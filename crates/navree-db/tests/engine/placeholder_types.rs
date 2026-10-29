@@ -10,7 +10,7 @@
 //! integer are another number, not an error.
 
 use futures_util::StreamExt;
-use navree_db::{Backend, Db, DbOptions, Executor, Kind, Statement, Value};
+use navree_db::{Backend, Db, DbOptions, Executor, ExecutorExt, Kind, Statement, Value};
 
 use crate::support::{Scratch, script};
 
@@ -131,6 +131,24 @@ pub async fn changing_value_types_on_one_connection(scratch: Scratch) {
         checks.expect("U64 3 after U64 MAX", got, &[1, 2]);
     }
     checks.finish();
+
+    // PostgreSQL: one prepared statement per set of types, reused while
+    // the types stay the same.
+    if backend == Backend::Postgres {
+        let prepared = || async {
+            db.fetch_scalar::<i64>(&Statement::portable(
+                "SELECT COUNT(*) FROM pg_prepared_statements WHERE statement LIKE ?",
+                ["SELECT id FROM measures WHERE amount > $1 ORDER BY id%".into()],
+            ))
+            .await
+            .unwrap()
+        };
+        assert_eq!(prepared().await, 2, "one for INT8, one for FLOAT8");
+        for at in 0..20_i64 {
+            ids(&db, ABOVE, at.into()).await.unwrap();
+        }
+        assert_eq!(prepared().await, 2, "integers reuse theirs");
+    }
 }
 
 /// A typed `NULL` first, then a value of another kind.

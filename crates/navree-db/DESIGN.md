@@ -132,3 +132,134 @@ backend.
 For navree-access (step 5) the same applies to its 6 tables: its ability
 filters become `Filter::raw` fragments (portable SQL with `?`), the shape
 `navree_orm::Filter::raw` accepts.
+
+## Prepared statements and parameter types
+
+### The problem
+
+Statements run through SQLx, which prepares each statement once per
+connection and caches it by its SQL text. On PostgreSQL the prepare
+(`Parse`) carries the type of every parameter, taken from the values of
+that first run, and later runs bind their values in binary form against
+those types. When the same SQL ran again with a value of another type in
+a placeholder, the connection reused the first statement and the server
+read the new bytes as the old type:
+
+| first run | then | on PostgreSQL |
+|---|---|---|
+| `amount > ?` with `I64(1)` | `F64(3.5)` | no rows (the float's bits read as a huge integer) |
+| `amount >= ?` with `F64(2.5)` | `I64(3)` | every row (the integer's bits read as a tiny float) |
+| `code = '' \|\| ?` with `I64(7)` | `"12345678"` | no rows (eight bytes of text read as an integer) |
+| `amount > COALESCE(?, 0)` with `Null(I64)` | `F64(2.0)` | no rows |
+| `amount > COALESCE(?, 0)` with `Null(F64)` | `I64(2)` | every row |
+| `... ? ...` with `I64` | `"a"`, `F32` | `08P01` insufficient data left in message |
+| `... ? ...` with `I32`, `U64(2)` | `Decimal`, `U64::MAX` (`NUMERIC`) | `22P03` incorrect binary data format |
+| `... ? ...` with text or a text `NULL` | `I64(7)` | `22021` invalid byte sequence (`0x00`) |
+
+The same happened on every pooled connection that had run the statement,
+inside transactions and savepoints, in streamed rows, through navree-orm's
+builder over an untyped column (`col("amount").gt(..)`), and in units of
+work on SeaORM's transactions (whose driver caches statements the same
+way). Nothing failed where the sizes matched: the rows were silently
+wrong.
+
+MySQL sends the parameters' types with every run, so parameters are read
+correctly, but a prepared statement keeps the result types it derived
+from earlier runs: `SELECT ? AS v` returned a decimal as a `DOUBLE`, text
+as a number, a date as a date-time and a boolean as `NULL` once the
+statement had run with a value of another type (`CAST(? AS CHAR)` and
+comparisons were right). SQLite types values, not parameters or columns,
+and answered every run as a first run.
+
+### The fix: the statement's text names its types
+
+`driver::Keyed` builds the text a statement is prepared with: the SQL as
+written, then a comment naming the type each value binds, as the driver
+sends it, before any trailing `;` (after a `;`, MySQL would read the
+comment as another statement):
+
+```sql
+SELECT id FROM measures WHERE amount > $1 ORDER BY id /* params: INT8 */
+SELECT id FROM measures WHERE amount > $1 ORDER BY id /* params: FLOAT8 */
+```
+
+SQLx's cache key is the text, so the key is now the SQL plus the
+parameter types: a run with other types is another statement, prepared
+for its own types; runs with the same types share one prepared statement
+per connection, as before. The names come from the same `Encode`/`Type`
+the value is bound with, so they cannot drift from what is sent (a `u64`
+beyond `i64` binds `NUMERIC` and is named so; an enum binds text, its
+`CAST(? AS mood)` being in the SQL; a vector is pgvector's `vector`). A
+`NULL` is named by its kind's type. Statements without values keep their
+text unchanged. PostgreSQL and MySQL key their statements; SQLite runs the
+SQL as written. navree-db statements on SeaORM's connections (units of
+work on SeaORM's transactions, migrations) are keyed the same way, by the
+kind of each value (`/* params: i64, text */`), since SeaORM binds each
+kind as one type.
+
+Considered:
+
+- **Placeholders typed in the SQL** (`$1::int8`): needs a parser that
+  finds placeholders outside strings, comments, quoted identifiers and
+  dollar quotes, and changes the SQL users wrote; the text still changes
+  per type, so it is the same cache behaviour with more risk.
+- **A cache keyed by SQL and parameter types**, in navree-db: SQLx's cache
+  is private and keyed by text; a second cache would mean preparing and
+  closing statements by hand beside SQLx's. Putting the types in the text
+  is that key, with SQLx's own cache, eviction and `Close`.
+- **Re-preparing when the type signature changes**: needs to know, per
+  physical connection, which types a cached statement was prepared with.
+  Pooled connections carry no navree-db state, and asking SQLx's cache
+  (`prepare_with`) costs a lookup, and catalog queries on a miss. A
+  statement whose types alternate would re-prepare on every change
+  instead of keeping both.
+
+Whether a value is `NULL` is not part of the key: PostgreSQL types a
+`NULL` by its kind, and MySQL reads values correctly after a `NULL` of
+their type ran first; only the kind a `NULL` read back from `SELECT ?`
+reports on MySQL follows the statement (`NULL` either way). Keying by
+nullness would multiply the statements of every insert with nullable
+columns.
+
+### What users see
+
+- Navree's query log (`QueryLog`, `Db::on_query`, `before_executing`),
+  the slow-query log, telemetry, errors and `Statement`'s `Display` show
+  the SQL as written, without the comment.
+- The database sees the comment: PostgreSQL's `pg_stat_activity.query`,
+  `pg_prepared_statements`, server logs (`log_statement`,
+  `log_min_duration_statement`) and `pg_stat_statements` show
+  `... /* params: INT8 */`; MySQL's process list and logs show it after
+  the statement with its values in place. PostgreSQL error positions are
+  unchanged (the comment is at the end), and `pg_stat_statements` already
+  counted statements whose parameter types differ separately.
+- A connection holds one prepared statement per SQL and set of types,
+  bounded by SQLx's statement cache as before.
+
+### Cost
+
+Building the text is one allocation (the SQL was copied before too) and
+one type name per value. A timed loop of 2,000 runs per statement on one
+connection (`stable_types_timing`; microseconds per statement, the median
+of three runs, each the median of three rounds, on a development machine
+running other builds):
+
+| statement | PostgreSQL before | after | MySQL before | after |
+|---|---|---|---|---|
+| select, 2 values | 169.4 | 107.0 | 255.6 | 244.3 |
+| select, 8 values | 160.4 | 133.9 | 307.0 | 270.9 |
+| insert, 3 values | 131.8 | 106.4 | 279.4 | 212.8 |
+
+The differences are the machine's noise; what matters is that stable
+types are not slower: they still run one prepared statement per
+connection (the PostgreSQL test counts them in `pg_prepared_statements`).
+
+### Tests
+
+`tests/engine/placeholder_types.rs`, on every server: integers then floats
+and back, text then integers, typed `NULL`s then other kinds, every
+pooled connection, transactions, savepoints, streams, units of work on
+both kinds of transaction, every kind of value after every other through
+`SELECT ?` and a cast to text, the prepared statements on PostgreSQL, and
+what logs and the server see. navree-orm's `tests/servers/value_types.rs`
+runs the builder over an untyped column.

@@ -16,8 +16,8 @@ use crate::{DbOptions, MySqlOptions};
 /// instants with an offset converted to UTC.
 ///
 /// MySQL sends the values' types with every run, but a prepared statement
-/// keeps the result types it derived from its first run's values
-/// (`SELECT ?` read back text as a `DOUBLE` after a boolean ran), so the
+/// keeps the result types it derived from earlier runs' values (`SELECT
+/// ?` read back text as a `DOUBLE` after a boolean ran), so the
 /// text names the types the values bind, as on PostgreSQL
 /// ([`Keyed`](super::Keyed)).
 pub(crate) fn statement(sql: &str, values: &[Value]) -> Result<(String, MySqlArguments), DbError> {
