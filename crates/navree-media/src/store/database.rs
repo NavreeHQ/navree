@@ -3,8 +3,7 @@
 use std::future::Future;
 
 use futures_util::future::BoxFuture;
-use navree_db::sea_orm::DatabaseTransaction;
-use navree_db::{Db, Uow};
+use navree_db::{Db, DbError, Uow};
 use navree_orm::{Model as _, OrmError};
 use uuid::Uuid;
 
@@ -45,7 +44,7 @@ impl DatabaseStore {
         let own = self.db.uow(None, None).await;
         match write(own.clone()).await {
             Ok(value) => {
-                own.commit().await?;
+                own.commit().await.map_err(DbError::from)?;
                 Ok(value)
             }
             Err(error) => {
@@ -118,7 +117,7 @@ impl MediaStore for DatabaseStore {
 
     fn delete_owner<'a>(
         &'a self,
-        tx: &'a DatabaseTransaction,
+        uow: &'a Uow,
         model_type: &'a str,
         model_id: &'a str,
     ) -> BoxFuture<'a, Result<Vec<MediaItem>, MediaError>> {
@@ -126,13 +125,13 @@ impl MediaStore for DatabaseStore {
             let rows = MediaRecord::query()
                 .where_(MediaRecord::MODEL_TYPE.eq(model_type))
                 .where_(MediaRecord::MODEL_ID.eq(model_id))
-                .get(tx)
+                .get(uow)
                 .await?;
             if !rows.is_empty() {
                 MediaRecord::query()
                     .where_(MediaRecord::MODEL_TYPE.eq(model_type))
                     .where_(MediaRecord::MODEL_ID.eq(model_id))
-                    .delete(tx)
+                    .delete(uow)
                     .await?;
             }
             Ok(rows

@@ -5,12 +5,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use navree_contracts::{AuthVia, Principal};
-use navree_db::Db;
+use navree_db::{Db, Executor as _, ExecutorExt as _, Statement};
 use navree_queue::{
     Batch, FAILED_MESSAGE, OPERATION_UPDATED_EVENT, Operation, OperationStatus, QueueDriver,
     STALLED_MESSAGE, SweepReport,
 };
-use sea_orm::{ConnectionTrait, Statement};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -518,10 +517,7 @@ async fn the_watchdog_restarts_idempotent_operations() {
     uow.commit().await.unwrap();
     // The job is lost (a crashed process, a flushed queue).
     let lose_jobs = || async {
-        db.conn()
-            .execute_unprepared("DELETE FROM jobs")
-            .await
-            .unwrap();
+        db.execute_script("DELETE FROM jobs").await.unwrap();
     };
     lose_jobs().await;
 
@@ -597,10 +593,7 @@ async fn overlapping_sweeps_restart_a_lost_job_once() {
         .await
         .unwrap();
     uow.commit().await.unwrap();
-    db.conn()
-        .execute_unprepared("DELETE FROM jobs")
-        .await
-        .unwrap();
+    db.execute_script("DELETE FROM jobs").await.unwrap();
     h.advance(301);
 
     let (first, second) = tokio::join!(h.operations.sweep(), h.operations.sweep());
@@ -612,16 +605,9 @@ async fn overlapping_sweeps_restart_a_lost_job_once() {
         "{first:?} {second:?}"
     );
     assert_eq!(first.failed + second.failed, 0, "{first:?} {second:?}");
-    let jobs = db
-        .conn()
-        .query_one_raw(Statement::from_string(
-            db.backend(),
-            "SELECT COUNT(*) AS n FROM jobs",
-        ))
+    let jobs: i64 = db
+        .fetch_scalar(&Statement::text("SELECT COUNT(*) AS n FROM jobs"))
         .await
-        .unwrap()
-        .unwrap()
-        .try_get::<i64>("", "n")
         .unwrap();
     assert_eq!(jobs, 1);
     let restarted = h.operations.find(op.id).await.unwrap().unwrap();
@@ -686,8 +672,7 @@ async fn the_watchdog_finishes_operations_of_finished_batches() {
     uow.commit().await.unwrap();
     h.drain().await;
     // Undo the operation's finish, as if the worker had stopped first.
-    db.conn()
-        .execute_unprepared("UPDATE operations SET status = 'running', finished_at = NULL")
+    db.execute_script("UPDATE operations SET status = 'running', finished_at = NULL")
         .await
         .unwrap();
 

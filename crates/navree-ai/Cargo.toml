@@ -15,6 +15,9 @@ default = []
 ## PostgreSQL driver for navree-db, for the pgvector store and conversation
 ## memory on PostgreSQL.
 postgres = ["navree-db/postgres"]
+## MySQL driver for navree-db, for conversation memory on MySQL (the test
+## suite runs on it with `NAVREE_TEST_DATABASE=mysql`).
+mysql = ["navree-db/mysql"]
 
 [dependencies]
 axum = { workspace = true }
@@ -40,8 +43,6 @@ navree-kernel = { workspace = true }
 navree-macros = { workspace = true }
 navree-storage = { workspace = true }
 navree-validation = { workspace = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
@@ -55,6 +56,8 @@ uuid = { workspace = true }
 [dev-dependencies]
 http-body-util = { workspace = true }
 navree-crypto = { workspace = true }
+# The tests' notes are an ORM model and a navree-access subject.
+navree-orm = { workspace = true, features = ["access"] }
 navree-testing = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }

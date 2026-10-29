@@ -30,7 +30,7 @@ async fn failed_jobs_are_orm_models() {
     assert_eq!(FailedJob::table_name(), FAILED_JOBS_TABLE);
     let failed = FailedJob::query()
         .where_(FailedJob::JOB_TYPE.eq(Panics::NAME))
-        .get(db.conn())
+        .get(&db)
         .await
         .unwrap()
         .into_models();
@@ -46,7 +46,7 @@ async fn failed_jobs_are_orm_models() {
 
     let newest = FailedJob::query()
         .latest_by(FailedJob::FAILED_AT)
-        .first(db.conn())
+        .first(&db)
         .await
         .unwrap()
         .expect("a failed job");
@@ -56,7 +56,7 @@ async fn failed_jobs_are_orm_models() {
     assert_eq!(
         FailedJob::query()
             .where_(FailedJob::FAILED_AT.lt(start() + TimeDelta::seconds(1)))
-            .count(db.conn())
+            .count(&db)
             .await
             .unwrap(),
         1,
@@ -82,9 +82,7 @@ async fn failed_jobs_stored_by_hand_are_listed_and_retried_by_the_queue() {
         attempts: 2,
         failed_at: start() - TimeDelta::hours(1),
     };
-    FailedJob::insert(db.conn(), [stored.clone()])
-        .await
-        .unwrap();
+    FailedJob::insert(&db, [stored.clone()]).await.unwrap();
 
     assert_eq!(
         h.queue.failed_job("imported-1").await.unwrap(),
@@ -100,5 +98,5 @@ async fn failed_jobs_stored_by_hand_are_listed_and_retried_by_the_queue() {
     );
     assert!(h.queue.failed().await.unwrap().is_empty());
     assert_eq!(h.queue.pending_count("default").await.unwrap(), 1);
-    assert_eq!(FailedJob::query().count(db.conn()).await.unwrap(), 0);
+    assert_eq!(FailedJob::query().count(&db).await.unwrap(), 0);
 }

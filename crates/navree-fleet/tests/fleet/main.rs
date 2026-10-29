@@ -2,6 +2,7 @@
 
 mod commands;
 mod dashboard;
+mod database;
 mod docs_surface;
 mod gauges;
 mod in_process;

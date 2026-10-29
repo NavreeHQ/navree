@@ -14,14 +14,13 @@
 
 #![allow(dead_code)]
 
-use navree_db::{DatabaseModule, Db};
+use navree_db::{Backend, DatabaseModule, Db, DbOptions, Executor, Pool};
 use navree_notify::{
     Channel, DeliveryLog, DeliveryStatus, NotificationDelivery, NotificationOptOut, Notifier,
     NotifyModule, NotifyOptions, OptOutSource, OptOuts, PushSubscription, PushSubscriptions,
 };
 use navree_orm::Model as _;
 use navree_testing::TestApp;
-use sea_orm::{ConnectionTrait, Database, DbBackend};
 use uuid::Uuid;
 
 use crate::external::subscription;
@@ -45,14 +44,12 @@ impl Scratch {
             }
         };
         let name = format!("navree_notify_{}", Uuid::now_v7().simple());
-        let conn = Database::connect(&admin).await.unwrap();
         let create = if mysql {
             format!("CREATE DATABASE `{name}` CHARACTER SET utf8mb4")
         } else {
             format!("CREATE DATABASE {name}")
         };
-        conn.execute_unprepared(&create).await.unwrap();
-        conn.close().await.unwrap();
+        admin_script(&admin, &create).await;
         let (base, rest) = admin.rsplit_once('/').unwrap();
         let options = rest.find('?').map_or("", |at| &rest[at..]);
         let url = format!("{base}/{name}{options}");
@@ -65,14 +62,26 @@ impl Scratch {
     }
 
     async fn drop(self) {
-        let conn = Database::connect(&self.admin).await.unwrap();
         let drop = if self.mysql {
             format!("DROP DATABASE IF EXISTS `{}`", self.name)
         } else {
             format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", self.name)
         };
-        conn.execute_unprepared(&drop).await.unwrap();
+        admin_script(&self.admin, &drop).await;
     }
+}
+
+/// Runs `sql` on the test server `admin` names.
+async fn admin_script(admin: &str, sql: &str) {
+    let pool = Pool::connect(&DbOptions {
+        url: admin.to_owned(),
+        max_connections: 1,
+        ..DbOptions::default()
+    })
+    .await
+    .unwrap();
+    pool.execute_script(sql).await.unwrap();
+    pool.close().await;
 }
 
 /// Sends over every external channel, plays the providers and checks the
@@ -94,11 +103,11 @@ async fn flow(scratch: &Scratch) {
         .await;
     let db = app.get::<Db>().await;
     let expected = if scratch.mysql {
-        DbBackend::MySql
+        Backend::MySql
     } else {
-        DbBackend::Postgres
+        Backend::Postgres
     };
-    assert_eq!(db.backend(), expected);
+    assert_eq!(Executor::backend(&*db), expected);
     let member = Member::new();
     let push = app.get::<PushSubscriptions>().await;
     let browser = subscription("https://fcm.googleapis.com/fcm/send/server-test");

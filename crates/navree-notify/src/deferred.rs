@@ -12,7 +12,6 @@ use navree_contracts::ZoneLevel;
 use navree_kernel::AppContext;
 use navree_orm::{Model, Record};
 use navree_time::{SendWindow, Zone, Zones};
-use sea_orm::DbErr;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -290,8 +289,7 @@ impl Notifier {
             return Ok(());
         }
         let exec = Exec::current(&self.app).await?;
-        on!(&exec, e => NotificationDeferral::insert_or_ignore(e, rows).await)
-            .map_err(DbErr::from)?;
+        on!(&exec, e => NotificationDeferral::insert_or_ignore(e, rows).await)?;
         exec.wrote();
         Ok(())
     }
@@ -316,8 +314,7 @@ impl Notifier {
             .oldest_by(NotificationDeferral::RELEASE_AT)
             .limit(deferred.batch)
             .get(e)
-            .await)
-        .map_err(DbErr::from)?;
+            .await)?;
         let retry_at = now + TimeDelta::seconds(i64::try_from(deferred.retry_secs).unwrap_or(300));
         let mut claimed = Vec::new();
         for row in due.into_iter().map(Record::into_inner) {
@@ -329,8 +326,7 @@ impl Notifier {
                     NotificationDeferral::RELEASE_AT.set(retry_at),
                     NotificationDeferral::ATTEMPTS.set(attempts),
                 ])
-                .await)
-            .map_err(DbErr::from)?;
+                .await)?;
             if won == 1 {
                 claimed.push(NotificationDeferral { attempts, ..row });
             }
@@ -480,8 +476,7 @@ impl Notifier {
         on!(exec, e => NotificationDeferral::query()
             .where_(NotificationDeferral::ID.is_in(ids.iter().copied()))
             .delete(e)
-            .await)
-        .map_err(DbErr::from)?;
+            .await)?;
         Ok(())
     }
 }

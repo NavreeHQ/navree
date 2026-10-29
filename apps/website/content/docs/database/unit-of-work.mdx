@@ -317,7 +317,7 @@ An observer:
 - must write through the `tx` it is given, or implement `observe_with(&Uow, changes)` instead of `observe` and write through the `uow` (an `Executor` until the commit ends). `observe_with` runs on units of work of either kind of transaction (`database.native_units_of_work`); `observe` only on SeaORM's, and by default it calls `observe_with`. `AuditModule`'s observer is written this way. The unit of work counts as finished once the commit starts, so `uow.tx()` fails inside an observer with "the unit of work is already committed or rolled back";
 - can veto the commit: an error rolls the whole unit of work back, and the request answers 500 (409 when the error is a unique or foreign-key violation).
 
-Don't dispatch queued jobs from an observer on SQLite. Because the unit of work is already finished, the queue writes through the pool, and that write waits for the very transaction that is committing.
+Queue jobs from an observer with `Queue::push_observed(uow, envelope)`, not `dispatch`: with the database driver the row is written through the `uow` the observer is given, so it joins the commit it observes (a commit that fails queues nothing). `dispatch` from an observer would write through the pool on SQLite, and that write waits for the very transaction that is committing.
 
 ## SQLite and concurrency
 

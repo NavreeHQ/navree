@@ -3,10 +3,11 @@
 use navree_auth::AuthError;
 use navree_cache::CacheError;
 use navree_crypto::CryptoError;
+use navree_db::DbError;
 use navree_http::AppError;
 use navree_http_client::HttpClientError;
 use navree_kernel::{BoxError, KernelError};
-use sea_orm::DbErr;
+use navree_orm::OrmError;
 
 /// A social sign-in error. Returned from handlers with `?`, it becomes an
 /// error response (the module registers the mapping): a bad or used state
@@ -144,9 +145,12 @@ pub enum SocialError {
     /// The state cache failed.
     #[error("social cache error: {0}")]
     Cache(#[from] CacheError),
-    /// A database error.
+    /// A database error (navree-db's statements and units of work).
     #[error("social database error: {0}")]
-    Db(#[from] DbErr),
+    Db(#[from] DbError),
+    /// An ORM error (the module's models and their queries).
+    #[error("social database error: {0}")]
+    Orm(#[from] OrmError),
     /// A provider the service needs could not be resolved.
     #[error("social provider error: {0}")]
     Kernel(#[from] KernelError),
@@ -240,6 +244,9 @@ impl SocialError {
             }
             SocialError::Auth(error) => return error.to_app_error(),
             SocialError::Db(error) => return navree_db::map_db_error(error),
+            SocialError::Orm(error) => {
+                return error.db_error().and_then(navree_db::map_db_error);
+            }
             SocialError::NotBound
             | SocialError::Config(_)
             | SocialError::Crypto(_)
@@ -257,14 +264,6 @@ impl SocialError {
             Some(error) => error,
             None => AppError::internal(self),
         }
-    }
-}
-
-/// The module's ORM reads fail as database errors ([`SocialError::Db`]),
-/// like its SeaORM writes.
-impl From<navree_orm::OrmError> for SocialError {
-    fn from(error: navree_orm::OrmError) -> Self {
-        SocialError::Db(error.into())
     }
 }
 
