@@ -2,10 +2,10 @@
 
 use navree::db::Db;
 use navree::prelude::*;
-use sea_orm::EntityTrait;
+
 use serde::{Deserialize, Serialize};
 
-use super::entity::{self as world, Entity as World};
+use super::entity::World;
 
 /// The most rows `/queries` reads.
 const MAX_QUERIES: usize = 500;
@@ -31,7 +31,7 @@ impl WorldController {
     /// One random row.
     #[get("/db")]
     #[public]
-    async fn db(&self) -> Result<Json<world::Model>> {
+    async fn db(&self) -> Result<Json<World>> {
         Ok(Json(random_row(&self.db).await?))
     }
 
@@ -39,10 +39,7 @@ impl WorldController {
     /// one query each.
     #[get("/queries")]
     #[public]
-    async fn queries(
-        &self,
-        Query(params): Query<QueriesParams>,
-    ) -> Result<Json<Vec<world::Model>>> {
+    async fn queries(&self, Query(params): Query<QueriesParams>) -> Result<Json<Vec<World>>> {
         let count = params.count();
         let mut rows = Vec::with_capacity(count);
         for _ in 0..count {
@@ -76,10 +73,10 @@ impl QueriesParams {
 
 /// The row with a uniformly random id in 1..=10000, read from the pool
 /// (no unit-of-work transaction for a single read).
-async fn random_row(db: &Db) -> Result<world::Model> {
+async fn random_row(db: &Db) -> Result<World> {
     let id: i32 = rand::random_range(1..=10_000);
-    World::find_by_id(id)
-        .one(db.conn())
+    Ok(World::find(db, id)
         .await?
-        .ok_or_else(AppError::not_found)
+        .ok_or_else(AppError::not_found)?
+        .into_inner())
 }

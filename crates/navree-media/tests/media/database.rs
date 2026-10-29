@@ -2,8 +2,7 @@
 //! work, change events, paging, and a model's media deleted with the
 //! model — on the database `NAVREE_TEST_DATABASE` names (SQLite by
 //! default; PostgreSQL with TimescaleDB and MySQL with the `postgres` and
-//! `mysql` features), with `NAVREE_TEST_NATIVE_UNITS_OF_WORK=1` for units
-//! of work on navree-db's own transactions (see `servers`).
+//! `mysql` features; see `servers`).
 
 use chrono::{DateTime, Utc};
 use image::ImageFormat;
