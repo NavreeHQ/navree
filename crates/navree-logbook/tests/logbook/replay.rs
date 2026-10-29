@@ -185,8 +185,7 @@ async fn the_api_replays_and_answers_with_the_right_errors() {
 
 #[tokio::test]
 async fn replays_run_as_the_same_user_with_a_fresh_token() {
-    let app = builder()
-        .temp_database()
+    let app = crate::servers::database(builder())
         .config("app.key", navree_crypto::generate_key())
         .config("hashing.memory_kib", 1024)
         .config("hashing.iterations", 1)

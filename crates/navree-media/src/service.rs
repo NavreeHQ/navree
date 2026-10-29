@@ -8,7 +8,6 @@ use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use navree_contracts::{Dispatcher, JobEnvelope};
 use navree_db::Uow;
-use navree_db::sea_orm::DatabaseTransaction;
 use navree_http_client::{HttpClient, HttpClientOptions};
 use navree_kernel::WeakAppContext;
 use navree_storage::{Disk, Storage, StorageError};
@@ -467,11 +466,11 @@ impl Media {
         Ok(deleted)
     }
 
-    /// Deletes the media of these owners (model type, key) inside `tx`, a
-    /// change observer's transaction, and their files after `uow` commits.
+    /// Deletes the media of these owners (model type, key) in `uow`, the
+    /// unit of work a change observer was given, and their files after it
+    /// commits.
     pub(crate) async fn delete_owners_in(
         &self,
-        tx: &DatabaseTransaction,
         uow: &Uow,
         owners: &[(&str, &str)],
     ) -> Result<(), MediaError> {
@@ -480,7 +479,7 @@ impl Media {
             removed.extend(
                 self.inner
                     .store
-                    .delete_owner(tx, model_type, model_id)
+                    .delete_owner(uow, model_type, model_id)
                     .await?,
             );
         }

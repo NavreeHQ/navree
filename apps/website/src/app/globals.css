@@ -436,6 +436,15 @@
       display: none;
     }
   }
+  /*
+   * A tab set keeps its inactive panels laid out but invisible, so switching
+   * never moves the page (the home page's architecture tabs stack six
+   * diagrams). Invisible pulses still restyle every frame, so stop them; a
+   * panel's pulses start again when it becomes active.
+   */
+  [data-state="inactive"] .diagram-pulse {
+    animation: none;
+  }
 }
 
 @layer components {

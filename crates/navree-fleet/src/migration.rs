@@ -6,10 +6,6 @@ use navree_db::MigrationSet;
 use navree_db::navree_schema::{
     Hypertable, KeyStrategy, Migration, Schema, SchemaMigration, SchemaResult,
 };
-use sea_orm::DbErr;
-use sea_orm::sea_query::{ColumnDef, Index, Table};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 
 /// The running masters, their supervisors and processes, and heartbeats.
 pub const MASTERS_TABLE: &str = "fleet_masters";
@@ -26,7 +22,10 @@ pub const METRICS_TABLE: &str = "fleet_metrics";
 pub(crate) fn migrations() -> MigrationSet {
     MigrationSet::new("fleet")
         .after(["queue"])
-        .migration(CreateFleetTables)
+        .migration(SchemaMigration::new(
+            "m20261027_000001_create_fleet_tables",
+            CreateFleetTables,
+        ))
         .migration(SchemaMigration::new(
             "m20261027_000002_convert_fleet_history_to_hypertables",
             ConvertHistoryToHypertables,
@@ -85,98 +84,62 @@ impl Migration for ConvertHistoryToHypertables {
 /// the queue's tables.
 struct CreateFleetTables;
 
-impl MigrationName for CreateFleetTables {
-    fn name(&self) -> &str {
-        "m20261027_000001_create_fleet_tables"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateFleetTables {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table(MASTERS_TABLE)
-                    .col(ColumnDef::new("id").string().not_null().primary_key())
-                    .col(ColumnDef::new("name").string().not_null())
-                    .col(ColumnDef::new("pid").big_integer().not_null())
-                    .col(ColumnDef::new("status").string().not_null())
-                    .col(ColumnDef::new("supervisors").text().not_null())
-                    .col(ColumnDef::new("started_at").big_integer().not_null())
-                    .col(ColumnDef::new("heartbeat_at").big_integer().not_null())
-                    .to_owned(),
-            )
+impl Migration for CreateFleetTables {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create(MASTERS_TABLE, |t| {
+                t.string("id").primary();
+                t.string("name");
+                t.big_integer("pid");
+                t.string("status");
+                t.text("supervisors");
+                t.big_integer("started_at");
+                t.big_integer("heartbeat_at");
+            })
             .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table(STATE_TABLE)
-                    .col(ColumnDef::new("key").string().not_null().primary_key())
-                    .col(ColumnDef::new("value").text().not_null())
-                    .col(ColumnDef::new("updated_at").big_integer().not_null())
-                    .to_owned(),
-            )
+        schema
+            .create(STATE_TABLE, |t| {
+                t.string("key").primary();
+                t.text("value");
+                t.big_integer("updated_at");
+            })
             .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table(JOBS_TABLE)
-                    .col(ColumnDef::new("id").string().not_null().primary_key())
-                    .col(ColumnDef::new("job_id").string().not_null())
-                    .col(ColumnDef::new("queue").string().not_null())
-                    .col(ColumnDef::new("job_type").string().not_null())
-                    .col(ColumnDef::new("attempt").big_integer().not_null())
-                    .col(ColumnDef::new("outcome").string().not_null())
-                    .col(ColumnDef::new("runtime_ms").big_integer().not_null())
-                    .col(ColumnDef::new("finished_at").big_integer().not_null())
-                    .col(ColumnDef::new("master").string().null())
-                    .to_owned(),
-            )
+        schema
+            .create(JOBS_TABLE, |t| {
+                t.string("id").primary();
+                t.string("job_id");
+                t.string("queue");
+                t.string("job_type");
+                t.big_integer("attempt");
+                t.string("outcome");
+                t.big_integer("runtime_ms");
+                t.big_integer("finished_at");
+                t.string("master").nullable();
+                t.index(["finished_at"])
+                    .name("fleet_jobs_finished_at_index");
+            })
             .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("fleet_jobs_finished_at_index")
-                    .table(JOBS_TABLE)
-                    .col("finished_at")
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table(METRICS_TABLE)
-                    .col(ColumnDef::new("id").string().not_null().primary_key())
-                    .col(ColumnDef::new("at").big_integer().not_null())
-                    .col(ColumnDef::new("kind").string().not_null())
-                    .col(ColumnDef::new("name").string().not_null())
-                    .col(ColumnDef::new("processed").big_integer().not_null())
-                    .col(ColumnDef::new("failed").big_integer().not_null())
-                    .col(ColumnDef::new("runtime_avg_ms").big_integer().not_null())
-                    .col(ColumnDef::new("runtime_p95_ms").big_integer().not_null())
-                    .col(ColumnDef::new("pending").big_integer().null())
-                    .col(ColumnDef::new("wait_ms").big_integer().null())
-                    .col(ColumnDef::new("master").string().null())
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("fleet_metrics_at_index")
-                    .table(METRICS_TABLE)
-                    .col("at")
-                    .to_owned(),
-            )
+        schema
+            .create(METRICS_TABLE, |t| {
+                t.string("id").primary();
+                t.big_integer("at");
+                t.string("kind");
+                t.string("name");
+                t.big_integer("processed");
+                t.big_integer("failed");
+                t.big_integer("runtime_avg_ms");
+                t.big_integer("runtime_p95_ms");
+                t.big_integer("pending").nullable();
+                t.big_integer("wait_ms").nullable();
+                t.string("master").nullable();
+                t.index(["at"]).name("fleet_metrics_at_index");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
         for table in [METRICS_TABLE, JOBS_TABLE, STATE_TABLE, MASTERS_TABLE] {
-            manager
-                .drop_table(Table::drop().table(table).to_owned())
-                .await?;
+            schema.drop_if_exists(table).await?;
         }
         Ok(())
     }

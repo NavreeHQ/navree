@@ -1,41 +1,37 @@
-//! Where the channel tables are read and written: the transaction of the
-//! current unit of work while it is unfinished (a request handler's), else
-//! the pool.
+//! Where the channel tables are read and written: the current unit of
+//! work while it is unfinished (a request handler's), else the pool.
 
 use std::sync::Arc;
 
 use navree_db::{Db, Uow};
 use navree_kernel::{AppContext, WeakAppContext};
-use sea_orm::DatabaseTransaction;
 
 use crate::NotifyError;
 
 /// A connection to run one service call on.
 pub(crate) enum Exec {
-    /// The current unit of work's transaction (written to: it is marked
-    /// modified).
-    Tx(Uow, Arc<DatabaseTransaction>),
+    /// The current unit of work (written to: it is marked modified).
+    Tx(Uow),
     /// The pool.
     Pool(Arc<Db>),
 }
 
 impl Exec {
-    /// The current unfinished unit of work's transaction, else the app's
-    /// pool; [`NotifyError::Unavailable`] without `DatabaseModule`.
+    /// The current unfinished unit of work, else the app's pool;
+    /// [`NotifyError::Unavailable`] without `DatabaseModule`.
     pub(crate) async fn current(app: &WeakAppContext) -> Result<Exec, NotifyError> {
         let ctx = upgrade(app)?;
         let db = database(&ctx).await?;
         if let Some(uow) = Uow::current()
             && !uow.is_finished().await
         {
-            let tx = uow.tx().await?;
-            return Ok(Exec::Tx(uow, tx));
+            return Ok(Exec::Tx(uow));
         }
         Ok(Exec::Pool(db))
     }
 
-    /// The pool, never a unit of work (deliveries are recorded after the
-    /// channel was sent, outside any transaction).
+    /// The pool, not a unit of work of the caller's (deliveries are
+    /// recorded after the channel was sent, outside any transaction).
     pub(crate) async fn pool(app: &WeakAppContext) -> Result<Exec, NotifyError> {
         let ctx = upgrade(app)?;
         Ok(Exec::Pool(database(&ctx).await?))
@@ -43,23 +39,23 @@ impl Exec {
 
     /// Notes a write on the unit of work.
     pub(crate) fn wrote(&self) {
-        if let Exec::Tx(uow, _) = self {
+        if let Exec::Tx(uow) = self {
             uow.mark_modified();
         }
     }
 }
 
-/// Runs `$body` with `$e` bound to the executor of an [`Exec`]: the
-/// transaction or the pool connection.
+/// Runs `$body` with `$e` bound to the executor of an [`Exec`]: the unit
+/// of work or the database.
 macro_rules! on {
     ($exec:expr, $e:ident => $body:expr) => {
         match $exec {
-            $crate::store::Exec::Tx(_, tx) => {
-                let $e: &::sea_orm::DatabaseTransaction = tx;
+            $crate::store::Exec::Tx(uow) => {
+                let $e: &::navree_db::Uow = uow;
                 $body
             }
             $crate::store::Exec::Pool(db) => {
-                let $e: &::sea_orm::DatabaseConnection = db.conn();
+                let $e: &::navree_db::Db = db;
                 $body
             }
         }

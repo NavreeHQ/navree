@@ -7,6 +7,7 @@ mod failover;
 mod module;
 mod rag;
 mod retrieval;
+mod servers;
 mod streaming;
 mod support;
 mod text;
