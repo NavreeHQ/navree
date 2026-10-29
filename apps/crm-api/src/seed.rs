@@ -60,12 +60,9 @@ impl Seeder for DemoSeeder {
                 return Ok(());
             }
             let demo = Demo::new(&users, self.clock.now());
-            // All of it or none of it, in one transaction. The records are
-            // written through the transaction itself rather than the unit of
-            // work, so the audit log does not list them.
+            // All of it or none of it, in one unit of work.
             in_uow(db, |uow| async move {
-                let tx = uow.tx().await?;
-                demo.create(&*tx).await?;
+                demo.create(&uow).await?;
                 Ok(())
             })
             .await

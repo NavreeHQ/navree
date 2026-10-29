@@ -430,7 +430,7 @@ pub(crate) fn singular(entity: &str) -> String {
 }
 
 impl ChangeObserver for Logbook {
-    fn observe_with<'a>(
+    fn observe<'a>(
         &'a self,
         uow: &'a Uow,
         changes: &'a [ChangeEvent],

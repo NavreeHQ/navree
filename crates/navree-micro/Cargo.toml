@@ -69,9 +69,6 @@ garde = { workspace = true }
 navree-access = { workspace = true }
 navree-macros = { workspace = true }
 rcgen = { workspace = true }
-# The `deals` fixture is a SeaORM entity: navree-access still reads its
-# subjects through one (until it is ported).
-sea-orm = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 trybuild = { workspace = true }

@@ -419,10 +419,7 @@ impl Scheduler {
     /// any unit of work the tick's tasks open (a claim must be visible to the
     /// other schedulers at once, and stay when a task rolls back).
     fn executor(&self) -> &dyn Executor {
-        match self.db.pool() {
-            Some(pool) => pool,
-            None => &*self.db,
-        }
+        self.db.pool()
     }
 
     /// Deletes runs older than [`RUN_RETENTION`] (once an hour, from `tick`).

@@ -67,7 +67,7 @@ impl Injectable for SearchObserver {
 }
 
 impl ChangeObserver for SearchObserver {
-    fn observe_with<'a>(
+    fn observe<'a>(
         &'a self,
         uow: &'a Uow,
         changes: &'a [ChangeEvent],

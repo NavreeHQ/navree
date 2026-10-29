@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use chrono::{DateTime, TimeDelta, Utc};
-use navree_db::{Db, DbError, Uow, prune_time_series_on};
+use navree_db::{Db, DbError, Uow, prune_time_series};
 use navree_orm::{Assignment, ConflictUpdate, Filter, Model as _, OrmError, Record, col, table};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -1351,15 +1351,15 @@ impl LighthouseStore {
     /// ignored issues with no occurrence left. Open issues are kept. On
     /// TimescaleDB, where samples, occurrences and aggregates are
     /// hypertables, the days entirely before the cutoff go as whole chunks
-    /// (see [`prune_time_series_on`]).
+    /// (see [`prune_time_series`]).
     pub async fn prune(&self, days: u32) -> Result<PruneSummary, LighthouseError> {
         let now = Utc::now();
         let cutoff = now - TimeDelta::days(i64::from(days.max(1)));
         let db = &self.db;
-        let samples = prune_time_series_on(db, SAMPLES_TABLE, "at", cutoff).await?;
-        let occurrences = prune_time_series_on(db, OCCURRENCES_TABLE, "at", cutoff).await?;
+        let samples = prune_time_series(db, SAMPLES_TABLE, "at", cutoff).await?;
+        let occurrences = prune_time_series(db, OCCURRENCES_TABLE, "at", cutoff).await?;
         let minute_cutoff = cutoff.max(now - TimeDelta::days(2));
-        let aggregates = prune_time_series_on(db, AGGREGATES_TABLE, "bucket", cutoff).await?
+        let aggregates = prune_time_series(db, AGGREGATES_TABLE, "bucket", cutoff).await?
             + aggregate::Model::query()
                 .where_(aggregate::Model::RESOLUTION.eq(MINUTE))
                 .where_(aggregate::Model::BUCKET.lt(minute_cutoff))

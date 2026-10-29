@@ -7,7 +7,7 @@ use navree::helm::{Field, FormData, Metric, RecordOf, Resource, SaveContext};
 use navree::prelude::*;
 use navree::workspace::Workspace;
 
-use crate::modules::projects::entity::Model as Project;
+use crate::modules::projects::entity::Project;
 
 /// Users: every account, searchable by name and email.
 #[injectable]

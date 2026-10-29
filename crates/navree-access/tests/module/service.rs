@@ -244,7 +244,7 @@ impl navree_contracts::AuditSink for DbAudit {
         Box::pin(async move {
             use navree_db::{Executor, Statement};
             let db = self.0.get().expect("database set");
-            let pool = db.pool().expect("a pool of navree-db's own");
+            let pool = db.pool();
             pool.execute(&Statement::portable(
                 "INSERT INTO denials (action) VALUES (?)",
                 [entry.action.into()],

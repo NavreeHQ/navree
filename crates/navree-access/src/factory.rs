@@ -301,8 +301,5 @@ impl fmt::Debug for AbilityFactory {
 /// (a change rolled back must not leave abilities cached under its access
 /// version).
 fn committed(db: &Db) -> &dyn Executor {
-    match db.pool() {
-        Some(pool) => pool,
-        None => db,
-    }
+    db.pool()
 }

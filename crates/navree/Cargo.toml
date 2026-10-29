@@ -679,8 +679,6 @@ criterion = { workspace = true }
 garde = { workspace = true }
 http-body-util = { workspace = true }
 metrics = { workspace = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }

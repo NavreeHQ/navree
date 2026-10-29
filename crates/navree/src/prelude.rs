@@ -13,9 +13,9 @@
 //! Every name is gated by the feature of the crate it comes from. With
 //! `http`, `Result` here is `navree::Result` (error type `AppError` by
 //! default), which shadows the standard prelude's `Result`; name the error
-//! type when it is not an `AppError` (`Result<(), BoxError>`). With `db`,
-//! navree-db's model factory trait is renamed `ModelFactory`, since
-//! [`Factory`] is the kernel's provider factory. Test helpers
+//! type when it is not an `AppError` (`Result<(), BoxError>`). With `orm`,
+//! `ModelFactory` is the ORM's model factory trait ([`Factory`] is the
+//! kernel's provider factory). Test helpers
 //! (`navree::testing`) are not part of the prelude.
 
 pub use std::sync::Arc;
@@ -56,10 +56,7 @@ pub use navree_view::{ModuleBuilderViewExt as _, ViewModule};
 #[cfg(feature = "api")]
 pub use navree_api::{ApiModule, ModuleBuilderApiExt as _};
 #[cfg(feature = "db")]
-pub use navree_db::{
-    DatabaseModule, Factory as ModelFactory, MigrationSet, ModuleBuilderDbExt as _, Page,
-    PageQuery, Repo, Uow,
-};
+pub use navree_db::{DatabaseModule, MigrationSet, ModuleBuilderDbExt as _, Page, PageQuery, Uow};
 #[cfg(feature = "mail")]
 pub use navree_mail::MailModule;
 #[cfg(feature = "mail-inbound")]
@@ -91,7 +88,7 @@ pub use navree_orm::attributes::Attributes;
 #[cfg(feature = "orm")]
 pub use navree_orm::{
     Builder, Collection, Model, ModelLifecycle as _, ModuleBuilderOrmExt as _, OrmModule, Record,
-    accessors, attrs,
+    accessors, attrs, factory::ModelFactory,
 };
 #[cfg(feature = "queue")]
 pub use navree_queue::{Batch, Operation, Operations, QueueModule};

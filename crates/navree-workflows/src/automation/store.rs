@@ -470,10 +470,7 @@ impl DatabaseAutomationStore {
     /// never the task's unit of work, or the connection itself when it has
     /// no pool.
     fn executor(&self) -> &dyn Executor {
-        match self.db.pool() {
-            Some(pool) => pool,
-            None => &self.db,
-        }
+        self.db.pool()
     }
 
     async fn execute_in(&self, uow: Option<&Uow>, stmt: Statement) -> StoreResult<u64> {

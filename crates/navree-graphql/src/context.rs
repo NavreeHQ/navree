@@ -7,14 +7,13 @@ use async_graphql::parser::types::OperationType;
 use async_graphql::{Context, Error};
 use axum::extract::FromRequestParts;
 use futures_util::FutureExt;
-use navree_access::{Ability, Accessible, ActionMarker, Authorized, Subject};
+use navree_access::{Ability, Accessible, ActionMarker, Authorized, Subject, SubjectRecords};
 use navree_auth::User;
 use navree_contracts::Principal;
 use navree_db::Uow;
 use navree_http::AppError;
 use navree_kernel::AppContext;
 use navree_workspace::{CurrentWorkspace, DemoIntent};
-use sea_orm::EntityTrait;
 
 use crate::__private::FIELD;
 use crate::loader::RequestLoader;
@@ -64,18 +63,17 @@ pub trait ContextExt {
     fn abilities(&self) -> impl Future<Output = Result<Arc<Ability>, Error>> + Send;
 
     /// A filter for the records of `E` the viewer may `A`
-    /// (`accessible.apply(Entity::find())`).
+    /// (with navree-orm: `Deal::query().accessible(&ability, Read)`).
     fn accessible<E, A>(&self) -> impl Future<Output = Result<Accessible<E, A>, Error>> + Send
     where
-        E: EntityTrait + Subject,
+        E: Subject,
         A: ActionMarker;
 
     /// The record the field's `#[can(A, E, from = "arg")]` check loaded; an
     /// internal error when the field declares no such check.
     fn authorized<E, A>(&self) -> Result<Authorized<E, A>, Error>
     where
-        E: EntityTrait + Subject,
-        E::Model: Sync,
+        E: SubjectRecords,
         A: ActionMarker;
 
     /// The current workspace (navree-workspace's `WorkspaceModule`), resolved
@@ -123,7 +121,7 @@ impl ContextExt for Context<'_> {
 
     async fn accessible<E, A>(&self) -> Result<Accessible<E, A>, Error>
     where
-        E: EntityTrait + Subject,
+        E: Subject,
         A: ActionMarker,
     {
         let access = operation(self)?.access().await?;
@@ -132,8 +130,7 @@ impl ContextExt for Context<'_> {
 
     fn authorized<E, A>(&self) -> Result<Authorized<E, A>, Error>
     where
-        E: EntityTrait + Subject,
-        E::Model: Sync,
+        E: SubjectRecords,
         A: ActionMarker,
     {
         let missing = || -> Error {

@@ -10,7 +10,6 @@ use async_graphql::{ErrorExtensionValues, PathSegment, Response, ServerError, Va
 use http::StatusCode;
 use navree_http::{AppError, ErrorMapper};
 use navree_kernel::BoxError;
-use sea_orm::DbErr;
 
 /// The message of a server error: internals never reach the client.
 const INTERNAL_MESSAGE: &str = "Internal server error";
@@ -119,13 +118,6 @@ fn classify(error: &ServerError, mappers: &[ErrorMapper]) -> Classified {
     };
     if let Some(app) = source.downcast_ref::<AppError>() {
         return from_app_error(app, mappers);
-    }
-    if let Some(db) = source.downcast_ref::<DbErr>() {
-        return match navree_db::map_db_error(db).or_else(|| ErrorMapper::apply_any(mappers, source))
-        {
-            Some(mapped) => from_app_error(&mapped, mappers),
-            None => internal(db.to_string()),
-        };
     }
     if let Some(db) = source.downcast_ref::<navree_db::DbError>() {
         return match navree_db::map_db_error(db).or_else(|| ErrorMapper::apply_any(mappers, source))
@@ -280,7 +272,7 @@ mod tests {
 
     #[test]
     fn database_errors_map_like_on_routes() {
-        let error = rendered(DbErr::RecordNotFound("deal".into()).into());
+        let error = rendered(navree_db::DbError::not_found("deal").into());
         assert_eq!(extension(&error, "code"), Value::from("NOT_FOUND"));
         assert_eq!(extension(&error, "statusCode"), Value::from(404));
     }

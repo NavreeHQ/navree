@@ -11,7 +11,7 @@ use chrono::{DateTime, SecondsFormat, TimeDelta, Utc};
 use http::header::{CONTENT_TYPE, HeaderName, HeaderValue, USER_AGENT};
 use navree_contracts::{Clock, Dispatcher, Job, JobEnvelope, JobOptions, SystemClock};
 use navree_crypto::Encrypter;
-use navree_db::{Db, DbError, Page, PageQuery, Uow, prune_time_series_on};
+use navree_db::{Db, DbError, Page, PageQuery, Uow, prune_time_series};
 use navree_events::EventBus;
 use navree_http_client::{HttpClient, HttpClientError};
 use navree_kernel::{AppContext, WeakAppContext};
@@ -583,7 +583,7 @@ impl Webhooks {
     /// `days` (default `webhooks.incoming.receipt_days`). On TimescaleDB,
     /// where the delivery log is made of hypertables, the days entirely
     /// before the cutoff go as whole chunks (see
-    /// [`prune_time_series_on`](navree_db::prune_time_series_on)).
+    /// [`prune_time_series`](navree_db::prune_time_series)).
     pub async fn prune(&self, days: Option<u64>) -> Result<Pruned, WebhooksError> {
         let deps = self.deps().await?;
         let db = deps.db()?;
@@ -598,7 +598,7 @@ impl Webhooks {
             // Attempts no older than their delivery: the old ones first (by
             // whole chunks), then the late retries of the deliveries that
             // go, then those deliveries.
-            prune_time_series_on(&uow, ATTEMPTS_TABLE, "created_at", deliveries_before).await?;
+            prune_time_series(&uow, ATTEMPTS_TABLE, "created_at", deliveries_before).await?;
             attempt::Model::query()
                 .where_(
                     attempt::Model::DELIVERY_ID.in_subquery(
@@ -610,7 +610,7 @@ impl Webhooks {
                 .delete(&uow)
                 .await?;
             let deliveries =
-                prune_time_series_on(&uow, DELIVERIES_TABLE, "created_at", deliveries_before)
+                prune_time_series(&uow, DELIVERIES_TABLE, "created_at", deliveries_before)
                     .await?;
             let receipts = receipt::Model::query()
                 .where_(receipt::Model::RECEIVED_AT.lt(receipts_before))

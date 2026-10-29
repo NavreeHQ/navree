@@ -65,8 +65,6 @@ navree-testing = { workspace = true }
 navree-view = { workspace = true }
 navree-workspace = { workspace = true }
 protox = { workspace = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 tonic-prost-build = { workspace = true }
