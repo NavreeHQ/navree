@@ -44,7 +44,7 @@ tests/
 
 ### The root directory
 
-- **`Cargo.toml`** names the package and its dependencies: `navree` (with its `postgres` feature, the driver of TimescaleDB), plus `serde`, `sea-orm`, `sea-orm-migration` and `garde`, whose derive macros name their own crates, and `chrono`, `uuid` and `serde_json`. It ends with an empty `[workspace]` table, so the app is a workspace of its own; remove it to make the app a member of an enclosing workspace. The `[profile.dev]` settings keep debug builds quick to link and compile Argon2 with optimisations, which keeps password hashing bearable in development.
+- **`Cargo.toml`** names the package and its dependencies: `navree` (with its `postgres` feature, the driver of TimescaleDB), plus `serde` and `garde`, whose derive macros name their own crates, and `chrono`, `uuid` and `serde_json`. It ends with an empty `[workspace]` table, so the app is a workspace of its own; remove it to make the app a member of an enclosing workspace. The `[profile.dev]` settings keep debug builds quick to link and compile Argon2 with optimisations, which keeps password hashing bearable in development.
 - **`.env`** holds this machine's settings and secrets, such as `APP_KEY`. `navree new` creates it from `.env.example`, and git ignores it. See [Configuration](/docs/getting-started/configuration/#the-env-file).
 - **`.env.example`** lists the keys `.env` needs, without secrets. Commit it.
 - **`config/app.toml`** holds the settings every environment shares: the listening address, the database URL, the log level, the mail transport and so on.
@@ -68,7 +68,7 @@ A feature module keeps everything about one feature together. `navree make:modul
 | `mod.rs` | The module struct and its `#[module(...)]` declaration: imports, providers, controllers, exports, and a `wire` method for registrations the attribute has no key for, such as migrations |
 | `controller.rs` | The controller: HTTP routes with their access attributes |
 | `service.rs` | The business logic, as an injectable service |
-| `entity.rs` | The SeaORM entity of the module's table |
+| `entity.rs` | The ORM model of the module's table |
 | `dto.rs` | Request and response bodies, with validation rules |
 | `migrations/` | The module's migration set; each module owns its tables |
 | `tests/` | Tests that boot the module alone on a fresh database |

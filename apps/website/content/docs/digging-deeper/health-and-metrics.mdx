@@ -265,7 +265,7 @@ With `observe.metrics = false`, no recorder is installed and `/metrics` isn't mo
 | Event | Emitted by | When | Fields |
 |---|---|---|---|
 | `RequestHandled` | `HttpModule` | a response is ready | `method`, `route` (the template, `None` when no route matched), `path`, `status`, `duration`, `user_id`, `workspace_id`, `request_id`, `client_ip` |
-| `QueryExecuted` | `DatabaseModule` | a statement ran | `sql` (with its placeholders, never the bound values), `duration`, `rows` (`None`: SeaORM doesn't report them), `connection` (the URL without its password), `failed` |
+| `QueryExecuted` | `DatabaseModule` | a statement ran | `sql` (with its placeholders, never the bound values), `duration`, `rows` (the rows returned or affected, `None` when the driver doesn't say), `connection` (the URL without its password), `failed` |
 | `JobProcessed` | queue workers | a job attempt succeeded | `queue`, `job_type`, `job_id`, `attempt`, `duration` |
 | `JobFailed` | queue workers | a job attempt failed, timed out or panicked | the same, plus `error` (the error chain) and `will_retry` |
 | `ScheduledTaskRan` | `ScheduleModule` | a task ran (skipped ticks aren't reported) | `task`, `tick`, `duration`, `error` |

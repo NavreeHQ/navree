@@ -289,7 +289,7 @@ async fn move_deal(&self, run: &AgentRun, args: MoveDealArgs) -> Result<DealReso
 
 Server errors (5xx) reach the model as `"The tool failed"`, never with their details, and are logged at `error` with the agent, the tool and the run's request id. A tool that runs past `tool_timeout_secs` is a 504 the model reads as "The tool did not finish in time".
 
-Writes happen in the tool call's unit of work. It commits when the tool returns `Ok` and rolls back when it returns `Err`, so a failed tool leaves nothing half done. Rows written through `Repo` are [audited](/docs/security/audit-log/) with the user as the actor, and jobs and events dispatched by the tool are queued only when it commits, as in a request.
+Writes happen in the tool call's unit of work. It commits when the tool returns `Ok` and rolls back when it returns `Err`, so a failed tool leaves nothing half done. Rows written through models are [audited](/docs/security/audit-log/) with the user as the actor, and jobs and events dispatched by the tool are queued only when it commits, as in a request.
 
 <Callout type="warning" title="Content is not a command">
 

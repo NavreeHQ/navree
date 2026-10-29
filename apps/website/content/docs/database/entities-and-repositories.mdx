@@ -1,164 +1,122 @@
 ---
-title: "Entities and repositories"
-description: "SeaORM entities next to the ORM's models: defining entities, relations and eager loading, UUID v7 keys, soft deletes by hand, and `Repo` for writes that record change events."
+title: "Models and records"
+description: "How a table maps to a `#[derive(Model)]` struct: UUID v7 keys, relations and eager loading, creating, saving and deleting records through a unit of work, the change events those writes record, soft deletes, mass writes and raw statements."
 ---
 
-Navree's [ORM](/docs/orm/getting-started/) is how an app works with its data, and what new code should use. It runs on [SeaORM 2](https://www.sea-ql.org/SeaORM/)'s connections, and SeaORM entities keep working next to models, in the same unit of work: several of Navree's own modules use entities (navree-auth's users, for one), and an app's older code may too. This page is about them. You query an entity with SeaORM, whose documentation applies as it is, and `navree-db` adds `Repo<E>`: a few functions that write an entity through the [unit of work](/docs/database/unit-of-work/) and record a change event for every write. The [audit log](/docs/security/audit-log/) turns those events into audit rows.
+A table is a Rust struct with `#[derive(Model)]`. Reading it gives you `Record<M>` values, and writing a record through the request's [unit of work](/docs/database/unit-of-work/) records a change event for the [audit log](/docs/security/audit-log/). This page is the database-side view of that: how tables map to models, what a write records, and how to drop to SQL when a model is the wrong tool. The [ORM section](/docs/orm/getting-started/) is the full reference for the query builder, relationships, casts and events.
 
-What a model does for you, an entity leaves to your code:
-
-| With a SeaORM entity | With a model |
+| You write | Navree does |
 |---|---|
-| A module with `Model`, `Relation` and `ActiveModel` types | A struct with `#[derive(Model)]` ([models](/docs/orm/models/)) |
-| `Repo::<E>::insert`, `update` and `delete` record change events | `create`, `save` and `delete` through a `&Uow` record the same events |
-| `Uuid::now_v7()`, `created_at` and `updated_at` set by hand | Keys and `#[model(timestamps)]` filled in |
-| A `deleted_at` column and a filter in every query | `#[model(soft_deletes)]` ([soft deletes](/docs/orm/scopes-and-soft-deletes/#soft-deletes)) |
-| `find_also_related`, `LoaderTrait` | `with("company")` ([eager loading](/docs/orm/eager-loading/)) |
-| `navree::db::paginate(select, conn, page)` | `query.paginate(&uow, page)` ([pagination](/docs/orm/pagination-and-streaming/)) |
+| A struct with `#[derive(Model)]` ([models](/docs/orm/models/)) | Maps it to a table, with one typed column constant per field |
+| `Deal::create(&uow, ..)`, `record.save(&uow)`, `record.delete(&uow)` | Writes in the unit of work's transaction and records a change event |
+| `#[model(timestamps)]` and a `Uuid` key | Fills in `created_at`, `updated_at` and a UUID v7 key |
+| `#[model(soft_deletes)]` ([soft deletes](/docs/orm/scopes-and-soft-deletes/#soft-deletes)) | Hides deleted rows from every query and sets `deleted_at` on delete |
+| `Deal::query().with("company")` ([eager loading](/docs/orm/eager-loading/)) | Loads each relation for a whole page in one query |
+| `query.paginate(&uow, page)` ([pagination](/docs/orm/pagination-and-streaming/)) | Reads a page and its total as `{ data, meta }` |
 
-Both share the pool, the unit of work and its transaction, so a request can write a model and an entity and commit them together.
+## Defining a model
 
-## Defining entities
+Here is a deal. The struct is the source of truth: there is no schema file, and the [migration](/docs/database/migrations/) that creates the table is written beside it.
 
-An entity is a Rust module with a `Model` struct, a `Relation` enum and an `ActiveModelBehavior` impl, as SeaORM expects. Here is a deal:
-
-```rust title="src/modules/deals/entity.rs"
-use sea_orm::entity::prelude::*;
+```rust title="src/modules/deals/models/deal.rs"
+use chrono::{DateTime, Utc};
+use navree::prelude::*;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 /// A deal.
-#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-#[sea_orm(table_name = "deals")]
-pub struct Model {
-    /// A UUID v7, so ids sort by creation time.
-    #[sea_orm(primary_key, auto_increment = false)]
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deals", timestamps)]
+pub struct Deal {
+    /// A UUID v7, generated when the deal is created.
     pub id: Uuid,
     pub title: String,
     /// The value in cents.
     pub amount_cents: i64,
+    #[model(cast = "string_enum")]
     pub stage: Stage,
     pub company_id: Uuid,
     pub owner_id: Uuid,
-    pub created_at: DateTimeUtc,
-    pub updated_at: DateTimeUtc,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
-
-/// A deal belongs to a company.
-#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {
-    #[sea_orm(
-        belongs_to = "super::company::Entity",
-        from = "Column::CompanyId",
-        to = "super::company::Column::Id"
-    )]
-    Company,
-}
-
-impl Related<super::company::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::Company.def()
-    }
-}
-
-impl ActiveModelBehavior for ActiveModel {}
 
 /// The pipeline stage, stored and sent as a lower-case string.
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Hash, EnumIter, DeriveActiveEnum, Serialize, Deserialize,
-)]
-#[sea_orm(rs_type = "String", db_type = "String(StringLen::N(16))")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Stage {
-    #[sea_orm(string_value = "lead")]
+    #[default]
     Lead,
-    #[sea_orm(string_value = "proposal")]
     Proposal,
-    #[sea_orm(string_value = "won")]
     Won,
-    #[sea_orm(string_value = "lost")]
     Lost,
 }
 ```
 
-Three things to know when you define entities in a Navree app:
+Three things to know when you define models in a Navree app:
 
-- **`Serialize` on the model.** `Repo` needs it, because it records old and new values as JSON. It also lets a handler return a model as JSON directly.
-- **SeaORM as a direct dependency.** SeaORM's derives name the `sea_orm` crate, so your app depends on `sea-orm` (with the `macros`, `with-chrono`, `with-json` and `with-uuid` features) next to `navree`, as an app made by `navree new` does. The database drivers come with `navree`.
-- **Timestamps you set yourself.** `created_at` and `updated_at` are ordinary `DateTimeUtc` columns. Nothing fills them in automatically: set them when you insert and update, from `Utc::now()` or from the app's `dyn Clock`, which tests can [fix](/docs/testing/fakes/#the-clock).
+- **`Serialize` on the model.** A change event records old and new values as JSON, which is built from the model's serde form. It also lets a handler return a record as JSON directly.
+- **`Default`.** `Deal::create(&uow, Deal { title: .., ..Default::default() })` leaves the key and timestamps to the ORM.
+- **Timestamps are filled in.** With `timestamps`, `created_at` and `updated_at` are set from the app's `dyn Clock`, which tests can [fix](/docs/testing/fakes/#the-clock).
 
-To start a new entity, `navree make:entity deals deal` writes `src/modules/deals/entities/deal.rs` with an `id` and the two timestamps, and prints the command that creates its table (`navree make:migration deals create_deals_table`). For a new table, `navree make:model deals Deal --migration` writes a model instead.
+To start a new model, `navree make:model deals Deal --migration` writes the struct and the migration that creates its table. A module registers its models with `m.model::<Deal>()`.
 
 ### UUID v7 primary keys
 
-Navree apps use UUID v7 keys that the app generates: the column is `#[sea_orm(primary_key, auto_increment = false)] pub id: Uuid`, and you set `id: Set(Uuid::now_v7())` when you insert. A version 7 UUID starts with a timestamp, so:
+Navree apps use UUID v7 keys that the app generates: the field is `pub id: Uuid`, and the ORM fills it with `Uuid::now_v7()` when you create a record with a nil key. A version 7 UUID starts with a timestamp, so:
 
 - ids sort by creation time, which keeps inserts at the end of the primary key index and makes "newest first" a key order;
 - [cursor pagination](/docs/database/pagination/#cursor-pagination) can page by the key;
 - the app knows the id before the row exists, and ids don't reveal how many records there are.
 
-Generating them needs the `v7` feature of the `uuid` crate. Integer keys work too (they are SeaORM's default), but cursor pagination needs a UUID column. A model with a `Uuid` key generates its UUID v7 when it is created.
+Generating them needs the `v7` feature of the `uuid` crate. Integer keys work too (`pub id: i64`, assigned by the database), but cursor pagination needs a UUID column. [Primary keys](/docs/orm/models/#primary-keys) lists every key type.
 
 ## Relations
 
-Declare relations the SeaORM way: `belongs_to` on the entity holding the foreign key, `has_many` on the other side, and a `Related` impl for each direction you navigate:
+A model declares its relations in a `#[relations]` block, with typed foreign keys, so a key on the wrong model doesn't compile:
 
-```rust title="src/modules/companies/entity.rs"
-#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {
-    /// The company's deals.
-    #[sea_orm(has_many = "super::deal::Entity")]
-    Deals,
-}
-
-impl Related<super::deal::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::Deals.def()
+```rust title="src/modules/deals/models/deal.rs"
+#[relations]
+impl Deal {
+    /// The company the deal is with.
+    pub fn company(&self) -> BelongsTo<Deal, Company> {
+        self.belongs_to(Deal::COMPANY_ID)
     }
 }
 ```
 
-A relation can point at an entity of another crate. The CRM's deals belong to navree-auth's users: `belongs_to = "navree::auth::user::Entity"` with `to = "navree::auth::user::Column::Id"` (navree-auth keeps that SeaORM entity beside its `User` model while code still relates to it; new code relates models).
+```rust title="src/modules/companies/models/company.rs"
+#[relations]
+impl Company {
+    /// The company's deals.
+    pub fn deals(&self) -> HasMany<Company, Deal> {
+        self.has_many(Deal::COMPANY_ID)
+    }
+}
+```
+
+[Relationships](/docs/orm/relationships/) covers every kind: one to one, many to many with pivot models, through and polymorphic relations. A relation can point at a model of another crate; navree-auth's `User` is a model like any other.
 
 ### Eager loading
 
-For entities, Navree adds nothing to SeaORM's eager loading, and every form works with any connection, the unit of work's transaction included. (Models load relations with `with`, in one query per relation, and can make lazy loading an error: [eager loading](/docs/orm/eager-loading/).) Whatever you choose, load related records for a whole page at once rather than querying inside a loop over it.
-
-`find_also_related` reads each record with its parent in one query (a `LEFT JOIN`):
+Whatever you choose, load related records for a whole page at once rather than querying inside a loop over it. `with` loads a relation for every record of a query in one more query (`WHERE id IN (..)`), and the results come back attached to their parents:
 
 ```rust
-let deals: Vec<(deal::Model, Option<company::Model>)> = deal::Entity::find()
-    .find_also_related(company::Entity)
-    .order_by_desc(deal::Column::CreatedAt)
-    .all(&*tx)
+let deals = Deal::query()
+    .with("company")
+    .order_by_desc(Deal::CREATED_AT)
+    .get(&uow)
     .await?;
 ```
 
-SeaORM's `LoaderTrait` (in `sea_orm::entity::prelude`) loads a relation for a list you already have, in one more query (`WHERE company_id IN (..)`) and without a join:
+[Eager loading](/docs/orm/eager-loading/) covers nested paths, constrained loads, counts and how to make lazy loading an error.
 
-```rust
-use sea_orm::LoaderTrait;
-
-// The deals of each company: one more query, `WHERE company_id IN (..)`.
-let companies = company::Entity::find()
-    .filter(company::Column::DeletedAt.is_null())
-    .all(&*tx)
-    .await?;
-let deals_per_company: Vec<Vec<deal::Model>> = companies.load_many(deal::Entity, &*tx).await?;
-
-// The company of each deal: one more query, `WHERE id IN (..)`.
-let deals = deal::Entity::find().all(&*tx).await?;
-let company_of_each: Vec<Option<company::Model>> =
-    deals.load_one(company::Entity, &*tx).await?;
-```
-
-The results come back in the order of the list you loaded them for.
-
-When a response embeds only a few columns of a related record, such as `"company": {"id", "name"}`, the CRM selects only those columns, for every id on the page, in one query, and looks them up in a map:
+When a response embeds only a few fields of a related record, such as `"company": {"id", "name"}`, the CRM loads every company the page names in one query and looks them up in a map:
 
 ```rust title="src/modules/companies/embeds.rs"
 use std::collections::{BTreeSet, HashMap};
 
-use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QuerySelect};
+use navree::prelude::*;
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -171,57 +129,40 @@ pub struct CompanyRef {
 
 impl CompanyRef {
     /// The companies with `ids`, by id: one query for any number of ids.
-    pub async fn load<C: ConnectionTrait>(
-        conn: &C,
+    pub async fn load(
+        uow: &Uow,
         ids: impl IntoIterator<Item = Uuid>,
-    ) -> Result<HashMap<Uuid, CompanyRef>, DbErr> {
+    ) -> navree::orm::Result<HashMap<Uuid, CompanyRef>> {
         let ids: BTreeSet<Uuid> = ids.into_iter().collect();
         if ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let rows: Vec<(Uuid, String)> = company::Entity::find()
-            .select_only()
-            .column(company::Column::Id)
-            .column(company::Column::Name)
-            .filter(company::Column::Id.is_in(ids))
-            .into_tuple()
-            .all(conn)
-            .await?;
-        Ok(rows
-            .into_iter()
-            .map(|(id, name)| (id, CompanyRef { id, name }))
+        let companies = Company::query().where_key_in(ids).get(uow).await?;
+        Ok(companies
+            .iter()
+            .map(|company| {
+                (
+                    company.id,
+                    CompanyRef { id: company.id, name: company.name.clone() },
+                )
+            })
             .collect())
     }
 }
 ```
 
-A list endpoint then calls `CompanyRef::load(&*tx, page.data.iter().map(|d| d.company_id))` once per page.
+A list endpoint then calls `CompanyRef::load(&uow, page.data.iter().map(|d| d.company_id))` once per page. Because `Company` is a model, its [global scopes](/docs/orm/scopes-and-soft-deletes/#global-scopes) apply: a soft-deleted company is left out of the map.
 
-## Repositories
+## Writing records
 
-`Repo<E>` is not an object you create or inject: it is a set of associated functions for entity `E`, each taking the unit of work first. A type alias keeps call sites short (`type Deals = Repo<deal::Entity>;`).
-
-| Function | Returns | Change event |
-|---|---|---|
-| `Repo::<E>::insert(&uow, active_model)` | the inserted model | `created`, with the whole new record |
-| `Repo::<E>::update(&uow, active_model)` | the updated model | `updated`, with only the fields that changed |
-| `Repo::<E>::delete(&uow, model)` | `()` | `deleted`, with the whole old record |
-| `Repo::<E>::find(&uow, id)` | `Option<Model>` | none |
-| `Repo::<E>::find_or_fail(&uow, id)` | the model, or `DbErr::RecordNotFound` (a 404 over HTTP) | none |
-| `Repo::<E>::find_for_update(&uow, id)` | `Option<Model>`, row locked on PostgreSQL and MySQL | none |
-
-Every function runs in the unit of work's transaction, beginning it if needed, so reads see the request's own uncommitted writes. The `find` functions take the value of a single-column primary key; on an entity with a composite key they return a `KeyArityMismatch` error. `insert`, `update` and `delete` work with composite keys too.
-
-`Repo` is in the prelude, alongside `Uow`.
+Every write takes an executor, and in a request that is the `&Uow`. The write runs in the unit of work's transaction, so it commits with the response (or rolls back with it), and it records a change event.
 
 ### Creating records
 
-Build an `ActiveModel` with its columns `Set`, including the id and the timestamps, and pass it to `Repo::insert`:
+`create` inserts a model and returns its record, with the key and timestamps filled in:
 
 ```rust title="src/modules/deals/service.rs"
-use chrono::Utc;
 use navree::prelude::*;
-use sea_orm::ActiveValue::Set;
 use uuid::Uuid;
 
 #[injectable]
@@ -229,23 +170,24 @@ pub struct DealService;
 
 impl DealService {
     /// Creates a deal owned by `owner_id`.
-    pub async fn create(&self, uow: &Uow, owner_id: Uuid, input: CreateDeal) -> Result<deal::Model> {
-        let now = Utc::now();
-        let deal = Repo::<deal::Entity>::insert(
+    pub async fn create(
+        &self,
+        uow: &Uow,
+        owner_id: Uuid,
+        input: CreateDeal,
+    ) -> navree::orm::Result<Record<Deal>> {
+        Deal::create(
             uow,
-            deal::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                title: Set(input.title),
-                amount_cents: Set(input.amount_cents),
-                stage: Set(Stage::Lead),
-                company_id: Set(input.company_id),
-                owner_id: Set(owner_id),
-                created_at: Set(now),
-                updated_at: Set(now),
+            Deal {
+                title: input.title,
+                amount_cents: input.amount_cents,
+                stage: Stage::Lead,
+                company_id: input.company_id,
+                owner_id,
+                ..Default::default()
             },
         )
-        .await?;
-        Ok(deal)
+        .await
     }
 }
 ```
@@ -260,46 +202,42 @@ async fn store(
     uow: Uow,
     CurrentPrincipal(me): CurrentPrincipal,
     Valid(Json(input)): Valid<Json<CreateDeal>>,
-) -> Result<Created<deal::Model>> {
+) -> Result<Created<Record<Deal>>> {
     let deal = self.deals.create(&uow, me.user_id, input).await?;
     Ok(Created(format!("/api/v1/deals/{}", deal.id), deal))
 }
 ```
 
-A column you leave `NotSet` is left out of the `INSERT`, so the database default applies. If the insert breaks a unique or foreign key constraint, the handler's `?` turns the error into a 409.
+If the insert breaks a unique or foreign key constraint, the handler's `?` turns the error into a 409 ([database errors](/docs/database/getting-started/#database-errors)).
 
 ### Updating records
 
-Load the record, turn it into an `ActiveModel`, `Set` what changes and pass it to `Repo::update`:
+Load the record, change its fields and save it:
 
 ```rust title="src/modules/deals/service.rs"
-use sea_orm::IntoActiveModel;
-
 /// Changes the fields `input` sends (a PATCH: a field left out stays as it is).
-pub async fn update(&self, uow: &Uow, id: Uuid, input: UpdateDeal) -> Result<deal::Model> {
-    let deal = Repo::<deal::Entity>::find_or_fail(uow, id).await?;
-    let mut active = deal.into_active_model();
+pub async fn update(
+    &self,
+    uow: &Uow,
+    id: Uuid,
+    input: UpdateDeal,
+) -> navree::orm::Result<Record<Deal>> {
+    let mut deal = Deal::find_or_fail(uow, id).await?;
     if let Some(title) = input.title {
-        active.title = Set(title);
+        deal.title = title;
     }
     if let Some(amount_cents) = input.amount_cents {
-        active.amount_cents = Set(amount_cents);
+        deal.amount_cents = amount_cents;
     }
     if let Some(stage) = input.stage {
-        active.stage = Set(stage);
+        deal.stage = stage;
     }
-    active.updated_at = Set(Utc::now());
-    Ok(Repo::<deal::Entity>::update(uow, active).await?)
+    deal.save(uow).await?;
+    Ok(deal)
 }
 ```
 
-`into_active_model()` marks every field unchanged, and SeaORM's `UPDATE` only writes the fields you `Set`. `Repo::update` then:
-
-1. reads the current row by the active model's primary key (with `FOR UPDATE` on PostgreSQL and MySQL), failing with `RecordNotFound` if it's gone, or with `PrimaryKeyNotSet` if the key isn't set;
-2. runs the update;
-3. compares the old and new rows and records an `updated` event with only the fields whose values differ. When nothing changed, it records no event.
-
-For the update above, moving a deal from `lead` to `won` records:
+A record remembers the values it was read with, so `save` writes only the columns that changed, sets `updated_at`, and records an `updated` event with only those columns. A record with no change writes nothing and records no event. For the update above, moving a deal from `lead` to `won` records:
 
 ```json
 {
@@ -311,26 +249,20 @@ For the update above, moving a deal from `lead` to `won` records:
 }
 ```
 
-The first read costs one extra `SELECT` per update, even when you loaded the record a moment before. It's what makes the recorded old values match the row that was actually replaced.
-
-### `Repo` has no `save()`
-
-`Repo` has no single `save()` that inserts or updates depending on the record (a model's [record](/docs/orm/models/#records) has one). Use `Repo::insert` for a new record and `Repo::update` for an existing one. Avoid SeaORM's own `ActiveModelTrait::save` on Navree entities: it inserts only when the primary key is `NotSet`, so with an app-generated UUID it would try to update a record that doesn't exist yet, and like every plain SeaORM write it records no change event. For an upsert, use SeaORM's `insert(..).on_conflict(..)` through `uow.tx()`, and record the change yourself if it should be audited (see [below](#when-to-use-repo-and-when-plain-seaorm)).
+`deal.update(uow, |d| d.stage = Stage::Won)` changes and saves in one call. `save` also inserts a record you built with `Record::new(..)`, so one method serves both. [Models](/docs/orm/models/#updating-records) covers dirty tracking, counters, reloading and finding or creating.
 
 ### Deleting records
 
-`Repo::delete` takes the model rather than an id, so that it can record the old values. Load it first:
-
 ```rust
-let deal = Repo::<deal::Entity>::find_or_fail(uow, id).await?;
-Repo::<deal::Entity>::delete(uow, deal).await?;
+let mut deal = Deal::find_or_fail(uow, id).await?;
+deal.delete(uow).await?;
 ```
 
-It fails with `RecordNotFound` if no row was deleted. To keep the row, delete softly instead ([below](#soft-deletes)).
+`delete` records a `deleted` event with the whole old record. On a model with soft deletes it sets `deleted_at` instead ([below](#soft-deletes)).
 
 ### Change events
 
-Each write through `Repo` adds a `ChangeEvent` to the unit of work:
+Each write through a unit of work adds a `ChangeEvent` to it:
 
 | Field | What it holds |
 |---|---|
@@ -340,33 +272,29 @@ Each write through `Repo` adds a `ChangeEvent` to the unit of work:
 | `old` | The whole record for deletes, the changed fields for updates, `None` for creates. |
 | `new` | The whole record for creates, the changed fields for updates, `None` for deletes. |
 
-Models write the same events when they are created, saved or deleted through a unit of work, so the audit log reads entities and models alike. `uow.changes()` returns the events recorded so far. When the unit of work commits, every registered change observer sees them, inside the transaction. An event holds the record as JSON; in an app with no change observer, `Repo` only builds that JSON if `uow.changes()` asks for it, so writes cost nothing extra for events nobody reads. `AuditModule` is one: it writes an audit row per event (`deal.created`, `deal.updated`, `deal.deleted`, with subject type `Deal`), so a rolled-back change leaves no audit row. [The unit of work](/docs/database/unit-of-work/#change-events-and-observers) shows how to write an observer of your own.
+`uow.changes()` returns the events recorded so far. When the unit of work commits, every registered change observer sees them, inside the transaction. `AuditModule` is one: it writes an audit row per event (`deal.created`, `deal.updated`, `deal.deleted`, with subject type `Deal`), so a rolled-back change leaves no audit row. [The unit of work](/docs/database/unit-of-work/#change-events-and-observers) shows how to write an observer of your own, and the ORM's [events](/docs/orm/events-and-observers/) are the other side: listeners that react to a model being saved.
 
-## When to use Repo and when plain SeaORM
+## Mass writes and raw statements
 
-Use `Repo` to create, update and delete the records your users work with, one at a time. Those are the changes an audit trail should show, and `Repo` records them for you.
+Create, save and delete one record at a time for the changes your users make: those are the changes an audit trail should show. For everything else, use the tool that fits:
 
-Use plain SeaORM, through `uow.tx()`, for everything else:
+- **Reads.** Lists, filters, joins, counts and aggregates are model queries.
+- **Bulk writes and bookkeeping.** A query's `update`, `delete` and `increment` change many rows in one statement and record no events ([mass updates](/docs/orm/query-builder/#updating-and-deleting-many-records)). The CRM renumbers the positions of the deals in a pipeline column this way: bookkeeping that shouldn't fill the audit log.
+- **Statements the builder doesn't cover.** A `Statement` runs on any executor, `&uow` included ([raw statements](/docs/database/getting-started/#raw-sql)).
 
-- **Reads.** Lists, filters, joins, counts and aggregates are SeaORM queries (`Repo::find` and `find_or_fail` cover loading one record by id).
-- **Bulk writes and bookkeeping.** `update_many` and `delete_many` change many rows in one statement, and record no events. The CRM renumbers the positions of the deals in a pipeline column this way: bookkeeping that shouldn't fill the audit log.
-- **Statements `Repo` doesn't cover**, such as upserts.
-
-When a plain write should still be audited, record its event with `uow.record_change`:
+When a mass or raw write should still be audited, record its event with `uow.record_change`:
 
 ```rust
-use navree::db::{ChangeEvent, ChangeOp};
-use sea_orm::sea_query::Expr;
+use navree::db::{ChangeEvent, ChangeOp, DbError, Executor, Statement};
 use serde_json::json;
 
 /// Marks a deal won with a single UPDATE, and records the change.
-pub async fn mark_won(uow: &Uow, deal: &deal::Model) -> Result<(), DbErr> {
-    let tx = uow.tx().await?;
-    deal::Entity::update_many()
-        .col_expr(deal::Column::Stage, Expr::value(Stage::Won))
-        .filter(deal::Column::Id.eq(deal.id))
-        .exec(&*tx)
-        .await?;
+pub async fn mark_won(uow: &Uow, deal: &Deal) -> Result<(), DbError> {
+    uow.execute(&Statement::portable(
+        "UPDATE deals SET stage = ? WHERE id = ?",
+        ["won".into(), deal.id.into()],
+    ))
+    .await?;
     uow.record_change(ChangeEvent {
         entity: "deals".to_owned(),
         id: deal.id.to_string(),
@@ -378,30 +306,14 @@ pub async fn mark_won(uow: &Uow, deal: &deal::Model) -> Result<(), DbErr> {
 }
 ```
 
-Whichever you use, write through the unit of work's transaction, not through the pool (`db.conn()`). A write through the pool escapes the request's rollback, and on SQLite, once the unit of work has begun its transaction, it waits for the write lock that transaction holds and fails after 5 seconds.
+Whichever you use, write through the unit of work (`&uow`), not through the pool. A write through the pool escapes the request's rollback, and on SQLite, once the unit of work has begun its transaction, it waits for the write lock that transaction holds and fails after 5 seconds.
 
 ## Soft deletes
 
-Models soft-delete with `#[model(soft_deletes)]`: their queries leave deleted records out, `delete` sets `deleted_at`, and `restore` and `force_delete` undo or finish it ([soft deletes](/docs/orm/scopes-and-soft-deletes/#soft-deletes)). SeaORM entities have no such scope, so an entity soft-deletes with a nullable `deleted_at` column and a few rules you can copy:
-
-1. Add the column, nullable, in the table's migration:
-
-   ```rust
-   t.soft_deletes_tz(); // a nullable `deleted_at` TIMESTAMP WITH TIME ZONE
-   ```
-
-   with `pub deleted_at: Option<DateTimeUtc>` on the model.
-2. Delete by setting `deleted_at` with `Repo::update`, so the audit log records an `updated` event with the new `deleted_at`.
-3. Filter every list with `deleted_at IS NULL`.
-4. Answer 404 when a request shows, updates or deletes a deleted record.
-5. Treat deleted records as missing when you check references: the CRM answers "company_id does not exist" when a new deal names a deleted company.
+A model soft-deletes with `#[model(soft_deletes)]` and a nullable `deleted_at` field. Its queries leave deleted records out, `delete` sets `deleted_at`, and `restore` and `force_delete` undo or finish it ([soft deletes](/docs/orm/scopes-and-soft-deletes/#soft-deletes)). The table needs the column, which the schema builder adds with `t.soft_deletes_tz()` (a nullable `deleted_at` `TIMESTAMP WITH TIME ZONE`).
 
 ```rust title="src/modules/companies/service.rs"
-use chrono::Utc;
-use navree::db::paginate;
 use navree::prelude::*;
-use sea_orm::ActiveValue::Set;
-use sea_orm::{ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, QueryOrder};
 use uuid::Uuid;
 
 #[injectable]
@@ -409,46 +321,33 @@ pub struct CompanyService;
 
 impl CompanyService {
     /// One page of the companies that are not deleted.
-    pub async fn list(&self, uow: &Uow, page: PageQuery) -> Result<Page<company::Model>> {
-        let select = company::Entity::find()
-            .filter(company::Column::DeletedAt.is_null())
-            .order_by_asc(company::Column::Name)
-            .order_by_asc(company::Column::Id);
-        let tx = uow.tx().await?;
-        Ok(paginate(select, &*tx, page).await?)
+    pub async fn list(&self, uow: &Uow, page: PageQuery) -> navree::orm::Result<Page<Record<Company>>> {
+        Company::query()
+            .order_by(Company::NAME)
+            .order_by(Company::ID)
+            .paginate(uow, page)
+            .await
     }
 
     /// The company with `id`; a 404 when it is soft-deleted.
-    pub async fn find(&self, uow: &Uow, id: Uuid) -> Result<company::Model> {
-        live(Repo::<company::Entity>::find_or_fail(uow, id).await?)
+    pub async fn find(&self, uow: &Uow, id: Uuid) -> navree::orm::Result<Record<Company>> {
+        Company::find_or_fail(uow, id).await
     }
 
     /// Soft-deletes the company; a 404 when it already is.
-    pub async fn delete(&self, uow: &Uow, id: Uuid) -> Result<()> {
-        let mut active = self.find(uow, id).await?.into_active_model();
-        active.deleted_at = Set(Some(Utc::now()));
-        Repo::<company::Entity>::update(uow, active).await?;
+    pub async fn delete(&self, uow: &Uow, id: Uuid) -> navree::orm::Result<()> {
+        let mut company = Company::find_or_fail(uow, id).await?;
+        company.delete(uow).await?;
         Ok(())
-    }
-}
-
-/// `company`, or a 404 when it is soft-deleted.
-fn live(company: company::Model) -> Result<company::Model> {
-    if company.deleted_at.is_some() {
-        Err(AppError::not_found())
-    } else {
-        Ok(company)
     }
 }
 ```
 
-Because nothing filters an entity's deleted rows for you, a few places need care:
+The scope does the filtering, so there is nothing to remember in each query. A few places still call for a decision:
 
-- **Record checks.** `#[can(.., from = "id")]` routes load the record without looking at `deleted_at`. A user whose rules deny the action gets a 403 rather than a 404 for a deleted record, which reveals that it existed. Check `deleted_at` in the handler, as `live` does.
-- **Validation.** navree-validation's `AsyncRule::exists` checks a column only and can't add `deleted_at IS NULL`, so check references to soft-deleted tables in the service. (The ORM's `exists` rule queries a model, and leaves its deleted records out: [validation rules](/docs/orm/workspaces-and-access/#validation-rules).)
-- **Relations.** `find_also_related`, `load_many` and your own embed loaders return deleted rows unless you filter them.
-
-`Repo` has no restore or force-delete helpers: restoring is an update that sets `deleted_at` back to `None`, and a hard delete is `Repo::delete`.
+- **Audit.** A soft delete records a `deleted` event with the whole old record, like any delete, and `restore` an `updated` one.
+- **Validation.** The ORM's `exists` rule queries a model and leaves its deleted records out, `unique` counts them since a unique index still covers their rows ([validation rules](/docs/orm/workspaces-and-access/#validation-rules)). navree-validation's column-only `AsyncRule::exists` knows nothing of `deleted_at`, so check references to soft-deleted tables in the service or use the ORM's rules.
+- **Relations.** A relation reads the related model's scopes, so soft-deleted records stay out of eager loads; `with_trashed` brings them back.
 
 ## Testing
 
@@ -462,12 +361,12 @@ Assert on change events by writing through a unit of work in a test and reading 
     Transactions, after-commit hooks, row locks and change observers.
   </LinkCard>
   <LinkCard href="/docs/database/migrations/" title="Migrations">
-    Creating the tables your entities map to.
+    Creating the tables your models map to.
   </LinkCard>
   <LinkCard href="/docs/database/pagination/" title="Pagination">
-    `paginate`, `Page` and cursor pages over UUID v7 keys.
+    `Page` and cursor pages over UUID v7 keys.
   </LinkCard>
   <LinkCard href="/docs/security/audit-log/" title="The audit log">
-    What happens to the change events `Repo` records.
+    What happens to the change events writes record.
   </LinkCard>
 </LinkCards>

@@ -127,9 +127,9 @@ Go through it in order; each item says how to check.
 
 ## 8. Audit and monitoring
 
-- [ ] `AuditModule` is in the app; writes go through `Repo` so data changes
-  are audited (plain `update_many` isn't; record those with
-  `uow.record_change`).
+- [ ] `AuditModule` is in the app; writes go through models and a unit of
+  work so data changes are audited (mass updates and raw statements aren't;
+  record those with `uow.record_change`).
 - [ ] Sensitive actions carry `#[audit(action = "..")]` (exports, deletions).
 - [ ] `audit:prune` is scheduled and `audit.retention_days` matches policy.
 - [ ] `audit.read` and `roles.manage` are granted only to admins.

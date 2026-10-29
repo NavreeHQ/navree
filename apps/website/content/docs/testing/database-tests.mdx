@@ -28,7 +28,7 @@ There is nothing to reset between tests, and tests aren't wrapped in a transacti
 
 `temp_database()` always creates a SQLite file. For tests on PostgreSQL or MySQL, the ORM's `#[navree::test(database = "postgres")]` gives each test a database of its own on a real server, copied from a template ([ORM testing](/docs/orm/testing/#real-servers)).
 
-To reach the database in a test, resolve `Db` from the app and query the pool with `db.conn()`:
+To reach the database in a test, resolve `Db` from the app. It is an executor, so models, queries and statements take it as it is:
 
 ```rust
 use navree::db::Db;
@@ -54,20 +54,7 @@ Deal::factory()
     .unwrap();
 ```
 
-Records saved outside a unit of work record no change events. SeaORM entities have [factories of their own](/docs/database/seeding-and-factories/#seaorm-entity-factories), which insert active models:
-
-```rust
-use navree::db::{create, create_many};
-
-let owner = Uuid::now_v7();
-let acme = create(&CompanyFactory { owner_id: owner }, db.conn()).await.unwrap();
-create_many(&DealFactory::new(acme.id, owner), db.conn(), 3).await.unwrap();
-create_many(&DealFactory::new(acme.id, owner).stage(Stage::Won), db.conn(), 2)
-    .await
-    .unwrap();
-```
-
-Factories write directly, without your services' rules and without change events. That makes them quick for the data a test merely needs, but not for the behaviour under test.
+Records saved through `&Db`, outside a unit of work, record no change events. Factories write directly, without your services' rules. That makes them quick for the data a test merely needs, but not for the behaviour under test.
 
 ### With seeders
 
@@ -96,7 +83,7 @@ pub async fn create_company(client: &CrmClient, body: Value) -> Value {
 }
 ```
 
-For records another module owns, whose API isn't part of the test app, the CRM inserts the row directly with SeaORM, as `insert_deal` in the same file does.
+For records another module owns, whose API isn't part of the test app, the CRM saves the record directly through its model, as `insert_deal` in the same file does.
 
 ## Asserting on the database
 
@@ -110,17 +97,19 @@ assert_database_count(&db, "deals", 1).await;
 assert_soft_deleted(&db, &company).await;
 ```
 
-Or query the table, through a model or with SeaORM, and check what's there:
+Or query the table through its model and check what's there:
 
 ```rust
-use sea_orm::EntityTrait;
-
 #[tokio::test]
 async fn creating_a_deal_stores_it() {
     let app = app().await;
     let db = app.get::<Db>().await;
     let me = Uuid::now_v7();
-    let acme = create(&CompanyFactory { owner_id: me }, db.conn()).await.unwrap();
+    let acme = Company::factory()
+        .set(Company::OWNER_ID, me)
+        .create_one(&db)
+        .await
+        .unwrap();
 
     let body = app
         .acting_as(principal(me))
@@ -132,8 +121,8 @@ async fn creating_a_deal_stores_it() {
         .json_value();
 
     let id: Uuid = serde_json::from_value(body["id"].clone()).unwrap();
-    let stored = deal::Entity::find_by_id(id)
-        .one(db.conn())
+    let stored = Deal::query()
+        .find(&db, id)
         .await
         .unwrap()
         .expect("the deal is stored");
@@ -146,8 +135,6 @@ async fn creating_a_deal_stores_it() {
 Counting is often enough, and it is the way to check that a rejected request left nothing behind:
 
 ```rust
-use sea_orm::PaginatorTrait;
-
 app.acting_as(principal(Uuid::now_v7()))
     .post("/api/v1/deals")
     .json(&json!({ "title": "", "amount_cents": 100, "company_id": Uuid::now_v7() }))
@@ -155,10 +142,10 @@ app.acting_as(principal(Uuid::now_v7()))
     .await
     .assert_validation_error("title");
 
-assert_eq!(deal::Entity::find().count(db.conn()).await.unwrap(), 0);
+assert_eq!(Deal::query().count(&db).await.unwrap(), 0);
 ```
 
-Checking the row also proves what the API can't show. A [soft-deleted](/docs/database/entities-and-repositories/#soft-deletes) company answers 404, but its row must still be there:
+Checking the row also proves what the API can't show. A [soft-deleted](/docs/orm/scopes-and-soft-deletes/#soft-deletes) company answers 404, but its row must still be there:
 
 ```rust
 #[tokio::test]
@@ -166,15 +153,20 @@ async fn deleting_a_company_keeps_its_row() {
     let app = app().await;
     let db = app.get::<Db>().await;
     let me = Uuid::now_v7();
-    let company = create(&CompanyFactory { owner_id: me }, db.conn()).await.unwrap();
+    let company = Company::factory()
+        .set(Company::OWNER_ID, me)
+        .create_one(&db)
+        .await
+        .unwrap();
     let path = format!("/api/v1/companies/{}", company.id);
     let client = app.acting_as(principal(me));
 
     client.delete(&path).send().await.assert_status(204);
     client.get(&path).send().await.assert_error(404, None);
 
-    let row = company::Entity::find_by_id(company.id)
-        .one(db.conn())
+    let row = Company::query()
+        .with_trashed()
+        .find(&db, company.id)
         .await
         .unwrap()
         .expect("the row is kept");
@@ -188,20 +180,18 @@ async fn deleting_a_company_keeps_its_row() {
 To test what a service records for the audit trail, run it in a unit of work of your own and read `uow.changes()` before rolling back:
 
 ```rust
-use navree::db::{ChangeOp, Repo};
-use sea_orm::ActiveValue::Set;
-use sea_orm::IntoActiveModel;
+use navree::db::ChangeOp;
 
 let uow = db.uow(Some(owner), None).await;
-let mut active = deal.clone().into_active_model();
-active.stage = Set(Stage::Won);
-Repo::<deal::Entity>::update(&uow, active).await.unwrap();
+let mut deal = deal.clone();
+deal.update(&uow, |deal| deal.stage = Stage::Won).await.unwrap();
 
 let changes = uow.changes();
 assert_eq!(changes.len(), 1);
 assert_eq!(changes[0].op, ChangeOp::Updated);
-assert_eq!(changes[0].old, Some(json!({ "stage": "lead" })));
-assert_eq!(changes[0].new, Some(json!({ "stage": "won" })));
+// Only the changed columns, so `stage` and the touched `updated_at`.
+assert_eq!(changes[0].old.as_ref().unwrap()["stage"], json!("lead"));
+assert_eq!(changes[0].new.as_ref().unwrap()["stage"], json!("won"));
 uow.rollback().await.unwrap();
 ```
 

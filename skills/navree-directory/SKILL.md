@@ -52,10 +52,10 @@ impl DirectorySink for RecipientSink {
     fn upsert_user<'a>(&'a self, ctx: &'a SinkContext, change: &'a UserChange)
         -> navree::BoxFuture<'a, Result<Option<String>, BoxError>> {
         Box::pin(async move {
-            let tx = ctx.uow().tx().await?;
+            let uow = ctx.uow();
             // find by change.directory_user_id, else Record::new(..) with ctx.owner().id()
             // set fields from change.user (primary_email(), full_name(), department, active)
-            // record.save(&*tx).await?;
+            // record.save(uow).await?;
             Ok(Some(local_id))                 // kept as the user's local_id
         })
     }

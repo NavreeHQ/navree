@@ -18,7 +18,7 @@ export const metadata: Metadata = pageMetadata({
 const crmFacts = [
   { label: "API", value: "Rust, Navree" },
   { label: "Front ends", value: "Next.js · Nuxt" },
-  { label: "Data", value: "SeaORM on SQLite" },
+  { label: "Data", value: "Navree ORM on SQLite" },
   { label: "Live", value: "Pusher protocol" },
 ];
 

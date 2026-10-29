@@ -173,7 +173,7 @@ The management routes need the permission `sso.manage` (`MANAGE_PERMISSION`), wh
 | `POST /api/sso/domains/{id}/verify` | Look its TXT record up |
 | `DELETE /api/sso/domains/{id}` | Remove a domain (204) |
 
-A taken or reserved slug, settings without metadata or with metadata that doesn't parse, a metadata URL or issuer that isn't `https`, rules that grant the `owner` role, and an owner that doesn't exist are 400s with field errors (`errors.slug`, `errors["settings.metadata_xml"]`, `errors.owner`, ...). Every change is written through `Repo`, so the [audit log](/docs/security/audit-log/) records it (client secrets only as ciphertext).
+A taken or reserved slug, settings without metadata or with metadata that doesn't parse, a metadata URL or issuer that isn't `https`, rules that grant the `owner` role, and an owner that doesn't exist are 400s with field errors (`errors.slug`, `errors["settings.metadata_xml"]`, `errors.owner`, ...). Every change is written through a record in the unit of work, so the [audit log](/docs/security/audit-log/) records it (client secrets only as ciphertext).
 
 To let workspace administrators manage their own connection, mount your own routes on the `Sso` service (see [Using the Sso service](#using-the-sso-service)).
 

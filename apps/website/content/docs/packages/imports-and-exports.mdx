@@ -108,6 +108,33 @@ Each field becomes a `Cell` (`Empty`, `Text`, `Int`, `Float`, `Bool`, `Date`, `D
 
 ### Downloads
 
+The examples read `Contact`, a [model](/docs/orm/models/) of a `contacts` table, and turn it into the export row:
+
+```rust title="src/modules/contacts/model.rs"
+use navree::prelude::*;
+
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "contacts")]
+pub struct Contact {
+    pub id: Uuid,
+    pub email: String,
+    pub name: String,
+    pub company: Option<String>,
+    pub vip: bool,
+}
+
+impl From<Contact> for ContactRow {
+    fn from(contact: Contact) -> Self {
+        ContactRow {
+            name: contact.name,
+            email: contact.email,
+            company: contact.company,
+            vip: contact.vip,
+        }
+    }
+}
+```
+
 Return a `Download` from a handler. `Download::csv` and `Download::xlsx` write rows you have; `Download::csv_stream` writes rows as a stream yields them, so the response never holds the whole file:
 
 ```rust title="src/modules/contacts/controller.rs"
@@ -123,10 +150,11 @@ impl ContactsController {
     #[get("/export.csv")]
     #[permissions("contacts.export")]
     async fn export_csv(&self) -> Result<Download> {
-        let contacts = contact::Entity::find()
-            .order_by_asc(contact::Column::Email)
-            .all(self.db.conn())
-            .await?;
+        let contacts = Contact::query()
+            .order_by(Contact::EMAIL)
+            .get(&*self.db)
+            .await?
+            .into_models();
         Ok(self
             .exports
             .csv("contacts", contacts.into_iter().map(ContactRow::from)))
@@ -136,10 +164,11 @@ impl ContactsController {
     #[get("/export.xlsx")]
     #[permissions("contacts.export")]
     async fn export_xlsx(&self) -> Result<Download> {
-        let contacts = contact::Entity::find()
-            .order_by_asc(contact::Column::Email)
-            .all(self.db.conn())
-            .await?;
+        let contacts = Contact::query()
+            .order_by(Contact::EMAIL)
+            .get(&*self.db)
+            .await?
+            .into_models();
         Ok(Download::xlsx(
             "contacts",
             contacts.into_iter().map(ContactRow::from),
@@ -222,16 +251,16 @@ impl Export for ContactsExport {
         filter: &ContactFilter,
         page: ExportPage,
     ) -> Result<Vec<ContactRow>, BoxError> {
-        let mut query = contact::Entity::find().order_by_asc(contact::Column::Email);
+        let mut query = Contact::query().order_by(Contact::EMAIL);
         if let Some(vip) = filter.vip {
-            query = query.filter(contact::Column::Vip.eq(vip));
+            query = query.where_(Contact::VIP.eq(vip));
         }
         let contacts = query
             .offset(page.offset)
             .limit(page.limit)
-            .all(self.db.conn())
+            .get(&*self.db)
             .await?;
-        Ok(contacts.into_iter().map(ContactRow::from).collect())
+        Ok(contacts.into_models().into_iter().map(ContactRow::from).collect())
     }
 }
 ```
@@ -342,34 +371,41 @@ impl Import for ContactsImport {
     }
 
     async fn existing(&self, _ctx: &ImportContext, keys: &[String]) -> Result<HashSet<String>, BoxError> {
-        let found = contact::Entity::find()
-            .filter(contact::Column::Email.is_in(keys.to_vec()))
-            .all(self.db.conn())
+        let found = Contact::query()
+            .where_(Contact::EMAIL.is_in(keys.to_vec()))
+            .pluck(&*self.db, Contact::EMAIL)
             .await?;
-        Ok(found.into_iter().map(|contact| contact.email).collect())
+        Ok(found.into_iter().collect())
     }
 
     async fn insert(&self, _ctx: &ImportContext, uow: &Uow, row: ContactInput) -> Result<(), BoxError> {
         if row.email.ends_with("@competitor.example") {
             return Err(RowRejected::new("Contacts at competitors are not imported").into());
         }
-        let contact = contact::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            email: Set(row.email.trim().to_lowercase()),
-            name: Set(row.name),
-            company: Set(row.company),
-            vip: Set(row.vip),
-        };
-        Repo::<contact::Entity>::insert(uow, contact).await?;
+        Contact::create(
+            uow,
+            Contact {
+                email: row.email.trim().to_lowercase(),
+                name: row.name,
+                company: row.company,
+                vip: row.vip,
+                ..Contact::default()
+            },
+        )
+        .await?;
         Ok(())
     }
 
     async fn update(&self, _ctx: &ImportContext, uow: &Uow, row: ContactInput) -> Result<(), BoxError> {
-        contact::Entity::update_many()
-            .col_expr(contact::Column::Name, Expr::value(row.name))
-            .col_expr(contact::Column::Company, Expr::value(row.company))
-            .filter(contact::Column::Email.eq(row.email.trim().to_lowercase()))
-            .exec(&*uow.tx().await?)
+        Contact::query()
+            .where_(Contact::EMAIL.eq(row.email.trim().to_lowercase()))
+            .update(
+                uow,
+                [
+                    Contact::NAME.set(row.name),
+                    Contact::COMPANY.set(row.company),
+                ],
+            )
             .await?;
         Ok(())
     }
@@ -379,12 +415,16 @@ impl Import for ContactsImport {
 Register it with `m.importer::<ContactsImport>()`. The module wiring of this page's examples:
 
 ```rust title="src/modules/contacts/mod.rs"
+use navree::schema::migration;
+
 #[module(controllers = [ContactsController], register = Self::wire)]
 struct ContactsModule;
 
 impl ContactsModule {
     fn wire(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet::new("contacts").migration(CreateContacts))
+        m.migrations(
+            MigrationSet::new("contacts").migration(migration!(m20261027_000001_create_contacts)),
+        )
             .importer::<ContactsImport>()
             .export::<ContactsExport>();
     }

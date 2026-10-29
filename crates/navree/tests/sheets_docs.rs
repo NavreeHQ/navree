@@ -7,67 +7,53 @@ use std::collections::HashSet;
 use garde::Validate;
 use navree::access::{AbilityCtx, AccessModule, AccessOptions, Rules};
 use navree::contracts::{AuthVia, Principal};
-use navree::db::{Db, Repo};
+use navree::db::Db;
+use navree::orm::Model as _;
 use navree::prelude::*;
 use navree::queue::Queue;
+use navree::schema::migration;
 use navree::sheets::{
     Download, DuplicateMode, Export, ExportContext, ExportPage, Exportable, Exports, Import,
     ImportContext, ImportStatus, Importable, Imports, RowRejected, Upload, UploadOptions,
 };
 use navree::testing::TestApp;
-use sea_orm::sea_query::{ColumnDef, Expr, Table};
-use sea_orm::{ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
 /// The contacts table.
-mod contact {
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "contacts")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub email: String,
-        pub name: String,
-        pub company: Option<String>,
-        pub vip: bool,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "contacts")]
+pub struct Contact {
+    pub id: Uuid,
+    pub email: String,
+    pub name: String,
+    pub company: Option<String>,
+    pub vip: bool,
 }
 
-struct CreateContacts;
+/// Creates the `contacts` table.
+mod m20261027_000001_create_contacts {
+    use navree::schema::prelude::*;
 
-impl MigrationName for CreateContacts {
-    fn name(&self) -> &str {
-        "m20261027_000001_create_contacts"
-    }
-}
+    pub struct Migration;
 
-#[async_trait]
-impl MigrationTrait for CreateContacts {
-    async fn up(&self, manager: &SchemaManager) -> std::result::Result<(), sea_orm::DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("contacts")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("email").string().not_null().unique_key())
-                    .col(ColumnDef::new("name").string().not_null())
-                    .col(ColumnDef::new("company").string().null())
-                    .col(ColumnDef::new("vip").boolean().not_null())
-                    .to_owned(),
-            )
-            .await
+    impl navree::schema::Migration for Migration {
+        async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+            schema
+                .create("contacts", |t| {
+                    t.uuid_primary();
+                    t.string("email").unique();
+                    t.string("name");
+                    t.string("company").nullable();
+                    t.boolean("vip");
+                })
+                .await
+        }
+
+        async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+            schema.drop_if_exists("contacts").await
+        }
     }
 }
 
@@ -87,8 +73,8 @@ struct ContactRow {
     vip: bool,
 }
 
-impl From<contact::Model> for ContactRow {
-    fn from(contact: contact::Model) -> Self {
+impl From<Contact> for ContactRow {
+    fn from(contact: Contact) -> Self {
         ContactRow {
             name: contact.name,
             email: contact.email,
@@ -128,16 +114,20 @@ impl Export for ContactsExport {
         filter: &ContactFilter,
         page: ExportPage,
     ) -> Result<Vec<ContactRow>, BoxError> {
-        let mut query = contact::Entity::find().order_by_asc(contact::Column::Email);
+        let mut query = Contact::query().order_by(Contact::EMAIL);
         if let Some(vip) = filter.vip {
-            query = query.filter(contact::Column::Vip.eq(vip));
+            query = query.where_(Contact::VIP.eq(vip));
         }
         let contacts = query
             .offset(page.offset)
             .limit(page.limit)
-            .all(self.db.conn())
+            .get(&*self.db)
             .await?;
-        Ok(contacts.into_iter().map(ContactRow::from).collect())
+        Ok(contacts
+            .into_models()
+            .into_iter()
+            .map(ContactRow::from)
+            .collect())
     }
 }
 
@@ -178,11 +168,11 @@ impl Import for ContactsImport {
         _ctx: &ImportContext,
         keys: &[String],
     ) -> Result<HashSet<String>, BoxError> {
-        let found = contact::Entity::find()
-            .filter(contact::Column::Email.is_in(keys.to_vec()))
-            .all(self.db.conn())
+        let found = Contact::query()
+            .where_(Contact::EMAIL.is_in(keys.to_vec()))
+            .pluck(&*self.db, Contact::EMAIL)
             .await?;
-        Ok(found.into_iter().map(|contact| contact.email).collect())
+        Ok(found.into_iter().collect())
     }
 
     async fn insert(
@@ -194,14 +184,17 @@ impl Import for ContactsImport {
         if row.email.ends_with("@competitor.example") {
             return Err(RowRejected::new("Contacts at competitors are not imported").into());
         }
-        let contact = contact::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            email: Set(row.email.trim().to_lowercase()),
-            name: Set(row.name),
-            company: Set(row.company),
-            vip: Set(row.vip),
-        };
-        Repo::<contact::Entity>::insert(uow, contact).await?;
+        Contact::create(
+            uow,
+            Contact {
+                email: row.email.trim().to_lowercase(),
+                name: row.name,
+                company: row.company,
+                vip: row.vip,
+                ..Contact::default()
+            },
+        )
+        .await?;
         Ok(())
     }
 
@@ -211,11 +204,15 @@ impl Import for ContactsImport {
         uow: &Uow,
         row: ContactInput,
     ) -> Result<(), BoxError> {
-        contact::Entity::update_many()
-            .col_expr(contact::Column::Name, Expr::value(row.name))
-            .col_expr(contact::Column::Company, Expr::value(row.company))
-            .filter(contact::Column::Email.eq(row.email.trim().to_lowercase()))
-            .exec(&*uow.tx().await?)
+        Contact::query()
+            .where_(Contact::EMAIL.eq(row.email.trim().to_lowercase()))
+            .update(
+                uow,
+                [
+                    Contact::NAME.set(row.name),
+                    Contact::COMPANY.set(row.company),
+                ],
+            )
             .await?;
         Ok(())
     }
@@ -236,10 +233,11 @@ impl ContactsController {
     #[get("/export.csv")]
     #[permissions("contacts.export")]
     async fn export_csv(&self) -> Result<Download> {
-        let contacts = contact::Entity::find()
-            .order_by_asc(contact::Column::Email)
-            .all(self.db.conn())
-            .await?;
+        let contacts = Contact::query()
+            .order_by(Contact::EMAIL)
+            .get(&*self.db)
+            .await?
+            .into_models();
         Ok(self
             .exports
             .csv("contacts", contacts.into_iter().map(ContactRow::from)))
@@ -249,10 +247,11 @@ impl ContactsController {
     #[get("/export.xlsx")]
     #[permissions("contacts.export")]
     async fn export_xlsx(&self) -> Result<Download> {
-        let contacts = contact::Entity::find()
-            .order_by_asc(contact::Column::Email)
-            .all(self.db.conn())
-            .await?;
+        let contacts = Contact::query()
+            .order_by(Contact::EMAIL)
+            .get(&*self.db)
+            .await?
+            .into_models();
         Ok(Download::xlsx(
             "contacts",
             contacts.into_iter().map(ContactRow::from),
@@ -266,9 +265,11 @@ struct ContactsModule;
 
 impl ContactsModule {
     fn wire(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet::new("contacts").migration(CreateContacts))
-            .importer::<ContactsImport>()
-            .export::<ContactsExport>();
+        m.migrations(
+            MigrationSet::new("contacts").migration(migration!(m20261027_000001_create_contacts)),
+        )
+        .importer::<ContactsImport>()
+        .export::<ContactsExport>();
     }
 }
 

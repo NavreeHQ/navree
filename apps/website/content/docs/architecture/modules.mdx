@@ -410,7 +410,7 @@ Some mistakes don't wait for the boot. `#[module]` rejects unknown keys at compi
 error: unknown #[module] key `import`: did you mean `imports`? (expected `imports`, `providers`, `controllers`, `exports`, `global` or `register`)
  --> src/modules/users.rs:9:10
   |
-9 | #[module(import = [DataModule], providers = [Repo])]
+9 | #[module(import = [DataModule], providers = [UserService])]
   |          ^^^^^^
 ```
 

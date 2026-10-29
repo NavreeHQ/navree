@@ -17,13 +17,13 @@ OpenAPI, health checks and a CLI with generators.
 
 ## Recognize a Navree app
 
-- `Cargo.toml` depends on `navree` (plus `serde`, `garde` and `sea-orm`,
-  whose derives name their own crates, and `chrono` and `uuid`).
+- `Cargo.toml` depends on `navree` (plus `serde` and `garde`, whose
+  derives name their own crates, and `chrono` and `uuid`).
 - `src/app.rs` builds the root with `Navree::app().module(..)` and a
   `// navree:modules` marker; `src/main.rs` calls `app(ConfigSources::defaults()).run()`.
 - Feature code lives in `src/modules/<name>/` (`mod.rs`, `controller.rs`,
-  `service.rs`, `models/`, `dto.rs`, `migrations/`, `tests/`; older code
-  and Navree's own modules have SeaORM entities in `entity.rs`).
+  `service.rs`, `models/` or `entity.rs`, `dto.rs`, `migrations/`,
+  `tests/`; the tables are `#[derive(Model)]` structs).
 - An `AGENTS.md` at the root holds the project's conventions. Read it first.
 
 ```text
@@ -54,8 +54,8 @@ tests/                 tests that boot the whole app
    for validation failures. A refusal users see gets its own `code`
    (`.with_code("campaign_already_running")`), which front ends translate.
 6. **The request is a unit of work.** Services take `&Uow` and pass it to
-   models (`Deal::create(&uow, ..)`, `deal.save(&uow)`; SeaORM entities
-   write through `Repo::<E>::insert/update/delete`); everything commits when
+   models (`Deal::create(&uow, ..)`, `deal.save(&uow)`, `deal.delete(&uow)`,
+   which record change events for the audit log); everything commits when
    the response status is below 400 and rolls back otherwise.
 7. **Test every change** with `navree::testing::TestApp`, then run
    `cargo fmt`, `cargo clippy --all-targets -- -D warnings` and `cargo test`.
@@ -65,7 +65,7 @@ tests/                 tests that boot the whole app
 `use navree::prelude::*;` brings the macros, `Arc`, the kernel types
 (`AppContext`, `ModuleBuilder`, `Module`, `Navree`, `BoxError`), `Result`
 (= `navree::Result<T, AppError>`, shadowing std's), `AppError`, `Json`,
-`Path`, `Query`, `Created`, `NoContent`, `Uow`, `Repo`, `Page`, `PageQuery`,
+`Path`, `Query`, `Created`, `NoContent`, `Uow`, `Page`, `PageQuery`,
 `Valid`, `ValidAsync`, the access markers (`Read`, `Create`, `Update`,
 `Delete`, `Manage`, `Accessible`, `Authorized`, `Abilities`, `Subject`),
 `CurrentUser`, the ORM's `Model` (trait and derive), `Record`, `Collection`,
@@ -103,7 +103,7 @@ navree list                                 # every command of the app
 | Return a status or error, map an error type, headers, downloads, API resources | `navree-errors-and-responses` |
 | Models, queries, relationships, eager loading, scopes, soft deletes, casts, observers, factories, model tests, route model binding; N+1 or lazy-loading errors | `navree-orm` |
 | Migrations: tables, columns, indexes, foreign keys, `migrate`, rollbacks, `--pretend`, `schema:dump` | `navree-migrations` |
-| Database configuration, the unit of work, transactions in jobs and commands, SeaORM entities and `Repo`, seeders, TimescaleDB hypertables | `navree-database` |
+| Database configuration, the unit of work, transactions in jobs and commands, raw statements, seeders, TimescaleDB hypertables | `navree-database` |
 | Sign-in, tokens, current user, password reset, email verification, two-factor, sessions, step-up, impersonation, magic links, passkeys, platform admins, token exchange, API keys | `navree-auth` |
 | Roles, permissions, ability rules, record checks, per-user list filters | `navree-access-control` |
 | Background jobs, workers, retries, batches, progress operations, cron schedules | `navree-queues-and-scheduling` |
@@ -165,16 +165,17 @@ navree list                                 # every command of the app
   the type. Use the generators.
 - Depending on another module's service without importing that module (or
   without the other module exporting it).
-- Building SQL strings or writing through `db.conn()` inside a request:
-  pass `&uow` to models (or use `uow.tx()` and `Repo` for entities), or the
+- Building SQL strings or writing through the pool (`db.pool()`) inside a
+  request: pass `&uow` to models (or to a `Statement` for raw SQL), or the
   request's writes escape its rollback.
 - Reading a relation inside a loop over records: eager load it with
   `with("relation")`; in development the ORM refuses the lazy load.
 - Using `Utc::now()` where tests need a fixed time: inject `Arc<dyn Clock>`.
 - Setting a key in `.env` that `config/app.toml` also sets: `.env` only
   fills keys the TOML file leaves out. Real environment variables win.
-- Calling `ActiveModel::save` on a Navree entity: use `Repo::insert` for new
-  rows and `Repo::update` for existing ones.
+- Writing a model with a mass update to get audited: `query.update(..)` and
+  bulk inserts record no change events; create or save records through the
+  unit of work.
 
 ## More
 

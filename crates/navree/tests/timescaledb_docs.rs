@@ -4,9 +4,8 @@
 //! facade's `time_series` suite runs Navree's own tables on real servers.
 
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
-use navree::db::sea_orm::ConnectionTrait;
-use navree::db::{Db, DbOptions, prune_time_series};
-use navree::orm::{Dialect, Expr, col, table};
+use navree::db::{Db, DbOptions, prune_time_series_on};
+use navree::orm::{Dialect, Expr, Value, col, table};
 use navree::schema::{
     ContinuousAggregate, Hypertable, RefreshPolicy, Schema, SchemaResult, Target,
 };
@@ -72,16 +71,15 @@ mod m20261101_090000_tune_time_series {
 /// "Pruning in code".
 mod prune {
     use chrono::{TimeDelta, Utc};
-    use navree::db::{Db, prune_time_series};
+    use navree::db::{Db, DbError, prune_time_series_on};
 
     /// Deletes the events older than `days`; returns how many.
-    pub async fn prune_events(db: &Db, days: i64) -> Result<u64, sea_orm::DbErr> {
+    pub async fn prune_events(db: &Db, days: i64) -> Result<u64, DbError> {
         let cutoff = Utc::now() - TimeDelta::days(days);
-        db.transaction(|uow| async move {
-            let tx = uow.tx().await?;
-            prune_time_series(&*tx, "events", "occurred_at", cutoff).await
-        })
-        .await
+        let tx = db.begin().await?;
+        let deleted = prune_time_series_on(&tx, "events", "occurred_at", cutoff).await?;
+        tx.commit().await?;
+        Ok(deleted)
     }
 }
 
@@ -237,21 +235,19 @@ async fn pruning_in_code() {
         .await
         .unwrap();
     for days in [120, 100, 10] {
-        db.conn()
-            .execute(
-                sea_orm::sea_query::Query::insert()
-                    .into_table(sea_orm::sea_query::Alias::new("events"))
-                    .columns(
-                        ["id", "workspace_id", "kind", "payload", "occurred_at"]
-                            .map(sea_orm::sea_query::Alias::new),
-                    )
-                    .values_panic([
-                        uuid::Uuid::now_v7().into(),
-                        uuid::Uuid::now_v7().into(),
-                        "page_view".into(),
-                        serde_json::json!({}).into(),
-                        (Utc::now() - TimeDelta::days(days)).into(),
-                    ]),
+        table("events")
+            .insert(
+                &db,
+                [[
+                    ("id", Value::from(uuid::Uuid::now_v7())),
+                    ("workspace_id", Value::from(uuid::Uuid::now_v7())),
+                    ("kind", Value::from("page_view")),
+                    ("payload", Value::from(serde_json::json!({}))),
+                    (
+                        "occurred_at",
+                        Value::from(Utc::now() - TimeDelta::days(days)),
+                    ),
+                ]],
             )
             .await
             .unwrap();
@@ -260,7 +256,7 @@ async fn pruning_in_code() {
     assert_eq!(prune::prune_events(&db, 90).await.unwrap(), 0);
     // The helper the example wraps, on its own.
     assert_eq!(
-        prune_time_series(db.conn(), "events", "occurred_at", Utc::now())
+        prune_time_series_on(&db, "events", "occurred_at", Utc::now())
             .await
             .unwrap(),
         1
@@ -280,15 +276,16 @@ async fn readings(db: &Db) -> DateTime<Utc> {
         .unwrap();
     let start = Utc.with_ymd_and_hms(2026, 10, 27, 8, 0, 0).unwrap();
     for step in 0..9_i32 {
-        db.conn()
-            .execute(
-                sea_orm::sea_query::Query::insert()
-                    .into_table(sea_orm::sea_query::Alias::new("readings"))
-                    .columns(["celsius", "taken_at"].map(sea_orm::sea_query::Alias::new))
-                    .values_panic([
-                        (20.0 + f64::from(step)).into(),
-                        (start + TimeDelta::minutes(10 * i64::from(step))).into(),
-                    ]),
+        table("readings")
+            .insert(
+                db,
+                [[
+                    ("celsius", Value::from(20.0 + f64::from(step))),
+                    (
+                        "taken_at",
+                        Value::from(start + TimeDelta::minutes(10 * i64::from(step))),
+                    ),
+                ]],
             )
             .await
             .unwrap();

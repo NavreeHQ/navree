@@ -153,10 +153,10 @@ call site: `.map_err(|e| AppError::new(StatusCode::BAD_GATEWAY, "rates_unavailab
 
 | Source | Response |
 |---|---|
-| `DbErr::RecordNotFound`, `RecordNotUpdated` (e.g. `Repo::find_or_fail`) | 404 `Not Found`, `not_found` |
+| `OrmError::ModelNotFound` (e.g. `Post::find_or_fail`), `DbError` of kind `NotFound` | 404 `Not Found`, `not_found` |
 | unique constraint violation | 409 `A record with the same unique value already exists.`, `conflict` |
 | foreign key violation | 409 `The change conflicts with a related record.`, `conflict` |
-| any other `DbErr` | 500, `internal_error` |
+| any other `DbError` or `OrmError` | 500, `internal_error` |
 | missing route / wrong method | 404 `not_found` / 405 `method_not_allowed` with `Allow` |
 | body over `http.body_limit_bytes` (2 MiB) | 413 `payload_too_large` |
 | wrong `Content-Type` for `Json` | 415 `unsupported_media_type` |
@@ -207,7 +207,7 @@ headers to every response, and CORS headers when the request's `Origin` is in
 ## API resources
 
 Don't return database models when the API shape should stay stable: give
-each entity a `*Resource` struct with `From<Model>`, a `"__type"` field
+each model a `*Resource` struct with `From<&Model>`, a `"__type"` field
 holding the subject name (front ends use it for CASL checks) and, for the
 OpenAPI document, `ToSchema`:
 
@@ -245,7 +245,7 @@ response.assert_validation_error("email");        // 400 with errors.email
 - Returning a JSON body with an error status built by hand: it's sent as
   is, not in the standard shape. Return `AppError`.
 - Putting the request id or internal details in `message`.
-- Catching a `DbErr` unique violation to return 400: let it become the 409,
+- Catching a unique violation (`error.is_unique_violation()`) to return 400: let it become the 409,
   or check first with an `AsyncRule::unique` validation rule.
 
 ## Docs

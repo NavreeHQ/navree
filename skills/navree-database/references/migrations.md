@@ -12,7 +12,7 @@ timestamp). Applied migrations are recorded in `navree_migrations`
 
 Migrations are written with the schema builder (`navree::schema`), which
 writes the SQL for PostgreSQL (with TimescaleDB), MySQL, MariaDB and SQLite.
-Older SeaORM `MigrationTrait` migrations run in the same sets unchanged.
+Every migration implements `navree::schema::Migration`.
 
 ## Generate
 
@@ -57,9 +57,9 @@ impl navree::schema::Migration for Migration {
 }
 ```
 
-Match the model or entity (on MySQL a `Uuid` written by either needs
+Match the model (on MySQL a `Uuid` the model writes needs
 `t.binary(..).length(16).fixed()`, not `uuid`, which is `CHAR(36)` there):
-`uuid` for `Uuid`, `timestamp_tz` for `DateTimeUtc`,
+`uuid` for `Uuid`, `timestamp_tz` for `DateTime<Utc>`,
 `boolean` for `bool`, `big_integer` for `i64`, `string`/`text` for
 `String`, `.nullable()` for `Option<T>`. Columns are `NOT NULL` unless
 `.nullable()`. Helpers: `timestamps_tz()` (nullable created/updated_at),
@@ -108,8 +108,8 @@ can't run in a transaction (`CREATE INDEX CONCURRENTLY` via an index's
 `fn within_transaction(&self) -> bool { false }`.
 
 MySQL and MariaDB commit DDL on their own, so there a migration runs outside
-a transaction (a SeaORM migration can return `Some(true)` from
-`use_transaction` for a data migration: its rows then roll back with the
+a transaction (a migration returns `true` from `within_transaction_on_mysql`
+for a data migration: its rows then roll back with the
 record row). A MySQL migration that fails part way keeps what ran before the
 failure and isn't recorded: one DDL statement per migration, or an `up` that
 can run again (check `has_table` or `has_column` first).

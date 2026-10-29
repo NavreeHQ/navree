@@ -10,6 +10,7 @@ mod service;
 use navree::prelude::*;
 
 pub use controller::PostController;
+pub use entity::Post;
 pub use service::PostService;
 
 /// The `publish` action: `#[can(Publish, Post, from = "id")]`,
@@ -22,7 +23,7 @@ impl ActionMarker for Publish {
 
 /// Posts: CRUD-ish routes, each checking the caller's abilities on `Post`.
 #[module(
-    imports = [AccessModule::for_feature::<entity::Entity>()],
+    imports = [AccessModule::for_feature::<Post>()],
     providers = [PostService],
     controllers = [PostController],
     exports = [PostService],

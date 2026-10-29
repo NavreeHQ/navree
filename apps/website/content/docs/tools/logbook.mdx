@@ -51,7 +51,7 @@ A queued job continues the trace of the request that dispatched it. A job's deta
 
 ## What Logbook records
 
-Each kind of entry comes from a **watcher**. Every watcher is on by default; turn one off with `logbook.watchers.<name> = false`. Logbook builds on the app's [telemetry events](/docs/digging-deeper/health-and-metrics/#telemetry-events) and on the data changes `Repo` records.
+Each kind of entry comes from a **watcher**. Every watcher is on by default; turn one off with `logbook.watchers.<name> = false`. Logbook builds on the app's [telemetry events](/docs/digging-deeper/health-and-metrics/#telemetry-events) and on the data changes models record.
 
 | Watcher | Records | Detail |
 |---|---|---|
@@ -65,7 +65,7 @@ Each kind of entry comes from a **watcher**. Every watcher is on by default; tur
 | `exceptions` | 5xx responses, panics and errors you report with `Telemetry::report_exception` | The error and its source chain, the location of a panic |
 | `http_client` | Calls through `HttpClient` | Method, URL, status, duration, attempts, error |
 | `notifications` | Every notification, one entry per channel | Type, notifiable, channel, notification id |
-| `models` | Every insert, update and delete through `Repo` | Table, id, the changed columns with old and new values |
+| `models` | Every insert, update and delete through a model | Table, id, the changed columns with old and new values |
 | `schedule` | Every scheduled task that runs | Task, the minute it was due, error, duration |
 
 A job's error is part of its entry; the `exceptions` watcher records errors of requests and your own reports.
