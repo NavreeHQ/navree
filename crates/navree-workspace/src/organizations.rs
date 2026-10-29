@@ -13,13 +13,13 @@ use uuid::Uuid;
 
 use crate::core::Core;
 use crate::entity::{OrgMember, Organization, Workspace, organization_grant};
-use crate::store;
 use crate::events::{
     OrgMemberAdded, OrganizationCreated, OrganizationDeleted, OrganizationOwnershipTransferred,
     WorkspaceAttached, WorkspaceDetached,
 };
 use crate::grants::{attached, org_selector, reached, set_org_selector};
 use crate::org_role::SCOPE_ALL;
+use crate::store;
 use crate::workspaces::{
     check_country_code as check_country, check_name, check_slug, check_zone_name as check_timezone,
     slugify_or,
@@ -339,13 +339,9 @@ impl Organizations {
         if from == to {
             return Ok(current);
         }
-        let new_owner = self
-            .core
-            .org_member_in(uow, id, to)
-            .await?
-            .ok_or_else(|| {
-                WorkspaceError::invalid("user_id", "user_id must be a member of the organization")
-            })?;
+        let new_owner = self.core.org_member_in(uow, id, to).await?.ok_or_else(|| {
+            WorkspaceError::invalid("user_id", "user_id must be a member of the organization")
+        })?;
         let old_owner = self.core.org_member_in(uow, id, from).await?;
         let now = self.core.now();
         let new_owner = set_org_role(uow, new_owner, OrgRole::Owner, now).await?;

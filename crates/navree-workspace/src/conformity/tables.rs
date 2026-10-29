@@ -52,9 +52,7 @@ async fn sqlite(db: &Db, table: &str) -> Result<TableFacts, DbError> {
         let info = rows(db, pragma(format!("PRAGMA index_info({})", quoted(&name)))).await?;
         let lead = info
             .iter()
-            .map(|row| {
-                Ok::<_, DbError>((row.get::<i64>("seqno")?, row.get::<String>("name")?))
-            })
+            .map(|row| Ok::<_, DbError>((row.get::<i64>("seqno")?, row.get::<String>("name")?)))
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .min_by_key(|(seqno, _)| *seqno)
@@ -109,9 +107,7 @@ async fn postgres(db: &Db, table: &str) -> Result<TableFacts, DbError> {
     )
     .await?
     .first()
-    .map(|row| {
-        Ok::<_, DbError>((row.get::<bool>("enabled")?, row.get::<bool>("forced")?))
-    })
+    .map(|row| Ok::<_, DbError>((row.get::<bool>("enabled")?, row.get::<bool>("forced")?)))
     .transpose()?;
     Ok(TableFacts {
         exists: true,

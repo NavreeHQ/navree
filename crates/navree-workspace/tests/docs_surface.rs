@@ -10,6 +10,7 @@ use navree_config::{Config, ConfigSources};
 use navree_db::Uow;
 use navree_events::Event;
 use navree_http::AppError;
+use navree_orm::Model as _;
 use navree_workspace::entity::{
     access_request, organization, organization_grant, organization_member, partition,
     partition_grant, workspace,
@@ -27,7 +28,6 @@ use navree_workspace::{
     PartitionRepo, PartitionScope, PartitionScoped, PartitionSelector, Partitions, RlsPolicy,
     WorkspaceConfig, WorkspaceError, WorkspaceScoped, WorkspaceSelector, Workspaces,
 };
-use navree_orm::Model as _;
 use uuid::Uuid;
 
 /// `contacts(id, workspace_id, partition_id, name)`, as on the partitions

@@ -8,11 +8,11 @@ use navree_db::MigrationSet;
 use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
+use navree_orm::{Model as _, OrmError};
 use navree_testing::TempDirGuard;
 use navree_workspace::{
     CurrentWorkspace, ModuleBuilderWorkspaceExt, WorkspaceDatabases, WorkspaceUow, Workspaces,
 };
-use navree_orm::{Model as _, OrmError};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -147,7 +147,7 @@ impl Module for NotesModule {
             "m20261026_000001_create_notes",
             CreateNotes,
         )))
-            .controller::<NotesController>();
+        .controller::<NotesController>();
     }
 }
 

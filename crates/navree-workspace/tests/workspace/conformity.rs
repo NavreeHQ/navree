@@ -57,7 +57,8 @@ impl Migration for CreateNotesAndLabels {
                 uuid(t, "id", dialect).primary();
                 uuid(t, "workspace_id", dialect);
                 t.string("body");
-                t.index("workspace_id").name("deal_notes_workspace_id_index");
+                t.index("workspace_id")
+                    .name("deal_notes_workspace_id_index");
             })
             .await?;
         schema
@@ -232,7 +233,11 @@ async fn workspace_tables_need_an_indexed_workspace_column() {
     let tables = report.check("workspace.tables").unwrap();
     // deals (workspace_scoped in the fixtures), deal_notes and labels; on
     // MySQL, whose catalog the check does not read, none.
-    let checked = if Server::current() == Server::MySql { 0 } else { 3 };
+    let checked = if Server::current() == Server::MySql {
+        0
+    } else {
+        3
+    };
     assert_eq!(tables.outcome.checked, checked);
     let rls_off = |table: &str| {
         (

@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use http::StatusCode;
-use navree_http::AppError;
 use navree_db::DbError;
+use navree_http::AppError;
 use navree_kernel::BoxError;
 
 /// The error code of a write refused by a read-only demo workspace

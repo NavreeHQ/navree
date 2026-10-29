@@ -6,13 +6,13 @@
 use chrono::{DateTime, Utc};
 use navree::BoxFuture;
 use navree::db::Db;
+use navree::db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 use navree::prelude::*;
 use navree::schedule::{ScheduleModule, Scheduler};
 use navree::testing::{TempDirGuard, TestApp, TestAppBuilder, principal};
 use navree::workspace::{
     DEMO_HEADER, DemoMode, DemoSeed, DemoSeeder, DemoWorkspaces, NewWorkspace, WorkspaceKind,
 };
-use navree::db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
@@ -22,7 +22,11 @@ use uuid::Uuid;
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Debug, PartialEq, Eq, navree::orm::Model, serde::Serialize)]
-#[model(table = "companies", subject = "Company", permission_prefix = "companies")]
+#[model(
+    table = "companies",
+    subject = "Company",
+    permission_prefix = "companies"
+)]
 struct Company {
     id: Uuid,
     workspace_id: Uuid,

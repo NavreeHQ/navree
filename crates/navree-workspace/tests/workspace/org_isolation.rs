@@ -10,11 +10,11 @@ use http::Method;
 use navree_db::{Executor as _, Statement, Uow, Value as DbValue};
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
+use navree_orm::prelude::*;
 use navree_workspace::{
     CurrentOrganization, CurrentPartition, CurrentWorkspace, GrantedBy, InOrganization, OrgRepo,
     PartitionRepo, PartitionScope, PartitionSelector, PinnedWorkspace, Selector, WorkspaceSelector,
 };
-use navree_orm::prelude::*;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -208,7 +208,11 @@ async fn deal(world: &World, workspace: Uuid, title: &str) -> Uuid {
         .await
         .execute(&Statement::portable(
             "INSERT INTO deals (id, workspace_id, title) VALUES (?, ?, ?)",
-            [DbValue::from(id), DbValue::from(workspace), DbValue::from(title)],
+            [
+                DbValue::from(id),
+                DbValue::from(workspace),
+                DbValue::from(title),
+            ],
         ))
         .await
         .unwrap();
@@ -600,7 +604,10 @@ async fn partition_grants_hold() {
     let mut moved = row.clone();
     moved.partition_id = Some(uk.id);
     let refused = PartitionRepo::<Contact>::update(&uow, acme.id, &only_uk, &mut moved).await;
-    assert!(matches!(refused, Err(OrmError::ModelNotFound { .. })), "{refused:?}");
+    assert!(
+        matches!(refused, Err(OrmError::ModelNotFound { .. })),
+        "{refused:?}"
+    );
     let all = Selector::All;
     let mut renamed = row.clone();
     renamed.name = "de renamed".into();

@@ -12,6 +12,7 @@ use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{
     BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver,
 };
+use navree_orm::prelude::*;
 use navree_schedule::{ScheduleModule, Scheduler};
 use navree_testing::TempDirGuard;
 use navree_workspace::{
@@ -19,7 +20,6 @@ use navree_workspace::{
     ModuleBuilderWorkspaceExt, NewWorkspace, Workspace, WorkspaceError, WorkspaceKind,
     WorkspaceRepo, WorkspaceUow,
 };
-use navree_orm::prelude::*;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -881,7 +881,7 @@ impl Module for NotesModule {
             "m20261027_000001_create_notes",
             CreateNotes,
         )))
-            .demo_seeder::<NotesDemo>();
+        .demo_seeder::<NotesDemo>();
     }
 }
 

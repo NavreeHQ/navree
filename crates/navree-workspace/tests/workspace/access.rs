@@ -249,9 +249,10 @@ async fn records_of_another_workspace_are_not_found() {
         let title = title.to_owned();
         async move {
             let uow = world.db().await.uow(None, None).await;
-            let created = WorkspaceRepo::<Deal>::insert(&uow, workspace, new_deal(Uuid::nil(), &title))
-                .await
-                .unwrap();
+            let created =
+                WorkspaceRepo::<Deal>::insert(&uow, workspace, new_deal(Uuid::nil(), &title))
+                    .await
+                    .unwrap();
             uow.commit().await.unwrap();
             created
         }
@@ -312,7 +313,10 @@ async fn the_repository_scopes_every_query() {
         title: "Stolen".into(),
     });
     let moved = WorkspaceRepo::<Deal>::update(&uow, globex.id, &mut stolen).await;
-    assert!(matches!(moved, Err(OrmError::ModelNotFound { .. })), "{moved:?}");
+    assert!(
+        matches!(moved, Err(OrmError::ModelNotFound { .. })),
+        "{moved:?}"
+    );
     let mut renamed = WorkspaceRepo::<Deal>::find_or_fail(&uow, acme.id, created.id)
         .await
         .unwrap();
@@ -326,7 +330,10 @@ async fn the_repository_scopes_every_query() {
     let stored = WorkspaceRepo::<Deal>::find_or_fail(&uow, acme.id, created.id)
         .await
         .unwrap();
-    assert_eq!((stored.workspace_id, stored.title.as_str()), (acme.id, "Renamed"));
+    assert_eq!(
+        (stored.workspace_id, stored.title.as_str()),
+        (acme.id, "Renamed")
+    );
     // A record built from a model replaces the stored values.
     let mut replaced = Record::from(Deal {
         id: created.id,
@@ -339,7 +346,10 @@ async fn the_repository_scopes_every_query() {
     assert_eq!(replaced.workspace_id, acme.id);
     assert_eq!(replaced.title, "Replaced");
     let refused = WorkspaceRepo::<Deal>::delete(&uow, globex.id, replaced.clone()).await;
-    assert!(matches!(refused, Err(OrmError::ModelNotFound { .. })), "{refused:?}");
+    assert!(
+        matches!(refused, Err(OrmError::ModelNotFound { .. })),
+        "{refused:?}"
+    );
     WorkspaceRepo::<Deal>::delete(&uow, acme.id, replaced)
         .await
         .unwrap();

@@ -221,11 +221,7 @@ impl OrgMembers {
         workspaces: WorkspaceSelector,
     ) -> Result<OrgMember, WorkspaceError> {
         self.core.require_organizations()?;
-        let exists = self
-            .core
-            .org_member_in(uow, org, user)
-            .await?
-            .is_some();
+        let exists = self.core.org_member_in(uow, org, user).await?.is_some();
         if exists {
             self.update(uow, org, user, Some(role), Some(workspaces))
                 .await
