@@ -122,8 +122,9 @@ pub trait SqlColumns {
     /// fractional operand written as the integer bound it amounts to
     /// (`n > 3.5` is `n > 3`, `n = 3.5` is `FALSE`). A statement then binds
     /// one type per placeholder whatever the JSON form of the rule's
-    /// operands (`3` or `3.5`), which PostgreSQL needs: a prepared
-    /// statement keeps the parameter types of its first run.
+    /// operands (`3` or `3.5`), so it is one prepared statement per
+    /// connection (navree-db keys prepared statements by their values'
+    /// types, so mixed types would be correct too, as more statements).
     fn kind(&self, field: &str) -> Option<Kind> {
         let _ = field;
         None

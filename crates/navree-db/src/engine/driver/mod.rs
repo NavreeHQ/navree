@@ -106,6 +106,112 @@ pub struct Executed {
     pub last_insert_id: Option<u64>,
 }
 
+/// What a statement's text ends with when its values' types key it: the
+/// SQL as written, then this, the type each placeholder binds (`INT8`,
+/// `TEXT`, ...), separated by `, `, and [`PARAMS_END`].
+pub(crate) const PARAMS_START: &str = " /* params: ";
+
+/// The end of the comment [`PARAMS_START`] begins.
+pub(crate) const PARAMS_END: &str = " */";
+
+/// The text of a statement keyed by the types its values bind: the SQL as
+/// written, with `/* params: INT8, TEXT */` before any trailing `;` and
+/// whitespace (after a `;`, MySQL would read the comment as a statement
+/// of its own). Nothing bound: the SQL as written.
+pub(crate) struct KeyedText<'s> {
+    /// The SQL as written.
+    written: &'s str,
+    /// Where the comment goes in it.
+    end: usize,
+    /// `written[..end]`, then the comment so far.
+    text: String,
+    named: usize,
+}
+
+impl<'s> KeyedText<'s> {
+    /// `sql`, about to name the types of `values` values.
+    pub(crate) fn new(sql: &'s str, values: usize) -> KeyedText<'s> {
+        let end = sql
+            .trim_end_matches(|c: char| c == ';' || c.is_whitespace())
+            .len();
+        // Type names are mostly at most 11 bytes (`TIMESTAMPTZ`), and `, `.
+        let comment = match values {
+            0 => 0,
+            n => PARAMS_START.len() + PARAMS_END.len() + n * 13,
+        };
+        let mut text = String::with_capacity(sql.len() + comment);
+        text.push_str(&sql[..end]);
+        KeyedText {
+            written: sql,
+            end,
+            text,
+            named: 0,
+        }
+    }
+
+    /// Names the type the next value binds.
+    pub(crate) fn name(&mut self, type_name: &str) {
+        let separator = if self.named == 0 { PARAMS_START } else { ", " };
+        self.text.push_str(separator);
+        self.text.push_str(type_name);
+        self.named += 1;
+    }
+
+    /// The text to prepare.
+    pub(crate) fn finish(mut self) -> String {
+        if self.named > 0 {
+            self.text.push_str(PARAMS_END);
+        }
+        self.text.push_str(&self.written[self.end..]);
+        self.text
+    }
+}
+
+/// A statement as a driver whose prepared statements keep the types of
+/// their first run (PostgreSQL, MySQL) prepares it: its [`KeyedText`],
+/// naming the type each value binds as the driver sends it, and the
+/// values.
+///
+/// SQLx caches a connection's prepared statements by their text. With the
+/// types in the text, the same SQL run with a value of another type (an
+/// `I64` then an `F64`, text then an integer, a typed `NULL` then a value
+/// of another kind) is another statement, prepared for its own types,
+/// instead of the first one reused with bytes the database reads as its
+/// first types. Statements whose types stay the same keep one text and
+/// one prepared statement per connection. See DESIGN.md, "Prepared
+/// statements and parameter types".
+#[cfg_attr(not(any(feature = "postgres", feature = "mysql")), allow(dead_code))]
+pub(crate) struct Keyed<'s, A> {
+    text: KeyedText<'s>,
+    args: A,
+}
+
+#[cfg_attr(not(any(feature = "postgres", feature = "mysql")), allow(dead_code))]
+impl<'s, A: sqlx::Arguments> Keyed<'s, A> {
+    /// `sql`, about to bind `values` values.
+    pub(crate) fn new(sql: &'s str, values: usize) -> Keyed<'s, A> {
+        Keyed {
+            text: KeyedText::new(sql, values),
+            args: A::default(),
+        }
+    }
+
+    /// Binds `value`, naming the type it binds in the statement's text.
+    pub(crate) fn add<'t, T>(&mut self, value: T) -> Result<(), sqlx::error::BoxDynError>
+    where
+        T: sqlx::Encode<'t, A::Database> + sqlx::Type<A::Database>,
+    {
+        let type_info = value.produces().unwrap_or_else(T::type_info);
+        self.text.name(sqlx::TypeInfo::name(&type_info));
+        self.args.add(value)
+    }
+
+    /// The text to prepare and the values.
+    pub(crate) fn finish(self) -> (String, A) {
+        (self.text.finish(), self.args)
+    }
+}
+
 /// A vector as little-endian `f32` bytes: MySQL 9's and MariaDB's binary
 /// `VECTOR` form, and the blobs SQLite extensions such as sqlite-vec read.
 #[cfg_attr(not(any(feature = "mysql", feature = "sqlite")), allow(dead_code))]
@@ -236,8 +342,8 @@ impl DriverPool {
     /// Runs a statement that returns no rows.
     pub(crate) async fn execute(&self, sql: &str, values: &[Value]) -> Result<Executed, DbError> {
         on_driver!(self, DriverPool, |pool, driver, BACKEND| {
-            let args = driver::arguments(values)?;
-            let done = sqlx::query_with(AssertSqlSafe(sql.to_owned()), args)
+            let (sql, args) = driver::statement(sql, values)?;
+            let done = sqlx::query_with(AssertSqlSafe(sql), args)
                 .execute(pool)
                 .await
                 .map_err(|error| DbError::from_sqlx(error, Some(BACKEND)))?;
@@ -252,8 +358,8 @@ impl DriverPool {
         values: &[Value],
     ) -> Result<Vec<DriverRow>, DbError> {
         on_driver!(self, DriverPool, |pool, driver, BACKEND| {
-            let args = driver::arguments(values)?;
-            let rows = sqlx::query_with(AssertSqlSafe(sql.to_owned()), args)
+            let (sql, args) = driver::statement(sql, values)?;
+            let rows = sqlx::query_with(AssertSqlSafe(sql), args)
                 .fetch_all(pool)
                 .await
                 .map_err(|error| DbError::from_sqlx(error, Some(BACKEND)))?;
@@ -268,8 +374,8 @@ impl DriverPool {
         values: &[Value],
     ) -> Result<Option<DriverRow>, DbError> {
         on_driver!(self, DriverPool, |pool, driver, BACKEND| {
-            let args = driver::arguments(values)?;
-            let row = sqlx::query_with(AssertSqlSafe(sql.to_owned()), args)
+            let (sql, args) = driver::statement(sql, values)?;
+            let row = sqlx::query_with(AssertSqlSafe(sql), args)
                 .fetch_optional(pool)
                 .await
                 .map_err(|error| DbError::from_sqlx(error, Some(BACKEND)))?;
@@ -297,7 +403,7 @@ impl DriverPool {
         values: &[Value],
     ) -> Result<BoxStream<'static, Result<DriverRow, DbError>>, DbError> {
         on_driver!(self, DriverPool, |pool, driver, BACKEND| {
-            let args = driver::arguments(values)?;
+            let (sql, args) = driver::statement(&sql, values)?;
             let pool = pool.clone();
             let (sender, receiver) = tokio::sync::mpsc::channel(STREAM_BUFFER);
             tokio::spawn(async move {
@@ -329,8 +435,8 @@ impl DriverConn {
         values: &[Value],
     ) -> Result<Executed, DbError> {
         on_driver!(self, DriverConn, |conn, driver, BACKEND| {
-            let args = driver::arguments(values)?;
-            let done = sqlx::query_with(AssertSqlSafe(sql.to_owned()), args)
+            let (sql, args) = driver::statement(sql, values)?;
+            let done = sqlx::query_with(AssertSqlSafe(sql), args)
                 .execute(&mut **conn)
                 .await
                 .map_err(|error| DbError::from_sqlx(error, Some(BACKEND)))?;
@@ -345,8 +451,8 @@ impl DriverConn {
         values: &[Value],
     ) -> Result<Vec<DriverRow>, DbError> {
         on_driver!(self, DriverConn, |conn, driver, BACKEND| {
-            let args = driver::arguments(values)?;
-            let rows = sqlx::query_with(AssertSqlSafe(sql.to_owned()), args)
+            let (sql, args) = driver::statement(sql, values)?;
+            let rows = sqlx::query_with(AssertSqlSafe(sql), args)
                 .fetch_all(&mut **conn)
                 .await
                 .map_err(|error| DbError::from_sqlx(error, Some(BACKEND)))?;
@@ -361,8 +467,8 @@ impl DriverConn {
         values: &[Value],
     ) -> Result<Option<DriverRow>, DbError> {
         on_driver!(self, DriverConn, |conn, driver, BACKEND| {
-            let args = driver::arguments(values)?;
-            let row = sqlx::query_with(AssertSqlSafe(sql.to_owned()), args)
+            let (sql, args) = driver::statement(sql, values)?;
+            let row = sqlx::query_with(AssertSqlSafe(sql), args)
                 .fetch_optional(&mut **conn)
                 .await
                 .map_err(|error| DbError::from_sqlx(error, Some(BACKEND)))?;
@@ -483,7 +589,7 @@ pub(crate) fn fetch_stream_on(
     let (sender, receiver) = tokio::sync::mpsc::channel(STREAM_BUFFER);
     macro_rules! stream_on {
         ($driver:ident, $variant:ident) => {{
-            let args = $driver::arguments(values)?;
+            let (sql, args) = $driver::statement(&sql, values)?;
             tokio::spawn(async move {
                 let DriverConn::$variant(conn) = guard.conn_mut() else {
                     return;
