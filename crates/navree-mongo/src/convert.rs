@@ -3,18 +3,19 @@
 //! | Value | BSON | Read back as |
 //! |---|---|---|
 //! | `bool` | boolean | `Bool` |
-//! | `i8`, `i16`, `i32`, `u8`, `u16` | 32-bit integer | `Int` |
-//! | `i64`, `u32`, `u64` up to `i64::MAX` | 64-bit integer | `BigInt` |
-//! | `f32`, `f64` | double | `Double` |
+//! | `i8`, `i16`, `i32`, `u8`, `u16` | 32-bit integer | `I32` |
+//! | `i64`, `u32`, `u64` up to `i64::MAX` | 64-bit integer | `I64` |
+//! | `f32`, `f64` | double | `F64` |
 //! | [`Decimal`] | Decimal128 | `Decimal` (text beyond 28 digits) |
 //! | `String`, `char` | string | `String` |
 //! | [`ObjectId`](crate::ObjectId) | ObjectId | `Enum` of type `ObjectId` |
 //! | `Uuid` | binary, subtype 4 | `Uuid` |
 //! | `Vec<u8>` | binary, generic subtype | `Bytes` |
-//! | `DateTime<Utc>`, `DateTime<FixedOffset>`, `NaiveDateTime` (UTC) | date (milliseconds) | `ChronoDateTimeUtc` |
-//! | `NaiveDate` | date at midnight UTC | `ChronoDateTimeUtc` (reads as a `NaiveDate`) |
+//! | `DateTime<Utc>`, `DateTime<FixedOffset>`, `NaiveDateTime` (UTC) | date (milliseconds) | `Timestamp` |
+//! | `NaiveDate` | date at midnight UTC | `Timestamp` (reads as a `NaiveDate`) |
 //! | `NaiveTime` | string `HH:MM:SS.ffffff` | `String` (reads as a `NaiveTime`) |
 //! | JSON (`serde_json::Value`, JSON casts) | embedded document, array or scalar | `Json` (relaxed extended JSON) |
+//! | a vector (`Value::Vector`) | array of doubles | `Json` |
 //! | NULL of any type | null | NULL |
 //!
 //! JSON is read as [extended JSON], so a JSON cast whose value holds

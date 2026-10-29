@@ -133,8 +133,8 @@ impl<M: Model> ModelColumns<M> {
 
     /// The value bound for the non-null JSON operand `value` on `field`:
     /// typed by the column (a UUID, a date-time, a date or a decimal parsed
-    /// from its JSON form), else booleans as booleans, integers as `BigInt`,
-    /// other numbers as `Double` and strings as text.
+    /// from its JSON form), else booleans as booleans, integers as `I64`,
+    /// other numbers as `F64` and strings as text.
     pub fn value(&self, field: &str, value: &Json) -> Value {
         let typed = stored::<M>(field).and_then(|stored| {
             let text = value.as_str();

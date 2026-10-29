@@ -109,8 +109,8 @@ pub fn to_sea_value_on(backend: Backend, value: &Value) -> sea_orm::Value {
     }
 }
 
-/// A SeaORM value as navree-db's. Kinds navree-db does not have (arrays,
-/// vectors, enums of other crates) are an error.
+/// A SeaORM value as navree-db's (an enum value keeps its type name; a vector
+/// is navree-db's with the `postgres` feature). Arrays are an error.
 pub fn from_sea_value(value: sea_orm::Value) -> Result<Value, DbError> {
     use sea_orm::Value as S;
     fn or_null<T: Into<Value>>(value: Option<T>, kind: Kind) -> Value {
