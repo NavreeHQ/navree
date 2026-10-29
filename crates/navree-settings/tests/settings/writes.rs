@@ -2,11 +2,11 @@
 //! work, the audit trail, `settings.changed`, and cache tags per key and
 //! level.
 
-use navree_audit::{AuditLog, audit_log};
-use navree_db::Db;
+use navree_audit::{AuditFilter, AuditLog};
+use navree_db::{Db, PageQuery};
 use navree_settings::{Scope, Settings, SettingsError, Source};
+use sea_orm::ConnectionTrait;
 use sea_orm::sea_query::{Expr, ExprTrait, Query};
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::Serialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -505,12 +505,26 @@ async fn every_change_is_audited_in_its_transaction() {
         .unwrap();
 
     world.app.get::<AuditLog>().await.flush().await;
-    let entries = audit_log::Entity::find()
-        .filter(audit_log::Column::Action.eq("settings.updated"))
-        .order_by_asc(audit_log::Column::Id)
-        .all(db.conn())
-        .await
-        .unwrap();
+    let entries = {
+        let mut page = world
+            .app
+            .get::<AuditLog>()
+            .await
+            .list(
+                &AuditFilter {
+                    action: Some("settings.updated".to_owned()),
+                    ..AuditFilter::default()
+                },
+                PageQuery {
+                    page: 1,
+                    per_page: 100,
+                },
+            )
+            .await
+            .unwrap();
+        page.data.reverse();
+        page.data
+    };
     assert_eq!(entries.len(), 3, "{entries:#?}");
     let global = &entries[0];
     assert_eq!(global.kind, "custom");

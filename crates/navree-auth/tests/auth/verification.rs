@@ -5,10 +5,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
+use navree_auth::User;
 use navree_contracts::{AuditSink, Clock, FixedClock};
 use navree_db::Db;
+use navree_orm::Model as _;
 use navree_testing::{TestApp, TestClient, TestResponse};
-use sea_orm::{ActiveModelTrait, IntoActiveModel, Set};
 
 use crate::support::{self, RecordingSink, first_url, sent_mail, signed_in};
 
@@ -129,9 +130,11 @@ async fn verification_link_for_a_previous_address_is_rejected() {
     let link = mailed_link(&app).await;
 
     let db = app.get::<Db>().await;
-    let mut row = user.into_active_model();
-    row.email = Set("ada@new.example.com".to_owned());
-    row.update(db.conn()).await.unwrap();
+    User::query()
+        .where_key(user.id)
+        .update(&*db, [User::EMAIL.set("ada@new.example.com".to_owned())])
+        .await
+        .unwrap();
 
     client
         .get(link.strip_prefix(BASE_URL).unwrap())

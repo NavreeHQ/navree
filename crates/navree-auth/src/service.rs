@@ -9,14 +9,13 @@ use chrono::{DateTime, TimeDelta, Utc};
 use navree_cache::Cache;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, Clock, SystemClock};
 use navree_crypto::{CryptoError, Encrypter, Hasher, constant_time_eq, random_token};
-use navree_db::{Db, Repo, Uow};
+use navree_db::{Db, DbError, Uow};
 use navree_http::HttpOptions;
 use navree_kernel::{
     AppContext, BoxFuture, Injectable, KernelError, ProviderKey, Resolver, WeakAppContext,
 };
 use navree_orm::{Executor, Model as _, Record};
 use navree_validation::Messages;
-use sea_orm::{DbErr, Set, Unchanged};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use tokio::sync::OnceCell;
@@ -186,7 +185,7 @@ impl fmt::Debug for TokenPair {
 ///   although the request fails; on SQLite call it before writing through
 ///   the request's unit of work.
 /// - Reads use the connection pool, or the task's unit of work when its
-///   transaction is open (`Db::reader`).
+///   transaction is open (as the ORM reads through a `Db`).
 /// - Logins, failed logins, refreshes, detected reuse and logouts are
 ///   written to the `dyn AuditSink` when one is registered.
 pub struct AuthService {
@@ -483,8 +482,7 @@ impl AuthService {
         let secret = RefreshSecret::generate();
         let row = self.refresh_row(&secret, user.id, &session, &meta);
         self.write(Some(user.id), |uow| async move {
-            let tx = uow.tx().await?;
-            RefreshToken::insert(&*tx, [row]).await?;
+            RefreshToken::insert(&uow, [row]).await?;
             Ok(())
         })
         .await?;
@@ -577,8 +575,7 @@ impl AuthService {
                     // No longer a platform administrator: end the session.
                     let family_id = session.family_id;
                     self.own(None, meta.request_id.clone(), |uow| async move {
-                        let tx = uow.tx().await?;
-                        revoke_family(&*tx, family_id, now).await
+                        revoke_family(&uow, family_id, now).await
                     })
                     .await?;
                     return Err(AuthError::InvalidRefreshToken);
@@ -628,16 +625,15 @@ impl AuthService {
         let now = self.clock.now();
         let revoked = self
             .write(Some(user_id), |uow| async move {
-                let tx = uow.tx().await?;
                 if all {
-                    return revoke_user(&*tx, user_id, now).await;
+                    return revoke_user(&uow, user_id, now).await;
                 }
                 let Some(presented) = presented else {
                     return Ok(0);
                 };
-                match RefreshToken::find(&*tx, presented.id()).await? {
+                match RefreshToken::find(&uow, presented.id()).await? {
                     Some(row) if row.user_id == user_id && same_hash(&row, &presented) => {
-                        revoke_family(&*tx, row.family_id, now).await
+                        revoke_family(&uow, row.family_id, now).await
                     }
                     _ => Ok(0),
                 }
@@ -660,16 +656,16 @@ impl AuthService {
     pub async fn revoke_all_refresh_tokens(&self, user_id: Uuid) -> Result<u64, AuthError> {
         let now = self.clock.now();
         self.write(Some(user_id), |uow| async move {
-            let tx = uow.tx().await?;
-            revoke_user(&*tx, user_id, now).await
+            revoke_user(&uow, user_id, now).await
         })
         .await
     }
 
     /// The user with `id`. Inside a unit of work whose transaction is open
     /// (a request after a record check, say) it reads through that
-    /// transaction (`Db::reader`), so the request never waits for a second
-    /// pool connection while it holds SQLite's write lock.
+    /// transaction (as the ORM reads through a `Db`), so the request never
+    /// waits for a second pool connection while it holds SQLite's write
+    /// lock.
     pub async fn find_user(&self, id: Uuid) -> Result<Option<User>, AuthError> {
         Ok(User::find(&self.db, id).await?.map(Record::into_inner))
     }
@@ -773,18 +769,11 @@ impl AuthService {
     ) -> Result<User, AuthError> {
         let now = self.clock.now();
         self.write(Some(user_id), |uow| async move {
-            let row = user::ActiveModel {
-                id: Unchanged(user_id),
-                password_hash: Set(hash),
-                updated_at: Set(now),
-                ..Default::default()
-            };
-            Repo::<user::Entity>::update(&uow, row)
-                .await
-                .map_err(|error| match error {
-                    DbErr::RecordNotFound(_) | DbErr::RecordNotUpdated => AuthError::UserNotFound,
-                    error => error.into(),
-                })
+            user::update(&uow, user_id, |user| {
+                user.password_hash = hash;
+                user.updated_at = now;
+            })
+            .await
         })
         .await
     }
@@ -807,29 +796,26 @@ impl AuthService {
         // Hash before taking the write lock: Argon2id is slow on purpose.
         let password_hash = self.hasher.hash(password).await?;
         let now = self.clock.now();
-        let taken = {
-            let tx = uow.tx().await?;
-            User::query()
-                .where_(User::EMAIL.eq(email.as_str()))
-                .exists(&*tx)
-                .await?
-        };
+        let taken = User::query()
+            .where_(User::EMAIL.eq(email.as_str()))
+            .exists(uow)
+            .await?;
         if taken {
             return Err(AuthError::EmailTaken);
         }
-        let row = user::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            name: Set(name.to_owned()),
-            email: Set(email),
-            password_hash: Set(password_hash),
-            email_verified_at: Set(None),
-            two_factor_secret: Set(None),
-            two_factor_recovery_codes: Set(None),
-            two_factor_confirmed_at: Set(None),
-            created_at: Set(now),
-            updated_at: Set(now),
+        let row = User {
+            id: Uuid::now_v7(),
+            name: name.to_owned(),
+            email,
+            password_hash,
+            email_verified_at: None,
+            two_factor_secret: None,
+            two_factor_recovery_codes: None,
+            two_factor_confirmed_at: None,
+            created_at: now,
+            updated_at: now,
         };
-        Ok(Repo::<user::Entity>::insert(uow, row).await?)
+        user::insert(uow, row).await
     }
 
     /// Claims the presented token and inserts its successor, or revokes
@@ -842,8 +828,7 @@ impl AuthService {
         meta: &ClientMeta,
         now: DateTime<Utc>,
     ) -> Result<Rotation, AuthError> {
-        let tx = uow.tx().await?;
-        let Some(row) = RefreshToken::find(&*tx, presented.id()).await? else {
+        let Some(row) = RefreshToken::find(uow, presented.id()).await? else {
             return Ok(Rotation::Invalid);
         };
         if !same_hash(&row, presented) {
@@ -859,7 +844,7 @@ impl AuthService {
             if row.replaced_by.is_none() {
                 return Ok(Rotation::Invalid);
             }
-            revoke_family(&*tx, row.family_id, now).await?;
+            revoke_family(uow, row.family_id, now).await?;
             return Ok(reused);
         }
         if row.expires_at <= now {
@@ -875,7 +860,7 @@ impl AuthService {
             .where_key(row.id)
             .where_null(RefreshToken::REVOKED_AT)
             .update(
-                &*tx,
+                uow,
                 [
                     RefreshToken::REVOKED_AT.set(now),
                     RefreshToken::REPLACED_BY.set(next.id()),
@@ -883,10 +868,10 @@ impl AuthService {
             )
             .await?;
         if claimed != 1 {
-            revoke_family(&*tx, row.family_id, now).await?;
+            revoke_family(uow, row.family_id, now).await?;
             return Ok(reused);
         }
-        RefreshToken::insert(&*tx, [self.refresh_row(next, row.user_id, &session, meta)]).await?;
+        RefreshToken::insert(uow, [self.refresh_row(next, row.user_id, &session, meta)]).await?;
         Ok(Rotation::Rotated {
             user_id: row.user_id,
             session,
@@ -961,7 +946,7 @@ impl AuthService {
         let uow = self.db.uow(actor, request_id).await;
         match uow.scope(f(uow.clone())).await {
             Ok(value) => {
-                uow.commit().await?;
+                uow.commit().await.map_err(DbError::from)?;
                 Ok(value)
             }
             Err(error) => {

@@ -214,8 +214,7 @@ impl AuthService {
         let user_id = user.id;
         self.write(Some(user_id), |uow| async move {
             let passkey = {
-                let tx = uow.tx().await?;
-                Passkey::insert(&*tx, [row.clone()]).await?;
+                Passkey::insert(&uow, [row.clone()]).await?;
                 row
             };
             self.audit_after_commit(
@@ -321,11 +320,10 @@ impl AuthService {
     ) -> Result<(), AuthError> {
         let deleted = self
             .write(Some(user_id), |uow| async move {
-                let tx = uow.tx().await?;
                 Ok(Passkey::query()
                     .where_key(id)
                     .where_(Passkey::USER_ID.eq(user_id))
-                    .delete(&*tx)
+                    .delete(&uow)
                     .await?)
             })
             .await?;
@@ -583,12 +581,11 @@ impl AuthService {
         let (id, previous) = (stored.id, stored.sign_count);
         let claimed = self
             .write(Some(stored.user_id), |uow| async move {
-                let tx = uow.tx().await?;
                 let claimed = Passkey::query()
                     .where_key(id)
                     .where_(Passkey::SIGN_COUNT.eq(previous))
                     .update(
-                        &*tx,
+                        &uow,
                         [
                             Passkey::SIGN_COUNT.set(counter),
                             Passkey::LAST_USED_AT.set(now),

@@ -7,11 +7,10 @@ use chrono::{DateTime, TimeDelta, Utc};
 use navree_config::Config;
 use navree_contracts::{AuditEntry, AuditKind};
 use navree_crypto::{CryptoError, constant_time_eq, random_token, sha256_hex};
-use navree_db::{Repo, Uow};
+use navree_db::Uow;
 use navree_http::{HttpOptions, UrlSigner};
 use navree_mail::{Mailable, Mailer};
 use navree_orm::Model as _;
-use sea_orm::{DbErr, Set, Unchanged};
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
@@ -68,12 +67,11 @@ impl AuthService {
         let audit = entry(AuditKind::Auth, "auth.password_reset_requested", meta).actor(user.id);
         self.write(Some(user.id), |uow| async move {
             {
-                let tx = uow.tx().await?;
                 PasswordResetToken::query()
                     .where_key(user.email.clone())
-                    .delete(&*tx)
+                    .delete(&uow)
                     .await?;
-                PasswordResetToken::insert(&*tx, [row]).await?;
+                PasswordResetToken::insert(&uow, [row]).await?;
             }
             if let Some((mailer, mail)) = mail {
                 send_after_commit(&uow, mailer, mail);
@@ -118,26 +116,20 @@ impl AuthService {
         self.write(Some(user.id), |uow| async move {
             {
                 // Claim the token: a concurrent reset with it finds nothing.
-                let tx = uow.tx().await?;
                 let claimed = PasswordResetToken::query()
                     .where_key(email.clone())
                     .where_(PasswordResetToken::TOKEN_HASH.eq(presented.as_str()))
-                    .delete(&*tx)
+                    .delete(&uow)
                     .await?;
                 if claimed != 1 {
                     return Err(AuthError::InvalidResetToken);
                 }
-                revoke_user(&*tx, user.id, now).await?;
+                revoke_user(&uow, user.id, now).await?;
             }
-            update_user(
-                &uow,
-                user::ActiveModel {
-                    id: Unchanged(user.id),
-                    password_hash: Set(hash),
-                    updated_at: Set(now),
-                    ..Default::default()
-                },
-            )
+            user::update(&uow, user.id, |user| {
+                user.password_hash = hash;
+                user.updated_at = now;
+            })
             .await?;
             self.audit_after_commit(&uow, audit).await;
             Ok(())
@@ -245,15 +237,10 @@ impl AuthService {
             .actor(user.id)
             .subject(USER_SUBJECT, user.id.to_string());
         self.write(Some(user.id), |uow| async move {
-            let user = update_user(
-                &uow,
-                user::ActiveModel {
-                    id: Unchanged(user.id),
-                    email_verified_at: Set(Some(now)),
-                    updated_at: Set(now),
-                    ..Default::default()
-                },
-            )
+            let user = user::update(&uow, user.id, |user| {
+                user.email_verified_at = Some(now);
+                user.updated_at = now;
+            })
             .await?;
             self.audit_after_commit(&uow, audit).await;
             Ok(user)
@@ -296,22 +283,16 @@ impl AuthService {
             .subject(USER_SUBJECT, user.id.to_string());
         self.write(Some(user.id), |uow| async move {
             {
-                let tx = uow.tx().await?;
-                revoke_user(&*tx, user.id, now).await?;
+                revoke_user(&uow, user.id, now).await?;
                 PasswordResetToken::query()
                     .where_key(user.email.clone())
-                    .delete(&*tx)
+                    .delete(&uow)
                     .await?;
             }
-            let user = update_user(
-                &uow,
-                user::ActiveModel {
-                    id: Unchanged(user.id),
-                    password_hash: Set(hash),
-                    updated_at: Set(now),
-                    ..Default::default()
-                },
-            )
+            let user = user::update(&uow, user.id, |user| {
+                user.password_hash = hash;
+                user.updated_at = now;
+            })
             .await?;
             let tokens = self.issue_tokens(&user, meta).await?;
             self.audit_after_commit(&uow, audit).await;
@@ -352,10 +333,7 @@ impl AuthService {
             current_password,
         } = update;
         let now = self.clock.now();
-        let mut row = user::ActiveModel {
-            id: Unchanged(user.id),
-            ..Default::default()
-        };
+        let (mut new_name, mut changed_email) = (None, None);
         let (mut old, mut new) = (Map::new(), Map::new());
         if let Some(name) = name {
             let name = name.trim();
@@ -365,7 +343,7 @@ impl AuthService {
             if name != user.name {
                 old.insert("name".to_owned(), json!(user.name));
                 new.insert("name".to_owned(), json!(name));
-                row.name = Set(name.to_owned());
+                new_name = Some(name.to_owned());
             }
         }
         let mut new_email = None;
@@ -393,15 +371,13 @@ impl AuthService {
                 }
                 old.insert("email".to_owned(), json!(user.email));
                 new.insert("email".to_owned(), json!(email));
-                row.email = Set(email.clone());
-                row.email_verified_at = Set(None);
+                changed_email = Some(email.clone());
                 new_email = Some(email);
             }
         }
         if new.is_empty() {
             return Ok(user);
         }
-        row.updated_at = Set(now);
         let mail = match &new_email {
             Some(email) => self.verification_mail_for(&user, email).await?,
             None => None,
@@ -423,11 +399,10 @@ impl AuthService {
         self.write(Some(user.id), |uow| async move {
             if let Some(email) = &new_email {
                 let taken = {
-                    let tx = uow.tx().await?;
                     User::query()
                         .where_(User::EMAIL.eq(email.as_str()))
                         .where_key_not(user.id)
-                        .exists(&*tx)
+                        .exists(&uow)
                         .await?
                 };
                 if taken {
@@ -435,13 +410,22 @@ impl AuthService {
                 }
                 // A reset token mailed to the old address must not reset
                 // whoever takes that address next.
-                let tx = uow.tx().await?;
                 PasswordResetToken::query()
                     .where_key(user.email.clone())
-                    .delete(&*tx)
+                    .delete(&uow)
                     .await?;
             }
-            let user = update_user(&uow, row).await?;
+            let user = user::update(&uow, user.id, |user| {
+                if let Some(name) = new_name {
+                    user.name = name;
+                }
+                if let Some(email) = changed_email {
+                    user.email = email;
+                    user.email_verified_at = None;
+                }
+                user.updated_at = now;
+            })
+            .await?;
             if let Some((mailer, mail)) = mail {
                 send_after_commit(&uow, mailer, mail);
             }
@@ -578,17 +562,6 @@ impl std::fmt::Debug for ProfileUpdate {
             )
             .finish()
     }
-}
-
-/// Updates a user row through `uow` (recording the change), mapping a
-/// missing row to [`AuthError::UserNotFound`].
-pub(crate) async fn update_user(uow: &Uow, row: user::ActiveModel) -> Result<User, AuthError> {
-    Repo::<user::Entity>::update(uow, row)
-        .await
-        .map_err(|error| match error {
-            DbErr::RecordNotFound(_) | DbErr::RecordNotUpdated => AuthError::UserNotFound,
-            error => error.into(),
-        })
 }
 
 /// The hash in verification links: SHA-256 of the address, lower-case hex.

@@ -24,14 +24,12 @@ use navree_crypto::totp::{Secret, Totp};
 use navree_crypto::{constant_time_eq, random_token, sha256_hex};
 use navree_db::Uow;
 use navree_orm::Model as _;
-use sea_orm::{Set, Unchanged};
 use serde::Serialize;
 use serde_json::json;
 use utoipa::ToSchema;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
-use crate::account::update_user;
 use crate::service::entry;
 use crate::{
     AuthError, AuthService, ClientMeta, LEEWAY_SECS, SignInAttempt, SignInMethod, TokenPair,
@@ -148,17 +146,12 @@ impl AuthService {
         let now = self.clock.now();
         let audit = self.two_factor_entry("auth.two_factor_enabled", &user, meta);
         self.write(Some(user.id), |uow| async move {
-            update_user(
-                &uow,
-                user::ActiveModel {
-                    id: Unchanged(user.id),
-                    two_factor_secret: Set(Some(stored)),
-                    two_factor_recovery_codes: Set(None),
-                    two_factor_confirmed_at: Set(None),
-                    updated_at: Set(now),
-                    ..Default::default()
-                },
-            )
+            user::update(&uow, user.id, |user| {
+                user.two_factor_secret = Some(stored);
+                user.two_factor_recovery_codes = None;
+                user.two_factor_confirmed_at = None;
+                user.updated_at = now;
+            })
             .await?;
             self.audit_after_commit(&uow, audit).await;
             Ok(())
@@ -196,16 +189,11 @@ impl AuthService {
         let now = self.clock.now();
         let audit = self.two_factor_entry("auth.two_factor_confirmed", &user, meta);
         self.write(Some(user.id), |uow| async move {
-            update_user(
-                &uow,
-                user::ActiveModel {
-                    id: Unchanged(user.id),
-                    two_factor_recovery_codes: Set(Some(stored)),
-                    two_factor_confirmed_at: Set(Some(now)),
-                    updated_at: Set(now),
-                    ..Default::default()
-                },
-            )
+            user::update(&uow, user.id, |user| {
+                user.two_factor_recovery_codes = Some(stored);
+                user.two_factor_confirmed_at = Some(now);
+                user.updated_at = now;
+            })
             .await?;
             self.audit_after_commit(&uow, audit).await;
             Ok(())
@@ -234,17 +222,12 @@ impl AuthService {
         let now = self.clock.now();
         let audit = self.two_factor_entry("auth.two_factor_disabled", &user, meta);
         self.write(Some(user.id), |uow| async move {
-            update_user(
-                &uow,
-                user::ActiveModel {
-                    id: Unchanged(user.id),
-                    two_factor_secret: Set(None),
-                    two_factor_recovery_codes: Set(None),
-                    two_factor_confirmed_at: Set(None),
-                    updated_at: Set(now),
-                    ..Default::default()
-                },
-            )
+            user::update(&uow, user.id, |user| {
+                user.two_factor_secret = None;
+                user.two_factor_recovery_codes = None;
+                user.two_factor_confirmed_at = None;
+                user.updated_at = now;
+            })
             .await?;
             self.audit_after_commit(&uow, audit).await;
             Ok(())
@@ -270,15 +253,10 @@ impl AuthService {
         let audit =
             self.two_factor_entry("auth.two_factor_recovery_codes_regenerated", &user, meta);
         self.write(Some(user.id), |uow| async move {
-            update_user(
-                &uow,
-                user::ActiveModel {
-                    id: Unchanged(user.id),
-                    two_factor_recovery_codes: Set(Some(stored)),
-                    updated_at: Set(now),
-                    ..Default::default()
-                },
-            )
+            user::update(&uow, user.id, |user| {
+                user.two_factor_recovery_codes = Some(stored);
+                user.updated_at = now;
+            })
             .await?;
             self.audit_after_commit(&uow, audit).await;
             Ok(())
@@ -535,13 +513,12 @@ impl AuthService {
         let now = self.clock.now();
         let user_id = user.id;
         self.write(Some(user_id), |uow: Uow| async move {
-            let tx = uow.tx().await?;
             // Only if nobody changed the codes meanwhile: each code works once.
             let claimed = User::query()
                 .where_key(user_id)
                 .where_(User::TWO_FACTOR_RECOVERY_CODES.eq(stored))
                 .update(
-                    &*tx,
+                    &uow,
                     [
                         User::TWO_FACTOR_RECOVERY_CODES.set(remaining),
                         User::UPDATED_AT.set(now),

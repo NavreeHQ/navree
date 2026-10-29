@@ -11,21 +11,12 @@ use uuid::Uuid;
 use crate::User;
 
 /// The subject type of users in resources and abilities (CASL subject);
-/// `<user::Entity as navree_access::Subject>::SUBJECT`.
+/// `<User as navree_access::Subject>::SUBJECT`.
 pub const USER_SUBJECT: &str = "User";
 
 /// The prefix of permission strings about users (`users.manage`);
-/// `<user::Entity as navree_access::Subject>::PERMISSION_PREFIX`.
+/// `<User as navree_access::Subject>::PERMISSION_PREFIX`.
 pub const USER_PERMISSION_PREFIX: &str = "users";
-
-/// Users are the access subject `User` with permission prefix `users`.
-/// Import `AccessModule::for_feature::<navree_auth::user::Entity>()` to load
-/// users for `can(.., User, from = "id")` checks and to make `users.*`
-/// permissions grant abilities on `User`.
-impl navree_access::Subject for crate::user::Entity {
-    const SUBJECT: &'static str = USER_SUBJECT;
-    const PERMISSION_PREFIX: &'static str = USER_PERMISSION_PREFIX;
-}
 
 /// The API representation of a [`User`]:
 /// `{"__type": "User", "id", "name", "email", "email_verified_at", "created_at"}`,

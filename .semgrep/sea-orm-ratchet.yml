@@ -32,8 +32,9 @@ rules:
         # until the crates using it are moved (data-layer move, step 8).
         - "/crates/navree-access/src/sea_compat.rs"
         - "/crates/navree-ai/"
-        - "/crates/navree-audit/"
-        - "/crates/navree-auth/"
+        # navree-auth is moved; `User` keeps its SeaORM derive (the
+        # compatibility layer for the crates not yet on navree-orm) until step 8.
+        - "/crates/navree-auth/src/entity/user.rs"
         - "/crates/navree-billing/"
         - "/crates/navree-db/"
         - "/crates/navree-flags/"
@@ -87,8 +88,8 @@ rules:
         - "/bench/"
         - "/crates/navree/"
         - "/crates/navree-ai/"
-        - "/crates/navree-audit/"
-        - "/crates/navree-auth/"
+        # navree-auth: sea-orm for `User`'s compatibility derive, until step 8.
+        - "/crates/navree-auth/Cargo.toml"
         - "/crates/navree-billing/"
         - "/crates/navree-db/"
         - "/crates/navree-flags/"

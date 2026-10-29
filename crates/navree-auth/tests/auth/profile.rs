@@ -3,10 +3,11 @@
 use std::sync::Arc;
 
 use chrono::Utc;
+use navree_auth::User;
 use navree_contracts::AuditSink;
 use navree_db::Db;
+use navree_orm::Model as _;
 use navree_testing::{TestClient, TestResponse};
-use sea_orm::{ActiveModelTrait, IntoActiveModel, Set};
 use serde_json::{Value, json};
 
 use crate::support::{
@@ -115,9 +116,11 @@ async fn update_profile_changes_name_and_email() {
         .await;
     let (user, access, _) = signed_in(&app, "ada@example.com").await;
     let db = app.get::<Db>().await;
-    let mut row = user.clone().into_active_model();
-    row.email_verified_at = Set(Some(Utc::now()));
-    row.update(db.conn()).await.unwrap();
+    User::query()
+        .where_key(user.id)
+        .update(&*db, [User::EMAIL_VERIFIED_AT.set(Some(Utc::now()))])
+        .await
+        .unwrap();
     let client = app.client();
 
     update_profile(&client, &access, json!({ "name": "  Ada King  " }))

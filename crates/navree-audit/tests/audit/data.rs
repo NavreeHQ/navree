@@ -3,19 +3,14 @@
 
 use std::sync::{Arc, Mutex};
 
-use navree_audit::{AuditModule, audit_log};
-use navree_db::{ChangeEvent, ChangeObserver, Db, ModuleBuilderDbExt, Repo, Uow};
+use navree_audit::{AuditModule, AuditRecord};
+use navree_db::{ChangeEvent, ChangeObserver, Db, DbError, ModuleBuilderDbExt, Uow};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
-use sea_orm::{
-    ActiveValue::Set, ColumnTrait, DatabaseTransaction, DbErr, EntityTrait, IntoActiveModel,
-    PaginatorTrait, QueryFilter,
-};
+use navree_orm::Model as _;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::support::{self, audit_rows, count, new_note, note};
-
-type Notes = Repo<note::Entity>;
+use crate::support::{self, Note, audit_rows, count, new_note};
 
 /// What [`ProbeObserver`] saw inside the transaction, per change.
 #[derive(Default)]
@@ -25,8 +20,8 @@ struct Probe {
 }
 
 /// Runs after the audit observer (its module imports `AuditModule`): counts
-/// the audit rows of each change through the transaction it is given, and
-/// fails when told to.
+/// the audit rows of each change through the unit of work being committed,
+/// and fails when told to.
 struct ProbeObserver(Arc<Probe>);
 
 impl Injectable for ProbeObserver {
@@ -40,22 +35,22 @@ impl Injectable for ProbeObserver {
 }
 
 impl ChangeObserver for ProbeObserver {
-    fn observe<'a>(
+    fn observe_with<'a>(
         &'a self,
-        tx: &'a DatabaseTransaction,
-        _uow: &'a Uow,
+        uow: &'a Uow,
         changes: &'a [ChangeEvent],
-    ) -> BoxFuture<'a, Result<(), DbErr>> {
+    ) -> BoxFuture<'a, Result<(), DbError>> {
         Box::pin(async move {
             for change in changes {
-                let seen = audit_log::Entity::find()
-                    .filter(audit_log::Column::SubjectId.eq(change.id.clone()))
-                    .count(tx)
-                    .await?;
+                let seen = AuditRecord::query()
+                    .where_(AuditRecord::SUBJECT_ID.eq(change.id.clone()))
+                    .count(uow)
+                    .await
+                    .map_err(|error| DbError::invalid(error.to_string()))?;
                 self.0.audit_rows_seen.lock().unwrap().push(seen);
             }
             if self.0.fail.load(std::sync::atomic::Ordering::SeqCst) {
-                return Err(DbErr::Custom("probe failure".into()));
+                return Err(DbError::invalid("probe failure"));
             }
             Ok(())
         })
@@ -84,7 +79,7 @@ async fn data_change_writes_audit_row_in_same_tx() {
     let actor = Uuid::now_v7();
 
     let uow = db.uow(Some(actor), Some("req-1".into())).await;
-    let note = Notes::insert(&uow, new_note("a")).await.unwrap();
+    let note = Note::create(&uow, new_note("a")).await.unwrap();
     assert_eq!(count(&app, "audit_logs").await, 0, "nothing before commit");
     uow.commit().await.unwrap();
 
@@ -116,8 +111,9 @@ async fn deletes_record_the_old_values() {
     let db = app.get::<Db>().await;
 
     let uow = db.uow(None, None).await;
-    let note = Notes::insert(&uow, new_note("a")).await.unwrap();
-    Notes::delete(&uow, note.clone()).await.unwrap();
+    let mut note = Note::create(&uow, new_note("a")).await.unwrap();
+    let old = note.clone().into_inner();
+    note.delete(&uow).await.unwrap();
     uow.commit().await.unwrap();
 
     let rows = audit_rows(&app).await;
@@ -127,7 +123,7 @@ async fn deletes_record_the_old_values() {
     assert_eq!(deleted.actor_id, None);
     assert_eq!(
         deleted.old_values,
-        Some(json!({"id": note.id, "title": "a", "body": "body of a"}))
+        Some(json!({"id": old.id, "title": "a", "body": "body of a"}))
     );
     assert_eq!(deleted.new_values, None);
 }
@@ -144,13 +140,13 @@ async fn rolled_back_change_leaves_no_audit_row() {
 
     // Rolled back by the caller: observers never run.
     let uow = db.uow(None, None).await;
-    Notes::insert(&uow, new_note("a")).await.unwrap();
+    Note::create(&uow, new_note("a")).await.unwrap();
     uow.rollback().await.unwrap();
 
     // A later observer fails: the audit row it saw is rolled back too.
     probe.fail.store(true, std::sync::atomic::Ordering::SeqCst);
     let uow = db.uow(None, None).await;
-    Notes::insert(&uow, new_note("b")).await.unwrap();
+    Note::create(&uow, new_note("b")).await.unwrap();
     uow.commit().await.unwrap_err();
     assert_eq!(*probe.audit_rows_seen.lock().unwrap(), vec![1]);
 
@@ -164,10 +160,10 @@ async fn update_records_only_changed_fields() {
     let db = app.get::<Db>().await;
 
     let uow = db.uow(None, None).await;
-    let note = Notes::insert(&uow, new_note("a")).await.unwrap();
-    let mut changed = note.clone().into_active_model();
-    changed.body = Set("changed".into());
-    Notes::update(&uow, changed).await.unwrap();
+    let mut note = Note::create(&uow, new_note("a")).await.unwrap();
+    note.update(&uow, |note| note.body = "changed".into())
+        .await
+        .unwrap();
     // A hand-recorded event carrying whole records is reduced to the
     // fields that differ.
     uow.record_change(ChangeEvent {
@@ -197,7 +193,7 @@ async fn update_without_changes_writes_no_row() {
     let db = app.get::<Db>().await;
 
     let uow = db.uow(None, None).await;
-    let note = Notes::insert(&uow, new_note("a")).await.unwrap();
+    let note = Note::create(&uow, new_note("a")).await.unwrap();
     uow.record_change(ChangeEvent {
         entity: "notes".into(),
         id: note.id.to_string(),

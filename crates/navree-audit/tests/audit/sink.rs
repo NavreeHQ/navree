@@ -6,14 +6,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use navree_audit::AuditLog;
+use navree_audit::AuditRecord;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink};
-use navree_db::{Db, Repo};
+use navree_db::Db;
+use navree_orm::Model as _;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::support::{self, audit_log, audit_rows, count, new_note, note};
-
-type Notes = Repo<note::Entity>;
+use crate::support::{self, Note, audit_log, audit_rows, count, new_note};
 
 #[tokio::test]
 async fn security_entry_survives_rollback() {
@@ -25,7 +25,7 @@ async fn security_entry_survives_rollback() {
     // A request's unit of work holds its transaction (on SQLite, the write
     // lock) while the denial is recorded.
     let uow = db.uow(Some(actor), Some("req-9".into())).await;
-    Notes::insert(&uow, new_note("a")).await.unwrap();
+    Note::create(&uow, new_note("a")).await.unwrap();
     let entry = AuditEntry::new(AuditKind::Security, "access.denied")
         .actor(actor)
         .subject("Note", "42")
@@ -84,10 +84,15 @@ async fn entries_are_written_in_order() {
 
 #[tokio::test]
 async fn graceful_shutdown_drains_the_queue() {
-    let (url, _guard) = navree_testing::temp_sqlite_url();
-    let app = support::builder()
+    let (url, _guard) = crate::servers::scratch();
+    let app = support::with_modules(navree_testing::TestApp::builder())
         .0
         .config("database.url", url.clone())
+        .config("database.migrate_on_boot", true)
+        .config(
+            "database.native_units_of_work",
+            crate::servers::native_units_of_work(),
+        )
         .build()
         .await;
     let log = audit_log(&app).await;
@@ -105,12 +110,9 @@ async fn graceful_shutdown_drains_the_queue() {
     })
     .await
     .unwrap();
-    use sea_orm::{EntityTrait, PaginatorTrait};
-    let written = navree_audit::audit_log::Entity::find()
-        .count(db.conn())
-        .await
-        .unwrap();
+    let written = AuditRecord::query().count(&db).await.unwrap();
     assert_eq!(written, 20);
+    db.close().await.unwrap();
 }
 
 #[tokio::test]
@@ -157,7 +159,7 @@ async fn disabled_audit_writes_nothing() {
     let log = audit_log(&app).await;
 
     let uow = db.uow(None, None).await;
-    Notes::insert(&uow, new_note("a")).await.unwrap();
+    Note::create(&uow, new_note("a")).await.unwrap();
     log.record_in(&uow, AuditEntry::new(AuditKind::Custom, "x"))
         .await
         .unwrap();
