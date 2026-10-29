@@ -4,14 +4,11 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use navree_db::{Db, MigrationSet, Page, PageQuery, paginate};
-use sea_orm::sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Index, Table};
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, IntoActiveModel, QueryFilter, QueryOrder,
-    Set,
+use navree_db::navree_schema::{
+    Blueprint, ColumnBuilder, Dialect, Migration, Schema, SchemaMigration, SchemaResult,
 };
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use navree_db::record::{self, Compare, Filter};
+use navree_db::{Db, DbError, MigrationSet, Page, PageQuery, Record};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -25,144 +22,121 @@ pub const AI_MIGRATIONS: &str = "ai";
 
 /// `ai_conversations`: one row per conversation.
 pub(crate) mod conversation {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
+    use uuid::Uuid;
 
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-    #[sea_orm(table_name = "ai_conversations")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub user_id: Uuid,
-        pub agent: String,
-        pub title: Option<String>,
-        pub summary: Option<String>,
-        pub summarized_count: i32,
-        /// A [`Pending`](super::Pending) as JSON.
-        pub pending: Option<String>,
-        pub created_at: DateTimeUtc,
-        pub updated_at: DateTimeUtc,
+    navree_db::record! {
+        /// A conversation row.
+        #[derive(Clone, Debug, PartialEq, Eq)]
+        pub(crate) struct Model in "ai_conversations" {
+            pub(crate) id: Uuid,
+            pub(crate) user_id: Uuid,
+            pub(crate) agent: String,
+            pub(crate) title: Option<String>,
+            pub(crate) summary: Option<String>,
+            pub(crate) summarized_count: i32,
+            /// A [`Pending`](super::Pending) as JSON.
+            pub(crate) pending: Option<String>,
+            pub(crate) created_at: DateTime<Utc>,
+            pub(crate) updated_at: DateTime<Utc>,
+        }
     }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `ai_messages`: the messages of a conversation, in order.
 pub(crate) mod message {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
+    use uuid::Uuid;
 
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-    #[sea_orm(table_name = "ai_messages")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub conversation_id: Uuid,
-        pub role: String,
-        /// The [`Part`](crate::Part)s as JSON.
-        pub content: String,
-        pub created_at: DateTimeUtc,
+    navree_db::record! {
+        /// A message row.
+        #[derive(Clone, Debug, PartialEq, Eq)]
+        pub(crate) struct Model in "ai_messages" {
+            pub(crate) id: Uuid,
+            pub(crate) conversation_id: Uuid,
+            pub(crate) role: String,
+            /// The [`Part`](crate::Part)s as JSON.
+            pub(crate) content: String,
+            pub(crate) created_at: DateTime<Utc>,
+        }
     }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// The `ai` migration set.
+///
+/// The migration keeps the name it always had, so a database migrated by
+/// an earlier version finds nothing pending. UUIDs are `BINARY(16)` on
+/// MySQL and MariaDB (where navree-db writes them as 16 bytes), names are
+/// `VARCHAR` without a length on PostgreSQL and SQLite and `VARCHAR(255)`
+/// on MySQL.
 pub(crate) fn migrations() -> MigrationSet {
-    MigrationSet::new(AI_MIGRATIONS).migration(CreateConversationTables)
+    MigrationSet::new(AI_MIGRATIONS).migration(SchemaMigration::new(
+        "m20261026_000001_create_ai_conversations",
+        CreateConversationTables,
+    ))
+}
+
+/// A UUID column: `BINARY(16)` on MySQL and MariaDB, `uuid` elsewhere.
+fn uuid<'a>(t: &'a mut Blueprint, name: &str, dialect: Dialect) -> ColumnBuilder<'a> {
+    if dialect == Dialect::MySql {
+        t.binary(name).length(16).fixed()
+    } else {
+        t.uuid(name)
+    }
+}
+
+/// A text column of no fixed length: `VARCHAR(255)` on MySQL and MariaDB,
+/// `VARCHAR` elsewhere.
+fn varchar<'a>(t: &'a mut Blueprint, name: &str, dialect: Dialect) -> ColumnBuilder<'a> {
+    if dialect == Dialect::MySql {
+        t.string(name).length(255)
+    } else {
+        t.raw_column(name, "VARCHAR")
+    }
 }
 
 /// Creates `ai_conversations` and `ai_messages`.
 struct CreateConversationTables;
 
-impl MigrationName for CreateConversationTables {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_ai_conversations"
-    }
-}
-
-fn timestamp(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name)
-        .timestamp_with_time_zone()
-        .not_null()
-        .to_owned()
-}
-
-#[async_trait]
-impl MigrationTrait for CreateConversationTables {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("ai_conversations")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("user_id").uuid().not_null())
-                    .col(ColumnDef::new("agent").string().not_null())
-                    .col(ColumnDef::new("title").string().null())
-                    .col(ColumnDef::new("summary").text().null())
-                    .col(
-                        ColumnDef::new("summarized_count")
-                            .integer()
-                            .not_null()
-                            .default(0),
-                    )
-                    .col(ColumnDef::new("pending").text().null())
-                    .col(timestamp("created_at"))
-                    .col(timestamp("updated_at"))
-                    .to_owned(),
-            )
+impl Migration for CreateConversationTables {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let dialect = schema.target().await?.dialect();
+        schema
+            .create("ai_conversations", |t| {
+                uuid(t, "id", dialect).primary();
+                uuid(t, "user_id", dialect);
+                varchar(t, "agent", dialect);
+                varchar(t, "title", dialect).nullable();
+                t.text("summary").nullable();
+                t.integer("summarized_count").default(0);
+                t.text("pending").nullable();
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+                t.index(["user_id", "updated_at"])
+                    .name("ai_conversations_user_id_index");
+            })
             .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("ai_conversations_user_id_index")
-                    .table("ai_conversations")
-                    .col("user_id")
-                    .col("updated_at")
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("ai_messages")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("conversation_id").uuid().not_null())
-                    .col(ColumnDef::new("role").string().not_null())
-                    .col(ColumnDef::new("content").text().not_null())
-                    .col(timestamp("created_at"))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .name("ai_messages_conversation_id_fk")
-                            .from("ai_messages", "conversation_id")
-                            .to("ai_conversations", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("ai_messages_conversation_id_index")
-                    .table("ai_messages")
-                    .col("conversation_id")
-                    .to_owned(),
-            )
+        schema
+            .create("ai_messages", |t| {
+                uuid(t, "id", dialect).primary();
+                uuid(t, "conversation_id", dialect);
+                varchar(t, "role", dialect);
+                t.text("content");
+                t.timestamp_tz("created_at");
+                t.foreign("conversation_id")
+                    .references("id")
+                    .on("ai_conversations")
+                    .name("ai_messages_conversation_id_fk")
+                    .cascade_on_delete();
+                t.index(["conversation_id"])
+                    .name("ai_messages_conversation_id_index");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("ai_messages").to_owned())
-            .await?;
-        manager
-            .drop_table(Table::drop().table("ai_conversations").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("ai_messages").await?;
+        schema.drop_if_exists("ai_conversations").await
     }
 }
 
@@ -228,7 +202,7 @@ impl std::fmt::Debug for Conversations {
     }
 }
 
-fn db_error(error: DbErr) -> AiError {
+fn db_error(error: DbError) -> AiError {
     AiError::internal(format!("conversation memory: {error}"))
 }
 
@@ -277,11 +251,11 @@ impl Conversations {
         user_id: Uuid,
         page: PageQuery,
     ) -> Result<Page<ConversationSummary>, AiError> {
-        let select = conversation::Entity::find()
-            .filter(conversation::Column::UserId.eq(user_id))
-            .order_by_desc(conversation::Column::UpdatedAt)
-            .order_by_desc(conversation::Column::Id);
-        let page = paginate(select, self.db()?.conn(), page)
+        let page = conversation::Model::select()
+            .eq("user_id", user_id)
+            .order_by_desc("updated_at")
+            .order_by_desc("id")
+            .page(self.db()?, page)
             .await
             .map_err(db_error)?;
         Ok(page.map(|row| ConversationSummary {
@@ -300,10 +274,10 @@ impl Conversations {
         conversation_id: Uuid,
     ) -> Result<Vec<StoredMessage>, AiError> {
         self.owned(user_id, conversation_id).await?;
-        let rows = message::Entity::find()
-            .filter(message::Column::ConversationId.eq(conversation_id))
-            .order_by_asc(message::Column::Id)
-            .all(self.db()?.conn())
+        let rows = message::Model::select()
+            .eq("conversation_id", conversation_id)
+            .order_by("id")
+            .all(self.db()?)
             .await
             .map_err(db_error)?;
         Ok(rows
@@ -331,10 +305,15 @@ impl Conversations {
         title: impl Into<String>,
     ) -> Result<(), AiError> {
         let row = self.owned(user_id, conversation_id).await?;
-        let mut active = row.into_active_model();
-        active.title = Set(Some(title.into()));
-        active.updated_at = Set(Utc::now());
-        active.update(self.db()?.conn()).await.map_err(db_error)?;
+        let changed = conversation::Model::update_where(Filter::all().eq("id", row.id))
+            .set("title", Some(title.into()))
+            .set("updated_at", Utc::now())
+            .execute(self.db()?)
+            .await
+            .map_err(db_error)?;
+        if changed == 0 {
+            return Err(not_found());
+        }
         Ok(())
     }
 
@@ -348,9 +327,9 @@ impl Conversations {
     /// runs); returns how many.
     pub async fn prune(&self, days: u64, now: DateTime<Utc>) -> Result<u64, AiError> {
         let cutoff = now - ChronoDuration::days(days.min(365_000) as i64);
-        let ids: Vec<Uuid> = conversation::Entity::find()
-            .filter(conversation::Column::UpdatedAt.lt(cutoff))
-            .all(self.db()?.conn())
+        let ids: Vec<Uuid> = conversation::Model::select()
+            .filter(Filter::all().compare("updated_at", Compare::Lt, cutoff))
+            .all(self.db()?)
             .await
             .map_err(db_error)?
             .into_iter()
@@ -363,15 +342,13 @@ impl Conversations {
     }
 
     async fn remove(&self, ids: &[Uuid]) -> Result<(), AiError> {
-        let conn = self.db()?.conn();
-        message::Entity::delete_many()
-            .filter(message::Column::ConversationId.is_in(ids.iter().copied()))
-            .exec(conn)
+        let db = self.db()?;
+        message::Model::delete_where(Filter::all().is_in("conversation_id", ids.iter().copied()))
+            .execute(db)
             .await
             .map_err(db_error)?;
-        conversation::Entity::delete_many()
-            .filter(conversation::Column::Id.is_in(ids.iter().copied()))
-            .exec(conn)
+        conversation::Model::delete_where(Filter::all().is_in("id", ids.iter().copied()))
+            .execute(db)
             .await
             .map_err(db_error)?;
         Ok(())
@@ -383,8 +360,7 @@ impl Conversations {
         user_id: Uuid,
         conversation_id: Uuid,
     ) -> Result<conversation::Model, AiError> {
-        conversation::Entity::find_by_id(conversation_id)
-            .one(self.db()?.conn())
+        record::find::<conversation::Model, _>(self.db()?, conversation_id)
             .await
             .map_err(db_error)?
             .filter(|row| row.user_id == user_id)
@@ -419,36 +395,38 @@ impl Conversations {
         first_message: &str,
     ) -> Result<conversation::Model, AiError> {
         let now = Utc::now();
-        let row = conversation::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            user_id: Set(user_id),
-            agent: Set(agent.to_owned()),
-            title: Set(Some(title_of(first_message)).filter(|t| !t.is_empty())),
-            summary: Set(None),
-            summarized_count: Set(0),
-            pending: Set(None),
-            created_at: Set(now),
-            updated_at: Set(now),
+        let row = conversation::Model {
+            id: Uuid::now_v7(),
+            user_id,
+            agent: agent.to_owned(),
+            title: Some(title_of(first_message)).filter(|t| !t.is_empty()),
+            summary: None,
+            summarized_count: 0,
+            pending: None,
+            created_at: now,
+            updated_at: now,
         };
-        row.insert(self.db()?.conn()).await.map_err(db_error)
+        record::insert_returning(self.db()?, &row)
+            .await
+            .map_err(db_error)
     }
 
     /// Appends `messages` to conversation `id`.
     pub(crate) async fn append(&self, id: Uuid, messages: &[Message]) -> Result<(), AiError> {
-        let conn = self.db()?.conn();
+        let db = self.db()?;
         for message in messages {
-            let row = message::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                conversation_id: Set(id),
-                role: Set(match message.role {
+            let row = message::Model {
+                id: Uuid::now_v7(),
+                conversation_id: id,
+                role: match message.role {
                     Role::User => "user".to_owned(),
                     Role::Assistant => "assistant".to_owned(),
-                }),
-                content: Set(serde_json::to_string(&stored_parts(message))
-                    .unwrap_or_else(|_| "[]".to_owned())),
-                created_at: Set(Utc::now()),
+                },
+                content: serde_json::to_string(&stored_parts(message))
+                    .unwrap_or_else(|_| "[]".to_owned()),
+                created_at: Utc::now(),
             };
-            row.insert(conn).await.map_err(db_error)?;
+            record::insert(db, &row).await.map_err(db_error)?;
         }
         Ok(())
     }
@@ -460,14 +438,21 @@ impl Conversations {
         pending: Option<&Pending>,
         summary: Option<(String, i32)>,
     ) -> Result<(), AiError> {
-        let mut active = row.clone().into_active_model();
-        active.pending = Set(pending.map(|p| serde_json::to_string(p).unwrap_or_default()));
+        let mut changes = conversation::Model::update_where(Filter::all().eq("id", row.id))
+            .set(
+                "pending",
+                pending.map(|p| serde_json::to_string(p).unwrap_or_default()),
+            );
         if let Some((summary, count)) = summary {
-            active.summary = Set(Some(summary));
-            active.summarized_count = Set(count);
+            changes = changes
+                .set("summary", Some(summary))
+                .set("summarized_count", count);
         }
-        active.updated_at = Set(Utc::now());
-        active.update(self.db()?.conn()).await.map_err(db_error)?;
+        changes
+            .set("updated_at", Utc::now())
+            .execute(self.db()?)
+            .await
+            .map_err(db_error)?;
         Ok(())
     }
 }

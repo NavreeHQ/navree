@@ -8,20 +8,16 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use chrono::{DateTime, TimeZone, Utc};
-use navree_access::{
-    AbilityCtx, AccessModule, AccessOptions, AccessService, Rules, Subject, field,
-};
+use navree_access::{AbilityCtx, AccessModule, AccessOptions, AccessService, Rules, field};
 use navree_ai::{AiModule, AiOptions, ModelConfig, ProviderConfig};
 use navree_auth::{AuthModule, AuthService};
 use navree_contracts::{Clock, FixedClock};
 use navree_crypto::CryptoModule;
+use navree_db::navree_schema::{Dialect, Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_testing::{TestApp, TestAppBuilder};
-use sea_orm::DbErr;
-use sea_orm::sea_query::{ColumnDef, Table};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use serde::Serialize;
 use serde_json::Value;
 use uuid::Uuid;
 use wiremock::{Request, Respond, ResponseTemplate};
@@ -108,58 +104,38 @@ pub async fn bodies(server: &wiremock::MockServer) -> Vec<Value> {
         .collect()
 }
 
-/// The `notes` entity agents work on.
-pub mod note {
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "notes")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub owner_id: Uuid,
-        pub title: String,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
-}
-
-impl Subject for note::Entity {
-    const SUBJECT: &'static str = "Note";
-    const PERMISSION_PREFIX: &'static str = "notes";
+/// A note: the model agents work on, and the navree-access subject `Note`
+/// (permission prefix `notes`).
+#[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
+#[model(table = "notes", subject = "Note", permission_prefix = "notes")]
+pub struct Note {
+    pub id: Uuid,
+    pub owner_id: Uuid,
+    pub title: String,
 }
 
 struct CreateNotes;
 
-impl MigrationName for CreateNotes {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_notes"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateNotes {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("notes")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("owner_id").uuid().not_null())
-                    .col(ColumnDef::new("title").string().not_null())
-                    .to_owned(),
-            )
+impl Migration for CreateNotes {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let mysql = schema.target().await?.dialect() == Dialect::MySql;
+        schema
+            .create("notes", |t| {
+                if mysql {
+                    t.binary("id").length(16).fixed().primary();
+                    t.binary("owner_id").length(16).fixed();
+                    t.string("title").length(255);
+                } else {
+                    t.uuid("id").primary();
+                    t.uuid("owner_id");
+                    t.raw_column("title", "VARCHAR");
+                }
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("notes").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("notes").await
     }
 }
 
@@ -183,16 +159,18 @@ pub struct NotesModule;
 
 impl Module for NotesModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet::new("notes").migration(CreateNotes))
-            .import(AccessModule::for_feature::<note::Entity>());
+        m.migrations(MigrationSet::new("notes").migration(SchemaMigration::new(
+            "m20261026_000001_create_notes",
+            CreateNotes,
+        )))
+        .import(AccessModule::for_feature::<Note>());
     }
 }
 
 /// A test app with users, roles, the notes table and `AiModule` with the
 /// fake, plus `extra` modules.
 pub fn agent_app() -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    crate::servers::database(TestApp::builder())
         .config("app.key", navree_crypto::generate_key())
         .config("hashing.memory_kib", 1024)
         .config("hashing.iterations", 1)
