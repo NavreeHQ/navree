@@ -127,7 +127,7 @@ impl Module for TemplatesModule {
 - installs `LibraryVisibility`, the global scope that keeps the model's queries to what the current workspace sees;
 - adds `LibraryGuard`, the model hook that keeps a workspace's writes to its own items;
 - registers the model with navree-orm, so `model:show` lists it and its guard;
-- classifies the table as a library for [`navree check`](/docs/testing/conformity-checks/), so a SeaORM entity on it needs no `workspace_entity` or `global_entity`.
+- classifies the table as a library for [`navree check`](/docs/testing/conformity-checks/), so a SeaORM entity on it (as in the Helm section below) needs no `sea_workspace_entity` or `sea_global_entity`.
 
 ## Reading a library
 

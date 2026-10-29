@@ -176,7 +176,9 @@ batch, `applied_at`) and the run order are the same as ever, so a migration
 keeps its name when it is rewritten and does not run again. SeaORM
 migrations (`MigrationTrait`) still go into `MigrationSet::migration` and run
 beside the others until Navree's own modules have none left; write new ones
-with the schema builder.
+with the schema builder. Workspace migrations
+(`m.workspace_migrations(..)`) must be schema-builder migrations: the
+per-workspace runner refuses SeaORM ones.
 
 ## Running
 

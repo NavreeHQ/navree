@@ -226,6 +226,8 @@ On SQLite, migrations run on a connection of their own with foreign keys off, so
 
 A migration may also be a SeaORM migration, a type implementing `MigrationTrait` (`navree::db::sea_orm_migration`). `MigrationSet::migration` still takes one, and it runs beside the schema builder's in the same name order, on a SeaORM transaction over the same connection: several of Navree's own modules still ship SeaORM migrations while they move to the schema builder, and an app's older ones keep running unchanged. A SeaORM migration can return `Some(true)` from `use_transaction` to run in a transaction on MySQL. Write new migrations with the schema builder; SeaORM migrations go away once Navree's own modules no longer have any.
 
+Workspace migrations (`m.workspace_migrations(..)`, for [schema and database isolation](/docs/workspaces/isolation/)) are different: the per-workspace runner refuses SeaORM migrations, so they must be schema-builder migrations.
+
 A ported migration keeps its exact name, so the row `navree_migrations` already holds for it still counts and it doesn't run again.
 
 ## Testing migrations
