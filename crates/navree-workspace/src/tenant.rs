@@ -2,15 +2,15 @@
 //! own schema or database (schema and database isolation), and the
 //! per-workspace database registry ([`WorkspaceDatabases`]).
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 use std::sync::Arc;
 
-use chrono::Utc;
-use navree_db::{Db, DbOptions, MIGRATIONS_TABLE, MigrationSet, SetMigration};
+use navree_db::{
+    Db, DbError, DbOptions, Executor, MigrationSet, SetMigration, record_migration,
+    recorded_migrations,
+};
 use navree_kernel::AppContext;
-use sea_orm::sea_query::{ColumnDef, Index, Query, Table};
-use sea_orm::{ConnectionTrait, DatabaseTransaction, DbErr, TransactionTrait};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -109,78 +109,37 @@ fn plan(sets: &[Arc<WorkspaceMigrationSet>]) -> Result<Vec<Step<'_>>, WorkspaceE
 
 /// The applied migrations recorded in `navree_migrations` (created when
 /// missing) as seen through `conn`, and the next batch number.
-async fn applied<C: ConnectionTrait>(conn: &C) -> Result<(HashSet<(String, String)>, i64), DbErr> {
-    conn.execute(
-        Table::create()
-            .table(MIGRATIONS_TABLE)
-            .if_not_exists()
-            .col(ColumnDef::new("module").string().not_null())
-            .col(ColumnDef::new("name").string().not_null())
-            .col(ColumnDef::new("batch").big_integer().not_null())
-            .col(
-                ColumnDef::new("applied_at")
-                    .timestamp_with_time_zone()
-                    .not_null(),
-            )
-            .primary_key(Index::create().col("module").col("name")),
-    )
-    .await?;
-    let rows = conn
-        .query_all(
-            Query::select()
-                .columns(["module", "name", "batch"])
-                .from(MIGRATIONS_TABLE),
-        )
-        .await?;
-    let mut done = HashSet::with_capacity(rows.len());
-    let mut batch = 0;
-    for row in rows {
-        let module: String = row.try_get("", "module")?;
-        let name: String = row.try_get("", "name")?;
-        let row_batch: i64 = row.try_get("", "batch")?;
-        batch = std::cmp::max(batch, row_batch);
-        done.insert((module, name));
-    }
+async fn applied(conn: &dyn Executor) -> Result<(HashMap<(String, String), i64>, i64), DbError> {
+    let done = recorded_migrations(conn).await?;
+    let batch = done.values().copied().max().unwrap_or(0);
     Ok((done, batch + 1))
 }
 
-async fn run_step(tx: &DatabaseTransaction, step: &Step<'_>, batch: i64) -> Result<(), DbErr> {
-    step.migration.up_in(tx).await?;
-    tx.execute(
-        Query::insert()
-            .into_table(MIGRATIONS_TABLE)
-            .columns(["module", "name", "batch", "applied_at"])
-            .values([
-                step.module.into(),
-                step.migration.name().into(),
-                batch.into(),
-                Utc::now().into(),
-            ])
-            .map_err(|e| DbErr::Custom(e.to_string()))?,
-    )
-    .await?;
-    Ok(())
+/// Applies `step` on `conn` and records it there.
+async fn run_step(conn: &dyn Executor, step: &Step<'_>, batch: i64) -> Result<(), DbError> {
+    step.migration.up_on(conn).await?;
+    record_migration(conn, step.module, step.migration.name(), batch).await
 }
 
-fn failed(step: &Step<'_>, error: DbErr) -> WorkspaceError {
+fn failed(step: &Step<'_>, error: DbError) -> WorkspaceError {
     WorkspaceError::Other(format!("workspace migration `{}` failed: {error}", step.label()).into())
 }
 
-/// Runs every pending workspace migration inside `tx` (schema isolation:
-/// the transaction's `search_path` starts with the workspace's schema);
-/// returns `module/name` of each.
+/// Runs every pending workspace migration on `conn`, a unit of work on the
+/// app's database whose `search_path` starts with the workspace's schema
+/// (schema isolation); returns `module/name` of each.
 pub(crate) async fn migrate_in(
-    tx: &DatabaseTransaction,
+    conn: &dyn Executor,
     sets: &[Arc<WorkspaceMigrationSet>],
 ) -> Result<Vec<String>, WorkspaceError> {
     let steps = plan(sets)?;
-    let (done, batch) = applied(tx).await?;
+    let (done, batch) = applied(conn).await?;
     let mut ran = Vec::new();
     for step in &steps {
-        if done.contains(&(step.module.to_owned(), step.migration.name().to_owned())) {
+        if done.contains_key(&(step.module.to_owned(), step.migration.name().to_owned())) {
             continue;
         }
-        run_step(tx, step, batch)
+        run_step(conn, step, batch)
             .await
             .map_err(|error| failed(step, error))?;
         ran.push(step.label());
@@ -195,14 +154,14 @@ pub(crate) async fn migrate_db(
     sets: &[Arc<WorkspaceMigrationSet>],
 ) -> Result<Vec<String>, WorkspaceError> {
     let steps = plan(sets)?;
-    let (done, batch) = applied(db.conn()).await?;
+    let (done, batch) = applied(db).await?;
     let mut ran = Vec::new();
     for step in &steps {
-        if done.contains(&(step.module.to_owned(), step.migration.name().to_owned())) {
+        if done.contains_key(&(step.module.to_owned(), step.migration.name().to_owned())) {
             continue;
         }
         tracing::info!(target: "navree::workspace", migration = %step.label(), "migrating a workspace database");
-        let tx = db.conn().begin().await?;
+        let tx = db.begin().await?;
         match run_step(&tx, step, batch).await {
             Ok(()) => tx.commit().await.map_err(|error| failed(step, error))?,
             Err(error) => {
@@ -294,7 +253,7 @@ impl WorkspaceDatabases {
     pub async fn forget(&self, workspace: Uuid) {
         let db = self.pools.lock().await.remove(&workspace);
         if let Some(db) = db
-            && let Err(error) = db.conn().close_by_ref().await
+            && let Err(error) = db.close().await
         {
             tracing::warn!(target: "navree::workspace", %error, "closing a workspace database failed");
         }
@@ -304,7 +263,7 @@ impl WorkspaceDatabases {
     pub(crate) async fn close_all(&self) {
         let pools: Vec<Arc<Db>> = self.pools.lock().await.drain().map(|(_, db)| db).collect();
         for db in pools {
-            if let Err(error) = db.conn().close_by_ref().await {
+            if let Err(error) = db.close().await {
                 tracing::warn!(target: "navree::workspace", %error, "closing a workspace database failed");
             }
         }

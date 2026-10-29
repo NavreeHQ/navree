@@ -9,8 +9,9 @@
 //!   changes their roles and removes them (the owner stays until ownership
 //!   is transferred); [`Invitations`] invites by email (the token is mailed
 //!   and stored as a SHA-256 digest), accepts by token, revokes and
-//!   expires. Every change goes through `navree_db::Repo` (audited) and
-//!   emits an [`events`] event once its unit of work commits.
+//!   expires. Every change is recorded in its unit of work (audited) and
+//!   emits an [`events`] event once it commits. The tables are navree-orm
+//!   models ([`entity`]), and seven of them are navree-access subjects.
 //! - **Roles.** [`WorkspaceRole`]: `owner`, `admin`, `member`, `viewer` and
 //!   roles the app defines under `workspace.roles`, each with permission
 //!   strings that navree-access evaluates.
@@ -23,9 +24,10 @@
 //!   non-member. Behind the guard, route `roles`, `permissions` and `can`
 //!   checks use the member's role in that workspace.
 //! - **Isolation** ([`Isolation`]). `Row`: a `workspace_id` column, scoped
-//!   by [`WorkspaceRepo`] and, on PostgreSQL, enforced by row-level security
-//!   ([`RlsPolicy`]) through `navree.workspace`, set for every workspace
-//!   request's transaction. `Schema`: one PostgreSQL schema per workspace,
+//!   by `#[model(workspace)]` and [`WorkspaceRepo`] and, on PostgreSQL,
+//!   enforced by row-level security ([`RlsPolicy`]) through
+//!   `navree.workspace`, set for every workspace request's transaction with
+//!   `Uow::set_local`. `Schema`: one PostgreSQL schema per workspace,
 //!   selected with `search_path`. `Database`: one database per workspace
 //!   ([`WorkspaceDatabases`]), used through [`WorkspaceUow`].
 //! - **Organizations** (`workspace.organizations.enabled`). An optional
@@ -64,7 +66,7 @@
 //!   `/api/workspaces/{workspace}/partitions` when those are on, unless
 //!   `workspace.routes` is false.
 //! - **Testing** (`testing`, feature `testing`). `TestApp::isolation_suite::<M>()`
-//!   with `testing::IsolationSuiteExt::factory` sends every route of module
+//!   with `testing::IsolationSuiteExt::factory` (a navree-orm factory) sends every route of module
 //!   `M` from one workspace against another's records: a 404, not listed,
 //!   never created there.
 //! - **Conformity.** `navree check` runs `workspace.entities` (every entity
@@ -80,6 +82,10 @@
 //!   code `demo_read_only`); with `"reset"` they are cleared and seeded
 //!   again every night (`workspace:demo-reset`). Responses about a demo
 //!   carry `X-Navree-Demo: read_only|reset` ([`DEMO_HEADER`]).
+//!
+//! - **SeaORM compatibility** ([`sea_compat`]). The SeaORM forms of the
+//!   scoped repositories and registrations, for crates not yet on
+//!   navree-orm; removed in step 8 of the data-layer port.
 //!
 //! ```no_run
 //! use navree_access::{AccessModule, AccessOptions};
@@ -107,6 +113,7 @@
 pub mod entity;
 pub mod events;
 pub mod library;
+pub mod sea_compat;
 #[cfg(feature = "testing")]
 pub mod testing;
 
@@ -138,6 +145,7 @@ mod permission_check;
 mod resolve;
 mod role;
 mod scoped;
+mod store;
 mod tenant;
 mod workspaces;
 mod zone;

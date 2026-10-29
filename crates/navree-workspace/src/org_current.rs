@@ -14,8 +14,7 @@ use navree_contracts::AuthState;
 use navree_db::Uow;
 use navree_http::{AppError, Guard};
 use navree_kernel::{AppContext, BoxFuture};
-use sea_orm::{IntoActiveModel, Select};
-use serde::Serialize;
+use navree_orm::Builder;
 use uuid::Uuid;
 
 use crate::access::{AccessScope, permission_target, scoped_access, subjects_of};
@@ -41,10 +40,10 @@ use crate::{
 /// workspace. It derefs to the [`Organization`].
 ///
 /// ```ignore
-/// async fn report(org: CurrentOrganization, uow: Uow) -> Result<Json<Vec<deal::Model>>> {
+/// async fn report(org: CurrentOrganization, uow: Uow) -> Result<Json<Vec<Deal>>> {
 ///     org.authorize("reports.read")?;
-///     let deals = org.scope(deal::Entity::find()).all(&*uow.tx().await?).await?;
-///     Ok(Json(deals))
+///     let deals = org.scope(Deal::query()).get(&uow).await?;
+///     Ok(Json(deals.into_models()))
 /// }
 /// ```
 ///
@@ -147,15 +146,10 @@ impl CurrentOrganization {
         }
     }
 
-    /// `select` restricted to the rows of the workspaces the user reaches
+    /// `query` restricted to the rows of the workspaces the user reaches
     /// ([`OrgRepo::scope`] with [`workspace_ids`](CurrentOrganization::workspace_ids)).
-    pub fn scope<E>(&self, select: Select<E>) -> Select<E>
-    where
-        E: WorkspaceScoped,
-        E::Model: Serialize + IntoActiveModel<E::ActiveModel> + Sync,
-        E::ActiveModel: Send + Sync,
-    {
-        OrgRepo::<E>::scope(&self.0.workspace_ids, select)
+    pub fn scope<M: WorkspaceScoped>(&self, query: Builder<M>) -> Builder<M> {
+        OrgRepo::<M>::scope(&self.0.workspace_ids, query)
     }
 
     /// The resolver that named the organization (`None` when a route's path
@@ -439,9 +433,9 @@ impl<S: Send + Sync> FromRequestParts<S> for CurrentPartition {
 /// else every partition the signed-in member sees.
 ///
 /// ```ignore
-/// async fn index(scope: PartitionScope, uow: Uow) -> Result<Json<Vec<contact::Model>>> {
-///     let contacts = scope.scope(contact::Entity::find()).all(&*uow.tx().await?).await?;
-///     Ok(Json(contacts))
+/// async fn index(scope: PartitionScope, uow: Uow) -> Result<Json<Vec<Contact>>> {
+///     let contacts = scope.scope(Contact::query()).get(&uow).await?;
+///     Ok(Json(contacts.into_models()))
 /// }
 /// ```
 ///
@@ -484,15 +478,10 @@ impl PartitionScope {
         self.selector.includes(id)
     }
 
-    /// `select` restricted to the workspace and to [`selector`](PartitionScope::selector)
+    /// `query` restricted to the workspace and to [`selector`](PartitionScope::selector)
     /// ([`PartitionRepo::scope`]).
-    pub fn scope<E>(&self, select: Select<E>) -> Select<E>
-    where
-        E: PartitionScoped,
-        E::Model: Serialize + IntoActiveModel<E::ActiveModel> + Sync,
-        E::ActiveModel: Send + Sync,
-    {
-        PartitionRepo::<E>::scope(self.workspace, &self.selector, select)
+    pub fn scope<M: PartitionScoped>(&self, query: Builder<M>) -> Builder<M> {
+        PartitionRepo::<M>::scope(self.workspace, &self.selector, query)
     }
 }
 

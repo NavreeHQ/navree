@@ -37,14 +37,16 @@ navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-mail = { workspace = true }
-# The workspace tables are models (`Workspace`, `Member`, `Organization`, ...).
-navree-orm = { workspace = true }
+# The workspace tables are models (`Workspace`, `Member`, `Organization`, ...),
+# seven of them access subjects (`#[model(subject)]`, feature `access`).
+navree-orm = { workspace = true, features = ["access"] }
 navree-schedule = { workspace = true }
 navree-telemetry = { workspace = true }
 navree-testing = { workspace = true, optional = true }
 navree-time = { workspace = true }
+# Compatibility layer only (`sea_compat`, the SeaORM derive kept on three
+# models and on `LibraryScope`): removed in step 8 of the data-layer port.
 sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

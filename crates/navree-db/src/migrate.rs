@@ -470,10 +470,27 @@ impl SetMigration<'_> {
         }
     }
 
+    /// Applies the migration on `conn` (a transaction, a unit of work), for
+    /// runners of their own: navree-workspace's per-workspace migrations
+    /// under schema and database isolation. A SeaORM migration needs a
+    /// SeaORM transaction ([`up_in`](Self::up_in)): `Unsupported` here.
+    pub async fn up_on(&self, conn: &(impl Executor + ?Sized)) -> Result<(), DbError> {
+        match self {
+            SetMigration::Schema(migration) => migration
+                .up(&navree_schema::Schema::new(&crate::schema::OnExecutor(conn)))
+                .await
+                .map_err(|error| DbError::new(crate::ErrorKind::Other, error.to_string())),
+            SetMigration::SeaOrm(migration) => Err(DbError::unsupported(format!(
+                "`{}` is a SeaORM migration: write it with the schema builder to run it here",
+                migration.name()
+            ))),
+        }
+    }
+
     /// Applies the migration inside a SeaORM transaction, for runners of
-    /// their own that still hold one (workspace migrations under schema and
-    /// database isolation). The [`Migrator`] runs migrations on navree-db's
-    /// transactions; this goes once no runner holds a SeaORM transaction.
+    /// their own that still hold one. The [`Migrator`] runs migrations on
+    /// navree-db's transactions; this goes once no runner holds a SeaORM
+    /// transaction.
     pub async fn up_in(&self, tx: &sea_orm::DatabaseTransaction) -> Result<(), sea_orm::DbErr> {
         match self {
             SetMigration::Schema(migration) => {
@@ -653,6 +670,42 @@ fn delete_sql(backend: Backend) -> &'static str {
             "DELETE FROM \"navree_migrations\" WHERE \"module\" = ? AND \"name\" = ?"
         }
     }
+}
+
+/// The migrations recorded in `navree_migrations` on `conn` (the table is
+/// created when missing), by `(module, name)`, with their batches: for
+/// runners of their own, such as navree-workspace's per-workspace
+/// migrations, that keep the same table as the [`Migrator`].
+pub async fn recorded_migrations(
+    conn: &dyn Executor,
+) -> Result<HashMap<(String, String), i64>, DbError> {
+    Ok(applied_rows(conn)
+        .await?
+        .into_iter()
+        .map(|(key, applied)| (key, applied.batch))
+        .collect())
+}
+
+/// Records migration `name` of `module` as applied in batch `batch` on
+/// `conn` (see [`recorded_migrations`]).
+pub async fn record_migration(
+    conn: &dyn Executor,
+    module: &str,
+    name: &str,
+    batch: i64,
+) -> Result<(), DbError> {
+    let backend = conn.backend();
+    let statement = Statement::new(
+        backend,
+        insert_sql(backend),
+        [
+            crate::Value::from(module),
+            crate::Value::from(name),
+            crate::Value::I64(batch),
+            crate::Value::from(Utc::now()),
+        ],
+    );
+    conn.execute(&statement).await.map(drop)
 }
 
 async fn ensure_table(conn: &dyn Executor) -> Result<(), DbError> {

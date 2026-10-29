@@ -153,7 +153,7 @@ pub use http::{MappedDbError, map_db_error};
 pub use migrate::{
     FreshOptions, IntoMigration, LoadedDump, MIGRATIONS_TABLE, MigrateOptions, MigrationError,
     MigrationReport, MigrationRun, MigrationSet, MigrationStatus, Migrator, Refreshed,
-    RollbackOptions, SetMigration, migration_kind,
+    RollbackOptions, SetMigration, migration_kind, record_migration, recorded_migrations,
 };
 pub use module::{DatabaseModule, ModuleBuilderDbExt};
 pub use options::{DbOptions, IsolationLevel, MySqlOptions, PostgresOptions, SqliteOptions};

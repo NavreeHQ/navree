@@ -4,7 +4,6 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::ops::Deref;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use axum::extract::{FromRequestParts, Path};
@@ -13,13 +12,10 @@ use navree_access::{Ability, PrincipalAccess};
 use navree_contracts::{AuthState, RequestId};
 use navree_db::Uow;
 use navree_http::{AppError, Guard, RouteMeta};
-use navree_kernel::{AppContext, BoxFuture};
+use navree_kernel::{AppContext, BoxError, BoxFuture};
 use navree_telemetry::TelemetryContext;
-use sea_orm::{
-    ColumnTrait, ColumnType, DbErr, IntoActiveModel, Iterable, PrimaryKeyToColumn, QueryFilter,
-    Select, Value,
-};
-use serde::Serialize;
+use navree_orm::Builder;
+use navree_orm::binding::{RouteBinding, RouteKey};
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
@@ -50,10 +46,10 @@ use crate::{
 /// [`granted_by`](CurrentWorkspace::granted_by) says which one applies.
 ///
 /// ```ignore
-/// async fn index(ws: CurrentWorkspace, uow: Uow) -> Result<Json<Vec<deal::Model>>> {
+/// async fn index(ws: CurrentWorkspace, uow: Uow) -> Result<Json<Vec<Deal>>> {
 ///     ws.authorize("deals.read")?;
-///     let deals = WorkspaceRepo::<deal::Entity>::select(ws.id()).all(&*uow.tx().await?).await?;
-///     Ok(Json(deals))
+///     let deals = WorkspaceRepo::<Deal>::query(ws.id()).get(&uow).await?;
+///     Ok(Json(deals.into_models()))
 /// }
 /// ```
 ///
@@ -158,15 +154,10 @@ impl CurrentWorkspace {
         }
     }
 
-    /// `select` restricted to this workspace's rows (row isolation; see
+    /// `query` restricted to this workspace's rows (row isolation; see
     /// [`WorkspaceRepo::scope`]).
-    pub fn scope<E>(&self, select: Select<E>) -> Select<E>
-    where
-        E: WorkspaceScoped,
-        E::Model: Serialize + IntoActiveModel<E::ActiveModel> + Sync,
-        E::ActiveModel: Send + Sync,
-    {
-        WorkspaceRepo::<E>::scope(self.id(), select)
+    pub fn scope<M: WorkspaceScoped>(&self, query: Builder<M>) -> Builder<M> {
+        WorkspaceRepo::<M>::scope(self.id(), query)
     }
 
     /// The configured isolation strategy.
@@ -455,7 +446,7 @@ pub(crate) async fn path_param(parts: &mut Parts, name: &str) -> Result<Option<S
 /// extractors) see the member's role in that workspace. The guard answers
 /// like [`CurrentWorkspace`]: 400, 404 or 403.
 ///
-/// For a `can(.., from = "id")` route on an entity registered with
+/// For a `can(.., from = "id")` route on a model registered with
 /// [`ModuleBuilderWorkspaceExt::workspace_scoped`](crate::ModuleBuilderWorkspaceExt::workspace_scoped),
 /// it also checks that the record belongs to the workspace (a 404
 /// otherwise), on every database.
@@ -466,7 +457,7 @@ pub(crate) async fn path_param(parts: &mut Parts, name: &str) -> Result<Option<S
 /// impl DealsController {
 ///     #[patch("/{id}")]
 ///     #[can(Update, Deal, from = "id")]
-///     async fn update(&self, ws: CurrentWorkspace, deal: Authorized<deal::Entity, Update>) -> .. { .. }
+///     async fn update(&self, ws: CurrentWorkspace, deal: Authorized<Deal, Update>) -> .. { .. }
 /// }
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -520,61 +511,39 @@ impl Guard for InWorkspace {
     }
 }
 
-/// An entity registered as workspace-scoped: how to check that a record
-/// belongs to a workspace.
+/// How to check that a record of a workspace-scoped subject belongs to a
+/// workspace: what
+/// [`workspace_scoped`](crate::ModuleBuilderWorkspaceExt::workspace_scoped)
+/// registers (and, for SeaORM entities, the compatibility layer).
 pub(crate) struct ScopedSubject {
     pub(crate) subject: &'static str,
-    pub(crate) belongs: fn(Uow, Uuid, String) -> BoxFuture<'static, Result<bool, DbErr>>,
+    pub(crate) belongs: fn(Uow, Uuid, String) -> BoxFuture<'static, Result<bool, BoxError>>,
 }
 
 impl ScopedSubject {
-    pub(crate) fn of<E>() -> Self
+    pub(crate) fn of<M>() -> Self
     where
-        E: WorkspaceScoped + navree_access::Subject,
-        E::Model: Serialize + IntoActiveModel<E::ActiveModel> + Sync,
-        E::ActiveModel: Send + Sync,
+        M: WorkspaceScoped + navree_access::Subject,
     {
         ScopedSubject {
-            subject: E::SUBJECT,
-            belongs: |uow, workspace, id| Box::pin(belongs::<E>(uow, workspace, id)),
+            subject: M::SUBJECT,
+            belongs: |uow, workspace, id| Box::pin(belongs::<M>(uow, workspace, id)),
         }
     }
 }
 
-/// Whether the record of `E` with primary key `id` belongs to `workspace`
-/// (read in `uow`'s transaction).
-async fn belongs<E>(uow: Uow, workspace: Uuid, id: String) -> Result<bool, DbErr>
-where
-    E: WorkspaceScoped,
-    E::Model: Serialize + IntoActiveModel<E::ActiveModel> + Sync,
-    E::ActiveModel: Send + Sync,
-{
-    let Some(pk) = E::PrimaryKey::iter().next() else {
+/// Whether the record of `M` whose route key is `id` belongs to
+/// `workspace` (read in `uow`'s transaction).
+async fn belongs<M: WorkspaceScoped>(
+    uow: Uow,
+    workspace: Uuid,
+    id: String,
+) -> Result<bool, BoxError> {
+    let Some(query) = <RouteKey as RouteBinding<M>>::query(WorkspaceRepo::<M>::query(workspace), &id)
+    else {
         return Ok(false);
     };
-    let column = pk.into_column();
-    let Some(value) = key_value(column.def().get_column_type(), &id) else {
-        return Ok(false);
-    };
-    let select = WorkspaceRepo::<E>::scope(workspace, E::find().filter(column.eq(value)));
-    Ok(select.one(&*uow.tx().await?).await?.is_some())
-}
-
-/// A path parameter as a value of the key column's type (`None` when it
-/// cannot be one).
-fn key_value(column_type: &ColumnType, id: &str) -> Option<Value> {
-    match column_type {
-        ColumnType::Uuid => Uuid::from_str(id).ok().map(Value::from),
-        ColumnType::TinyInteger
-        | ColumnType::SmallInteger
-        | ColumnType::Integer
-        | ColumnType::BigInteger => id.parse::<i64>().ok().map(Value::from),
-        ColumnType::TinyUnsigned
-        | ColumnType::SmallUnsigned
-        | ColumnType::Unsigned
-        | ColumnType::BigUnsigned => id.parse::<u64>().ok().map(Value::from),
-        _ => Some(Value::from(id.to_owned())),
-    }
+    Ok(query.exists(&uow).await?)
 }
 
 /// For a `can(.., from = "<param>")` route on a workspace-scoped subject:
@@ -631,8 +600,8 @@ async fn check_scoped_record(
 ///   opened on first use and committed with the request (when the status
 ///   is below 400; rolled back otherwise).
 ///
-/// It derefs to [`Uow`], so `Repo`, `WorkspaceRepo` and `paginate` take it
-/// as they take the request's.
+/// It derefs to [`Uow`], so the model API and `WorkspaceRepo` take it as
+/// they take the request's.
 #[derive(Clone, Debug)]
 pub struct WorkspaceUow(Uow);
 
