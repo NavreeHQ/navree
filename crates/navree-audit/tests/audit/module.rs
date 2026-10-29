@@ -52,12 +52,16 @@ fn malformed_skip_field_fails_validation() {
 
 #[tokio::test]
 async fn for_root_needs_no_audit_configuration() {
-    let (url, _guard) = navree_testing::temp_sqlite_url();
+    let (url, _guard) = crate::servers::scratch();
     let app = Navree::app()
         .module(ConfigModule::for_root(
             ConfigSources::new()
                 .set("database.url", url)
                 .set("database.migrate_on_boot", true)
+                .set(
+                    "database.native_units_of_work",
+                    crate::servers::native_units_of_work(),
+                )
                 // Ignored: for_root options win.
                 .set("audit.retention_days", 1),
         ))
@@ -153,8 +157,7 @@ async fn plain_and_from_config_read_the_audit_section() {
         .await;
     assert_eq!(audit_log(&app).await.options().retention_days, 7);
 
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .config("audit.retention_days", 8)
         .config("audit.routes", false)
         .module(DatabaseModule)

@@ -9,103 +9,92 @@ use std::sync::Arc;
 use axum::http::request::Parts;
 use navree_audit::{AuditLog, AuditModule, AuditRecord};
 use navree_contracts::AuthState;
-use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt};
+use navree_db::navree_schema::{
+    Blueprint, ColumnBuilder, Dialect, Migration, Schema, SchemaMigration, SchemaResult,
+};
+use navree_db::{DatabaseModule, Db, ExecutorExt, MigrationSet, ModuleBuilderDbExt, Statement};
 use navree_http::{AppError, RouteAuthorizer, RouteMeta};
 use navree_kernel::{BoxFuture, Module, ModuleBuilder};
+use navree_orm::Model as _;
 use navree_testing::{TestApp, TestAppBuilder};
-use sea_orm::sea_query::{ColumnDef, Table};
-use sea_orm::{ConnectionTrait, DbErr, EntityTrait, QueryOrder, Statement};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 use uuid::Uuid;
 
-/// The `notes` entity: uuid id, title, body.
+/// The `notes` table: uuid id, title, body.
 pub mod note {
-    use sea_orm::entity::prelude::*;
     use serde::Serialize;
+    use uuid::Uuid;
 
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "notes")]
+    #[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, Serialize)]
+    #[model(table = "notes")]
     pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         pub title: String,
         pub body: String,
     }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
-/// The `users` entity, with fields that must never reach the audit trail.
-pub mod user {
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
+/// A note.
+pub type Note = note::Model;
 
-    #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "users")]
+/// The `users` table, with fields that must never reach the audit trail.
+pub mod user {
+    use serde::Serialize;
+    use serde_json::Value;
+    use uuid::Uuid;
+
+    #[derive(Clone, Debug, PartialEq, navree_orm::Model, Serialize)]
+    #[model(table = "users")]
     pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         pub email: String,
         pub password_hash: String,
         pub remember_token: Option<String>,
         pub ssn: Option<String>,
-        pub settings: Json,
+        pub settings: Value,
     }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
-/// Creates `notes`, `users` and `sessions`.
+/// A user of the fixtures.
+pub type User = user::Model;
+
+/// A UUID column: `BINARY(16)` on MySQL (navree-db writes UUIDs as 16
+/// bytes there), `uuid` elsewhere.
+fn uuid<'a>(t: &'a mut Blueprint, name: &str, dialect: Dialect) -> ColumnBuilder<'a> {
+    if dialect == Dialect::MySql {
+        t.binary(name).length(16).fixed()
+    } else {
+        t.uuid(name)
+    }
+}
+
+/// Creates `notes` and `users`.
 pub struct CreateFixtures;
 
-impl MigrationName for CreateFixtures {
-    fn name(&self) -> &str {
-        "m0001_create_fixtures"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateFixtures {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("notes")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("title").string().not_null())
-                    .col(ColumnDef::new("body").string().not_null())
-                    .to_owned(),
-            )
+impl Migration for CreateFixtures {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let dialect = schema.target().await?.dialect();
+        schema
+            .create("notes", |t| {
+                uuid(t, "id", dialect).primary();
+                t.string("title");
+                t.string("body");
+            })
             .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("users")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("email").string().not_null())
-                    .col(ColumnDef::new("password_hash").string().not_null())
-                    .col(ColumnDef::new("remember_token").string().null())
-                    .col(ColumnDef::new("ssn").string().null())
-                    .col(ColumnDef::new("settings").json().not_null())
-                    .to_owned(),
-            )
+        schema
+            .create("users", |t| {
+                uuid(t, "id", dialect).primary();
+                t.string("email");
+                t.string("password_hash");
+                t.string("remember_token").nullable();
+                t.string("ssn").nullable();
+                t.json("settings");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("users").to_owned())
-            .await?;
-        manager
-            .drop_table(Table::drop().table("notes").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("users").await?;
+        schema.drop_if_exists("notes").await
     }
 }
 
@@ -117,7 +106,10 @@ pub struct FixturesModule {
 
 impl Module for FixturesModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet::new("fixtures").migration(CreateFixtures))
+        m.migrations(MigrationSet::new("fixtures").migration(SchemaMigration::new(
+            "m0001_create_fixtures",
+            CreateFixtures,
+        )))
             .value_arc::<dyn RouteAuthorizer>(self.authorizer.clone())
             .exports::<dyn RouteAuthorizer>();
     }
@@ -167,12 +159,19 @@ impl RouteAuthorizer for GrantAuthorizer {
     }
 }
 
-/// A test app with a temporary database, `DatabaseModule`, `AuditModule`
-/// (configured from the `audit` section) and the fixtures.
+/// A test app with a database of its own (on the server
+/// `NAVREE_TEST_DATABASE` names; see [`servers`](crate::servers)),
+/// `DatabaseModule`, `AuditModule` (configured from the `audit` section)
+/// and the fixtures.
 pub fn builder() -> (TestAppBuilder, FixturesModule) {
+    with_modules(crate::servers::database(TestApp::builder()))
+}
+
+/// `builder` with the modules of [`builder`]: for an app whose database
+/// the test chooses.
+pub fn with_modules(builder: TestAppBuilder) -> (TestAppBuilder, FixturesModule) {
     let fixtures = FixturesModule::default();
-    let builder = TestApp::builder()
-        .temp_database()
+    let builder = builder
         .config("http.per_ip_rate_limit", serde_json::Value::Null)
         .module(DatabaseModule)
         .module(AuditModule)
@@ -188,27 +187,21 @@ pub async fn app() -> TestApp {
 /// Every audit row, oldest first.
 pub async fn audit_rows(app: &TestApp) -> Vec<AuditRecord> {
     let db = app.get::<Db>().await;
-    navree_audit::audit_log::Entity::find()
-        .order_by_asc(navree_audit::audit_log::Column::CreatedAt)
-        .order_by_asc(navree_audit::audit_log::Column::Id)
-        .all(db.conn())
+    AuditRecord::query()
+        .order_by(AuditRecord::CREATED_AT)
+        .order_by(AuditRecord::ID)
+        .get(&*db)
         .await
         .expect("read audit rows")
+        .into_models()
 }
 
 /// `SELECT count(*) FROM table`.
 pub async fn count(app: &TestApp, table: &str) -> i64 {
     let db = app.get::<Db>().await;
-    let row = db
-        .conn()
-        .query_one_raw(Statement::from_string(
-            db.backend(),
-            format!("SELECT count(*) AS n FROM \"{table}\""),
-        ))
+    db.fetch_scalar::<i64>(&Statement::text(format!("SELECT count(*) FROM {table}")))
         .await
         .expect("count query")
-        .expect("count row");
-    row.try_get::<i64>("", "n").expect("count")
 }
 
 /// The app's audit log.
@@ -217,11 +210,10 @@ pub async fn audit_log(app: &TestApp) -> Arc<AuditLog> {
 }
 
 /// A new note.
-pub fn new_note(title: &str) -> note::ActiveModel {
-    use sea_orm::ActiveValue::Set;
-    note::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        title: Set(title.to_owned()),
-        body: Set(format!("body of {title}")),
+pub fn new_note(title: &str) -> Note {
+    Note {
+        id: Uuid::now_v7(),
+        title: title.to_owned(),
+        body: format!("body of {title}"),
     }
 }

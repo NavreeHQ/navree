@@ -5,12 +5,11 @@
 
 use navree_audit::{AuditFilter, AuditLog};
 use navree_contracts::{AuditEntry, AuditKind};
-use navree_db::{Db, PageQuery, Repo, Uow};
+use navree_db::{Db, PageQuery, Uow};
+use navree_orm::Model as _;
 use uuid::Uuid;
 
-use crate::support::{self, audit_log, audit_rows, new_note, note};
-
-type Notes = Repo<note::Entity>;
+use crate::support::{self, Note, audit_log, audit_rows, new_note};
 
 #[tokio::test]
 async fn data_changes_of_an_impersonated_unit_of_work_record_the_impersonator() {
@@ -19,13 +18,13 @@ async fn data_changes_of_an_impersonated_unit_of_work_record_the_impersonator() 
     let (user, admin) = (Uuid::now_v7(), Uuid::now_v7());
 
     let uow = db.impersonated_uow(user, admin, Some("req-1".into())).await;
-    Notes::insert(&uow, new_note("seen by support"))
+    Note::create(&uow, new_note("seen by support"))
         .await
         .unwrap();
     uow.commit().await.unwrap();
 
     let plain = db.uow(Some(user), None).await;
-    Notes::insert(&plain, new_note("by the user"))
+    Note::create(&plain, new_note("by the user"))
         .await
         .unwrap();
     plain.commit().await.unwrap();
@@ -107,10 +106,10 @@ async fn the_list_filters_by_impersonator() {
     let (user, admin) = (Uuid::now_v7(), Uuid::now_v7());
 
     let uow = db.impersonated_uow(user, admin, None).await;
-    Notes::insert(&uow, new_note("a")).await.unwrap();
+    Note::create(&uow, new_note("a")).await.unwrap();
     uow.commit().await.unwrap();
     let uow = db.uow(Some(user), None).await;
-    Notes::insert(&uow, new_note("b")).await.unwrap();
+    Note::create(&uow, new_note("b")).await.unwrap();
     uow.commit().await.unwrap();
 
     let page = log
