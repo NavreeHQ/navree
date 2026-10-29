@@ -1,42 +1,39 @@
-//! The `{{ table }}` table.
+//! The `{{ table }}` table as an ORM model.
+
+use chrono::{DateTime, Utc};
+use navree::orm::Model;
+use serde::Serialize;
+use uuid::Uuid;
 
 {% if crud %}
-use navree::access::Subject;
-{% endif %}
-use sea_orm::entity::prelude::*;
-use serde::Serialize;
-
 /// {{ a_entity_title }}. Serialized as is in API responses: keep secrets out
-/// of it (or skip them with `#[serde(skip)]`).
-#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-#[sea_orm(table_name = "{{ table }}")]
-pub struct Model {
-    /// A UUID v7, so ids sort by creation time.
-    #[sea_orm(primary_key, auto_increment = false)]
+/// of it (or skip them with `#[serde(skip)]`). Query it with
+/// `{{ entity_pascal }}::query()`. The model is the access subject
+/// `{{ entity_pascal }}`, with permissions `{{ table }}.<action>`
+/// (`{{ table }}.update`, `{{ table }}.manage`, ...): rules name it
+/// `{{ entity_pascal }}`, and routes use it as `#[can(Read, {{ entity_pascal }})]` and
+/// `Authorized<{{ entity_pascal }}, Update>`.
+#[derive(Model, Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[model(table = "{{ table }}", timestamps, subject)]
+{% else %}
+/// {{ a_entity_title }}. Serialized as is in API responses: keep secrets out
+/// of it (or skip them with `#[serde(skip)]`). Query it with
+/// `{{ entity_pascal }}::query()`.
+#[derive(Model, Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[model(table = "{{ table }}", timestamps)]
+{% endif %}
+pub struct {{ entity_pascal }} {
+    /// A UUID v7, generated when the record is created, so ids sort by
+    /// creation time.
     pub id: Uuid,
 {% if crud %}
     /// The user who created it (abilities can test `owner_id`).
     pub owner_id: Option<Uuid>,
 {% endif %}
+    /// The name.
     pub name: String,
-    pub created_at: DateTimeUtc,
-    pub updated_at: DateTimeUtc,
+    /// When the record was created.
+    pub created_at: DateTime<Utc>,
+    /// When the record last changed.
+    pub updated_at: DateTime<Utc>,
 }
-
-#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
-
-impl ActiveModelBehavior for ActiveModel {}
-{% if crud %}
-
-/// The access subject: rules name it `{{ entity_pascal }}`, permissions
-/// `{{ table }}.<action>` (`{{ table }}.update`, `{{ table }}.manage`, ...).
-impl Subject for Entity {
-    const SUBJECT: &'static str = "{{ entity_pascal }}";
-    const PERMISSION_PREFIX: &'static str = "{{ table }}";
-}
-
-/// The subject in route attributes and extractors: `#[can(Read, {{ entity_pascal }})]`,
-/// `Authorized<{{ entity_pascal }}, Update>`.
-pub type {{ entity_pascal }} = Entity;
-{% endif %}

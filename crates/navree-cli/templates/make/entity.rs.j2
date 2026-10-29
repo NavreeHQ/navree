@@ -1,21 +1,22 @@
-//! The `{{ table }}` table. Create it with
+//! The `{{ table }}` table as an ORM model. Create it with
 //! `navree make:migration {{ module }} create_{{ table }}_table`.
 
-use sea_orm::entity::prelude::*;
+use chrono::{DateTime, Utc};
+use navree::orm::Model;
 use serde::Serialize;
+use uuid::Uuid;
 
-/// {{ a_title }}.
-#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-#[sea_orm(table_name = "{{ table }}")]
-pub struct Model {
-    /// A UUID v7, so ids sort by creation time.
-    #[sea_orm(primary_key, auto_increment = false)]
+/// {{ a_title }}. Query it with `{{ pascal }}::query()`, create one with
+/// `{{ pascal }}::create(&uow, {{ pascal }} { .. })`; `navree model:show
+/// {{ pascal }}` describes it.
+#[derive(Model, Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[model(table = "{{ table }}", timestamps)]
+pub struct {{ pascal }} {
+    /// A UUID v7, generated when the record is created, so ids sort by
+    /// creation time.
     pub id: Uuid,
-    pub created_at: DateTimeUtc,
-    pub updated_at: DateTimeUtc,
+    /// When the record was created.
+    pub created_at: DateTime<Utc>,
+    /// When the record last changed.
+    pub updated_at: DateTime<Utc>,
 }
-
-#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
-
-impl ActiveModelBehavior for ActiveModel {}

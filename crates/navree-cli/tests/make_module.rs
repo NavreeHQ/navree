@@ -59,16 +59,14 @@ fn multi_word_names_follow_rust_and_http_conventions() {
     );
     let entity = files.get("blog_posts/entity.rs").unwrap();
     assert!(
-        entity.contains(r#"#[sea_orm(table_name = "blog_posts")]"#),
+        entity.contains(r#"#[model(table = "blog_posts", timestamps, subject)]"#),
         "{entity}"
     );
+    assert!(entity.contains("pub struct BlogPost {"), "{entity}");
+    let service = files.get("blog_posts/service.rs").unwrap();
     assert!(
-        entity.contains(r#"const SUBJECT: &'static str = "BlogPost";"#),
-        "{entity}"
-    );
-    assert!(
-        entity.contains(r#"const PERMISSION_PREFIX: &'static str = "blog_posts";"#),
-        "{entity}"
+        service.contains("Accessible<BlogPost, Read>"),
+        "the subject is the model: {service}"
     );
     assert!(
         files
@@ -97,6 +95,21 @@ fn generated_rust_never_leaks_template_syntax() {
             assert!(
                 !file.contents.contains('\r'),
                 "{} uses LF line endings",
+                file.path
+            );
+        }
+    }
+}
+
+#[test]
+fn generated_modules_never_name_seaorm() {
+    for crud in [true, false] {
+        let files = module_files(&name("posts"), crud, now()).unwrap();
+        for file in files.iter() {
+            let contents = file.contents.to_lowercase();
+            assert!(
+                !contents.contains("sea_orm") && !contents.contains("sea-orm"),
+                "{} names SeaORM",
                 file.path
             );
         }
