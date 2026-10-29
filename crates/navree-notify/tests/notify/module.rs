@@ -3,14 +3,13 @@
 use std::sync::Arc;
 
 use navree_contracts::JobRegistration;
-use navree_db::{DatabaseModule, Db};
+use navree_db::{DatabaseModule, Db, Executor as _, Statement};
 use navree_kernel::{Factory, Module, ModuleBuilder, ProviderKey};
 use navree_notify::{
     DELIVERIES_TABLE, DeliveryLog, NOTIFICATIONS_TABLE, Notifier, NotifyModule, NotifyOptions,
     OPT_OUTS_TABLE, OptOuts, PUSH_SUBSCRIPTIONS_TABLE, PushSubscriptions,
 };
 use navree_testing::TestApp;
-use sea_orm::{ConnectionTrait, Statement};
 
 /// A module that injects the notifier without importing `NotifyModule`.
 struct DealsModule;
@@ -31,8 +30,7 @@ impl Module for DealsModule {
 
 #[tokio::test]
 async fn from_config_reads_the_notify_section() {
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::database::database(TestApp::builder())
         .config("notify.queue", true)
         .config("notify.routes", false)
         .module(DatabaseModule)
@@ -52,8 +50,7 @@ async fn from_config_reads_the_notify_section() {
 
 #[tokio::test]
 async fn the_channel_services_are_exported_globally() {
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::database::database(TestApp::builder())
         .module(DatabaseModule)
         .module(NotifyModule)
         .build()
@@ -76,8 +73,7 @@ async fn the_channel_services_are_exported_globally() {
 
 #[tokio::test]
 async fn a_configured_driver_without_credentials_fails_the_boot() {
-    let result = TestApp::builder()
-        .temp_database()
+    let result = crate::database::database(TestApp::builder())
         .config("notify.sms.driver", "twilio")
         .module(DatabaseModule)
         .module(NotifyModule::from_config())
@@ -92,8 +88,7 @@ async fn a_configured_driver_without_credentials_fails_the_boot() {
 
 #[tokio::test]
 async fn a_plain_module_uses_the_defaults() {
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::database::database(TestApp::builder())
         .module(DatabaseModule)
         .module(NotifyModule)
         .build()
@@ -107,8 +102,7 @@ async fn a_plain_module_uses_the_defaults() {
 
 #[tokio::test]
 async fn the_notifier_is_exported_globally() {
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::database::database(TestApp::builder())
         .module(DatabaseModule)
         .module(NotifyModule::for_root(NotifyOptions::default()))
         .module(DealsModule)
@@ -120,8 +114,7 @@ async fn the_notifier_is_exported_globally() {
 
 #[tokio::test]
 async fn the_module_registers_its_job_and_migrates_its_table() {
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::database::database(TestApp::builder())
         .module(DatabaseModule)
         .module(NotifyModule)
         .build()
@@ -141,14 +134,20 @@ async fn the_module_registers_its_job_and_migrates_its_table() {
         OPT_OUTS_TABLE,
         PUSH_SUBSCRIPTIONS_TABLE,
     ] {
-        let table = db
-            .conn()
-            .query_one_raw(Statement::from_string(
-                db.backend(),
-                format!("SELECT name FROM sqlite_master WHERE type = 'table' AND name = '{name}'"),
-            ))
-            .await
-            .unwrap();
-        assert!(table.is_some(), "the {name} table exists");
+        db.fetch_all(&Statement::text(format!(
+            "SELECT * FROM {name} WHERE 1 = 0"
+        )))
+        .await
+        .unwrap_or_else(|error| panic!("the {name} table exists: {error}"));
     }
+}
+
+#[tokio::test]
+async fn the_suite_runs_on_the_configured_server() {
+    let app = crate::support::app().await;
+    let db = app.get::<Db>().await;
+    assert_eq!(
+        navree_db::Executor::backend(&*db),
+        crate::database::Server::current().backend()
+    );
 }

@@ -1,6 +1,7 @@
 //! [`QueueError`].
 
-use sea_orm::DbErr;
+use navree_db::DbError;
+use navree_orm::OrmError;
 
 /// What can go wrong when queueing or working jobs.
 #[derive(Debug, thiserror::Error)]
@@ -25,7 +26,10 @@ pub enum QueueError {
     Payload(#[source] serde_json::Error),
     /// A database error (database driver).
     #[error(transparent)]
-    Db(#[from] DbErr),
+    Db(#[from] DbError),
+    /// A failed-jobs ORM operation failed (database driver).
+    #[error(transparent)]
+    Orm(#[from] OrmError),
     /// A driver from another crate failed (a [`QueueStore`](crate::QueueStore)
     /// such as navree-redis's): connection, protocol, ...
     #[error("the queue driver failed: {0}")]
@@ -37,12 +41,4 @@ pub enum QueueError {
     /// `DatabaseModule`.
     #[error("operations need the app database: add DatabaseModule to the app")]
     NoDatabase,
-}
-
-/// The database driver's ORM operations fail as database errors
-/// ([`QueueError::Db`]), like its other statements.
-impl From<navree_orm::OrmError> for QueueError {
-    fn from(error: navree_orm::OrmError) -> Self {
-        QueueError::Db(error.into())
-    }
 }

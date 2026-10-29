@@ -7,7 +7,6 @@ use chrono::{DateTime, Utc};
 use navree_crypto::webpush;
 use navree_kernel::WeakAppContext;
 use navree_orm::{Model, Record};
-use sea_orm::DbErr;
 use serde::{Deserialize, Serialize};
 use url::Url;
 use uuid::Uuid;
@@ -181,8 +180,7 @@ impl PushSubscriptions {
         let existing = on!(&exec, e => PushSubscription::query()
             .where_(PushSubscription::ENDPOINT_HASH.eq(hash.as_str()))
             .first(e)
-            .await)
-        .map_err(DbErr::from)?;
+            .await)?;
         let mut record = existing.unwrap_or_else(|| {
             Record::new(PushSubscription {
                 id: Uuid::now_v7(),
@@ -197,7 +195,7 @@ impl PushSubscriptions {
         record.p256dh = subscription.keys.p256dh.trim().to_owned();
         record.auth = subscription.keys.auth.trim().to_owned();
         record.user_agent = user_agent.map(|ua| ua.chars().take(255).collect());
-        on!(&exec, e => record.save(e).await).map_err(DbErr::from)?;
+        on!(&exec, e => record.save(e).await)?;
         exec.wrote();
         Ok(record.into_inner())
     }
@@ -216,8 +214,7 @@ impl PushSubscriptions {
             .where_(PushSubscription::NOTIFIABLE_TYPE.eq(notifiable.notifiable_type()))
             .where_(PushSubscription::NOTIFIABLE_ID.eq(notifiable.notifiable_id()))
             .delete(e)
-            .await)
-        .map_err(DbErr::from)?;
+            .await)?;
         exec.wrote();
         Ok(deleted > 0)
     }
@@ -235,8 +232,7 @@ impl PushSubscriptions {
             .where_(PushSubscription::NOTIFIABLE_ID.eq(notifiable_id))
             .oldest_by(PushSubscription::CREATED_AT)
             .get(e)
-            .await)
-        .map_err(DbErr::from)?;
+            .await)?;
         Ok(rows.into_iter().map(Record::into_inner).collect())
     }
 
@@ -246,8 +242,7 @@ impl PushSubscriptions {
         let deleted = on!(&exec, e => PushSubscription::query()
             .where_(PushSubscription::ID.eq(id))
             .delete(e)
-            .await)
-        .map_err(DbErr::from)?;
+            .await)?;
         exec.wrote();
         Ok(deleted > 0)
     }
@@ -259,8 +254,7 @@ impl PushSubscriptions {
         on!(&exec, e => PushSubscription::query()
             .where_(PushSubscription::ID.eq(id))
             .update(e, [PushSubscription::LAST_USED_AT.set(Some(at))])
-            .await)
-        .map_err(DbErr::from)?;
+            .await)?;
         Ok(())
     }
 
@@ -271,8 +265,7 @@ impl PushSubscriptions {
         on!(&exec, e => PushSubscription::query()
             .where_(PushSubscription::ID.eq(id))
             .delete(e)
-            .await)
-        .map_err(DbErr::from)?;
+            .await)?;
         Ok(())
     }
 }
