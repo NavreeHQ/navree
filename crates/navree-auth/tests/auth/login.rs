@@ -2,11 +2,11 @@
 
 use std::sync::Arc;
 
-use navree_auth::{AuthError, AuthService, ClientMeta, user};
+use navree_auth::{AuthError, AuthService, ClientMeta, User};
 use navree_contracts::{AuditKind, AuditSink};
 use navree_crypto::{Hasher, HashingOptions};
 use navree_db::Db;
-use sea_orm::{ActiveModelTrait, EntityTrait, IntoActiveModel, Set};
+use navree_orm::Model as _;
 use serde_json::json;
 
 use crate::support::{self, PASSWORD, RecordingSink, login, tokens};
@@ -280,19 +280,17 @@ async fn login_rehashes_an_outdated_password_hash() {
     .unwrap();
     let old_hash = old_hasher.hash(PASSWORD).await.unwrap();
     let db = app.get::<Db>().await;
-    let mut row = user.clone().into_active_model();
-    row.password_hash = Set(old_hash.clone());
-    row.update(db.conn()).await.unwrap();
+    User::query()
+        .where_key(user.id)
+        .update(&*db, [User::PASSWORD_HASH.set(old_hash.clone())])
+        .await
+        .unwrap();
 
     login(&app.client(), "ada@example.com", PASSWORD)
         .await
         .assert_status(200);
 
-    let stored = user::Entity::find_by_id(user.id)
-        .one(db.conn())
-        .await
-        .unwrap()
-        .unwrap();
+    let stored = User::find(&*db, user.id).await.unwrap().unwrap();
     assert_ne!(stored.password_hash, old_hash, "rehashed");
     let hasher = app.get::<Hasher>().await;
     assert!(!hasher.needs_rehash(&stored.password_hash));
@@ -309,9 +307,11 @@ async fn a_malformed_stored_hash_is_a_failed_login() {
     let app = support::app().await;
     let user = support::create_user(&app, "ada@example.com").await;
     let db = app.get::<Db>().await;
-    let mut row = user.into_active_model();
-    row.password_hash = Set("not-a-phc-string".to_owned());
-    row.update(db.conn()).await.unwrap();
+    User::query()
+        .where_key(user.id)
+        .update(&*db, [User::PASSWORD_HASH.set("not-a-phc-string".to_owned())])
+        .await
+        .unwrap();
     login(&app.client(), "ada@example.com", PASSWORD)
         .await
         .assert_error(401, "Invalid credentials");

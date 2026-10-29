@@ -14,11 +14,10 @@ use navree_audit::{AuditFilter, AuditLog, AuditModule};
 use navree_auth::testing::VirtualAuthenticator;
 use navree_auth::{AuthModule, AuthService};
 use navree_crypto::{CryptoModule, generate_key};
-use navree_db::{DatabaseModule, Db, PageQuery};
+use navree_db::{DatabaseModule, Db, DbOptions, Executor, PageQuery, Pool};
 use navree_mail::{MailModule, MailOptions, Mailer, TransportConfig};
 use navree_testing::TestApp;
 use navree_view::{ViewModule, ViewOptions};
-use sea_orm::{ConnectionTrait, Database};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -38,25 +37,37 @@ impl Scratch {
             return None;
         };
         let name = format!("navree_auth_{}", Uuid::now_v7().simple());
-        let conn = Database::connect(&admin).await.unwrap();
-        conn.execute_unprepared(&format!("CREATE DATABASE {name}"))
+        let conn = admin_pool(&admin).await;
+        conn.execute_script(&format!("CREATE DATABASE {name}"))
             .await
             .unwrap();
-        conn.close().await.unwrap();
+        conn.close().await;
         let (base, _) = admin.rsplit_once('/').unwrap();
         let url = format!("{base}/{name}");
         Some(Scratch { admin, name, url })
     }
 
     async fn drop(self) {
-        let conn = Database::connect(&self.admin).await.unwrap();
-        conn.execute_unprepared(&format!(
+        let conn = admin_pool(&self.admin).await;
+        conn.execute_script(&format!(
             "DROP DATABASE IF EXISTS {} WITH (FORCE)",
             self.name
         ))
         .await
         .unwrap();
+        conn.close().await;
     }
+}
+
+/// A connection to the server of the admin URL.
+async fn admin_pool(admin: &str) -> Pool {
+    Pool::connect(&DbOptions {
+        url: admin.to_owned(),
+        max_connections: 1,
+        ..DbOptions::default()
+    })
+    .await
+    .unwrap()
 }
 
 async fn app(scratch: &Scratch) -> TestApp {

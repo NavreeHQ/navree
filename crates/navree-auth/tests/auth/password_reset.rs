@@ -11,7 +11,7 @@ use navree_db::Db;
 use navree_kernel::{Module, ModuleBuilder};
 use navree_testing::{TestApp, TestClient, TestResponse};
 use navree_view::ModuleBuilderViewExt;
-use sea_orm::EntityTrait;
+use navree_orm::Model as _;
 use serde_json::json;
 
 use crate::support::{
@@ -94,8 +94,7 @@ async fn forgot_password_always_202_and_sends_mail_for_known_email() {
 
     // Only the SHA-256 of the token is stored.
     let db = app.get::<Db>().await;
-    let row = password_reset_token::Entity::find_by_id("ada@example.com".to_owned())
-        .one(db.conn())
+    let row = password_reset_token::Model::find(&*db, "ada@example.com".to_owned())
         .await
         .unwrap()
         .expect("a reset row");
@@ -117,8 +116,7 @@ async fn forgot_password_without_a_reset_url_mails_the_token() {
     let text = sent[0].text.clone().unwrap();
     assert!(first_url(&text).is_none(), "{text}");
     let db = app.get::<Db>().await;
-    let row = password_reset_token::Entity::find_by_id("ada@example.com".to_owned())
-        .one(db.conn())
+    let row = password_reset_token::Model::find(&*db, "ada@example.com".to_owned())
         .await
         .unwrap()
         .unwrap();
@@ -187,8 +185,7 @@ async fn reset_password_with_valid_token_revokes_refresh_tokens() {
         .assert_error(400, "Invalid or expired password reset token");
     let db = app.get::<Db>().await;
     assert!(
-        password_reset_token::Entity::find_by_id("ada@example.com".to_owned())
-            .one(db.conn())
+        password_reset_token::Model::find(&*db, "ada@example.com".to_owned())
             .await
             .unwrap()
             .is_none()

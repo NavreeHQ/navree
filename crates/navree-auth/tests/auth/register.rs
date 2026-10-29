@@ -1,8 +1,8 @@
 //! `POST /api/auth/register`.
 
-use navree_auth::{AuthService, user};
+use navree_auth::{AuthService, User};
 use navree_db::Db;
-use sea_orm::EntityTrait;
+use navree_orm::Model as _;
 use serde_json::{Value, json};
 
 use crate::support::{self, PASSWORD, tokens};
@@ -30,7 +30,7 @@ async fn register_hashes_password_and_returns_tokens() {
     assert!(body["user"]["created_at"].is_string(), "{body}");
 
     let db = app.get::<Db>().await;
-    let users = user::Entity::find().all(db.conn()).await.unwrap();
+    let users = User::all(&*db).await.unwrap().into_vec();
     assert_eq!(users.len(), 1);
     let stored = &users[0];
     assert_eq!(body["user"]["id"], json!(stored.id));

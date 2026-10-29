@@ -2,6 +2,7 @@
 //! authentication, refresh-token rotation and logout through the full
 //! navree-http router, driven by navree-testing's `TestClient`.
 
+mod servers;
 mod support;
 
 mod access;
