@@ -565,131 +565,18 @@ impl Module for UpgradeModule {
     }
 }
 
-/// With the `postgres` feature and `NAVREE_TEST_POSTGRES_URL` set, or the
-/// `mysql` feature and `NAVREE_TEST_MYSQL_URL` set (URLs whose user may
-/// create databases), every harness runs on a fresh database of its own on
-/// that server: `cargo test -p navree-workflows --features postgres`.
-#[cfg(any(feature = "postgres", feature = "mysql"))]
-pub mod servers {
-    use sea_orm::{ConnectionTrait, Database};
-    use uuid::Uuid;
-
-    /// A database created for one test; dropped when this is.
-    pub struct Scratch {
-        admin: String,
-        name: String,
-        mysql: bool,
-        pub url: String,
-    }
-
-    impl Scratch {
-        /// `None` when no server URL is set for an enabled feature.
-        pub async fn new() -> Option<Scratch> {
-            let (admin, mysql) = server()?;
-            let name = format!("navree_workflows_{}", Uuid::now_v7().simple());
-            let conn = Database::connect(&admin)
-                .await
-                .expect("the test server is reachable");
-            let create = if mysql {
-                format!("CREATE DATABASE `{name}` CHARACTER SET utf8mb4")
-            } else {
-                format!("CREATE DATABASE {name}")
-            };
-            conn.execute_unprepared(&create)
-                .await
-                .expect("the test user may create databases");
-            conn.close().await.expect("closes");
-            let (base, rest) = admin.rsplit_once('/').expect("a database URL");
-            let options = rest.find('?').map_or("", |at| &rest[at..]);
-            let url = format!("{base}/{name}{options}");
-            Some(Scratch {
-                admin,
-                name,
-                mysql,
-                url,
-            })
-        }
-    }
-
-    /// The admin URL and whether it is MySQL: PostgreSQL first.
-    fn server() -> Option<(String, bool)> {
-        let var = |name: &str| std::env::var(name).ok().filter(|url| !url.is_empty());
-        if cfg!(feature = "postgres")
-            && let Some(url) = var("NAVREE_TEST_POSTGRES_URL")
-        {
-            return Some((url, false));
-        }
-        if cfg!(feature = "mysql")
-            && let Some(url) = var("NAVREE_TEST_MYSQL_URL")
-        {
-            return Some((url, true));
-        }
-        None
-    }
-
-    impl Drop for Scratch {
-        fn drop(&mut self) {
-            let admin = self.admin.clone();
-            let drop = if self.mysql {
-                format!("DROP DATABASE IF EXISTS `{}`", self.name)
-            } else {
-                format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", self.name)
-            };
-            let _ = std::thread::spawn(move || {
-                let runtime = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .expect("runtime");
-                runtime.block_on(async move {
-                    if let Ok(conn) = Database::connect(&admin).await {
-                        let _ = conn.execute_unprepared(&drop).await;
-                        let _ = conn.close().await;
-                    }
-                });
-            })
-            .join();
-        }
-    }
-}
-
-#[cfg(not(any(feature = "postgres", feature = "mysql")))]
-pub mod servers {
-    /// Without the `postgres` and `mysql` features every harness uses
-    /// SQLite.
-    pub struct Scratch {
-        pub url: String,
-    }
-
-    impl Scratch {
-        pub async fn new() -> Option<Scratch> {
-            None
-        }
-    }
-}
-
-/// A database for one test: a fresh PostgreSQL or MySQL database (see
-/// [`servers`]) or a SQLite file.
+/// A database for one test: a fresh SQLite file, or a fresh database on the
+/// server `NAVREE_TEST_DATABASE` names (see [`servers`](crate::servers));
+/// dropped with this.
 pub struct TestDatabase {
     pub url: String,
-    _scratch: Option<servers::Scratch>,
-    _guard: Option<navree_testing::TempDirGuard>,
+    _guard: Box<dyn std::any::Any + Send + Sync>,
 }
 
 impl TestDatabase {
     pub async fn new() -> TestDatabase {
-        if let Some(scratch) = servers::Scratch::new().await {
-            return TestDatabase {
-                url: scratch.url.clone(),
-                _scratch: Some(scratch),
-                _guard: None,
-            };
-        }
-        let (url, guard) = navree_testing::temp_sqlite_url();
-        TestDatabase {
-            url,
-            _scratch: None,
-            _guard: Some(guard),
-        }
+        let (url, guard) = crate::servers::scratch();
+        TestDatabase { url, _guard: guard }
     }
 }
 
@@ -708,9 +595,14 @@ pub fn builder(
     clock: Arc<FixedClock>,
     journal: Arc<Journal>,
 ) -> TestAppBuilder {
-    TestApp::builder()
-        .config("database.url", database.url.clone())
+    let app = if crate::servers::native_units_of_work() {
+        TestApp::builder().config("database.native_units_of_work", true)
+    } else {
+        TestApp::builder()
+    };
+    app.config("database.url", database.url.clone())
         .config("database.migrate_on_boot", true)
+        .config("database.max_connections", 4)
         .config("workflows.routes", false)
         .config("workflows.automation_routes", false)
         .module(DatabaseModule::from_config())

@@ -36,8 +36,6 @@ navree-macros = { workspace = true }
 navree-schedule = { workspace = true }
 # Routes act on the request's workspace (`InWorkspace`).
 navree-workspace = { workspace = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
