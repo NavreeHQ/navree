@@ -9,7 +9,7 @@
 
       postgres  PostgreSQL 17 + TimescaleDB   127.0.0.1:55432  database navree_test
       mysql     MySQL 8.4 LTS                 127.0.0.1:53306  database navree_test
-      mongodb   MongoDB 8.0, replica set rs0  127.0.0.1:57017  (transactions work)
+      mongodb   MongoDB 8.0, replica set rs0  127.0.0.1:45017  (transactions work)
 
     Binaries live in target/databases/<server>, data in target/databases/data,
     logs in target/databases/logs and generated configuration in
@@ -93,7 +93,9 @@ $Mongo = @{
     Data  = Join-Path $DataRoot 'mongodb'
     Log   = Join-Path $LogDir 'mongod.log'
     Conf  = Join-Path $ConfDir 'mongod.cfg'
-    Port  = 57017
+    # Below 49152: Windows reserves blocks of the dynamic range above it for
+    # Hyper-V and WinNAT at boot, and 57017 once fell inside one.
+    Port  = 45017
     ReplicaSet = 'rs0'
 }
 $Mongo.Mongod = Join-Path $Mongo.Home 'bin\mongod.exe'
@@ -444,12 +446,18 @@ function Start-MongoDb {
         (Get-MongoPid) -and (Invoke-Mongosh 'db.adminCommand({ ping: 1 }).ok').ExitCode -eq 0
     }
     if (-not $up) { throw "mongodb did not accept connections within 60s. Log tail:`n$(Get-LogTail $Mongo.Log)" }
-    # Initiate the replica set once (code 94: NotYetInitialized).
+    # Initiate the replica set once (code 94: NotYetInitialized). A data
+    # directory initiated on another port names a member that is not this
+    # node (code 93: InvalidReplicaSetConfig), so move the member here.
     $initiate = Invoke-Mongosh (@(
             'try { rs.status(); print(''initiated''); }'
-            'catch (e) { if (e.code !== 94) throw e;'
+            'catch (e) { if (e.code === 94) {'
             "  rs.initiate({ _id: '$($Mongo.ReplicaSet)', members: [{ _id: 0, host: '127.0.0.1:$($Mongo.Port)' }] });"
             '  print(''initiating''); }'
+            'else if (e.code === 93) { const c = rs.conf();'
+            "  c.members[0].host = '127.0.0.1:$($Mongo.Port)'; rs.reconfig(c, { force: true });"
+            '  print(''moved''); }'
+            'else { throw e; } }'
         ) -join ' ')
     if ($initiate.ExitCode -ne 0) { throw "mongodb: replica set initiation failed:`n$($initiate.Output)" }
     if (-not (Wait-Until -TimeoutSeconds 60 -Condition { Test-MongoPrimary })) {
