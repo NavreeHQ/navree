@@ -20,11 +20,21 @@ use crate::subject::{LoadedRecord, SubjectLoader};
 /// with.
 ///
 /// ORM models get an implementation from `#[derive(Model)]` with
-/// `#[model(subject = "...")]` (their records are ORM records). Below the
-/// ORM, implement it for a navree-db record by hand: load the row by key
-/// with `Select::for_update` when [`Uow::lock_for_update`] says so, and
-/// give [`row_json`](crate::row_json) as its JSON form (see
+/// `#[model(subject = "...")]` (their records are ORM records, loaded by
+/// route key with the model's query and global scopes, in the unit of work
+/// the request runs in, whichever transaction it holds). Below the ORM,
+/// implement it for a navree-db record by hand: load the row by key with
+/// `Select::for_update` when [`Uow::lock_for_update`] says so, and give
+/// [`row_json`](crate::row_json) as its JSON form (see
 /// [`RoleRow`](crate::entity::RoleRow)).
+///
+/// Why the derive implements it, and not a blanket implementation: this
+/// crate sits below navree-orm (navree-orm depends on it, optionally), so
+/// it cannot name `navree_orm::Model`; and navree-orm cannot write
+/// `impl<M: Model + Subject> SubjectRecords for M`, because the trait is
+/// foreign to it and `M` is an uncovered type parameter (the orphan rule).
+/// The derive writes the implementation in the model's own crate, for the
+/// model's own type, which the orphan rule allows.
 pub trait SubjectRecords: Subject + Send + Sync + 'static {
     /// A loaded record.
     type Record: Clone + Send + Sync + 'static;

@@ -13,7 +13,7 @@ use navree_kernel::AppContext;
 use uuid::Uuid;
 
 use crate::entity::{
-    access_request, invitation, member, organization, organization_member, partition, workspace,
+    AccessRequest, Invitation, Member, OrgMember, Organization, Partition, Workspace,
 };
 use crate::{RoleTable, WorkspaceError, WorkspaceRole};
 
@@ -21,31 +21,13 @@ use crate::{RoleTable, WorkspaceError, WorkspaceRole};
 /// `AccessModule` (whose `AbilityFactory` knows every registered subject).
 fn own_subjects() -> BTreeMap<String, String> {
     [
-        (
-            workspace::Entity::PERMISSION_PREFIX,
-            workspace::Entity::SUBJECT,
-        ),
-        (member::Entity::PERMISSION_PREFIX, member::Entity::SUBJECT),
-        (
-            invitation::Entity::PERMISSION_PREFIX,
-            invitation::Entity::SUBJECT,
-        ),
-        (
-            organization::Entity::PERMISSION_PREFIX,
-            organization::Entity::SUBJECT,
-        ),
-        (
-            organization_member::Entity::PERMISSION_PREFIX,
-            organization_member::Entity::SUBJECT,
-        ),
-        (
-            access_request::Entity::PERMISSION_PREFIX,
-            access_request::Entity::SUBJECT,
-        ),
-        (
-            partition::Entity::PERMISSION_PREFIX,
-            partition::Entity::SUBJECT,
-        ),
+        (Workspace::PERMISSION_PREFIX, Workspace::SUBJECT),
+        (Member::PERMISSION_PREFIX, Member::SUBJECT),
+        (Invitation::PERMISSION_PREFIX, Invitation::SUBJECT),
+        (Organization::PERMISSION_PREFIX, Organization::SUBJECT),
+        (OrgMember::PERMISSION_PREFIX, OrgMember::SUBJECT),
+        (AccessRequest::PERMISSION_PREFIX, AccessRequest::SUBJECT),
+        (Partition::PERMISSION_PREFIX, Partition::SUBJECT),
     ]
     .into_iter()
     .map(|(prefix, subject)| (prefix.to_owned(), subject.to_owned()))

@@ -64,7 +64,7 @@ impl ActiveModelBehavior for ActiveModel {}
 ```
 
 Relations are plain SeaORM (`belongs_to`/`has_many` plus `Related` impls);
-navree-auth's users are `navree::auth::user::Entity`. Keep secrets out of a
+navree-auth's users are `navree::auth::user::Entity` (the SeaORM entity of the `navree::auth::User` model; relate models in new code). Keep secrets out of a
 model that handlers serialize, or `#[serde(skip)]` them.
 
 ## Service: reads and writes in the unit of work

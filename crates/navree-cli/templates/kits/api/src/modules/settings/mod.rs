@@ -22,6 +22,8 @@ mod migrations;
 mod service;
 
 use navree::prelude::*;
+// COMPAT (data-layer move): `sea_workspace_entity` for the SeaORM entity.
+use navree::workspace::sea_compat::ModuleBuilderSeaWorkspaceExt as _;
 use navree::workspace::Workspace;
 
 pub use controller::SettingsController;
@@ -44,7 +46,7 @@ impl SettingsModule {
         m.migrations(migrations::migrations())
             // Rows belong to one workspace: `navree check` makes sure they
             // are only read and written through `WorkspaceRepo`.
-            .workspace_entity::<entity::Entity>();
+            .sea_workspace_entity::<entity::Entity>();
         // navree:wire
     }
 }

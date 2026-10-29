@@ -1,11 +1,18 @@
 //! The workspace module's migrations (`MigrationSet` `workspace`, after
-//! `auth`): the tables, then `workspaces.timezone`, `country` and `kind`.
+//! `auth`): the tables, then `workspaces.timezone`, `country` and `kind`,
+//! written with the schema builder.
+//!
+//! Their names are the ones the module's migrations always had, so a
+//! database migrated by an earlier version finds nothing pending. The
+//! columns are the types those migrations created: UUIDs as `BINARY(16)` on
+//! MySQL and MariaDB (where navree-db writes UUIDs as 16 bytes), names,
+//! slugs, emails and roles as `VARCHAR` without a length on PostgreSQL and
+//! SQLite and `VARCHAR(255)` on MySQL.
 
 use navree_db::MigrationSet;
-use sea_orm::DbErr;
-use sea_orm::sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Index, Table};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use navree_db::navree_schema::{
+    Blueprint, ColumnBuilder, Dialect, Migration, Schema, SchemaMigration, SchemaResult,
+};
 
 /// The name of the workspace module's migration set; tables that reference
 /// `workspaces` run `.after([WORKSPACE_MIGRATIONS])`.
@@ -17,244 +24,116 @@ pub const WORKSPACE_MIGRATIONS: &str = "workspace";
 pub(crate) fn migrations() -> MigrationSet {
     MigrationSet::new(WORKSPACE_MIGRATIONS)
         .after(["auth"])
-        .migration(CreateWorkspaceTables)
-        .migration(CreateOrganizationTables)
-        .migration(CreatePartitionTables)
-        .migration(AddWorkspaceTimeZone)
-        .migration(AddWorkspaceKind)
+        .migration(SchemaMigration::new(
+            "m20261026_000001_create_workspace_tables",
+            CreateWorkspaceTables,
+        ))
+        .migration(SchemaMigration::new(
+            "m20261026_000002_create_organization_tables",
+            CreateOrganizationTables,
+        ))
+        .migration(SchemaMigration::new(
+            "m20261026_000003_create_partition_tables",
+            CreatePartitionTables,
+        ))
+        .migration(SchemaMigration::new(
+            "m20261027_000001_add_workspace_time_zone",
+            AddWorkspaceTimeZone,
+        ))
+        .migration(SchemaMigration::new(
+            "m20261027_000002_add_workspace_kind",
+            AddWorkspaceKind,
+        ))
 }
 
-/// Adds `workspaces.kind` (`live` or `demo`, default `live`) and its index.
-struct AddWorkspaceKind;
-
-impl MigrationName for AddWorkspaceKind {
-    fn name(&self) -> &str {
-        "m20261027_000002_add_workspace_kind"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for AddWorkspaceKind {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .alter_table(
-                Table::alter()
-                    .table("workspaces")
-                    .add_column(
-                        ColumnDef::new("kind")
-                            .string_len(16)
-                            .not_null()
-                            .default("live"),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("workspaces_kind_index")
-                    .table("workspaces")
-                    .col("kind")
-                    .to_owned(),
-            )
-            .await
-    }
-
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_index(
-                Index::drop()
-                    .name("workspaces_kind_index")
-                    .table("workspaces")
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .alter_table(
-                Table::alter()
-                    .table("workspaces")
-                    .drop_column("kind")
-                    .to_owned(),
-            )
-            .await
+/// A UUID column: `BINARY(16)` on MySQL and MariaDB, `uuid` elsewhere.
+fn uuid<'a>(t: &'a mut Blueprint, name: &str, dialect: Dialect) -> ColumnBuilder<'a> {
+    if dialect == Dialect::MySql {
+        t.binary(name).length(16).fixed()
+    } else {
+        t.uuid(name)
     }
 }
 
-/// Adds `workspaces.timezone` and `workspaces.country` (nullable).
-struct AddWorkspaceTimeZone;
-
-impl MigrationName for AddWorkspaceTimeZone {
-    fn name(&self) -> &str {
-        "m20261027_000001_add_workspace_time_zone"
+/// A text column of no fixed length: `VARCHAR(255)` on MySQL and MariaDB,
+/// `VARCHAR` elsewhere.
+fn varchar<'a>(t: &'a mut Blueprint, name: &str, dialect: Dialect) -> ColumnBuilder<'a> {
+    if dialect == Dialect::MySql {
+        t.string(name).length(255)
+    } else {
+        t.raw_column(name, "VARCHAR")
     }
 }
 
-#[async_trait]
-impl MigrationTrait for AddWorkspaceTimeZone {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        // One column per statement: SQLite alters one at a time.
-        manager
-            .alter_table(
-                Table::alter()
-                    .table("workspaces")
-                    .add_column(ColumnDef::new("timezone").string_len(64).null())
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .alter_table(
-                Table::alter()
-                    .table("workspaces")
-                    .add_column(ColumnDef::new("country").string_len(2).null())
-                    .to_owned(),
-            )
-            .await
-    }
+/// A scope column: `all` (the default) or `only`.
+fn scope<'a>(t: &'a mut Blueprint, name: &str) -> ColumnBuilder<'a> {
+    t.string(name).length(8).default("all")
+}
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        for column in ["country", "timezone"] {
-            manager
-                .alter_table(
-                    Table::alter()
-                        .table("workspaces")
-                        .drop_column(column)
-                        .to_owned(),
-                )
-                .await?;
-        }
-        Ok(())
-    }
+/// The dialect of the database `schema` runs on.
+async fn dialect(schema: &Schema<'_>) -> SchemaResult<Dialect> {
+    Ok(schema.target().await?.dialect())
 }
 
 /// Creates `workspaces`, `workspace_members` and `workspace_invitations`.
 struct CreateWorkspaceTables;
 
-impl MigrationName for CreateWorkspaceTables {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_workspace_tables"
-    }
-}
-
-fn timestamp(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name)
-        .timestamp_with_time_zone()
-        .not_null()
-        .to_owned()
-}
-
-#[async_trait]
-impl MigrationTrait for CreateWorkspaceTables {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("workspaces")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("name").string().not_null())
-                    .col(ColumnDef::new("slug").string().not_null().unique_key())
-                    .col(ColumnDef::new("owner_id").uuid().not_null())
-                    .col(timestamp("created_at"))
-                    .col(timestamp("updated_at"))
-                    .to_owned(),
-            )
+impl Migration for CreateWorkspaceTables {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let dialect = dialect(schema).await?;
+        schema
+            .create("workspaces", |t| {
+                uuid(t, "id", dialect).primary();
+                varchar(t, "name", dialect);
+                varchar(t, "slug", dialect).unique();
+                uuid(t, "owner_id", dialect);
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+                t.index("owner_id").name("workspaces_owner_id_index");
+            })
             .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("workspaces_owner_id_index")
-                    .table("workspaces")
-                    .col("owner_id")
-                    .to_owned(),
-            )
+        schema
+            .create("workspace_members", |t| {
+                uuid(t, "id", dialect).primary();
+                uuid(t, "workspace_id", dialect);
+                uuid(t, "user_id", dialect);
+                varchar(t, "role", dialect);
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+                t.foreign("workspace_id")
+                    .references("id")
+                    .on("workspaces")
+                    .cascade_on_delete();
+                t.unique(["workspace_id", "user_id"])
+                    .name("workspace_members_workspace_user_unique");
+                t.index("user_id").name("workspace_members_user_id_index");
+            })
             .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("workspace_members")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("workspace_id").uuid().not_null())
-                    .col(ColumnDef::new("user_id").uuid().not_null())
-                    .col(ColumnDef::new("role").string().not_null())
-                    .col(timestamp("created_at"))
-                    .col(timestamp("updated_at"))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("workspace_members", "workspace_id")
-                            .to("workspaces", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("workspace_members_workspace_user_unique")
-                    .table("workspace_members")
-                    .col("workspace_id")
-                    .col("user_id")
-                    .unique()
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("workspace_members_user_id_index")
-                    .table("workspace_members")
-                    .col("user_id")
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("workspace_invitations")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("workspace_id").uuid().not_null())
-                    .col(ColumnDef::new("email").string().not_null())
-                    .col(ColumnDef::new("role").string().not_null())
-                    .col(
-                        ColumnDef::new("token_hash")
-                            .string()
-                            .not_null()
-                            .unique_key(),
-                    )
-                    .col(ColumnDef::new("invited_by").uuid().null())
-                    .col(timestamp("expires_at"))
-                    .col(
-                        ColumnDef::new("accepted_at")
-                            .timestamp_with_time_zone()
-                            .null(),
-                    )
-                    .col(ColumnDef::new("accepted_by").uuid().null())
-                    .col(timestamp("created_at"))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("workspace_invitations", "workspace_id")
-                            .to("workspaces", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("workspace_invitations_workspace_email_index")
-                    .table("workspace_invitations")
-                    .col("workspace_id")
-                    .col("email")
-                    .to_owned(),
-            )
+        schema
+            .create("workspace_invitations", |t| {
+                uuid(t, "id", dialect).primary();
+                uuid(t, "workspace_id", dialect);
+                varchar(t, "email", dialect);
+                varchar(t, "role", dialect);
+                varchar(t, "token_hash", dialect).unique();
+                uuid(t, "invited_by", dialect).nullable();
+                t.timestamp_tz("expires_at");
+                t.timestamp_tz("accepted_at").nullable();
+                uuid(t, "accepted_by", dialect).nullable();
+                t.timestamp_tz("created_at");
+                t.foreign("workspace_id")
+                    .references("id")
+                    .on("workspaces")
+                    .cascade_on_delete();
+                t.index(["workspace_id", "email"])
+                    .name("workspace_invitations_workspace_email_index");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
         for table in ["workspace_invitations", "workspace_members", "workspaces"] {
-            manager
-                .drop_table(Table::drop().table(table).to_owned())
-                .await?;
+            schema.drop(table).await?;
         }
         Ok(())
     }
@@ -264,212 +143,115 @@ impl MigrationTrait for CreateWorkspaceTables {
 /// and `access_requests`, and adds `workspaces.organization_id`.
 struct CreateOrganizationTables;
 
-impl MigrationName for CreateOrganizationTables {
-    fn name(&self) -> &str {
-        "m20261026_000002_create_organization_tables"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateOrganizationTables {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("organizations")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("name").string().not_null())
-                    .col(ColumnDef::new("slug").string().not_null().unique_key())
-                    .col(ColumnDef::new("owner_id").uuid().not_null())
-                    .col(ColumnDef::new("country").string_len(2).null())
-                    .col(ColumnDef::new("timezone").string_len(64).null())
-                    .col(timestamp("created_at"))
-                    .col(timestamp("updated_at"))
-                    .to_owned(),
-            )
+impl Migration for CreateOrganizationTables {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let dialect = dialect(schema).await?;
+        schema
+            .create("organizations", |t| {
+                uuid(t, "id", dialect).primary();
+                varchar(t, "name", dialect);
+                varchar(t, "slug", dialect).unique();
+                uuid(t, "owner_id", dialect);
+                t.string("country").length(2).nullable();
+                t.string("timezone").length(64).nullable();
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+                t.index("owner_id").name("organizations_owner_id_index");
+            })
             .await?;
-        index(
-            manager,
-            "organizations_owner_id_index",
-            "organizations",
-            &["owner_id"],
-            false,
-        )
-        .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("organization_members")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("organization_id").uuid().not_null())
-                    .col(ColumnDef::new("user_id").uuid().not_null())
-                    .col(ColumnDef::new("role").string().not_null())
-                    .col(scope("scope"))
-                    .col(timestamp("created_at"))
-                    .col(timestamp("updated_at"))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("organization_members", "organization_id")
-                            .to("organizations", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
+        schema
+            .create("organization_members", |t| {
+                uuid(t, "id", dialect).primary();
+                uuid(t, "organization_id", dialect);
+                uuid(t, "user_id", dialect);
+                varchar(t, "role", dialect);
+                scope(t, "scope");
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+                t.foreign("organization_id")
+                    .references("id")
+                    .on("organizations")
+                    .cascade_on_delete();
+                t.unique(["organization_id", "user_id"])
+                    .name("organization_members_organization_user_unique");
+                t.index("user_id")
+                    .name("organization_members_user_id_index");
+            })
             .await?;
-        index(
-            manager,
-            "organization_members_organization_user_unique",
-            "organization_members",
-            &["organization_id", "user_id"],
-            true,
-        )
-        .await?;
-        index(
-            manager,
-            "organization_members_user_id_index",
-            "organization_members",
-            &["user_id"],
-            false,
-        )
-        .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("organization_grants")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("organization_id").uuid().not_null())
-                    .col(ColumnDef::new("member_id").uuid().not_null())
-                    .col(ColumnDef::new("workspace_id").uuid().not_null())
-                    .col(timestamp("created_at"))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("organization_grants", "member_id")
-                            .to("organization_members", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("organization_grants", "workspace_id")
-                            .to("workspaces", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
+        schema
+            .create("organization_grants", |t| {
+                uuid(t, "id", dialect).primary();
+                uuid(t, "organization_id", dialect);
+                uuid(t, "member_id", dialect);
+                uuid(t, "workspace_id", dialect);
+                t.timestamp_tz("created_at");
+                t.foreign("member_id")
+                    .references("id")
+                    .on("organization_members")
+                    .cascade_on_delete();
+                t.foreign("workspace_id")
+                    .references("id")
+                    .on("workspaces")
+                    .cascade_on_delete();
+                t.unique(["member_id", "workspace_id"])
+                    .name("organization_grants_member_workspace_unique");
+                t.index("workspace_id")
+                    .name("organization_grants_workspace_id_index");
+            })
             .await?;
-        index(
-            manager,
-            "organization_grants_member_workspace_unique",
-            "organization_grants",
-            &["member_id", "workspace_id"],
-            true,
-        )
-        .await?;
-        index(
-            manager,
-            "organization_grants_workspace_id_index",
-            "organization_grants",
-            &["workspace_id"],
-            false,
-        )
-        .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("access_requests")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("organization_id").uuid().not_null())
-                    .col(ColumnDef::new("workspace_id").uuid().null())
-                    .col(ColumnDef::new("user_id").uuid().not_null())
-                    .col(ColumnDef::new("message").text().null())
-                    .col(ColumnDef::new("status").string_len(16).not_null())
-                    .col(ColumnDef::new("role").string().null())
-                    .col(ColumnDef::new("decided_by").uuid().null())
-                    .col(
-                        ColumnDef::new("decided_at")
-                            .timestamp_with_time_zone()
-                            .null(),
-                    )
-                    .col(ColumnDef::new("reason").text().null())
-                    .col(timestamp("created_at"))
-                    .col(timestamp("updated_at"))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("access_requests", "organization_id")
-                            .to("organizations", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("access_requests", "workspace_id")
-                            .to("workspaces", "id")
-                            .on_delete(ForeignKeyAction::SetNull),
-                    )
-                    .to_owned(),
-            )
+        schema
+            .create("access_requests", |t| {
+                uuid(t, "id", dialect).primary();
+                uuid(t, "organization_id", dialect);
+                uuid(t, "workspace_id", dialect).nullable();
+                uuid(t, "user_id", dialect);
+                t.text("message").nullable();
+                t.string("status").length(16);
+                varchar(t, "role", dialect).nullable();
+                uuid(t, "decided_by", dialect).nullable();
+                t.timestamp_tz("decided_at").nullable();
+                t.text("reason").nullable();
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+                t.foreign("organization_id")
+                    .references("id")
+                    .on("organizations")
+                    .cascade_on_delete();
+                t.foreign("workspace_id")
+                    .references("id")
+                    .on("workspaces")
+                    .null_on_delete();
+                t.index(["organization_id", "status"])
+                    .name("access_requests_organization_status_index");
+                t.index("user_id").name("access_requests_user_id_index");
+            })
             .await?;
-        index(
-            manager,
-            "access_requests_organization_status_index",
-            "access_requests",
-            &["organization_id", "status"],
-            false,
-        )
-        .await?;
-        index(
-            manager,
-            "access_requests_user_id_index",
-            "access_requests",
-            &["user_id"],
-            false,
-        )
-        .await?;
         // A plain nullable column: SQLite can't add a foreign key to an
         // existing table, so `Organizations::delete` detaches workspaces
         // itself.
-        manager
-            .alter_table(
-                Table::alter()
-                    .table("workspaces")
-                    .add_column(ColumnDef::new("organization_id").uuid().null())
-                    .to_owned(),
-            )
-            .await?;
-        index(
-            manager,
-            "workspaces_organization_id_index",
-            "workspaces",
-            &["organization_id"],
-            false,
-        )
-        .await
+        schema
+            .table("workspaces", |t| {
+                uuid(t, "organization_id", dialect).nullable();
+                t.index("organization_id")
+                    .name("workspaces_organization_id_index");
+            })
+            .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_index(
-                Index::drop()
-                    .name("workspaces_organization_id_index")
-                    .table("workspaces")
-                    .to_owned(),
-            )
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .table("workspaces", |t| {
+                t.drop_index("workspaces_organization_id_index");
+            })
             .await?;
-        manager
-            .alter_table(
-                Table::alter()
-                    .table("workspaces")
-                    .drop_column("organization_id")
-                    .to_owned(),
-            )
-            .await?;
+        schema.drop_columns("workspaces", "organization_id").await?;
         for table in [
             "access_requests",
             "organization_grants",
             "organization_members",
             "organizations",
         ] {
-            manager
-                .drop_table(Table::drop().table(table).to_owned())
-                .await?;
+            schema.drop(table).await?;
         }
         Ok(())
     }
@@ -479,134 +261,103 @@ impl MigrationTrait for CreateOrganizationTables {
 /// `workspace_members.partition_scope`.
 struct CreatePartitionTables;
 
-impl MigrationName for CreatePartitionTables {
-    fn name(&self) -> &str {
-        "m20261026_000003_create_partition_tables"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreatePartitionTables {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("workspace_partitions")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("workspace_id").uuid().not_null())
-                    .col(ColumnDef::new("name").string().not_null())
-                    .col(ColumnDef::new("slug").string().not_null())
-                    .col(timestamp("created_at"))
-                    .col(timestamp("updated_at"))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("workspace_partitions", "workspace_id")
-                            .to("workspaces", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
+impl Migration for CreatePartitionTables {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let dialect = dialect(schema).await?;
+        schema
+            .create("workspace_partitions", |t| {
+                uuid(t, "id", dialect).primary();
+                uuid(t, "workspace_id", dialect);
+                varchar(t, "name", dialect);
+                varchar(t, "slug", dialect);
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+                t.foreign("workspace_id")
+                    .references("id")
+                    .on("workspaces")
+                    .cascade_on_delete();
+                t.unique(["workspace_id", "slug"])
+                    .name("workspace_partitions_workspace_slug_unique");
+            })
             .await?;
-        index(
-            manager,
-            "workspace_partitions_workspace_slug_unique",
-            "workspace_partitions",
-            &["workspace_id", "slug"],
-            true,
-        )
-        .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("partition_grants")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("workspace_id").uuid().not_null())
-                    .col(ColumnDef::new("member_id").uuid().not_null())
-                    .col(ColumnDef::new("partition_id").uuid().not_null())
-                    .col(timestamp("created_at"))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("partition_grants", "member_id")
-                            .to("workspace_members", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("partition_grants", "partition_id")
-                            .to("workspace_partitions", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
+        schema
+            .create("partition_grants", |t| {
+                uuid(t, "id", dialect).primary();
+                uuid(t, "workspace_id", dialect);
+                uuid(t, "member_id", dialect);
+                uuid(t, "partition_id", dialect);
+                t.timestamp_tz("created_at");
+                t.foreign("member_id")
+                    .references("id")
+                    .on("workspace_members")
+                    .cascade_on_delete();
+                t.foreign("partition_id")
+                    .references("id")
+                    .on("workspace_partitions")
+                    .cascade_on_delete();
+                t.unique(["member_id", "partition_id"])
+                    .name("partition_grants_member_partition_unique");
+                t.index("partition_id")
+                    .name("partition_grants_partition_id_index");
+            })
             .await?;
-        index(
-            manager,
-            "partition_grants_member_partition_unique",
-            "partition_grants",
-            &["member_id", "partition_id"],
-            true,
-        )
-        .await?;
-        index(
-            manager,
-            "partition_grants_partition_id_index",
-            "partition_grants",
-            &["partition_id"],
-            false,
-        )
-        .await?;
-        manager
-            .alter_table(
-                Table::alter()
-                    .table("workspace_members")
-                    .add_column(scope("partition_scope"))
-                    .to_owned(),
-            )
+        schema
+            .table("workspace_members", |t| {
+                scope(t, "partition_scope");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .alter_table(
-                Table::alter()
-                    .table("workspace_members")
-                    .drop_column("partition_scope")
-                    .to_owned(),
-            )
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .drop_columns("workspace_members", "partition_scope")
             .await?;
         for table in ["partition_grants", "workspace_partitions"] {
-            manager
-                .drop_table(Table::drop().table(table).to_owned())
-                .await?;
+            schema.drop(table).await?;
         }
         Ok(())
     }
 }
 
-/// A scope column: `all` (the default) or `only`.
-fn scope(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name)
-        .string_len(8)
-        .not_null()
-        .default("all")
-        .to_owned()
+/// Adds `workspaces.timezone` and `workspaces.country` (nullable).
+struct AddWorkspaceTimeZone;
+
+impl Migration for AddWorkspaceTimeZone {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .table("workspaces", |t| {
+                t.string("timezone").length(64).nullable();
+                t.string("country").length(2).nullable();
+            })
+            .await
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .drop_columns("workspaces", ["country", "timezone"])
+            .await
+    }
 }
 
-/// Creates index `name` on `table` (`columns`), unique or not.
-async fn index(
-    manager: &SchemaManager<'_>,
-    name: &str,
-    table: &'static str,
-    columns: &[&'static str],
-    unique: bool,
-) -> Result<(), DbErr> {
-    let mut index = Index::create();
-    index.name(name).table(table);
-    for column in columns {
-        index.col(*column);
+/// Adds `workspaces.kind` (`live` or `demo`, default `live`) and its index.
+struct AddWorkspaceKind;
+
+impl Migration for AddWorkspaceKind {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .table("workspaces", |t| {
+                t.string("kind").length(16).default("live");
+                t.index("kind").name("workspaces_kind_index");
+            })
+            .await
     }
-    if unique {
-        index.unique();
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .table("workspaces", |t| {
+                t.drop_index("workspaces_kind_index");
+            })
+            .await?;
+        schema.drop_columns("workspaces", "kind").await
     }
-    manager.create_index(index.to_owned()).await
 }

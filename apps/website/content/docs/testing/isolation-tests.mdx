@@ -3,11 +3,11 @@ title: "Isolation tests"
 description: "Generate cross-workspace tests from a module's route table: reading, changing or deleting another workspace's record is a 404, lists never show it, and creates never land in it."
 ---
 
-A multi-tenant app is only as safe as its least careful query. One `Entity::find_by_id` without the workspace filter, and Globex reads Acme's deals. Isolation tests prove each route keeps workspaces apart, and `TestApp::isolation_suite` writes them for you from the module's route table: every route, sent from one workspace against another workspace's records.
+A multi-tenant app is only as safe as its least careful query. One `Deal::find(id)` without the workspace filter, and Globex reads Acme's deals. Isolation tests prove each route keeps workspaces apart, and `TestApp::isolation_suite` writes them for you from the module's route table: every route, sent from one workspace against another workspace's records.
 
 ## A first suite
 
-Give the suite the module to test and a model factory for its records, then run it:
+Give the suite the module to test and a navree-orm factory for its records, then run it:
 
 ```rust title="tests/deals_isolation.rs"
 use navree::testing::TestApp;
@@ -18,32 +18,31 @@ use serde_json::json;
 async fn deals_stay_in_their_workspace() {
     let app = app().await; // your test app, with WorkspaceModule and DealsModule
     app.isolation_suite::<DealsModule>()
-        .factory(DealFactory::default())
+        .factory(Deal::factory())
         .body("POST", "/api/v1/deals", json!({ "title": "Renewal", "amount_cents": 1000 }))
         .run()
         .await;
 }
 ```
 
-The factory is an ordinary [model factory](/docs/database/seeding-and-factories/#factories) whose entity implements `WorkspaceScoped`:
+The factory is an ordinary [model factory](/docs/orm/factories/) whose model implements `WorkspaceScoped`. `Deal::factory()` exists when the model names its factory with `#[model(factory = DealFactory)]`; without that, pass `Factory::<DealFactory>::new()`:
 
 ```rust title="src/deals/factory.rs"
-use navree::db::sea_orm::ActiveValue::Set;
-use navree::db::Factory;
+use navree::orm::factory::{FactoryContext, ModelFactory};
 use uuid::Uuid;
 
 #[derive(Default)]
 pub struct DealFactory;
 
-impl Factory for DealFactory {
-    type Entity = deal::Entity;
+impl ModelFactory for DealFactory {
+    type Model = Deal;
 
-    fn definition(&self, n: usize) -> deal::ActiveModel {
-        deal::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            workspace_id: Set(Uuid::nil()), // the suite sets the workspace
-            title: Set(format!("Deal {n}")),
-            ..Default::default()
+    fn definition(&self, ctx: &mut FactoryContext<'_, Deal>) -> Deal {
+        Deal {
+            id: Uuid::now_v7(),
+            workspace_id: Uuid::nil(), // the suite sets the workspace
+            title: format!("Deal {}", ctx.index()),
+            ..Deal::default()
         }
     }
 }
@@ -87,20 +86,19 @@ Each route gets its own records, so a leaking `DELETE` can't spoil the next rout
 
 ```rust
 app.isolation_suite::<DealsModule>()
-    .factory_for("deal", DealFactory::default()) // /deals/{deal}/...
+    .factory_for("deal", Deal::factory()) // /deals/{deal}/...
     .run()
     .await;
 ```
 
-Each record goes into the workspace the suite asks for: through `WorkspaceRepo::insert` under row isolation, and into the workspace's own schema or database under schema and database isolation, with its workspace column set when the table keeps one. On PostgreSQL the insert runs inside the workspace, so a table with [row-level security](/docs/workspaces/isolation/#row-level-security-on-postgresql) accepts it.
+Each record goes into the workspace the suite asks for: through `WorkspaceRepo::insert` under row isolation, and created through the model API in the workspace's own schema or database under schema and database isolation, with its workspace column set when the table keeps one. On PostgreSQL the insert runs inside the workspace, so a table with [row-level security](/docs/workspaces/isolation/#row-level-security-on-postgresql) accepts it.
 
 The suite tests what the routes do, not how the code is written. A handler that reads by id without the workspace filter still passes when row-level security or a per-workspace schema keeps the record out of reach; the [`workspace.repo` check](/docs/testing/conformity-checks/#workspace-data-through-workspacerepo) is the one that asks for `WorkspaceRepo` in the code.
 
 A nested route such as `/deals/{deal}/notes/{note}` needs a note that belongs to the deal. Bind it with `.record`, whose closure gets the parameters bound before it:
 
 ```rust
-use navree::db::sea_orm::ActiveValue::Set;
-use navree::db::{Db, Factory};
+use navree::db::Db;
 use navree::testing::RecordContext;
 use navree::workspace::WorkspaceRepo;
 use uuid::Uuid;
@@ -110,15 +108,15 @@ async fn note(cx: RecordContext) -> Result<String, navree::kernel::BoxError> {
     let deal: Uuid = cx.params()["deal"].parse()?;
     let db = cx.app().get::<Db>().await?;
     let uow = db.uow(None, None).await;
-    let mut model = NoteFactory.definition(cx.n());
-    model.deal_id = Set(deal);
-    let note = WorkspaceRepo::<note::Entity>::insert(&uow, workspace, model).await?;
+    let mut model = Note::factory().make_one()?.into_inner();
+    model.deal_id = deal;
+    let note = WorkspaceRepo::<Note>::insert(&uow, workspace, model).await?;
     uow.commit().await?;
     Ok(note.id.to_string())
 }
 
 app.isolation_suite::<DealsModule>()
-    .factory_for("deal", DealFactory::default())
+    .factory_for("deal", Deal::factory())
     .record("note", note)
     .run()
     .await;
@@ -132,7 +130,7 @@ Writes on a record (`PATCH /deals/{id}`) are sent with `{}` unless you give a bo
 
 ```rust
 app.isolation_suite::<DealsModule>()
-    .factory(DealFactory::default())
+    .factory(Deal::factory())
     .body("POST", "/api/v1/deals", json!({ "title": "Renewal", "amount_cents": 1000 }))
     .body("PATCH", "/api/v1/deals/{id}", json!({ "title": "Renamed" }))
     .skip("POST", "/api/v1/deals/import", "an upload; covered by import_tests.rs")
@@ -195,7 +193,7 @@ app.isolation_suite::<InvoicesModule>()
 | `IsolationSuite` | Does |
 |---|---|
 | `app.isolation_suite::<M>()` | A suite for every route of module `M` |
-| `.factory(f)`, `.factory_for(param, f)` | Binds `{id}` or `{param}` to records of a model factory, and uses workspaces (navree-workspace, `IsolationSuiteExt`) |
+| `.factory(f)`, `.factory_for(param, f)` | Binds `{id}` or `{param}` to records of a navree-orm `Factory` (`Deal::factory()`), and uses workspaces (navree-workspace, `IsolationSuiteExt`) |
 | `.record(param, f)` | Binds `{param}` to records an async closure creates: `f(RecordContext) -> Result<String, BoxError>` |
 | `.body(method, path, json)` | The JSON body for one route |
 | `.skip(method, path, reason)` | Leaves one route out |

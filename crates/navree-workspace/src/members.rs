@@ -4,15 +4,16 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-use navree_db::{Repo, Uow};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set};
+use navree_db::Uow;
+use navree_orm::Model as _;
 use serde::Serialize;
 use uuid::Uuid;
 
 use crate::core::Core;
 use crate::directory::UserSummary;
-use crate::entity::{Member, member};
+use crate::entity::Member;
 use crate::events::{MemberAdded, MemberRemoved, MemberRoleChanged};
+use crate::store;
 use crate::workspaces::set_role;
 use crate::{WorkspaceError, WorkspaceRole};
 
@@ -46,12 +47,13 @@ impl Members {
 
     /// The members of `workspace`, oldest first, with their users.
     pub async fn list(&self, workspace: Uuid) -> Result<Vec<MemberInfo>, WorkspaceError> {
-        let members = member::Entity::find()
-            .filter(member::Column::WorkspaceId.eq(workspace))
-            .order_by_asc(member::Column::CreatedAt)
-            .order_by_asc(member::Column::Id)
-            .all(&self.core.db.reader().await)
-            .await?;
+        let members = Member::query()
+            .where_(Member::WORKSPACE_ID.eq(workspace))
+            .order_by(Member::CREATED_AT)
+            .order_by(Member::ID)
+            .get(&*self.core.db)
+            .await?
+            .into_models();
         let ids: Vec<Uuid> = members.iter().map(|m| m.user_id).collect();
         let mut users: HashMap<Uuid, UserSummary> = self
             .core
@@ -77,9 +79,7 @@ impl Members {
         workspace: Uuid,
         user: Uuid,
     ) -> Result<Option<Member>, WorkspaceError> {
-        self.core
-            .member_in(&self.core.db.reader().await, workspace, user)
-            .await
+        self.core.member_in(&*self.core.db, workspace, user).await
     }
 
     /// Adds `user` to `workspace` with `role` (a built-in or configured
@@ -92,12 +92,10 @@ impl Members {
         role: WorkspaceRole,
     ) -> Result<Member, WorkspaceError> {
         self.core.check_role(&role)?;
-        let tx = uow.tx().await?;
-        self.core.workspace_in(&*tx, workspace).await?;
-        if self.core.member_in(&*tx, workspace, user).await?.is_some() {
+        self.core.workspace_in(uow, workspace).await?;
+        if self.core.member_in(uow, workspace, user).await?.is_some() {
             return Err(WorkspaceError::AlreadyMember);
         }
-        drop(tx);
         self.insert(uow, workspace, user, role).await
     }
 
@@ -110,16 +108,16 @@ impl Members {
         role: WorkspaceRole,
     ) -> Result<Member, WorkspaceError> {
         let now = self.core.now();
-        let added = Repo::<member::Entity>::insert(
+        let added = store::insert(
             uow,
-            member::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                workspace_id: Set(workspace),
-                user_id: Set(user),
-                role: Set(role.as_str().to_owned()),
-                partition_scope: Set(crate::org_role::SCOPE_ALL.to_owned()),
-                created_at: Set(now),
-                updated_at: Set(now),
+            Member {
+                id: Uuid::now_v7(),
+                workspace_id: workspace,
+                user_id: user,
+                role: role.as_str().to_owned(),
+                partition_scope: crate::org_role::SCOPE_ALL.to_owned(),
+                created_at: now,
+                updated_at: now,
             },
         )
         .await?;
@@ -148,14 +146,12 @@ impl Members {
         role: WorkspaceRole,
     ) -> Result<Member, WorkspaceError> {
         self.core.check_role(&role)?;
-        let tx = uow.tx().await?;
-        let owner = self.core.workspace_in(&*tx, workspace).await?.owner_id;
+        let owner = self.core.workspace_in(uow, workspace).await?.owner_id;
         let current = self
             .core
-            .member_in(&*tx, workspace, user)
+            .member_in(uow, workspace, user)
             .await?
             .ok_or(WorkspaceError::MemberNotFound)?;
-        drop(tx);
         if user == owner && role != WorkspaceRole::Owner {
             return Err(WorkspaceError::OwnerRequired);
         }
@@ -187,19 +183,17 @@ impl Members {
         workspace: Uuid,
         user: Uuid,
     ) -> Result<(), WorkspaceError> {
-        let tx = uow.tx().await?;
-        let owner = self.core.workspace_in(&*tx, workspace).await?.owner_id;
+        let owner = self.core.workspace_in(uow, workspace).await?.owner_id;
         let current = self
             .core
-            .member_in(&*tx, workspace, user)
+            .member_in(uow, workspace, user)
             .await?
             .ok_or(WorkspaceError::MemberNotFound)?;
-        drop(tx);
         if user == owner {
             return Err(WorkspaceError::OwnerRequired);
         }
         let role = current.role.clone();
-        Repo::<member::Entity>::delete(uow, current).await?;
+        store::delete(uow, current).await?;
         self.core
             .emit_after_commit(
                 uow,

@@ -39,7 +39,7 @@ It also adds `workspaces.organization_id`, the organization a workspace is attac
 
 ## Creating organizations
 
-The `Organizations` service creates organizations and attaches workspaces to them. As with the workspace services, writes take the unit of work to run in, go through `Repo` and emit their events once it commits:
+The `Organizations` service creates organizations and attaches workspaces to them. As with the workspace services, writes take the unit of work to run in, go through the model API and emit their events once it commits:
 
 ```rust
 use navree::workspace::{NewOrganization, Organizations};
@@ -172,10 +172,9 @@ Organization-level routes (a dashboard over every workspace, the organization's 
 They work as the [workspace resolvers](/docs/workspaces/resolution/#the-resolvers) do, with their own settings, so a request can name a workspace and an organization at once. Put the `InOrganization` guard on the controller so the route's checks run against the organization role:
 
 ```rust title="src/reports/controller.rs"
-use navree::db::paginate;
 use navree::prelude::*;
 
-use crate::deals::entity::{Deal, deal};
+use crate::deals::model::Deal;
 
 #[injectable]
 pub struct ReportsController;
@@ -185,10 +184,9 @@ pub struct ReportsController;
 impl ReportsController {
     #[get("/deals")]
     #[permissions("reports.read")]
-    async fn deals(&self, org: CurrentOrganization, uow: Uow, page: PageQuery) -> Result<Page<deal::Model>> {
+    async fn deals(&self, org: CurrentOrganization, uow: Uow, page: PageQuery) -> Result<Page<Record<Deal>>> {
         // Every deal of the workspaces this member reaches.
-        let select = OrgRepo::<Deal>::select(org.workspace_ids());
-        Ok(paginate(select, &*uow.tx().await?, page).await?)
+        Ok(OrgRepo::<Deal>::query(org.workspace_ids()).paginate(&uow, page).await?)
     }
 }
 ```
@@ -204,7 +202,7 @@ impl ReportsController {
 | `reaches(workspace)` | Whether they reach that workspace |
 | `permissions()`, `has_permission(p)`, `authorize(p)` | The role's permissions; `authorize` is `Ok(())` or a 403 |
 | `ability()`, `access()`, `can(action, subject)` | Their abilities in the organization |
-| `scope(select)` | `select` limited to the rows of `workspace_ids()` |
+| `scope(query)` | A `Builder<M>` limited to the rows of `workspace_ids()`: `org.scope(Deal::query())` |
 | `resolver()` | The resolver that found it (`None` for a path parameter) |
 
 | Situation | Status | `message` |
@@ -219,13 +217,13 @@ Inside an organization request, navree-access builds the abilities from your abi
 
 ## Reading across workspaces
 
-`OrgRepo<E>` reads a [workspace-scoped](/docs/workspaces/isolation/#scoping-queries) entity across several workspaces: every query filters the workspace column by the ids you pass, usually `org.workspace_ids()`. An empty list matches nothing.
+`OrgRepo<M>` reads a [workspace-scoped](/docs/workspaces/isolation/#scoping-queries) model across several workspaces: every query filters the workspace column by the ids you pass, usually `org.workspace_ids()`. An empty list matches nothing.
 
-| `OrgRepo::<E>::` | Does |
+| `OrgRepo::<M>::` | Does |
 |---|---|
-| `select(workspaces)` | `E::find()` limited to the rows of those workspaces |
-| `scope(workspaces, select)` | Adds the filter to any `Select<E>` |
-| `find(&uow, workspaces, id)`, `find_or_fail` | One record, if it belongs to one of them; else not found (a 404 from a handler) |
+| `query(workspaces)` | `M::query()` limited to the rows of those workspaces, a `Builder<M>` |
+| `scope(workspaces, query)` | Adds the filter to any `Builder<M>` |
+| `find(&uow, workspaces, id)`, `find_or_fail` | One record, if it belongs to one of them; else `None`, or `OrmError::ModelNotFound` (a 404 from a handler) |
 
 `OrgRepo` only reads. Writes go to one workspace at a time, through `WorkspaceRepo` inside a workspace request. It reads row isolation's shared tables; schema and database isolation keep each workspace's rows apart physically.
 
