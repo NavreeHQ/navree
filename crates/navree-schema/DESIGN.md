@@ -330,11 +330,8 @@ pub fn migrations() -> MigrationSet {
 
 [`SchemaMigration`], what `migration!` builds, is a [`NamedMigration`]
 (the object-safe face of a [`Migration`] with its name), which is what
-`MigrationSet` holds and the migrator runs. Until every crate's migrations
-are written with the builder, a set also takes SeaORM migrations
-(`MigrationTrait`); they run beside the others in name order, on a SeaORM
-transaction over the same connection, and `MigrationSet::entries` hands
-both kinds to runners of their own (the workspace module's per-tenant
+`MigrationSet` holds and the migrator runs; `MigrationSet::entries`
+hands them to runners of their own (the workspace module's per-tenant
 runner).
 
 `navree make:migration <module> <name>` (the CLI) writes a schema
@@ -367,9 +364,7 @@ too.
   migrations read the real database through the context's reader (so
   SQLite rebuilds and hypertable conversions plan against the real tables)
   and record what they would change (`Schema::pretending` through the
-  context), without touching SeaORM; SeaORM migrations run on a connection
-  that keeps every statement and answers no reads (a SeaORM migration that
-  reads fails with that explanation). A migration that depends on an
+  context). A migration that depends on an
   earlier pending one's tables cannot be planned and says so.
 - **Transactions.** A migration runs in a navree-db transaction (on the
   direct connection when there is one) where DDL is transactional
@@ -461,8 +456,7 @@ Inside the migrator it converts to `DbErr::Migration` with the same text.
   compression, policies and continuous aggregates, conversions, fallbacks,
   and dump round trips, each test in a database of its own; skipped with a
   notice when the variable is unset.
-- **The runner** (`navree-db`'s `tests/db/schema_migrations.rs`): schema and
-  SeaORM migrations in one set, steps, batches, rollbacks, reset, refresh,
+- **The runner** (`navree-db`'s `tests/db/schema_migrations.rs`): steps, batches, rollbacks, reset, refresh,
   pretend, SQLite rebuilds of referenced tables, the foreign-key check,
   options from configuration, dumps loaded into empty databases, and every
   command with its option errors and the production guard.
@@ -482,7 +476,7 @@ Inside the migrator it converts to `DbErr::Migration` with the same text.
   reuse [`Interval`] and [`Target`].
 - **Framework tables.** The framework's time-series tables are
   hypertables: each module adds a schema migration (a [`SchemaMigration`]
-  in its SeaORM-built set) that converts them with `migrate_data` and
+  in its set) that converts them with `migrate_data` and
   `KeyStrategy::Extend`, unless [`Schema::is_hypertable`] says they already
   are: `audit_logs` (`created_at`, 7 days), `webhook_deliveries` and
   `webhook_attempts` (`created_at`, 1 day; attempts reference their endpoint
@@ -494,10 +488,10 @@ Inside the migrator it converts to `DbErr::Migration` with the same text.
   TimescaleDB cannot turn back into a plain table in place. Their prune
   commands go through `navree_db::prune_time_series`. The facade's
   `time_series` suite checks all of it on real TimescaleDB and MySQL
-  servers. The framework's table-creating migrations stay SeaORM ones: the
-  builder's DDL differs from theirs (`string` is `VARCHAR(255)` where they
-  made unbounded `varchar` on PostgreSQL, `uuid` is `CHAR(36)` where they
-  made `binary(16)` on MySQL, time columns get six fractional digits on
-  MySQL), and rewriting them would give new databases other columns than
-  the ones already migrated. New framework migrations are schema
-  migrations.
+  servers. Every framework migration is a schema migration; the ones that
+  create the framework's tables kept their names and spell out the column
+  types the databases already have (unbounded `varchar` on PostgreSQL,
+  `binary(16)` UUIDs on MySQL where they were), so new databases get the
+  same columns as the ones already migrated, and those find nothing
+  pending (the facade's `production_migrations` suite checks the
+  upgrade).
