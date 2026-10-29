@@ -1,14 +1,11 @@
 //! Notifications in the recipient's saved locale.
 
-use navree_db::Db;
+use navree_db::{Db, Executor as _, Statement};
 use navree_i18n::{I18n, t};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_mail::{MailModule, MailOptions, Mailer, TemplateMail, TransportConfig};
-use navree_notify::{
-    Channel, Notifiable, Notification, Notifier, NotifyModule, NotifyOptions, notifications,
-};
+use navree_notify::{Channel, Notifiable, Notification, Notifier, NotifyModule, NotifyOptions};
 use navree_view::{ModuleBuilderViewExt, ViewModule, ViewOptions};
-use sea_orm::{EntityTrait, QueryOrder};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -130,18 +127,18 @@ async fn notifications_render_in_the_recipients_saved_locale() {
     assert_eq!(mail[1].text.as_deref(), Some("Sent by Acme CRM."));
 
     let db = world.app.get::<Db>().await;
-    let rows = notifications::Entity::find()
-        .order_by_asc(notifications::Column::CreatedAt)
-        .order_by_asc(notifications::Column::Id)
-        .all(db.conn())
+    let rows = db
+        .fetch_all(&Statement::text(
+            "SELECT data FROM notifications ORDER BY created_at, id",
+        ))
         .await
         .unwrap();
     assert_eq!(
-        rows[0].data,
+        rows[0].get::<Value>("data").unwrap(),
         json!({ "message": "Ada a gagné Lovelace renewal." })
     );
     assert_eq!(
-        rows[1].data,
+        rows[1].get::<Value>("data").unwrap(),
         json!({ "message": "Ada won Lovelace renewal." })
     );
     world.app.shutdown().await.unwrap();

@@ -1,12 +1,11 @@
 //! The database driver's batches: table `job_batches`, and the batch and
 //! operation columns of `jobs`.
 
-use navree_db::Uow;
+use navree_db::{Backend, Executor, ExecutorExt as _, Row, Statement, Uow};
 use navree_orm::Model as _;
-use sea_orm::{ConnectionTrait, DbBackend, QueryResult, Statement};
 
 use super::PrepareCallback;
-use super::database::{DatabaseStore, insert_job, json, statement};
+use super::database::{DatabaseStore, insert_job, json};
 use crate::QueueError;
 use crate::batch::{BatchRow, BatchStep, Finish, Finished};
 use crate::migration::{JOB_BATCHES_TABLE, JOBS_TABLE};
@@ -42,9 +41,9 @@ impl DatabaseStore {
 
     /// Finishes a reserved job of a batch in one transaction: deletes it
     /// (moving it to `failed_jobs` when it failed), updates the batch row
-    /// (locked on PostgreSQL; SQLite serialises writers) and inserts the
-    /// callbacks that became due. `None` when `worker` no longer holds the
-    /// reservation.
+    /// (locked where the database has row locks; SQLite serialises
+    /// writers) and inserts the callbacks that became due. `None` when
+    /// `worker` no longer holds the reservation.
     pub(crate) async fn finish_batch_job(
         &self,
         job: &ReservedJob,
@@ -56,35 +55,32 @@ impl DatabaseStore {
     ) -> Result<Finished, QueueError> {
         let uow = self.db.uow(None, None).await;
         let result = async {
-            let backend = uow.db().backend();
-            let tx = uow.tx().await?;
-            let deleted = tx
-                .execute_raw(statement(
-                    backend,
-                    &format!("DELETE FROM {JOBS_TABLE} WHERE id = ? AND reserved_by = ?"),
-                    vec![job.id.as_str().into(), worker.into()],
+            let backend = uow.backend();
+            let deleted = uow
+                .execute(&Statement::portable(
+                    format!("DELETE FROM {JOBS_TABLE} WHERE id = ? AND reserved_by = ?"),
+                    [job.id.as_str().into(), worker.into()],
                 ))
                 .await?
-                .rows_affected();
+                .rows_affected;
             if deleted != 1 {
                 return Ok(Finished::Lost);
             }
             if finish == Finish::Failed {
-                FailedJob::insert(&*tx, [FailedJob::of(job, error, now)]).await?;
+                FailedJob::insert(&uow, [FailedJob::of(job, error, now)]).await?;
             }
             let Some(batch_id) = &job.membership.batch_id else {
                 return Ok(Finished::Done(None));
             };
-            let lock = if backend == DbBackend::Postgres {
+            let lock = if backend.supports_row_locks() {
                 " FOR UPDATE"
             } else {
                 ""
             };
-            let Some(found) = tx
-                .query_one_raw(statement(
-                    backend,
-                    &format!("SELECT {BATCH_COLUMNS} FROM {JOB_BATCHES_TABLE} WHERE id = ?{lock}"),
-                    vec![batch_id.as_str().into()],
+            let Some(found) = uow
+                .fetch_optional(&Statement::portable(
+                    format!("SELECT {BATCH_COLUMNS} FROM {JOB_BATCHES_TABLE} WHERE id = ?{lock}"),
+                    [batch_id.as_str().into()],
                 ))
                 .await?
             else {
@@ -99,10 +95,10 @@ impl DatabaseStore {
                 row.job_finished(&job.id, finish, now)
             };
             for envelope in due {
-                tx.execute_raw(insert_job(backend, &prepare(envelope, &row)?)?)
+                uow.execute(&insert_job(backend, &prepare(envelope, &row)?)?)
                     .await?;
             }
-            tx.execute_raw(update_batch(backend, &row)?).await?;
+            uow.execute(&update_batch(&row)?).await?;
             let settled_now = !was_settled && row.settled();
             Ok(Finished::Done(Some(Box::new(BatchStep {
                 batch: row,
@@ -115,12 +111,10 @@ impl DatabaseStore {
 
     pub(crate) async fn find_batch(&self, id: &str) -> Result<Option<BatchRow>, QueueError> {
         let row = self
-            .db
-            .conn()
-            .query_one_raw(statement(
-                self.db.backend(),
-                &format!("SELECT {BATCH_COLUMNS} FROM {JOB_BATCHES_TABLE} WHERE id = ?"),
-                vec![id.into()],
+            .executor()
+            .fetch_optional(&Statement::portable(
+                format!("SELECT {BATCH_COLUMNS} FROM {JOB_BATCHES_TABLE} WHERE id = ?"),
+                [id.into()],
             ))
             .await?;
         row.map(|row| batch_row(&row)).transpose()
@@ -130,15 +124,13 @@ impl DatabaseStore {
     pub(crate) async fn batches(&self, limit: usize) -> Result<Vec<BatchRow>, QueueError> {
         let limit = i64::try_from(limit).unwrap_or(i64::MAX);
         let rows = self
-            .db
-            .conn()
-            .query_all_raw(statement(
-                self.db.backend(),
-                &format!(
+            .executor()
+            .fetch_all(&Statement::portable(
+                format!(
                     "SELECT {BATCH_COLUMNS} FROM {JOB_BATCHES_TABLE} \
                      ORDER BY created_at DESC, id DESC LIMIT ?"
                 ),
-                vec![limit.into()],
+                [limit.into()],
             ))
             .await?;
         rows.iter().map(batch_row).collect()
@@ -151,15 +143,13 @@ impl DatabaseStore {
         id: &str,
         now: i64,
     ) -> Result<Option<BatchRow>, QueueError> {
-        self.db
-            .conn()
-            .execute_raw(statement(
-                self.db.backend(),
-                &format!(
+        self.executor()
+            .execute(&Statement::portable(
+                format!(
                     "UPDATE {JOB_BATCHES_TABLE} SET cancelled_at = ? \
                      WHERE id = ? AND cancelled_at IS NULL AND finished_at IS NULL"
                 ),
-                vec![now.into(), id.into()],
+                [now.into(), id.into()],
             ))
             .await?;
         self.find_batch(id).await
@@ -169,54 +159,48 @@ impl DatabaseStore {
     /// `before`; returns how many.
     pub(crate) async fn prune_batches(&self, before: i64) -> Result<u64, QueueError> {
         let result = self
-            .db
-            .conn()
-            .execute_raw(statement(
-                self.db.backend(),
-                &format!(
+            .executor()
+            .execute(&Statement::portable(
+                format!(
                     "DELETE FROM {JOB_BATCHES_TABLE} \
                      WHERE finished_at IS NOT NULL AND finished_at < ? AND callbacks_pending = 0"
                 ),
-                vec![before.into()],
+                [before.into()],
             ))
             .await?;
-        Ok(result.rows_affected())
+        Ok(result.rows_affected)
     }
 
     /// How many stored jobs do the work of operation `operation_id`.
     pub(crate) async fn count_for_operation(&self, operation_id: &str) -> Result<u64, QueueError> {
-        let row = self
-            .db
-            .conn()
-            .query_one_raw(statement(
-                self.db.backend(),
-                &format!("SELECT COUNT(*) AS n FROM {JOBS_TABLE} WHERE operation_id = ?"),
-                vec![operation_id.into()],
+        let n: i64 = self
+            .executor()
+            .fetch_scalar(&Statement::portable(
+                format!("SELECT COUNT(*) AS n FROM {JOBS_TABLE} WHERE operation_id = ?"),
+                [operation_id.into()],
             ))
             .await?;
-        let n: i64 = match row {
-            Some(row) => row.try_get("", "n")?,
-            None => 0,
-        };
         Ok(u64::try_from(n).unwrap_or_default())
     }
 }
 
 async fn insert_batch_on(uow: &Uow, row: &BatchRow, jobs: &[NewJob]) -> Result<(), QueueError> {
-    let backend = uow.db().backend();
-    let tx = uow.tx().await?;
-    tx.execute_raw(insert_batch(backend, row)?).await?;
+    let backend: Backend = uow.backend();
+    uow.execute(&insert_batch(row)?).await?;
     for job in jobs {
-        tx.execute_raw(insert_job(backend, job)?).await?;
+        uow.execute(&insert_job(backend, job)?).await?;
     }
     Ok(())
 }
 
 /// Commits `uow` when `result` is a success, rolls it back otherwise.
-async fn finish_uow<T>(uow: Uow, result: Result<T, QueueError>) -> Result<T, QueueError> {
+pub(super) async fn finish_uow<T>(
+    uow: Uow,
+    result: Result<T, QueueError>,
+) -> Result<T, QueueError> {
     match result {
         Ok(value) => {
-            uow.commit().await?;
+            uow.commit().await.map_err(navree_db::DbError::from)?;
             Ok(value)
         }
         Err(error) => {
@@ -232,19 +216,18 @@ fn to_i64(n: u64) -> i64 {
     i64::try_from(n).unwrap_or(i64::MAX)
 }
 
-fn to_u64(row: &QueryResult, column: &str) -> Result<u64, QueueError> {
-    let n: i64 = row.try_get("", column)?;
+fn to_u64(row: &Row, column: &str) -> Result<u64, QueueError> {
+    let n: i64 = row.get(column)?;
     Ok(u64::try_from(n).unwrap_or_default())
 }
 
-fn insert_batch(backend: DbBackend, row: &BatchRow) -> Result<Statement, QueueError> {
-    Ok(statement(
-        backend,
-        &format!(
+fn insert_batch(row: &BatchRow) -> Result<Statement, QueueError> {
+    Ok(Statement::portable(
+        format!(
             "INSERT INTO {JOB_BATCHES_TABLE} ({BATCH_COLUMNS}) \
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         ),
-        vec![
+        [
             row.id.as_str().into(),
             row.name.as_str().into(),
             to_i64(row.total_jobs).into(),
@@ -267,15 +250,14 @@ fn insert_batch(backend: DbBackend, row: &BatchRow) -> Result<Statement, QueueEr
     ))
 }
 
-fn update_batch(backend: DbBackend, row: &BatchRow) -> Result<Statement, QueueError> {
-    Ok(statement(
-        backend,
-        &format!(
+fn update_batch(row: &BatchRow) -> Result<Statement, QueueError> {
+    Ok(Statement::portable(
+        format!(
             "UPDATE {JOB_BATCHES_TABLE} SET pending_jobs = ?, failed_jobs = ?, \
              failed_job_ids = ?, callbacks_pending = ?, callbacks_failed = ?, \
              cancelled_at = ?, finished_at = ? WHERE id = ?"
         ),
-        vec![
+        [
             to_i64(row.pending_jobs).into(),
             to_i64(row.failed_jobs).into(),
             serde_json::to_string(&row.failed_job_ids)
@@ -290,21 +272,21 @@ fn update_batch(backend: DbBackend, row: &BatchRow) -> Result<Statement, QueueEr
     ))
 }
 
-fn batch_row(row: &QueryResult) -> Result<BatchRow, QueueError> {
+fn batch_row(row: &Row) -> Result<BatchRow, QueueError> {
     Ok(BatchRow {
-        id: row.try_get("", "id")?,
-        name: row.try_get("", "name")?,
+        id: row.get("id")?,
+        name: row.get("name")?,
         total_jobs: to_u64(row, "total_jobs")?,
         pending_jobs: to_u64(row, "pending_jobs")?,
         failed_jobs: to_u64(row, "failed_jobs")?,
-        failed_job_ids: json(&row.try_get::<String>("", "failed_job_ids")?)?,
-        callbacks: json(&row.try_get::<String>("", "callbacks")?)?,
+        failed_job_ids: json(&row.get::<String>("failed_job_ids")?)?,
+        callbacks: json(&row.get::<String>("callbacks")?)?,
         callbacks_pending: to_u64(row, "callbacks_pending")?,
         callbacks_failed: to_u64(row, "callbacks_failed")?,
-        allow_failures: row.try_get("", "allow_failures")?,
-        operation_id: row.try_get("", "operation_id")?,
-        created_at: row.try_get("", "created_at")?,
-        cancelled_at: row.try_get("", "cancelled_at")?,
-        finished_at: row.try_get("", "finished_at")?,
+        allow_failures: row.get("allow_failures")?,
+        operation_id: row.get("operation_id")?,
+        created_at: row.get("created_at")?,
+        cancelled_at: row.get("cancelled_at")?,
+        finished_at: row.get("finished_at")?,
     })
 }

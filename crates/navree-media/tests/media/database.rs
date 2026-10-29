@@ -1,12 +1,9 @@
 //! The `database` store: the `media` table and its migration, units of
 //! work, change events, paging, and a model's media deleted with the
-//! model — on SQLite always, and on PostgreSQL (with TimescaleDB) and
-//! MySQL when their servers are configured.
-//!
-//! Opt-in servers: build with `--features postgres` and set
-//! `NAVREE_TEST_POSTGRES_URL`, or `--features mysql` and
-//! `NAVREE_TEST_MYSQL_URL`, to a URL of a throwaway server whose user may
-//! create databases. Each test creates its own database and drops it.
+//! model — on the database `NAVREE_TEST_DATABASE` names (SQLite by
+//! default; PostgreSQL with TimescaleDB and MySQL with the `postgres` and
+//! `mysql` features), with `NAVREE_TEST_NATIVE_UNITS_OF_WORK=1` for units
+//! of work on navree-db's own transactions (see `servers`).
 
 use chrono::{DateTime, Utc};
 use image::ImageFormat;
@@ -339,15 +336,20 @@ async fn store_flow(app: &TestApp) {
     assert!(disk.exists(&sheet.path).await.unwrap());
 }
 
+/// The store flow on the database `NAVREE_TEST_DATABASE` names (SQLite by
+/// default), with either kind of unit of work.
 #[tokio::test]
-async fn the_store_works_on_sqlite() {
-    let app = app(TestApp::builder().temp_database()).build().await;
+async fn the_store_works_on_the_current_database() {
+    let app = app(crate::servers::database(TestApp::builder()))
+        .build()
+        .await;
     store_flow(&app).await;
+    app.shutdown().await.unwrap();
 }
 
 #[tokio::test]
 async fn delete_with_model_can_be_turned_off() {
-    let app = app(TestApp::builder().temp_database())
+    let app = app(crate::servers::database(TestApp::builder()))
         .config("media.delete_with_model", false)
         .build()
         .await;
@@ -372,91 +374,4 @@ async fn delete_with_model_can_be_turned_off() {
     record.delete(&uow).await.unwrap();
     uow.commit().await.unwrap();
     assert_eq!(media.all(lecture.model()).await.unwrap().len(), 1);
-}
-
-/// A database of its own on a test server.
-#[cfg(any(feature = "postgres", feature = "mysql"))]
-struct Scratch {
-    admin: String,
-    name: String,
-    url: String,
-    mysql: bool,
-}
-
-#[cfg(any(feature = "postgres", feature = "mysql"))]
-impl Scratch {
-    async fn new(var: &str, test: &str, mysql: bool) -> Option<Scratch> {
-        use navree_db::sea_orm::{ConnectionTrait, Database};
-        let admin = match std::env::var(var) {
-            Ok(url) if !url.is_empty() => url,
-            _ => {
-                println!("SKIPPED {test}: set {var}");
-                return None;
-            }
-        };
-        let name = format!("navree_media_{}", Uuid::now_v7().simple());
-        let conn = Database::connect(&admin).await.unwrap();
-        let create = if mysql {
-            format!("CREATE DATABASE `{name}` CHARACTER SET utf8mb4")
-        } else {
-            format!("CREATE DATABASE {name}")
-        };
-        conn.execute_unprepared(&create).await.unwrap();
-        conn.close().await.unwrap();
-        let (base, rest) = admin.rsplit_once('/').unwrap();
-        let options = rest.find('?').map_or("", |at| &rest[at..]);
-        let url = format!("{base}/{name}{options}");
-        Some(Scratch {
-            admin,
-            name,
-            url,
-            mysql,
-        })
-    }
-
-    async fn drop(self) {
-        use navree_db::sea_orm::{ConnectionTrait, Database};
-        let conn = Database::connect(&self.admin).await.unwrap();
-        let drop = if self.mysql {
-            format!("DROP DATABASE IF EXISTS `{}`", self.name)
-        } else {
-            format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", self.name)
-        };
-        conn.execute_unprepared(&drop).await.unwrap();
-    }
-
-    async fn run(self) {
-        let app = app(TestApp::builder()
-            .config("database.url", self.url.as_str())
-            .config("database.migrate_on_boot", true))
-        .build()
-        .await;
-        store_flow(&app).await;
-        app.shutdown().await.unwrap();
-        self.drop().await;
-    }
-}
-
-#[cfg(feature = "postgres")]
-#[tokio::test]
-async fn the_store_works_on_postgres() {
-    if let Some(scratch) = Scratch::new(
-        "NAVREE_TEST_POSTGRES_URL",
-        "the_store_works_on_postgres",
-        false,
-    )
-    .await
-    {
-        scratch.run().await;
-    }
-}
-
-#[cfg(feature = "mysql")]
-#[tokio::test]
-async fn the_store_works_on_mysql() {
-    if let Some(scratch) =
-        Scratch::new("NAVREE_TEST_MYSQL_URL", "the_store_works_on_mysql", true).await
-    {
-        scratch.run().await;
-    }
 }

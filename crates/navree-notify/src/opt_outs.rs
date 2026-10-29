@@ -7,7 +7,6 @@ use chrono::{DateTime, Utc};
 use navree_kernel::WeakAppContext;
 use navree_orm::{Model, Record};
 use navree_validation::{Country, Phone};
-use sea_orm::DbErr;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -98,8 +97,7 @@ impl OptOuts {
             source: source.as_str().to_owned(),
             created_at: crate::notifier::now_in(&self.app).await,
         };
-        let inserted = on!(&exec, e => NotificationOptOut::insert_or_ignore(e, [row]).await)
-            .map_err(DbErr::from)?;
+        let inserted = on!(&exec, e => NotificationOptOut::insert_or_ignore(e, [row]).await)?;
         exec.wrote();
         Ok(inserted > 0)
     }
@@ -113,8 +111,7 @@ impl OptOuts {
             .where_(NotificationOptOut::CHANNEL.eq(channel.as_str()))
             .where_(NotificationOptOut::ADDRESS.eq(address.as_str()))
             .delete(e)
-            .await)
-        .map_err(DbErr::from)?;
+            .await)?;
         exec.wrote();
         Ok(deleted > 0)
     }
@@ -127,8 +124,7 @@ impl OptOuts {
             .where_(NotificationOptOut::CHANNEL.eq(channel.as_str()))
             .where_(NotificationOptOut::ADDRESS.eq(address.as_str()))
             .exists(e)
-            .await)
-        .map_err(DbErr::from)?)
+            .await)?)
     }
 
     /// Every opt-out of `channel`, newest first.
@@ -138,8 +134,7 @@ impl OptOuts {
             .where_(NotificationOptOut::CHANNEL.eq(channel.as_str()))
             .latest_by(NotificationOptOut::CREATED_AT)
             .get(e)
-            .await)
-        .map_err(DbErr::from)?;
+            .await)?;
         Ok(rows.into_iter().map(Record::into_inner).collect())
     }
 }

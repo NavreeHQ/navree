@@ -13,8 +13,7 @@ use navree_testing::TestApp;
 use crate::support::{JobsModule, Journal, Record, Toggle, Urgent, harness};
 
 async fn faked_app(fake: &QueueFake) -> TestApp {
-    TestApp::builder()
-        .temp_database()
+    crate::servers::database(TestApp::builder())
         .module(DatabaseModule)
         .module(QueueModule::for_root(QueueOptions {
             driver: QueueDriver::Memory,

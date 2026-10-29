@@ -4,9 +4,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use navree_contracts::{Broadcaster, Dispatcher};
-use navree_db::Db;
+use navree_db::{Db, Executor as _, Statement};
 use navree_notify::{Channel, Notifier, NotifyOptions, SendNotificationJob};
-use sea_orm::ConnectionTrait;
 
 use crate::support::{self, DealWon, RecordingBroadcaster, RecordingDispatcher, TestUser};
 
@@ -19,9 +18,7 @@ async fn send_in_stores_with_the_transaction_and_delivers_after_commit() {
     let db = app.get::<Db>().await;
     let uow = db.uow(None, None).await;
     // The business change: the transaction now holds SQLite's write lock.
-    let tx = uow.tx().await.unwrap();
-    tx.execute_unprepared("SELECT 1").await.unwrap();
-    drop(tx);
+    uow.fetch_all(&Statement::text("SELECT 1")).await.unwrap();
 
     let id = notifier
         .send_in(&uow, &TestUser::new(), DealWon::via(&ALL, "Acme renewal"))
@@ -110,7 +107,7 @@ async fn send_inside_a_unit_of_work_scope_joins_it() {
 
     let uow = db.uow(None, None).await;
     // BEGIN IMMEDIATE: the unit of work holds SQLite's write lock.
-    drop(uow.tx().await.unwrap());
+    uow.fetch_all(&Statement::text("SELECT 1")).await.unwrap();
     let sent = tokio::time::timeout(
         quick,
         uow.scope(notifier.send(&TestUser::new(), DealWon::via(&ALL, "Acme renewal"))),

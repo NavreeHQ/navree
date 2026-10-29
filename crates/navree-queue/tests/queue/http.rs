@@ -11,7 +11,7 @@ use navree_http::{HttpModule, route_table};
 use navree_kernel::Navree;
 use navree_queue::{Operation, OperationRecord, QueueDriver, QueueModule};
 use navree_realtime::{RealtimeModule, RealtimeOptions};
-use navree_testing::{principal, temp_sqlite_url};
+use navree_testing::principal;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -309,7 +309,7 @@ async fn routes_need_an_authenticator_and_the_database() {
             .collect()
     };
     // No authenticator: nothing is mounted, and the app boots.
-    let (url, _guard) = temp_sqlite_url();
+    let (url, _guard) = crate::servers::scratch();
     let app = Navree::app()
         .module(ConfigModule::for_root(
             ConfigSources::new()
