@@ -13,7 +13,7 @@ use std::task::{Context, Poll};
 use navree_kernel::BoxFuture;
 use sea_orm::{ConnectionTrait, DbBackend, DbErr, RuntimeErr};
 
-use crate::engine::driver::{Executed, RowStream};
+use crate::engine::driver::{Executed, KeyedText, RowStream};
 use crate::engine::{Backend, DbError, ErrorKind, Executor, Kind, Row, Statement, Value};
 
 /// SeaORM's name for `backend`.
@@ -202,12 +202,31 @@ impl<'a, C: ConnectionTrait + Sync + ?Sized> SeaExecutor<'a, C> {
     }
 
     /// `statement` as SeaORM runs it on this connection.
+    ///
+    /// SeaORM's driver caches prepared statements by their text too, so on
+    /// PostgreSQL and MySQL the text names the kind of each value
+    /// (`/* params: i64, text */`): SeaORM binds each kind as one type, so
+    /// values of other kinds make another statement (see
+    /// [`Keyed`](crate::engine::driver::Keyed)). A mock connection
+    /// (`migrate --pretend`, scripted tests) prepares nothing and keeps the
+    /// SQL as written.
     pub(crate) fn statement(&self, statement: &Statement) -> Result<sea_orm::Statement, DbError> {
         let backend = Executor::backend(self);
         let statement = statement.for_backend(backend)?;
+        let sql = match backend {
+            _ if self.conn.is_mock_connection() => statement.sql().to_owned(),
+            Backend::Sqlite => statement.sql().to_owned(),
+            Backend::Postgres | Backend::MySql => {
+                let mut text = KeyedText::new(statement.sql(), statement.values().len());
+                for value in statement.values() {
+                    text.name(value.kind().name());
+                }
+                text.finish()
+            }
+        };
         Ok(sea_orm::Statement::from_sql_and_values(
             db_backend(backend),
-            statement.sql(),
+            sql,
             statement
                 .values()
                 .iter()
