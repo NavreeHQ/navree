@@ -445,8 +445,7 @@ async fn the_dashboard_shows_metrics_or_a_hint() {
     assert!(html.contains("$10.00"));
     assert!(html.contains("Companies") && html.contains("Deals"), "menu");
 
-    let empty = navree_testing::TestApp::builder()
-        .temp_database()
+    let empty = crate::servers::database(navree_testing::TestApp::builder())
         .module(navree_db::DatabaseModule)
         .module(navree_access::AccessModule::for_root(options()))
         .module(navree_helm::HelmModule::from_config())

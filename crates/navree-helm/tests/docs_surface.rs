@@ -5,6 +5,8 @@
 //! cookie, the subject, the configuration keys and the JSON API routes. A
 //! rename fails this file.
 
+#[path = "helm/servers.rs"]
+mod servers;
 #[path = "helm/support.rs"]
 mod support;
 
@@ -14,20 +16,20 @@ use navree_contracts::Job;
 use navree_helm::{
     Action, ActionContext, ActionResult, DEFAULT_MAX_FILE_BYTES, Field, Filter, FormData,
     HELM_SUBJECT, Helm, HelmActionJob, HelmModule, HelmOptions, HelmPage, Metric, MetricRange,
-    ModelOf, ModuleBuilderHelmExt, PageContext, Resource, SESSION_COOKIE, SaveContext, VIEW,
+    ModelOf, ModuleBuilderHelmExt, RecordOf, PageContext, Resource, SESSION_COOKIE, SaveContext, VIEW,
 };
 use navree_http::AppError;
 use navree_kernel::{BoxFuture, ModuleBuilder};
-use sea_orm::{ColumnTrait, QueryFilter, Select};
+use navree_orm::{Builder, Record};
 use serde_json::json;
 
-use support::{CompanyResource, DealResource, Move, STAGES, deal};
+use support::{CompanyResource, Deal, DealResource, Move, STAGES};
 
 /// A resource naming every constant and method of the trait.
 struct EveryItem;
 
 impl Resource for EveryItem {
-    type Entity = deal::Entity;
+    type Model = Deal;
 
     const LABEL: &'static str = "Deals";
     const SINGULAR: &'static str = "Deal";
@@ -66,30 +68,30 @@ impl Resource for EveryItem {
                 .max_size(DEFAULT_MAX_FILE_BYTES),
             Field::belongs_to::<CompanyResource>("company_id"),
             Field::has_many::<DealResource>("company_id"),
-            Field::computed("probability", |deal: &deal::Model| deal.stage.clone()),
+            Field::computed("probability", |deal: &Deal| deal.stage.clone()),
             Field::view("summary", "admin/summary"),
         ]
     }
 
-    fn filters(&self) -> Vec<Filter<deal::Entity>> {
+    fn filters(&self) -> Vec<Filter<Deal>> {
         vec![
             Filter::select("stage").options(STAGES),
             Filter::belongs_to::<CompanyResource>("company_id").label("Company"),
             Filter::date_range("expected_close_date"),
-            Filter::boolean("open", "Open deals only", |select, on| {
+            Filter::boolean("open", "Open deals only", |query, on| {
                 if on {
-                    select.filter(deal::Column::ClosedAt.is_null())
+                    query.where_(Deal::CLOSED_AT.is_null())
                 } else {
-                    select
+                    query
                 }
             }),
-            Filter::custom("min", "At least", |select, value| {
-                select.filter(deal::Column::AmountCents.gte(value.parse::<i64>().unwrap_or(0)))
+            Filter::custom("min", "At least", |query, value| {
+                query.where_(Deal::AMOUNT_CENTS.gte(value.parse::<i64>().unwrap_or(0)))
             }),
         ]
     }
 
-    fn actions(&self) -> Vec<Action<deal::Entity>> {
+    fn actions(&self) -> Vec<Action<Deal>> {
         vec![
             Action::new("mark-lost", "Mark as lost")
                 .ability(Move)
@@ -97,7 +99,7 @@ impl Resource for EveryItem {
                 .destructive()
                 .fields(vec![Field::textarea("lost_reason").required()])
                 .only_on_detail()
-                .handle(|ctx: ActionContext, deals: Vec<deal::Model>| async move {
+                .handle(|ctx: ActionContext, deals: Vec<Record<Deal>>| async move {
                     let _ = (ctx.uow(), ctx.user_id(), ctx.app(), deals.len());
                     let _: String = ctx.input("lost_reason")?;
                     let _ = ctx.inputs();
@@ -114,42 +116,42 @@ impl Resource for EveryItem {
         ]
     }
 
-    fn metrics(&self) -> Vec<Metric<deal::Entity>> {
+    fn metrics(&self) -> Vec<Metric<Deal>> {
         vec![
             Metric::value("Open pipeline")
-                .sum(deal::Column::AmountCents)
-                .filter(deal::Column::ClosedAt.is_null())
+                .sum(Deal::AMOUNT_CENTS)
+                .filter(Deal::CLOSED_AT.is_null())
                 .money("USD")
                 .on_dashboard(),
-            Metric::value("Average").average(deal::Column::AmountCents),
-            Metric::value("Smallest").min(deal::Column::AmountCents),
+            Metric::value("Average").average(Deal::AMOUNT_CENTS),
+            Metric::value("Smallest").min(Deal::AMOUNT_CENTS),
             Metric::value("Largest")
-                .max(deal::Column::AmountCents)
-                .over(deal::Column::CreatedAt),
+                .max(Deal::AMOUNT_CENTS)
+                .over(Deal::CREATED_AT),
             Metric::trend("By day")
                 .count()
-                .by_day(deal::Column::CreatedAt, 30),
+                .by_day(Deal::CREATED_AT, 30),
             Metric::trend("By week")
                 .count()
-                .by_week(deal::Column::CreatedAt, 12),
+                .by_week(Deal::CREATED_AT, 12),
             Metric::trend("By month")
                 .count()
-                .by_month(deal::Column::CreatedAt, 12),
+                .by_month(Deal::CREATED_AT, 12),
             Metric::partition("By stage")
                 .count()
-                .group_by(deal::Column::Stage),
+                .group_by(Deal::STAGE),
         ]
     }
 
-    fn query(&self, select: Select<deal::Entity>) -> Select<deal::Entity> {
-        select.filter(deal::Column::ClosedAt.is_null())
+    fn query(&self, query: Builder<Deal>) -> Builder<Deal> {
+        query.where_(Deal::CLOSED_AT.is_null())
     }
 
     fn create<'a>(
         &'a self,
         ctx: &'a SaveContext,
         form: FormData,
-    ) -> BoxFuture<'a, Result<ModelOf<Self>, AppError>> {
+    ) -> BoxFuture<'a, Result<RecordOf<Self>, AppError>> {
         Box::pin(async move {
             let _ = (ctx.uow(), ctx.user_id(), form.values(), form.get("title"));
             let _: support::NewDeal = form.parse().await?;
@@ -160,9 +162,9 @@ impl Resource for EveryItem {
     fn update<'a>(
         &'a self,
         ctx: &'a SaveContext,
-        record: deal::Model,
+        record: Record<Deal>,
         form: FormData,
-    ) -> BoxFuture<'a, Result<deal::Model, AppError>> {
+    ) -> BoxFuture<'a, Result<Record<Deal>, AppError>> {
         Box::pin(async move {
             let _ = (ctx.get::<HelmOptions>().await?, form.contains("title"));
             Ok(record)
@@ -172,7 +174,7 @@ impl Resource for EveryItem {
     fn delete<'a>(
         &'a self,
         _ctx: &'a SaveContext,
-        _record: deal::Model,
+        _record: Record<Deal>,
     ) -> BoxFuture<'a, Result<(), AppError>> {
         Box::pin(async { Ok(()) })
     }
@@ -235,6 +237,10 @@ fn the_documented_api_exists() {
     assert_eq!(<DealResource as Resource>::PER_PAGE, 0);
     assert_eq!(<DealResource as Resource>::ORDER, 0);
 
+    // The model of a resource, and its records.
+    let _: Option<ModelOf<DealResource>> = None::<Deal>;
+    let _: Option<RecordOf<DealResource>> = None::<Record<Deal>>;
+
     // 10 MiB per file by default.
     assert_eq!(DEFAULT_MAX_FILE_BYTES, 10 * 1024 * 1024);
 
@@ -244,7 +250,7 @@ fn the_documented_api_exists() {
         assert_eq!(MetricRange::parse(name).unwrap().as_str(), name);
     }
     assert_eq!(
-        Metric::<deal::Entity>::value("Open pipeline").slug(),
+        Metric::<Deal>::value("Open pipeline").slug(),
         "open-pipeline"
     );
 

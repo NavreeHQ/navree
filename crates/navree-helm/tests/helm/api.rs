@@ -5,7 +5,7 @@ use navree_audit::AuditModule;
 use navree_db::Db;
 use navree_helm::FormData;
 use navree_testing::principal;
-use sea_orm::EntityTrait;
+use navree_orm::{Assignment, Model};
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
@@ -346,14 +346,11 @@ async fn the_query_and_the_access_rules_hide_rows() {
     let visible = company(&app, "Visible", None).await;
     let gone = company(&app, "Gone", None).await;
     let db = app.get::<Db>().await;
-    company::Entity::update(company::ActiveModel {
-        id: sea_orm::Set(gone.id),
-        deleted_at: sea_orm::Set(Some(now())),
-        ..Default::default()
-    })
-    .exec(db.conn())
-    .await
-    .unwrap();
+    Company::query()
+        .where_key(gone.id)
+        .update(&*db, [Assignment::value("deleted_at", now())])
+        .await
+        .unwrap();
 
     let body = rep
         .get("/admin/api/resources/companies")
@@ -581,12 +578,7 @@ async fn the_default_create_writes_the_form_to_the_columns() {
         .assert_status(201)
         .json_value();
     let id: Uuid = body["data"]["id"].as_str().unwrap().parse().unwrap();
-    let db = app.get::<Db>().await;
-    let saved = company::Entity::find_by_id(id)
-        .one(db.conn())
-        .await
-        .unwrap()
-        .unwrap();
+    let saved = reload_company(&app, id).await.unwrap();
     assert_eq!(saved.name, "Initech");
     // A blank nullable column is stored as NULL; created_at is set.
     assert_eq!(saved.city, None);
@@ -803,6 +795,88 @@ async fn changes_are_audited_with_the_user() {
         Some(own.id.to_string().as_str())
     );
     assert_eq!(updated.new_values.as_ref().unwrap()["title"], "Audited");
+}
+
+/// The default writes record their change events with the record's
+/// serialized form: a hidden field (`Company::api_token`) is stored, but
+/// never reaches an observer or the audit log, on create, update or
+/// delete.
+#[tokio::test]
+async fn hidden_fields_stay_out_of_change_events_and_audit_entries() {
+    let app = builder()
+        .config("audit.routes", false)
+        .module(AuditModule::from_config())
+        .build()
+        .await;
+    let (manager_id, manager) = user(&app, "manager").await;
+    let body = manager
+        .post("/admin/api/resources/companies")
+        .json(&json!({ "name": "Initech", "api_token": "tok-created-secret" }))
+        .send()
+        .await
+        .assert_status(201)
+        .json_value();
+    let id: Uuid = body["data"]["id"].as_str().unwrap().parse().unwrap();
+    let saved = reload_company(&app, id).await.unwrap();
+    assert_eq!(saved.api_token.as_deref(), Some("tok-created-secret"));
+    assert_eq!(saved.created_at, now());
+
+    manager
+        .patch(&format!("/admin/api/resources/companies/{id}"))
+        .json(&json!({ "api_token": "tok-updated-secret", "city": "Austin" }))
+        .send()
+        .await
+        .assert_status(200);
+    let saved = reload_company(&app, id).await.unwrap();
+    assert_eq!(saved.api_token.as_deref(), Some("tok-updated-secret"));
+    assert_eq!(saved.city.as_deref(), Some("Austin"));
+    // Only the hidden field changes: nothing is recorded for it.
+    manager
+        .patch(&format!("/admin/api/resources/companies/{id}"))
+        .json(&json!({ "api_token": "tok-rotated-secret" }))
+        .send()
+        .await
+        .assert_status(200);
+    manager
+        .delete(&format!("/admin/api/resources/companies/{id}"))
+        .send()
+        .await
+        .assert_status(204);
+    assert!(reload_company(&app, id).await.is_none());
+
+    let log = app.get::<navree_audit::AuditLog>().await;
+    log.flush().await;
+    let rows: Vec<_> = navree_audit::AuditLog::list(
+        &log,
+        &navree_audit::AuditFilter::default(),
+        navree_db::PageQuery {
+            page: 1,
+            per_page: 100,
+        },
+    )
+    .await
+    .unwrap()
+    .data
+    .into_iter()
+    .filter(|r| r.subject_id.as_deref() == Some(id.to_string().as_str()))
+    .collect();
+    let mut actions: Vec<&str> = rows.iter().map(|r| r.action.as_str()).collect();
+    actions.sort_unstable();
+    assert_eq!(
+        actions,
+        ["company.created", "company.deleted", "company.updated"],
+        "{rows:?}"
+    );
+    assert!(rows.iter().all(|r| r.actor_id == Some(manager_id)));
+    let updated = rows.iter().find(|r| r.action == "company.updated").unwrap();
+    assert_eq!(
+        updated.new_values.as_ref().unwrap(),
+        &json!({ "city": "Austin" })
+    );
+    let text = serde_json::to_string(&rows).unwrap();
+    assert!(text.contains("Initech"), "{text}");
+    assert!(!text.contains("tok-"), "a secret reached the audit log: {text}");
+    assert!(!text.contains("api_token"), "{text}");
 }
 
 #[tokio::test]
