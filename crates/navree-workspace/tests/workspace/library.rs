@@ -493,12 +493,21 @@ async fn the_check_constraint_refuses_contradicting_owners() {
     let lib = fixture().await;
     let db = lib.world.db().await;
     let (org, ws) = (lib.group.id.to_string(), lib.acme.id.to_string());
+    // UUIDs are 16 bytes on MySQL.
+    let mysql = db.backend() == navree_db::Backend::MySql;
+    let uuid = |id: &str| {
+        if mysql {
+            format!("UUID_TO_BIN('{id}')")
+        } else {
+            format!("'{id}'")
+        }
+    };
     let insert = |scope: &str, organization: Option<&str>, workspace: Option<&str>| {
-        let quote = |id: Option<&str>| id.map_or("NULL".to_owned(), |id| format!("'{id}'"));
+        let quote = |id: Option<&str>| id.map_or("NULL".to_owned(), uuid);
         format!(
             "INSERT INTO templates (id, scope, organization_id, workspace_id, slug, name, created_at, updated_at) \
-             VALUES ('{}', '{scope}', {}, {}, 'raw', 'Raw', '2026-10-28 00:00:00', '2026-10-28 00:00:00')",
-            Uuid::now_v7(),
+             VALUES ({}, '{scope}', {}, {}, 'raw', 'Raw', '2026-10-28 00:00:00', '2026-10-28 00:00:00')",
+            uuid(&Uuid::now_v7().to_string()),
             quote(organization),
             quote(workspace)
         )
@@ -513,11 +522,9 @@ async fn the_check_constraint_refuses_contradicting_owners() {
         ("shared", None, None),
     ] {
         let refused = db.execute_script(&insert(scope, organization, workspace)).await;
-        assert!(
-            refused
-                .unwrap_err()
-                .to_string()
-                .contains("CHECK constraint failed"),
+        assert_eq!(
+            refused.unwrap_err().kind(),
+            navree_db::ErrorKind::CheckViolation,
             "{scope} {organization:?} {workspace:?}"
         );
     }

@@ -13,6 +13,7 @@ use navree_testing::{TempDirGuard, TestApp};
 use navree_workspace::{ModuleBuilderWorkspaceExt, WorkspaceScoped};
 use uuid::Uuid;
 
+use crate::database::Server;
 use crate::support::{builder, uuid};
 
 /// `countries`: shared by every workspace.
@@ -229,23 +230,34 @@ async fn workspace_tables_need_an_indexed_workspace_column() {
     let dir = TempDirGuard::new();
     let report = report(&app, dir.path()).await;
     let tables = report.check("workspace.tables").unwrap();
-    // deals (workspace_scoped in the fixtures), deal_notes and labels.
-    assert_eq!(tables.outcome.checked, 3);
-    assert_eq!(
-        subjects(tables),
-        [
-            (
-                Severity::Warning,
-                "deals".to_owned(),
-                "no index starts with `workspace_id`".to_owned()
-            ),
-            (
-                Severity::Error,
-                "labels".to_owned(),
-                "has no `workspace_id` column".to_owned()
-            ),
-        ]
+    // deals (workspace_scoped in the fixtures), deal_notes and labels; on
+    // MySQL, whose catalog the check does not read, none.
+    let checked = if Server::current() == Server::MySql { 0 } else { 3 };
+    assert_eq!(tables.outcome.checked, checked);
+    let rls_off = |table: &str| {
+        (
+            Severity::Warning,
+            table.to_owned(),
+            "row-level security is off".to_owned(),
+        )
+    };
+    let no_index = (
+        Severity::Warning,
+        "deals".to_owned(),
+        "no index starts with `workspace_id`".to_owned(),
     );
+    let no_column = (
+        Severity::Error,
+        "labels".to_owned(),
+        "has no `workspace_id` column".to_owned(),
+    );
+    let expected = match Server::current() {
+        // The catalog also says where row-level security is off.
+        Server::Postgres => vec![rls_off("deal_notes"), no_index, rls_off("deals"), no_column],
+        Server::MySql => vec![],
+        Server::Sqlite => vec![no_index, no_column],
+    };
+    assert_eq!(subjects(tables), expected);
     // Without sources, the source checks are skipped.
     let entities = report.check("workspace.entities").unwrap();
     assert!(
@@ -297,6 +309,12 @@ async fn navree_check_runs_them_through_the_conformity_command() {
         .await
         .unwrap_err();
     // One unclassified entity, two direct accesses, one table without the
-    // column; one table without an index.
-    assert_eq!(error.to_string(), "conformity: 4 errors, 1 warning");
+    // column; one table without an index (and, on PostgreSQL, two without
+    // row-level security; on MySQL the tables are not checked).
+    let expected = match Server::current() {
+        Server::Postgres => "conformity: 4 errors, 3 warnings",
+        Server::MySql => "conformity: 3 errors, 0 warnings",
+        Server::Sqlite => "conformity: 4 errors, 1 warning",
+    };
+    assert_eq!(error.to_string(), expected);
 }
