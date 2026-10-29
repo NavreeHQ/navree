@@ -426,42 +426,66 @@ impl Integrations {
         let runtime = rt.clone();
         rt.write(connected_by, |uow| async move {
             let model = {
-                // Written on the transaction, not through the unit of work:
-                // a change event would carry the encrypted credentials. The
-                // audit entry below records the connection instead.
-                let tx = uow.tx().await?;
+                // Written with set-based statements, not `Record::save`: a
+                // change event would carry the encrypted credentials and
+                // token. The audit entry below records the connection
+                // instead.
                 let existing = Row::query()
                     .where_(Row::OWNER_TYPE.eq(owner_type))
                     .where_(Row::OWNER_ID.eq(owner_id))
                     .where_(Row::PROVIDER.eq(provider.as_str()))
                     .where_(Row::SCOPE_SET.eq(scope_set.as_str()))
-                    .first(&*tx)
-                    .await?;
-                let mut record = existing.unwrap_or_else(|| {
-                    Record::new(Row {
-                        owner_type: owner_type.to_owned(),
-                        owner_id,
-                        provider: provider.clone(),
-                        scope_set: scope_set.clone(),
-                        created_at: now,
-                        ..Row::default()
-                    })
+                    .first(&uow)
+                    .await?
+                    .map(Record::into_inner);
+                let is_new = existing.is_none();
+                let mut model = existing.unwrap_or_else(|| Row {
+                    id: Uuid::now_v7(),
+                    owner_type: owner_type.to_owned(),
+                    owner_id,
+                    provider: provider.clone(),
+                    scope_set: scope_set.clone(),
+                    created_at: now,
+                    ..Row::default()
                 });
-                record.kind = kind.as_str().to_owned();
-                record.external_id = external_id;
-                record.display_name = display_name;
-                record.credentials = encrypted;
-                record.access_token = access_token;
-                record.token_expires_at = expires;
-                record.scopes = scopes;
-                record.status = ConnectionStatus::Healthy.as_str().to_owned();
-                record.failures = 0;
-                record.last_error = None;
-                record.connected_by = connected_by;
-                record.updated_at = now;
-                record.save(&*tx).await?;
+                model.kind = kind.as_str().to_owned();
+                model.external_id = external_id;
+                model.display_name = display_name;
+                model.credentials = encrypted;
+                model.access_token = access_token;
+                model.token_expires_at = expires;
+                model.scopes = scopes;
+                model.status = ConnectionStatus::Healthy.as_str().to_owned();
+                model.failures = 0;
+                model.last_error = None;
+                model.connected_by = connected_by;
+                model.updated_at = now;
+                if is_new {
+                    Row::insert(&uow, [model.clone()]).await?;
+                } else {
+                    Row::query()
+                        .where_key(model.id)
+                        .update(
+                            &uow,
+                            [
+                                Row::KIND.set(model.kind.as_str()),
+                                Row::EXTERNAL_ID.set(model.external_id.clone()),
+                                Row::DISPLAY_NAME.set(model.display_name.clone()),
+                                Row::CREDENTIALS.set(model.credentials.as_str()),
+                                Row::ACCESS_TOKEN.set(model.access_token.clone()),
+                                Row::TOKEN_EXPIRES_AT.set(model.token_expires_at),
+                                Row::SCOPES.set(model.scopes.clone()),
+                                Row::STATUS.set(model.status.as_str()),
+                                Row::FAILURES.set(model.failures),
+                                Row::LAST_ERROR.set(model.last_error.clone()),
+                                Row::CONNECTED_BY.set(model.connected_by),
+                                Row::UPDATED_AT.set(now),
+                            ],
+                        )
+                        .await?;
+                }
                 uow.mark_modified();
-                record.into_inner()
+                model
             };
             runtime
                 .emit_after_commit(
@@ -661,7 +685,7 @@ impl Integrations {
         Ok(Row::query()
             .where_(Row::OWNER_TYPE.eq(kind))
             .where_(Row::OWNER_ID.eq(id))
-            .delete(rt.db.conn())
+            .delete(&rt.db)
             .await?)
     }
 

@@ -3,7 +3,7 @@
 use http::StatusCode;
 use navree_cache::CacheError;
 use navree_crypto::CryptoError;
-use navree_db::sea_orm::DbErr;
+use navree_db::DbError;
 use navree_http::AppError;
 use navree_http_client::HttpClientError;
 use navree_kernel::KernelError;
@@ -132,7 +132,10 @@ pub enum IntegrationsError {
     Cache(#[from] CacheError),
     /// A database error.
     #[error("integrations database error: {0}")]
-    Db(#[from] DbErr),
+    Db(#[from] DbError),
+    /// A model operation failed (a query, a write).
+    #[error("integrations database error: {0}")]
+    Orm(#[from] OrmError),
     /// A provider the service needs could not be resolved.
     #[error("integrations provider error: {0}")]
     Kernel(#[from] KernelError),
@@ -206,6 +209,7 @@ impl IntegrationsError {
                 .with_code("integration_unavailable")
                 .with_detail("The integration is unavailable. Please try again."),
             IntegrationsError::Db(error) => return navree_db::map_db_error(error),
+            IntegrationsError::Orm(error) => return map_orm_error(error),
             #[cfg(feature = "mail")]
             IntegrationsError::MailboxWatchNotFound => AppError::not_found()
                 .with_code("mailbox_watch_not_found")
@@ -244,11 +248,18 @@ impl IntegrationsError {
     }
 }
 
-/// The ORM's errors are database errors (`Db`), mapped the same way.
-impl From<OrmError> for IntegrationsError {
-    fn from(error: OrmError) -> Self {
-        IntegrationsError::Db(DbErr::from(error))
+/// The response of an ORM error: its first database error in the source
+/// chain, as navree-db maps it (a missing record is a 404, a violation a
+/// 409), else a 500.
+fn map_orm_error(error: &OrmError) -> Option<AppError> {
+    let mut next: Option<&(dyn std::error::Error + 'static)> = Some(error);
+    while let Some(cause) = next {
+        if let Some(db) = cause.downcast_ref::<DbError>() {
+            return navree_db::map_db_error(db);
+        }
+        next = cause.source();
     }
+    None
 }
 
 /// The mapping registered with `map_error`.

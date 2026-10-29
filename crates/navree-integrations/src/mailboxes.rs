@@ -337,8 +337,8 @@ impl MailboxWatches {
         }
         let saved = watch.clone();
         rt.housekeeping(|uow| async move {
-            let tx = uow.tx().await?;
-            Record::new(saved).save(&*tx).await?;
+            // Inserted as it is, with no change event.
+            MailboxWatch::insert(&uow, [saved]).await?;
             uow.mark_modified();
             Ok(())
         })

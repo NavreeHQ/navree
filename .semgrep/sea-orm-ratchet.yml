@@ -42,7 +42,6 @@ rules:
         - "/crates/navree-graphql/"
         - "/crates/navree-grpc/"
         - "/crates/navree-helm/"
-        - "/crates/navree-i18n/"
         - "/crates/navree-lighthouse/"
         - "/crates/navree-logbook/"
         - "/crates/navree-mcp/"
@@ -59,12 +58,9 @@ rules:
         - "/crates/navree-sheets/"
         - "/crates/navree-social/"
         - "/crates/navree-sso/"
-        - "/crates/navree-webhooks/"
-        - "/crates/navree-workflows/"
         - "/crates/navree-cli/"
         - "/crates/navree-directory/"
         - "/crates/navree-domains/"
-        - "/crates/navree-integrations/"
         - "/crates/navree-macros/"
         - "/crates/navree-media/"
         # navree-workspace is moved; its SeaORM compatibility layer (the
@@ -105,7 +101,6 @@ rules:
         - "/crates/navree-graphql/"
         - "/crates/navree-grpc/"
         - "/crates/navree-helm/"
-        - "/crates/navree-i18n/"
         - "/crates/navree-lighthouse/"
         - "/crates/navree-logbook/"
         - "/crates/navree-mcp/"
@@ -121,8 +116,6 @@ rules:
         - "/crates/navree-sheets/"
         - "/crates/navree-social/"
         - "/crates/navree-sso/"
-        - "/crates/navree-webhooks/"
-        - "/crates/navree-workflows/"
         # navree-workspace: sea-orm for its compatibility layer, until step 8.
         - "/crates/navree-workspace/Cargo.toml"
     pattern-regex: '(?m)^\s*sea-orm(?:-migration)?\s*(?:=|\.)'
