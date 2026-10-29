@@ -74,13 +74,40 @@ impl sqlx::Encode<'_, Postgres> for PgVector<'_> {
         let Some(items) = self.0 else {
             return Ok(sqlx::encode::IsNull::Yes);
         };
-        buf.extend_from_slice(&u16::try_from(items.len())?.to_be_bytes());
-        buf.extend_from_slice(&0_u16.to_be_bytes());
-        for item in items {
-            buf.extend_from_slice(&item.to_be_bytes());
-        }
+        buf.extend_from_slice(&vector_binary(items)?);
         Ok(sqlx::encode::IsNull::No)
     }
+}
+
+/// pgvector's binary form of a `vector`: the dimensions (`u16`), an unused
+/// `u16`, then each component as a big-endian `f32`.
+fn vector_binary(items: &[f32]) -> Result<Vec<u8>, sqlx::error::BoxDynError> {
+    let mut bytes = Vec::with_capacity(4 + items.len() * 4);
+    bytes.extend_from_slice(&u16::try_from(items.len())?.to_be_bytes());
+    bytes.extend_from_slice(&0_u16.to_be_bytes());
+    for item in items {
+        bytes.extend_from_slice(&item.to_be_bytes());
+    }
+    Ok(bytes)
+}
+
+/// The components of a `vector` in pgvector's binary form.
+fn parse_vector(bytes: &[u8]) -> Result<Vec<f32>, sqlx::error::BoxDynError> {
+    let dims = usize::from(u16::from_be_bytes(
+        bytes.get(0..2).ok_or("a vector too short")?.try_into()?,
+    ));
+    let mut items = Vec::with_capacity(dims);
+    for i in 0..dims {
+        let at = 4 + i * 4;
+        let float = f32::from_be_bytes(
+            bytes
+                .get(at..at + 4)
+                .ok_or("a vector too short")?
+                .try_into()?,
+        );
+        items.push(float);
+    }
+    Ok(items)
 }
 
 fn bind_null(args: &mut PgArguments, kind: Kind) -> Result<(), sqlx::error::BoxDynError> {
@@ -185,22 +212,7 @@ fn decode(raw: PgValueRef<'_>, type_name: &str) -> Result<Value, sqlx::error::Bo
 /// A pgvector `vector` (binary form: dimensions, an unused word, then
 /// big-endian `f32`s).
 fn vector(raw: PgValueRef<'_>) -> Result<Value, sqlx::error::BoxDynError> {
-    let bytes = raw.as_bytes()?;
-    let dims = usize::from(u16::from_be_bytes(
-        bytes.get(0..2).ok_or("a vector too short")?.try_into()?,
-    ));
-    let mut items = Vec::with_capacity(dims);
-    for i in 0..dims {
-        let at = 4 + i * 4;
-        let float = f32::from_be_bytes(
-            bytes
-                .get(at..at + 4)
-                .ok_or("a vector too short")?
-                .try_into()?,
-        );
-        items.push(float);
-    }
-    Ok(Value::Vector(items))
+    Ok(Value::Vector(parse_vector(raw.as_bytes()?)?))
 }
 
 /// The kind of a column of PostgreSQL type `type_name` (for its NULLs).
@@ -274,5 +286,25 @@ pub(crate) fn pool_options(options: &DbOptions) -> PgPoolOptions {
             })
         }
         None => pool,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn vectors_cross_in_pgvector_s_binary_form() {
+        let items = [0.5_f32, -1.0, 2.25];
+        let bytes = vector_binary(&items).unwrap();
+        assert_eq!(&bytes[..4], &[0, 3, 0, 0]);
+        assert_eq!(&bytes[4..8], &0.5_f32.to_be_bytes());
+        assert_eq!(parse_vector(&bytes).unwrap(), items);
+        assert_eq!(
+            parse_vector(&vector_binary(&[]).unwrap()).unwrap(),
+            [] as [f32; 0]
+        );
+        assert!(parse_vector(&bytes[..6]).is_err());
+        assert!(vector_binary(&vec![0.0; 70_000]).is_err());
     }
 }
