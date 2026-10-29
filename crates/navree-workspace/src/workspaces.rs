@@ -5,22 +5,18 @@ use std::fmt;
 use std::sync::Arc;
 
 use navree_contracts::ZoneOwner;
-use navree_db::{Repo, Uow};
+use navree_db::Uow;
+use navree_orm::{Executor, Model as _, Record};
 use navree_time::Zone;
-use sea_orm::{
-    ColumnTrait, ConnectionTrait, EntityTrait, IntoActiveModel, QueryFilter, QueryOrder,
-    QuerySelect, Set,
-};
 use serde::Serialize;
 use uuid::Uuid;
 
 use crate::core::Core;
-use crate::entity::{
-    Member, Workspace, WorkspaceKind, member, organization, organization_member, workspace,
-};
+use crate::entity::{Member, OrgMember, Organization, Workspace, WorkspaceKind};
 use crate::events::{MemberAdded, OwnershipTransferred, WorkspaceCreated, WorkspaceDeleted};
 use crate::grants::{org_grant, org_selector, reached};
 use crate::org_role::SCOPE_ALL;
+use crate::store;
 use crate::{OrgRole, WorkspaceError, WorkspaceRole};
 
 /// The longest workspace name, in characters.
@@ -100,10 +96,10 @@ pub(crate) struct Admission {
 /// exported by the workspace module.
 ///
 /// Writes take the [`Uow`] to run in (an HTTP request's, or one from
-/// `Db::uow` in jobs and commands), go through `navree_db::Repo` (so the
-/// audit trail records them) and emit their events once it commits. Reads
-/// use `Db::reader`: the current unit of work's open transaction, else the
-/// pool.
+/// `Db::uow` in jobs and commands), record their changes in it (so the
+/// audit trail sees them) and emit their events once it commits. Reads go
+/// where the ORM sends them: the current unit of work's open transaction,
+/// else the pool.
 pub struct Workspaces {
     core: Arc<Core>,
 }
@@ -138,12 +134,11 @@ impl Workspaces {
         kind: WorkspaceKind,
     ) -> Result<Workspace, WorkspaceError> {
         let name = check_name(&input.name)?;
-        let tx = uow.tx().await?;
         let slug = match input.slug {
             Some(slug) => {
                 let slug = slug.trim().to_owned();
                 check_slug(&slug)?;
-                if slug_taken(&*tx, &slug, None).await? {
+                if slug_taken(uow, &slug, None).await? {
                     return Err(WorkspaceError::invalid(
                         "slug",
                         "slug has already been taken",
@@ -151,37 +146,36 @@ impl Workspaces {
                 }
                 slug
             }
-            None => free_slug(&*tx, &slugify(&name)).await?,
+            None => free_slug(uow, &slugify(&name)).await?,
         };
-        drop(tx);
         let now = self.core.now();
         let id = Uuid::now_v7();
-        let created = Repo::<workspace::Entity>::insert(
+        let created = store::insert(
             uow,
-            workspace::ActiveModel {
-                id: Set(id),
-                name: Set(name.clone()),
-                slug: Set(slug.clone()),
-                owner_id: Set(owner),
-                organization_id: Set(None),
-                timezone: Set(None),
-                country: Set(None),
-                kind: Set(kind.as_str().to_owned()),
-                created_at: Set(now),
-                updated_at: Set(now),
+            Workspace {
+                id,
+                name: name.clone(),
+                slug: slug.clone(),
+                owner_id: owner,
+                organization_id: None,
+                timezone: None,
+                country: None,
+                kind: kind.as_str().to_owned(),
+                created_at: now,
+                updated_at: now,
             },
         )
         .await?;
-        Repo::<member::Entity>::insert(
+        store::insert(
             uow,
-            member::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                workspace_id: Set(id),
-                user_id: Set(owner),
-                role: Set(WorkspaceRole::Owner.as_str().to_owned()),
-                partition_scope: Set(SCOPE_ALL.to_owned()),
-                created_at: Set(now),
-                updated_at: Set(now),
+            Member {
+                id: Uuid::now_v7(),
+                workspace_id: id,
+                user_id: owner,
+                role: WorkspaceRole::Owner.as_str().to_owned(),
+                partition_scope: SCOPE_ALL.to_owned(),
+                created_at: now,
+                updated_at: now,
             },
         )
         .await?;
@@ -218,11 +212,13 @@ impl Workspaces {
         name: &str,
     ) -> Result<Workspace, WorkspaceError> {
         let name = check_name(name)?;
-        let current = self.core.workspace_in(&*uow.tx().await?, id).await?;
-        let mut row = current.into_active_model();
-        row.name = Set(name);
-        row.updated_at = Set(self.core.now());
-        Ok(Repo::<workspace::Entity>::update(uow, row).await?)
+        let current = self.core.workspace_in(uow, id).await?;
+        let now = self.core.now();
+        store::update(uow, current, |row| {
+            row.name = name;
+            row.updated_at = now;
+        })
+        .await
     }
 
     /// Sets the time zone and country of workspace `id` (`None` clears
@@ -242,12 +238,14 @@ impl Workspaces {
         country: Option<&str>,
     ) -> Result<Workspace, WorkspaceError> {
         let (timezone, country) = check_time_zone(timezone, country)?;
-        let current = self.core.workspace_in(&*uow.tx().await?, id).await?;
-        let mut row = current.into_active_model();
-        row.timezone = Set(timezone);
-        row.country = Set(country);
-        row.updated_at = Set(self.core.now());
-        Ok(Repo::<workspace::Entity>::update(uow, row).await?)
+        let current = self.core.workspace_in(uow, id).await?;
+        let now = self.core.now();
+        store::update(uow, current, |row| {
+            row.timezone = timezone;
+            row.country = country;
+            row.updated_at = now;
+        })
+        .await
     }
 
     /// Every workspace's id, time zone and country (for navree-time), with
@@ -265,17 +263,18 @@ impl Workspaces {
 
     async fn zone_rows(&self, id: Option<Uuid>) -> Result<Vec<ZoneOwner>, WorkspaceError> {
         type Row = (Uuid, Option<String>, Option<String>, Option<Uuid>);
-        let conn = self.core.db.reader().await;
-        let mut query = workspace::Entity::find()
-            .select_only()
-            .column(workspace::Column::Id)
-            .column(workspace::Column::Timezone)
-            .column(workspace::Column::Country)
-            .column(workspace::Column::OrganizationId);
+        let db = &*self.core.db;
+        let mut query = Workspace::query();
         if let Some(id) = id {
-            query = query.filter(workspace::Column::Id.eq(id));
+            query = query.where_key(id);
         }
-        let rows: Vec<Row> = query.into_tuple().all(&conn).await?;
+        let rows: Vec<Row> = query
+            .get(db)
+            .await?
+            .into_models()
+            .into_iter()
+            .map(|w| (w.id, w.timezone, w.country, w.organization_id))
+            .collect();
         let unset = |value: &Option<String>| value.as_deref().is_none_or(|v| v.trim().is_empty());
         let inheriting: HashSet<Uuid> = if self.core.config.organizations.enabled {
             rows.iter()
@@ -289,17 +288,13 @@ impl Workspaces {
             if inheriting.is_empty() {
                 HashMap::new()
             } else {
-                organization::Entity::find()
-                    .select_only()
-                    .column(organization::Column::Id)
-                    .column(organization::Column::Timezone)
-                    .column(organization::Column::Country)
-                    .filter(organization::Column::Id.is_in(inheriting))
-                    .into_tuple::<(Uuid, Option<String>, Option<String>)>()
-                    .all(&conn)
+                Organization::query()
+                    .where_key_in(inheriting)
+                    .get(db)
                     .await?
+                    .into_models()
                     .into_iter()
-                    .map(|(id, zone, country)| (id, (zone, country)))
+                    .map(|org| (org.id, (org.timezone, org.country)))
                     .collect()
             };
         Ok(rows
@@ -322,38 +317,50 @@ impl Workspaces {
     /// organization memberships reach (a membership of the workspace wins
     /// over an organization grant).
     pub async fn for_user(&self, user: Uuid) -> Result<Vec<Membership>, WorkspaceError> {
-        let conn = self.core.db.reader().await;
-        let rows = member::Entity::find()
-            .filter(member::Column::UserId.eq(user))
-            .find_also_related(workspace::Entity)
-            .order_by_asc(workspace::Column::Name)
-            .all(&conn)
-            .await?;
-        let mut memberships: Vec<Membership> = rows
+        let db = &*self.core.db;
+        let roles: HashMap<Uuid, WorkspaceRole> = Member::query()
+            .where_(Member::USER_ID.eq(user))
+            .get(db)
+            .await?
+            .into_models()
             .into_iter()
-            .filter_map(|(membership, workspace)| {
-                workspace.map(|workspace| Membership {
-                    role: membership.role(),
-                    workspace,
-                    granted_by: GrantedBy::Membership,
-                })
-            })
+            .map(|membership| (membership.workspace_id, membership.role()))
             .collect();
+        let mut memberships: Vec<Membership> = if roles.is_empty() {
+            Vec::new()
+        } else {
+            Workspace::query()
+                .where_key_in(roles.keys().copied())
+                .order_by(Workspace::NAME)
+                .get(db)
+                .await?
+                .into_models()
+                .into_iter()
+                .filter_map(|workspace| {
+                    roles.get(&workspace.id).map(|role| Membership {
+                        role: role.clone(),
+                        workspace,
+                        granted_by: GrantedBy::Membership,
+                    })
+                })
+                .collect()
+        };
         if !self.core.config.organizations.enabled {
             return Ok(memberships);
         }
         let mut seen: HashSet<Uuid> = memberships.iter().map(|m| m.workspace.id).collect();
-        let org_memberships = organization_member::Entity::find()
-            .filter(organization_member::Column::UserId.eq(user))
-            .all(&conn)
-            .await?;
+        let org_memberships = OrgMember::query()
+            .where_(OrgMember::USER_ID.eq(user))
+            .get(db)
+            .await?
+            .into_models();
         for org_member in org_memberships {
             let role = org_member.role();
             let Some(mapped) = self.core.org_roles.workspace_role(&role).cloned() else {
                 continue;
             };
-            let selector = org_selector(&conn, &org_member).await?;
-            for workspace in reached(&conn, org_member.organization_id, &selector).await? {
+            let selector = org_selector(db, &org_member).await?;
+            for workspace in reached(db, org_member.organization_id, &selector).await? {
                 if seen.insert(workspace.id) {
                     memberships.push(Membership {
                         workspace,
@@ -381,10 +388,7 @@ impl Workspaces {
         id: Uuid,
         user: Uuid,
     ) -> Result<Option<(WorkspaceRole, GrantedBy)>, WorkspaceError> {
-        let workspace = self
-            .core
-            .workspace_in(&self.core.db.reader().await, id)
-            .await?;
+        let workspace = self.core.workspace_in(&*self.core.db, id).await?;
         Ok(self
             .admission(&workspace, user)
             .await?
@@ -397,8 +401,8 @@ impl Workspaces {
         workspace: &Workspace,
         user: Uuid,
     ) -> Result<Option<Admission>, WorkspaceError> {
-        let conn = self.core.db.reader().await;
-        if let Some(member) = self.core.member_in(&conn, workspace.id, user).await? {
+        let db = &*self.core.db;
+        if let Some(member) = self.core.member_in(db, workspace.id, user).await? {
             return Ok(Some(Admission {
                 role: member.role(),
                 member,
@@ -408,7 +412,7 @@ impl Workspaces {
         if !self.core.config.organizations.enabled {
             return Ok(None);
         }
-        let Some(grant) = org_grant(&self.core, &conn, workspace, user).await? else {
+        let Some(grant) = org_grant(&self.core, db, workspace, user).await? else {
             return Ok(None);
         };
         let member = Member {
@@ -432,17 +436,18 @@ impl Workspaces {
 
     /// The workspace with `id`.
     pub async fn find(&self, id: Uuid) -> Result<Option<Workspace>, WorkspaceError> {
-        Ok(workspace::Entity::find_by_id(id)
-            .one(&self.core.db.reader().await)
-            .await?)
+        Ok(Workspace::find(&*self.core.db, id)
+            .await?
+            .map(Record::into_inner))
     }
 
     /// The workspace with `slug`.
     pub async fn find_by_slug(&self, slug: &str) -> Result<Option<Workspace>, WorkspaceError> {
-        Ok(workspace::Entity::find()
-            .filter(workspace::Column::Slug.eq(slug))
-            .one(&self.core.db.reader().await)
-            .await?)
+        Ok(Workspace::query()
+            .where_(Workspace::SLUG.eq(slug))
+            .first(&*self.core.db)
+            .await?
+            .map(Record::into_inner))
     }
 
     /// The workspace an identifier names: an id (UUID) or a slug.
@@ -457,9 +462,7 @@ impl Workspaces {
 
     /// The membership of `user` in workspace `id`, if any.
     pub async fn membership(&self, id: Uuid, user: Uuid) -> Result<Option<Member>, WorkspaceError> {
-        self.core
-            .member_in(&self.core.db.reader().await, id, user)
-            .await
+        self.core.member_in(&*self.core.db, id, user).await
     }
 
     /// Makes `to` (already a member) the owner of workspace `id`: they get
@@ -470,26 +473,25 @@ impl Workspaces {
         id: Uuid,
         to: Uuid,
     ) -> Result<Workspace, WorkspaceError> {
-        let tx = uow.tx().await?;
-        let current = self.core.workspace_in(&*tx, id).await?;
+        let current = self.core.workspace_in(uow, id).await?;
         let from = current.owner_id;
         if from == to {
             return Ok(current);
         }
-        let new_owner = self.core.member_in(&*tx, id, to).await?.ok_or_else(|| {
+        let new_owner = self.core.member_in(uow, id, to).await?.ok_or_else(|| {
             WorkspaceError::invalid("user_id", "user_id must be a member of the workspace")
         })?;
-        let old_owner = self.core.member_in(&*tx, id, from).await?;
-        drop(tx);
+        let old_owner = self.core.member_in(uow, id, from).await?;
         let now = self.core.now();
         set_role(uow, new_owner, WorkspaceRole::Owner, now).await?;
         if let Some(old_owner) = old_owner {
             set_role(uow, old_owner, WorkspaceRole::Admin, now).await?;
         }
-        let mut row = current.into_active_model();
-        row.owner_id = Set(to);
-        row.updated_at = Set(now);
-        let updated = Repo::<workspace::Entity>::update(uow, row).await?;
+        let updated = store::update(uow, current, |row| {
+            row.owner_id = to;
+            row.updated_at = now;
+        })
+        .await?;
         self.core
             .emit_after_commit(
                 uow,
@@ -508,9 +510,9 @@ impl Workspaces {
     /// under database isolation its pool is closed after the commit and the
     /// database is left in place.
     pub async fn delete(&self, uow: &Uow, id: Uuid) -> Result<(), WorkspaceError> {
-        let current = self.core.workspace_in(&*uow.tx().await?, id).await?;
+        let current = self.core.workspace_in(uow, id).await?;
         let slug = current.slug.clone();
-        Repo::<workspace::Entity>::delete(uow, current).await?;
+        store::delete(uow, current).await?;
         self.core.isolation.deleted(uow, id).await?;
         self.core
             .emit_after_commit(
@@ -543,10 +545,11 @@ impl Workspaces {
 
     /// Every workspace, by creation (for commands that visit them all).
     pub async fn all(&self) -> Result<Vec<Workspace>, WorkspaceError> {
-        Ok(workspace::Entity::find()
-            .order_by_asc(workspace::Column::CreatedAt)
-            .all(&self.core.db.reader().await)
-            .await?)
+        Ok(Workspace::query()
+            .order_by(Workspace::CREATED_AT)
+            .get(&*self.core.db)
+            .await?
+            .into_models())
     }
 }
 
@@ -563,10 +566,11 @@ pub(crate) async fn set_role(
     role: WorkspaceRole,
     now: chrono::DateTime<chrono::Utc>,
 ) -> Result<Member, WorkspaceError> {
-    let mut row = membership.into_active_model();
-    row.role = Set(role.as_str().to_owned());
-    row.updated_at = Set(now);
-    Ok(Repo::<member::Entity>::update(uow, row).await?)
+    store::update(uow, membership, |row| {
+        row.role = role.as_str().to_owned();
+        row.updated_at = now;
+    })
+    .await
 }
 
 /// A trimmed, checked name (of a workspace, organization or partition).
@@ -670,26 +674,26 @@ pub(crate) fn slugify_or(name: &str, fallback: &str) -> String {
     }
 }
 
-async fn slug_taken<C: ConnectionTrait>(
-    conn: &C,
+async fn slug_taken<E: Executor + ?Sized>(
+    exec: &E,
     slug: &str,
     except: Option<Uuid>,
 ) -> Result<bool, WorkspaceError> {
-    let mut query = workspace::Entity::find().filter(workspace::Column::Slug.eq(slug));
+    let mut query = Workspace::query().where_(Workspace::SLUG.eq(slug));
     if let Some(id) = except {
-        query = query.filter(workspace::Column::Id.ne(id));
+        query = query.where_key_not(id);
     }
-    Ok(query.one(conn).await?.is_some())
+    Ok(query.exists(exec).await?)
 }
 
 /// `base`, or `base-2`, `base-3`, ... whichever is free.
-async fn free_slug<C: ConnectionTrait>(conn: &C, base: &str) -> Result<String, WorkspaceError> {
-    if !slug_taken(conn, base, None).await? {
+async fn free_slug<E: Executor + ?Sized>(exec: &E, base: &str) -> Result<String, WorkspaceError> {
+    if !slug_taken(exec, base, None).await? {
         return Ok(base.to_owned());
     }
     for n in 2..1000 {
         let candidate = format!("{base}-{n}");
-        if !slug_taken(conn, &candidate, None).await? {
+        if !slug_taken(exec, &candidate, None).await? {
             return Ok(candidate);
         }
     }

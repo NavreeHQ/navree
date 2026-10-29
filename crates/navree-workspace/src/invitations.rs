@@ -5,16 +5,17 @@ use std::sync::Arc;
 
 use chrono::{DateTime, TimeDelta, Utc};
 use navree_crypto::{random_token, sha256_hex};
-use navree_db::{Repo, Uow};
+use navree_db::Uow;
 use navree_mail::{Mailable, Message, TemplateMail};
-use sea_orm::{ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, QueryOrder, Set};
+use navree_orm::{Model as _, Record};
 use serde_json::json;
 use uuid::Uuid;
 
 use crate::core::Core;
-use crate::entity::{Invitation, Member, Workspace, invitation};
+use crate::entity::{Invitation, Member, Workspace};
 use crate::events::{InvitationAccepted, InvitationSent};
 use crate::members::Members;
+use crate::store;
 use crate::{InvitationOptions, WorkspaceError, WorkspaceRole};
 
 /// The length of invitation tokens (URL-safe characters).
@@ -96,9 +97,7 @@ impl Invitations {
             ));
         }
         self.core.check_role(&role)?;
-        let tx = uow.tx().await?;
-        let target = self.core.workspace_in(&*tx, workspace).await?;
-        drop(tx);
+        let target = self.core.workspace_in(uow, workspace).await?;
         if let Some(user) = self
             .core
             .directory
@@ -110,31 +109,32 @@ impl Invitations {
             return Err(WorkspaceError::AlreadyMember);
         }
         // A new invitation replaces the address's pending one.
-        let pending = invitation::Entity::find()
-            .filter(invitation::Column::WorkspaceId.eq(workspace))
-            .filter(invitation::Column::Email.eq(email.clone()))
-            .filter(invitation::Column::AcceptedAt.is_null())
-            .all(&*uow.tx().await?)
-            .await?;
+        let pending = Invitation::query()
+            .where_(Invitation::WORKSPACE_ID.eq(workspace))
+            .where_(Invitation::EMAIL.eq(email.as_str()))
+            .where_null(Invitation::ACCEPTED_AT)
+            .get(uow)
+            .await?
+            .into_models();
         for old in pending {
-            Repo::<invitation::Entity>::delete(uow, old).await?;
+            store::delete(uow, old).await?;
         }
         let now = self.core.now();
         let token = random_token(TOKEN_LEN);
         let options = &self.core.config.invitations;
-        let created = Repo::<invitation::Entity>::insert(
+        let created = store::insert(
             uow,
-            invitation::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                workspace_id: Set(workspace),
-                email: Set(email.clone()),
-                role: Set(role.as_str().to_owned()),
-                token_hash: Set(sha256_hex(token.as_bytes())),
-                invited_by: Set(invited_by),
-                expires_at: Set(after(now, options.ttl_secs)),
-                accepted_at: Set(None),
-                accepted_by: Set(None),
-                created_at: Set(now),
+            Invitation {
+                id: Uuid::now_v7(),
+                workspace_id: workspace,
+                email: email.clone(),
+                role: role.as_str().to_owned(),
+                token_hash: sha256_hex(token.as_bytes()),
+                invited_by,
+                expires_at: after(now, options.ttl_secs),
+                accepted_at: None,
+                accepted_by: None,
+                created_at: now,
             },
         )
         .await?;
@@ -189,19 +189,18 @@ impl Invitations {
         token: &str,
         user: Uuid,
     ) -> Result<AcceptedInvitation, WorkspaceError> {
-        let tx = uow.tx().await?;
-        let found = invitation::Entity::find()
-            .filter(invitation::Column::TokenHash.eq(sha256_hex(token.trim().as_bytes())))
-            .one(&*tx)
+        let found = Invitation::query()
+            .where_(Invitation::TOKEN_HASH.eq(sha256_hex(token.trim().as_bytes())))
+            .first(uow)
             .await?
+            .map(Record::into_inner)
             .filter(|invitation| invitation.accepted_at.is_none())
             .ok_or(WorkspaceError::InvitationNotFound)?;
         let now = self.core.now();
         if found.expires_at <= now {
             return Err(WorkspaceError::InvitationExpired);
         }
-        let workspace = self.core.workspace_in(&*tx, found.workspace_id).await?;
-        drop(tx);
+        let workspace = self.core.workspace_in(uow, found.workspace_id).await?;
         if self.core.config.invitations.require_matching_email {
             let accepting = self
                 .core
@@ -227,7 +226,7 @@ impl Invitations {
         }
         if self
             .core
-            .member_in(&*uow.tx().await?, workspace.id, user)
+            .member_in(uow, workspace.id, user)
             .await?
             .is_some()
         {
@@ -236,10 +235,11 @@ impl Invitations {
         let role = found.role();
         let member = self.members.insert(uow, workspace.id, user, role).await?;
         let invitation_id = found.id;
-        let mut row = found.into_active_model();
-        row.accepted_at = Set(Some(now));
-        row.accepted_by = Set(Some(user));
-        let accepted = Repo::<invitation::Entity>::update(uow, row).await?;
+        let accepted = store::update(uow, found, |row| {
+            row.accepted_at = Some(now);
+            row.accepted_by = Some(user);
+        })
+        .await?;
         self.core
             .emit_after_commit(
                 uow,
@@ -258,46 +258,49 @@ impl Invitations {
     /// show before accepting.
     pub async fn find_by_token(&self, token: &str) -> Result<Option<Invitation>, WorkspaceError> {
         let now = self.core.now();
-        Ok(invitation::Entity::find()
-            .filter(invitation::Column::TokenHash.eq(sha256_hex(token.trim().as_bytes())))
-            .one(&self.core.db.reader().await)
+        Ok(Invitation::query()
+            .where_(Invitation::TOKEN_HASH.eq(sha256_hex(token.trim().as_bytes())))
+            .first(&*self.core.db)
             .await?
+            .map(Record::into_inner)
             .filter(|invitation| invitation.is_pending(now)))
     }
 
     /// The pending invitations of `workspace`, newest first.
     pub async fn pending(&self, workspace: Uuid) -> Result<Vec<Invitation>, WorkspaceError> {
-        Ok(invitation::Entity::find()
-            .filter(invitation::Column::WorkspaceId.eq(workspace))
-            .filter(invitation::Column::AcceptedAt.is_null())
-            .filter(invitation::Column::ExpiresAt.gt(self.core.now()))
-            .order_by_desc(invitation::Column::CreatedAt)
-            .order_by_desc(invitation::Column::Id)
-            .all(&self.core.db.reader().await)
-            .await?)
+        Ok(Invitation::query()
+            .where_(Invitation::WORKSPACE_ID.eq(workspace))
+            .where_null(Invitation::ACCEPTED_AT)
+            .where_(Invitation::EXPIRES_AT.gt(self.core.now()))
+            .order_by_desc(Invitation::CREATED_AT)
+            .order_by_desc(Invitation::ID)
+            .get(&*self.core.db)
+            .await?
+            .into_models())
     }
 
     /// Revokes the pending invitation `id` of `workspace` (its token stops
     /// working). [`WorkspaceError::InvitationNotFound`] if there is none.
     pub async fn revoke(&self, uow: &Uow, workspace: Uuid, id: Uuid) -> Result<(), WorkspaceError> {
-        let found = invitation::Entity::find_by_id(id)
-            .filter(invitation::Column::WorkspaceId.eq(workspace))
-            .filter(invitation::Column::AcceptedAt.is_null())
-            .one(&*uow.tx().await?)
+        let found = Invitation::query()
+            .where_key(id)
+            .where_(Invitation::WORKSPACE_ID.eq(workspace))
+            .where_null(Invitation::ACCEPTED_AT)
+            .first(uow)
             .await?
-            .ok_or(WorkspaceError::InvitationNotFound)?;
-        Ok(Repo::<invitation::Entity>::delete(uow, found).await?)
+            .ok_or(WorkspaceError::InvitationNotFound)?
+            .into_inner();
+        store::delete(uow, found).await
     }
 
     /// Deletes every invitation that expired without being accepted;
     /// returns how many (`workspace:prune-invitations`).
     pub async fn prune_expired(&self, uow: &Uow) -> Result<u64, WorkspaceError> {
-        let result = invitation::Entity::delete_many()
-            .filter(invitation::Column::AcceptedAt.is_null())
-            .filter(invitation::Column::ExpiresAt.lte(self.core.now()))
-            .exec(&*uow.tx().await?)
-            .await?;
-        Ok(result.rows_affected)
+        Ok(Invitation::query()
+            .where_null(Invitation::ACCEPTED_AT)
+            .where_(Invitation::EXPIRES_AT.lte(self.core.now()))
+            .delete(uow)
+            .await?)
     }
 }
 

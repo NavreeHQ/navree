@@ -5,17 +5,18 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-use navree_db::{Repo, Uow};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set};
+use navree_db::Uow;
+use navree_orm::Model as _;
 use serde::Serialize;
 use uuid::Uuid;
 
 use crate::core::Core;
 use crate::directory::UserSummary;
-use crate::entity::{OrgMember, organization_member};
+use crate::entity::OrgMember;
 use crate::events::{OrgMemberAdded, OrgMemberChanged, OrgMemberRemoved};
 use crate::grants::{check_workspaces, org_selector, set_org_selector};
 use crate::organizations::set_org_role;
+use crate::store;
 use crate::{OrgRole, WorkspaceError, WorkspaceSelector};
 
 /// An organization member with the workspaces they reach and the user's
@@ -56,13 +57,14 @@ impl OrgMembers {
     /// workspaces and users.
     pub async fn list(&self, org: Uuid) -> Result<Vec<OrgMemberInfo>, WorkspaceError> {
         self.core.require_organizations()?;
-        let conn = self.core.db.reader().await;
-        let members = organization_member::Entity::find()
-            .filter(organization_member::Column::OrganizationId.eq(org))
-            .order_by_asc(organization_member::Column::CreatedAt)
-            .order_by_asc(organization_member::Column::Id)
-            .all(&conn)
-            .await?;
+        let db = &*self.core.db;
+        let members = OrgMember::query()
+            .where_(OrgMember::ORGANIZATION_ID.eq(org))
+            .order_by(OrgMember::CREATED_AT)
+            .order_by(OrgMember::ID)
+            .get(db)
+            .await?
+            .into_models();
         let ids: Vec<Uuid> = members.iter().map(|m| m.user_id).collect();
         let mut users: HashMap<Uuid, UserSummary> = self
             .core
@@ -76,7 +78,7 @@ impl OrgMembers {
         let mut list = Vec::with_capacity(members.len());
         for member in members {
             list.push(OrgMemberInfo {
-                workspaces: org_selector(&conn, &member).await?,
+                workspaces: org_selector(db, &member).await?,
                 user: users.remove(&member.user_id),
                 member,
             });
@@ -87,9 +89,7 @@ impl OrgMembers {
     /// The membership of `user` in organization `org`, if any.
     pub async fn find(&self, org: Uuid, user: Uuid) -> Result<Option<OrgMember>, WorkspaceError> {
         self.core.require_organizations()?;
-        self.core
-            .org_member_in(&self.core.db.reader().await, org, user)
-            .await
+        self.core.org_member_in(&*self.core.db, org, user).await
     }
 
     /// The workspaces `user` reaches as a member of organization `org`
@@ -100,9 +100,9 @@ impl OrgMembers {
         user: Uuid,
     ) -> Result<Option<WorkspaceSelector>, WorkspaceError> {
         self.core.require_organizations()?;
-        let conn = self.core.db.reader().await;
-        match self.core.org_member_in(&conn, org, user).await? {
-            Some(member) => Ok(Some(org_selector(&conn, &member).await?)),
+        let db = &*self.core.db;
+        match self.core.org_member_in(db, org, user).await? {
+            Some(member) => Ok(Some(org_selector(db, &member).await?)),
             None => Ok(None),
         }
     }
@@ -124,22 +124,20 @@ impl OrgMembers {
         if role == OrgRole::Owner {
             return Err(owner_role());
         }
-        let tx = uow.tx().await?;
-        if self.core.org_member_in(&*tx, org, user).await?.is_some() {
+        if self.core.org_member_in(uow, org, user).await?.is_some() {
             return Err(WorkspaceError::AlreadyOrganizationMember);
         }
-        drop(tx);
         let now = self.core.now();
-        let added = Repo::<organization_member::Entity>::insert(
+        let added = store::insert(
             uow,
-            organization_member::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                organization_id: Set(org),
-                user_id: Set(user),
-                role: Set(role.as_str().to_owned()),
-                scope: Set(workspaces.scope_name().to_owned()),
-                created_at: Set(now),
-                updated_at: Set(now),
+            OrgMember {
+                id: Uuid::now_v7(),
+                organization_id: org,
+                user_id: user,
+                role: role.as_str().to_owned(),
+                scope: workspaces.scope_name().to_owned(),
+                created_at: now,
+                updated_at: now,
             },
         )
         .await?;
@@ -171,15 +169,13 @@ impl OrgMembers {
         workspaces: Option<WorkspaceSelector>,
     ) -> Result<OrgMember, WorkspaceError> {
         self.core.require_organizations()?;
-        let tx = uow.tx().await?;
-        let organization = self.core.organization_in(&*tx, org).await?;
+        let organization = self.core.organization_in(uow, org).await?;
         let current = self
             .core
-            .org_member_in(&*tx, org, user)
+            .org_member_in(uow, org, user)
             .await?
             .ok_or(WorkspaceError::MemberNotFound)?;
-        let current_selector = org_selector(&*tx, &current).await?;
-        drop(tx);
+        let current_selector = org_selector(uow, &current).await?;
         let new_role = role.unwrap_or_else(|| current.role());
         let new_selector = workspaces.unwrap_or_else(|| current_selector.clone());
         if user == organization.owner_id {
@@ -225,11 +221,7 @@ impl OrgMembers {
         workspaces: WorkspaceSelector,
     ) -> Result<OrgMember, WorkspaceError> {
         self.core.require_organizations()?;
-        let exists = self
-            .core
-            .org_member_in(&*uow.tx().await?, org, user)
-            .await?
-            .is_some();
+        let exists = self.core.org_member_in(uow, org, user).await?.is_some();
         if exists {
             self.update(uow, org, user, Some(role), Some(workspaces))
                 .await
@@ -243,19 +235,17 @@ impl OrgMembers {
     /// [`WorkspaceError::OrganizationOwnerRequired`] for the owner.
     pub async fn remove(&self, uow: &Uow, org: Uuid, user: Uuid) -> Result<(), WorkspaceError> {
         self.core.require_organizations()?;
-        let tx = uow.tx().await?;
-        let organization = self.core.organization_in(&*tx, org).await?;
+        let organization = self.core.organization_in(uow, org).await?;
         let current = self
             .core
-            .org_member_in(&*tx, org, user)
+            .org_member_in(uow, org, user)
             .await?
             .ok_or(WorkspaceError::MemberNotFound)?;
-        drop(tx);
         if user == organization.owner_id {
             return Err(WorkspaceError::OrganizationOwnerRequired);
         }
         let role = current.role.clone();
-        Repo::<organization_member::Entity>::delete(uow, current).await?;
+        store::delete(uow, current).await?;
         self.core
             .emit_after_commit(
                 uow,
@@ -278,9 +268,8 @@ impl OrgMembers {
         workspaces: &WorkspaceSelector,
     ) -> Result<(), WorkspaceError> {
         self.core.check_org_role(role)?;
-        let tx = uow.tx().await?;
-        self.core.organization_in(&*tx, org).await?;
-        check_workspaces(&*tx, org, workspaces).await
+        self.core.organization_in(uow, org).await?;
+        check_workspaces(uow, org, workspaces).await
     }
 }
 

@@ -6,7 +6,8 @@ use navree::access::{Accessible, Read};
 use navree::contracts::Broadcaster;
 use navree::db::{Page, PageQuery, Uow, paginate};
 use navree::injectable;
-use navree::workspace::WorkspaceRepo;
+// COMPAT (data-layer port): the SeaORM forms of the workspace repositories.
+use navree::workspace::sea_compat::WorkspaceRepo;
 use sea_orm::{ActiveValue::Set, ColumnTrait, DbErr, QueryFilter, QueryOrder};
 use serde_json::json;
 use std::sync::Arc;

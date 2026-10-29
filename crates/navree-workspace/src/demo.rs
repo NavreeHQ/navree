@@ -8,15 +8,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use navree_db::Uow;
+use navree_db::{DbError, Executor, Statement, Uow, Value};
 use navree_kernel::{AppContext, BoxError, BoxFuture};
-use sea_orm::sea_query::{Alias, Expr, ExprTrait, Query};
-use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QueryOrder};
+use navree_orm::Model as _;
 use serde::de::DeserializeOwned;
 use uuid::Uuid;
 
 use crate::core::Core;
-use crate::entity::{Workspace, WorkspaceKind, workspace};
+use crate::entity::{Workspace, WorkspaceKind};
 use crate::events::DemoWorkspaceSeeded;
 use crate::isolation::WorkspaceScoped;
 use crate::{DemoMode, DemoOptions, Isolation, NewWorkspace, WorkspaceError, Workspaces, fixtures};
@@ -77,7 +76,7 @@ pub enum DemoIntent {
 ///             // `fixtures/demo/companies.json` (`workspace.demo.fixtures`).
 ///             let companies: Vec<Company> = demo.fixture("companies")?;
 ///             for company in companies {
-///                 // Insert with WorkspaceRepo::<company::Entity>::insert(demo.uow(), demo.id(), ..).
+///                 // Insert with WorkspaceRepo::<Company>::insert(demo.uow(), demo.id(), ..).
 ///                 let _ = company.name;
 ///             }
 ///             Ok(())
@@ -149,7 +148,7 @@ impl DemoSeed {
     /// the app database's under row and schema isolation (with
     /// `navree.workspace` and, for schemas, the `search_path` set on
     /// PostgreSQL), the workspace's own database under database isolation.
-    /// Write with `WorkspaceRepo` (row isolation) or `Repo`; it is also
+    /// Write with `WorkspaceRepo` (row isolation) or the model API; it is also
     /// the task's current unit of work (`Uow::current()`).
     pub fn uow(&self) -> &Uow {
         &self.uow
@@ -190,34 +189,44 @@ impl DemoSeed {
     /// [`uow`](Self::uow): those with its id in `workspace_id` under row
     /// isolation, every row of the workspace's own table under schema and
     /// database isolation. Returns the number deleted.
-    pub async fn clear_table(&self, table: &str) -> Result<u64, DbErr> {
+    pub async fn clear_table(&self, table: &str) -> Result<u64, DbError> {
         self.delete_rows(table, "workspace_id").await
     }
 
-    /// [`clear_table`](Self::clear_table) for entity `E`, with its
+    /// [`clear_table`](Self::clear_table) for model `M`, with its
     /// [`WORKSPACE_COLUMN`](WorkspaceScoped::WORKSPACE_COLUMN).
-    pub async fn clear<E: WorkspaceScoped>(&self) -> Result<u64, DbErr> {
-        self.delete_rows(E::default().table_name(), E::WORKSPACE_COLUMN)
+    pub async fn clear<M: WorkspaceScoped>(&self) -> Result<u64, DbError> {
+        self.delete_rows(M::meta().table(), M::WORKSPACE_COLUMN)
             .await
     }
 
-    async fn delete_rows(&self, table: &str, column: &str) -> Result<u64, DbErr> {
-        let mut delete = Query::delete();
-        match (&self.isolation, &self.schema) {
-            (Isolation::Schema, Some(schema)) => {
-                delete.from_table((Alias::new(schema.as_str()), Alias::new(table)));
-            }
-            (Isolation::Database, _) => {
-                delete.from_table(Alias::new(table));
-            }
-            _ => {
-                delete
-                    .from_table(Alias::new(table))
-                    .and_where(Expr::col(Alias::new(column)).eq(self.workspace.id));
-            }
-        }
-        let tx = self.uow.tx().await?;
-        Ok(tx.execute(&delete).await?.rows_affected())
+    async fn delete_rows(&self, table: &str, column: &str) -> Result<u64, DbError> {
+        let backend = Executor::backend(&self.uow);
+        let statement = match (&self.isolation, &self.schema) {
+            (Isolation::Schema, Some(schema)) => Statement::portable(
+                format!(
+                    "DELETE FROM {}.{}",
+                    backend.quote_identifier(schema),
+                    backend.quote_identifier(table)
+                ),
+                [],
+            ),
+            (Isolation::Database, _) => Statement::portable(
+                format!("DELETE FROM {}", backend.quote_identifier(table)),
+                [],
+            ),
+            _ => Statement::portable(
+                format!(
+                    "DELETE FROM {} WHERE {} = ?",
+                    backend.quote_identifier(table),
+                    backend.quote_identifier(column)
+                ),
+                [Value::from(self.workspace.id)],
+            ),
+        };
+        Ok(Executor::execute(&self.uow, &statement)
+            .await?
+            .rows_affected)
     }
 }
 
@@ -342,11 +351,12 @@ impl DemoWorkspaces {
 
     /// Every demo workspace, by creation.
     pub async fn all(&self) -> Result<Vec<Workspace>, WorkspaceError> {
-        Ok(workspace::Entity::find()
-            .filter(workspace::Column::Kind.eq(WorkspaceKind::Demo.as_str()))
-            .order_by_asc(workspace::Column::CreatedAt)
-            .all(&self.core.db.reader().await)
-            .await?)
+        Ok(Workspace::query()
+            .where_(Workspace::KIND.eq(WorkspaceKind::Demo.as_str()))
+            .order_by(Workspace::CREATED_AT)
+            .get(&*self.core.db)
+            .await?
+            .into_models())
     }
 
     /// The registered seeders, checked for unique names.

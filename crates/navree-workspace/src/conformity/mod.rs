@@ -1,12 +1,15 @@
 //! The workspace conformity checks `navree check` runs, and the entity
 //! classification they read.
 //!
-//! - `workspace.entities`: every entity the app's source defines is
-//!   classified as a workspace entity (`workspace_scoped`,
-//!   `workspace_entity`) or a global one (`global_entity`).
-//! - `workspace.repo`: workspace entities are reached only through
-//!   `WorkspaceRepo` (a source scan; `// navree:allow(workspace-repo)`
-//!   allows one access).
+//! - `workspace.entities`: every SeaORM entity the app's source defines is
+//!   classified as a workspace entity (`sea_workspace_scoped`,
+//!   `sea_workspace_entity`) or a global one (`sea_global_entity`). Models
+//!   are classified with `workspace_scoped`, `workspace_entity` and
+//!   `global_entity`; a model declared `#[model(workspace)]` scopes its own
+//!   queries.
+//! - `workspace.repo`: SeaORM workspace entities are reached only through
+//!   the compatibility layer's `WorkspaceRepo` (a source scan;
+//!   `// navree:allow(workspace-repo)` allows one access).
 //! - `workspace.tables`: each workspace table has its workspace column, an
 //!   index that starts with it and, on PostgreSQL, row-level security.
 //!
@@ -20,7 +23,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use navree_contracts::{CheckContext, CheckOutcome, ConformityCheck, Finding};
 use navree_db::Db;
-use sea_orm::EntityTrait;
 
 use crate::{Isolation, WorkspaceConfig, WorkspaceScoped};
 
@@ -52,20 +54,23 @@ pub(crate) enum EntityKind {
 }
 
 impl EntityClass {
-    /// `E` as a workspace entity.
-    pub(crate) fn workspace<E: WorkspaceScoped>() -> Self {
+    /// Model `M` as a workspace entity.
+    pub(crate) fn workspace<M: WorkspaceScoped>() -> Self {
+        Self::workspace_table(M::meta().table(), M::WORKSPACE_COLUMN)
+    }
+
+    /// Table `table` as a workspace entity's, by `column`.
+    pub(crate) fn workspace_table(table: &str, column: &'static str) -> Self {
         Self {
-            table: E::default().table_name().to_owned(),
-            kind: EntityKind::Workspace {
-                column: E::WORKSPACE_COLUMN,
-            },
+            table: table.to_owned(),
+            kind: EntityKind::Workspace { column },
         }
     }
 
-    /// `E` as a global entity.
-    pub(crate) fn global<E: EntityTrait>() -> Self {
+    /// Table `table` as a global entity's.
+    pub(crate) fn global(table: &str) -> Self {
         Self {
-            table: E::default().table_name().to_owned(),
+            table: table.to_owned(),
             kind: EntityKind::Global,
         }
     }
@@ -184,7 +189,7 @@ fn classification_finding(entity: &EntityDef, registry: &Registry) -> Option<Fin
                     format!("entity `{}` is classified as {listed} entity", entity.table),
                 )
                 .hint(format!(
-                    "keep one of m.workspace_entity::<{name}>(), m.global_entity::<{name}>() and m.library::<..>() for its table"
+                    "keep one of m.sea_workspace_entity::<{name}>(), m.sea_global_entity::<{name}>() and m.library::<..>() for its table"
                 )),
             )
         }
@@ -197,7 +202,7 @@ fn classification_finding(entity: &EntityDef, registry: &Registry) -> Option<Fin
                 ),
             )
             .hint(format!(
-                "register it in its module: m.workspace_entity::<{name}>() (its rows belong to one workspace) or m.global_entity::<{name}>() (shared by every workspace)"
+                "register it in its module: m.sea_workspace_entity::<{name}>() (its rows belong to one workspace) or m.sea_global_entity::<{name}>() (shared by every workspace), or port it to a navree-orm model"
             )),
         ),
     }
@@ -241,7 +246,7 @@ fn repo_check() -> ConformityCheck {
                         ),
                     )
                     .hint(format!(
-                        "go through WorkspaceRepo::<{name}> (select, find, insert, update, delete), or mark a deliberate cross-workspace access with // {ALLOW_MARKER}"
+                        "go through sea_compat::WorkspaceRepo::<{name}> (select, find, insert, update, delete), or mark a deliberate cross-workspace access with // {ALLOW_MARKER}"
                     ))
                 })
                 .collect();

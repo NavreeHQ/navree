@@ -7,9 +7,14 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, TimeZone, Utc};
-use navree_access::{AbilityCtx, AccessModule, AccessOptions, Rules, Subject};
+use navree_access::{AbilityCtx, AccessModule, AccessOptions, Rules};
 use navree_contracts::{Clock, FixedClock, Principal};
-use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt, Uow};
+use navree_db::navree_schema::{
+    Blueprint, ColumnBuilder, Dialect, Migration, Schema, SchemaMigration, SchemaResult,
+};
+use navree_db::{
+    DatabaseModule, Db, Executor, MigrationSet, ModuleBuilderDbExt, Statement, Uow, Value,
+};
 use navree_events::{EventBus, EventsModule};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_mail::{MailModule, MailOptions, Mailer, Message, TransportConfig};
@@ -21,11 +26,6 @@ use navree_workspace::{
     PartitionSelector, Partitions, Workspace, WorkspaceModule, WorkspaceScoped, WorkspaceSelector,
     Workspaces,
 };
-use sea_orm::sea_query::{ColumnDef, Query, Table};
-use sea_orm::{ConnectionTrait, DbErr};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
-use serde_json::Value;
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
@@ -37,157 +37,108 @@ pub fn start() -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 10, 26, 9, 0, 0).unwrap()
 }
 
-/// `users(id, name, email)`, as navree-auth creates it.
-struct CreateUsers;
+/// Creates table `.0` with the columns `.1` adds (given the database's
+/// dialect); `down` drops it.
+pub struct Create(pub &'static str, pub fn(&mut Blueprint, Dialect));
 
-impl MigrationName for CreateUsers {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_users"
+impl Migration for Create {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let dialect = schema.target().await?.dialect();
+        let columns = self.1;
+        schema.create(self.0, |t| columns(t, dialect)).await
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists(self.0).await
     }
 }
 
-#[async_trait]
-impl MigrationTrait for CreateUsers {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("users")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("name").string().not_null())
-                    .col(ColumnDef::new("email").string().not_null().unique_key())
-                    .to_owned(),
-            )
-            .await
+/// A UUID column: `BINARY(16)` on MySQL (how navree-db writes UUIDs
+/// there), `uuid` elsewhere.
+pub fn uuid<'a>(t: &'a mut Blueprint, name: &str, dialect: Dialect) -> ColumnBuilder<'a> {
+    if dialect == Dialect::MySql {
+        t.binary(name).length(16).fixed()
+    } else {
+        t.uuid(name)
     }
+}
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("users").to_owned())
-            .await
-    }
+/// `users(id, name, email)`, as navree-auth creates it.
+fn users(t: &mut Blueprint, dialect: Dialect) {
+    uuid(t, "id", dialect).primary();
+    t.string("name");
+    t.string("email").unique();
 }
 
 /// `deals(id, workspace_id, title)`: a workspace-owned table.
-struct CreateDeals;
-
-impl MigrationName for CreateDeals {
-    fn name(&self) -> &str {
-        "m20261026_000002_create_deals"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateDeals {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("deals")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("workspace_id").uuid().not_null())
-                    .col(ColumnDef::new("title").string().not_null())
-                    .to_owned(),
-            )
-            .await
-    }
-
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("deals").to_owned())
-            .await
-    }
+fn deals(t: &mut Blueprint, dialect: Dialect) {
+    uuid(t, "id", dialect).primary();
+    uuid(t, "workspace_id", dialect);
+    t.string("title");
 }
 
 /// `contacts(id, workspace_id, partition_id, name)`: a table owned by
 /// workspaces and sliced by partitions.
-struct CreateContacts;
-
-impl MigrationName for CreateContacts {
-    fn name(&self) -> &str {
-        "m20261026_000003_create_contacts"
-    }
+fn contacts(t: &mut Blueprint, dialect: Dialect) {
+    uuid(t, "id", dialect).primary();
+    uuid(t, "workspace_id", dialect);
+    uuid(t, "partition_id", dialect).nullable();
+    t.string("name");
 }
 
-#[async_trait]
-impl MigrationTrait for CreateContacts {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("contacts")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("workspace_id").uuid().not_null())
-                    .col(ColumnDef::new("partition_id").uuid().null())
-                    .col(ColumnDef::new("name").string().not_null())
-                    .to_owned(),
-            )
-            .await
-    }
-
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("contacts").to_owned())
-            .await
-    }
-}
-
-/// The `contacts` entity.
+/// The `contacts` model: the access subject `Contact`.
 pub mod contact {
-    use sea_orm::entity::prelude::*;
     use serde::Serialize;
+    use uuid::Uuid;
 
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "contacts")]
+    #[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, Serialize)]
+    #[model(
+        table = "contacts",
+        subject = "Contact",
+        permission_prefix = "contacts"
+    )]
     pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         pub workspace_id: Uuid,
         pub partition_id: Option<Uuid>,
         pub name: String,
     }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
-impl Subject for contact::Entity {
-    const SUBJECT: &'static str = "Contact";
-    const PERMISSION_PREFIX: &'static str = "contacts";
-}
+/// A contact.
+pub type Contact = contact::Model;
 
-impl WorkspaceScoped for contact::Entity {}
+impl WorkspaceScoped for Contact {}
 
-impl PartitionScoped for contact::Entity {}
+impl PartitionScoped for Contact {}
 
-/// The `deals` entity.
+/// The `deals` model: the access subject `Deal`.
 pub mod deal {
-    use sea_orm::entity::prelude::*;
     use serde::Serialize;
+    use uuid::Uuid;
 
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "deals")]
+    #[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, Serialize)]
+    #[model(table = "deals", subject = "Deal", permission_prefix = "deals")]
     pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         pub workspace_id: Uuid,
         pub title: String,
     }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
-impl Subject for deal::Entity {
-    const SUBJECT: &'static str = "Deal";
-    const PERMISSION_PREFIX: &'static str = "deals";
-}
+/// A deal.
+pub type Deal = deal::Model;
 
-impl WorkspaceScoped for deal::Entity {}
+impl WorkspaceScoped for Deal {}
+
+/// A deal of `workspace` titled `title`, with a new id.
+pub fn new_deal(workspace: Uuid, title: &str) -> Deal {
+    Deal {
+        id: Uuid::now_v7(),
+        workspace_id: workspace,
+        title: title.to_owned(),
+    }
+}
 
 /// The fixtures module: the `users` and `deals` tables, deals as a
 /// workspace-scoped subject.
@@ -195,16 +146,25 @@ pub struct FixturesModule;
 
 impl Module for FixturesModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet::new("auth").migration(CreateUsers))
-            .migrations(
-                MigrationSet::new("deals")
-                    .after(["workspace"])
-                    .migration(CreateDeals)
-                    .migration(CreateContacts),
-            )
-            .import(AccessModule::for_feature::<deal::Entity>())
-            .import(AccessModule::for_feature::<contact::Entity>())
-            .workspace_scoped::<deal::Entity>();
+        m.migrations(MigrationSet::new("auth").migration(SchemaMigration::new(
+            "m20261026_000001_create_users",
+            Create("users", users),
+        )))
+        .migrations(
+            MigrationSet::new("deals")
+                .after(["workspace"])
+                .migration(SchemaMigration::new(
+                    "m20261026_000002_create_deals",
+                    Create("deals", deals),
+                ))
+                .migration(SchemaMigration::new(
+                    "m20261026_000003_create_contacts",
+                    Create("contacts", contacts),
+                )),
+        )
+        .import(AccessModule::for_feature::<Deal>())
+        .import(AccessModule::for_feature::<Contact>())
+        .workspace_scoped::<Deal>();
     }
 }
 
@@ -228,9 +188,8 @@ pub fn access() -> AccessOptions {
 /// A test app: database, events, mail (array transport), views, access and
 /// workspaces with `config` on top, a fixed clock and the fixtures.
 pub fn builder() -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
-        .config("http.per_ip_rate_limit", Value::Null)
+    crate::database::database(TestApp::builder())
+        .config("http.per_ip_rate_limit", serde_json::Value::Null)
         .config(
             "workspace.roles.member.permissions",
             serde_json::json!(["deals.*"]),
@@ -388,13 +347,10 @@ impl World {
         let id = Uuid::now_v7();
         self.db()
             .await
-            .conn()
-            .execute(
-                Query::insert()
-                    .into_table("users")
-                    .columns(["id", "name", "email"])
-                    .values_panic([id.into(), name.into(), email.into()]),
-            )
+            .execute(&Statement::portable(
+                "INSERT INTO users (id, name, email) VALUES (?, ?, ?)",
+                [Value::from(id), Value::from(name), Value::from(email)],
+            ))
             .await
             .unwrap();
         id
@@ -469,12 +425,12 @@ impl World {
 
 /// JSON event receivers.
 pub struct Events {
-    receivers: Vec<(String, broadcast::Receiver<Value>)>,
+    receivers: Vec<(String, broadcast::Receiver<serde_json::Value>)>,
 }
 
 impl Events {
     /// Every event received so far, as (name, payload), drained.
-    pub fn drain(&mut self) -> Vec<(String, Value)> {
+    pub fn drain(&mut self) -> Vec<(String, serde_json::Value)> {
         let mut out = Vec::new();
         for (name, receiver) in &mut self.receivers {
             while let Ok(payload) = receiver.try_recv() {

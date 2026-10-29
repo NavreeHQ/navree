@@ -120,7 +120,7 @@ An architecture is a decision you can revisit, because the unit doesn't change: 
 | A call to an exported service | A message to a service | `self.deals.show(..)` becomes `self.client.send("deals.get", ..)`; the module gets a `#[message_handlers]` struct | The service, its rules, its access checks |
 | An in-process event | An event between services | The emitting module adds `m.forward_event::<DealWon>()`; listeners become `#[event_pattern]` handlers | The event type, its name, the emitting code |
 | A sync listener | A queued listener | Its `queued` method returns `true` | Its code; the emitter |
-| Single-tenant | Multi-tenant | `WorkspaceModule` in the root, a `workspace_id` column on tenant tables, the `InWorkspace` guard on tenant controllers, `WorkspaceRepo` in place of `Repo` | Routes, access rules, the rest of the service code |
+| Single-tenant | Multi-tenant | `WorkspaceModule` in the root, a `workspace_id` column on tenant tables, the `InWorkspace` guard on tenant controllers, `WorkspaceRepo` (or `#[model(workspace)]`) in place of unscoped queries | Routes, access rules, the rest of the service code |
 | Row isolation | Schema or database isolation | `workspace.isolation`, tenant tables registered with `m.workspace_migrations`, and a data migration | Handlers written with `WorkspaceUow` and `WorkspaceRepo` |
 | A web app holding tokens | A BFF | The front end's server and its cookies | The API: it serves bearer tokens to every client |
 | A service | Back into the monolith | Its module is added to the monolith's root; messages become calls again | Its module code |

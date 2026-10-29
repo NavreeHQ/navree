@@ -94,7 +94,7 @@ The [`InWorkspace` guard](/docs/workspaces/resolution/#the-inworkspace-guard) ha
 - `#[roles("admin")]` asks for the workspace role `admin`;
 - `#[permissions("deals.export")]` asks whether the role holds `deals.export`;
 - `#[can(Update, Deal, from = "id")]` loads the deal and checks it against the member's rules;
-- the `Abilities`, `CurrentAccess` and `Accessible<E, A>` extractors return the workspace abilities.
+- the `Abilities`, `CurrentAccess` and `Accessible<M, A>` extractors return the workspace abilities.
 
 navree-access's `GET /api/me/abilities` route has no guard, so it returns the user's global rules. To send the workspace rules to the browser, add a route behind the guard:
 
@@ -118,17 +118,18 @@ impl DealsController {
         uow: Uow,
         deal: Authorized<Deal, Update>,
         Json(input): Json<DealChanges>,
-    ) -> Result<Json<deal::Model>> {
-        let mut row = deal.into_inner().into_active_model();
+    ) -> Result<Json<Deal>> {
+        let mut record = deal.into_inner(); // the Record<Deal>
         if let Some(title) = input.title {
-            row.title = Set(title);
+            record.title = title;
         }
-        Ok(Json(WorkspaceRepo::<Deal>::update(&uow, ws.id(), row).await?))
+        WorkspaceRepo::<Deal>::update(&uow, ws.id(), &mut record).await?;
+        Ok(Json(record.into_inner()))
     }
 }
 ```
 
-A `can(.., from = "id")` check on an entity registered with `m.workspace_scoped::<Deal>()` first confirms that the record belongs to the current workspace, so a deal of another workspace is a 404 even for an owner (see [data isolation](/docs/workspaces/isolation/#records-checked-by-route)).
+A `can(.., from = "id")` check on a model registered with `m.workspace_scoped::<Deal>()` first confirms that the record belongs to the current workspace, so a deal of another workspace is a 404 even for an owner (see [data isolation](/docs/workspaces/isolation/#records-checked-by-route)).
 
 ### Checks in the handler
 

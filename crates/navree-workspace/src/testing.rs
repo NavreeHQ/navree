@@ -10,24 +10,20 @@
 //! async fn deals_stay_in_their_workspace() {
 //!     let app = app().await;
 //!     app.isolation_suite::<DealsModule>()
-//!         .factory(DealFactory::default()) // binds {id}; uses workspaces
+//!         .factory(Deal::factory()) // binds {id}; uses workspaces
 //!         .body("POST", "/api/v1/deals", json!({ "title": "Renewal" }))
 //!         .run()
 //!         .await;
 //! }
 //! ```
 
-use std::str::FromStr;
 use std::sync::Arc;
 
-use navree_db::{Db, Factory, Repo};
+use navree_db::Db;
 use navree_kernel::{BoxError, BoxFuture};
+use navree_orm::factory::{Factory, ModelFactory};
+use navree_orm::{Model, PrimaryKey, Value};
 use navree_testing::{IsolationSuite, RecordContext, Tenancy, Tenant, TestApp};
-use sea_orm::{
-    ActiveModelTrait, EntityName, EntityTrait, IntoActiveModel, Iterable, ModelTrait,
-    PrimaryKeyToColumn, Value,
-};
-use serde::Serialize;
 use uuid::Uuid;
 
 use crate::{
@@ -53,7 +49,7 @@ impl WorkspaceTenancy {
         }
     }
 
-    /// Uses `field` as the body field that names a workspace (an entity
+    /// Uses `field` as the body field that names a workspace (a model
     /// whose `WorkspaceScoped::WORKSPACE_COLUMN` is not `workspace_id`).
     pub fn owner_field(mut self, field: &str) -> Self {
         self.owner_field = field.to_owned();
@@ -117,46 +113,37 @@ impl Tenancy for WorkspaceTenancy {
 /// Workspace bindings for [`IsolationSuite`]: import the trait, then call
 /// `.factory(..)` on `app.isolation_suite::<M>()`.
 pub trait IsolationSuiteExt: Sized {
-    /// Binds `{id}` to records made by `factory` (a `navree_db::Factory`
-    /// whose entity is [`WorkspaceScoped`]), inserted into the suite's
+    /// Binds `{id}` to records made by `factory` (a navree-orm factory
+    /// whose model is [`WorkspaceScoped`]), inserted into the suite's
     /// workspaces, and uses [`WorkspaceTenancy`] unless another tenancy is
     /// set. Under row isolation the record goes through
     /// [`WorkspaceRepo::insert`]; under schema and database isolation it is
-    /// inserted in the workspace's own schema or database, with the
-    /// workspace column set when the entity has one.
-    fn factory<F>(self, factory: F) -> Self
+    /// created in the workspace's own schema or database, with the
+    /// workspace column set when the model has one.
+    fn factory<F>(self, factory: Factory<F>) -> Self
     where
-        F: Factory + 'static,
-        F::Entity: WorkspaceScoped,
-        <F::Entity as EntityTrait>::Model:
-            Serialize + IntoActiveModel<<F::Entity as EntityTrait>::ActiveModel> + Sync,
-        <F::Entity as EntityTrait>::ActiveModel: Send + Sync,
+        F: ModelFactory,
+        F::Model: WorkspaceScoped,
     {
         self.factory_for("id", factory)
     }
 
     /// Like [`factory`](Self::factory), for path parameter `param`
     /// (`deal` in `/deals/{deal}/notes/{note}`).
-    fn factory_for<F>(self, param: &str, factory: F) -> Self
+    fn factory_for<F>(self, param: &str, factory: Factory<F>) -> Self
     where
-        F: Factory + 'static,
-        F::Entity: WorkspaceScoped,
-        <F::Entity as EntityTrait>::Model:
-            Serialize + IntoActiveModel<<F::Entity as EntityTrait>::ActiveModel> + Sync,
-        <F::Entity as EntityTrait>::ActiveModel: Send + Sync;
+        F: ModelFactory,
+        F::Model: WorkspaceScoped;
 
     /// Uses [`WorkspaceTenancy`].
     fn workspaces(self) -> Self;
 }
 
 impl IsolationSuiteExt for IsolationSuite<'_> {
-    fn factory_for<F>(self, param: &str, factory: F) -> Self
+    fn factory_for<F>(self, param: &str, factory: Factory<F>) -> Self
     where
-        F: Factory + 'static,
-        F::Entity: WorkspaceScoped,
-        <F::Entity as EntityTrait>::Model:
-            Serialize + IntoActiveModel<<F::Entity as EntityTrait>::ActiveModel> + Sync,
-        <F::Entity as EntityTrait>::ActiveModel: Send + Sync,
+        F: ModelFactory,
+        F::Model: WorkspaceScoped,
     {
         let factory = Arc::new(factory);
         let suite = if self.has_tenancy() {
@@ -172,20 +159,17 @@ impl IsolationSuiteExt for IsolationSuite<'_> {
     }
 }
 
-/// Inserts `factory`'s next record into the workspace of `cx`; returns its
-/// primary key as text.
-async fn insert<F>(factory: Arc<F>, cx: RecordContext) -> Result<String, BoxError>
+/// Creates `factory`'s next record in the workspace of `cx`; returns its
+/// key as text.
+async fn insert<F>(factory: Arc<Factory<F>>, cx: RecordContext) -> Result<String, BoxError>
 where
-    F: Factory,
-    F::Entity: WorkspaceScoped,
-    <F::Entity as EntityTrait>::Model:
-        Serialize + IntoActiveModel<<F::Entity as EntityTrait>::ActiveModel> + Sync,
-    <F::Entity as EntityTrait>::ActiveModel: Send + Sync,
+    F: ModelFactory,
+    F::Model: WorkspaceScoped,
 {
     let workspace = Uuid::parse_str(&cx.tenant().id)?;
     let app = cx.app();
     let config = app.get::<WorkspaceConfig>().await?;
-    let model = factory.definition(cx.n());
+    let model = (*factory).clone().make_one()?.into_inner();
     let uow = match config.isolation {
         Isolation::Database => {
             let db = app.get::<WorkspaceDatabases>().await?.db(workspace).await?;
@@ -201,61 +185,35 @@ where
                 .enter(&uow, workspace)
                 .await?;
         }
-        let model = match config.isolation {
-            Isolation::Row => WorkspaceRepo::<F::Entity>::insert(&uow, workspace, model).await?,
+        let record = match config.isolation {
+            Isolation::Row => WorkspaceRepo::<F::Model>::insert(&uow, workspace, model).await?,
             _ => {
                 // A table in the workspace's own schema or database may still
                 // keep the workspace column (a policy, a foreign key).
                 let mut model = model;
-                let column = <F::Entity as EntityTrait>::Column::from_str(
-                    <F::Entity as WorkspaceScoped>::WORKSPACE_COLUMN,
-                )
-                .ok();
-                if let Some(column) = column {
-                    model.set(column, workspace.into());
+                if F::Model::meta()
+                    .column(<F::Model as WorkspaceScoped>::WORKSPACE_COLUMN)
+                    .is_some()
+                {
+                    model.set_value(
+                        <F::Model as WorkspaceScoped>::WORKSPACE_COLUMN,
+                        Value::from(workspace),
+                    )?;
                 }
-                Repo::<F::Entity>::insert(&uow, model).await?
+                navree_orm::workspace::scope(workspace, F::Model::create(&uow, model)).await?
             }
         };
-        Ok::<_, BoxError>(model)
+        Ok::<_, BoxError>(record)
     }
     .await;
     match inserted {
-        Ok(model) => {
+        Ok(record) => {
             uow.commit().await?;
-            primary_key(&model).ok_or_else(|| {
-                format!(
-                    "the primary key of `{}` is not a single text, UUID or integer column",
-                    F::Entity::default().table_name()
-                )
-                .into()
-            })
+            Ok(record.key().to_key_string())
         }
         Err(error) => {
             uow.rollback().await?;
             Err(error)
         }
-    }
-}
-
-/// A model's single-column primary key as the path shows it.
-fn primary_key<M: ModelTrait>(model: &M) -> Option<String> {
-    let mut keys = <<M::Entity as EntityTrait>::PrimaryKey as Iterable>::iter();
-    let key = keys.next()?;
-    if keys.next().is_some() {
-        return None;
-    }
-    match model.get(key.into_column()) {
-        Value::Uuid(Some(id)) => Some(id.to_string()),
-        Value::String(Some(text)) => Some(text),
-        Value::TinyInt(Some(n)) => Some(n.to_string()),
-        Value::SmallInt(Some(n)) => Some(n.to_string()),
-        Value::Int(Some(n)) => Some(n.to_string()),
-        Value::BigInt(Some(n)) => Some(n.to_string()),
-        Value::TinyUnsigned(Some(n)) => Some(n.to_string()),
-        Value::SmallUnsigned(Some(n)) => Some(n.to_string()),
-        Value::Unsigned(Some(n)) => Some(n.to_string()),
-        Value::BigUnsigned(Some(n)) => Some(n.to_string()),
-        _ => None,
     }
 }

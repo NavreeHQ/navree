@@ -51,20 +51,18 @@ The migration set `workspace` runs after `auth` and creates three tables, plus t
 | `workspace_members` | `id`, `workspace_id` (cascades on delete), `user_id`, `role`, `partition_scope`, `created_at`, `updated_at`; one row per workspace and user |
 | `workspace_invitations` | `id`, `workspace_id` (cascades on delete), `email`, `role`, `token_hash` (unique), `invited_by`, `expires_at`, `accepted_at`, `accepted_by`, `created_at` |
 
-User ids are not foreign keys. Invitation tokens are stored as SHA-256 digests. Tables of your own that reference `workspaces` run after the set: `MigrationSet::new("deals").after(["workspace"])`.
+The tables are navree-orm models, exported as `Workspace`, `Member`, `Invitation`, `Organization`, `OrgMember`, `AccessRequest` and `Partition`; read them as you read your own, with `Workspace::query()` or `Member::query().where_(Member::WORKSPACE_ID.eq(id))`. Seven of them are [access](/docs/security/authorization/) subjects that the module registers itself, so there is nothing to add to use their permissions. User ids are not foreign keys. Invitation tokens are stored as SHA-256 digests. Tables of your own that reference `workspaces` run after the set: `MigrationSet::new("deals").after(["workspace"])`.
 
 ## A first workspace route
 
 Here is a deals module whose routes work inside the current workspace. The `InWorkspace` guard finds the workspace, checks that the signed-in user belongs to it and evaluates the route's permissions against their role there:
 
 ```rust title="src/deals/controller.rs"
-use navree::db::paginate;
 use navree::prelude::*;
-use sea_orm::ActiveValue::Set;
 use serde::Deserialize;
 use uuid::Uuid;
 
-use super::entity::{Deal, deal};
+use super::model::Deal;
 
 #[derive(Deserialize)]
 pub struct NewDeal {
@@ -80,9 +78,8 @@ pub struct DealsController;
 impl DealsController {
     #[get("/")]
     #[permissions("deals.read")]
-    async fn index(&self, ws: CurrentWorkspace, uow: Uow, page: PageQuery) -> Result<Page<deal::Model>> {
-        let select = WorkspaceRepo::<Deal>::select(ws.id());
-        Ok(paginate(select, &*uow.tx().await?, page).await?)
+    async fn index(&self, ws: CurrentWorkspace, uow: Uow, page: PageQuery) -> Result<Page<Record<Deal>>> {
+        Ok(WorkspaceRepo::<Deal>::query(ws.id()).paginate(&uow, page).await?)
     }
 
     #[post("/")]
@@ -92,39 +89,42 @@ impl DealsController {
         ws: CurrentWorkspace,
         uow: Uow,
         Json(input): Json<NewDeal>,
-    ) -> Result<Created<deal::Model>> {
-        let deal = WorkspaceRepo::<Deal>::insert(
-            &uow,
-            ws.id(),
-            deal::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                owner_id: Set(ws.member().user_id),
-                title: Set(input.title),
-                amount_cents: Set(input.amount_cents),
-                ..Default::default()
-            },
-        )
-        .await?;
-        Ok(Created(format!("/api/v1/deals/{}", deal.id), deal))
+    ) -> Result<Created<Deal>> {
+        let deal = Deal {
+            id: Uuid::now_v7(),
+            workspace_id: ws.id(),
+            owner_id: ws.member().user_id,
+            title: input.title,
+            amount_cents: input.amount_cents,
+        };
+        let deal = WorkspaceRepo::<Deal>::insert(&uow, ws.id(), deal).await?;
+        Ok(Created(format!("/api/v1/deals/{}", deal.id), deal.into_inner()))
     }
 }
 ```
 
-The `deals` table has a `workspace_id` column, and the entity says so in one line:
+The `deals` table has a `workspace_id` column. The model is the access subject `Deal` and says in one line that its rows belong to a workspace:
 
-```rust title="src/deals/entity.rs"
-impl Subject for deal::Entity {
-    const SUBJECT: &'static str = "Deal";
-    const PERMISSION_PREFIX: &'static str = "deals";
+```rust title="src/deals/model.rs"
+use navree::prelude::*;
+use serde::Serialize;
+use uuid::Uuid;
+
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deals", subject = "Deal", permission_prefix = "deals")]
+pub struct Deal {
+    pub id: Uuid,
+    pub workspace_id: Uuid,
+    pub owner_id: Uuid,
+    pub title: String,
+    pub amount_cents: i64,
 }
 
 /// Rows carry a `workspace_id` column.
-impl WorkspaceScoped for deal::Entity {}
-
-pub type Deal = deal::Entity;
+impl WorkspaceScoped for Deal {}
 ```
 
-`WorkspaceRepo` scopes every read to the workspace and sets the column on insert. Give members the permission in configuration:
+`WorkspaceRepo` scopes every read to the workspace and sets the column on insert; writes go through the model API, so the model's hooks run and the change reaches the audit trail. A model declared `#[model(workspace)]` already scopes its own queries to the current workspace (see [workspaces and access](/docs/orm/workspaces-and-access/)); `WorkspaceScoped` adds `WorkspaceRepo` for naming a workspace explicitly, and both use the same column. Give members the permission in configuration:
 
 ```toml title="config/app.toml"
 [workspace.roles.member]
@@ -197,7 +197,7 @@ The `workspace.demo` keys are described with [demo workspaces](/docs/workspaces/
 
 ## The services
 
-`WorkspaceModule` exports three services, four more for [organizations](/docs/workspaces/organizations/) (`Organizations`, `OrgMembers`, `AccessRequests`) and [partitions](/docs/workspaces/partitions/) (`Partitions`), and `DemoWorkspaces` for [demo workspaces](/docs/workspaces/demo-workspaces/). Writes take the unit of work to run in (the request's `Uow`, or one from `Db::uow` in jobs and commands), go through `Repo` so the [audit trail](/docs/security/audit-log/) records them, and emit their events once the unit of work commits.
+`WorkspaceModule` exports three services, four more for [organizations](/docs/workspaces/organizations/) (`Organizations`, `OrgMembers`, `AccessRequests`) and [partitions](/docs/workspaces/partitions/) (`Partitions`), and `DemoWorkspaces` for [demo workspaces](/docs/workspaces/demo-workspaces/). Writes take the unit of work to run in (the request's `Uow`, or one from `Db::uow` in jobs and commands), go through the model API so the [audit trail](/docs/security/audit-log/) records them, and emit their events once the unit of work commits.
 
 | Service | Methods |
 |---|---|

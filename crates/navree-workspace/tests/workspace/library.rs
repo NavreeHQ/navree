@@ -7,6 +7,7 @@ use std::sync::Arc;
 use axum::extract::Path;
 use chrono::{DateTime, Utc};
 use http::Method;
+use navree_db::Executor as _;
 use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{Db, MigrationSet, ModuleBuilderDbExt, Uow};
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
@@ -20,7 +21,6 @@ use navree_workspace::{
     CurrentWorkspace, InWorkspace, ModuleBuilderWorkspaceExt, Organization, Workspace,
     WorkspaceError,
 };
-use sea_orm::ConnectionTrait;
 use serde::Serialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -493,12 +493,21 @@ async fn the_check_constraint_refuses_contradicting_owners() {
     let lib = fixture().await;
     let db = lib.world.db().await;
     let (org, ws) = (lib.group.id.to_string(), lib.acme.id.to_string());
+    // UUIDs are 16 bytes on MySQL.
+    let mysql = db.backend() == navree_db::Backend::MySql;
+    let uuid = |id: &str| {
+        if mysql {
+            format!("UUID_TO_BIN('{id}')")
+        } else {
+            format!("'{id}'")
+        }
+    };
     let insert = |scope: &str, organization: Option<&str>, workspace: Option<&str>| {
-        let quote = |id: Option<&str>| id.map_or("NULL".to_owned(), |id| format!("'{id}'"));
+        let quote = |id: Option<&str>| id.map_or("NULL".to_owned(), uuid);
         format!(
             "INSERT INTO templates (id, scope, organization_id, workspace_id, slug, name, created_at, updated_at) \
-             VALUES ('{}', '{scope}', {}, {}, 'raw', 'Raw', '2026-10-28 00:00:00', '2026-10-28 00:00:00')",
-            Uuid::now_v7(),
+             VALUES ({}, '{scope}', {}, {}, 'raw', 'Raw', '2026-10-28 00:00:00', '2026-10-28 00:00:00')",
+            uuid(&Uuid::now_v7().to_string()),
             quote(organization),
             quote(workspace)
         )
@@ -513,14 +522,11 @@ async fn the_check_constraint_refuses_contradicting_owners() {
         ("shared", None, None),
     ] {
         let refused = db
-            .conn()
-            .execute_unprepared(&insert(scope, organization, workspace))
+            .execute_script(&insert(scope, organization, workspace))
             .await;
-        assert!(
-            refused
-                .unwrap_err()
-                .to_string()
-                .contains("CHECK constraint failed"),
+        assert_eq!(
+            refused.unwrap_err().kind(),
+            navree_db::ErrorKind::CheckViolation,
             "{scope} {organization:?} {workspace:?}"
         );
     }
@@ -529,8 +535,7 @@ async fn the_check_constraint_refuses_contradicting_owners() {
         ("organization", Some(org.as_str()), None),
         ("workspace", None, Some(ws.as_str())),
     ] {
-        db.conn()
-            .execute_unprepared(&insert(scope, organization, workspace))
+        db.execute_script(&insert(scope, organization, workspace))
             .await
             .unwrap();
     }

@@ -1,6 +1,6 @@
 ---
 title: "Conformity checks"
-description: "`navree check` verifies what the compiler can't: every route documented, every entity classified, workspace data reached only through `WorkspaceRepo`, translations and migrations. `navree gate` runs it with fmt, clippy, the tests and the front end in one command."
+description: "`navree check` verifies what the compiler can't: every route documented, every workspace table classified, workspace data reached only through `WorkspaceRepo`, translations and migrations. `navree gate` runs it with fmt, clippy, the tests and the front end in one command."
 ---
 
 The compiler checks types and the container checks the module graph, but some rules of a well-built app live between modules: every route documented in the API, every table either owned by a workspace or shared, no query on workspace data without the workspace filter. `navree check` verifies those rules in one command, and `navree gate` runs it together with formatting, lints, tests and the front end's checks before you push.
@@ -24,10 +24,10 @@ Conformity checks
   ok    api.docs            Every route is documented with #[api] (38 checked)
   FAIL  workspace.entities  Every entity is classified as a workspace or a global entity (5 checked)
           error  src/modules/deals/note.rs:6: entity `deal_notes` is not classified as a workspace or a global entity
-                 hint: register it in its module: m.workspace_entity::<note::Entity>() (its rows belong to one workspace) or m.global_entity::<note::Entity>() (shared by every workspace)
+                 hint: register it in its module: m.sea_workspace_entity::<note::Entity>() (its rows belong to one workspace) or m.sea_global_entity::<note::Entity>() (shared by every workspace), or port it to a navree-orm model
   FAIL  workspace.repo      Workspace entities are reached only through WorkspaceRepo (41 checked)
           error  src/modules/deals/service.rs:58: reaches workspace entity `deals` directly with `entity::Entity::find_by_id`
-                 hint: go through WorkspaceRepo::<entity::Entity> (select, find, insert, update, delete), or mark a deliberate cross-workspace access with // navree:allow(workspace-repo)
+                 hint: go through sea_compat::WorkspaceRepo::<entity::Entity> (select, find, insert, update, delete), or mark a deliberate cross-workspace access with // navree:allow(workspace-repo)
   warn  workspace.tables    Workspace tables have an indexed workspace column (3 checked)
           warning  deals: no index starts with `workspace_id`
                    hint: every workspace query filters by workspace_id: create an index on (workspace_id) or one that starts with it
@@ -76,8 +76,8 @@ You can run the app command directly too, which is what a deployment pipeline do
 | Check | Contributed by | Verifies |
 |---|---|---|
 | `api.docs` | `ApiModule` | Every route has `#[api]` documentation |
-| `workspace.entities` | `WorkspaceModule` | Every entity in your source is classified as a workspace or a global entity |
-| `workspace.repo` | `WorkspaceModule` | Code reaches workspace entities only through `WorkspaceRepo` |
+| `workspace.entities` | `WorkspaceModule` | Every SeaORM entity in your source is classified as a workspace or a global entity (models are classified in their module) |
+| `workspace.repo` | `WorkspaceModule` | Code reaches SeaORM workspace entities only through the compatibility `WorkspaceRepo` |
 | `workspace.tables` | `WorkspaceModule` | Each workspace table has its workspace column, an index that starts with it and, on PostgreSQL, row-level security |
 | `i18n.translations` | Built in | Runs the app's `i18n:check` command when a module registers it |
 | `db.migrations` | Built in | Runs the app's `migrate:lint` command when a module registers it |
@@ -121,43 +121,49 @@ Apps made with `navree new` list the Lighthouse and Logbook dashboards there (`u
 
 ### Entities classified
 
-Under row isolation, every table either belongs to one workspace or is shared by all of them, and the difference decides how code may read it. `workspace.entities` reads your source for SeaORM entities (`#[sea_orm(table_name = "..")]`) and requires each one to be classified in its module:
+Under row isolation, every table either belongs to one workspace or is shared by all of them, and the difference decides how code may read it. Classify each model in its module:
 
 ```rust title="src/modules/deals/mod.rs"
 impl DealsModule {
     fn wire(&self, m: &mut ModuleBuilder) {
-        m.workspace_scoped::<Deal>()        // a workspace entity that routes check by id
-            .workspace_entity::<DealNote>()  // a workspace entity
+        m.workspace_scoped::<Deal>()        // a workspace model that routes check by id
+            .workspace_entity::<DealNote>()  // a workspace model
             .global_entity::<Currency>();    // one set of rows for every workspace
     }
 }
 ```
 
-- `workspace_scoped::<E>()` registers an access subject for the [record checks](/docs/workspaces/isolation/#records-checked-by-route) and classifies it.
-- `workspace_entity::<E>()` classifies an entity that isn't an access subject. Its entity implements `WorkspaceScoped`.
-- `global_entity::<E>()` marks a table shared by every workspace: currencies, plans, the app's own settings.
+- `workspace_scoped::<M>()` registers an access subject for the [record checks](/docs/workspaces/isolation/#records-checked-by-route) and classifies it.
+- `workspace_entity::<M>()` classifies a model that isn't an access subject. The model implements `WorkspaceScoped`.
+- `global_entity::<M>()` marks a table shared by every workspace: currencies, plans, the app's own settings.
 
-Entities defined by navree crates (users, workspaces, jobs) aren't in your source and aren't checked. An entity classified both ways is an error too.
+A model declared `#[model(workspace)]` scopes its own queries to the current workspace, so nothing can reach its rows without the filter. Its table is still classified with `workspace_entity` or `workspace_scoped`, which is what [`workspace.tables`](#workspace-tables) reads.
+
+`workspace.entities` reads your source for SeaORM entities (`#[sea_orm(table_name = "..")]`), the ones an app keeps while its tables move to models, and requires each one to be classified too. The registrations for those are `m.sea_workspace_scoped::<E>()`, `m.sea_workspace_entity::<E>()` and `m.sea_global_entity::<E>()` (from `ModuleBuilderSeaWorkspaceExt` in `navree::workspace::sea_compat`), and the finding's hint names them. The compatibility layer goes away once the last SeaORM entity is ported.
+
+Tables defined by navree crates (users, workspaces, jobs) aren't in your source and aren't checked. A table classified both ways is an error too.
 
 ### Workspace data through WorkspaceRepo
 
-`workspace.repo` finds the places where your code reaches a workspace entity directly, where the workspace filter is easy to forget:
+`workspace.repo` applies to the SeaORM entities that `workspace.entities` reads. It finds the places where your code reaches such a workspace entity directly, where the workspace filter is easy to forget:
 
 - `Entity::find`, `find_by_id`, `insert`, `insert_many`, `update`, `update_many`, `delete`, `delete_many` and `delete_by_id` on a workspace entity;
 - `Repo::<Entity>`, navree-db's repository, which doesn't know about workspaces.
 
-`WorkspaceRepo::<Entity>` and `CurrentWorkspace::scope(..)` are the scoped ways in. A deliberate cross-workspace access, such as an admin report or a maintenance command, takes a marker comment on its line or the line above:
+`sea_compat::WorkspaceRepo::<Entity>` and `CurrentWorkspace::scope(..)` are the scoped ways in. A deliberate cross-workspace access, such as an admin report or a maintenance command, takes a marker comment on its line or the line above:
 
 ```rust
 // Every workspace's open deals, for the platform dashboard. navree:allow(workspace-repo)
 let open = deal::Entity::find().filter(deal::Column::Stage.ne("won")).all(conn).await?;
 ```
 
+For a model there is nothing to scan: `WorkspaceRepo::<Model>` and a `#[model(workspace)]` model's own scope are how its rows are reached, and the [isolation tests](/docs/testing/isolation-tests/) catch a route that leaves the filter out.
+
 The scan reads your code as text, not as a compiled program. It follows `use` declarations (trees, `self`, `super`, `crate`, `as` renames and globs) and `type` aliases, so `use super::entity::{self, Entity as Deal}` and then `Deal::find()` is found, while another module's `entity::Entity` is not confused with this one. It skips `tests/`, `benches/`, `examples/` and `#[cfg(test)]` modules. It can't see through a generic function that takes the entity as a type parameter, or a macro that writes the query; the [isolation tests](/docs/testing/isolation-tests/) catch what reaches the routes either way.
 
 ### Workspace tables
 
-`workspace.tables` reads the migrated database. For each workspace entity's table:
+`workspace.tables` reads the migrated database. For each classified workspace table:
 
 - the workspace column (`WorkspaceScoped::WORKSPACE_COLUMN`, `workspace_id` by default) must exist, or it is an error;
 - an index should start with that column, since every workspace query filters by it (a warning);

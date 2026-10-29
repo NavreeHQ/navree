@@ -157,7 +157,7 @@ let hits = search
 
 ## Workspaces
 
-An entity that implements `WorkspaceScoped` is scoped automatically (the
+A SeaORM entity that implements `WorkspaceScoped` (`navree::workspace::sea_compat`) is scoped automatically (the
 derive finds the column; by hand use `.workspace("workspace_id")`). Every
 query on it must name the workspace or it fails with
 `SearchError::WorkspaceRequired`:

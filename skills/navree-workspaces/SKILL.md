@@ -36,29 +36,41 @@ Navree::app()
 
 2. Give the table a `workspace_id uuid not null` column (index it), run the
    migration after the `workspace` set, and add the RLS policy on
-   PostgreSQL:
+   PostgreSQL. Migrations are navree-schema migrations (`navree::schema`):
 
 ```rust
-m.migrations(MigrationSet::new("deals").after(["workspace"]).migration(CreateDeals));
+m.migrations(MigrationSet::new("deals").after(["workspace"]).migration(
+    SchemaMigration::new("m20261026_000001_create_deals", CreateDeals),
+));
 
-// inside CreateDeals::up, after create_table:
-if manager.get_database_backend() == DbBackend::Postgres {
-    manager
-        .get_connection()
-        .execute_unprepared(&RlsPolicy::new("deals").create_sql()) // needs `ConnectionTrait` in scope
+// CreateDeals: `impl navree::schema::Migration`
+async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+    schema
+        .create("deals", |t| {
+            t.uuid("id").primary();
+            t.uuid("workspace_id").index();
+            t.string("title");
+        })
         .await?;
+    if schema.target().await?.dialect() == Dialect::Postgres {
+        schema.statement(&RlsPolicy::new("deals").create_sql()).await?;
+    }
+    Ok(())
 }
 ```
 
-3. Mark the entity and register it as workspace-scoped:
+3. Make the table a navree-orm model (the access subject comes from the
+   attribute), mark it `WorkspaceScoped` and register it as workspace-scoped:
 
 ```rust
-impl Subject for deal::Entity {
-    const SUBJECT: &'static str = "Deal";
-    const PERMISSION_PREFIX: &'static str = "deals";
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deals", subject = "Deal", permission_prefix = "deals")]
+pub struct Deal {
+    pub id: Uuid,
+    pub workspace_id: Uuid,
+    pub title: String,
 }
-impl WorkspaceScoped for deal::Entity {} // column `workspace_id` (override WORKSPACE_COLUMN)
-pub type Deal = deal::Entity;
+impl WorkspaceScoped for Deal {} // column `workspace_id` (override WORKSPACE_COLUMN)
 
 #[module(
     imports = [AccessModule::for_feature::<Deal>()],
@@ -69,16 +81,19 @@ pub struct DealsModule;
 
 impl DealsModule {
     fn wire(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet::new("deals").after(["workspace"]).migration(CreateDeals))
+        m.migrations(/* the set above */)
             .workspace_scoped::<Deal>(); // `can(.., from = "id")` 404s other workspaces' records
     }
 }
 ```
 
+   A model declared `#[model(workspace)]` already scopes its own queries to
+   the current workspace; `WorkspaceScoped` + `WorkspaceRepo` is for naming a
+   workspace explicitly. Give both the same column.
+
 4. Guard the controller and go through `WorkspaceRepo`:
 
 ```rust
-use navree::db::paginate;
 use navree::prelude::*;
 
 #[injectable]
@@ -89,27 +104,25 @@ pub struct DealsController;
 impl DealsController {
     #[get("/")]
     #[permissions("deals.read")]
-    async fn index(&self, ws: CurrentWorkspace, uow: Uow, page: PageQuery) -> Result<Page<deal::Model>> {
-        Ok(paginate(WorkspaceRepo::<Deal>::select(ws.id()), &*uow.tx().await?, page).await?)
+    async fn index(&self, ws: CurrentWorkspace, uow: Uow, page: PageQuery) -> Result<Page<Record<Deal>>> {
+        Ok(WorkspaceRepo::<Deal>::query(ws.id()).paginate(&uow, page).await?)
     }
 
     #[post("/")]
     #[permissions("deals.create")]
-    async fn store(&self, ws: CurrentWorkspace, uow: Uow, Json(input): Json<NewDeal>) -> Result<Created<deal::Model>> {
-        let deal = WorkspaceRepo::<Deal>::insert(&uow, ws.id(), deal::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            title: Set(input.title),
-            ..Default::default() // workspace_id is set by the repo
-        }).await?;
-        Ok(Created(format!("/api/v1/deals/{}", deal.id), deal))
+    async fn store(&self, ws: CurrentWorkspace, uow: Uow, Json(input): Json<NewDeal>) -> Result<Created<Deal>> {
+        let deal = Deal { id: Uuid::now_v7(), title: input.title, ..Deal::default() }; // workspace_id is set by the repo
+        let deal = WorkspaceRepo::<Deal>::insert(&uow, ws.id(), deal).await?;
+        Ok(Created(format!("/api/v1/deals/{}", deal.id), deal.into_inner()))
     }
 
     #[patch("/{id}")]
     #[can(Update, Deal, from = "id")]
-    async fn update(&self, ws: CurrentWorkspace, uow: Uow, deal: Authorized<Deal, Update>, Json(input): Json<DealChanges>) -> Result<Json<deal::Model>> {
-        let mut row = deal.into_inner().into_active_model();
-        row.title = Set(input.title);
-        Ok(Json(WorkspaceRepo::<Deal>::update(&uow, ws.id(), row).await?))
+    async fn update(&self, ws: CurrentWorkspace, uow: Uow, deal: Authorized<Deal, Update>, Json(input): Json<DealChanges>) -> Result<Json<Deal>> {
+        let mut record = deal.into_inner(); // Record<Deal>
+        record.title = input.title;
+        WorkspaceRepo::<Deal>::update(&uow, ws.id(), &mut record).await?;
+        Ok(Json(record.into_inner()))
     }
 }
 ```
@@ -148,7 +161,7 @@ of this workspace.`
 `CurrentWorkspace` (extractor, derefs to the `Workspace` row): `id()`,
 `workspace()`, `member()`, `role()`, `permissions()`, `ability()`,
 `access()`, `can(action, subject)`, `has_permission("deals.export")`,
-`authorize("deals.export")?` (403), `scope(select)`, `isolation()`,
+`authorize("deals.export")?` (403), `scope(query)` (a `Builder<M>`), `isolation()`,
 `resolver()`.
 
 ## Roles and permissions
@@ -166,8 +179,11 @@ of this workspace.`
   [workspace role]`, `ctx.permissions == role permissions`, `ctx.team_id ==
   Some(workspace id)`. Global roles/permissions are NOT included; a global
   super-admin keeps `manage all`; token abilities still narrow.
-- Module subjects: `Workspace` (`workspace.*`), `WorkspaceMember`
-  (`workspace.members.*`), `WorkspaceInvitation` (`workspace.invitations.*`).
+- Module subjects (navree-orm models, registered by the module itself):
+  `Workspace` (`workspace.*`), `WorkspaceMember` (`workspace.members.*`),
+  `WorkspaceInvitation` (`workspace.invitations.*`), plus `Organization`,
+  `OrganizationMember`, `AccessRequest` and `WorkspacePartition`. Read the
+  tables with `Workspace::query()`, `Member::query().where_(Member::WORKSPACE_ID.eq(id))`.
 
 ## Services (writes take `&Uow` first, emit events after commit)
 
@@ -214,10 +230,11 @@ isolation = "schema"   # PostgreSQL only: schema workspace_<id>, search_path per
 # database_url = "sqlite://storage/workspaces/{id}.db?mode=rwc"
 ```
 
-- Tenant tables come from `m.workspace_migrations(MigrationSet::new("notes").migration(CreateNotes))`,
-  not `m.migrations`. Schema: run when the workspace is created; database:
+- Tenant tables come from `m.workspace_migrations(MigrationSet::new("notes").migration(SchemaMigration::new("m..._create_notes", CreateNotes)))`,
+  not `m.migrations`; they must be navree-schema migrations (the
+  per-workspace runner refuses SeaORM ones). Schema: run when the workspace is created; database:
   on first open per process; both: `navree workspace:migrate [slug...]`.
-- Handlers use `WorkspaceUow` (derefs to `Uow`): the request's unit of work
+- Handlers use `WorkspaceUow` (derefs to `Uow`, a navree-orm executor): the request's unit of work
   for row/schema, a unit of work on the workspace's database for database
   isolation, committed when the status < 400.
 - Jobs: `databases.db(id).await?.uow(None, None).await` + `commit()`
@@ -252,7 +269,7 @@ access_requests.approve(&uow, acme.id, request_id, Some(admin), Approval::defaul
   which. Org-granted users have no `workspace_members` row.
 - Org-level routes: `#[guard(InOrganization::guard())]` + `CurrentOrganization`
   (`workspace_ids()`, `reaches`, `authorize`, `scope`). Read across workspaces
-  with `OrgRepo::<E>::select(org.workspace_ids())` (read-only; writes go through
+  with `OrgRepo::<Deal>::query(org.workspace_ids())` (a `Builder<M>`; read-only; writes go through
   `WorkspaceRepo` in one workspace). 400 `The request names no organization.`,
   404 `Organization not found.`, 403 `You are not a member of this organization.`
 - An organization's `timezone` / `country` (checked like a workspace's,
@@ -275,18 +292,19 @@ enabled = true          # resolvers header (X-Partition), path (/p), claim; no s
 ```
 
 ```rust
-impl WorkspaceScoped for contact::Entity {}
-impl PartitionScoped for contact::Entity {}   // column `partition_id` (PARTITION_COLUMN)
+impl WorkspaceScoped for Contact {}
+impl PartitionScoped for Contact {}   // Contact: a #[derive(Model)]; column `partition_id` (PARTITION_COLUMN)
 
 let uk = partitions.create(&uow, ws.id, NewPartition::named("acme.co.uk")).await?; // slug acme-co-uk
 partitions.grant(&uow, ws.id, grace, PartitionSelector::only([uk.id])).await?;
 
 // lists: the named partition, else every partition the member sees
-async fn index(&self, scope: PartitionScope, uow: Uow, page: PageQuery) -> Result<Page<contact::Model>> {
-    Ok(paginate(PartitionRepo::<Contact>::select(scope.workspace_id(), scope.selector()), &*uow.tx().await?, page).await?)
+async fn index(&self, scope: PartitionScope, uow: Uow, page: PageQuery) -> Result<Page<Record<Contact>>> {
+    Ok(PartitionRepo::<Contact>::query(scope.workspace_id(), scope.selector()).paginate(&uow, page).await?)
 }
 // writes: CurrentPartition requires X-Partition (400 otherwise)
-PartitionRepo::<Contact>::insert(&uow, ws.id(), partition.id(), am).await?;
+PartitionRepo::<Contact>::insert(&uow, ws.id(), partition.id(), contact).await?;
+// also update(&uow, ws, &selector, &mut record), delete(&uow, ws, &selector, record), find, find_or_fail
 ```
 
 - Members see `All` by default; the workspace owner and org-granted users always
@@ -380,18 +398,18 @@ impl DemoSeeder for CrmDemo {
         Box::pin(async move {
             let companies: Vec<CompanyFixture> = demo.fixture("crm/companies")?; // fixtures/demo/crm/companies.json
             for c in companies {
-                WorkspaceRepo::<Company>::insert(demo.uow(), demo.id(), company::ActiveModel {
-                    id: Set(Uuid::now_v7()), name: Set(c.name), ..Default::default()
-                }).await?;
+                let company = Company { id: Uuid::now_v7(), name: c.name, ..Company::default() }; // workspace_id is set by the repo
+                WorkspaceRepo::<Company>::insert(demo.uow(), demo.id(), company).await?;
             }
             Ok(())
         })
     }
-    // Override `clear` for another workspace column: `demo.clear::<Company>().await?`.
+    // Override `clear` for another workspace column: `demo.clear::<Company>().await?`
+    // (`clear` and `clear_table` return Result<u64, navree_db::DbError>).
 }
 
 // in the module's wire():
-m.migrations(..).workspace_scoped::<Company>().demo_seeder::<CrmDemo>();
+m.migrations(..).workspace_scoped::<Company>().demo_seeder::<CrmDemo>(); // Company: a #[derive(Model)] + WorkspaceScoped
 ```
 
 2. Fixtures: `workspace.demo.fixtures` (default `fixtures/demo`), JSON; a
@@ -454,17 +472,20 @@ each of its routes, from the route table and a model factory (skill
 use navree::workspace::testing::IsolationSuiteExt;
 
 app.isolation_suite::<DealsModule>()
-    .factory(DealFactory::default()) // binds {id}; workspace_id is set by the suite
+    .factory(Deal::factory()) // a navree-orm Factory (#[model(factory = DealFactory)], or Factory::<DealFactory>::new()); binds {id}; workspace_id is set by the suite
     .body("POST", "/api/v1/deals", json!({ "title": "Big one" }))
     .run()
     .await;
 ```
 
-Classify every entity (`m.workspace_scoped::<E>()`,
-`m.workspace_entity::<E>()` or `m.global_entity::<E>()`) and run
-`navree check`: `workspace.entities`, `workspace.repo` and
-`workspace.tables` catch unclassified entities, unscoped queries and
-unindexed or unprotected tables.
+Classify every model (`m.workspace_scoped::<M>()`,
+`m.workspace_entity::<M>()` or `m.global_entity::<M>()`; a
+`#[model(workspace)]` model scopes its own queries) and run
+`navree check`: `workspace.entities` and `workspace.repo` scan the source
+of SeaORM entities an app still has (their registrations are
+`m.sea_workspace_entity::<E>()` / `m.sea_global_entity::<E>()`, and the repo
+is `sea_compat::WorkspaceRepo`), and `workspace.tables` checks the workspace
+column, its index and RLS of every classified table.
 
 Read invitation tokens from `app.get::<Mailer>().await.array_transport().unwrap().sent()`
 (config `mail.transport = "array"`); move time with
@@ -475,11 +496,11 @@ Read invitation tokens from `app.get::<Mailer>().await.array_transport().unwrap(
 - Forgetting `#[guard(InWorkspace::guard())]`: route `#[roles]` /
   `#[permissions]` / `#[can]` then check GLOBAL access (usually 403), because
   extractors (including `CurrentWorkspace`) run after route checks.
-- Querying a workspace-owned table with `Entity::find()` / `Repo` instead of
-  `WorkspaceRepo` leaks rows across workspaces on SQLite (PostgreSQL RLS
-  hides them). Always scope: `WorkspaceRepo::<E>::select(ws.id())`.
-- `#[can(.., from = "id")]` on a workspace-owned entity without
-  `m.workspace_scoped::<E>()` lets a member with an unconditional permission
+- Querying a workspace-owned table with `M::query()` (on a model that isn't
+  `#[model(workspace)]`) leaks rows across workspaces on SQLite (PostgreSQL
+  RLS hides them). Always scope: `WorkspaceRepo::<M>::query(ws.id())`.
+- `#[can(.., from = "id")]` on a workspace-owned model without
+  `m.workspace_scoped::<M>()` lets a member with an unconditional permission
   load another workspace's record on SQLite.
 - RLS: the app must connect as a role that is neither superuser nor
   `BYPASSRLS`; without `navree.workspace` set (jobs that forgot
@@ -510,6 +531,11 @@ Read invitation tokens from `app.get::<Mailer>().await.array_transport().unwrap(
   `library_read_only` (clone it), another workspace's item a 404; writing
   for another owner there needs `unguarded(..)` plus your own permission
   check.
+- Crates not yet on navree-orm keep their SeaORM entities working through
+  `navree::workspace::sea_compat::{WorkspaceScoped, PartitionScoped,
+  WorkspaceRepo, OrgRepo, PartitionRepo, ModuleBuilderSeaWorkspaceExt}`
+  (`sea_workspace_scoped`, `sea_workspace_entity`, `sea_global_entity`).
+  It is removed in step 8 of the data-layer port; write new code with models.
 
 Docs: `/docs/workspaces/introduction/`, `/docs/workspaces/resolution/`,
 `/docs/workspaces/members-and-roles/`, `/docs/workspaces/invitations/`,

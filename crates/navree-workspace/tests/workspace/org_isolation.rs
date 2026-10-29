@@ -7,19 +7,18 @@ use std::sync::Arc;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use http::Method;
-use navree_db::Uow;
+use navree_db::{Executor as _, Statement, Uow, Value as DbValue};
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
+use navree_orm::prelude::*;
 use navree_workspace::{
     CurrentOrganization, CurrentPartition, CurrentWorkspace, GrantedBy, InOrganization, OrgRepo,
     PartitionRepo, PartitionScope, PartitionSelector, PinnedWorkspace, Selector, WorkspaceSelector,
 };
-use sea_orm::sea_query::Query;
-use sea_orm::{ActiveValue::Set, ConnectionTrait, DbErr, EntityTrait};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::support::{World, contact, deal, org_builder};
+use crate::support::{Contact, Deal, World, org_builder};
 
 struct ProbeController;
 
@@ -45,15 +44,15 @@ async fn organization(org: CurrentOrganization) -> Json<Value> {
 /// Every deal of the organization's workspaces the member reaches, by
 /// title.
 async fn report(org: CurrentOrganization, uow: Uow) -> Result<Json<Value>, AppError> {
-    let tx = uow.tx().await?;
-    let mut titles: Vec<String> = OrgRepo::<deal::Entity>::select(org.workspace_ids())
-        .all(&*tx)
+    let mut titles: Vec<String> = OrgRepo::<Deal>::query(org.workspace_ids())
+        .get(&uow)
         .await?
+        .into_models()
         .into_iter()
         .map(|deal| deal.title)
         .collect();
     titles.sort();
-    let scoped = org.scope(deal::Entity::find()).all(&*tx).await?.len();
+    let scoped = org.scope(Deal::query()).count(&uow).await?;
     Ok(Json(json!({ "titles": titles, "scoped": scoped })))
 }
 
@@ -61,9 +60,11 @@ async fn show_deal(
     org: CurrentOrganization,
     uow: Uow,
     axum::extract::Path(id): axum::extract::Path<Uuid>,
-) -> Result<Json<deal::Model>, AppError> {
+) -> Result<Json<Deal>, AppError> {
     Ok(Json(
-        OrgRepo::<deal::Entity>::find_or_fail(&uow, org.workspace_ids(), id).await?,
+        OrgRepo::<Deal>::find_or_fail(&uow, org.workspace_ids(), id)
+            .await?
+            .into_inner(),
     ))
 }
 
@@ -86,9 +87,10 @@ async fn workspace(ws: CurrentWorkspace) -> Json<Value> {
 
 async fn contacts(scope: PartitionScope, uow: Uow) -> Result<Json<Value>, AppError> {
     let mut names: Vec<String> = scope
-        .scope(contact::Entity::find())
-        .all(&*uow.tx().await?)
+        .scope(Contact::query())
+        .get(&uow)
         .await?
+        .into_models()
         .into_iter()
         .map(|contact| contact.name)
         .collect();
@@ -106,19 +108,19 @@ async fn add_contact(
     partition: CurrentPartition,
     uow: Uow,
     Json(input): Json<Value>,
-) -> Result<Json<contact::Model>, AppError> {
-    let created = PartitionRepo::<contact::Entity>::insert(
+) -> Result<Json<Contact>, AppError> {
+    let created = PartitionRepo::<Contact>::insert(
         &uow,
         ws.id(),
         partition.id(),
-        contact::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            name: Set(input["name"].as_str().unwrap_or_default().to_owned()),
-            ..Default::default()
+        Contact {
+            id: Uuid::now_v7(),
+            name: input["name"].as_str().unwrap_or_default().to_owned(),
+            ..Contact::default()
         },
     )
     .await?;
-    Ok(Json(created))
+    Ok(Json(created.into_inner()))
 }
 
 async fn partition(partition: CurrentPartition) -> Json<Value> {
@@ -204,13 +206,14 @@ async fn deal(world: &World, workspace: Uuid, title: &str) -> Uuid {
     world
         .db()
         .await
-        .conn()
-        .execute(
-            Query::insert()
-                .into_table("deals")
-                .columns(["id", "workspace_id", "title"])
-                .values_panic([id.into(), workspace.into(), title.into()]),
-        )
+        .execute(&Statement::portable(
+            "INSERT INTO deals (id, workspace_id, title) VALUES (?, ?, ?)",
+            [
+                DbValue::from(id),
+                DbValue::from(workspace),
+                DbValue::from(title),
+            ],
+        ))
         .await
         .unwrap();
     id
@@ -222,13 +225,15 @@ async fn contact_row(world: &World, workspace: Uuid, partition: Option<Uuid>, na
     world
         .db()
         .await
-        .conn()
-        .execute(
-            Query::insert()
-                .into_table("contacts")
-                .columns(["id", "workspace_id", "partition_id", "name"])
-                .values_panic([id.into(), workspace.into(), partition.into(), name.into()]),
-        )
+        .execute(&Statement::portable(
+            "INSERT INTO contacts (id, workspace_id, partition_id, name) VALUES (?, ?, ?, ?)",
+            [
+                DbValue::from(id),
+                DbValue::from(workspace),
+                DbValue::from(partition),
+                DbValue::from(name),
+            ],
+        ))
         .await
         .unwrap();
     id
@@ -582,62 +587,43 @@ async fn partition_grants_hold() {
     let db = world.db().await;
     let uow = db.uow(None, None).await;
     let only_uk = Selector::only([uk.id]);
-    let row = contact::Entity::find_by_id(de_contact)
-        .one(&*uow.tx().await.unwrap())
+    let row = Contact::query()
+        .where_key(de_contact)
+        .first(&uow)
         .await
         .unwrap()
         .unwrap();
     assert!(matches!(
-        PartitionRepo::<contact::Entity>::find_or_fail(&uow, acme.id, &only_uk, de_contact).await,
-        Err(DbErr::RecordNotFound(_))
+        PartitionRepo::<Contact>::find_or_fail(&uow, acme.id, &only_uk, de_contact).await,
+        Err(OrmError::ModelNotFound { .. })
     ));
     assert!(matches!(
-        PartitionRepo::<contact::Entity>::delete(&uow, acme.id, &only_uk, row.clone()).await,
-        Err(DbErr::RecordNotFound(_))
+        PartitionRepo::<Contact>::delete(&uow, acme.id, &only_uk, row.clone()).await,
+        Err(OrmError::ModelNotFound { .. })
     ));
-    let moved = PartitionRepo::<contact::Entity>::update(
-        &uow,
-        acme.id,
-        &only_uk,
-        contact::ActiveModel {
-            id: Set(de_contact),
-            partition_id: Set(Some(uk.id)),
-            ..Default::default()
-        },
-    )
-    .await;
-    assert!(matches!(moved, Err(DbErr::RecordNotFound(_))));
+    let mut moved = row.clone();
+    moved.partition_id = Some(uk.id);
+    let refused = PartitionRepo::<Contact>::update(&uow, acme.id, &only_uk, &mut moved).await;
+    assert!(
+        matches!(refused, Err(OrmError::ModelNotFound { .. })),
+        "{refused:?}"
+    );
     let all = Selector::All;
-    let renamed = PartitionRepo::<contact::Entity>::update(
-        &uow,
-        acme.id,
-        &all,
-        contact::ActiveModel {
-            id: Set(de_contact),
-            name: Set("de renamed".into()),
-            ..Default::default()
-        },
-    )
-    .await
-    .unwrap();
+    let mut renamed = row.clone();
+    renamed.name = "de renamed".into();
+    PartitionRepo::<Contact>::update(&uow, acme.id, &all, &mut renamed)
+        .await
+        .unwrap();
     assert_eq!(renamed.name, "de renamed");
     assert_eq!(
-        PartitionRepo::<contact::Entity>::select(acme.id, &Selector::Only(vec![]))
-            .all(&*uow.tx().await.unwrap())
+        PartitionRepo::<Contact>::query(acme.id, &Selector::Only(vec![]))
+            .count(&uow)
             .await
-            .unwrap()
-            .len(),
+            .unwrap(),
         0
     );
-    assert_eq!(
-        OrgRepo::<deal::Entity>::select(&[])
-            .all(&*uow.tx().await.unwrap())
-            .await
-            .unwrap()
-            .len(),
-        0
-    );
-    PartitionRepo::<contact::Entity>::delete(&uow, acme.id, &all, row)
+    assert_eq!(OrgRepo::<Deal>::query(&[]).count(&uow).await.unwrap(), 0);
+    PartitionRepo::<Contact>::delete(&uow, acme.id, &all, renamed)
         .await
         .unwrap();
     uow.rollback().await.unwrap();

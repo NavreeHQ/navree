@@ -42,11 +42,9 @@ use chrono::{DateTime, Utc};
 use navree::BoxFuture;
 use navree::prelude::*;
 use navree::workspace::{DemoSeed, DemoSeeder};
-use sea_orm::ActiveValue::Set;
 use serde::Deserialize;
-use uuid::Uuid;
 
-use super::entity::{Company, company};
+use super::model::Company;
 
 /// One company of `fixtures/demo/crm/companies.json`.
 #[derive(Deserialize)]
@@ -74,18 +72,13 @@ impl DemoSeeder for CrmDemo {
         Box::pin(async move {
             let companies: Vec<CompanyFixture> = demo.fixture("crm/companies")?;
             for fixture in companies {
-                WorkspaceRepo::<Company>::insert(
-                    demo.uow(),
+                let company = Company::new(
                     demo.id(),
-                    company::ActiveModel {
-                        id: Set(Uuid::now_v7()),
-                        workspace_id: Set(demo.id()),
-                        name: Set(fixture.name),
-                        stage: Set(fixture.stage),
-                        last_contacted_at: Set(fixture.last_contacted_at),
-                    },
-                )
-                .await?;
+                    fixture.name,
+                    fixture.stage,
+                    fixture.last_contacted_at,
+                );
+                WorkspaceRepo::<Company>::insert(demo.uow(), demo.id(), company).await?;
             }
             Ok(())
         })
@@ -93,9 +86,9 @@ impl DemoSeeder for CrmDemo {
 }
 ```
 
-Register it next to the module's migrations:
+`Company` is a model with a `workspace_id` column that implements `WorkspaceScoped`; `Company::new` builds one with a new id. Register the seeder next to the module's migrations:
 
-```rust title="src/crm/mod.rs" {12}
+```rust title="src/crm/mod.rs" {19}
 #[module(
     imports = [AccessModule::for_feature::<Company>()],
     controllers = [CompaniesController],
@@ -105,9 +98,16 @@ pub struct CrmModule;
 
 impl CrmModule {
     fn wire(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet::new("companies").after(["workspace"]).migration(CreateCompanies))
-            .workspace_scoped::<Company>()
-            .demo_seeder::<CrmDemo>();
+        m.migrations(
+            MigrationSet::new("companies")
+                .after(["workspace"])
+                .migration(SchemaMigration::new(
+                    "m20261027_000001_create_companies",
+                    CreateCompanies,
+                )),
+        )
+        .workspace_scoped::<Company>()
+        .demo_seeder::<CrmDemo>();
     }
 }
 ```
@@ -123,18 +123,18 @@ Seeders are providers, so they can inject services. They run in module dependenc
 | `now()` | The time of seeding, from the app's `dyn Clock` |
 | `fixture::<T>(name)` | `<workspace.demo.fixtures>/<name>.json`, placeholders resolved, deserialized |
 | `parse_fixture::<T>(json)` | The same for JSON held in the code (`include_str!`) |
-| `clear_table(table)`, `clear::<E>()` | Deletes the demo's rows from a table; returns the count |
+| `clear_table(table)`, `clear::<M>()` | Deletes the demo's rows from a table; returns the count, or a `navree_db::DbError` |
 | `isolation()`, `is_reset()`, `app()` | The isolation strategy, whether a clear came first, the app |
 
-The unit of work follows the [isolation strategy](/docs/workspaces/isolation/). Under row isolation it is a transaction on the app's database that has entered the demo (`navree.workspace` is set on PostgreSQL, so row-level security admits the demo's rows), and you write with `WorkspaceRepo`. Under schema isolation its `search_path` starts with the demo's schema. Under database isolation it is a unit of work on the demo's own database.
+The unit of work follows the [isolation strategy](/docs/workspaces/isolation/). Under row isolation it is a transaction on the app's database that has entered the demo (`navree.workspace` is set on PostgreSQL, so row-level security admits the demo's rows), and you write with `WorkspaceRepo` or the model API. Under schema isolation its `search_path` starts with the demo's schema. Under database isolation it is a unit of work on the demo's own database.
 
-Writes through `WorkspaceRepo` and `Repo` are audited like any other. To keep the [audit log](/docs/security/audit-log/) for real activity, insert through the transaction with plain SeaORM instead: `model.insert(&*demo.uow().tx().await?)`.
+Writes through `WorkspaceRepo` and the model API run the model's hooks and are recorded in the unit of work for the [audit log](/docs/security/audit-log/) like any other change; `save_quietly` and the other quiet operations silence the model's listeners, but a change inside a unit of work is still recorded.
 
 ### Clearing before a reset
 
 A reset clears every seeder's data, in the reverse of the seeding order, then seeds again. The default `clear` runs `clear_table` on each of `tables()`, in the order listed, so list child tables before their parents. `clear_table` deletes the rows whose `workspace_id` is the demo's under row isolation, and every row of the demo's own table under schema and database isolation (the delete names the demo's schema, so a shared table is never touched).
 
-Override `clear` when a table names its workspace column differently or the data lives elsewhere. `clear::<E>()` uses the entity's `WorkspaceScoped::WORKSPACE_COLUMN`:
+Override `clear` when a table names its workspace column differently or the data lives elsewhere. `clear::<M>()` uses the model's `WorkspaceScoped::WORKSPACE_COLUMN`:
 
 ```rust
 fn clear<'a>(&'a self, demo: &'a DemoSeed) -> BoxFuture<'a, Result<(), BoxError>> {
@@ -364,6 +364,7 @@ async fn the_create_command_makes_a_read_only_demo() {
     let dir = fixtures(); // a TempDirGuard holding crm/companies.json
     let app = TestApp::builder()
         .temp_database()
+        .config("http.per_ip_rate_limit", serde_json::Value::Null)
         .config("workspace.users_table", "")
         .config("workspace.roles.member.permissions", json!(["companies.*"]))
         .config("workspace.demo.fixtures", dir.path().display().to_string())
@@ -386,12 +387,14 @@ async fn the_create_command_makes_a_read_only_demo() {
         .await
         .assert_status(200);
     assert_eq!(listed.header(DEMO_HEADER), Some("read_only"));
+    assert_eq!(listed.json_value().as_array().unwrap().len(), 3);
     client
         .post("/api/v1/companies")
         .header("X-Workspace", "demo")
         .send()
         .await
         .assert_error(403, "Demo workspaces are read-only.");
+    app.shutdown().await.unwrap();
 }
 ```
 

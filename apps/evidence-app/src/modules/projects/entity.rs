@@ -4,7 +4,8 @@
 
 use navree::access::Subject;
 use navree::search::Searchable;
-use navree::workspace::WorkspaceScoped;
+// COMPAT (data-layer port): the SeaORM forms of the workspace repositories.
+use navree::workspace::sea_compat::WorkspaceScoped;
 use sea_orm::entity::prelude::*;
 use serde::Serialize;
 
