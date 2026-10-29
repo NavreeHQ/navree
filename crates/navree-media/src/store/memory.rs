@@ -5,7 +5,6 @@ use std::sync::{Mutex, MutexGuard};
 
 use futures_util::future::BoxFuture;
 use navree_db::Uow;
-use navree_db::sea_orm::DatabaseTransaction;
 use uuid::Uuid;
 
 use super::{MediaQuery, MediaStore};
@@ -41,7 +40,7 @@ impl MediaStore for MemoryStore {
         Box::pin(async move {
             let mut rows = self.rows();
             if rows.contains_key(&item.id) {
-                return Err(MediaError::Db(navree_db::sea_orm::DbErr::Custom(format!(
+                return Err(MediaError::Db(navree_db::DbError::invalid(format!(
                     "media {} already exists",
                     item.id
                 ))));
@@ -81,7 +80,7 @@ impl MediaStore for MemoryStore {
 
     fn delete_owner<'a>(
         &'a self,
-        _tx: &'a DatabaseTransaction,
+        _uow: &'a Uow,
         model_type: &'a str,
         model_id: &'a str,
     ) -> BoxFuture<'a, Result<Vec<MediaItem>, MediaError>> {
