@@ -10,8 +10,8 @@ use chrono::{DateTime, Utc};
 use navree_config::Config;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, Clock, Secret, SystemClock};
 use navree_crypto::Encrypter;
-use navree_db::sea_orm::DbBackend;
-use navree_db::{Db, Uow};
+
+use navree_db::{Backend, Db, Executor as _, Uow};
 use navree_events::{Event, EventBus};
 use navree_integrations::{Level, Owner, OwnerType};
 use navree_kernel::{AppContext, BoxError, WeakAppContext};
@@ -313,9 +313,9 @@ impl Runtime {
         F: FnOnce(Uow) -> Fut,
         Fut: Future<Output = Result<T, DirectoryError>>,
     {
-        if self.db.backend() == DbBackend::Sqlite
+        if self.db.backend() == Backend::Sqlite
             && let Some(uow) = Uow::current()
-            && uow.open_tx().await.is_some()
+            && uow.has_open_transaction().await
         {
             return f(uow).await;
         }
@@ -334,7 +334,7 @@ impl Runtime {
         let uow = self.db.uow(actor, None).await;
         match uow.scope(f(uow.clone())).await {
             Ok(value) => {
-                uow.commit().await?;
+                uow.commit().await.map_err(navree_db::DbError::from)?;
                 Ok(value)
             }
             Err(error) => {
