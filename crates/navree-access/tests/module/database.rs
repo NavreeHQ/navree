@@ -100,7 +100,10 @@ impl Scratch {
             Server::Postgres => ("NAVREE_TEST_POSTGRES_URL", cfg!(feature = "postgres")),
             Server::MySql => ("NAVREE_TEST_MYSQL_URL", cfg!(feature = "mysql")),
         };
-        assert!(compiled, "NAVREE_TEST_DATABASE={server:?} needs its feature");
+        assert!(
+            compiled,
+            "NAVREE_TEST_DATABASE={server:?} needs its feature"
+        );
         let admin_url = std::env::var(variable)
             .ok()
             .filter(|url| !url.is_empty())

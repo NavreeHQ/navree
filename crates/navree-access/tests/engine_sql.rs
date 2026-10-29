@@ -16,10 +16,7 @@ fn ability(define: impl FnOnce(&mut Rules)) -> Ability {
 
 /// `SELECT "id" FROM "posts" WHERE <filter>` with values inlined.
 fn sqlite(filter: SqlFilter) -> String {
-    format!(
-        r#"SELECT "id" FROM "posts" WHERE {}"#,
-        where_clause(filter)
-    )
+    format!(r#"SELECT "id" FROM "posts" WHERE {}"#, where_clause(filter))
 }
 
 /// The filter as SQLite runs it, values inlined.
@@ -442,12 +439,10 @@ mod properties {
     }
 
     /// Ids selected by `filter`, run with bound parameters and with literals.
-    async fn selected_ids(
-        conn: &mut SqliteConnection,
-        filter: SqlFilter,
-    ) -> (Vec<i64>, Vec<i64>) {
+    async fn selected_ids(conn: &mut SqliteConnection, filter: SqlFilter) -> (Vec<i64>, Vec<i64>) {
         let fragment = filter.to_statement(Backend::Sqlite);
-        let select = |condition: &str| format!("SELECT id FROM items WHERE {condition} ORDER BY id");
+        let select =
+            |condition: &str| format!("SELECT id FROM items WHERE {condition} ORDER BY id");
 
         let mut bound = sqlx::query(sqlx::AssertSqlSafe(select(fragment.sql())));
         for value in fragment.values() {

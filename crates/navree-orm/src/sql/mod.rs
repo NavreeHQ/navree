@@ -15,7 +15,6 @@ use crate::error::OrmError;
 use crate::ir::Where;
 use crate::value::Value;
 
-
 pub(crate) use crate::render::grammar::is_identifier;
 pub(crate) use crate::render::lower::timeout_millis;
 pub use crate::render::{

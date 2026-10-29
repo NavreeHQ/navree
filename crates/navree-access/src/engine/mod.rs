@@ -80,8 +80,8 @@ pub use ability::Ability;
 pub use condition::{Cond, Conditions, FieldRef, IntoCondValue, field};
 pub use rule::{Rule, RuleBuilder, RuleError, Rules};
 pub use sql::{
-    DefaultColumns, SqlColumn, SqlColumns, SqlFilter, SqlOp, TypedColumns, accepts_kind,
-    sql_value, typed_value, value_json,
+    DefaultColumns, SqlColumn, SqlColumns, SqlFilter, SqlOp, TypedColumns, accepts_kind, sql_value,
+    typed_value, value_json,
 };
 
 /// The standard `read` action.

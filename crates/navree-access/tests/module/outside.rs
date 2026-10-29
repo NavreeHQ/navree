@@ -111,10 +111,7 @@ async fn authorize_record_loads_by_subject_and_checks_the_record() {
     assert_eq!(record.action(), "update");
     assert_eq!(record.record()["title"], "Mine");
     assert!(
-        record
-            .clone()
-            .into_authorized::<Post, Read>()
-            .is_none(),
+        record.clone().into_authorized::<Post, Read>().is_none(),
         "the action must match"
     );
     let typed: Authorized<Post, Update> = record.into_authorized().expect("typed");
@@ -160,29 +157,23 @@ async fn authorized_load_checks_a_typed_record() {
         .unwrap();
     let uow = db.uow(Some(author), None).await;
 
-    let post =
-        Authorized::<Post, Update>::load(&uow, Arc::clone(&ability), &own.id.to_string())
-            .await
-            .expect("own post");
+    let post = Authorized::<Post, Update>::load(&uow, Arc::clone(&ability), &own.id.to_string())
+        .await
+        .expect("own post");
     assert_eq!(post.into_inner().title, "Mine");
-    let post = Authorized::<Post, Read>::load(
-        &uow,
-        Arc::clone(&ability),
-        &published.id.to_string(),
-    )
-    .await
-    .expect("published post");
+    let post =
+        Authorized::<Post, Read>::load(&uow, Arc::clone(&ability), &published.id.to_string())
+            .await
+            .expect("published post");
     assert_eq!(post.title, "Public");
 
-    let denied =
-        Authorized::<Post, Read>::load(&uow, Arc::clone(&ability), &hidden.id.to_string())
-            .await
-            .expect_err("hidden post");
+    let denied = Authorized::<Post, Read>::load(&uow, Arc::clone(&ability), &hidden.id.to_string())
+        .await
+        .expect_err("hidden post");
     assert_eq!(denied.status, StatusCode::FORBIDDEN);
-    let missing =
-        Authorized::<Post, Read>::load(&uow, ability, &Uuid::now_v7().to_string())
-            .await
-            .expect_err("missing post");
+    let missing = Authorized::<Post, Read>::load(&uow, ability, &Uuid::now_v7().to_string())
+        .await
+        .expect_err("missing post");
     assert_eq!(missing.status, StatusCode::NOT_FOUND);
     uow.rollback().await.unwrap();
 }

@@ -214,7 +214,8 @@ impl SqlColumns for TypedColumns {
 
     fn accepts(&self, field: &str, value: &Value) -> bool {
         // Not a column: SQL `NULL`, which matches nothing either way.
-        self.kind(field).is_none_or(|kind| accepts_kind(kind, value))
+        self.kind(field)
+            .is_none_or(|kind| accepts_kind(kind, value))
     }
 }
 
@@ -404,7 +405,11 @@ impl SqlFilter {
                 for (condition, result) in whens {
                     sql.push_str(" WHEN (");
                     condition.write(backend, sql, values);
-                    sql.push_str(if *result { ") THEN TRUE" } else { ") THEN FALSE" });
+                    sql.push_str(if *result {
+                        ") THEN TRUE"
+                    } else {
+                        ") THEN FALSE"
+                    });
                 }
                 sql.push_str(if *otherwise {
                     " ELSE TRUE END"
@@ -573,13 +578,17 @@ where
         Cond::Eq(v) if foreign(v) => SqlFilter::Bool(false),
         Cond::Eq(v) => match operand(v) {
             Operand::Value(value) => compare(SqlOp::Eq, value),
-            Operand::Between(_) | Operand::Above | Operand::Below | Operand::Never => SqlFilter::Bool(false),
+            Operand::Between(_) | Operand::Above | Operand::Below | Operand::Never => {
+                SqlFilter::Bool(false)
+            }
         },
         Cond::Ne(Value::Null) => SqlFilter::IsNotNull(column),
         Cond::Ne(v) if foreign(v) => SqlFilter::Bool(true),
         Cond::Ne(v) => match operand(v) {
             Operand::Value(value) => compare(SqlOp::DistinctFrom, value),
-            Operand::Between(_) | Operand::Above | Operand::Below | Operand::Never => SqlFilter::Bool(true),
+            Operand::Between(_) | Operand::Above | Operand::Below | Operand::Never => {
+                SqlFilter::Bool(true)
+            }
         },
         Cond::Lt(v) | Cond::Lte(v) | Cond::Gt(v) | Cond::Gte(v) if foreign(v) => {
             SqlFilter::Bool(false)
