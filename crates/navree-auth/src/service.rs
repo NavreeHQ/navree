@@ -9,7 +9,7 @@ use chrono::{DateTime, TimeDelta, Utc};
 use navree_cache::Cache;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, Clock, SystemClock};
 use navree_crypto::{CryptoError, Encrypter, Hasher, constant_time_eq, random_token};
-use navree_db::{Db, DbError, Uow};
+use navree_db::{Db, Uow};
 use navree_http::HttpOptions;
 use navree_kernel::{
     AppContext, BoxFuture, Injectable, KernelError, ProviderKey, Resolver, WeakAppContext,
@@ -946,7 +946,7 @@ impl AuthService {
         let uow = self.db.uow(actor, request_id).await;
         match uow.scope(f(uow.clone())).await {
             Ok(value) => {
-                uow.commit().await.map_err(DbError::from)?;
+                uow.commit().await?;
                 Ok(value)
             }
             Err(error) => {

@@ -11,7 +11,7 @@ use navree_cache::Cache;
 use navree_config::Config;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, Clock, SystemClock};
 use navree_crypto::{Encrypter, Hasher, random_token, sha256_hex};
-use navree_db::{Db, DbError, Uow};
+use navree_db::{Db, Uow};
 use navree_events::{Event, EventBus};
 use navree_http::HttpOptions;
 use navree_http_client::{HttpClient, HttpClientOptions};
@@ -1712,7 +1712,7 @@ impl Sso {
         let uow = self.db.uow(None, request_id).await;
         match uow.scope(f(uow.clone())).await {
             Ok(value) => {
-                uow.commit().await.map_err(DbError::from)?;
+                uow.commit().await?;
                 Ok(value)
             }
             Err(error) => {

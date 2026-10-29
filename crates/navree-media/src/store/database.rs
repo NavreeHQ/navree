@@ -3,7 +3,7 @@
 use std::future::Future;
 
 use futures_util::future::BoxFuture;
-use navree_db::{Db, DbError, Uow};
+use navree_db::{Db, Uow};
 use navree_orm::{Model as _, OrmError};
 use uuid::Uuid;
 
@@ -44,7 +44,7 @@ impl DatabaseStore {
         let own = self.db.uow(None, None).await;
         match write(own.clone()).await {
             Ok(value) => {
-                own.commit().await.map_err(DbError::from)?;
+                own.commit().await?;
                 Ok(value)
             }
             Err(error) => {

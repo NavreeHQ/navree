@@ -605,7 +605,7 @@ impl LighthouseStore {
                     .commit()
                     .await
                     .map(|()| written)
-                    .map_err(|error| LighthouseError::from(DbError::from(error))),
+                    .map_err(LighthouseError::from),
                 Err(error) => {
                     let _ = uow.rollback().await;
                     Err(error)
