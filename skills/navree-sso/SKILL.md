@@ -48,7 +48,12 @@ enforce_for_verified_domains = true                     # refuse passwords for v
 ```
 
 4. Migrations: set `sso` (after `auth`): `sso_connections`, `sso_domains`,
-   `sso_identities`.
+   `sso_identities`, which are navree-orm models
+   (`navree::sso::sso_connection::Model`, `sso_domain::Model`,
+   `sso_identity::Model`). A connection's `settings` (client secret
+   ciphertext, IdP metadata with certificates) is never serialized; its
+   change events carry a summary (`has_client_secret`, `has_metadata_xml`,
+   a digest). Errors: `SsoError::Db(DbError)`, `SsoError::Orm(OrmError)`.
 5. Create a connection (`POST /api/sso/connections` with `sso.manage`, or
    `Sso::create_connection(&uow, NewConnection::saml(owner, name, xml))` /
    `NewConnection::oidc(owner, name, issuer, client_id, secret)`), add a

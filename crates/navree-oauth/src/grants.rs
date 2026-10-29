@@ -11,7 +11,6 @@ use navree_auth::AuthService;
 use navree_contracts::{AuditEntry, AuditKind};
 use navree_db::Uow;
 use navree_orm::{Executor, Model as _, Record};
-use sea_orm::DatabaseTransaction;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use utoipa::ToSchema;
@@ -136,10 +135,10 @@ pub(crate) struct Grants {
 
 impl Grants {
     /// Issues an access token (plus a refresh token and an ID token when
-    /// asked for) in `tx`.
+    /// asked for) in `uow`.
     pub(crate) async fn issue(
         &self,
-        tx: &DatabaseTransaction,
+        uow: &Uow,
         issue: Issue<'_>,
     ) -> Result<TokenResponse, OAuthError> {
         let core = &self.core;
@@ -165,7 +164,7 @@ impl Grants {
             revoked_at: None,
             created_at: now,
         };
-        access_token::Model::insert(tx, [access_row]).await?;
+        access_token::Model::insert(uow, [access_row]).await?;
         let refresh = match refresh_family {
             Some(family) => {
                 let token = new_token(REFRESH_TOKEN_PREFIX);
@@ -188,7 +187,7 @@ impl Grants {
                     revoked_at: None,
                     created_at: now,
                 };
-                refresh_token::Model::insert(tx, [refresh_row]).await?;
+                refresh_token::Model::insert(uow, [refresh_row]).await?;
                 Some(token)
             }
             None => None,
@@ -290,10 +289,9 @@ impl Grants {
                 "This client may not use the authorization code grant".into(),
             ));
         }
-        let tx = uow.tx().await?;
         let row = code::Model::query()
             .where_(code::Model::CODE_HASH.eq(digest(code)))
-            .first(&*tx)
+            .first(uow)
             .await?
             .ok_or_else(|| OAuthError::InvalidGrant("The authorization code is invalid".into()))?;
         if row.client_id != client.id {
@@ -303,7 +301,7 @@ impl Grants {
         }
         let now = self.core.now();
         if row.used_at.is_some() {
-            self.revoke_code_tokens(&tx, row.id, now).await?;
+            self.revoke_code_tokens(uow, row.id, now).await?;
             return Err(OAuthError::InvalidGrant(
                 "The authorization code was already used".into(),
             ));
@@ -330,17 +328,17 @@ impl Grants {
         let claimed = code::Model::query()
             .where_key(row.id)
             .where_null(code::Model::USED_AT)
-            .update(&*tx, [code::Model::USED_AT.set(now)])
+            .update(uow, [code::Model::USED_AT.set(now)])
             .await?;
         if claimed != 1 {
-            self.revoke_code_tokens(&tx, row.id, now).await?;
+            self.revoke_code_tokens(uow, row.id, now).await?;
             return Err(OAuthError::InvalidGrant(
                 "The authorization code was already used".into(),
             ));
         }
         let scopes = parse_scope(&row.scopes);
         self.issue(
-            &tx,
+            uow,
             Issue {
                 client,
                 user_id: row.user_id,
@@ -359,19 +357,19 @@ impl Grants {
     /// was presented twice).
     async fn revoke_code_tokens(
         &self,
-        tx: &DatabaseTransaction,
+        uow: &Uow,
         code_id: Uuid,
         now: DateTime<Utc>,
     ) -> Result<(), OAuthError> {
         access_token::Model::query()
             .where_(access_token::Model::CODE_ID.eq(code_id))
             .where_null(access_token::Model::REVOKED_AT)
-            .update(tx, [access_token::Model::REVOKED_AT.set(now)])
+            .update(uow, [access_token::Model::REVOKED_AT.set(now)])
             .await?;
         refresh_token::Model::query()
             .where_(refresh_token::Model::CODE_ID.eq(code_id))
             .where_null(refresh_token::Model::REVOKED_AT)
-            .update(tx, [refresh_token::Model::REVOKED_AT.set(now)])
+            .update(uow, [refresh_token::Model::REVOKED_AT.set(now)])
             .await?;
         self.core.forget_all();
         tracing::warn!(target: "navree::security", %code_id, "an authorization code was presented twice; its tokens were revoked");
@@ -407,9 +405,8 @@ impl Grants {
                 "The client may not ask for one of these scopes".into(),
             ));
         }
-        let tx = uow.tx().await?;
         self.issue(
-            &tx,
+            uow,
             Issue {
                 client,
                 user_id: owner,
@@ -436,11 +433,11 @@ impl Grants {
                 "This client may not use the device authorization grant".into(),
             ));
         }
-        let tx = uow.tx().await?;
-        let mut row = device_code::Model::query()
+        let row = device_code::Model::query()
             .where_(device_code::Model::DEVICE_CODE_HASH.eq(digest(device_code)))
-            .first(&*tx)
+            .first(uow)
             .await?
+            .map(Record::into_inner)
             .filter(|row| row.client_id == client.id)
             .ok_or_else(|| OAuthError::InvalidGrant("The device code is invalid".into()))?;
         let now = self.core.now();
@@ -456,35 +453,60 @@ impl Grants {
         let too_fast = row
             .last_polled_at
             .is_some_and(|last| (now - last).num_seconds() < interval);
-        row.last_polled_at = Some(now);
+        // Only the polling columns change, in statements of their own: the
+        // device code's digest never reaches a change event.
+        let polled = device_code::Model::query().where_key(row.id);
         if too_fast {
             // RFC 8628 §3.5: every slow_down adds five seconds.
-            row.interval_secs = interval + 5;
-            row.save(&*tx).await?;
+            polled
+                .update(
+                    uow,
+                    [
+                        device_code::Model::LAST_POLLED_AT.set(now),
+                        device_code::Model::INTERVAL_SECS.set(interval + 5),
+                    ],
+                )
+                .await?;
             return Err(OAuthError::SlowDown);
         }
         match row.status.as_str() {
             "approved" => {}
             "denied" => {
-                row.used_at = Some(now);
-                row.save(&*tx).await?;
+                polled
+                    .update(
+                        uow,
+                        [
+                            device_code::Model::LAST_POLLED_AT.set(now),
+                            device_code::Model::USED_AT.set(now),
+                        ],
+                    )
+                    .await?;
                 return Err(OAuthError::AccessDenied(
                     "The user denied the request".into(),
                 ));
             }
             _ => {
-                row.save(&*tx).await?;
+                polled
+                    .update(uow, [device_code::Model::LAST_POLLED_AT.set(now)])
+                    .await?;
                 return Err(OAuthError::AuthorizationPending);
             }
         }
         let user_id = row
             .user_id
             .ok_or_else(|| OAuthError::InvalidGrant("The device code is invalid".into()))?;
-        row.used_at = Some(now);
-        row.save(&*tx).await?;
+        polled
+            .update(
+                uow,
+                [
+                    device_code::Model::LAST_POLLED_AT.set(now),
+                    device_code::Model::USED_AT.set(now),
+                ],
+            )
+            .await?;
         let scopes = parse_scope(&row.scopes);
         self.issue(
-            &tx,
+            uow,
             Issue {
                 client,
                 user_id,
@@ -508,11 +530,10 @@ impl Grants {
         token: &str,
         scope: Option<&str>,
     ) -> Result<TokenResponse, OAuthError> {
-        let tx = uow.tx().await?;
         let invalid = || OAuthError::InvalidGrant("The refresh token is invalid".into());
         let row = refresh_token::Model::query()
             .where_(refresh_token::Model::TOKEN_HASH.eq(digest(token)))
-            .first(&*tx)
+            .first(uow)
             .await?
             .filter(|row| row.client_id == client.id)
             .ok_or_else(invalid)?;
@@ -521,7 +542,7 @@ impl Grants {
             return Err(invalid());
         }
         if row.used_at.is_some() {
-            self.revoke_family(&*tx, row.family_id, now).await?;
+            self.revoke_family(uow, row.family_id, now).await?;
             self.core
                 .audit(
                     AuditEntry::new(AuditKind::Security, "oauth.refresh_reuse_detected")
@@ -554,14 +575,14 @@ impl Grants {
         let claimed = refresh_token::Model::query()
             .where_key(row.id)
             .where_null(refresh_token::Model::USED_AT)
-            .update(&*tx, [refresh_token::Model::USED_AT.set(now)])
+            .update(uow, [refresh_token::Model::USED_AT.set(now)])
             .await?;
         if claimed != 1 {
-            self.revoke_family(&*tx, row.family_id, now).await?;
+            self.revoke_family(uow, row.family_id, now).await?;
             return Err(invalid());
         }
         self.issue(
-            &tx,
+            uow,
             Issue {
                 client,
                 user_id: row.user_id,
@@ -606,27 +627,28 @@ impl Grants {
         client: &Client,
         token: &str,
     ) -> Result<(), OAuthError> {
-        let tx = uow.tx().await?;
         let hash = digest(token);
         let now = self.core.now();
         if token.starts_with(REFRESH_TOKEN_PREFIX) {
             if let Some(row) = refresh_token::Model::query()
                 .where_(refresh_token::Model::TOKEN_HASH.eq(hash.as_str()))
-                .first(&*tx)
+                .first(uow)
                 .await?
                 .filter(|row| row.client_id == client.id)
             {
-                self.revoke_family(&*tx, row.family_id, now).await?;
+                self.revoke_family(uow, row.family_id, now).await?;
             }
         } else if token.starts_with(ACCESS_TOKEN_PREFIX)
-            && let Some(mut row) = access_token::Model::query()
+            && let Some(row) = access_token::Model::query()
                 .where_(access_token::Model::TOKEN_HASH.eq(hash.as_str()))
-                .first(&*tx)
+                .first(uow)
                 .await?
                 .filter(|row| row.client_id == client.id && row.revoked_at.is_none())
         {
-            row.revoked_at = Some(now);
-            row.save(&*tx).await?;
+            access_token::Model::query()
+                .where_key(row.id)
+                .update(uow, [access_token::Model::REVOKED_AT.set(now)])
+                .await?;
             self.core.forget([hash]);
         }
         Ok(())

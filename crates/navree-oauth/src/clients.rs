@@ -256,7 +256,7 @@ impl OAuthClients {
             updated_at: now,
             revoked_at: None,
         };
-        Client::insert(&*uow.tx().await?, [model.clone()]).await?;
+        Client::insert(uow, [model.clone()]).await?;
         let mut entry = AuditEntry::new(AuditKind::Security, "oauth.client_created")
             .subject("OAuthClient", model.id.to_string())
             .metadata(json!({
@@ -399,7 +399,7 @@ impl OAuthClients {
         Client::query()
             .where_key(client.id)
             .update(
-                &*uow.tx().await?,
+                uow,
                 [
                     Client::SECRET_HASH.set(digest(&secret)),
                     Client::UPDATED_AT.set(self.core.now()),
@@ -414,25 +414,23 @@ impl OAuthClients {
     pub async fn revoke(&self, uow: &Uow, id: Uuid) -> Result<(), OAuthError> {
         let client = self.active(uow, id).await?;
         let now = self.core.now();
-        let tx = uow.tx().await?;
         Client::query()
             .where_key(id)
             .update(
-                &*tx,
+                uow,
                 [Client::REVOKED_AT.set(now), Client::UPDATED_AT.set(now)],
             )
             .await?;
         access_token::Model::query()
             .where_(access_token::Model::CLIENT_ID.eq(id))
             .where_null(access_token::Model::REVOKED_AT)
-            .update(&*tx, [access_token::Model::REVOKED_AT.set(now)])
+            .update(uow, [access_token::Model::REVOKED_AT.set(now)])
             .await?;
         refresh_token::Model::query()
             .where_(refresh_token::Model::CLIENT_ID.eq(id))
             .where_null(refresh_token::Model::REVOKED_AT)
-            .update(&*tx, [refresh_token::Model::REVOKED_AT.set(now)])
+            .update(uow, [refresh_token::Model::REVOKED_AT.set(now)])
             .await?;
-        drop(tx);
         let core = self.core.clone();
         uow.after_commit(move || {
             Box::pin(async move {
@@ -451,7 +449,7 @@ impl OAuthClients {
 
     /// The client `id`, unless unknown or revoked (404).
     async fn active(&self, uow: &Uow, id: Uuid) -> Result<Client, OAuthError> {
-        Client::find(&*uow.tx().await?, id)
+        Client::find(uow, id)
             .await?
             .map(Record::into_inner)
             .filter(|client| !client.is_revoked())

@@ -32,10 +32,10 @@ rules:
         # until the crates using it are moved (data-layer move, step 8).
         - "/crates/navree-access/src/sea_compat.rs"
         # navree-auth is moved; `User` keeps its SeaORM derive (the
-        # compatibility layer for the crates not yet on navree-orm: navree-sso, the
+        # compatibility layer for the crates not yet on navree-orm: the
         # admin resources over `user::Entity` in navree-helm's tests, the CLI kit and
         # evidence-app, and navree-auth's own subject test) until step 8. navree-social
-        # is on the `User` model and no longer needs it.
+        # and navree-sso are on the `User` model and no longer need it.
         - "/crates/navree-auth/src/entity/user.rs"
         - "/crates/navree-billing/"
         - "/crates/navree-db/"
@@ -49,13 +49,11 @@ rules:
         # navree-micro is moved; its tests keep one SeaORM fixture (the `deals`
         # entity, a subject through navree-access's SeaORM shim) until step 8.
         - "/crates/navree-micro/tests/micro/support.rs"
-        - "/crates/navree-oauth/"
         - "/crates/navree-orm/"
         - "/crates/navree-schema/"
         - "/crates/navree-search/"
         - "/crates/navree-settings/"
         - "/crates/navree-sheets/"
-        - "/crates/navree-sso/"
         - "/crates/navree-webhooks/"
         - "/crates/navree-workflows/"
         - "/crates/navree-cli/"
@@ -104,13 +102,11 @@ rules:
         - "/crates/navree-mcp/"
         # navree-micro: a dev-dependency for that fixture (navree-access's shim, step 8).
         - "/crates/navree-micro/Cargo.toml"
-        - "/crates/navree-oauth/"
         - "/crates/navree-orm/"
         - "/crates/navree-schema/"
         - "/crates/navree-search/"
         - "/crates/navree-settings/"
         - "/crates/navree-sheets/"
-        - "/crates/navree-sso/"
         - "/crates/navree-webhooks/"
         - "/crates/navree-workflows/"
         # navree-workspace: sea-orm for its compatibility layer, until step 8.

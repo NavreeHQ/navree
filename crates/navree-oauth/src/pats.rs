@@ -192,7 +192,7 @@ impl PersonalAccessTokens {
             revoked_at: None,
             created_at: now,
         };
-        PersonalAccessToken::insert(&*uow.tx().await?, [record.clone()]).await?;
+        PersonalAccessToken::insert(uow, [record.clone()]).await?;
         let entry = AuditEntry::new(AuditKind::Auth, "oauth.pat_created")
             .actor(user_id)
             .subject("PersonalAccessToken", record.id.to_string())
@@ -215,15 +215,15 @@ impl PersonalAccessTokens {
     /// Revokes `user_id`'s token `id` (404 for someone else's or an
     /// unknown one). Audited as `oauth.pat_revoked`.
     pub async fn revoke(&self, uow: &Uow, user_id: Uuid, id: Uuid) -> Result<(), OAuthError> {
-        let tx = uow.tx().await?;
-        let mut record = PersonalAccessToken::find(&*tx, id)
+        let record = PersonalAccessToken::find(uow, id)
             .await?
             .filter(|record| record.user_id == user_id && record.revoked_at.is_none())
             .ok_or(OAuthError::NotFound("Personal access token not found."))?;
         let hash = record.token_hash.clone();
-        record.revoked_at = Some(self.core.now());
-        record.save(&*tx).await?;
-        drop(tx);
+        PersonalAccessToken::query()
+            .where_key(id)
+            .update(uow, [PersonalAccessToken::REVOKED_AT.set(self.core.now())])
+            .await?;
         let core = self.core.clone();
         uow.after_commit(move || Box::pin(async move { core.forget([hash]) }));
         let entry = AuditEntry::new(AuditKind::Auth, "oauth.pat_revoked")
@@ -240,10 +240,7 @@ impl PersonalAccessTokens {
         let now = self.core.now();
         let result = PersonalAccessToken::query()
             .where_key(id)
-            .update(
-                self.core.db.conn(),
-                [PersonalAccessToken::LAST_USED_AT.set(now)],
-            )
+            .update(&self.core.db, [PersonalAccessToken::LAST_USED_AT.set(now)])
             .await;
         if let Err(error) = result {
             tracing::debug!(target: "navree::oauth", %error, "could not record a personal access token's last use");

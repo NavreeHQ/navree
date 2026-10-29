@@ -1479,6 +1479,22 @@ better.
   delivery log, the OAuth server's clients, grants and tokens, failed
   jobs, stored notifications and audit rows. Reads moved with them
   (auth's and social sign-in's user lookups too).
+- **Secrets and change events (navree-oauth, navree-sso).** A model write
+  through a `Uow` records every column's stored value, whatever `serde`
+  skips, so a table with digests or ciphertext is written with the
+  statements that record nothing: `Model::insert` (bulk) and the builder's
+  `update` and `delete`. The OAuth server writes all eight of its tables
+  that way (client secret, token, code and device code digests never reach
+  an observer; `Record::save` is not used on them). navree-sso, whose
+  connection, domain and identity changes belong in audit trails, writes
+  the same way and records the event itself: a `Recorded` row's
+  `event_form` is its `Serialize` form (the connection's `settings` column,
+  holding the client secret ciphertext and the identity provider's
+  certificates, is `skip_serializing`) plus a summary of the settings that
+  copies a whitelist of fields (protocol, URLs, client id, scopes, whether a
+  secret and a metadata document are set, the document's digest). Both
+  crates test it with an observer registered in the app that sees every
+  event of the flows (`tests/oauth/secrets.rs`, `tests/sso/secrets.rs`).
 - **Errors.** `From<OrmError> for DbErr` (database errors as SeaORM would
   have returned them, not-found as `RecordNotFound`, the rest as
   `DbErr::Custom`) lets services

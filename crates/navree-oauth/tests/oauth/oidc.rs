@@ -238,8 +238,7 @@ async fn rotated_keys_stay_in_the_jwks() {
 async fn options_in_code_work_like_configuration() {
     let key = SigningKey25519::generate();
     let world = World::with(
-        navree_testing::TestApp::builder()
-            .temp_database()
+        crate::servers::database(navree_testing::TestApp::builder())
             .config("app.key", navree_crypto::generate_key())
             .config("hashing.memory_kib", 1024)
             .config("hashing.iterations", 1)

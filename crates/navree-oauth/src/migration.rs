@@ -1,13 +1,16 @@
-//! The OAuth server's migrations (`MigrationSet` `oauth`, after `auth`).
+//! The OAuth server's migrations (`MigrationSet` `oauth`, after `auth`),
+//! written with the schema builder.
+//!
+//! The migration keeps the name it always had, so a database migrated by an
+//! earlier version finds nothing pending. The columns are the types it
+//! created: UUIDs as `BINARY(16)` on MySQL and MariaDB (where navree-db
+//! writes UUIDs as 16 bytes), names, grants and digests as `VARCHAR`
+//! without a length on PostgreSQL and SQLite and `VARCHAR(255)` on MySQL.
 
 use navree_db::MigrationSet;
-use sea_orm::DbErr;
-use sea_orm::sea_query::{
-    ColumnDef, ForeignKey, ForeignKeyAction, ForeignKeyCreateStatement, Index, Table,
-    TableCreateStatement,
+use navree_db::navree_schema::{
+    Blueprint, ColumnBuilder, Dialect, Migration, Schema, SchemaMigration, SchemaResult,
 };
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 
 /// The name of the OAuth server's migration set.
 pub const OAUTH_MIGRATIONS: &str = "oauth";
@@ -16,289 +19,253 @@ pub const OAUTH_MIGRATIONS: &str = "oauth";
 pub(crate) fn migrations() -> MigrationSet {
     MigrationSet::new(OAUTH_MIGRATIONS)
         .after(["auth"])
-        .migration(CreateOAuthTables)
+        .migration(SchemaMigration::new(
+            "m20261026_000001_create_oauth_tables",
+            CreateOAuthTables,
+        ))
+}
+
+/// A UUID column: `BINARY(16)` on MySQL and MariaDB, `uuid` elsewhere.
+fn uuid<'a>(t: &'a mut Blueprint, name: &str, dialect: Dialect) -> ColumnBuilder<'a> {
+    if dialect == Dialect::MySql {
+        t.binary(name).length(16).fixed()
+    } else {
+        t.uuid(name)
+    }
+}
+
+/// A text column of no fixed length: `VARCHAR(255)` on MySQL and MariaDB,
+/// `VARCHAR` elsewhere.
+fn varchar<'a>(t: &'a mut Blueprint, name: &str, dialect: Dialect) -> ColumnBuilder<'a> {
+    if dialect == Dialect::MySql {
+        t.string(name).length(255)
+    } else {
+        t.raw_column(name, "VARCHAR")
+    }
+}
+
+/// The tables, in the order they are created.
+const TABLES: [&str; 8] = [
+    "oauth_clients",
+    "oauth_authorizations",
+    "oauth_authorization_requests",
+    "oauth_codes",
+    "oauth_access_tokens",
+    "oauth_refresh_tokens",
+    "oauth_device_codes",
+    "personal_access_tokens",
+];
+
+/// `client_id` referencing `oauth_clients(id)`, cascading deletes.
+fn client_fk(t: &mut Blueprint) {
+    t.foreign("client_id")
+        .references("id")
+        .on("oauth_clients")
+        .cascade_on_delete();
 }
 
 /// Creates every OAuth table.
 struct CreateOAuthTables;
 
-impl MigrationName for CreateOAuthTables {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_oauth_tables"
+impl Migration for CreateOAuthTables {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let dialect = schema.target().await?.dialect();
+        schema
+            .create("oauth_clients", |t| {
+                uuid(t, "id", dialect).primary();
+                varchar(t, "name", dialect);
+                varchar(t, "secret_hash", dialect).nullable();
+                t.text("redirect_uris");
+                t.text("scopes");
+                varchar(t, "grants", dialect);
+                uuid(t, "owner_id", dialect).nullable();
+                t.boolean("trusted").default(false);
+                t.boolean("introspect").default(false);
+                uuid(t, "workspace_id", dialect).nullable();
+                t.text("logo_url").nullable();
+                t.text("website").nullable();
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+                t.timestamp_tz("revoked_at").nullable();
+            })
+            .await?;
+        schema
+            .create("oauth_authorizations", |t| {
+                uuid(t, "id", dialect).primary();
+                uuid(t, "user_id", dialect);
+                uuid(t, "client_id", dialect);
+                t.text("scopes");
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+                client_fk(t);
+                t.unique(["user_id", "client_id"])
+                    .name("oauth_authorizations_user_client_unique");
+            })
+            .await?;
+        schema
+            .create("oauth_authorization_requests", |t| {
+                uuid(t, "id", dialect).primary();
+                uuid(t, "client_id", dialect);
+                t.text("redirect_uri");
+                t.text("scopes");
+                t.text("state").nullable();
+                varchar(t, "code_challenge", dialect);
+                t.text("nonce").nullable();
+                uuid(t, "user_id", dialect).nullable();
+                varchar(t, "status", dialect);
+                t.timestamp_tz("expires_at");
+                t.timestamp_tz("created_at");
+                client_fk(t);
+            })
+            .await?;
+        schema
+            .create("oauth_codes", |t| {
+                uuid(t, "id", dialect).primary();
+                varchar(t, "code_hash", dialect).unique();
+                uuid(t, "client_id", dialect);
+                uuid(t, "user_id", dialect);
+                t.text("redirect_uri");
+                t.text("scopes");
+                varchar(t, "code_challenge", dialect);
+                t.text("nonce").nullable();
+                t.timestamp_tz("expires_at");
+                t.timestamp_tz("used_at").nullable();
+                t.timestamp_tz("created_at");
+                client_fk(t);
+            })
+            .await?;
+        schema
+            .create("oauth_access_tokens", |t| {
+                uuid(t, "id", dialect).primary();
+                varchar(t, "token_hash", dialect).unique();
+                uuid(t, "client_id", dialect);
+                uuid(t, "user_id", dialect);
+                t.text("scopes");
+                varchar(t, "grant", dialect);
+                uuid(t, "code_id", dialect).nullable();
+                uuid(t, "family_id", dialect).nullable();
+                uuid(t, "workspace_id", dialect).nullable();
+                t.timestamp_tz("expires_at");
+                t.timestamp_tz("revoked_at").nullable();
+                t.timestamp_tz("created_at");
+                client_fk(t);
+                t.index(["user_id", "client_id"])
+                    .name("oauth_access_tokens_user_client_index");
+                t.index("family_id")
+                    .name("oauth_access_tokens_family_index");
+                t.index("code_id").name("oauth_access_tokens_code_index");
+            })
+            .await?;
+        schema
+            .create("oauth_refresh_tokens", |t| {
+                uuid(t, "id", dialect).primary();
+                varchar(t, "token_hash", dialect).unique();
+                uuid(t, "client_id", dialect);
+                uuid(t, "user_id", dialect);
+                t.text("scopes");
+                uuid(t, "family_id", dialect);
+                uuid(t, "code_id", dialect).nullable();
+                uuid(t, "access_token_id", dialect).nullable();
+                uuid(t, "workspace_id", dialect).nullable();
+                t.timestamp_tz("expires_at");
+                t.timestamp_tz("used_at").nullable();
+                t.timestamp_tz("revoked_at").nullable();
+                t.timestamp_tz("created_at");
+                client_fk(t);
+                t.index(["user_id", "client_id"])
+                    .name("oauth_refresh_tokens_user_client_index");
+                t.index("family_id")
+                    .name("oauth_refresh_tokens_family_index");
+            })
+            .await?;
+        schema
+            .create("oauth_device_codes", |t| {
+                uuid(t, "id", dialect).primary();
+                varchar(t, "device_code_hash", dialect).unique();
+                varchar(t, "user_code", dialect).unique();
+                uuid(t, "client_id", dialect);
+                t.text("scopes");
+                uuid(t, "user_id", dialect).nullable();
+                varchar(t, "status", dialect);
+                t.big_integer("interval_secs");
+                t.timestamp_tz("last_polled_at").nullable();
+                t.timestamp_tz("expires_at");
+                t.timestamp_tz("used_at").nullable();
+                t.timestamp_tz("created_at");
+                client_fk(t);
+            })
+            .await?;
+        schema
+            .create("personal_access_tokens", |t| {
+                uuid(t, "id", dialect).primary();
+                uuid(t, "user_id", dialect);
+                varchar(t, "name", dialect);
+                varchar(t, "token_hash", dialect).unique();
+                t.text("scopes");
+                t.timestamp_tz("expires_at").nullable();
+                t.timestamp_tz("last_used_at").nullable();
+                t.timestamp_tz("revoked_at").nullable();
+                t.timestamp_tz("created_at");
+                t.index("user_id").name("personal_access_tokens_user_index");
+            })
+            .await
     }
-}
 
-fn id() -> ColumnDef {
-    ColumnDef::new("id")
-        .uuid()
-        .not_null()
-        .primary_key()
-        .to_owned()
-}
-
-fn uuid(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name).uuid().not_null().to_owned()
-}
-
-fn uuid_null(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name).uuid().null().to_owned()
-}
-
-fn text(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name).text().not_null().to_owned()
-}
-
-fn text_null(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name).text().null().to_owned()
-}
-
-fn string(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name).string().not_null().to_owned()
-}
-
-fn unique_string(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name)
-        .string()
-        .not_null()
-        .unique_key()
-        .to_owned()
-}
-
-fn timestamp(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name)
-        .timestamp_with_time_zone()
-        .not_null()
-        .to_owned()
-}
-
-fn timestamp_null(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name)
-        .timestamp_with_time_zone()
-        .null()
-        .to_owned()
-}
-
-/// `client_id` referencing `oauth_clients(id)`, cascading deletes.
-fn client_fk(table: &'static str) -> ForeignKeyCreateStatement {
-    ForeignKey::create()
-        .from(table, "client_id")
-        .to("oauth_clients", "id")
-        .on_delete(ForeignKeyAction::Cascade)
-        .to_owned()
-}
-
-fn index(
-    name: &'static str,
-    table: &'static str,
-    columns: &[&'static str],
-) -> sea_orm::sea_query::IndexCreateStatement {
-    let mut index = Index::create();
-    index.name(name).table(table);
-    for column in columns {
-        index.col(*column);
-    }
-    index.to_owned()
-}
-
-fn tables() -> Vec<TableCreateStatement> {
-    vec![
-        Table::create()
-            .table("oauth_clients")
-            .col(id())
-            .col(string("name"))
-            .col(ColumnDef::new("secret_hash").string().null())
-            .col(text("redirect_uris"))
-            .col(text("scopes"))
-            .col(string("grants"))
-            .col(uuid_null("owner_id"))
-            .col(
-                ColumnDef::new("trusted")
-                    .boolean()
-                    .not_null()
-                    .default(false),
-            )
-            .col(
-                ColumnDef::new("introspect")
-                    .boolean()
-                    .not_null()
-                    .default(false),
-            )
-            .col(uuid_null("workspace_id"))
-            .col(text_null("logo_url"))
-            .col(text_null("website"))
-            .col(timestamp("created_at"))
-            .col(timestamp("updated_at"))
-            .col(timestamp_null("revoked_at"))
-            .to_owned(),
-        Table::create()
-            .table("oauth_authorizations")
-            .col(id())
-            .col(uuid("user_id"))
-            .col(uuid("client_id"))
-            .col(text("scopes"))
-            .col(timestamp("created_at"))
-            .col(timestamp("updated_at"))
-            .foreign_key(&mut client_fk("oauth_authorizations"))
-            .to_owned(),
-        Table::create()
-            .table("oauth_authorization_requests")
-            .col(id())
-            .col(uuid("client_id"))
-            .col(text("redirect_uri"))
-            .col(text("scopes"))
-            .col(text_null("state"))
-            .col(string("code_challenge"))
-            .col(text_null("nonce"))
-            .col(uuid_null("user_id"))
-            .col(string("status"))
-            .col(timestamp("expires_at"))
-            .col(timestamp("created_at"))
-            .foreign_key(&mut client_fk("oauth_authorization_requests"))
-            .to_owned(),
-        Table::create()
-            .table("oauth_codes")
-            .col(id())
-            .col(unique_string("code_hash"))
-            .col(uuid("client_id"))
-            .col(uuid("user_id"))
-            .col(text("redirect_uri"))
-            .col(text("scopes"))
-            .col(string("code_challenge"))
-            .col(text_null("nonce"))
-            .col(timestamp("expires_at"))
-            .col(timestamp_null("used_at"))
-            .col(timestamp("created_at"))
-            .foreign_key(&mut client_fk("oauth_codes"))
-            .to_owned(),
-        Table::create()
-            .table("oauth_access_tokens")
-            .col(id())
-            .col(unique_string("token_hash"))
-            .col(uuid("client_id"))
-            .col(uuid("user_id"))
-            .col(text("scopes"))
-            .col(string("grant"))
-            .col(uuid_null("code_id"))
-            .col(uuid_null("family_id"))
-            .col(uuid_null("workspace_id"))
-            .col(timestamp("expires_at"))
-            .col(timestamp_null("revoked_at"))
-            .col(timestamp("created_at"))
-            .foreign_key(&mut client_fk("oauth_access_tokens"))
-            .to_owned(),
-        Table::create()
-            .table("oauth_refresh_tokens")
-            .col(id())
-            .col(unique_string("token_hash"))
-            .col(uuid("client_id"))
-            .col(uuid("user_id"))
-            .col(text("scopes"))
-            .col(uuid("family_id"))
-            .col(uuid_null("code_id"))
-            .col(uuid_null("access_token_id"))
-            .col(uuid_null("workspace_id"))
-            .col(timestamp("expires_at"))
-            .col(timestamp_null("used_at"))
-            .col(timestamp_null("revoked_at"))
-            .col(timestamp("created_at"))
-            .foreign_key(&mut client_fk("oauth_refresh_tokens"))
-            .to_owned(),
-        Table::create()
-            .table("oauth_device_codes")
-            .col(id())
-            .col(unique_string("device_code_hash"))
-            .col(unique_string("user_code"))
-            .col(uuid("client_id"))
-            .col(text("scopes"))
-            .col(uuid_null("user_id"))
-            .col(string("status"))
-            .col(ColumnDef::new("interval_secs").big_integer().not_null())
-            .col(timestamp_null("last_polled_at"))
-            .col(timestamp("expires_at"))
-            .col(timestamp_null("used_at"))
-            .col(timestamp("created_at"))
-            .foreign_key(&mut client_fk("oauth_device_codes"))
-            .to_owned(),
-        Table::create()
-            .table("personal_access_tokens")
-            .col(id())
-            .col(uuid("user_id"))
-            .col(string("name"))
-            .col(unique_string("token_hash"))
-            .col(text("scopes"))
-            .col(timestamp_null("expires_at"))
-            .col(timestamp_null("last_used_at"))
-            .col(timestamp_null("revoked_at"))
-            .col(timestamp("created_at"))
-            .to_owned(),
-    ]
-}
-
-#[async_trait]
-impl MigrationTrait for CreateOAuthTables {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        for table in tables() {
-            manager.create_table(table).await?;
-        }
-        let mut unique_authorization = index(
-            "oauth_authorizations_user_client_unique",
-            "oauth_authorizations",
-            &["user_id", "client_id"],
-        );
-        unique_authorization.unique();
-        for statement in [
-            unique_authorization,
-            index(
-                "oauth_access_tokens_user_client_index",
-                "oauth_access_tokens",
-                &["user_id", "client_id"],
-            ),
-            index(
-                "oauth_access_tokens_family_index",
-                "oauth_access_tokens",
-                &["family_id"],
-            ),
-            index(
-                "oauth_access_tokens_code_index",
-                "oauth_access_tokens",
-                &["code_id"],
-            ),
-            index(
-                "oauth_refresh_tokens_user_client_index",
-                "oauth_refresh_tokens",
-                &["user_id", "client_id"],
-            ),
-            index(
-                "oauth_refresh_tokens_family_index",
-                "oauth_refresh_tokens",
-                &["family_id"],
-            ),
-            index(
-                "personal_access_tokens_user_index",
-                "personal_access_tokens",
-                &["user_id"],
-            ),
-        ] {
-            manager.create_index(statement).await?;
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        for table in TABLES.into_iter().rev() {
+            schema.drop_if_exists(table).await?;
         }
         Ok(())
     }
+}
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        for table in [
-            "personal_access_tokens",
-            "oauth_device_codes",
-            "oauth_refresh_tokens",
-            "oauth_access_tokens",
-            "oauth_codes",
-            "oauth_authorization_requests",
-            "oauth_authorizations",
-            "oauth_clients",
-        ] {
-            manager
-                .drop_table(Table::drop().table(table).to_owned())
-                .await?;
+#[cfg(test)]
+mod tests {
+    use navree_db::SetMigration;
+    use navree_db::navree_schema::Target;
+
+    use super::*;
+
+    /// The SQL `up` writes for `target`, offline.
+    async fn statements(target: Target) -> Vec<String> {
+        let schema = Schema::offline(target);
+        for entry in migrations().entries() {
+            let SetMigration::Schema(migration) = entry else {
+                panic!("{} is not a schema migration", entry.name());
+            };
+            migration.up(&schema).await.unwrap();
         }
-        Ok(())
+        schema.statements()
+    }
+
+    #[tokio::test]
+    async fn the_name_is_the_one_databases_recorded() {
+        let names: Vec<String> = migrations()
+            .entries()
+            .iter()
+            .map(|entry| entry.name().to_owned())
+            .collect();
+        assert_eq!(names, ["m20261026_000001_create_oauth_tables"]);
+    }
+
+    #[tokio::test]
+    async fn uuids_are_sixteen_bytes_on_mysql() {
+        let sql = statements(Target::mysql((8, 4))).await.join("\n");
+        assert!(sql.contains("`id` BINARY(16) NOT NULL"), "{sql}");
+        assert!(sql.contains("`token_hash` VARCHAR(255) NOT NULL"), "{sql}");
+        let sql = statements(Target::postgres(16)).await.join("\n");
+        assert!(sql.contains("\"id\" UUID NOT NULL"), "{sql}");
+        assert!(sql.contains("\"token_hash\" VARCHAR NOT NULL"), "{sql}");
+    }
+
+    #[tokio::test]
+    async fn every_table_is_created_and_dropped() {
+        let sql = statements(Target::postgres(16)).await.join("\n");
+        for table in TABLES {
+            assert!(
+                sql.contains(&format!("CREATE TABLE \"{table}\"")),
+                "{table}"
+            );
+        }
     }
 }

@@ -1,10 +1,17 @@
-//! The module's migrations (`MigrationSet` `sso`, after `auth`).
+//! The module's migrations (`MigrationSet` `sso`, after `auth`), written
+//! with the schema builder.
+//!
+//! The migration keeps the name it always had, so a database migrated by an
+//! earlier version finds nothing pending. The columns are the types it
+//! created: UUIDs as `BINARY(16)` on MySQL and MariaDB (where navree-db
+//! writes UUIDs as 16 bytes, and where `users.id` has that type), names,
+//! slugs and domains as `VARCHAR` without a length on PostgreSQL and SQLite
+//! and `VARCHAR(255)` on MySQL.
 
 use navree_db::MigrationSet;
-use sea_orm::DbErr;
-use sea_orm::sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Index, Table};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use navree_db::navree_schema::{
+    Blueprint, ColumnBuilder, Dialect, Migration, Schema, SchemaMigration, SchemaResult,
+};
 
 /// The name of the module's migration set.
 pub const SSO_MIGRATIONS: &str = "sso";
@@ -13,169 +20,144 @@ pub const SSO_MIGRATIONS: &str = "sso";
 pub(crate) fn migrations() -> MigrationSet {
     MigrationSet::new(SSO_MIGRATIONS)
         .after(["auth"])
-        .migration(CreateSsoTables)
+        .migration(SchemaMigration::new(
+            "m20261027_000001_create_sso_tables",
+            CreateSsoTables,
+        ))
+}
+
+/// A UUID column: `BINARY(16)` on MySQL and MariaDB, `uuid` elsewhere.
+fn uuid<'a>(t: &'a mut Blueprint, name: &str, dialect: Dialect) -> ColumnBuilder<'a> {
+    if dialect == Dialect::MySql {
+        t.binary(name).length(16).fixed()
+    } else {
+        t.uuid(name)
+    }
+}
+
+/// A text column of no fixed length: `VARCHAR(255)` on MySQL and MariaDB,
+/// `VARCHAR` elsewhere.
+fn varchar<'a>(t: &'a mut Blueprint, name: &str, dialect: Dialect) -> ColumnBuilder<'a> {
+    if dialect == Dialect::MySql {
+        t.string(name).length(255)
+    } else {
+        t.raw_column(name, "VARCHAR")
+    }
 }
 
 /// Creates `sso_connections`, `sso_domains` and `sso_identities`.
 struct CreateSsoTables;
 
-impl MigrationName for CreateSsoTables {
-    fn name(&self) -> &str {
-        "m20261027_000001_create_sso_tables"
-    }
-}
-
-fn timestamp(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name)
-        .timestamp_with_time_zone()
-        .not_null()
-        .to_owned()
-}
-
-#[async_trait]
-impl MigrationTrait for CreateSsoTables {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("sso_connections")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("owner_type").string().not_null())
-                    .col(ColumnDef::new("owner_id").uuid().null())
-                    .col(ColumnDef::new("slug").string().not_null())
-                    .col(ColumnDef::new("name").string().not_null())
-                    .col(ColumnDef::new("protocol").string().not_null())
-                    .col(ColumnDef::new("enabled").boolean().not_null())
-                    .col(ColumnDef::new("enforce").boolean().null())
-                    .col(ColumnDef::new("settings").text().not_null())
-                    .col(ColumnDef::new("provisioning").text().not_null())
-                    .col(timestamp("created_at"))
-                    .col(timestamp("updated_at"))
-                    .to_owned(),
-            )
+impl Migration for CreateSsoTables {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let dialect = schema.target().await?.dialect();
+        schema
+            .create("sso_connections", |t| {
+                uuid(t, "id", dialect).primary();
+                varchar(t, "owner_type", dialect);
+                uuid(t, "owner_id", dialect).nullable();
+                varchar(t, "slug", dialect);
+                varchar(t, "name", dialect);
+                varchar(t, "protocol", dialect);
+                t.boolean("enabled");
+                t.boolean("enforce").nullable();
+                t.text("settings");
+                t.text("provisioning");
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+                t.unique("slug").name("sso_connections_slug_unique");
+                t.index(["owner_type", "owner_id"])
+                    .name("sso_connections_owner_index");
+            })
             .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("sso_connections_slug_unique")
-                    .table("sso_connections")
-                    .col("slug")
-                    .unique()
-                    .to_owned(),
-            )
+        schema
+            .create("sso_domains", |t| {
+                uuid(t, "id", dialect).primary();
+                uuid(t, "connection_id", dialect);
+                varchar(t, "domain", dialect);
+                varchar(t, "token", dialect);
+                t.timestamp_tz("verified_at").nullable();
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+                t.foreign("connection_id")
+                    .references("id")
+                    .on("sso_connections")
+                    .cascade_on_delete();
+                t.unique(["connection_id", "domain"])
+                    .name("sso_domains_connection_domain_unique");
+                t.index("domain").name("sso_domains_domain_index");
+            })
             .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("sso_connections_owner_index")
-                    .table("sso_connections")
-                    .col("owner_type")
-                    .col("owner_id")
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .create_table(
-                Table::create()
-                    .table("sso_domains")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("connection_id").uuid().not_null())
-                    .col(ColumnDef::new("domain").string().not_null())
-                    .col(ColumnDef::new("token").string().not_null())
-                    .col(
-                        ColumnDef::new("verified_at")
-                            .timestamp_with_time_zone()
-                            .null(),
-                    )
-                    .col(timestamp("created_at"))
-                    .col(timestamp("updated_at"))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("sso_domains", "connection_id")
-                            .to("sso_connections", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("sso_domains_connection_domain_unique")
-                    .table("sso_domains")
-                    .col("connection_id")
-                    .col("domain")
-                    .unique()
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("sso_domains_domain_index")
-                    .table("sso_domains")
-                    .col("domain")
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .create_table(
-                Table::create()
-                    .table("sso_identities")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("connection_id").uuid().not_null())
-                    .col(ColumnDef::new("user_id").uuid().not_null())
-                    .col(ColumnDef::new("subject").string().not_null())
-                    .col(ColumnDef::new("email").string().null())
-                    .col(ColumnDef::new("attributes").text().not_null())
-                    .col(timestamp("last_login_at"))
-                    .col(timestamp("created_at"))
-                    .col(timestamp("updated_at"))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("sso_identities", "connection_id")
-                            .to("sso_connections", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("sso_identities", "user_id")
-                            .to("users", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("sso_identities_connection_subject_unique")
-                    .table("sso_identities")
-                    .col("connection_id")
-                    .col("subject")
-                    .unique()
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("sso_identities_user_index")
-                    .table("sso_identities")
-                    .col("user_id")
-                    .to_owned(),
-            )
+        schema
+            .create("sso_identities", |t| {
+                uuid(t, "id", dialect).primary();
+                uuid(t, "connection_id", dialect);
+                uuid(t, "user_id", dialect);
+                varchar(t, "subject", dialect);
+                varchar(t, "email", dialect).nullable();
+                t.text("attributes");
+                t.timestamp_tz("last_login_at");
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+                t.foreign("connection_id")
+                    .references("id")
+                    .on("sso_connections")
+                    .cascade_on_delete();
+                t.foreign("user_id")
+                    .references("id")
+                    .on("users")
+                    .cascade_on_delete();
+                t.unique(["connection_id", "subject"])
+                    .name("sso_identities_connection_subject_unique");
+                t.index("user_id").name("sso_identities_user_index");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
         for table in ["sso_identities", "sso_domains", "sso_connections"] {
-            manager
-                .drop_table(Table::drop().table(table).to_owned())
-                .await?;
+            schema.drop_if_exists(table).await?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_db::SetMigration;
+    use navree_db::navree_schema::Target;
+
+    use super::*;
+
+    /// The SQL `up` writes for `target`, offline.
+    async fn statements(target: Target) -> Vec<String> {
+        let schema = Schema::offline(target);
+        for entry in migrations().entries() {
+            let SetMigration::Schema(migration) = entry else {
+                panic!("{} is not a schema migration", entry.name());
+            };
+            migration.up(&schema).await.unwrap();
+        }
+        schema.statements()
+    }
+
+    #[tokio::test]
+    async fn the_name_is_the_one_databases_recorded() {
+        let names: Vec<String> = migrations()
+            .entries()
+            .iter()
+            .map(|entry| entry.name().to_owned())
+            .collect();
+        assert_eq!(names, ["m20261027_000001_create_sso_tables"]);
+    }
+
+    #[tokio::test]
+    async fn uuids_are_sixteen_bytes_on_mysql() {
+        let sql = statements(Target::mysql((8, 4))).await.join("\n");
+        assert!(sql.contains("`id` BINARY(16) NOT NULL"), "{sql}");
+        assert!(sql.contains("`slug` VARCHAR(255) NOT NULL"), "{sql}");
+        let sql = statements(Target::postgres(16)).await.join("\n");
+        assert!(sql.contains("\"id\" UUID NOT NULL"), "{sql}");
+        assert!(sql.contains("\"slug\" VARCHAR NOT NULL"), "{sql}");
     }
 }
