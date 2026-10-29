@@ -158,7 +158,7 @@ export const ecosystem: EcosystemEntry[] = [
     name: "Helm",
     kind: "tool",
     category: "build",
-    tagline: "An admin panel generated from your entities",
+    tagline: "An admin panel generated from your models",
     summary:
       "Describe a resource once and get list, detail and edit screens with filters, bulk actions and metrics. Every screen respects the access rules your API already enforces.",
     features: ["Resources from entities", "Filters, actions and metrics", "Uses your access policies", "Custom fields and pages"],
