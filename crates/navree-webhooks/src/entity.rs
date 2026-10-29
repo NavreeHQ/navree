@@ -1,7 +1,6 @@
-//! The webhooks module's tables (migration set `webhooks`): navree-orm
-//! models (`endpoint::Model::query()`, typed columns such as
-//! `delivery::Model::EVENT_TYPE`), and SeaORM entities for code built on
-//! SeaORM's query API.
+//! The webhooks module's tables, as navree-orm models
+//! (`endpoint::Model::query()`, typed columns such as
+//! `delivery::Model::EVENT_TYPE`).
 //!
 //! - `webhook_endpoints(id, workspace_id, url, description, events JSON,
 //!   headers JSON, secret, previous_secret, previous_secret_expires_at,
@@ -22,22 +21,23 @@
 //! So no foreign key points at a delivery: an attempt's `delivery_id` is
 //! indexed, and `webhooks:prune` deletes a delivery's attempts with it.
 //!
-//! Secrets are encrypted with the app key when the app has one, and never
-//! serialized. Change endpoints through [`Webhooks`](crate::Webhooks);
+//! Secrets are encrypted with the app key when the app has one, never
+//! serialized and never part of a change event. Change endpoints through
+//! [`Webhooks`](crate::Webhooks), which records them without their secrets;
 //! read the tables freely.
 
 /// `webhook_endpoints`: where webhooks are sent.
 pub mod endpoint {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use serde_json::Value;
+    use uuid::Uuid;
 
     /// An endpoint.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "webhook_endpoints")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "webhook_endpoints")]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The workspace that owns it; `None` for an app-wide endpoint.
         pub workspace_id: Option<Uuid>,
@@ -46,66 +46,49 @@ pub mod endpoint {
         /// A note for people.
         pub description: Option<String>,
         /// The subscribed event types (a JSON array; `*` is every type).
-        pub events: Json,
+        pub events: Value,
         /// Extra request headers (a JSON object of strings).
-        pub headers: Json,
+        pub headers: Value,
         /// The signing secret, encrypted with the app key when there is one.
         /// Never serialized.
         #[serde(skip_serializing)]
-        #[sea_orm(column_type = "Text")]
+        #[model(hidden)]
         pub secret: String,
         /// The secret before the last rotation, still signing until
         /// `previous_secret_expires_at`. Never serialized.
         #[serde(skip_serializing)]
-        #[sea_orm(column_type = "Text", nullable)]
+        #[model(hidden)]
         pub previous_secret: Option<String>,
         /// When the previous secret stops signing.
-        pub previous_secret_expires_at: Option<DateTimeUtc>,
+        pub previous_secret_expires_at: Option<DateTime<Utc>>,
         /// Whether deliveries are sent.
         pub enabled: bool,
         /// When it was disabled.
-        pub disabled_at: Option<DateTimeUtc>,
+        pub disabled_at: Option<DateTime<Utc>>,
         /// Why: `manual`, `failing` or `gone`.
         pub disabled_reason: Option<String>,
         /// Since when every attempt has failed (cleared by a success).
-        pub failing_since: Option<DateTimeUtc>,
+        pub failing_since: Option<DateTime<Utc>>,
         /// When it was created.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
         /// When it last changed.
-        pub updated_at: DateTimeUtc,
+        pub updated_at: DateTime<Utc>,
     }
-
-    /// An endpoint has many deliveries.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {
-        /// `webhook_deliveries.endpoint_id`.
-        #[sea_orm(has_many = "super::delivery::Entity")]
-        Deliveries,
-    }
-
-    impl Related<super::delivery::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::Deliveries.def()
-        }
-    }
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `webhook_deliveries`: one message to one endpoint.
 pub mod delivery {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// A delivery.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "webhook_deliveries")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "webhook_deliveries")]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
-        /// The endpoint.
+        /// The endpoint (`webhook_endpoints.id`, `ON DELETE CASCADE`).
         pub endpoint_id: Uuid,
         /// The endpoint's workspace.
         pub workspace_id: Option<Uuid>,
@@ -115,7 +98,6 @@ pub mod delivery {
         /// The event type (`deal.won`).
         pub event_type: String,
         /// The exact body that is signed and sent.
-        #[sea_orm(column_type = "Text")]
         pub payload: String,
         /// `pending`, `succeeded` or `failed`.
         pub status: String,
@@ -124,65 +106,35 @@ pub mod delivery {
         /// Attempts allowed before it fails.
         pub max_attempts: i32,
         /// When the next attempt is due (pending deliveries).
-        pub next_attempt_at: Option<DateTimeUtc>,
+        pub next_attempt_at: Option<DateTime<Utc>>,
         /// The status code of the last attempt, if the endpoint answered.
         pub last_status_code: Option<i32>,
         /// The error of the last failed attempt.
-        #[sea_orm(column_type = "Text", nullable)]
         pub last_error: Option<String>,
         /// When the message was created.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
         /// When it last changed.
-        pub updated_at: DateTimeUtc,
+        pub updated_at: DateTime<Utc>,
     }
-
-    /// A delivery belongs to an endpoint and has many attempts.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {
-        /// `webhook_endpoints.id`.
-        #[sea_orm(
-            belongs_to = "super::endpoint::Entity",
-            from = "Column::EndpointId",
-            to = "super::endpoint::Column::Id",
-            on_delete = "Cascade"
-        )]
-        Endpoint,
-        /// `webhook_attempts.delivery_id`.
-        #[sea_orm(has_many = "super::attempt::Entity")]
-        Attempts,
-    }
-
-    impl Related<super::endpoint::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::Endpoint.def()
-        }
-    }
-
-    impl Related<super::attempt::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::Attempts.def()
-        }
-    }
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `webhook_attempts`: one HTTP request of a delivery.
 pub mod attempt {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// An attempt.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "webhook_attempts")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "webhook_attempts")]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
-        /// The delivery.
+        /// The delivery (`webhook_deliveries.id`; no foreign key:
+        /// deliveries are a hypertable on TimescaleDB, pruning deletes the
+        /// attempts).
         pub delivery_id: Uuid,
-        /// The endpoint.
+        /// The endpoint (`webhook_endpoints.id`, `ON DELETE CASCADE`).
         pub endpoint_id: Uuid,
         /// The attempt number, from 1.
         pub attempt: i32,
@@ -191,78 +143,34 @@ pub mod attempt {
         /// Whether it succeeded (a 2xx in time).
         pub succeeded: bool,
         /// The first 4 KB of the response body.
-        #[sea_orm(column_type = "Text", nullable)]
         pub response_body: Option<String>,
         /// Why it failed, when it did without a response (timeout, refused).
-        #[sea_orm(column_type = "Text", nullable)]
         pub error: Option<String>,
         /// How long it took, in milliseconds.
         pub duration_ms: i64,
         /// When it was made.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
     }
-
-    /// An attempt belongs to a delivery and to its endpoint.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {
-        /// `webhook_deliveries.id` (no foreign key: deliveries are a
-        /// hypertable on TimescaleDB; pruning deletes the attempts).
-        #[sea_orm(
-            belongs_to = "super::delivery::Entity",
-            from = "Column::DeliveryId",
-            to = "super::delivery::Column::Id"
-        )]
-        Delivery,
-        /// `webhook_endpoints.id`.
-        #[sea_orm(
-            belongs_to = "super::endpoint::Entity",
-            from = "Column::EndpointId",
-            to = "super::endpoint::Column::Id",
-            on_delete = "Cascade"
-        )]
-        Endpoint,
-    }
-
-    impl Related<super::delivery::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::Delivery.def()
-        }
-    }
-
-    impl Related<super::endpoint::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::Endpoint.def()
-        }
-    }
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `webhook_receipts`: incoming messages already handled
 /// ([`mark_processed`](crate::VerifiedWebhook::mark_processed)).
 pub mod receipt {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// A receipt.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "webhook_receipts")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "webhook_receipts")]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The source name (`github`).
         pub source: String,
         /// The sender's message id.
         pub message_id: String,
         /// When it was handled.
-        pub received_at: DateTimeUtc,
+        pub received_at: DateTime<Utc>,
     }
-
-    /// No relations.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }

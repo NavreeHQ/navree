@@ -16,8 +16,6 @@ use navree_contracts::{Clock, SystemClock};
 use navree_db::Uow;
 use navree_http::AppError;
 use navree_kernel::AppContext;
-use sea_orm::ConnectionTrait;
-use sea_orm::sea_query::{OnConflict, Query};
 use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -126,29 +124,17 @@ impl<S: WebhookSource> VerifiedWebhook<S> {
     /// redelivery). A message whose handling rolled back is handled again
     /// on the next delivery; one that committed is not.
     pub async fn mark_processed(&self, uow: &Uow) -> Result<bool, WebhooksError> {
-        let tx = uow.tx().await?;
-        let mut insert = Query::insert();
-        insert
-            .into_table(receipt::Entity)
-            .columns([
-                receipt::Column::Id,
-                receipt::Column::Source,
-                receipt::Column::MessageId,
-                receipt::Column::ReceivedAt,
-            ])
-            .values_panic([
-                Uuid::now_v7().into(),
-                S::NAME.into(),
-                self.id.clone().into(),
-                self.received_at.into(),
-            ])
-            .on_conflict(
-                OnConflict::columns([receipt::Column::Source, receipt::Column::MessageId])
-                    .do_nothing()
-                    .to_owned(),
-            );
-        let result = tx.execute(&insert).await?;
-        Ok(result.rows_affected() > 0)
+        use navree_orm::Model as _;
+
+        let receipt = receipt::Model {
+            id: Uuid::now_v7(),
+            source: S::NAME.to_owned(),
+            message_id: self.id.clone(),
+            received_at: self.received_at,
+        };
+        // Inserted without a change event (a receipt is not a record anyone
+        // audits); a conflict on (source, message_id) inserts nothing.
+        Ok(receipt::Model::insert_or_ignore(uow, [receipt]).await? > 0)
     }
 }
 

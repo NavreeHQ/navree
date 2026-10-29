@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use navree_contracts::{FixedClock, Job};
 use navree_db::Db;
+use navree_db::{Backend, Executor, Statement};
 use navree_events::Event;
 use navree_http_client::HttpClient;
 use navree_webhooks::{
@@ -18,7 +19,6 @@ use navree_webhooks::{
     WebhookContext, WebhookDeliveryFailed, WebhookEndpointDisabled, WebhookEvent, WebhookSource,
     WebhookVerifier, Webhooks, WebhooksError, WebhooksModule, WebhooksOptions,
 };
-use sea_orm::{ConnectionTrait, Statement};
 
 use crate::support::{DealWon, builder, start};
 
@@ -139,7 +139,6 @@ fn the_documented_names_exist() {
     // Events that become webhooks.
     fn is_webhook_event<E: WebhookEvent>() {}
     is_webhook_event::<DealWon>();
-    let _ = WebhookContext::conn;
     let _ = WebhookContext::db;
     let _ = WebhookContext::app;
     // The service.
@@ -310,17 +309,23 @@ async fn the_documented_routes_commands_and_tables_exist() {
     assert!(app.run_command("webhooks:test", &[]).await.is_err());
 
     let db = app.get::<Db>().await;
-    let rows = db
-        .conn()
-        .query_all_raw(Statement::from_string(
-            db.backend(),
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'webhook_%' ORDER BY name",
-        ))
+    let sql = match db.backend() {
+        Backend::Sqlite => {
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'webhook_%' ORDER BY name"
+        }
+        Backend::Postgres => {
+            "SELECT tablename::text AS name FROM pg_tables WHERE schemaname = current_schema() AND tablename LIKE 'webhook_%' ORDER BY tablename"
+        }
+        Backend::MySql => {
+            "SELECT CAST(table_name AS CHAR) AS name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'webhook_%' ORDER BY table_name"
+        }
+    };
+    let tables: Vec<String> = db
+        .fetch_all(&Statement::text(sql))
         .await
-        .unwrap();
-    let tables: Vec<String> = rows
+        .unwrap()
         .iter()
-        .map(|row| row.try_get::<String>("", "name").unwrap())
+        .map(|row| row.get::<String>("name").unwrap())
         .collect();
     assert_eq!(
         tables,

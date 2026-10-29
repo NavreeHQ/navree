@@ -114,8 +114,7 @@ impl Notification for Reminder {
 /// Webhooks with the three sources and notifications through `sms` and
 /// `whatsapp`.
 fn app(sms: Arc<dyn SmsDriver>, whatsapp: Arc<dyn WhatsAppDriver>) -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    crate::servers::database(TestApp::builder())
         .config("webhooks.routes", false)
         .config("webhooks.incoming.twilio.secret", TWILIO_TOKEN)
         .config("webhooks.incoming.vonage.secret", VONAGE_SECRET)
@@ -343,8 +342,7 @@ async fn meta_answers_the_handshake_and_applies_statuses_and_replies() {
 
 #[tokio::test]
 async fn only_configured_sources_get_a_route() {
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .config("webhooks.routes", false)
         .config("webhooks.incoming.twilio.secret", TWILIO_TOKEN)
         .module(DatabaseModule::from_config())
@@ -377,8 +375,7 @@ async fn only_configured_sources_get_a_route() {
 
 #[tokio::test]
 async fn without_notify_module_nothing_is_mounted() {
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .config("webhooks.routes", false)
         .config("webhooks.incoming.twilio.secret", TWILIO_TOKEN)
         .module(DatabaseModule::from_config())

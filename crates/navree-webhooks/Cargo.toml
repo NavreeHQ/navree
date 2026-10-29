@@ -15,6 +15,11 @@ workspace = true
 ## (`NotifyCallbacksController`): Twilio, Vonage and Meta statuses and
 ## STOP replies applied to the notification delivery log and opt-outs.
 notify = ["dep:navree-notify"]
+## The test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres` with
+## NAVREE_TEST_POSTGRES_URL).
+postgres = ["navree-db/postgres"]
+## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
+mysql = ["navree-db/mysql"]
 
 [dependencies]
 axum = { workspace = true }
@@ -38,8 +43,6 @@ navree-notify = { workspace = true, optional = true }
 navree-orm = { workspace = true }
 navree-workspace = { workspace = true }
 rand = { workspace = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_urlencoded = { workspace = true }

@@ -4,9 +4,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use navree_db::{Db, Uow};
+use navree_db::{Db, Executor, Row, Statement, Uow, Value as SqlValue};
 use navree_kernel::BoxFuture;
-use sea_orm::{ConnectionTrait, QueryResult, Statement, Value as SqlValue};
 use uuid::Uuid;
 
 use super::graph::AutomationGraph;
@@ -464,21 +463,28 @@ impl DatabaseAutomationStore {
     }
 
     fn stmt(&self, sql: &str, values: Vec<SqlValue>) -> Statement {
-        statement(self.db.backend(), sql, values)
+        statement(sql, values)
+    }
+
+    /// What statements outside a unit of work run on: the writer's pool,
+    /// never the task's unit of work, or the connection itself when it has
+    /// no pool.
+    fn executor(&self) -> &dyn Executor {
+        match self.db.pool() {
+            Some(pool) => pool,
+            None => &self.db,
+        }
     }
 
     async fn execute_in(&self, uow: Option<&Uow>, stmt: Statement) -> StoreResult<u64> {
-        let result = match uow {
-            Some(uow) => {
-                let tx = uow.tx().await?;
-                tx.execute_raw(stmt).await?
-            }
-            None => self.db.conn().execute_raw(stmt).await?,
+        let executed = match uow {
+            Some(uow) => uow.execute(&stmt).await?,
+            None => self.executor().execute(&stmt).await?,
         };
-        Ok(result.rows_affected())
+        Ok(executed.rows_affected)
     }
 
-    async fn all(&self, sql: &str, values: Vec<SqlValue>) -> StoreResult<Vec<QueryResult>> {
+    async fn all(&self, sql: &str, values: Vec<SqlValue>) -> StoreResult<Vec<Row>> {
         self.all_in(None, sql, values).await
     }
 
@@ -489,20 +495,23 @@ impl DatabaseAutomationStore {
         uow: Option<&Uow>,
         sql: &str,
         values: Vec<SqlValue>,
-    ) -> StoreResult<Vec<QueryResult>> {
+    ) -> StoreResult<Vec<Row>> {
         let stmt = self.stmt(sql, values);
         if let Some(uow) = uow
-            && let Some(tx) = uow.open_tx().await
+            && uow.has_open_transaction().await
         {
-            return Ok(tx.query_all_raw(stmt).await?);
+            return Ok(uow.fetch_all(&stmt).await?);
         }
-        Ok(self.db.conn().query_all_raw(stmt).await?)
+        Ok(self.executor().fetch_all(&stmt).await?)
     }
 
     async fn count_of(&self, sql: &str, values: Vec<SqlValue>) -> StoreResult<u64> {
-        let row = self.db.conn().query_one_raw(self.stmt(sql, values)).await?;
+        let row = self
+            .executor()
+            .fetch_optional(&self.stmt(sql, values))
+            .await?;
         let total: i64 = match row {
-            Some(row) => row.try_get("", "total")?,
+            Some(row) => row.get("total")?,
             None => 0,
         };
         Ok(u64::try_from(total).unwrap_or_default())
@@ -522,8 +531,8 @@ fn parse_uuid(text: &str) -> StoreResult<Uuid> {
         .map_err(|_| WorkflowsError::Other(format!("stored id `{text}` is not a UUID")))
 }
 
-fn opt_uuid(row: &QueryResult, column: &str) -> StoreResult<Option<Uuid>> {
-    row.try_get::<Option<String>>("", column)?
+fn opt_uuid(row: &Row, column: &str) -> StoreResult<Option<Uuid>> {
+    row.get::<Option<String>>(column)?
         .map(|text| parse_uuid(&text))
         .transpose()
 }
@@ -540,51 +549,51 @@ fn graph_text(graph: &AutomationGraph) -> StoreResult<String> {
     })
 }
 
-fn u32_column(row: &QueryResult, column: &str) -> StoreResult<u32> {
-    let value: i64 = row.try_get("", column)?;
+fn u32_column(row: &Row, column: &str) -> StoreResult<u32> {
+    let value: i64 = row.get(column)?;
     Ok(u32::try_from(value).unwrap_or(u32::MAX))
 }
 
-fn automation_row(row: &QueryResult) -> StoreResult<Automation> {
-    let status: String = row.try_get("", "status")?;
-    let enrollment: String = row.try_get("", "enrollment")?;
+fn automation_row(row: &Row) -> StoreResult<Automation> {
+    let status: String = row.get("status")?;
+    let enrollment: String = row.get("enrollment")?;
     Ok(Automation {
-        id: parse_uuid(&row.try_get::<String>("", "id")?)?,
+        id: parse_uuid(&row.get::<String>("id")?)?,
         workspace_id: opt_uuid(row, "workspace_id")?,
-        name: row.try_get("", "name")?,
-        description: row.try_get("", "description")?,
+        name: row.get("name")?,
+        description: row.get("description")?,
         status: status.parse().map_err(WorkflowsError::Other)?,
-        definition: graph(&row.try_get::<String>("", "definition")?)?,
+        definition: graph(&row.get::<String>("definition")?)?,
         enrollment: enrollment.parse().map_err(WorkflowsError::Other)?,
         version: row
-            .try_get::<Option<i64>>("", "version")?
+            .get::<Option<i64>>("version")?
             .map(|v| u32::try_from(v).unwrap_or(u32::MAX)),
-        trigger_event: row.try_get("", "trigger_event")?,
-        template: row.try_get("", "template")?,
-        created_at: from_millis(row.try_get("", "created_at")?),
-        updated_at: from_millis(row.try_get("", "updated_at")?),
+        trigger_event: row.get("trigger_event")?,
+        template: row.get("template")?,
+        created_at: from_millis(row.get("created_at")?),
+        updated_at: from_millis(row.get("updated_at")?),
     })
 }
 
-fn version_row(row: &QueryResult) -> StoreResult<AutomationVersion> {
+fn version_row(row: &Row) -> StoreResult<AutomationVersion> {
     Ok(AutomationVersion {
-        automation_id: parse_uuid(&row.try_get::<String>("", "automation_id")?)?,
+        automation_id: parse_uuid(&row.get::<String>("automation_id")?)?,
         version: u32_column(row, "version")?,
-        definition: graph(&row.try_get::<String>("", "definition")?)?,
+        definition: graph(&row.get::<String>("definition")?)?,
         published_by: opt_uuid(row, "published_by")?,
-        created_at: from_millis(row.try_get("", "created_at")?),
+        created_at: from_millis(row.get("created_at")?),
     })
 }
 
-fn enrollment_row(row: &QueryResult) -> StoreResult<EnrollmentRecord> {
+fn enrollment_row(row: &Row) -> StoreResult<EnrollmentRecord> {
     Ok(EnrollmentRecord {
-        id: parse_uuid(&row.try_get::<String>("", "id")?)?,
-        automation_id: parse_uuid(&row.try_get::<String>("", "automation_id")?)?,
+        id: parse_uuid(&row.get::<String>("id")?)?,
+        automation_id: parse_uuid(&row.get::<String>("automation_id")?)?,
         version: u32_column(row, "version")?,
         workspace_id: opt_uuid(row, "workspace_id")?,
-        subject: row.try_get("", "subject")?,
-        run_id: parse_uuid(&row.try_get::<String>("", "run_id")?)?,
-        created_at: from_millis(row.try_get("", "created_at")?),
+        subject: row.get("subject")?,
+        run_id: parse_uuid(&row.get::<String>("run_id")?)?,
+        created_at: from_millis(row.get("created_at")?),
     })
 }
 

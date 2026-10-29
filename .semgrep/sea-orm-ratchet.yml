@@ -41,7 +41,6 @@ rules:
         - "/crates/navree-graphql/"
         - "/crates/navree-grpc/"
         - "/crates/navree-helm/"
-        - "/crates/navree-i18n/"
         - "/crates/navree-lighthouse/"
         - "/crates/navree-mcp/"
         # navree-micro is ported; its tests keep one SeaORM fixture (the `deals`
@@ -51,12 +50,9 @@ rules:
         - "/crates/navree-schema/"
         - "/crates/navree-search/"
         - "/crates/navree-sheets/"
-        - "/crates/navree-webhooks/"
-        - "/crates/navree-workflows/"
         - "/crates/navree-cli/"
         - "/crates/navree-directory/"
         - "/crates/navree-domains/"
-        - "/crates/navree-integrations/"
         - "/crates/navree-macros/"
         # navree-workspace is ported; its SeaORM compatibility layer (the
         # `sea_compat` repositories and registrations, the SeaORM derive kept
@@ -92,7 +88,6 @@ rules:
         - "/crates/navree-graphql/"
         - "/crates/navree-grpc/"
         - "/crates/navree-helm/"
-        - "/crates/navree-i18n/"
         - "/crates/navree-lighthouse/"
         - "/crates/navree-mcp/"
         # navree-micro: a dev-dependency for that fixture (navree-access's shim, step 8).
@@ -101,8 +96,6 @@ rules:
         - "/crates/navree-schema/"
         - "/crates/navree-search/"
         - "/crates/navree-sheets/"
-        - "/crates/navree-webhooks/"
-        - "/crates/navree-workflows/"
         # navree-workspace: sea-orm for its compatibility layer, until step 8.
         - "/crates/navree-workspace/Cargo.toml"
     pattern-regex: '(?m)^\s*sea-orm(?:-migration)?\s*(?:=|\.)'

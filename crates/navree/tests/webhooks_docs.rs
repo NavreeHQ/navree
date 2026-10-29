@@ -40,7 +40,7 @@ impl WebhookEvent for DealWon {
     /// What goes in `data`.
     fn payload<'a>(&'a self, ctx: &'a WebhookContext) -> BoxFuture<'a, Result<Value, BoxError>> {
         Box::pin(async move {
-            let _connection = ctx.conn();
+            let _db = ctx.db();
             Ok(json!({ "deal": { "id": self.deal_id }, "won_by": self.won_by }))
         })
     }

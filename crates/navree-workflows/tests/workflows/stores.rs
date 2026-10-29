@@ -7,11 +7,11 @@
 use std::time::Duration;
 
 use navree_db::PageQuery;
+use navree_db::{Backend, Executor};
 use navree_workflows::{
     AutomationChanges, AutomationStatus, EnrollmentPolicy, Execution, NewAutomation, RunQuery,
     RunStatus, StartOptions, StepStatus, WorkflowsError,
 };
-use sea_orm::DbBackend;
 use serde_json::json;
 
 use crate::support::{
@@ -51,15 +51,12 @@ conformance!(
 #[tokio::test]
 async fn the_harness_runs_on_the_configured_server() {
     let h = harness(|b| b).await;
-    let set = |name: &str| std::env::var(name).is_ok_and(|url| !url.is_empty());
-    let expected = if cfg!(feature = "postgres") && set("NAVREE_TEST_POSTGRES_URL") {
-        DbBackend::Postgres
-    } else if cfg!(feature = "mysql") && set("NAVREE_TEST_MYSQL_URL") {
-        DbBackend::MySql
-    } else {
-        DbBackend::Sqlite
+    let expected = match crate::servers::Server::current() {
+        crate::servers::Server::Sqlite => Backend::Sqlite,
+        crate::servers::Server::Postgres => Backend::Postgres,
+        crate::servers::Server::MySql => Backend::MySql,
     };
-    assert_eq!(h.db().await.backend(), expected);
+    assert_eq!(Executor::backend(&*h.db().await), expected);
 }
 
 /// A start applies when its unit of work commits, and never when it rolls

@@ -10,6 +10,7 @@ mod notify;
 mod orm;
 mod outgoing;
 mod routes;
+mod servers;
 mod sources;
 mod support;
 mod time_series;

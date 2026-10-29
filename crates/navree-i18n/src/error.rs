@@ -2,8 +2,8 @@
 
 use std::collections::BTreeMap;
 
+use navree_db::DbError;
 use navree_http::AppError;
-use sea_orm::DbErr;
 
 /// What can go wrong in the localization module.
 #[derive(Debug, thiserror::Error)]
@@ -48,7 +48,7 @@ pub enum I18nError {
     NoDatabase,
     /// A database error while reading or saving a locale.
     #[error(transparent)]
-    Database(#[from] DbErr),
+    Database(#[from] DbError),
 }
 
 /// `InvalidLocale` and `UnsupportedLocale` are 400s with `errors.locale`;
