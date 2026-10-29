@@ -416,7 +416,7 @@ impl DemoWorkspaces {
         match result {
             Ok(names) => {
                 self.seeded(&uow, &workspace, names.clone(), true).await;
-                uow.commit().await?;
+                uow.commit().await.map_err(WorkspaceError::db)?;
                 tracing::info!(target: "navree::workspace", workspace = %workspace.slug, seeders = ?names, "demo workspace reset");
                 Ok(DemoReset {
                     workspace,
@@ -444,7 +444,7 @@ impl DemoWorkspaces {
         let uow = tenant.uow(None, None).await;
         match self.run(&uow, workspace, seeders, reset).await {
             Ok(names) => {
-                uow.commit().await?;
+                uow.commit().await.map_err(WorkspaceError::db)?;
                 Ok(names)
             }
             Err(error) => {
