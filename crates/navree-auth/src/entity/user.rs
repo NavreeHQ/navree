@@ -113,8 +113,10 @@ impl navree_access::Subject for Entity {
 }
 
 /// Inserts `user` through `uow` and records a `created` change event with
-/// the stored row (its `Serialize` form); the stored row.
-pub(crate) async fn insert(uow: &Uow, user: Model) -> Result<Model, AuthError> {
+/// the stored row (its `Serialize` form, so no secret reaches an observer);
+/// the stored row. Other modules that create users (social sign-in, single
+/// sign-on) write them with this.
+pub async fn insert(uow: &Uow, user: Model) -> Result<Model, AuthError> {
     let id = user.id;
     Model::insert(uow, [user]).await?;
     let stored = stored(uow, id).await?;

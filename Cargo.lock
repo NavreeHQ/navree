@@ -6700,8 +6700,6 @@ dependencies = [
  "navree-orm",
  "navree-testing",
  "ring",
- "sea-orm",
- "sea-orm-migration",
  "serde",
  "serde_json",
  "sha2 0.11.1",
