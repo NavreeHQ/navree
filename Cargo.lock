@@ -5109,7 +5109,6 @@ dependencies = [
  "navree-validation",
  "navree-view",
  "ring",
- "sea-orm",
  "serde",
  "serde_json",
  "sha2 0.11.1",
