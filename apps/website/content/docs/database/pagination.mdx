@@ -1,6 +1,6 @@
 ---
 title: "Pagination"
-description: "Offset pages in a `{data, meta}` response with `PageQuery`, `paginate` and `Page`, your own page parameters, and cursor pagination over UUID v7 keys."
+description: "Offset pages in a `{data, meta}` response with `PageQuery` and `Page`, your own page parameters, shaping the items, and cursor pagination over UUID v7 keys."
 ---
 
 Lists should come back a page at a time. `navree-db` gives you two kinds of pagination:
@@ -8,25 +8,26 @@ Lists should come back a page at a time. `navree-db` gives you two kinds of pagi
 - **Offset pagination**, `?page=2&per_page=15`, with the total and the number of pages in a `{data, meta}` response. Use it for tables a user pages through.
 - **Cursor pagination**, `?cursor=...&limit=15`, which only knows "the next page". Use it for feeds and infinite scrolling, where rows arrive while people read.
 
-Model queries paginate themselves, `Deal::query().latest().paginate(&uow, page)`, with the same `PageQuery`, `Page` and `{data, meta}` response ([pagination and streaming](/docs/orm/pagination-and-streaming/)). This page covers `navree::db::paginate`, for SeaORM selects.
+A model query paginates itself, `Deal::query().latest().paginate(&uow, page)`, and answers with navree-db's `PageQuery`, `Page` and the `{data, meta}` response. This page covers those types and what an API does with them; [pagination and streaming](/docs/orm/pagination-and-streaming/) covers the query side (simple pages, cursors, chunks and streams).
 
 ## Paginating a query
 
-Take a `PageQuery` in the handler, build an ordered SeaORM query, and pass both to `paginate` with a connection:
+Take a `PageQuery` in the handler, order the query, and call `paginate` on it with the unit of work:
 
 ```rust title="src/modules/deals/service.rs"
-use navree::db::paginate;
+use navree::orm::{OrmError, Record};
 use navree::prelude::*;
-use sea_orm::{EntityTrait, QueryOrder};
+
+use super::entity::Deal;
 
 impl DealService {
     /// One page of deals, newest first.
-    pub async fn list(&self, uow: &Uow, page: PageQuery) -> Result<Page<deal::Model>> {
-        let select = deal::Entity::find()
-            .order_by_desc(deal::Column::CreatedAt)
-            .order_by_desc(deal::Column::Id);
-        let tx = uow.tx().await?;
-        Ok(paginate(select, &*tx, page).await?)
+    pub async fn list(&self, uow: &Uow, page: PageQuery) -> Result<Page<Record<Deal>>, OrmError> {
+        Deal::query()
+            .order_by_desc(Deal::CREATED_AT)
+            .order_by_desc(Deal::ID)
+            .paginate(uow, page)
+            .await
     }
 }
 ```
@@ -34,14 +35,14 @@ impl DealService {
 ```rust title="src/modules/deals/controller.rs"
 #[get("/")]
 #[authenticated]
-async fn index(&self, uow: Uow, page: PageQuery) -> Result<Page<deal::Model>> {
-    self.deals.list(&uow, page).await
+async fn index(&self, uow: Uow, page: PageQuery) -> Result<Page<Record<Deal>>> {
+    Ok(self.deals.list(&uow, page).await?)
 }
 ```
 
-`Page<T>` is a response, so the handler returns it as it is. `PageQuery` and `Page` are in the prelude; `paginate` is `navree::db::paginate`.
+`Page<T>` is a response, so the handler returns it as it is. `PageQuery` and `Page` are in the prelude.
 
-`paginate` runs two queries: a `COUNT(*)` for the total and the page itself with `LIMIT` and `OFFSET`. Run it on the unit of work's transaction, as above. On SQLite that keeps the total and the page consistent, because no other writer can commit while the unit of work holds the write lock. PostgreSQL transactions run at its default `READ COMMITTED` level, where each query sees the latest commits, so a write committed between the two queries can still make them disagree. MySQL's default `REPEATABLE READ` reads both from the transaction's single snapshot, so they agree there, unless `database.mysql.isolation_level` lowers the level.
+`paginate` runs two queries: a `COUNT(*)` for the total and the page itself with `LIMIT` and `OFFSET`. Run it on the unit of work, as above. On SQLite that keeps the total and the page consistent, because no other writer can commit while the unit of work holds the write lock. PostgreSQL transactions run at its default `READ COMMITTED` level, where each query sees the latest commits, so a write committed between the two queries can still make them disagree. MySQL's default `REPEATABLE READ` reads both from the transaction's single snapshot, so they agree there, unless `database.mysql.isolation_level` lowers the level.
 
 **Always order the query**, and end the order with a unique column such as the id. Without a stable order, the database may return rows in a different order for each page, and a row can appear twice or not at all while someone pages through.
 
@@ -150,12 +151,13 @@ async fn index(
     uow: Uow,
     Valid(Query(query)): Valid<Query<DealsQuery>>,
 ) -> Result<Page<DealResource>> {
-    let select = deal::Entity::find()
-        .order_by_desc(deal::Column::CreatedAt)
-        .order_by_desc(deal::Column::Id);
     let page = PageQuery::new(query.page, query.per_page);
-    let tx = uow.tx().await?;
-    Ok(paginate(select, &*tx, page).await?.map(DealResource::from))
+    let deals = Deal::query()
+        .order_by_desc(Deal::CREATED_AT)
+        .order_by_desc(Deal::ID)
+        .paginate(&uow, page)
+        .await?;
+    Ok(deals.map(|deal| DealResource::from(&*deal)))
 }
 ```
 
@@ -163,34 +165,40 @@ A failed rule is a 400 in the same format, from [validation](/docs/basics/valida
 
 ## Shaping the items
 
-`page.map(f)` converts every item and keeps `meta`, which is how you turn models into the resources your API returns (above, `DealResource::from`). When the conversion needs the database, for example to embed each deal's company, take the page apart and put it back together:
+`page.map(f)` converts every item and keeps `meta`, which is how you turn records into the resources your API returns (above, `DealResource::from`). When the conversion needs a related record, for example each deal's company, load the relation with the query so the whole page costs one more query, and read it from the records:
 
 ```rust
-let page = paginate(select, &*tx, page).await?;
-Ok(Page {
-    data: DealResource::load_many(&*tx, page.data).await?,
-    meta: page.meta,
-})
+let page = Deal::query()
+    .with("company")
+    .order_by_desc(Deal::CREATED_AT)
+    .order_by_desc(Deal::ID)
+    .paginate(&uow, page)
+    .await?;
+Ok(page.map(|deal| {
+    let company = deal.loaded(Deal::company).and_then(Option::as_ref);
+    DealResource::new(&deal, company)
+}))
 ```
 
-`load_many` here is the CRM's: it loads every embed for the page in one query per kind of embed, as described in [eager loading](/docs/database/entities-and-repositories/#eager-loading).
+`with("company:id,name")` selects only those columns of the related model. [Eager loading](/docs/orm/eager-loading/) covers nested loads, constrained loads and counts.
 
-When the rows don't come from a SeaORM `Select` (raw SQL, another service), build the page yourself with `Page::new(data, query, total)`, which computes `meta` from the query and the total.
+When the rows don't come from a model query (raw SQL, another service), build the page yourself with `Page::new(data, query, total)`, which computes `meta` from the query and the total.
 
 ## Cursor pagination
 
-Offset pages shift when rows are added: a new deal at the top pushes the last deal of page 1 onto page 2, and a user paging through sees it twice. A cursor page continues after the last row the client saw instead. Navree's cursor pagination pages by a UUID v7 column, usually the primary key, whose order is creation order:
+Offset pages shift when rows are added: a new deal at the top pushes the last deal of page 1 onto page 2, and a user paging through sees it twice. A cursor page continues after the last row the client saw instead. A model query pages by cursor over its own order, and with UUID v7 keys the order of the key is creation order:
 
 ```rust title="src/modules/deals/controller.rs"
-use navree::db::{CursorPage, CursorQuery, cursor_paginate_desc};
+use navree::orm::{CursorPage, CursorRequest};
 
 /// The feed: newest deals first, by cursor.
 #[get("/feed")]
 #[authenticated]
-async fn feed(&self, uow: Uow, cursor: CursorQuery) -> Result<CursorPage<DealResource>> {
-    let tx = uow.tx().await?;
-    let page = cursor_paginate_desc(deal::Entity::find(), deal::Column::Id, &*tx, cursor).await?;
-    Ok(page.map(DealResource::from))
+async fn feed(&self, uow: Uow, cursor: CursorRequest) -> Result<CursorPage<Record<Deal>>> {
+    Ok(Deal::query()
+        .order_by_desc(Deal::ID)
+        .cursor_paginate(&uow, cursor)
+        .await?)
 }
 ```
 
@@ -200,17 +208,16 @@ async fn feed(&self, uow: Uow, cursor: CursorQuery) -> Result<CursorPage<DealRes
     { "id": "01a17759-52ce-7558-9a7d-19b9a79d6002", "title": "Deal 4", "amount_cents": 50000 },
     { "id": "01a17759-52cd-72b4-b105-f1165805b354", "title": "Deal 3", "amount_cents": 40000 }
   ],
-  "next_cursor": "AaF3WVLNcrSxBfEWWAWzVA"
+  "next_cursor": "eyJjIjpbImlkIl0sImQiOiJuIiwidiI6W1siaTY0IiwyXV19",
+  "prev_cursor": null
 }
 ```
 
-The client asks for the next page with `?cursor=AaF3WVLNcrSxBfEWWAWzVA`. On the last page, `next_cursor` is `null`.
+The client asks for the next page with `?cursor=` and the `next_cursor` it got; `null` means there is none.
 
-- `CursorQuery` reads `cursor` (absent for the first page) and `limit` (default 15, at most 100). A malformed cursor or a `limit` that isn't a positive integer is a 400.
-- `cursor_paginate` returns the oldest rows first, `cursor_paginate_desc` the newest first.
-- The query may filter but must not be ordered: the function orders it by the column.
-- The column must hold UUIDs; any other type fails with a `DbErr`.
-- There is no total and no previous page. The cursor is the last row's id, encoded; treat it as opaque.
+- `CursorRequest` reads `cursor` (absent for the first page) and `limit` (default: the model's page size, at most 100). A malformed cursor or a `limit` that isn't a positive integer is a 400.
+- The query's order decides the direction: `order_by_desc(Deal::ID)` is newest first, `order_by(Deal::ID)` oldest first. The key is added as a tie-breaker.
+- There is no total. The cursor encodes the order's columns and the last row's values; treat it as opaque. A cursor that doesn't match the query is refused.
 
 ## Documenting pages in OpenAPI
 
@@ -258,8 +265,11 @@ rep.get("/api/v1/deals")
 See [HTTP tests](/docs/testing/http-tests/) for the assertions.
 
 <LinkCards>
-  <LinkCard href="/docs/database/entities-and-repositories/" title="Entities and repositories">
-    Queries, relations and loading embeds for a page.
+  <LinkCard href="/docs/orm/pagination-and-streaming/" title="Pagination and streaming">
+    Simple pages, cursor pages, chunks and lazy streams on model queries.
+  </LinkCard>
+  <LinkCard href="/docs/orm/eager-loading/" title="Eager loading">
+    Loading the relations a page shows in one query each.
   </LinkCard>
   <LinkCard href="/docs/basics/validation/" title="Validation">
     `Valid<Query<T>>` for your own query parameters.

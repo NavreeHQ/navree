@@ -313,11 +313,11 @@ A loader implements `navree::graphql::Loader` and is an injectable provider:
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crm_core::entities::company;
+use crm_core::models::Company;
 use navree::db::Db;
 use navree::graphql::Loader;
 use navree::injectable;
-use sea_orm::{ColumnTrait, DbErr, EntityTrait, QueryFilter};
+use navree::orm::{Model as _, OrmError};
 use uuid::Uuid;
 
 use super::types::CompanyObject;
@@ -329,15 +329,20 @@ pub struct CompanyLoader {
 
 impl Loader<Uuid> for CompanyLoader {
     type Value = CompanyObject;
-    type Error = Arc<DbErr>;
+    type Error = Arc<OrmError>;
 
     async fn load(&self, ids: &[Uuid]) -> Result<HashMap<Uuid, CompanyObject>, Self::Error> {
-        let companies = company::Entity::find()
-            .filter(company::Column::Id.is_in(ids.iter().copied()))
-            .filter(company::Column::DeletedAt.is_null())
-            .all(self.db.conn())
-            .await?;
-        Ok(companies.into_iter().map(|c| (c.id, c.into())).collect())
+        // Soft-deleted companies are left out by the model's own scope.
+        let companies = Company::query()
+            .where_key_in(ids.iter().copied())
+            .get(&self.db)
+            .await
+            .map_err(Arc::new)?;
+        Ok(companies
+            .into_models()
+            .into_iter()
+            .map(|c| (c.id, c.into()))
+            .collect())
     }
 }
 ```

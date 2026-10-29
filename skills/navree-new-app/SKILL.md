@@ -153,7 +153,7 @@ Routes that exist at once: `POST /api/auth/register|login|refresh|logout`,
 ## 4. Add the first feature
 
 ```sh
-navree make:module posts --crud      # entity, migration, DTOs, CRUD controller, service, tests
+navree make:module posts --crud      # model, migration, DTOs, CRUD controller, service, tests
 cargo test                           # the generated tests pass as they are
 navree routes                        # shows /api/v1/posts with its access rules
 ```
@@ -171,9 +171,9 @@ run `navree migrate` explicitly elsewhere.
 cargo add --git https://github.com/NavreeHQ/navree navree
 ```
 
-Also add `serde` (derive), `sea-orm` (`macros`, `with-chrono`, `with-json`,
-`with-uuid`, default features off), `sea-orm-migration` and `garde`
-(`derive`, `email`): their derives name their own crates. A minimal app:
+Also add `serde` (derive), `chrono`, `uuid` (`serde`, `v7`) and `garde`
+(`derive`, `email`): their derives name their own crates. (The ORM's
+derives, migrations and database drivers come with `navree`.) A minimal app:
 
 ```rust
 use navree::prelude::*;

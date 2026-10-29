@@ -92,19 +92,6 @@ pub struct PostsModule;
 
 `subject` alone names the subject after the struct and takes the table as the permission prefix; `policy = PostPolicy` adds the rules about it. `for_feature` maps the permission prefix to the subject, and lets routes load the model's records by route key (a UUID, an integer or a string): the ORM loads them in the request's unit of work, on navree-db's own transaction. A subject that isn't a model, such as `Report`, registers with `AccessModule::for_subject::<S>()` for its permission prefix alone. Users are a subject too: `navree::auth::User` is the subject `User`, with the prefix `users`. To check routes against users and to make `users.*` permissions apply, import `AccessModule::for_feature::<navree::auth::User>()`.
 
-A SeaORM entity of a crate that isn't ported yet becomes a subject by implementing `Subject` for its `Entity`, and registers with `for_feature` the same way; navree-access loads its records through a shim until the SeaORM layer is removed:
-
-```rust title="src/modules/posts/entity.rs"
-use navree::access::Subject;
-
-// ... the SeaORM entity of the `posts` table: Model, Column, Entity
-
-impl Subject for Entity {
-    const SUBJECT: &'static str = "Post";
-    const PERMISSION_PREFIX: &'static str = "posts";
-}
-```
-
 ## Defining abilities
 
 The abilities function receives the user's context and adds rules:
@@ -437,9 +424,9 @@ For a `from` route, the authorizer:
 4. checks the rules against the record, and answers 403 when they say no;
 5. keeps the record for the handler.
 
-For a model, `Authorized<M, A>` dereferences to its `Record<M>` (which dereferences to the model, so `post.title` works), and `into_inner()` gives the `Record<M>`; `.into_inner()` on that gives the model. For a SeaORM entity it dereferences to the entity's model. It also has `model()`, `record()` (the JSON the conditions saw), `ability()` and `check_fields(..)`. The extractor must match the route: `Authorized<Post, Update>` on a route without `#[can(Update, Post, from = ..)]` is a 500 that says so. So is a `from` route for a subject registered without `for_feature`.
+For a model, `Authorized<M, A>` dereferences to its `Record<M>` (which dereferences to the model, so `post.title` works), and `into_inner()` gives the `Record<M>`; `.into_inner()` on that gives the model. It also has `model()`, `record()` (the JSON the conditions saw), `ability()` and `check_fields(..)`. The extractor must match the route: `Authorized<Post, Update>` on a route without `#[can(Update, Post, from = ..)]` is a 500 that says so. So is a `from` route for a subject registered without `for_feature`.
 
-Conditions see the record as JSON with one member per column, named like the column. UUIDs are hyphenated lower-case strings, timestamps RFC 3339 UTC strings with microseconds, and dates `YYYY-MM-DD`. The same JSON comes from `navree::orm::access::record_json(&record)` for an ORM model (`ability.authorize(Update, &record)` checks one directly), `navree::access::row_json(&row)` for a navree-db record, and `navree::access::record_json(&model)` for a SeaORM entity's model.
+Conditions see the record as JSON with one member per column, named like the column. UUIDs are hyphenated lower-case strings, timestamps RFC 3339 UTC strings with microseconds, and dates `YYYY-MM-DD`. The same JSON comes from `navree::orm::access::record_json(&record)` for an ORM model (`ability.authorize(Update, &record)` checks one directly), `navree::access::row_json(&row)` for a navree-db record.
 
 <Callout type="warning" title="Soft-deleted records">
 

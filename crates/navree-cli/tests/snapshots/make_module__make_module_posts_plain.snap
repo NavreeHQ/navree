@@ -11,7 +11,7 @@ expression: files.to_string()
 //! ├── mod.rs           # PostsModule: what the module provides and imports
 //! ├── controller.rs    # PostController: the HTTP routes
 //! ├── service.rs       # PostService: the business logic
-//! ├── entity.rs        # the `posts` table (SeaORM entity)
+//! ├── entity.rs        # the `posts` table, as an ORM model
 //! ├── dto.rs           # request bodies and their validation rules
 //! ├── migrations/      # migrations owned by this module
 //! └── tests/           # tests on a fresh database
@@ -28,8 +28,10 @@ mod tests;
 use navree::db::ModuleBuilderDbExt;
 use navree::kernel::ModuleBuilder;
 use navree::module;
+use navree::orm::ModuleBuilderOrmExt;
 
 pub use controller::PostController;
+pub use entity::Post;
 pub use service::PostService;
 
 /// Posts: the `posts` table, and `/api/v1/posts` for
@@ -43,11 +45,12 @@ pub use service::PostService;
 pub struct PostsModule;
 
 impl PostsModule {
-    /// Registrations `#[module]` has no key for (migrations, jobs,
+    /// Registrations `#[module]` has no key for (migrations, models, jobs,
     /// listeners, commands, templates). `navree make:*` adds its lines above
     /// the `navree:wire` marker.
     fn wire(&self, m: &mut ModuleBuilder) {
         m.migrations(migrations::migrations());
+        m.model::<Post>();
         // navree:wire
     }
 }
@@ -59,9 +62,10 @@ use std::sync::Arc;
 
 use navree::db::Uow;
 use navree::http::{Json, Result};
+use navree::orm::Record;
 use navree::{controller, injectable};
 
-use super::entity::Model;
+use super::entity::Post;
 use super::service::PostService;
 
 /// The routes of the posts module, for signed-in users.
@@ -76,7 +80,7 @@ impl PostController {
     /// Lists every post, newest first.
     #[get("/")]
     #[api(summary = "List posts", tag = "Post")]
-    async fn index(&self, uow: Uow) -> Result<Json<Vec<Model>>> {
+    async fn index(&self, uow: Uow) -> Result<Json<Vec<Record<Post>>>> {
         Ok(Json(self.posts.all(&uow).await?))
     }
 }
@@ -86,9 +90,9 @@ impl PostController {
 
 use navree::db::Uow;
 use navree::injectable;
-use sea_orm::{DbErr, EntityTrait, QueryOrder};
+use navree::orm::{Model as _, OrmError, Record};
 
-use super::entity::{Column, Entity, Model};
+use super::entity::Post;
 
 /// Reads and writes posts. Take the caller's `Uow` so the work
 /// joins its transaction.
@@ -97,37 +101,40 @@ pub struct PostService;
 
 impl PostService {
     /// Every post, newest first.
-    pub async fn all(&self, uow: &Uow) -> Result<Vec<Model>, DbErr> {
-        Entity::find()
-            .order_by_desc(Column::CreatedAt)
-            .all(&*uow.tx().await?)
-            .await
+    pub async fn all(&self, uow: &Uow) -> Result<Vec<Record<Post>>, OrmError> {
+        Ok(Post::query()
+            .order_by_desc(Post::CREATED_AT)
+            .order_by_desc(Post::ID)
+            .get(uow)
+            .await?
+            .into_vec())
     }
 }
 
 ==> posts/entity.rs <==
-//! The `posts` table.
+//! The `posts` table as an ORM model.
 
-use sea_orm::entity::prelude::*;
+use chrono::{DateTime, Utc};
+use navree::orm::Model;
 use serde::Serialize;
+use uuid::Uuid;
 
 /// A post. Serialized as is in API responses: keep secrets out
-/// of it (or skip them with `#[serde(skip)]`).
-#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-#[sea_orm(table_name = "posts")]
-pub struct Model {
-    /// A UUID v7, so ids sort by creation time.
-    #[sea_orm(primary_key, auto_increment = false)]
+/// of it (or skip them with `#[serde(skip)]`). Query it with
+/// `Post::query()`.
+#[derive(Model, Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[model(table = "posts", timestamps)]
+pub struct Post {
+    /// A UUID v7, generated when the record is created, so ids sort by
+    /// creation time.
     pub id: Uuid,
+    /// The name.
     pub name: String,
-    pub created_at: DateTimeUtc,
-    pub updated_at: DateTimeUtc,
+    /// When the record was created.
+    pub created_at: DateTime<Utc>,
+    /// When the record last changed.
+    pub updated_at: DateTime<Utc>,
 }
-
-#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
-
-impl ActiveModelBehavior for ActiveModel {}
 
 ==> posts/dto.rs <==
 //! Request bodies of the posts API, with their validation rules

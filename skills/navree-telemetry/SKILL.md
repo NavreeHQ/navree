@@ -279,8 +279,9 @@ is `true` for the kinds it wants; without one, `is_disabled()` is `true`.
   `Cache::with_telemetry(telemetry, "memory")`, `Mailer::with_telemetry(telemetry)`,
   `HttpClient::with_telemetry(telemetry)`. An `HttpClient` without one
   reports to the current request's or job's registry.
-- **`QueryExecuted::rows` is always `None`** (SeaORM doesn't report it) and
-  `execute_unprepared` statements aren't reported.
+- **`QueryExecuted::rows` is `None`** for `BEGIN`, savepoints, `COMMIT` and
+  `ROLLBACK`, which return no rows; statements report the rows they read
+  or changed.
 - **`MailSent` carries the rendered bodies.** A sink that stores records
   stores mail contents; drop `text` and `html` if that's not wanted.
 - **`endpoint` without the `otel` feature fails the boot**, naming the

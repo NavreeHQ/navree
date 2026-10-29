@@ -355,7 +355,7 @@ to get something done.
   another framework or use one as a reference point: no "like X", "X-style",
   "the way you know from X" or "X calls these ...". Describe the feature,
   its behaviour and its limits. Naming the libraries Navree is built on is
-  good (Tokio, Axum, Hyper, Tower, SeaORM, sqlx, garde, tonic, rustls,
+  good (Tokio, Axum, Hyper, Tower, sqlx, garde, tonic, rustls,
   Argon2), and so are protocols and standards: "speaks the Pusher protocol,
   so pusher-js and any Pusher client connects", OpenAPI 3.1, OAuth 2.1,
   OpenTelemetry, MCP. The JSON error shape

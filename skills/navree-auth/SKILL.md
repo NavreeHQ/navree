@@ -124,8 +124,7 @@ and the access subject `User` (`#[model(subject = "User", permission_prefix =
 "users")]`): register it with `AccessModule::for_feature::<navree_auth::User>()`
 and take `Authorized<User, Read>`, which derefs to `Record<User>`
 (`.into_inner()` is the Record, `.into_inner().into_inner()` the `User`).
-`navree::auth::user::Entity` is the SeaORM entity of the same table, kept only
-for code not yet on navree-orm (and as a subject for such crates). Modules
+Modules
 that create users (social sign-in, single sign-on) write them with
 `navree::auth::user::insert(&uow, user)`, which records the change event
 without the secrets. Its
@@ -221,7 +220,21 @@ use navree::contracts::{AuthVia, Principal};
 use navree::crypto::sha256_hex;
 use navree::db::Db;
 use navree::prelude::*;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use chrono::{DateTime, Utc};
+use serde::Serialize;
+use uuid::Uuid;
+
+/// An API key's row: only the digest is stored.
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "api_keys", timestamps)]
+pub struct ApiKey {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub key_hash: String,
+    pub abilities: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
 
 #[injectable]
 pub struct ApiKeyStrategy {
@@ -239,9 +252,9 @@ impl Strategy for ApiKeyStrategy {
                 return Ok(None); // not ours: the next strategy, or a guest
             };
             let digest = sha256_hex(key.as_bytes()); // store digests, never keys
-            let found = api_key::Entity::find()
-                .filter(api_key::Column::KeyHash.eq(digest))
-                .one(self.db.conn())
+            let found = ApiKey::query()
+                .where_(ApiKey::KEY_HASH.eq(digest))
+                .first(&*self.db)
                 .await
                 .map_err(AppError::internal)?;
             let Some(row) = found else {

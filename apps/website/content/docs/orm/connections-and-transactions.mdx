@@ -11,7 +11,7 @@ Every ORM method that touches the database takes an **executor** first, and the 
 |---|---|---|
 | `&Uow` | its transaction | its transaction, with a change event per record for the [audit log](/docs/security/audit-log/) |
 | `&Db` | the current unit of work's transaction when one is open on this pool; else the pool, or a read replica when you have them | the current unit of work when there is one on this pool; else the pool |
-| `&DatabaseConnection`, `&DatabaseTransaction` (SeaORM) | as given | as given, without change events |
+| `&Pool`, `&Transaction` (from `db.begin()`) | as given | as given, without change events |
 | `Arc<E>` of any of these | as `E` | as `E` |
 
 `&Db` joins the current unit of work, the request's while a handler runs, so a service holding an `Arc<Db>` writes inside the request's transaction without being given a `Uow`. That matters most on SQLite: a write through a second pool connection would wait for the request's write lock. Inside a unit of work, writes also mark it as having written, so with `sticky` read replicas its later reads go to the writer and see what it wrote.
@@ -43,7 +43,7 @@ match result {
 }
 ```
 
-Committing runs the change observers (audit rows) in the transaction and the after-commit hooks once it is durable, so queued jobs and [model listeners](/docs/orm/events-and-observers/#inside-a-unit-of-work) hear about the writes. The actor you pass is who the audit log records. `db.transaction(|uow| async move { .. })` does the same for a closure whose errors are SeaORM's `DbErr`.
+Committing runs the change observers (audit rows) in the transaction and the after-commit hooks once it is durable, so queued jobs and [model listeners](/docs/orm/events-and-observers/#inside-a-unit-of-work) hear about the writes. The actor you pass is who the audit log records. `db.transaction(|uow| async move { .. })` does the same for a closure that returns `Result<_, DbError>`.
 
 Some ORM operations need atomicity of their own and take care of it: pivot writes (`attach`, `sync`) and multi-statement bulk inserts run in a transaction of their own on the pool, or a savepoint inside a unit of work; `create_or_first` inserts in a savepoint so a unique violation doesn't abort a PostgreSQL transaction.
 
@@ -118,7 +118,7 @@ db.on_query(|query| {
 });
 ```
 
-`QueryLog::capture(future)` returns what a future ran, each `LoggedQuery` with its SQL, values, duration and connection (`raw_sql()` writes the values in, for reading). `db.on_query` hears every statement of a connection, `db.before_executing` and `db.before_starting_transaction` run before the ORM's statements and transactions, and `db.when_querying_for_longer_than(threshold, ..)` runs once per unit of work whose statements add up past a threshold. Each unit of work counts its statements (`uow.query_stats()`), logs a summary when it finishes and warns about a statement repeated ten times or more: the shape of an N+1 query. [Logbook](/docs/tools/logbook/) shows all of it per request.
+`QueryLog::capture(future)` returns what a future ran, each captured query with its SQL, values, duration and connection (`raw_sql()` writes the values in, for reading). `db.on_query` hears every statement of a connection, `db.before_executing` and `db.before_starting_transaction` run before the ORM's statements and transactions, and `db.when_querying_for_longer_than(threshold, ..)` runs once per unit of work whose statements add up past a threshold. Each unit of work counts its statements (`uow.query_stats()`), logs a summary when it finishes and warns about a statement repeated ten times or more: the shape of an N+1 query. [Logbook](/docs/tools/logbook/) shows all of it per request.
 
 Two commands help in development: `navree db [connection] [--read | --write]` opens the database's own client (`psql`, `mysql`, `mariadb`, `sqlite3` or `mongosh`) with the configured credentials, and `navree db:monitor` shows the connections each database has open.
 

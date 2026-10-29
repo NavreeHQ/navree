@@ -31,17 +31,11 @@ workspace's records. Three tools prove it:
    Workspace models are `#[derive(Model)]` structs that implement
    `WorkspaceScoped` (column `workspace_id` unless `WORKSPACE_COLUMN` says
    otherwise); a `#[model(workspace)]` model also scopes its own queries.
-   A SeaORM entity of a crate not yet ported is classified with
-   `m.sea_workspace_scoped::<E>()`, `m.sea_workspace_entity::<E>()` or
-   `m.sea_global_entity::<E>()` (`ModuleBuilderSeaWorkspaceExt`, in
-   `navree::workspace::sea_compat`).
 2. Reach workspace models only through `WorkspaceRepo::<M>` (`query`,
    `find`, `find_or_fail`, `insert`, `update`, `delete`) or
-   `CurrentWorkspace::scope(query)`. For a SeaORM entity the `workspace.repo`
-   source scan applies and the way in is `sea_compat::WorkspaceRepo::<E>`; a
-   deliberate cross-workspace query (an admin report, a maintenance
-   command) gets `// navree:allow(workspace-repo)` on its line or the line
-   above.
+   `CurrentWorkspace::scope(query)`. A deliberate cross-workspace query (an
+   admin report, a maintenance command) gets
+   `// navree:allow(workspace-repo)` on its line or the line above.
 3. Document every route with `#[api(summary = "..", tag = "..")]` (or
    `.api(ApiMeta { .. })` on a `RouteDef`). Routes that stay undocumented
    on purpose go in `api.undocumented` (`"METHOD /path"`, `"/path"`, a
@@ -74,8 +68,8 @@ app's config and a migrated database (`navree migrate` first). Errors exit
 | Check | From | Fails on (error) / reports (warning) |
 |---|---|---|
 | `api.docs` | `ApiModule` | error: a route without `#[api]` (not in `api.undocumented`) |
-| `workspace.entities` | `WorkspaceModule` | error: a SeaORM entity in `src/` (`#[sea_orm(table_name)]`) not classified, or classified both ways; hints name `m.sea_workspace_entity::<..>()` and `m.sea_global_entity::<..>()` |
-| `workspace.repo` | `WorkspaceModule` | error: `Entity::find*`, `insert*`, `update*`, `delete*` or `Repo::<E>` on a SeaORM workspace entity; hint names `sea_compat::WorkspaceRepo::<..>` |
+| `workspace.entities` | `WorkspaceModule` | error: a table the app's source defines outside the ORM that is not classified, or classified both ways (models are classified in `register`, as above) |
+| `workspace.repo` | `WorkspaceModule` | error: a direct read or write of such a workspace table that bypasses `WorkspaceRepo` |
 | `workspace.tables` | `WorkspaceModule` | every classified table (models too): error: no workspace column; warning: no index starting with it, row-level security off (PostgreSQL), table missing |
 | `i18n.translations` | built in | runs the app's `i18n:check` when a module registers it, else skipped |
 | `db.migrations` | built in | runs the app's `migrate:lint` when a module registers it, else skipped |
@@ -84,10 +78,12 @@ The `workspace.*` checks are skipped under `schema` and `database`
 isolation. `api.require_docs = true` makes an undocumented route stop the
 boot itself (turn it on in development).
 
-The `workspace.entities` and `workspace.repo` scans read the source of SeaORM entities as text: it follows `use` trees,
-renames, globs and `type` aliases, and skips `tests/`, `benches/`,
-`examples/` and `#[cfg(test)]`. It cannot see through generics or macros;
-the isolation suite covers what reaches the routes.
+The `workspace.entities` and `workspace.repo` scans read the app's source
+as text: they follow `use` trees, renames, globs and `type` aliases, and
+skip `tests/`, `benches/`, `examples/` and `#[cfg(test)]`. They cannot see
+through generics or macros; the isolation suite covers what reaches the
+routes. A `#[model(workspace)]` model is scoped by the ORM itself, not by
+a scan.
 
 ## Isolation suites
 

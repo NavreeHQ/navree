@@ -1,6 +1,6 @@
 ---
 name: navree-performance
-description: "Make a Navree app faster per request, or check that a change didn't make it slower: the request-pipeline benchmarks (`cargo bench -p navree --bench pipeline`), the `database` pool settings (`test_before_acquire`, `idle_timeout_secs`, `max_lifetime_secs`, `max_connections`) and `database.transaction_settings`, what the fixed HTTP layers cost and when they merge into one middleware, which modules make `Repo` writes serialize change events, reading through the pool instead of a transaction, and the service locator in hot paths. Use when throughput or latency matters, when a load test shows Navree using its CPUs while the database idles, or before changing navree-http, navree-db or navree-kernel code on the request path."
+description: "Make a Navree app faster per request, or check that a change didn't make it slower: the request-pipeline benchmarks (`cargo bench -p navree --bench pipeline`), the `database` pool settings (`test_before_acquire`, `idle_timeout_secs`, `max_lifetime_secs`, `max_connections`) and `database.transaction_settings`, what the fixed HTTP layers cost and when they merge into one middleware, which modules make model writes serialize change events, reading through the pool instead of a transaction, and the service locator in hot paths. Use when throughput or latency matters, when a load test shows Navree using its CPUs while the database idles, or before changing navree-http, navree-db or navree-kernel code on the request path."
 ---
 
 # Performance
@@ -28,7 +28,7 @@ cargo bench -p navree --bench pipeline -- --test    # run each once (CI)
 | `axum/json` | the same handler on a bare Axum router: the floor to compare `pipeline/json` with |
 | `pipeline/json_x64` | 64 `/json` requests at once on four worker threads: shows contention |
 | `pipeline/db` | `GET /db`: one `SELECT` by primary key through the pool (SQLite) |
-| `pipeline/insert` | `POST /deals`: `Valid<Json<T>>`, then `Repo::insert` in the request's unit of work, committed |
+| `pipeline/insert` | `POST /deals`: `Valid<Json<T>>`, then `Deal::create` in the request's unit of work, committed |
 | `uow/begin_commit` | a unit of work that begins and commits a SQLite transaction |
 | `kernel/get` | `AppContext::get::<Db>()` |
 
@@ -80,25 +80,24 @@ per_ip_rate_limit = 600       # sharded by IP; a single client IP shares one key
 - `Valid<Json<T>>` deserializes the body straight from its bytes; a
   `serde_json::Value` is built only to report a failure.
 - `AppContext::get`, `try_get` and `get_named` are a map lookup.
-- `Repo::insert`, `update` and `delete` serialize their change event only if
+- Model creates, saves and deletes serialize their change event only if
   the app registers a `dyn ChangeObserver` (`AuditModule`, `LogbookModule`,
   `SearchModule` do); otherwise only `uow.changes()` builds them.
 
 ## Habits
 
-- A single read needs no transaction: `Entity::find_by_id(id).one(db.conn())`
-  costs one round trip; through `uow.tx()` it is `BEGIN`, the query, the
-  transaction settings and `COMMIT`.
-- In a service that takes no `&Uow`, read with `.one(&db.reader().await)`:
-  it uses the request's open transaction when there is one, the pool
-  otherwise.
+- A single read needs no transaction: `Deal::find(&db, id)` through the
+  `Db` costs one round trip on the pool; through `&uow` it is `BEGIN`, the
+  query, the transaction settings and `COMMIT`.
+- In a service that takes no `&Uow`, read through `&db`: it uses the
+  request's open transaction when there is one, the pool otherwise.
 - Inject providers (`Arc<T>` fields, `#[injectable]`) instead of calling
   `ctx.get` per request.
 - Register a `GlobalLayer` as a Tower `Layer` with its own service rather
   than `axum::middleware::from_fn` when it runs on every request: every
   `from_fn` layer adds boxed futures and clones of the inner stack.
 - Leave `LogbookModule` out of production builds you benchmark: even with
-  `logbook.enabled = false` it registers a change observer (so `Repo` writes
+  `logbook.enabled = false` it registers a change observer (so model writes
   serialize their events) and a `Session`-slot layer (so authentication
   stays a middleware of its own).
 
@@ -114,8 +113,8 @@ per_ip_rate_limit = 600       # sharded by IP; a single client IP shares one key
 
 ## Gotchas
 
-- A request that keeps an `Arc<DatabaseTransaction>` from `uow.tx()` past
-  the handler fails to commit ("its transaction is still in use").
+- A request that keeps a row stream or query future of its unit of work
+  alive past the handler fails to commit ("its transaction is still in use").
 - `transaction_settings = false` with a trigger that reads
   `current_setting('navree.actor', true)` silently records an empty actor.
 - Benchmarks of one client IP put every request on the same limiter key: the

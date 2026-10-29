@@ -1,25 +1,24 @@
-//! The `user_profiles` table: what users say about themselves (one row per
-//! user, created on the first update).
+//! The `user_profiles` table as an ORM model: what users say about
+//! themselves (one row per user, created on the first update).
 
-use sea_orm::entity::prelude::*;
+use chrono::{DateTime, Utc};
+use navree::orm::Model;
 use serde::Serialize;
+use uuid::Uuid;
 
-/// A user's profile.
-#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-#[sea_orm(table_name = "user_profiles")]
-pub struct Model {
+/// A user's profile. Query it with `Profile::query()`; the ORM sets the
+/// timestamps when it creates or saves a record.
+#[derive(Model, Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[model(table = "user_profiles", primary_key = "user_id", timestamps)]
+pub struct Profile {
     /// The user's id (`users.id`).
-    #[sea_orm(primary_key, auto_increment = false)]
     pub user_id: Uuid,
     /// A short biography.
     pub bio: Option<String>,
     /// An IANA time zone, e.g. `Europe/Paris`.
     pub timezone: String,
-    pub created_at: DateTimeUtc,
-    pub updated_at: DateTimeUtc,
+    /// When the profile was created.
+    pub created_at: DateTime<Utc>,
+    /// When it last changed.
+    pub updated_at: DateTime<Utc>,
 }
-
-#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
-
-impl ActiveModelBehavior for ActiveModel {}

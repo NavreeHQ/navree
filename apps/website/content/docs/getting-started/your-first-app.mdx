@@ -1,9 +1,9 @@
 ---
 title: "Your first app"
-description: "Build a small task-list API with an entity, a migration, validation, JWT authentication, access rules and feature tests, from `navree new` to green tests."
+description: "Build a small task-list API with a model, a migration, validation, JWT authentication, access rules and feature tests, from `navree new` to green tests."
 ---
 
-This tutorial builds **Planner**, a small JSON API for to-do lists. People sign up, sign in, create tasks and tick them off, and nobody can see or change anyone else's tasks. Along the way you use the generators, write a migration and an entity, validate input, protect routes with access attributes, and finish with feature tests that sign up real users.
+This tutorial builds **Planner**, a small JSON API for to-do lists. People sign up, sign in, create tasks and tick them off, and nobody can see or change anyone else's tasks. Along the way you use the generators, write a migration and a model, validate input, protect routes with access attributes, and finish with feature tests that sign up real users.
 
 Every command and file below comes from a real run of the CLI, and the finished app passes its tests and `cargo clippy -- -D warnings`.
 
@@ -70,12 +70,12 @@ The module's files:
 | `mod.rs` | `TasksModule`: its providers, controller, the import that registers `Task` with the access module, and its migrations |
 | `controller.rs` | `TaskController`: five routes under `/api/v1/tasks`, each with an access check |
 | `service.rs` | `TaskService`: listing, creating, updating and deleting, in the request's unit of work |
-| `entity.rs` | The SeaORM entity for the `tasks` table, and `Task`, the access subject |
+| `entity.rs` | `Task`, the ORM model of the `tasks` table, which is also the access subject |
 | `dto.rs` | The request bodies and their validation rules |
 | `migrations/` | The migration that creates the `tasks` table |
 | `tests/mod.rs` | Tests that boot the module on a fresh SQLite database |
 
-A generated resource has a `name` column. A task needs a `title` and a `done` flag, so the next sections change the migration, the entity, the request bodies and the service.
+A generated resource has a `name` column. A task needs a `title` and a `done` flag, so the next sections change the migration, the model, the request bodies and the service.
 
 ## Define the table
 
@@ -97,16 +97,15 @@ schema
 
 Migrations are written with the [schema builder](/docs/database/schema-builder/), which writes the SQL for SQLite in development and for PostgreSQL, MySQL or TimescaleDB in production. Each module owns a migration set (`MigrationSet::new("tasks")`), and `navree migrate` runs every module's set in dependency order. [Migrations](/docs/database/migrations/) covers the rest.
 
-## Update the entity
+## Update the model
 
-The entity is the Rust shape of a row. It is also what the API returns, since the generated routes serialize it as it is:
+The model is the Rust shape of a row. It is also what the API returns, since the generated routes serialize it as it is. `#[derive(Model)]` generates the queries and the typed columns (`Task::TITLE`), and `subject` makes `Task` the access subject: rules call it `Task` and permissions start with `tasks.`:
 
 ```rust title="src/modules/tasks/entity.rs"
-#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-#[sea_orm(table_name = "tasks")]
-pub struct Model {
-    /// A UUID v7, so ids sort by creation time.
-    #[sea_orm(primary_key, auto_increment = false)]
+#[derive(Model, Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[model(table = "tasks", timestamps, subject)]
+pub struct Task {
+    /// A UUID v7, generated when the task is created.
     pub id: Uuid,
     /// The user who created it (abilities can test `owner_id`).
     pub owner_id: Option<Uuid>,
@@ -115,21 +114,12 @@ pub struct Model {
     pub title: String, // [!code ++]
     /// Whether it is done. // [!code ++]
     pub done: bool, // [!code ++]
-    pub created_at: DateTimeUtc,
-    pub updated_at: DateTimeUtc,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 ```
 
-Below the model, the generator declared the access subject. Rules call it `Task` and permissions start with `tasks.`:
-
-```rust title="src/modules/tasks/entity.rs"
-impl Subject for Entity {
-    const SUBJECT: &'static str = "Task";
-    const PERMISSION_PREFIX: &'static str = "tasks";
-}
-
-pub type Task = Entity;
-```
+The ORM generates the key and fills `created_at` and `updated_at` when it creates or saves a record, so the service never sets them. See [models](/docs/orm/models/).
 
 ## Validate the input
 
@@ -184,38 +174,41 @@ The service does the work. Change the two methods that set columns:
 
 ```rust title="src/modules/tasks/service.rs"
 /// Creates a task owned by the acting user.
-pub async fn create(&self, uow: &Uow, input: CreateTask) -> Result<Model, DbErr> {
-    let now = Utc::now();
-    let task = ActiveModel {
-        id: Set(Uuid::now_v7()),
-        owner_id: Set(uow.actor()),
-        name: Set(input.name), // [!code --]
-        title: Set(input.title), // [!code ++]
-        done: Set(false), // [!code ++]
-        created_at: Set(now),
-        updated_at: Set(now),
-    };
-    Repo::<Entity>::insert(uow, task).await
+pub async fn create(&self, uow: &Uow, input: CreateTask) -> Result<Record<Task>, OrmError> {
+    Task::create(
+        uow,
+        Task {
+            owner_id: uow.actor(),
+            name: input.name, // [!code --]
+            title: input.title, // [!code ++]
+            ..Task::default()
+        },
+    )
+    .await
 }
 
 /// Applies the fields present in `input`.
-pub async fn update(&self, uow: &Uow, task: Model, input: UpdateTask) -> Result<Model, DbErr> {
-    let mut active: ActiveModel = task.into();
+pub async fn update(
+    &self,
+    uow: &Uow,
+    mut task: Record<Task>,
+    input: UpdateTask,
+) -> Result<Record<Task>, OrmError> {
     if let Some(name) = input.name { // [!code --]
-        active.name = Set(name); // [!code --]
+        task.name = name; // [!code --]
     } // [!code --]
     if let Some(title) = input.title { // [!code ++]
-        active.title = Set(title); // [!code ++]
+        task.title = title; // [!code ++]
     } // [!code ++]
     if let Some(done) = input.done { // [!code ++]
-        active.done = Set(done); // [!code ++]
+        task.done = done; // [!code ++]
     } // [!code ++]
-    active.updated_at = Set(Utc::now());
-    Repo::<Entity>::update(uow, active).await
+    task.save(uow).await?;
+    Ok(task)
 }
 ```
 
-`Uow` is the request's unit of work: a transaction that opens on first use and commits when the response status is below 400, or rolls back otherwise. `uow.actor()` is the signed-in user's id, so every task records its owner. `Repo` writes through the unit of work and records a change event for each write, which the audit log and change observers receive at commit. See [The unit of work](/docs/database/unit-of-work/).
+`Uow` is the request's unit of work: a transaction that opens on first use and commits when the response status is below 400, or rolls back otherwise. `uow.actor()` is the signed-in user's id, so every task records its owner. `create` and `save` write through the unit of work and record a change event for each write, which the audit log and change observers receive at commit; `save` writes only the columns that changed. See [The unit of work](/docs/database/unit-of-work/).
 
 ## Protect the routes
 
@@ -233,7 +226,7 @@ impl TaskController {
         uow: Uow,
         scope: Accessible<Task, Read>,
         page: PageQuery,
-    ) -> Result<Page<Model>> {
+    ) -> Result<Page<Record<Task>>> {
         Ok(self.tasks.list(&uow, scope, page).await?)
     }
 
@@ -244,7 +237,7 @@ impl TaskController {
         &self,
         uow: Uow,
         Valid(Json(input)): Valid<Json<CreateTask>>,
-    ) -> Result<Created<Model>> {
+    ) -> Result<Created<Record<Task>>> {
         let task = self.tasks.create(&uow, input).await?;
         Ok(Created(format!("/api/v1/tasks/{}", task.id), task))
     }
@@ -257,7 +250,7 @@ impl TaskController {
         uow: Uow,
         task: Authorized<Task, Update>,
         Valid(Json(input)): Valid<Json<UpdateTask>>,
-    ) -> Result<Json<Model>> {
+    ) -> Result<Json<Record<Task>>> {
         task.check_fields(&input.changed_fields())?;
         let task = self.tasks.update(&uow, task.into_inner(), input).await?;
         Ok(Json(task))
@@ -630,7 +623,7 @@ The first line is the module tests in `src/` (users and tasks), the second the a
 mod.rs              # TasksModule
 controller.rs       # five routes, each with #[can]
 service.rs          # TaskService
-entity.rs           # the tasks table and the Task subject
+entity.rs           # the Task model and access subject
 dto.rs              # CreateTask, UpdateTask and their rules
 migrations/
   mod.rs
@@ -653,8 +646,8 @@ Planner has sign-up and sign-in with rotating refresh tokens, a validated CRUD A
   <LinkCard href="/docs/security/authorization/" title="Authorization">
     Roles, permissions, field rules and SQL filters.
   </LinkCard>
-  <LinkCard href="/docs/database/entities-and-repositories/" title="Entities and repositories">
-    SeaORM entities and `Repo` in depth.
+  <LinkCard href="/docs/orm/models/" title="Models">
+    Models, records and the writes that record change events, in depth.
   </LinkCard>
   <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
     Send work to the background with `navree make:job`.

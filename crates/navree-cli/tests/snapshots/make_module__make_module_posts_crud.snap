@@ -11,7 +11,7 @@ expression: files.to_string()
 //! ├── mod.rs           # PostsModule: what the module provides and imports
 //! ├── controller.rs    # PostController: the HTTP routes
 //! ├── service.rs       # PostService: the business logic
-//! ├── entity.rs        # the `posts` table (SeaORM entity)
+//! ├── entity.rs        # the `posts` table, as an ORM model
 //! ├── dto.rs           # request bodies and their validation rules
 //! ├── migrations/      # migrations owned by this module
 //! └── tests/           # tests on a fresh database
@@ -29,6 +29,7 @@ use navree::access::AccessModule;
 use navree::db::ModuleBuilderDbExt;
 use navree::kernel::ModuleBuilder;
 use navree::module;
+use navree::orm::ModuleBuilderOrmExt;
 
 pub use controller::PostController;
 pub use entity::Post;
@@ -40,7 +41,7 @@ pub use service::PostService;
 /// with permissions (`posts.read`, `.create`, `.update`, `.delete`, or
 /// `posts.manage` for all) or with rules in the app's abilities function.
 #[module(
-    imports = [AccessModule::for_feature::<entity::Entity>()],
+    imports = [AccessModule::for_feature::<Post>()],
     providers = [PostService],
     controllers = [PostController],
     exports = [PostService],
@@ -49,11 +50,12 @@ pub use service::PostService;
 pub struct PostsModule;
 
 impl PostsModule {
-    /// Registrations `#[module]` has no key for (migrations, jobs,
+    /// Registrations `#[module]` has no key for (migrations, models, jobs,
     /// listeners, commands, templates). `navree make:*` adds its lines above
     /// the `navree:wire` marker.
     fn wire(&self, m: &mut ModuleBuilder) {
         m.migrations(migrations::migrations());
+        m.model::<Post>();
         // navree:wire
     }
 }
@@ -66,11 +68,12 @@ use std::sync::Arc;
 use navree::access::{Accessible, Authorized, Create, Delete, Read, Update};
 use navree::db::{Page, PageQuery, Uow};
 use navree::http::{Created, Json, NoContent, Result};
+use navree::orm::Record;
 use navree::validation::Valid;
 use navree::{controller, injectable};
 
 use super::dto::{CreatePost, UpdatePost};
-use super::entity::{Model, Post};
+use super::entity::Post;
 use super::service::PostService;
 
 /// The routes of the posts resource. Each one checks the
@@ -93,7 +96,7 @@ impl PostController {
         uow: Uow,
         scope: Accessible<Post, Read>,
         page: PageQuery,
-    ) -> Result<Page<Model>> {
+    ) -> Result<Page<Record<Post>>> {
         Ok(self.posts.list(&uow, scope, page).await?)
     }
 
@@ -101,7 +104,7 @@ impl PostController {
     #[get("/{id}")]
     #[can(Read, Post, from = "id")]
     #[api(summary = "Show a post", tag = "Post")]
-    async fn show(&self, post: Authorized<Post, Read>) -> Json<Model> {
+    async fn show(&self, post: Authorized<Post, Read>) -> Json<Record<Post>> {
         Json(post.into_inner())
     }
 
@@ -113,7 +116,7 @@ impl PostController {
         &self,
         uow: Uow,
         Valid(Json(input)): Valid<Json<CreatePost>>,
-    ) -> Result<Created<Model>> {
+    ) -> Result<Created<Record<Post>>> {
         let post = self.posts.create(&uow, input).await?;
         Ok(Created(format!("/api/v1/posts/{}", post.id), post))
     }
@@ -127,7 +130,7 @@ impl PostController {
         uow: Uow,
         post: Authorized<Post, Update>,
         Valid(Json(input)): Valid<Json<UpdatePost>>,
-    ) -> Result<Json<Model>> {
+    ) -> Result<Json<Record<Post>>> {
         post.check_fields(&input.changed_fields())?;
         let post = self.posts.update(&uow, post.into_inner(), input).await?;
         Ok(Json(post))
@@ -146,21 +149,20 @@ impl PostController {
 ==> posts/service.rs <==
 //! The business logic of the posts module.
 
-use chrono::Utc;
 use navree::access::{Accessible, Read};
-use navree::db::{Page, PageQuery, Repo, Uow, paginate};
+use navree::db::{Page, PageQuery, Uow};
 use navree::injectable;
-use sea_orm::{ActiveValue::Set, DbErr, EntityTrait, QueryOrder};
-use uuid::Uuid;
+use navree::orm::access::AccessibleQuery as _;
+use navree::orm::{Model as _, OrmError, Record};
 
 use super::dto::{CreatePost, UpdatePost};
-use super::entity::{ActiveModel, Column, Entity, Model};
+use super::entity::Post;
 
 /// Lists, creates, updates and deletes posts.
 ///
-/// Writes go through `Repo` inside the caller's unit of work: they commit
-/// with the request (or roll back with it) and record change events for the
-/// audit log and change observers.
+/// Writes go through the model's records inside the caller's unit of work:
+/// they commit with the request (or roll back with it) and record change
+/// events for the audit log and change observers.
 #[injectable]
 pub struct PostService;
 
@@ -169,79 +171,84 @@ impl PostService {
     pub async fn list(
         &self,
         uow: &Uow,
-        scope: Accessible<Entity, Read>,
+        scope: Accessible<Post, Read>,
         page: PageQuery,
-    ) -> Result<Page<Model>, DbErr> {
-        let select = scope.apply(Entity::find().order_by_desc(Column::CreatedAt));
-        paginate(select, &*uow.tx().await?, page).await
+    ) -> Result<Page<Record<Post>>, OrmError> {
+        scope
+            .query()
+            .order_by_desc(Post::CREATED_AT)
+            .order_by_desc(Post::ID)
+            .paginate(uow, page)
+            .await
     }
 
-    /// Creates a post owned by the acting user.
-    pub async fn create(&self, uow: &Uow, input: CreatePost) -> Result<Model, DbErr> {
-        let now = Utc::now();
-        let post = ActiveModel {
-            id: Set(Uuid::now_v7()),
-            owner_id: Set(uow.actor()),
-            name: Set(input.name),
-            created_at: Set(now),
-            updated_at: Set(now),
-        };
-        Repo::<Entity>::insert(uow, post).await
+    /// Creates a post owned by the acting user. The ORM generates the
+    /// id (a UUID v7) and sets the timestamps.
+    pub async fn create(&self, uow: &Uow, input: CreatePost) -> Result<Record<Post>, OrmError> {
+        Post::create(
+            uow,
+            Post {
+                owner_id: uow.actor(),
+                name: input.name,
+                ..Post::default()
+            },
+        )
+        .await
     }
 
     /// Applies the fields present in `input`.
-    pub async fn update(&self, uow: &Uow, post: Model, input: UpdatePost) -> Result<Model, DbErr> {
-        let mut active: ActiveModel = post.into();
+    pub async fn update(
+        &self,
+        uow: &Uow,
+        mut post: Record<Post>,
+        input: UpdatePost,
+    ) -> Result<Record<Post>, OrmError> {
         if let Some(name) = input.name {
-            active.name = Set(name);
+            post.name = name;
         }
-        active.updated_at = Set(Utc::now());
-        Repo::<Entity>::update(uow, active).await
+        // Writes only the changed columns, sets `updated_at` and records the
+        // change.
+        post.save(uow).await?;
+        Ok(post)
     }
 
     /// Deletes `post`.
-    pub async fn delete(&self, uow: &Uow, post: Model) -> Result<(), DbErr> {
-        Repo::<Entity>::delete(uow, post).await
+    pub async fn delete(&self, uow: &Uow, mut post: Record<Post>) -> Result<(), OrmError> {
+        post.delete(uow).await?;
+        Ok(())
     }
 }
 
 ==> posts/entity.rs <==
-//! The `posts` table.
+//! The `posts` table as an ORM model.
 
-use navree::access::Subject;
-use sea_orm::entity::prelude::*;
+use chrono::{DateTime, Utc};
+use navree::orm::Model;
 use serde::Serialize;
+use uuid::Uuid;
 
 /// A post. Serialized as is in API responses: keep secrets out
-/// of it (or skip them with `#[serde(skip)]`).
-#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-#[sea_orm(table_name = "posts")]
-pub struct Model {
-    /// A UUID v7, so ids sort by creation time.
-    #[sea_orm(primary_key, auto_increment = false)]
+/// of it (or skip them with `#[serde(skip)]`). Query it with
+/// `Post::query()`. The model is the access subject
+/// `Post`, with permissions `posts.<action>`
+/// (`posts.update`, `posts.manage`, ...): rules name it
+/// `Post`, and routes use it as `#[can(Read, Post)]` and
+/// `Authorized<Post, Update>`.
+#[derive(Model, Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[model(table = "posts", timestamps, subject)]
+pub struct Post {
+    /// A UUID v7, generated when the record is created, so ids sort by
+    /// creation time.
     pub id: Uuid,
     /// The user who created it (abilities can test `owner_id`).
     pub owner_id: Option<Uuid>,
+    /// The name.
     pub name: String,
-    pub created_at: DateTimeUtc,
-    pub updated_at: DateTimeUtc,
+    /// When the record was created.
+    pub created_at: DateTime<Utc>,
+    /// When the record last changed.
+    pub updated_at: DateTime<Utc>,
 }
-
-#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
-
-impl ActiveModelBehavior for ActiveModel {}
-
-/// The access subject: rules name it `Post`, permissions
-/// `posts.<action>` (`posts.update`, `posts.manage`, ...).
-impl Subject for Entity {
-    const SUBJECT: &'static str = "Post";
-    const PERMISSION_PREFIX: &'static str = "posts";
-}
-
-/// The subject in route attributes and extractors: `#[can(Read, Post)]`,
-/// `Authorized<Post, Update>`.
-pub type Post = Entity;
 
 ==> posts/dto.rs <==
 //! Request bodies of the posts API, with their validation rules

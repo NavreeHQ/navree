@@ -9,7 +9,7 @@
 //! ├── mod.rs           # UsersModule: what the module provides
 //! ├── controller.rs    # ProfileController: GET and PUT /api/v1/profile
 //! ├── service.rs       # ProfileService: reads and writes profiles
-//! ├── entity.rs        # the `user_profiles` table
+//! ├── entity.rs        # the `user_profiles` table (an ORM model)
 //! ├── dto.rs           # request and response bodies
 //! ├── migrations/      # migrations owned by this module
 //! └── tests/           # tests on a fresh database
@@ -26,8 +26,10 @@ mod tests;
 use navree::db::ModuleBuilderDbExt;
 use navree::kernel::ModuleBuilder;
 use navree::module;
+use navree::orm::ModuleBuilderOrmExt;
 
 pub use controller::ProfileController;
+pub use entity::Profile;
 pub use service::ProfileService;
 
 /// User profiles.
@@ -40,11 +42,12 @@ pub use service::ProfileService;
 pub struct UsersModule;
 
 impl UsersModule {
-    /// Registrations `#[module]` has no key for (migrations, jobs,
+    /// Registrations `#[module]` has no key for (migrations, models, jobs,
     /// listeners, commands, templates). `navree make:*` adds its lines above
     /// the `navree:wire` marker.
     fn wire(&self, m: &mut ModuleBuilder) {
         m.migrations(migrations::migrations());
+        m.model::<Profile>();
         // navree:wire
     }
 }

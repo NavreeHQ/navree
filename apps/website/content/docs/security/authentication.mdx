@@ -84,7 +84,7 @@ The constant `navree::auth::AUTH_MIGRATIONS` holds the name `auth`. See [Migrati
 | `two_factor_secret`, `two_factor_recovery_codes`, `two_factor_confirmed_at` | [Two-factor authentication](/docs/security/account-flows/#two-factor-authentication); never serialized |
 | `created_at`, `updated_at` | UTC |
 
-`navree::auth::User` is a model of Navree's ORM: query it with `User::query()` and its typed columns (`User::EMAIL`, `User::CREATED_AT`), or `User::find(&db, id)`. Its columns are fixed by `navree-auth`, and the module writes them itself (through `AuthService`), recording the change in the unit of work without the password hash or the two-factor data, so audit trails and other change observers never see them. It is also the access subject `User` (`#[model(subject = "User", permission_prefix = "users")]`), so an app registers it with `AccessModule::for_feature::<navree::auth::User>()`, and a route that checks a user takes `Authorized<User, Read>`, which dereferences to the `Record<User>`. While some of Navree's own modules still read users through SeaORM, `navree::auth::user::Entity` remains as a SeaORM entity of the same table, and as a subject for those crates only; new code uses the model. To create a user outside `AuthService` (a sign-in module, an import), write it with `navree::auth::user::insert(&uow, user)`: it inserts the row and records the change event without the password hash or two-factor data. Keep app-specific data about users in a table of your own that references `users.id`, and add it to the API's user resource with a [user resource extension](#the-user-resource).
+`navree::auth::User` is a model of Navree's ORM: query it with `User::query()` and its typed columns (`User::EMAIL`, `User::CREATED_AT`), or `User::find(&db, id)`. Its columns are fixed by `navree-auth`, and the module writes them itself (through `AuthService`), recording the change in the unit of work without the password hash or the two-factor data, so audit trails and other change observers never see them. It is also the access subject `User` (`#[model(subject = "User", permission_prefix = "users")]`), so an app registers it with `AccessModule::for_feature::<navree::auth::User>()`, and a route that checks a user takes `Authorized<User, Read>`, which dereferences to the `Record<User>`. To create a user outside `AuthService` (a sign-in module, an import), write it with `navree::auth::user::insert(&uow, user)`: it inserts the row and records the change event without the password hash or two-factor data. Keep app-specific data about users in a table of your own that references `users.id`, and add it to the API's user resource with a [user resource extension](#the-user-resource).
 
 ## The auth routes
 
@@ -488,7 +488,7 @@ Authentication is a chain of strategies, each one a way of recognising a request
 
 ### Writing your own strategy
 
-Navree has no built-in API keys or personal access tokens. A strategy is how you add them. This one accepts an `X-Api-Key` header and looks the key up in an `api_keys` table of your own (its entity isn't shown):
+Navree has no built-in API keys or personal access tokens. A strategy is how you add them. This one accepts an `X-Api-Key` header and looks the key up in an `api_keys` table of your own (its [model](/docs/orm/models/), `ApiKey`, isn't shown):
 
 ```rust title="src/modules/api_keys/strategy.rs"
 use navree::BoxFuture;
@@ -498,9 +498,8 @@ use navree::contracts::{AuthVia, Principal};
 use navree::crypto::sha256_hex;
 use navree::db::Db;
 use navree::prelude::*;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
-use super::entity as api_key; // the `api_keys` table
+use super::entity::ApiKey; // the model of the `api_keys` table
 
 /// `X-Api-Key: <key>` for scripts and integrations.
 #[injectable]
@@ -524,9 +523,9 @@ impl Strategy for ApiKeyStrategy {
             };
             // Keys are stored as SHA-256 digests, never in plain text.
             let digest = sha256_hex(key.as_bytes());
-            let found = api_key::Entity::find()
-                .filter(api_key::Column::KeyHash.eq(digest))
-                .one(self.db.conn())
+            let found = ApiKey::query()
+                .where_(ApiKey::KEY_HASH.eq(digest))
+                .first(&self.db)
                 .await
                 .map_err(AppError::internal)?;
             // A key we don't know is a 401, never a guest.

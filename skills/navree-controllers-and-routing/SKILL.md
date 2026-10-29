@@ -32,11 +32,12 @@ use std::sync::Arc;
 use navree::access::{Accessible, Authorized, Create, Delete, Read, Update};
 use navree::db::{Page, PageQuery, Uow};
 use navree::http::{Created, Json, NoContent, Result};
+use navree::orm::Record;
 use navree::validation::Valid;
 use navree::{controller, injectable};
 
 use super::dto::{CreatePost, UpdatePost};
-use super::entity::{Model, Post};
+use super::entity::Post;
 use super::service::PostService;
 
 #[injectable]
@@ -48,20 +49,20 @@ pub struct PostController {
 impl PostController {
     #[get("/")]
     #[can(Read, Post)]
-    async fn index(&self, uow: Uow, scope: Accessible<Post, Read>, page: PageQuery) -> Result<Page<Model>> {
+    async fn index(&self, uow: Uow, scope: Accessible<Post, Read>, page: PageQuery) -> Result<Page<Record<Post>>> {
         Ok(self.posts.list(&uow, scope, page).await?)
     }
 
     #[get("/{id}")]
     #[can(Read, Post, from = "id")]              // loads the record: 404 if missing, 403 if not allowed
-    async fn show(&self, post: Authorized<Post, Read>) -> Json<Model> {
+    async fn show(&self, post: Authorized<Post, Read>) -> Json<Record<Post>> {
         Json(post.into_inner())
     }
 
     #[post("/")]
     #[can(Create, Post)]
     #[throttle(limit = 30, per = "1m")]
-    async fn store(&self, uow: Uow, Valid(Json(input)): Valid<Json<CreatePost>>) -> Result<Created<Model>> {
+    async fn store(&self, uow: Uow, Valid(Json(input)): Valid<Json<CreatePost>>) -> Result<Created<Record<Post>>> {
         let post = self.posts.create(&uow, input).await?;
         Ok(Created(format!("/api/v1/posts/{}", post.id), post)) // 201 + Location
     }
@@ -73,7 +74,7 @@ impl PostController {
         uow: Uow,
         post: Authorized<Post, Update>,
         Valid(Json(input)): Valid<Json<UpdatePost>>,
-    ) -> Result<Json<Model>> {
+    ) -> Result<Json<Record<Post>>> {
         post.check_fields(&input.changed_fields())?; // 403 for fields the rules don't allow
         Ok(Json(self.posts.update(&uow, post.into_inner(), input).await?))
     }
@@ -253,8 +254,8 @@ async fn guests_must_sign_in_and_users_create_posts() {
 - Two `#[can]` on one route (one on the impl block counts).
 - `from = "id"` without a matching `{id}` in the path; or an `Authorized<E, A>`
   extractor that doesn't match the route's `#[can]` (500).
-- `#[can(.., from = "id")]` for an entity whose module doesn't import
-  `AccessModule::for_feature::<Entity>()` (500 when the route runs).
+- `#[can(.., from = "id")]` for a model whose module doesn't import
+  `AccessModule::for_feature::<Post>()` (500 when the route runs).
 - Sending a stale `Authorization` header to a public route: an invalid
   token is a 401 on every route.
 - A generic or non-`async` handler, or one taking `self`/`&mut self`.

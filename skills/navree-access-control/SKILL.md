@@ -37,11 +37,9 @@ pub struct Post { /* columns */ }       // `#[can(Read, Post)]`, `Authorized<Pos
 pub struct PostsModule;
 ```
 
-   A SeaORM entity of a crate not yet on navree-orm becomes a subject with
-   `impl navree::access::Subject for Entity { const SUBJECT; const
-   PERMISSION_PREFIX; }` and registers as `for_feature::<entity::Entity>()`;
-   navree-access loads its records through a shim until the SeaORM layer is
-   removed. navree-auth's users: `for_feature::<navree_auth::User>()`.
+   A model becomes a subject with `#[model(subject)]` (or `policy = ..`) and
+   registers as `for_feature::<Model>()`. navree-auth's users:
+   `for_feature::<navree_auth::User>()`.
 
 2. Protect each route with one access attribute (template below).
 3. Grant access: permissions to a role (`navree access:grant editor
@@ -51,8 +49,7 @@ pub struct PostsModule;
    `scope.query()` / `scope.apply(Post::query())` from
    `navree::orm::access::AccessibleQuery`; SQL you write yourself:
    `scope.sql_filter(&TypedColumns::new("posts").with(..)).to_statement(backend)`,
-   a portable fragment; a SeaORM entity, until it moves to a model:
-   `scope.apply(Entity::find())`); check records with
+   a portable fragment); check records with
    `#[can(.., from = "id")]` and `Authorized` (for a model it derefs to
    `Record<M>`; `.into_inner()` is the Record, `.into_inner().into_inner()`
    the model).
@@ -164,8 +161,7 @@ pub fn define(ctx: &AbilityCtx, rules: &mut Rules) {
 compiled rules: `ability.can(PUBLISH, "Post", Some(&record_json))` with the
 record's JSON (`navree::orm::access::record_json(&record)` for an ORM model,
 or `ability.authorize(Publish, &record)?` from `AbilityExt`;
-`navree::access::row_json(&row)` for a navree-db record;
-`navree::access::record_json(&model)` for a SeaORM entity's model),
+`navree::access::row_json(&row)` for a navree-db record),
 `ability.can_field(..)`, `ability.permitted_fields(..)`. `CurrentAccess`
 adds roles, permissions and `super_admin`.
 

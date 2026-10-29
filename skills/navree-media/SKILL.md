@@ -156,7 +156,7 @@ below its width), `nonqueued()` / `queued()`, and with `media-ffmpeg`
   rows in the unit of work, files after commit.
 - Deleting the model deletes its media when it is registered with
   `for_feature`, names `MEDIA_TABLE`, the delete records change events
-  (record `delete`, `Model::destroy`, `Repo::delete`; NOT query-builder bulk
+  (record `delete`, `Model::destroy`; NOT query-builder bulk
   deletes) and the row has no `deleted_at` column (soft-deleting models keep
   their media: call `delete_all` on force delete). `media.delete_with_model = false` turns it off.
 

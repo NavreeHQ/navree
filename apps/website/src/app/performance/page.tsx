@@ -578,7 +578,7 @@ export default async function PerformancePage() {
         <SectionHead id="workload" eyebrow="Workload" title="A small CRM API, and nothing tuned for it.">
           <p>
             The app is an ordinary {site.name} application: modules and controllers, the JWT strategy and{" "}
-            <Code>CurrentUser</Code>, validated extractors, SeaORM entities, the unit of work and {site.name}&apos;s
+            <Code>CurrentUser</Code>, validated extractors, ORM models, the unit of work and {site.name}&apos;s
             pagination. It reads a seeded PostgreSQL database of 10,000 <Code>world</Code> rows, 100 users and 1,000 deals.
           </p>
         </SectionHead>
@@ -865,7 +865,7 @@ export default async function PerformancePage() {
             {
               key: "pool",
               title: "Pooled connections",
-              text: "One pool of PostgreSQL connections, kept open and shared by every worker. SeaORM builds the queries and sqlx runs them.",
+              text: "One pool of PostgreSQL connections, kept open and shared by every worker. The ORM builds the queries and sqlx runs them.",
               proof: `${fmtInt(r.db.rps)} single queries a second`,
             },
             {
