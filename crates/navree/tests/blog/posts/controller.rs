@@ -4,7 +4,7 @@ use navree::prelude::*;
 
 use super::Publish;
 use super::dto::{CreatePost, UpdatePost};
-use super::entity::{Model, Post};
+use super::entity::Post;
 use super::service::PostService;
 
 /// The routes of the posts resource. `from = "id"` routes load the post
@@ -25,15 +25,15 @@ impl PostController {
         uow: Uow,
         scope: Accessible<Post, Read>,
         page: PageQuery,
-    ) -> Result<Page<Model>> {
-        Ok(self.posts.list(&uow, scope, page).await?)
+    ) -> Result<Page<Record<Post>>> {
+        self.posts.list(&uow, scope, page).await
     }
 
     /// One post.
     #[get("/{id}")]
     #[can(Read, Post, from = "id")]
     #[api(summary = "Show a post", tag = "Posts", responses(403, 404))]
-    async fn show(&self, post: Authorized<Post, Read>) -> Json<Model> {
+    async fn show(&self, post: Authorized<Post, Read>) -> Json<Record<Post>> {
         Json(post.into_inner())
     }
 
@@ -51,7 +51,7 @@ impl PostController {
         &self,
         uow: Uow,
         Valid(Json(input)): Valid<Json<CreatePost>>,
-    ) -> Result<Created<Model>> {
+    ) -> Result<Created<Record<Post>>> {
         let post = self.posts.create(&uow, input).await?;
         Ok(Created(format!("/api/v1/posts/{}", post.id), post))
     }
@@ -70,7 +70,7 @@ impl PostController {
         uow: Uow,
         post: Authorized<Post, Update>,
         Valid(Json(input)): Valid<Json<UpdatePost>>,
-    ) -> Result<Json<Model>> {
+    ) -> Result<Json<Record<Post>>> {
         post.check_fields(&input.changed_fields())?;
         Ok(Json(
             self.posts.update(&uow, post.into_inner(), input).await?,
@@ -86,7 +86,7 @@ impl PostController {
         uow: Uow,
         CurrentUser(author): CurrentUser,
         post: Authorized<Post, Publish>,
-    ) -> Result<Json<Model>> {
+    ) -> Result<Json<Record<Post>>> {
         let post = self
             .posts
             .publish(&uow, post.into_inner(), &author.name, &author.email)
