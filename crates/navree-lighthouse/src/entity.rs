@@ -1,7 +1,6 @@
 //! Lighthouse's tables (migration set `lighthouse`): navree-orm models
 //! (`issue::Model::query()`, typed columns such as
-//! `occurrence::Model::ISSUE_ID`), and SeaORM entities for code built on
-//! SeaORM's query API.
+//! `occurrence::Model::ISSUE_ID`).
 //!
 //! - `lighthouse_issues`: one row per fingerprint, with its status and
 //!   exact count;
@@ -16,18 +15,16 @@
 
 /// `lighthouse_issues`.
 pub mod issue {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
+    use uuid::Uuid;
 
     /// An issue row.
-    #[derive(Clone, Debug, PartialEq, DeriveEntityModel, navree_orm::Model, serde::Serialize)]
-    #[sea_orm(table_name = "lighthouse_issues")]
+    #[derive(Clone, Debug, PartialEq, navree_orm::Model, serde::Serialize)]
     #[model(table = "lighthouse_issues")]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The fingerprint (32 hex characters), unique.
-        #[sea_orm(unique)]
         pub fingerprint: String,
         /// `exception`, `slow_request`, ...
         pub kind: String,
@@ -40,10 +37,8 @@ pub mod issue {
         /// The route, job, task or host.
         pub culprit: String,
         /// The full message of the first occurrence.
-        #[sea_orm(column_type = "Text")]
         pub message: String,
         /// The source chain (JSON array of strings).
-        #[sea_orm(column_type = "Text")]
         pub chain: String,
         /// Where it happened (`file:line:column`), when known.
         pub location: Option<String>,
@@ -52,9 +47,9 @@ pub mod issue {
         /// Occurrences, exact.
         pub count: i64,
         /// The first occurrence.
-        pub first_seen: DateTimeUtc,
+        pub first_seen: DateTime<Utc>,
         /// The latest occurrence.
-        pub last_seen: DateTimeUtc,
+        pub last_seen: DateTime<Utc>,
         /// The release of the first occurrence.
         pub first_release: Option<String>,
         /// The release of the latest occurrence.
@@ -62,57 +57,46 @@ pub mod issue {
         /// The environment of the latest occurrence.
         pub environment: Option<String>,
         /// When it was resolved.
-        pub resolved_at: Option<DateTimeUtc>,
+        pub resolved_at: Option<DateTime<Utc>>,
         /// The release current when it was resolved in the next release.
         pub resolved_in_release: Option<String>,
         /// Ignored until then.
-        pub ignored_until: Option<DateTimeUtc>,
+        pub ignored_until: Option<DateTime<Utc>>,
         /// Ignored for this many more occurrences.
         pub ignore_remaining: Option<i64>,
         /// When it last came back after being resolved.
-        pub regressed_at: Option<DateTimeUtc>,
+        pub regressed_at: Option<DateTime<Utc>>,
         /// The comment of the last status change.
-        #[sea_orm(column_type = "Text", nullable)]
         pub comment: Option<String>,
         /// When the row was created.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
         /// When the row last changed.
-        pub updated_at: DateTimeUtc,
+        pub updated_at: DateTime<Utc>,
     }
-
-    /// No relations.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `lighthouse_occurrences`.
 pub mod occurrence {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
+    use uuid::Uuid;
 
     /// A stored occurrence.
-    #[derive(Clone, Debug, PartialEq, DeriveEntityModel, navree_orm::Model, serde::Serialize)]
-    #[sea_orm(table_name = "lighthouse_occurrences")]
+    #[derive(Clone, Debug, PartialEq, navree_orm::Model, serde::Serialize)]
     #[model(table = "lighthouse_occurrences")]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The issue (`lighthouse_issues.id`, cascading delete).
         pub issue_id: Uuid,
         /// When it happened.
-        pub at: DateTimeUtc,
+        pub at: DateTime<Utc>,
         /// Its level.
         pub level: String,
         /// The message.
-        #[sea_orm(column_type = "Text")]
         pub message: String,
         /// The source chain (JSON array).
-        #[sea_orm(column_type = "Text")]
         pub chain: String,
         /// A backtrace, when one was captured.
-        #[sea_orm(column_type = "Text", nullable)]
         pub backtrace: Option<String>,
         /// Where it happened, when known.
         pub location: Option<String>,
@@ -146,35 +130,27 @@ pub mod occurrence {
         pub sample_id: Option<Uuid>,
         /// Headers, body, client address, tags, report context, job details
         /// (JSON object, masked).
-        #[sea_orm(column_type = "Text")]
         pub context: String,
     }
-
-    /// No relations.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `lighthouse_samples`.
 pub mod sample {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
+    use uuid::Uuid;
 
     /// A request or job sample with its spans.
-    #[derive(Clone, Debug, PartialEq, DeriveEntityModel, navree_orm::Model, serde::Serialize)]
-    #[sea_orm(table_name = "lighthouse_samples")]
+    #[derive(Clone, Debug, PartialEq, navree_orm::Model, serde::Serialize)]
     #[model(table = "lighthouse_samples")]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// `request` or `job`.
         pub kind: String,
         /// The endpoint (`GET /api/v1/deals/board`) or the job type.
         pub name: String,
         /// When it finished.
-        pub at: DateTimeUtc,
+        pub at: DateTime<Utc>,
         /// How long it took, in milliseconds.
         pub duration_ms: f64,
         /// The response status (requests).
@@ -204,46 +180,35 @@ pub mod sample {
         pub process: Option<String>,
         /// The spans (JSON array of `{kind, label, start_ms, duration_ms,
         /// failed}`).
-        #[sea_orm(column_type = "Text")]
         pub spans: String,
         /// Headers, client address, tags, job details (JSON object, masked).
-        #[sea_orm(column_type = "Text")]
         pub context: String,
         /// The error of a failed job attempt.
-        #[sea_orm(column_type = "Text", nullable)]
         pub error: Option<String>,
     }
-
-    /// No relations.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `lighthouse_aggregates`.
 pub mod aggregate {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
+    use uuid::Uuid;
 
     /// Counts and a latency histogram of one key in one bucket, written by
     /// one process.
-    #[derive(Clone, Debug, PartialEq, DeriveEntityModel, navree_orm::Model, serde::Serialize)]
-    #[sea_orm(table_name = "lighthouse_aggregates")]
+    #[derive(Clone, Debug, PartialEq, navree_orm::Model, serde::Serialize)]
     #[model(table = "lighthouse_aggregates")]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The bucket size in seconds: 60 or 3600.
         pub resolution: i32,
         /// The bucket's start.
-        pub bucket: DateTimeUtc,
+        pub bucket: DateTime<Utc>,
         /// `request`, `query`, `job`, `outgoing`, `exception` or `issue`.
         pub kind: String,
         /// A hash of the key (what rows are matched by).
         pub key_hash: String,
         /// The endpoint, statement, job type, host or fingerprint.
-        #[sea_orm(column_type = "Text")]
         pub key: String,
         /// The process that wrote the row.
         pub process: String,
@@ -259,32 +224,23 @@ pub mod aggregate {
         /// The longest duration in milliseconds.
         pub max_ms: f64,
         /// The latency histogram (`bucket:count,...`).
-        #[sea_orm(column_type = "Text")]
         pub histogram: String,
         /// Kind-specific details (JSON): the routes and jobs that ran a
         /// query, the slowest outgoing calls.
-        #[sea_orm(column_type = "Text", nullable)]
         pub detail: Option<String>,
     }
-
-    /// No relations.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `lighthouse_alerts`.
 pub mod alert {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
+    use uuid::Uuid;
 
     /// One alert through one channel.
-    #[derive(Clone, Debug, PartialEq, DeriveEntityModel, navree_orm::Model, serde::Serialize)]
-    #[sea_orm(table_name = "lighthouse_alerts")]
+    #[derive(Clone, Debug, PartialEq, navree_orm::Model, serde::Serialize)]
     #[model(table = "lighthouse_alerts")]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The issue it is about.
         pub issue_id: Option<Uuid>,
@@ -299,20 +255,12 @@ pub mod alert {
         /// Delivery attempts.
         pub attempts: i32,
         /// The last delivery error.
-        #[sea_orm(column_type = "Text", nullable)]
         pub error: Option<String>,
         /// The alert (JSON).
-        #[sea_orm(column_type = "Text")]
         pub payload: String,
         /// When it was raised.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
         /// When it was delivered.
-        pub delivered_at: Option<DateTimeUtc>,
+        pub delivered_at: Option<DateTime<Utc>>,
     }
-
-    /// No relations.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }

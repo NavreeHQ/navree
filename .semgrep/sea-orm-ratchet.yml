@@ -41,7 +41,6 @@ rules:
         - "/crates/navree-graphql/"
         - "/crates/navree-grpc/"
         - "/crates/navree-helm/"
-        - "/crates/navree-lighthouse/"
         - "/crates/navree-mcp/"
         # navree-micro is ported; its tests keep one SeaORM fixture (the `deals`
         # entity, a subject through navree-access's SeaORM shim) until step 8.
@@ -88,7 +87,6 @@ rules:
         - "/crates/navree-graphql/"
         - "/crates/navree-grpc/"
         - "/crates/navree-helm/"
-        - "/crates/navree-lighthouse/"
         - "/crates/navree-mcp/"
         # navree-micro: a dev-dependency for that fixture (navree-access's shim, step 8).
         - "/crates/navree-micro/Cargo.toml"
