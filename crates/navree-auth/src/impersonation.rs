@@ -124,8 +124,7 @@ impl AuthService {
         let now = self.clock.now();
         if let Some(session_id) = claims.sid {
             self.write(Some(claims.sub), |uow| async move {
-                let tx = uow.tx().await?;
-                revoke_family(&*tx, session_id, now).await
+                revoke_family(&uow, session_id, now).await
             })
             .await?;
         }

@@ -5,10 +5,11 @@ use std::time::Duration;
 
 use chrono::{TimeZone, Utc};
 use navree_contracts::{AuditEntry, AuditKind, Clock, FixedClock};
-use navree_db::{Db, Repo};
+use navree_db::Db;
+use navree_orm::Model as _;
 use navree_testing::TestApp;
 
-use crate::support::{self, audit_log, audit_rows, new_note, note};
+use crate::support::{self, Note, audit_log, audit_rows, new_note};
 
 const DAY: Duration = Duration::from_secs(24 * 60 * 60);
 
@@ -35,9 +36,7 @@ async fn aged(config: &[(&str, serde_json::Value)]) -> (TestApp, Arc<FixedClock>
     // A data change through a unit of work is stamped by the same clock.
     let db = app.get::<Db>().await;
     let uow = db.uow(None, None).await;
-    Repo::<note::Entity>::insert(&uow, new_note("middle"))
-        .await
-        .unwrap();
+    Note::create(&uow, new_note("middle")).await.unwrap();
     uow.commit().await.unwrap();
     clock.advance(200 * DAY);
     log.record(AuditEntry::new(AuditKind::Auth, "auth.login.new"))

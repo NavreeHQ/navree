@@ -5,12 +5,11 @@ use std::time::Duration;
 
 use navree_auth::{
     AuthModule, AuthOptions, AuthService, JwtOptions, JwtService, TokenType, User, UserResource,
-    user,
 };
 use navree_crypto::CryptoModule;
 use navree_db::{DatabaseModule, Db};
+use navree_orm::Model as _;
 use navree_testing::TestApp;
-use sea_orm::EntityTrait;
 use serde_json::{Value, json};
 
 use crate::support::{self, PASSWORD, login, signed_in};
@@ -91,8 +90,7 @@ async fn for_root_takes_options_and_a_configured_secret() {
         },
         ..AuthOptions::default()
     };
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .config("hashing.memory_kib", 1024)
         .config("hashing.iterations", 1)
         .module(CryptoModule::from_config())
@@ -130,8 +128,7 @@ async fn tokens_are_signed_with_a_key_derived_from_the_app_key() {
 
 #[tokio::test]
 async fn boots_without_an_app_key() {
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .config("hashing.memory_kib", 1024)
         .config("hashing.iterations", 1)
         .module(CryptoModule::from_config())
@@ -205,7 +202,7 @@ async fn service_creates_finds_and_updates_users() {
     assert!(user.updated_at >= created.updated_at);
 
     let db = app.get::<Db>().await;
-    assert_eq!(user::Entity::find().all(db.conn()).await.unwrap().len(), 1);
+    assert_eq!(User::all(&*db).await.unwrap().len(), 1);
 }
 
 #[tokio::test]

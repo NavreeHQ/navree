@@ -150,12 +150,11 @@ impl AuthService {
         let now = self.clock.now();
         let revoked = self
             .write(Some(user_id), |uow| async move {
-                let tx = uow.tx().await?;
                 Ok(RefreshToken::query()
                     .where_(RefreshToken::FAMILY_ID.eq(session_id))
                     .where_(RefreshToken::USER_ID.eq(user_id))
                     .where_null(RefreshToken::REVOKED_AT)
-                    .update(&*tx, [RefreshToken::REVOKED_AT.set(now)])
+                    .update(&uow, [RefreshToken::REVOKED_AT.set(now)])
                     .await?)
             })
             .await?;
@@ -211,12 +210,11 @@ impl AuthService {
         if let Some(session_id) = claims.sid {
             let user_id = user.id;
             self.write(Some(user_id), |uow| async move {
-                let tx = uow.tx().await?;
                 RefreshToken::query()
                     .where_(RefreshToken::FAMILY_ID.eq(session_id))
                     .where_(RefreshToken::USER_ID.eq(user_id))
                     .where_null(RefreshToken::REVOKED_AT)
-                    .update(&*tx, [RefreshToken::AUTHENTICATED_AT.set(now)])
+                    .update(&uow, [RefreshToken::AUTHENTICATED_AT.set(now)])
                     .await?;
                 Ok(())
             })

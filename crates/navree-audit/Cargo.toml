@@ -10,6 +10,14 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+## The test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres` with
+## NAVREE_TEST_POSTGRES_URL).
+postgres = ["navree-db/postgres"]
+## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
+mysql = ["navree-db/mysql"]
+
 [dependencies]
 axum = { workspace = true }
 chrono = { workspace = true }
@@ -20,8 +28,6 @@ navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 # The audit trail as models (`AuditRecord`), written and listed through the ORM.
 navree-orm = { workspace = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

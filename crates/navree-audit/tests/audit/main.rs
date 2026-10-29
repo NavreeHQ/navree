@@ -1,5 +1,7 @@
-//! navree-audit integration tests. Every test uses a fresh temporary SQLite file.
+//! navree-audit integration tests. Every test uses a fresh database of its
+//! own, on SQLite or the server `NAVREE_TEST_DATABASE` names (see `servers`).
 
+mod servers;
 mod support;
 
 mod data;

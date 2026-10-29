@@ -7,8 +7,8 @@ use std::time::Duration;
 use navree_auth::login_token;
 use navree_contracts::AuditSink;
 use navree_db::Db;
+use navree_orm::Model as _;
 use navree_testing::{TestApp, TestAppBuilder};
-use sea_orm::EntityTrait;
 use serde_json::{Value, json};
 
 use crate::support::{
@@ -157,7 +157,7 @@ async fn magic_links_expire_are_throttled_and_say_nothing_about_unknown_addresse
     // A new link replaces the old one.
     request("ada@example.com").await.assert_status(202);
     let db = app.get::<Db>().await;
-    let rows = login_token::Entity::find().all(db.conn()).await.unwrap();
+    let rows = login_token::Model::all(&*db).await.unwrap().into_vec();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].kind, "magic_link");
     assert!(!rows[0].token_hash.contains(&token));

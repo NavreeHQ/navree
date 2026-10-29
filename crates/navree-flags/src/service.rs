@@ -714,7 +714,9 @@ impl Engine {
                 if let Some(request_id) = uow.request_id() {
                     entry = entry.request_id(request_id);
                 }
-                log.record_in(uow, entry).await?;
+                log.record_in(uow, entry)
+                    .await
+                    .map_err(sea_orm::DbErr::from)?;
             }
             None => {
                 if let Err(error) = log.record(entry).await {

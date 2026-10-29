@@ -117,7 +117,7 @@ impl Related<super::deal::Entity> for Entity {
 }
 ```
 
-A relation can point at an entity of another crate. The CRM's deals belong to navree-auth's users: `belongs_to = "navree::auth::user::Entity"` with `to = "navree::auth::user::Column::Id"`.
+A relation can point at an entity of another crate. The CRM's deals belong to navree-auth's users: `belongs_to = "navree::auth::user::Entity"` with `to = "navree::auth::user::Column::Id"` (navree-auth keeps that SeaORM entity beside its `User` model while code still relates to it; new code relates models).
 
 ### Eager loading
 

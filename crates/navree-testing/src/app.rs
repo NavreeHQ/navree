@@ -1,5 +1,6 @@
 //! [`TestApp`] and [`TestAppBuilder`].
 
+use std::any::Any;
 use std::sync::Arc;
 
 use http::HeaderValue;
@@ -33,8 +34,10 @@ pub struct TestApp {
     /// What its clients share; `None` without `HttpModule`.
     target: Option<Arc<Target>>,
     /// Temporary directories (databases) removed with the app; declared
-    /// last so they are dropped after it.
+    /// after it so they are dropped after it.
     temp: Vec<TempDirGuard>,
+    /// What [`TestAppBuilder::hold`] keeps alive; dropped last.
+    held: Vec<Box<dyn Any + Send + Sync>>,
 }
 
 impl TestApp {
@@ -100,6 +103,7 @@ impl TestApp {
             app,
             target,
             temp: Vec::new(),
+            held: Vec::new(),
         })
     }
 
@@ -129,10 +133,16 @@ impl TestApp {
     /// tracked tasks, runs the `on_shutdown` hooks), then deletes its
     /// temporary directories. Dropping a `TestApp` only cancels the token.
     pub async fn shutdown(self) -> Result<(), BoxError> {
-        let TestApp { app, target, temp } = self;
+        let TestApp {
+            app,
+            target,
+            temp,
+            held,
+        } = self;
         drop(target);
         let result = app.shutdown().await;
         drop(temp);
+        drop(held);
         result
     }
 
@@ -198,9 +208,18 @@ pub struct TestAppBuilder {
     config: Vec<(String, serde_json::Value)>,
     fake_auth: bool,
     temp: Vec<TempDirGuard>,
+    held: Vec<Box<dyn Any + Send + Sync>>,
 }
 
 impl TestAppBuilder {
+    /// Keeps `value` alive as long as the app, and drops it after the app
+    /// (and its temporary directories): a guard that drops a test's own
+    /// database on a server, say.
+    pub fn hold(mut self, value: impl Any + Send + Sync) -> Self {
+        self.held.push(Box::new(value));
+        self
+    }
+
     /// Replaces the base configuration sources. The default is none at all,
     /// so tests never read `.env`, `config/app.toml` or the process
     /// environment; [`config`](TestAppBuilder::config) values still go on top.
@@ -296,6 +315,7 @@ impl TestAppBuilder {
         }
         let mut app = TestApp::boot(builder).await?;
         app.temp = self.temp;
+        app.held = self.held;
         Ok(app)
     }
 }

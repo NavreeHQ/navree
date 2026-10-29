@@ -7,11 +7,11 @@ use std::sync::Arc;
 use chrono::{DateTime, TimeDelta, Utc};
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, Clock, SystemClock};
 use navree_db::{
-    ChangeEvent, ChangeObserver, ChangeOp, Db, Page, PageQuery, Uow, prune_time_series,
+    ChangeEvent, ChangeObserver, ChangeOp, Db, DbError, Executor, Page, PageQuery, Uow,
+    prune_time_series_on, record,
 };
 use navree_kernel::{BoxError, BoxFuture};
-use navree_orm::{Executor, Model as _, Record};
-use sea_orm::{DatabaseTransaction, DbErr};
+use navree_orm::{OrmError, Record};
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
@@ -34,16 +34,18 @@ pub enum AuditError {
     },
     /// A database error.
     #[error(transparent)]
-    Db(#[from] DbErr),
+    Db(#[from] DbError),
 }
 
 /// The audit trail. Provided and exported by `AuditModule` (inject
 /// `Arc<AuditLog>`); other modules reach it as `dyn AuditSink`, and it sees
 /// every unit of work as a `dyn ChangeObserver`.
 ///
-/// - Data changes recorded in a [`Uow`] (by `navree_db::Repo`) become `data`
+/// - Data changes recorded in a [`Uow`] (by navree-orm models saved in it,
+///   navree-db's recorded record writes, or `navree_db::Repo`) become `data`
 ///   entries written inside the unit of work's transaction, right before it
-///   commits: a rolled-back change leaves no audit row. The action is
+///   commits ([`ChangeObserver::observe_with`]): a rolled-back change leaves
+///   no audit row. The action is
 ///   `<subject>.<created|updated|deleted>` (`deal.updated`), the subject the
 ///   table's subject type (`Deal`), the actor, impersonator and request id
 ///   those of the unit of work; updates keep only the fields that changed.
@@ -143,7 +145,7 @@ impl AuditLog {
             }
             // The writer has stopped (the app is shutting down): write directly.
             Err(mpsc::error::TrySendError::Closed(Message::Entry(row))) => {
-                insert(self.db.conn(), vec![*row]).await?;
+                insert(own_connection(&self.db), &[*row]).await?;
                 Ok(())
             }
             Err(_) => Ok(()),
@@ -153,7 +155,7 @@ impl AuditLog {
     /// Records `entry` inside the transaction of `uow`, so it commits or
     /// rolls back with the work. The actor, impersonator and request id
     /// default to those of the unit of work.
-    pub async fn record_in(&self, uow: &Uow, mut entry: AuditEntry) -> Result<(), DbErr> {
+    pub async fn record_in(&self, uow: &Uow, mut entry: AuditEntry) -> Result<(), DbError> {
         if !self.policy.enabled {
             return Ok(());
         }
@@ -167,8 +169,7 @@ impl AuditLog {
             entry.request_id = uow.request_id().map(str::to_owned);
         }
         let row = self.row(entry);
-        let tx = uow.tx().await?;
-        insert(&*tx, vec![row]).await
+        insert(uow, &[row]).await
     }
 
     /// Waits until every entry queued by [`record`](AuditLog::record) so far
@@ -181,39 +182,47 @@ impl AuditLog {
         }
     }
 
-    /// One page of entries matching `filter`, newest first, read on the
-    /// log's own connection (the one [`record`](AuditLog::record) writes
-    /// on).
+    /// One page of entries matching `filter`, newest first, read through
+    /// the ORM on the log's database: the task's unit of work when its
+    /// transaction is open, else the connection pool.
     pub async fn list(
         &self,
         filter: &AuditFilter,
         page: PageQuery,
-    ) -> Result<Page<AuditRecord>, DbErr> {
+    ) -> Result<Page<AuditRecord>, OrmError> {
         let page = filter
             .query()
             .order_by_desc(AuditRecord::CREATED_AT)
             .order_by_desc(AuditRecord::ID)
-            .paginate(self.db.conn(), page)
+            .paginate(&self.db, page)
             .await?;
         Ok(page.map(Record::into_inner))
     }
 
     /// Deletes entries older than `days` days; returns how many.
-    pub async fn prune(&self, days: u32) -> Result<u64, DbErr> {
+    pub async fn prune(&self, days: u32) -> Result<u64, DbError> {
         let cutoff = self.clock.now() - TimeDelta::days(i64::from(days));
         self.prune_before(cutoff).await
     }
 
     /// Deletes entries recorded before `cutoff`; returns how many. On
     /// TimescaleDB, where `audit_logs` is a hypertable, the weeks entirely
-    /// before `cutoff` go as whole chunks (see [`prune_time_series`]).
-    pub async fn prune_before(&self, cutoff: DateTime<Utc>) -> Result<u64, DbErr> {
-        self.db
-            .transaction(|uow| async move {
-                let tx = uow.tx().await?;
-                prune_time_series(&*tx, AUDIT_TABLE, "created_at", cutoff).await
-            })
-            .await
+    /// before `cutoff` go as whole chunks (see [`prune_time_series_on`]),
+    /// in a unit of work of its own.
+    pub async fn prune_before(&self, cutoff: DateTime<Utc>) -> Result<u64, DbError> {
+        let uow = self.db.uow(None, None).await;
+        match prune_time_series_on(&uow, AUDIT_TABLE, "created_at", cutoff).await {
+            Ok(pruned) => {
+                uow.commit().await?;
+                Ok(pruned)
+            }
+            Err(error) => {
+                if let Err(rollback) = uow.rollback().await {
+                    tracing::warn!(target: "navree::audit", error = %rollback, "rollback failed");
+                }
+                Err(error)
+            }
+        }
     }
 
     /// The row for `entry`, without skipped fields, stamped now.
@@ -278,13 +287,15 @@ impl AuditLog {
     }
 }
 
+/// Writes the `data` entries through the unit of work being committed, on
+/// either kind of transaction (SeaORM's runs this through `observe`'s
+/// default).
 impl ChangeObserver for AuditLog {
-    fn observe<'a>(
+    fn observe_with<'a>(
         &'a self,
-        tx: &'a DatabaseTransaction,
         uow: &'a Uow,
         changes: &'a [ChangeEvent],
-    ) -> BoxFuture<'a, Result<(), DbErr>> {
+    ) -> BoxFuture<'a, Result<(), DbError>> {
         Box::pin(async move {
             if !self.policy.enabled {
                 return Ok(());
@@ -293,7 +304,7 @@ impl ChangeObserver for AuditLog {
                 .iter()
                 .filter_map(|change| self.data_row(change, uow))
                 .collect();
-            insert(tx, rows).await
+            insert(uow, &rows).await
         })
     }
 }
@@ -340,7 +351,7 @@ async fn handle(db: &Db, message: Message) {
     match message {
         Message::Entry(row) => {
             let action = row.action.clone();
-            if let Err(error) = insert(db.conn(), vec![*row]).await {
+            if let Err(error) = insert(own_connection(db), &[*row]).await {
                 tracing::warn!(target: "navree::audit", %action, %error, "could not write an audit entry");
             }
         }
@@ -350,11 +361,23 @@ async fn handle(db: &Db, message: Message) {
     }
 }
 
-/// Inserts `rows` in one statement through `exec`: the log's own
-/// connection, or the transaction it is handed. A plain insert records no
-/// change events, so audit rows are never audited themselves.
-async fn insert<E: Executor + ?Sized>(exec: &E, rows: Vec<AuditRecord>) -> Result<(), DbErr> {
-    AuditRecord::insert(exec, rows).await?;
+/// Where entries written outside a unit of work go: the writer's pool,
+/// never the task's unit of work (an entry that joined it would be rolled
+/// back with the request), or the connection itself when it has no pool.
+fn own_connection(db: &Db) -> &dyn Executor {
+    match db.pool() {
+        Some(pool) => pool,
+        None => db,
+    }
+}
+
+/// Inserts `rows` through `exec`: the log's own connection, or the unit of
+/// work it is handed. A plain insert records no change events, so audit
+/// rows are never audited themselves.
+async fn insert<E: Executor + ?Sized>(exec: &E, rows: &[AuditRecord]) -> Result<(), DbError> {
+    for row in rows {
+        record::insert(exec, row).await?;
+    }
     Ok(())
 }
 
