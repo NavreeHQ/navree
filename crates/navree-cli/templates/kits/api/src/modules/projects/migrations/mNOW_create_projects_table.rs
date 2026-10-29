@@ -2,8 +2,8 @@
 //! policy: a transaction sees only the rows of the workspace it is in
 //! (`navree.workspace`, set for every workspace request).
 
-use navree::schema::prelude::*;
 use navree::schema::Dialect;
+use navree::schema::prelude::*;
 use navree::workspace::RlsPolicy;
 
 pub struct Migration;

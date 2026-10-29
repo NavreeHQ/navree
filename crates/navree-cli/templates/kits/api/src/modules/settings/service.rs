@@ -67,13 +67,9 @@ impl SettingsService {
         user: Uuid,
     ) -> Result<NotificationSettings, OrmError> {
         let saved = Self::saved(uow, workspace, user).await?;
-        Ok(saved.map_or_else(NotificationSettings::default, |row| {
-            NotificationSettings {
-                project_activity: row.project_activity,
-                weekly_summary: row.weekly_summary,
-                product_updates: row.product_updates,
-            }
-        }))
+        Ok(saved
+            .as_ref()
+            .map_or_else(NotificationSettings::default, preferences))
     }
 
     /// Saves the fields present in `input`.
@@ -87,11 +83,7 @@ impl SettingsService {
         let saved = Self::saved(uow, workspace, user).await?;
         let current = saved
             .as_ref()
-            .map_or_else(NotificationSettings::default, |row| NotificationSettings {
-                project_activity: row.project_activity,
-                weekly_summary: row.weekly_summary,
-                product_updates: row.product_updates,
-            });
+            .map_or_else(NotificationSettings::default, preferences);
         let wanted = NotificationSettings {
             project_activity: input.project_activity.unwrap_or(current.project_activity),
             weekly_summary: input.weekly_summary.unwrap_or(current.weekly_summary),
@@ -132,5 +124,14 @@ impl SettingsService {
             .where_(NotificationSetting::USER_ID.eq(user))
             .first(uow)
             .await
+    }
+}
+
+/// The preferences a stored row holds.
+fn preferences(row: &Record<NotificationSetting>) -> NotificationSettings {
+    NotificationSettings {
+        project_activity: row.project_activity,
+        weekly_summary: row.weekly_summary,
+        product_updates: row.product_updates,
     }
 }
