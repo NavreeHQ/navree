@@ -1,16 +1,20 @@
 //! The webhooks module's migrations (`MigrationSet` `webhooks`). The
 //! delivery log, `webhook_deliveries` and `webhook_attempts`, is time
-//! series: TimescaleDB hypertables on `created_at`.
+//! series: TimescaleDB hypertables on `created_at`. Written with the schema
+//! builder.
+//!
+//! The names are the ones the module's migrations always had, so a database
+//! migrated by an earlier version finds nothing pending. The columns are the
+//! types those migrations created: UUIDs as `BINARY(16)` on MySQL and
+//! MariaDB (where navree-db writes UUIDs as 16 bytes), text of no fixed
+//! length as `VARCHAR` without a length on PostgreSQL and SQLite and
+//! `VARCHAR(255)` on MySQL, JSON as `json`.
 
 use navree_db::MigrationSet;
 use navree_db::navree_schema::{
-    Hypertable, KeyStrategy, Migration, MigrationContext, Schema, SchemaError, SchemaMigration,
-    SchemaResult,
+    Blueprint, ColumnBuilder, Dialect, Hypertable, KeyStrategy, Migration, MigrationContext,
+    Schema, SchemaError, SchemaMigration, SchemaResult,
 };
-use sea_orm::DbErr;
-use sea_orm::sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Index, Table};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 
 /// The name of the webhooks module's migration set.
 pub const WEBHOOKS_MIGRATIONS: &str = "webhooks";
@@ -24,7 +28,10 @@ pub(crate) const ATTEMPTS_TABLE: &str = "webhook_attempts";
 /// The webhooks module's migration set.
 pub(crate) fn migrations() -> MigrationSet {
     MigrationSet::new(WEBHOOKS_MIGRATIONS)
-        .migration(CreateWebhookTables)
+        .migration(SchemaMigration::new(
+            "m20261026_000001_create_webhook_tables",
+            CreateWebhookTables,
+        ))
         .migration(SchemaMigration::new(
             "m20261027_000001_convert_webhook_deliveries_to_hypertables",
             ConvertDeliveriesToHypertables,
@@ -120,181 +127,119 @@ impl Migration for ConvertDeliveriesToHypertables {
     }
 }
 
+/// A UUID column: `BINARY(16)` on MySQL and MariaDB, `uuid` elsewhere.
+fn uuid<'a>(t: &'a mut Blueprint, name: &str, dialect: Dialect) -> ColumnBuilder<'a> {
+    if dialect == Dialect::MySql {
+        t.binary(name).length(16).fixed()
+    } else {
+        t.uuid(name)
+    }
+}
+
+/// A text column of no fixed length: `VARCHAR(255)` on MySQL and MariaDB,
+/// `VARCHAR` elsewhere.
+fn varchar<'a>(t: &'a mut Blueprint, name: &str, dialect: Dialect) -> ColumnBuilder<'a> {
+    if dialect == Dialect::MySql {
+        t.string(name).length(255)
+    } else {
+        t.raw_column(name, "VARCHAR")
+    }
+}
+
 /// Creates `webhook_endpoints`, `webhook_deliveries`, `webhook_attempts`
 /// and `webhook_receipts`.
 struct CreateWebhookTables;
 
-impl MigrationName for CreateWebhookTables {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_webhook_tables"
-    }
-}
-
-fn timestamp(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name)
-        .timestamp_with_time_zone()
-        .not_null()
-        .to_owned()
-}
-
-fn nullable_timestamp(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name)
-        .timestamp_with_time_zone()
-        .null()
-        .to_owned()
-}
-
-#[async_trait]
-impl MigrationTrait for CreateWebhookTables {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("webhook_endpoints")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("workspace_id").uuid().null())
-                    .col(ColumnDef::new("url").text().not_null())
-                    .col(ColumnDef::new("description").string().null())
-                    .col(ColumnDef::new("events").json().not_null())
-                    .col(ColumnDef::new("headers").json().not_null())
-                    .col(ColumnDef::new("secret").text().not_null())
-                    .col(ColumnDef::new("previous_secret").text().null())
-                    .col(nullable_timestamp("previous_secret_expires_at"))
-                    .col(ColumnDef::new("enabled").boolean().not_null())
-                    .col(nullable_timestamp("disabled_at"))
-                    .col(ColumnDef::new("disabled_reason").string().null())
-                    .col(nullable_timestamp("failing_since"))
-                    .col(timestamp("created_at"))
-                    .col(timestamp("updated_at"))
-                    .to_owned(),
-            )
+impl Migration for CreateWebhookTables {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let d = schema.target().await?.dialect();
+        schema
+            .create("webhook_endpoints", |t| {
+                uuid(t, "id", d).primary();
+                uuid(t, "workspace_id", d)
+                    .nullable()
+                    .index_named("webhook_endpoints_workspace_id_index");
+                t.text("url");
+                varchar(t, "description", d).nullable();
+                t.json("events");
+                t.json("headers");
+                t.text("secret");
+                t.text("previous_secret").nullable();
+                t.timestamp_tz("previous_secret_expires_at").nullable();
+                t.boolean("enabled");
+                t.timestamp_tz("disabled_at").nullable();
+                varchar(t, "disabled_reason", d).nullable();
+                t.timestamp_tz("failing_since").nullable();
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+            })
             .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("webhook_endpoints_workspace_id_index")
-                    .table("webhook_endpoints")
-                    .col("workspace_id")
-                    .to_owned(),
-            )
+        schema
+            .create("webhook_deliveries", |t| {
+                uuid(t, "id", d).primary();
+                uuid(t, "endpoint_id", d);
+                uuid(t, "workspace_id", d).nullable();
+                varchar(t, "message_id", d);
+                varchar(t, "event_type", d);
+                t.text("payload");
+                varchar(t, "status", d);
+                t.integer("attempts");
+                t.integer("max_attempts");
+                t.timestamp_tz("next_attempt_at").nullable();
+                t.integer("last_status_code").nullable();
+                t.text("last_error").nullable();
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+                t.foreign(["endpoint_id"])
+                    .references(["id"])
+                    .on("webhook_endpoints")
+                    .cascade_on_delete();
+                t.index(["endpoint_id", "created_at"])
+                    .name("webhook_deliveries_endpoint_created_index");
+                t.index(["status"]).name("webhook_deliveries_status_index");
+                t.index(["created_at"])
+                    .name("webhook_deliveries_created_at_index");
+            })
             .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("webhook_deliveries")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("endpoint_id").uuid().not_null())
-                    .col(ColumnDef::new("workspace_id").uuid().null())
-                    .col(ColumnDef::new("message_id").string().not_null())
-                    .col(ColumnDef::new("event_type").string().not_null())
-                    .col(ColumnDef::new("payload").text().not_null())
-                    .col(ColumnDef::new("status").string().not_null())
-                    .col(ColumnDef::new("attempts").integer().not_null())
-                    .col(ColumnDef::new("max_attempts").integer().not_null())
-                    .col(nullable_timestamp("next_attempt_at"))
-                    .col(ColumnDef::new("last_status_code").integer().null())
-                    .col(ColumnDef::new("last_error").text().null())
-                    .col(timestamp("created_at"))
-                    .col(timestamp("updated_at"))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("webhook_deliveries", "endpoint_id")
-                            .to("webhook_endpoints", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
+        schema
+            .create("webhook_attempts", |t| {
+                uuid(t, "id", d).primary();
+                uuid(t, "delivery_id", d).index_named("webhook_attempts_delivery_id_index");
+                uuid(t, "endpoint_id", d);
+                t.integer("attempt");
+                t.integer("status_code").nullable();
+                t.boolean("succeeded");
+                t.text("response_body").nullable();
+                t.text("error").nullable();
+                t.big_integer("duration_ms");
+                t.timestamp_tz("created_at");
+                t.foreign(["delivery_id"])
+                    .references(["id"])
+                    .on("webhook_deliveries")
+                    .cascade_on_delete();
+            })
             .await?;
-        for (name, columns) in [
-            (
-                "webhook_deliveries_endpoint_created_index",
-                &["endpoint_id", "created_at"][..],
-            ),
-            ("webhook_deliveries_status_index", &["status"][..]),
-            ("webhook_deliveries_created_at_index", &["created_at"][..]),
-        ] {
-            let mut index = Index::create();
-            index.name(name).table("webhook_deliveries");
-            for column in columns {
-                index.col(*column);
-            }
-            manager.create_index(index.to_owned()).await?;
-        }
-        manager
-            .create_table(
-                Table::create()
-                    .table("webhook_attempts")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("delivery_id").uuid().not_null())
-                    .col(ColumnDef::new("endpoint_id").uuid().not_null())
-                    .col(ColumnDef::new("attempt").integer().not_null())
-                    .col(ColumnDef::new("status_code").integer().null())
-                    .col(ColumnDef::new("succeeded").boolean().not_null())
-                    .col(ColumnDef::new("response_body").text().null())
-                    .col(ColumnDef::new("error").text().null())
-                    .col(ColumnDef::new("duration_ms").big_integer().not_null())
-                    .col(timestamp("created_at"))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("webhook_attempts", "delivery_id")
-                            .to("webhook_deliveries", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("webhook_attempts_delivery_id_index")
-                    .table("webhook_attempts")
-                    .col("delivery_id")
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("webhook_receipts")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("source").string().not_null())
-                    .col(ColumnDef::new("message_id").string().not_null())
-                    .col(timestamp("received_at"))
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("webhook_receipts_source_message_unique")
-                    .table("webhook_receipts")
-                    .col("source")
-                    .col("message_id")
-                    .unique()
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("webhook_receipts_received_at_index")
-                    .table("webhook_receipts")
-                    .col("received_at")
-                    .to_owned(),
-            )
+        schema
+            .create("webhook_receipts", |t| {
+                uuid(t, "id", d).primary();
+                varchar(t, "source", d);
+                varchar(t, "message_id", d);
+                t.timestamp_tz("received_at")
+                    .index_named("webhook_receipts_received_at_index");
+                t.unique(["source", "message_id"])
+                    .name("webhook_receipts_source_message_unique");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
         for table in [
             "webhook_receipts",
             "webhook_attempts",
             "webhook_deliveries",
             "webhook_endpoints",
         ] {
-            manager
-                .drop_table(Table::drop().table(table).to_owned())
-                .await?;
+            schema.drop_if_exists(table).await?;
         }
         Ok(())
     }
