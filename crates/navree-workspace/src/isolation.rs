@@ -469,11 +469,11 @@ impl IsolationDriver {
                 .await;
                 match result {
                     Ok(ran) => {
-                        uow.commit().await?;
+                        uow.commit().await.map_err(WorkspaceError::db)?;
                         Ok(ran)
                     }
                     Err(error) => {
-                        uow.rollback().await?;
+                        uow.rollback().await.map_err(WorkspaceError::db)?;
                         Err(error)
                     }
                 }

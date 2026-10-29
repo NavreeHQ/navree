@@ -487,7 +487,7 @@ impl Runtime {
             .await;
         match together {
             Ok(()) => {
-                uow.commit().await.map_err(navree_db::DbError::from)?;
+                uow.commit().await?;
                 *recorded = (*recorded + chunk.len()).min(max);
                 return Ok(0);
             }
@@ -514,7 +514,7 @@ impl Runtime {
                             .await?;
                         *recorded += 1;
                     }
-                    uow.commit().await.map_err(navree_db::DbError::from)?;
+                    uow.commit().await?;
                 }
                 Err(error) => {
                     failures += 1;

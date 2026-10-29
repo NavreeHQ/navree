@@ -220,7 +220,7 @@ thiserror = "2.0.21"
 anyhow = "1.0.104"
 uuid = { version = "1.29.0", features = ["serde", "v4", "v7"] }
 chrono = { version = "0.4.45", features = ["serde"] }
-# Exact decimals: navree-orm's `Decimal` fields (SeaORM's `with-rust_decimal`).
+# Exact decimals: navree-db's `Value::Decimal` and navree-orm's `Decimal` fields.
 rust_decimal = { version = "1.43.0", default-features = false, features = ["serde", "std"] }
 # The IANA time zone database compiled in (navree-time): no build script,
 # no system tzdata.
@@ -261,33 +261,8 @@ opentelemetry-otlp = { version = "0.33.1", default-features = false, features = 
 opentelemetry-proto = { version = "0.33.1", default-features = false, features = ["gen-tonic-messages", "trace"] }
 
 # ---------------------------------------------------------------------------
-# Database (SeaORM 2 on SQLx 0.9; SQLite bundled, rustls+ring for Postgres)
+# Database (navree-db runs on SQLx 0.9; SQLite bundled, rustls+ring for Postgres)
 # ---------------------------------------------------------------------------
-sea-orm = { version = "2.0.4", default-features = false, features = [
-    "macros",
-    "runtime-tokio-rustls",
-    "sqlite-use-returning-for-3_35",
-    "sqlx-sqlite",
-    "with-chrono",
-    "with-json",
-    "with-uuid",
-] }
-sea-orm-migration = { version = "2.0.4", default-features = false, features = [
-    "runtime-tokio-rustls",
-    "sqlite-use-returning-for-3_35",
-    "sqlx-sqlite",
-    "with-chrono",
-    "with-json",
-    "with-uuid",
-] }
-sea-query = { version = "1.0.2", default-features = false, features = [
-    "backend-postgres",
-    "backend-sqlite",
-    "derive",
-    "with-chrono",
-    "with-json",
-    "with-uuid",
-] }
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite-bundled"] }
 # The transaction manager trait navree-db's transactions drive (SQLx does
 # not re-export it).

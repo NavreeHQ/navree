@@ -8,7 +8,7 @@ use std::sync::Arc;
 use navree_audit::AuditLog;
 use navree_cache::Cache;
 use navree_contracts::{AuditEntry, AuditKind, Clock};
-use navree_db::{Db, DbError, Uow};
+use navree_db::{Db, Uow};
 use navree_events::EventBus;
 use navree_kernel::WeakAppContext;
 use serde::Serialize;
@@ -549,7 +549,7 @@ impl Engine {
             Some((uow, false)) => work(Some(uow)).await,
             Some((uow, true)) => match uow.scope(work(Some(uow.clone()))).await {
                 Ok(value) => {
-                    uow.commit().await.map_err(DbError::from)?;
+                    uow.commit().await?;
                     Ok(value)
                 }
                 Err(error) => {

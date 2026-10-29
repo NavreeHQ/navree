@@ -6,7 +6,7 @@
 //! - **Data changes** made through a `navree_db::Uow` (navree-orm models
 //!   saved in it, navree-db's recorded record writes, or `navree_db::Repo`)
 //!   are written as `data` entries by a `dyn ChangeObserver`
-//!   (`observe_with`) inside the unit of work's transaction, so a
+//!   (`observe`) inside the unit of work's transaction, so a
 //!   rolled-back change leaves no audit row. Entries carry the unit of
 //!   work's actor and request id, the subject type and id (`Deal`,
 //!   `0199...`), the action (`deal.created`, `deal.updated`,

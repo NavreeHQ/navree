@@ -6,7 +6,7 @@ use std::sync::Mutex;
 
 use chrono::{DateTime, Utc};
 use navree_db::Db;
-use navree_db::sea_orm::ConnectionTrait;
+use navree_db::Executor as _;
 use navree_orm::hooks::Flow;
 use navree_orm::{ExecContext, Model, Observer, Record, Result};
 use serde::{Deserialize, Serialize};
@@ -82,8 +82,8 @@ CREATE TABLE members (
 /// Creates the lifecycle tables.
 pub async fn create_tables(db: &Db) {
     for statement in SCHEMA.split(';').map(str::trim).filter(|s| !s.is_empty()) {
-        db.conn()
-            .execute_unprepared(statement)
+        db.pool()
+            .execute_script(statement)
             .await
             .unwrap_or_else(|error| panic!("{statement}: {error}"));
     }

@@ -27,7 +27,6 @@ navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-validation = { workspace = true }
 navree-workspace = { workspace = true }
-sea-orm = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 similar = { workspace = true }
@@ -40,8 +39,9 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 navree-crypto = { workspace = true }
 navree-macros = { workspace = true }
+# The tests' `posts` table is a model and an access subject.
+navree-orm = { workspace = true, features = ["access"] }
 navree-testing = { workspace = true }
-sea-orm-migration = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-tungstenite = { workspace = true }

@@ -1,9 +1,6 @@
 //! Options and connecting.
 
-use std::time::Duration;
-
-use navree_db::{Db, DbOptions, MySqlOptions};
-use sea_orm::{ConnectionTrait, DbBackend, Statement};
+use navree_db::{Backend, Db, DbOptions, Executor, ExecutorExt, MySqlOptions, Statement};
 
 use crate::support::TempDb;
 
@@ -20,18 +17,9 @@ fn default_options() {
     assert_eq!(options.max_lifetime_secs, 1800);
 }
 
-/// By default a connection taken from the pool is not pinged first (one
-/// round trip saved per checkout); idle and old connections are replaced.
-#[tokio::test]
-async fn the_pool_does_not_ping_every_checkout_by_default() {
-    let temp = TempDb::new();
-    let db = Db::connect(&temp.options()).await.expect("connects");
-    let pool = db.conn().get_sqlite_connection_pool().options();
-    assert!(!pool.get_test_before_acquire());
-    assert_eq!(pool.get_idle_timeout(), Some(Duration::from_secs(600)));
-    assert_eq!(pool.get_max_lifetime(), Some(Duration::from_secs(1800)));
-}
-
+/// A pool whose connections are pinged at every checkout and never idle
+/// out still serves statements (the settings themselves are checked by the
+/// driver's unit tests).
 #[tokio::test]
 async fn pool_checks_and_lifetimes_follow_the_options() {
     let temp = TempDb::new();
@@ -43,19 +31,16 @@ async fn pool_checks_and_lifetimes_follow_the_options() {
     })
     .await
     .expect("connects");
-    let pool = db.conn().get_sqlite_connection_pool().options();
-    assert!(pool.get_test_before_acquire());
-    assert_eq!(pool.get_idle_timeout(), None, "0: idle connections stay");
-    assert_eq!(pool.get_max_lifetime(), Some(Duration::from_secs(60)));
     let one: i64 = db
-        .conn()
-        .query_one_raw(Statement::from_string(DbBackend::Sqlite, "SELECT 1"))
+        .pool()
+        .fetch_scalar(&Statement::text("SELECT 1"))
         .await
-        .expect("query")
-        .expect("row")
-        .try_get_by_index(0)
-        .expect("value");
+        .expect("query");
     assert_eq!(one, 1);
+    db.ping().await.expect("pings");
+    let stats = db.pool_stats();
+    assert_eq!(stats.max, 10);
+    assert!(stats.size >= 1, "{stats:?}");
 }
 
 #[test]
@@ -75,16 +60,12 @@ fn pool_settings_come_from_the_database_section() {
 
 async fn pragma(db: &Db, name: &str) -> String {
     let row = db
-        .conn()
-        .query_one_raw(Statement::from_string(
-            DbBackend::Sqlite,
-            format!("PRAGMA {name}"),
-        ))
+        .pool()
+        .fetch_one(&Statement::text(format!("PRAGMA {name}")))
         .await
-        .expect("pragma query")
-        .expect("pragma row");
-    row.try_get_by_index::<String>(0)
-        .or_else(|_| row.try_get_by_index::<i64>(0).map(|v| v.to_string()))
+        .expect("pragma query");
+    row.get::<String>(0)
+        .or_else(|_| row.get::<i64>(0).map(|v| v.to_string()))
         .expect("pragma value")
 }
 
@@ -92,7 +73,7 @@ async fn pragma(db: &Db, name: &str) -> String {
 async fn sqlite_connection_uses_wal_busy_timeout_and_foreign_keys() {
     let temp = TempDb::new();
     let db = Db::connect(&temp.options()).await.expect("connects");
-    assert_eq!(db.backend(), DbBackend::Sqlite);
+    assert_eq!(db.backend(), Backend::Sqlite);
     assert_eq!(pragma(&db, "journal_mode").await, "wal");
     assert_eq!(pragma(&db, "foreign_keys").await, "1");
     assert_eq!(pragma(&db, "busy_timeout").await, "5000");
@@ -120,9 +101,8 @@ async fn slow_queries_are_logged_at_warn_without_bound_values() {
     let db = Db::connect(&options).await.expect("connects");
     let logs = crate::support::LogCapture::default();
     let _guard = logs.install();
-    db.conn()
-        .query_one_raw(Statement::from_sql_and_values(
-            DbBackend::Sqlite,
+    db.pool()
+        .fetch_optional(&Statement::portable(
             "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 400000) \
              SELECT count(*) FROM c WHERE ? <> 'hunter2'",
             ["secret-binding".into()],
@@ -223,8 +203,8 @@ async fn log_queries_logs_every_statement_at_debug() {
     let db = Db::connect(&options).await.expect("connects");
     let logs = crate::support::LogCapture::default();
     let _guard = logs.install();
-    db.conn()
-        .query_one_raw(Statement::from_string(DbBackend::Sqlite, "SELECT 42"))
+    db.pool()
+        .fetch_optional(&Statement::text("SELECT 42"))
         .await
         .expect("query runs");
     let text = logs.text();

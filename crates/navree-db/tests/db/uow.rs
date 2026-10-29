@@ -4,11 +4,10 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use navree_db::{ChangeEvent, ChangeOp, Db, Uow};
-use sea_orm::{ActiveModelTrait, DbErr, EntityTrait};
+use navree_db::{ChangeEvent, ChangeOp, Db, DbError, ErrorKind, Record, Uow, record};
 use uuid::Uuid;
 
-use crate::fixtures::{count, new_note, note, notes_db};
+use crate::fixtures::{Note, count, create_notes, new_note, notes_db};
 use crate::support::TempDb;
 
 #[tokio::test]
@@ -16,9 +15,9 @@ async fn uow_commits_writes_made_through_its_transaction() {
     let temp = TempDb::new();
     let db = notes_db(&temp).await;
     let uow = db.uow(None, None).await;
-    let tx = uow.tx().await.expect("tx");
-    new_note("a").insert(&*tx).await.expect("insert");
-    drop(tx);
+    assert!(!uow.has_open_transaction().await, "lazy");
+    record::insert(&uow, &new_note("a")).await.expect("insert");
+    assert!(uow.has_open_transaction().await);
     assert_eq!(count(&db, "notes").await, 0, "not visible before commit");
     uow.commit().await.expect("commit");
     assert_eq!(count(&db, "notes").await, 1);
@@ -29,42 +28,53 @@ async fn uow_rollback_discards_writes() {
     let temp = TempDb::new();
     let db = notes_db(&temp).await;
     let uow = db.uow(None, None).await;
-    new_note("a")
-        .insert(&*uow.tx().await.unwrap())
-        .await
-        .unwrap();
+    record::insert(&uow, &new_note("a")).await.unwrap();
     uow.rollback().await.expect("rollback");
     assert_eq!(count(&db, "notes").await, 0);
 }
 
 #[tokio::test]
-async fn uow_tx_is_shared_and_finished_uow_refuses_new_work() {
+async fn uow_has_one_transaction_and_finished_uow_refuses_new_work() {
     let temp = TempDb::new();
     let db = notes_db(&temp).await;
     let uow = db.uow(None, None).await;
-    let first = uow.tx().await.unwrap();
-    let second = uow.clone().tx().await.unwrap();
-    assert!(
-        Arc::ptr_eq(&first, &second),
-        "one transaction per unit of work"
-    );
-    drop((first, second));
+    record::insert(&uow, &new_note("a")).await.unwrap();
+    // A clone writes in the same transaction: it sees the first write.
+    let clone = uow.clone();
+    assert_eq!(Note::select().count(&clone).await.unwrap(), 1);
+    assert_eq!(count(&db, "notes").await, 0, "one uncommitted transaction");
     uow.commit().await.unwrap();
-    assert!(uow.tx().await.is_err(), "no transaction after commit");
+    let error = record::insert(&uow, &new_note("b")).await.unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::TransactionDone, "{error}");
     uow.commit().await.expect("a second commit is a no-op");
 }
 
 #[tokio::test]
-async fn commit_fails_while_the_transaction_is_still_held() {
+async fn savepoints_nest_inside_the_unit_of_work() {
     let temp = TempDb::new();
     let db = notes_db(&temp).await;
     let uow = db.uow(None, None).await;
-    let held = uow.tx().await.unwrap();
-    new_note("a").insert(&*held).await.unwrap();
-    let error = uow.commit().await.unwrap_err();
-    assert!(error.to_string().contains("still in use"), "{error}");
-    drop(held);
-    assert_eq!(count(&db, "notes").await, 0);
+    record::insert(&uow, &new_note("kept")).await.unwrap();
+    let savepoint = uow.savepoint().await.unwrap();
+    record::insert(&savepoint, &new_note("undone"))
+        .await
+        .unwrap();
+    savepoint.rollback().await.unwrap();
+    let savepoint = uow.savepoint().await.unwrap();
+    record::insert(&savepoint, &new_note("released"))
+        .await
+        .unwrap();
+    savepoint.commit().await.unwrap();
+    uow.commit().await.unwrap();
+    let mut titles: Vec<String> = Note::select()
+        .all(&db)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|note| note.title)
+        .collect();
+    titles.sort();
+    assert_eq!(titles, ["kept", "released"]);
 }
 
 #[tokio::test]
@@ -79,6 +89,10 @@ async fn uow_carries_actor_and_request_id() {
     assert!(
         !uow.lock_for_update(),
         "SQLite has no SELECT ... FOR UPDATE"
+    );
+    assert!(
+        !uow.set_local("navree.workspace", "w").await.unwrap(),
+        "SQLite has no transaction-local settings"
     );
 }
 
@@ -117,10 +131,7 @@ async fn rollback_as_committed_keeps_nothing_but_runs_the_hooks() {
     let seen = Arc::new(AtomicUsize::new(usize::MAX));
 
     let uow = db.uow(None, None).await;
-    new_note("a")
-        .insert(&*uow.tx().await.unwrap())
-        .await
-        .unwrap();
+    record::insert(&uow, &new_note("a")).await.unwrap();
     let (hook_runs, hook_seen, hook_db) = (runs.clone(), seen.clone(), db.clone());
     uow.after_commit(move || {
         Box::pin(async move {
@@ -138,20 +149,6 @@ async fn rollback_as_committed_keeps_nothing_but_runs_the_hooks() {
     uow.rollback_as_committed()
         .await
         .expect("ending a finished unit of work does nothing");
-    assert_eq!(runs.load(Ordering::SeqCst), 1);
-
-    // A transaction still held: an error, and the hooks are dropped.
-    let uow = db.uow(None, None).await;
-    let held = uow.tx().await.unwrap();
-    let hook_runs = runs.clone();
-    uow.after_commit(move || {
-        Box::pin(async move {
-            hook_runs.fetch_add(1, Ordering::SeqCst);
-        })
-    });
-    let error = uow.rollback_as_committed().await.unwrap_err();
-    assert!(error.to_string().contains("still in use"), "{error}");
-    drop(held);
     assert_eq!(runs.load(Ordering::SeqCst), 1);
 }
 
@@ -179,23 +176,18 @@ async fn transaction_commits_on_ok_and_rolls_back_on_err() {
 
     let id = db
         .transaction(|uow| async move {
-            let model = new_note("kept").insert(&*uow.tx().await?).await?;
-            Ok(model.id)
+            let note = new_note("kept");
+            record::insert(&uow, &note).await?;
+            Ok(note.id)
         })
         .await
         .expect("commits");
-    assert!(
-        note::Entity::find_by_id(id)
-            .one(db.conn())
-            .await
-            .unwrap()
-            .is_some()
-    );
+    assert!(record::find::<Note, _>(&db, id).await.unwrap().is_some());
 
     let error = db
         .transaction(|uow| async move {
-            new_note("dropped").insert(&*uow.tx().await?).await?;
-            Err::<(), _>(DbErr::Custom("nope".into()))
+            record::insert(&uow, &new_note("dropped")).await?;
+            Err::<(), _>(DbError::invalid("nope"))
         })
         .await
         .unwrap_err();
@@ -205,8 +197,6 @@ async fn transaction_commits_on_ok_and_rolls_back_on_err() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn concurrent_read_then_write_units_of_work_queue_instead_of_failing() {
-    use sea_orm::PaginatorTrait;
-
     let temp = TempDb::new();
     let db = notes_db(&temp).await;
     let mut tasks = Vec::new();
@@ -214,12 +204,11 @@ async fn concurrent_read_then_write_units_of_work_queue_instead_of_failing() {
         let db = db.clone();
         tasks.push(tokio::spawn(async move {
             db.transaction(|uow| async move {
-                let tx = uow.tx().await?;
                 // Read first, then write: a deferred SQLite transaction
                 // fails here with SQLITE_BUSY when another writer committed.
-                let seen = note::Entity::find().count(&*tx).await?;
+                let seen = Note::select().count(&uow).await?;
                 tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-                new_note(&format!("n{i}-{seen}")).insert(&*tx).await?;
+                record::insert(&uow, &new_note(&format!("n{i}-{seen}"))).await?;
                 Ok(())
             })
             .await
@@ -265,17 +254,18 @@ async fn is_finished_after_commit_or_rollback() {
     assert!(committed.is_finished().await);
 
     let rolled_back = db.uow(None, None).await;
-    rolled_back.tx().await.unwrap();
+    Note::select().count(&rolled_back).await.unwrap();
     rolled_back.rollback().await.unwrap();
     assert!(rolled_back.is_finished().await);
     assert!(!rolled_back.same_as(&committed));
 }
 
-/// `Db::reader` reads through the current unit of work's open transaction:
-/// with a pool of one connection, a read while the unit of work holds that
-/// connection would otherwise wait for the pool until the acquire timeout.
+/// `Db::read_executor` reads through the current unit of work's open
+/// transaction, and so does `Db` itself: with a pool of one connection, a
+/// read while the unit of work holds that connection would otherwise wait
+/// for the pool until the acquire timeout.
 #[tokio::test]
-async fn reader_uses_the_open_transaction_of_the_current_unit_of_work() {
+async fn reads_use_the_open_transaction_of_the_current_unit_of_work() {
     let temp = TempDb::new();
     let db = Db::connect(&navree_db::DbOptions {
         max_connections: 1,
@@ -284,40 +274,37 @@ async fn reader_uses_the_open_transaction_of_the_current_unit_of_work() {
     })
     .await
     .expect("connects");
-    sea_orm_migration::MigrationTrait::up(
-        &crate::fixtures::CreateNotes,
-        &sea_orm_migration::SchemaManager::new(db.conn()),
-    )
-    .await
-    .expect("creates tables");
-    assert!(!db.reader().await.in_transaction(), "no unit of work");
+    create_notes(&db).await;
+    assert!(
+        !db.read_executor().await.in_transaction(),
+        "no unit of work"
+    );
 
     let started = std::time::Instant::now();
     let found = db
         .transaction(|uow| {
             let db = db.clone();
             async move {
-                assert!(!db.reader().await.in_transaction(), "not begun yet");
-                let tx = uow.tx().await?;
-                new_note("uncommitted").insert(&*tx).await?;
-                drop(tx);
-                let reader = db.reader().await;
+                assert!(!db.read_executor().await.in_transaction(), "not begun yet");
+                record::insert(&uow, &new_note("uncommitted")).await?;
+                let reader = db.read_executor().await;
                 assert!(reader.in_transaction());
-                let found = note::Entity::find().all(&reader).await?;
-                Ok(found.len())
+                let found = Note::select().all(&reader).await?;
+                let through_db = Note::select().count(&db).await?;
+                Ok((found.len(), through_db))
             }
         })
         .await
         .expect("the read does not wait for a second connection");
-    assert_eq!(found, 1, "sees the unit of work's own write");
+    assert_eq!(found, (1, 1), "sees the unit of work's own write");
     assert!(started.elapsed() < std::time::Duration::from_secs(2));
 
     // A finished unit of work reads from the pool again.
     let uow = db.uow(None, None).await;
-    uow.tx().await.expect("tx");
+    Note::select().count(&uow).await.expect("begins");
     uow.rollback().await.expect("rollback");
     let in_tx = uow
-        .scope(async { db.reader().await.in_transaction() })
+        .scope(async { db.read_executor().await.in_transaction() })
         .await;
     assert!(!in_tx);
 }

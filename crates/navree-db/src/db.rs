@@ -9,21 +9,15 @@ use std::time::Duration;
 use navree_config::ConfigSection;
 use navree_kernel::{AppContext, BoxFuture, WeakAppContext};
 use navree_telemetry::Telemetry;
-use sea_orm::{
-    ConnectionTrait, DatabaseConnection, DatabaseTransaction, DbBackend, DbErr,
-    SqliteTransactionMode, Statement, TransactionOptions, TransactionTrait,
-};
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
-use crate::engine::compat::SeaExecutor;
-use crate::engine::driver::DriverPool;
 use crate::engine::report::Reporter;
 use crate::options::{driver_url, redact_url, scheme, url_password};
 use crate::queries::Watchers;
 use crate::{
-    Backend, ChangeObserver, DbError, DbOptions, Executed, Executor, LoggedQuery, Pool, Reader,
-    Row, RowStream, Transaction, TxOptions, Uow,
+    Backend, ChangeObserver, DbError, DbOptions, ErrorKind, Executed, Executor, ExecutorExt,
+    LoggedQuery, Pool, Row, RowStream, Statement, Transaction, TxOptions, Uow,
 };
 
 /// The database: a cheap, cloneable handle to the connection pool (and to
@@ -41,27 +35,26 @@ use crate::{
 /// session settings of `database.postgres`
 /// ([`PostgresOptions`](crate::PostgresOptions)).
 ///
+/// `Db` is an [`Executor`]: statements on it run in the task's unit of
+/// work when it has one on this database, else on the writer's pool (see
+/// below).
+///
 /// **Read replicas.** With `read_urls`, reads outside a transaction
-/// ([`reader`](Db::reader)) go to the replicas in turn; writes and
-/// transactions use the writer. A task reads from the writer inside
-/// [`Db::using_writer`], and (with `sticky`, the default) once its unit of
-/// work has written, so a request sees its own writes while replicas catch
-/// up.
+/// ([`read_executor`](Db::read_executor), [`read_pool`](Db::read_pool)) go
+/// to the replicas in turn; writes and transactions use the writer. A task
+/// reads from the writer inside [`Db::using_writer`], and (with `sticky`,
+/// the default) once its unit of work has written, so a request sees its
+/// own writes while replicas catch up.
 #[derive(Clone)]
 pub struct Db {
     inner: Arc<DbInner>,
 }
 
 struct DbInner {
-    /// The writer's SeaORM connection, a view over [`pool`](Self::pool).
-    /// Shared by every handle on the same pool ([`Db::with_app`] included),
-    /// so [`Db::reader`] can tell whether a unit of work uses this pool.
-    conn: Arc<DatabaseConnection>,
-    /// The writer's pool; `None` for a scripted SeaORM connection
-    /// ([`Db::from_connection`] in tests).
-    pool: Option<Pool>,
-    /// The pools of the read replicas (SeaORM views).
-    replicas: Arc<Vec<DatabaseConnection>>,
+    /// The writer's pool. Shared by every handle on the same database
+    /// ([`Db::with_app`] included), so [`Db::same_as`] can tell whether a
+    /// unit of work uses it.
+    pool: Pool,
     /// The read replicas' pools.
     replica_pools: Arc<Vec<Pool>>,
     /// The replica the next read goes to.
@@ -70,8 +63,7 @@ struct DbInner {
     sticky: bool,
     /// The connection's name: `default`, or a named connection's.
     name: Arc<str>,
-    /// The statement listeners and hooks, shared with the pools' timing
-    /// callbacks.
+    /// The statement listeners and hooks, shared with the pools' reporters.
     watchers: Arc<Watchers>,
     /// The direct connection (`direct_url`), if configured.
     direct: Option<Arc<Direct>>,
@@ -83,17 +75,12 @@ struct DbInner {
     observed: bool,
     /// `database.transaction_settings`.
     transaction_settings: bool,
-    /// Units of work run on navree-db's own transactions instead of
-    /// SeaORM's ([`Db::with_native_units_of_work`]).
-    native_units_of_work: bool,
 }
 
 /// The pools a [`Db`] shares with the handles made from it
 /// ([`Db::with_app`], [`Db::with_transaction_settings`]).
 struct Pools {
-    conn: Arc<DatabaseConnection>,
-    pool: Option<Pool>,
-    replicas: Arc<Vec<DatabaseConnection>>,
+    pool: Pool,
     replica_pools: Arc<Vec<Pool>>,
     sticky: bool,
     watchers: Arc<Watchers>,
@@ -105,7 +92,6 @@ struct Pools {
 struct Settings {
     observed: bool,
     transaction_settings: bool,
-    native_units_of_work: bool,
 }
 
 /// The direct connection of `direct_url`, opened on first use.
@@ -148,30 +134,30 @@ impl Db {
     /// the same errors as configured ones.
     ///
     /// ```no_run
-    /// # async fn demo() -> Result<(), sea_orm::DbErr> {
-    /// use navree_db::{Db, DbOptions};
+    /// # async fn demo() -> Result<(), navree_db::DbError> {
+    /// use navree_db::{Backend, Db, DbOptions};
     ///
     /// let db = Db::connect(&DbOptions {
     ///     url: "mariadb://crm:secret@127.0.0.1:3306/crm".into(),
     ///     ..DbOptions::default()
     /// })
     /// .await?;
-    /// assert_eq!(db.backend(), sea_orm::DbBackend::MySql);
+    /// assert_eq!(db.backend(), Backend::MySql);
     /// # Ok(()) }
     /// ```
-    pub async fn connect(options: &DbOptions) -> Result<Db, DbErr> {
+    pub async fn connect(options: &DbOptions) -> Result<Db, DbError> {
         Self::connect_with_telemetry(options, Telemetry::disabled()).await
     }
 
     /// Opens a pool like [`connect`](Db::connect) that reports every
-    /// statement SeaORM times to `telemetry` as a `QueryExecuted` event (the
-    /// SQL with its placeholders, never the bound values; the connection is
-    /// the URL without its password). `DatabaseModule` connects this way
-    /// with the app's registry.
+    /// statement to `telemetry` as a `QueryExecuted` event (the SQL with its
+    /// placeholders, never the bound values; the connection is the URL
+    /// without its password). `DatabaseModule` connects this way with the
+    /// app's registry.
     pub async fn connect_with_telemetry(
         options: &DbOptions,
         telemetry: Telemetry,
-    ) -> Result<Db, DbErr> {
+    ) -> Result<Db, DbError> {
         Self::connect_named(DEFAULT_CONNECTION, options, telemetry).await
     }
 
@@ -182,15 +168,18 @@ impl Db {
         name: &str,
         options: &DbOptions,
         telemetry: Telemetry,
-    ) -> Result<Db, DbErr> {
-        options
-            .validate()
-            .map_err(|problems| DbErr::Custom(format!("invalid database options: {problems}")))?;
+    ) -> Result<Db, DbError> {
+        options.validate().map_err(|problems| {
+            DbError::new(
+                ErrorKind::Connect,
+                format!("invalid database options: {problems}"),
+            )
+        })?;
         let watchers = Arc::new(Watchers::new(Arc::from(name)));
         // Boxed: the drivers' connect futures are deep, and every future
         // that connects (workspace databases, migration commands) nests
         // this one; a boxed future keeps their types shallow.
-        let connect: BoxFuture<'_, Result<Db, DbErr>> =
+        let connect: BoxFuture<'_, Result<Db, DbError>> =
             Box::pin(Self::connect_watched(options, telemetry, watchers));
         connect.await
     }
@@ -201,14 +190,11 @@ impl Db {
         options: &DbOptions,
         telemetry: Telemetry,
         watchers: Arc<Watchers>,
-    ) -> Result<Db, DbErr> {
-        let (pool, conn) = open_pool(&options.url, options, telemetry.clone(), &watchers).await?;
-        let mut replicas = Vec::with_capacity(options.read_urls.len());
+    ) -> Result<Db, DbError> {
+        let pool = open_pool(&options.url, options, telemetry.clone(), &watchers).await?;
         let mut replica_pools = Vec::with_capacity(options.read_urls.len());
         for url in &options.read_urls {
-            let (pool, conn) = open_pool(url, options, telemetry.clone(), &watchers).await?;
-            replica_pools.push(pool);
-            replicas.push(conn);
+            replica_pools.push(open_pool(url, options, telemetry.clone(), &watchers).await?);
         }
         let direct = options.direct().map(|options| {
             Arc::new(Direct {
@@ -219,9 +205,7 @@ impl Db {
         });
         Ok(Self::build(
             Pools {
-                conn: Arc::new(conn),
-                pool: Some(pool),
-                replicas: Arc::new(replicas),
+                pool,
                 replica_pools: Arc::new(replica_pools),
                 sticky: options.sticky,
                 watchers,
@@ -231,7 +215,6 @@ impl Db {
             Settings {
                 observed: false,
                 transaction_settings: options.transaction_settings,
-                native_units_of_work: options.native_units_of_work,
             },
         ))
     }
@@ -244,20 +227,20 @@ impl Db {
     /// it is this connection.
     ///
     /// ```no_run
-    /// # async fn demo(db: navree_db::Db) -> Result<(), sea_orm::DbErr> {
-    /// use sea_orm::ConnectionTrait;
+    /// # async fn demo(db: navree_db::Db) -> Result<(), navree_db::DbError> {
+    /// use navree_db::Executor;
     ///
     /// let direct = db.direct().await?;
-    /// direct.conn().execute_unprepared("LISTEN deals").await?;
+    /// direct.pool().execute_script("LISTEN deals").await?;
     /// # Ok(()) }
     /// ```
-    pub async fn direct(&self) -> Result<Db, DbErr> {
+    pub async fn direct(&self) -> Result<Db, DbError> {
         let Some(direct) = &self.inner.direct else {
             return Ok(self.clone());
         };
         let db = direct
             .db
-            .get_or_try_init(|| -> BoxFuture<'_, Result<Db, DbErr>> {
+            .get_or_try_init(|| -> BoxFuture<'_, Result<Db, DbError>> {
                 // Boxed: the driver's connect future is deep, and every
                 // caller's future (migration commands) would nest it.
                 Box::pin(async {
@@ -267,7 +250,6 @@ impl Db {
                         self.inner.watchers.clone(),
                     )
                     .await?;
-                    let db = db.with_native_units_of_work(self.inner.native_units_of_work);
                     Ok(match &self.inner.app {
                         Some(app) => db.with_weak_app(app.clone(), self.inner.observed),
                         None => db,
@@ -282,44 +264,6 @@ impl Db {
     /// (`direct_url`).
     pub fn has_direct(&self) -> bool {
         self.inner.direct.is_some()
-    }
-
-    /// Wraps an existing SeaORM connection (no replicas, no change
-    /// observers; transaction settings on, as
-    /// `database.transaction_settings` is by default). Its SeaORM
-    /// statements are not watched: query listeners, query logs and
-    /// unit-of-work statistics see only pools opened by
-    /// [`connect`](Db::connect) and its siblings, and statements run
-    /// through [`Executor`]. A scripted connection (SeaORM's mock) has no
-    /// [`pool`](Db::pool): navree-db's statements then run through it.
-    pub fn from_connection(conn: DatabaseConnection) -> Db {
-        let watchers = Arc::new(Watchers::new(Arc::from(DEFAULT_CONNECTION)));
-        let pool = sea_pool(&conn).map(|driver| {
-            let reporter = Reporter::new(
-                watchers.clone(),
-                Telemetry::disabled(),
-                "",
-                &DbOptions::default(),
-            );
-            Pool::from_driver(driver, reporter)
-        });
-        Self::build(
-            Pools {
-                conn: Arc::new(conn),
-                pool,
-                replicas: Arc::new(Vec::new()),
-                replica_pools: Arc::new(Vec::new()),
-                sticky: true,
-                watchers,
-                direct: None,
-            },
-            None,
-            Settings {
-                observed: false,
-                transaction_settings: true,
-                native_units_of_work: false,
-            },
-        )
     }
 
     /// The same pool, reporting commits to the `dyn ChangeObserver`
@@ -356,39 +300,10 @@ impl Db {
         )
     }
 
-    /// The same pool, its units of work running on navree-db's own
-    /// transactions (`enabled`) or on SeaORM's (the default while crates
-    /// move off SeaORM).
-    ///
-    /// A unit of work on navree-db's own transaction runs statements
-    /// through [`Executor`] (`uow.fetch_all(&statement)`), savepoints
-    /// ([`Uow::savepoint`]) and transaction-local settings
-    /// ([`Uow::set_local`]); it has no SeaORM transaction to hand out, so
-    /// [`Uow::tx`] fails, and its change observers run through
-    /// [`ChangeObserver::observe_with`]. A unit of work on SeaORM's serves
-    /// both: navree-db's statements run in the same SeaORM transaction.
-    pub fn with_native_units_of_work(&self, enabled: bool) -> Db {
-        Self::build(
-            self.pools(),
-            self.inner.app.clone(),
-            Settings {
-                native_units_of_work: enabled,
-                ..self.settings()
-            },
-        )
-    }
-
-    /// Whether units of work run on navree-db's own transactions (see
-    /// [`with_native_units_of_work`](Db::with_native_units_of_work)).
-    pub fn native_units_of_work(&self) -> bool {
-        self.inner.native_units_of_work
-    }
-
     fn settings(&self) -> Settings {
         Settings {
             observed: self.inner.observed,
             transaction_settings: self.inner.transaction_settings,
-            native_units_of_work: self.inner.native_units_of_work,
         }
     }
 
@@ -406,9 +321,7 @@ impl Db {
     /// The pools this handle shares with its siblings.
     fn pools(&self) -> Pools {
         Pools {
-            conn: self.inner.conn.clone(),
             pool: self.inner.pool.clone(),
-            replicas: self.inner.replicas.clone(),
             replica_pools: self.inner.replica_pools.clone(),
             sticky: self.inner.sticky,
             watchers: self.inner.watchers.clone(),
@@ -418,9 +331,7 @@ impl Db {
 
     fn build(pools: Pools, app: Option<WeakAppContext>, settings: Settings) -> Db {
         let Pools {
-            conn,
             pool,
-            replicas,
             replica_pools,
             sticky,
             watchers,
@@ -428,9 +339,7 @@ impl Db {
         } = pools;
         Self {
             inner: Arc::new(DbInner {
-                conn,
                 pool,
-                replicas,
                 replica_pools,
                 next_replica: Arc::new(AtomicUsize::new(0)),
                 sticky,
@@ -441,7 +350,6 @@ impl Db {
                 observers: OnceCell::new(),
                 observed: settings.observed,
                 transaction_settings: settings.transaction_settings,
-                native_units_of_work: settings.native_units_of_work,
             }),
         }
     }
@@ -450,8 +358,7 @@ impl Db {
     /// writer and replicas; named connections have their own listeners),
     /// with the SQL, the bound values, the time it took and whether it
     /// failed. Listeners run inside the statement's task, so keep them
-    /// short (spawn slow work). SeaORM does not time
-    /// `execute_unprepared`, so those statements are not seen.
+    /// short (spawn slow work).
     ///
     /// ```no_run
     /// # fn demo(db: navree_db::Db) {
@@ -521,11 +428,6 @@ impl Db {
         Arc::ptr_eq(&self.inner.watchers, watchers)
     }
 
-    /// The SeaORM connection (pool) of the writer.
-    pub fn conn(&self) -> &DatabaseConnection {
-        &self.inner.conn
-    }
-
     /// The connection's name: `default`, or the name of a named connection
     /// (`[database.connections.<name>]`).
     pub fn name(&self) -> &str {
@@ -546,43 +448,36 @@ impl Db {
     /// [`connect`](Db::connect)): connect that database yourself.
     ///
     /// ```no_run
-    /// # async fn demo(db: navree_db::Db) -> Result<(), sea_orm::DbErr> {
+    /// # async fn demo(db: navree_db::Db) -> Result<(), navree_db::DbError> {
     /// let analytics = db.connection("analytics").await?;
     /// assert_eq!(analytics.name(), "analytics");
     /// # Ok(()) }
     /// ```
-    pub async fn connection(&self, name: &str) -> Result<Db, DbErr> {
+    pub async fn connection(&self, name: &str) -> Result<Db, DbError> {
         if name == self.name() {
             return Ok(self.clone());
         }
         let Some(app) = self.app() else {
-            return Err(DbErr::Custom(format!(
-                "no database connection named `{name}`: this connection (`{}`) belongs to no app that configures others",
-                self.name()
-            )));
+            return Err(DbError::new(
+                ErrorKind::Other,
+                format!(
+                    "no database connection named `{name}`: this connection (`{}`) belongs to no app that configures others",
+                    self.name()
+                ),
+            ));
         };
-        let connections = app
-            .get::<crate::DbConnections>()
-            .await
-            .map_err(|error| DbErr::Custom(format!("database connection `{name}`: {error}")))?;
+        let connections = app.get::<crate::DbConnections>().await.map_err(|error| {
+            DbError::new(
+                ErrorKind::Other,
+                format!("database connection `{name}`: {error}"),
+            )
+        })?;
         Ok(Db::clone(&*connections.get(name).await?))
     }
 
     /// How many read replicas the connection has.
     pub fn replicas(&self) -> usize {
-        self.inner.replicas.len()
-    }
-
-    /// The pool a read outside a transaction uses: the next read replica
-    /// in turn, or the writer when there is none or the task reads from the
-    /// writer ([`Db::using_writer`]).
-    pub fn read_conn(&self) -> &DatabaseConnection {
-        let replicas = &self.inner.replicas;
-        if replicas.is_empty() || Self::reads_from_writer() {
-            return &self.inner.conn;
-        }
-        let at = self.inner.next_replica.fetch_add(1, Ordering::Relaxed) % replicas.len();
-        &replicas[at]
+        self.inner.replica_pools.len()
     }
 
     /// Runs `future` with every read of the task going to the writer, even
@@ -593,8 +488,8 @@ impl Db {
     /// # async fn demo(db: navree_db::Db) {
     /// use navree_db::Db;
     ///
-    /// let fresh = Db::using_writer(async { db.reader().await.in_transaction() }).await;
-    /// # let _ = fresh;
+    /// let pool = Db::using_writer(async { db.read_pool().clone() }).await;
+    /// assert!(pool.same_pool(db.pool()));
     /// # }
     /// ```
     pub async fn using_writer<F: Future>(future: F) -> F::Output {
@@ -607,13 +502,13 @@ impl Db {
         USING_WRITER.try_with(|writer| *writer).unwrap_or(false)
     }
 
-    /// Closes the pools (the writer's and the replicas'). Statements fail
-    /// from then on; a pool replaces a connection it lost by itself, so
-    /// there is no reconnecting by hand.
-    pub async fn close(&self) -> Result<(), DbErr> {
-        self.inner.conn.close_by_ref().await?;
-        for replica in self.inner.replicas.iter() {
-            replica.close_by_ref().await?;
+    /// Closes the pools (the writer's, the replicas' and the direct
+    /// connection's). Statements fail from then on; a pool replaces a
+    /// connection it lost by itself, so there is no reconnecting by hand.
+    pub async fn close(&self) -> Result<(), DbError> {
+        self.inner.pool.close().await;
+        for replica in self.inner.replica_pools.iter() {
+            replica.close().await;
         }
         if let Some(direct) = self
             .inner
@@ -628,29 +523,26 @@ impl Db {
 
     /// The writer pool's connections: open, idle and the most it opens.
     pub fn pool_stats(&self) -> PoolStats {
-        pool_stats(&self.inner.conn)
+        self.inner.pool.stats()
     }
 
     /// The number of connections the database server has open (from every
     /// client): `pg_stat_activity` on PostgreSQL, `Threads_connected` on
     /// MySQL; `None` on SQLite, which has no server. For `db:monitor`.
-    pub async fn open_connections(&self) -> Result<Option<u64>, DbErr> {
+    pub async fn open_connections(&self) -> Result<Option<u64>, DbError> {
         let sql = match self.backend() {
-            DbBackend::Postgres => "SELECT COUNT(*) FROM pg_stat_activity",
-            DbBackend::MySql => {
+            Backend::Postgres => "SELECT COUNT(*) FROM pg_stat_activity",
+            Backend::MySql => {
                 "SELECT CAST(VARIABLE_VALUE AS UNSIGNED) FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Threads_connected'"
             }
-            _ => return Ok(None),
+            Backend::Sqlite => return Ok(None),
         };
-        let row = self
-            .conn()
-            .query_one_raw(Statement::from_string(self.backend(), sql))
-            .await?;
+        let row = self.pool().fetch_optional(&Statement::text(sql)).await?;
         let count = match row {
             Some(row) => row
-                .try_get_by_index::<i64>(0)
+                .get::<i64>(0)
                 .map(|count| count.max(0).cast_unsigned())
-                .or_else(|_| row.try_get_by_index::<u64>(0))?,
+                .or_else(|_| row.get::<u64>(0))?,
             None => 0,
         };
         Ok(Some(count))
@@ -658,28 +550,28 @@ impl Db {
 
     /// The server's version: `17.2` (PostgreSQL), `8.4.3` or
     /// `11.4.2-MariaDB` (MySQL, MariaDB), `3.47.0` (SQLite).
-    pub async fn server_version(&self) -> Result<String, DbErr> {
+    pub async fn server_version(&self) -> Result<String, DbError> {
         let sql = match self.backend() {
-            DbBackend::Postgres => "SELECT current_setting('server_version')",
-            DbBackend::MySql => "SELECT VERSION()",
-            _ => "SELECT sqlite_version()",
+            Backend::Postgres => "SELECT current_setting('server_version')",
+            Backend::MySql => "SELECT VERSION()",
+            Backend::Sqlite => "SELECT sqlite_version()",
         };
-        self.text(sql).await
+        self.pool().fetch_scalar(&Statement::text(sql)).await
     }
 
     /// The name of the database the connection uses (`main` on SQLite).
-    pub async fn database_name(&self) -> Result<String, DbErr> {
+    pub async fn database_name(&self) -> Result<String, DbError> {
         let sql = match self.backend() {
-            DbBackend::Postgres => "SELECT current_database()",
-            DbBackend::MySql => "SELECT DATABASE()",
-            _ => return Ok("main".to_owned()),
+            Backend::Postgres => "SELECT current_database()",
+            Backend::MySql => "SELECT DATABASE()",
+            Backend::Sqlite => return Ok("main".to_owned()),
         };
-        self.text(sql).await
+        self.pool().fetch_scalar(&Statement::text(sql)).await
     }
 
     /// Whether the server is MariaDB (which speaks MySQL's protocol).
-    pub async fn is_mariadb(&self) -> Result<bool, DbErr> {
-        if self.backend() != DbBackend::MySql {
+    pub async fn is_mariadb(&self) -> Result<bool, DbError> {
+        if self.backend() != Backend::MySql {
             return Ok(false);
         }
         Ok(self
@@ -690,78 +582,31 @@ impl Db {
     }
 
     /// Whether the database has the TimescaleDB extension installed.
-    pub async fn has_timescaledb(&self) -> Result<bool, DbErr> {
-        if self.backend() != DbBackend::Postgres {
+    pub async fn has_timescaledb(&self) -> Result<bool, DbError> {
+        if self.backend() != Backend::Postgres {
             return Ok(false);
         }
-        let row = self
-            .conn()
-            .query_one_raw(Statement::from_string(
-                DbBackend::Postgres,
+        let count: i64 = self
+            .pool()
+            .fetch_scalar(&Statement::text(
                 "SELECT COUNT(*) FROM pg_extension WHERE extname = 'timescaledb'",
             ))
             .await?;
-        Ok(row
-            .map(|row| row.try_get_by_index::<i64>(0))
-            .transpose()?
-            .unwrap_or(0)
-            > 0)
-    }
-
-    /// The text in the first column of the first row of `sql`.
-    async fn text(&self, sql: &str) -> Result<String, DbErr> {
-        let row = self
-            .conn()
-            .query_one_raw(Statement::from_string(self.backend(), sql))
-            .await?
-            .ok_or_else(|| DbErr::RecordNotFound(format!("`{sql}` returned no row")))?;
-        row.try_get_by_index::<String>(0)
+        Ok(count > 0)
     }
 
     /// The database backend.
-    pub fn backend(&self) -> DbBackend {
-        self.inner.conn.get_database_backend()
+    pub fn backend(&self) -> Backend {
+        self.inner.pool.backend()
     }
 
     /// The app this pool belongs to, while it runs: set for the `Db` that
     /// `DatabaseModule` provides, `None` for one made with
-    /// [`connect`](Db::connect) or [`from_connection`](Db::from_connection)
-    /// and once the app is dropped. Code that receives only a `Db` (or a
-    /// [`Uow`], through [`Uow::db`]) uses it to reach app services such as
-    /// the `dyn Clock`.
+    /// [`connect`](Db::connect) and once the app is dropped. Code that
+    /// receives only a `Db` (or a [`Uow`], through [`Uow::db`]) uses it to
+    /// reach app services such as the `dyn Clock`.
     pub fn app(&self) -> Option<AppContext> {
         self.inner.app.as_ref().and_then(WeakAppContext::upgrade)
-    }
-
-    /// The connection to read with: the open transaction of the task's
-    /// unit of work on this pool ([`Uow::current`], e.g. the request's once
-    /// a record check or a write began it), else the pool.
-    ///
-    /// Use it for reads in services that take no `&Uow`. On SQLite an open
-    /// unit of work holds the write lock on one pool connection; waiting
-    /// for a second connection while holding it deadlocks the pool as soon
-    /// as about `max_connections` requests run together (the others hold
-    /// connections while they wait for the lock, and fail with "database
-    /// is locked"). Reading through the transaction also sees its own
-    /// uncommitted writes. Drop the reader before the unit of work commits
-    /// (use it as a temporary: `.one(&db.reader().await)`).
-    ///
-    /// With read replicas, a read outside a transaction goes to a replica
-    /// ([`read_conn`](Db::read_conn)), unless the task reads from the
-    /// writer ([`Db::using_writer`]) or, with `sticky`, its unit of work
-    /// has written ([`Uow::has_modified_records`]).
-    pub async fn reader(&self) -> Reader<'_> {
-        let current =
-            Uow::current().filter(|uow| Arc::ptr_eq(&uow.db().inner.conn, &self.inner.conn));
-        if let Some(uow) = &current
-            && let Some(tx) = uow.open_tx().await
-        {
-            return Reader::Transaction(tx);
-        }
-        if self.inner.sticky && current.as_ref().is_some_and(Uow::has_modified_records) {
-            return Reader::Pool(&self.inner.conn);
-        }
-        Reader::Pool(self.read_conn())
     }
 
     /// A new, lazy unit of work for `actor` (jobs, commands, tests; HTTP
@@ -789,22 +634,21 @@ impl Db {
     /// [`Uow::current`].
     ///
     /// ```no_run
-    /// # async fn demo(db: navree_db::Db) -> Result<(), sea_orm::DbErr> {
-    /// use sea_orm::ConnectionTrait;
+    /// # async fn demo(db: navree_db::Db) -> Result<(), navree_db::DbError> {
+    /// use navree_db::{Executor, Statement};
     ///
     /// let rows = db
     ///     .transaction(|uow| async move {
-    ///         let tx = uow.tx().await?;
-    ///         let result = tx.execute_unprepared("DELETE FROM sessions").await?;
-    ///         Ok(result.rows_affected())
+    ///         let done = uow.execute(&Statement::text("DELETE FROM sessions")).await?;
+    ///         Ok(done.rows_affected)
     ///     })
     ///     .await?;
     /// # Ok(()) }
     /// ```
-    pub async fn transaction<F, Fut, T>(&self, f: F) -> Result<T, DbErr>
+    pub async fn transaction<F, Fut, T>(&self, f: F) -> Result<T, DbError>
     where
         F: FnOnce(Uow) -> Fut,
-        Fut: Future<Output = Result<T, DbErr>>,
+        Fut: Future<Output = Result<T, DbError>>,
     {
         let uow = self.uow(None, None).await;
         match uow.scope(f(uow.clone())).await {
@@ -822,7 +666,7 @@ impl Db {
     }
 
     /// The app's change observers (resolved once).
-    pub(crate) async fn observers(&self) -> Result<&[Arc<dyn ChangeObserver>], DbErr> {
+    pub(crate) async fn observers(&self) -> Result<&[Arc<dyn ChangeObserver>], DbError> {
         let observers = self
             .inner
             .observers
@@ -831,13 +675,17 @@ impl Db {
                     return Ok(Vec::new());
                 };
                 let Some(ctx) = app.upgrade() else {
-                    return Err(DbErr::Custom(
-                        "the app owning this database has been dropped".to_owned(),
+                    return Err(DbError::new(
+                        ErrorKind::Other,
+                        "the app owning this database has been dropped",
                     ));
                 };
-                ctx.get_all::<dyn ChangeObserver>()
-                    .await
-                    .map_err(|e| DbErr::Custom(format!("cannot resolve change observers: {e}")))
+                ctx.get_all::<dyn ChangeObserver>().await.map_err(|e| {
+                    DbError::new(
+                        ErrorKind::Other,
+                        format!("cannot resolve change observers: {e}"),
+                    )
+                })
             })
             .await?;
         Ok(observers)
@@ -855,107 +703,16 @@ impl fmt::Debug for Db {
 }
 
 /// Opens one pool at `url` with the pool, session and logging settings of
-/// `options` (the writer's and each replica's): navree-db's own pool, and
-/// the SeaORM connection that is a view over it (same connections), with
-/// its statements reported like navree-db's.
+/// `options` (the writer's and each replica's), its statements reported to
+/// the connection's watchers and telemetry.
 async fn open_pool(
     url: &str,
     options: &DbOptions,
     telemetry: Telemetry,
     watchers: &Arc<Watchers>,
-) -> Result<(Pool, DatabaseConnection), DbErr> {
+) -> Result<Pool, DbError> {
     let reporter = Reporter::new(watchers.clone(), telemetry, url, options);
-    let pool = Pool::open(url, options, reporter.clone())
-        .await
-        .map_err(|error| DbErr::Custom(error.message().to_owned()))?;
-    let mut conn = sea_view(pool.driver());
-    install_query_log(&mut conn, reporter);
-    Ok((pool, conn))
-}
-
-/// Begins a SeaORM transaction that may read before it writes. SQLite
-/// takes the write lock when it begins (`BEGIN IMMEDIATE`), waiting up to
-/// `busy_timeout` for another writer: a deferred `BEGIN` that upgrades to a
-/// write after a read fails with `database is locked` at once, without
-/// waiting, when another connection holds the write lock then. The other
-/// databases begin as usual.
-pub(crate) async fn begin_for_write(
-    conn: &DatabaseConnection,
-) -> Result<DatabaseTransaction, DbErr> {
-    match conn.get_database_backend() {
-        DbBackend::Sqlite => {
-            conn.begin_with_options(TransactionOptions {
-                sqlite_transaction_mode: Some(SqliteTransactionMode::Immediate),
-                ..TransactionOptions::default()
-            })
-            .await
-        }
-        _ => conn.begin().await,
-    }
-}
-
-/// The SeaORM connection on the connections of `pool`.
-pub(crate) fn sea_view(pool: &DriverPool) -> DatabaseConnection {
-    match pool {
-        #[cfg(feature = "postgres")]
-        DriverPool::Postgres(pool) => {
-            sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone())
-        }
-        #[cfg(feature = "mysql")]
-        DriverPool::MySql(pool) => sea_orm::SqlxMySqlConnector::from_sqlx_mysql_pool(pool.clone()),
-        #[cfg(feature = "sqlite")]
-        DriverPool::Sqlite(pool) => {
-            sea_orm::SqlxSqliteConnector::from_sqlx_sqlite_pool(pool.clone())
-        }
-        DriverPool::Never(never) => match *never {},
-    }
-}
-
-/// The pool under a SeaORM connection (none for a scripted one, or a
-/// driver navree-db is built without).
-fn sea_pool(conn: &DatabaseConnection) -> Option<DriverPool> {
-    if conn.is_mock_connection() {
-        return None;
-    }
-    match conn.get_database_backend() {
-        #[cfg(feature = "postgres")]
-        DbBackend::Postgres => Some(DriverPool::Postgres(
-            conn.get_postgres_connection_pool().clone(),
-        )),
-        #[cfg(feature = "mysql")]
-        DbBackend::MySql => Some(DriverPool::MySql(conn.get_mysql_connection_pool().clone())),
-        #[cfg(feature = "sqlite")]
-        DbBackend::Sqlite => Some(DriverPool::Sqlite(
-            conn.get_sqlite_connection_pool().clone(),
-        )),
-        _ => None,
-    }
-}
-
-/// Reports every statement SeaORM times on `conn` the way navree-db
-/// reports its own: to the connection's watchers (query logs, listeners,
-/// unit-of-work statistics), to the telemetry sinks that want
-/// `QueryExecuted` events, and to `tracing` (target `navree_db::query`:
-/// every statement at debug level when `log_queries`, statements slower
-/// than `slow_query_ms` at warn level). Only the SQL text is logged, never
-/// the bound values. SeaORM does not time `execute_unprepared`, so those
-/// statements are not seen.
-fn install_query_log(conn: &mut DatabaseConnection, reporter: Reporter) {
-    conn.set_metric_callback(move |info| {
-        reporter.watchers.observe(info);
-        reporter.emit(&info.statement.sql, info.elapsed, info.failed, None);
-    });
-}
-
-/// The connections of `conn`'s pool.
-fn pool_stats(conn: &DatabaseConnection) -> PoolStats {
-    match sea_pool(conn) {
-        Some(pool) => {
-            let (size, idle, max) = pool.stats();
-            PoolStats { size, idle, max }
-        }
-        None => PoolStats::default(),
-    }
+    Pool::open(url, options, reporter).await
 }
 
 /// What SQLx says when a MySQL account's password must go over a
@@ -997,32 +754,29 @@ pub(crate) fn connect_message(url: &str, message: &str) -> String {
 }
 
 impl Db {
-    /// The writer's pool: navree-db's own connections (the SeaORM
-    /// connection of [`conn`](Db::conn) runs on the same ones). `None` only
-    /// for a `Db` made from a scripted SeaORM connection.
-    pub fn pool(&self) -> Option<&Pool> {
-        self.inner.pool.as_ref()
+    /// The writer's pool: navree-db's own connections.
+    pub fn pool(&self) -> &Pool {
+        &self.inner.pool
     }
 
     /// The pool a read outside a transaction uses: the next read replica
     /// in turn, or the writer when there is none or the task reads from the
-    /// writer ([`Db::using_writer`]). Like [`read_conn`](Db::read_conn), for
-    /// navree-db's statements.
-    pub fn read_pool(&self) -> Option<&Pool> {
+    /// writer ([`Db::using_writer`]).
+    pub fn read_pool(&self) -> &Pool {
         let replicas = &self.inner.replica_pools;
         if replicas.is_empty() || Self::reads_from_writer() {
             return self.pool();
         }
         let at = self.inner.next_replica.fetch_add(1, Ordering::Relaxed) % replicas.len();
-        Some(&replicas[at])
+        &replicas[at]
     }
 
     /// The pool the running task reads from outside a transaction, as
-    /// [`reader`](Db::reader) picks it: the writer when the task reads from
-    /// the writer ([`Db::using_writer`]) or, with `sticky`, once its unit of
-    /// work on this pool wrote ([`Uow::has_modified_records`]); else
-    /// [`read_pool`](Db::read_pool).
-    pub fn task_read_pool(&self) -> Option<&Pool> {
+    /// [`read_executor`](Db::read_executor) picks it: the writer when the
+    /// task reads from the writer ([`Db::using_writer`]) or, with `sticky`,
+    /// once its unit of work on this pool wrote
+    /// ([`Uow::has_modified_records`]); else [`read_pool`](Db::read_pool).
+    pub fn task_read_pool(&self) -> &Pool {
         if self.inner.sticky
             && self
                 .current_uow()
@@ -1032,15 +786,6 @@ impl Db {
             return self.pool();
         }
         self.read_pool()
-    }
-
-    /// The writer's pool, or the error of a `Db` without one.
-    fn writer_pool(&self) -> Result<&Pool, DbError> {
-        self.pool().ok_or_else(|| {
-            DbError::unsupported(
-                "this database is a scripted SeaORM connection: it has no pool of navree-db's own",
-            )
-        })
     }
 
     /// Begins a transaction on a connection of its own (not the task's
@@ -1057,46 +802,44 @@ impl Db {
     /// # Ok(()) }
     /// ```
     pub async fn begin(&self) -> Result<Transaction, DbError> {
-        self.writer_pool()?.begin().await
+        self.pool().begin().await
     }
 
-    /// Begins a SeaORM transaction for work that reads and then writes
-    /// (outside a unit of work): `BEGIN IMMEDIATE` on SQLite, so it queues
-    /// for the write lock instead of failing with `database is locked` when
-    /// another connection holds it between the read and the write; a plain
-    /// `BEGIN` elsewhere.
-    pub async fn begin_for_write(&self) -> Result<DatabaseTransaction, DbErr> {
-        self.run_before_starting_transaction();
-        begin_for_write(self.conn()).await
+    /// Begins a transaction for work that reads and then writes (outside a
+    /// unit of work): `BEGIN IMMEDIATE` on SQLite, so it queues for the
+    /// write lock instead of failing with `database is locked` when another
+    /// connection holds it between the read and the write; a plain `BEGIN`
+    /// elsewhere.
+    pub async fn begin_for_write(&self) -> Result<Transaction, DbError> {
+        self.begin_with(TxOptions::new().immediate()).await
     }
 
     /// Begins a transaction with `options` (isolation level, read only,
     /// SQLite's `IMMEDIATE`).
     pub async fn begin_with(&self, options: TxOptions) -> Result<Transaction, DbError> {
-        self.writer_pool()?.begin_with(options).await
+        self.pool().begin_with(options).await
     }
 
     /// Checks the writer with a round trip to the server.
     pub async fn ping(&self) -> Result<(), DbError> {
-        match self.pool() {
-            Some(pool) => pool.ping().await,
-            None => self.inner.conn.ping().await.map_err(DbError::from),
-        }
+        self.pool().ping().await
     }
 
     /// Whether `self` and `other` are handles to the same database (the
     /// same pools): a unit of work of one can run the other's statements.
     pub fn same_as(&self, other: &Db) -> bool {
-        Arc::ptr_eq(&self.inner.conn, &other.inner.conn)
+        self.inner.pool.same_pool(&other.inner.pool)
     }
 
-    /// Where a read of navree-db's statements goes, as
-    /// [`reader`](Db::reader) decides for SeaORM's: the task's unit of
-    /// work on this database when its transaction is open (it sees its own
-    /// writes, and on SQLite a second connection would wait for the lock
-    /// it holds); else the writer when the task reads from it
-    /// ([`Db::using_writer`]) or, with `sticky`, its unit of work has
-    /// written; else the next read replica in turn ([`Db::read_pool`]).
+    /// Where a read goes: the task's unit of work on this database when
+    /// its transaction is open (it sees its own writes, and on SQLite a
+    /// second connection would wait for the lock it holds); else the writer
+    /// when the task reads from it ([`Db::using_writer`]) or, with
+    /// `sticky`, its unit of work has written; else the next read replica
+    /// in turn ([`Db::read_pool`]).
+    ///
+    /// Use it for reads in services that take no `&Uow`. Drop it before
+    /// the unit of work commits (use it as a temporary).
     ///
     /// ```no_run
     /// # async fn demo(db: navree_db::Db) -> Result<(), navree_db::DbError> {
@@ -1119,27 +862,22 @@ impl Db {
             return ReadExecutor(Route::Uow(uow.clone()));
         }
         let writer = self.inner.sticky && current.as_ref().is_some_and(Uow::has_modified_records);
-        let pool = if writer {
+        ReadExecutor(Route::Pool(if writer {
             self.pool()
         } else {
             self.read_pool()
-        };
-        ReadExecutor(match pool {
-            Some(pool) => Route::Pool(pool),
-            None => Route::Sea(SeaExecutor::new(&*self.inner.conn)),
-        })
+        }))
     }
 
-    /// The task's current unit of work, when it works on this pool and is
-    /// not finished.
+    /// The task's current unit of work, when it works on this pool.
     fn current_uow(&self) -> Option<Uow> {
-        Uow::current().filter(|uow| Arc::ptr_eq(&uow.db().inner.conn, &self.inner.conn))
+        Uow::current().filter(|uow| uow.db().same_as(self))
     }
 
     /// Where a statement of [`Executor`] runs: the task's current unit of
     /// work on this pool when its transaction is open (or, for a `write`,
     /// when it is not finished: the write begins it), else the writer's
-    /// pool (or the scripted connection).
+    /// pool.
     async fn route(&self, write: bool) -> Route<'_> {
         if let Some(uow) = self.current_uow()
             && !uow.is_finished().await
@@ -1147,10 +885,7 @@ impl Db {
         {
             return Route::Uow(uow);
         }
-        match self.pool() {
-            Some(pool) => Route::Pool(pool),
-            None => Route::Sea(SeaExecutor::new(&*self.inner.conn)),
-        }
+        Route::Pool(self.pool())
     }
 }
 
@@ -1158,7 +893,6 @@ impl Db {
 enum Route<'a> {
     Uow(Uow),
     Pool(&'a Pool),
-    Sea(SeaExecutor<'a, DatabaseConnection>),
 }
 
 impl Route<'_> {
@@ -1166,7 +900,6 @@ impl Route<'_> {
         match self {
             Route::Uow(uow) => uow,
             Route::Pool(pool) => *pool,
-            Route::Sea(sea) => sea,
         }
     }
 }
@@ -1175,12 +908,18 @@ impl Route<'_> {
 /// writer or a read replica, chosen when it was made.
 pub struct ReadExecutor<'a>(Route<'a>);
 
+impl ReadExecutor<'_> {
+    /// Whether reads go through the current unit of work's transaction.
+    pub fn in_transaction(&self) -> bool {
+        matches!(self.0, Route::Uow(_))
+    }
+}
+
 impl fmt::Debug for ReadExecutor<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match &self.0 {
             Route::Uow(_) => "ReadExecutor(unit of work)",
             Route::Pool(_) => "ReadExecutor(pool)",
-            Route::Sea(_) => "ReadExecutor(scripted connection)",
         })
     }
 }
@@ -1190,31 +929,25 @@ impl Executor for ReadExecutor<'_> {
         self.0.executor().backend()
     }
 
-    fn execute<'a>(
-        &'a self,
-        statement: &'a crate::Statement,
-    ) -> BoxFuture<'a, Result<Executed, DbError>> {
+    fn execute<'a>(&'a self, statement: &'a Statement) -> BoxFuture<'a, Result<Executed, DbError>> {
         self.0.executor().execute(statement)
     }
 
     fn fetch_all<'a>(
         &'a self,
-        statement: &'a crate::Statement,
+        statement: &'a Statement,
     ) -> BoxFuture<'a, Result<Vec<Row>, DbError>> {
         self.0.executor().fetch_all(statement)
     }
 
     fn fetch_optional<'a>(
         &'a self,
-        statement: &'a crate::Statement,
+        statement: &'a Statement,
     ) -> BoxFuture<'a, Result<Option<Row>, DbError>> {
         self.0.executor().fetch_optional(statement)
     }
 
-    fn fetch<'a>(
-        &'a self,
-        statement: &'a crate::Statement,
-    ) -> BoxFuture<'a, Result<RowStream, DbError>> {
+    fn fetch<'a>(&'a self, statement: &'a Statement) -> BoxFuture<'a, Result<RowStream, DbError>> {
         self.0.executor().fetch(statement)
     }
 
@@ -1224,7 +957,7 @@ impl Executor for ReadExecutor<'_> {
 }
 
 /// Statements on a `Db` run in the task's unit of work on this pool when
-/// its transaction is open, as [`Db::reader`] reads; `execute` and
+/// its transaction is open, as [`Db::read_executor`] reads; `execute` and
 /// `execute_script` (writes) join the task's unfinished unit of work even
 /// before its transaction began (and begin it), as the ORM's writes do, so
 /// a request's writes stay in its transaction and audit trail. Otherwise
@@ -1232,19 +965,16 @@ impl Executor for ReadExecutor<'_> {
 /// [`Db::read_pool`].
 impl Executor for Db {
     fn backend(&self) -> Backend {
-        crate::engine::compat::backend_of(self.backend())
+        Db::backend(self)
     }
 
-    fn execute<'a>(
-        &'a self,
-        statement: &'a crate::Statement,
-    ) -> BoxFuture<'a, Result<Executed, DbError>> {
+    fn execute<'a>(&'a self, statement: &'a Statement) -> BoxFuture<'a, Result<Executed, DbError>> {
         Box::pin(async move { self.route(true).await.executor().execute(statement).await })
     }
 
     fn fetch_all<'a>(
         &'a self,
-        statement: &'a crate::Statement,
+        statement: &'a Statement,
     ) -> BoxFuture<'a, Result<Vec<Row>, DbError>> {
         Box::pin(async move {
             self.route(false)
@@ -1257,7 +987,7 @@ impl Executor for Db {
 
     fn fetch_optional<'a>(
         &'a self,
-        statement: &'a crate::Statement,
+        statement: &'a Statement,
     ) -> BoxFuture<'a, Result<Option<Row>, DbError>> {
         Box::pin(async move {
             self.route(false)
@@ -1268,10 +998,7 @@ impl Executor for Db {
         })
     }
 
-    fn fetch<'a>(
-        &'a self,
-        statement: &'a crate::Statement,
-    ) -> BoxFuture<'a, Result<RowStream, DbError>> {
+    fn fetch<'a>(&'a self, statement: &'a Statement) -> BoxFuture<'a, Result<RowStream, DbError>> {
         Box::pin(async move { self.route(false).await.executor().fetch(statement).await })
     }
 

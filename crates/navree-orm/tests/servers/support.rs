@@ -6,7 +6,7 @@ use std::future::Future;
 use std::panic::AssertUnwindSafe;
 
 use futures::FutureExt;
-use navree_db::sea_orm::ConnectionTrait;
+use navree_db::Executor as _;
 use navree_db::{Db, DbOptions};
 use navree_orm::Ulid;
 
@@ -79,8 +79,8 @@ where
     let (url, schema) = match server {
         Server::Postgres => {
             admin
-                .conn()
-                .execute_unprepared(&format!("CREATE SCHEMA {name}"))
+                .pool()
+                .execute_script(&format!("CREATE SCHEMA {name}"))
                 .await
                 .expect("creates the schema");
             (
@@ -90,8 +90,8 @@ where
         }
         Server::MySql => {
             admin
-                .conn()
-                .execute_unprepared(&format!(
+                .pool()
+                .execute_script(&format!(
                     "CREATE DATABASE {name} CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci"
                 ))
                 .await
@@ -106,19 +106,19 @@ where
     .await
     .expect("connects to the test database");
     for statement in schema.split(";\n").map(str::trim).filter(|s| !s.is_empty()) {
-        db.conn()
-            .execute_unprepared(statement)
+        db.pool()
+            .execute_script(statement)
             .await
             .unwrap_or_else(|error| panic!("{statement}: {error}"));
     }
 
     let outcome = AssertUnwindSafe(test(db.clone())).catch_unwind().await;
-    let _ = db.conn().clone().close().await;
+    let _ = db.close().await;
     let drop = match server {
         Server::Postgres => format!("DROP SCHEMA {name} CASCADE"),
         Server::MySql => format!("DROP DATABASE {name}"),
     };
-    if let Err(error) = admin.conn().execute_unprepared(&drop).await {
+    if let Err(error) = admin.pool().execute_script(&drop).await {
         eprintln!("could not drop {name}: {error}");
     }
     if let Err(panic) = outcome {

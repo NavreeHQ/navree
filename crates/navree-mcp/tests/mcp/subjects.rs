@@ -1,6 +1,6 @@
-//! Record checks for any access subject, not only SeaORM entities: a
-//! subject whose records load through its own `SubjectRecords` (as ORM
-//! models' do) works with `cx.authorize`, `cx.accessible` and
+//! Record checks for any access subject, not only ORM models: a subject
+//! whose records load through its own `SubjectRecords` (as ORM models'
+//! do) works with `cx.authorize`, `cx.accessible` and
 //! `can(.., from = ..)` items.
 
 use std::sync::{Mutex, OnceLock};

@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, TimeZone, Utc};
 use navree_contracts::{Clock, FixedClock};
-use navree_db::sea_orm::ConnectionTrait;
+use navree_db::Executor as _;
 use navree_db::{DatabaseModule, Db, DbOptions};
 use navree_kernel::{Module, ModuleBuilder, ModuleId};
 use navree_testing::{TestApp, TestAppBuilder};
@@ -23,8 +23,8 @@ pub struct TestDb {
 /// Creates the test tables.
 pub async fn create_tables(db: &Db) {
     for statement in SCHEMA.split(';').map(str::trim).filter(|s| !s.is_empty()) {
-        db.conn()
-            .execute_unprepared(statement)
+        db.pool()
+            .execute_script(statement)
             .await
             .unwrap_or_else(|error| panic!("{statement}: {error}"));
     }
@@ -95,14 +95,10 @@ impl Module for Boxed {
 
 /// Counts the rows of `table` directly.
 pub async fn count_rows(db: &Db, table: &str) -> i64 {
-    let row = db
-        .conn()
-        .query_one_raw(navree_db::sea_orm::Statement::from_string(
-            db.backend(),
-            format!("SELECT COUNT(*) AS n FROM {table}"),
-        ))
-        .await
-        .unwrap()
-        .unwrap();
-    row.try_get::<i64>("", "n").unwrap()
+    navree_db::ExecutorExt::fetch_scalar(
+        db.pool(),
+        &navree_db::Statement::text(format!("SELECT COUNT(*) AS n FROM {table}")),
+    )
+    .await
+    .unwrap()
 }

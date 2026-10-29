@@ -9,7 +9,7 @@ use navree_auth::{
     ClientMeta, LoginOutcome, SignInAttempt, SignInMethod, User, two_factor_enabled, user,
 };
 use navree_contracts::{AuditEntry, AuditKind, Secret};
-use navree_db::{DbError, Uow};
+use navree_db::Uow;
 use navree_kernel::{AppContext, BoxError, BoxFuture, Lifecycle};
 use navree_orm::{Executor, Model as _, Record};
 use serde_json::json;
@@ -750,7 +750,7 @@ impl Social {
         let uow = rt.db.uow(None, request_id).await;
         match uow.scope(f(uow.clone())).await {
             Ok(value) => {
-                uow.commit().await.map_err(DbError::from)?;
+                uow.commit().await?;
                 Ok(value)
             }
             Err(error) => {

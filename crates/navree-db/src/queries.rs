@@ -10,10 +10,7 @@ use std::future::Future;
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 use std::time::Duration;
 
-use sea_orm::metric::Info;
-use sea_orm::{DbBackend, Statement};
-
-use crate::Uow;
+use crate::{Backend, Uow, Value};
 
 /// A statement a connection ran: its SQL (with placeholders), the bound
 /// values, how long it took, whether it failed, and the connection's name.
@@ -24,7 +21,7 @@ pub struct LoggedQuery {
     /// The statement with its placeholders.
     pub sql: String,
     /// The bound values, in placeholder order.
-    pub values: Vec<sea_orm::Value>,
+    pub values: Vec<Value>,
     /// How long it took.
     pub duration: Duration,
     /// Whether it failed.
@@ -32,7 +29,7 @@ pub struct LoggedQuery {
     /// The connection's name: `default`, or a named connection's.
     pub connection: Arc<str>,
     /// The database it ran on.
-    pub backend: DbBackend,
+    pub backend: Backend,
 }
 
 impl LoggedQuery {
@@ -42,8 +39,7 @@ impl LoggedQuery {
     /// ```
     /// use std::time::Duration;
     ///
-    /// use navree_db::LoggedQuery;
-    /// use sea_orm::DbBackend;
+    /// use navree_db::{Backend, LoggedQuery};
     ///
     /// let query = LoggedQuery {
     ///     sql: "SELECT * FROM deals WHERE title = $1".into(),
@@ -51,13 +47,12 @@ impl LoggedQuery {
     ///     duration: Duration::from_millis(2),
     ///     failed: false,
     ///     connection: "default".into(),
-    ///     backend: DbBackend::Postgres,
+    ///     backend: Backend::Postgres,
     /// };
     /// assert_eq!(query.raw_sql(), "SELECT * FROM deals WHERE title = 'Renewal'");
     /// ```
     pub fn raw_sql(&self) -> String {
-        Statement::from_sql_and_values(self.backend, self.sql.clone(), self.values.clone())
-            .to_string()
+        crate::engine::statement_text(&self.sql, &self.values, self.backend)
     }
 }
 
@@ -76,11 +71,10 @@ struct Capture {
 ///
 /// ```no_run
 /// # async fn demo(db: navree_db::Db) {
-/// use navree_db::QueryLog;
-/// use sea_orm::ConnectionTrait;
+/// use navree_db::{Executor, QueryLog, Statement};
 ///
 /// let (_, queries) = QueryLog::capture(async {
-///     db.reader().await.query_all_raw(sea_orm::Statement::from_string(db.backend(), "SELECT 1")).await
+///     db.read_executor().await.fetch_all(&Statement::text("SELECT 1")).await
 /// })
 /// .await;
 /// for query in &queries {
@@ -95,8 +89,7 @@ impl QueryLog {
     /// Runs `future` and returns its output with the statements it ran, in
     /// order, on any connection opened by [`Db`](crate::Db). Statements
     /// count while the future's task runs them (tasks it spawns are not
-    /// followed); SeaORM does not time `execute_unprepared`, so those are
-    /// left out. Captures nest: an outer capture also gets the statements
+    /// followed). Captures nest: an outer capture also gets the statements
     /// of an inner one.
     pub async fn capture<F: Future>(future: F) -> (F::Output, Vec<LoggedQuery>) {
         let capture = Arc::new(Capture {
@@ -199,23 +192,6 @@ impl Watchers {
         }
     }
 
-    /// Sees a statement SeaORM timed (see [`observe_statement`](Self::observe_statement)).
-    pub(crate) fn observe(self: &Arc<Self>, info: &Info<'_>) {
-        self.observe_statement(
-            &info.statement.sql,
-            || {
-                info.statement
-                    .values
-                    .as_ref()
-                    .map(|values| values.0.clone())
-                    .unwrap_or_default()
-            },
-            info.statement.db_backend,
-            info.elapsed,
-            info.failed,
-        );
-    }
-
     /// Sees a statement that ran on this connection: the task's captures,
     /// the listeners (`values` is called only when one of them is there),
     /// and the statistics and duration handlers of the task's unit of work
@@ -223,8 +199,8 @@ impl Watchers {
     pub(crate) fn observe_statement(
         self: &Arc<Self>,
         sql: &str,
-        values: impl FnOnce() -> Vec<sea_orm::Value>,
-        backend: DbBackend,
+        values: impl FnOnce() -> Vec<Value>,
+        backend: Backend,
         elapsed: Duration,
         failed: bool,
     ) {

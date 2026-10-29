@@ -197,7 +197,7 @@ async fn health_check_up() {
     assert_eq!(database.check().await, HealthStatus::Up);
 
     let db = app.ctx().get::<Db>().await.unwrap();
-    db.conn().close_by_ref().await.unwrap();
+    db.close().await.unwrap();
     assert!(matches!(database.check().await, HealthStatus::Down(_)));
 }
 
@@ -232,7 +232,7 @@ async fn pool_is_closed_on_shutdown() {
         .await
         .unwrap();
     let db = app.ctx().get::<Db>().await.unwrap();
-    db.conn().ping().await.expect("open while running");
+    db.ping().await.expect("open while running");
     app.shutdown().await.expect("shuts down");
-    assert!(db.conn().ping().await.is_err(), "closed after shutdown");
+    assert!(db.ping().await.is_err(), "closed after shutdown");
 }

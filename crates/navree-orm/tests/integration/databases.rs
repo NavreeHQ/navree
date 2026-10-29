@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use http::Method;
-use navree_db::sea_orm::ConnectionTrait;
+use navree_db::Executor as _;
 use navree_db::{DatabaseModule, Db, DbOptions};
 use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
@@ -26,7 +26,7 @@ static BUILDS: AtomicUsize = AtomicUsize::new(0);
 static NOTES: Template = Template::new("integration notes", |template| {
     Box::pin(async move {
         BUILDS.fetch_add(1, Ordering::SeqCst);
-        let conn = template.db().conn();
+        let conn = template.db().pool();
         for sql in [
             "CREATE TABLE authors (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)",
             "CREATE TABLE notes (id INTEGER PRIMARY KEY AUTOINCREMENT, author_id INTEGER NOT NULL REFERENCES authors (id), body TEXT NOT NULL)",
@@ -34,7 +34,7 @@ static NOTES: Template = Template::new("integration notes", |template| {
             "INSERT INTO authors (name) VALUES ('Ada')",
             "INSERT INTO navree_migrations (version) VALUES ('m0001')",
         ] {
-            conn.execute_unprepared(sql).await?;
+            conn.execute_script(sql).await?;
         }
         Ok(())
     })
@@ -60,8 +60,8 @@ async fn every_copy_starts_from_the_template() {
     assert_ne!(first.url(), second.url());
     first
         .db()
-        .conn()
-        .execute_unprepared("INSERT INTO notes (author_id, body) VALUES (1, 'hello')")
+        .pool()
+        .execute_script("INSERT INTO notes (author_id, body) VALUES (1, 'hello')")
         .await
         .unwrap();
     assert_eq!(count(first.db(), "notes").await, 1);
@@ -83,8 +83,8 @@ async fn every_copy_starts_from_the_template() {
 async fn truncation_empties_every_table_but_the_kept_ones() {
     let test = NOTES.sqlite().await.unwrap();
     test.db()
-        .conn()
-        .execute_unprepared("INSERT INTO notes (author_id, body) VALUES (1, 'a'), (1, 'b')")
+        .pool()
+        .execute_script("INSERT INTO notes (author_id, body) VALUES (1, 'a'), (1, 'b')")
         .await
         .unwrap();
     test.truncate(&["navree_migrations"]).await.unwrap();
@@ -93,8 +93,8 @@ async fn truncation_empties_every_table_but_the_kept_ones() {
     assert_eq!(count(test.db(), "navree_migrations").await, 1);
     // Counters start over.
     test.db()
-        .conn()
-        .execute_unprepared("INSERT INTO authors (name) VALUES ('Grace')")
+        .pool()
+        .execute_script("INSERT INTO authors (name) VALUES ('Grace')")
         .await
         .unwrap();
     let first = table("authors")
@@ -126,8 +126,8 @@ async fn models_and_factories_run_on_copies_and_memory_databases() {
     assert!(
         other
             .db()
-            .conn()
-            .execute_unprepared("SELECT 1 FROM deals")
+            .pool()
+            .execute_script("SELECT 1 FROM deals")
             .await
             .is_err(),
         "memory databases are private"

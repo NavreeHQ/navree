@@ -1,12 +1,23 @@
 //! `contains_ignore_case` / `eq_ignore_case` against a real SQLite database,
 //! whose own `LOWER` and `LIKE` fold ASCII letters only.
 
-use navree_db::{contains_ignore_case, eq_ignore_case};
-use sea_orm::sea_query::Expr;
-use sea_orm::{ActiveModelTrait, EntityTrait, QueryFilter, QueryOrder};
+use navree_db::{Db, ExecutorExt, Statement, contains_ignore_case, eq_ignore_case, record};
 
-use crate::fixtures::{new_note, note, notes_db};
+use crate::fixtures::{new_note, notes_db};
 use crate::support::TempDb;
+
+/// The titles of the notes matching `condition`, in order.
+async fn titles(db: &Db, condition: Statement) -> Vec<String> {
+    db.fetch_column(&Statement::portable(
+        format!(
+            "SELECT title FROM notes WHERE {} ORDER BY title",
+            condition.sql()
+        ),
+        condition.values().to_vec(),
+    ))
+    .await
+    .unwrap()
+}
 
 #[tokio::test]
 async fn non_ascii_text_matches_in_any_case() {
@@ -18,16 +29,10 @@ async fn non_ascii_text_matches_in_any_case() {
         "Ölwechsel Rahmenvertrag",
         "Acme 100% *real*",
     ] {
-        new_note(title).insert(db.conn()).await.unwrap();
+        record::insert(&db, &new_note(title)).await.unwrap();
     }
     let backend = db.backend();
-    let titles = |condition| {
-        note::Entity::find()
-            .filter(condition)
-            .order_by_asc(note::Column::Title)
-            .all(db.conn())
-    };
-    let title = || Expr::col(note::Column::Title);
+    let title = backend.quote_identifier("title");
     for (term, expected) in [
         ("Øresund", vec!["Øresund Énergie"]),
         ("øresund", vec!["Øresund Énergie"]),
@@ -42,20 +47,11 @@ async fn non_ascii_text_matches_in_any_case() {
         ("*", vec!["Acme 100% *real*"]),
         ("e?u", vec![]),
     ] {
-        let found: Vec<String> = titles(contains_ignore_case(backend, title(), term))
-            .await
-            .unwrap()
-            .into_iter()
-            .map(|note| note.title)
-            .collect();
+        let found = titles(&db, contains_ignore_case(backend, &title, term)).await;
         assert_eq!(found, expected, "search {term:?}");
     }
-    let found = titles(eq_ignore_case(backend, title(), "øresund énergie"))
-        .await
-        .unwrap();
+    let found = titles(&db, eq_ignore_case(backend, &title, "øresund énergie")).await;
     assert_eq!(found.len(), 1);
-    let found = titles(eq_ignore_case(backend, title(), "øresund"))
-        .await
-        .unwrap();
+    let found = titles(&db, eq_ignore_case(backend, &title, "øresund")).await;
     assert!(found.is_empty());
 }

@@ -43,7 +43,7 @@ impl Injectable for QueueingObserver {
 }
 
 impl ChangeObserver for QueueingObserver {
-    fn observe_with<'a>(
+    fn observe<'a>(
         &'a self,
         uow: &'a Uow,
         changes: &'a [ChangeEvent],

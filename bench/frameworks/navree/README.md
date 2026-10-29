@@ -2,16 +2,16 @@
 
 The benchmark API as an ordinary Navree application: modules and controllers
 with Navree's route macros, navree-auth's JWT strategy and `CurrentUser`,
-navree-validation extractors, navree-db (SeaORM) entities, Navree's unit of work,
+navree-validation extractors, navree-orm models, Navree's unit of work,
 error format and pagination.
 
 | | |
 |---|---|
-| Framework | Navree 0.1.0 from this repository (`crates/navree`, a path dependency; features `auth`, `log`, `postgres`) |
+| Framework | Navree 0.1.0 from this repository (`crates/navree`, a path dependency; features `auth`, `log`, `orm`, `postgres`) |
 | Runtime | Rust 1.99.1 (`rust:1-bookworm` build stage, `debian:bookworm-slim` runtime); release profile `opt-level = 3`, `lto = "thin"`, `codegen-units = 1` |
 | HTTP | navree-http on Axum 0.8.9, hyper 1.12.0, tower-http 0.7.1 |
 | Workers | One process. `AppBuilder::run` builds Tokio's (1.54.1) default multi-thread runtime: one worker per CPU, 8 under the benchmark's cpuset. The `serve` command runs `axum::serve` on `0.0.0.0:8080` |
-| Database | navree-db `DatabaseModule`: SeaORM 2.0.4 on sqlx 0.9.0 (PostgreSQL), one pool of 64 connections (`database.max_connections = 64`, `migrate_on_boot = false`) |
+| Database | navree-db `DatabaseModule` on sqlx 0.9.0 (PostgreSQL), one pool of 64 connections (`database.max_connections = 64`, `migrate_on_boot = false`) |
 | JWT | navree-auth `AuthModule`: its `JwtStrategy` (HS256 on `navree_crypto::jose`, with HMAC from RustCrypto `hmac`/`sha2` in navree-crypto; the measured run predates that and used jsonwebtoken 11.1.0 with the same HMAC crates; HS256, signature, `exp`, `iss = navree`, token type `access`), then the `CurrentUser` extractor loads the `users` row (navree-auth's `user` entity) |
 | Validation | navree-validation `Valid<Query<T>>` and `Valid<Json<T>>` on garde 0.23.0; failures are 400s in Navree's error format |
 
@@ -26,12 +26,12 @@ level is `warn` (JSON lines in release builds), so the per-request log line
 - `src/app.rs`: the app root (the modules below).
 - `src/world/`: `WorldModule` with `WorldController` (`#[controller("!/")]`,
   so no `/api` prefix): `GET /json`, `GET /db`, `GET /queries`, all
-  `#[public]`, and the `world` SeaORM entity (`randomnumber` serialized as
+  `#[public]`, and the `World` model (`randomnumber` serialized as
   `randomNumber`).
 - `src/deals/`: `DealsModule` with `DealsController` (`#[controller("/deals")]`
   → `/api/deals`, both routes `#[authenticated]`), `DealService`, the
-  `deals` entity (with its `Stage` active enum and the `owner` relation to
-  navree-auth's `users`), the DTOs and the `DealResource` / `OwnerRef` shapes.
+  `Deal` model (with its `Stage`, stored as its name, and `owner_id`
+  pointing at navree-auth's `users`), the DTOs and the `DealResource` / `OwnerRef` shapes.
 
 ## Navree modules in the app
 

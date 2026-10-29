@@ -7,7 +7,7 @@
 
 use chrono::{DateTime, Utc};
 use navree_db::Db;
-use navree_db::sea_orm::ConnectionTrait;
+use navree_db::Executor as _;
 use navree_orm::prelude::*;
 use navree_orm::relations::{
     BelongsTo, BelongsToMany, HasMany, HasManyThrough, HasOne, MorphMany, MorphTo, MorphTypes,
@@ -293,8 +293,8 @@ async fn create_tables(db: &Db, server: Server) {
         Server::MySql => MYSQL,
     };
     for statement in script.split(";\n").map(str::trim).filter(|s| !s.is_empty()) {
-        db.conn()
-            .execute_unprepared(statement)
+        db.pool()
+            .execute_script(statement)
             .await
             .unwrap_or_else(|error| panic!("{statement}: {error}"));
     }

@@ -58,10 +58,6 @@ async fn for_root_needs_no_audit_configuration() {
             ConfigSources::new()
                 .set("database.url", url)
                 .set("database.migrate_on_boot", true)
-                .set(
-                    "database.native_units_of_work",
-                    crate::servers::native_units_of_work(),
-                )
                 // Ignored: for_root options win.
                 .set("audit.retention_days", 1),
         ))

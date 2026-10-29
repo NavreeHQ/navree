@@ -1,7 +1,7 @@
 //! Casts through the database: JSON, string and integer enums, custom
 //! casts, nullable casts, and conditions encoded through casts.
 
-use navree_db::sea_orm::ConnectionTrait;
+use navree_db::Executor as _;
 use navree_orm::{Model, OrmError};
 
 use crate::models::{Deal, DealMeta, Invoice, Line, Priority, Stage};
@@ -122,8 +122,8 @@ async fn custom_and_nullable_casts() {
 #[tokio::test]
 async fn bad_stored_values_fail_with_the_casts_message() {
     let t = sqlite().await;
-    t.db.conn()
-        .execute_unprepared("INSERT INTO invoices (total) VALUES ('12.5')")
+    t.db.pool()
+        .execute_script("INSERT INTO invoices (total) VALUES ('12.5')")
         .await
         .unwrap();
     let error = Invoice::query().first(&t.db).await.unwrap_err();

@@ -28,7 +28,7 @@ async fn locking_reads_join_the_unit_of_work() {
         Company::query().get(&db).await.unwrap();
     })
     .await;
-    assert!(uow.open_tx().await.is_none());
+    assert!(!uow.has_open_transaction().await);
     let locked = uow
         .scope(async {
             Company::query()
@@ -40,7 +40,10 @@ async fn locking_reads_join_the_unit_of_work() {
         .await
         .unwrap();
     assert_eq!(locked.len(), 1);
-    assert!(uow.open_tx().await.is_some(), "the locking read began it");
+    assert!(
+        uow.has_open_transaction().await,
+        "the locking read began it"
+    );
     assert!(!uow.lock_for_update(), "SQLite has no row locks");
 
     let mut record = Company::find_or_fail(&uow, acme.id).await.unwrap();

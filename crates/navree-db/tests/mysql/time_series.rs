@@ -2,10 +2,8 @@
 //! migration is a regular table here, pruned with one `DELETE`.
 
 use chrono::{DateTime, TimeZone, Utc};
-use navree_db::prune_time_series;
+use navree_db::{Executor, ExecutorExt, Statement, prune_time_series};
 use navree_schema::Schema;
-use sea_orm::ConnectionTrait;
-use sea_orm::sea_query::{Alias, Query};
 
 use crate::support::Scratch;
 
@@ -31,42 +29,31 @@ async fn old_rows_are_deleted_and_counted() {
         .unwrap();
     assert!(!schema.is_hypertable("events").await.unwrap());
     for n in 1..=5 {
-        db.conn()
-            .execute(
-                Query::insert()
-                    .into_table(Alias::new("events"))
-                    .columns([
-                        Alias::new("id"),
-                        Alias::new("occurred_at"),
-                        Alias::new("at_ms"),
-                    ])
-                    .values_panic([
-                        // `uuid_primary()` is CHAR(36) on MySQL.
-                        uuid::Uuid::now_v7().to_string().into(),
-                        day(n).into(),
-                        day(n).timestamp_millis().into(),
-                    ]),
-            )
-            .await
-            .unwrap();
+        db.execute(&Statement::portable(
+            "INSERT INTO events (id, occurred_at, at_ms) VALUES (?, ?, ?)",
+            [
+                // `uuid_primary()` is CHAR(36) on MySQL.
+                uuid::Uuid::now_v7().to_string().into(),
+                day(n).into(),
+                day(n).timestamp_millis().into(),
+            ],
+        ))
+        .await
+        .unwrap();
     }
-    let deleted = prune_time_series(db.conn(), "events", "occurred_at", day(3))
+    let deleted = prune_time_series(&db, "events", "occurred_at", day(3))
         .await
         .unwrap();
     assert_eq!(deleted, 2);
-    let deleted = prune_time_series(db.conn(), "events", "at_ms", day(4).timestamp_millis())
+    let tx = db.begin().await.unwrap();
+    let deleted = prune_time_series(&tx, "events", "at_ms", day(4).timestamp_millis())
         .await
         .unwrap();
+    tx.commit().await.unwrap();
     assert_eq!(deleted, 1);
-    let left = db
-        .conn()
-        .query_all(
-            Query::select()
-                .column(Alias::new("at_ms"))
-                .from(Alias::new("events")),
-        )
+    let left: i64 = db
+        .fetch_scalar(&Statement::text("SELECT COUNT(*) FROM events"))
         .await
-        .unwrap()
-        .len();
+        .unwrap();
     assert_eq!(left, 2);
 }

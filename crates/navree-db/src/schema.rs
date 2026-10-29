@@ -4,9 +4,7 @@
 
 use navree_kernel::BoxFuture;
 use navree_schema::{Dialect, SchemaConnection, SchemaError, SchemaRow, SchemaValue};
-use sea_orm::ConnectionTrait;
 
-use crate::compat::SeaExecutor;
 use crate::{Backend, Db, Executor, Kind, Pool, Row, Statement, Transaction, Uow, Value};
 
 /// navree-schema's name for `backend`.
@@ -153,26 +151,6 @@ impl<E: Executor + ?Sized> SchemaConnection for OnExecutor<'_, E> {
         params: &'a [SchemaValue],
     ) -> BoxFuture<'a, Result<Vec<SchemaRow>, SchemaError>> {
         Box::pin(query_on(self.0, sql, params))
-    }
-}
-
-/// A schema on a SeaORM connection or transaction, while code still holds
-/// one: `Schema::new(&SeaExecutor::new(&*uow.tx().await?))`.
-impl<C: ConnectionTrait + Sync + ?Sized> SchemaConnection for SeaExecutor<'_, C> {
-    fn backend(&self) -> Dialect {
-        dialect(Executor::backend(self))
-    }
-
-    fn execute<'a>(&'a self, sql: &'a str) -> BoxFuture<'a, Result<(), SchemaError>> {
-        Box::pin(execute_on(self, sql))
-    }
-
-    fn query<'a>(
-        &'a self,
-        sql: &'a str,
-        params: &'a [SchemaValue],
-    ) -> BoxFuture<'a, Result<Vec<SchemaRow>, SchemaError>> {
-        Box::pin(query_on(self, sql, params))
     }
 }
 

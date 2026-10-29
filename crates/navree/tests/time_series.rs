@@ -16,9 +16,9 @@
 
 use navree::db::navree_schema::Schema;
 use navree::db::{Db, MIGRATIONS_TABLE};
+use navree::db::{ExecutorExt as _, Statement};
 use navree::prelude::*;
 use navree::testing::{TestApp, TestAppBuilder};
-use sea_orm::{ConnectionTrait, Statement};
 
 /// Every time-series table of the framework, with its time column.
 const TIME_SERIES: [(&str, &str); 9] = [
@@ -65,15 +65,13 @@ fn app() -> TestAppBuilder {
 /// The names of the applied migrations that convert tables.
 async fn conversions_applied(db: &Db) -> Vec<String> {
     let mut names: Vec<String> = db
-        .conn()
-        .query_all_raw(Statement::from_string(
-            db.backend(),
-            format!("SELECT name FROM {MIGRATIONS_TABLE}"),
-        ))
+        .pool()
+        .fetch_column::<String>(&Statement::text(format!(
+            "SELECT name FROM {MIGRATIONS_TABLE}"
+        )))
         .await
         .unwrap()
-        .iter()
-        .map(|row| row.try_get::<String>("", "name").unwrap())
+        .into_iter()
         .filter(|name| name.contains("_to_hypertable"))
         .collect();
     names.sort();
@@ -119,7 +117,18 @@ async fn sqlite_keeps_regular_tables_with_time_indexes() {
 mod scratch {
     use std::sync::atomic::{AtomicU32, Ordering};
 
-    use sea_orm::{ConnectionTrait, Database};
+    use navree::db::{DbOptions, Executor as _, Pool};
+
+    /// A pool on the server database at `url`.
+    async fn connect(url: &str) -> Pool {
+        Pool::connect(&DbOptions {
+            url: url.to_owned(),
+            max_connections: 1,
+            ..DbOptions::default()
+        })
+        .await
+        .expect("connects")
+    }
 
     static COUNTER: AtomicU32 = AtomicU32::new(0);
 
@@ -144,11 +153,11 @@ mod scratch {
                 std::process::id(),
                 COUNTER.fetch_add(1, Ordering::SeqCst)
             );
-            let conn = Database::connect(&admin).await.expect("connects");
-            conn.execute_unprepared(&format!("CREATE DATABASE {name}"))
+            let conn = connect(&admin).await;
+            conn.execute_script(&format!("CREATE DATABASE {name}"))
                 .await
                 .expect("the test user may create databases");
-            conn.close().await.expect("closes");
+            conn.close().await;
             let (base, query) = match admin.split_once('?') {
                 Some((base, query)) => (base.to_owned(), format!("?{query}")),
                 None => (admin.clone(), String::new()),
@@ -165,14 +174,14 @@ mod scratch {
 
         /// Drops the database.
         pub async fn drop(self) {
-            let conn = Database::connect(&self.admin).await.expect("connects");
+            let conn = connect(&self.admin).await;
             let sql = if self.mysql {
                 format!("DROP DATABASE IF EXISTS {}", self.name)
             } else {
                 format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", self.name)
             };
-            conn.execute_unprepared(&sql).await.expect("drops");
-            conn.close().await.expect("closes");
+            conn.execute_script(&sql).await.expect("drops");
+            conn.close().await;
         }
     }
 }
@@ -181,20 +190,17 @@ mod scratch {
 mod timescaledb {
     use chrono::{TimeDelta, Utc};
     use navree::db::navree_schema::{IndexKind, Schema};
+    use navree::db::{Backend, Executor as _, ExecutorExt as _, Statement};
     use navree::db::{Db, MIGRATIONS_TABLE};
-    use sea_orm::{ConnectionTrait, DbBackend, Statement};
 
     use super::scratch::Scratch;
     use super::{CONVERSIONS, app, assert_attempts_reference_endpoints, conversions_applied};
 
     async fn number(db: &Db, sql: &str) -> i64 {
-        db.conn()
-            .query_one_raw(Statement::from_string(DbBackend::Postgres, sql))
+        db.pool()
+            .fetch_scalar::<i64>(&Statement::text(sql))
             .await
             .unwrap_or_else(|e| panic!("{sql}: {e}"))
-            .unwrap()
-            .try_get_by_index::<i64>(0)
-            .unwrap()
     }
 
     /// The webhook tables as the release before the delivery log became
@@ -263,8 +269,8 @@ INSERT INTO "webhook_attempts" VALUES
             scratch.drop().await;
             return;
         }
-        db.conn()
-            .execute_unprepared(PREVIOUS_WEBHOOK_TABLES)
+        db.pool()
+            .execute_script(PREVIOUS_WEBHOOK_TABLES)
             .await
             .unwrap();
         before.shutdown().await.unwrap();
@@ -396,7 +402,7 @@ INSERT INTO "webhook_attempts" VALUES
             3
         );
         again.shutdown().await.unwrap();
-        lighthouse_db.conn().clone().close().await.unwrap();
+        lighthouse_db.close().await.unwrap();
         app_db.drop().await;
         monitoring.drop().await;
     }
@@ -436,9 +442,9 @@ INSERT INTO "webhook_attempts" VALUES
         assert!(schema.is_hypertable("readings").await.unwrap());
         let start = Utc.with_ymd_and_hms(2026, 10, 27, 8, 0, 0).unwrap();
         for step in 0..9_i32 {
-            db.conn()
-                .execute_raw(Statement::from_sql_and_values(
-                    DbBackend::Postgres,
+            db.pool()
+                .execute(&Statement::new(
+                    Backend::Postgres,
                     "INSERT INTO readings (celsius, taken_at) VALUES ($1, $2)",
                     [
                         (20.0 + f64::from(step)).into(),
@@ -574,8 +580,8 @@ INSERT INTO "webhook_attempts" VALUES
             .map(|name| format!("'{name}'"))
             .collect::<Vec<_>>()
             .join(", ");
-        db.conn()
-            .execute_unprepared(&format!(
+        db.pool()
+            .execute_script(&format!(
                 "DELETE FROM {MIGRATIONS_TABLE} WHERE name IN ({names})"
             ))
             .await
@@ -590,9 +596,9 @@ INSERT INTO "webhook_attempts" VALUES
         // `audit:prune` drops the weeks before the cutoff whole.
         let now = Utc::now();
         for weeks in [10, 9, 8, 1] {
-            db.conn()
-                .execute_raw(Statement::from_sql_and_values(
-                    DbBackend::Postgres,
+            db.pool()
+                .execute(&Statement::new(
+                    Backend::Postgres,
                     "INSERT INTO audit_logs (id, kind, action, metadata, created_at) \
                      VALUES (gen_random_uuid(), 'auth', 'auth.login', '{}', $1)",
                     [(now - TimeDelta::weeks(weeks)).into()],

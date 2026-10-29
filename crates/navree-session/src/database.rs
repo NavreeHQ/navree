@@ -65,10 +65,7 @@ impl DatabaseStore {
     /// when the request rolls back), or the connection itself when it has
     /// no pool.
     fn executor(&self) -> &dyn Executor {
-        match self.db.pool() {
-            Some(pool) => pool,
-            None => &self.db,
-        }
+        self.db.pool()
     }
 
     async fn load_record(&self, id: &str) -> Result<Option<SessionRecord>, DbError> {

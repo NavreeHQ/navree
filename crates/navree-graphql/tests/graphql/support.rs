@@ -11,11 +11,12 @@ use async_graphql::futures_util::{Stream, StreamExt};
 use async_graphql::{ComplexObject, InputObject, SimpleObject};
 use garde::Validate;
 use navree_access::{
-    AbilityCtx, AccessModule, AccessOptions, AccessService, READ, Read, Rules, Subject, UPDATE,
-    Update, field,
+    AbilityCtx, AccessModule, AccessOptions, AccessService, READ, Read, Rules, UPDATE, Update,
+    field,
 };
 use navree_contracts::{AuditEntry, AuditSink, BoxError, BoxFuture};
-use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt, Uow};
+use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
+use navree_db::{DatabaseModule, Db, DbError, MigrationSet, ModuleBuilderDbExt, Uow};
 use navree_events::{Event, EventBus, EventsModule};
 use navree_graphql::{
     Context, ContextExt, EventStream, GraphqlModule, Loader, ModuleBuilderGraphqlExt, Result,
@@ -23,12 +24,10 @@ use navree_graphql::{
 use navree_http::{AppError, ModuleBuilderHttpExt};
 use navree_kernel::ModuleBuilder;
 use navree_macros::{injectable, module, resolver};
+use navree_orm::Model as _;
+use navree_orm::access::AccessibleQuery as _;
 use navree_testing::{TestApp, TestAppBuilder};
 use navree_validation::Valid;
-use sea_orm::sea_query::{ColumnDef, Table};
-use sea_orm::{ActiveModelTrait, DbErr, EntityTrait, QueryFilter, QueryOrder, Set};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -36,63 +35,42 @@ use uuid::Uuid;
 /// The role that passes every check.
 pub const SUPER_ADMIN: &str = "super-admin";
 
-/// The `posts` entity.
+/// The `posts` model: the access subject `Post` (permissions `posts.*`).
 pub mod post {
-    use sea_orm::entity::prelude::*;
     use serde::Serialize;
+    use uuid::Uuid;
 
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "posts")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
+    #[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, Serialize)]
+    #[model(table = "posts", subject = "Post", permission_prefix = "posts")]
+    pub struct Post {
         pub id: Uuid,
         pub author_id: Option<Uuid>,
         pub title: String,
         pub status: String,
         pub published: bool,
     }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
-impl Subject for post::Entity {
-    const SUBJECT: &'static str = "Post";
-    const PERMISSION_PREFIX: &'static str = "posts";
-}
+pub use post::Post;
 
 /// Creates `posts`.
 pub struct CreatePosts;
 
-impl MigrationName for CreatePosts {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_posts"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreatePosts {
-    async fn up(&self, manager: &SchemaManager) -> std::result::Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("posts")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("author_id").uuid().null())
-                    .col(ColumnDef::new("title").string().not_null())
-                    .col(ColumnDef::new("status").string().not_null())
-                    .col(ColumnDef::new("published").boolean().not_null())
-                    .to_owned(),
-            )
+impl Migration for CreatePosts {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("posts", |t| {
+                t.uuid("id").primary();
+                t.uuid("author_id").nullable();
+                t.string("title");
+                t.string("status");
+                t.boolean("published");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> std::result::Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("posts").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("posts").await
     }
 }
 
@@ -130,8 +108,8 @@ pub struct PostObject {
     pub author_id: Option<Uuid>,
 }
 
-impl From<post::Model> for PostObject {
-    fn from(post: post::Model) -> Self {
+impl From<Post> for PostObject {
+    fn from(post: Post) -> Self {
         Self {
             id: post.id,
             title: post.title,
@@ -176,7 +154,7 @@ impl AuthorLoader {
 
 impl Loader<Uuid> for AuthorLoader {
     type Value = Author;
-    type Error = Arc<DbErr>;
+    type Error = Arc<DbError>;
 
     async fn load(&self, ids: &[Uuid]) -> std::result::Result<HashMap<Uuid, Author>, Self::Error> {
         let mut sorted = ids.to_vec();
@@ -253,12 +231,9 @@ impl PostResolver {
     #[public]
     async fn posts(&self, ctx: &Context<'_>) -> Result<Vec<PostObject>> {
         let uow = ctx.uow()?;
-        let readable = ctx.accessible::<post::Entity, Read>().await?;
-        let posts = readable
-            .apply(post::Entity::find().order_by_asc(post::Column::Title))
-            .all(&*uow.tx().await?)
-            .await?;
-        Ok(posts.into_iter().map(Into::into).collect())
+        let readable = ctx.accessible::<Post, Read>().await?;
+        let posts = readable.query().order_by(Post::TITLE).get(&uow).await?;
+        Ok(posts.into_models().into_iter().map(Into::into).collect())
     }
 
     /// The viewer's user id.
@@ -277,11 +252,11 @@ impl PostResolver {
 
     /// One post, checked against its record.
     #[query]
-    #[can(Read, post::Entity, from = "id")]
+    #[can(Read, Post, from = "id")]
     async fn post(&self, ctx: &Context<'_>, id: Uuid) -> Result<PostObject> {
-        let post = ctx.authorized::<post::Entity, Read>()?.into_inner();
+        let post = ctx.authorized::<Post, Read>()?.into_inner();
         assert_eq!(post.id, id);
-        Ok(post.into())
+        Ok(post.into_inner().into())
     }
 
     /// Admins only.
@@ -310,7 +285,7 @@ impl PostResolver {
     #[public]
     async fn failing(&self, kind: String) -> Result<String> {
         match kind.as_str() {
-            "missing" => Err(DbErr::RecordNotFound("post".into()).into()),
+            "missing" => Err(DbError::not_found("post").into()),
             "conflict" => Err(AppError::conflict("That title is taken.").into()),
             "forbidden" => Err(AppError::forbidden().into()),
             "boom" => Err(std::io::Error::other("the disk is on fire").into()),
@@ -327,12 +302,12 @@ impl PostResolver {
     #[query]
     #[authenticated]
     async fn misdeclared(&self, ctx: &Context<'_>) -> Result<String> {
-        Ok(ctx.authorized::<post::Entity, Read>()?.title.clone())
+        Ok(ctx.authorized::<Post, Read>()?.title.clone())
     }
 
     /// Renames a post the viewer may update.
     #[mutation]
-    #[can(Update, post::Entity, from = "id")]
+    #[can(Update, Post, from = "id")]
     async fn rename_post(
         &self,
         ctx: &Context<'_>,
@@ -340,17 +315,16 @@ impl PostResolver {
         input: Valid<RenameInput>,
     ) -> Result<PostObject> {
         let Valid(RenameInput { title, .. }) = input;
-        let post = ctx.authorized::<post::Entity, Update>()?.into_inner();
+        let mut post = ctx.authorized::<Post, Update>()?.into_inner();
         let uow = ctx.uow()?;
         let fail = title == "fail-after-write";
-        let mut model: post::ActiveModel = post.into();
-        model.title = Set(title);
-        let updated = model.update(&*uow.tx().await?).await?;
-        assert_eq!(updated.id, id);
+        post.title = title;
+        post.save(&uow).await?;
+        assert_eq!(post.id, id);
         if fail {
             return Err(async_graphql::Error::new("failed after writing"));
         }
-        Ok(updated.into())
+        Ok(post.into_inner().into())
     }
 
     /// Creates a post owned by the viewer and announces it after commit.
@@ -360,15 +334,18 @@ impl PostResolver {
         let uow = ctx.uow()?;
         assert!(Uow::current().is_some_and(|current| current.same_as(&uow)));
         let me = ctx.principal()?.user_id;
-        let post = post::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            author_id: Set(Some(me)),
-            title: Set(title),
-            status: Set("draft".to_owned()),
-            published: Set(false),
-        }
-        .insert(&*uow.tx().await?)
-        .await?;
+        let post = Post::create(
+            &uow,
+            Post {
+                id: Uuid::now_v7(),
+                author_id: Some(me),
+                title,
+                status: "draft".to_owned(),
+                published: false,
+            },
+        )
+        .await?
+        .into_inner();
         let bus = ctx.app()?.get::<EventBus>().await?;
         let event = PostCreated {
             id: post.id,
@@ -384,7 +361,7 @@ impl PostResolver {
 
     /// New posts, as they are created.
     #[subscription]
-    #[can(Read, post::Entity)]
+    #[can(Read, Post)]
     async fn post_created(
         &self,
         ctx: &Context<'_>,
@@ -419,11 +396,7 @@ impl StatsResolver {
     /// How many posts exist.
     #[query]
     async fn post_count(&self) -> Result<u64> {
-        Ok(post::Entity::find()
-            .filter(sea_orm::Condition::all())
-            .all(self.db.conn())
-            .await?
-            .len() as u64)
+        Ok(Post::query().count(&*self.db).await?)
     }
 
     /// Which field resolves the viewer (public: a guest gets `None`).
@@ -439,8 +412,11 @@ pub struct PostsModule;
 
 impl PostsModule {
     fn wire(&self, m: &mut ModuleBuilder) {
-        m.import(AccessModule::for_feature::<post::Entity>())
-            .migrations(MigrationSet::new("posts").migration(CreatePosts))
+        m.import(AccessModule::for_feature::<Post>())
+            .migrations(MigrationSet::new("posts").migration(SchemaMigration::new(
+                "m20261026_000001_create_posts",
+                CreatePosts,
+            )))
             .resolver::<PostResolver>()
             .dataloader::<AuthorLoader>()
             .map_error::<TitleTaken>(|_| Some(AppError::conflict("That title is taken.")));
@@ -504,27 +480,30 @@ pub async fn insert_post(
     title: &str,
     author: Option<Uuid>,
     published: bool,
-) -> post::Model {
+) -> Post {
     let db = app.get::<Db>().await;
-    post::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        author_id: Set(author),
-        title: Set(title.to_owned()),
-        status: Set("draft".to_owned()),
-        published: Set(published),
-    }
-    .insert(db.conn())
+    Post::create(
+        &*db,
+        Post {
+            id: Uuid::now_v7(),
+            author_id: author,
+            title: title.to_owned(),
+            status: "draft".to_owned(),
+            published,
+        },
+    )
     .await
     .expect("insert post")
+    .into_inner()
 }
 
 /// The post `id` as stored.
-pub async fn stored(app: &TestApp, id: Uuid) -> post::Model {
-    post::Entity::find_by_id(id)
-        .one(app.get::<Db>().await.conn())
+pub async fn stored(app: &TestApp, id: Uuid) -> Post {
+    Post::find(&*app.get::<Db>().await, id)
         .await
         .unwrap()
         .expect("the post exists")
+        .into_inner()
 }
 
 /// Gives `user` the role `role` with `permissions`.

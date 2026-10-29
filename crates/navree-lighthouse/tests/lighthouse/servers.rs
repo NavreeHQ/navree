@@ -5,11 +5,9 @@
 //!   `NAVREE_TEST_POSTGRES_URL`, feature `postgres`) or `mysql` (on the
 //!   server of `NAVREE_TEST_MYSQL_URL`, feature `mysql`). Server databases
 //!   are dropped with the app.
-//! - `NAVREE_TEST_NATIVE_UNITS_OF_WORK=1`: units of work on navree-db's own
-//!   transactions (`database.native_units_of_work`) instead of SeaORM's.
 //!
 //! ```text
-//! NAVREE_TEST_DATABASE=postgres NAVREE_TEST_NATIVE_UNITS_OF_WORK=1 \
+//! NAVREE_TEST_DATABASE=postgres \
 //!   cargo test -p navree-lighthouse --features postgres
 //! ```
 
@@ -71,19 +69,9 @@ impl Server {
     }
 }
 
-/// Whether units of work run on navree-db's own transactions.
-pub fn native_units_of_work() -> bool {
-    std::env::var("NAVREE_TEST_NATIVE_UNITS_OF_WORK").as_deref() == Ok("1")
-}
-
 /// `builder` with a fresh, migrated database of its own on the current
-/// server, and the current kind of units of work.
+/// server.
 pub fn database(builder: TestAppBuilder) -> TestAppBuilder {
-    let builder = if native_units_of_work() {
-        builder.config("database.native_units_of_work", true)
-    } else {
-        builder
-    };
     let server = Server::current();
     if server == Server::Sqlite {
         return builder.temp_database();

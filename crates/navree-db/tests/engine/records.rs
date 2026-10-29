@@ -271,8 +271,8 @@ pub async fn records_round_trip(scratch: Scratch) {
 /// change events (without the fields `Serialize` skips), and a claim
 /// (`UPDATE .. WHERE status = ..`) lets only one of two units of work win.
 pub async fn records_in_units_of_work(scratch: Scratch) {
-    for native in [false, true] {
-        let db = scratch.db().await.with_native_units_of_work(native);
+    {
+        let db = scratch.db().await;
         let backend = scratch.server.backend();
         script(&db, "DROP TABLE IF EXISTS contacts").await;
         contacts(&db, backend).await;
@@ -359,7 +359,7 @@ pub async fn records_in_units_of_work(scratch: Scratch) {
         );
         let mut claimed = [a.unwrap(), b.unwrap()];
         claimed.sort_unstable();
-        assert_eq!(claimed, [0, 1], "exactly one claim wins (native: {native})");
+        assert_eq!(claimed, [0, 1], "exactly one claim wins");
 
         // `FOR UPDATE` reads inside a unit of work.
         let uow = db.uow(None, None).await;

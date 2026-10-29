@@ -221,7 +221,6 @@ impl Migration for CreateOAuthTables {
 
 #[cfg(test)]
 mod tests {
-    use navree_db::SetMigration;
     use navree_db::navree_schema::Target;
 
     use super::*;
@@ -230,10 +229,7 @@ mod tests {
     async fn statements(target: Target) -> Vec<String> {
         let schema = Schema::offline(target);
         for entry in migrations().entries() {
-            let SetMigration::Schema(migration) = entry else {
-                panic!("{} is not a schema migration", entry.name());
-            };
-            migration.up(&schema).await.unwrap();
+            entry.migration().up(&schema).await.unwrap();
         }
         schema.statements()
     }

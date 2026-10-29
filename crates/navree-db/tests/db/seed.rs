@@ -1,50 +1,44 @@
-//! Seeders (`db:seed`, `migrate:fresh --seed`) and model factories.
+//! Seeders (`db:seed`, `migrate:fresh --seed`).
 
 use std::sync::{Arc, Mutex};
 
 use navree_db::{
-    DatabaseModule, Db, Factory, MigrationSet, ModuleBuilderDbExt, Seeder, SeederCalls, create,
-    create_many, run_seeders,
+    DatabaseModule, Db, DbError, MigrationSet, ModuleBuilderDbExt, Seeder, SeederCalls, record,
+    run_seeders,
 };
 use navree_kernel::{
     App, AppContext, BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree,
     ProviderKey, Resolver,
 };
-use sea_orm::ActiveValue::Set;
-use sea_orm::EntityTrait;
 
-use crate::fixtures::{CreateNotes, count, note, notes_db};
+use crate::fixtures::{CreateNotes, Note, count, notes_db};
 use crate::support::TempDb;
 
-/// Notes titled `note-<n>`.
-struct NoteFactory;
-
-impl Factory for NoteFactory {
-    type Entity = note::Entity;
-
-    fn definition(&self, n: usize) -> note::ActiveModel {
-        note::ActiveModel {
-            id: Set(uuid::Uuid::now_v7()),
-            title: Set(format!("note-{n}")),
-            body: Set("generated".into()),
-        }
+/// Inserts `n` notes titled `note-<i>`.
+async fn create_notes(db: &Db, n: usize) -> Result<(), DbError> {
+    for i in 0..n {
+        let note = Note {
+            id: uuid::Uuid::now_v7(),
+            title: format!("note-{i}"),
+            body: "generated".into(),
+        };
+        record::insert(db, &note).await?;
     }
+    Ok(())
 }
 
 #[tokio::test]
-async fn factory_creates_numbered_records() {
+async fn seeding_twice_violates_the_unique_title() {
     let temp = TempDb::new();
     let db = notes_db(&temp).await;
-    let notes = create_many(&NoteFactory, db.conn(), 3).await.unwrap();
+    create_notes(&db, 3).await.unwrap();
+    assert_eq!(count(&db, "notes").await, 3);
+    let again = create_notes(&db, 1).await.unwrap_err();
     assert_eq!(
-        notes.iter().map(|n| n.title.as_str()).collect::<Vec<_>>(),
-        ["note-0", "note-1", "note-2"]
+        again.kind(),
+        navree_db::ErrorKind::UniqueViolation,
+        "{again}"
     );
-    assert_eq!(note::Entity::find().all(db.conn()).await.unwrap(), notes);
-
-    let uow = db.uow(None, None).await;
-    let one = create(&NoteFactory, &*uow.tx().await.unwrap()).await;
-    assert!(one.is_err(), "note-0 again violates the unique title");
 }
 
 /// Order in which seeders ran.
@@ -72,7 +66,7 @@ impl Seeder for NoteSeeder {
     fn run<'a>(&'a self, _ctx: &'a AppContext, db: &'a Db) -> BoxFuture<'a, Result<(), BoxError>> {
         Box::pin(async move {
             self.0.0.lock().unwrap().push("notes");
-            create_many(&NoteFactory, db.conn(), 3).await?;
+            create_notes(db, 3).await?;
             Ok(())
         })
     }
@@ -262,7 +256,7 @@ impl Seeder for CountSeeder {
         Box::pin(async move {
             assert!(!navree_db::seeding_without_model_events());
             self.log.0.lock().unwrap().push("count");
-            create_many(&NoteFactory, db.conn(), self.count).await?;
+            create_notes(db, self.count).await?;
             Ok(())
         })
     }
@@ -315,8 +309,7 @@ impl Module for Archive {
                         ..navree_db::DbOptions::default()
                     })
                     .await?;
-                    let manager = sea_orm_migration::SchemaManager::new(db.conn());
-                    sea_orm_migration::MigrationTrait::up(&CreateNotes, &manager).await?;
+                    crate::fixtures::create_notes(&db).await;
                     Ok(Arc::new(db))
                 }
             })

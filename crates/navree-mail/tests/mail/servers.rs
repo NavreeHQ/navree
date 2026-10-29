@@ -1,9 +1,6 @@
 //! The delivery tables on every database: SQLite always, PostgreSQL with
 //! TimescaleDB (`--features postgres`, `NAVREE_TEST_POSTGRES_URL`) and
-//! MySQL (`--features mysql`, `NAVREE_TEST_MYSQL_URL`), each on units of
-//! work on SeaORM's transactions (the default) and on navree-db's own
-//! (`database.native_units_of_work`), which proves the crate no longer
-//! needs SeaORM's transaction.
+//! MySQL (`--features mysql`, `NAVREE_TEST_MYSQL_URL`).
 //!
 //! Each scenario runs in a database of its own (created on the server and
 //! dropped afterwards): the migration, the delivery log and its events
@@ -106,9 +103,8 @@ impl Scratch {
     }
 }
 
-/// Runs `scenario` on a mail app on `server`, its units of work on
-/// navree-db's own transactions when `native`.
-pub async fn run<F, Fut>(server: Server, native: bool, scenario: F)
+/// Runs `scenario` on a mail app on `server`.
+pub async fn run<F, Fut>(server: Server, scenario: F)
 where
     F: FnOnce(MailApp) -> Fut,
     Fut: Future<Output = ()>,
@@ -122,15 +118,12 @@ where
     };
     let fake = navree_mail::MailFake::new();
     let authorizer = std::sync::Arc::new(GrantAuthorizer::default());
-    let mut app = builder(&fake, &authorizer)
-        .config("database.native_units_of_work", native)
-        .config("database.max_connections", 8);
+    let mut app = builder(&fake, &authorizer).config("database.max_connections", 8);
     if let Some(scratch) = &scratch {
         app = app.config("database.url", scratch.url.as_str());
     }
     let app = app.build().await;
     let db = app.get::<Db>().await;
-    assert_eq!(db.native_units_of_work(), native);
     let expected = match server {
         Server::Sqlite => Backend::Sqlite,
         Server::Postgres => Backend::Postgres,
@@ -152,7 +145,7 @@ where
     }
 }
 
-/// One test per server and kind of unit of work for each scenario.
+/// One test per server for each scenario.
 macro_rules! on_every_server {
     ($($scenario:ident),* $(,)?) => {
         $(
@@ -161,32 +154,17 @@ macro_rules! on_every_server {
 
                 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
                 async fn sqlite() {
-                    run(Server::Sqlite, false, super::$scenario).await;
-                }
-
-                #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-                async fn sqlite_native() {
-                    run(Server::Sqlite, true, super::$scenario).await;
+                    run(Server::Sqlite, super::$scenario).await;
                 }
 
                 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
                 async fn postgres() {
-                    run(Server::Postgres, false, super::$scenario).await;
-                }
-
-                #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-                async fn postgres_native() {
-                    run(Server::Postgres, true, super::$scenario).await;
+                    run(Server::Postgres, super::$scenario).await;
                 }
 
                 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
                 async fn mysql() {
-                    run(Server::MySql, false, super::$scenario).await;
-                }
-
-                #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-                async fn mysql_native() {
-                    run(Server::MySql, true, super::$scenario).await;
+                    run(Server::MySql, super::$scenario).await;
                 }
             }
         )*

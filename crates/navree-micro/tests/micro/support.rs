@@ -1,4 +1,4 @@
-//! Fixtures: a `deals` entity with access rules, a `notes` table, message
+//! Fixtures: a `deals` model with access rules, a `notes` table, message
 //! and event handlers written with `#[message_handlers]`, and app builders.
 
 #![allow(dead_code)]
@@ -9,8 +9,8 @@ use std::time::Duration;
 
 use garde::Validate;
 use navree_access::{
-    AbilityCtx, AccessModule, AccessOptions, AccessService, Authorized, READ, Read, Rules, Subject,
-    UPDATE, Update, field,
+    AbilityCtx, AccessModule, AccessOptions, AccessService, Authorized, READ, Read, Rules, UPDATE,
+    Update, field,
 };
 use navree_contracts::{AuditEntry, AuditSink, BoxError, BoxFuture};
 use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
@@ -21,38 +21,29 @@ use navree_http::{AppError, CurrentPrincipal, Guard, Result};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_macros::{injectable, message_handlers};
 use navree_micro::{MessageContext, ModuleBuilderMicroExt, Payload, ServiceClient};
+use navree_orm::Model as _;
 use navree_telemetry::TelemetryContext;
 use navree_testing::TestApp;
 use navree_validation::Valid;
-use sea_orm::{ActiveModelTrait, Set};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-/// The `deals` entity.
+/// The `deals` model: the access subject `Deal`.
 pub mod deal {
-    use sea_orm::entity::prelude::*;
     use serde::Serialize;
+    use uuid::Uuid;
 
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "deals")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
+    #[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, Serialize)]
+    #[model(table = "deals", subject = "Deal", permission_prefix = "deals")]
+    pub struct Deal {
         pub id: Uuid,
         pub owner_id: Uuid,
         pub title: String,
     }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
-impl Subject for deal::Entity {
-    const SUBJECT: &'static str = "Deal";
-    const PERMISSION_PREFIX: &'static str = "deals";
-}
+pub use deal::Deal;
 
 /// The name of the migration that creates `deals` and `notes`.
 pub const CREATE_TABLES: &str = "m20261026_000001_create_deals_and_notes";
@@ -113,8 +104,8 @@ pub struct DealView {
     pub title: String,
 }
 
-impl From<deal::Model> for DealView {
-    fn from(model: deal::Model) -> Self {
+impl From<Deal> for DealView {
+    fn from(model: Deal) -> Self {
         Self {
             id: model.id,
             owner_id: model.owner_id,
@@ -191,23 +182,24 @@ pub struct DealsHandlers {
 impl DealsHandlers {
     /// One deal, if the caller may read it.
     #[message_pattern("deals.get")]
-    #[can(Read, deal::Entity, from = "id")]
-    async fn get(&self, deal: Authorized<deal::Entity, Read>) -> Result<DealView> {
-        Ok(deal.into_inner().into())
+    #[can(Read, Deal, from = "id")]
+    async fn get(&self, deal: Authorized<Deal, Read>) -> Result<DealView> {
+        Ok(deal.into_inner().into_inner().into())
     }
 
     /// Renames a deal the caller may update, and emits `deal.renamed`.
     #[message_pattern("deals.rename")]
-    #[can(Update, deal::Entity, from = "id")]
+    #[can(Update, Deal, from = "id")]
     async fn rename(
         &self,
         uow: Uow,
-        deal: Authorized<deal::Entity, Update>,
+        deal: Authorized<Deal, Update>,
         Valid(Payload(input)): Valid<Payload<Rename>>,
     ) -> Result<DealView> {
-        let mut model: deal::ActiveModel = deal.into_inner().into();
-        model.title = Set(input.title.clone());
-        let updated = model.update(&*uow.tx().await?).await?;
+        let mut updated = deal.into_inner();
+        updated.title = input.title.clone();
+        updated.save(&uow).await?;
+        let updated = updated.into_inner();
         self.client
             .emit(
                 "deal.renamed",
@@ -352,7 +344,7 @@ pub struct DealsModule;
 
 impl Module for DealsModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.import(AccessModule::for_feature::<deal::Entity>())
+        m.import(AccessModule::for_feature::<Deal>())
             .migrations(MigrationSet::new("deals").migration(CreateTables::migration()))
             .provider::<InternalOnly>()
             .message_handlers::<DealsHandlers>();
@@ -386,16 +378,19 @@ impl AuditSink for RecordingAudit {
 }
 
 /// Inserts a deal owned by `owner`.
-pub async fn insert_deal(app: &TestApp, owner: Uuid, title: &str) -> deal::Model {
+pub async fn insert_deal(app: &TestApp, owner: Uuid, title: &str) -> Deal {
     let db = app.get::<Db>().await;
-    deal::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        owner_id: Set(owner),
-        title: Set(title.to_owned()),
-    }
-    .insert(db.conn())
+    Deal::create(
+        &*db,
+        Deal {
+            id: Uuid::now_v7(),
+            owner_id: owner,
+            title: title.to_owned(),
+        },
+    )
     .await
     .expect("insert deal")
+    .into_inner()
 }
 
 /// Creates `role` with `permissions` and gives it to `user`.

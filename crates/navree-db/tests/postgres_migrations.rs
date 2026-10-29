@@ -1,6 +1,6 @@
 //! The migrator on a real PostgreSQL server (with TimescaleDB when it has
-//! it): schema and SeaORM migrations, pretending, rollbacks, refresh, fresh,
-//! and a schema dump loaded into an empty database.
+//! it): module migrations, pretending, rollbacks, refresh, fresh, and a
+//! schema dump loaded into an empty database.
 //!
 //! Opt-in: build with `--features postgres` and set
 //! `NAVREE_TEST_POSTGRES_URL` to a URL of a throwaway server whose user may
@@ -15,13 +15,21 @@ use navree_db::{
     DatabaseModule, Db, DbOptions, FreshOptions, MigrateOptions, MigrationSet, Migrator,
     ModuleBuilderDbExt, RollbackOptions,
 };
+use navree_db::{Executor, ExecutorExt, Pool, Statement};
 use navree_kernel::{App, Module, ModuleBuilder, Navree};
-use sea_orm::sea_query::{ColumnDef, Table};
-use sea_orm::{ConnectionTrait, Database, DbErr, Statement};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 
 static COUNTER: AtomicU32 = AtomicU32::new(0);
+
+/// A one-connection pool on `url`.
+async fn connect(url: &str) -> Pool {
+    Pool::connect(&DbOptions {
+        url: url.to_owned(),
+        max_connections: 1,
+        ..DbOptions::default()
+    })
+    .await
+    .unwrap()
+}
 
 /// A database of its own on the test server.
 struct Scratch {
@@ -41,28 +49,28 @@ impl Scratch {
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::SeqCst)
         );
-        let conn = Database::connect(&admin).await.unwrap();
-        conn.execute_unprepared(&format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"))
+        let conn = connect(&admin).await;
+        conn.execute_script(&format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"))
             .await
             .unwrap();
-        conn.execute_unprepared(&format!("CREATE DATABASE {name}"))
+        conn.execute_script(&format!("CREATE DATABASE {name}"))
             .await
             .unwrap();
-        conn.close().await.unwrap();
+        conn.close().await;
         let (base, _) = admin.rsplit_once('/').unwrap();
         let url = format!("{base}/{name}");
         Some(Scratch { admin, name, url })
     }
 
     async fn drop(self) {
-        let conn = Database::connect(&self.admin).await.unwrap();
-        conn.execute_unprepared(&format!(
+        let conn = connect(&self.admin).await;
+        conn.execute_script(&format!(
             "DROP DATABASE IF EXISTS {} WITH (FORCE)",
             self.name
         ))
         .await
         .unwrap();
-        conn.close().await.unwrap();
+        conn.close().await;
     }
 }
 
@@ -116,33 +124,21 @@ mod m0002_create_events {
     }
 }
 
-/// The tags table, written with SeaORM.
+/// The tags table, added with `SchemaMigration::new`.
 struct CreateTags;
 
-impl MigrationName for CreateTags {
-    fn name(&self) -> &str {
-        "m0003_create_tags"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateTags {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("tags")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("label").string().not_null())
-                    .to_owned(),
-            )
+impl navree_schema::Migration for CreateTags {
+    async fn up(&self, schema: &navree_schema::Schema<'_>) -> navree_schema::SchemaResult {
+        schema
+            .create("tags", |t| {
+                t.uuid_primary();
+                t.string("label");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("tags").to_owned())
-            .await
+    async fn down(&self, schema: &navree_schema::Schema<'_>) -> navree_schema::SchemaResult {
+        schema.drop_if_exists("tags").await
     }
 }
 
@@ -154,7 +150,10 @@ impl Module for Crm {
             MigrationSet::new("crm")
                 .migration(navree_schema::migration!(m0001_create_companies))
                 .migration(navree_schema::migration!(m0002_create_events))
-                .migration(CreateTags),
+                .migration(navree_schema::SchemaMigration::new(
+                    "m0003_create_tags",
+                    CreateTags,
+                )),
         );
     }
 }
@@ -173,34 +172,22 @@ async fn boot(url: &str) -> App {
 
 async fn tables(app: &App) -> Vec<String> {
     let db = app.ctx().get::<Db>().await.unwrap();
-    db.conn()
-        .query_all_raw(Statement::from_string(
-            db.backend(),
+    db.pool()
+        .fetch_column(&Statement::text(
             "SELECT tablename::text AS name FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename",
         ))
         .await
         .unwrap()
-        .iter()
-        .map(|row| row.try_get::<String>("", "name").unwrap())
-        .collect()
 }
 
 async fn hypertables(app: &App) -> Vec<String> {
     let db = app.ctx().get::<Db>().await.unwrap();
-    let found = db
-        .conn()
-        .query_all_raw(Statement::from_string(
-            db.backend(),
+    db.pool()
+        .fetch_column(&Statement::text(
             "SELECT hypertable_name::text AS name FROM timescaledb_information.hypertables",
         ))
-        .await;
-    match found {
-        Ok(rows) => rows
-            .iter()
-            .map(|row| row.try_get::<String>("", "name").unwrap())
-            .collect(),
-        Err(_) => Vec::new(),
-    }
+        .await
+        .unwrap_or_default()
 }
 
 #[tokio::test]
@@ -328,9 +315,9 @@ async fn session_settings_apply_to_every_connection() {
     let Some(scratch) = Scratch::new().await else {
         return;
     };
-    let admin = Database::connect(&scratch.url).await.unwrap();
-    admin.execute_unprepared("CREATE SCHEMA app").await.unwrap();
-    admin.close().await.unwrap();
+    let admin = connect(&scratch.url).await;
+    admin.execute_script("CREATE SCHEMA app").await.unwrap();
+    admin.close().await;
     let db = Db::connect(&DbOptions {
         url: scratch.url.clone(),
         max_connections: 3,
@@ -349,15 +336,11 @@ async fn session_settings_apply_to_every_connection() {
     let show = |setting: &'static str| {
         let db = db.clone();
         async move {
-            db.conn()
-                .query_one_raw(Statement::from_string(
-                    sea_orm::DbBackend::Postgres,
-                    format!("SELECT current_setting('{setting}') AS value"),
-                ))
+            db.pool()
+                .fetch_scalar::<String>(&Statement::text(format!(
+                    "SELECT current_setting('{setting}') AS value"
+                )))
                 .await
-                .unwrap()
-                .unwrap()
-                .try_get::<String>("", "value")
                 .unwrap()
         }
     };
@@ -370,20 +353,16 @@ async fn session_settings_apply_to_every_connection() {
         "repeatable read"
     );
     // Unqualified names resolve in `app` first.
-    db.conn()
-        .execute_unprepared("CREATE TABLE notes (id INT)")
+    db.pool()
+        .execute_script("CREATE TABLE notes (id INT)")
         .await
         .unwrap();
-    let schema = db
-        .conn()
-        .query_one_raw(Statement::from_string(
-            sea_orm::DbBackend::Postgres,
-            "SELECT table_schema AS value FROM information_schema.tables WHERE table_name = 'notes'",
+    let schema: String = db
+        .pool()
+        .fetch_scalar(&Statement::text(
+            "SELECT table_schema::text AS value FROM information_schema.tables WHERE table_name = 'notes'",
         ))
         .await
-        .unwrap()
-        .unwrap()
-        .try_get::<String>("", "value")
         .unwrap();
     assert_eq!(schema, "app");
     assert!(db.open_connections().await.unwrap().unwrap() >= 1);

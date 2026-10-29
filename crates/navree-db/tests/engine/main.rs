@@ -1,6 +1,5 @@
 //! navree-db's own data layer on SQLx (pools, statements, values, rows,
-//! errors, transactions, savepoints, units of work, the SeaORM bridge,
-//! records),
+//! errors, transactions, savepoints, units of work, records),
 //! run on every database: SQLite always, PostgreSQL with TimescaleDB and
 //! MySQL when `NAVREE_TEST_POSTGRES_URL` / `NAVREE_TEST_MYSQL_URL` are set
 //! (or `target/test-databases.env` has them) and the `postgres` / `mysql`
@@ -32,9 +31,9 @@ use transactions::{
     commit_rollback_and_drop, options_and_finished_transactions, rows_stream, savepoints_nest,
 };
 use units::{
-    bridge_values, bridged_units_of_work_share_one_transaction,
-    db_statements_join_the_current_unit_of_work, native_units_of_work,
-    observers_run_inside_the_commit, savepoints_and_settings_in_units_of_work,
+    db_statements_join_the_current_unit_of_work, observers_run_inside_the_commit,
+    savepoints_and_settings_in_units_of_work, transaction_settings_follow_the_option,
+    units_of_work,
 };
 use values::{every_kind_round_trips, expressions_read_tolerantly, rows_read_dynamically};
 use watching::{sessions_follow_the_options, statements_are_watched};
@@ -49,12 +48,11 @@ on_every_server!(
     savepoints_nest,
     options_and_finished_transactions,
     rows_stream,
-    native_units_of_work,
+    units_of_work,
+    transaction_settings_follow_the_option,
     savepoints_and_settings_in_units_of_work,
     observers_run_inside_the_commit,
-    bridged_units_of_work_share_one_transaction,
     db_statements_join_the_current_unit_of_work,
-    bridge_values,
     statements_are_watched,
     sessions_follow_the_options,
     records_round_trip,

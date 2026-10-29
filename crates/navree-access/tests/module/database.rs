@@ -1,15 +1,13 @@
 //! Where the module tests run: a SQLite file by default, or a database of
-//! its own on a server, with units of work on SeaORM's transactions (the
-//! default) or on navree-db's own.
+//! its own on a server.
 //!
 //! - `NAVREE_TEST_DATABASE=postgres` (feature `postgres`,
 //!   `NAVREE_TEST_POSTGRES_URL`: a TimescaleDB server) or `mysql` (feature
 //!   `mysql`, `NAVREE_TEST_MYSQL_URL`): every app gets a database of its
-//!   own on that server, dropped with the app;
-//! - `NAVREE_TEST_NATIVE_UNITS_OF_WORK=1`: `database.native_units_of_work`.
+//!   own on that server, dropped with the app.
 //!
 //! ```text
-//! NAVREE_TEST_DATABASE=postgres NAVREE_TEST_NATIVE_UNITS_OF_WORK=1 \
+//! NAVREE_TEST_DATABASE=postgres \
 //!   cargo test -p navree-access --features postgres,mysql --test module
 //! ```
 
@@ -47,15 +45,6 @@ pub fn server() -> Server {
         Ok("mysql") => Server::MySql,
         Ok(other) => panic!("NAVREE_TEST_DATABASE: unknown database `{other}`"),
     }
-}
-
-/// Whether units of work run on navree-db's own transactions
-/// (`NAVREE_TEST_NATIVE_UNITS_OF_WORK=1`).
-pub fn native() -> bool {
-    matches!(
-        std::env::var("NAVREE_TEST_NATIVE_UNITS_OF_WORK").as_deref(),
-        Ok("1" | "true")
-    )
 }
 
 static COUNTER: AtomicU32 = AtomicU32::new(0);
@@ -177,13 +166,10 @@ pub fn scratch() -> (String, Keep) {
     }
 }
 
-/// `builder` on a database of its own on [`server`], migrated on boot,
-/// its units of work native when [`native`]. The database goes with the
-/// app.
+/// `builder` on a database of its own on [`server`], migrated on boot.
+/// The database goes with the app.
 pub fn database(builder: TestAppBuilder) -> TestAppBuilder {
-    let builder = builder
-        .config("database.native_units_of_work", native())
-        .config("database.max_connections", 8);
+    let builder = builder.config("database.max_connections", 8);
     match server() {
         Server::Sqlite => builder.temp_database(),
         server => {
@@ -203,7 +189,6 @@ pub async fn connect() -> (Db, Keep) {
     let db = Db::connect(&DbOptions {
         url,
         max_connections: 4,
-        native_units_of_work: native(),
         ..DbOptions::default()
     })
     .await

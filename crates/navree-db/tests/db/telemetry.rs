@@ -5,13 +5,12 @@ use std::sync::Arc;
 
 use axum::body::Body;
 use http::{Method, Request};
-use navree_db::{DatabaseModule, Db, DbOptions, Uow};
+use navree_db::{DatabaseModule, Db, DbOptions, Executor, Statement, Uow};
 use navree_http::{
     AppError, Controller, HttpModule, HttpOptions, ModuleBuilderHttpExt, RouteDef, build_router,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, Resolver};
 use navree_telemetry::{EventKind, Telemetry, TelemetryRecorder};
-use sea_orm::{ConnectionTrait, DbBackend, Statement};
 use tower::ServiceExt;
 
 use crate::support::TempDb;
@@ -33,20 +32,14 @@ async fn every_statement_is_reported_without_bound_values() {
         .await
         .expect("connects");
 
-    db.conn()
-        .query_one_raw(Statement::from_sql_and_values(
-            DbBackend::Sqlite,
-            "SELECT ? AS answer",
-            ["secret-binding".into()],
-        ))
-        .await
-        .expect("query runs");
+    db.fetch_optional(&Statement::portable(
+        "SELECT ? AS answer",
+        ["secret-binding".into()],
+    ))
+    .await
+    .expect("query runs");
     let failed = db
-        .conn()
-        .query_one_raw(Statement::from_string(
-            DbBackend::Sqlite,
-            "SELECT * FROM no_such_table",
-        ))
+        .fetch_optional(&Statement::text("SELECT * FROM no_such_table"))
         .await;
     assert!(failed.is_err());
 
@@ -56,7 +49,7 @@ async fn every_statement_is_reported_without_bound_values() {
         .find(|q| q.sql == "SELECT ? AS answer")
         .expect("the query is reported");
     assert!(!answer.failed);
-    assert_eq!(answer.rows, None);
+    assert_eq!(answer.rows, Some(1));
     assert!(
         answer.connection.starts_with("sqlite://"),
         "{}",
@@ -78,8 +71,7 @@ async fn a_plain_connection_reports_nothing() {
     let temp = TempDb::new();
     let recorder = TelemetryRecorder::new();
     let db = Db::connect(&quiet(&temp)).await.expect("connects");
-    db.conn()
-        .query_one_raw(Statement::from_string(DbBackend::Sqlite, "SELECT 1"))
+    db.fetch_optional(&Statement::text("SELECT 1"))
         .await
         .unwrap();
     assert!(recorder.is_empty());
@@ -102,10 +94,7 @@ impl Controller for AnswerController {
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
         vec![
             RouteDef::on(Method::GET, "/", |uow: Uow| async move {
-                let tx = uow.tx().await?;
-                tx.query_one_raw(Statement::from_string(DbBackend::Sqlite, "SELECT 42"))
-                    .await?;
-                drop(tx);
+                uow.fetch_optional(&Statement::text("SELECT 42")).await?;
                 Ok::<_, AppError>("42")
             })
             .public(),

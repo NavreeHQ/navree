@@ -174,7 +174,7 @@ async fn tables(pool: &Pool) -> Vec<String> {
 
 async fn pool_of(app: &App) -> Pool {
     let db = app.ctx().get::<Db>().await.expect("a Db");
-    db.pool().expect("navree-db's pool").clone()
+    db.pool().clone()
 }
 
 /// What one database showed.

@@ -123,7 +123,7 @@ impl Operation {
         let Some(current) = self.reads() else {
             return;
         };
-        if current.open_tx().await.is_none() {
+        if !current.has_open_transaction().await {
             return;
         }
         let fresh = self.new_uow().await;

@@ -6,35 +6,32 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use navree_db::{
-    ChangeEvent, ChangeOp, DatabaseModule, Db, DbConnections, DbOptions, SqliteOptions,
+    ChangeEvent, ChangeOp, DatabaseModule, Db, DbConnections, DbOptions, Executor, ExecutorExt,
+    SqliteOptions, Statement,
 };
 use navree_kernel::Navree;
-use sea_orm::{ConnectionTrait, DbBackend, Statement};
 
 use crate::support::TempDb;
 
 /// A table `place(name)` holding one row, `name`.
-async fn place(db: &Db, conn: &impl ConnectionTrait, name: &str) {
-    for sql in [
-        "CREATE TABLE IF NOT EXISTS place (name TEXT NOT NULL)".to_owned(),
-        format!("INSERT INTO place (name) VALUES ('{name}')"),
-    ] {
-        conn.execute_raw(Statement::from_string(db.backend(), sql))
-            .await
-            .unwrap();
-    }
-}
-
-async fn read_place(conn: &impl ConnectionTrait) -> String {
-    conn.query_one_raw(Statement::from_string(
-        DbBackend::Sqlite,
-        "SELECT name FROM place",
+async fn place(conn: &(impl Executor + ?Sized), name: &str) {
+    conn.execute(&Statement::text(
+        "CREATE TABLE IF NOT EXISTS place (name TEXT NOT NULL)",
     ))
     .await
-    .unwrap()
-    .unwrap()
-    .try_get::<String>("", "name")
-    .unwrap()
+    .unwrap();
+    conn.execute(&Statement::portable(
+        "INSERT INTO place (name) VALUES (?)",
+        [name.into()],
+    ))
+    .await
+    .unwrap();
+}
+
+async fn read_place(conn: &(impl Executor + ?Sized)) -> String {
+    conn.fetch_scalar(&Statement::text("SELECT name FROM place"))
+        .await
+        .unwrap()
 }
 
 /// A writer file and a replica file whose `place` rows tell them apart.
@@ -48,9 +45,9 @@ async fn replicated(sticky: bool) -> (Db, TempDb, TempDb) {
     })
     .await
     .unwrap();
-    place(&db, db.conn(), "writer").await;
+    place(db.pool(), "writer").await;
     let replica_db = Db::connect(&replica.options()).await.unwrap();
-    place(&replica_db, replica_db.conn(), "replica").await;
+    place(replica_db.pool(), "replica").await;
     (db, writer, replica)
 }
 
@@ -58,22 +55,21 @@ async fn replicated(sticky: bool) -> (Db, TempDb, TempDb) {
 async fn replicas_serve_reads_outside_transactions() {
     let (db, _writer, _replica) = replicated(true).await;
     assert_eq!(db.replicas(), 1);
-    assert_eq!(read_place(&db.reader().await).await, "replica");
+    assert_eq!(read_place(&db.read_executor().await).await, "replica");
     assert_eq!(
-        read_place(db.conn()).await,
+        read_place(db.pool()).await,
         "writer",
         "writes go to the writer"
     );
     // The writer on demand.
-    let forced = Db::using_writer(async { read_place(&db.reader().await).await }).await;
+    let forced = Db::using_writer(async { read_place(&db.read_executor().await).await }).await;
     assert_eq!(forced, "writer");
     assert!(!Db::reads_from_writer());
     // Inside an open transaction reads go through it.
     let uow = db.uow(None, None).await;
-    let tx = uow.tx().await.unwrap();
-    drop(tx);
+    uow.fetch_all(&Statement::text("SELECT 1")).await.unwrap();
     let in_tx = uow
-        .scope(async { read_place(&db.reader().await).await })
+        .scope(async { read_place(&db.read_executor().await).await })
         .await;
     assert_eq!(in_tx, "writer");
     uow.rollback().await.unwrap();
@@ -85,7 +81,7 @@ async fn reads_stick_to_the_writer_after_a_unit_of_work_writes() {
     let uow = db.uow(None, None).await;
     assert!(!uow.has_modified_records());
     let before = uow
-        .scope(async { read_place(&db.reader().await).await })
+        .scope(async { read_place(&db.read_executor().await).await })
         .await;
     assert_eq!(before, "replica");
     uow.record_change(ChangeEvent {
@@ -99,7 +95,7 @@ async fn reads_stick_to_the_writer_after_a_unit_of_work_writes() {
     uow.commit().await.unwrap();
     // Committed: no transaction is open, yet the task reads its writes.
     let after = uow
-        .scope(async { read_place(&db.reader().await).await })
+        .scope(async { read_place(&db.read_executor().await).await })
         .await;
     assert_eq!(after, "writer");
 
@@ -107,7 +103,7 @@ async fn reads_stick_to_the_writer_after_a_unit_of_work_writes() {
     let uow = lagging.uow(None, None).await;
     uow.mark_modified();
     let read = uow
-        .scope(async { read_place(&lagging.reader().await).await })
+        .scope(async { read_place(&lagging.read_executor().await).await })
         .await;
     assert_eq!(read, "replica", "sticky is off");
 }
@@ -130,23 +126,20 @@ async fn named_connections_connect_on_first_use() {
     assert_eq!(registry.names(), ["analytics", "default"]);
     let default = registry.get("default").await.unwrap();
     assert_eq!(default.name(), "default");
-    assert!(std::ptr::eq(
-        default.conn(),
-        app.ctx().get::<Db>().await.unwrap().conn()
-    ));
+    assert!(default.same_as(&app.ctx().get::<Db>().await.unwrap()));
     let named = registry.get("analytics").await.unwrap();
     assert_eq!(named.name(), "analytics");
     assert!(
         Arc::ptr_eq(&named, &registry.get("analytics").await.unwrap()),
         "one pool"
     );
-    place(&named, named.conn(), "analytics").await;
-    assert_eq!(read_place(named.conn()).await, "analytics");
+    place(named.pool(), "analytics").await;
+    assert_eq!(read_place(named.pool()).await, "analytics");
     assert!(named.app().is_some(), "named connections belong to the app");
     let error = registry.get("reports").await.unwrap_err();
     assert_eq!(
         error.to_string(),
-        "Custom Error: no database connection named `reports` (configured: analytics, default)"
+        "no database connection named `reports` (configured: analytics, default)"
     );
 }
 
@@ -171,16 +164,13 @@ async fn any_connection_reaches_the_others_by_name() {
     assert_eq!(named.name(), "analytics");
     assert!(!named.is_default());
     let default = app.ctx().get_named::<Db>("default").await.unwrap();
-    assert!(std::ptr::eq(default.conn(), db.conn()));
+    assert!(default.same_as(&db));
     // From one connection to another.
     let reached = db.connection("analytics").await.unwrap();
-    assert!(std::ptr::eq(reached.conn(), named.conn()), "the same pool");
+    assert!(reached.same_as(&named), "the same pool");
     let back = named.connection("default").await.unwrap();
-    assert!(std::ptr::eq(back.conn(), db.conn()));
-    assert!(std::ptr::eq(
-        db.connection("default").await.unwrap().conn(),
-        db.conn()
-    ));
+    assert!(back.same_as(&db));
+    assert!(db.connection("default").await.unwrap().same_as(&db));
     let unknown = db.connection("reports").await.unwrap_err();
     assert!(
         unknown
@@ -351,11 +341,8 @@ async fn migrations_and_session_work_use_the_direct_connection() {
     let db = app.ctx().get::<Db>().await.unwrap();
     assert!(db.has_direct());
     let session = db.direct().await.unwrap();
-    assert!(!std::ptr::eq(session.conn(), db.conn()));
-    assert!(
-        std::ptr::eq(db.direct().await.unwrap().conn(), session.conn()),
-        "opened once"
-    );
+    assert!(!session.same_as(&db));
+    assert!(db.direct().await.unwrap().same_as(&session), "opened once");
     assert_eq!(session.name(), "default");
     let direct_tables = crate::fixtures::tables(&session).await;
     assert!(
@@ -384,18 +371,12 @@ async fn migrations_and_session_work_use_the_direct_connection() {
     read_count(&session).await;
     assert!(heard.load(std::sync::atomic::Ordering::SeqCst) >= 1);
     db.close().await.unwrap();
-    assert!(
-        session.conn().ping().await.is_err(),
-        "closed with the connection"
-    );
+    assert!(session.ping().await.is_err(), "closed with the connection");
 
     // Without `direct_url`, the direct connection is the connection.
     let plain = Db::connect(&pooled.options()).await.unwrap();
     assert!(!plain.has_direct());
-    assert!(std::ptr::eq(
-        plain.direct().await.unwrap().conn(),
-        plain.conn()
-    ));
+    assert!(plain.direct().await.unwrap().same_as(&plain));
     // It must reach the same kind of database.
     let mismatched = Db::connect(&DbOptions {
         direct_url: Some("postgres://app@db/app".into()),
@@ -412,11 +393,8 @@ async fn migrations_and_session_work_use_the_direct_connection() {
 }
 
 async fn read_count(db: &Db) {
-    db.conn()
-        .query_one_raw(Statement::from_string(
-            DbBackend::Sqlite,
-            "SELECT COUNT(*) FROM users",
-        ))
+    db.pool()
+        .fetch_optional(&Statement::text("SELECT COUNT(*) FROM users"))
         .await
         .unwrap();
 }
@@ -432,8 +410,8 @@ async fn pool_settings_statistics_and_closing() {
     })
     .await
     .unwrap();
-    db.conn()
-        .execute_unprepared("CREATE TABLE t (id INTEGER)")
+    db.pool()
+        .execute_script("CREATE TABLE t (id INTEGER)")
         .await
         .unwrap();
     let stats = db.pool_stats();
@@ -446,7 +424,7 @@ async fn pool_settings_statistics_and_closing() {
         "SQLite has no server"
     );
     db.close().await.unwrap();
-    assert!(db.conn().execute_unprepared("SELECT 1").await.is_err());
+    assert!(db.pool().execute_script("SELECT 1").await.is_err());
 }
 
 #[tokio::test]
@@ -470,16 +448,12 @@ async fn sqlite_settings_apply_to_every_connection() {
         let db = db.clone();
         async move {
             let row = db
-                .conn()
-                .query_one_raw(Statement::from_string(
-                    DbBackend::Sqlite,
-                    format!("PRAGMA {name}"),
-                ))
+                .pool()
+                .fetch_one(&Statement::text(format!("PRAGMA {name}")))
                 .await
-                .unwrap()
                 .unwrap();
-            row.try_get_by_index::<String>(0)
-                .or_else(|_| row.try_get_by_index::<i64>(0).map(|v| v.to_string()))
+            row.get::<String>(0)
+                .or_else(|_| row.get::<i64>(0).map(|v| v.to_string()))
                 .unwrap()
         }
     };
@@ -500,8 +474,8 @@ async fn sqlite_databases_can_live_in_memory() {
     })
     .await
     .unwrap();
-    place(&db, db.conn(), "memory").await;
-    assert_eq!(read_place(db.conn()).await, "memory");
+    place(db.pool(), "memory").await;
+    assert_eq!(read_place(db.pool()).await, "memory");
     assert_eq!(db.database_name().await.unwrap(), "main");
 }
 

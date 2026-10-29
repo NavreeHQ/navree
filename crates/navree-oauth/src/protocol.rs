@@ -14,7 +14,7 @@ use base64::engine::general_purpose::STANDARD;
 use http::header::{AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE, LOCATION, PRAGMA};
 use http::{Extensions, HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use navree_contracts::RequestId;
-use navree_db::{DbError, Uow};
+use navree_db::Uow;
 use navree_http::{ApiMeta, AppError, ClientIp, Controller, Json, RouteDef, schema_fn};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use serde::{Deserialize, Serialize};
@@ -191,7 +191,7 @@ where
                 tracing::warn!(target: "navree::oauth", %error, "rollback failed");
             }
         }
-        _ => uow.commit().await.map_err(DbError::from)?,
+        _ => uow.commit().await?,
     }
     result
 }

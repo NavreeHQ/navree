@@ -1,79 +1,29 @@
 //! Creates the `posts` table.
 
-use sea_orm_migration::prelude::*;
+use navree::schema::prelude::*;
 
 /// `m20261025_000001_create_posts`.
-#[derive(DeriveMigrationName)]
 pub struct Migration;
 
-#[async_trait::async_trait]
-impl MigrationTrait for Migration {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table(Posts::Table)
-                    .col(ColumnDef::new(Posts::Id).uuid().not_null().primary_key())
-                    .col(ColumnDef::new(Posts::AuthorId).uuid().not_null())
-                    .col(ColumnDef::new(Posts::Title).string().not_null())
-                    .col(ColumnDef::new(Posts::Body).text().not_null())
-                    .col(
-                        ColumnDef::new(Posts::Published)
-                            .boolean()
-                            .not_null()
-                            .default(false),
-                    )
-                    .col(
-                        ColumnDef::new(Posts::PublishedAt)
-                            .timestamp_with_time_zone()
-                            .null(),
-                    )
-                    .col(
-                        ColumnDef::new(Posts::CreatedAt)
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(Posts::UpdatedAt)
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .name("fk_posts_author_id")
-                            .from(Posts::Table, Posts::AuthorId)
-                            .to(Users::Table, Users::Id)
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
+impl navree::schema::Migration for Migration {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("posts", |t| {
+                t.uuid_primary();
+                t.uuid("author_id")
+                    .constrained_on("users", "id")
+                    .cascade_on_delete();
+                t.string("title");
+                t.text("body");
+                t.boolean("published").default(false);
+                t.timestamp_tz("published_at").nullable();
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table(Posts::Table).to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("posts").await
     }
-}
-
-/// The `posts` table and its columns.
-#[derive(DeriveIden)]
-enum Posts {
-    Table,
-    Id,
-    AuthorId,
-    Title,
-    Body,
-    Published,
-    PublishedAt,
-    CreatedAt,
-    UpdatedAt,
-}
-
-/// navree-auth's `users` table.
-#[derive(DeriveIden)]
-enum Users {
-    Table,
-    Id,
 }
