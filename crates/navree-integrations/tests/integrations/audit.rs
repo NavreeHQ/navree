@@ -92,3 +92,58 @@ async fn connecting_and_disconnecting_are_audited_without_secrets() {
     let written = serde_json::to_string(&entries).unwrap();
     assert!(!written.contains("secret"), "{written}");
 }
+
+/// A connection row holds encrypted credentials and a token, so writing it
+/// (a connect, a reconnect, a token refresh) records no change event for
+/// the unit of work's observers: the audit entry names the connection
+/// instead.
+#[tokio::test]
+async fn connection_writes_record_no_change_events() {
+    let h = harness(|b| b).await;
+    let integrations = h.integrations().await;
+    let db = h.app.get::<navree_db::Db>().await;
+    let uow = db.uow(Some(ADMIN), None).await;
+    let connection = uow
+        .scope(async {
+            let mut id = None;
+            for code in ["first", "second"] {
+                h.fake.on_code(
+                    "hubspot",
+                    code,
+                    FakeGrant::new()
+                        .access_token("access-secret")
+                        .refresh_token("refresh-secret")
+                        .expires_in(600),
+                );
+                let state = integrations
+                    .connect_url(Owner::App, "hubspot", ConnectOptions::default().user(ADMIN))
+                    .await
+                    .unwrap()
+                    .state;
+                id = Some(
+                    integrations
+                        .complete(
+                            Owner::App,
+                            "hubspot",
+                            &ConnectCallback::code(state, code),
+                            Some(ADMIN),
+                        )
+                        .await
+                        .unwrap()
+                        .connection
+                        .id,
+                );
+            }
+            id.unwrap()
+        })
+        .await;
+    let changes = uow.changes();
+    assert!(
+        changes
+            .iter()
+            .all(|change| change.entity != "integration_connections"),
+        "{changes:?}"
+    );
+    uow.commit().await.unwrap();
+    assert!(integrations.find(connection).await.is_ok());
+}

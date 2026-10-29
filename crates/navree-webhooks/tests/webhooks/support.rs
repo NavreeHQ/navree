@@ -12,13 +12,13 @@ use navree_db::{DatabaseModule, Db};
 use navree_events::{Event, EventBus, EventsModule};
 use navree_http_client::{FakeServer, HttpClient, HttpClientModule};
 use navree_kernel::{BoxError, BoxFuture, Module, ModuleBuilder};
+use navree_orm::Model as _;
 use navree_queue::{Queue, QueueModule};
 use navree_testing::{TestApp, TestAppBuilder};
 use navree_webhooks::{
     CreatedEndpoint, Delivery, ModuleBuilderWebhooksExt, NewEndpoint, WebhookContext, WebhookEvent,
     Webhooks, WebhooksModule,
 };
-use sea_orm::{EntityTrait, PaginatorTrait};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -45,8 +45,8 @@ impl WebhookEvent for DealWon {
     fn payload<'a>(&'a self, ctx: &'a WebhookContext) -> BoxFuture<'a, Result<Value, BoxError>> {
         Box::pin(async move {
             // Payloads can read the database.
-            let endpoints = navree_webhooks::entity::endpoint::Entity::find()
-                .count(ctx.conn())
+            let endpoints = navree_webhooks::entity::endpoint::Model::query()
+                .count(ctx.db())
                 .await?;
             Ok(json!({
                 "deal": { "id": self.deal_id, "title": self.title },
@@ -102,8 +102,7 @@ pub struct Harness {
 /// fixed clock, webhooks (routes off) and the deals module; `configure`
 /// adds configuration and modules.
 pub fn builder(client: HttpClient, clock: Arc<FixedClock>) -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    crate::servers::database(TestApp::builder())
         .config("queue.driver", "memory")
         .config("webhooks.routes", false)
         .module(DatabaseModule::from_config())

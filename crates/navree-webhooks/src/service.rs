@@ -11,17 +11,17 @@ use chrono::{DateTime, SecondsFormat, TimeDelta, Utc};
 use http::header::{CONTENT_TYPE, HeaderName, HeaderValue, USER_AGENT};
 use navree_contracts::{Clock, Dispatcher, Job, JobEnvelope, JobOptions, SystemClock};
 use navree_crypto::Encrypter;
-use navree_db::{Db, Page, PageQuery, Repo, Uow, prune_time_series};
+use navree_db::{Db, DbError, Page, PageQuery, Uow, prune_time_series_on};
 use navree_events::EventBus;
 use navree_http_client::{HttpClient, HttpClientError};
 use navree_kernel::{AppContext, WeakAppContext};
 use navree_orm::{Builder, Executor, Model as _, Record};
-use sea_orm::ActiveValue::{Set, Unchanged};
 use serde::Serialize;
 use serde_json::{Value, json};
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
+use crate::changes;
 use crate::entity::{attempt, delivery, endpoint, receipt};
 use crate::event::{WebhookContext, WebhookTypeRegistration};
 use crate::events::{WebhookDeliveryFailed, WebhookEndpointDisabled};
@@ -275,27 +275,27 @@ impl Webhooks {
         let description = check_description(new.description)?;
         let secret = generate_secret();
         let now = deps.now();
-        let model = Repo::<endpoint::Entity>::insert(
-            uow,
-            endpoint::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                workspace_id: Set(new.workspace_id),
-                url: Set(url),
-                description: Set(description),
-                events: Set(json!(events)),
-                headers: Set(json!(headers)),
-                secret: Set(self.seal(deps, &secret)?),
-                previous_secret: Set(None),
-                previous_secret_expires_at: Set(None),
-                enabled: Set(true),
-                disabled_at: Set(None),
-                disabled_reason: Set(None),
-                failing_since: Set(None),
-                created_at: Set(now),
-                updated_at: Set(now),
-            },
-        )
-        .await?;
+        let model = endpoint::Model {
+            id: Uuid::now_v7(),
+            workspace_id: new.workspace_id,
+            url,
+            description,
+            events: json!(events),
+            headers: json!(headers),
+            secret: self.seal(deps, &secret)?,
+            previous_secret: None,
+            previous_secret_expires_at: None,
+            enabled: true,
+            disabled_at: None,
+            disabled_reason: None,
+            failing_since: None,
+            created_at: now,
+            updated_at: now,
+        };
+        // Written as it is, without the ORM's change event (which would
+        // carry the secret); the event below leaves the secrets out.
+        endpoint::Model::insert(uow, [model.clone()]).await?;
+        changes::created(uow, &model);
         Ok(CreatedEndpoint {
             endpoint: Endpoint::from(&model),
             secret,
@@ -312,32 +312,36 @@ impl Webhooks {
     ) -> Result<Endpoint, WebhooksError> {
         let deps = self.deps().await?;
         let current = self.find_in(uow, id).await?;
-        let mut model = endpoint::ActiveModel {
-            id: Unchanged(current.id),
-            updated_at: Set(deps.now()),
-            ..Default::default()
-        };
+        let mut model = current.clone();
+        model.updated_at = deps.now();
         if let Some(url) = changes.url {
-            model.url = Set(self.check_url(deps, &url).await?);
+            model.url = self.check_url(deps, &url).await?;
         }
         if let Some(events) = changes.events {
-            model.events = Set(json!(self.check_events(events)?));
+            model.events = json!(self.check_events(events)?);
         }
         if let Some(description) = changes.description {
-            model.description = Set(check_description(Some(description))?);
+            model.description = check_description(Some(description))?;
         }
         if let Some(headers) = changes.headers {
-            model.headers = Set(json!(check_headers(headers)?));
+            model.headers = json!(check_headers(headers)?);
         }
-        let updated = Repo::<endpoint::Entity>::update(uow, model).await?;
-        Ok(Endpoint::from(&updated))
+        write_endpoint(uow, &current, &model).await?;
+        Ok(Endpoint::from(&model))
     }
 
     /// Deletes an endpoint with its deliveries and attempts (pending
     /// deliveries are dropped).
     pub async fn delete_endpoint(&self, uow: &Uow, id: Uuid) -> Result<(), WebhooksError> {
         let current = self.find_in(uow, id).await?;
-        Repo::<endpoint::Entity>::delete(uow, current).await?;
+        let deleted = endpoint::Model::query()
+            .where_key(current.id)
+            .delete(uow)
+            .await?;
+        if deleted == 0 {
+            return Err(WebhooksError::EndpointNotFound(id));
+        }
+        changes::deleted(uow, &current);
         Ok(())
     }
 
@@ -350,18 +354,12 @@ impl Webhooks {
         let secret = generate_secret();
         let now = deps.now();
         let overlap = TimeDelta::from_std(ROTATION_OVERLAP).unwrap_or(TimeDelta::MAX);
-        Repo::<endpoint::Entity>::update(
-            uow,
-            endpoint::ActiveModel {
-                id: Unchanged(current.id),
-                secret: Set(self.seal(deps, &secret)?),
-                previous_secret: Set(Some(current.secret)),
-                previous_secret_expires_at: Set(Some(now + overlap)),
-                updated_at: Set(now),
-                ..Default::default()
-            },
-        )
-        .await?;
+        let mut model = current.clone();
+        model.secret = self.seal(deps, &secret)?;
+        model.previous_secret = Some(current.secret.clone());
+        model.previous_secret_expires_at = Some(now + overlap);
+        model.updated_at = now;
+        write_endpoint(uow, &current, &model).await?;
         Ok(secret)
     }
 
@@ -369,20 +367,14 @@ impl Webhooks {
     pub async fn enable(&self, uow: &Uow, id: Uuid) -> Result<Endpoint, WebhooksError> {
         let deps = self.deps().await?;
         let current = self.find_in(uow, id).await?;
-        let updated = Repo::<endpoint::Entity>::update(
-            uow,
-            endpoint::ActiveModel {
-                id: Unchanged(current.id),
-                enabled: Set(true),
-                disabled_at: Set(None),
-                disabled_reason: Set(None),
-                failing_since: Set(None),
-                updated_at: Set(deps.now()),
-                ..Default::default()
-            },
-        )
-        .await?;
-        Ok(Endpoint::from(&updated))
+        let mut model = current.clone();
+        model.enabled = true;
+        model.disabled_at = None;
+        model.disabled_reason = None;
+        model.failing_since = None;
+        model.updated_at = deps.now();
+        write_endpoint(uow, &current, &model).await?;
+        Ok(Endpoint::from(&model))
     }
 
     /// Turns delivery to an endpoint off; its pending deliveries fail when
@@ -391,19 +383,13 @@ impl Webhooks {
         let deps = self.deps().await?;
         let current = self.find_in(uow, id).await?;
         let now = deps.now();
-        let updated = Repo::<endpoint::Entity>::update(
-            uow,
-            endpoint::ActiveModel {
-                id: Unchanged(current.id),
-                enabled: Set(false),
-                disabled_at: Set(Some(now)),
-                disabled_reason: Set(Some("manual".to_owned())),
-                updated_at: Set(now),
-                ..Default::default()
-            },
-        )
-        .await?;
-        Ok(Endpoint::from(&updated))
+        let mut model = current.clone();
+        model.enabled = false;
+        model.disabled_at = Some(now);
+        model.disabled_reason = Some("manual".to_owned());
+        model.updated_at = now;
+        write_endpoint(uow, &current, &model).await?;
+        Ok(Endpoint::from(&model))
     }
 
     /// One endpoint.
@@ -449,7 +435,6 @@ impl Webhooks {
         let outcome = self.send(deps, &endpoint, &message_id, &payload).await?;
         let attempt = self
             .in_uow(db, |uow| async move {
-                let tx = uow.tx().await?;
                 let delivery = delivery::Model {
                     id: Uuid::now_v7(),
                     endpoint_id: endpoint.id,
@@ -472,8 +457,8 @@ impl Webhooks {
                     created_at: now,
                     updated_at: now,
                 };
-                delivery::Model::insert(&*tx, [delivery.clone()]).await?;
-                let attempt = insert_attempt(&*tx, &delivery, 1, &outcome, now).await?;
+                delivery::Model::insert(&uow, [delivery.clone()]).await?;
+                let attempt = insert_attempt(&uow, &delivery, 1, &outcome, now).await?;
                 Ok(attempt)
             })
             .await?;
@@ -537,12 +522,10 @@ impl Webhooks {
         let deps = self.deps().await?;
         let db = deps.db()?;
         self.in_uow(db, |uow| async move {
-            let mut delivery = {
-                let tx = uow.tx().await?;
-                delivery::Model::find(&*tx, delivery_id)
-                    .await?
-                    .ok_or(WebhooksError::DeliveryNotFound(delivery_id))?
-            };
+            let mut delivery = delivery::Model::find(&uow, delivery_id)
+                .await?
+                .map(Record::into_inner)
+                .ok_or(WebhooksError::DeliveryNotFound(delivery_id))?;
             let status = DeliveryStatus::parse(&delivery.status);
             if status != DeliveryStatus::Failed {
                 return Err(WebhooksError::NotRetryable(status));
@@ -552,10 +535,19 @@ impl Webhooks {
             delivery.max_attempts = delivery.attempts + 1;
             delivery.next_attempt_at = Some(now);
             delivery.updated_at = now;
-            {
-                let tx = uow.tx().await?;
-                delivery.save(&*tx).await?;
-            }
+            // A set-based update: the delivery log records no change events.
+            delivery::Model::query()
+                .where_key(delivery.id)
+                .update(
+                    &uow,
+                    [
+                        delivery::Model::STATUS.set(delivery.status.as_str()),
+                        delivery::Model::MAX_ATTEMPTS.set(delivery.max_attempts),
+                        delivery::Model::NEXT_ATTEMPT_AT.set(delivery.next_attempt_at),
+                        delivery::Model::UPDATED_AT.set(now),
+                    ],
+                )
+                .await?;
             self.dispatch_job(
                 deps,
                 &Deliver {
@@ -564,7 +556,7 @@ impl Webhooks {
                 None,
             )
             .await?;
-            Ok(Delivery::from(delivery.model()))
+            Ok(Delivery::from(&delivery))
         })
         .await
     }
@@ -591,7 +583,7 @@ impl Webhooks {
     /// `days` (default `webhooks.incoming.receipt_days`). On TimescaleDB,
     /// where the delivery log is made of hypertables, the days entirely
     /// before the cutoff go as whole chunks (see
-    /// [`prune_time_series`](navree_db::prune_time_series)).
+    /// [`prune_time_series_on`](navree_db::prune_time_series_on)).
     pub async fn prune(&self, days: Option<u64>) -> Result<Pruned, WebhooksError> {
         let deps = self.deps().await?;
         let db = deps.db()?;
@@ -603,11 +595,10 @@ impl Webhooks {
         let deliveries_before = cutoff(days.unwrap_or(self.options().retain_days));
         let receipts_before = cutoff(days.unwrap_or(self.options().incoming.receipt_days));
         self.in_uow(db, |uow| async move {
-            let tx = uow.tx().await?;
             // Attempts no older than their delivery: the old ones first (by
             // whole chunks), then the late retries of the deliveries that
             // go, then those deliveries.
-            prune_time_series(&*tx, ATTEMPTS_TABLE, "created_at", deliveries_before).await?;
+            prune_time_series_on(&uow, ATTEMPTS_TABLE, "created_at", deliveries_before).await?;
             attempt::Model::query()
                 .where_(
                     attempt::Model::DELIVERY_ID.in_subquery(
@@ -616,13 +607,14 @@ impl Webhooks {
                             .where_(delivery::Model::CREATED_AT.lt(deliveries_before)),
                     ),
                 )
-                .delete(&*tx)
+                .delete(&uow)
                 .await?;
             let deliveries =
-                prune_time_series(&*tx, DELIVERIES_TABLE, "created_at", deliveries_before).await?;
+                prune_time_series_on(&uow, DELIVERIES_TABLE, "created_at", deliveries_before)
+                    .await?;
             let receipts = receipt::Model::query()
                 .where_(receipt::Model::RECEIVED_AT.lt(receipts_before))
-                .delete(&*tx)
+                .delete(&uow)
                 .await?;
             Ok(Pruned {
                 deliveries,
@@ -646,10 +638,9 @@ impl Webhooks {
     pub(crate) async fn drop_workspace(&self, workspace_id: Uuid) -> Result<u64, WebhooksError> {
         let db = self.deps().await?.db()?;
         self.in_uow(db, |uow| async move {
-            let tx = uow.tx().await?;
             Ok(endpoint::Model::query()
                 .where_(endpoint::Model::WORKSPACE_ID.eq(workspace_id))
-                .delete(&*tx)
+                .delete(&uow)
                 .await?)
         })
         .await
@@ -753,7 +744,7 @@ impl Webhooks {
         self.check_size(&payload)?;
         let already: HashSet<Uuid> = delivery::Model::query()
             .where_(delivery::Model::MESSAGE_ID.eq(job.message_id.as_str()))
-            .pluck(db.conn(), delivery::Model::ENDPOINT_ID)
+            .pluck(db, delivery::Model::ENDPOINT_ID)
             .await?
             .into_iter()
             .collect();
@@ -761,7 +752,7 @@ impl Webhooks {
             in_workspace(endpoint::Model::query(), job.workspace_id)
                 .where_(endpoint::Model::ENABLED.eq(true))
                 .order_by(endpoint::Model::CREATED_AT)
-                .get(db.conn())
+                .get(db)
                 .await?
                 .into_models()
                 .into_iter()
@@ -776,7 +767,6 @@ impl Webhooks {
         self.in_uow(db, |uow| async move {
             let mut ids = Vec::with_capacity(endpoints.len());
             {
-                let tx = uow.tx().await?;
                 for endpoint in &endpoints {
                     let id = Uuid::now_v7();
                     let delivery = delivery::Model {
@@ -795,7 +785,7 @@ impl Webhooks {
                         created_at: now,
                         updated_at: now,
                     };
-                    delivery::Model::insert(&*tx, [delivery]).await?;
+                    delivery::Model::insert(&uow, [delivery]).await?;
                     ids.push(id);
                 }
             }
@@ -813,7 +803,7 @@ impl Webhooks {
     pub(crate) async fn deliver(&self, delivery_id: Uuid) -> Result<(), WebhooksError> {
         let deps = self.deps().await?;
         let db = deps.db()?;
-        let Some(delivery) = delivery::Model::find(db.conn(), delivery_id)
+        let Some(delivery) = delivery::Model::find(db, delivery_id)
             .await?
             .map(Record::into_inner)
         else {
@@ -822,7 +812,7 @@ impl Webhooks {
         if DeliveryStatus::parse(&delivery.status) != DeliveryStatus::Pending {
             return Ok(());
         }
-        let Some(endpoint) = endpoint::Model::find(db.conn(), delivery.endpoint_id)
+        let Some(endpoint) = endpoint::Model::find(db, delivery.endpoint_id)
             .await?
             .map(Record::into_inner)
         else {
@@ -861,11 +851,10 @@ impl Webhooks {
         let reason = reason.to_owned();
         self.in_uow(db, |uow| async move {
             {
-                let tx = uow.tx().await?;
                 delivery::Model::query()
                     .where_key(delivery.id)
                     .update(
-                        &*tx,
+                        &uow,
                         [
                             delivery::Model::STATUS.set(DeliveryStatus::Failed.as_str()),
                             delivery::Model::NEXT_ATTEMPT_AT.set(None),
@@ -902,8 +891,7 @@ impl Webhooks {
             let mut emitted = Vec::new();
             let mut next_delay = None;
             {
-                let tx = uow.tx().await?;
-                insert_attempt(&*tx, &delivery, attempts, &outcome, now).await?;
+                insert_attempt(&uow, &delivery, attempts, &outcome, now).await?;
                 let mut endpoint_disabled = false;
                 if !real {
                     tracing::debug!(target: "navree::webhooks", delivery = %delivery.id, "test message attempt recorded");
@@ -911,7 +899,7 @@ impl Webhooks {
                     if endpoint.failing_since.is_some() {
                         endpoint::Model::query()
                             .where_key(endpoint.id)
-                            .update(&*tx, [endpoint::Model::FAILING_SINCE.set(None)])
+                            .update(&uow, [endpoint::Model::FAILING_SINCE.set(None)])
                             .await?;
                     }
                 } else {
@@ -924,7 +912,7 @@ impl Webhooks {
                         endpoint::Model::query()
                             .where_key(endpoint.id)
                             .update(
-                                &*tx,
+                                &uow,
                                 [
                                     endpoint::Model::ENABLED.set(false),
                                     endpoint::Model::DISABLED_AT.set(now),
@@ -944,7 +932,7 @@ impl Webhooks {
                     } else if endpoint.failing_since.is_none() {
                         endpoint::Model::query()
                             .where_key(endpoint.id)
-                            .update(&*tx, [endpoint::Model::FAILING_SINCE.set(now)])
+                            .update(&uow, [endpoint::Model::FAILING_SINCE.set(now)])
                             .await?;
                     }
                 }
@@ -976,7 +964,7 @@ impl Webhooks {
                 delivery::Model::query()
                     .where_key(delivery.id)
                     .update(
-                        &*tx,
+                        &uow,
                         [
                             delivery::Model::STATUS.set(status.as_str()),
                             delivery::Model::ATTEMPTS.set(attempts),
@@ -1141,8 +1129,12 @@ impl Webhooks {
 
     /// The endpoint `id`, read in `uow`.
     async fn find_in(&self, uow: &Uow, id: Uuid) -> Result<endpoint::Model, WebhooksError> {
-        Repo::<endpoint::Entity>::find(uow, id)
+        endpoint::Model::query()
+            .where_key(id)
+            .lock_for_update()
+            .first(uow)
             .await?
+            .map(Record::into_inner)
             .ok_or(WebhooksError::EndpointNotFound(id))
     }
 
@@ -1155,7 +1147,7 @@ impl Webhooks {
         Fut: Future<Output = Result<T, WebhooksError>>,
     {
         if let Some(current) = Uow::current()
-            && std::ptr::eq(current.db().conn(), db.conn())
+            && current.db().same_as(db)
             && !current.is_finished().await
         {
             return f(current).await;
@@ -1163,7 +1155,7 @@ impl Webhooks {
         let uow = db.uow(None, None).await;
         match uow.scope(f(uow.clone())).await {
             Ok(value) => {
-                uow.commit().await?;
+                uow.commit().await.map_err(DbError::from)?;
                 Ok(value)
             }
             Err(error) => {
@@ -1373,6 +1365,52 @@ fn in_workspace(
         Some(id) => endpoints.where_(endpoint::Model::WORKSPACE_ID.eq(id)),
         None => endpoints.where_null(endpoint::Model::WORKSPACE_ID),
     }
+}
+
+/// Writes the columns in which `new` differs from `old` (the same endpoint)
+/// and records the change, without its secrets, for the audit trail.
+async fn write_endpoint(
+    uow: &Uow,
+    old: &endpoint::Model,
+    new: &endpoint::Model,
+) -> Result<(), WebhooksError> {
+    let mut sets = Vec::new();
+    macro_rules! changed {
+        ($($column:ident: $field:ident),* $(,)?) => {
+            $(
+                if old.$field != new.$field {
+                    sets.push(endpoint::Model::$column.set(new.$field.clone()));
+                }
+            )*
+        };
+    }
+    changed!(
+        URL: url,
+        DESCRIPTION: description,
+        EVENTS: events,
+        HEADERS: headers,
+        SECRET: secret,
+        PREVIOUS_SECRET: previous_secret,
+        PREVIOUS_SECRET_EXPIRES_AT: previous_secret_expires_at,
+        ENABLED: enabled,
+        DISABLED_AT: disabled_at,
+        DISABLED_REASON: disabled_reason,
+        FAILING_SINCE: failing_since,
+        UPDATED_AT: updated_at,
+    );
+    if sets.is_empty() {
+        return Ok(());
+    }
+    // A set-based update: the ORM's change event would carry the secrets.
+    let written = endpoint::Model::query()
+        .where_key(old.id)
+        .update(uow, sets)
+        .await?;
+    if written == 0 {
+        return Err(WebhooksError::EndpointNotFound(old.id));
+    }
+    changes::updated(uow, old, new);
+    Ok(())
 }
 
 /// Inserts the attempt row of `outcome` through `exec`.

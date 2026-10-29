@@ -1,9 +1,8 @@
 //! [`DatabaseWorkflowStore`]: runs in `workflow_runs` and `workflow_steps`.
 
 use chrono::{DateTime, Utc};
-use navree_db::{Db, Uow};
+use navree_db::{Db, Executor, Row, Statement, Transaction, TxOptions, Uow, Value as SqlValue};
 use navree_kernel::BoxFuture;
-use sea_orm::{ConnectionTrait, DbBackend, QueryResult, Statement, Value as SqlValue};
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -36,47 +35,38 @@ impl DatabaseWorkflowStore {
         Self { db }
     }
 
-    fn stmt(&self, sql: &str, values: Vec<SqlValue>) -> Statement {
-        statement(self.db.backend(), sql, values)
+    /// What statements outside a unit of work run on: the writer's pool,
+    /// never the task's unit of work (a lease or a claim must not roll back
+    /// with a request), or the connection itself when it has no pool.
+    fn executor(&self) -> &dyn Executor {
+        match self.db.pool() {
+            Some(pool) => pool,
+            None => &self.db,
+        }
     }
 
     /// Runs `stmt` in `uow`'s transaction, or on its own.
     async fn execute_in(&self, uow: Option<&Uow>, stmt: Statement) -> StoreResult<u64> {
-        let result = match uow {
-            Some(uow) => {
-                let tx = uow.tx().await?;
-                tx.execute_raw(stmt).await?
-            }
-            None => self.db.conn().execute_raw(stmt).await?,
+        let executed = match uow {
+            Some(uow) => uow.execute(&stmt).await?,
+            None => self.executor().execute(&stmt).await?,
         };
-        Ok(result.rows_affected())
+        Ok(executed.rows_affected)
     }
 
     async fn one_run(&self, sql: &str, values: Vec<SqlValue>) -> StoreResult<Option<WorkflowRun>> {
-        let row = self.db.conn().query_one_raw(self.stmt(sql, values)).await?;
+        let row = self
+            .executor()
+            .fetch_optional(&statement(sql, values))
+            .await?;
         row.map(|row| run_row(&row)).transpose()
     }
 }
 
-/// `sql` with `?` placeholders, numbered (`$1`, `$2`, ...) on PostgreSQL.
-pub(crate) fn statement(backend: DbBackend, sql: &str, values: Vec<SqlValue>) -> Statement {
-    let sql = if backend == DbBackend::Postgres {
-        let mut numbered = String::with_capacity(sql.len() + 8);
-        let mut n = 0;
-        for c in sql.chars() {
-            if c == '?' {
-                n += 1;
-                numbered.push('$');
-                numbered.push_str(&n.to_string());
-            } else {
-                numbered.push(c);
-            }
-        }
-        numbered
-    } else {
-        sql.to_owned()
-    };
-    Statement::from_sql_and_values(backend, sql, values)
+/// `sql` with `?` placeholders (numbered on PostgreSQL when it runs) and
+/// its values.
+pub(crate) fn statement(sql: &str, values: Vec<SqlValue>) -> Statement {
+    Statement::portable(sql, values)
 }
 
 /// Unix milliseconds.
@@ -111,8 +101,8 @@ fn json(column: &str, text: &str) -> StoreResult<Value> {
     })
 }
 
-fn opt_json(row: &QueryResult, column: &str) -> StoreResult<Option<Value>> {
-    row.try_get::<Option<String>>("", column)?
+fn opt_json(row: &Row, column: &str) -> StoreResult<Option<Value>> {
+    row.get::<Option<String>>(column)?
         .map(|text| json(column, &text))
         .transpose()
 }
@@ -122,37 +112,37 @@ fn uuid(text: &str) -> StoreResult<Uuid> {
         .map_err(|_| WorkflowsError::Other(format!("stored id `{text}` is not a UUID")))
 }
 
-fn opt_uuid_column(row: &QueryResult, column: &str) -> StoreResult<Option<Uuid>> {
-    row.try_get::<Option<String>>("", column)?
+fn opt_uuid_column(row: &Row, column: &str) -> StoreResult<Option<Uuid>> {
+    row.get::<Option<String>>(column)?
         .map(|text| uuid(&text))
         .transpose()
 }
 
-fn number(row: &QueryResult, column: &str) -> StoreResult<u32> {
-    let value: i64 = row.try_get("", column)?;
+fn number(row: &Row, column: &str) -> StoreResult<u32> {
+    let value: i64 = row.get(column)?;
     Ok(u32::try_from(value).unwrap_or(u32::MAX))
 }
 
-fn opt_time(row: &QueryResult, column: &str) -> StoreResult<Option<DateTime<Utc>>> {
-    Ok(row.try_get::<Option<i64>>("", column)?.map(from_millis))
+fn opt_time(row: &Row, column: &str) -> StoreResult<Option<DateTime<Utc>>> {
+    Ok(row.get::<Option<i64>>(column)?.map(from_millis))
 }
 
-fn time(row: &QueryResult, column: &str) -> StoreResult<DateTime<Utc>> {
-    Ok(from_millis(row.try_get("", column)?))
+fn time(row: &Row, column: &str) -> StoreResult<DateTime<Utc>> {
+    Ok(from_millis(row.get(column)?))
 }
 
-pub(crate) fn run_row(row: &QueryResult) -> StoreResult<WorkflowRun> {
-    let status: String = row.try_get("", "status")?;
+pub(crate) fn run_row(row: &Row) -> StoreResult<WorkflowRun> {
+    let status: String = row.get("status")?;
     Ok(WorkflowRun {
-        id: uuid(&row.try_get::<String>("", "id")?)?,
-        workflow: row.try_get("", "workflow")?,
+        id: uuid(&row.get::<String>("id")?)?,
+        workflow: row.get("workflow")?,
         version: number(row, "version")?,
         status: status.parse().map_err(WorkflowsError::Other)?,
-        input: json("input", &row.try_get::<String>("", "input")?)?,
+        input: json("input", &row.get::<String>("input")?)?,
         output: opt_json(row, "output")?,
-        error: row.try_get("", "error")?,
+        error: row.get("error")?,
         workspace_id: opt_uuid_column(row, "workspace_id")?,
-        key: row.try_get("", "dedup_key")?,
+        key: row.get("dedup_key")?,
         wake_at: opt_time(row, "wake_at")?,
         created_at: time(row, "created_at")?,
         updated_at: time(row, "updated_at")?,
@@ -160,20 +150,20 @@ pub(crate) fn run_row(row: &QueryResult) -> StoreResult<WorkflowRun> {
     })
 }
 
-fn step_row(row: &QueryResult) -> StoreResult<WorkflowStep> {
-    let kind: String = row.try_get("", "kind")?;
-    let status: String = row.try_get("", "status")?;
+fn step_row(row: &Row) -> StoreResult<WorkflowStep> {
+    let kind: String = row.get("kind")?;
+    let status: String = row.get("status")?;
     Ok(WorkflowStep {
-        run_id: uuid(&row.try_get::<String>("", "run_id")?)?,
-        key: row.try_get("", "step_key")?,
+        run_id: uuid(&row.get::<String>("run_id")?)?,
+        key: row.get("step_key")?,
         position: number(row, "position")?,
         kind: kind.parse().map_err(WorkflowsError::Other)?,
         status: status.parse().map_err(WorkflowsError::Other)?,
         output: opt_json(row, "output")?,
-        error: row.try_get("", "error")?,
+        error: row.get("error")?,
         attempts: number(row, "attempts")?,
         wake_at: opt_time(row, "wake_at")?,
-        event: row.try_get("", "event")?,
+        event: row.get("event")?,
         filter: opt_json(row, "filter")?,
         created_at: time(row, "created_at")?,
         updated_at: time(row, "updated_at")?,
@@ -214,6 +204,148 @@ fn to_i64(n: u64) -> i64 {
     i64::try_from(n).unwrap_or(i64::MAX)
 }
 
+/// Commits `tx` when `result` is a success, rolls it back otherwise.
+async fn finish<T>(tx: Transaction, result: StoreResult<T>) -> StoreResult<T> {
+    match result {
+        Ok(value) => {
+            tx.commit().await?;
+            Ok(value)
+        }
+        Err(error) => {
+            if let Err(rollback) = tx.rollback().await {
+                tracing::warn!(target: "navree::workflows", error = %rollback, "rollback failed");
+            }
+            Err(error)
+        }
+    }
+}
+
+/// Renews the lease and writes `step` (a completed step is never rewritten);
+/// `false` when the lease is no longer held.
+async fn save_step_in(tx: &Transaction, lease: &Lease, step: &WorkflowStep) -> StoreResult<bool> {
+    let held = tx
+        .execute(&statement(
+            &format!(
+                "UPDATE {RUNS_TABLE} SET lease_until = ?, updated_at = ? \
+                 WHERE id = ? AND status = 'running' AND lease_token = ?"
+            ),
+            vec![
+                millis(lease.until).into(),
+                millis(lease.now).into(),
+                lease.run_id.to_string().into(),
+                lease.token.to_string().into(),
+            ],
+        ))
+        .await?
+        .rows_affected;
+    if held == 0 {
+        return Ok(false);
+    }
+    let existing = tx
+        .fetch_optional(&statement(
+            &format!("SELECT status FROM {STEPS_TABLE} WHERE run_id = ? AND step_key = ?"),
+            vec![step.run_id.to_string().into(), step.key.clone().into()],
+        ))
+        .await?;
+    let output = opt_text(step.output.as_ref());
+    let filter = opt_text(step.filter.as_ref());
+    match existing {
+        Some(row) => {
+            let status: String = row.get("status")?;
+            if status != StepStatus::Completed.as_str() {
+                tx.execute(&statement(
+                    &format!(
+                        "UPDATE {STEPS_TABLE} SET kind = ?, status = ?, \
+                         output = ?, error = ?, attempts = ?, wake_at = ?, \
+                         event = ?, filter = ?, updated_at = ? \
+                         WHERE run_id = ? AND step_key = ?"
+                    ),
+                    vec![
+                        step.kind.as_str().into(),
+                        step.status.as_str().into(),
+                        output,
+                        step.error.clone().into(),
+                        i64::from(step.attempts).into(),
+                        opt_millis(step.wake_at),
+                        step.event.clone().into(),
+                        filter,
+                        millis(step.updated_at).into(),
+                        step.run_id.to_string().into(),
+                        step.key.clone().into(),
+                    ],
+                ))
+                .await?;
+            }
+        }
+        None => {
+            tx.execute(&statement(
+                &format!(
+                    "INSERT INTO {STEPS_TABLE} ({STEP_COLUMNS}) \
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                ),
+                vec![
+                    step.run_id.to_string().into(),
+                    step.key.clone().into(),
+                    i64::from(step.position).into(),
+                    step.kind.as_str().into(),
+                    step.status.as_str().into(),
+                    output,
+                    step.error.clone().into(),
+                    i64::from(step.attempts).into(),
+                    opt_millis(step.wake_at),
+                    step.event.clone().into(),
+                    filter,
+                    millis(step.created_at).into(),
+                    millis(step.updated_at).into(),
+                ],
+            ))
+            .await?;
+        }
+    }
+    Ok(true)
+}
+
+/// Ends the lease with `sets` (see [`WorkflowStore::release`]); the run's
+/// new status, or `None` when the lease is no longer held.
+async fn release_in(
+    tx: &Transaction,
+    sets: &str,
+    values: Vec<SqlValue>,
+    run_id: &str,
+) -> StoreResult<Option<String>> {
+    let updated = tx
+        .execute(&statement(
+            &format!(
+                "UPDATE {RUNS_TABLE} SET {sets}, lease_token = NULL, \
+                 lease_until = NULL, updated_at = ? \
+                 WHERE id = ? AND status = 'running' AND lease_token = ?"
+            ),
+            values,
+        ))
+        .await?
+        .rows_affected;
+    if updated == 0 {
+        return Ok(None);
+    }
+    // The wake flag is cleared in a second statement: the CASEs above read
+    // it.
+    tx.execute(&statement(
+        &format!("UPDATE {RUNS_TABLE} SET wake_requested = ? WHERE id = ?"),
+        vec![false.into(), run_id.into()],
+    ))
+    .await?;
+    let row = tx
+        .fetch_optional(&statement(
+            &format!("SELECT status FROM {RUNS_TABLE} WHERE id = ?"),
+            vec![run_id.into()],
+        ))
+        .await?;
+    Ok(match row {
+        Some(row) => Some(row.get::<String>("status")?),
+        None => None,
+    })
+}
+
 impl WorkflowStore for DatabaseWorkflowStore {
     fn insert_run<'a>(
         &'a self,
@@ -221,7 +353,7 @@ impl WorkflowStore for DatabaseWorkflowStore {
         run: &'a WorkflowRun,
     ) -> BoxFuture<'a, StoreResult<()>> {
         Box::pin(async move {
-            let stmt = self.stmt(
+            let stmt = statement(
                 &format!(
                     "INSERT INTO {RUNS_TABLE} (id, workflow, version, status, input, output, \
                      error, workspace_id, dedup_key, wake_at, wake_requested, created_at, \
@@ -282,9 +414,8 @@ impl WorkflowStore for DatabaseWorkflowStore {
             values.push(to_i64(query.effective_limit()).into());
             values.push(to_i64(query.offset).into());
             let rows = self
-                .db
-                .conn()
-                .query_all_raw(self.stmt(
+                .executor()
+                .fetch_all(&statement(
                     &format!(
                         "SELECT {RUN_COLUMNS} FROM {RUNS_TABLE}{clause} \
                          ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"
@@ -300,15 +431,14 @@ impl WorkflowStore for DatabaseWorkflowStore {
         Box::pin(async move {
             let (clause, values) = run_filter(query);
             let row = self
-                .db
-                .conn()
-                .query_one_raw(self.stmt(
+                .executor()
+                .fetch_optional(&statement(
                     &format!("SELECT COUNT(*) AS total FROM {RUNS_TABLE}{clause}"),
                     values,
                 ))
                 .await?;
             let total: i64 = match row {
-                Some(row) => row.try_get("", "total")?,
+                Some(row) => row.get("total")?,
                 None => 0,
             };
             Ok(u64::try_from(total).unwrap_or_default())
@@ -318,9 +448,8 @@ impl WorkflowStore for DatabaseWorkflowStore {
     fn steps(&self, run_id: Uuid) -> BoxFuture<'_, StoreResult<Vec<WorkflowStep>>> {
         Box::pin(async move {
             let rows = self
-                .db
-                .conn()
-                .query_all_raw(self.stmt(
+                .executor()
+                .fetch_all(&statement(
                     &format!(
                         "SELECT {STEP_COLUMNS} FROM {STEPS_TABLE} WHERE run_id = ? \
                          ORDER BY position, step_key"
@@ -336,9 +465,8 @@ impl WorkflowStore for DatabaseWorkflowStore {
         Box::pin(async move {
             let now = millis(lease.now);
             let claimed = self
-                .db
-                .conn()
-                .execute_raw(self.stmt(
+                .executor()
+                .execute(&statement(
                     &format!(
                         "UPDATE {RUNS_TABLE} SET lease_token = ?, lease_until = ?, \
                          wake_requested = ?, updated_at = ?, status = 'running' \
@@ -358,7 +486,7 @@ impl WorkflowStore for DatabaseWorkflowStore {
                     ],
                 ))
                 .await?
-                .rows_affected();
+                .rows_affected;
             if claimed == 0 {
                 return Ok(None);
             }
@@ -382,102 +510,9 @@ impl WorkflowStore for DatabaseWorkflowStore {
         step: &'a WorkflowStep,
     ) -> BoxFuture<'a, StoreResult<bool>> {
         Box::pin(async move {
-            let backend = self.db.backend();
-            let lease = *lease;
-            let step = step.clone();
-            let saved = self
-                .db
-                .transaction(|uow| async move {
-                    let tx = uow.tx().await?;
-                    let held = tx
-                        .execute_raw(statement(
-                            backend,
-                            &format!(
-                                "UPDATE {RUNS_TABLE} SET lease_until = ?, updated_at = ? \
-                                 WHERE id = ? AND status = 'running' AND lease_token = ?"
-                            ),
-                            vec![
-                                millis(lease.until).into(),
-                                millis(lease.now).into(),
-                                lease.run_id.to_string().into(),
-                                lease.token.to_string().into(),
-                            ],
-                        ))
-                        .await?
-                        .rows_affected();
-                    if held == 0 {
-                        return Ok(false);
-                    }
-                    let existing = tx
-                        .query_one_raw(statement(
-                            backend,
-                            &format!(
-                                "SELECT status FROM {STEPS_TABLE} WHERE run_id = ? AND step_key = ?"
-                            ),
-                            vec![step.run_id.to_string().into(), step.key.clone().into()],
-                        ))
-                        .await?;
-                    let output = opt_text(step.output.as_ref());
-                    let filter = opt_text(step.filter.as_ref());
-                    match existing {
-                        Some(row) => {
-                            let status: String = row.try_get("", "status")?;
-                            if status != StepStatus::Completed.as_str() {
-                                tx.execute_raw(statement(
-                                    backend,
-                                    &format!(
-                                        "UPDATE {STEPS_TABLE} SET kind = ?, status = ?, \
-                                         output = ?, error = ?, attempts = ?, wake_at = ?, \
-                                         event = ?, filter = ?, updated_at = ? \
-                                         WHERE run_id = ? AND step_key = ?"
-                                    ),
-                                    vec![
-                                        step.kind.as_str().into(),
-                                        step.status.as_str().into(),
-                                        output,
-                                        step.error.clone().into(),
-                                        i64::from(step.attempts).into(),
-                                        opt_millis(step.wake_at),
-                                        step.event.clone().into(),
-                                        filter,
-                                        millis(step.updated_at).into(),
-                                        step.run_id.to_string().into(),
-                                        step.key.clone().into(),
-                                    ],
-                                ))
-                                .await?;
-                            }
-                        }
-                        None => {
-                            tx.execute_raw(statement(
-                                backend,
-                                &format!(
-                                    "INSERT INTO {STEPS_TABLE} ({STEP_COLUMNS}) \
-                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-                                ),
-                                vec![
-                                    step.run_id.to_string().into(),
-                                    step.key.clone().into(),
-                                    i64::from(step.position).into(),
-                                    step.kind.as_str().into(),
-                                    step.status.as_str().into(),
-                                    output,
-                                    step.error.clone().into(),
-                                    i64::from(step.attempts).into(),
-                                    opt_millis(step.wake_at),
-                                    step.event.clone().into(),
-                                    filter,
-                                    millis(step.created_at).into(),
-                                    millis(step.updated_at).into(),
-                                ],
-                            ))
-                            .await?;
-                        }
-                    }
-                    Ok(true)
-                })
-                .await?;
-            Ok(saved)
+            let tx = self.db.begin_with(TxOptions::new().immediate()).await?;
+            let saved = save_step_in(&tx, lease, step).await;
+            finish(tx, saved).await
         })
     }
 
@@ -520,48 +555,10 @@ impl WorkflowStore for DatabaseWorkflowStore {
                 lease.run_id.to_string().into(),
                 lease.token.to_string().into(),
             ]);
-            let backend = self.db.backend();
             let run_id = lease.run_id.to_string();
-            let status = self
-                .db
-                .transaction(|uow| async move {
-                    let tx = uow.tx().await?;
-                    let updated = tx
-                        .execute_raw(statement(
-                            backend,
-                            &format!(
-                                "UPDATE {RUNS_TABLE} SET {sets}, lease_token = NULL, \
-                                 lease_until = NULL, updated_at = ? \
-                                 WHERE id = ? AND status = 'running' AND lease_token = ?"
-                            ),
-                            values,
-                        ))
-                        .await?
-                        .rows_affected();
-                    if updated == 0 {
-                        return Ok(None);
-                    }
-                    // The wake flag is cleared in a second statement: the
-                    // CASEs above read it.
-                    tx.execute_raw(statement(
-                        backend,
-                        &format!("UPDATE {RUNS_TABLE} SET wake_requested = ? WHERE id = ?"),
-                        vec![false.into(), run_id.clone().into()],
-                    ))
-                    .await?;
-                    let row = tx
-                        .query_one_raw(statement(
-                            backend,
-                            &format!("SELECT status FROM {RUNS_TABLE} WHERE id = ?"),
-                            vec![run_id.clone().into()],
-                        ))
-                        .await?;
-                    Ok(match row {
-                        Some(row) => Some(row.try_get::<String>("", "status")?),
-                        None => None,
-                    })
-                })
-                .await?;
+            let tx = self.db.begin_with(TxOptions::new().immediate()).await?;
+            let status = release_in(&tx, &sets, values, &run_id).await;
+            let status = finish(tx, status).await?;
             status
                 .map(|status| status.parse().map_err(WorkflowsError::Other))
                 .transpose()
@@ -571,9 +568,8 @@ impl WorkflowStore for DatabaseWorkflowStore {
     fn due(&self, query: DueQuery) -> BoxFuture<'_, StoreResult<Vec<Uuid>>> {
         Box::pin(async move {
             let rows = self
-                .db
-                .conn()
-                .query_all_raw(self.stmt(
+                .executor()
+                .fetch_all(&statement(
                     &format!(
                         "SELECT id, status, CASE \
                            WHEN status = 'running' THEN lease_until \
@@ -598,16 +594,15 @@ impl WorkflowStore for DatabaseWorkflowStore {
             let mut ids = Vec::with_capacity(rows.len());
             let mut stale = Vec::new();
             for row in &rows {
-                let id = uuid(&row.try_get::<String>("", "id")?)?;
-                if row.try_get::<String>("", "status")? == RunStatus::Pending.as_str() {
+                let id = uuid(&row.get::<String>("id")?)?;
+                if row.get::<String>("status")? == RunStatus::Pending.as_str() {
                     stale.push(id);
                 }
                 ids.push(id);
             }
             for id in stale {
-                self.db
-                    .conn()
-                    .execute_raw(self.stmt(
+                self.executor()
+                    .execute(&statement(
                         &format!(
                             "UPDATE {RUNS_TABLE} SET updated_at = ? \
                              WHERE id = ? AND status = 'pending'"
@@ -628,9 +623,8 @@ impl WorkflowStore for DatabaseWorkflowStore {
                 .collect::<Vec<_>>()
                 .join(", ");
             let rows = self
-                .db
-                .conn()
-                .query_all_raw(self.stmt(
+                .executor()
+                .fetch_all(&statement(
                     &format!(
                         "SELECT {columns} FROM {STEPS_TABLE} s \
                          JOIN {RUNS_TABLE} r ON r.id = s.run_id \
@@ -658,7 +652,7 @@ impl WorkflowStore for DatabaseWorkflowStore {
             let resolved = self
                 .execute_in(
                     uow,
-                    self.stmt(
+                    statement(
                         &format!(
                             "UPDATE {STEPS_TABLE} SET output = ?, updated_at = ?, \
                              status = 'completed' \
@@ -681,7 +675,7 @@ impl WorkflowStore for DatabaseWorkflowStore {
             // `status` last: MySQL evaluates the assignments left to right.
             self.execute_in(
                 uow,
-                self.stmt(
+                statement(
                     &format!(
                         "UPDATE {RUNS_TABLE} SET \
                          wake_requested = CASE WHEN status = 'running' THEN ? \
@@ -712,7 +706,7 @@ impl WorkflowStore for DatabaseWorkflowStore {
             let cancelled = self
                 .execute_in(
                     uow,
-                    self.stmt(
+                    statement(
                         &format!(
                             "UPDATE {RUNS_TABLE} SET finished_at = ?, updated_at = ?, \
                              wake_at = NULL, lease_token = NULL, lease_until = NULL, \
@@ -736,7 +730,7 @@ impl WorkflowStore for DatabaseWorkflowStore {
             let retried = self
                 .execute_in(
                     uow,
-                    self.stmt(
+                    statement(
                         &format!(
                             "UPDATE {RUNS_TABLE} SET error = NULL, finished_at = NULL, \
                              updated_at = ?, status = 'pending' \
@@ -751,7 +745,7 @@ impl WorkflowStore for DatabaseWorkflowStore {
             }
             self.execute_in(
                 uow,
-                self.stmt(
+                statement(
                     &format!("DELETE FROM {STEPS_TABLE} WHERE run_id = ? AND status = 'failed'"),
                     vec![id.to_string().into()],
                 ),
@@ -764,9 +758,8 @@ impl WorkflowStore for DatabaseWorkflowStore {
     fn prune(&self, before: DateTime<Utc>) -> BoxFuture<'_, StoreResult<u64>> {
         Box::pin(async move {
             let before = millis(before);
-            self.db
-                .conn()
-                .execute_raw(self.stmt(
+            self.executor()
+                .execute(&statement(
                     &format!(
                         "DELETE FROM {STEPS_TABLE} WHERE run_id IN (SELECT id FROM {RUNS_TABLE} \
                          WHERE finished_at IS NOT NULL AND finished_at < ?)"
@@ -775,9 +768,8 @@ impl WorkflowStore for DatabaseWorkflowStore {
                 ))
                 .await?;
             let pruned = self
-                .db
-                .conn()
-                .execute_raw(self.stmt(
+                .executor()
+                .execute(&statement(
                     &format!(
                         "DELETE FROM {RUNS_TABLE} WHERE finished_at IS NOT NULL \
                          AND finished_at < ?"
@@ -785,7 +777,7 @@ impl WorkflowStore for DatabaseWorkflowStore {
                     vec![before.into()],
                 ))
                 .await?
-                .rows_affected();
+                .rows_affected;
             Ok(pruned)
         })
     }

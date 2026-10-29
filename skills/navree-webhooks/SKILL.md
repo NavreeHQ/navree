@@ -42,7 +42,7 @@ Navree::app()
 use navree::BoxFuture;
 use navree::prelude::*;
 use navree::webhooks::{WebhookContext, WebhookEvent};
-use sea_orm::EntityTrait;
+use navree::orm::prelude::*;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -57,7 +57,7 @@ impl WebhookEvent for DealWon {
     // Default: the event itself as JSON. Runs once, on a queue worker.
     fn payload<'a>(&'a self, ctx: &'a WebhookContext) -> BoxFuture<'a, Result<Value, BoxError>> {
         Box::pin(async move {
-            let deal = deal::Entity::find_by_id(self.deal_id).one(ctx.conn()).await?;
+            let deal = deal::Model::find(ctx.db(), self.deal_id).await?;
             Ok(json!({ "deal": deal }))
         })
     }

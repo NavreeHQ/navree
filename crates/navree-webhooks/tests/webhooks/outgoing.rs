@@ -9,13 +9,13 @@ use navree_crypto::CryptoModule;
 use navree_db::Db;
 use navree_events::EventBus;
 use navree_http_client::FakeResponse;
+use navree_orm::Model as _;
 use navree_queue::QueueFake;
 use navree_webhooks::entity::endpoint;
 use navree_webhooks::{
     DeliveryStatus, EndpointChanges, FanOut, NewEndpoint, RETRY_SCHEDULE, StandardWebhooks,
     Tolerance, WebhookDeliveryFailed, WebhookEndpointDisabled, Webhooks, WebhooksError,
 };
-use sea_orm::EntityTrait;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -765,11 +765,11 @@ async fn secrets_are_encrypted_at_rest_with_the_app_key() {
     let created = h.endpoint(NewEndpoint::new(URL).events(["deal.won"])).await;
 
     let db = h.app.get::<Db>().await;
-    let row = endpoint::Entity::find_by_id(created.endpoint.id)
-        .one(db.conn())
+    let row = endpoint::Model::find(&*db, created.endpoint.id)
         .await
         .unwrap()
-        .unwrap();
+        .unwrap()
+        .into_inner();
     assert!(!row.secret.contains(&created.secret[6..]));
     assert!(!row.secret.starts_with("whsec_"));
     let serialized = serde_json::to_value(&row).unwrap();
@@ -807,4 +807,42 @@ async fn event_types_list_every_registration() {
     let names: Vec<_> = types.iter().map(|t| t.name.as_str()).collect();
     assert_eq!(names, ["deal.lost", "deal.won", "export.ready"]);
     assert_eq!(types[1].description, "A deal moved to won.");
+}
+
+#[tokio::test]
+async fn change_events_never_carry_the_secrets() {
+    for key in [true, false] {
+        let h = harness(|b| {
+            if key {
+                b.config("app.key", navree_crypto::generate_key())
+                    .module(CryptoModule::from_config())
+            } else {
+                b
+            }
+        })
+        .await;
+        let webhooks = h.webhooks().await;
+        let db = h.app.get::<Db>().await;
+        let uow = db.uow(None, None).await;
+        let created = webhooks
+            .create_endpoint(&uow, NewEndpoint::new(URL).events(["deal.won"]))
+            .await
+            .unwrap();
+        let id = created.endpoint.id;
+        let rotated = webhooks.rotate_secret(&uow, id).await.unwrap();
+        webhooks.disable(&uow, id).await.unwrap();
+        webhooks.delete_endpoint(&uow, id).await.unwrap();
+
+        let events = uow.changes();
+        let ops: Vec<_> = events.iter().map(|e| format!("{:?}", e.op)).collect();
+        assert_eq!(ops, ["Created", "Updated", "Updated", "Deleted"]);
+        let written = serde_json::to_string(&events).unwrap();
+        for secret in [&created.secret, &rotated] {
+            assert!(!written.contains(&secret[6..]), "{written}");
+        }
+        assert!(!written.contains("\"previous_secret\""), "{written}");
+        assert!(!written.contains("\"secret\""), "{written}");
+        assert!(written.contains("hooks.lovelace.io"), "{written}");
+        uow.rollback().await.unwrap();
+    }
 }

@@ -223,8 +223,7 @@ fn providers(builder: TestAppBuilder) -> TestAppBuilder {
 /// `scope_sets`.
 pub fn builder(clock: Arc<FixedClock>, inbox: Arc<Inbox>) -> TestAppBuilder {
     providers(
-        TestApp::builder()
-            .temp_database()
+        crate::servers::database(TestApp::builder())
             .config("app.key", generate_key())
             .config("http.per_ip_rate_limit", Value::Null)
             .config("integrations.routes", false),
