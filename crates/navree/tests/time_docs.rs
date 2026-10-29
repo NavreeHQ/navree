@@ -5,7 +5,8 @@
     feature = "time",
     feature = "schedule",
     feature = "testing",
-    feature = "validation"
+    feature = "validation",
+    feature = "orm"
 ))]
 
 use std::sync::Mutex;
@@ -18,16 +19,12 @@ use navree::contracts::{
 };
 use navree::db::{Db, Executor, Statement};
 use navree::kernel::{CommandSpec, Resolver};
+use navree::orm::{Model as _, Value, table};
 use navree::prelude::*;
 use navree::schedule::{LocalRun, RunStatus, Scheduler};
+use navree::schema::SchemaMigration;
 use navree::testing::{TestApp, principal};
 use navree::time::{FixedHolidays, Holidays, LocalDayError, ZoneError, Zones, ZonesFake};
-use sea_orm::sea_query::{self, ColumnDef, Expr, ExprTrait, Table};
-use sea_orm::{
-    ActiveValue::Set, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, PaginatorTrait, QueryFilter,
-};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
@@ -49,62 +46,39 @@ fn zones_are_checked_and_normalized() -> Result<(), ZoneError> {
 // --- The request's zone and report windows -----------------------------------
 
 /// `signups(id, created_at)`.
-mod signup {
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "signups")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub created_at: DateTimeUtc,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "signups")]
+pub struct Signup {
+    pub id: Uuid,
+    pub created_at: DateTime<Utc>,
 }
 
 /// Creates `signups` and `users(id, timezone)`.
-struct CreateTables;
+mod create_tables {
+    use navree::schema::prelude::*;
 
-impl MigrationName for CreateTables {
-    fn name(&self) -> &str {
-        "m20261027_000001_create_time_docs_tables"
-    }
-}
+    pub struct Migration;
 
-#[async_trait]
-impl MigrationTrait for CreateTables {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("signups")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(
-                        ColumnDef::new("created_at")
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("users")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("timezone").string().null())
-                    .to_owned(),
-            )
-            .await
-    }
+    impl navree::schema::Migration for Migration {
+        async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+            schema
+                .create("signups", |t| {
+                    t.uuid_primary();
+                    t.timestamp_tz("created_at");
+                })
+                .await?;
+            schema
+                .create("users", |t| {
+                    t.uuid_primary();
+                    t.string("timezone").nullable();
+                })
+                .await
+        }
 
-    async fn down(&self, _manager: &SchemaManager) -> Result<(), DbErr> {
-        Ok(())
+        async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+            schema.drop_if_exists("users").await?;
+            schema.drop_if_exists("signups").await
+        }
     }
 }
 
@@ -136,10 +110,10 @@ impl ReportsController {
         uow: Uow,
     ) -> Result<WithZone<SignupReport>> {
         let (from, to) = range.utc_bounds(&zone);
-        let signups = signup::Entity::find()
-            .filter(signup::Column::CreatedAt.gte(from))
-            .filter(signup::Column::CreatedAt.lt(to))
-            .count(&*uow.tx().await?)
+        let signups = Signup::query()
+            .where_(Signup::CREATED_AT.gte(from))
+            .where_(Signup::CREATED_AT.lt(to))
+            .count(&uow)
             .await?;
         Ok(WithZone::new(&zone, SignupReport { from, to, signups }))
     }
@@ -152,14 +126,10 @@ pub struct UserZones {
 
 impl UserZones {
     async fn find(&self, id: Uuid) -> Result<Option<ZoneOwner>, BoxError> {
-        let query = sea_query::Query::select()
-            .column("timezone")
-            .from("users")
-            .and_where(Expr::col("id").eq(id))
-            .to_owned();
-        Ok(match self.db.conn().query_one(&query).await? {
+        let statement = Statement::portable("SELECT timezone FROM users WHERE id = ?", [id.into()]);
+        Ok(match self.db.fetch_optional(&statement).await? {
             Some(row) => {
-                let zone: Option<String> = row.try_get("", "timezone")?;
+                let zone: Option<String> = row.get("timezone")?;
                 Some(ZoneOwner {
                     id,
                     zone,
@@ -199,7 +169,12 @@ struct ReportsModule;
 impl Module for ReportsModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.controller::<ReportsController>()
-            .migrations(MigrationSet::new("time_docs").migration(CreateTables));
+            .migrations(
+                MigrationSet::new("time_docs").migration(SchemaMigration::new(
+                    "m20261027_000001_create_time_docs_tables",
+                    create_tables::Migration,
+                )),
+            );
         m.multi(Factory::<dyn ZoneSource>::new(|r: Resolver| async move {
             Ok(Arc::new(UserZones {
                 db: r.get::<Db>().await?,
@@ -222,22 +197,30 @@ async fn reports_app() -> TestApp {
 
 async fn add_user(app: &TestApp, timezone: Option<&str>) -> Uuid {
     let id = Uuid::now_v7();
-    let insert = sea_query::Query::insert()
-        .into_table("users")
-        .columns(["id", "timezone"])
-        .values_panic([id.into(), timezone.map(str::to_owned).into()])
-        .to_owned();
-    app.get::<Db>().await.conn().execute(&insert).await.unwrap();
+    let db = app.get::<Db>().await;
+    table("users")
+        .insert(
+            &*db,
+            [[
+                ("id", Value::from(id)),
+                ("timezone", Value::from(timezone.map(str::to_owned))),
+            ]],
+        )
+        .await
+        .unwrap();
     id
 }
 
 async fn add_signup(app: &TestApp, at: &str) {
     let created_at: DateTime<Utc> = at.parse().unwrap();
-    signup::Entity::insert(signup::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        created_at: Set(created_at),
-    })
-    .exec(app.get::<Db>().await.conn())
+    let db = app.get::<Db>().await;
+    Signup::create(
+        &*db,
+        Signup {
+            created_at,
+            ..Signup::default()
+        },
+    )
     .await
     .unwrap();
 }

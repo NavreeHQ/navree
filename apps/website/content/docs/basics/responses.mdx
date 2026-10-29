@@ -1,9 +1,9 @@
 ---
 title: "Responses and API resources"
-description: "Return JSON, status codes and headers from handlers, shape entities into API resources, and send pages, downloads and streams."
+description: "Return JSON, status codes and headers from handlers, shape models into API resources, and send pages, downloads and streams."
 ---
 
-A handler returns anything that implements Axum's `IntoResponse`. Navree adds a few response types of its own (`Created`, `NoContent`, `Page<T>`) and a pattern for API resources: structs that give your entities a stable, documented JSON shape. This page covers all of them, plus headers, file downloads and streamed bodies.
+A handler returns anything that implements Axum's `IntoResponse`. Navree adds a few response types of its own (`Created`, `NoContent`, `Page<T>`) and a pattern for API resources: structs that give your models a stable, documented JSON shape. This page covers all of them, plus headers, file downloads and streamed bodies.
 
 ## Returning JSON
 
@@ -11,7 +11,6 @@ Wrap any `Serialize` value in `Json`. Most handlers return `Result<Json<T>>`, wh
 
 ```rust title="src/companies/controller.rs"
 use navree::prelude::*;
-use sea_orm::EntityTrait;
 use uuid::Uuid;
 
 #[injectable]
@@ -22,11 +21,8 @@ pub struct CompaniesController;
 impl CompaniesController {
     #[get("/{id}")]
     async fn show(&self, uow: Uow, Path(id): Path<Uuid>) -> Result<Json<CompanyResource>> {
-        let company = company::Entity::find_by_id(id)
-            .one(&*uow.tx().await?)
-            .await?
-            .ok_or_else(AppError::not_found)?;
-        Ok(Json(company.into()))
+        let company = Company::find_or_fail(&uow, id).await?; // a 404 when missing
+        Ok(Json(CompanyResource::from(&*company)))
     }
 }
 ```
@@ -139,7 +135,7 @@ Returning a database model as JSON ties your API to your table: a renamed column
 
 ### The resource pattern
 
-The CRM gives every entity a `*Resource` struct, builds it from the model, and returns it from every route of that entity:
+The CRM gives every model a `*Resource` struct, builds it from the model, and returns it from every route of that model:
 
 ```rust title="src/companies/resource.rs"
 use chrono::{DateTime, Utc};
@@ -228,14 +224,13 @@ The CRM uses typed resource structs rather than these helpers, because typed str
 `Page<T>` is a page of results. Return it directly; it serializes as `data` plus `meta`:
 
 ```rust
-use navree::db::paginate;
-use sea_orm::{EntityTrait, QueryOrder};
-
 #[get("/")]
 async fn index(&self, uow: Uow, page: PageQuery) -> Result<Page<CompanyResource>> {
-    let select = company::Entity::find().order_by_asc(company::Column::Name);
-    let page = paginate(select, &*uow.tx().await?, page).await?;
-    Ok(page.map(CompanyResource::from))
+    let page = Company::query()
+        .order_by(Company::NAME)
+        .paginate(&uow, page)
+        .await?;
+    Ok(page.map(|company| CompanyResource::from(&*company)))
 }
 ```
 

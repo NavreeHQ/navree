@@ -143,13 +143,12 @@ async fn the_app_boots() {
 ## Data and the database
 
 ```rust
-use navree::db::{Db, create, create_many};
-use sea_orm::{EntityTrait, PaginatorTrait};
+use navree::db::Db;
 
 let db = app.get::<Db>().await;
-create_many(&PostFactory::new(owner).published(), db.conn(), 3).await.unwrap(); // see navree-database
+Post::factory().state(PostFactory::published).count(3).create(&*db).await.unwrap(); // see navree-orm
 app.run_command("db:seed", &["demo-posts"]).await.unwrap();
-assert_eq!(post::Entity::find().count(db.conn()).await.unwrap(), 6);
+assert_eq!(Post::query().count(&*db).await.unwrap(), 6);
 ```
 
 Prefer creating the data under test through the API; factories skip your

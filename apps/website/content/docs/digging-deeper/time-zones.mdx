@@ -115,10 +115,8 @@ Each level is a `dyn ZoneSource` (from `navree::contracts`), registered as a mul
 
 ```rust title="src/users/zones.rs"
 use navree::contracts::{BoxFuture, ZoneLevel, ZoneOwner, ZoneRequest, ZoneSource};
-use navree::db::Db;
+use navree::db::{Db, Executor, Statement};
 use navree::prelude::*;
-use sea_orm::ConnectionTrait;
-use sea_orm::sea_query::{self, Expr, ExprTrait};
 
 /// The zone of each user, from `users.timezone`.
 pub struct UserZones {
@@ -127,14 +125,10 @@ pub struct UserZones {
 
 impl UserZones {
     async fn find(&self, id: Uuid) -> Result<Option<ZoneOwner>, BoxError> {
-        let query = sea_query::Query::select()
-            .column("timezone")
-            .from("users")
-            .and_where(Expr::col("id").eq(id))
-            .to_owned();
-        Ok(match self.db.conn().query_one(&query).await? {
+        let statement = Statement::portable("SELECT timezone FROM users WHERE id = ?", [id.into()]);
+        Ok(match self.db.fetch_optional(&statement).await? {
             Some(row) => {
-                let zone: Option<String> = row.try_get("", "timezone")?;
+                let zone: Option<String> = row.get("timezone")?;
                 Some(ZoneOwner { id, zone, country: None })
             }
             None => None,
@@ -206,10 +200,10 @@ async fn signups(
     uow: Uow,
 ) -> Result<WithZone<SignupReport>> {
     let (from, to) = range.utc_bounds(&zone);
-    let signups = signup::Entity::find()
-        .filter(signup::Column::CreatedAt.gte(from))
-        .filter(signup::Column::CreatedAt.lt(to))
-        .count(&*uow.tx().await?)
+    let signups = Signup::query()
+        .where_(Signup::CREATED_AT.gte(from))
+        .where_(Signup::CREATED_AT.lt(to))
+        .count(&uow)
         .await?;
     Ok(WithZone::new(&zone, SignupReport { from, to, signups }))
 }

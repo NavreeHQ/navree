@@ -194,36 +194,6 @@ Deal::factory().count(10).recycle(&companies).state(DealFactory::won).create(db)
 
 `navree make:factory deals deal` writes a factory, and `navree make:model deals Deal --factory` links one to a new model. [Factories](/docs/orm/factories/) covers the rest: the faker, states, sequences, parents and children, many-to-many attachments, recycled records and hooks.
 
-### SeaORM entity factories
-
-Entities have a simpler factory trait, `navree::db::Factory`: `Entity` is the entity it builds, and `definition(n)` returns the active model of the `n`-th record of a batch. `create` inserts one record (definition 0) and `create_many` the definitions `0..n`, in order, on any SeaORM connection:
-
-```rust
-use navree::db::{Factory, create, create_many};
-
-impl Factory for CompanyFactory {
-    type Entity = company::Entity;
-
-    fn definition(&self, n: usize) -> company::ActiveModel {
-        let now = Utc::now();
-        company::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            name: Set(format!("Company {n}")),
-            domain: Set(Some(format!("company{n}.test"))),
-            owner_id: Set(self.owner_id),
-            created_at: Set(now),
-            updated_at: Set(now),
-            deleted_at: Set(None),
-        }
-    }
-}
-
-let acme = create(&CompanyFactory { owner_id }, db.conn()).await?;
-let companies = create_many(&CompanyFactory { owner_id }, db.conn(), 10).await?;
-```
-
-In `navree::prelude`, this trait is called `ModelFactory`, because `Factory` there is the kernel's provider factory; a file that writes ORM factories imports `navree::orm::factory::ModelFactory` by its path. Entity factories insert with plain SeaORM: they record no change events, run no services' rules, and `n` counts from 0 in every call, so a column derived only from `n` repeats across calls.
-
 <LinkCards>
   <LinkCard href="/docs/orm/factories/" title="Factories">
     Definitions, fake data, states, relationships and recycling.

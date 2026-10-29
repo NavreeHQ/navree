@@ -10,10 +10,10 @@ use navree::auth::{
     SignInPolicy, TwoFactorPolicy, User,
 };
 use navree::db::Db;
+use navree::db::{Executor as _, Statement};
 use navree::prelude::*;
 use navree::testing::{TestApp, TestAppBuilder};
 use navree::{BoxError, BoxFuture};
-use sea_orm::{ConnectionTrait, Statement};
 use serde_json::{Value, json};
 
 // ---------------------------------------------------------------------------
@@ -125,13 +125,12 @@ pub struct WorkspaceTwoFactorPolicy {
 impl TwoFactorPolicy for WorkspaceTwoFactorPolicy {
     fn requires_two_factor<'a>(&'a self, user: &'a User) -> BoxFuture<'a, Result<bool, BoxError>> {
         Box::pin(async move {
-            let conn = self.db.conn();
-            let row = conn
-                .query_one_raw(Statement::from_sql_and_values(
-                    conn.get_database_backend(),
+            let row = self
+                .db
+                .fetch_optional(&Statement::portable(
                     "SELECT 1 FROM workspace_members m \
                      JOIN workspace_security s ON s.workspace_id = m.workspace_id \
-                     WHERE m.user_id = $1 AND s.require_two_factor",
+                     WHERE m.user_id = ? AND s.require_two_factor",
                     [user.id.into()],
                 ))
                 .await?;
@@ -185,13 +184,7 @@ async fn create_policy_tables(app: &TestApp) {
         "CREATE TABLE workspace_members (workspace_id INTEGER, user_id TEXT)",
         "CREATE TABLE workspace_security (workspace_id INTEGER, require_two_factor BOOLEAN)",
     ] {
-        db.conn()
-            .execute_raw(Statement::from_string(
-                db.conn().get_database_backend(),
-                sql,
-            ))
-            .await
-            .unwrap();
+        db.execute(&Statement::text(sql)).await.unwrap();
     }
 }
 
@@ -348,23 +341,18 @@ async fn the_workspace_policy_example_limits_members() {
         .await
         .unwrap();
     let db = app.get::<Db>().await;
-    let backend = db.conn().get_database_backend();
-    db.conn()
-        .execute_raw(Statement::from_sql_and_values(
-            backend,
-            "INSERT INTO workspace_members (workspace_id, user_id) VALUES (1, $1)",
-            [ada.id.into()],
-        ))
-        .await
-        .unwrap();
+    db.execute(&Statement::portable(
+        "INSERT INTO workspace_members (workspace_id, user_id) VALUES (1, ?)",
+        [ada.id.into()],
+    ))
+    .await
+    .unwrap();
     assert!(!service.two_factor_required(&ada).await.unwrap());
-    db.conn()
-        .execute_raw(Statement::from_string(
-            backend,
-            "INSERT INTO workspace_security (workspace_id, require_two_factor) VALUES (1, true)",
-        ))
-        .await
-        .unwrap();
+    db.execute(&Statement::text(
+        "INSERT INTO workspace_security (workspace_id, require_two_factor) VALUES (1, true)",
+    ))
+    .await
+    .unwrap();
     assert!(service.two_factor_required(&ada).await.unwrap());
     app.client()
         .post("/api/auth/login")

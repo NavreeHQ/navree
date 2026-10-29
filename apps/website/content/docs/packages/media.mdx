@@ -308,7 +308,7 @@ media.delete_all(&uow, course.model()).await?;           // every file of the mo
 
 The rows go in the unit of work; the files (the original, its conversions and responsive variants, everything under `{prefix}/{id}/` on both disks) are deleted after it commits, so a rollback keeps them. Without a unit of work they go at once.
 
-When a model registered with `MediaModule::for_feature` names its `MEDIA_TABLE`, deleting one of its rows takes its media along: a change observer deletes the rows in the same transaction and the files after the commit. It sees deletes that record change events (a navree-orm record's `delete`, `Model::destroy`, `Repo::delete`); bulk deletes from the query builder record none, so delete their media with `delete_all` first. Models with a `deleted_at` column keep their media when they are deleted, since a soft delete and a force delete look the same to the observer: call `delete_all` when you force-delete one. `media.delete_with_model = false` turns the observer off.
+When a model registered with `MediaModule::for_feature` names its `MEDIA_TABLE`, deleting one of its rows takes its media along: a change observer deletes the rows in the same transaction and the files after the commit. It sees deletes that record change events (a navree-orm record's `delete`, `Model::destroy`); bulk deletes from the query builder record none, so delete their media with `delete_all` first. Models with a `deleted_at` column keep their media when they are deleted, since a soft delete and a force delete look the same to the observer: call `delete_all` when you force-delete one. `media.delete_with_model = false` turns the observer off.
 
 ## Conversions
 

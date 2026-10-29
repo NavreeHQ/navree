@@ -75,7 +75,7 @@ To use Navree in a Cargo package you already have, add it from the Git repositor
 cargo add --git https://github.com/NavreeHQ/navree navree
 ```
 
-This adds a Git dependency with every module, since the `full` feature is on by default. The derive macros of serde, SeaORM and garde name their own crates, so add `serde`, `sea-orm` and `garde` too; a new app's `Cargo.toml` shows the versions and features.
+This adds a Git dependency with every module, since the `full` feature is on by default. The derive macros of serde and garde name their own crates, so add `serde` and `garde` too (the ORM's `#[derive(Model)]` comes with `navree`); a new app's `Cargo.toml` shows the versions and features.
 
 ## Creating an application
 

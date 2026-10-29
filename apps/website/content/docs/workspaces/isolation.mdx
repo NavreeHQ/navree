@@ -49,8 +49,6 @@ async fn index(&self, ws: CurrentWorkspace, uow: Uow, page: PageQuery) -> Result
 }
 ```
 
-An app's remaining SeaORM entities keep working through `navree::workspace::sea_compat`, which has the SeaORM forms of `WorkspaceScoped` and `WorkspaceRepo` and the module registrations (`sea_workspace_scoped`, `sea_workspace_entity`, `sea_global_entity`): the forms the `workspace.*` conformity checks name. It has no partition or organization forms. It goes away once the last SeaORM entity is ported; everything on this page uses models.
-
 ### Records checked by route
 
 A route that checks a record, `#[can(Update, Deal, from = "id")]`, loads it by primary key before the handler runs. Register the model as workspace-scoped in its module, and the [`InWorkspace` guard](/docs/workspaces/resolution/#the-inworkspace-guard) first confirms the record belongs to the current workspace; a record of another workspace is a 404, whatever the member's role:
@@ -80,7 +78,7 @@ impl DealsModule {
 
 ### Row-level security on PostgreSQL
 
-On PostgreSQL, the database enforces the scope too. Every workspace request sets the setting `navree.workspace` to the workspace's id for its transaction (with `Uow::set_local`, so it ends with the transaction), next to the `navree.actor` and `navree.request_id` settings navree-db sets. A row-level security policy compares each row's column with it. Every statement of that unit of work is covered, navree-orm queries and raw navree-db statements alike, on either kind of transaction a unit of work can run on (`database.native_units_of_work`). `RlsPolicy` writes the SQL; run it in the table's migration, on PostgreSQL only:
+On PostgreSQL, the database enforces the scope too. Every workspace request sets the setting `navree.workspace` to the workspace's id for its transaction (with `Uow::set_local`, so it ends with the transaction), next to the `navree.actor` and `navree.request_id` settings navree-db sets. A row-level security policy compares each row's column with it. Every statement of that unit of work is covered, navree-orm queries and raw navree-db statements alike. `RlsPolicy` writes the SQL; run it in the table's migration, on PostgreSQL only:
 
 ```rust title="src/deals/migration.rs"
 use navree::schema::{Dialect, Migration, Schema, SchemaResult};
@@ -196,7 +194,7 @@ impl NotesModule {
 }
 ```
 
-Workspace migrations must be navree-schema migrations: the per-workspace runner refuses SeaORM ones.
+Workspace migrations must be navree-schema migrations: the per-workspace runner refuses any other kind.
 
 - Creating a workspace creates its schema and runs every workspace migration in it, in the same transaction.
 - Each schema records its own migrations in its own `navree_migrations` table.

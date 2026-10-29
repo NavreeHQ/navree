@@ -29,10 +29,10 @@ Usage: navree <COMMAND>
 
 Commands:
   new                Create a new app in ./NAME
-  make:module        Generate a feature module: mod.rs, controller.rs, service.rs, entity.rs, dto.rs, migrations/, tests/
+  make:module        Generate a feature module: mod.rs, controller.rs, service.rs, entity.rs (the model), dto.rs, migrations/, tests/
   make:controller    Generate a controller in a module (controllers/NAME.rs)
   make:service       Generate a service in a module (services/NAME.rs)
-  make:entity        Generate a database entity in a module (entities/NAME.rs)
+  make:entity        Generate a minimal ORM model in a module (entities/NAME.rs)
   make:migration     Generate a migration in a module (create_TABLE_table creates the table)
   make:job           Generate a queued job in a module (jobs/NAME.rs)
   make:event         Generate an event in a module (events/NAME.rs)
@@ -141,7 +141,7 @@ navree make:module posts --crud
   updated  src/app.rs
 ```
 
-With `--crud`, the module serves the five JSON resource routes under `/api/v1/posts` (list, show, create, update, delete), each guarded by abilities on its entity, with validated DTOs and tests. Without it, the module has one authenticated `index` route to start from. Use the plural for the name: `posts` gets the entity `Post` and the table `posts`. `--path` changes the modules directory (default `src/modules`).
+With `--crud`, the module serves the five JSON resource routes under `/api/v1/posts` (list, show, create, update, delete), each guarded by abilities on its model, with validated DTOs and tests. Without it, the module has one authenticated `index` route to start from. Use the plural for the name: `posts` gets the model `Post` and the table `posts`. `--path` changes the modules directory (default `src/modules`).
 
 ### Other generators
 
@@ -167,7 +167,7 @@ The report lists a file once per edit: here `mod.rs` gets the `pub mod jobs;` de
 | `make:model posts Tag` | `models/tag.rs`, an [ORM model](/docs/orm/models/) for `tags`; `--migration`, `--factory`, `--seeder`, `--controller` and `--policy` (or `--all`) add those, each referring to the others | `m.model::<..>()` and each companion's registration, in `wire` |
 | `make:factory posts tag` | `factories/tag.rs`, a [model factory](/docs/orm/factories/) (`--model <model>` when its name differs) | nothing; `#[model(factory = ..)]` links it |
 | `make:seeder posts demo_data` | `seeders/demo_data.rs`, a [seeder](/docs/database/seeding-and-factories/) named `demo_data` | the seeder, in `wire` |
-| `make:entity posts tag` | `entities/tag.rs`, a SeaORM entity for `tags` | nothing; prints the `make:migration` to run next |
+| `make:entity posts tag` | `entities/tag.rs`, a minimal [ORM model](/docs/orm/models/) for `tags` (an id and the two timestamps) | nothing; prints the `make:migration` to run next |
 | `make:migration posts create_tags_table` | `migrations/m<timestamp>_create_tags_table.rs` | adds it to the module's migration set. A `create_<table>_table` name generates a table-creating migration |
 | `make:job posts publish_post` | `jobs/publish_post.rs`, a job named `posts.publish_post` | the job, in `wire` |
 | `make:event posts post_published` | `events/post_published.rs` | nothing (events need no registration) |
@@ -180,7 +180,7 @@ The report lists a file once per edit: here `mod.rs` gets the `pub mod jobs;` de
 | `make:test posts publishing` | `tests/publishing.rs`, a test booting the module | declares it in `tests/mod.rs` |
 | `make:mcp posts assistant` | `mcp/assistant.rs`, `AssistantMcp`, an [MCP server](/docs/ai/mcp-servers/) with one tool (`assistant_echo`) | `m.mcp_server::<..>()`, in `wire`; prints the steps it leaves to you (the `mcp` feature, utoipa, `McpModule`) |
 
-`make:listener --event` needs the event to exist (`make:event` first). The guides for each kind say what to fill in: [controllers](/docs/basics/routing/), [entities](/docs/database/entities-and-repositories/), [migrations](/docs/database/migrations/), [jobs](/docs/digging-deeper/queues/), [events and listeners](/docs/digging-deeper/events/), [mail](/docs/digging-deeper/mail/), [notifications](/docs/digging-deeper/notifications/), [policies](/docs/security/authorization/), [tests](/docs/testing/getting-started/) and [MCP servers](/docs/ai/mcp-servers/).
+`make:listener --event` needs the event to exist (`make:event` first). The guides for each kind say what to fill in: [controllers](/docs/basics/routing/), [models](/docs/orm/models/), [migrations](/docs/database/migrations/), [jobs](/docs/digging-deeper/queues/), [events and listeners](/docs/digging-deeper/events/), [mail](/docs/digging-deeper/mail/), [notifications](/docs/digging-deeper/notifications/), [policies](/docs/security/authorization/), [tests](/docs/testing/getting-started/) and [MCP servers](/docs/ai/mcp-servers/).
 
 ## The development server
 

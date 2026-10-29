@@ -64,7 +64,7 @@ navree make:resource deals Deal          # module, model (Deal or deal); --path 
    registers it at the `// navree:wire` marker with
    `navree::helm::ModuleBuilderHelmExt::resource::<..>(m)`. If the model is
    no access subject, it prints what to add (`subject` in its
-   `#[model(..)]`): Helm needs one. A SeaORM entity is not a resource.
+   `#[model(..)]`): Helm needs one. Only an ORM model is a resource.
 
 4. Open `http://127.0.0.1:8080/admin` and sign in with an app account. When
    the account has two-factor authentication on, the panel asks for the code

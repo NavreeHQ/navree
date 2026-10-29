@@ -161,7 +161,7 @@ pub struct DealsModule;
 
 impl DealsModule {
     fn wire(&self, m: &mut ModuleBuilder) {
-        m.import(AccessModule::for_feature::<deal::Entity>())
+        m.import(AccessModule::for_feature::<Deal>())
             .grpc_service::<DealsGrpc>()                     // singleton of this module, served
             .grpc_descriptors(grpc::pb::FILE_DESCRIPTOR_SET); // reflection + Connect JSON
     }

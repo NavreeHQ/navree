@@ -294,10 +294,10 @@ navree model:prune           # deletes what prunable models select
 - `use navree::prelude::*;` alone for `#[relations]` or `#[scopes]`: they
   come from `navree::orm::prelude`.
 - Calling a scope without importing its trait (`DealScopes`).
-- Passing `db.conn()` (a SeaORM connection) in a request: its writes skip
-  the unit of work, so they neither roll back with the request nor reach
-  the audit log. Pass `&uow`, or `&db`, which joins the request's unit of
-  work.
+- Passing the pool (`db.pool()`) or a `Transaction` from `db.begin()` in a
+  request: its writes skip the unit of work, so they neither roll back with
+  the request nor reach the audit log. Pass `&uow`, or `&db`, which joins
+  the request's unit of work.
 - Lazy loads in a loop (N+1): eager load with `with`.
 - `latest()` on a model without `timestamps`: use `latest_by(column)`.
 - Mass updates and deletes (`query.update`, `query.delete`, bulk inserts)
@@ -309,8 +309,8 @@ navree model:prune           # deletes what prunable models select
   the status. A rule that must hold even inside `without_events` is a
   `ModelHook` (a behavior, `m.multi(Factory::<dyn ModelHook<M>>..)`), not
   an observer; `navree::orm::workspace::current_in(ctx)` is its workspace.
-- `navree::prelude::ModelFactory` is navree-db's entity factory; ORM
-  factories implement `navree::orm::factory::ModelFactory`.
+- Factories implement `navree::orm::factory::ModelFactory`: import the
+  trait from there.
 - A MySQL table made with `uuid_primary()` (`CHAR(36)`): inserting a model
   fails with error 1366; declare `t.binary("id").length(16).fixed()`.
 

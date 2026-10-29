@@ -36,8 +36,7 @@ impl DealFactory {
 Link it on the model with `#[model(factory = DealFactory)]`, which gives
 `Deal::factory()`. `navree make:factory deals deal` writes one;
 `navree make:model deals Deal --factory` links one to a new model. The
-trait is `navree::orm::factory::ModelFactory` (the prelude's
-`ModelFactory` is navree-db's SeaORM entity factory).
+trait is `navree::orm::factory::ModelFactory`.
 
 | Builder | Does |
 |---|---|

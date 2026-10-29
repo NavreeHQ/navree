@@ -152,7 +152,7 @@ impl DealsModule {
 | `ctx.principal()?` | `&Principal`; `UNAUTHENTICATED` for guests |
 | `ctx.current_user().await?` | `navree::auth::User` (needs `AuthModule`) |
 | `ctx.abilities().await?` | `Arc<Ability>` |
-| `ctx.accessible::<E, A>().await?` | `Accessible<E, A>` (`.apply(Entity::find())`) |
+| `ctx.accessible::<E, A>().await?` | `Accessible<E, A>` (`.query()`, `.apply(E::query())`) |
 | `ctx.authorized::<E, A>()?` | `Authorized<E, A>` of the field's `#[can(A, E, from = ..)]` |
 | `ctx.workspace().await?` | `CurrentWorkspace` (from `X-Workspace`, subdomain or claim) |
 | `ctx.loader::<L>()` | `&RequestLoader<L>`; panics if `L` is not registered |
@@ -168,14 +168,15 @@ pub struct CompanyLoader {
 
 impl Loader<Uuid> for CompanyLoader {          // navree::graphql::Loader
     type Value = CompanyObject;
-    type Error = Arc<DbErr>;
+    type Error = Arc<OrmError>;
 
     async fn load(&self, ids: &[Uuid]) -> Result<HashMap<Uuid, CompanyObject>, Self::Error> {
-        let rows = company::Entity::find()
-            .filter(company::Column::Id.is_in(ids.iter().copied()))
-            .all(self.db.conn())
-            .await?;
-        Ok(rows.into_iter().map(|c| (c.id, c.into())).collect())
+        let rows = Company::query()
+            .where_key_in(ids.iter().copied())
+            .get(&*self.db)
+            .await
+            .map_err(Arc::new)?;
+        Ok(rows.into_iter().map(|c| (c.id, CompanyObject::from(&*c))).collect())
     }
 }
 
@@ -233,7 +234,7 @@ plain name or `name:port` leaves `'self'`), so a proxy must forward `Host`. In c
 `extensions` carries `code` (`BAD_REQUEST`, `UNAUTHENTICATED`, `FORBIDDEN`,
 `NOT_FOUND`, `CONFLICT`, `INTERNAL_SERVER_ERROR`, ...), `statusCode`,
 `error` and, for `Valid<T>` failures, `errors` (`{"input.position": [..]}`).
-`AppError` keeps its status, `DbErr` maps like on routes, `m.map_error::<E>`
+`AppError` keeps its status, `OrmError` and `DbError` map like on routes, `m.map_error::<E>`
 mappings apply, plain messages are `BAD_REQUEST`, anything else is a 500
 with message `Internal server error` (logged on `navree::error`).
 HTTP status: 200 when the operation ran (even with field errors); 400 for a

@@ -93,7 +93,7 @@ app.isolation_suite::<DealsModule>()
 
 Each record goes into the workspace the suite asks for: through `WorkspaceRepo::insert` under row isolation, and created through the model API in the workspace's own schema or database under schema and database isolation, with its workspace column set when the table keeps one. On PostgreSQL the insert runs inside the workspace, so a table with [row-level security](/docs/workspaces/isolation/#row-level-security-on-postgresql) accepts it.
 
-The suite tests what the routes do, not how the code is written. A handler that reads by id without the workspace filter still passes when row-level security or a per-workspace schema keeps the record out of reach; the [`workspace.repo` check](/docs/testing/conformity-checks/#workspace-data-through-workspacerepo) is the one that asks for `WorkspaceRepo` in the code.
+The suite tests what the routes do, not how the code is written. A handler that reads by id without the workspace filter still passes when row-level security or a per-workspace schema keeps the record out of reach; a `#[model(workspace)]` model scopes its own queries, so the filter can't be left out of the code at all ([workspace tables](/docs/testing/conformity-checks/#workspace-tables) shows how such tables are checked).
 
 A nested route such as `/deals/{deal}/notes/{note}` needs a note that belongs to the deal. Bind it with `.record`, whose closure gets the parameters bound before it:
 

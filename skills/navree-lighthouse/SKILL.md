@@ -106,7 +106,7 @@ Numbers, UUIDs, quoted strings, emails and hex ids in messages are replaced
 before hashing. 4xx responses only count towards the route's error rate.
 Lighthouse's own routes, `lighthouse.ignore.routes` (`/health/*`, `/metrics`),
 `lighthouse.ignore.jobs` and `lighthouse.alert` jobs are never recorded.
-Queries run with `execute_unprepared` are not timed by SeaORM, so they never
+Scripts run with `Executor::execute_script` are not timed, so they never
 show up.
 
 ## Counts, sampling and load
