@@ -26,8 +26,7 @@ Principles:
   the page shape stay in navree-db. Every statement runs through them, so
   audit trails, workspace isolation and after-commit work keep working.
   The ORM runs on navree-db's engine (its values, rows, pools,
-  transactions and executor); SeaORM entities keep working beside ORM
-  models while crates move off them (same pool, same unit of work).
+  transactions and executor).
 - **One driver abstraction.** A query is first a driver-neutral value (the
   IR, `navree_orm::ir`), then SQL for PostgreSQL/TimescaleDB, MySQL or
   SQLite written by the ORM's own renderer (`navree_orm::render`, section
@@ -593,8 +592,7 @@ connection its query names, else its model's, else (inside
 `DbConnections`; a named connection's `Db` runs what it is given unless
 the query names another; a `Uow` refuses an operation on another
 connection (`OrmError::Connection`: a unit of work spans one
-connection); SeaORM connections, transactions and document stores run
-what they are given. A write through `Db` or `Uow` marks the task's unit
+connection); document stores run what they are given. A write through `Db` or `Uow` marks the task's unit
 of work as having written (`Uow::has_modified_records`), so with replicas
 and `sticky` its later reads stay on the writer. `Target` runs IR:
 `fetch`, `stream`, `aggregate`, `exists`, `insert`, `update`, `delete`,
@@ -643,19 +641,13 @@ buckets emulated on MySQL and SQLite with TimescaleDB's origin, Monday
 path (`->>`) is compared with the JSON text of a non-string value.
 Statements run through navree-db's `Executor`: a pool of navree-db's own
 (the writer, or a replica for reads outside a unit of work), the unit of
-work (its transaction, navree-db's or, by default while crates move off
-SeaORM, SeaORM's), or a transaction or savepoint the ORM began
-(`OwnTransaction`: a transaction on the pool, `Transaction::savepoint`,
-`Uow::savepoint`, or a SeaORM savepoint of a unit of work on SeaORM's
-transaction). navree-db times and reports every statement (query log,
-listeners, before-executing hooks, telemetry, slow-query warnings); the
-ORM runs the hooks itself only for the statements that go through
-SeaORM. A read on a pool that loses its connection (`DbError` of kind
+work (its transaction), or a transaction or savepoint the ORM began
+(`OwnTransaction`: a transaction on the pool, `Transaction::savepoint`
+or `Uow::savepoint`). navree-db times and reports every statement (query
+log, listeners, before-executing hooks, telemetry, slow-query warnings).
+A read on a pool that loses its connection (`DbError` of kind
 `ConnectionLost`, or a driver message saying so) runs once more; a
-cursor holds its transaction's connection (`ensure_free`). SeaORM's
-`DatabaseConnection` and `DatabaseTransaction` stay executors while
-crates still hand them over (`exec/sea.rs`, through navree-db's bridge;
-their cursors read through SeaORM's own).
+cursor holds its transaction's connection (`ensure_free`).
 
 ### The renderer (`render/`)
 
@@ -737,11 +729,10 @@ test reads its sources to keep it so); its values are
   with `NULLS LAST` on MySQL), the case says so and the run requires the
   difference.
 
-No sea-query is left in the ORM: `Where::Sql` and
-`From<sea_query::Condition>` went with the data-layer move's step 5
-(navree-access builds its filters as `SqlFilter`s). SeaORM's connections
-and transactions still serve as executors (`exec/sea.rs`) until units of
-work run on navree-db's transactions only (step 8).
+The renderer replaced the earlier compiler entirely: `Where::Sql` went
+with the data-layer move's step 5 (navree-access builds its filters as
+`SqlFilter`s), and since step 8 units of work run on navree-db's
+transactions only.
 
 ### Document drivers (`driver.rs`)
 
@@ -827,9 +818,7 @@ into the requested type.
 
 `is_not_found()`, `is_unique_violation()`, `is_foreign_key_violation()`,
 `is_timeout()` and `is_lost_connection()` classify; `db_error()` gives the
-`DbError` of `Db`, `ModelNotFound` and `Timeout`. `From<DbErr>` (SeaORM
-statements run inside ORM code while crates move off SeaORM) converts
-through navree-db's `DbError::from`. Messages name the model, the column
+`DbError` of `Db`, `ModelNotFound` and `Timeout`. Messages name the model, the column
 and the operation; no SQL or values reach clients (navree-http logs the
 source of 500s).
 
@@ -1373,7 +1362,7 @@ Built. What each part is and where it plugs in:
   and a blanket `impl<M: Model + Subject> SubjectRecords for M` in
   navree-orm breaks the orphan rule (a foreign trait for an uncovered type
   parameter). Records load through the ORM in the unit of work the request
-  runs in, on navree-db's own transaction as on SeaORM's.
+  runs in.
 - **Validation** (`src/validation.rs`, feature `validation`): `unique`
   and `exists` build navree-validation `AsyncRule`s over a `UowCheck` that
   queries the model in the request's unit of work (scopes and workspace
@@ -1390,8 +1379,7 @@ Built. What each part is and where it plugs in:
   controller binds records by route key or checks abilities when there is
   a policy, the seeder uses the factory; the module registers the model,
   its access feature, seeder and controller), `make:factory <module> <name>
-  [--model M]`, `make:seeder <module> <name>`. `--resource` is not offered:
-  admin-panel resources are built from SeaORM entities.
+  [--model M]`, `make:seeder <module> <name>`.
 
 ### mongodb
 
@@ -1441,6 +1429,14 @@ opt-in); its `DESIGN.md` has the details.
 The framework crates' tables are navree-orm models, and the crates read
 and write them through the ORM where that keeps behaviour and reads
 better.
+
+(History: this section records how the tables moved while SeaORM was
+still in the tree. The data-layer move, steps 5 to 8
+(`docs/design`),
+replaced what it describes as transitional: the dual derives, `Repo`,
+`db.conn()` and `&*tx` executors, `DbErr` conversions and the SeaORM
+migrations are gone; every table is a model or a navree-db record, and
+every migration a navree-schema one.)
 
 - **One struct, two derives.** A table whose SeaORM entity is public API
   (apps, Helm's panels and tests query `Entity`, `Column` and
