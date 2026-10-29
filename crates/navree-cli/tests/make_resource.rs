@@ -168,7 +168,9 @@ fn missing_modules_models_and_existing_files_are_errors() {
     let error = make_resource(&root, "src/modules", &name("deals"), "Contact").unwrap_err();
     assert!(
         error.to_string().contains("model `contact` not found")
-            && error.to_string().contains("navree make:model deals contact"),
+            && error
+                .to_string()
+                .contains("navree make:model deals contact"),
         "{error}"
     );
     let error = make_resource(&root, "src/modules", &name("deals"), "123").unwrap_err();

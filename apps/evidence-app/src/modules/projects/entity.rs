@@ -17,17 +17,14 @@ use serde::Serialize;
 /// admin panel lists (`ProjectAdmin`). The ORM derive names its trait by
 /// path, since the struct is called `Model`.
 #[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    DeriveEntityModel,
-    navree::orm::Model,
-    Serialize,
-    Searchable,
+    Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree::orm::Model, Serialize, Searchable,
 )]
 #[sea_orm(table_name = "projects")]
-#[model(table = "projects", subject = "Project", permission_prefix = "projects")]
+#[model(
+    table = "projects",
+    subject = "Project",
+    permission_prefix = "projects"
+)]
 #[searchable(name = "Project", workspace = "workspace_id")]
 pub struct Model {
     /// The id (UUID v7).

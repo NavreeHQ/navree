@@ -77,7 +77,11 @@ mod models {
     }
 
     #[derive(Model, Clone, Debug, Default, Serialize)]
-    #[model(table = "companies", subject = "Company", permission_prefix = "companies")]
+    #[model(
+        table = "companies",
+        subject = "Company",
+        permission_prefix = "companies"
+    )]
     pub struct Company {
         pub id: Uuid,
         pub name: String,
@@ -88,7 +92,11 @@ mod models {
     }
 
     #[derive(Model, Clone, Debug, Default, Serialize)]
-    #[model(table = "contacts", subject = "Contact", permission_prefix = "contacts")]
+    #[model(
+        table = "contacts",
+        subject = "Contact",
+        permission_prefix = "contacts"
+    )]
     pub struct Contact {
         pub id: Uuid,
         pub name: String,
@@ -400,13 +408,9 @@ struct DealsModule;
 
 impl DealsModule {
     fn wire(&self, m: &mut ModuleBuilder) {
-        m.migrations(
-            MigrationSet::new("sales")
-                .after(["auth"])
-                .migration(navree::schema::migration!(
-                    m20261026_000001_create_sales_tables
-                )),
-        );
+        m.migrations(MigrationSet::new("sales").after(["auth"]).migration(
+            navree::schema::migration!(m20261026_000001_create_sales_tables),
+        ));
         m.resource::<DealResource>();
         m.resource::<CompanyResource>();
         m.resource::<ContactResource>();

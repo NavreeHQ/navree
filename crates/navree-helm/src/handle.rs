@@ -850,8 +850,7 @@ impl<R: Resource> Handle<R> {
             };
             query = query.order_by_dir(values::qualified::<R::Model>(column_name), direction);
             if column_name != self.info.pk {
-                query =
-                    query.order_by_dir(values::qualified::<R::Model>(self.info.pk), direction);
+                query = query.order_by_dir(values::qualified::<R::Model>(self.info.pk), direction);
             }
         }
         let per_page = q.per_page.unwrap_or(self.info.per_page);
@@ -936,7 +935,8 @@ impl<R: Resource> Handle<R> {
                 }
                 if let Some(to) = to {
                     let end = to + Duration::days(1);
-                    query = query.where_(self.col(name).lt(values::date_bound(shape, midnight(end))));
+                    query =
+                        query.where_(self.col(name).lt(values::date_bound(shape, midnight(end))));
                 }
                 Ok(query)
             }
@@ -1029,11 +1029,7 @@ impl<R: Resource> Handle<R> {
                         .aggregate(cx, between(start, end), &metric.aggregate)
                         .await?;
                     result.previous = self
-                        .aggregate(
-                            cx,
-                            between(previous_start, previous_end),
-                            &metric.aggregate,
-                        )
+                        .aggregate(cx, between(previous_start, previous_end), &metric.aggregate)
                         .await?;
                     result.range = Some(range.as_str());
                     result.ranges = MetricRange::ALL
@@ -1082,10 +1078,7 @@ impl<R: Resource> Handle<R> {
                 let mut grouped: Vec<Vec<f64>> = vec![Vec::new(); buckets.len()];
                 for record in &records {
                     let model = record.model();
-                    let Some(day) = model
-                        .value(column)?
-                        .as_ref()
-                        .and_then(values::value_date)
+                    let Some(day) = model.value(column)?.as_ref().and_then(values::value_date)
                     else {
                         continue;
                     };
@@ -1252,12 +1245,16 @@ fn group_key(row: &Row, column: &str, shape: Shape) -> String {
             .ok()
             .flatten()
             .map(|d| d.format("%Y-%m-%d").to_string()),
-        _ => row.get::<Option<String>>(column).ok().flatten().or_else(|| {
-            row.value(column)
-                .ok()
-                .filter(|v| !matches!(v, Value::Null(_)))
-                .and_then(|v| key_text(&navree_orm::to_json(&v)))
-        }),
+        _ => row
+            .get::<Option<String>>(column)
+            .ok()
+            .flatten()
+            .or_else(|| {
+                row.value(column)
+                    .ok()
+                    .filter(|v| !matches!(v, Value::Null(_)))
+                    .and_then(|v| key_text(&navree_orm::to_json(&v)))
+            }),
     };
     text.unwrap_or_default()
 }

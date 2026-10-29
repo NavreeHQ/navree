@@ -42,7 +42,11 @@ pub fn now() -> DateTime<Utc> {
 /// (`#[model(hidden)]`), so it never reaches a change event or the audit
 /// log, even when the panel edits it.
 #[derive(navree_orm::Model, Clone, Debug, Default, PartialEq, Serialize)]
-#[model(table = "companies", subject = "Company", permission_prefix = "companies")]
+#[model(
+    table = "companies",
+    subject = "Company",
+    permission_prefix = "companies"
+)]
 pub struct Company {
     pub id: Uuid,
     pub name: String,
@@ -284,14 +288,12 @@ impl Resource for DealResource {
                     query
                 }
             }),
-            Filter::custom(
-                "min_amount",
-                "At least (cents)",
-                |query, value| match value.parse::<i64>() {
-                    Ok(min) => query.where_(Deal::AMOUNT_CENTS.gte(min)),
-                    Err(_) => query,
-                },
-            ),
+            Filter::custom("min_amount", "At least (cents)", |query, value| match value
+                .parse::<i64>()
+            {
+                Ok(min) => query.where_(Deal::AMOUNT_CENTS.gte(min)),
+                Err(_) => query,
+            }),
         ]
     }
 
@@ -574,7 +576,10 @@ pub async fn reload(app: &TestApp, id: Uuid) -> Option<Deal> {
 /// Reads a company back (soft-deleted ones too).
 pub async fn reload_company(app: &TestApp, id: Uuid) -> Option<Company> {
     let db = app.get::<Db>().await;
-    Company::find(&*db, id).await.unwrap().map(Record::into_inner)
+    Company::find(&*db, id)
+        .await
+        .unwrap()
+        .map(Record::into_inner)
 }
 
 /// The ids in a list response.

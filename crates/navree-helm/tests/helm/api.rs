@@ -4,8 +4,8 @@ use chrono::NaiveDate;
 use navree_audit::AuditModule;
 use navree_db::Db;
 use navree_helm::FormData;
-use navree_testing::principal;
 use navree_orm::{Assignment, Model};
+use navree_testing::principal;
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
@@ -875,7 +875,10 @@ async fn hidden_fields_stay_out_of_change_events_and_audit_entries() {
     );
     let text = serde_json::to_string(&rows).unwrap();
     assert!(text.contains("Initech"), "{text}");
-    assert!(!text.contains("tok-"), "a secret reached the audit log: {text}");
+    assert!(
+        !text.contains("tok-"),
+        "a secret reached the audit log: {text}"
+    );
     assert!(!text.contains("api_token"), "{text}");
 }
 

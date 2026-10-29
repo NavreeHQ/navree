@@ -218,7 +218,10 @@ async fn a_soft_deleting_model_is_trashed_by_the_default_delete() {
         .assert_status(204);
     let trashed = reload_document(&app, id).await;
     assert_eq!(trashed.name, "Lease, signed");
-    assert!(trashed.deleted_at.is_some(), "the row is trashed, not removed");
+    assert!(
+        trashed.deleted_at.is_some(),
+        "the row is trashed, not removed"
+    );
     admin
         .get("/admin/api/resources/documents")
         .send()

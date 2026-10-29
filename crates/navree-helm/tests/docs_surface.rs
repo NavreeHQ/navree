@@ -16,7 +16,8 @@ use navree_contracts::Job;
 use navree_helm::{
     Action, ActionContext, ActionResult, DEFAULT_MAX_FILE_BYTES, Field, Filter, FormData,
     HELM_SUBJECT, Helm, HelmActionJob, HelmModule, HelmOptions, HelmPage, Metric, MetricRange,
-    ModelOf, ModuleBuilderHelmExt, RecordOf, PageContext, Resource, SESSION_COOKIE, SaveContext, VIEW,
+    ModelOf, ModuleBuilderHelmExt, PageContext, RecordOf, Resource, SESSION_COOKIE, SaveContext,
+    VIEW,
 };
 use navree_http::AppError;
 use navree_kernel::{BoxFuture, ModuleBuilder};
@@ -128,18 +129,14 @@ impl Resource for EveryItem {
             Metric::value("Largest")
                 .max(Deal::AMOUNT_CENTS)
                 .over(Deal::CREATED_AT),
-            Metric::trend("By day")
-                .count()
-                .by_day(Deal::CREATED_AT, 30),
+            Metric::trend("By day").count().by_day(Deal::CREATED_AT, 30),
             Metric::trend("By week")
                 .count()
                 .by_week(Deal::CREATED_AT, 12),
             Metric::trend("By month")
                 .count()
                 .by_month(Deal::CREATED_AT, 12),
-            Metric::partition("By stage")
-                .count()
-                .group_by(Deal::STAGE),
+            Metric::partition("By stage").count().group_by(Deal::STAGE),
         ]
     }
 
