@@ -20,7 +20,7 @@ The examples build "Ask about this deal" in the CRM: a rep asks "What did they s
 
 <Callout type="tip" title="Search or RAG">
 
-To let people **find records** ("customers unhappy with onboarding"), use [Search](/docs/packages/search/): `#[derive(Searchable)]` keeps entities indexed for keyword and vector queries with the same `Embeddings`. Use what this page describes when a **model answers** from passages of your data.
+To let people **find records** ("customers unhappy with onboarding"), use [Search](/docs/packages/search/): `#[derive(Searchable)]` keeps models indexed for keyword and vector queries with the same `Embeddings`. Use what this page describes when a **model answers** from passages of your data.
 
 </Callout>
 
@@ -532,6 +532,6 @@ async fn answers_use_only_the_deals_own_activity() {
     Wrap retrieval in a tool the model calls when it needs to.
   </LinkCard>
   <LinkCard href="/docs/packages/search/" title="Search">
-    Keyword and vector search over your entities.
+    Keyword and vector search over your models.
   </LinkCard>
 </LinkCards>

@@ -1,6 +1,7 @@
-//! The migrations of the projects module.
+//! The migrations of the projects module, written with the schema builder.
 
 use navree::db::MigrationSet;
+use navree::schema::migration;
 
 mod m20261028_000001_create_projects_table;
 
@@ -8,5 +9,5 @@ mod m20261028_000001_create_projects_table;
 pub fn migrations() -> MigrationSet {
     MigrationSet::new("projects")
         .after(["workspace"])
-        .migration(m20261028_000001_create_projects_table::Migration)
+        .migration(migration!(m20261028_000001_create_projects_table))
 }

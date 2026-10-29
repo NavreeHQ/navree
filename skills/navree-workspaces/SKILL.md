@@ -531,11 +531,12 @@ Read invitation tokens from `app.get::<Mailer>().await.array_transport().unwrap(
   `library_read_only` (clone it), another workspace's item a 404; writing
   for another owner there needs `unguarded(..)` plus your own permission
   check.
-- Crates not yet on navree-orm keep their SeaORM entities working through
-  `navree::workspace::sea_compat::{WorkspaceScoped, PartitionScoped,
-  WorkspaceRepo, OrgRepo, PartitionRepo, ModuleBuilderSeaWorkspaceExt}`
-  (`sea_workspace_scoped`, `sea_workspace_entity`, `sea_global_entity`).
-  It is removed in step 8 of the data-layer port; write new code with models.
+- An app's remaining SeaORM entities keep working through
+  `navree::workspace::sea_compat::{WorkspaceScoped, WorkspaceRepo,
+  ModuleBuilderSeaWorkspaceExt}` (`sea_workspace_scoped`,
+  `sea_workspace_entity`, `sea_global_entity`), the forms the `workspace.*`
+  conformity checks name. It has no partition or organization forms. It is
+  removed in step 8 of the data-layer port; write new code with models.
 
 Docs: `/docs/workspaces/introduction/`, `/docs/workspaces/resolution/`,
 `/docs/workspaces/members-and-roles/`, `/docs/workspaces/invitations/`,
