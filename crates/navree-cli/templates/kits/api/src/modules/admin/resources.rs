@@ -1,9 +1,9 @@
 //! The admin panel's resources: what Helm shows and edits for each entity.
+//! (A subscriptions resource returns once Helm takes navree-orm models.)
 
 use garde::Validate;
 use navree::BoxFuture;
 use navree::auth::{AuthService, user};
-use navree::billing::entity::subscription;
 use navree::crypto::generate_key;
 use navree::helm::{Field, Filter, FormData, Metric, Resource, SaveContext};
 use navree::prelude::*;
@@ -80,93 +80,6 @@ impl Resource for UserAdmin {
             Ok(auth
                 .create_user(&input.name, &input.email, &generate_key())
                 .await?)
-        })
-    }
-}
-
-const STATUSES: [(&str, &str); 6] = [
-    ("trialing", "Trialing"),
-    ("active", "Active"),
-    ("past_due", "Past due"),
-    ("paused", "Paused"),
-    ("canceled", "Canceled"),
-    ("incomplete", "Incomplete"),
-];
-
-/// Subscriptions: the local copy of the payment provider's, read-only (they
-/// change through checkout, the customer portal and the provider's
-/// webhooks).
-#[injectable]
-pub struct SubscriptionAdmin;
-
-impl Resource for SubscriptionAdmin {
-    type Entity = subscription::Entity;
-
-    const LABEL: &'static str = "Subscriptions";
-    const SINGULAR: &'static str = "Subscription";
-    const GROUP: &'static str = "Billing";
-    const ICON: &'static str = "credit-card";
-    const TITLE: &'static str = "plan";
-    const SEARCH: &'static [&'static str] = &["plan", "provider_id"];
-
-    fn fields(&self) -> Vec<Field> {
-        vec![
-            Field::text("billable_id").label("Workspace").readonly(),
-            Field::text("plan").readonly().sortable(),
-            Field::text("interval").readonly(),
-            Field::select("status")
-                .options(STATUSES)
-                .badge()
-                .readonly()
-                .sortable(),
-            Field::number("quantity").label("Seats").readonly(),
-            Field::datetime("trial_ends_at").readonly(),
-            Field::datetime("current_period_end")
-                .label("Renews")
-                .readonly(),
-            Field::datetime("ends_at").readonly(),
-            Field::text("provider").readonly().hide_on_index(),
-            Field::datetime("created_at").readonly().sortable(),
-        ]
-    }
-
-    fn filters(&self) -> Vec<Filter<subscription::Entity>> {
-        vec![Filter::select("status").options(STATUSES)]
-    }
-
-    fn metrics(&self) -> Vec<Metric<subscription::Entity>> {
-        vec![
-            Metric::value("Paying subscriptions")
-                .count()
-                .filter(subscription::Column::Status.eq("active"))
-                .on_dashboard(),
-            Metric::partition("Subscriptions by plan")
-                .count()
-                .group_by(subscription::Column::Plan),
-        ]
-    }
-
-    fn create<'a>(
-        &'a self,
-        _ctx: &'a SaveContext,
-        _form: FormData,
-    ) -> BoxFuture<'a, Result<subscription::Model>> {
-        Box::pin(async move {
-            Err(AppError::bad_request(
-                "Subscriptions start at checkout in the app.",
-            ))
-        })
-    }
-
-    fn delete<'a>(
-        &'a self,
-        _ctx: &'a SaveContext,
-        _record: subscription::Model,
-    ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async move {
-            Err(AppError::bad_request(
-                "Cancel subscriptions in the workspace's billing settings or the customer portal.",
-            ))
         })
     }
 }

@@ -1,4 +1,4 @@
-//! The admin panel: Helm resources for users and subscriptions,
+//! The admin panel: a Helm resource for users,
 //! served at `/admin` for super admins (the global `admin` role, which
 //! passes every check). Grant other roles `helm.view` plus the abilities on
 //! each subject to let them in with less.
@@ -6,7 +6,7 @@
 //! ```text
 //! admin/
 //! ├── mod.rs           # AdminModule: registers the resources
-//! └── resources.rs     # UserAdmin, SubscriptionAdmin
+//! └── resources.rs     # UserAdmin
 //! ```
 //!
 //! `navree make:resource <module> <Entity>` adds a resource for one of
@@ -16,7 +16,7 @@ mod resources;
 
 use navree::prelude::*;
 
-pub use resources::{SubscriptionAdmin, UserAdmin};
+pub use resources::UserAdmin;
 
 /// The admin panel's resources.
 #[module(register = Self::wire)]
@@ -27,7 +27,7 @@ impl AdminModule {
     /// it to the panel; `navree make:resource` adds its lines above the
     /// `navree:wire` marker.
     fn wire(&self, m: &mut ModuleBuilder) {
-        m.resource::<UserAdmin>().resource::<SubscriptionAdmin>();
+        m.resource::<UserAdmin>();
         // navree:wire
     }
 }

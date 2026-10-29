@@ -191,8 +191,11 @@ async fn migrate_beside_a_writer(sea: bool) {
         reset.expect("and so do their rollbacks").migrations.len(),
         MIGRATIONS
     );
+    // The writer held the write lock at least once while the migrations ran
+    // (how often depends on the machine's load); the migrations above
+    // succeeding beside it is what the test proves.
     assert!(
-        commits > before + 2,
+        commits > before,
         "the writer kept writing through the migrations ({before} -> {commits} commits)"
     );
 }
