@@ -7,6 +7,7 @@ mod http;
 mod module;
 mod notify;
 mod preferences;
+mod servers;
 mod support;
 mod validation;
 mod views;

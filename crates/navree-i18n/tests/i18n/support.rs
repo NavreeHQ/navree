@@ -6,7 +6,8 @@
 use chrono::NaiveDate;
 use garde::Validate;
 use navree_access::{AccessModule, AccessOptions};
-use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt, Uow};
+use navree_db::navree_schema::{Dialect, Migration, Schema, SchemaMigration, SchemaResult};
+use navree_db::{DatabaseModule, Db, Executor, MigrationSet, ModuleBuilderDbExt, Statement, Uow};
 use navree_http::Json;
 use navree_i18n::{I18nModule, Locale, t};
 use navree_kernel::{Module, ModuleBuilder};
@@ -14,10 +15,6 @@ use navree_macros::{controller, injectable, module};
 use navree_testing::{TestApp, TestAppBuilder, TestClient, principal};
 use navree_validation::{Country, Valid, ValidationModule, rules};
 use navree_workspace::{NewWorkspace, Workspace, WorkspaceModule, Workspaces};
-use sea_orm::sea_query::{ColumnDef, Query, Table};
-use sea_orm::{ConnectionTrait, DbErr};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -84,31 +81,24 @@ pub struct DealsModule;
 /// `users(id, name, email)`, as navree-auth creates it.
 struct CreateUsers;
 
-impl MigrationName for CreateUsers {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_users"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateUsers {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("users")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("name").string().not_null())
-                    .col(ColumnDef::new("email").string().not_null().unique_key())
-                    .to_owned(),
-            )
+impl Migration for CreateUsers {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let mysql = schema.target().await?.dialect() == Dialect::MySql;
+        schema
+            .create("users", |t| {
+                if mysql {
+                    t.binary("id").length(16).fixed().primary();
+                } else {
+                    t.uuid("id").primary();
+                }
+                t.string("name");
+                t.string("email").unique();
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("users").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("users").await
     }
 }
 
@@ -117,7 +107,10 @@ pub struct UsersModule;
 
 impl Module for UsersModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet::new("auth").migration(CreateUsers));
+        m.migrations(MigrationSet::new("auth").migration(SchemaMigration::new(
+            "m20261026_000001_create_users",
+            CreateUsers,
+        )));
     }
 }
 
@@ -134,10 +127,10 @@ pub fn builder() -> TestAppBuilder {
         .module(DealsModule)
 }
 
-/// [`builder`] with a temporary database, users and workspaces.
+/// [`builder`] with a temporary database (on the server
+/// `NAVREE_TEST_DATABASE` names), users and workspaces.
 pub fn with_database() -> TestAppBuilder {
-    builder()
-        .temp_database()
+    crate::servers::database(builder())
         .module(DatabaseModule::from_config())
         .module(UsersModule)
         .module(AccessModule::for_root(AccessOptions::default()))
@@ -170,13 +163,10 @@ impl World {
         let email = format!("{}-{id}@navree.test", name.to_lowercase());
         self.db()
             .await
-            .conn()
-            .execute(
-                Query::insert()
-                    .into_table("users")
-                    .columns(["id", "name", "email"])
-                    .values_panic([id.into(), name.into(), email.into()]),
-            )
+            .execute(&Statement::portable(
+                "INSERT INTO users (id, name, email) VALUES (?, ?, ?)",
+                [id.into(), name.into(), email.into()],
+            ))
             .await
             .unwrap();
         id

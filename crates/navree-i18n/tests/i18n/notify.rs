@@ -1,14 +1,11 @@
 //! Notifications in the recipient's saved locale.
 
-use navree_db::Db;
+use navree_db::{Db, ExecutorExt, Statement};
 use navree_i18n::{I18n, t};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_mail::{MailModule, MailOptions, Mailer, TemplateMail, TransportConfig};
-use navree_notify::{
-    Channel, Notifiable, Notification, Notifier, NotifyModule, NotifyOptions, notifications,
-};
+use navree_notify::{Channel, Notifiable, Notification, Notifier, NotifyModule, NotifyOptions};
 use navree_view::{ModuleBuilderViewExt, ViewModule, ViewOptions};
-use sea_orm::{EntityTrait, QueryOrder};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -71,6 +68,11 @@ impl Module for Templates {
 
 #[tokio::test]
 async fn notifications_render_in_the_recipients_saved_locale() {
+    if crate::servers::native_units_of_work() {
+        // navree-notify stores notifications through SeaORM's transaction until its own port.
+        eprintln!("skipped: navree-notify is not ported off SeaORM's transaction yet");
+        return;
+    }
     let world = World::with(
         support::with_database()
             .module(ViewModule::for_root(ViewOptions {
@@ -130,19 +132,16 @@ async fn notifications_render_in_the_recipients_saved_locale() {
     assert_eq!(mail[1].text.as_deref(), Some("Sent by Acme CRM."));
 
     let db = world.app.get::<Db>().await;
-    let rows = notifications::Entity::find()
-        .order_by_asc(notifications::Column::CreatedAt)
-        .order_by_asc(notifications::Column::Id)
-        .all(db.conn())
+    let rows: Vec<Value> = db
+        .fetch_column(&Statement::text(
+            "SELECT data FROM notifications ORDER BY created_at, id",
+        ))
         .await
         .unwrap();
     assert_eq!(
-        rows[0].data,
+        rows[0],
         json!({ "message": "Ada a gagné Lovelace renewal." })
     );
-    assert_eq!(
-        rows[1].data,
-        json!({ "message": "Ada won Lovelace renewal." })
-    );
+    assert_eq!(rows[1], json!({ "message": "Ada won Lovelace renewal." }));
     world.app.shutdown().await.unwrap();
 }

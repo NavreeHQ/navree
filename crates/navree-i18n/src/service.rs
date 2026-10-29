@@ -6,15 +6,13 @@ use std::future::Future;
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
 use chrono::Utc;
-use navree_db::{Db, Uow};
-use sea_orm::sea_query::OnConflict;
-use sea_orm::{ActiveValue, EntityTrait};
+use navree_db::{Db, Record as _, Uow, record};
 use uuid::Uuid;
 
 use crate::catalog::{self, Catalog, Lookup, Report};
 use crate::format::Formats;
 use crate::locale::Locale;
-use crate::migration::locale_preference;
+use crate::migration::LocalePreferenceRow;
 use crate::options::{I18nOptions, Missing};
 use crate::{Args, I18nError, tag};
 
@@ -151,8 +149,10 @@ impl Shared {
         let Some(db) = &self.db else {
             return Ok(None);
         };
-        let row = locale_preference::Entity::find_by_id((owner.as_str().to_owned(), id))
-            .one(&db.reader().await)
+        let row = LocalePreferenceRow::select()
+            .eq("scope_type", owner.as_str())
+            .eq("scope_id", id)
+            .one(&db.read_executor().await)
             .await?;
         Ok(row.and_then(|row| self.matching(&row.locale)))
     }
@@ -168,27 +168,19 @@ impl Shared {
             return Err(I18nError::NoDatabase);
         }
         let tag = self.supported_tag(locale)?;
-        let row = locale_preference::ActiveModel {
-            scope_type: ActiveValue::Set(owner.as_str().to_owned()),
-            scope_id: ActiveValue::Set(id),
-            locale: ActiveValue::Set(tag.clone()),
-            updated_at: ActiveValue::Set(Utc::now()),
+        let row = LocalePreferenceRow {
+            scope_type: owner.as_str().to_owned(),
+            scope_id: id,
+            locale: tag.clone(),
+            updated_at: Utc::now(),
         };
-        let tx = uow.tx().await?;
-        locale_preference::Entity::insert(row)
-            .on_conflict(
-                OnConflict::columns([
-                    locale_preference::Column::ScopeType,
-                    locale_preference::Column::ScopeId,
-                ])
-                .update_columns([
-                    locale_preference::Column::Locale,
-                    locale_preference::Column::UpdatedAt,
-                ])
-                .to_owned(),
-            )
-            .exec(&*tx)
-            .await?;
+        record::upsert(
+            uow,
+            &row,
+            &["scope_type", "scope_id"],
+            &["locale", "updated_at"],
+        )
+        .await?;
         Ok(tag)
     }
 
