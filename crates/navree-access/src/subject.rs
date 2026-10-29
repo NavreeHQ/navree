@@ -20,6 +20,9 @@ pub(crate) struct SubjectRegistration {
     pub(crate) prefix: &'static str,
     pub(crate) type_name: &'static str,
     pub(crate) loader: Option<Arc<dyn SubjectLoader>>,
+    /// A SeaORM entity of the compatibility layer, which yields to a model
+    /// of the same subject.
+    pub(crate) sea_compat: bool,
 }
 
 impl SubjectRegistration {
@@ -30,6 +33,7 @@ impl SubjectRegistration {
             prefix: S::PERMISSION_PREFIX,
             type_name: std::any::type_name::<S>(),
             loader: None,
+            sea_compat: false,
         }
     }
 
@@ -38,6 +42,7 @@ impl SubjectRegistration {
     pub(crate) fn records<S: crate::SubjectRecords>() -> Self {
         Self {
             loader: Some(Arc::new(crate::records::RecordsLoader::<S>::new())),
+            sea_compat: S::SEA_COMPAT,
             ..Self::of::<S>()
         }
     }
@@ -50,6 +55,7 @@ impl fmt::Debug for SubjectRegistration {
             .field("prefix", &self.prefix)
             .field("type", &self.type_name)
             .field("loader", &self.loader.is_some())
+            .field("sea_compat", &self.sea_compat)
             .finish()
     }
 }
@@ -129,18 +135,34 @@ impl Subjects {
     /// Collects the subjects contributed by the modules of `ctx`.
     pub(crate) fn collect(ctx: &AppContext) -> Result<Subjects, AccessError> {
         let mut prefixes: BTreeMap<String, String> = BTreeMap::new();
-        let mut owners: HashMap<&'static str, &'static str> = HashMap::new();
+        // Subject → its registered type, and whether that is a SeaORM entity
+        // of the compatibility layer.
+        let mut owners: HashMap<&'static str, (&'static str, bool)> = HashMap::new();
         let mut loaders = HashMap::new();
         for contributed in ctx.contributions::<SubjectRegistration>() {
             let registration = &contributed.value;
-            if let Some(other) = owners.insert(registration.subject, registration.type_name)
-                && other != registration.type_name
-            {
-                return Err(AccessError::Config(format!(
-                    "subject `{}` is registered by both `{other}` and `{}`",
-                    registration.subject, registration.type_name
-                )));
+            match owners.get(registration.subject).copied() {
+                Some((other, _)) if other == registration.type_name => {}
+                // A model and its SeaORM twin (one table) register one
+                // subject: keep the model's.
+                Some((_, other_is_compat)) if registration.sea_compat && !other_is_compat => {
+                    continue;
+                }
+                Some((_, true)) if !registration.sea_compat => {
+                    loaders.remove(registration.subject);
+                }
+                Some((other, _)) => {
+                    return Err(AccessError::Config(format!(
+                        "subject `{}` is registered by both `{other}` and `{}`",
+                        registration.subject, registration.type_name
+                    )));
+                }
+                None => {}
             }
+            owners.insert(
+                registration.subject,
+                (registration.type_name, registration.sea_compat),
+            );
             match prefixes.get(registration.prefix) {
                 Some(subject) if subject != registration.subject => {
                     return Err(AccessError::Config(format!(

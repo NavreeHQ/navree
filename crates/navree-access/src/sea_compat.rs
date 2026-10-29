@@ -55,6 +55,8 @@ where
 {
     type Record = E::Model;
 
+    const SEA_COMPAT: bool = true;
+
     fn load<'a>(
         uow: &'a Uow,
         id: &'a str,
