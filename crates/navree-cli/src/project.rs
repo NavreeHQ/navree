@@ -47,7 +47,10 @@ mod tests {
 
     #[test]
     fn finds_the_nearest_package_above() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         std::fs::write(
             dir.path().join("Cargo.toml"),
             "[workspace]\nmembers = [\"app\"]\n",
@@ -72,7 +75,10 @@ mod tests {
 
     #[test]
     fn a_workspace_with_default_members_is_where_commands_run() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         std::fs::write(
             dir.path().join("Cargo.toml"),
             "[workspace]\nmembers = [\"crates/*\"]\ndefault-members = [\"crates/billing\"]\n",

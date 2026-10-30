@@ -12,10 +12,15 @@ use tempfile::TempDir;
 
 fn log_path() -> PathBuf {
     static DIR: OnceLock<TempDir> = OnceLock::new();
-    DIR.get_or_init(|| tempfile::tempdir().expect("tempdir"))
-        .path()
-        .join("logs")
-        .join("navree.log")
+    DIR.get_or_init(|| {
+        tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .expect("tempdir")
+    })
+    .path()
+    .join("logs")
+    .join("navree.log")
 }
 
 fn options() -> LogOptions {

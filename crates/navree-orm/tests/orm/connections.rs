@@ -13,8 +13,8 @@ use navree_kernel::{App, Navree};
 use navree_orm::{
     Model, OrmError, Record, Value, col, raw, select, table, using_connection, using_writer,
 };
+use navree_testing::TempDirGuard;
 use serde::{Deserialize, Serialize};
-use tempfile::TempDir;
 
 use crate::models::Company;
 use crate::support::create_tables;
@@ -31,7 +31,7 @@ pub struct Metric {
 const METRICS: &str = "CREATE TABLE metrics (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, value INTEGER NOT NULL)";
 
 /// Options for SQLite file `name` in `dir`.
-fn file(dir: &TempDir, name: &str) -> DbOptions {
+fn file(dir: &TempDirGuard, name: &str) -> DbOptions {
     DbOptions {
         url: format!("sqlite://{}?mode=rwc", dir.path().join(name).display()),
         ..DbOptions::default()
@@ -40,7 +40,7 @@ fn file(dir: &TempDir, name: &str) -> DbOptions {
 
 /// An app whose default connection is `main.db`, with the named
 /// connections `analytics` and `archive`, each holding a `metrics` table.
-async fn app_with_connections(dir: &TempDir) -> (App, Arc<Db>) {
+async fn app_with_connections(dir: &TempDirGuard) -> (App, Arc<Db>) {
     let mut connections = BTreeMap::new();
     connections.insert("analytics".to_owned(), file(dir, "analytics.db"));
     connections.insert("archive".to_owned(), file(dir, "archive.db"));
@@ -70,7 +70,7 @@ fn metric(name: &str, value: i64) -> Metric {
 
 #[tokio::test]
 async fn models_run_on_their_connection_given_the_default_db() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     let (_app, db) = app_with_connections(&dir).await;
     assert_eq!(Metric::connection_name(), Some("analytics"));
     assert_eq!(Company::connection_name(), None);
@@ -125,7 +125,7 @@ async fn models_run_on_their_connection_given_the_default_db() {
 
 #[tokio::test]
 async fn a_named_connection_runs_what_it_is_given_and_queries_can_name_one() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     let (app, db) = app_with_connections(&dir).await;
     Metric::create(&*db, metric("visits", 1)).await.unwrap();
     // A named connection's `Db` runs the model's operations itself.
@@ -195,7 +195,7 @@ async fn a_named_connection_runs_what_it_is_given_and_queries_can_name_one() {
 
 #[tokio::test]
 async fn a_unit_of_work_spans_one_connection() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     let (_app, db) = app_with_connections(&dir).await;
     let uow = db.uow(None, None).await;
     let error = Metric::query().count(&uow).await.unwrap_err();
@@ -232,7 +232,7 @@ async fn a_unit_of_work_spans_one_connection() {
 
 #[tokio::test]
 async fn the_default_connection_can_be_replaced_inside_a_scope() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     let (_app, db) = app_with_connections(&dir).await;
     let archive = db.connection("archive").await.unwrap();
     Metric::create(&archive, metric("old", 9)).await.unwrap();
@@ -271,7 +271,7 @@ async fn the_default_connection_can_be_replaced_inside_a_scope() {
 
 #[tokio::test]
 async fn a_db_outside_an_app_cannot_reach_other_connections() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     let alone = Db::connect(&file(&dir, "alone.db")).await.unwrap();
     let error = Metric::query().count(&alone).await.unwrap_err();
     assert!(
@@ -362,7 +362,7 @@ async fn orm_statements_reach_query_logs_listeners_and_hooks() {
 // ---------------------------------------------------------------------------
 
 /// A writer and a replica whose companies tell them apart.
-async fn replicated(dir: &TempDir) -> Db {
+async fn replicated(dir: &TempDirGuard) -> Db {
     let writer = file(dir, "writer.db");
     let replica = file(dir, "replica.db");
     for (options, name) in [(&writer, "writer"), (&replica, "replica")] {
@@ -394,7 +394,7 @@ async fn company_names(db: &Db) -> Vec<String> {
 
 #[tokio::test]
 async fn reads_go_to_the_writer_on_demand() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     let db = replicated(&dir).await;
     assert_eq!(company_names(&db).await, ["replica"]);
     assert_eq!(
@@ -451,7 +451,7 @@ async fn reads_go_to_the_writer_on_demand() {
 
 #[tokio::test]
 async fn reads_stay_on_the_writer_once_a_unit_of_work_wrote() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     let db = replicated(&dir).await;
     let uow = db.uow(None, None).await;
     assert_eq!(uow.scope(company_names(&db)).await, ["replica"]);

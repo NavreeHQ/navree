@@ -99,7 +99,10 @@ fn leaves(value: &Value, path: &mut Vec<String>, out: &mut Vec<(String, Value)>)
 
 /// Loads `src` as a file called `name` and exercises everything on the tree.
 fn load_file(name: &str, src: &[u8]) {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let path = dir.path().join(name);
     std::fs::write(&path, src).expect("write");
     if let Ok(config) = Config::load(&ConfigSources::new().file(&path)) {
@@ -202,7 +205,7 @@ proptest! {
     fn arbitrary_bytes_as_a_file_or_dotenv_never_panic(bytes in vec(any::<u8>(), 0..200)) {
         load_file("app.toml", &bytes);
         load_file("app.json", &bytes);
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = tempfile::Builder::new().prefix("navree-test-").tempdir().expect("tempdir");
         let path = dir.path().join(".env");
         std::fs::write(&path, &bytes).expect("write");
         let _ = Config::load(&ConfigSources::new().dotenv(&path));
@@ -214,7 +217,7 @@ proptest! {
         Just("${".to_owned()), Just("}".to_owned()), Just("export ".to_owned()), Just("#".to_owned()),
         Just("\\".to_owned()), Just("__".to_owned()), "[A-Za-z0-9_]{1,5}", "\\PC{1,3}",
     ], 0..40)) {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = tempfile::Builder::new().prefix("navree-test-").tempdir().expect("tempdir");
         let path = dir.path().join(".env");
         std::fs::write(&path, parts.concat()).expect("write");
         if let Ok(config) = Config::load(&ConfigSources::new().dotenv(&path)) {
@@ -225,7 +228,7 @@ proptest! {
     /// What a JSON file says is what the tree holds.
     #[test]
     fn a_json_file_loads_to_the_object_it_holds(layer in any_layer()) {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = tempfile::Builder::new().prefix("navree-test-").tempdir().expect("tempdir");
         let path = dir.path().join("app.json");
         std::fs::write(&path, serde_json::to_string_pretty(&layer).expect("json")).expect("write");
         let config = Config::load(&ConfigSources::new().file(&path)).expect("load");
@@ -237,7 +240,7 @@ proptest! {
     fn a_toml_file_loads_to_the_table_it_holds(layer in any_layer()) {
         let Ok(table) = toml::Value::try_from(&layer) else { return Ok(()); };
         let Ok(text) = toml::to_string(&table) else { return Ok(()); };
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = tempfile::Builder::new().prefix("navree-test-").tempdir().expect("tempdir");
         let path = dir.path().join("app.toml");
         std::fs::write(&path, text).expect("write");
         let config = Config::load(&ConfigSources::new().file(&path)).expect("load");

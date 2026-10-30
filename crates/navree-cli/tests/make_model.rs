@@ -14,7 +14,10 @@ fn now() -> Timestamp {
 }
 
 fn project() -> (tempfile::TempDir, PathBuf) {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let app = NewApp {
         name: AppName::parse("crm").unwrap(),
         ui: Ui::None,

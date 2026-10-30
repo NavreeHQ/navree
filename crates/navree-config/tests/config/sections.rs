@@ -19,7 +19,10 @@ struct CacheConfig {
 }
 
 fn config() -> Config {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let toml = dir.path().join("app.toml");
     std::fs::write(
         &toml,
@@ -125,7 +128,10 @@ fn get_string_and_get_bool_convert_scalars() {
     assert_eq!(config.get_bool("name"), None, "not a boolean");
     assert_eq!(config.get_bool("missing"), None);
 
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let toml = dir.path().join("app.toml");
     std::fs::write(&toml, "[server]\nport = 8080\n").expect("write fixture");
     let config = Config::load(&ConfigSources::new().file(&toml)).expect("load");

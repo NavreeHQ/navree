@@ -77,7 +77,10 @@ async fn boot_errors(sources: ConfigSources, module: impl Module) -> BootErrors 
 
 #[tokio::test]
 async fn set_overrides_everything() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let file = toml(&dir, "[billing]\ncurrency = \"USD\"\nplan = \"pro\"\n");
     let sources = ConfigSources::new()
         .set("billing.currency", "EUR")
@@ -183,7 +186,10 @@ fn sections_without_config_module_fail_validation_naming_config() {
 
 #[tokio::test]
 async fn config_load_errors_fail_boot_naming_the_file() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let file = toml(&dir, "[billing\ncurrency = \"EUR\"\n");
     let text = boot_errors(ConfigSources::new().file(&file), BillingModule)
         .await

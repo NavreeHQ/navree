@@ -459,7 +459,10 @@ mod tests {
 
     #[tokio::test]
     async fn the_apps_version_is_downloaded_once_then_cached() {
-        let home = tempfile::tempdir().unwrap();
+        let home = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let (settings, fetcher) = settings(home.path(), false, Ok(Some(tiny_bundle("0.0.1"))));
         let library = DocsLibrary::load(Some("0.0.1"), &settings).await;
         assert_eq!(library.source, DocsSource::Download);
@@ -478,7 +481,10 @@ mod tests {
 
     #[tokio::test]
     async fn the_embedded_docs_serve_their_own_version_without_network() {
-        let home = tempfile::tempdir().unwrap();
+        let home = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let (settings, fetcher) = settings(home.path(), false, Err("no network".into()));
         let library = DocsLibrary::load(Some(EMBEDDED_VERSION), &settings).await;
         assert_eq!(library.source, DocsSource::Embedded);
@@ -488,7 +494,10 @@ mod tests {
 
     #[tokio::test]
     async fn offline_or_missing_versions_fall_back_with_a_note() {
-        let home = tempfile::tempdir().unwrap();
+        let home = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let (settings, fetcher) = settings(home.path(), true, Ok(Some(tiny_bundle("0.0.1"))));
         let library = DocsLibrary::load(Some("0.0.1"), &settings).await;
         assert_eq!(library.source, DocsSource::Embedded);
@@ -541,7 +550,10 @@ mod tests {
             .unwrap();
         assert_eq!(missing, None);
 
-        let home = tempfile::tempdir().unwrap();
+        let home = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let settings = DocsSettings {
             home: Some(home.path().to_path_buf()),
             base_url: server.uri(),

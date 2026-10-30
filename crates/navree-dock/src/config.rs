@@ -1131,7 +1131,10 @@ env = { CRM_UPLOADS_ENDPOINT = "http://{host}:{port}", CRM_UPLOADS_BUCKET = "{bu
 
     #[test]
     fn load_reads_the_package_name_and_reports_a_missing_file() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let error = DockFile::load(dir.path()).unwrap_err();
         assert!(matches!(error, DockError::NoDockFile(_)), "{error}");
         assert!(error.to_string().contains("navree dock:add <service>"));

@@ -14,6 +14,15 @@ use futures_util::FutureExt;
 use navree_db::{Backend, Db, DbOptions, Executor};
 use uuid::Uuid;
 
+/// The temporary-directory guard of navree-testing (its reaper retries a
+/// folder Windows will not delete while SQLite has a file open, and its
+/// sweep removes the folders of earlier runs). This crate cannot
+/// depend on navree-testing, so the file is included.
+#[allow(dead_code)]
+#[path = "../../../navree-testing/src/temp.rs"]
+mod temp;
+use temp::TempDirGuard;
+
 /// Where a test runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Server {
@@ -53,7 +62,7 @@ pub struct Scratch {
     pub server: Server,
     /// The URL of the database.
     pub url: String,
-    _dir: Option<tempfile::TempDir>,
+    _dir: Option<TempDirGuard>,
 }
 
 /// What drops the database afterwards.
@@ -91,7 +100,7 @@ async fn create(server: Server, test: &str, prefix: &str) -> Option<(Scratch, Op
     }
     let name = format!("{prefix}_{}", Uuid::now_v7().simple());
     let Some(variable) = server.variable() else {
-        let dir = tempfile::tempdir().expect("a temp dir");
+        let dir = TempDirGuard::new();
         let url = format!("sqlite://{}?mode=rwc", dir.path().join("test.db").display());
         return Some((
             Scratch {

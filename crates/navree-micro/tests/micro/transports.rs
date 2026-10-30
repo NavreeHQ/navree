@@ -152,7 +152,10 @@ struct Certificates {
 fn certificates() -> Certificates {
     use rcgen::{BasicConstraints, CertificateParams, IsCa, Issuer, KeyPair};
 
-    let dir = tempfile::tempdir().expect("temp dir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("temp dir");
     let write = |name: &str, contents: String| {
         let path = dir.path().join(name);
         std::fs::write(&path, contents).expect("write pem");
@@ -253,7 +256,10 @@ async fn mutual_tls_refuses_a_peer_without_a_trusted_certificate() {
 
 #[tokio::test]
 async fn tcp_tls_files_that_do_not_parse_fail_at_construction() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let garbage = dir.path().join("garbage.pem");
     std::fs::write(&garbage, "not a certificate").unwrap();
     let options = TcpOptions {

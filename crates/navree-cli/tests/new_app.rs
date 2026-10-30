@@ -90,7 +90,10 @@ fn tree(root: &Path) -> Vec<String> {
 
 #[test]
 fn new_creates_expected_tree() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let root = create_app(dir.path(), &app("blog", Ui::None), now()).unwrap();
     assert_eq!(root, dir.path().join("blog"));
     assert_eq!(
@@ -126,7 +129,10 @@ fn new_creates_expected_tree() {
 
 #[test]
 fn cargo_manifest_names_the_package_and_the_navree_dependency() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let root = create_app(dir.path(), &app("my-shop", Ui::None), now()).unwrap();
     let manifest = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
     let parsed: toml::Table = manifest.parse().expect("Cargo.toml is valid TOML");
@@ -162,7 +168,10 @@ fn cargo_manifest_names_the_package_and_the_navree_dependency() {
 /// gives the app the very URL config/app.toml names.
 #[test]
 fn timescaledb_is_the_default_database() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let root = create_app(dir.path(), &app("my-shop", Ui::None), now()).unwrap();
     let url = "postgres://navree:navree@127.0.0.1:5432/my_shop";
     assert_eq!(configured_url(&root), url);
@@ -193,7 +202,10 @@ fn timescaledb_is_the_default_database() {
 
 #[test]
 fn plain_postgres_mysql_and_sqlite_are_options() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let postgres = create_app(
         dir.path(),
         &app_on("pg-shop", Ui::None, Database::Postgres),
@@ -273,7 +285,10 @@ fn a_published_navree_takes_the_driver_feature_too() {
 /// Dock runs it.
 #[test]
 fn the_next_steps_start_the_database_first() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let timescale = app("my-shop", Ui::None);
     let root = create_app(dir.path(), &timescale, now()).unwrap();
     let message = created_message(&timescale, &root);
@@ -318,7 +333,10 @@ fn the_next_steps_start_the_database_first() {
 /// The generated files explain the database they were made for.
 #[test]
 fn the_generated_files_describe_the_database() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let root = create_app(dir.path(), &app("my-shop", Ui::None), now()).unwrap();
     let dock = read(&root, "dock.toml");
     assert!(
@@ -387,7 +405,10 @@ fn the_generated_files_describe_the_database() {
 /// that imports it rather than repeating it.
 #[test]
 fn agents_md_describes_the_conventions_and_claude_md_imports_it() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let root = create_app(dir.path(), &app("my-shop", Ui::None), now()).unwrap();
     let agents = std::fs::read_to_string(root.join("AGENTS.md")).unwrap();
     assert!(agents.starts_with("# AGENTS.md\n"), "{agents}");
@@ -429,7 +450,10 @@ fn agents_md_describes_the_conventions_and_claude_md_imports_it() {
         "CLAUDE.md only points: {claude}"
     );
 
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let root = create_app(dir.path(), &app("blog", Ui::Next), now()).unwrap();
     let agents = std::fs::read_to_string(root.join("AGENTS.md")).unwrap();
     assert!(
@@ -487,7 +511,10 @@ fn navree_path_accepts_the_repository_or_the_facade_crate() {
     };
     assert_eq!(from_facade, from_repo);
 
-    let elsewhere = tempfile::tempdir().unwrap();
+    let elsewhere = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let error = NavreeSource::resolve(Some(elsewhere.path())).unwrap_err();
     assert!(format!("{error:#}").contains("--navree-path"), "{error:#}");
 
@@ -500,7 +527,10 @@ fn navree_path_accepts_the_repository_or_the_facade_crate() {
 
 #[test]
 fn ui_next_adds_the_web_front_end() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let root = create_app(dir.path(), &app("blog", Ui::Next), now()).unwrap();
     let web: Vec<String> = tree(&root)
         .into_iter()
@@ -534,7 +564,10 @@ fn ui_next_adds_the_web_front_end() {
 
 #[test]
 fn refuses_a_directory_that_is_not_empty() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     std::fs::create_dir(dir.path().join("blog")).unwrap();
     std::fs::write(dir.path().join("blog").join("notes.txt"), "keep me").unwrap();
     let error = create_app(dir.path(), &app("blog", Ui::None), now()).unwrap_err();
@@ -558,7 +591,10 @@ fn a_new_app_outside_a_repository_gets_one() {
         println!("SKIPPED: git is not available");
         return;
     }
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let root = create_app(dir.path(), &app("blog", Ui::None), now()).unwrap();
     assert_eq!(init_repository(&root), Repository::Created);
     assert!(root.join(".git").exists());
@@ -580,7 +616,10 @@ fn a_new_app_inside_a_repository_leaves_it_alone() {
         println!("SKIPPED: git is not available");
         return;
     }
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     assert!(
         std::process::Command::new("git")
             .arg("-C")
@@ -597,7 +636,10 @@ fn a_new_app_inside_a_repository_leaves_it_alone() {
 
 #[test]
 fn a_kit_gets_its_harbor_key_and_an_app_without_one_does_not() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let kit = NewApp {
         kit: Some(navree_cli::kits::Kit::Api),
         ..app("crm", Ui::None)
@@ -626,7 +668,10 @@ fn a_kit_gets_its_harbor_key_and_an_app_without_one_does_not() {
 
 #[test]
 fn generated_files_are_free_of_template_syntax() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let root = create_app(dir.path(), &app("blog", Ui::Next), now()).unwrap();
     for file in tree(&root) {
         let contents = std::fs::read_to_string(root.join(&file)).unwrap();

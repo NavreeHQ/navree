@@ -4,6 +4,15 @@
 //! facade's `time_series` suite runs Navree's own tables on real servers.
 #![cfg(feature = "sqlite")]
 
+/// The temporary-directory guard of navree-testing, included so these tests
+/// need no feature for it: its reaper retries a folder Windows will not
+/// delete while SQLite has a file open, and its sweep removes the folders of
+/// earlier runs.
+#[allow(dead_code)]
+#[path = "../../navree-testing/src/temp.rs"]
+mod temp;
+use temp::TempDirGuard;
+
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
 use navree::db::{Db, DbOptions, prune_time_series};
 use navree::db::{Executor as _, Statement};
@@ -89,7 +98,7 @@ fn timescaledb() -> Target {
     Target::postgres(17).with_timescaledb((2, 31))
 }
 
-async fn sqlite(dir: &tempfile::TempDir) -> Db {
+async fn sqlite(dir: &TempDirGuard) -> Db {
     Db::connect(&DbOptions {
         url: format!("sqlite://{}?mode=rwc", dir.path().join("docs.db").display()),
         ..DbOptions::default()
@@ -127,7 +136,7 @@ async fn the_events_migration_compiles_for_timescaledb_and_runs_on_sqlite() {
         );
     }
 
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     let db = sqlite(&dir).await;
     let schema = Schema::new(&db);
     m20261027_090000_create_events_table::Migration
@@ -173,7 +182,7 @@ async fn tuning_navree_s_tables() {
 
 #[tokio::test]
 async fn converting_an_existing_table() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     let db = sqlite(&dir).await;
     let schema = Schema::new(&db);
     schema
@@ -213,7 +222,7 @@ async fn converting_an_existing_table() {
 
 #[tokio::test]
 async fn reading_the_time_dimension() -> SchemaResult {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     let db = sqlite(&dir).await;
     let mut shown = Vec::new();
     if let Some(time) = Schema::new(&db).time_dimension("events").await? {
@@ -230,7 +239,7 @@ async fn reading_the_time_dimension() -> SchemaResult {
 async fn pruning_in_code() {
     use navree::schema::Migration as _;
 
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     let db = sqlite(&dir).await;
     m20261027_090000_create_events_table::Migration
         .up(&Schema::new(&db))
@@ -289,7 +298,7 @@ async fn readings(db: &Db) -> DateTime<Utc> {
 
 #[tokio::test]
 async fn time_bucket_queries() -> Result<(), Box<dyn std::error::Error>> {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     let db = sqlite(&dir).await;
     let start = readings(&db).await;
 

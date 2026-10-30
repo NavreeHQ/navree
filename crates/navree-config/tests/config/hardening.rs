@@ -26,7 +26,10 @@ fn scrub(dir: &TempDir, text: impl ToString) -> String {
 
 #[test]
 fn a_file_over_the_size_limit_is_refused_and_one_at_the_limit_is_read() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let toml = write(&dir, "app.toml", "a = 1\n");
     let size = std::fs::metadata(&toml).expect("metadata").len();
 
@@ -48,7 +51,10 @@ fn a_file_over_the_size_limit_is_refused_and_one_at_the_limit_is_read() {
 
 #[test]
 fn the_size_limit_applies_to_dotenv_toml_and_json_files() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let dotenv = write(&dir, ".env", "APP_A=1\nAPP_B=2\n");
     let toml = write(&dir, "app.toml", "a = 1\nb = 2\n");
     let json = write(&dir, "app.json", r#"{"a": 1, "b": 2}"#);
@@ -68,7 +74,10 @@ fn the_size_limit_applies_to_dotenv_toml_and_json_files() {
 #[test]
 fn the_default_size_limit_is_one_mebibyte() {
     assert_eq!(ConfigSources::DEFAULT_MAX_FILE_SIZE, 1024 * 1024);
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let limit = usize::try_from(ConfigSources::DEFAULT_MAX_FILE_SIZE).expect("fits");
     // A TOML comment padded to exactly the limit loads; one byte more does not.
     let padding = |size: usize| format!("a = 1\n#{}", "x".repeat(size - "a = 1\n#".len()));
@@ -82,7 +91,10 @@ fn the_default_size_limit_is_one_mebibyte() {
 
 #[test]
 fn a_larger_limit_can_be_asked_for() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let size = usize::try_from(ConfigSources::DEFAULT_MAX_FILE_SIZE).expect("fits") + 10;
     let big = write(&dir, "big.toml", format!("a = 1\n#{}", "x".repeat(size)));
     assert!(Config::load(&ConfigSources::new().file(&big)).is_err());
@@ -100,7 +112,10 @@ fn a_larger_limit_can_be_asked_for() {
 fn a_file_over_the_limit_is_refused_even_when_it_is_not_valid() {
     // The size check comes before parsing, so a huge garbage file costs a
     // bounded read, not a parse.
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let garbage = write(&dir, "app.toml", vec![0xFF; 4096]);
     let error = Config::load(&ConfigSources::new().file(&garbage).max_file_size(100))
         .expect_err("too large");
@@ -113,7 +128,10 @@ fn a_file_over_the_limit_is_refused_even_when_it_is_not_valid() {
 
 #[test]
 fn nesting_deeper_than_the_limit_is_refused_in_files() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     // Levels count the root table: `[a.b]` is three.
     let toml_ok = write(&dir, "ok.toml", "[a.b]\nc = 1\n");
     let toml_deep = write(&dir, "deep.toml", "[a.b.c]\nd = 1\n");
@@ -160,7 +178,10 @@ fn nesting_deeper_than_the_limit_is_refused_in_environment_names_and_set_keys() 
         .is_ok()
     );
 
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let dotenv = write(&dir, ".env", "APP_A__B__C__D=x\n");
     let error =
         Config::load(&ConfigSources::new().dotenv(&dotenv).max_depth(3)).expect_err("too deep");
@@ -231,7 +252,10 @@ fn the_depth_limit_is_clamped_to_what_the_stack_can_hold() {
 
 #[test]
 fn deep_files_that_the_parsers_refuse_are_errors_too() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let toml = write(
         &dir,
         "app.toml",
@@ -284,7 +308,10 @@ fn another_prefix_never_reads_the_default_one_and_the_reverse() {
 
 #[test]
 fn dotenv_entries_outside_the_app_prefix_never_reach_the_tree() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let dotenv = write(
         &dir,
         ".env",
@@ -438,7 +465,10 @@ fn a_secret_section_key_hides_numbers_in_everything_below_it() {
 
 #[test]
 fn file_errors_never_contain_the_text_that_failed() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let json = write(&dir, "app.json", r#"{"password": "hunter2", "oops" 1}"#);
     let error = Config::load(&ConfigSources::new().file(&json)).expect_err("invalid JSON");
     let text = scrub(&dir, &error);
@@ -458,7 +488,10 @@ fn file_errors_never_contain_the_text_that_failed() {
 
 #[test]
 fn a_debug_print_of_any_error_has_no_values() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let toml = write(&dir, "app.toml", "password = \"hunter2\nmore = 1\n");
     let errors = [
         Config::load(&ConfigSources::new().file(&toml)).expect_err("toml"),

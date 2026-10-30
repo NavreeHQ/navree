@@ -212,7 +212,10 @@ mod tests {
 
     #[test]
     fn the_dockerfile_of_a_workspace_member() {
-        let root = tempfile::tempdir().unwrap();
+        let root = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let dir = root.path().join("apps").join("crm-api");
         std::fs::create_dir_all(dir.join("config")).unwrap();
         std::fs::write(root.path().join("Cargo.lock"), "").unwrap();
@@ -236,7 +239,10 @@ mod tests {
 
     #[test]
     fn a_single_package_app_is_its_own_context() {
-        let root = tempfile::tempdir().unwrap();
+        let root = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let app = ImageApp {
             features: vec![],
             ..app(root.path(), root.path())
@@ -256,7 +262,10 @@ mod tests {
 
     #[test]
     fn images_build_and_push_with_the_engine_found() {
-        let root = tempfile::tempdir().unwrap();
+        let root = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let fake = FakeExecutor::new(|_| Output::ok(""));
         let exec: Arc<dyn Executor> = Arc::new(fake.clone());
         let (tag, platform, engine) = build_image(

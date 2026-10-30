@@ -13,7 +13,10 @@ fn now() -> Timestamp {
 }
 
 fn project() -> (tempfile::TempDir, PathBuf) {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let app = NewApp {
         name: AppName::parse("blog").unwrap(),
         ui: Ui::None,
@@ -72,7 +75,10 @@ fn make_module_twice_fails_without_touching_anything() {
 
 #[test]
 fn make_module_outside_a_navree_app_prints_hints() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     std::fs::write(dir.path().join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
     let report = make_module(dir.path(), "src/modules", &name("posts"), false, now()).unwrap();
     assert!(dir.path().join("src/modules/posts/mod.rs").exists());

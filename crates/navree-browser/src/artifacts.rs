@@ -142,7 +142,10 @@ mod tests {
 
     #[test]
     fn file_names_are_numbered_per_test_and_earlier_runs_are_cleared() {
-        let root = tempfile::tempdir().unwrap();
+        let root = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let stale = root.path().join("numbered").join("01-old.png");
         std::fs::create_dir_all(stale.parent().unwrap()).unwrap();
         std::fs::write(&stale, b"old").unwrap();

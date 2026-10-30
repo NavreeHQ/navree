@@ -19,7 +19,10 @@ fn tree(config: &Config) -> Value {
 
 #[test]
 fn a_json_file_loads_like_a_toml_file() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let json_file = write(
         &dir,
         "app.json",
@@ -44,7 +47,10 @@ fn a_json_file_loads_like_a_toml_file() {
 
 #[test]
 fn the_extension_picks_the_format_in_any_case() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let upper = write(&dir, "APP.JSON", r#"{"a": 1}"#);
     let toml = write(&dir, "app.toml", "b = 2\n");
     // Anything that is not `.json` is TOML, as before.
@@ -56,7 +62,10 @@ fn the_extension_picks_the_format_in_any_case() {
 
 #[test]
 fn json_and_toml_files_stack_in_the_order_they_were_added() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let base = write(
         &dir,
         "base.toml",
@@ -86,7 +95,10 @@ fn json_and_toml_files_stack_in_the_order_they_were_added() {
 
 #[test]
 fn a_json_null_replaces_what_an_earlier_source_set_and_reads_as_none() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let base = write(&dir, "base.toml", "[http]\nper_ip_rate_limit = 600\n");
     let off = write(
         &dir,
@@ -110,7 +122,10 @@ fn a_json_null_replaces_what_an_earlier_source_set_and_reads_as_none() {
 
 #[test]
 fn json_values_convert_like_any_other() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let file = write(
         &dir,
         "app.json",
@@ -135,7 +150,10 @@ fn json_values_convert_like_any_other() {
 
 #[test]
 fn a_missing_json_file_is_skipped_and_a_byte_order_mark_is_accepted() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let missing = dir.path().join("missing.json");
     let bom = write(&dir, "bom.json", "\u{feff}{\"a\": 1}");
     let config = Config::load(&ConfigSources::new().file(&missing).file(&bom)).expect("load");
@@ -144,7 +162,10 @@ fn a_missing_json_file_is_skipped_and_a_byte_order_mark_is_accepted() {
 
 #[test]
 fn json_syntax_errors_name_the_file_the_line_and_the_column() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let bad = write(&dir, "app.json", "{\n  \"a\": 1,\n  \"b\": ,\n}\n");
     let error = Config::load(&ConfigSources::new().file(&bad)).expect_err("invalid JSON");
     assert!(
@@ -169,7 +190,10 @@ fn json_syntax_errors_name_the_file_the_line_and_the_column() {
 
 #[test]
 fn json_files_must_be_objects_and_may_not_have_comments_or_trailing_commas() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     for (name, src) in [
         ("array.json", "[1, 2]"),
         ("scalar.json", "5"),
@@ -197,7 +221,10 @@ fn json_files_must_be_objects_and_may_not_have_comments_or_trailing_commas() {
 
 #[test]
 fn a_toml_file_named_json_is_an_error_naming_json() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let file = write(&dir, "app.json", "a = 1\n");
     let error = Config::load(&ConfigSources::new().file(&file)).expect_err("not JSON");
     assert!(matches!(error, ConfigError::Json { .. }), "{error:?}");
@@ -205,7 +232,10 @@ fn a_toml_file_named_json_is_an_error_naming_json() {
 
 #[test]
 fn duplicate_keys_in_json_take_the_last_value() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let file = write(&dir, "app.json", r#"{ "a": 1, "a": 2 }"#);
     let config = Config::load(&ConfigSources::new().file(&file)).expect("load");
     assert_eq!(tree(&config), json!({ "a": 2 }));

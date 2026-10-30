@@ -588,7 +588,10 @@ async fn files_are_added_from_disks_and_local_files() {
     // Copied, not moved.
     assert!(uploads.exists("tmp/abc/report.pdf").await.unwrap());
 
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let path = dir.path().join("syllabus.txt");
     std::fs::write(&path, "Week 1").unwrap();
     let item = s
@@ -889,7 +892,10 @@ fn invalid_collections_fail_the_build() {
                 .conversion(navree_media::Conversion::new("Thumb"));
         }
     }
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let error = navree_media::Media::builder(crate::models::storage(dir.path()))
         .register::<Bad>()
         .build()

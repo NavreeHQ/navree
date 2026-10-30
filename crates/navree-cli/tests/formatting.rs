@@ -32,7 +32,10 @@ fn generated_rust_is_rustfmt_clean() {
         eprintln!("rustfmt is not installed; skipping");
         return;
     }
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let now = Timestamp::from_unix(1_792_938_605);
     let app = NewApp {
         name: AppName::parse("blog").unwrap(),

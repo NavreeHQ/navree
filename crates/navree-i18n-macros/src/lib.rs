@@ -177,7 +177,10 @@ mod tests {
 
     #[test]
     fn collects_ftl_files_by_locale_in_order() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         write(dir.path(), "fr/main.ftl", "hello = Bonjour\n");
         write(dir.path(), "en/main.ftl", "hello = Hello\n");
         write(dir.path(), "en/mail/welcome.ftl", "welcome = Welcome\n");
@@ -203,7 +206,10 @@ mod tests {
 
     #[test]
     fn syntax_errors_name_the_file_and_line() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         write(
             dir.path(),
             "en/main.ftl",
@@ -225,7 +231,10 @@ mod tests {
 
     #[test]
     fn a_missing_directory_is_an_error() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let errors = collect(&dir.path().join("nope"), "nope").unwrap_err();
         assert!(errors[0].contains("cannot read"), "{errors:?}");
     }

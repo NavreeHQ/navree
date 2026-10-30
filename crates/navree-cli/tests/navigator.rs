@@ -32,7 +32,10 @@ fn copy_dir(from: &Path, to: &Path) {
 /// A copy of the fixture app with its `Cargo.toml` (pointing at the
 /// workspace's facade) and the workspace's `Cargo.lock`.
 fn fixture_app() -> tempfile::TempDir {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/navigator-app");
     copy_dir(&fixtures, dir.path());
     let facade = workspace().join("crates").join("navree");
@@ -231,7 +234,10 @@ async fn navree_mcp_serves_the_tools_over_stdio() {
 
 #[test]
 fn skills_install_writes_every_skill_into_both_folders() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let skills = dir.path().join(".claude/skills");
     std::fs::create_dir_all(skills.join("crm-pipeline-stages")).unwrap();
     std::fs::write(skills.join("crm-pipeline-stages/SKILL.md"), "ours").unwrap();

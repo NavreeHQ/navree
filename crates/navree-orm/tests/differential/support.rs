@@ -53,7 +53,7 @@ where
     Fut: Future<Output = ()>,
 {
     if dialect == Dialect::Sqlite {
-        let dir = tempfile::tempdir().expect("creates a directory for the SQLite file");
+        let dir = navree_testing::TempDirGuard::new();
         let url = format!(
             "sqlite://{}?mode=rwc",
             dir.path().join("differential.db").display()

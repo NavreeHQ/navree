@@ -24,7 +24,10 @@ fn redis_and_mailpit_start_answer_and_go_away() {
         eprintln!("SKIPPED: set NAVREE_TEST_DOCKER=1 to run Dock against Docker or Podman");
         return;
     }
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let project = format!("dock-e2e-{}", std::process::id());
     std::fs::write(
         dir.path().join("dock.toml"),

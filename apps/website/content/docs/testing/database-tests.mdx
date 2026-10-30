@@ -265,7 +265,7 @@ Its test then calls every route that combines a record check, `CurrentUser` and 
 
 ## Cleaning up
 
-Dropping a `TestApp` deletes its database directory. On Windows, a pool that is still open keeps the files, so end tests with `app.shutdown().await` (or the CRM's `crm.shutdown().await`), which closes the pool first.
+Dropping a `TestApp` deletes its database directory. On Windows, a pool that is still open keeps the files, so end tests with `app.shutdown().await` (or the CRM's `crm.shutdown().await`), which closes the pool first. A directory that could not be deleted is retried in the background for about 30 seconds, and the next test process removes `navree-test-*` directories that are more than an hour old.
 
 <LinkCards>
   <LinkCard href="/docs/database/seeding-and-factories/" title="Seeding and factories">

@@ -12,6 +12,7 @@ use std::panic::AssertUnwindSafe;
 
 use futures_util::FutureExt;
 use navree_db::{Backend, Db, DbOptions, Executor};
+use navree_testing::TempDirGuard;
 use uuid::Uuid;
 
 /// Where a test runs.
@@ -53,7 +54,7 @@ pub struct Scratch {
     pub server: Server,
     /// The URL of the database.
     pub url: String,
-    _dir: Option<tempfile::TempDir>,
+    _dir: Option<TempDirGuard>,
 }
 
 /// What drops the database afterwards.
@@ -91,7 +92,7 @@ async fn create(server: Server, test: &str, prefix: &str) -> Option<(Scratch, Op
     }
     let name = format!("{prefix}_{}", Uuid::now_v7().simple());
     let Some(variable) = server.variable() else {
-        let dir = tempfile::tempdir().expect("a temp dir");
+        let dir = TempDirGuard::new();
         let url = format!("sqlite://{}?mode=rwc", dir.path().join("test.db").display());
         return Some((
             Scratch {

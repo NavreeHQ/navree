@@ -85,7 +85,10 @@ async fn actions_assertions_waits_and_reading() -> Result<(), BrowserError> {
     let server = TestServer::start(app.ctx()).await?;
     let browser = Browser::launch().await?;
     let page = browser.visit(server.url("/playground")).await?;
-    let logo = std::env::temp_dir().join(format!("navree-browser-acme-{}.png", std::process::id()));
+    let logo = std::env::temp_dir().join(format!(
+        "navree-test-browser-acme-{}.png",
+        std::process::id()
+    ));
     std::fs::write(&logo, b"png").expect("a fixture file");
 
     // Actions.
@@ -177,7 +180,10 @@ async fn options_in_code() -> Result<(), BrowserError> {
     if !has_chrome("options_in_code") {
         return Ok(());
     }
-    let artifacts = tempfile::tempdir().expect("a temporary folder");
+    let artifacts = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("a temporary folder");
     let browser = Browser::builder()
         .headless(true)
         .chrome(Browser::find_chrome()?)

@@ -692,7 +692,10 @@ mod tests {
 
     #[test]
     fn archives_hold_the_binary_the_included_directories_and_the_release_file() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let app = dir.path().join("app");
         std::fs::create_dir_all(app.join("config")).unwrap();
         std::fs::write(app.join("config/app.toml"), "[http]\n").unwrap();

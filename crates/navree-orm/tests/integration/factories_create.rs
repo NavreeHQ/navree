@@ -472,7 +472,7 @@ impl Module for Archive {
 
 #[tokio::test]
 async fn connection_creates_on_a_named_database() {
-    let archive = tempfile::tempdir().unwrap();
+    let archive = navree_testing::TempDirGuard::new();
     let url = format!(
         "sqlite://{}?mode=rwc",
         archive.path().join("archive.db").display()

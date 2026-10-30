@@ -15,7 +15,10 @@ fn write(dir: &TempDir, name: &str, contents: &str) -> PathBuf {
 
 #[test]
 fn later_sources_override_earlier() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let dotenv = write(
         &dir,
         ".env",
@@ -69,7 +72,10 @@ fn later_sources_override_earlier() {
 
 #[test]
 fn set_values_win_whatever_the_order_and_merge_objects() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let toml = write(
         &dir,
         "app.toml",
@@ -122,7 +128,10 @@ fn defaults_read_dotenv_then_app_toml_then_app_env() {
 
 #[test]
 fn defaults_in_reads_the_files_of_another_directory() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     std::fs::create_dir_all(dir.path().join("config")).unwrap();
     std::fs::write(
         dir.path().join("config/app.toml"),
@@ -155,7 +164,10 @@ fn sources_debug_shows_keys_but_not_values() {
 
 #[test]
 fn missing_files_are_skipped() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let config = Config::load(
         &ConfigSources::new()
             .dotenv(dir.path().join("missing.env"))
@@ -167,7 +179,10 @@ fn missing_files_are_skipped() {
 
 #[test]
 fn dotenv_entries_use_the_app_mapping_and_leave_the_process_env_alone() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let dotenv = write(
         &dir,
         ".env",
@@ -190,7 +205,10 @@ fn dotenv_entries_use_the_app_mapping_and_leave_the_process_env_alone() {
 
 #[test]
 fn file_errors_name_the_file_and_line_but_not_the_values() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let toml = write(
         &dir,
         "app.toml",

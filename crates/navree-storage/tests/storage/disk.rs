@@ -8,7 +8,10 @@ use crate::support::{DISKS, storage};
 
 #[tokio::test]
 async fn put_get_delete_local_and_memory() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let storage = storage(root.path());
 
     for name in DISKS {
@@ -82,7 +85,10 @@ async fn put_get_delete_local_and_memory() {
 
 #[tokio::test]
 async fn failed_stream_leaves_nothing_behind() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let storage = storage(root.path());
 
     for name in DISKS {
@@ -121,7 +127,10 @@ const TRAVERSALS: [&str; 12] = [
 
 #[tokio::test]
 async fn rejects_path_traversal() {
-    let outer = tempfile::tempdir().unwrap();
+    let outer = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let root = outer.path().join("root");
     std::fs::write(outer.path().join("secret.txt"), "top secret").unwrap();
     let storage = storage(&root);
@@ -167,7 +176,10 @@ async fn rejects_path_traversal() {
 
 #[tokio::test]
 async fn normalises_paths() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let storage = storage(root.path());
 
     for name in DISKS {
@@ -205,7 +217,10 @@ async fn normalises_paths() {
 
 #[tokio::test]
 async fn list_prefix() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let storage = storage(root.path());
 
     for name in DISKS {

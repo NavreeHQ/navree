@@ -92,6 +92,8 @@ mod cookies;
 mod isolation;
 mod response;
 mod temp;
+#[cfg(test)]
+mod temp_tests;
 
 pub use app::{TestApp, TestAppBuilder};
 pub use auth::{ActingAs, TestAuthenticator, principal};

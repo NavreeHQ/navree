@@ -154,7 +154,10 @@ mod tests {
     use crate::project::Project;
 
     fn app_dir() -> tempfile::TempDir {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         std::fs::write(
             dir.path().join("Cargo.toml"),
             "[package]\nname = \"crm-api\"\nversion = \"0.1.0\"\n",
@@ -261,7 +264,10 @@ mod tests {
 
     #[test]
     fn init_needs_a_package() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         assert!(init(dir.path(), &Environment::production()).is_err());
     }
 }

@@ -103,7 +103,10 @@ async fn check_and_uncheck_native_custom_and_hidden_controls() {
 async fn attach_puts_a_file_in_a_hidden_file_input() {
     let (browser, site) = browser_or_skip!("attach_puts_a_file_in_a_hidden_file_input");
     let page = browser.visit(site.url("/playground")).await.unwrap();
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let logo = dir.path().join("acme.png");
     std::fs::write(&logo, b"\x89PNG fake").unwrap();
     page.attach("Logo", &logo).await.unwrap();

@@ -250,7 +250,10 @@ async fn the_migrator_on_postgres() {
     assert_eq!(refreshed.reverted.migrations.len(), 2);
     assert_eq!(refreshed.migrated.migrations.len(), 3);
 
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let path = dir.path().join("postgres-schema.sql");
     Migrator::dump(app.ctx(), Some(&path)).await.unwrap();
     let dump = std::fs::read_to_string(&path).unwrap();

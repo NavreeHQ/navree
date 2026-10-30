@@ -202,7 +202,9 @@ concurrency tests.
   `.env` and environment).
 - `acting_as` in an app with `AuthModule` without `.fake_auth()` (panics).
 - Dropping the `TempDirGuard` early, or not calling `shutdown` on Windows
-  (temporary databases stay in `%TEMP%`).
+  (the directory waits in `%TEMP%` while a pool holds its files; the guard
+  retries for about 30 seconds, and test processes remove `navree-test-*`
+  directories older than an hour).
 - Asserting on `Utc::now()` values: inject `dyn Clock` and fix it.
 
 ## Docs

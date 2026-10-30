@@ -20,7 +20,10 @@ fn name(s: &str) -> Name {
 /// A new app with a CRUD `deals` module and its `Deal` model, made with a
 /// policy (so the model is an access subject).
 fn project() -> (tempfile::TempDir, PathBuf) {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let app = NewApp {
         name: AppName::parse("crm").unwrap(),
         ui: Ui::None,

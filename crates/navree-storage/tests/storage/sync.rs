@@ -7,7 +7,10 @@ use crate::support::{options, storage};
 
 #[tokio::test]
 async fn sync_copies_what_is_missing_or_different() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let storage = storage(root.path());
     let memory = storage.disk("memory").unwrap();
     let local = storage.disk("local").unwrap();
@@ -70,7 +73,10 @@ async fn sync_copies_what_is_missing_or_different() {
 
 #[tokio::test]
 async fn failures_are_reported_and_the_sync_goes_on() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let storage = storage(root.path());
     let memory = storage.disk("memory").unwrap();
     memory
@@ -92,7 +98,10 @@ async fn failures_are_reported_and_the_sync_goes_on() {
 
 #[tokio::test]
 async fn sync_needs_two_known_disks() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let storage = storage(root.path());
     assert!(matches!(
         storage.sync("memory", "memory", &SyncOptions::default()).await,
@@ -106,7 +115,10 @@ async fn sync_needs_two_known_disks() {
 
 #[tokio::test]
 async fn the_command_syncs_named_disks() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let app = Navree::app()
         .module(StorageModule::for_root(options(root.path())))
         .boot()

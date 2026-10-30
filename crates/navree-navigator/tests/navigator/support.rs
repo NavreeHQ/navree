@@ -21,7 +21,10 @@ pub struct Fixture {
 
 impl Fixture {
     pub fn new(app_toml: &str) -> Fixture {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .expect("tempdir");
         let root = dir.path();
         write(
             &root.join("Cargo.toml"),

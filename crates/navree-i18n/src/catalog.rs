@@ -821,7 +821,10 @@ mod tests {
 
     #[test]
     fn the_directory_is_read_recursively() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let write = |relative: &str, source: &str| {
             let path = dir.path().join(relative);
             fs::create_dir_all(path.parent().unwrap()).unwrap();

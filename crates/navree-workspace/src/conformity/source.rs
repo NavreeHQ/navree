@@ -1707,7 +1707,10 @@ fn real() {}
 
     #[test]
     fn projects_load_every_crate_under_the_root() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let root = dir.path();
         std::fs::write(root.join("Cargo.toml"), "[package]\nname = \"crm-api\"\n").unwrap();
         std::fs::create_dir_all(root.join("src")).unwrap();

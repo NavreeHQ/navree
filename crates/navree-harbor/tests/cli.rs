@@ -38,7 +38,10 @@ struct App {
 
 impl App {
     fn new() -> App {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         std::fs::write(
             dir.path().join("Cargo.toml"),
             "[package]\nname = \"crm-api\"\nversion = \"0.1.0\"\n\n[dependencies]\nnavree = { version = \"0.1\", features = [\"postgres\"] }\n",
@@ -46,7 +49,10 @@ impl App {
         .unwrap();
         std::fs::create_dir_all(dir.path().join("config")).unwrap();
         std::fs::write(dir.path().join("config/app.toml"), "[http]\n").unwrap();
-        let home = tempfile::tempdir().unwrap();
+        let home = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         std::fs::create_dir_all(home.path().join(".ssh")).unwrap();
         std::fs::write(home.path().join(".ssh/id_ed25519"), "PRIVATE KEY\n").unwrap();
         std::fs::write(

@@ -509,7 +509,10 @@ async fn a_schema_dump_loads_into_an_empty_database() {
     let temp = TempDb::new();
     let app = boot(crm_app(&temp, &[])).await;
     Migrator::up(app.ctx()).await.unwrap();
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let path = dir.path().join("schema").join("sqlite-schema.sql");
     let written = Migrator::dump(app.ctx(), Some(&path)).await.unwrap();
     assert_eq!(written, path);
@@ -628,7 +631,10 @@ async fn the_commands() {
     );
     run(&app, "migrate:fresh", &["--drop-views"]).await.unwrap();
     assert_eq!(batches(&db).await.len(), 3);
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let path = dir.path().join("dump.sql");
     run(&app, "schema:dump", &["--path", path.to_str().unwrap()])
         .await

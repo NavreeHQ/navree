@@ -47,7 +47,10 @@ async fn it_downloads_and_unpacks_into_the_cache_once() {
         .expect(2)
         .mount(&server)
         .await;
-    let cache = tempfile::tempdir().unwrap();
+    let cache = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let opts = options(&server, cache.path(), "156.0.8078.47", false);
 
     let mut out = Vec::new();
@@ -107,7 +110,10 @@ async fn a_version_the_server_does_not_have_fails_with_the_url() {
         .respond_with(ResponseTemplate::new(404))
         .mount(&server)
         .await;
-    let cache = tempfile::tempdir().unwrap();
+    let cache = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let opts = options(&server, cache.path(), "1.2.3.4", false);
     let error = install(&opts, &mut Vec::new()).await.unwrap_err();
     let message = format!("{error:#}");
@@ -132,7 +138,10 @@ async fn a_broken_archive_leaves_nothing_behind() {
         .respond_with(ResponseTemplate::new(200).set_body_bytes(archive("linux64", false)))
         .mount(&server)
         .await;
-    let cache = tempfile::tempdir().unwrap();
+    let cache = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
 
     let error = install(
         &options(&server, cache.path(), "9.9.9.9", false),

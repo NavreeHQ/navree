@@ -5,7 +5,10 @@ use crate::support::{boot, document};
 #[tokio::test]
 async fn openapi_export_writes_file() {
     let app = boot().await;
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let path = dir.path().join("web").join("openapi.json");
 
     app.run_command("openapi:export", vec![path.display().to_string()])

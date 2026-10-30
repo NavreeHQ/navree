@@ -8,14 +8,13 @@ use std::sync::Arc;
 use navree_crypto::{CryptoModule, CryptoOptions, HashingOptions, generate_key};
 use navree_db::Executor as _;
 use navree_db::{DatabaseModule, Db, DbOptions};
-use navree_testing::TestApp;
-use tempfile::TempDir;
+use navree_testing::{TempDirGuard, TestApp};
 
 /// A SQLite database of its own. Keep it alive for the test: dropping it
 /// deletes the file.
 pub struct Sqlite {
     pub db: Db,
-    _dir: TempDir,
+    _dir: TempDirGuard,
 }
 
 /// Runs each statement of `schema`.
@@ -30,7 +29,7 @@ pub async fn create(db: &Db, schema: &str) {
 
 /// A fresh SQLite database (no app) with `schema`'s tables.
 pub async fn sqlite(schema: &str) -> Sqlite {
-    let dir = tempfile::tempdir().expect("a temporary directory");
+    let dir = TempDirGuard::new();
     let url = format!(
         "sqlite://{}?mode=rwc",
         dir.path().join("attributes.db").display()

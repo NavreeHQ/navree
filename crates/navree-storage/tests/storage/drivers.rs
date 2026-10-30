@@ -29,7 +29,10 @@ async fn memory_disk_conforms() {
 
 #[tokio::test]
 async fn local_disk_conforms() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let (_app, subject) = app_subject("local", DiskConfig::local(root.path())).await;
     assert_eq!(subject.disk.driver(), "local");
     run(&subject).await;

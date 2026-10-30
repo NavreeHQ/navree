@@ -933,7 +933,10 @@ mod tests {
 
     #[test]
     fn only_a_source_naming_the_module_includes_lighthouse() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         assert!(!included(dir.path()));
         std::fs::create_dir_all(dir.path().join("src/modules")).unwrap();
         std::fs::write(dir.path().join("src/main.rs"), "fn main() {}").unwrap();

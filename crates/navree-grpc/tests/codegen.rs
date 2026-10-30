@@ -68,7 +68,10 @@ fn generated_code_is_current() {
         generate(&checked_in);
         return;
     }
-    let fresh = tempfile::tempdir().unwrap();
+    let fresh = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     generate(fresh.path());
     for name in [
         "crm.deals.v1.rs",

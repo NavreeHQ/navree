@@ -15,6 +15,15 @@
 //! is pending, every row reads back, and they roll back cleanly.
 #![cfg(feature = "sqlite")]
 
+/// The temporary-directory guard of navree-testing, included so these tests
+/// need no feature for it: its reaper retries a folder Windows will not
+/// delete while SQLite has a file open, and its sweep removes the folders of
+/// earlier runs.
+#[allow(dead_code)]
+#[path = "../../navree-testing/src/temp.rs"]
+mod temp;
+use temp::TempDirGuard;
+
 use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -312,7 +321,7 @@ fn with_database(url: &str, database: &str) -> String {
 
 #[tokio::test]
 async fn every_migration_on_sqlite() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     let url = format!("sqlite://{}?mode=rwc", dir.path().join("app.db").display());
     let outcome = every_migration(&url).await;
     eprintln!("SQLite: {outcome:?}");

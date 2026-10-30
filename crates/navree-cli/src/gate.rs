@@ -465,7 +465,10 @@ mod tests {
     use crate::check::tests::{FakeRunner, HELP};
 
     fn app(manifest: &str) -> tempfile::TempDir {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         std::fs::write(dir.path().join("Cargo.toml"), manifest).unwrap();
         dir
     }
@@ -654,7 +657,10 @@ mod tests {
 
     #[test]
     fn the_machine_lock_admits_one_gate_at_a_time() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let path = dir.path().join("locks").join("navree-gate.lock");
         let held = try_lock(&path, Path::new("app-one"))
             .unwrap()
@@ -672,7 +678,10 @@ mod tests {
 
     #[test]
     fn the_gate_takes_the_lock() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let path = dir.path().join("navree-gate.lock");
         let mut runner = FakeRunner::default();
         let options = GateOptions {

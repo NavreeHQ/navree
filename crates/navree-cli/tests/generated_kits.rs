@@ -91,7 +91,10 @@ fn generate(kit: Kit, name: &str) -> (tempfile::TempDir, PathBuf) {
     let facade = std::env::var_os("NAVREE_FACADE")
         .map(PathBuf::from)
         .unwrap_or_else(|| workspace().join("crates").join("navree"));
-    let parent = tempfile::tempdir().unwrap();
+    let parent = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let app = NewApp {
         name: AppName::parse(name).unwrap(),
         ui: Ui::None,

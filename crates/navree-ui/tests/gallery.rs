@@ -157,7 +157,7 @@ fn the_components_page_shows_every_kind_of_component() {
 fn writes_the_gallery_to_disk() {
     let dir = match std::env::var_os("NAVREE_UI_GALLERY_DIR") {
         Some(dir) => std::path::PathBuf::from(dir),
-        None => std::env::temp_dir().join(format!("navree-ui-gallery-{}", std::process::id())),
+        None => std::env::temp_dir().join(format!("navree-test-ui-gallery-{}", std::process::id())),
     };
     gallery::write(&dir).expect("the gallery is written");
     for page in PAGES {

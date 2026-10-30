@@ -614,7 +614,10 @@ mod tests {
 
     #[test]
     fn the_binary_is_built_and_its_answers_are_cached() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let binary = dir.path().join("crm.exe");
         std::fs::write(&binary, "binary").unwrap();
         let runner = FakeRunner::new();
@@ -669,7 +672,10 @@ mod tests {
 
     #[test]
     fn a_failed_build_returns_the_first_compiler_error() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let runner = FakeRunner::new();
         let messages = [
             serde_json::json!({"reason": "compiler-message", "message": {"level": "warning", "rendered": "warning: unused"}}),
@@ -705,7 +711,10 @@ mod tests {
 
     #[test]
     fn no_build_uses_the_last_binary_or_says_there_is_none() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let runner = FakeRunner::new();
         runner.on("cargo", &["metadata"], ok(&metadata(dir.path())));
         let probe = AppProbe::new(project(dir.path()), runner.clone(), true, Vec::new());
@@ -732,7 +741,10 @@ mod tests {
 
     #[test]
     fn a_failing_command_reports_what_it_printed() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let binary = dir.path().join("crm");
         std::fs::write(&binary, "binary").unwrap();
         let runner = FakeRunner::new();
@@ -769,7 +781,10 @@ mod tests {
 
     #[test]
     fn the_package_needs_a_binary() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let runner = FakeRunner::new();
         runner.on(
             "cargo",

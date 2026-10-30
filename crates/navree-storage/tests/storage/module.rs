@@ -32,7 +32,10 @@ fn storage_section(root: &std::path::Path) -> serde_json::Value {
 
 #[tokio::test]
 async fn from_config_reads_the_storage_section() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let files = root.path().join("files");
     let app = Navree::app()
         .module(ConfigModule::for_root(
@@ -70,7 +73,10 @@ async fn from_config_reads_the_storage_section() {
 
 #[tokio::test]
 async fn invalid_storage_config_fails_the_boot() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let mut section = storage_section(root.path());
     section["default"] = json!("s3");
     let error = boot_error(
@@ -103,7 +109,10 @@ fn default_options_have_one_local_disk() {
 
 /// A temporary URL for a fixed path and expiry, from a freshly booted app.
 async fn signed_url(app_key: Option<&str>, with_crypto: bool) -> String {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let mut sources = ConfigSources::new();
     if let Some(key) = app_key {
         sources = sources.set("app.key", key);
@@ -146,7 +155,10 @@ async fn temporary_urls_are_keyed_by_the_app_key() {
 
 #[tokio::test]
 async fn crypto_module_key_signs_without_config() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let key = generate_key();
     let boot = || async {
         Navree::app()
@@ -175,7 +187,10 @@ async fn crypto_module_key_signs_without_config() {
 
 #[tokio::test]
 async fn malformed_app_key_fails_the_boot() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let error = boot_error(
         Navree::app()
             .module(ConfigModule::for_root(
@@ -235,7 +250,10 @@ impl Module for FilesModule {
 
 #[tokio::test]
 async fn storage_errors_map_to_http_statuses() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let app = TestApp::boot(
         Navree::app()
             .module(StorageModule::for_root(options(root.path())))
@@ -254,7 +272,10 @@ async fn storage_errors_map_to_http_statuses() {
 
 #[tokio::test]
 async fn health_check_probes_every_disk() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let app = Navree::app()
         .module(StorageModule::for_root(options(root.path())))
         .boot()
@@ -279,7 +300,10 @@ async fn health_check_probes_every_disk() {
 
     // A local disk whose root disappeared is down.
     drop(app);
-    let gone = tempfile::tempdir().unwrap();
+    let gone = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let path = gone.path().join("root");
     let app = Navree::app()
         .module(StorageModule::for_root(options(&path)))
@@ -366,7 +390,10 @@ fn multipart_request(contents: &[u8]) -> Request<Body> {
 
 #[tokio::test]
 async fn multipart_errors_in_handlers_keep_their_status() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let app = TestApp::boot(
         Navree::app()
             .module(StorageModule::for_root(options(root.path())))

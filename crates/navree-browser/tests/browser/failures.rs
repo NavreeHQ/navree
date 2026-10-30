@@ -23,7 +23,10 @@ async fn a_failed_step_saves_a_screenshot_the_html_and_the_console_log() {
         return;
     }
     let site = Fixture::start().await;
-    let artifacts = tempfile::tempdir().unwrap();
+    let artifacts = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let browser = Browser::builder()
         .artifacts(artifacts.path())
         .timeout(Duration::from_millis(400))
@@ -106,7 +109,10 @@ async fn screenshots_on_purpose_are_numbered_and_named() {
         return;
     }
     let site = Fixture::start().await;
-    let artifacts = tempfile::tempdir().unwrap();
+    let artifacts = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let browser = Browser::builder()
         .artifacts(artifacts.path())
         .launch()
@@ -163,7 +169,10 @@ async fn a_failure_on_a_background_page_still_saves_its_screenshot() {
         return;
     }
     let site = Fixture::start().await;
-    let artifacts = tempfile::tempdir().unwrap();
+    let artifacts = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let browser = Browser::builder()
         .artifacts(artifacts.path())
         .timeout(Duration::from_millis(300))

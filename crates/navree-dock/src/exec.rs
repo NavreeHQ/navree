@@ -431,7 +431,10 @@ mod tests {
 
     #[test]
     fn programs_are_found_on_path_with_windows_extensions() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         std::fs::write(dir.path().join("podman.exe"), "").unwrap();
         std::fs::write(dir.path().join("docker"), "").unwrap();
         let path = Some(dir.path().as_os_str().to_owned());

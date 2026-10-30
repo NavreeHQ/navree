@@ -207,7 +207,10 @@ mod tests {
 
     #[test]
     fn installs_into_both_folders() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let report = install_files(dir.path(), FILES.iter().copied()).unwrap();
         assert_eq!(report.installed, ["navree", "navree-database"]);
         for target in SKILL_DIRS {
@@ -223,7 +226,10 @@ mod tests {
 
     #[test]
     fn installing_again_changes_nothing() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         install_files(dir.path(), FILES.iter().copied()).unwrap();
         let report = install_files(dir.path(), FILES.iter().copied()).unwrap();
         assert!(report.removed.is_empty());
@@ -232,7 +238,10 @@ mod tests {
 
     #[test]
     fn other_skills_are_left_alone_and_stale_navree_skills_go() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let skills = dir.path().join(".claude/skills");
         std::fs::create_dir_all(skills.join("crm-pipeline-stages")).unwrap();
         std::fs::write(skills.join("crm-pipeline-stages/SKILL.md"), "mine").unwrap();

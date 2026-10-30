@@ -131,7 +131,10 @@ mod tests {
     /// fields, or colour codes end up in the file.
     #[test]
     fn coloured_stdout_does_not_leak_escapes_into_the_file() {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .expect("tempdir");
         let path = dir.path().join("app.log");
         let options = LogOptions {
             format: LogFormat::Pretty,

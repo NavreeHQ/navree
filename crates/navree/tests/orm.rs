@@ -2,6 +2,15 @@
 //! `navree::prelude` and `navree::orm`, inside a unit of work.
 #![cfg(feature = "sqlite")]
 
+/// The temporary-directory guard of navree-testing, included so these tests
+/// need no feature for it: its reaper retries a folder Windows will not
+/// delete while SQLite has a file open, and its sweep removes the folders of
+/// earlier runs.
+#[allow(dead_code)]
+#[path = "../../navree-testing/src/temp.rs"]
+mod temp;
+use temp::TempDirGuard;
+
 use navree::BoxError;
 use navree::db::Executor as _;
 use navree::db::{Db, DbOptions};
@@ -22,7 +31,7 @@ struct Contact {
 
 #[tokio::test]
 async fn models_work_through_the_facade() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     let url = format!(
         "sqlite://{}?mode=rwc",
         dir.path().join("facade.db").display()
@@ -118,7 +127,7 @@ impl Person {
 
 #[tokio::test]
 async fn relations_work_through_the_facade() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     let url = format!(
         "sqlite://{}?mode=rwc",
         dir.path().join("relations.db").display()

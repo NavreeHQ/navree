@@ -21,7 +21,10 @@ async fn boot(root: &std::path::Path, clock: Arc<FixedClock>) -> TestApp {
 
 #[tokio::test]
 async fn temporary_url_valid_then_expired() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let clock = Arc::new(FixedClock::new(Utc::now()));
     let app = boot(root.path(), clock.clone()).await;
     let storage = app.app.ctx().get::<Storage>().await.unwrap();
@@ -63,7 +66,10 @@ async fn temporary_url_valid_then_expired() {
 
 #[tokio::test]
 async fn tampered_or_unsigned_urls_are_forbidden() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let clock = Arc::new(FixedClock::new(Utc::now()));
     let app = boot(root.path(), clock.clone()).await;
     let storage = app.app.ctx().get::<Storage>().await.unwrap();
@@ -95,7 +101,10 @@ async fn tampered_or_unsigned_urls_are_forbidden() {
 
 #[tokio::test]
 async fn signed_url_for_missing_file_is_not_found() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let clock = Arc::new(FixedClock::new(Utc::now()));
     let app = boot(root.path(), clock.clone()).await;
     let storage = app.app.ctx().get::<Storage>().await.unwrap();
@@ -123,7 +132,10 @@ async fn signed_url_for_missing_file_is_not_found() {
 
 #[tokio::test]
 async fn active_content_is_served_as_an_attachment() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let clock = Arc::new(FixedClock::new(Utc::now()));
     let app = boot(root.path(), clock.clone()).await;
     let disk = app.app.ctx().get::<Storage>().await.unwrap().default_disk();

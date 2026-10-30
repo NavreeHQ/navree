@@ -311,7 +311,10 @@ async fn compression_skipped_for_event_stream() {
 
 #[tokio::test]
 async fn maintenance_mode_returns_503() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let file = dir.path().join("down");
     std::fs::write(&file, r#"{"retry": 120, "message": "Back soon."}"#).unwrap();
     let app = Setup::new(vec![
@@ -335,7 +338,10 @@ async fn maintenance_mode_returns_503() {
 
 #[tokio::test]
 async fn maintenance_mode_skips_excepted_paths() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let file = dir.path().join("down");
     std::fs::write(&file, "{}").unwrap();
     let routes = || {
@@ -387,7 +393,10 @@ fn maintenance_except_reads_a_comma_separated_environment_value() {
 
 #[tokio::test]
 async fn down_and_up_commands_toggle_maintenance() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let file = dir.path().join("framework").join("down");
     let app = Setup::new(vec![
         RouteDef::new(Method::GET, "/ok", get(|| async { "ok" })).public(),
@@ -620,7 +629,10 @@ fn client_ip_of_a_request_follows_the_proxy_settings() {
 /// carries the request id.
 #[tokio::test]
 async fn fixed_layers_keep_their_order_in_one_middleware() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let mut routes = error_routes();
     routes.push(RouteDef::new(Method::GET, "/ok", get(|| async { "ok" })).public());
     let single = HttpOptions {
@@ -660,7 +672,10 @@ async fn fixed_layers_keep_their_order_in_one_middleware() {
 
 #[tokio::test(start_paused = true)]
 async fn the_app_timeout_holds_in_one_middleware() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let mut single = HttpOptions {
         compression: false,
         timeout_secs: 1,
