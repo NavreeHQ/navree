@@ -4,7 +4,6 @@
 //! builds a Word report, an export behind an operation, a module that
 //! ships its templates, and the fake.
 #![cfg(feature = "sqlite")]
-
 #![cfg(feature = "documents")]
 
 use navree::documents::docx::{Align, Paragraph, Table as DocxTable};

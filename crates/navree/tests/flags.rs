@@ -3,7 +3,6 @@
 //! facade alone: `#[flag]` and `#[requires_flag]` expand to
 //! `::navree::flags::*`, and the result boots, routes and resolves.
 #![cfg(feature = "sqlite")]
-
 #![cfg(feature = "flags")]
 
 use std::collections::HashMap;

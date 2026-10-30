@@ -73,7 +73,10 @@ use serde::{Deserialize, Deserializer};
 pub struct DbOptions {
     /// The connection URL (`postgres://...` for TimescaleDB or PostgreSQL,
     /// `mysql://...`, `mariadb://...` or `sqlite://path?mode=rwc`); default
-    /// `sqlite://storage/app.db?mode=rwc`.
+    /// `sqlite://storage/app.db?mode=rwc`. Each URL needs its driver's
+    /// feature (`postgres`, `mysql`, `sqlite`; none is on by default), so an
+    /// app built without `sqlite` that leaves the URL out stops at boot with
+    /// "enable the `sqlite` feature of navree-db".
     pub url: String,
     /// Read replicas of the database at `url`: reads outside a
     /// transaction go to them in turn, writes and transactions to `url`.

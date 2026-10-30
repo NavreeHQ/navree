@@ -14,9 +14,9 @@ use navree_telemetry::{ModuleBuilderTelemetryExt, TelemetrySink};
 
 use crate::capture;
 use crate::redact::Redactor;
-use crate::store::{LogbookStore, MemoryStore};
 #[cfg(feature = "sqlite")]
 use crate::store::SqliteStore;
+use crate::store::{LogbookStore, MemoryStore};
 use crate::ui::LogbookController;
 use crate::{Activation, Logbook, LogbookOptions, StoreKind};
 

@@ -66,7 +66,7 @@ pub use module::{LogbookModule, PRUNE_EVERY};
 pub use options::{Activation, CaptureOptions, IgnoreOptions, LogbookOptions, StoreKind, Watchers};
 pub use redact::REDACTED;
 pub use replay::{REPLAY_TOKEN_TTL, ReplayRequest, Replayed, is_unsafe};
-pub use store::{ListQuery, LogbookStore, MemoryStore};
 #[cfg(feature = "sqlite")]
 pub use store::SqliteStore;
+pub use store::{ListQuery, LogbookStore, MemoryStore};
 pub use ui::VIEW_PERMISSION;

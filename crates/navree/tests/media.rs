@@ -5,7 +5,6 @@
 //! the model, regeneration, archives, text, images on their own, and the
 //! fake.
 #![cfg(feature = "sqlite")]
-
 #![cfg(feature = "media")]
 
 use std::io::Write;

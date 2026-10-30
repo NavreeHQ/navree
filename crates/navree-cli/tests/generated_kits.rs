@@ -53,6 +53,12 @@ fn target() -> PathBuf {
     .join("generated-kits")
 }
 
+/// The feature the commands that boot an app turn on: the kits compile only
+/// the `postgres` driver, and `cargo run --features navree/sqlite` adds
+/// SQLite for a run on a scratch file (their tests have SQLite through
+/// `[dev-dependencies]`).
+const SQLITE: &str = "navree/sqlite";
+
 /// `cargo <args>` in `dir`, with the outer build's job limit and sccache.
 /// What the app runs (`cargo run -- check`, ...) boots without the
 /// services Dock would start: a SQLite file instead of PostgreSQL, and the
@@ -114,7 +120,7 @@ fn finish(parent: tempfile::TempDir, ok: bool, what: &str) {
 /// (the module graph resolves) and `extra`, an app command.
 fn rust_checks(root: &Path, extra: &[&str]) -> bool {
     std::fs::create_dir_all(root.join("storage")).unwrap();
-    let mut run = vec!["run", "--quiet", "--"];
+    let mut run = vec!["run", "--quiet", "--features", SQLITE, "--"];
     run.extend_from_slice(extra);
     cargo(root, &["test", "--workspace", "--quiet"])
         && cargo(
@@ -129,7 +135,10 @@ fn rust_checks(root: &Path, extra: &[&str]) -> bool {
                 "warnings",
             ],
         )
-        && cargo(root, &["run", "--quiet", "--", "check"])
+        && cargo(
+            root,
+            &["run", "--quiet", "--features", SQLITE, "--", "check"],
+        )
         && cargo(root, &run)
 }
 
@@ -143,6 +152,8 @@ fn openapi_is_current(root: &Path) -> bool {
         &[
             "run",
             "--quiet",
+            "--features",
+            SQLITE,
             "--",
             "openapi:export",
             "openapi.fresh.json",
