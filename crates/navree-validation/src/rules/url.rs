@@ -11,8 +11,9 @@
 //!   is given (`http://example.com:` fails).
 //! - For the web's schemes (`http`, `https`, `ws`, `wss`, `ftp`, `file`)
 //!   the host is a host name (labels of letters, digits and hyphens, the
-//!   last not all digits), an IPv4 address or a bracketed IPv6 address,
-//!   and it is required except for `file` (`file:///etc/hosts`). Other
+//!   last not a number: all digits, or `0x` and hex digits), an IPv4
+//!   address or a bracketed IPv6 address, and it is required except for
+//!   `file` (`file:///etc/hosts`). Other
 //!   schemes take any RFC 3986 host (`urn:isbn:0451450523`,
 //!   `mailto:ada@example.com` and `custom://anything` pass).
 //! - Internationalized host names are accepted in their ASCII form
@@ -188,6 +189,8 @@ mod tests {
             "ftp://ftp.example.com/pub",
             "ws://example.com/socket",
             "file:///etc/hosts",
+            "https://0x.example.com",
+            "https://example.0xg",
             "file://server/share",
             "mailto:ada@example.com",
             "urn:isbn:0451450523",
@@ -231,6 +234,10 @@ mod tests {
             "http://1.2.3/",
             "http://[2001:db8::12345]/",
             "http://[192.0.2.1]/",
+            "https://example.0xa",
+            "https://example.0Xa/path",
+            "https://example.0x",
+            "http://0x7f000001/",
             "http://user@:80/",
             "https://bücher.de",
             "https://example.com/\n",

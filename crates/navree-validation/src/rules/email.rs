@@ -9,8 +9,9 @@
 //!   refused: they are legal but almost always a typo or an attack.
 //! - The domain is a host name of at most 253 bytes, labels of 1 to 63
 //!   letters, digits and hyphens with no hyphen at either end and no
-//!   trailing dot, whose last label isn't all digits (`a@127.0.0.1` is
-//!   refused); or an address literal: `[192.0.2.1]` or `[IPv6:2001:db8::1]`.
+//!   trailing dot, whose last label isn't a number (all digits, or `0x`
+//!   and hex digits: `a@127.0.0.1` is refused); or an address literal:
+//!   `[192.0.2.1]` or `[IPv6:2001:db8::1]`.
 //!   A single label (`admin@localhost`) is a host name too.
 //! - Internationalized domains are accepted in their ASCII form
 //!   (`user@xn--bcher-kva.de`); clients convert `bücher.de` before sending.
@@ -60,7 +61,7 @@ fn is_domain(domain: &str) -> bool {
     }
 }
 
-/// Labels of letters, digits and hyphens; the last not all digits.
+/// Labels of letters, digits and hyphens; the last not a number.
 pub(crate) fn is_host_name(host: &str) -> bool {
     if host.is_empty() || host.len() > MAX_DOMAIN {
         return false;
@@ -72,7 +73,16 @@ pub(crate) fn is_host_name(host: &str) -> bool {
         }
         last = label;
     }
-    !last.bytes().all(|byte| byte.is_ascii_digit())
+    !last.bytes().all(|byte| byte.is_ascii_digit()) && !is_hex_number(last)
+}
+
+/// `0x` and hex digits: URL parsers read such a last label as an IPv4
+/// number, so the name is no host name to them.
+fn is_hex_number(label: &str) -> bool {
+    label
+        .get(..2)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("0x"))
+        && label[2..].bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 /// 1 to 63 letters, digits and hyphens, no hyphen at either end.
