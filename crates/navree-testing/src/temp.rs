@@ -158,8 +158,8 @@ pub(crate) fn global_reaper() -> &'static Reaper {
     REAPER.get_or_init(|| {
         Reaper::start(
             REAP_WINDOW,
-            Duration::from_millis(25),
-            Duration::from_secs(1),
+            Duration::from_millis(2),
+            Duration::from_millis(500),
             Box::new(remove),
         )
     })
