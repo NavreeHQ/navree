@@ -111,7 +111,11 @@ fuzz_target!(|data: &[u8]| {
         let checked = check_path(path);
         if checked.is_ok() {
             assert!(!path.contains('\\'));
-            assert!(!path.split('/').any(|segment| segment == "." || segment == ".."));
+            assert!(
+                !path
+                    .split('/')
+                    .any(|segment| segment == "." || segment == "..")
+            );
         }
         let found = tree.at(path);
         if let Some(found) = &found {
@@ -119,7 +123,12 @@ fuzz_target!(|data: &[u8]| {
             let best = rank(found.pattern, path).expect("the matched pattern matches");
             for (pattern, _) in tree.iter() {
                 if let Some(other) = rank(pattern, path) {
-                    assert!(best <= other, "{} beats {} for {path}", pattern, found.pattern);
+                    assert!(
+                        best <= other,
+                        "{} beats {} for {path}",
+                        pattern,
+                        found.pattern
+                    );
                 }
             }
             let last = found.raw_values().len().saturating_sub(1);
@@ -149,9 +158,15 @@ fuzz_target!(|data: &[u8]| {
                     "{method} {path} answered {status}"
                 );
             }
-            if method == Method::POST && tree.at(uri.path()).is_some() && check_path(uri.path()).is_ok() {
+            if method == Method::POST
+                && tree.at(uri.path()).is_some()
+                && check_path(uri.path()).is_ok()
+            {
                 assert!(
-                    matches!(status, StatusCode::METHOD_NOT_ALLOWED | StatusCode::BAD_REQUEST),
+                    matches!(
+                        status,
+                        StatusCode::METHOD_NOT_ALLOWED | StatusCode::BAD_REQUEST
+                    ),
                     "POST {path}: {status}"
                 );
             }

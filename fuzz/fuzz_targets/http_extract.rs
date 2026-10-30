@@ -51,7 +51,10 @@ fn request(method: Method, query: &str, content_type: &str, body: &[u8]) -> Opti
 }
 
 fn client_error(status: http::StatusCode) {
-    assert!(status.is_client_error(), "a rejection of client input is a 4xx, got {status}");
+    assert!(
+        status.is_client_error(),
+        "a rejection of client input is a 4xx, got {status}"
+    );
 }
 
 /// Prints pairs the way an HTML form submits them.

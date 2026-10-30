@@ -115,8 +115,12 @@ fn dto(text: &str) {
         Ok(signup) => assert!(signup.validate().is_ok()),
         Err(errors) => {
             for (path, messages) in errors.iter() {
-                let field = path.split('.').next().unwrap_or_default();
-                assert!(FIELDS.contains(&field), "unexpected path {path:?}");
+                // serde fills a struct from an array by position, so an
+                // array's paths start with an index.
+                if json.is_object() {
+                    let field = path.split('.').next().unwrap_or_default();
+                    assert!(FIELDS.contains(&field), "unexpected path {path:?}");
+                }
                 assert!(!messages.is_empty());
             }
         }
