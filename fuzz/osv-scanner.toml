@@ -1,0 +1,10 @@
+# Known findings in the fuzz workspace's Cargo.lock that have no fixed release
+# their dependents can use. The fuzz workspace builds Navree's own crates, so
+# its tree matches the root Cargo.lock: keep these entries in step with
+# ../osv-scanner.toml. Reviewed 2026-10-30; each entry expires so it gets
+# looked at again.
+
+[[IgnoredVulns]]
+id = "GHSA-qwgh-2vcv-g2f7"
+ignoreUntil = 2027-01-31
+reason = "As in ../osv-scanner.toml: block-buffer 0.10.4 is the block buffer of digest 0.10, which sha1 0.10 (axum 0.8.9's WebSocket handshake, tungstenite 0.29) and sha2 0.10 (sqlx-core 0.9.0) still use, all at their latest releases; the fix is only in block-buffer 0.12 (digest 0.11). Not reachable: the buffer's cursor is corrupted only when its block-compression callback panics and the caller catches the panic and reuses the hasher, and here the callbacks are the SHA-1 and SHA-256 block functions, which do not panic."
