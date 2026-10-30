@@ -53,6 +53,18 @@ fn navree_features(root: &Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// The `features` of the generated `navree` dev-dependency: the SQLite
+/// driver the tests run on.
+fn navree_test_features(root: &Path) -> Vec<String> {
+    let manifest: toml::Table = read(root, "Cargo.toml").parse().unwrap();
+    manifest["dev-dependencies"]["navree"]["features"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f.as_str().unwrap().to_owned())
+        .collect()
+}
+
 /// Every file under `root`, relative, with `/` separators, sorted.
 fn tree(root: &Path) -> Vec<String> {
     fn walk(dir: &Path, root: &Path, out: &mut Vec<String>) {
@@ -124,6 +136,13 @@ fn cargo_manifest_names_the_package_and_the_navree_dependency() {
         Some("/opt/navree/crates/navree")
     );
     assert_eq!(navree_features(&root), ["postgres"]);
+    // The tests run on SQLite files, so the dev-dependency turns the driver
+    // on; the app's own build compiles only PostgreSQL.
+    assert_eq!(navree_test_features(&root), ["sqlite"]);
+    assert_eq!(
+        parsed["dev-dependencies"]["navree"]["path"].as_str(),
+        Some("/opt/navree/crates/navree")
+    );
     assert!(parsed.contains_key("workspace"), "a standalone workspace");
     let main = std::fs::read_to_string(root.join("src").join("main.rs")).unwrap();
     assert!(
@@ -218,7 +237,8 @@ fn plain_postgres_mysql_and_sqlite_are_options() {
     )
     .unwrap();
     assert_eq!(configured_url(&sqlite), "sqlite://storage/lite.db?mode=rwc");
-    assert!(navree_features(&sqlite).is_empty());
+    assert_eq!(navree_features(&sqlite), ["sqlite"]);
+    assert_eq!(navree_test_features(&sqlite), ["sqlite"]);
     let manifest: toml::Table = read(&sqlite, "Cargo.toml").parse().unwrap();
     assert_eq!(
         manifest["dependencies"]["navree"]["path"].as_str(),

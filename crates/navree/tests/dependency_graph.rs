@@ -744,8 +744,7 @@ fn packages_in_tree(default_features: bool, features: &[&str]) -> BTreeSet<Strin
     let output = command.output().expect("failed to run `cargo tree`");
     assert!(
         output.status.success(),
-        "`cargo tree` failed:
-{}",
+        "`cargo tree` failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
     package_names(&String::from_utf8_lossy(&output.stdout))
@@ -901,7 +900,9 @@ fn a_build_without_sqlite_has_no_libsqlite3_sys() {
         for name in SQLITE_PACKAGES {
             assert!(
                 !packages.contains(*name),
-                "`navree` with default features {default_features} and {features:?} builds                  `{name}`: SQLite must come only from the `sqlite` feature. Find what pulls it                  in with `cargo tree -p navree -i {name}`"
+                "`navree` (default features: {default_features}) with {features:?} builds `{name}`: \
+                 SQLite must come only from the `sqlite` feature; find what pulls it in with \
+                 `cargo tree -p navree -i {name}`"
             );
         }
         assert!(
@@ -932,13 +933,15 @@ fn the_sqlite_feature_builds_sqlite_and_no_other_driver() {
 
 #[test]
 fn package_names_are_read_from_cargo_tree_output() {
-    let tree = "navree v0.1.0 (C:\work\navree)
-sqlx v0.9.0
-sqlx-core v0.9.0
-sqlx-core v0.9.0 (*)
-";
+    let tree = [
+        r"navree v0.1.0 (C:\work\navree)",
+        "sqlx v0.9.0",
+        "sqlx-core v0.9.0",
+        "sqlx-core v0.9.0 (*)",
+    ]
+    .join("\n");
     assert_eq!(
-        package_names(tree).into_iter().collect::<Vec<_>>(),
+        package_names(&tree).into_iter().collect::<Vec<_>>(),
         ["navree", "sqlx", "sqlx-core"]
     );
 }
