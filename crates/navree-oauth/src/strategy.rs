@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
-use axum::extract::{FromRequestParts, OptionalFromRequestParts, Request};
+use axum::extract::Request;
 use axum::middleware::{Next, from_fn};
 use axum::response::Response;
 use chrono::{DateTime, Utc};
@@ -16,6 +16,7 @@ use http::{HeaderValue, StatusCode};
 use navree_access::{ALL, Ability, AbilityFactory, MANAGE, Rules};
 use navree_auth::Strategy;
 use navree_contracts::{AuthVia, BoxFuture, Principal};
+use navree_http::extract::{FromRequestParts, OptionalFromRequestParts};
 use navree_http::{AppError, GlobalLayer, LayerSlot, RouteMeta};
 use navree_kernel::{AppContext, Injectable, KernelError, ProviderKey, Resolver};
 use navree_workspace::PinnedWorkspace;
@@ -102,10 +103,10 @@ impl OAuthToken {
     }
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for OAuthToken {
+impl FromRequestParts for OAuthToken {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         parts
             .extensions
             .get::<OAuthToken>()
@@ -116,13 +117,10 @@ impl<S: Send + Sync> FromRequestParts<S> for OAuthToken {
     }
 }
 
-impl<S: Send + Sync> OptionalFromRequestParts<S> for OAuthToken {
+impl OptionalFromRequestParts for OAuthToken {
     type Rejection = AppError;
 
-    async fn from_request_parts(
-        parts: &mut Parts,
-        _state: &S,
-    ) -> Result<Option<Self>, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Option<Self>, Self::Rejection> {
         Ok(parts.extensions.get::<OAuthToken>().cloned())
     }
 }
@@ -344,6 +342,14 @@ fn token_ability(permissions: &[String], prefixes: &BTreeMap<String, String>) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn handlers_on_the_oauth_token_are_native() {
+        use navree_http::handler::Endpoint;
+
+        async fn handler(_: OAuthToken, _: Option<OAuthToken>) {}
+        assert!(Endpoint::new(handler).is_native());
+    }
 
     #[test]
     fn insufficient_scope_names_the_scopes() {

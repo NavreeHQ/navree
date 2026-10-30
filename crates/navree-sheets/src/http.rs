@@ -1,9 +1,9 @@
 //! What the export and import routes share: the request's workspace,
 //! permission checks and route metadata.
 
-use axum::extract::FromRequestParts;
 use http::request::Parts;
 use navree_contracts::{Principal, permitted};
+use navree_http::extract::FromRequestParts;
 use navree_http::{ApiMeta, AppError, RouteDef, SchemaFn};
 use navree_kernel::AppContext;
 use navree_workspace::{CurrentWorkspace, InWorkspace};
@@ -14,10 +14,10 @@ use uuid::Uuid;
 /// `WorkspaceModule` (resolved by the `InWorkspace` guard), else `None`.
 pub(crate) struct Scope(pub(crate) Option<Uuid>);
 
-impl<S: Send + Sync> FromRequestParts<S> for Scope {
+impl FromRequestParts for Scope {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         Ok(Scope(
             parts
                 .extensions
@@ -104,4 +104,17 @@ pub(crate) fn scoped(workspaces: bool) -> impl Fn(RouteDef) -> RouteDef + Clone 
 pub(crate) fn upgrade(app: &navree_kernel::WeakAppContext) -> Result<AppContext, AppError> {
     app.upgrade()
         .ok_or_else(|| AppError::internal("the app has shut down"))
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_http::handler::Endpoint;
+
+    use super::*;
+
+    #[test]
+    fn handlers_on_the_scope_are_native() {
+        async fn handler(_: Scope) {}
+        assert!(Endpoint::new(handler).is_native());
+    }
 }

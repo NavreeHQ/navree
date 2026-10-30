@@ -3,13 +3,14 @@
 
 use std::sync::Arc;
 
-use axum::extract::{FromRequestParts, Path, Query};
+use axum::extract::{Path, Query};
 use axum::response::{IntoResponse, Response};
 use http::request::Parts;
 use http::{Method, StatusCode};
 use navree_auth::{AuthOptions, ClientMeta, LoginOutcome};
 use navree_contracts::{AuthState, Principal};
 use navree_db::Uow;
+use navree_http::extract::FromRequestParts;
 use navree_http::{
     ApiMeta, AppError, Controller, CurrentPrincipal, Json, NoContent, RouteDef, schema_fn,
 };
@@ -34,10 +35,10 @@ struct RedirectQuery {
 /// The request's principal, if any (on public routes).
 struct MaybePrincipal(Option<Principal>);
 
-impl<S: Send + Sync> FromRequestParts<S> for MaybePrincipal {
+impl FromRequestParts for MaybePrincipal {
     type Rejection = std::convert::Infallible;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         Ok(MaybePrincipal(
             parts
                 .extensions
@@ -315,5 +316,18 @@ impl Social {
 impl IntoResponse for SocialError {
     fn into_response(self) -> Response {
         self.into_app_error().into_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_http::handler::Endpoint;
+
+    use super::*;
+
+    #[test]
+    fn handlers_on_the_maybe_principal_are_native() {
+        async fn handler(_: MaybePrincipal) {}
+        assert!(Endpoint::new(handler).is_native());
     }
 }

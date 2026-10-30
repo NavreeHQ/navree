@@ -4,11 +4,12 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use axum::extract::{FromRequestParts, Path, Query};
+use axum::extract::{Path, Query};
 use axum::http::request::Parts;
 use axum::http::{HeaderMap, Method, Uri, header};
 use navree_contracts::Principal;
 use navree_db::{Page, PageQuery, Uow};
+use navree_http::extract::FromRequestParts;
 use navree_http::{
     ApiMeta, AppError, Controller, Created, CurrentPrincipal, Json, NoContent, RouteDef,
 };
@@ -535,10 +536,10 @@ struct RawUnread {
     unread: Option<String>,
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for UnreadFilter {
+impl FromRequestParts for UnreadFilter {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let Query(raw) = Query::<RawUnread>::try_from_uri(&parts.uri)
             .map_err(|rejection| AppError::bad_request(rejection.body_text()))?;
         match raw.unread.as_deref().map(str::trim) {
@@ -574,5 +575,18 @@ fn api(summary: &str, responses: &[u16], response: Option<navree_http::SchemaFn>
         responses: responses.to_vec(),
         response,
         ..ApiMeta::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_http::handler::Endpoint;
+
+    use super::*;
+
+    #[test]
+    fn handlers_on_the_unread_filter_are_native() {
+        async fn handler(_: UnreadFilter) {}
+        assert!(Endpoint::new(handler).is_native());
     }
 }

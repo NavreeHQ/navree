@@ -2,10 +2,11 @@
 
 use std::sync::Arc;
 
-use axum::extract::{FromRequestParts, Path, Query};
+use axum::extract::{Path, Query};
 use http::Method;
 use http::request::Parts;
 use navree_db::PageQuery;
+use navree_http::extract::FromRequestParts;
 use navree_http::{ApiMeta, AppError, Controller, Json, RouteDef, SchemaFn, schema_fn};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_workspace::{CurrentWorkspace, InWorkspace, WorkspaceConfig};
@@ -55,10 +56,10 @@ pub(crate) struct DataList<T> {
 /// `WorkspaceModule` (resolved by the [`InWorkspace`] guard), else `None`.
 pub(crate) struct Scope(pub(crate) Option<Uuid>);
 
-impl<S: Send + Sync> FromRequestParts<S> for Scope {
+impl FromRequestParts for Scope {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         Ok(Scope(
             parts
                 .extensions
@@ -288,5 +289,18 @@ impl Controller for WorkflowsController {
                 Some(schema_fn::<WorkflowRun>),
             )),
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_http::handler::Endpoint;
+
+    use super::*;
+
+    #[test]
+    fn handlers_on_the_scope_are_native() {
+        async fn handler(_: Scope) {}
+        assert!(Endpoint::new(handler).is_native());
     }
 }

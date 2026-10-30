@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use axum::Form;
-use axum::extract::{FromRequestParts, Path, Query};
+use axum::extract::{Path, Query};
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use http::HeaderMap;
 use http::header::{HeaderName, HeaderValue};
@@ -13,7 +13,7 @@ use http::{Method, StatusCode};
 use navree_access::{Abilities, Subject as _};
 use navree_auth::{AuthError, AuthService, ClientMeta, LoginOutcome, TwoFactorProof};
 use navree_crypto::{Encrypter, constant_time_eq, random_token};
-use navree_http::extract::FromRequestParts as _;
+use navree_http::extract::FromRequestParts;
 use navree_http::{AppError, ClientIp, Controller, CurrentPrincipal, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_view::Views;
@@ -152,10 +152,10 @@ pub(crate) struct Viewer {
     path: String,
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for Viewer {
+impl FromRequestParts for Viewer {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let CurrentPrincipal(principal) = CurrentPrincipal::from_parts(parts)?;
         let abilities = Abilities::from_request_parts(parts).await?;
         Ok(Viewer {
@@ -930,4 +930,17 @@ fn encode(text: &str) -> String {
 
 fn round1(value: f64) -> f64 {
     (value * 10.0).round() / 10.0
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_http::handler::Endpoint;
+
+    use super::*;
+
+    #[test]
+    fn handlers_on_the_viewer_are_native() {
+        async fn handler(_: Viewer) {}
+        assert!(Endpoint::new(handler).is_native());
+    }
 }

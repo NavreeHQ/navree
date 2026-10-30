@@ -2,11 +2,12 @@
 
 use std::ops::{Deref, DerefMut};
 
-use axum::extract::{FromRequest, Request};
 use bytes::Bytes;
 use http::StatusCode;
 use http::header::CONTENT_TYPE;
 use navree_http::AppError;
+use navree_http::body::{BodyLimit, read_body};
+use navree_http::extract::{FromRequest, Request};
 use navree_validation::ValidInput;
 use navree_validation::Validate;
 use serde::de::DeserializeOwned;
@@ -68,19 +69,19 @@ fn codec_of(req: &Request) -> Result<Codec, AppError> {
 }
 
 async fn bytes_of(req: Request) -> Result<Bytes, AppError> {
-    Bytes::from_request(req, &()).await.map_err(|rejection| {
-        AppError::from_status(rejection.status()).with_detail(rejection.body_text())
-    })
+    let limit = BodyLimit::of(req.extensions());
+    read_body(req.into_body(), limit)
+        .await
+        .map_err(|error| AppError::from_status(error.status()).with_detail(error.to_string()))
 }
 
-impl<T, S> FromRequest<S> for Payload<T>
+impl<T> FromRequest for Payload<T>
 where
-    T: DeserializeOwned,
-    S: Send + Sync,
+    T: DeserializeOwned + Send,
 {
     type Rejection = AppError;
 
-    async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request(req: Request) -> Result<Self, Self::Rejection> {
         let codec = codec_of(&req)?;
         let bytes = bytes_of(req).await?;
         codec

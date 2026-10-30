@@ -1,11 +1,12 @@
 //! [`CurrentDomain`] and the request layer that marks requests to a
 //! verified custom domain.
 
-use axum::extract::{FromRequestParts, OptionalFromRequestParts, Request};
+use axum::extract::Request;
 use axum::middleware::Next;
 use axum::response::Response;
 use http::request::Parts;
 use navree_http::AppError;
+use navree_http::extract::{FromRequestParts, OptionalFromRequestParts};
 use navree_kernel::AppContext;
 use navree_workspace::DomainWorkspace;
 use serde::{Deserialize, Serialize};
@@ -72,23 +73,20 @@ async fn resolve(parts: &mut Parts) -> Result<Option<CurrentDomain>, AppError> {
     Ok(found)
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for CurrentDomain {
+impl FromRequestParts for CurrentDomain {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         resolve(parts)
             .await?
             .ok_or_else(|| DomainsError::DomainNotFound.into_app_error())
     }
 }
 
-impl<S: Send + Sync> OptionalFromRequestParts<S> for CurrentDomain {
+impl OptionalFromRequestParts for CurrentDomain {
     type Rejection = AppError;
 
-    async fn from_request_parts(
-        parts: &mut Parts,
-        _state: &S,
-    ) -> Result<Option<Self>, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Option<Self>, Self::Rejection> {
         resolve(parts).await
     }
 }
@@ -123,4 +121,17 @@ pub(crate) async fn mark_domain(request: Request, next: Next) -> Response {
         }
     }
     next.run(Request::from_parts(parts, body)).await
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_http::handler::Endpoint;
+
+    use super::*;
+
+    #[test]
+    fn handlers_on_the_current_domain_are_native() {
+        async fn handler(_: CurrentDomain, _: Option<CurrentDomain>) {}
+        assert!(Endpoint::new(handler).is_native());
+    }
 }

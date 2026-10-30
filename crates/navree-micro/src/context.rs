@@ -7,13 +7,14 @@ use std::future::Future;
 use std::sync::{Arc, LazyLock, Mutex, MutexGuard, PoisonError};
 use std::time::SystemTime;
 
-use axum::extract::{FromRequestParts, Request};
+use axum::extract::Request;
 use axum::middleware::{Next, from_fn};
 use axum::response::Response;
 use http::header::AUTHORIZATION;
 use http::request::Parts;
 use navree_contracts::{AuthState, RequestId};
 use navree_db::Uow;
+use navree_http::extract::FromRequestParts;
 use navree_http::{AppError, GlobalLayer, LayerSlot};
 use navree_telemetry::{TelemetryContext, TraceContext};
 use uuid::Uuid;
@@ -111,10 +112,10 @@ impl MessageContext {
     }
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for MessageContext {
+impl FromRequestParts for MessageContext {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         parts
             .extensions
             .get::<MessageContext>()
@@ -247,6 +248,16 @@ mod tests {
     use navree_contracts::{AuthVia, Principal};
 
     use super::*;
+
+    #[test]
+    fn handlers_on_the_message_extractors_are_native() {
+        use navree_http::handler::Endpoint;
+
+        use crate::{Payload, ReplyCodec};
+
+        async fn handler(_: MessageContext, _: ReplyCodec, _: Payload<serde_json::Value>) {}
+        assert!(Endpoint::new(handler).is_native());
+    }
 
     #[test]
     fn the_http_context_comes_from_headers_and_extensions() {

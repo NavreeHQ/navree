@@ -10,6 +10,7 @@ use axum::response::{IntoResponse, Response};
 use http::StatusCode;
 use http::header::CONTENT_TYPE;
 use navree_events::{Event, EventBus, Listener, ModuleBuilderEventsExt};
+use navree_http::extract::FromRequestParts;
 use navree_http::handler::Endpoint;
 use navree_http::{AccessSpec, AppError, CanSpec, Guard, Handler};
 use navree_kernel::{
@@ -274,13 +275,10 @@ impl ReplyCodec {
     }
 }
 
-impl<S: Send + Sync> axum::extract::FromRequestParts<S> for ReplyCodec {
+impl FromRequestParts for ReplyCodec {
     type Rejection = std::convert::Infallible;
 
-    async fn from_request_parts(
-        parts: &mut http::request::Parts,
-        _state: &S,
-    ) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut http::request::Parts) -> Result<Self, Self::Rejection> {
         let codec = parts
             .headers
             .get(CONTENT_TYPE)

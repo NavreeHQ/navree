@@ -3,10 +3,11 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use axum::extract::{FromRequestParts, Path};
+use axum::extract::Path;
 use http::request::Parts;
 use http::{Method, Uri};
 use navree_db::{PageQuery, Uow};
+use navree_http::extract::FromRequestParts;
 use navree_http::{
     ApiMeta, AppError, Controller, Created, Json, NoContent, RouteDef, SchemaFn, schema_fn,
 };
@@ -73,10 +74,10 @@ struct DataList<T> {
 /// (app-wide endpoints).
 struct Scope(Option<Uuid>);
 
-impl<S: Send + Sync> FromRequestParts<S> for Scope {
+impl FromRequestParts for Scope {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         Ok(Scope(
             parts
                 .extensions
@@ -386,5 +387,18 @@ impl Controller for WebhooksController {
                     Some(schema_fn::<Delivery>),
                 )),
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_http::handler::Endpoint;
+
+    use super::*;
+
+    #[test]
+    fn handlers_on_the_scope_are_native() {
+        async fn handler(_: Scope) {}
+        assert!(Endpoint::new(handler).is_native());
     }
 }

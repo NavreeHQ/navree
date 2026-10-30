@@ -2,13 +2,12 @@
 
 use std::sync::Arc;
 
-use axum::extract::FromRequestParts;
 use http::header::USER_AGENT;
 use http::request::Parts;
 use navree_access::CurrentAccess;
 use navree_contracts::{AuthState, RequestId};
 use navree_db::Uow;
-use navree_http::extract::FromRequestParts as _;
+use navree_http::extract::FromRequestParts;
 use navree_http::{AppError, ClientIp};
 use navree_kernel::AppContext;
 
@@ -22,10 +21,10 @@ pub(crate) struct Panel {
     pub(crate) session: PanelSession,
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for Panel {
+impl FromRequestParts for Panel {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let app = parts
             .extensions
             .get::<AppContext>()
@@ -70,5 +69,18 @@ impl<S: Send + Sync> FromRequestParts<S> for Panel {
             },
             session,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_http::handler::Endpoint;
+
+    use super::*;
+
+    #[test]
+    fn handlers_on_the_panel_are_native() {
+        async fn handler(_: Panel) {}
+        assert!(Endpoint::new(handler).is_native());
     }
 }

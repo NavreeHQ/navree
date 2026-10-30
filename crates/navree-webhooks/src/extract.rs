@@ -6,7 +6,6 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use axum::body::to_bytes;
-use axum::extract::{FromRequest, Request};
 use axum::response::{IntoResponse as _, Response};
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
@@ -15,6 +14,7 @@ use http::header::{CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
 use navree_contracts::{Clock, SystemClock};
 use navree_db::Uow;
 use navree_http::AppError;
+use navree_http::extract::{FromRequest, Request};
 use navree_kernel::AppContext;
 use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha256};
@@ -149,10 +149,10 @@ impl<S> fmt::Debug for VerifiedWebhook<S> {
     }
 }
 
-impl<S: WebhookSource, St: Send + Sync> FromRequest<St> for VerifiedWebhook<S> {
+impl<S: WebhookSource> FromRequest for VerifiedWebhook<S> {
     type Rejection = Response;
 
-    async fn from_request(request: Request, _state: &St) -> Result<Self, Self::Rejection> {
+    async fn from_request(request: Request) -> Result<Self, Self::Rejection> {
         let ctx = request
             .extensions()
             .get::<AppContext>()
@@ -274,5 +274,19 @@ fn refuse(source: &'static str, error: &VerifyError) -> Response {
                 .with_code(INVALID_SIGNATURE_CODE)
                 .into_response()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_http::handler::Endpoint;
+
+    use super::*;
+    use crate::Stripe;
+
+    #[test]
+    fn handlers_on_a_verified_webhook_are_native() {
+        async fn handler(_: VerifiedWebhook<Stripe>) {}
+        assert!(Endpoint::new(handler).is_native());
     }
 }
