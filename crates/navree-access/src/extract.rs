@@ -6,11 +6,11 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use axum::extract::FromRequestParts;
 use http::request::Parts;
 use navree_contracts::AuthState;
 use navree_db::Uow;
 use navree_http::AppError;
+use navree_http::extract::FromRequestParts;
 use navree_kernel::AppContext;
 use serde_json::Value;
 
@@ -74,10 +74,10 @@ impl Deref for Abilities {
     }
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for Abilities {
+impl FromRequestParts for Abilities {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         Ok(Abilities(
             request_access(parts, None).await?.ability.clone(),
         ))
@@ -97,10 +97,10 @@ impl Deref for CurrentAccess {
     }
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for CurrentAccess {
+impl FromRequestParts for CurrentAccess {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         Ok(CurrentAccess(request_access(parts, None).await?))
     }
 }
@@ -246,15 +246,14 @@ impl<S: SubjectRecords, A> fmt::Debug for Authorized<S, A> {
     }
 }
 
-impl<E, A, St> FromRequestParts<St> for Authorized<E, A>
+impl<E, A> FromRequestParts for Authorized<E, A>
 where
     E: SubjectRecords,
     A: ActionMarker,
-    St: Send + Sync,
 {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &St) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let missing = || {
             AppError::internal(format!(
                 "Authorized<{}, {}> needs the route to declare `can({}, {}, from = ..)`",
@@ -340,15 +339,14 @@ impl<E, A> fmt::Debug for Accessible<E, A> {
     }
 }
 
-impl<E, A, S> FromRequestParts<S> for Accessible<E, A>
+impl<E, A> FromRequestParts for Accessible<E, A>
 where
     E: Subject,
     A: ActionMarker,
-    S: Send + Sync,
 {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let access = request_access(parts, None).await?;
         Ok(Self::new(access.ability.clone()))
     }

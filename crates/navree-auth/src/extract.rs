@@ -3,10 +3,10 @@
 use std::convert::Infallible;
 use std::net::IpAddr;
 
-use axum::extract::FromRequestParts;
 use http::header::USER_AGENT;
 use http::request::Parts;
 use navree_contracts::{AuthState, RequestId};
+use navree_http::extract::FromRequestParts;
 use navree_http::{AppError, ClientIp};
 use navree_kernel::AppContext;
 
@@ -23,7 +23,7 @@ use crate::{AuthError, AuthService, ClientMeta, User};
 /// async fn profile(CurrentUser(user): CurrentUser) -> Json<UserResource> {
 ///     Json(UserResource::from(&user))
 /// }
-/// # let _: axum::routing::MethodRouter = axum::routing::get(profile);
+/// # let _ = navree_http::RouteDef::on(http::Method::GET, "/me", profile);
 /// ```
 #[derive(Clone, Debug)]
 pub struct CurrentUser(pub User);
@@ -43,10 +43,10 @@ impl std::ops::Deref for CurrentUser {
     }
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for CurrentUser {
+impl FromRequestParts for CurrentUser {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         if let Some(user) = parts.extensions.get::<CurrentUser>() {
             return Ok(user.clone());
         }
@@ -75,10 +75,10 @@ impl<S: Send + Sync> FromRequestParts<S> for CurrentUser {
     }
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for ClientMeta {
+impl FromRequestParts for ClientMeta {
     type Rejection = Infallible;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let ClientIp(ip) = ClientIp::from_parts(parts);
         Ok(ClientMeta {
             ip: (!ip.is_unspecified()).then(|| canonical_ip(ip)),

@@ -8,6 +8,7 @@ use http::request::Parts;
 use navree_access::CurrentAccess;
 use navree_contracts::{AuthState, RequestId};
 use navree_db::Uow;
+use navree_http::extract::FromRequestParts as _;
 use navree_http::{AppError, ClientIp};
 use navree_kernel::AppContext;
 
@@ -24,7 +25,7 @@ pub(crate) struct Panel {
 impl<S: Send + Sync> FromRequestParts<S> for Panel {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         let app = parts
             .extensions
             .get::<AppContext>()
@@ -37,8 +38,8 @@ impl<S: Send + Sync> FromRequestParts<S> for Panel {
             .and_then(|state| state.0.as_ref())
             .map(|p| p.user_id)
             .ok_or_else(AppError::unauthenticated)?;
-        let uow = Uow::from_request_parts(parts, state).await?;
-        let CurrentAccess(access) = CurrentAccess::from_request_parts(parts, state).await?;
+        let uow = Uow::from_request_parts(parts).await?;
+        let CurrentAccess(access) = CurrentAccess::from_request_parts(parts).await?;
         let ClientIp(ip) = ClientIp::from_parts(parts);
         let client = Client {
             request_id: parts

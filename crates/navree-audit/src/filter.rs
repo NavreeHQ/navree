@@ -2,10 +2,10 @@
 
 use std::collections::BTreeMap;
 
-use axum::extract::{FromRequestParts, Query};
 use axum::http::request::Parts;
 use navree_contracts::AuditKind;
-use navree_http::AppError;
+use navree_http::extract::FromRequestParts;
+use navree_http::{AppError, Query};
 use navree_orm::{Builder, Filter, Model as _};
 use serde::Deserialize;
 use uuid::Uuid;
@@ -116,10 +116,10 @@ struct RawFilter {
     kind: Option<String>,
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for AuditFilter {
+impl FromRequestParts for AuditFilter {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let Query(raw) = Query::<RawFilter>::try_from_uri(&parts.uri)
             .map_err(|rejection| AppError::bad_request(rejection.body_text()))?;
         let mut errors = BTreeMap::new();
@@ -177,6 +177,12 @@ fn parse_kind(name: &str) -> Option<AuditKind> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn handlers_on_the_filter_are_native() {
+        async fn handler(_: super::AuditFilter) {}
+        assert!(navree_http::handler::Endpoint::new(handler).is_native());
+    }
+
     use super::*;
 
     #[test]

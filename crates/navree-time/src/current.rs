@@ -5,12 +5,12 @@ use std::fmt;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use axum::extract::FromRequestParts;
 use axum::response::{IntoResponse, Response};
 use chrono::DateTime;
 use chrono_tz::Tz;
 use http::request::Parts;
 use navree_contracts::{AuthState, Clock, ZoneLevel, ZoneRequest};
+use navree_http::extract::FromRequestParts;
 use navree_http::{AppError, Json};
 use navree_kernel::AppContext;
 use serde::ser::Error as _;
@@ -124,10 +124,10 @@ impl fmt::Debug for CurrentZone {
     }
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for CurrentZone {
+impl FromRequestParts for CurrentZone {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         if let Some(current) = parts.extensions.get::<CurrentZone>() {
             return Ok(current.clone());
         }

@@ -3,11 +3,11 @@
 use std::fmt;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use axum::extract::{FromRequestParts, OptionalFromRequestParts};
 use axum::http::request::Parts;
 use chrono::{DateTime, Utc};
 use navree_contracts::SessionRecord;
 use navree_http::AppError;
+use navree_http::extract::{FromRequestParts, OptionalFromRequestParts};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
@@ -237,10 +237,10 @@ impl fmt::Debug for Session {
 
 /// The session of the request; a 500 error when `SessionModule` is not in
 /// the app.
-impl<S: Send + Sync> FromRequestParts<S> for Session {
+impl FromRequestParts for Session {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         parts.extensions.get::<Session>().cloned().ok_or_else(|| {
             AppError::internal(
                 "no session in the request: add SessionModule to the app (its layer loads one per request)",
@@ -250,13 +250,10 @@ impl<S: Send + Sync> FromRequestParts<S> for Session {
 }
 
 /// `Option<Session>`: `None` outside the session layer.
-impl<S: Send + Sync> OptionalFromRequestParts<S> for Session {
+impl OptionalFromRequestParts for Session {
     type Rejection = std::convert::Infallible;
 
-    async fn from_request_parts(
-        parts: &mut Parts,
-        _state: &S,
-    ) -> Result<Option<Self>, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Option<Self>, Self::Rejection> {
         Ok(parts.extensions.get::<Session>().cloned())
     }
 }
@@ -285,9 +282,16 @@ pub enum SessionError {
 mod tests {
     use std::collections::BTreeMap;
 
+    use navree_http::handler::Endpoint;
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn handlers_on_the_session_are_native() {
+        async fn handler(_: Session, _: Option<Session>) {}
+        assert!(Endpoint::new(handler).is_native());
+    }
 
     #[test]
     fn values_roundtrip_as_json() {

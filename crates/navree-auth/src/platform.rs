@@ -22,10 +22,10 @@
 
 use std::time::Duration;
 
-use axum::extract::FromRequestParts;
 use http::request::Parts;
 use navree_contracts::AuditKind;
 use navree_http::AppError;
+use navree_http::extract::FromRequestParts;
 use navree_kernel::AppContext;
 use serde_json::json;
 use uuid::Uuid;
@@ -221,15 +221,15 @@ impl AuthService {
 /// async fn console(PlatformAdmin(admin): PlatformAdmin) -> Json<String> {
 ///     Json(format!("Signed in to the platform as {}", admin.email))
 /// }
-/// # let _: axum::routing::MethodRouter = axum::routing::get(console);
+/// # let _ = navree_http::RouteDef::on(http::Method::GET, "/console", console);
 /// ```
 #[derive(Clone, Debug)]
 pub struct PlatformAdmin(pub User);
 
-impl<S: Send + Sync> FromRequestParts<S> for PlatformAdmin {
+impl FromRequestParts for PlatformAdmin {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let claims = parts
             .extensions
             .get::<AccessClaims>()

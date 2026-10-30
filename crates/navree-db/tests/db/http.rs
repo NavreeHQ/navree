@@ -567,3 +567,9 @@ async fn uow_extractor_without_database_module_is_500() {
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "{body}");
     assert_eq!(body["message"], "Internal server error");
 }
+
+#[test]
+fn handlers_on_the_database_extractors_are_native() {
+    async fn handler(_: Uow, _: navree_db::PageQuery, _: navree_db::CursorQuery) {}
+    assert!(navree_http::handler::Endpoint::new(handler).is_native());
+}

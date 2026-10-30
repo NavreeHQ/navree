@@ -7,12 +7,12 @@
 
 use std::collections::BTreeMap;
 
-use axum::extract::{FromRequestParts, Query};
 use axum::response::{IntoResponse, Response};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use http::request::Parts;
-use navree_http::{AppError, Json};
+use navree_http::extract::FromRequestParts;
+use navree_http::{AppError, Json, Query};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -66,10 +66,10 @@ struct RawPageQuery {
     per_page: Option<String>,
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for PageQuery {
+impl FromRequestParts for PageQuery {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let Query(raw) = Query::<RawPageQuery>::try_from_uri(&parts.uri)
             .map_err(|rejection| AppError::bad_request(rejection.body_text()))?;
         let mut errors = BTreeMap::new();
@@ -205,10 +205,10 @@ struct RawCursorQuery {
     limit: Option<String>,
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for CursorQuery {
+impl FromRequestParts for CursorQuery {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let Query(raw) = Query::<RawCursorQuery>::try_from_uri(&parts.uri)
             .map_err(|rejection| AppError::bad_request(rejection.body_text()))?;
         let mut errors = BTreeMap::new();

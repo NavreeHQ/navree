@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use async_graphql::parser::types::OperationType;
 use async_graphql::{Context, Error};
-use axum::extract::FromRequestParts;
 use futures_util::FutureExt;
 use navree_access::{Ability, Accessible, ActionMarker, Authorized, Subject, SubjectRecords};
 use navree_auth::User;
@@ -17,7 +16,7 @@ use navree_workspace::{CurrentWorkspace, DemoIntent};
 
 use crate::__private::FIELD;
 use crate::loader::RequestLoader;
-use crate::operation::Operation;
+use crate::operation::{Operation, extract};
 
 /// The state of the operation `ctx` belongs to.
 pub(crate) fn operation<'a>(ctx: &Context<'a>) -> Result<&'a Arc<Operation>, Error> {
@@ -151,7 +150,7 @@ impl ContextExt for Context<'_> {
         let (mut parts, ()) = http::Request::new(()).into_parts();
         parts.extensions = (*extensions).clone();
         // The extractor only reads the extensions: it is ready at once.
-        match Authorized::<E, A>::from_request_parts(&mut parts, &()).now_or_never() {
+        match extract::<Authorized<E, A>, _>(&mut parts).now_or_never() {
             Some(Ok(authorized)) => Ok(authorized),
             Some(Err(error)) => Err(error.into()),
             None => Err(missing()),

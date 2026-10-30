@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::error::Error as StdError;
 use std::sync::Arc;
 
-use axum::extract::{FromRequest, FromRequestParts, Multipart, Path, RawQuery, Request};
+use axum::extract::{FromRequest, Multipart, Path, RawQuery, Request};
 use axum::response::{IntoResponse, Response};
 use http::header::{CACHE_CONTROL, CONTENT_TYPE, SET_COOKIE};
 use http::{HeaderMap, HeaderValue, StatusCode};
@@ -13,6 +13,7 @@ use navree_auth::{AuthError, AuthService, ClientMeta, LoginOutcome, TwoFactorPro
 use navree_contracts::{AuthState, AuthVia};
 use navree_crypto::{Encrypter, constant_time_eq, random_token};
 use navree_http::AppError;
+use navree_http::extract::FromRequestParts;
 use navree_kernel::AppContext;
 use navree_storage::{Storage, UploadRules, store_upload};
 use serde::Serialize;
@@ -444,7 +445,7 @@ impl SignIn {
         let app = parts.extensions.get::<AppContext>().cloned()?;
         let core = app.get::<Core>().await.ok()?;
         let host = request_host(&http::Request::from_parts(parts.clone(), ()));
-        let meta = ClientMeta::from_request_parts(&mut parts, &())
+        let meta = ClientMeta::from_request_parts(&mut parts)
             .await
             .unwrap_or_else(|never| match never {});
         let signed_in = parts

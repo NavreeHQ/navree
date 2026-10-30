@@ -11,6 +11,7 @@ dist/
 build/
 coverage/
 .pnpm-store/
+apps/website/out/
 
 # Local tool folders (installed skills, settings) and copies of this repository
 .claude/

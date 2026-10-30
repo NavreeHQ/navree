@@ -41,11 +41,10 @@ use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
-use axum::extract::rejection::PathRejection;
-use axum::extract::{FromRequestParts, Path};
 use http::request::Parts;
 use navree_db::{Db, Uow};
-use navree_http::AppError;
+use navree_http::extract::FromRequestParts;
+use navree_http::{AppError, PathParams};
 use navree_kernel::AppContext;
 use uuid::Uuid;
 
@@ -184,16 +183,15 @@ impl<M: Model + fmt::Debug, B> fmt::Debug for Bound<M, B> {
     }
 }
 
-impl<M, B, S> FromRequestParts<S> for Bound<M, B>
+impl<M, B> FromRequestParts for Bound<M, B>
 where
     M: Model,
     B: RouteBinding<M>,
-    S: Send + Sync,
 {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let params = path_params(parts).await?;
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
+        let params = path_params(parts);
         let param = B::PARAM
             .map(str::to_owned)
             .or_else(|| default_param::<M>(&params, Position::Only))
@@ -284,17 +282,16 @@ impl<P: Model + fmt::Debug, C: Model + fmt::Debug, B> fmt::Debug for BoundChild<
     }
 }
 
-impl<P, C, B, S> FromRequestParts<S> for BoundChild<P, C, B>
+impl<P, C, B> FromRequestParts for BoundChild<P, C, B>
 where
     P: Model,
     C: ChildOf<P>,
     B: RouteBinding<C>,
-    S: Send + Sync,
 {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let params = path_params(parts).await?;
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
+        let params = path_params(parts);
         let parent_param = default_param::<P>(&params, Position::First)
             .ok_or_else(|| missing_param::<P>(&params))?;
         let child_param = B::PARAM
@@ -316,14 +313,18 @@ where
     }
 }
 
-/// The route's path parameters, in route order.
-async fn path_params(parts: &mut Parts) -> Result<Vec<(String, String)>, AppError> {
-    match Path::<Vec<(String, String)>>::from_request_parts(parts, &()).await {
-        Ok(Path(params)) => Ok(params),
-        Err(PathRejection::MissingPathParams(_)) => Ok(Vec::new()),
-        // A parameter that is not valid percent-encoded UTF-8 names no record.
-        Err(_) => Err(AppError::not_found()),
-    }
+/// The route's path parameters, in route order (the router has decoded
+/// them, and refused a value that is not valid percent-encoded UTF-8).
+fn path_params(parts: &Parts) -> Vec<(String, String)> {
+    parts
+        .extensions
+        .get::<PathParams>()
+        .map_or_else(Vec::new, |params| {
+            params
+                .iter()
+                .map(|(name, value)| (name.to_owned(), value.to_owned()))
+                .collect()
+        })
 }
 
 /// The text of parameter `name`.

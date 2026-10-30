@@ -5,9 +5,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use http::request::Parts;
-use navree_access::{Authorized, FieldCheck, Read};
+use navree_access::{Abilities, Accessible, Authorized, CurrentAccess, FieldCheck, Read};
 use navree_contracts::{AuditKind, AuthState};
 use navree_db::{Db, Uow};
+use navree_http::handler::Endpoint;
 use navree_http::{AccessSpec, CanSpec, RouteAuthorizer, RouteMeta};
 use navree_testing::{TestApp, principal};
 use uuid::Uuid;
@@ -58,9 +59,8 @@ async fn a_field_check_reads_the_record_id_from_its_arguments() {
     let (result, mut parts) = check(&app, Some(author), &draft.id.to_string(), &uow).await;
     result.expect("the author may read the draft");
     let authorized =
-        <Authorized<Post, Read> as axum::extract::FromRequestParts<()>>::from_request_parts(
+        <Authorized<Post, Read> as navree_http::extract::FromRequestParts>::from_request_parts(
             &mut parts,
-            &(),
         )
         .await
         .expect("the record is handed over");
@@ -123,4 +123,16 @@ async fn a_field_check_without_the_argument_is_a_server_error() {
     let error = authorizer.authorize(&mut parts, &meta).await.unwrap_err();
     assert_eq!(error.status.as_u16(), 500);
     uow.rollback().await.unwrap();
+}
+
+#[test]
+fn handlers_on_the_access_extractors_are_native() {
+    async fn handler(
+        _: Abilities,
+        _: CurrentAccess,
+        _: Authorized<Post, Read>,
+        _: Accessible<Post, Read>,
+    ) {
+    }
+    assert!(Endpoint::new(handler).is_native());
 }

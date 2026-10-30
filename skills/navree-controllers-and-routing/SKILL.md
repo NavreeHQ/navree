@@ -198,8 +198,8 @@ impl FromRequestParts for Tenant {
 To resolve a service inside an extractor, read the `AppContext` from
 `parts.extensions.get::<AppContext>()` and call `ctx.get::<T>().await`;
 the route's decoded path parameters are `parts.extensions.get::<PathParams>()`.
-A type implements either this trait or the previous router's
-`FromRequestParts<S>` (crates not yet moved), never both.
+A type implements either this trait or axum's `FromRequestParts<S>`, never
+both.
 
 ## Hand-written routes
 

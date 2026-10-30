@@ -11,9 +11,9 @@ use std::time::Duration;
 
 use std::convert::Infallible;
 
-use axum::extract::{FromRequestParts, OptionalFromRequestParts};
 use http::request::Parts;
 use navree_contracts::{AuthState, BoxFuture, Impersonator};
+use navree_http::extract::{FromRequestParts, OptionalFromRequestParts};
 use navree_http::{AppError, Guard};
 use navree_kernel::AppContext;
 use uuid::Uuid;
@@ -32,7 +32,7 @@ use crate::{AuthError, Claims, TokenType};
 /// async fn session(claims: AccessClaims) -> Json<Option<uuid::Uuid>> {
 ///     Json(claims.session_id())
 /// }
-/// # let _: axum::routing::MethodRouter = axum::routing::get(session);
+/// # let _ = navree_http::RouteDef::on(http::Method::GET, "/session", session);
 /// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct AccessClaims(pub Claims);
@@ -67,10 +67,10 @@ impl Deref for AccessClaims {
     }
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for AccessClaims {
+impl FromRequestParts for AccessClaims {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         parts
             .extensions
             .get::<AccessClaims>()
@@ -81,13 +81,10 @@ impl<S: Send + Sync> FromRequestParts<S> for AccessClaims {
 
 /// `Option<AccessClaims>`: the claims when the request carries an access
 /// token.
-impl<S: Send + Sync> OptionalFromRequestParts<S> for AccessClaims {
+impl OptionalFromRequestParts for AccessClaims {
     type Rejection = Infallible;
 
-    async fn from_request_parts(
-        parts: &mut Parts,
-        _state: &S,
-    ) -> Result<Option<Self>, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Option<Self>, Self::Rejection> {
         Ok(parts.extensions.get::<AccessClaims>().cloned())
     }
 }
@@ -104,7 +101,7 @@ impl<S: Send + Sync> OptionalFromRequestParts<S> for AccessClaims {
 ///     // Show "You are impersonating ..." in the front end.
 ///     Json(actor.is_impersonating())
 /// }
-/// # let _: axum::routing::MethodRouter = axum::routing::get(banner);
+/// # let _ = navree_http::RouteDef::on(http::Method::GET, "/banner", banner);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Actor {
@@ -127,10 +124,10 @@ impl Actor {
     }
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for Actor {
+impl FromRequestParts for Actor {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let user_id = parts
             .extensions
             .get::<AuthState>()

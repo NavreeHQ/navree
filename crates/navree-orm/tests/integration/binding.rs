@@ -220,6 +220,48 @@ async fn routes_choose_their_own_bindings() {
 }
 
 #[tokio::test]
+async fn parameters_bind_percent_decoded() {
+    let (app, db, _clock) = app(vec![Box::new(RoutesModule)]).await;
+    Deal::factory()
+        .set(Deal::TITLE, "Pilot one")
+        .set(Deal::SLUG, "caf\u{e9} pilot")
+        .create_one(&*db)
+        .await
+        .unwrap();
+    app.client()
+        .get("/api/deals/caf%C3%A9%20pilot")
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("title", json!("Pilot one"));
+    app.client()
+        .get("/api/titles/Pilot%20one")
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("slug", json!("caf\u{e9} pilot"));
+}
+
+#[test]
+fn handlers_on_the_binding_extractors_are_native() {
+    async fn handler(_: Bound<Deal>, _: BoundChild<Company, Deal>, _: navree_orm::CursorRequest) {}
+    assert!(navree_http::handler::Endpoint::new(handler).is_native());
+}
+
+#[tokio::test]
+async fn a_binding_outside_a_matched_route_has_no_parameters() {
+    use navree_http::extract::FromRequestParts;
+
+    let (mut parts, ()) = http::Request::new(()).into_parts();
+    let error = Bound::<Deal>::from_request_parts(&mut parts)
+        .await
+        .expect_err("no parameter to bind");
+    assert_eq!(error.status, http::StatusCode::INTERNAL_SERVER_ERROR);
+    let cause = format!("{:?}", error.source);
+    assert!(cause.contains("(it has: none)"), "{cause}");
+}
+
+#[tokio::test]
 async fn soft_deleted_records_bind_only_on_routes_that_opt_in() {
     let (app, db, _clock) = app(vec![Box::new(RoutesModule)]).await;
     let mut deal = Deal::factory()

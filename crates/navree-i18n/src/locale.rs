@@ -5,10 +5,10 @@ use std::fmt;
 use std::future::Future;
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 
-use axum::extract::FromRequestParts;
 use chrono::Datelike;
 use http::request::Parts;
 use navree_http::AppError;
+use navree_http::extract::FromRequestParts;
 use unic_langid::LanguageIdentifier;
 
 use crate::format::{DateStyle, Formats, naive_date};
@@ -245,11 +245,11 @@ impl PartialEq<&str> for Locale {
     }
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for Locale {
+impl FromRequestParts for Locale {
     type Rejection = AppError;
 
     /// The locale negotiated for the request (a 500 without `I18nModule`).
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         parts
             .extensions
             .get::<Locale>()
@@ -339,6 +339,12 @@ into_number!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize, f32, f64);
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn handlers_on_the_locale_are_native() {
+        async fn handler(_: super::Locale) {}
+        assert!(navree_http::handler::Endpoint::new(handler).is_native());
+    }
+
     use chrono::NaiveDate;
 
     use super::*;

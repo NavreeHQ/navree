@@ -7,10 +7,11 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use axum::extract::{FromRequestParts, Request};
+use axum::extract::Request;
 use axum::response::{IntoResponse, Response};
 use http::request::Parts;
 use navree_contracts::{AuthState, Impersonator, RequestId};
+use navree_http::extract::FromRequestParts;
 use navree_http::{AppError, GlobalLayer, LayerSlot};
 use navree_kernel::{AppContext, BoxFuture};
 use navree_telemetry::TelemetryContext;
@@ -23,10 +24,10 @@ use crate::{Db, DbError, ErrorKind, Uow};
 
 /// The unit of work of the current request, opened by the `DatabaseModule`
 /// layer. A 500 error when `DatabaseModule` is not in the app.
-impl<S: Send + Sync> FromRequestParts<S> for Uow {
+impl FromRequestParts for Uow {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         parts.extensions.get::<Uow>().cloned().ok_or_else(|| {
             AppError::internal(
                 "no unit of work in the request: add DatabaseModule to the app (its layer opens one per request)",

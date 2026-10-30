@@ -13,6 +13,7 @@ use http::{Method, StatusCode};
 use navree_access::{Abilities, Subject as _};
 use navree_auth::{AuthError, AuthService, ClientMeta, LoginOutcome, TwoFactorProof};
 use navree_crypto::{Encrypter, constant_time_eq, random_token};
+use navree_http::extract::FromRequestParts as _;
 use navree_http::{AppError, ClientIp, Controller, CurrentPrincipal, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_view::Views;
@@ -154,9 +155,9 @@ pub(crate) struct Viewer {
 impl<S: Send + Sync> FromRequestParts<S> for Viewer {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         let CurrentPrincipal(principal) = CurrentPrincipal::from_parts(parts)?;
-        let abilities = Abilities::from_request_parts(parts, state).await?;
+        let abilities = Abilities::from_request_parts(parts).await?;
         Ok(Viewer {
             user_id: principal.user_id,
             csrf: parts

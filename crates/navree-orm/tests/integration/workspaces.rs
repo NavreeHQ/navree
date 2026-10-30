@@ -4,10 +4,10 @@
 
 use std::sync::Arc;
 
-use axum::extract::FromRequestParts;
 use http::Method;
 use http::request::Parts;
 use navree_db::{Db, Uow};
+use navree_http::extract::FromRequestParts;
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_orm::binding::Bound;
@@ -397,10 +397,10 @@ async fn the_current_workspace_has_several_sources() {
 /// work (what navree-workspace's CurrentWorkspace does).
 struct TestWorkspace;
 
-impl<S: Send + Sync> FromRequestParts<S> for TestWorkspace {
+impl FromRequestParts for TestWorkspace {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, AppError> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, AppError> {
         let workspace = parts
             .headers
             .get("x-workspace")

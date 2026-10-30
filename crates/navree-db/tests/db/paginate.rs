@@ -2,12 +2,12 @@
 //! `CursorPage`): the extractors, the response shapes, and a record
 //! select's pages.
 
-use axum::extract::FromRequestParts;
 use axum::response::IntoResponse;
 use http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use navree_db::{CursorPage, CursorQuery, Page, PageMeta, PageQuery, Record, record};
 use navree_http::AppError;
+use navree_http::extract::FromRequestParts;
 use serde_json::json;
 
 use crate::fixtures::{Note, notes_db};
@@ -15,12 +15,12 @@ use crate::support::TempDb;
 
 async fn page_query(uri: &str) -> Result<PageQuery, AppError> {
     let (mut parts, ()) = Request::get(uri).body(()).unwrap().into_parts();
-    PageQuery::from_request_parts(&mut parts, &()).await
+    PageQuery::from_request_parts(&mut parts).await
 }
 
 async fn cursor_query(uri: &str) -> Result<CursorQuery, AppError> {
     let (mut parts, ()) = Request::get(uri).body(()).unwrap().into_parts();
-    CursorQuery::from_request_parts(&mut parts, &()).await
+    CursorQuery::from_request_parts(&mut parts).await
 }
 
 /// `n` notes titled `note-00`, `note-01`, ...

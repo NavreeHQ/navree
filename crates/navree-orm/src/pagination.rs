@@ -28,13 +28,13 @@
 
 use std::collections::BTreeMap;
 
-use axum::extract::{FromRequestParts, Query};
 use axum::response::{IntoResponse, Response};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use http::request::Parts;
-use navree_http::{AppError, Json};
+use navree_http::extract::FromRequestParts;
+use navree_http::{AppError, Json, Query};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
@@ -215,10 +215,10 @@ struct RawCursorRequest {
     limit: Option<String>,
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for CursorRequest {
+impl FromRequestParts for CursorRequest {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let Query(raw) = Query::<RawCursorRequest>::try_from_uri(&parts.uri)
             .map_err(|rejection| AppError::bad_request(rejection.body_text()))?;
         let mut errors = BTreeMap::new();

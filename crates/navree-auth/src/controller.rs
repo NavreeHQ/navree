@@ -3,11 +3,11 @@
 
 use std::sync::Arc;
 
-use axum::extract::{FromRequest, Request};
 use axum::response::{IntoResponse, Response};
 use http::header::CONTENT_TYPE;
 use http::{Method, StatusCode};
 use navree_db::Uow;
+use navree_http::extract::{FromRequest, Request};
 use navree_http::{
     ApiMeta, AppError, Controller, CurrentPrincipal, Json, NoContent, RouteDef, schema_fn,
 };
@@ -329,18 +329,18 @@ pub(crate) async fn login_response(
 /// request has no `Content-Type` (no body).
 pub(crate) struct OptionalBody<T>(pub(crate) T);
 
-impl<T, S> FromRequest<S> for OptionalBody<T>
+impl<T> FromRequest for OptionalBody<T>
 where
     T: DeserializeOwned + Validate + Default + Send,
-    S: Send + Sync,
 {
     type Rejection = AppError;
 
-    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request(req: Request) -> Result<Self, Self::Rejection> {
         if !req.headers().contains_key(CONTENT_TYPE) {
             return Ok(OptionalBody(T::default()));
         }
-        let Valid(Json(value)) = Valid::<Json<T>>::from_request(req, state).await?;
+        let Valid(Json(value)) =
+            <Valid<Json<T>> as axum::extract::FromRequest<()>>::from_request(req, &()).await?;
         Ok(OptionalBody(value))
     }
 }
@@ -351,5 +351,28 @@ pub(crate) fn api(summary: &str, responses: &[u16]) -> ApiMeta {
         tags: vec!["Auth".to_owned()],
         responses: responses.to_vec(),
         ..ApiMeta::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_http::handler::Endpoint;
+
+    use super::*;
+    use crate::{AccessClaims, Actor, PlatformAdmin};
+
+    #[test]
+    fn handlers_on_the_auth_extractors_are_native() {
+        async fn handler(
+            _: CurrentUser,
+            _: ClientMeta,
+            _: AccessClaims,
+            _: Option<AccessClaims>,
+            _: Actor,
+            _: PlatformAdmin,
+            _: OptionalBody<LogoutInput>,
+        ) {
+        }
+        assert!(Endpoint::new(handler).is_native());
     }
 }

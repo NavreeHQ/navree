@@ -292,3 +292,9 @@ async fn current_zone_needs_the_module() {
     let reply = get(&app, "/api/probe/zone", None, &[]).await;
     assert_eq!(reply.status, StatusCode::INTERNAL_SERVER_ERROR);
 }
+
+#[test]
+fn handlers_on_the_current_zone_are_native() {
+    async fn handler(_: navree_time::CurrentZone) {}
+    assert!(navree_http::handler::Endpoint::new(handler).is_native());
+}

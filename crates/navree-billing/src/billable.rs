@@ -5,6 +5,7 @@ use axum::extract::FromRequestParts;
 use http::request::Parts;
 use navree_auth::{CurrentUser, User};
 use navree_http::AppError;
+use navree_http::extract::FromRequestParts as _;
 use navree_kernel::BoxFuture;
 use navree_workspace::{CurrentWorkspace, Workspace};
 use serde::{Deserialize, Serialize};
@@ -199,7 +200,7 @@ impl Billable for User {
 
     fn from_request(parts: &mut Parts) -> BoxFuture<'_, Result<BillableRef, AppError>> {
         Box::pin(async move {
-            let CurrentUser(user) = CurrentUser::from_request_parts(parts, &()).await?;
+            let CurrentUser(user) = CurrentUser::from_request_parts(parts).await?;
             Ok(BillableRef::of(&user))
         })
     }
