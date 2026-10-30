@@ -78,7 +78,7 @@ cargo test -p navree-validation
 When several builds run at once (you, an editor, a second checkout), give each its own target directory (and, if you use it, let sccache share the compiled dependencies). Cargo locks a target directory, so builds sharing one wait for each other:
 
 ```sh
-CARGO_TARGET_DIR=target/agents/http cargo test -p navree-http
+CARGO_TARGET_DIR=target/builds/http cargo test -p navree-http
 ```
 
 Keep `CARGO_BUILD_JOBS` moderate when memory is tight.
@@ -88,7 +88,7 @@ Keep `CARGO_BUILD_JOBS` moderate when memory is tight.
 - **Generated apps.** `navree-cli`'s `generated_app` test creates an app with `navree new`, runs every generator in it, then builds, tests and lints the result against the workspace's `navree`. It builds the whole framework in a fresh project, so it is ignored by default. Run it after changing the CLI's templates:
 
   ```sh
-  CARGO_TARGET_DIR=target/agents/cli cargo test -p navree-cli --test generated_app -- --ignored
+  CARGO_TARGET_DIR=target/builds/cli cargo test -p navree-cli --test generated_app -- --ignored
   ```
 
 - **Snapshots.** `navree-cli` and `navree-access` use [insta](https://insta.rs) snapshots, and `navree-macros` checks its compile errors with [trybuild](https://docs.rs/trybuild). Don't edit `.snap` or `.stderr` files by hand: re-run the tests with `INSTA_UPDATE=always` or `TRYBUILD=overwrite`, then review the diff.

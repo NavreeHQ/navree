@@ -5,7 +5,7 @@
 //! (minutes). Run it with
 //!
 //! ```text
-//! CARGO_TARGET_DIR=target/agents/cli cargo test -p navree-cli --test generated_app -- --ignored
+//! CARGO_TARGET_DIR=target/builds/cli cargo test -p navree-cli --test generated_app -- --ignored
 //! ```
 //!
 //! `NAVREE_FACADE` may point at another `navree` facade crate directory (default:

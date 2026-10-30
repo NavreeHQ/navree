@@ -175,10 +175,10 @@ locks the target directory, so give each one its own (and, if you use it, let
 sccache share the compiled dependencies):
 
 ```sh
-CARGO_TARGET_DIR=target/agents/<label> cargo test -p <crate>
+CARGO_TARGET_DIR=target/builds/<label> cargo test -p <crate>
 ```
 
-For example `CARGO_TARGET_DIR=target/agents/http cargo test -p navree-http`.
+For example `CARGO_TARGET_DIR=target/builds/http cargo test -p navree-http`.
 Use `-p <crate>` while working on one crate, and keep `CARGO_BUILD_JOBS`
 moderate when memory is tight.
 
@@ -213,7 +213,7 @@ E2E_REAL_API=1 pnpm e2e
 This needs cargo and nothing listening on ports 8080 or 3000. Playwright
 starts crm-api on a fresh, seeded database of its own
 (`apps/crm-api/storage/e2e.db`; `migrate:fresh`, `db:seed crm-demo`, then
-`serve`, built into `target/agents/crm-e2e`) and the production build of
+`serve`, built into `target/builds/crm-e2e`) and the production build of
 crm-web (`pnpm build && pnpm start`), then runs every spec in a real
 Chromium against them, one spec at a time. The first run compiles the API,
 which takes several minutes. Without `E2E_REAL_API=1`, `pnpm e2e` only runs

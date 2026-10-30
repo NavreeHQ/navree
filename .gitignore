@@ -1,4 +1,4 @@
-# Rust build output (each agent builds into target/agents/<label>)
+# Rust build output (parallel builds use target/builds/<label>)
 target/
 # Fuzzing: working corpora, crashes and coverage stay out of the repository
 # (the seeds in fuzz/seeds are committed).
@@ -12,6 +12,9 @@ target/
 # Node / Next.js
 node_modules/
 .next/
+# Written and rewritten by `next dev`
+/apps/*/AGENTS.md
+/apps/*/CLAUDE.md
 
 # Runtime data written by Navree apps (storage/framework/down, storage/*.db, uploads)
 /storage/
@@ -22,8 +25,21 @@ node_modules/
 *.db-shm
 *.db-wal
 .env
+.env.*
+!.env.example
 # The configuration loader's test fixtures are apps, .env files included.
 !crates/navree-config/tests/fixtures/**/.env
+!crates/navree-config/tests/fixtures/**/.env.*
+.npmrc
+.netrc
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+credentials.json
+service-account*.json
 
 # insta pending snapshots
 *.snap.new
@@ -51,3 +67,16 @@ cf.token
 
 # Static analysis reports (scripts/sast.sh)
 /sast-reports/
+
+# Local editor, tool and working files
+/docs/
+.claude/
+.codex/
+.cursor/
+.windsurf/
+.aider*
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

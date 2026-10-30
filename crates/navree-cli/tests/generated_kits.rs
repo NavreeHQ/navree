@@ -7,7 +7,7 @@
 //! `api`) or `micro:patterns` (`micro`). Run them with
 //!
 //! ```text
-//! CARGO_TARGET_DIR=target/agents/cli cargo test -p navree-cli --test generated_kits -- --ignored
+//! CARGO_TARGET_DIR=target/builds/cli cargo test -p navree-cli --test generated_kits -- --ignored
 //! ```
 //!
 //! The SaaS kit's front end is checked by `saas_kit_web_installs_lints_tests_and_builds`,
