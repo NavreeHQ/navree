@@ -1,21 +1,13 @@
-//! Small extractors and responses: [`ClientIp`], [`Scoped`], [`Created`],
-//! [`NoContent`].
+//! [`ClientIp`]: the client's address, behind trusted proxies.
 
-use std::fmt;
+use std::convert::Infallible;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::ops::Deref;
-use std::sync::Arc;
 
-use axum::Json;
-use axum::extract::{ConnectInfo, FromRequestParts};
-use axum::response::{IntoResponse, Response};
-use http::header::LOCATION;
+use axum::extract::ConnectInfo;
+use http::HeaderMap;
 use http::request::Parts;
-use http::{HeaderMap, HeaderValue, StatusCode};
-use navree_kernel::{AppContext, RequestScope};
-use serde::Serialize;
 
-use crate::{AppError, RouteMeta};
+use super::FromRequestParts;
 
 /// The client IP address. The pipeline computes it once per request (from
 /// the connection, or from `X-Forwarded-For` / `X-Real-IP` when the peer is
@@ -192,124 +184,30 @@ fn forwarded_ip(headers: &HeaderMap, trust: &ProxyTrust) -> Option<IpAddr> {
     })
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for ClientIp {
-    type Rejection = std::convert::Infallible;
-
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        Ok(match parts.extensions.get::<ClientIp>() {
+impl ClientIp {
+    /// The client IP the pipeline recorded for the request of `parts`; for
+    /// a request outside the pipeline, the peer address (no proxy is
+    /// trusted), else `0.0.0.0`.
+    pub fn from_parts(parts: &Parts) -> Self {
+        match parts.extensions.get::<ClientIp>() {
             Some(ip) => *ip,
             None => ClientIp::resolve(&parts.headers, &parts.extensions, &ProxyTrust::none()),
-        })
+        }
     }
 }
 
-/// A provider resolved for the current request, with the visibility of the
-/// module that registered the route (request-scoped injection).
-///
-/// Request-scoped providers (`Scope::Request`,
-/// `#[injectable(scope = "request")]`) are built on first use within a
-/// request and shared by every `Scoped<T>` of that request: the pipeline
-/// keeps one `RequestScope` per request in its extensions. Singletons and
-/// transient providers resolve as usual. A provider the route's module
-/// cannot see, or one that fails to build, is a 500.
-///
-/// ```ignore
-/// async fn show(cart: Scoped<Cart>) -> Json<CartView> { ... }
-/// ```
-pub struct Scoped<T: ?Sized>(pub Arc<T>);
+impl FromRequestParts for ClientIp {
+    type Rejection = Infallible;
 
-impl<T: ?Sized> Deref for Scoped<T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T: ?Sized> Clone for Scoped<T> {
-    fn clone(&self) -> Self {
-        Scoped(self.0.clone())
-    }
-}
-
-impl<T: ?Sized> fmt::Debug for Scoped<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Scoped<{}>", std::any::type_name::<T>())
-    }
-}
-
-impl<S, T> FromRequestParts<S> for Scoped<T>
-where
-    S: Send + Sync,
-    T: ?Sized + Send + Sync + 'static,
-{
-    type Rejection = AppError;
-
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let unavailable = || {
-            AppError::internal(format!(
-                "Scoped<{}> is only available in a route mounted by navree-http",
-                std::any::type_name::<T>()
-            ))
-        };
-        let ctx = parts
-            .extensions
-            .get::<AppContext>()
-            .cloned()
-            .ok_or_else(unavailable)?;
-        let module = parts
-            .extensions
-            .get::<Arc<RouteMeta>>()
-            .and_then(|meta| meta.module_id)
-            .ok_or_else(unavailable)?;
-        let scope = match parts.extensions.get::<RequestScope>() {
-            Some(scope) => scope.clone(),
-            None => {
-                let scope = RequestScope::new();
-                parts.extensions.insert(scope.clone());
-                scope
-            }
-        };
-        ctx.request_resolver(module, scope)
-            .get::<T>()
-            .await
-            .map(Scoped)
-            .map_err(AppError::internal)
-    }
-}
-
-/// 201 Created with a `Location` header and a JSON body.
-#[derive(Clone, Debug)]
-pub struct Created<T>(pub String, pub T);
-
-impl<T: Serialize> IntoResponse for Created<T> {
-    fn into_response(self) -> Response {
-        let Created(location, body) = self;
-        let location = match HeaderValue::from_str(&location) {
-            Ok(value) => value,
-            Err(error) => {
-                return AppError::internal(format!("invalid Location header: {error}"))
-                    .into_response();
-            }
-        };
-        let mut response = (StatusCode::CREATED, Json(body)).into_response();
-        response.headers_mut().insert(LOCATION, location);
-        response
-    }
-}
-
-/// 204 No Content.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct NoContent;
-
-impl IntoResponse for NoContent {
-    fn into_response(self) -> Response {
-        StatusCode::NO_CONTENT.into_response()
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
+        Ok(ClientIp::from_parts(parts))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use http::HeaderValue;
+
     use super::*;
 
     fn peer(ip: [u8; 4]) -> http::Extensions {
@@ -444,14 +342,5 @@ mod tests {
         for bad in ["", "localhost", "10.0.0.0/33", "::1/129", "1.2.3.4/x"] {
             assert_eq!(IpNetwork::parse(bad), None, "{bad}");
         }
-    }
-
-    #[test]
-    fn created_sets_location_and_status() {
-        let response =
-            Created("/api/deals/1".to_owned(), serde_json::json!({"id": 1})).into_response();
-        assert_eq!(response.status(), StatusCode::CREATED);
-        assert_eq!(response.headers()[LOCATION], "/api/deals/1");
-        assert_eq!(NoContent.into_response().status(), StatusCode::NO_CONTENT);
     }
 }

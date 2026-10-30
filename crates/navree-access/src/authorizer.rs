@@ -6,13 +6,11 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-use axum::extract::rejection::PathRejection;
-use axum::extract::{FromRequestParts, Path};
 use http::header::USER_AGENT;
 use http::request::Parts;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, RequestId};
 use navree_db::Uow;
-use navree_http::{AppError, ClientIp, RouteAuthorizer, RouteMeta};
+use navree_http::{AppError, ClientIp, PathParams, RouteAuthorizer, RouteMeta};
 use navree_kernel::{AppContext, BoxFuture};
 use serde_json::{Value, json};
 
@@ -159,19 +157,20 @@ impl AccessAuthorizer {
                 meta.method, meta.full_path
             ))
         };
-        let params = match parts.extensions.get::<FieldCheck>() {
+        // The router has decoded the parameters; one it could not decode
+        // never reaches a route.
+        let params: HashMap<String, String> = match parts.extensions.get::<FieldCheck>() {
             Some(check) => check.args.clone(),
-            None => {
-                let Path(params) = Path::<HashMap<String, String>>::from_request_parts(parts, &())
-                    .await
-                    .map_err(|rejection| match rejection {
-                        PathRejection::MissingPathParams(_) => misdeclared(),
-                        // A parameter that is not valid percent-encoded UTF-8
-                        // names no record.
-                        _ => AppError::not_found(),
-                    })?;
-                params
-            }
+            None => parts
+                .extensions
+                .get::<PathParams>()
+                .map(|params| {
+                    params
+                        .iter()
+                        .map(|(name, value)| (name.to_owned(), value.to_owned()))
+                        .collect()
+                })
+                .unwrap_or_default(),
         };
         let id = params.get(param).ok_or_else(misdeclared)?;
         let loader = self.factory.subjects().loader(subject).ok_or_else(|| {

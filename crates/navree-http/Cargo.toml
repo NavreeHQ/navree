@@ -1,6 +1,6 @@
 [package]
 name = "navree-http"
-description = "Navree HttpModule: Axum integration, default Tower layers, JSON errors, controllers and route metadata."
+description = "Navree HttpModule: Navree's router and extractors, default Tower layers, JSON errors, controllers and route metadata."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,7 +11,11 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+# The previous router: its body and response types, its serve loop and its
+# middleware, until the move takes them to navree-http's own; the crates not
+# yet moved still use its extractors.
 axum = { workspace = true }
+bytes = { workspace = true }
 chrono = { workspace = true }
 # The per-IP limit and route throttles: keys sharded across locks.
 dashmap = { workspace = true }
@@ -28,6 +32,8 @@ metrics = { workspace = true }
 pin-project-lite = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# The field path in Query, Form and Json errors (`title: invalid type: ...`).
+serde_path_to_error = { workspace = true }
 sha2 = { workspace = true }
 tokio = { workspace = true }
 # The per-route pipeline is a Tower layer of its own.
@@ -38,8 +44,17 @@ utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+# The routing micro-benchmarks (`benches/routing.rs`).
+criterion = { workspace = true }
+# The references of the router's differential tests (tests/routing): the
+# previous matcher, the urlencoded parser and deserializer, percent-decoding.
+form_urlencoded = { workspace = true }
 http-body-util = { workspace = true }
+matchit = { workspace = true }
+percent-encoding = { workspace = true }
+proptest = { workspace = true }
 serde_json = { workspace = true }
+serde_urlencoded = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 tower = { workspace = true }
@@ -47,3 +62,8 @@ tower = { workspace = true }
 # dev-dependency features do not reach normal builds.
 tower-http = { workspace = true, features = ["cors"] }
 tracing-subscriber = { workspace = true }
+
+# Navree's router against the previous one (`cargo bench -p navree-http --bench routing`).
+[[bench]]
+name = "routing"
+harness = false

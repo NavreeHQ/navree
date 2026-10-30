@@ -14,6 +14,8 @@ use navree_kernel::{
 };
 use tokio::sync::watch;
 
+use crate::body::BodyError;
+use crate::extract::rejection;
 use crate::maintenance::{MaintenanceInfo, MaintenanceMode};
 use crate::{
     AppError, HttpOptions, ModuleBuilderHttpExt, RouteMeta, UrlSigner, build_router, route_table,
@@ -100,6 +102,13 @@ fn register(m: &mut ModuleBuilder, options: Option<HttpOptions>) {
             .deps(vec![ProviderKey::of::<HttpOptions>()]),
         )
         .exports::<UrlSigner>()
+        .map_error::<rejection::JsonRejection>(|r| Some(r.to_app_error()))
+        .map_error::<rejection::FormRejection>(|r| Some(r.to_app_error()))
+        .map_error::<rejection::QueryRejection>(|r| Some(r.to_app_error()))
+        .map_error::<rejection::PathRejection>(|r| Some(r.to_app_error()))
+        .map_error::<rejection::ExtensionRejection>(|r| Some(r.to_app_error()))
+        .map_error::<BodyError>(|r| Some(AppError::rejection(r.status(), r.to_string())))
+        // The previous framework's rejections, from the crates not yet moved.
         .map_error::<JsonRejection>(|r| Some(AppError::rejection(r.status(), r.body_text())))
         .map_error::<FormRejection>(|r| Some(AppError::rejection(r.status(), r.body_text())))
         .map_error::<QueryRejection>(|r| Some(AppError::rejection(r.status(), r.body_text())))

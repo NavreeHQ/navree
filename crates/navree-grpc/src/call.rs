@@ -13,13 +13,13 @@ use http::request::Parts;
 use http::{Method, StatusCode, Uri};
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState, RequestId};
 use navree_db::{Db, Uow};
-use navree_http::{AppError, Authenticator, ClientIp, ErrorMapper, RouteAuthorizer, RouteMeta};
+use navree_http::{
+    AppError, Authenticator, ClientIp, ErrorMapper, PathParams, RouteAuthorizer, RouteMeta,
+};
 use navree_kernel::{AppContext, ModuleId, WeakAppContext};
-use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 use tonic::{Request, Response, Status};
-use tower::ServiceExt;
 
 use crate::context::CallContext;
 use crate::service::GrpcMethod;
@@ -98,18 +98,11 @@ impl ServiceRuntime {
                 let mut meta = method.meta;
                 meta.module = Some(module_name);
                 meta.module_id = Some(module);
-                let record = meta
-                    .access
-                    .can
-                    .as_ref()
-                    .and_then(|can| can.from.clone())
-                    .map(|param| record_router(&param));
                 (
                     method.name,
                     MethodRuntime {
                         template: meta,
                         resolved: OnceLock::new(),
-                        record,
                     },
                 )
             })
@@ -118,17 +111,14 @@ impl ServiceRuntime {
     }
 
     /// The metadata of `method`, its full path set from the call's.
-    fn meta(&self, method: &str, path: &str) -> Option<(Arc<RouteMeta>, Option<&axum::Router>)> {
+    fn meta(&self, method: &str, path: &str) -> Option<Arc<RouteMeta>> {
         let runtime = self.methods.get(method)?;
-        let meta = runtime
-            .resolved
-            .get_or_init(|| {
-                let mut meta = runtime.template.clone();
-                meta.full_path = path.to_owned();
-                Arc::new(meta)
-            })
-            .clone();
-        Some((meta, runtime.record.as_ref()))
+        let meta = runtime.resolved.get_or_init(|| {
+            let mut meta = runtime.template.clone();
+            meta.full_path = path.to_owned();
+            Arc::new(meta)
+        });
+        Some(meta.clone())
     }
 }
 
@@ -136,9 +126,6 @@ impl ServiceRuntime {
 pub(crate) struct MethodRuntime {
     template: RouteMeta,
     resolved: OnceLock<Arc<RouteMeta>>,
-    /// For `can(.., from = "id")`: a router that puts the record id where
-    /// the route authorizer reads it (the path parameter `id`).
-    record: Option<axum::Router>,
 }
 
 /// The call's state, inserted into the request extensions by the edge.
@@ -245,7 +232,7 @@ where
     let Some(ctx) = info.runtime.ctx.upgrade() else {
         return Err(Status::unavailable("the server is shutting down"));
     };
-    let Some((meta, record)) = info.service.meta(method, &info.path) else {
+    let Some(meta) = info.service.meta(method, &info.path) else {
         return Err(Status::internal(format!(
             "`{method}` is not a method of {}",
             info.service.name
@@ -257,7 +244,6 @@ where
         &info,
         &ctx,
         meta.clone(),
-        record,
         request,
         record_key,
         body,
@@ -288,12 +274,10 @@ where
 
 /// Authentication, the access check, guards, the unit of work and the
 /// method.
-#[allow(clippy::too_many_arguments)]
 async fn run<Req, Res, F, Fut>(
     info: &CallInfo,
     ctx: &AppContext,
     meta: Arc<RouteMeta>,
-    record: Option<&axum::Router>,
     request: Request<Req>,
     record_key: Option<RecordKeyFn<Req>>,
     body: F,
@@ -349,7 +333,7 @@ where
         None => None,
     };
 
-    let admitted = admit(runtime, &meta, record, &mut parts, &message, record_key).await;
+    let admitted = admit(runtime, &meta, &mut parts, &message, record_key).await;
     if let Err(error) = admitted {
         rollback(uow.as_ref()).await;
         return Err(error);
@@ -394,7 +378,6 @@ where
 async fn admit<Req>(
     runtime: &Runtime,
     meta: &RouteMeta,
-    record: Option<&axum::Router>,
     parts: &mut Parts,
     message: &Req,
     record_key: Option<RecordKeyFn<Req>>,
@@ -420,12 +403,15 @@ async fn admit<Req>(
     let authorizer = runtime.authorizer.as_ref().ok_or_else(|| {
         AppError::internal("the method declares roles, permissions or can, but no dyn RouteAuthorizer is registered")
     })?;
-    if let (Some(router), Some(can)) = (record, &meta.access.can) {
-        let param = can.from.as_deref().unwrap_or("id");
+    // `can(.., from = "id")`: the record id goes, as it is, where the route
+    // authorizer (and `Path`) read path parameters.
+    if let Some(param) = meta.access.can.as_ref().and_then(|can| can.from.as_deref()) {
         let id = record_key
             .and_then(|key| key(message))
             .ok_or_else(|| Status::invalid_argument(format!("{param} is required")))?;
-        put_record_id(parts, router, &id).await?;
+        parts
+            .extensions
+            .insert(PathParams::from_pairs([(param, id.as_str())]));
     }
     authorizer.authorize(parts, meta).await?;
     Ok(())
@@ -436,58 +422,6 @@ async fn rollback(uow: Option<&Uow>) {
         && let Err(error) = uow.rollback().await
     {
         tracing::warn!(target: "navree::grpc", %error, "rolling back the unit of work failed");
-    }
-}
-
-/// A router whose only route is `/{param}`: routing a request through it
-/// stores the record id where `Path` extractors (and navree-access's route
-/// authorizer) read path parameters.
-fn record_router(param: &str) -> axum::Router {
-    axum::Router::new().route(
-        &format!("/{{{param}}}"),
-        axum::routing::any(|request: axum::extract::Request| async move {
-            let (mut parts, _) = request.into_parts();
-            if let Some(slot) = parts.extensions.remove::<PartsSlot>() {
-                *slot.0.lock().unwrap_or_else(PoisonError::into_inner) = Some(parts);
-            }
-            StatusCode::NO_CONTENT
-        }),
-    )
-}
-
-/// Carries the request parts out of [`record_router`]'s handler.
-#[derive(Clone, Default)]
-struct PartsSlot(Arc<Mutex<Option<Parts>>>);
-
-/// Characters escaped in a record id put in a path segment.
-const SEGMENT: &AsciiSet = &NON_ALPHANUMERIC
-    .remove(b'-')
-    .remove(b'_')
-    .remove(b'.')
-    .remove(b'~');
-
-async fn put_record_id(
-    parts: &mut Parts,
-    router: &axum::Router,
-    id: &str,
-) -> Result<(), CallError> {
-    let path = std::mem::take(&mut parts.uri);
-    let slot = PartsSlot::default();
-    let mut moved = std::mem::replace(parts, http::Request::new(()).into_parts().0);
-    moved.uri = format!("/{}", utf8_percent_encode(id, SEGMENT))
-        .parse()
-        .map_err(|_| Status::invalid_argument("the record id is not valid"))?;
-    moved.extensions.insert(slot.clone());
-    let request = http::Request::from_parts(moved, axum::body::Body::empty());
-    let routed = router.clone().oneshot(request).await;
-    let taken = slot.0.lock().unwrap_or_else(PoisonError::into_inner).take();
-    match (routed, taken) {
-        (Ok(_), Some(mut routed)) => {
-            routed.uri = path;
-            *parts = routed;
-            Ok(())
-        }
-        _ => Err(AppError::internal("the record id could not be routed").into()),
     }
 }
 
@@ -524,13 +458,50 @@ async fn record_security(sink: &dyn AuditSink, entry: AuditEntry) {
     }
 }
 
-/// Runs one Navree extractor on the call's request parts.
-pub async fn extract<T>(parts: &mut Parts) -> Result<T, CallError>
+/// Runs one extractor on the call's request parts: a Navree extractor
+/// (`navree_http::extract::FromRequestParts`) or, during the move, one
+/// still on the previous framework's trait; `M` is inferred. It returns the
+/// extractor's own future (no async wrapper), so a call's future nests no
+/// deeper than with one trait.
+pub fn extract<T, M>(parts: &mut Parts) -> impl Future<Output = Result<T, CallError>> + Send
 where
-    T: FromRequestParts<()>,
+    T: Extract<M>,
+{
+    T::extract(parts)
+}
+
+/// An extractor [`extract`] runs; `M` tells the two traits apart.
+pub trait Extract<M>: Sized {
+    /// Runs the extractor.
+    fn extract(parts: &mut Parts) -> impl Future<Output = Result<Self, CallError>> + Send;
+}
+
+/// Navree's extractors.
+#[derive(Debug)]
+pub enum ViaNavree {}
+
+/// The previous framework's extractors.
+#[derive(Debug)]
+pub enum ViaPrevious {}
+
+impl<T> Extract<ViaNavree> for T
+where
+    T: navree_http::extract::FromRequestParts,
     T::Rejection: Into<CallError>,
 {
-    T::from_request_parts(parts, &()).await.map_err(Into::into)
+    async fn extract(parts: &mut Parts) -> Result<Self, CallError> {
+        T::from_request_parts(parts).await.map_err(Into::into)
+    }
+}
+
+impl<T> Extract<ViaPrevious> for T
+where
+    T: FromRequestParts<()> + Send,
+    T::Rejection: Into<CallError>,
+{
+    async fn extract(parts: &mut Parts) -> Result<Self, CallError> {
+        T::from_request_parts(parts, &()).await.map_err(Into::into)
+    }
 }
 
 /// Lets an extractor whose rejection is an [`AppError`] (every Navree

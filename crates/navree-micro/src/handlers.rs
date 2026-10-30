@@ -6,13 +6,12 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::handler::Handler;
 use axum::response::{IntoResponse, Response};
-use axum::routing::MethodRouter;
 use http::StatusCode;
 use http::header::CONTENT_TYPE;
 use navree_events::{Event, EventBus, Listener, ModuleBuilderEventsExt};
-use navree_http::{AccessSpec, AppError, CanSpec, Guard};
+use navree_http::handler::Endpoint;
+use navree_http::{AccessSpec, AppError, CanSpec, Guard, Handler};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, Injectable, KernelError, ModuleBuilder, ModuleId, ProviderKey,
     Resolver,
@@ -30,8 +29,8 @@ pub trait MessageHandlers: Send + Sync + 'static {
     fn patterns(self: Arc<Self>) -> Vec<PatternDef>;
 }
 
-/// One message or event pattern: its handler (an Axum handler whose
-/// arguments are extractors) and its metadata.
+/// One message or event pattern: its handler (a `navree_http::Handler`, an
+/// async function whose arguments are extractors) and its metadata.
 ///
 /// The handler's response is the reply: its status, its body and its
 /// `content-type`.
@@ -54,7 +53,7 @@ pub struct PatternDef {
     /// Message or event.
     pub kind: PatternKind,
     /// The handler.
-    pub handler: MethodRouter,
+    pub handler: Endpoint,
     /// Access, guards and options.
     pub meta: PatternMeta,
 }
@@ -86,13 +85,13 @@ pub struct PatternMeta {
 impl PatternDef {
     fn new<H, T>(pattern: &str, kind: PatternKind, handler: H) -> Self
     where
-        H: Handler<T, ()>,
+        H: Handler<T>,
         T: 'static,
     {
         Self {
             pattern: pattern.to_owned(),
             kind,
-            handler: axum::routing::post(handler),
+            handler: Endpoint::new(handler),
             meta: PatternMeta::default(),
         }
     }
@@ -100,7 +99,7 @@ impl PatternDef {
     /// A message pattern answered by `handler`.
     pub fn message<H, T>(pattern: &str, handler: H) -> Self
     where
-        H: Handler<T, ()>,
+        H: Handler<T>,
         T: 'static,
     {
         Self::new(pattern, PatternKind::Message, handler)
@@ -109,7 +108,7 @@ impl PatternDef {
     /// An event pattern handled by `handler`.
     pub fn event<H, T>(pattern: &str, handler: H) -> Self
     where
-        H: Handler<T, ()>,
+        H: Handler<T>,
         T: 'static,
     {
         Self::new(pattern, PatternKind::Event, handler)

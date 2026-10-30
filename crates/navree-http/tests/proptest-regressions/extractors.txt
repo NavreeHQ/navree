@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 38d0e94a336961fe2628a609702893b8dd26a9035ec9af639c59c9a0bdcfec10 # shrinks to query = "p%61ge=a+b&q=%ZZ"
+cc 77995dcbf1404f2f97f9ca218e5cce673f660e42230a2e70c7d48c2f634ec401 # shrinks to a = "4294967296", b = "a%20b"
+cc de22382a11b0a2fa597bae84a3ceb27177028ae32248d8e18d6d1693dae695f3 # shrinks to content_type = Some("application/json+"), body = [123, 34, 116, 105, 116, 108, 101, 34, 58, 34, 65, 34, 125]

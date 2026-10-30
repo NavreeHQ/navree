@@ -5,15 +5,13 @@ use std::collections::HashMap;
 use std::convert::Infallible;
 use std::fmt;
 use std::net::IpAddr;
-use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
 use axum::Router;
-use axum::extract::{DefaultBodyLimit, Request};
+use axum::extract::DefaultBodyLimit;
 use axum::middleware::from_fn_with_state;
-use axum::response::{IntoResponse, Response};
 use http::header::{CONTENT_LENGTH, HeaderName};
 use http::request::Parts;
 use http::{Method, StatusCode};
@@ -21,32 +19,42 @@ use navree_config::Config;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState, RequestId};
 use navree_kernel::{AppContext, BoxError, BoxFuture};
 use navree_telemetry::{EventKind, Telemetry, TracePolicy};
-use tower::{Layer, Service, ServiceExt};
+use tower::Service;
+use tower::util::BoxCloneSyncService;
 use tower_http::compression::CompressionLayer;
 use uuid::Uuid;
 
+use crate::body::BodyLimit;
 use crate::controller::ControllerRegistration;
 use crate::error::ErrorFormat;
-use crate::extract::ProxyTrust;
+use crate::extract::{ProxyTrust, Request};
+use crate::handler::{BoxedService, Endpoint};
 use crate::limiter::KeyedRateLimiter;
 use crate::network::rate_limit_key;
 use crate::pipeline::{
     self, CheckStages, ContextState, GuardStages, Requester, Stages, TimeoutOverride, X_REQUEST_ID,
 };
+use crate::response::{IntoResponse, Response};
+use crate::routing::PathPattern;
 use crate::{
     AppError, Authenticator, ClientIp, CorsLayer, CorsOptions, ErrorMapper, GlobalLayer,
-    HttpOptions, HttpServer, LayerSlot, RouteAuthorizer, RouteDef, RouteMeta,
+    HttpOptions, HttpServer, LayerSlot, RouteAuthorizer, RouteDef, RouteMeta, routing,
 };
 
-/// Builds the app's full router: every controller route behind its per-route
-/// pipeline, the single 404 fallback, the contributed [`GlobalLayer`]s and
-/// the fixed global layers. Used by `serve` and by tests.
+/// Builds the app's full router: every controller route on Navree's
+/// [`Router`](routing::Router) behind its per-route pipeline, the single 404,
+/// the contributed [`GlobalLayer`]s and the fixed global layers. Used by
+/// `serve` and by tests.
 ///
 /// Fails, listing every problem, when a route has no access declaration, is
-/// mounted twice or has an invalid path, or when routes need an
+/// mounted twice (the same method on paths that differ only in parameter
+/// names counts) or has an invalid path, or when routes need an
 /// [`Authenticator`] or a [`RouteAuthorizer`] that is not registered.
 /// `HttpModule` runs this check at boot, so these mistakes stop the app
 /// before it binds a port.
+///
+/// The global layers still wrap the previous framework's router type,
+/// whose only service is Navree's router.
 pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
     let server = ctx
         .get::<HttpServer>()
@@ -68,11 +76,17 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
         body_limit: options.body_limit_bytes,
         ipv6_prefix: options.rate_limit_ipv6_prefix,
     };
-    let mut router = Router::new();
+    let mut routes_router = routing::Router::new();
+    let mut errors = Vec::new();
     for route in routes {
-        router = mount(router, route, &shared)?;
+        if let Err(error) = mount(&mut routes_router, route, &shared) {
+            errors.push(error);
+        }
     }
-    router = router.fallback(|| async { AppError::not_found() });
+    if !errors.is_empty() {
+        return Err(RouteErrors(errors).into());
+    }
+    let mut router = Router::new().fallback_service(routes_router);
     // Without `Session`-slot layers nothing comes between the fixed layers
     // and authentication, so it runs as their last stage: one middleware
     // fewer on every request.
@@ -92,6 +106,8 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
     // The fixed layers between two Tower layers run as the stages of one
     // middleware (see `Stages`): the checks inside compression, the guard
     // inside CORS, the request context outermost.
+    // The app's body limit for the previous framework's body extractors;
+    // Navree's read the route's `BodyLimit`, set by the route pipeline.
     router = router.layer(DefaultBodyLimit::max(options.body_limit_bytes));
     let mappers = ctx
         .contributions::<ErrorMapper>()
@@ -198,7 +214,7 @@ pub async fn route_table(ctx: &AppContext) -> Result<Vec<RouteMeta>, BoxError> {
 /// A route ready to mount: its metadata (with full path and module) and handler.
 struct Mounted {
     controller: &'static str,
-    handler: axum::routing::MethodRouter,
+    handler: Endpoint,
     meta: RouteMeta,
 }
 
@@ -290,7 +306,9 @@ impl std::error::Error for RouteErrors {}
 
 fn validate(routes: &[Mounted], authenticator: bool, authorizer: bool) -> Result<(), RouteErrors> {
     let mut errors = Vec::new();
-    let mut seen: HashMap<(&str, &str), &str> = HashMap::new();
+    // (method, shape) → (path, controller): two routes of one shape match
+    // the same paths.
+    let mut shapes: HashMap<(String, String), (String, &str)> = HashMap::new();
     for route in routes {
         let meta = &route.meta;
         let label = format!(
@@ -300,11 +318,23 @@ fn validate(routes: &[Mounted], authenticator: bool, authorizer: bool) -> Result
             route.controller,
             meta.module.unwrap_or("?")
         );
-        if let Err(problem) = check_path(&meta.full_path) {
-            errors.push(format!("{label}: {problem}"));
-        }
-        if let Some(first) = seen.insert((&meta.method, &meta.full_path), route.controller) {
-            errors.push(format!("{label} is registered twice (also by {first})"));
+        match PathPattern::parse(&meta.full_path) {
+            Err(problem) => errors.push(format!("{label}: {problem}")),
+            Ok(pattern) => {
+                let key = (meta.method.clone(), pattern.shape());
+                match shapes.get(&key) {
+                    Some((path, first)) if *path == meta.full_path => {
+                        errors.push(format!("{label} is registered twice (also by {first})"));
+                    }
+                    Some((path, first)) => errors.push(format!(
+                        "{label}: `{} {}` matches the same paths as `{} {path}` (by {first}); only parameter names differ",
+                        meta.method, meta.full_path, meta.method
+                    )),
+                    None => {
+                        shapes.insert(key, (meta.full_path.clone(), route.controller));
+                    }
+                }
+            }
         }
         let access = &meta.access;
         if !access.is_declared() {
@@ -346,21 +376,6 @@ fn validate(routes: &[Mounted], authenticator: bool, authorizer: bool) -> Result
     }
 }
 
-/// Axum 0.8 path syntax: `/`-prefixed, `{param}` and `{*rest}` captures.
-fn check_path(path: &str) -> Result<(), String> {
-    for segment in path.split('/') {
-        if segment.starts_with(':') || segment.starts_with('*') {
-            return Err(format!(
-                "segment `{segment}` uses old capture syntax; write `{{param}}` or `{{*rest}}`"
-            ));
-        }
-        if segment.matches('{').count() != segment.matches('}').count() {
-            return Err(format!("segment `{segment}` has unbalanced braces"));
-        }
-    }
-    Ok(())
-}
-
 /// Values every per-route pipeline shares.
 struct Shared {
     authorizer: Option<Arc<dyn RouteAuthorizer>>,
@@ -369,7 +384,8 @@ struct Shared {
     ipv6_prefix: u8,
 }
 
-fn mount(router: Router, route: Mounted, shared: &Shared) -> Result<Router, RouteErrors> {
+/// Mounts a route on `router` behind its per-route pipeline.
+fn mount(router: &mut routing::Router, route: Mounted, shared: &Shared) -> Result<(), String> {
     let meta = Arc::new(route.meta);
     let runtime = Arc::new(RouteRuntime {
         throttle: meta.throttle.map(|t| KeyedRateLimiter::new(t.limit, t.per)),
@@ -387,18 +403,27 @@ fn mount(router: Router, route: Mounted, shared: &Shared) -> Result<Router, Rout
         ipv6_prefix: shared.ipv6_prefix,
         meta: meta.clone(),
     });
-    let mut handler = route.handler;
-    if let Some(limit) = meta.body_limit {
-        handler = handler.route_layer(DefaultBodyLimit::max(limit));
-    }
-    handler = handler.route_layer(RouteLayer(runtime));
-    let path = meta.full_path.clone();
-    std::panic::catch_unwind(AssertUnwindSafe(move || router.route(&path, handler))).map_err(|_| {
-        RouteErrors(vec![format!(
-            "route `{} {}` cannot be mounted (see the panic message above)",
-            meta.method, meta.full_path
-        )])
-    })
+    let method = meta
+        .method
+        .parse::<Method>()
+        .map_err(|error| format!("route `{} {}`: {error}", meta.method, meta.full_path))?;
+    let handler = route.handler;
+    router
+        .try_route_service(method, &meta.full_path, |pattern| {
+            BoxCloneSyncService::new(RouteService {
+                runtime,
+                inner: handler.mount(pattern, meta.body_limit),
+            })
+        })
+        .map_err(|error| {
+            format!(
+                "route `{} {}` ({} in module `{}`): {error}",
+                meta.method,
+                meta.full_path,
+                route.controller,
+                meta.module.unwrap_or("?")
+            )
+        })
 }
 
 /// The per-route state: metadata, throttle, authorizer, audit sink.
@@ -580,35 +605,15 @@ fn client_ip(parts: &Parts) -> IpAddr {
         .0
 }
 
-/// Runs [`route_pipeline`] around a route's handler: a Tower layer of its
-/// own rather than a `from_fn` middleware, so a request pays for one boxed
-/// future here, not three.
+/// A route's handler behind its [`route_pipeline`]: one boxed future per
+/// request for the pipeline and the handler together.
 #[derive(Clone)]
-struct RouteLayer(Arc<RouteRuntime>);
-
-impl<S> Layer<S> for RouteLayer {
-    type Service = RouteService<S>;
-
-    fn layer(&self, inner: S) -> RouteService<S> {
-        RouteService {
-            runtime: self.0.clone(),
-            inner,
-        }
-    }
-}
-
-/// A route's handler behind its [`route_pipeline`].
-#[derive(Clone)]
-struct RouteService<S> {
+struct RouteService {
     runtime: Arc<RouteRuntime>,
-    inner: S,
+    inner: BoxedService,
 }
 
-impl<S> Service<Request> for RouteService<S>
-where
-    S: Service<Request, Response = Response, Error = Infallible> + Clone + Send + 'static,
-    S::Future: Send + 'static,
-{
+impl Service<Request> for RouteService {
     type Response = Response;
     type Error = Infallible;
     type Future = BoxFuture<'static, Result<Response, Infallible>>;
@@ -624,16 +629,19 @@ where
     }
 }
 
-/// The per-route pipeline: route metadata into the extensions, body limit,
-/// authentication, per-user throttle, guards, authorization, route timeout,
-/// the handler, then the audit action.
-async fn route_pipeline<S>(runtime: Arc<RouteRuntime>, request: Request, handler: S) -> Response
-where
-    S: Service<Request, Response = Response, Error = Infallible>,
-{
+/// The per-route pipeline: route metadata and body limit into the
+/// extensions, the `Content-Length` check, authentication, per-user
+/// throttle, guards, authorization, route timeout, the handler, then the
+/// audit action.
+async fn route_pipeline(
+    runtime: Arc<RouteRuntime>,
+    request: Request,
+    handler: BoxedService,
+) -> Response {
     let meta = runtime.meta.clone();
     let (mut parts, body) = request.into_parts();
     parts.extensions.insert(meta.clone());
+    parts.extensions.insert(BodyLimit(runtime.body_limit));
     if let (Some(route_timeout), Some(cell)) =
         (meta.timeout, parts.extensions.get::<TimeoutOverride>())
     {
@@ -653,12 +661,7 @@ where
                     ClientIp(client_ip(&parts)),
                 )
             });
-            let run = async move {
-                match handler.oneshot(Request::from_parts(parts, body)).await {
-                    Ok(response) => response,
-                    Err(never) => match never {},
-                }
-            };
+            let run = crate::handler::call(handler, Request::from_parts(parts, body));
             let response = match meta.timeout {
                 Some(limit) => match tokio::time::timeout(limit, run).await {
                     Ok(response) => response,
@@ -805,11 +808,12 @@ mod tests {
 
     #[test]
     fn old_capture_syntax_is_rejected() {
-        assert!(check_path("/api/deals/{id}").is_ok());
-        assert!(check_path("/files/{*path}").is_ok());
-        assert!(check_path("/api/deals/:id").is_err());
-        assert!(check_path("/files/*path").is_err());
-        assert!(check_path("/api/{id").is_err());
+        let check = |path| PathPattern::parse(path).map(drop);
+        assert!(check("/api/deals/{id}").is_ok());
+        assert!(check("/files/{*path}").is_ok());
+        assert!(check("/api/deals/:id").is_err());
+        assert!(check("/files/*path").is_err());
+        assert!(check("/api/{id").is_err());
     }
 
     #[test]

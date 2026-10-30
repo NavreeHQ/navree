@@ -78,8 +78,8 @@ impl<S: Send + Sync> FromRequestParts<S> for CurrentUser {
 impl<S: Send + Sync> FromRequestParts<S> for ClientMeta {
     type Rejection = Infallible;
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let ClientIp(ip) = ClientIp::from_request_parts(parts, state).await?;
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let ClientIp(ip) = ClientIp::from_parts(parts);
         Ok(ClientMeta {
             ip: (!ip.is_unspecified()).then(|| canonical_ip(ip)),
             user_agent: parts

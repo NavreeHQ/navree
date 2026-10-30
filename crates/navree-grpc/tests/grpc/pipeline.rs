@@ -77,11 +77,14 @@ async fn record_checks_read_the_id_field() {
     assert_eq!(empty.code(), Code::InvalidArgument);
     assert_eq!(empty.message(), "id is required");
 
-    let not_a_uuid = owner
-        .get_deal(GetDealRequest { id: "a/b c".into() })
-        .await
-        .unwrap_err();
-    assert_eq!(not_a_uuid.code(), Code::NotFound);
+    // The id is read as it is, never as a path: odd ids are missing records.
+    for id in ["a/b c", "..", r"a\b"] {
+        let odd = owner
+            .get_deal(GetDealRequest { id: id.into() })
+            .await
+            .unwrap_err();
+        assert_eq!(odd.code(), Code::NotFound, "{id}");
+    }
 }
 
 #[tokio::test]

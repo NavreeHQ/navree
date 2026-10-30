@@ -36,7 +36,6 @@ navree-kernel = { workspace = true }
 navree-macros = { workspace = true }
 navree-testing = { workspace = true, optional = true }
 navree-validation = { workspace = true }
-percent-encoding = { workspace = true }
 pin-project-lite = { workspace = true }
 prost = { workspace = true }
 prost-reflect = { workspace = true }

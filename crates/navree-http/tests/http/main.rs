@@ -6,6 +6,7 @@ mod support;
 mod access;
 mod errors;
 mod logs;
+mod matching;
 mod pipeline;
 mod routes;
 mod server;

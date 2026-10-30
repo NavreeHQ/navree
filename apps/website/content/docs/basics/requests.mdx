@@ -5,7 +5,7 @@ description: "Reading paths, query strings, JSON and other bodies, headers, the 
 
 ## Introduction
 
-A handler doesn't receive a request object. It declares what it needs as arguments, and an *extractor* builds each one from the request: `Path(id)` from the path, `Query(filter)` from the query string, `Json(input)` from the body, `CurrentUser(user)` from the authenticated principal. This is Axum's model, and every Axum extractor works in a Navree handler; Navree adds extractors for the things it manages, such as the current user, the unit of work and validated input.
+A handler doesn't receive a request object. It declares what it needs as arguments, and an *extractor* builds each one from the request: `Path(id)` from the path, `Query(filter)` from the query string, `Json(input)` from the body, `CurrentUser(user)` from the authenticated principal. navree-http has the common extractors (`navree::http::{Path, Query, Json, Form, Extension}` and the rest of `navree::http::extract`), and Navree's packages add extractors for the things they manage, such as the current user, the unit of work and validated input.
 
 ```rust title="src/modules/deals/notes_controller.rs"
 use navree::prelude::*;
@@ -79,7 +79,7 @@ Missing fields must be `Option`s or have a serde default. A value of the wrong t
 
 ## JSON bodies
 
-`Json<T>` reads a JSON body into any `T: Deserialize`. It's Axum's `Json`, re-exported by navree-http and the prelude, and the same type serializes JSON responses. The request must say `Content-Type: application/json`:
+`Json<T>` reads a JSON body into any `T: Deserialize`. It's navree-http's `Json`, in the prelude, and the same type serializes JSON responses. The request must say `Content-Type: application/json` (or a `+json` type such as `application/merge-patch+json`, parameters allowed), in a single header:
 
 | Problem | Status | Message |
 |---|---|---|
@@ -87,7 +87,7 @@ Missing fields must be `Option`s or have a serde default. A value of the wrong t
 | Not JSON | 400 | `Failed to parse the request body as JSON: EOF while parsing an object at line 1 column 1` |
 | JSON of the wrong shape | 400 | ``Failed to deserialize the JSON body into the target type: missing field `title` at line 1 column 13`` |
 
-Axum itself answers a wrongly shaped body with a 422; Navree turns it into a 400, like every other input error.
+A wrongly shaped body is a 400, like every other input error, and the message names the field (``title: invalid type: integer `1`, expected a string``). A body with anything but whitespace after the JSON value is not JSON.
 
 To check the values (lengths, formats, ranges, uniqueness) and answer with a message per field, wrap the extractor: `Valid(Json(input)): Valid<Json<CreateNote>>`. See [validation](/docs/basics/validation/).
 
@@ -96,13 +96,13 @@ To check the values (lengths, formats, ranges, uniqueness) and answer with a mes
 | Extractor | Reads |
 |---|---|
 | `String` | The body as UTF-8 text |
-| `navree::axum::body::Bytes` | The raw body |
-| `navree::axum::Form<T>` | An `application/x-www-form-urlencoded` body |
+| `navree::http::body::Bytes` | The raw body |
+| `navree::http::Form<T>` | An `application/x-www-form-urlencoded` body (for `GET` and `HEAD`, the query string) |
 | `navree::axum::extract::Multipart` | A `multipart/form-data` body, part by part; [file storage](/docs/digging-deeper/storage/) has helpers for uploads |
-| `navree::axum::extract::Request` | The whole request |
+| `navree::http::extract::Request` | The whole request |
 
 ```rust
-use navree::axum::body::Bytes;
+use navree::http::body::Bytes;
 
 #[post("/{id}/attachments")]
 async fn attach(&self, Path(deal_id): Path<Uuid>, body: Bytes) -> String {
@@ -110,7 +110,7 @@ async fn attach(&self, Path(deal_id): Path<Uuid>, body: Bytes) -> String {
 }
 ```
 
-An extractor that reads the body must be the handler's **last** argument: there is only one body. Putting it anywhere else is a compile error from Axum (the handler doesn't implement `Handler`).
+An extractor that reads the body must be the handler's **last** argument: there is only one body. Putting it anywhere else is a compile error (the handler doesn't implement `Handler`).
 
 ## Headers
 
@@ -135,11 +135,11 @@ For one header you need often, write a small extractor (see [writing your own](#
 
 Every request has an id, which ties the request log, every log line written during the request, audit entries and the response together. The pipeline keeps an incoming `X-Request-Id` when it's 1 to 64 letters, digits, `-` or `_`, and generates one otherwise (a UUID v7 as 32 hex digits). The response carries it in `X-Request-Id`, error responses included.
 
-A handler reads it with Axum's `Extension` extractor:
+A handler reads it with the `Extension` extractor:
 
 ```rust
-use navree::axum::Extension;
 use navree::contracts::RequestId;
+use navree::http::Extension;
 
 #[get("/trace")]
 async fn trace(&self, Extension(request_id): Extension<RequestId>) -> String {
@@ -253,20 +253,20 @@ A route that needs a different limit, larger for an import or smaller for a webh
 
 ## Writing your own extractor
 
-An extractor is a type that implements Axum's `FromRequestParts` (or `FromRequest`, for one that reads the body). Use `AppError` as the rejection, so failures render in the error format:
+An extractor is a type that implements `navree::http::extract::FromRequestParts` (or `FromRequest`, for one that reads the body). Use `AppError` as the rejection, so failures render in the error format:
 
 ```rust
-use navree::axum::extract::FromRequestParts;
 use navree::axum::http::request::Parts;
+use navree::http::extract::FromRequestParts;
 use navree::prelude::*;
 
 /// The `X-Tenant` header, required.
 pub struct Tenant(pub String);
 
-impl<S: Send + Sync> FromRequestParts<S> for Tenant {
+impl FromRequestParts for Tenant {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         parts
             .headers
             .get("x-tenant")
@@ -284,10 +284,10 @@ An extractor that needs a service resolves it through the `AppContext` the pipel
 /// The app's settings, resolved from the container.
 pub struct Settings(pub Arc<AppSettings>);
 
-impl<S: Send + Sync> FromRequestParts<S> for Settings {
+impl FromRequestParts for Settings {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let ctx = parts
             .extensions
             .get::<AppContext>()
@@ -305,7 +305,7 @@ async fn show(&self, Tenant(tenant): Tenant, Settings(settings): Settings) -> St
 }
 ```
 
-Request extensions are also where you find the `RequestId`, the `ClientIp`, the `AuthState` and the route's metadata (as `Arc<RouteMeta>`), if your extractor needs them. A request without `X-Tenant` gets:
+Request extensions are also where you find the `RequestId`, the `ClientIp`, the `AuthState`, the route's metadata (as `Arc<RouteMeta>`) and its decoded path parameters (as `PathParams`), if your extractor needs them. A request without `X-Tenant` gets:
 
 ```json
 { "statusCode": 400, "message": "The X-Tenant header is required.", "error": "Bad Request", "code": "bad_request" }

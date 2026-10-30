@@ -435,6 +435,9 @@ insta = { version = "1.49.0", features = ["json"] }
 # TLS and navree-directory's LDAPS tests.
 rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "pem", "ring"] }
 proptest = "1.12.0"
+# The previous router's matcher, the reference of navree-http's routing
+# differential tests (already in the tree under axum).
+matchit = "0.8.4"
 # HTTP mock servers for provider integrations (navree-social, navree-billing)
 # and the search engines' REST clients (navree-search).
 wiremock = "0.6.5"

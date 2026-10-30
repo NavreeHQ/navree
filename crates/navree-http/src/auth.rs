@@ -3,11 +3,11 @@
 
 use std::fmt;
 
-use axum::extract::FromRequestParts;
 use http::request::Parts;
 use navree_contracts::{AuthState, Principal};
 use navree_kernel::BoxFuture;
 
+use crate::extract::FromRequestParts;
 use crate::{AppError, RouteMeta};
 
 /// Establishes who is making a request (implemented by navree-auth; fakes in
@@ -53,15 +53,23 @@ pub trait Guard: Send + Sync + 'static + fmt::Debug {
 #[derive(Clone, Debug)]
 pub struct CurrentPrincipal(pub Principal);
 
-impl<S: Send + Sync> FromRequestParts<S> for CurrentPrincipal {
-    type Rejection = AppError;
-
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+impl CurrentPrincipal {
+    /// The principal the pipeline authenticated for the request of `parts`;
+    /// 401 for a guest.
+    pub fn from_parts(parts: &Parts) -> Result<Self, AppError> {
         parts
             .extensions
             .get::<AuthState>()
             .and_then(|state| state.0.clone())
             .map(CurrentPrincipal)
             .ok_or_else(AppError::unauthenticated)
+    }
+}
+
+impl FromRequestParts for CurrentPrincipal {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
+        Self::from_parts(parts)
     }
 }

@@ -343,8 +343,9 @@ pub use navree_harbor as harbor;
 #[cfg(feature = "navigator")]
 pub use navree_navigator as navigator;
 
-/// Axum, for extractors and types navree-http does not re-export
-/// (`navree::axum::extract::Path`, `navree::axum::http::HeaderMap`, ...).
+/// The previous router, for the types navree-http does not have yet
+/// (`navree::axum::http::HeaderMap`, `navree::axum::extract::Multipart`,
+/// ...). It goes once navree-http has them all.
 #[cfg(feature = "http")]
 pub use axum;
 

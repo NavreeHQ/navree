@@ -87,6 +87,15 @@ async fn can_from_reads_the_record_id_from_the_payload() {
         .request("deals.get", &GetDeal { id: Uuid::now_v7() })
         .await
         .assert_error(404, "Not Found");
+    // The id is read as it is, never as a path: odd ids are missing records.
+    for id in ["a/b c", "..", r"a\b"] {
+        micro
+            .client()
+            .acting_as(principal(rep))
+            .request("deals.get", &json!({ "id": id }))
+            .await
+            .assert_error(404, "Not Found");
+    }
 
     // A payload without the field is a 400.
     micro

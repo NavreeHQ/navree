@@ -23,11 +23,11 @@ use navree_contracts::{
 };
 use navree_db::Uow;
 use navree_http::{
-    AppError, Authenticator, ErrorMapper, GlobalLayer, LayerSlot, RouteAuthorizer, RouteMeta,
+    AppError, Authenticator, ErrorMapper, GlobalLayer, LayerSlot, PathParams, RouteAuthorizer,
+    RouteMeta,
 };
 use navree_kernel::{AppContext, BoxError, RequestScope};
 use navree_telemetry::{Telemetry, TelemetryContext, TraceContext, TracePolicy};
-use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use tower::ServiceExt;
 use uuid::Uuid;
 
@@ -195,7 +195,7 @@ impl MessageRouter {
             authorizer.is_some(),
         )?;
 
-        let mut router = Router::new();
+        let mut routes = navree_http::routing::Router::new();
         for (registered, handler) in patterns.iter().zip(handlers) {
             let inbox = settings.inbox.clone().filter(|_| match registered.kind {
                 PatternKind::Message => registered.meta.dedupe,
@@ -216,10 +216,14 @@ impl MessageRouter {
                     PatternKind::Message => None,
                 },
             });
-            let handler = handler.route_layer(from_fn_with_state(runtime, handler_pipeline));
-            router = router.route(&path_of(registered), handler);
+            let handler = handler.layer(from_fn_with_state(runtime, handler_pipeline));
+            routes
+                .try_route(Method::POST, &path_of(registered), handler)
+                .map_err(|error| format!("{}: {error}", registered.label()))?;
         }
-        router = router.fallback(|| async { AppError::not_found() });
+        // Navree's router matches; the layers below still wrap the previous
+        // framework's router type (`GlobalLayer`).
+        let mut router = Router::new().fallback_service(routes);
 
         // Authentication first, then the app's authentication-context and
         // unit-of-work layers (the session slot is HTTP's alone), outermost
@@ -378,19 +382,24 @@ impl MessageRouter {
         attempt: u32,
         request_id: &RequestId,
     ) -> Result<Request, AppError> {
-        let uri = match registered
+        // `can(.., from = "field")`: the record id goes, as it is, where the
+        // access check reads path parameters.
+        let record = match registered
             .meta
             .access
             .can
             .as_ref()
             .and_then(|can| can.from.as_deref())
         {
-            Some(field) => format!("/m/{}/{}", registered.index, record_id(envelope, field)?),
-            None => format!("/m/{}", registered.index),
+            Some(field) => {
+                let id = record_id(envelope, field)?;
+                Some(PathParams::from_pairs([(field, id.as_str())]))
+            }
+            None => None,
         };
         let mut request = http::Request::builder()
             .method(Method::POST)
-            .uri(uri)
+            .uri(path_of(registered))
             .body(Body::from(envelope.payload().clone()))
             .map_err(AppError::internal)?;
         let request_headers = request.headers_mut();
@@ -417,6 +426,9 @@ impl MessageRouter {
         extensions.insert(ctx.clone());
         extensions.insert(request_id.clone());
         extensions.insert(RequestScope::new());
+        if let Some(record) = record {
+            extensions.insert(record);
+        }
         extensions.insert(MessageContext(Arc::new(MessageInfo {
             pattern: envelope.pattern().to_owned(),
             handler_pattern: registered.pattern.clone(),
@@ -465,22 +477,14 @@ fn record_id(envelope: &Envelope, field: &str) -> Result<String, AppError> {
         serde_json::Value::Number(id) if id.is_i64() || id.is_u64() => id.to_string(),
         _ => return Err(missing()),
     };
-    Ok(utf8_percent_encode(&id, NON_ALPHANUMERIC).to_string())
+    Ok(id)
 }
 
-/// `/m/{index}`, or `/m/{index}/{field}` for a `can(.., from = "field")`
-/// check (the access check reads the record id from the path).
+/// `/m/{index}`: the path a pattern's messages are routed on. A record id
+/// for `can(.., from = "field")` travels in the request's [`PathParams`],
+/// not in the path.
 fn path_of(registered: &Registered) -> String {
-    match registered
-        .meta
-        .access
-        .can
-        .as_ref()
-        .and_then(|can| can.from.as_deref())
-    {
-        Some(field) => format!("/m/{}/{{{field}}}", registered.index),
-        None => format!("/m/{}", registered.index),
-    }
+    format!("/m/{}", registered.index)
 }
 
 /// Checks the registered patterns; every problem at once.
@@ -863,9 +867,9 @@ mod tests {
             "deals.get",
             r#"{"id":"0199c1d2-6f7e","n":7,"x":{"y":1},"s":"a b"}"#,
         );
-        assert_eq!(record_id(&envelope, "id").unwrap(), "0199c1d2%2D6f7e");
+        assert_eq!(record_id(&envelope, "id").unwrap(), "0199c1d2-6f7e");
         assert_eq!(record_id(&envelope, "n").unwrap(), "7");
-        assert_eq!(record_id(&envelope, "s").unwrap(), "a%20b");
+        assert_eq!(record_id(&envelope, "s").unwrap(), "a b");
         assert_eq!(
             record_id(&envelope, "x").unwrap_err().status,
             StatusCode::BAD_REQUEST

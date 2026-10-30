@@ -39,9 +39,7 @@ impl<S: Send + Sync> FromRequestParts<S> for Panel {
             .ok_or_else(AppError::unauthenticated)?;
         let uow = Uow::from_request_parts(parts, state).await?;
         let CurrentAccess(access) = CurrentAccess::from_request_parts(parts, state).await?;
-        let ClientIp(ip) = ClientIp::from_request_parts(parts, state)
-            .await
-            .unwrap_or_else(|never| match never {});
+        let ClientIp(ip) = ClientIp::from_parts(parts);
         let client = Client {
             request_id: parts
                 .extensions

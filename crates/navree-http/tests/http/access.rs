@@ -139,13 +139,13 @@ async fn non_public_route_returns_401_without_principal() {
     let calls = Arc::new(Counter::default());
     let handler_calls = calls.clone();
     let app = Setup::new(vec![
-        RouteDef::new(
+        RouteDef::on(
             Method::GET,
             "/me",
-            get(move |CurrentPrincipal(principal): CurrentPrincipal| {
+            move |CurrentPrincipal(principal): CurrentPrincipal| {
                 handler_calls.hit();
                 async move { principal.user_id.to_string() }
-            }),
+            },
         )
         .authenticated(),
         // No extractor: only the pipeline can reject the guest.

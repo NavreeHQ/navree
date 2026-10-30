@@ -99,9 +99,10 @@ async fn the_docs_page_references_only_local_assets_and_the_app_serves_them() {
         get(&app, "/api/docs/assets/missing.js").await.status,
         StatusCode::NOT_FOUND
     );
+    // An encoded slash in the file name never reaches the route.
     assert_eq!(
         get(&app, "/api/docs/assets/..%2FCargo.toml").await.status,
-        StatusCode::NOT_FOUND
+        StatusCode::BAD_REQUEST
     );
 }
 

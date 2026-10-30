@@ -3,7 +3,7 @@ title: "Responses and API resources"
 description: "Return JSON, status codes and headers from handlers, shape models into API resources, and send pages, downloads and streams."
 ---
 
-A handler returns anything that implements Axum's `IntoResponse`. Navree adds a few response types of its own (`Created`, `NoContent`, `Page<T>`) and a pattern for API resources: structs that give your models a stable, documented JSON shape. This page covers all of them, plus headers, file downloads and streamed bodies.
+A handler returns anything that implements `IntoResponse` (`navree::http::IntoResponse`). Navree adds a few response types of its own (`Created`, `NoContent`, `Page<T>`) and a pattern for API resources: structs that give your models a stable, documented JSON shape. This page covers all of them, plus headers, file downloads and streamed bodies.
 
 ## Returning JSON
 
@@ -27,7 +27,7 @@ impl CompaniesController {
 }
 ```
 
-The response is `200 OK` with `Content-Type: application/json`. `Json` is Axum's, re-exported by `navree::http` and the prelude.
+The response is `200 OK` with `Content-Type: application/json`. `Json` is navree-http's, in `navree::http` and the prelude; the same type reads JSON request bodies.
 
 For a one-off shape, `serde_json::json!` is enough:
 

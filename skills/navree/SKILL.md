@@ -6,7 +6,7 @@ description: "Navree, the complete backend framework for Rust: what it is, how a
 # Navree
 
 Navree is a framework for building secure, scalable server-side applications
-in Rust, on Tokio and Axum. Features live in **modules**; modules declare
+in Rust, on Tokio and hyper. Features live in **modules**; modules declare
 what they import, provide and export; a **dependency-injection** container
 wires them when the app boots and refuses to start if anything is missing.
 Around that structure sits a standard library for backends: routing,

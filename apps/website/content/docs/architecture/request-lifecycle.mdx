@@ -109,7 +109,7 @@ This layer gives every error the same JSON shape:
 { "statusCode": 404, "message": "Not Found", "error": "Not Found", "code": "not_found" }
 ```
 
-Handlers, extractors, guards and inner layers return `AppError`s; this layer turns them into that JSON. A 500 that carries a source error first goes through the error mappers modules contribute (`DatabaseModule` maps "record not found" to 404 and unique and foreign-key violations to 409, including those the unit of work hits when it commits). Server errors are logged on target `navree::error`, with the request id and the whole error chain; for a 500 the client only sees `"Internal server error"`. Plain-text or empty error responses from Axum or Tower are rewritten into the same format, and Axum's 422 for well-formed JSON of the wrong shape becomes a 400. See [errors](/docs/basics/errors/).
+Handlers, extractors, guards and inner layers return `AppError`s; this layer turns them into that JSON. A 500 that carries a source error first goes through the error mappers modules contribute (`DatabaseModule` maps "record not found" to 404 and unique and foreign-key violations to 409, including those the unit of work hits when it commits). Server errors are logged on target `navree::error`, with the request id and the whole error chain; for a 500 the client only sees `"Internal server error"`. Plain-text or empty error responses from Tower layers are rewritten into the same format, and a 422 for well-formed input of the wrong shape becomes a 400. See [errors](/docs/basics/errors/).
 
 ### Maintenance mode, rate limit, body limit
 
@@ -127,7 +127,7 @@ The three slots hold the layers that modules contribute, in this order:
 
 ### Routing
 
-The router matches the path and the method against every mounted route. A path no route matches gets the single 404 fallback; a known path with the wrong method gets a 405 with an `Allow` header. The global layers wrap the fallback too, so a 404 is still logged, rate-limited and rendered in the error format. Axum answers `HEAD` for `GET` routes. See [routing](/docs/basics/routing/).
+The router matches the path and the method against every mounted route, segment by segment and without rewriting the path: a path with a `.` or `..` segment or a backslash, or whose parameters don't decode to clean text, is a 400 before any route code runs. A path no route matches gets the single 404; a known path with the wrong method gets a 405 with an `Allow` header, and an `OPTIONS` request a 204 with the same header. The global layers wrap the router, so a 404 is still logged, rate-limited and rendered in the error format. `HEAD` runs the `GET` route without its body. The router puts the decoded path parameters into the request as `PathParams`, where guards and the authorizer read them. See [routing](/docs/basics/routing/).
 
 ## The route pipeline
 
@@ -191,7 +191,7 @@ async fn update(
 
 This CRM handler receives the request's unit of work, the signed-in user loaded from the database, the deal the authorizer already loaded and checked, and the validated JSON body. By the time it runs, every check above has passed.
 
-A handler returns anything that implements Axum's `IntoResponse`. With the prelude, `Result<T>` means `Result<T, AppError>`, so `?` works on any error: errors without a specific mapping become a logged 500, and modules can map their own error types to specific statuses. See [responses](/docs/basics/responses/) and [errors](/docs/basics/errors/).
+A handler returns anything that implements `IntoResponse` (`navree::http::IntoResponse`). With the prelude, `Result<T>` means `Result<T, AppError>`, so `?` works on any error: errors without a specific mapping become a logged 500, and modules can map their own error types to specific statuses. See [responses](/docs/basics/responses/) and [errors](/docs/basics/errors/).
 
 ## The way back out
 

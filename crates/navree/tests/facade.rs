@@ -167,7 +167,7 @@ fn prelude_brings_the_everyday_types() {
     assert!(same::<Created<u8>, navree::http::Created<u8>>());
     assert!(same::<NoContent, navree::http::NoContent>());
     assert!(same::<Scoped<u8>, navree::http::Scoped<u8>>());
-    assert!(same::<Path<u8>, navree::axum::extract::Path<u8>>());
+    assert!(same::<Path<u8>, navree::http::Path<u8>>());
     assert!(same::<Query<u8>, navree::axum::extract::Query<u8>>());
     // Data, validation, identity and access.
     assert!(same::<Uow, navree::db::Uow>());

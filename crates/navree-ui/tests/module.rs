@@ -102,12 +102,15 @@ async fn stale_versions_are_served_uncached_and_unknown_files_are_404() {
 
     for path in [
         format!("/_navree/ui/{}/missing.css", assets::version()),
-        format!("/_navree/ui/{}/fonts/../navree-ui.css", assets::version()),
         "/_navree/ui/navree-ui.css".to_owned(),
     ] {
         let status = app.client().get(&path).send().await.status();
         assert_eq!(status.as_u16(), 404, "{path}");
     }
+    // A dot segment never reaches a route: the router refuses the path.
+    let path = format!("/_navree/ui/{}/fonts/../navree-ui.css", assets::version());
+    let status = app.client().get(&path).send().await.status();
+    assert_eq!(status.as_u16(), 400, "{path}");
 }
 
 #[tokio::test]

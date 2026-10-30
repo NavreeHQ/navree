@@ -63,7 +63,7 @@ There's one attribute per HTTP method: `#[get]`, `#[post]`, `#[put]`, `#[patch]`
 
 ### Handlers
 
-A route method must be a non-generic `async fn` that takes `&self`. Its other arguments are extractors (`Path`, `Query`, `Json`, the current user, the unit of work...), with the one that reads the body last, and its return type implements Axum's `IntoResponse`: `Json<T>`, `String`, `NoContent`, `Created<T>`, a status code, or `Result<T>` of any of these. [Requests](/docs/basics/requests/) and [responses](/docs/basics/responses/) cover both sides.
+A route method must be a non-generic `async fn` that takes `&self`. Its other arguments are extractors (`Path`, `Query`, `Json`, the current user, the unit of work...), with the one that reads the body last, and its return type implements `IntoResponse`: `Json<T>`, `String`, `NoContent`, `Created<T>`, a status code, or `Result<T>` of any of these. [Requests](/docs/basics/requests/) and [responses](/docs/basics/responses/) cover both sides.
 
 The macro checks the signature: a handler that isn't `async`, takes `&mut self` or `self`, has no receiver, or is generic gets a compile error that names it. Methods without a route attribute stay ordinary methods, so a controller can keep helpers next to its handlers.
 
@@ -126,7 +126,7 @@ The parts are joined with single slashes, and the result never ends with a slash
 
 ### Path parameters
 
-Paths use Axum 0.8's syntax: `{name}` captures one segment and `{*name}` captures the rest of the path. Read them with the `Path` extractor, which deserializes into any type serde can parse into:
+`{name}` captures one segment and `{*name}` captures the rest of the path; a parameter is always a whole segment. Read them with the `Path` extractor, which deserializes into any type serde can parse into:
 
 ```rust
 #[get("/{id}")]
@@ -166,7 +166,7 @@ impl NotesController {
 }
 ```
 
-As the example shows, the controller prefix may hold parameters too. A value that doesn't parse is a 400 in the [error format](/docs/basics/errors/), with Axum's explanation as the message:
+As the example shows, the controller prefix may hold parameters too. A value that doesn't parse is a 400 in the [error format](/docs/basics/errors/), with the reason as the message:
 
 ```json wrap
 {
@@ -177,7 +177,24 @@ As the example shows, the controller prefix may hold parameters too. A value tha
 }
 ```
 
-The old capture syntax (`/:id`, `/*rest`) and unbalanced braces are compile errors, with a hint at the new syntax.
+The old capture syntax (`/:id`, `/*rest`), unbalanced braces and a parameter that is part of a segment (`/v{n}`, `/{name}.json`) are compile errors, with a hint at the fix.
+
+### What a path may hold
+
+The router matches the path as the client sent it, segment by segment, and never rewrites it, so what a proxy in front of the app checked is what the app routes. A path it can't route unambiguously is a 400 before any guard or handler runs:
+
+| Request | Answer |
+|---|---|
+| A `.` or `..` segment, also percent-encoded (`/files/%2e%2e/secret`) | 400 ``Invalid URL: the path has a `.` or `..` segment`` |
+| A backslash (`/files\secret`) | 400 `Invalid URL: the path has a backslash` |
+| A `{name}` value holding an encoded slash (`/deals/a%2Fb`) | 400 ``Invalid URL: `id` holds an encoded slash`` |
+| A value holding `%00` or `%5C` | 400, naming the parameter |
+| A value that isn't UTF-8 once decoded (`/deals/%FF`) | 400 ``Invalid URL: Invalid UTF-8 in `id` `` |
+| An empty segment (`/api//deals`) or a trailing slash | 404 |
+
+Parameter values arrive percent-decoded (`caf%C3%A9` is `café`, `+` stays `+`). A `{*name}` value may hold slashes, decoded ones included, but none of its parts may be `.` or `..`. Static segments match byte for byte: `/d%65als` doesn't reach `/deals`.
+
+When two routes match one path, the one with a static segment first wins, segment by segment from the left: `/users/me` beats `/users/{id}`, which beats `/users/{*rest}`. The order routes are registered in never matters. Two routes of one method whose paths differ only in parameter names (`/deals/{id}` and `/deals/{deal}`) fail the boot.
 
 ### Query strings
 
@@ -254,7 +271,7 @@ POST    /webhooks/stripe                                        public  DealsMod
 
 ## Writing controllers by hand
 
-`#[controller]` implements the `Controller` trait, and you can implement it yourself. Each route is a `RouteDef`: a method, a path, an Axum handler and a builder for everything the attributes declare. Hand-written routes can do two things the attributes can't: set a per-route body limit with `body_limit(bytes)`, and wrap the handler in [Tower layers](/docs/basics/middleware/#a-layer-on-one-route).
+`#[controller]` implements the `Controller` trait, and you can implement it yourself. Each route is a `RouteDef`: a method, a path, a handler (an `async` function or closure whose arguments are extractors) and a builder for everything the attributes declare. Hand-written routes can do two things the attributes can't: set a per-route body limit with `body_limit(bytes)`, and wrap the handler in [Tower layers](/docs/basics/middleware/#a-layer-on-one-route).
 
 ```rust title="src/modules/imports/controller.rs"
 use navree::axum::http::Method;
@@ -298,12 +315,12 @@ Mistakes in routes stop the app before it serves anything. The `#[controller]` m
 - a route with no access declaration, or `#[public]` combined with another one;
 - two `#[can]` on one route (one on the route, one on the impl block);
 - `from = "id"` naming a parameter the route's path doesn't have;
-- the old `:id` / `*rest` capture syntax and unbalanced braces;
+- the old `:id` / `*rest` capture syntax, unbalanced braces and parameters that are part of a segment;
 - two routes with the same method and path in one controller (capture names aside);
 - helper attributes on a method without a route attribute, and route-only attributes such as `#[timeout]` on the impl block;
 - an unknown `#[controller]` key or an invalid version.
 
-When the app boots, `HttpModule` checks every route of every module again, including hand-written ones, and fails with a list of every problem when a route has no access declaration, two modules mount the same method and path, a path is malformed, a non-public route exists but the app has no `dyn Authenticator`, or a route declares roles, permissions or an ability but the app has no `dyn RouteAuthorizer`:
+When the app boots, `HttpModule` checks every route of every module again, including hand-written ones, and fails with a list of every problem when a route has no access declaration, two routes have the same method and path (or paths that differ only in parameter names), a path is malformed, a non-public route exists but the app has no `dyn Authenticator`, or a route declares roles, permissions or an ability but the app has no `dyn RouteAuthorizer`:
 
 ```text wrap
 route `GET /api/v1/reports/team` (ReportsController in module `ReportsModule`) declares roles:admin|manager but no `dyn RouteAuthorizer` is registered (import the access module)
@@ -311,7 +328,7 @@ route `GET /api/v1/reports/team` (ReportsController in module `ReportsModule`) d
 
 ## What clients see when nothing matches
 
-A path that no route matches is a 404, and a known path with another method is a 405 with an `Allow` header, both in the error format. Axum answers `HEAD` requests for `GET` routes. CORS preflight requests (`OPTIONS` with `Origin` and `Access-Control-Request-Method`) are handled by the CORS layer when `http.cors.allowed_origins` is set; any other `OPTIONS` request, and every `OPTIONS` request when it isn't set, is a 405 like any other unrouted method. See [CORS](/docs/basics/cors-and-security-headers/).
+A path that no route matches is a 404, and a known path with another method is a 405 with an `Allow` header (`Allow: GET, HEAD, POST, OPTIONS`), both in the error format. A `HEAD` request runs the `GET` route and gets its headers without the body. An `OPTIONS` request for a known path is answered with `204 No Content` and the same `Allow` header, without running any route, unless a route handles `OPTIONS` itself. CORS preflight requests (`OPTIONS` with `Origin` and `Access-Control-Request-Method`) are handled earlier, by the CORS layer, when `http.cors.allowed_origins` is set. See [CORS](/docs/basics/cors-and-security-headers/).
 
 ## Testing routes
 

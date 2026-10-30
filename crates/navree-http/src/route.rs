@@ -6,19 +6,19 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::handler::Handler;
-use axum::routing::{MethodFilter, MethodRouter};
+use axum::routing::MethodRouter;
 use http::Method;
 use navree_kernel::ModuleId;
 
 use crate::Guard;
+use crate::handler::{Endpoint, Handler};
 
-/// One route: a method, a path, an Axum handler and its metadata.
+/// One route: a method, a path, a [`Handler`] and its metadata.
 ///
-/// The path is relative to the controller (`/{id}`), Axum 0.8 syntax
-/// (`{param}`, `{*rest}`). A path starting with `!` is absolute: it is mounted
-/// as written, without the API prefix, version or controller prefix
-/// (`!/sanctum/csrf-cookie`, `!/health/live`).
+/// The path is relative to the controller (`/{id}`), with `{param}` and
+/// `{*rest}` captures (see [`routing`](crate::routing)). A path starting with
+/// `!` is absolute: it is mounted as written, without the API prefix,
+/// version or controller prefix (`!/sanctum/csrf-cookie`, `!/health/live`).
 ///
 /// Every route must declare its access ([`public`](RouteDef::public),
 /// [`authenticated`](RouteDef::authenticated), [`roles`](RouteDef::roles),
@@ -26,57 +26,56 @@ use crate::Guard;
 /// refuses to boot otherwise.
 ///
 /// ```
-/// use axum::routing::get;
 /// use http::Method;
 /// use navree_http::RouteDef;
 ///
-/// let route = RouteDef::new(Method::GET, "/{id}", get(|| async { "deal" }))
+/// let route = RouteDef::on(Method::GET, "/{id}", || async { "deal" })
 ///     .name("deals.show")
 ///     .can("read", "Deal", Some("id"));
 /// assert!(route.meta.access.is_declared());
 /// ```
 #[derive(Clone)]
 pub struct RouteDef {
-    /// The HTTP method (must match the method `handler` routes).
+    /// The HTTP method the route answers.
     pub method: Method,
     /// The path relative to the controller, or absolute when it starts with `!`.
     pub path: String,
-    /// The Axum handler, e.g. `axum::routing::get(handler)`.
-    pub handler: MethodRouter,
+    /// The handler, ready to mount.
+    pub handler: Endpoint,
     /// Access declaration, guards, limits and documentation.
     pub meta: RouteMeta,
 }
 
 impl RouteDef {
-    /// A route with no access declaration yet.
+    /// A route answering `method` on `path` with `handler`, with no access
+    /// declaration yet.
+    pub fn on<H, T>(method: Method, path: impl Into<String>, handler: H) -> Self
+    where
+        H: Handler<T>,
+        T: 'static,
+    {
+        Self::with_endpoint(method, path, Endpoint::new(handler))
+    }
+
+    /// A route answering `method` with the previous framework's method
+    /// router, run as is (during the move; prefer [`on`](RouteDef::on)).
+    /// Requests reach it only for `method`, whatever else the method router
+    /// answers.
     pub fn new(method: Method, path: impl Into<String>, handler: MethodRouter) -> Self {
-        let path = path.into();
+        Self::with_endpoint(method, path, Endpoint::from_method_router(handler))
+    }
+
+    /// A route answering `method` with `endpoint`.
+    pub fn with_endpoint(method: Method, path: impl Into<String>, endpoint: Endpoint) -> Self {
         Self {
             meta: RouteMeta {
                 method: method.to_string(),
                 ..RouteMeta::default()
             },
             method,
-            path,
-            handler,
+            path: path.into(),
+            handler: endpoint,
         }
-    }
-
-    /// A route whose handler answers exactly `method` (so the method and the
-    /// handler cannot disagree, as they can with [`new`](RouteDef::new)).
-    ///
-    /// # Panics
-    ///
-    /// For extension methods Axum cannot route (anything but the standard
-    /// methods).
-    pub fn on<H, T>(method: Method, path: impl Into<String>, handler: H) -> Self
-    where
-        H: Handler<T, ()>,
-        T: 'static,
-    {
-        let filter = MethodFilter::try_from(method.clone())
-            .unwrap_or_else(|_| panic!("axum cannot route the HTTP method `{method}`"));
-        Self::new(method, path, axum::routing::on(filter, handler))
     }
 
     /// No authentication or authorization needed.
@@ -397,14 +396,20 @@ mod tests {
         let route = RouteDef::on(Method::PATCH, "/x", || async { "patched" }).public();
         assert_eq!(route.method, Method::PATCH);
         assert_eq!(route.meta.method, "PATCH");
+        assert!(route.handler.is_native());
+        let mut router = crate::routing::Router::new();
+        router
+            .try_route(route.method.clone(), "/x", route.handler.clone())
+            .unwrap();
         let call = |method: Method| {
-            let handler = route.handler.clone();
+            let router = router.clone();
             async move {
                 let request = http::Request::builder()
                     .method(method)
+                    .uri("/x")
                     .body(axum::body::Body::empty())
                     .unwrap();
-                handler.oneshot(request).await.unwrap().status()
+                router.oneshot(request).await.unwrap().status()
             }
         };
         assert_eq!(call(Method::PATCH).await, http::StatusCode::OK);

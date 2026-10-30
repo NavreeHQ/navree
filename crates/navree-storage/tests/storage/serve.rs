@@ -118,15 +118,25 @@ async fn signed_url_for_missing_file_is_not_found() {
         .unwrap();
     app.get(&url).await.error(404);
 
-    // Without a valid signature nothing is revealed: an unknown disk or a
-    // traversal attempt looks like a forged link.
+    // Without a valid signature nothing is revealed: an unknown disk looks
+    // like a forged link.
+    let body = app
+        .get("/storage/nope/a.txt?expires=99999999999&signature=00")
+        .await
+        .error(403);
+    assert_eq!(body["message"], "Invalid signature.");
+    // A traversal attempt never reaches the route: the router refuses it.
     for uri in [
-        "/storage/nope/a.txt?expires=99999999999&signature=00",
         "/storage/local/..%2F..%2Fsecret.txt?expires=99999999999&signature=00",
         "/storage/local/a%5C..%5C..%5Csecret.txt?expires=99999999999&signature=00",
     ] {
-        let body = app.get(uri).await.error(403);
-        assert_eq!(body["message"], "Invalid signature.", "{uri}");
+        let body = app.get(uri).await.error(400);
+        assert!(
+            body["message"]
+                .as_str()
+                .is_some_and(|message| message.starts_with("Invalid URL")),
+            "{uri}: {body}"
+        );
     }
 }
 

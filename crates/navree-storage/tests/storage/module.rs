@@ -265,7 +265,11 @@ async fn storage_errors_map_to_http_statuses() {
 
     assert_eq!(app.get("/files/hello.txt").await.text(), "hi");
     app.get("/files/missing.txt").await.error(404);
+    // The router refuses a backslash before any handler runs...
     let body = app.get("/files/a%5C..%5C..%5Csecret.txt").await.error(400);
+    assert_eq!(body["message"], "Invalid URL: `path` holds a backslash");
+    // ...and the disk refuses what the router lets through.
+    let body = app.get("/files/a/.../secret.txt").await.error(400);
     assert_eq!(body["message"], "Invalid file path.");
     assert_eq!(body["code"], "invalid_file_path");
 }

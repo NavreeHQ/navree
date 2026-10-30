@@ -155,8 +155,7 @@ impl<S: Send + Sync> FromRequestParts<S> for Viewer {
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let CurrentPrincipal(principal) =
-            CurrentPrincipal::from_request_parts(parts, state).await?;
+        let CurrentPrincipal(principal) = CurrentPrincipal::from_parts(parts)?;
         let abilities = Abilities::from_request_parts(parts, state).await?;
         Ok(Viewer {
             user_id: principal.user_id,

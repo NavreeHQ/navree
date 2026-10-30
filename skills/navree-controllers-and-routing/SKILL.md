@@ -93,13 +93,19 @@ impl PostController {
 - Full path = `http.api_prefix` (`/api`) + `/v{version}` + controller
   prefix + route path. Without `version`, there is no `/vN` segment.
   `#[controller]` with no arguments has an empty prefix.
-- `{id}` captures a segment, `{*rest}` the rest of the path (Axum 0.8
-  syntax; `:id` is a compile error). The controller prefix may hold
-  parameters too: `#[controller("/deals/{deal_id}/notes")]`.
+- `{id}` captures a segment, `{*rest}` the rest of the path; a parameter
+  is a whole segment (`:id` and `/v{n}` are compile errors). The
+  controller prefix may hold parameters too:
+  `#[controller("/deals/{deal_id}/notes")]`.
 - A path starting with `!` ignores the prefix, version and controller
   prefix: `#[get("!/up")]` is `GET /up` (webhooks, probes).
-- Paths match exactly: `GET /api/v1/posts/` (trailing slash) is a 404. A
-  known path with another method is a 405 with `Allow`.
+- Paths match exactly, never rewritten: `GET /api/v1/posts/` (trailing
+  slash) and `//` are 404s; a `.`/`..` segment (also `%2e`) or a backslash
+  is a 400; a `{id}` value with `%2F`, `%5C` or `%00`, or not UTF-8 once
+  decoded, is a 400 before any guard runs. Static segments beat `{param}`,
+  which beats `{*rest}`; two routes of one method differing only in
+  parameter names fail the boot. A known path with another method is a 405
+  with `Allow`; `OPTIONS` gets 204 with `Allow`; `HEAD` runs the `GET` route.
 - `#[name("posts.show")]` names a route (shown by `navree routes`, used as
   the OpenAPI `operationId`).
 
@@ -126,16 +132,17 @@ authenticator (`AuthModule`), or the boot fails. Rules themselves:
 |---|---|
 | `Path(id): Path<Uuid>`, `Path((a, b)): Path<(Uuid, u32)>` | path parameters (bad value: 400) |
 | `Query(f): Query<T>`, `Valid(Query(f)): Valid<Query<T>>` | the query string (`Option` or serde defaults for optional keys) |
-| `Json(b): Json<T>`, `Valid(Json(b)): Valid<Json<T>>` | a JSON body (`Content-Type: application/json`, else 415) |
+| `Json(b): Json<T>`, `Valid(Json(b)): Valid<Json<T>>` | a JSON body (`Content-Type: application/json` or `+json`, else 415) |
+| `Form(f): Form<T>` (`navree::http`) | an urlencoded form (the query string for `GET`) |
 | `uow: Uow` | the request's unit of work (pass `&uow` to services) |
 | `CurrentPrincipal(me)` (`navree::http`) | the signed-in user's id (`me.user_id`), no query |
 | `CurrentUser(user)` (prelude) | the `users` row, loaded once per request |
 | `page: PageQuery`, `cursor: CursorQuery` | `?page=&per_page=`, `?cursor=&limit=` |
 | `Authorized<E, A>`, `Accessible<E, A>`, `Abilities(ability)` | the checked record, the SQL list filter, the user's rules |
 | `ClientIp(ip)` (`navree::http`) | the client address (honours `http.trusted_proxies`) |
-| `Extension(id): Extension<RequestId>` | the request id (`navree::axum::Extension`, `navree::contracts::RequestId`) |
+| `Extension(id): Extension<RequestId>` | the request id (`navree::http::Extension`, `navree::contracts::RequestId`) |
 | `headers: HeaderMap` (`navree::axum::http::HeaderMap`) | every header |
-| `String`, `navree::axum::body::Bytes`, `navree::axum::extract::Multipart` | raw bodies, uploads |
+| `String`, `navree::http::body::Bytes`, `navree::axum::extract::Multipart` | raw bodies, uploads |
 | `Scoped<T>` | a request-scoped provider |
 
 Only one extractor may read the body, and it must be the **last**
@@ -166,17 +173,17 @@ see `navree-openapi`). Durations: `"500ms"`, `"5s"`, `"1m"`, `"1h"`.
 ## A custom extractor
 
 ```rust
-use navree::axum::extract::FromRequestParts;
 use navree::axum::http::request::Parts;
+use navree::http::extract::FromRequestParts;
 use navree::prelude::*;
 
 /// The `X-Tenant` header, required.
 pub struct Tenant(pub String);
 
-impl<S: Send + Sync> FromRequestParts<S> for Tenant {
+impl FromRequestParts for Tenant {
     type Rejection = AppError; // rendered in Navree's error format
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         parts
             .headers
             .get("x-tenant")
@@ -189,7 +196,10 @@ impl<S: Send + Sync> FromRequestParts<S> for Tenant {
 ```
 
 To resolve a service inside an extractor, read the `AppContext` from
-`parts.extensions.get::<AppContext>()` and call `ctx.get::<T>().await`.
+`parts.extensions.get::<AppContext>()` and call `ctx.get::<T>().await`;
+the route's decoded path parameters are `parts.extensions.get::<PathParams>()`.
+A type implements either this trait or the previous router's
+`FromRequestParts<S>` (crates not yet moved), never both.
 
 ## Hand-written routes
 

@@ -1,10 +1,12 @@
-//! Route path templates (Axum 0.8 syntax: `{param}`, `{*rest}`), checked at
-//! compile time so mistakes navree-http would reject at boot fail the build.
+//! Route path templates (navree-http's syntax: `{param}`, `{*rest}`, each a
+//! whole segment), checked at compile time so mistakes navree-http would
+//! reject at boot fail the build.
 
 use syn::LitStr;
 
-/// Checks the template in `path`: no old-style `:param` / `*rest` captures
-/// and balanced braces. The error points at the literal.
+/// Checks the template in `path`: no old-style `:param` / `*rest` captures,
+/// balanced braces, and parameters that are whole segments. The error
+/// points at the literal.
 pub(crate) fn check(path: &LitStr) -> syn::Result<()> {
     let value = path.value();
     for segment in value.trim_start_matches('!').split('/') {
@@ -14,6 +16,14 @@ pub(crate) fn check(path: &LitStr) -> syn::Result<()> {
             format!("path segment `{segment}` uses the old capture syntax: write `{{{segment}}}`")
         } else if segment.matches('{').count() != segment.matches('}').count() {
             format!("path segment `{segment}` has unbalanced braces")
+        } else if segment.contains('{')
+            && !(segment.starts_with('{')
+                && segment.ends_with('}')
+                && segment.matches('{').count() == 1)
+        {
+            format!(
+                "path segment `{segment}` mixes text and a parameter: a parameter is a whole segment"
+            )
         } else {
             continue;
         };
@@ -109,5 +119,23 @@ mod tests {
         assert_eq!(params("/teams/{team}/deals/{id}"), ["team", "id"]);
         assert_eq!(params("/files/{*path}"), ["path"]);
         assert_eq!(params("/deals"), Vec::<&str>::new());
+    }
+
+    #[test]
+    fn parameters_are_whole_segments() {
+        let checked = |path: &str| {
+            check(&LitStr::new(path, proc_macro2::Span::call_site())).map_err(|e| e.to_string())
+        };
+        assert!(checked("/deals/{id}/files/{*path}").is_ok());
+        assert!(checked("!/health/{probe}").is_ok());
+        for bad in ["/v{n}", "/{name}.json", "/{a}{b}", "/x{*rest}"] {
+            let error = checked(bad).unwrap_err();
+            assert!(
+                error.contains("a parameter is a whole segment"),
+                "{bad}: {error}"
+            );
+        }
+        assert!(checked("/:id").unwrap_err().contains("old capture syntax"));
+        assert!(checked("/{id").unwrap_err().contains("unbalanced"));
     }
 }

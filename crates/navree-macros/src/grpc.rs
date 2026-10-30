@@ -500,7 +500,7 @@ fn wrapper(method: &Method, grpc: &TokenStream) -> TokenStream {
     };
     let extractors = method.extractors.iter().map(|(pat, ty)| {
         quote_spanned! {ty.span()=>
-            let #pat: #ty = #grpc::__private::extract::<#ty>(&mut #parts).await?;
+            let #pat: #ty = #grpc::__private::extract::<#ty, _>(&mut #parts).await?;
         }
     });
     quote! {

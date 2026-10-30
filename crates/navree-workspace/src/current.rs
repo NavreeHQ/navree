@@ -1,17 +1,16 @@
 //! [`CurrentWorkspace`], the [`InWorkspace`] guard and [`WorkspaceUow`]:
 //! resolving the workspace of a request and checking the membership.
 
-use std::collections::HashMap;
 use std::fmt;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use axum::extract::{FromRequestParts, Path};
+use axum::extract::FromRequestParts;
 use http::request::Parts;
 use navree_access::{Ability, PrincipalAccess};
 use navree_contracts::{AuthState, RequestId};
 use navree_db::Uow;
-use navree_http::{AppError, Guard, RouteMeta};
+use navree_http::{AppError, Guard, PathParams, RouteMeta};
 use navree_kernel::{AppContext, BoxError, BoxFuture};
 use navree_orm::Builder;
 use navree_orm::binding::{RouteBinding, RouteKey};
@@ -432,12 +431,14 @@ fn writes(method: &http::Method, intent: Option<DemoIntent>) -> bool {
     }
 }
 
-/// The value of path parameter `name`, if the route has it.
+/// The value of path parameter `name`, if the route has it (the router has
+/// decoded it; one it could not decode never reaches a route).
 pub(crate) async fn path_param(parts: &mut Parts, name: &str) -> Result<Option<String>, AppError> {
-    let Path(params) = Path::<HashMap<String, String>>::from_request_parts(parts, &())
-        .await
-        .map_err(|_| AppError::not_found())?;
-    Ok(params.get(name).cloned())
+    Ok(parts
+        .extensions
+        .get::<PathParams>()
+        .and_then(|params| params.get(name))
+        .map(str::to_owned))
 }
 
 /// The route guard that resolves the workspace before the route's access

@@ -99,6 +99,20 @@ doc = false
 bench = false
 
 [[bin]]
+name = "http_extract"
+path = "fuzz_targets/http_extract.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "http_routing"
+path = "fuzz_targets/http_routing.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "jose_keys"
 path = "fuzz_targets/jose_keys.rs"
 test = false
