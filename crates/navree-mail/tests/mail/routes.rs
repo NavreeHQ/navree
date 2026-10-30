@@ -147,7 +147,9 @@ async fn tampered_tracking_links_are_not_found() {
         .send()
         .await
         .assert_status(404);
-    let bad_signature = format!("{}0", &path[..path.len() - 1]);
+    // Any other hex digit: the last one may already be a 0.
+    let last = if path.ends_with('0') { '1' } else { '0' };
+    let bad_signature = format!("{}{last}", &path[..path.len() - 1]);
     mail.app
         .client()
         .get(&bad_signature)

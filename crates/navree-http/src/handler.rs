@@ -368,6 +368,7 @@ mod tests {
     async fn run<H: Handler<T>, T: 'static>(handler: H, request: Request) -> (StatusCode, String) {
         let response = handler.call(request).await;
         let status = response.status();
+        // nosemgrep: navree-unwrap-on-request-data
         let body = response.into_body().collect().await.unwrap().to_bytes();
         (status, String::from_utf8_lossy(&body).into_owned())
     }

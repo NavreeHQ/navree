@@ -3,5 +3,11 @@
 
 #[test]
 fn derive_misuse_is_reported_precisely() {
-    trybuild::TestCases::new().compile_fail("tests/ui/*.rs");
+    let cases = trybuild::TestCases::new();
+    cases.compile_fail("tests/ui/fields.rs");
+    cases.compile_fail("tests/ui/rule_syntax.rs");
+    // rustc lists the types a rule accepts, and `html` adds one, so this
+    // message is only the same with the crate's default features.
+    #[cfg(not(feature = "html"))]
+    cases.compile_fail("tests/ui/rule_types.rs");
 }

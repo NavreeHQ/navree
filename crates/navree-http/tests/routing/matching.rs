@@ -207,7 +207,11 @@ proptest! {
             insertable &= previous.insert(pattern_of(segs), id).is_ok();
         }
         prop_assume!(insertable);
-        if let (Some(ours), Ok(theirs)) = (tree.at(&path), previous.at(&path)) {
+        // An empty segment is no parameter here, so the previous matcher may
+        // have taken a route this one passes over for the next best.
+        if let (Some(ours), Ok(theirs)) = (tree.at(&path), previous.at(&path))
+            && !theirs.params.iter().any(|(_, value)| value.is_empty())
+        {
             prop_assert_eq!(*ours.value, *theirs.value, "path {:?}", path);
         }
         if let Ok(theirs) = previous.at(&path)
