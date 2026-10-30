@@ -118,6 +118,10 @@ fn one_process_claims_the_sweep_for_a_while() {
     assert!(claim_sweep(root.path(), now, every), "nobody swept yet");
     assert!(!claim_sweep(root.path(), now, every), "just swept");
     assert!(
+        !claim_sweep(root.path(), now - Duration::from_secs(60), every),
+        "a stamp newer than the clock is recent"
+    );
+    assert!(
         !claim_sweep(root.path(), now + Duration::from_secs(300), every),
         "swept five minutes ago"
     );

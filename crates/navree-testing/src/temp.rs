@@ -325,11 +325,15 @@ pub(crate) fn sweep_dir(root: &Path, now: SystemTime, max_age: Duration) -> usiz
 /// `every`. Records the sweep in a stamp file when it says yes.
 pub(crate) fn claim_sweep(root: &Path, now: SystemTime, every: Duration) -> bool {
     let stamp = root.join(SWEEP_STAMP);
-    let recent = fs::metadata(&stamp)
-        .and_then(|meta| meta.modified())
-        .ok()
-        .and_then(|swept| now.duration_since(swept).ok())
-        .is_some_and(|since| since < every);
+    // A stamp newer than `now` is recent too: the clock ticked since `now`
+    // was read.
+    let recent = !every.is_zero()
+        && fs::metadata(&stamp)
+            .and_then(|meta| meta.modified())
+            .is_ok_and(|swept| {
+                now.duration_since(swept)
+                    .map_or(true, |since| since < every)
+            });
     if recent {
         return false;
     }
