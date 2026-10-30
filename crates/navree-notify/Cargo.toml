@@ -58,6 +58,8 @@ url = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
 navree-testing = { workspace = true }
 # A browser's side of web push in the tests (decrypting what was pushed).
 ring = { workspace = true }

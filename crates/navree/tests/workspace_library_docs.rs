@@ -3,6 +3,7 @@
 //! as an app writes them (the facade and the prelude), compiled and run:
 //! the migration, the model, the module, the routes, the seeder and the
 //! Helm resource of the global library.
+#![cfg(feature = "sqlite")]
 #![cfg(all(feature = "workspace", feature = "helm", feature = "testing"))]
 // The page's examples are written as an app writes them, without doc comments.
 #![allow(missing_docs)]

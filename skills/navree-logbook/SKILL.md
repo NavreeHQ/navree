@@ -28,7 +28,10 @@ Navree::app()
 2. Run `navree dev` and open `http://127.0.0.1:8080/_logbook` (the boot log
    prints the URL: `navree::logbook: recording to storage/logbook.db, open ...`).
 3. Entries go to `storage/logbook.db` (its own SQLite file, never the app's
-   database) and survive restarts. `navree logbook:clear` empties it.
+   database) and survive restarts. `navree logbook:clear` empties it. The
+   file store needs the `sqlite` feature (`navree`'s, or `navree-logbook`'s);
+   a PostgreSQL or MySQL build without it keeps entries in memory, and
+   `logbook.store = "file"` stops the boot.
 
 ## Steps: find out what a request did
 

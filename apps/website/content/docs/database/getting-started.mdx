@@ -17,9 +17,11 @@ Navree supports four SQL databases:
 - **TimescaleDB** is the default: PostgreSQL with hypertables for time-series data. `navree new` sets an app up for it and [Dock](/docs/tools/dock/) runs it on your machine ([below](#timescaledb)).
 - **PostgreSQL** without TimescaleDB works the same; tables declared as hypertables are regular tables there ([below](#postgresql)). Both need the `postgres` Cargo feature.
 - **MySQL** and **MariaDB** are behind the `mysql` Cargo feature ([below](#mysql-and-mariadb)).
-- **SQLite** is compiled into your app (bundled), so there is nothing to install. Tests run on it by default, each in a file of its own, and an app whose configuration names no database uses a SQLite file ([below](#sqlite)).
+- **SQLite** is behind the `sqlite` Cargo feature, and it is bundled: the feature compiles SQLite into your app, so there is nothing to install. Tests run on it, each in a file of its own ([below](#sqlite)).
 
-`navree new my-app` makes a TimescaleDB app; `--database postgres`, `--database mysql` and `--database sqlite` make the others. MongoDB is supported too, by the ORM's [document driver](/docs/orm/mongodb/).
+Each driver is a feature of its own, and none is on by default: a PostgreSQL or MySQL build compiles no SQLite, and a SQLite build compiles no PostgreSQL or MySQL driver. Turn on the one you use (`navree = { git = "https://github.com/NavreeHQ/navree", features = ["postgres"] }`), and a second one only when the app talks to two kinds of server. An app whose `database.url` names a driver it was built without fails to boot with a message naming the feature to enable (for example "enable the `sqlite` feature of navree-db").
+
+`navree new my-app` makes a TimescaleDB app with the `postgres` feature; `--database postgres`, `--database mysql` and `--database sqlite` make the others, each with its own feature. MongoDB is supported too, by the ORM's [document driver](/docs/orm/mongodb/).
 
 ## Configuration
 
@@ -42,7 +44,7 @@ transaction_settings = true
 
 | Key | Default | What it does |
 |---|---|---|
-| `url` | `sqlite://storage/app.db?mode=rwc` | The connection URL: `postgres://...` (TimescaleDB or PostgreSQL), `mysql://...`, `mariadb://...` or `sqlite://...`. A new app sets a TimescaleDB URL, the one Dock's `postgres` service serves; without a URL, Navree uses a SQLite file, so an app boots with nothing installed. |
+| `url` | `sqlite://storage/app.db?mode=rwc` | The connection URL: `postgres://...` (TimescaleDB or PostgreSQL), `mysql://...`, `mariadb://...` or `sqlite://...`. A new app sets a TimescaleDB URL, the one Dock's `postgres` service serves. Without a URL, Navree uses a SQLite file, which needs the `sqlite` feature: an app built without it stops at boot and asks for the feature or a URL. |
 | `max_connections` | `10` | The most connections in the pool. Must be at least 1. |
 | `min_connections` | `0` | The connections kept open while idle. Must not exceed `max_connections`. |
 | `connect_timeout_secs` | `8` | How long opening a connection may take. Waiting for a free connection from the pool times out after four times this. |
@@ -263,7 +265,19 @@ MariaDB connects through the same code but hasn't been run against a server yet,
 
 ## SQLite
 
-SQLite is built in: tests run on it by default, `navree new my-app --database sqlite` makes an app on it, and an app whose configuration has no `database.url` uses `sqlite://storage/app.db?mode=rwc`. Migrations that declare [hypertables](/docs/database/timescaledb/#one-migration-every-database) run on it too, as regular tables with the same keys and time indexes.
+SQLite is the `sqlite` Cargo feature, and it is off unless you turn it on: `navree = { git = "https://github.com/NavreeHQ/navree", features = ["sqlite"] }`. `navree new my-app --database sqlite` writes that for you. The feature compiles the bundled SQLite library (a C library, built with the C compiler your Rust toolchain links with); a PostgreSQL or MySQL build compiles none of it. An app whose configuration has no `database.url` uses `sqlite://storage/app.db?mode=rwc`, and without the feature that default stops the boot with "enable the `sqlite` feature of navree-db", so an app on another database always sets its URL.
+
+Tests run on SQLite, each in a file of its own, so an app on PostgreSQL turns the feature on for its tests only, in `[dev-dependencies]`, and its release build still compiles no SQLite. `navree new` writes this:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["postgres"] }
+
+[dev-dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["sqlite"] }
+```
+
+Migrations that declare [hypertables](/docs/database/timescaledb/#one-migration-every-database) run on it too, as regular tables with the same keys and time indexes.
 
 A SQLite URL names a file. `mode=rwc` creates the file if it doesn't exist, and Navree creates its directory, so `sqlite://storage/app.db?mode=rwc` works on a fresh checkout. A relative path is relative to the working directory the app runs in.
 

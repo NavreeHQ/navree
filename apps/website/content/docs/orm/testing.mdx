@@ -80,7 +80,7 @@ async fn in_memory(db: TestDb) { /* .. */ }
 async fn plain() { /* .. */ }
 ```
 
-`database` is `"sqlite"` (the default), `"memory"`, `"postgres"` or `"mysql"`. A test may return a `Result`. `db.db()` is the `Db` to pass to models; `db.url()` the URL, for booting an app on the same database.
+`database` is `"sqlite"` (the default), `"memory"`, `"postgres"` or `"mysql"`. The `sqlite` and `memory` databases need the `sqlite` Cargo feature (`navree-db`'s, or `navree`'s) in your `[dev-dependencies]`; `postgres` and `mysql` need their own feature. A test may return a `Result`. `db.db()` is the `Db` to pass to models; `db.url()` the URL, for booting an app on the same database.
 
 ### Templates
 

@@ -15,6 +15,11 @@ path = "src/main.rs"
 [lints.rust]
 unsafe_code = "forbid"
 
+[features]
+## The SQLite driver, for a scratch database (`APP_DATABASE__URL=sqlite://...`);
+## the evidence app runs on PostgreSQL, which compiles no SQLite.
+sqlite = ["navree/sqlite"]
+
 [dependencies]
 async-graphql = { workspace = true }
 async-trait = { workspace = true }

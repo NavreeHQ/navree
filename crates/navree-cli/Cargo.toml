@@ -52,7 +52,7 @@ zip = { workspace = true }
 insta = { workspace = true }
 # `tests/navigator.rs`: the fixture app's SQLite database (the test speaks
 # JSON-RPC lines to `navree mcp`'s stdio itself).
-sqlx = { workspace = true }
+sqlx = { workspace = true, features = ["sqlite-bundled"] }
 tempfile = { workspace = true }
 # A local server for the browser:install download tests.
 wiremock = { workspace = true }

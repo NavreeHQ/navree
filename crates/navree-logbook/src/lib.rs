@@ -15,7 +15,8 @@
 //!   events, cache calls, log lines, exceptions, outgoing HTTP calls,
 //!   notifications, data changes and scheduled tasks. Entries recorded
 //!   while a request, job or scheduled task ran belong to its [`Batch`].
-//! - **Stores**: a SQLite file of its own ([`SqliteStore`], the default)
+//! - **Stores**: a SQLite file of its own (`SqliteStore`, the default with the
+//!   `sqlite` feature)
 //!   or memory ([`MemoryStore`]), bounded by `logbook.max_entries` and
 //!   `logbook.keep_hours`; batches are pruned whole.
 //! - **The UI** at `logbook.path`: the list with [filters](Filter), a
@@ -65,5 +66,7 @@ pub use module::{LogbookModule, PRUNE_EVERY};
 pub use options::{Activation, CaptureOptions, IgnoreOptions, LogbookOptions, StoreKind, Watchers};
 pub use redact::REDACTED;
 pub use replay::{REPLAY_TOKEN_TTL, ReplayRequest, Replayed, is_unsafe};
-pub use store::{ListQuery, LogbookStore, MemoryStore, SqliteStore};
+pub use store::{ListQuery, LogbookStore, MemoryStore};
+#[cfg(feature = "sqlite")]
+pub use store::SqliteStore;
 pub use ui::VIEW_PERMISSION;

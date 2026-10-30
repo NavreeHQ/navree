@@ -1,6 +1,7 @@
 //! The examples of `content/docs/workspaces/demo-workspaces.mdx`, written
 //! as an app writes them (the facade, the prelude and the macros),
 //! compiled and run.
+#![cfg(feature = "sqlite")]
 #![cfg(all(feature = "workspace", feature = "testing"))]
 
 use chrono::{DateTime, Utc};

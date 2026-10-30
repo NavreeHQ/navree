@@ -2,6 +2,7 @@
 //! through the facade: navree-orm models, resources written with
 //! `#[injectable]` and the prelude, registered with `m.resource::<R>()`,
 //! and the page's test.
+#![cfg(feature = "sqlite")]
 
 use navree::BoxFuture;
 use navree::helm::{

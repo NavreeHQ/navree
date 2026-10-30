@@ -2,6 +2,7 @@
 //! app writes them: the migrations compiled for TimescaleDB (offline) and
 //! run on SQLite, pruning and the time-bucket queries run on SQLite. The
 //! facade's `time_series` suite runs Navree's own tables on real servers.
+#![cfg(feature = "sqlite")]
 
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
 use navree::db::{Db, DbOptions, prune_time_series};

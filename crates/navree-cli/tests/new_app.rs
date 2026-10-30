@@ -246,7 +246,7 @@ fn a_published_navree_takes_the_driver_feature_too() {
     assert_eq!(Database::Timescaledb.feature(), Some("postgres"));
     assert_eq!(Database::Postgres.feature(), Some("postgres"));
     assert_eq!(Database::Mysql.feature(), Some("mysql"));
-    assert_eq!(Database::Sqlite.feature(), None);
+    assert_eq!(Database::Sqlite.feature(), Some("sqlite"));
 }
 
 /// The steps `navree new` prints: start the database with Dock first when

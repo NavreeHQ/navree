@@ -5587,6 +5587,7 @@ dependencies = [
  "navree-http",
  "navree-http-client",
  "navree-kernel",
+ "navree-logbook",
  "navree-mail",
  "navree-orm",
  "navree-queue",

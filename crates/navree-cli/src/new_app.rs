@@ -58,12 +58,12 @@ pub enum Database {
 impl Database {
     /// The facade feature that compiles the database's driver: `postgres`
     /// for TimescaleDB and PostgreSQL, `mysql` for MySQL and MariaDB, and
-    /// none for SQLite, which is built in.
+    /// `sqlite` for SQLite (no driver is compiled unless its feature is on).
     pub fn feature(self) -> Option<&'static str> {
         match self {
             Database::Timescaledb | Database::Postgres => Some("postgres"),
             Database::Mysql => Some("mysql"),
-            Database::Sqlite => None,
+            Database::Sqlite => Some("sqlite"),
         }
     }
 
@@ -269,6 +269,9 @@ struct AppContext {
     crate_name: String,
     title: String,
     navree_dependency: String,
+    /// `navree` for `[dev-dependencies]`, with the `sqlite` driver the
+    /// tests run on.
+    navree_test_dependency: String,
     users_migration: String,
     ui_next: bool,
     /// `timescaledb`, `postgres`, `mysql` or `sqlite`.
@@ -288,6 +291,7 @@ pub fn app_files(app: &NewApp, now: Timestamp) -> Result<FileSet, TemplateError>
     let ctx = AppContext {
         package: app.name.package().to_owned(),
         title: app.name.title(),
+        navree_test_dependency: app.navree.dependency_with_features(&["sqlite"]),
         navree_dependency: app
             .navree
             .dependency_with_features(&app.database.feature().into_iter().collect::<Vec<_>>()),

@@ -69,6 +69,8 @@ uuid = { workspace = true }
 x509-parser = { workspace = true }
 
 [dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
 navree-access = { workspace = true }
 # The crate's own tests report to a LighthouseFake (feature `lighthouse`).
 navree-domains = { workspace = true, features = ["lighthouse"] }

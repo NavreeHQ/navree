@@ -96,9 +96,18 @@ impl SqliteStore {
         &self.path
     }
 
+    /// Begins a transaction that will write: `BEGIN IMMEDIATE`, so it takes
+    /// SQLite's write lock first and queues on the busy timeout. A plain
+    /// `BEGIN` that reads (the schema version) and then writes could be
+    /// refused with `SQLITE_BUSY` when another connection wrote in between,
+    /// without waiting (the same rule as navree-db's units of work on SQLite).
+    async fn begin_write(&self) -> Result<sqlx::Transaction<'static, sqlx::Sqlite>, sqlx::Error> {
+        self.pool.begin_with("BEGIN IMMEDIATE").await
+    }
+
     /// Creates the tables, or recreates them for another schema version.
     async fn migrate(&self) -> Result<(), LogbookError> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.begin_write().await?;
         let version: i64 = sqlx::query_scalar("PRAGMA user_version")
             .fetch_one(&mut *tx)
             .await?;
@@ -123,7 +132,7 @@ impl SqliteStore {
     }
 
     async fn insert_all(&self, entries: Vec<Entry>) -> Result<(), LogbookError> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.begin_write().await?;
         for entry in entries {
             let content = serde_json::to_string(&entry.content)
                 .map_err(|error| LogbookError::Store(error.to_string()))?;
@@ -163,7 +172,7 @@ impl SqliteStore {
     }
 
     async fn add_all_tags(&self, key: String, tags: Vec<String>) -> Result<(), LogbookError> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.begin_write().await?;
         for tag in tags {
             sqlx::query("INSERT OR IGNORE INTO logbook_tags (batch_key, tag) VALUES (?, ?)")
                 .bind(&key)
@@ -243,7 +252,7 @@ impl SqliteStore {
         max_entries: usize,
         older_than: DateTime<Utc>,
     ) -> Result<u64, LogbookError> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.begin_write().await?;
         let doomed_old = "SELECT DISTINCT batch_key FROM logbook_entries WHERE at < ?";
         // A fixed subquery held in a local &str; the value is bound.
         // nosemgrep: navree-sql-built-from-strings
@@ -293,7 +302,7 @@ impl SqliteStore {
     }
 
     async fn clear_all(&self) -> Result<u64, LogbookError> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.begin_write().await?;
         let deleted = sqlx::query("DELETE FROM logbook_entries")
             .execute(&mut *tx)
             .await?
