@@ -119,8 +119,9 @@ async fn the_route_checks_size_type_and_expiry() {
     app.send(streamed).await.error(413);
     assert!(!disk.exists("big.png").await.unwrap());
 
-    // Expired.
-    clock.advance(StdDuration::from_secs(5 * 60));
+    // Expired. Links are signed with the wall clock, which has moved on since
+    // this clock was set, so step past the five minutes by a margin.
+    clock.advance(StdDuration::from_secs(6 * 60));
     let body = upload(&app, &signed, png(10)).await.error(403);
     assert_eq!(body["message"], "The link has expired.");
 }
