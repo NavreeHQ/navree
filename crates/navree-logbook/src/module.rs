@@ -14,7 +14,9 @@ use navree_telemetry::{ModuleBuilderTelemetryExt, TelemetrySink};
 
 use crate::capture;
 use crate::redact::Redactor;
-use crate::store::{LogbookStore, MemoryStore, SqliteStore};
+#[cfg(feature = "sqlite")]
+use crate::store::SqliteStore;
+use crate::store::{LogbookStore, MemoryStore};
 use crate::ui::LogbookController;
 use crate::{Activation, Logbook, LogbookOptions, StoreKind};
 
@@ -186,11 +188,20 @@ async fn build(r: &Resolver, options: LogbookOptions) -> Result<Logbook, BoxErro
 async fn open_store(options: &LogbookOptions) -> Result<Arc<dyn LogbookStore>, BoxError> {
     Ok(match options.store {
         StoreKind::Memory => Arc::new(MemoryStore::new()),
+        #[cfg(feature = "sqlite")]
         StoreKind::File => Arc::new(SqliteStore::open(&options.file).await.map_err(|error| {
             format!("logbook.file `{}` cannot be opened: {error}", options.file)
         })?),
+        #[cfg(not(feature = "sqlite"))]
+        StoreKind::File => return Err(NO_FILE_STORE.into()),
     })
 }
+
+/// Why `logbook.store = "file"` fails in a build without SQLite.
+#[cfg(not(feature = "sqlite"))]
+const NO_FILE_STORE: &str = "logbook.store = \"file\" keeps entries in a SQLite file, and this \
+     build compiles no SQLite: enable the `sqlite` feature (navree's, or navree-logbook's), or \
+     set logbook.store = \"memory\"";
 
 /// `http://<addr>`, with a wildcard address read as loopback.
 pub(crate) fn base_url(addr: &str) -> String {
@@ -268,6 +279,7 @@ async fn clear_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxErro
     } else {
         let options = logbook.options();
         match options.store {
+            #[cfg(feature = "sqlite")]
             StoreKind::File if std::path::Path::new(&options.file).exists() => {
                 SqliteStore::open(&options.file).await?.clear().await?
             }

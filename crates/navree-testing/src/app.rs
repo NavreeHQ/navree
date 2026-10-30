@@ -233,6 +233,11 @@ impl TestAppBuilder {
     /// directory (deleted with the app) and sets
     /// `database.migrate_on_boot = true`, so every app gets its own,
     /// migrated database.
+    ///
+    /// The database is SQLite, which navree-db compiles only with its
+    /// `sqlite` feature (the facade's `sqlite`): a crate whose tests use
+    /// this turns the feature on in its `[dev-dependencies]`, and without
+    /// it the app stops at boot asking for the feature.
     pub fn temp_database(mut self) -> Self {
         let (url, guard) = temp_sqlite_url();
         self.temp.push(guard);
@@ -244,7 +249,8 @@ impl TestAppBuilder {
     /// boot: the fastest database for tests, gone with the app. Its pool
     /// keeps exactly one connection (every connection would open a
     /// database of its own), so a unit of work holds the database until it
-    /// ends.
+    /// ends. Needs navree-db's `sqlite` feature, like
+    /// [`temp_database`](TestAppBuilder::temp_database).
     pub fn memory_database(self) -> Self {
         self.config("database.url", "sqlite::memory:")
             .config("database.max_connections", 1)

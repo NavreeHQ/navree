@@ -12,6 +12,10 @@ workspace = true
 
 [features]
 default = []
+## The `file` store: entries in a SQLite file of its own (`SqliteStore`; the
+## bundled SQLite library). Without it the store is memory, and
+## `logbook.store = "file"` is an error at boot.
+sqlite = ["sqlx/sqlite-bundled"]
 ## The test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres` with
 ## NAVREE_TEST_POSTGRES_URL).
 postgres = ["navree-db/postgres"]
@@ -47,6 +51,10 @@ wildmatch = { workspace = true }
 
 [dev-dependencies]
 navree-access = { workspace = true }
+# The tests run on SQLite files (the driver is opt-in), and cover the file
+# store.
+navree-db = { workspace = true, features = ["sqlite"] }
+navree-logbook = { workspace = true, features = ["sqlite"] }
 navree-cache = { workspace = true }
 navree-crypto = { workspace = true }
 navree-events = { workspace = true }

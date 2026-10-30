@@ -84,6 +84,7 @@ impl Pool {
         })
     }
 
+    #[cfg(feature = "sqlite")]
     pub(crate) fn driver(&self) -> &DriverPool {
         &self.inner.driver
     }

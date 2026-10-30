@@ -1,5 +1,6 @@
 //! The ORM through the facade: a model declared and queried with
 //! `navree::prelude` and `navree::orm`, inside a unit of work.
+#![cfg(feature = "sqlite")]
 
 use navree::BoxError;
 use navree::db::Executor as _;

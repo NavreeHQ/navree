@@ -33,11 +33,16 @@ fn name(s: &str) -> Name {
     Name::parse("name", s).unwrap()
 }
 
+/// The feature the commands that boot the app turn on: the app is made for
+/// TimescaleDB (the default), so it compiles only the `postgres` driver, and
+/// `cargo run --features navree/sqlite` adds SQLite for a run on a scratch
+/// file (its tests have SQLite through `[dev-dependencies]`).
+const SQLITE: &str = "navree/sqlite";
+
 /// `cargo <args>` in `dir`, with the outer build's job limit and sccache.
 ///
-/// The app is made for TimescaleDB (the default), so it compiles the
-/// `postgres` driver; the commands that boot it (`conformity:check`) run on
-/// a SQLite file instead, since no database server runs here.
+/// The commands that boot the app (`check`, `conformity:check`) run on a
+/// SQLite file instead of PostgreSQL, since no database server runs here.
 /// `APP_DATABASE__URL` overrides config/app.toml.
 fn cargo(dir: &Path, target: &Path, args: &[&str]) -> bool {
     let mut command = Command::new("cargo");
@@ -191,12 +196,12 @@ fn navree_new_output_compiles_against_the_workspace() {
     .unwrap();
 
     let ok = cargo(&root, &target, &["test", "--quiet"])
-        && cargo(&root, &target, &["run", "--quiet", "--", "check"])
+        && cargo(&root, &target, &["run", "--quiet", "--features", SQLITE, "--", "check"])
         // Generated routes are documented: `navree check` passes.
         && cargo(
             &root,
             &target,
-            &["run", "--quiet", "--", "conformity:check"],
+            &["run", "--quiet", "--features", SQLITE, "--", "conformity:check"],
         )
         && cargo(
             &root,

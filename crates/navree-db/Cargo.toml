@@ -11,9 +11,12 @@ publish.workspace = true
 workspace = true
 
 [features]
-default = ["sqlite"]
-## SQLite (the bundled library). On by default until every crate's tests
-## turn it on themselves (docs/superpowers/specs/2026-10-28-navree-data-layer-on-sqlx.md, §5).
+default = []
+## SQLite (the bundled library, 168k lines of C): the one place that
+## compiles it. Off by default, so a PostgreSQL or MySQL build compiles no
+## SQLite; crates whose tests run on SQLite turn it on in their
+## dev-dependencies, and a SQLite URL without it fails with "enable the
+## `sqlite` feature of navree-db".
 sqlite = ["sqlx/sqlite-bundled"]
 ## PostgreSQL and TimescaleDB driver (`postgres://` and `postgresql://` URLs),
 ## with pgvector's `vector` values (`Value::Vector`).
@@ -51,6 +54,8 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
 http-body-util = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

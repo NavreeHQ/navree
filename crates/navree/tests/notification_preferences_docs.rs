@@ -4,6 +4,7 @@
 //! module that registers them, the notifiable with a workspace and a zone,
 //! the preferences in code and over HTTP, the workspace templates as
 //! settings, and the testing example as written.
+#![cfg(feature = "sqlite")]
 #![cfg(all(feature = "notify", feature = "settings"))]
 // The page's examples are written as an app writes them, without doc comments.
 #![allow(missing_docs)]

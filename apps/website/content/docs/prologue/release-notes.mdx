@@ -110,6 +110,16 @@ Read it with `Post::query().where_(Post::TITLE.eq("Hello")).get(&uow)` and write
 
 The code generators write models and schema-builder migrations, and the generated `Cargo.toml` files no longer list `sea-orm`. Existing tables need no change: models read the same columns, and a database migrated by the old migrator keeps its migration history.
 
+## SQLite is opt-in
+
+SQLite is no longer compiled into every build. It is the `sqlite` Cargo feature of `navree` (and of `navree-db`), off by default like `postgres` and `mysql`, so a PostgreSQL or MySQL build compiles no SQLite C code: the bundled SQLite library is most of the C in a build, and `cargo tree -i libsqlite3-sys` finds nothing without the feature.
+
+- **An app on SQLite** adds the feature: `navree = { git = "https://github.com/NavreeHQ/navree", features = ["sqlite"] }`. `navree new --database sqlite` writes it.
+- **An app on another database** changes nothing it runs on. `navree new` writes `postgres` (TimescaleDB, the default) or `mysql`, and now also `sqlite` in `[dev-dependencies]`, because tests run on SQLite files. Add the same `[dev-dependencies]` entry to an existing app: `navree = { git = "https://github.com/NavreeHQ/navree", features = ["sqlite"] }`.
+- **`database.url` left out** still means `sqlite://storage/app.db?mode=rwc`, so an app built without the feature stops at boot with "enable the `sqlite` feature of navree-db" instead of falling back to a file. Set the URL, or turn the feature on.
+- **Logbook's `file` store** is a SQLite file of its own, so it needs the feature too (`navree`'s `sqlite`, or `navree-logbook`'s). Without it Logbook keeps its entries in memory, and `logbook.store = "file"` fails at boot.
+- **Crates that depend on `navree-db` directly** turn `sqlite` on where their tests need it (`navree-db = { git = "https://github.com/NavreeHQ/navree", features = ["sqlite"] }` in `[dev-dependencies]`).
+
 ## The framework
 
 ### Foundation
@@ -129,7 +139,7 @@ The code generators write models and schema-builder migrations, and the generate
 
 ### Data
 
-- **`navree-db`**: a database engine on sqlx (pools, statements, rows, transactions and the `Executor` they share) with a unit of work per request (a transaction that commits when the response succeeds) that records change events, per-module migration sets, seeders, pagination and the `migrate`, `migrate:rollback`, `migrate:fresh`, `migrate:status` and `db:seed` commands. TimescaleDB is the default database (`navree new` sets it up and Dock runs it), with hypertables for Navree's own time-series tables and chunk-dropping pruning (`prune_time_series`); plain PostgreSQL with the same `postgres` feature, MySQL and MariaDB with `mysql`, and SQLite built in.
+- **`navree-db`**: a database engine on sqlx (pools, statements, rows, transactions and the `Executor` they share) with a unit of work per request (a transaction that commits when the response succeeds) that records change events, per-module migration sets, seeders, pagination and the `migrate`, `migrate:rollback`, `migrate:fresh`, `migrate:status` and `db:seed` commands. TimescaleDB is the default database (`navree new` sets it up and Dock runs it), with hypertables for Navree's own time-series tables and chunk-dropping pruning (`prune_time_series`); plain PostgreSQL with the same `postgres` feature, MySQL and MariaDB with `mysql`, and SQLite with `sqlite`.
 - **`navree-orm`**: the [ORM](/docs/orm/getting-started/). Models are structs with `#[derive(Model)]` and typed column constants; a query builder with joins, subqueries, unions, aggregates, JSON and full-text conditions, row locks and bulk writes; records with dirty tracking; relationships of every kind with batched eager loading and lazy-loading prevention; casts, accessors and serialization; model events, observers and broadcasts; global and local scopes, soft deletes and pruning; offset and cursor pagination, chunks and streams; factories with fake data; `#[navree::test]` databases with templates and assertions; route model binding; and workspace and access-control scoping. It runs in the unit of work on PostgreSQL with TimescaleDB, MySQL and MariaDB, SQLite and, with `navree-mongo`, MongoDB.
 - **`navree-schema`**: the [schema builder](/docs/database/schema-builder/) migrations are written with: tables, columns, indexes, foreign keys and check constraints in Rust, written as each database's SQL, SQLite table rebuilds, TimescaleDB hypertables, reading the live schema, and [schema dumps](/docs/database/squashing-migrations/) that replace a long migration history.
 - **`navree-cache`**: a bounded memory cache store with `remember`, tags, stale-while-revalidate and atomic locks.

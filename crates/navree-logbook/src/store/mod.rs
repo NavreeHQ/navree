@@ -1,13 +1,16 @@
 //! Where entries are kept: the [`LogbookStore`] trait, the
-//! [`MemoryStore`] and the [`SqliteStore`] (the `file` store).
+//! [`MemoryStore`] and the `SqliteStore` (the `file` store, with the `sqlite`
+//! feature).
 
 mod memory;
+#[cfg(feature = "sqlite")]
 mod sqlite;
 
 use chrono::{DateTime, Utc};
 use navree_kernel::BoxFuture;
 
 pub use memory::MemoryStore;
+#[cfg(feature = "sqlite")]
 pub use sqlite::SqliteStore;
 
 use crate::{Entry, Filter, LogbookError};
@@ -43,7 +46,7 @@ impl ListQuery {
 }
 
 /// Keeps Logbook's entries and the tags of their batches. Implemented by
-/// [`MemoryStore`] and [`SqliteStore`]; both pass the same conformance
+/// [`MemoryStore`] and `SqliteStore`; both pass the same conformance
 /// tests.
 ///
 /// Tags belong to a batch key ([`Entry::batch_key`]): the batch id, or the

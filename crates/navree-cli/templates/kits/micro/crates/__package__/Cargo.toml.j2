@@ -19,4 +19,7 @@ serde_json.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+# The tests boot the service on a fresh SQLite file each; the service itself
+# compiles only PostgreSQL.
+navree = { workspace = true, features = ["sqlite"] }
 tokio.workspace = true

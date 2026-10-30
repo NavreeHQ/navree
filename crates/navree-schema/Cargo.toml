@@ -31,6 +31,6 @@ insta = { workspace = true }
 # The tests' own connections (SQLite files; the real servers with the
 # `postgres` and `mysql` features). The library reaches databases only
 # through `SchemaConnection`.
-sqlx = { workspace = true, features = ["rust_decimal"] }
+sqlx = { workspace = true, features = ["rust_decimal", "sqlite-bundled"] }
 tempfile = { workspace = true }
 tokio = { workspace = true }

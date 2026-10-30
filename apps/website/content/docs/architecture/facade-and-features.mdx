@@ -219,8 +219,9 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `workflows` | `http`, `db`, `events`, `schedule`, `workspace` |
 | `directory` | `http`, `crypto`, `events`, `db`, `orm`, `queue`, `schedule`, `workspace`, `integrations` |
 | `domains` | `http`, `crypto`, `events`, `db`, `orm`, `schedule`, `workspace` (with `lighthouse` on too, certificates close to expiry are reported to Lighthouse) |
-| `postgres` | `db`, and navree-db's PostgreSQL driver |
-| `mysql` | `db`, and navree-db's MySQL and MariaDB driver |
+| `sqlite` (opt-in) | `db`, navree-db's SQLite driver (the bundled library), and `logbook`'s SQLite file store |
+| `postgres` (opt-in) | `db`, and navree-db's PostgreSQL driver |
+| `mysql` (opt-in) | `db`, and navree-db's MySQL and MariaDB driver |
 | `validation-phone` | `validation`, and navree-validation's `Phone` (E.164 numbers, on the rlibphonenumber crate) |
 | `validation-html` | `validation`, and navree-validation's `SafeHtml` (rich text sanitized with ammonia) |
 | `storage-s3` (in `full`) | `storage`, and navree-storage's S3 driver (AWS, MinIO, Cloudflare R2, DigitalOcean Spaces) |
@@ -230,7 +231,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 
 With `workspace` on too, `testing` also adds `navree::workspace::testing`, the [isolation suites](/docs/testing/isolation-tests/); neither feature turns the other on.
 
-SQLite is always available with `db`. The `postgres` feature adds the PostgreSQL driver, for TimescaleDB (the default database of a new app) and plain PostgreSQL, and `mysql` the driver for MySQL and MariaDB. The `storage-*` features add [object storage drivers](/docs/digging-deeper/storage/#cloud-disks); they talk HTTPS through rustls with ring, so they need no system library. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/getting-started/#postgresql) list which PostgreSQL-only paths to try in staging first.
+The database drivers are features of their own, and none is in `full`. Each turns on `db` and the matching driver of navree-db: `postgres` adds the PostgreSQL driver, for TimescaleDB (the default database of a new app) and plain PostgreSQL, `mysql` the driver for MySQL and MariaDB, and `sqlite` the SQLite driver, with the bundled SQLite library compiled from C source (it also turns on the `file` store of `logbook` when that is on). A build with `postgres` or `mysql` and without `sqlite` compiles no SQLite code at all; an app opens a database only with a driver it was built with, and otherwise stops with a message naming the feature to enable. A new app's tests run on SQLite, so `navree new` turns `sqlite` on in `[dev-dependencies]` only. The `storage-*` features add [object storage drivers](/docs/digging-deeper/storage/#cloud-disks); they talk HTTPS through rustls with ring, so they need no system library. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/getting-started/#postgresql) list which PostgreSQL-only paths to try in staging first.
 
 Tests in `crates/navree/tests/facade.rs` keep this table true: every module crate sits behind a feature named after it, each module feature turns on exactly the features of the crates its crate depends on (no fewer, no more), and `full` is the default and covers every module except the opt-in ones (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `redis`, `micro`, `i18n`, `mongo`), which you list yourself: `features = ["billing"]`.
 
