@@ -8,7 +8,8 @@ description: "Creates and runs a new Navree app: installing the navree CLI, `nav
 ## Prerequisites
 
 - Rust 1.95 or newer (edition 2024), from rustup.
-- A C compiler for the Rust toolchain: SQLite is compiled from source. On
+- A C compiler for the Rust toolchain: the `navree` tool and any build with
+  the `sqlite` feature (and an app's tests) compile SQLite from source. On
   Windows that means the MSVC build tools.
 - Docker or Podman: `navree dock up` runs the app's database, TimescaleDB
   (not needed with `--database sqlite`).
@@ -48,8 +49,9 @@ navree new blog --navree-path ~/code/navree      # depend on that checkout
   enclosing one).
 - `--database` picks the database: `timescaledb` (the default: PostgreSQL
   with hypertables), `postgres`, `mysql` (also MariaDB) or `sqlite`. It sets
-  `database.url`, the `navree` dependency's driver feature (`postgres` or
-  `mysql`; SQLite is built in) and, for TimescaleDB and PostgreSQL, a
+  `database.url`, the `navree` dependency's driver feature (`postgres`,
+  `mysql` or `sqlite`; the app compiles only that driver, and `[dev-dependencies]`
+  turns `sqlite` on because the tests run on SQLite files) and, for TimescaleDB and PostgreSQL, a
   `dock.toml` whose `postgres` service serves that very URL
   (`postgres://navree:navree@127.0.0.1:5432/<crate_name>`).
 

@@ -52,6 +52,8 @@ utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
 http-body-util = { workspace = true }
 navree-api = { workspace = true }
 # ID token signatures are checked with `ring` directly, apart from the code

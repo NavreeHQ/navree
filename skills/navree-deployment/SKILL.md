@@ -19,7 +19,8 @@ and `navree deploy`. This skill is for running the app on your own setup.
 
 1. Build: `cargo build --release` (binary: `target/release/<package>`).
    Build on the target platform (or cross-compile). No OpenSSL or SQLite
-   library is needed at runtime. Until the crates are published, the build
+   library is needed at runtime (SQLite is compiled in only with the
+   `sqlite` feature). Until the crates are published, the build
    machine needs the Navree checkout at the path in `Cargo.toml` (or point
    the dependency at the Git repository).
 2. Copy to the server: the binary, `config/app.toml` and a writable
@@ -165,7 +166,7 @@ Navree checkout into the build stage while the app depends on it by path.
 
 ## The database
 
-SQLite (default) suits one server: WAL mode, a 5 s busy timeout; keep
+SQLite (`features = ["sqlite"]` on `navree`) suits one server: WAL mode, a 5 s busy timeout; keep
 `storage/` on a persistent disk and back the file up. For several servers
 use PostgreSQL (`features = ["postgres"]` on `navree`, a `postgres://`
 URL) or MySQL/MariaDB (`features = ["mysql"]`, a `mysql://` URL; TLS is

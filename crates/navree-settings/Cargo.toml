@@ -57,6 +57,8 @@ utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
 navree-api = { workspace = true }
 # The `notify` feature's tests (`tests/settings/notify.rs`): notification
 # mail rendered by navree-mail's array transport.

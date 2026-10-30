@@ -568,6 +568,10 @@ domains = [
     "schedule",
     "workspace",
 ]
+## SQLite driver for navree-db (`sqlite:` URLs; the bundled SQLite library),
+## and Logbook's SQLite file store. Not in `full`: a PostgreSQL or MySQL build
+## compiles no SQLite.
+sqlite = ["db", "navree-db/sqlite", "navree-logbook?/sqlite"]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 ## MySQL and MariaDB driver for navree-db (`mysql://` and `mariadb://` URLs).
@@ -726,8 +730,8 @@ required-features = ["media"]
 
 # The request-pipeline micro-benchmarks: `/json` through the whole router,
 # a pool read, a validated insert and a unit of work on SQLite
-# (`cargo bench -p navree --bench pipeline`).
+# (`cargo bench -p navree --features sqlite --bench pipeline`).
 [[bench]]
 name = "pipeline"
 harness = false
-required-features = ["db", "validation"]
+required-features = ["db", "validation", "sqlite"]

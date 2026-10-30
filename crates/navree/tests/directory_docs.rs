@@ -2,6 +2,7 @@
 //! the `directory` feature (in `full`): the recipients sink on an ORM model,
 //! the feature module, a source of your own, the welcome listener,
 //! connections made in code, and the page's test as written.
+#![cfg(feature = "sqlite")]
 #![cfg(feature = "directory")]
 // The page's examples are written as an app writes them, without doc comments.
 #![allow(missing_docs)]

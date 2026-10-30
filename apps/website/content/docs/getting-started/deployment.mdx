@@ -24,7 +24,7 @@ The rest of this page explains what a deployment involves, for when you run your
 cargo build --release
 ```
 
-The binary is `target/release/<package>`, for example `target/release/planner` (`planner.exe` on Windows). Build it on the platform you deploy to, or cross-compile for it. TLS uses rustls and SQLite is compiled in, so the binary doesn't need OpenSSL or a SQLite library at runtime.
+The binary is `target/release/<package>`, for example `target/release/planner` (`planner.exe` on Windows). Build it on the platform you deploy to, or cross-compile for it. TLS uses rustls, and an app built with the `sqlite` feature has SQLite compiled in, so the binary doesn't need OpenSSL or a SQLite library at runtime. A PostgreSQL or MySQL build compiles no SQLite at all.
 
 A release build changes two defaults: logs are written as JSON lines instead of the pretty format, and templates are read once instead of reloaded when they change. See [Configuration: environments](/docs/getting-started/configuration/#environments).
 

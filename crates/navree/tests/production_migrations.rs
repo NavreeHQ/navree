@@ -13,6 +13,7 @@
 //! Navree can migrate a database with this same file;
 //! `NAVREE_UPGRADE_DATABASES` checks databases migrated that way: nothing
 //! is pending, every row reads back, and they roll back cleanly.
+#![cfg(feature = "sqlite")]
 
 use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicU32, Ordering};

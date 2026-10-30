@@ -1,6 +1,7 @@
 //! The examples of `content/docs/digging-deeper/batches-and-operations.mdx`,
 //! written as an app writes them (the facade, the prelude and the macros),
 //! compiled and run.
+#![cfg(feature = "sqlite")]
 
 use navree::contracts::{BoxError, Job, JobContext, JobOptions};
 use navree::http::CurrentPrincipal;

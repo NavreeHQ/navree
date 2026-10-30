@@ -2,6 +2,7 @@
 //! the `sso` feature (in `full`): the testing example as written, the
 //! onboarding function, the workspace controller (macros) and the static
 //! DNS resolver.
+#![cfg(feature = "sqlite")]
 #![cfg(feature = "sso")]
 
 use navree::prelude::*;

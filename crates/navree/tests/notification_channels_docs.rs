@@ -2,6 +2,7 @@
 //! facade with the `notify` feature (in `full`): the notifiable and the
 //! notification, the opt-out calls, the delivery log query, a callback
 //! route of your own (with `webhooks`) and the testing example as written.
+#![cfg(feature = "sqlite")]
 #![cfg(feature = "notify")]
 // The page's examples are written as an app writes them, without doc comments.
 #![allow(missing_docs)]

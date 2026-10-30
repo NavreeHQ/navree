@@ -71,7 +71,7 @@ impl Default for LogbookOptions {
         Self {
             enabled: None,
             path: "/_logbook".to_owned(),
-            store: StoreKind::File,
+            store: StoreKind::default(),
             file: "storage/logbook.db".to_owned(),
             max_entries: 10_000,
             keep_hours: 24,
@@ -216,13 +216,20 @@ pub(crate) fn parse_level(name: &str) -> Option<LogLevel> {
 }
 
 /// Where Logbook keeps its entries.
+///
+/// The default is `file` with this crate's `sqlite` feature (the facade's
+/// `sqlite`), and `memory` without it: the file store is SQLite, which a
+/// PostgreSQL or MySQL build does not compile. `logbook.store = "file"`
+/// without the feature fails at boot with that explanation.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum StoreKind {
     /// A SQLite file of its own (`logbook.file`): entries survive restarts.
-    #[default]
+    /// Needs the `sqlite` feature.
+    #[cfg_attr(feature = "sqlite", default)]
     File,
-    /// The process's memory: for tests.
+    /// The process's memory: entries go when the app stops.
+    #[cfg_attr(not(feature = "sqlite"), default)]
     Memory,
 }
 

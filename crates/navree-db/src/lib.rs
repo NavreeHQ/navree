@@ -12,7 +12,7 @@
 //! - [`DatabaseModule`] is global: it connects the pool at boot and exports
 //!   [`Db`] and [`DbOptions`] (section `database`). TimescaleDB, Navree's
 //!   default database, and plain PostgreSQL are behind the `postgres`
-//!   feature; SQLite is behind the `sqlite` feature, on by default (its
+//!   feature; SQLite is behind the `sqlite` feature, off by default (its
 //!   connections use WAL, `busy_timeout = 5000` and `foreign_keys = ON`);
 //!   MySQL and MariaDB are behind the `mysql` feature (`mysql://` or
 //!   `mariadb://` URLs; connections in UTC, `utf8mb4` and strict SQL mode

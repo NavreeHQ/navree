@@ -24,8 +24,9 @@ reqwest = { workspace = true }
 rustls = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-# SQLite (bundled, from the workspace) and PostgreSQL with rustls and ring.
-sqlx = { workspace = true, features = ["postgres", "tls-rustls-ring-webpki"] }
+# SQLite (bundled) and PostgreSQL with rustls and ring: the tool reads the
+# databases of any app, so it carries both drivers whatever the app compiles.
+sqlx = { workspace = true, features = ["postgres", "sqlite-bundled", "tls-rustls-ring-webpki"] }
 sqlparser = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

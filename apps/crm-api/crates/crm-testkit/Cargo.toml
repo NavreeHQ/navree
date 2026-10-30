@@ -13,7 +13,8 @@ unsafe_code = "forbid"
 [dependencies]
 chrono = { workspace = true }
 crm-core = { path = "../crm-core" }
-navree = { workspace = true }
+# The kit boots the CRM on SQLite files (the driver is opt-in).
+navree = { workspace = true, features = ["sqlite"] }
 serde_json = { workspace = true }
 uuid = { workspace = true }
 

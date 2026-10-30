@@ -1,5 +1,6 @@
 //! The examples of `content/docs/tools/fleet.mdx`, written as an app writes
 //! them (the facade, the prelude and the macros), compiled and run.
+#![cfg(feature = "sqlite")]
 
 use std::sync::Mutex;
 use std::time::Duration;

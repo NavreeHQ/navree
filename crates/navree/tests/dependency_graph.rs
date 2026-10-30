@@ -14,6 +14,9 @@
 //! - `navree-macros` tests expand the macros against the runtime crates, so
 //!   `navree-macros` may dev-depend on any runtime crate (layers 0 to 7).
 //!
+//! SQLite is opt-in: `navree` with `postgres` or `mysql` and without
+//! `sqlite` has no `libsqlite3-sys` in its resolved graph.
+//!
 //! It also checks the external side of the graph: `Cargo.lock` must not contain
 //! aws-lc, OpenSSL, native-tls or CMake (rustls with `ring` only), nor the
 //! crates the crypto policy forbids (`rsa`, `p256`, `p384`, `ed25519-dalek`).
@@ -721,6 +724,44 @@ fn listed_packages(lock: &str, names: &[&str]) -> Vec<String> {
         .collect()
 }
 
+/// The names of the packages `navree` builds with `features` (`cargo tree`,
+/// every kind of edge: normal, build and dev), from the resolved graph of
+/// the lockfile (nothing is compiled or downloaded).
+fn packages_in_tree(default_features: bool, features: &[&str]) -> BTreeSet<String> {
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+    let mut command = Command::new(cargo);
+    command
+        .args(["tree", "--offline", "--prefix", "none", "--format", "{p}"])
+        .args(["-p", "navree", "--manifest-path"])
+        .arg(&manifest);
+    if !default_features {
+        command.arg("--no-default-features");
+    }
+    if !features.is_empty() {
+        command.args(["--features", &features.join(",")]);
+    }
+    let output = command.output().expect("failed to run `cargo tree`");
+    assert!(
+        output.status.success(),
+        "`cargo tree` failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    package_names(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// The package names in `cargo tree --prefix none --format "{p}"` output
+/// (`name vX.Y.Z (path or *)` per line).
+fn package_names(tree: &str) -> BTreeSet<String> {
+    tree.lines()
+        .filter_map(|line| line.split_whitespace().next())
+        .map(str::to_owned)
+        .collect()
+}
+
+/// The packages that compile SQLite: the C library and the driver on it.
+const SQLITE_PACKAGES: &[&str] = &["libsqlite3-sys", "sqlx-sqlite"];
+
 fn find_rule(krate: &str) -> Option<&'static Rule> {
     HIERARCHY.iter().find(|r| r.krate == krate)
 }
@@ -839,6 +880,69 @@ fn no_other_data_layer_is_in_the_graph() {
     assert!(
         declared.is_empty(),
         "workspace crates declare `sea-*` dependencies: {declared:?}"
+    );
+}
+
+/// SQLite is opt-in (`navree-db`'s `sqlite`, the facade's `sqlite`): a
+/// PostgreSQL or MySQL build compiles no SQLite C code, with the default
+/// features (`full`) as much as without them. The graph is the resolved one
+/// for the feature set, dev-dependencies of `navree` included.
+#[test]
+fn a_build_without_sqlite_has_no_libsqlite3_sys() {
+    for (default_features, features) in [
+        (false, vec!["postgres"]),
+        (false, vec!["mysql"]),
+        (false, vec!["postgres", "mysql"]),
+        (true, vec!["postgres"]),
+        (true, vec!["mysql"]),
+    ] {
+        let packages = packages_in_tree(default_features, &features);
+        for name in SQLITE_PACKAGES {
+            assert!(
+                !packages.contains(*name),
+                "`navree` (default features: {default_features}) with {features:?} builds `{name}`: \
+                 SQLite must come only from the `sqlite` feature; find what pulls it in with \
+                 `cargo tree -p navree -i {name}`"
+            );
+        }
+        assert!(
+            packages.contains("sqlx-core"),
+            "the graph of {features:?} has no sqlx (is the output read right?)"
+        );
+    }
+}
+
+/// The other direction: the `sqlite` feature is what brings SQLite in, and
+/// brings no other driver with it.
+#[test]
+fn the_sqlite_feature_builds_sqlite_and_no_other_driver() {
+    let packages = packages_in_tree(false, &["sqlite"]);
+    for name in SQLITE_PACKAGES {
+        assert!(
+            packages.contains(*name),
+            "`navree` with `sqlite` does not build `{name}`"
+        );
+    }
+    for name in ["sqlx-postgres", "sqlx-mysql"] {
+        assert!(
+            !packages.contains(name),
+            "`navree` with `sqlite` builds `{name}`: each driver is a feature of its own"
+        );
+    }
+}
+
+#[test]
+fn package_names_are_read_from_cargo_tree_output() {
+    let tree = [
+        r"navree v0.1.0 (C:\work\navree)",
+        "sqlx v0.9.0",
+        "sqlx-core v0.9.0",
+        "sqlx-core v0.9.0 (*)",
+    ]
+    .join("\n");
+    assert_eq!(
+        package_names(&tree).into_iter().collect::<Vec<_>>(),
+        ["navree", "sqlx", "sqlx-core"]
     );
 }
 

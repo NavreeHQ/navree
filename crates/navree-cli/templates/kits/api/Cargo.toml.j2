@@ -26,6 +26,9 @@ utoipa = { version = "6", features = ["chrono", "uuid"] }
 uuid = { version = "1", features = ["serde", "v7"] }
 
 [dev-dependencies]
+# The tests boot the app on a fresh SQLite file each, so they turn the SQLite
+# driver on; the app itself compiles only the driver of its own database.
+navree = {{ navree_test_dependency }}
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 # Small debug info: faster links, so `navree dev` restarts sooner.

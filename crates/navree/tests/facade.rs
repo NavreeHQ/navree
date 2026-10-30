@@ -484,6 +484,7 @@ mod m20261027_120000_create_events_table {
     }
 }
 
+#[cfg(feature = "sqlite")]
 #[tokio::test]
 async fn schema_migrations_run_through_the_facade() {
     struct Events;
@@ -1006,15 +1007,18 @@ fn i18n_is_reexported_with_its_feature() {
     assert_eq!(args.len(), 1);
 }
 
-/// SQLite is built in; every other database driver is a feature of its own,
-/// outside `full`, that turns on `db` and the matching feature of navree-db
-/// (`features = ["postgres"]`, `features = ["mysql"]`). There is no
-/// `mysql-rsa`: the crypto policy keeps the `rsa` crate out.
+/// Every database driver is a feature of its own, outside `full`, that
+/// turns on `db` and the matching feature of navree-db
+/// (`features = ["sqlite"]`, `features = ["postgres"]`,
+/// `features = ["mysql"]`): a build with one compiles none of the others
+/// (`tests/dependency_graph.rs` checks the graph). There is no `mysql-rsa`:
+/// the crypto policy keeps the `rsa` crate out.
 #[test]
 fn database_driver_features_turn_on_db_and_the_driver() {
     let features = Features::read();
     let full = features.closure("full");
     for (feature, driver) in [
+        ("sqlite", "navree-db/sqlite"),
         ("postgres", "navree-db/postgres"),
         ("mysql", "navree-db/mysql"),
     ] {

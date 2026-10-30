@@ -26,7 +26,7 @@ The root `Cargo.toml` is a workspace of `crates/*`, `apps/crm-api` and `apps/crm
 
 You need:
 
-- Rust 1.95 or newer (edition 2024). On Windows, the MSVC build tools, because SQLite is compiled from source.
+- Rust 1.95 or newer (edition 2024). On Windows, the MSVC build tools, because SQLite is compiled from source (the workspace's tests run on it; a PostgreSQL or MySQL build of an app compiles none).
 - Optional: [sccache](https://github.com/mozilla/sccache), to share compiled dependencies between target directories. The repository doesn't set a compiler wrapper; set `RUSTC_WRAPPER=sccache`, or `rustc-wrapper = "sccache"` under `[build]` in a Cargo config outside the repository, such as `~/.cargo/config.toml`.
 - For `apps/crm-web` and `apps/website`: Node.js 20.9 or newer and pnpm 11.
 

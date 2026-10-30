@@ -2,6 +2,7 @@
 //! `passwordless`, `account-flows` (two-factor policy) and
 //! `authentication` (platform administrators), through the facade: the
 //! controllers and the policy as written, booted and called.
+#![cfg(feature = "sqlite")]
 
 use navree::access::{AccessModule, AccessOptions, AccessService};
 use navree::auth::testing::VirtualAuthenticator;
