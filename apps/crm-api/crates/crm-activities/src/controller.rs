@@ -10,7 +10,7 @@ use crate::service::ActivityService;
 
 /// `/api/v1/activities`: everyone in the CRM reads and creates activities;
 /// owners (and managers) change and delete them; assignees, owners and
-/// managers complete them (spec §9.1).
+/// managers complete them.
 #[injectable]
 pub struct ActivitiesController {
     activities: Arc<ActivityService>,
@@ -86,7 +86,7 @@ impl ActivitiesController {
         Ok(Json(updated))
     }
 
-    /// Marks a task completed (spec §9.1: the assignee, the owner or a
+    /// Marks a task completed (the assignee, the owner or a
     /// manager).
     #[post("/{id}/complete")]
     #[can(Complete, Activity, from = "id")]

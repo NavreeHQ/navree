@@ -7,7 +7,7 @@
 //! Three exceptions, all for dev-dependencies only:
 //! - A crate may dev-depend on itself, to turn on its own features in its
 //!   tests (navree-workspace's `testing`).
-//! - A dev-dependency may point at any navree crate in a lower layer (spec §3),
+//! - A dev-dependency may point at any navree crate in a lower layer,
 //!   so tests can boot lower-layer modules (navree-notify's tests need
 //!   ViewModule for MailModule). This covers `navree-testing` (L3) for every
 //!   crate in layer 4 or above.
@@ -45,10 +45,9 @@ const fn rule(krate: &'static str, layer: u8, allowed: &'static [&'static str]) 
     }
 }
 
-/// Spec §3, "Allowed runtime dependency edges", the ecosystem layers of the
-/// ecosystem build plan (§3: L6 libraries, L7 packages built on them, L8 the
-/// entry points), and the app layers (L9 and up) whose crates may use
-/// anything below them. Kept one row per crate, like the spec.
+/// The allowed runtime dependency edges: the ecosystem layers (L6 libraries,
+/// L7 packages built on them, L8 the entry points), and the app layers (L9
+/// and up) whose crates may use anything below them. Kept one row per crate.
 #[rustfmt::skip]
 const HIERARCHY: &[Rule] = &[
     // L0
@@ -175,7 +174,7 @@ const HIERARCHY: &[Rule] = &[
     // The ORM: models on navree-db's pool and unit of work. Model events go
     // through navree-events, encrypted and hashed casts through
     // navree-crypto, records as API resources (`__type`, field masks)
-    // through navree-api (ORM brief §2, §3). navree-access (same layer,
+    // through navree-api. navree-access (same layer,
     // optional feature `access`): models as subjects, abilities as query
     // filters. navree-testing (optional feature `testing`): `TestApp`
     // seeding. navree-validation (optional feature `validation`): rules
@@ -187,7 +186,7 @@ const HIERARCHY: &[Rule] = &[
     ]),
     // Browser testing: a dev-dependency crate that serves an app's router
     // (navree-http) on a real port and drives Chrome over the DevTools
-    // Protocol (ecosystem build plan §3: may use http and testing).
+    // Protocol (may use http and testing).
     rule("navree-browser", 4, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-testing",
     ]),
@@ -217,8 +216,8 @@ const HIERARCHY: &[Rule] = &[
         "navree-orm",
     ]),
     // Redis: the shared connections and the Redis drivers of the cache,
-    // the queue, sessions and the real-time backplane (ecosystem build
-    // plan §3: may also use http and db).
+    // the queue, sessions and the real-time backplane (may also use http
+    // and db).
     rule("navree-redis", 5, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-cache",
         "navree-db", "navree-queue", "navree-session", "navree-realtime",
@@ -232,7 +231,7 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry",
         "navree-schema", "navree-db", "navree-orm",
     ]),
-    // L6: ecosystem libraries (ecosystem build plan §3).
+    // L6: ecosystem libraries.
     // Social sign-in: links provider accounts to navree-auth users and
     // issues their tokens. Linked accounts are navree-orm models.
     rule("navree-social", 6, &[
@@ -491,7 +490,7 @@ const HIERARCHY: &[Rule] = &[
     // `navree mcp` and `navree skills:install`.
     rule("navree-cli", 8, &["navree-dock", "navree-harbor", "navree-navigator"]),
     // L9 and up (apps): anything below, except the CLI binary.
-    // The CRM (plan "Wave 6 layout"): its crates use only the `navree` facade.
+    // The CRM: its crates use only the `navree` facade.
     // crm-core is shared; crm-testkit boots it for tests (a dev-dependency
     // of the crates above it); the feature crates build on crm-core; the
     // crm-api binary assembles them.
@@ -698,7 +697,7 @@ const FORBIDDEN_NATIVE_PACKAGES: &[&str] = &[
     "openssl-sys",
 ];
 
-/// Packages the crypto policy keeps out (ecosystem build plan §2): `rsa`
+/// Packages the crypto policy keeps out: `rsa`
 /// (RUSTSEC-2023-0071) and the RustCrypto curve crates. Asymmetric
 /// signatures go through `ring`, wrapped in `navree_crypto::jose`.
 const FORBIDDEN_CRYPTO_PACKAGES: &[&str] = &["ed25519-dalek", "p256", "p384", "rsa"];
@@ -803,7 +802,7 @@ fn violation(edge: &Edge) -> Option<String> {
         if from == to {
             return None;
         }
-        // Tests may use any navree crate in a lower layer (spec §3); this is how
+        // Tests may use any navree crate in a lower layer; this is how
         // navree-testing (L3) serves every crate in layer 4 and above.
         if to_rule.layer < from_rule.layer {
             return None;
@@ -828,7 +827,7 @@ fn workspace_dependency_edges_follow_the_hierarchy() {
     let found = violations(&edges);
     assert!(
         found.is_empty(),
-        "crate hierarchy violations (spec §3):\n  {}",
+        "crate hierarchy violations:\n  {}",
         found.join("\n  ")
     );
 }
@@ -967,7 +966,7 @@ fn hierarchy_table_lists_exactly_the_workspace_crates() {
     );
 }
 
-/// The §3 table allows one same-layer edge (navree-config -> navree-contracts, both
+/// The table allows one same-layer edge (navree-config -> navree-contracts, both
 /// L1), so the invariant is "never upwards" plus "no cycles".
 #[test]
 fn hierarchy_table_never_points_up_and_has_no_cycles() {
@@ -1171,7 +1170,7 @@ fn navree_testing_is_an_allowed_dev_dependency_from_layer_4_up() {
 
 #[test]
 fn dev_dependency_on_any_lower_layer_crate_is_allowed() {
-    // Spec §3: tests may boot lower-layer modules (MailModule needs ViewModule).
+    // Tests may boot lower-layer modules (MailModule needs ViewModule).
     let edges = [
         edge("navree-notify", "navree-view", Kind::Dev),
         edge("navree-auth", "navree-view", Kind::Dev),

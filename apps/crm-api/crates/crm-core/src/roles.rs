@@ -1,4 +1,4 @@
-//! The CRM's roles (spec §6). Roles live in navree-access's `roles` table;
+//! The CRM's roles. Roles live in navree-access's `roles` table;
 //! the `crm-roles` seeder creates them and grants their permissions.
 
 use std::fmt;

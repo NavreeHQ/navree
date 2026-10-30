@@ -1,6 +1,6 @@
 //! The CRM's closed value sets. Each is stored as a string column (the
 //! models declare `#[model(cast = "string_enum")]`, which stores the serde
-//! name) and sent over the API as the same string (spec §7), and parses
+//! name) and sent over the API as the same string, and parses
 //! back with [`FromStr`].
 
 use std::fmt;

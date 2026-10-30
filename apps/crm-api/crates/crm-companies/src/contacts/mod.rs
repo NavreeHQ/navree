@@ -15,7 +15,7 @@ pub use export::{CSV_CONTENT_TYPE, CSV_HEADER, contacts_csv};
 pub use resource::{ContactPage, ContactResource, ContactType};
 pub use service::ContactService;
 
-/// Contacts (spec §7); see the [crate docs](crate).
+/// Contacts; see the [crate docs](crate).
 #[module(
     imports = [CrmCoreModule],
     providers = [ContactService],

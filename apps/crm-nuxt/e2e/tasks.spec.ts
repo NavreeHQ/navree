@@ -16,7 +16,7 @@ test("a rep adds a task due today, finds it under Today and completes it", async
   await dialog.getByRole("combobox", { name: /Related to/ }).click();
   await page.getByPlaceholder("Search deals").fill("Fleet telematics");
   await page.getByRole("option", { name: "Fleet telematics rollout" }).click();
-  // Later today (UTC): the API's "today" (spec §9.5); the browser runs in UTC.
+  // Later today (UTC): the API's "today"; the browser runs in UTC.
   await dialog.getByLabel("Due").fill(`${todayUtc()}T23:30`);
   await expect(dialog.getByLabel("Assignee")).toContainText(ACCOUNTS.rep1.name);
   const created = page.waitForResponse(

@@ -9,7 +9,7 @@ use navree::access::ActionMarker;
 pub const MOVE: &str = "move";
 /// `export`: download contacts as CSV.
 pub const EXPORT: &str = "export";
-/// `complete`: mark an activity (a task) done (spec §9.1).
+/// `complete`: mark an activity (a task) done.
 pub const COMPLETE: &str = "complete";
 
 /// The [`MOVE`] action.

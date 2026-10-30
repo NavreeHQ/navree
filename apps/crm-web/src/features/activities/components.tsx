@@ -87,7 +87,7 @@ export function DueLabel({ activity }: { activity: Activity }) {
   );
 }
 
-/** Complete checkbox for a task; disabled when the API would refuse (CASL `complete`, spec §9.1). */
+/** Complete checkbox for a task; disabled when the API would refuse (CASL `complete`). */
 export function TaskCheckbox({ activity, label }: { activity: Activity; label?: string }) {
   const complete = useCompleteActivity();
   const done = Boolean(activity.completed_at);

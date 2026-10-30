@@ -1,4 +1,4 @@
-//! `GET /api/v1/dashboard` (spec §7 and §9.6): [`Dashboard`], built by
+//! `GET /api/v1/dashboard`: [`Dashboard`], built by
 //! [`DashboardService`] and served by [`DashboardController`].
 //!
 //! - `pipeline`: every stage in board order with its deal count and amount;

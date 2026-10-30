@@ -1,5 +1,4 @@
-//! The deal events: [`DealAssigned`] and [`DealWon`] (spec §6 background
-//! work). [`DealsModule`](crate::DealsModule) subscribes the queued
+//! The deal events: [`DealAssigned`] and [`DealWon`]. [`DealsModule`](crate::DealsModule) subscribes the queued
 //! [`NotifyDealOwner`](crate::NotifyDealOwner) to both; other modules may
 //! subscribe their own listeners with `m.on::<DealWon, L>()`.
 

@@ -1,5 +1,5 @@
 //! `deal.updated` `{deal}` on `private-crm.deals` after every change, so
-//! open boards refresh (spec §6 real-time, §7).
+//! open boards refresh.
 
 use std::time::Duration;
 
@@ -117,7 +117,7 @@ async fn notifications_from_a_worker_process_reach_the_socket() {
     server.shutdown().await;
 }
 
-/// PRD "Where rules are enforced" #5: when a user's roles change or they
+/// When a user's roles change or they
 /// sign out, their sockets close (code 4200: reconnect and authorize
 /// again), so subscriptions authorized under the old access end.
 #[tokio::test]

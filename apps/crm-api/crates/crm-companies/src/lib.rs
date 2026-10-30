@@ -1,6 +1,6 @@
 //! # crm-companies
 //!
-//! [`CompaniesModule`] and [`ContactsModule`] (plan Task 33; spec §7, §9.3).
+//! [`CompaniesModule`] and [`ContactsModule`].
 //!
 //! | Route | Access | Result |
 //! |---|---|---|
@@ -19,7 +19,7 @@
 //! Every resource carries `__type` (the CASL subject type) and an `owner`
 //! embed; deleted (`deleted_at`) records are 404s and never listed.
 //! Setting another user as `owner_id` needs `manage` on the record type
-//! (spec §9.3; [`crm_core::owner_for`]): reps get a 403.
+//! ([`crm_core::owner_for`]): reps get a 403.
 #![forbid(unsafe_code)]
 
 mod common;

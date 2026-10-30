@@ -1,4 +1,4 @@
-//! Who may own a record (spec §9.3): owner pickers are for users who can
+//! Who may own a record: owner pickers are for users who can
 //! `manage` the record type; everyone else creates records they own, and
 //! cannot hand them to someone else (403).
 

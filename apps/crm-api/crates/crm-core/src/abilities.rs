@@ -1,4 +1,4 @@
-//! Who may do what in the CRM (spec §6 and §9): the abilities function the
+//! Who may do what in the CRM: the abilities function the
 //! access module calls for every principal, compiled into CASL rules served
 //! at `GET /api/me/abilities` and enforced by `#[can]` routes and
 //! `Accessible` list filters.
@@ -214,7 +214,7 @@ mod tests {
     const Y: bool = true;
     const N: bool = false;
 
-    /// Spec §6 and §9: admin is super-admin; managers manage every customer
+    /// Admin is super-admin; managers manage every customer
     /// record, export contacts and read users; reps read everything, create
     /// records, change only what they own, complete their own or assigned
     /// activities; nobody but admin deletes a won or lost deal.

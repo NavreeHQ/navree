@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type Locator, type Page } from "@playwright/test";
 
-/** The crm-demo seeder's accounts (spec §6); every one uses `password123`. */
+/** The crm-demo seeder's accounts; every one uses `password123`. */
 export const ACCOUNTS = {
   admin: { email: "admin@navree.test", name: "Dana Whitfield" },
   manager: { email: "manager@navree.test", name: "Marcus Reyes" },

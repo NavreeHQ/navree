@@ -131,8 +131,8 @@ impl navree_contracts::Broadcaster for RecordingBroadcaster {
     }
 }
 
-/// Signing out ends the user's real-time subscriptions (PRD "Where rules
-/// are enforced" #5), so channels authorized for the session stop.
+/// Signing out ends the user's real-time subscriptions, so channels
+/// authorized for the session stop.
 #[tokio::test]
 async fn logout_ends_the_users_realtime_subscriptions() {
     let broadcaster = Arc::new(RecordingBroadcaster::default());

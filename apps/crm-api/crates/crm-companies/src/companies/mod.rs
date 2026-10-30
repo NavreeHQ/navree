@@ -13,7 +13,7 @@ pub use dto::{CompanyFilters, CompanySort, CreateCompany, UpdateCompany};
 pub use resource::{CompanyDetail, CompanyPage, CompanyResource, CompanyType};
 pub use service::CompanyService;
 
-/// Companies (spec §7); see the [crate docs](crate).
+/// Companies; see the [crate docs](crate).
 #[module(
     imports = [CrmCoreModule],
     providers = [CompanyService],

@@ -62,7 +62,7 @@ full = [
     "workspace",
 ]
 # Each module feature turns on the features of the navree crates it builds
-# on (spec §3), so `navree::<dependency>` is always there to name their types.
+# on, so `navree::<dependency>` is always there to name their types.
 ## L1
 ## Telemetry events, sinks and W3C trace context (every emitting module turns it on).
 telemetry = ["dep:navree-telemetry"]

@@ -1,4 +1,4 @@
-//! crm-web's backend-for-frontend (spec §7) calls the API for every
+//! crm-web's backend-for-frontend calls the API for every
 //! browser, from its own address (loopback in the documented setup), and
 //! names the browser in `X-Forwarded-For`. The API must tell the browsers
 //! apart, or one browser's wrong passwords lock every user of the web app

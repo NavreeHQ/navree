@@ -2541,7 +2541,7 @@ export interface components {
             /**
              * Format: uuid
              * @description The owner (default: the caller). Only users who can manage companies
-             *     may name someone else (spec §9.3; 403 otherwise).
+             *     may name someone else (403 otherwise).
              */
             owner_id?: string | null;
             /** @description A phone number. */
@@ -2616,7 +2616,7 @@ export interface components {
             name?: string;
             /**
              * Format: uuid
-             * @description The new owner: managers and admins only (spec §9.3; 403 otherwise).
+             * @description The new owner: managers and admins only (403 otherwise).
              */
             owner_id?: string;
             /** @description A phone number. */
@@ -2726,7 +2726,7 @@ export interface components {
             /**
              * Format: uuid
              * @description The owner (default: the caller). Only users who can manage contacts
-             *     may name someone else (spec §9.3; 403 otherwise).
+             *     may name someone else (403 otherwise).
              */
             owner_id?: string | null;
             /** @description A phone number. */
@@ -2796,7 +2796,7 @@ export interface components {
             last_name?: string;
             /**
              * Format: uuid
-             * @description The new owner: managers and admins only (spec §9.3; 403 otherwise).
+             * @description The new owner: managers and admins only (403 otherwise).
              */
             owner_id?: string;
             /** @description A phone number. */
@@ -2895,7 +2895,7 @@ export interface components {
             upcoming: number;
         };
         /**
-         * @description A deal as the API returns it (spec §7 `Deal`): the row plus
+         * @description A deal as the API returns it: the row plus
          *     `probability` (from the stage) and the `company`, `contact` and `owner`
          *     embeds.
          */
@@ -3333,7 +3333,7 @@ export interface components {
             role?: components["schemas"]["UserRole"] | null;
         };
         /**
-         * @description A user as `/api/v1/users` returns it (spec §7 `User`):
+         * @description A user as `/api/v1/users` returns it:
          *     `{__type: "User", id, name, email, email_verified_at, roles, created_at}`.
          */
         User: {

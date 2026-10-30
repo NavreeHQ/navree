@@ -1,4 +1,4 @@
-//! `/api/v1/activities` (spec §7 and §9): create, list with filters,
+//! `/api/v1/activities`: create, list with filters,
 //! update, complete and delete, with the CRM's access rules.
 
 mod support;

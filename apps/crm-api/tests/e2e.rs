@@ -216,7 +216,7 @@ async fn a_deal_from_first_contact_to_reassignment() {
         .send()
         .await
         .assert_error(403, None);
-    // A rep cannot hand their deal to someone else (spec §9.3).
+    // A rep cannot hand their deal to someone else.
     rep1.patch(&deal_path)
         .json(&json!({ "owner_id": rep2.id() }))
         .send()

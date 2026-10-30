@@ -1,4 +1,4 @@
-//! Board order: every stage's deals hold the positions `0..n` (spec §9.4).
+//! Board order: every stage's deals hold the positions `0..n`.
 //!
 //! A column is read in board order (`position`, then age) and written back
 //! densely, so gaps left by moves and deletes close and ties resolve the

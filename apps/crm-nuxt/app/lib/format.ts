@@ -142,7 +142,7 @@ export function formatRelative(value: string | null | undefined, now: Date = new
   return formatDate(value);
 }
 
-/** Start of the current UTC day (the API's `due` filter works in UTC days, spec §9.5). */
+/** Start of the current UTC day (the API's `due` filter works in UTC days). */
 export function startOfUtcDay(now: Date = new Date()): number {
   return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
 }

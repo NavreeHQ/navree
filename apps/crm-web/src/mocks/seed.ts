@@ -1,5 +1,5 @@
 /**
- * Demo data for the mock API, mirroring crm-api's `crm-demo` seeder (spec §6):
+ * Demo data for the mock API, mirroring crm-api's `crm-demo` seeder:
  * four accounts (password `password123`), ~20 companies, ~50 contacts,
  * ~30 deals across stages and ~60 activities. Generated deterministically;
  * dates are relative to "now" so overdue/today/upcoming buckets always exist.
@@ -166,7 +166,7 @@ export function createSeed(now: Date = new Date()): MockDatabase {
     return Math.min(date.getTime(), nowMs - 60_000);
   };
   const idAt = (ms: number) => makeId(ms, rand);
-  // Day and month boundaries are UTC, like the API (spec §9.5).
+  // Day and month boundaries are UTC, like the API.
   const startOfToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   const dateOnly = (ms: number) => {
     const d = new Date(ms);
@@ -568,7 +568,7 @@ export function createSeed(now: Date = new Date()): MockDatabase {
       completed_at: done ? iso(Math.min(due, nowMs - 1800_000)) : null,
       ...subject,
       // Most tasks are created by the person who does them; every fifth one was assigned by the
-      // manager, which the assignee can still complete (spec §9.1) but not edit.
+      // manager, which the assignee can still complete but not edit.
       owner_id: i % 5 === 0 && assignee.id !== manager.id ? manager.id : assignee.id,
       assignee_id: assignee.id,
       created_at: iso(created),

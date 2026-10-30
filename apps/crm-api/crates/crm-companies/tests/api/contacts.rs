@@ -1,4 +1,4 @@
-//! `/api/v1/contacts` (spec §7): CRUD, embeds, ownership (§9.3),
+//! `/api/v1/contacts`: CRUD, embeds, ownership,
 //! validation, search, filters, soft deletes and the CSV export.
 
 use crm_testkit::Role;
@@ -267,7 +267,7 @@ async fn rep_cannot_update_other_reps_contact_or_assign_contacts() {
         .await
         .assert_error(403, "Forbidden");
 
-    // Spec §9.3.
+    // A rep may not hand a new contact to someone else.
     rep1.post("/api/v1/contacts")
         .json(&json!({ "first_name": "Al", "last_name": "Turing", "owner_id": crm.user_id(Role::Rep2) }))
         .send()

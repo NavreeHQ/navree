@@ -251,7 +251,7 @@ async fn rep_cannot_delete_won_deal() {
     let open = id_of(&create_deal(&rep, new_deal("Open", acme, 100)).await);
 
     for id in [won, lost] {
-        // Not even their own, and not a manager either (spec §9.2).
+        // Not even their own, and not a manager either.
         rep.delete(&format!("/api/v1/deals/{id}"))
             .send()
             .await

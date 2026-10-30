@@ -1,6 +1,6 @@
-//! The daily schedule (spec §6): `crm:task-reminders` at 08:00 UTC notifies
+//! The daily schedule: `crm:task-reminders` at 08:00 UTC notifies
 //! everyone with open tasks due today (database, mail and their private
-//! channel; data `{title, message, url}`, spec §9.7), and `audit:prune`
+//! channel; data `{title, message, url}`), and `audit:prune`
 //! runs daily.
 
 mod support;

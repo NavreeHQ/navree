@@ -1,5 +1,5 @@
-//! Seeding: the CRM's roles (always needed) and the four demo accounts
-//! (spec §6), shared by the `crm-demo` seeder and the test kit.
+//! Seeding: the CRM's roles (always needed) and the four demo accounts,
+//! shared by the `crm-demo` seeder and the test kit.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -30,7 +30,7 @@ pub struct DemoAccount {
     pub role: UserRole,
 }
 
-/// The demo accounts: an admin, a manager and two reps (spec §6; the names
+/// The demo accounts: an admin, a manager and two reps (the names
 /// match crm-web's mock data).
 pub const DEMO_ACCOUNTS: [DemoAccount; 4] = [
     DemoAccount {

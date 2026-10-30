@@ -1,4 +1,4 @@
-//! The API's deal shapes (spec §7): [`DealResource`] and its embeds.
+//! The API's deal shapes: [`DealResource`] and its embeds.
 
 use chrono::{DateTime, NaiveDate, Utc};
 use crm_core::models::Deal;
@@ -11,7 +11,7 @@ use serde::Serialize;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-/// A deal as the API returns it (spec §7 `Deal`): the row plus
+/// A deal as the API returns it: the row plus
 /// `probability` (from the stage) and the `company`, `contact` and `owner`
 /// embeds.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]

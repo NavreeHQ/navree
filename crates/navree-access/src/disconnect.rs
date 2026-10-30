@@ -1,7 +1,7 @@
-//! Ending real-time subscriptions when access changes (PRD "Where rules
-//! are enforced" #5): a private channel subscription is authorized once,
-//! when it is made, so a user whose roles or permissions shrink would keep
-//! receiving it. After such a change commits, their connections are closed
+//! Ending real-time subscriptions when access changes. A private channel
+//! subscription is authorized once, when it is made, so a user whose roles or
+//! permissions shrink would keep receiving it. After such a change commits,
+//! their connections are closed
 //! through `dyn Broadcaster::end_user_subscriptions` (navree-realtime: code
 //! 4200, reconnect and authorize again).
 

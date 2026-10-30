@@ -1,4 +1,4 @@
-//! The API's company shapes (spec §7 `Company`).
+//! The API's company shapes.
 
 use chrono::{DateTime, Utc};
 use crm_core::models::Company;

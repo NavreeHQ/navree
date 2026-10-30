@@ -1,5 +1,5 @@
 /**
- * MSW handlers implementing the Navree CRM API contract (spec §7, §9, §10) as the
+ * MSW handlers implementing the Navree CRM API contract as the
  * browser sees it through the BFF: same-origin `/api/*`, the session held
  * "server side" (here: sessionStorage stands in for the httpOnly token
  * cookies), `POST /api/auth/login` returning only `{user}`, Navree error bodies
@@ -150,7 +150,7 @@ function route(handler: Handler, { auth = true } = {}): HttpResponseResolver {
   };
 }
 
-/** Spec §9.3: only people who can `manage` a record type may set someone else as owner. */
+/** Only people who can `manage` a record type may set someone else as owner. */
 function assertCanAssign(ctx: Ctx, subject: SubjectName, ownerId: string | undefined): void {
   if (ownerId && ownerId !== ctx.user.id && !ctx.ability.can("manage", subject)) {
     fail(403, "You can only assign records to yourself");
@@ -260,7 +260,7 @@ function broadcast(channel: string, event: string, data: unknown): void {
 function notify(userId: string, type: string, data: Record<string, unknown>): void {
   const row = { id: newId(), user_id: userId, type, data, read_at: null, created_at: nowIso() };
   db.notifications.unshift(row);
-  // spec §9.7: the broadcast payload is the notification's data object.
+  // The broadcast payload is the notification's data object.
   broadcast(`private-users.${userId}`, "notification.created", data);
 }
 
@@ -617,12 +617,12 @@ function afterDealChange(ctx: Ctx, deal: DealRow, previous: DealRow) {
 function dashboard(user: UserRow) {
   const deals = db.deals.filter((d) => !d.deleted_at);
   const now = new Date();
-  // UTC day and month boundaries, like the API (spec §9.5).
+  // UTC day and month boundaries, like the API.
   const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
   const open = deals.filter((d) => OPEN_STAGES.includes(d.stage));
   const won = deals.filter((d) => d.stage === "won" && d.closed_at && Date.parse(d.closed_at) >= monthStart);
   const startToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  // "My" tasks: assigned to me, or owned by me when unassigned (spec §9.6).
+  // "My" tasks: assigned to me, or owned by me when unassigned.
   const tasks = db.activities.filter(
     (a) =>
       a.kind === "task" &&
@@ -1206,7 +1206,7 @@ export const handlers = [
         .filter((a) => completed === null || (completed === "true") === (a.completed_at !== null))
         .filter((a) => {
           if (!due) return true;
-          // spec §9.5: due filters apply to open tasks, in UTC days.
+          // Due filters apply to open tasks, in UTC days.
           if (!a.due_at || a.kind !== "task") return false;
           const t = Date.parse(a.due_at);
           if (due === "overdue") return t < startToday;

@@ -1,6 +1,6 @@
 //! Notifying CRM users: [`NotifiableUser`] (database, mail and the
 //! `private-users.{id}` broadcast channel) and the `data` every CRM
-//! notification stores and broadcasts, [`NotificationData`] (spec §9.7).
+//! notification stores and broadcasts, [`NotificationData`].
 
 use navree::auth::User;
 use navree::notify::{Notifiable, USER_NOTIFIABLE_TYPE};

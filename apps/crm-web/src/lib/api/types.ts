@@ -97,9 +97,9 @@ export type AppSubject = Company | Contact | Deal | Activity | User;
 
 // ---- Query parameters ----------------------------------------------------------
 //
-// navree-api cannot document query parameters yet (framework open issue W2/W6), so
+// navree-api cannot document query parameters yet, so
 // the generated `paths` say `query?: never` for every list endpoint. These are the
-// filters of spec §7, merged into `paths` below so openapi-fetch type-checks them.
+// list filters, merged into `paths` below so openapi-fetch type-checks them.
 
 type Paging = { page?: number; per_page?: number };
 

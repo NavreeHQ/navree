@@ -1,7 +1,6 @@
 //! # crm-activities
 //!
-//! [`ActivitiesModule`] and [`DashboardModule`] (plan Task 35; spec §6, §7
-//! and §9).
+//! [`ActivitiesModule`] and [`DashboardModule`].
 //!
 //! | Route | Access | Result |
 //! |---|---|---|
@@ -17,10 +16,10 @@
 //!   user (else 400 `subject_id does not exist` / `assignee_id does not
 //!   exist`). Only tasks are completed (else 400); completing twice keeps
 //!   the first time.
-//! - `due` follows spec §9.5 in UTC days ([`Due`], [`Today`]): `overdue` =
+//! - `due` works in UTC days ([`Due`], [`Today`]): `overdue` =
 //!   open tasks due before today, `today` = due today, `upcoming` = due after
 //!   today. Times come from the app's `dyn Clock`.
-//! - The dashboard follows spec §9.6 (see [`Dashboard`]).
+//! - For the dashboard, see [`Dashboard`].
 //! - The `crm:task-reminders` command ([`TaskReminders`]) notifies everyone
 //!   with open tasks due today, the assignee or else the owner, once each
 //!   ([`TasksDueToday`]: database, broadcast and mail; data `{title,

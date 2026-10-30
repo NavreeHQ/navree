@@ -7,7 +7,7 @@ import { Glyph, type GlyphName } from "./glyphs";
 /*
  * The diagram kit. A diagram is data (nodes, groups, edges and notes on an
  * 8 px grid) and this file draws it as SVG, so every diagram follows the
- * same rules (spec §7):
+ * same rules:
  *
  * - Lines start and end at the centre of a side (`"node.bottom"`), and are
  *   routed with right angles and rounded corners. An arrowhead shows the

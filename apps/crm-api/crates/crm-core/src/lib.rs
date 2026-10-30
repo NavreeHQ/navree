@@ -1,8 +1,8 @@
 //! # crm-core
 //!
 //! What every Navree CRM crate shares, so the feature crates (companies and
-//! contacts, deals, activities and the dashboard) build in parallel without
-//! depending on each other:
+//! contacts, deals, activities and the dashboard) need not depend on each
+//! other:
 //!
 //! - [`models`]: the ORM models of every CRM table ([`Company`],
 //!   [`Contact`], [`Deal`], [`Activity`]) and of the users and roles the
@@ -16,15 +16,14 @@
 //!   timeline as a time series (a TimescaleDB hypertable);
 //! - [`enums`]: [`CompanySize`], [`ContactStatus`], [`Stage`] (with
 //!   `probability()` and `label()`), [`ActivityKind`], [`SubjectType`];
-//! - [`abilities`]: who may do what (spec §6 and §9), [`roles`],
+//! - [`abilities`]: who may do what, [`roles`],
 //!   [`permissions`] and the custom [`actions`] [`Move`], [`Export`] and
 //!   [`Complete`];
 //! - [`embeds`]: [`OwnerRef`], [`CompanyRef`], [`ContactRef`], built from
 //!   eager loaded relations;
-//! - [`ownership`]: [`owner_for`], who may set a record's `owner_id`
-//!   (spec §9.3);
+//! - [`ownership`]: [`owner_for`], who may set a record's `owner_id`;
 //! - [`notify`]: [`NotifiableUser`] and the notification
-//!   [`NotificationData`] shape (spec §9.7);
+//!   [`NotificationData`] shape;
 //! - [`seed`]: the roles seeder and the demo accounts;
 //! - [`CrmCoreModule`] and [`platform`], the framework modules configured
 //!   for the CRM.

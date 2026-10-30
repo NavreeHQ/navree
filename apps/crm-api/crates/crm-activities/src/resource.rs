@@ -1,4 +1,4 @@
-//! The API's activity shape (spec §7 `Activity`), built from a record with
+//! The API's activity shape, built from a record with
 //! its relations: the owner and assignee embeds and the label of the
 //! record it is attached to, each loaded with one query per relation (and
 //! per kind of record) for a whole page.

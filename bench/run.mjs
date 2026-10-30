@@ -3,7 +3,7 @@
 //
 //   node bench/run.mjs                       every framework in frameworks.json
 //   node bench/run.mjs --only navree,axum      just these
-//   node bench/run.mjs --smoke --only navree   build + conformance + 5 s per test (for implementers)
+//   node bench/run.mjs --smoke --only navree   build + conformance + 5 s per test (a quick check)
 //   node bench/run.mjs --skip-build          reuse built images
 //   node bench/run.mjs --skip-done           skip frameworks that already have results
 //   node bench/run.mjs --report              only rewrite results/summary.md

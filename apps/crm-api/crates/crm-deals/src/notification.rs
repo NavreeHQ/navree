@@ -1,5 +1,5 @@
 //! Telling owners about their deals: [`DealNotification`] (database,
-//! broadcast and mail; data `{title, message, url, deal_id}`, spec §9.7)
+//! broadcast and mail; data `{title, message, url, deal_id}`)
 //! and the queued listener [`NotifyDealOwner`].
 
 use std::marker::PhantomData;

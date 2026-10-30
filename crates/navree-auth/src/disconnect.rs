@@ -1,7 +1,7 @@
-//! Ending real-time subscriptions when a user signs out (PRD "Where rules
-//! are enforced" #5): their sockets close through
-//! `dyn Broadcaster::end_user_subscriptions` (navree-realtime: code 4200), so
-//! every private channel must be authorized again with valid credentials.
+//! Ending real-time subscriptions when a user signs out: their sockets close
+//! through `dyn Broadcaster::end_user_subscriptions` (navree-realtime: code
+//! 4200), so every private channel must be authorized again with valid
+//! credentials.
 
 use navree_contracts::Broadcaster;
 use navree_db::Uow;

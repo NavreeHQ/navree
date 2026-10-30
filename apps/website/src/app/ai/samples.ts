@@ -283,5 +283,5 @@ impl CrmMcp {
   },
 ];
 
-/** The providers `navree-ai` speaks to (spec §5). */
+/** The providers `navree-ai` speaks to. */
 export const providers = ["Anthropic", "OpenAI", "Google Gemini", "Mistral", "Ollama", "AWS Bedrock"];

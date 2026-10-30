@@ -11,8 +11,8 @@ use navree::{BoxFuture, prelude::*};
 use crate::abilities;
 use crate::subjects::DEAL;
 
-/// The realtime application key: clients connect to `ws://host/app/navree-crm-key`
-/// (spec §7). A default; `realtime.key` overrides it.
+/// The realtime application key: clients connect to `ws://host/app/navree-crm-key`.
+/// A default; `realtime.key` overrides it.
 pub const REALTIME_KEY: &str = "navree-crm-key";
 
 /// The private channel deal changes are broadcast on (`private-crm.deals`,
@@ -24,7 +24,7 @@ pub const DEAL_UPDATED: &str = "deal.updated";
 
 /// The proxies whose `X-Forwarded-For` names the client, unless
 /// `http.trusted_proxies` says otherwise: crm-web's backend-for-frontend
-/// calls the API from loopback in the documented setup (spec §7), for
+/// calls the API from loopback in the documented setup, for
 /// every browser, and names the browser in that header. Without this, all
 /// web users share one per-IP rate limit, and one browser's wrong passwords
 /// throttle everyone's logins to that account. Clients that reach the API

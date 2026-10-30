@@ -3,7 +3,7 @@ import type { AppSubject, CaslRule, SubjectName } from "@/lib/api/types";
 
 /**
  * Actions the API grants: CRUD + `manage` (any), plus `move` on Deal, `export`
- * on Contact and `complete` on Activity (spec §9.1).
+ * on Contact and `complete` on Activity.
  */
 export type AppAction = "read" | "create" | "update" | "delete" | "manage" | "move" | "export" | "complete";
 

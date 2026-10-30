@@ -1,4 +1,4 @@
-//! The `crm-demo` seeder (spec §6): the four demo accounts (password
+//! The `crm-demo` seeder: the four demo accounts (password
 //! `password123`), 20 companies, 50 contacts, 30 deals across every stage
 //! and 60 activities, with tasks overdue, due today and upcoming. The data
 //! is fixed (no randomness) and dated relative to the app's clock; the

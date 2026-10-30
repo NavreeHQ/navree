@@ -12,7 +12,7 @@ build/
 coverage/
 .pnpm-store/
 
-# Agent worktrees are copies of this repository
+# Local tool folders hold copies of this repository
 .claude/
 
 # (The rules' own test fixtures in .semgrep/ contain the patterns the rules

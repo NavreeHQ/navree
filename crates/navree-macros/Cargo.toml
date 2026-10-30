@@ -23,8 +23,8 @@ syn = { workspace = true }
 
 # Macro tests expand against the runtime crates (allowed as dev-dependencies
 # of navree-macros only; see crates/navree/tests/dependency_graph.rs). The DI
-# macro tests (Task 12) need the kernel, plus navree-http for
-# `#[module(controllers = [..])]`; the controller macro tests (Task 13) build
+# macro tests need the kernel, plus navree-http for
+# `#[module(controllers = [..])]`; the controller macro tests build
 # real routers, so they add axum, navree-access (action and subject markers for
 # `#[can]`), navree-contracts (a fake authenticator) and friends.
 [dev-dependencies]

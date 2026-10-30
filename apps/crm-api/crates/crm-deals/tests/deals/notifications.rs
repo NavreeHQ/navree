@@ -1,5 +1,5 @@
 //! `DealAssigned` / `DealWon`: the owner gets a queued database and mail
-//! notification (spec §6 background work, §9.7 data shape).
+//! notification.
 
 use crm_testkit::{CrmClient, Role, TestCrm};
 use navree::mail::{Mailer, Message};

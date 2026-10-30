@@ -8,7 +8,7 @@ import { createAppAbility } from "./ability";
 const REP1 = "0190a1b2-0000-7000-8000-000000000001";
 const REP2 = "0190a1b2-0000-7000-8000-000000000002";
 
-/** Rep rules exactly as the API serves them in CASL JSON (spec §6). */
+/** Rep rules exactly as the API serves them in CASL JSON. */
 const repRules: CaslRule[] = [
   { action: "read", subject: ["Company", "Contact", "Deal", "Activity", "User"] },
   { action: "create", subject: ["Company", "Contact", "Deal", "Activity"] },
@@ -90,7 +90,7 @@ describe("CASL ability", () => {
     expect(ability.can("delete", deal({ stage: "lost" }))).toBe(false);
   });
 
-  it("lets a rep complete tasks assigned to them or owned by them, not other people's (spec §9.1)", () => {
+  it("lets a rep complete tasks assigned to them or owned by them, not other people's", () => {
     const ability = createAppAbility(repRules);
     const task = (owner_id: string, assignee_id: string | null) =>
       ({ __type: "Activity", id: "t1", kind: "task", owner_id, assignee_id }) as never;

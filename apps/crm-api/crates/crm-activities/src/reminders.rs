@@ -1,4 +1,4 @@
-//! The daily task reminders (spec §6): the `crm:task-reminders` command,
+//! The daily task reminders: the `crm:task-reminders` command,
 //! scheduled at 08:00 UTC, notifies everyone with open tasks due today
 //! (UTC) — the assignee, or the owner of an unassigned task — with one
 //! [`TasksDueToday`] notification each: stored for `/api/notifications`,

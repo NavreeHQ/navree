@@ -1,6 +1,6 @@
 //! # crm-deals
 //!
-//! [`DealsModule`] (plan Task 34; spec §7): the sales pipeline.
+//! [`DealsModule`]: the sales pipeline.
 //!
 //! | Route | Access | Result |
 //! |---|---|---|
@@ -13,19 +13,19 @@
 //! | `POST /api/v1/deals/{id}/move` [`MoveDeal`] `{stage, position?, lost_reason?}` | `move` that deal | [`DealResource`] |
 //!
 //! Owners: a deal belongs to its creator unless someone who can `manage`
-//! deals names another owner (spec §9.3). Stages: `won` and `lost` set
+//! deals names another owner. Stages: `won` and `lost` set
 //! `closed_at`, `lost` needs a `lost_reason` (a 400 on `lost_reason`), an
 //! open stage reopens the deal (`closed_at` and `lost_reason` cleared).
 //! Every stage's deals hold the positions `0..n`: `position` in a move is
 //! the 0-based index within the target stage and the deals from there on
-//! shift down (spec §9.4); other writes put the deal at the end of its
+//! shift down; other writes put the deal at the end of its
 //! stage.
 //!
-//! Background work (spec §6): a deal given to someone other than the user
+//! Background work: a deal given to someone other than the user
 //! making the change emits [`DealAssigned`], a deal entering `won` emits
 //! [`DealWon`]; the queued listener [`NotifyDealOwner`] sends the owner a
 //! [`DealNotification`] (database, `private-users.{id}` broadcast and
-//! mail) whose data is `{title, message, url, deal_id}` (spec §9.7).
+//! mail) whose data is `{title, message, url, deal_id}`.
 //! After every change commits, the deal is broadcast as `deal.updated`
 //! `{deal}` on `private-crm.deals` through `dyn Broadcaster`.
 //!

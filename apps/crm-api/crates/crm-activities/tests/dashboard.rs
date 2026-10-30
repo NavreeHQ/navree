@@ -1,4 +1,4 @@
-//! `GET /api/v1/dashboard` (spec §7 and §9.6): the pipeline, deals won this
+//! `GET /api/v1/dashboard`: the pipeline, deals won this
 //! month and open deal totals are team-wide (amounts summed across
 //! currencies); task counts are the signed-in user's (assigned to them, or
 //! owned by them when unassigned); the ten newest activities.

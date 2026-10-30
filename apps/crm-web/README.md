@@ -34,7 +34,7 @@ pnpm dev                                       # http://localhost:3000, sign in 
 
 ### How it talks to the API
 
-The Next.js server is a backend-for-frontend (spec §7, §10). The browser only calls same-origin `/api/*` and
+The Next.js server is a backend-for-frontend. The browser only calls same-origin `/api/*` and
 `/broadcasting/auth`; route handlers in `src/app/api` and `src/app/broadcasting` forward them to `NAVREE_API_URL` with
 `Authorization: Bearer <access token>`. Tokens never reach the browser:
 

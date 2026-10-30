@@ -86,7 +86,7 @@ export default defineConfig({
   use: {
     baseURL,
     trace: "retain-on-failure",
-    // crm-api's day boundaries ("due today", "overdue") are UTC (spec §9.5); run the browser in UTC too.
+    // crm-api's day boundaries ("due today", "overdue") are UTC; run the browser in UTC too.
     timezoneId: "UTC",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],

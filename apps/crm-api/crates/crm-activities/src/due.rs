@@ -1,4 +1,4 @@
-//! Due dates relative to "today" in UTC (spec §9.5): the `due` filter of
+//! Due dates relative to "today" in UTC: the `due` filter of
 //! `GET /api/v1/activities`, the dashboard's task counts and the daily
 //! reminders all use the same day boundaries.
 
@@ -28,7 +28,7 @@ impl Today {
     }
 }
 
-/// `?due=` on `GET /api/v1/activities` (spec §9.5).
+/// `?due=` on `GET /api/v1/activities`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 #[schema(as = ActivityDueFilter)]

@@ -1,4 +1,4 @@
-//! The API's contact shapes (spec §7 `Contact`).
+//! The API's contact shapes.
 
 use chrono::{DateTime, Utc};
 use crm_core::models::Contact;

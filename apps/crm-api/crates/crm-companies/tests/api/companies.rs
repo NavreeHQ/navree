@@ -1,4 +1,4 @@
-//! `/api/v1/companies` (spec §7): CRUD, ownership (§9.3), validation,
+//! `/api/v1/companies`: CRUD, ownership, validation,
 //! search, filters, sort and soft deletes.
 
 use crm_core::Stage;
@@ -228,7 +228,7 @@ async fn only_managers_assign_companies_to_someone_else() {
     let manager = crm.login_as(Role::Manager).await;
     let rep2_id = crm.user_id(Role::Rep2);
 
-    // Spec §9.3: reps sending another owner_id get a 403, and nothing is
+    // Reps sending another owner_id get a 403, and nothing is
     // created.
     rep1.post("/api/v1/companies")
         .json(&json!({ "name": "Hooli", "owner_id": rep2_id }))

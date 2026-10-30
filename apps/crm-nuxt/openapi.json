@@ -713,7 +713,7 @@
             "type": "string"
           },
           "owner_id": {
-            "description": "The owner (default: the caller). Only users who can manage companies\nmay name someone else (spec §9.3; 403 otherwise).",
+            "description": "The owner (default: the caller). Only users who can manage companies\nmay name someone else (403 otherwise).",
             "format": "uuid",
             "type": [
               "string",
@@ -877,7 +877,7 @@
             "type": "string"
           },
           "owner_id": {
-            "description": "The new owner: managers and admins only (spec §9.3; 403 otherwise).",
+            "description": "The new owner: managers and admins only (403 otherwise).",
             "format": "uuid",
             "type": "string"
           },
@@ -1094,7 +1094,7 @@
             "type": "string"
           },
           "owner_id": {
-            "description": "The owner (default: the caller). Only users who can manage contacts\nmay name someone else (spec §9.3; 403 otherwise).",
+            "description": "The owner (default: the caller). Only users who can manage contacts\nmay name someone else (403 otherwise).",
             "format": "uuid",
             "type": [
               "string",
@@ -1238,7 +1238,7 @@
             "type": "string"
           },
           "owner_id": {
-            "description": "The new owner: managers and admins only (spec §9.3; 403 otherwise).",
+            "description": "The new owner: managers and admins only (403 otherwise).",
             "format": "uuid",
             "type": "string"
           },
@@ -1431,7 +1431,7 @@
         "type": "object"
       },
       "Deal": {
-        "description": "A deal as the API returns it (spec §7 `Deal`): the row plus\n`probability` (from the stage) and the `company`, `contact` and `owner`\nembeds.",
+        "description": "A deal as the API returns it: the row plus\n`probability` (from the stage) and the `company`, `contact` and `owner`\nembeds.",
         "properties": {
           "__type": {
             "description": "Always `\"Deal\"` (the CASL subject type).",
@@ -2352,7 +2352,7 @@
         "type": "object"
       },
       "User": {
-        "description": "A user as `/api/v1/users` returns it (spec §7 `User`):\n`{__type: \"User\", id, name, email, email_verified_at, roles, created_at}`.",
+        "description": "A user as `/api/v1/users` returns it:\n`{__type: \"User\", id, name, email, email_verified_at, roles, created_at}`.",
         "properties": {
           "__type": {
             "description": "Always `\"User\"` (the CASL subject type).",

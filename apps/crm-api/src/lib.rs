@@ -1,8 +1,7 @@
 //! # crm-api
 //!
 //! The Navree CRM API: companies, contacts, deals, activities and a
-//! dashboard for a small sales team, built on the Navree framework (spec §6
-//! and §7).
+//! dashboard for a small sales team, built on the Navree framework.
 //!
 //! [`app`] assembles it: the platform modules
 //! ([`crm_core::platform`]), `CrmCoreModule` (tables, abilities, roles),

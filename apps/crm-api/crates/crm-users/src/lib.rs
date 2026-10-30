@@ -1,6 +1,6 @@
 //! # crm-users
 //!
-//! [`UsersModule`]: the CRM's user screens (spec §7).
+//! [`UsersModule`]: the CRM's user screens.
 //!
 //! | Route | Access | Result |
 //! |---|---|---|

@@ -22,7 +22,7 @@ import {
 
 type Pillar = { n: string; title: string; text: string; href: string };
 
-/** The ten pillars, verbatim from the positioning (spec §3). */
+/** The ten pillars, verbatim from the positioning. */
 const P: Record<string, Pillar> = {
   modular: {
     n: "01",

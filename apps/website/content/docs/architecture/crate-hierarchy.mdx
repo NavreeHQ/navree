@@ -223,7 +223,7 @@ It reads the workspace with `cargo metadata` and checks that:
 A forbidden edge fails with a message that says what the crate may use instead:
 
 ```text wrap
-crate hierarchy violations (spec §3):
+crate hierarchy violations:
   navree-http (L2) -> navree-crypto (L2) (Normal) is not an allowed edge; navree-http may depend on: [navree-kernel, navree-contracts, navree-config]
 ```
 

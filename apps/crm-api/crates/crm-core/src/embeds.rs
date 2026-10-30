@@ -1,4 +1,4 @@
-//! The small records the API embeds in its resources (spec §7):
+//! The small records the API embeds in its resources:
 //! `owner: {id, name}`, `company: {id, name}`, `contact: {id, full_name}`.
 //!
 //! They come from relations eager loaded with the records, one query per

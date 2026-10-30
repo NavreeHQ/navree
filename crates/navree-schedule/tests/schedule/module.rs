@@ -13,7 +13,7 @@ use crate::databases::Scratch;
 use crate::on_every_server;
 use crate::support::{Counter, Tasks, TestDb, at, clock, scheduler};
 
-/// A feature module that imports `ScheduleModule` by type, as the PRD shows.
+/// A feature module that imports `ScheduleModule` by type, as an app does.
 struct BillingModule(Counter);
 
 impl Module for BillingModule {

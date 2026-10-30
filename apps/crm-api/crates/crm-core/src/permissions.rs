@@ -15,7 +15,7 @@ pub const ACTIVITIES_MANAGE: &str = "activities.manage";
 /// Read users.
 pub const USERS_READ: &str = "users.read";
 
-/// What the `manager` role grants (spec §6, plan Task 32).
+/// What the `manager` role grants.
 pub const MANAGER: [&str; 6] = [
     COMPANIES_MANAGE,
     CONTACTS_MANAGE,

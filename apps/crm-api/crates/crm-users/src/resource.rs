@@ -16,7 +16,7 @@ use serde_json::{Map, Value};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-/// A user as `/api/v1/users` returns it (spec §7 `User`):
+/// A user as `/api/v1/users` returns it:
 /// `{__type: "User", id, name, email, email_verified_at, roles, created_at}`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
 #[schema(as = User)]

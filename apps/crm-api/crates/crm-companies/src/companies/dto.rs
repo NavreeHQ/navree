@@ -53,7 +53,7 @@ pub struct CreateCompany {
     #[validate(length(max = MAX_TEXT))]
     pub country: Option<String>,
     /// The owner (default: the caller). Only users who can manage companies
-    /// may name someone else (spec §9.3; 403 otherwise).
+    /// may name someone else (403 otherwise).
     #[serde(default)]
     #[validate(skip)]
     pub owner_id: Option<Uuid>,
@@ -128,7 +128,7 @@ pub struct UpdateCompany {
     #[validate(length(max = MAX_TEXT))]
     #[schema(value_type = Option<String>)]
     pub country: Option<Option<String>>,
-    /// The new owner: managers and admins only (spec §9.3; 403 otherwise).
+    /// The new owner: managers and admins only (403 otherwise).
     #[serde(default, deserialize_with = "present")]
     #[validate(skip)]
     #[schema(nullable = false)]

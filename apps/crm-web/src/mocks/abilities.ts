@@ -1,15 +1,15 @@
 /**
  * CASL rules per role, as crm-api's `abilities::define` serves them from
- * `GET /api/me/abilities` (spec §6, plan Task 32):
+ * `GET /api/me/abilities`:
  *
  * - admin: super-admin, `manage all`;
  * - manager: permissions companies.manage, contacts.manage, contacts.export,
  *   deals.manage, activities.manage, users.read (compiled to rules), plus the
  *   base rules every signed-in user gets;
  * - rep: read everything; create records; update/delete Company, Contact and
- *   Activity they own; complete an Activity assigned to them or owned by them
- *   (spec §9.1); update + move + delete Deal they own; and, last (last match
- *   wins), cannot delete a Deal that is won or lost (everyone but admin, §9.2).
+ *   Activity they own; complete an Activity assigned to them or owned by them;
+ *   update + move + delete Deal they own; and, last (last match
+ *   wins), cannot delete a Deal that is won or lost (everyone but admin).
  */
 import type { CaslRule } from "@/lib/api/types";
 import type { UserRow } from "./seed";

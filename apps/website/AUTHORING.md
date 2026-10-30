@@ -41,7 +41,7 @@ built all come from it.
   manifest. To move or rename a page, change both, and search the docs for
   links to the old URL.
 
-Every page from the design (§3) already exists as a stub. Each stub has its
+Every page of the docs already exists as a stub. Each stub has its
 front-matter, a summary of what the page will cover and a callout titled
 "This page is being written". **Write into the existing file and delete the
 callout** when the page is done. Keep the file names: other pages link to

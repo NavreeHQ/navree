@@ -192,7 +192,7 @@ category line, `site.tagline` the short tagline, `site.getStarted` the
 - Hover: buttons `active:scale-[0.98]`; trailing arrows nudge
   `group-hover:translate-x-0.5`.
 
-## 7. Diagrams (spec section 7)
+## 7. Diagrams
 
 - Hand-built SVG (or HTML+SVG) React components in
   `src/components/diagrams/`, one per diagram, usable from pages and MDX

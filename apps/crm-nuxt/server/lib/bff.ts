@@ -1,5 +1,5 @@
 /**
- * Backend-for-frontend for the Navree API (spec §7, §10).
+ * Backend-for-frontend for the Navree API.
  *
  * The browser only ever talks to this Nuxt server (Nitro), same origin, with no
  * tokens. The BFF keeps the JWT access token and the rotating refresh token in

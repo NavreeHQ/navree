@@ -1,5 +1,4 @@
-//! What a stage change does to a deal's closing columns (spec §7 move
-//! rules): won and lost set `closed_at`, lost needs a `lost_reason`, and
+//! What a stage change does to a deal's closing columns: won and lost set `closed_at`, lost needs a `lost_reason`, and
 //! moving back to an open stage reopens the deal.
 
 use chrono::{DateTime, Utc};

@@ -1,6 +1,6 @@
-//! PRD "Logging and audit": security events reach the audit table, not
+//! Security events reach the audit table, not
 //! only stdout: throttled logins, rate limiting, and access denials raised
-//! outside the route authorizer (the owner rule of spec §9.3, private
+//! outside the route authorizer (the owner rule, private
 //! channels a user may not join).
 
 use crm_core::seed::DEMO_PASSWORD;
@@ -67,7 +67,7 @@ async fn denials_outside_the_route_authorizer_are_audited() {
         .json_value()["id"]
         .clone();
 
-    // Spec §9.3: a rep may not hand a new record to someone else.
+    // A rep may not hand a new record to someone else.
     rep.post("/api/v1/deals")
         .json(&json!({
             "title": "Renewal",

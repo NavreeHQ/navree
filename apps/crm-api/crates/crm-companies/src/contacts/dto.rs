@@ -49,7 +49,7 @@ pub struct CreateContact {
     #[validate(skip)]
     pub company_id: Option<Uuid>,
     /// The owner (default: the caller). Only users who can manage contacts
-    /// may name someone else (spec §9.3; 403 otherwise).
+    /// may name someone else (403 otherwise).
     #[serde(default)]
     #[validate(skip)]
     pub owner_id: Option<Uuid>,
@@ -130,7 +130,7 @@ pub struct UpdateContact {
     #[validate(skip)]
     #[schema(value_type = Option<Uuid>)]
     pub company_id: Option<Option<Uuid>>,
-    /// The new owner: managers and admins only (spec §9.3; 403 otherwise).
+    /// The new owner: managers and admins only (403 otherwise).
     #[serde(default, deserialize_with = "present")]
     #[validate(skip)]
     #[schema(nullable = false)]

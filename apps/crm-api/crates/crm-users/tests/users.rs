@@ -1,5 +1,5 @@
 //! `UsersModule`: `/api/v1/me`, `/api/v1/users` and roles on the auth user
-//! resource (spec §7).
+//! resource.
 
 use crm_testkit::{Role, TestCrm};
 use crm_users::UsersModule;

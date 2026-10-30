@@ -323,7 +323,7 @@ impl navree_contracts::Broadcaster for RecordingBroadcaster {
     }
 }
 
-/// PRD "Where rules are enforced" #5: a user whose access changes, or the
+/// A user whose access changes, or the
 /// members of a role that loses permissions, get their real-time
 /// subscriptions ended once the change commits (never for a rolled-back
 /// change, and not for changes that only widen a role).

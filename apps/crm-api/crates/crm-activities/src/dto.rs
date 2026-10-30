@@ -173,7 +173,7 @@ pub struct ActivityFilter {
     /// Only activities assigned to this user.
     #[validate(skip)]
     pub assignee_id: Option<Uuid>,
-    /// Only activities due in this window of UTC days (spec §9.5); sorts
+    /// Only activities due in this window of UTC days; sorts
     /// by due date, earliest first.
     #[validate(skip)]
     pub due: Option<Due>,
