@@ -512,14 +512,14 @@ impl From<std::convert::Infallible> for CallError {
     }
 }
 
-/// `Valid<Request<T>>`: runs the garde rules of the message; a broken rule
+/// `Valid<Request<T>>`: runs the rules of the message; a broken rule
 /// is `INVALID_ARGUMENT` with a `google.rpc.BadRequest` detail.
 pub async fn validate<T>(
     request: Request<T>,
     parts: &Parts,
 ) -> Result<navree_validation::Valid<Request<T>>, CallError>
 where
-    T: garde::Validate<Context = ()>,
+    T: navree_validation::Validate,
 {
     let ctx = parts.extensions.get::<AppContext>();
     match navree_validation::validate_in(request.get_ref(), ctx).await {

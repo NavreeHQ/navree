@@ -23,7 +23,7 @@
 //!   default). Lists show only what the user may use; calls are checked,
 //!   `from = "id"` record checks included.
 //! - Tool arguments are a struct deriving `Deserialize`, `utoipa::ToSchema`
-//!   and `garde::Validate`: the input schema comes from `ToSchema`
+//!   and `navree_validation::Validate`: the input schema comes from `ToSchema`
 //!   ([`input_schema`]) and invalid arguments are refused with field
 //!   messages before the method runs.
 //! - A call runs in its own unit of work (committed when it returns `Ok`)
@@ -44,7 +44,7 @@
 //! ```no_run
 //! use std::sync::Arc;
 //!
-//! use garde::Validate;
+//! use navree_validation::Validate;
 //! use navree_http::AppError;
 //! use navree_kernel::{BoxFuture, Injectable, KernelError, Resolver};
 //! use navree_mcp::{Call, McpItem, McpOutput, McpServer, ToolDef};
@@ -53,7 +53,7 @@
 //! #[derive(Deserialize, Validate, utoipa::ToSchema)]
 //! struct Greet {
 //!     /// Who to greet.
-//!     #[garde(length(min = 1, max = 50))]
+//!     #[validate(length(min = 1, max = 50))]
 //!     name: String,
 //! }
 //!

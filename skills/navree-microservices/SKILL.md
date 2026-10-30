@@ -26,8 +26,8 @@ navree = { git = "https://github.com/NavreeHQ/navree", features = ["micro", "mic
 # micro-kafka (Kafka 4.0+), micro-rabbitmq, micro-redis (Redis 6.2+), micro-mqtt (MQTT 5)
 ```
 
-2. Put payloads in a crate both sides share (plain serde types; `garde`
-   rules for `Valid<Payload<T>>`; events implement `navree::events::Event`
+2. Put payloads in a crate both sides share (plain serde types;
+   `#[validate]` rules for `Valid<Payload<T>>`; events implement `navree::events::Event`
    with `NAME` = the pattern).
 
 3. Write the handlers:

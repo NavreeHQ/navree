@@ -170,7 +170,7 @@ permissions = ["projects.*"]`,
     ],
     how: [
       "`#[controller(\"/deals\", version = \"1\")]` and `#[api(...)]`",
-      "`Valid<Json<T>>` with garde rules: field errors before the handler runs",
+      "`Valid<Json<T>>` with `#[validate]` rules: field errors before the handler runs",
       "`ApiModule` serves `/api/openapi.json` and `/api/docs`",
       "`openapi:export` for typed clients in any language",
     ],

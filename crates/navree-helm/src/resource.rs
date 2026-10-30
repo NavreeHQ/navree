@@ -199,7 +199,7 @@ impl FormData {
     }
 
     /// Deserializes the values into your DTO and validates it with its
-    /// garde rules, exactly as `Valid<Json<T>>` does in your API: a 400
+    /// validation rules, exactly as `Valid<Json<T>>` does in your API: a 400
     /// whose `errors` name the fields, shown under them in the panel.
     ///
     /// ```ignore
@@ -207,7 +207,7 @@ impl FormData {
     /// ```
     pub async fn parse<T>(&self) -> Result<T, AppError>
     where
-        T: DeserializeOwned + garde::Validate<Context = ()> + Send,
+        T: DeserializeOwned + navree_validation::Validate + Send,
     {
         let body = serde_json::to_vec(&self.values).map_err(AppError::internal)?;
         let mut request = http::Request::builder()

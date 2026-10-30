@@ -4,12 +4,12 @@
 
 use std::sync::Arc;
 
-use garde::Validate;
 use http::Method;
 use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_orm::validation::{exists, unique};
 use navree_orm::{Model, Record};
+use navree_validation::Validate;
 use navree_validation::{AsyncRule, AsyncRules, ValidAsync};
 use serde::Deserialize;
 use serde_json::json;
@@ -163,9 +163,9 @@ async fn unique_holds_within_the_current_workspace() {
 /// The body of `POST /deals` and `PATCH /deals/{deal}`.
 #[derive(Debug, Deserialize, Validate)]
 struct DealInput {
-    #[garde(length(min = 1))]
+    #[validate(length(min = 1))]
     slug: String,
-    #[garde(skip)]
+    #[validate(skip)]
     company_id: Option<i64>,
 }
 

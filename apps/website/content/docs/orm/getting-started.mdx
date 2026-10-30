@@ -205,11 +205,11 @@ use serde::Deserialize;
 use super::models::deal::Deal;
 
 /// The body of a create or an update.
-#[derive(Debug, Deserialize, garde::Validate)]
+#[derive(Debug, Deserialize, navree::validation::Validate)]
 pub struct DealInput {
-    #[garde(length(min = 1, max = 255))]
+    #[validate(length(min = 1, max = 255))]
     pub title: String,
-    #[garde(range(min = 0))]
+    #[validate(range(min = 0))]
     pub amount_cents: i64,
 }
 

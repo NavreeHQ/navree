@@ -205,7 +205,7 @@ use navree::helm::{FormData, RecordOf, SaveContext};
 fn update<'a>(&'a self, ctx: &'a SaveContext, deal: RecordOf<Self>, form: FormData)
     -> BoxFuture<'a, Result<RecordOf<Self>>> {
     Box::pin(async move {
-        let input: UpdateDeal = form.parse().await?;   // garde, errors under fields
+        let input: UpdateDeal = form.parse().await?;   // validated, errors under fields
         ctx.get::<DealService>().await?.update_model(ctx.uow(), ctx.user_id(), deal, input).await
     })
 }

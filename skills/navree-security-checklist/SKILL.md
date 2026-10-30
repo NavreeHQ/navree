@@ -49,7 +49,8 @@ Go through it in order; each item says how to check.
 ## 3. Input
 
 - [ ] Every body and query DTO goes through `Valid<..>` / `ValidAsync<..>`
-  with garde rules on every field; lengths use `length(chars, ..)`.
+  with `#[validate]` rules (or `skip`) on every field; `length(..)` counts
+  characters (`length(bytes, ..)` when the limit is about bytes).
 - [ ] Uniqueness also has a unique index (a race becomes a 409).
 - [ ] No SQL built from strings; raw `Statement`s bind values. Async rule
   table/column names are constants, never input.

@@ -14,7 +14,7 @@ description: "CSV and Excel exports from typed rows, streamed or queued to a dis
 1. The upload is stored, and its reading is queued as an operation the client follows.
 2. The text encoding is detected (UTF-8, UTF-16, Windows-1256, Shift_JIS and the others browsers know), and the CSV, TSV, XLSX, XLS or ODS file is read.
 3. The file's headers are matched to your columns: automatically, from a mapping saved for files with the same headers, or from one the user chooses.
-4. Every row is read into your type and validated with [garde](https://docs.rs/garde), in your app's validation wording. Rows that repeat an earlier row's key, and rows whose key your app already has, are found.
+4. Every row is read into your type and validated with its `#[derive(Validate)]` rules, in your app's validation wording. Rows that repeat an earlier row's key, and rows whose key your app already has, are found.
 5. The user previews the rows by status, then applies the import: valid rows are saved in queue batches, each in its own unit of work, and duplicates are skipped, updated or refused.
 6. An error file lists every row that was not saved, with the reason, ready to fix and upload again.
 
@@ -309,7 +309,7 @@ From code, `exports.download::<ContactsExport>(params, ExportRequest::new(SheetF
 
 ### Row types
 
-An import reads each row into a struct that serde deserializes and garde validates. `#[derive(Importable)]` declares its columns:
+An import reads each row into a struct that serde deserializes and its `#[validate]` rules check. `#[derive(Importable)]` declares its columns:
 
 ```rust title="src/modules/contacts/import.rs"
 use navree::sheets::Importable;
@@ -318,15 +318,15 @@ use navree::sheets::Importable;
 #[derive(Deserialize, Validate, Importable)]
 struct ContactInput {
     #[import(header = "Email", aliases = ["E-mail", "Email address"])]
-    #[garde(email)]
+    #[validate(email)]
     email: String,
-    #[garde(length(min = 1, max = 100))]
+    #[validate(length(min = 1, max = 100))]
     name: String,
     #[import(aliases = ["Organization"])]
-    #[garde(length(max = 100))]
+    #[validate(length(max = 100))]
     company: Option<String>,
     #[serde(default)]
-    #[garde(skip)]
+    #[validate(skip)]
     vip: bool,
 }
 ```
@@ -348,7 +348,7 @@ Cells are read the way people type them:
 - **Enums** by variant name, in any case; **lists** split on `,`, `;`, `|` or line breaks.
 - **Empty cells** are left out: `None` for an `Option`, the default for a field with `#[serde(default)]`, and "should not be empty" for anything else.
 
-A cell that doesn't fit gets the message of your app's [validation](/docs/basics/validation/) rules ("age must be an integer number"), then garde runs the struct's rules.
+A cell that doesn't fit gets the message of your app's [validation](/docs/basics/validation/) rules ("age must be an integer number"), then the struct's rules run.
 
 ### The importer
 

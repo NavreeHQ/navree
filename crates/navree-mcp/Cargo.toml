@@ -23,7 +23,6 @@ bytes = { workspace = true }
 chrono = { workspace = true }
 dashmap = { workspace = true }
 futures = { workspace = true }
-garde = { workspace = true }
 http = { workspace = true }
 http-body-util = { workspace = true }
 metrics = { workspace = true }

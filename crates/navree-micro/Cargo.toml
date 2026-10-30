@@ -67,7 +67,6 @@ webpki-roots = { workspace = true }
 [dev-dependencies]
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
-garde = { workspace = true }
 navree-access = { workspace = true }
 navree-macros = { workspace = true }
 # The `deals` fixture is a model and an access subject.

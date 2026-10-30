@@ -163,11 +163,11 @@ use navree::prelude::*;
 use navree::workspace::CurrentWorkspace;
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize, garde::Validate)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct Upgrade {
-    #[garde(length(min = 1))]
+    #[validate(length(min = 1))]
     pub plan: String,
-    #[garde(skip)]
+    #[validate(skip)]
     pub yearly: bool,
 }
 

@@ -7,7 +7,6 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use garde::Validate;
 use navree_access::{
     AbilityCtx, AccessModule, AccessOptions, AccessService, Authorized, READ, Read, Rules, UPDATE,
     Update, field,
@@ -25,6 +24,7 @@ use navree_orm::Model as _;
 use navree_telemetry::TelemetryContext;
 use navree_testing::TestApp;
 use navree_validation::Valid;
+use navree_validation::Validate;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -123,9 +123,9 @@ pub struct GetDeal {
 /// `deals.rename`.
 #[derive(Clone, Debug, Serialize, Deserialize, Validate)]
 pub struct Rename {
-    #[garde(skip)]
+    #[validate(skip)]
     pub id: Uuid,
-    #[garde(length(min = 2, max = 50))]
+    #[validate(length(min = 2, max = 50))]
     pub title: String,
 }
 
@@ -143,7 +143,7 @@ impl navree_events::Event for DealRenamed {
 /// A note to write.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
 pub struct NewNote {
-    #[garde(length(min = 1))]
+    #[validate(length(min = 1))]
     pub body: String,
 }
 

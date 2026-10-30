@@ -121,9 +121,9 @@ struct MoveDeal {
     position: Option<u32>,
 }
 
-#[derive(Debug, serde::Deserialize, garde::Validate)]
+#[derive(Debug, serde::Deserialize, navree::validation::Validate)]
 struct UpdateDeal {
-    #[garde(length(min = 1, max = 200))]
+    #[validate(length(min = 1, max = 200))]
     title: Option<String>,
 }
 
@@ -346,7 +346,7 @@ impl Resource for DealResource {
     ) -> BoxFuture<'a, Result<RecordOf<Self>>> {
         Box::pin(async move {
             let deals = ctx.get::<DealService>().await?;
-            let input: UpdateDeal = form.parse().await?; // garde validation, errors under each field
+            let input: UpdateDeal = form.parse().await?; // validation, errors under each field
             deals
                 .update_model(ctx.uow(), ctx.user_id(), deal, input)
                 .await
@@ -552,7 +552,7 @@ async fn the_docs_resource_serves_its_screens() {
     assert_eq!(body["data"]["display"]["owner_id"], "Priya");
     assert_eq!(body["data"]["values"]["probability"], "10%");
 
-    // Saving through the service, with the DTO's garde rules.
+    // Saving through the service, with the DTO's validation rules.
     rep.patch(&format!("/admin/api/resources/deals/{}", own.id))
         .json(&json!({ "title": "Initech upgrade, phase 2" }))
         .send()

@@ -4,7 +4,6 @@
 #![allow(dead_code)]
 
 use chrono::NaiveDate;
-use garde::Validate;
 use navree_access::{AccessModule, AccessOptions};
 use navree_db::navree_schema::{Dialect, Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{DatabaseModule, Db, Executor, MigrationSet, ModuleBuilderDbExt, Statement, Uow};
@@ -13,6 +12,7 @@ use navree_i18n::{I18nModule, Locale, t};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_macros::{controller, injectable, module};
 use navree_testing::{TestApp, TestAppBuilder, TestClient, principal};
+use navree_validation::Validate;
 use navree_validation::{Country, Valid, ValidationModule, rules};
 use navree_workspace::{NewWorkspace, Workspace, WorkspaceModule, Workspaces};
 use serde::Deserialize;
@@ -25,19 +25,19 @@ pub const FIXTURES: &str = "tests/fixtures/locales";
 /// A contact, as in the docs' validation example.
 #[derive(Debug, Deserialize, Validate)]
 pub struct NewContact {
-    #[garde(length(chars, min = 1))]
+    #[validate(length(min = 1))]
     pub first_name: String,
-    #[garde(length(chars, min = 1))]
+    #[validate(length(min = 1))]
     pub last_name: String,
-    #[garde(email)]
+    #[validate(email)]
     #[serde(default)]
     pub email: Option<String>,
     /// An international type: its message key is `country`.
-    #[garde(skip)]
+    #[validate(skip)]
     #[serde(default)]
     pub country: Option<Country>,
     /// An international rule: its message key is `unicode_name`.
-    #[garde(inner(custom(rules::unicode_name)))]
+    #[validate(custom(rules::unicode_name))]
     #[serde(default)]
     pub company: Option<String>,
 }

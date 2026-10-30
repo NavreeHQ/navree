@@ -9,7 +9,7 @@ use std::str::FromStr;
 use serde::de::{self, Deserializer, Visitor};
 use serde::{Deserialize, Serialize, Serializer};
 
-use crate::rules::RuleInput;
+use crate::rules::{Length, Measure, Range, RuleInput, Unit};
 
 /// The digit zero of every run of ten decimal digits (Unicode general
 /// category `Nd`) outside ASCII, in code point order. Each run holds the
@@ -131,9 +131,9 @@ pub fn fold_digits(text: &str) -> Cow<'_, str> {
 /// parsed, so rules see `123456` whether the user typed `١٢٣٤٥٦`, `۱۲۳۴۵۶`
 /// or `१२३४५६`.
 ///
-/// - `Folded<String>` (the default) keeps the folded text. garde's string
-///   rules (`length`, `pattern`, `ascii`, `contains`, ...) and Navree's
-///   [`rules`](crate::rules) work on it directly.
+/// - `Folded<String>` (the default) keeps the folded text. The text rules
+///   (`length`, `pattern`, `ascii`, `contains`, ...) and the
+///   [`rules`](crate::rules) for `custom` work on it directly.
 /// - `Folded<T>` for any `T: FromStr` (`u32`, `i64`, `f64`, `Decimal`, ...)
 ///   parses the folded text, so `"٤٢"` is `42`; a JSON number is accepted
 ///   too. `range` works on folded numbers.
@@ -143,15 +143,15 @@ pub fn fold_digits(text: &str) -> Cow<'_, str> {
 /// like `T` does (`quantity must be an integer number`).
 ///
 /// ```
-/// use garde::Validate;
+/// use navree_validation::Validate;
 /// use navree_validation::Folded;
 /// use serde::Deserialize;
 ///
 /// #[derive(Deserialize, Validate)]
 /// struct Verify {
-///     #[garde(length(min = 6, max = 6), pattern(r"^[0-9]+$"))]
+///     #[validate(length(min = 6, max = 6), pattern(r"^[0-9]+$"))]
 ///     code: Folded<String>,
-///     #[garde(range(min = 1, max = 99))]
+///     #[validate(range(min = 1, max = 99))]
 ///     quantity: Option<Folded<u32>>,
 /// }
 ///
@@ -267,48 +267,17 @@ impl<T: RuleInput> RuleInput for Folded<T> {
     }
 }
 
-impl<T: garde::rules::AsStr> garde::rules::AsStr for Folded<T> {
-    fn as_str(&self) -> &str {
-        self.0.as_str()
+impl<T: Length> Length for Folded<T> {
+    fn measure(&self, unit: Unit) -> Option<Measure> {
+        self.0.measure(unit)
     }
 }
 
-impl<T: garde::rules::length::HasSimpleLength> garde::rules::length::HasSimpleLength for Folded<T> {
-    fn length(&self) -> usize {
-        self.0.length()
-    }
-}
+impl<T: Range> Range for Folded<T> {
+    type Bound = T::Bound;
 
-impl<T: garde::rules::length::HasBytes> garde::rules::length::HasBytes for Folded<T> {
-    fn num_bytes(&self) -> usize {
-        self.0.num_bytes()
-    }
-}
-
-impl<T: garde::rules::length::HasChars> garde::rules::length::HasChars for Folded<T> {
-    fn num_chars(&self) -> usize {
-        self.0.num_chars()
-    }
-}
-
-impl<T: garde::rules::length::HasGraphemes> garde::rules::length::HasGraphemes for Folded<T> {
-    fn num_graphemes(&self) -> usize {
-        self.0.num_graphemes()
-    }
-}
-
-impl<T: garde::rules::range::Bounds> garde::rules::range::Bounds for Folded<T> {
-    type Size = T::Size;
-
-    const MIN: Self::Size = T::MIN;
-    const MAX: Self::Size = T::MAX;
-
-    fn validate_bounds(
-        &self,
-        lower_bound: Self::Size,
-        upper_bound: Self::Size,
-    ) -> Result<(), garde::rules::range::OutOfBounds> {
-        self.0.validate_bounds(lower_bound, upper_bound)
+    fn value(&self) -> Option<&T::Bound> {
+        self.0.value()
     }
 }
 

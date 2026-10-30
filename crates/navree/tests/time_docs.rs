@@ -479,16 +479,16 @@ async fn schedules_run_on_local_clocks() {
 // --- Validation -----------------------------------------------------------------
 
 /// A profile update keeping the zone as a string.
-#[derive(Deserialize, garde::Validate)]
+#[derive(Deserialize, navree::validation::Validate)]
 pub struct UpdateProfile {
     /// The user's IANA time zone.
-    #[garde(custom(navree::time::rules::time_zone))]
+    #[validate(custom(navree::time::rules::time_zone))]
     pub timezone: Option<String>,
 }
 
 #[test]
 fn the_rule_checks_zone_names() {
-    use garde::Validate;
+    use navree::validation::Validate;
     let ok = UpdateProfile {
         timezone: Some("Asia/Calcutta".into()),
     };

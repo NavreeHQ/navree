@@ -13,7 +13,6 @@ use std::sync::Arc;
 
 use async_graphql::futures_util::{Stream, StreamExt};
 use async_graphql::{ComplexObject, Enum, InputObject, SimpleObject};
-use garde::Validate;
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, ActionMarker, Read, Rules, field};
 use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{DatabaseModule, Db, DbError, MigrationSet, ModuleBuilderDbExt, Uow};
@@ -28,6 +27,7 @@ use navree_orm::Model as _;
 use navree_orm::access::AccessibleQuery as _;
 use navree_testing::{TestApp, principal};
 use navree_validation::Valid;
+use navree_validation::Validate;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -277,11 +277,11 @@ impl From<DealUpdated> for DealUpdatedObject {
 
 #[derive(Debug, InputObject, Validate)]
 pub struct MoveDealInput {
-    #[garde(skip)]
+    #[validate(skip)]
     pub stage: Stage,
-    #[garde(range(min = 0))]
+    #[validate(range(min = 0))]
     pub position: Option<i64>,
-    #[garde(length(chars, max = 1000))]
+    #[validate(length(max = 1000))]
     pub lost_reason: Option<String>,
 }
 

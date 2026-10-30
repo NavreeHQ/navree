@@ -22,7 +22,7 @@
 //!   `AppContext`.
 //! - **Units of work.** Query fields share one that commits nothing; each
 //!   mutation field runs in its own, committed when it returns `Ok`.
-//! - **Validation.** A `Valid<T>` argument runs `T`'s garde rules before
+//! - **Validation.** A `Valid<T>` argument runs `T`'s validation rules before
 //!   the field, with the messages routes use.
 //! - **Errors** keep Navree's JSON error shape in `extensions` (`code`,
 //!   `statusCode`, `error`, `errors`), with each error's HTTP status.

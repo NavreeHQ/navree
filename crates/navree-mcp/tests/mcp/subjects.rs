@@ -5,7 +5,6 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use garde::Validate;
 use navree_access::{
     AbilityCtx, AccessModule, Authorized, READ, Read, Rules, Subject, SubjectRecords, field,
 };
@@ -16,6 +15,7 @@ use navree_kernel::{Module, ModuleBuilder};
 use navree_macros::{injectable, mcp_server};
 use navree_mcp::testing::McpTestClient;
 use navree_mcp::{McpContext, ModuleBuilderMcpExt};
+use navree_validation::Validate;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -89,7 +89,7 @@ impl SubjectRecords for Note {
 #[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
 struct NoteArgs {
     /// The note to read.
-    #[garde(skip)]
+    #[validate(skip)]
     note_id: Uuid,
 }
 

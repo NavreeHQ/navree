@@ -26,7 +26,6 @@ navree = { path = "../../../crates/navree", default-features = false, features =
 # Derive macros name their own crates, so a Navree app depends on them directly
 # (same versions and features as the Navree workspace).
 chrono = { version = "0.4.45", features = ["serde"] }
-garde = { version = "0.23.0", features = ["derive", "serde"] }
 rand = "0.10.3"
 serde = { version = "1.0.229", features = ["derive"] }
 uuid = { version = "1.29.0", features = ["serde", "v7"] }

@@ -43,6 +43,7 @@ navree-realtime = { path = "crates/navree-realtime", version = "0.1.0" }
 navree-storage = { path = "crates/navree-storage", version = "0.1.0" }
 navree-session = { path = "crates/navree-session", version = "0.1.0" }
 navree-validation = { path = "crates/navree-validation", version = "0.1.0" }
+navree-validation-macros = { path = "crates/navree-validation-macros", version = "0.1.0" }
 navree-queue = { path = "crates/navree-queue", version = "0.1.0" }
 navree-audit = { path = "crates/navree-audit", version = "0.1.0" }
 navree-access = { path = "crates/navree-access", version = "0.1.0" }
@@ -296,7 +297,6 @@ rqrr = { version = "0.11.0", default-features = false }
 # ---------------------------------------------------------------------------
 # Module capabilities
 # ---------------------------------------------------------------------------
-garde = { version = "0.23.0", features = ["derive", "email", "regex", "serde", "unicode", "url"] }
 # International input (navree-validation): E.164 phone numbers (feature
 # `phone`), HTML sanitizing (feature `html`), general categories for names in
 # any script, BCP 47 locales (icu_locale_core is already in the tree via url).

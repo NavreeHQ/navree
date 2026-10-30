@@ -110,7 +110,8 @@ storage-gcs = ["storage", "navree-storage/gcs"]
 storage-azure = ["storage", "navree-storage/azure"]
 ## Time zones: zones, the request's zone, local days, send windows,
 ## holidays and local-time SQL (the IANA database compiled in; in `full`).
-time = ["dep:navree-time", "http", "db"]
+## With `validation` on too, `Valid<Query<DayRange>>` checks report windows.
+time = ["dep:navree-time", "http", "db", "navree-validation?/time"]
 ## L4
 session = ["dep:navree-session", "http", "crypto", "db"]
 ## With `orm` on too, also `navree::orm::validation` (`unique` and `exists`
@@ -680,7 +681,6 @@ base64 = { workspace = true }
 chrono = { workspace = true }
 # The request-pipeline benchmarks (`benches/pipeline.rs`).
 criterion = { workspace = true }
-garde = { workspace = true }
 http-body-util = { workspace = true }
 metrics = { workspace = true }
 serde = { workspace = true }

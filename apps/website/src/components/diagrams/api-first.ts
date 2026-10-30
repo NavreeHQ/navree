@@ -7,13 +7,13 @@ import type { DiagramSpec } from "./figure";
  */
 export const apiFirst: DiagramSpec = {
   title: "API-first",
-  desc: "Validated DTOs (garde rules) feed versioned controllers under /api/v1. Navree generates an OpenAPI 3.1 document from both when the app boots and serves it at /api/openapi.json. openapi:export writes the document to a file, and typed clients are generated from it: the web app in TypeScript, mobile apps in Swift or Kotlin, partners and agents in any language. Validation failures (400) and refusals from controllers (401, 403, 404) share one JSON error shape: statusCode, message and error.",
+  desc: "Validated DTOs (#[derive(Validate)] rules) feed versioned controllers under /api/v1. Navree generates an OpenAPI 3.1 document from both when the app boots and serves it at /api/openapi.json. openapi:export writes the document to a file, and typed clients are generated from it: the web app in TypeScript, mobile apps in Swift or Kotlin, partners and agents in any language. Validation failures (400) and refusals from controllers (401, 403, 404) share one JSON error shape: statusCode, message and error.",
   legend: [{ kind: "flow", label: "generated from" }],
   wide: {
     width: 592,
     height: 288,
     nodes: [
-      { id: "dto", x: 0, y: 0, w: 160, title: "Validated DTOs", sub: "garde rules", icon: "braces" },
+      { id: "dto", x: 0, y: 0, w: 160, title: "Validated DTOs", sub: "field rules", icon: "braces" },
       { id: "ctrl", x: 216, y: 0, w: 160, title: "Controllers", sub: "versioned: /api/v1", icon: "route" },
       { id: "doc", x: 432, y: 0, w: 160, title: "OpenAPI 3.1", sub: "built at boot", icon: "document", tone: "accent" },
       {
@@ -44,7 +44,7 @@ export const apiFirst: DiagramSpec = {
     width: 272,
     height: 600,
     nodes: [
-      { id: "dto", x: 24, y: 0, w: 216, title: "Validated DTOs", sub: "garde rules", icon: "braces" },
+      { id: "dto", x: 24, y: 0, w: 216, title: "Validated DTOs", sub: "field rules", icon: "braces" },
       { id: "ctrl", x: 24, y: 96, w: 216, title: "Controllers", sub: "versioned: /api/v1", icon: "route" },
       { id: "doc", x: 24, y: 192, w: 216, title: "OpenAPI 3.1", sub: "built at boot", icon: "document", tone: "accent" },
       { id: "err", x: 24, y: 288, w: 216, title: "One error shape", sub: "statusCode, message, error", subMono: true },

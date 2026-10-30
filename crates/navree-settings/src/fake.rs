@@ -20,14 +20,14 @@ use crate::{
 ///
 /// ```
 /// # tokio::runtime::Runtime::new().unwrap().block_on(async {
-/// use garde::Validate;
+/// use navree_validation::Validate;
 /// use navree_settings::{Scope, SettingsFake, SettingsGroup, Source};
 /// use serde::{Deserialize, Serialize};
 /// use serde_json::json;
 /// use uuid::Uuid;
 ///
 /// #[derive(Serialize, Deserialize, Validate, Default)]
-/// #[garde(allow_unvalidated)]
+/// #[validate(skip_unmarked)]
 /// struct PortalSettings {
 ///     show_leaderboard: bool,
 /// }

@@ -27,7 +27,7 @@ async fn valid_input_deserializes() {
 }
 
 #[tokio::test]
-async fn garde_failures_are_400s_with_field_errors() {
+async fn rule_failures_are_400s_with_field_errors() {
     let error = validate_value::<CreateUser>(
         json!({ "name": "A", "email": "nope", "age": 30, "tags": [] }),
         None,

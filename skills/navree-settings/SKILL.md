@@ -1,6 +1,6 @@
 ---
 name: navree-settings
-description: "Typed settings with inheritance in navree-settings: the `settings` facade feature (in `full`), `SettingsModule` and the `settings` config section, settings types with `#[derive(Settings)]` (`key`, `scopes(global, organization, workspace, user)`, `permission`, `read_permission`) registered with `SettingsModule::for_feature::<T>()` or `m.settings::<T>()`, `Scope`, resolution field by field down global → organization → workspace → user with a `Source` per field, `Resolved<T>`, the `Setting<T>` extractor, `Settings::update` (garde-validated, errors by field), `inherit` and `reset` in a unit of work, `settings.updated` audit entries and `settings.changed` events, cache tags per key and level, `GET`/`PATCH`/`DELETE /api/settings/{key}?scope=` with `{data, sources, overridden}`, the `settings:*` commands, the Helm Settings screens, and `SettingsFake` / `settings.store = \"memory\"` in tests. Use when adding settings an app, organization, workspace or user can change, showing where a value comes from, building a settings screen, resetting a field to inherit, testing code that reads settings, or debugging a value that does not apply, a 400 on a settings write, or `SettingsError::Unregistered`."
+description: "Typed settings with inheritance in navree-settings: the `settings` facade feature (in `full`), `SettingsModule` and the `settings` config section, settings types with `#[derive(Settings)]` (`key`, `scopes(global, organization, workspace, user)`, `permission`, `read_permission`) registered with `SettingsModule::for_feature::<T>()` or `m.settings::<T>()`, `Scope`, resolution field by field down global → organization → workspace → user with a `Source` per field, `Resolved<T>`, the `Setting<T>` extractor, `Settings::update` (validated, errors by field), `inherit` and `reset` in a unit of work, `settings.updated` audit entries and `settings.changed` events, cache tags per key and level, `GET`/`PATCH`/`DELETE /api/settings/{key}?scope=` with `{data, sources, overridden}`, the `settings:*` commands, the Helm Settings screens, and `SettingsFake` / `settings.store = \"memory\"` in tests. Use when adding settings an app, organization, workspace or user can change, showing where a value comes from, building a settings screen, resetting a field to inherit, testing code that reads settings, or debugging a value that does not apply, a 400 on a settings write, or `SettingsError::Unregistered`."
 ---
 
 # Settings with inheritance
@@ -45,24 +45,24 @@ Navree::app()
    `navree migrate` after adding it.
 
 3. Define the type: a struct whose fields are the settings, with
-   `Serialize`, `Deserialize`, garde's `Validate` (every field needs a rule
-   or `#[garde(skip)]`) and a `Default` that passes its own rules. The doc
+   `Serialize`, `Deserialize`, `Validate` (every field needs a rule
+   or `#[validate(skip)]`) and a `Default` that passes its own rules. The doc
    comment is its description:
 
 ```rust
-use garde::Validate;
 use navree::settings::Settings;
+use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
 
 /// What the member portal shows.
 #[derive(Settings, Clone, Debug, Serialize, Deserialize, Validate)]
 #[settings(key = "portal", scopes(global, organization, workspace, user))]
 pub struct PortalSettings {
-    #[garde(skip)]
+    #[validate(skip)]
     pub show_leaderboard: bool,
-    #[garde(length(max = 200))]
+    #[validate(length(max = 200))]
     pub welcome_text: String,
-    #[garde(range(min = 1, max = 100))]
+    #[validate(range(min = 1, max = 100))]
     pub page_size: u32,
 }
 
@@ -130,7 +130,7 @@ settings.reset::<PortalSettings>(&uow, Scope::workspace(acme.id)).await?;
 - The patch is anything that serializes to a JSON object. Writes go to the
   scope's target (its most specific level).
 - The values after the patch, inherited ones included, are validated with the
-  type's garde rules: `SettingsError::Invalid` names the fields (a 400 with
+  type's rules: `SettingsError::Invalid` names the fields (a 400 with
   `errors` when returned from a handler). Unknown fields are
   `UnknownFields` (400), a level the type does not allow `ScopeNotAllowed`
   (400).
@@ -211,7 +211,7 @@ the code reads by key (routes, commands).
 ## Checks before you finish
 
 - [ ] Every settings type is registered once (`for_feature` or `m.settings`).
-- [ ] Its `Default` passes its own garde rules (otherwise every write fails).
+- [ ] Its `Default` passes its own validation rules (otherwise every write fails).
 - [ ] `scopes(..)` lists only the levels that make sense for it.
 - [ ] Writes take the request's or job's `Uow`.
 - [ ] The `settings` migrations ran.

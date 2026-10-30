@@ -113,7 +113,7 @@ type Parser<T> = fn(&Value) -> Result<T, String>;
 /// The JSON Schema comes from `T`'s `ToSchema`; the provider's own
 /// structured-output mode constrains the answer where it has one. An
 /// answer that doesn't deserialize (or, with [`validated`](Self::validated),
-/// breaks `T`'s garde rules) goes back to the model with the errors, up to
+/// breaks `T`'s validation rules) goes back to the model with the errors, up to
 /// `ai.structured_retries` times, then fails with
 /// [`AiError::InvalidOutput`].
 #[must_use = "a request does nothing until it is awaited"]
@@ -139,11 +139,11 @@ where
 
     request_options!();
 
-    /// Also checks the value against `T`'s garde rules, the same rules as
+    /// Also checks the value against `T`'s validation rules, the same rules as
     /// a validated request body.
     pub fn validated(mut self) -> Self
     where
-        T: garde::Validate<Context = ()>,
+        T: navree_validation::Validate,
     {
         self.parse = validated::<T>;
         self
@@ -156,7 +156,7 @@ fn plain<T: DeserializeOwned>(value: &Value) -> Result<T, String> {
 }
 
 /// Deserializes and validates `value`, with the API's messages.
-fn validated<T: DeserializeOwned + garde::Validate<Context = ()>>(
+fn validated<T: DeserializeOwned + navree_validation::Validate>(
     value: &Value,
 ) -> Result<T, String> {
     navree_validation::validate_json::<T>(value, &navree_validation::Messages::default()).map_err(

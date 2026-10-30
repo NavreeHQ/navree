@@ -9,7 +9,6 @@ use std::sync::{Arc, Mutex};
 
 use async_graphql::futures_util::{Stream, StreamExt};
 use async_graphql::{ComplexObject, InputObject, SimpleObject};
-use garde::Validate;
 use navree_access::{
     AbilityCtx, AccessModule, AccessOptions, AccessService, READ, Read, Rules, UPDATE, Update,
     field,
@@ -28,6 +27,7 @@ use navree_orm::Model as _;
 use navree_orm::access::AccessibleQuery as _;
 use navree_testing::{TestApp, TestAppBuilder};
 use navree_validation::Valid;
+use navree_validation::Validate;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -178,11 +178,11 @@ impl Loader<Uuid> for AuthorLoader {
 /// The input of `renamePost`.
 #[derive(Debug, InputObject, Validate)]
 pub struct RenameInput {
-    #[garde(length(chars, min = 2, max = 50))]
+    #[validate(length(min = 2, max = 50))]
     pub title: String,
-    #[garde(range(min = 0))]
+    #[validate(range(min = 0))]
     pub position: Option<i64>,
-    #[garde(length(min = 1))]
+    #[validate(length(min = 1))]
     pub tag_names: Option<Vec<String>>,
 }
 

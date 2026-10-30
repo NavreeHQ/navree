@@ -325,7 +325,6 @@ let best = ai.rerank(&question, candidates).model("fast").top(6).await?;
 Put together: retrieve, rerank, then ask for a structured answer that cites its sources by number, so the response can link to them.
 
 ```rust title="crates/crm-deals/src/ask.rs"
-use garde::Validate;
 use navree::ai::{Ai, Filter, VectorStore};
 use navree::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -336,13 +335,13 @@ use uuid::Uuid;
 #[derive(Debug, Deserialize, Serialize, ToSchema, Validate)]
 pub struct GroundedAnswer {
     /// The answer in at most four sentences, using only the sources.
-    #[garde(length(chars, min = 1, max = 2000))]
+    #[validate(length(min = 1, max = 2000))]
     pub answer: String,
     /// The numbers of the sources the answer uses, e.g. [1, 3].
-    #[garde(skip)]
+    #[validate(skip)]
     pub sources: Vec<usize>,
     /// False when the sources don't contain the answer.
-    #[garde(skip)]
+    #[validate(skip)]
     pub answered: bool,
 }
 

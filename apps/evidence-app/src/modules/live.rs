@@ -3,9 +3,9 @@
 //! takes. The load profiles publish through it while WebSocket clients
 //! listen on `/app/{key}`.
 
-use garde::Validate;
 use navree::contracts::Broadcaster;
 use navree::prelude::*;
+use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -13,10 +13,10 @@ use utoipa::ToSchema;
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct Publish {
     /// The event name, `client-` events excluded: 1 to 64 characters.
-    #[garde(length(min = 1, max = 64))]
+    #[validate(length(min = 1, max = 64))]
     pub event: String,
     /// Any JSON payload.
-    #[garde(skip)]
+    #[validate(skip)]
     #[serde(default)]
     pub data: serde_json::Value,
 }

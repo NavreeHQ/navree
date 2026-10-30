@@ -6,11 +6,11 @@
 // Inside this crate's own tests the macros name `crate::<module>`.
 use navree::{access, kernel, mcp};
 
-use garde::Validate;
 use navree::mcp::testing::McpTestClient;
 use navree::mcp::{McpContext, PromptMessage, mcp_server};
 use navree::prelude::*;
 use navree::testing::{TestApp, principal};
+use navree::validation::Validate;
 use serde::Deserialize;
 use serde_json::json;
 
@@ -18,7 +18,7 @@ use serde_json::json;
 #[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
 pub struct Greet {
     /// Who to greet.
-    #[garde(length(min = 1, max = 40))]
+    #[validate(length(min = 1, max = 40))]
     pub name: String,
 }
 

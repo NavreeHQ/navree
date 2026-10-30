@@ -9,13 +9,13 @@ use std::time::Duration;
 
 use axum::extract::Path;
 use axum::response::IntoResponse;
-use garde::Validate;
 use http::{Method, StatusCode};
 use navree_http::{
     ApiMeta, AppError, Controller, CurrentPrincipal, Json, NoContent, RouteDef, schema_fn,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_validation::Valid;
+use navree_validation::Validate;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use utoipa::ToSchema;
@@ -44,12 +44,12 @@ pub struct SessionList {
 #[derive(Default, Deserialize, Validate, ToSchema)]
 pub struct ConfirmInput {
     /// The account password.
-    #[garde(length(min = 1, max = 1024))]
+    #[validate(length(min = 1, max = 1024))]
     #[schema(format = Password)]
     #[serde(default)]
     pub password: Option<String>,
     /// A current code from the authenticator app.
-    #[garde(length(min = 1, max = 16))]
+    #[validate(length(min = 1, max = 16))]
     #[serde(default)]
     pub code: Option<String>,
 }
@@ -58,7 +58,7 @@ pub struct ConfirmInput {
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct ImpersonateInput {
     /// Why (required; recorded in the audit trail).
-    #[garde(length(min = 1, max = 500))]
+    #[validate(length(min = 1, max = 500))]
     pub reason: String,
 }
 
@@ -66,7 +66,7 @@ pub struct ImpersonateInput {
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct PasswordlessInput {
     /// The email address of the account.
-    #[garde(email, length(max = 255))]
+    #[validate(email, length(max = 255))]
     pub email: String,
 }
 
@@ -74,7 +74,7 @@ pub struct PasswordlessInput {
 #[derive(Deserialize, Validate, ToSchema)]
 pub struct MagicLinkVerifyInput {
     /// The token from the link.
-    #[garde(length(min = 1, max = 512))]
+    #[validate(length(min = 1, max = 512))]
     pub token: String,
 }
 
@@ -82,10 +82,10 @@ pub struct MagicLinkVerifyInput {
 #[derive(Deserialize, Validate, ToSchema)]
 pub struct OtpVerifyInput {
     /// The email address the code was sent to.
-    #[garde(email, length(max = 255))]
+    #[validate(email, length(max = 255))]
     pub email: String,
     /// The code from the mail.
-    #[garde(length(min = 1, max = 16))]
+    #[validate(length(min = 1, max = 16))]
     pub code: String,
 }
 
@@ -93,7 +93,7 @@ pub struct OtpVerifyInput {
 #[derive(Deserialize, Validate, ToSchema)]
 pub struct ExchangeInput {
     /// A JWT signed by a trusted issuer.
-    #[garde(length(min = 1, max = 16384))]
+    #[validate(length(min = 1, max = 16384))]
     pub token: String,
 }
 

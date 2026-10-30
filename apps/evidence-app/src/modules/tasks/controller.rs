@@ -1,10 +1,10 @@
 //! `/api/v1/tasks`: the current workspace's tasks.
 
 use chrono::NaiveDate;
-use garde::Validate;
 use navree::orm::access::AccessibleQuery;
 use navree::orm::prelude::*;
 use navree::prelude::*;
+use navree::validation::Validate;
 use serde::Deserialize;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -15,21 +15,21 @@ use super::model::{Task, TaskStatus};
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreateTask {
     /// The project (in the same workspace).
-    #[garde(skip)]
+    #[validate(skip)]
     pub project_id: Uuid,
     /// 1 to 200 characters.
-    #[garde(length(min = 1, max = 200))]
+    #[validate(length(min = 1, max = 200))]
     pub title: String,
     /// `todo` (the default), `doing` or `done`.
-    #[garde(skip)]
+    #[validate(skip)]
     #[serde(default)]
     pub status: TaskStatus,
     /// 1 (highest) to 4; 3 by default.
-    #[garde(range(min = 1, max = 4))]
+    #[validate(range(min = 1, max = 4))]
     #[serde(default = "default_priority")]
     pub priority: i32,
     /// When it is due.
-    #[garde(skip)]
+    #[validate(skip)]
     pub due_on: Option<NaiveDate>,
 }
 
@@ -41,13 +41,13 @@ fn default_priority() -> i32 {
 #[derive(Debug, Default, Deserialize, Validate, ToSchema)]
 pub struct UpdateTask {
     /// 1 to 200 characters.
-    #[garde(length(min = 1, max = 200))]
+    #[validate(length(min = 1, max = 200))]
     pub title: Option<String>,
     /// `todo`, `doing` or `done`.
-    #[garde(skip)]
+    #[validate(skip)]
     pub status: Option<TaskStatus>,
     /// 1 (highest) to 4.
-    #[garde(range(min = 1, max = 4))]
+    #[validate(range(min = 1, max = 4))]
     pub priority: Option<i32>,
 }
 
@@ -55,10 +55,10 @@ pub struct UpdateTask {
 #[derive(Debug, Default, Deserialize, Validate, ToSchema)]
 pub struct TaskFilter {
     /// Only this project's tasks.
-    #[garde(skip)]
+    #[validate(skip)]
     pub project_id: Option<Uuid>,
     /// Only tasks with this status.
-    #[garde(skip)]
+    #[validate(skip)]
     pub status: Option<TaskStatus>,
 }
 

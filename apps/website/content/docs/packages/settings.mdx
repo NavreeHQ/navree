@@ -9,7 +9,7 @@ description: "Typed settings with `#[derive(Settings)]`, stored for the whole ap
 
 `navree-settings` handles that:
 
-- **Settings are types.** A struct with `#[derive(Settings)]` is one group of settings stored under one key. Its fields are the settings, `Default` gives the values when nothing is stored, and its [garde](https://docs.rs/garde) rules check every write.
+- **Settings are types.** A struct with `#[derive(Settings)]` is one group of settings stored under one key. Its fields are the settings, `Default` gives the values when nothing is stored, and its `#[validate]` rules check every write.
 - **Values are inherited field by field** down the chain global → organization → workspace → user. A workspace that sets only `welcome_text` still follows its organization for everything else.
 - **Every resolved value knows its source**: `default`, `global`, `organization`, `workspace` or `user`. The routes return it next to the values, so a settings screen can say "inherited from the organization" and offer to reset a field.
 - **Writes are validated, audited, cached by tag and announced.** They run in your unit of work, write a `settings.updated` audit entry, clear the cached values they affect and emit `settings.changed` after the commit.
@@ -69,22 +69,22 @@ From the environment: `APP_SETTINGS__STORE=memory`, `APP_SETTINGS__CACHE_TTL_SEC
 
 ## Defining settings
 
-A settings type is a struct whose fields are the settings. Derive `Settings` next to `Serialize`, `Deserialize` and garde's `Validate`, and give it a `Default`:
+A settings type is a struct whose fields are the settings. Derive `Settings` next to `Serialize`, `Deserialize` and `Validate`, and give it a `Default`:
 
 ```rust title="src/modules/portal/settings.rs"
-use garde::Validate;
 use navree::settings::Settings;
+use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
 
 /// What the member portal shows.
 #[derive(Settings, Clone, Debug, Serialize, Deserialize, Validate)]
 #[settings(key = "portal", scopes(global, organization, workspace, user))]
 pub struct PortalSettings {
-    #[garde(skip)]
+    #[validate(skip)]
     pub show_leaderboard: bool,
-    #[garde(length(max = 200))]
+    #[validate(length(max = 200))]
     pub welcome_text: String,
-    #[garde(range(min = 1, max = 100))]
+    #[validate(range(min = 1, max = 100))]
     pub page_size: u32,
 }
 
@@ -218,7 +218,7 @@ settings
     .await?;
 ```
 
-The values after the patch, inherited ones included, are checked with `T`'s garde rules before anything is stored, so a rule across fields sees what will actually apply. A failure is `SettingsError::Invalid` with the messages by field; returned from a handler it is a 400:
+The values after the patch, inherited ones included, are checked with `T`'s validation rules before anything is stored, so a rule across fields sees what will actually apply. A failure is `SettingsError::Invalid` with the messages by field; returned from a handler it is a 400:
 
 ```json title="400 Bad Request" wrap
 {"statusCode":400,"message":["page_size must not be less than 1"],"error":"Bad Request","code":"validation_failed","errors":{"page_size":["page_size must not be less than 1"]}}
@@ -472,7 +472,7 @@ fake.assert_not_changed::<NotificationSettings>();
     The level between the app and its workspaces.
   </LinkCard>
   <LinkCard href="/docs/basics/validation/" title="Validation">
-    The garde rules every write is checked with.
+    The validation rules every write is checked with.
   </LinkCard>
   <LinkCard href="/docs/tools/helm/" title="Helm">
     The admin panel with the Settings screens.

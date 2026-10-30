@@ -18,7 +18,7 @@ use crate::support::{NotificationSettings, PortalSettings, World, builder};
     PartialEq,
     serde::Serialize,
     serde::Deserialize,
-    garde::Validate,
+    navree_validation::Validate,
 )]
 #[settings(
     key = "billing-contact",
@@ -26,7 +26,7 @@ use crate::support::{NotificationSettings, PortalSettings, World, builder};
     read_permission = "billing.read"
 )]
 struct BillingContact {
-    #[garde(skip)]
+    #[validate(skip)]
     email: String,
 }
 

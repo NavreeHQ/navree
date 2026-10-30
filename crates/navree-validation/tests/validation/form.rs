@@ -1,5 +1,5 @@
 //! `Valid<Query<T>>` and `Valid<Form<T>>`: string values parsed by serde,
-//! then garde rules, all as 400 field errors.
+//! then validation rules, all as 400 field errors.
 
 use serde_json::json;
 

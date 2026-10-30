@@ -120,17 +120,17 @@ In code, `PageQuery::new(page, per_page)` builds one with the same limits (a pag
 `PageQuery` lowers a `per_page` above 100 rather than rejecting it, and defaults to 15. When your API needs different rules, validate the parameters yourself and build the `PageQuery` from them. The app behind Navree's [performance](/performance/) measurements does this because its workload specification asks for a 400 above 100 and a default of 20:
 
 ```rust title="src/modules/deals/dto.rs"
-use garde::Validate;
+use navree::validation::Validate;
 use serde::Deserialize;
 
 /// `page` ≥ 1 (default 1), `per_page` 1..=100 (default 20); anything else is a 400.
 #[derive(Debug, Deserialize, Validate)]
 pub struct DealsQuery {
     #[serde(default = "first_page")]
-    #[garde(range(min = 1))]
+    #[validate(range(min = 1))]
     pub page: u64,
     #[serde(default = "default_per_page")]
-    #[garde(range(min = 1, max = 100))]
+    #[validate(range(min = 1, max = 100))]
     pub per_page: u64,
 }
 

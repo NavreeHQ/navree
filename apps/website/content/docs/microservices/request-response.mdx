@@ -101,14 +101,14 @@ A breaking change to a payload or a reply is a new pattern, such as `deals.get.v
 /// `deals.move`. Replies with a `DealView`.
 #[derive(Clone, Debug, Serialize, Deserialize, Validate)]
 pub struct MoveDeal {
-    #[garde(skip)]
+    #[validate(skip)]
     pub id: Uuid,
-    #[garde(skip)]
+    #[validate(skip)]
     pub stage: Stage,
     /// The 0-based place within the stage; the end when absent.
-    #[garde(range(min = 0))]
+    #[validate(range(min = 0))]
     pub position: Option<i64>,
-    #[garde(length(chars, max = 1000))]
+    #[validate(length(max = 1000))]
     pub lost_reason: Option<String>,
 }
 
@@ -124,14 +124,14 @@ pub struct MoveTo {
 /// `deals.of_company`. Replies with a `Vec<DealView>`.
 #[derive(Clone, Debug, Serialize, Deserialize, Validate)]
 pub struct DealsOfCompany {
-    #[garde(skip)]
+    #[validate(skip)]
     pub company_id: Uuid,
 }
 ```
 
 ### Validation
 
-`Valid<Payload<T>>` runs the garde rules of `T` after decoding, exactly like `Valid<Json<T>>` on a route, with the same messages. A payload that breaks a rule never reaches the handler; the caller gets a 400 reply with every broken rule:
+`Valid<Payload<T>>` runs the validation rules of `T` after decoding, exactly like `Valid<Json<T>>` on a route, with the same messages. A payload that breaks a rule never reaches the handler; the caller gets a 400 reply with every broken rule:
 
 ```json title="400 reply to deals.move"
 {

@@ -72,13 +72,13 @@ mod organizations {
 // ------------------------------------------------------------ checkout
 
 /// The body of `POST /api/v1/billing/upgrade`.
-#[derive(Debug, Deserialize, garde::Validate)]
+#[derive(Debug, Deserialize, navree::validation::Validate)]
 pub struct Upgrade {
     /// The plan key.
-    #[garde(length(min = 1))]
+    #[validate(length(min = 1))]
     pub plan: String,
     /// The yearly price instead of the monthly one.
-    #[garde(skip)]
+    #[validate(skip)]
     pub yearly: bool,
 }
 

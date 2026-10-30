@@ -18,10 +18,10 @@ use std::fmt;
 use std::future::Future;
 
 use chrono::{DateTime, Utc};
-use garde::Validate;
 use navree_contracts::BoxError;
 use navree_db::Uow;
 use navree_kernel::AppContext;
+use navree_validation::Validate;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -74,20 +74,20 @@ impl ImportColumn {
 }
 
 /// A row type an import reads: its columns. Derive it with
-/// `#[derive(Importable)]` next to serde's `Deserialize` and garde's
+/// `#[derive(Importable)]` next to serde's `Deserialize` and navree-validation's
 /// `Validate`:
 ///
 /// ```
-/// use garde::Validate;
+/// use navree_validation::Validate;
 /// use navree_sheets::{ImportRow, Importable};
 /// use serde::Deserialize;
 ///
 /// #[derive(Deserialize, Validate, Importable)]
 /// struct RecipientRow {
 ///     #[import(header = "Email", aliases = ["E-mail", "Email address"])]
-///     #[garde(email)]
+///     #[validate(email)]
 ///     email: String,
-///     #[garde(length(max = 100))]
+///     #[validate(length(max = 100))]
 ///     first_name: Option<String>,
 /// }
 ///
@@ -134,7 +134,7 @@ impl fmt::Debug for ImportContext {
 /// use std::collections::HashSet;
 /// use std::sync::Arc;
 ///
-/// use garde::Validate;
+/// use navree_validation::Validate;
 /// use navree_contracts::BoxError;
 /// use navree_db::Uow;
 /// use navree_sheets::{Import, ImportContext, Importable, RowRejected};
@@ -142,9 +142,9 @@ impl fmt::Debug for ImportContext {
 ///
 /// #[derive(Deserialize, Validate, Importable)]
 /// struct ContactRow {
-///     #[garde(email)]
+///     #[validate(email)]
 ///     email: String,
-///     #[garde(length(min = 1, max = 100))]
+///     #[validate(length(min = 1, max = 100))]
 ///     name: String,
 /// }
 ///
@@ -178,7 +178,7 @@ pub trait Import: Send + Sync + 'static {
     const NAME: &'static str;
 
     /// What one row is read into.
-    type Row: ImportRow + DeserializeOwned + Validate<Context = ()> + Send + Sync + 'static;
+    type Row: ImportRow + DeserializeOwned + Validate + Send + Sync + 'static;
 
     /// The permission a user needs to upload and apply files of this
     /// import (default `{NAME}.import`, checked app-wide or in the import's

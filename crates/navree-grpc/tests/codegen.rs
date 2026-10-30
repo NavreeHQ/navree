@@ -30,20 +30,20 @@ fn generate(out: &Path) {
         .emit_rerun_if_changed(false)
         .type_attribute(
             ".crm.deals.v1.MoveDealRequest",
-            "#[derive(garde::Validate)]",
+            "#[derive(navree_validation::Validate)]",
         )
-        .field_attribute(".crm.deals.v1.MoveDealRequest.id", "#[garde(skip)]")
+        .field_attribute(".crm.deals.v1.MoveDealRequest.id", "#[validate(skip)]")
         .field_attribute(
             ".crm.deals.v1.MoveDealRequest.stage",
-            "#[garde(length(min = 1))]",
+            "#[validate(length(min = 1))]",
         )
         .field_attribute(
             ".crm.deals.v1.MoveDealRequest.position",
-            "#[garde(range(min = 0))]",
+            "#[validate(range(min = 0))]",
         )
         .field_attribute(
             ".crm.deals.v1.MoveDealRequest.lost_reason",
-            "#[garde(length(chars, max = 1000))]",
+            "#[validate(length(max = 1000))]",
         )
         .compile_fds(fds)
         .expect("tonic-prost-build generates the code");

@@ -1,7 +1,7 @@
 # The navree facade: modules, crates and sections
 
-An app depends on the `navree` crate alone (plus `serde` and `garde`
-for their derives, and `chrono` and `uuid`). Its default `full`
+An app depends on the `navree` crate alone (plus `serde` for its derives,
+and `chrono` and `uuid`). Its default `full`
 feature turns every module on; each module is also its own feature.
 `postgres` adds the PostgreSQL driver, `mysql` the MySQL and MariaDB
 driver and `sqlite` the SQLite driver (the bundled library). None is on by
@@ -32,7 +32,7 @@ MongoDB.
 | `navree::realtime` | navree-realtime | `realtime` | `RealtimeModule::from_config()` | `realtime` | Pusher-protocol WebSockets, channels, `Realtime` |
 | `navree::storage` | navree-storage | `storage` (+ `storage-s3`, `storage-gcs`, `storage-azure`) | `StorageModule::from_config()` | `storage` | `Disk`, `Storage`, `store_upload`, `presigned_put` / `accept_upload`, temporary URLs, `storage:sync` |
 | `navree::session` | navree-session | `session` | `SessionModule::from_config()` | `session` | cookie sessions and CSRF (optional; not used with bearer tokens) |
-| `navree::validation` | navree-validation | `validation` | `ValidationModule::from_config()` | `validation` | `Valid`, `ValidAsync`, `AsyncRule`, `ValidationErrors`, `Folded`, `Country`, `Locale`; `Phone` (`validation-phone`) and `SafeHtml` (`validation-html`) |
+| `navree::validation` | navree-validation | `validation` | `ValidationModule::from_config()` | `validation` | `Validate` (trait and derive), `Valid`, `ValidAsync`, `AsyncRule`, `ValidationErrors`, `Folded`, `Country`, `Locale`; `Phone` (`validation-phone`) and `SafeHtml` (`validation-html`) |
 | `navree::queue` | navree-queue | `queue` | `QueueModule::from_config()` | `queue` | `Queue`, `Batch`, `Operations`, `QueueFake`, `queue:work` |
 | `navree::audit` | navree-audit | `audit` | `AuditModule::from_config()` | `audit` | the audit trail, `GET /api/audit`, `audit:prune` |
 | `navree::access` | navree-access | `access` | `AccessModule::for_root(AccessOptions { .. })` | | roles, permissions, abilities, `#[roles]`/`#[permissions]`/`#[can]` |

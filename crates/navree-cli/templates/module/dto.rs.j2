@@ -1,14 +1,14 @@
 //! Request bodies of the {{ module_words }} API, with their validation rules
 //! (checked by the `Valid` extractor before the handler runs).
 
-use garde::Validate;
+use navree::validation::Validate;
 use serde::Deserialize;
 
 /// The body of `POST /api/v1/{{ route }}`.
 #[derive(Debug, Deserialize, Validate)]
 pub struct Create{{ entity_pascal }} {
     /// 1 to 255 characters.
-    #[garde(length(min = 1, max = 255))]
+    #[validate(length(min = 1, max = 255))]
     pub name: String,
 }
 {% if crud %}
@@ -17,7 +17,7 @@ pub struct Create{{ entity_pascal }} {
 #[derive(Debug, Deserialize, Validate)]
 pub struct Update{{ entity_pascal }} {
     /// 1 to 255 characters.
-    #[garde(length(min = 1, max = 255))]
+    #[validate(length(min = 1, max = 255))]
     pub name: Option<String>,
 }
 

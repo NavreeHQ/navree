@@ -4,10 +4,10 @@ use std::future::Future;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
+use crate::Validate;
 use axum::RequestExt;
 use axum::extract::{Form, FromRequest, FromRequestParts, Query, RawPathParams, Request};
 use bytes::Bytes;
-use garde::Validate;
 use http::header::CONTENT_TYPE;
 use http::request::Parts;
 use http::{HeaderMap, Method, StatusCode};
@@ -39,32 +39,32 @@ macro_rules! in_context {
 }
 
 /// Validated input: `Valid<Json<T>>`, `Valid<Query<T>>` or `Valid<Form<T>>`
-/// deserializes `T`, then runs its garde rules.
+/// deserializes `T`, then runs its rules.
 ///
 /// Every failure is a 400 error with field errors
 /// (`{"statusCode": 400, "message": ["email must be a valid email address"],
 /// "error": "Bad Request", "code": "validation_failed", "errors": {"email":
 /// ["email must be a valid email address"]}}`):
 /// malformed JSON (on `body`), serde errors (at the serde path: a missing
-/// field is `required`, a wrong type is `string`, `integer`, ...) and garde
+/// field is `required`, a wrong type is `string`, `integer`, ...) and the
 /// rules, with messages from the app's [`Messages`].
 ///
 /// ```
 /// use axum::extract::Query;
-/// use garde::Validate;
+/// use navree_validation::Validate;
 /// use navree_http::Json;
 /// use navree_validation::Valid;
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Deserialize, Serialize, Validate)]
 /// struct CreateUser {
-///     #[garde(email)]
+///     #[validate(email)]
 ///     email: String,
 /// }
 ///
 /// #[derive(Deserialize, Validate)]
 /// struct Filters {
-///     #[garde(range(min = 1, max = 100))]
+///     #[validate(range(min = 1, max = 100))]
 ///     per_page: Option<u32>,
 /// }
 ///
@@ -103,7 +103,7 @@ impl<E> DerefMut for Valid<E> {
 
 impl<T, S> FromRequest<S> for Valid<Json<T>>
 where
-    T: DeserializeOwned + Validate<Context = ()> + Send,
+    T: DeserializeOwned + Validate + Send,
     S: Send + Sync,
 {
     type Rejection = AppError;
@@ -128,7 +128,7 @@ where
 
 impl<T, S> FromRequestParts<S> for Valid<Query<T>>
 where
-    T: DeserializeOwned + Validate<Context = ()> + Send,
+    T: DeserializeOwned + Validate + Send,
     S: Send + Sync,
 {
     type Rejection = AppError;
@@ -145,7 +145,7 @@ where
 
 impl<T, S> FromRequest<S> for Valid<Form<T>>
 where
-    T: DeserializeOwned + Validate<Context = ()> + Send,
+    T: DeserializeOwned + Validate + Send,
     S: Send + Sync,
 {
     type Rejection = AppError;
@@ -173,12 +173,12 @@ where
 /// An input extractor from another crate that [`Valid`] and [`ValidAsync`]
 /// can wrap, such as navree-micro's `Payload<T>`: it reads its input as a
 /// JSON value, and validation then runs exactly as for `Valid<Json<T>>`
-/// (serde errors at their path, the garde rules of
+/// (serde errors at their path, the rules of
 /// [`Target`](ValidInput::Target), the app's [`Messages`]).
 ///
 /// ```
 /// use axum::extract::Request;
-/// use garde::Validate;
+/// use navree_validation::Validate;
 /// use navree_http::AppError;
 /// use navree_validation::{Valid, ValidInput};
 /// use serde::Deserialize;
@@ -189,7 +189,7 @@ where
 ///
 /// impl<T> ValidInput for Input<T>
 /// where
-///     T: serde::de::DeserializeOwned + Validate<Context = ()> + Send,
+///     T: serde::de::DeserializeOwned + Validate + Send,
 /// {
 ///     type Target = T;
 ///
@@ -207,7 +207,7 @@ where
 ///
 /// #[derive(Deserialize, Validate)]
 /// struct Rename {
-///     #[garde(length(min = 1))]
+///     #[validate(length(min = 1))]
 ///     name: String,
 /// }
 ///
@@ -218,7 +218,7 @@ where
 /// ```
 pub trait ValidInput: Sized + Send {
     /// The type the input deserializes into.
-    type Target: DeserializeOwned + Validate<Context = ()> + Send;
+    type Target: DeserializeOwned + Validate + Send;
 
     /// Reads the request's input as a JSON value. `Ok(None)` means the
     /// input is malformed and becomes the field error malformed JSON gets
@@ -340,7 +340,7 @@ async fn validate_urlencoded<T>(
     [root, rules_root]: [&'static str; 2],
 ) -> Result<T, Invalid>
 where
-    T: DeserializeOwned + Validate<Context = ()>,
+    T: DeserializeOwned + Validate,
 {
     let mut context = Context::new(app);
     let query = parts.uri.query().unwrap_or_default();
@@ -362,7 +362,7 @@ where
 }
 
 /// Validated input with database rules: like [`Valid`], then, once the
-/// garde rules pass, the [`AsyncRules`] of `T` (`unique`, `exists`) run in
+/// validation rules pass, the [`AsyncRules`] of `T` (`unique`, `exists`) run in
 /// the request's unit of work ([`Uow`], so the app needs `DatabaseModule`).
 /// Failed rules are 400 field errors (`"email has already been
 /// taken"`); a rule that cannot run (a bad identifier, a database error)
@@ -396,7 +396,7 @@ impl<E> DerefMut for ValidAsync<E> {
 
 impl<T, S> FromRequest<S> for ValidAsync<Json<T>>
 where
-    T: DeserializeOwned + Validate<Context = ()> + AsyncRules + Send,
+    T: DeserializeOwned + Validate + AsyncRules + Send,
     S: Send + Sync,
 {
     type Rejection = AppError;
@@ -413,7 +413,7 @@ where
 
 impl<T, S> FromRequestParts<S> for ValidAsync<Query<T>>
 where
-    T: DeserializeOwned + Validate<Context = ()> + AsyncRules + Send,
+    T: DeserializeOwned + Validate + AsyncRules + Send,
     S: Send + Sync,
 {
     type Rejection = AppError;
@@ -428,7 +428,7 @@ where
 
 impl<T, S> FromRequest<S> for ValidAsync<Form<T>>
 where
-    T: DeserializeOwned + Validate<Context = ()> + AsyncRules + Send,
+    T: DeserializeOwned + Validate + AsyncRules + Send,
     S: Send + Sync,
 {
     type Rejection = AppError;
@@ -546,7 +546,7 @@ pub(crate) async fn messages(ctx: Option<&AppContext>) -> Arc<Messages> {
     }
 }
 
-/// Runs the garde rules of `value` outside an extractor (a GraphQL
+/// Runs the rules of `value` outside an extractor (a GraphQL
 /// argument, a message payload) and renders the failures with `messages`,
 /// as the extractors do: fields are dotted paths (`items.0.sku`), a rule on
 /// the value as a whole is reported under `root`, and `input`, the value as
@@ -555,12 +555,12 @@ pub(crate) async fn messages(ctx: Option<&AppContext>) -> Arc<Messages> {
 /// defaults, unless the call runs in an [`InputContext::scope`].
 ///
 /// ```
-/// use garde::Validate;
+/// use navree_validation::Validate;
 /// use navree_validation::{Messages, validate};
 ///
 /// #[derive(Validate)]
 /// struct MoveDeal {
-///     #[garde(range(min = 0))]
+///     #[validate(range(min = 0))]
 ///     position: i64,
 /// }
 ///
@@ -571,7 +571,7 @@ pub(crate) async fn messages(ctx: Option<&AppContext>) -> Arc<Messages> {
 ///     Some(&["position must not be less than 0".to_owned()][..])
 /// );
 /// ```
-pub fn validate<T: Validate<Context = ()>>(
+pub fn validate<T: Validate>(
     value: &T,
     input: Option<&Value>,
     messages: &Messages,
@@ -589,7 +589,7 @@ pub fn validate<T: Validate<Context = ()>>(
 /// Rules that read the [`InputContext`] (`rules::phone` on a number
 /// without a country code) get the app's, as configured: there is no
 /// request for a [`RegionSource`](crate::RegionSource) to look at.
-pub async fn validate_in<T: Validate<Context = ()>>(
+pub async fn validate_in<T: Validate>(
     value: &T,
     ctx: Option<&AppContext>,
 ) -> Result<(), crate::ValidationErrors> {
@@ -617,26 +617,26 @@ pub async fn validate_in<T: Validate<Context = ()>>(
     }
 }
 
-/// Deserializes `input` into `T` and runs its garde rules: the checks
+/// Deserializes `input` into `T` and runs its rules: the checks
 /// [`Valid<Json<T>>`](Valid) runs on a request body, for JSON that arrives
 /// some other way (MCP tool arguments, agent tool calls, queued payloads).
 ///
 /// Failures are the same 400 errors, with field errors at their serde path
-/// (`"title should not be empty"`) and garde messages, from the app's
+/// (`"title should not be empty"`) and rule messages, from the app's
 /// [`Messages`] when `ctx` has them (the defaults otherwise). Values that
 /// read the [`InputContext`] (a `Phone` written without a country code)
 /// get the app's, as configured: there is no request for a
 /// [`RegionSource`](crate::RegionSource) to look at.
 ///
 /// ```
-/// use garde::Validate;
+/// use navree_validation::Validate;
 /// use navree_validation::validate_value;
 /// use serde::Deserialize;
 /// use serde_json::json;
 ///
 /// #[derive(Deserialize, Validate)]
 /// struct LogCall {
-///     #[garde(length(min = 1, max = 200))]
+///     #[validate(length(min = 1, max = 200))]
 ///     subject: String,
 /// }
 ///
@@ -654,7 +654,7 @@ pub async fn validate_in<T: Validate<Context = ()>>(
 /// ```
 pub async fn validate_value<T>(input: Value, ctx: Option<&AppContext>) -> Result<T, AppError>
 where
-    T: DeserializeOwned + Validate<Context = ()>,
+    T: DeserializeOwned + Validate,
 {
     match validate_detached::<T>(input, ctx).await {
         Ok(value) => Ok(value),
@@ -669,7 +669,7 @@ where
 /// whole are on `body`.
 async fn validate_detached<T>(input: Value, app: Option<&AppContext>) -> Result<T, Invalid>
 where
-    T: DeserializeOwned + Validate<Context = ()>,
+    T: DeserializeOwned + Validate,
 {
     let mut context = Context::new(app);
     let value = match context.attempt(|| from_json::<T>(&input)) {
@@ -704,9 +704,9 @@ async fn translator(ctx: Option<&AppContext>) -> Option<Arc<dyn MessageTranslato
     }
 }
 
-/// Runs the garde rules of `value`.
-pub(crate) fn check<T: Validate<Context = ()>>(value: &T) -> Result<(), Vec<Failure>> {
-    failure::scope(|| value.validate_with(&())).map_err(failure::from_report)
+/// Runs the rules of `value`.
+pub(crate) fn check<T: Validate>(value: &T) -> Result<(), Vec<Failure>> {
+    value.validate().map_err(failure::from_violations)
 }
 
 /// Reads a JSON body, keeping the request head. The outer error is an
@@ -720,7 +720,7 @@ async fn json_body(req: Request) -> Result<(Parts, Bytes), AppError> {
     read_body(req).await
 }
 
-/// A JSON body as the garde failures see it: its bytes, parsed into a
+/// A JSON body as the rule failures see it: its bytes, parsed into a
 /// [`Value`] only when a failure needs it (the length messages pick their
 /// `array` variant from it).
 enum JsonInput {

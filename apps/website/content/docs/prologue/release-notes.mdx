@@ -120,6 +120,31 @@ SQLite is no longer compiled into every build. It is the `sqlite` Cargo feature 
 - **Logbook's `file` store** is a SQLite file of its own, so it needs the feature too (`navree`'s `sqlite`, or `navree-logbook`'s). Without it Logbook keeps its entries in memory, and `logbook.store = "file"` fails at boot.
 - **Crates that depend on `navree-db` directly** turn `sqlite` on where their tests need it (`navree-db = { git = "https://github.com/NavreeHQ/navree", features = ["sqlite"] }` in `[dev-dependencies]`).
 
+## Validation is Navree's own
+
+The validation rules, the `#[derive(Validate)]` macro and the email and URL parsers are Navree's own code, in navree-validation; garde is gone from every manifest. The [400 response](/docs/basics/validation/#error-responses) keeps its format, its field paths and its messages. These changes break apps that still use the old API:
+
+| Before | Now |
+|---|---|
+| `garde` in `Cargo.toml`; `use garde::Validate;` | Removed. Drop the dependency: the derive comes with `navree` as `navree::validation::Validate`, also in the prelude. |
+| `#[garde(...)]` | `#[validate(...)]`; `skip`, `required`, `range`, `email`, `url`, `pattern`, `custom`, `ascii`, `alphanumeric`, `contains`, `ip`, `ipv4`, `ipv6` and `credit_card` keep their names |
+| `length(chars, min = 1)` | `length(min = 1)`. `length` counts characters; plain `length` used to count bytes. `length(bytes, ...)` counts bytes. |
+| `dive` | `nested` |
+| `inner(...)` | `each(...)` on a list, set or map; on an `Option`, the rules go on the field itself, since they apply to the `Some` value and pass on `None` |
+| `prefix("x")`, `suffix("x")`, `matches(other)` | `starts_with("x")`, `ends_with("x")`, `same_as(other)` |
+| `#[garde(allow_unvalidated)]` | `#[validate(skip_unmarked)]` |
+| `fn rule(value: &T, _ctx: &()) -> garde::Result` | `fn rule(value: &T) -> Result<(), E>` with `E: Into<Violation>` (a `Violation`, a `String` or a `&str`) |
+| `garde::Error::new(text)` | `Violation::text(text)`, or return the `&str` or `String` |
+| `rule_error(key, params)` returning a garde error | `rule_error(key, params)` returns a `Violation` (also `Violation::rule(key).with(name, value)`) |
+| `Validate<Context = ()>` bounds | `Validate` |
+| `#[garde(context(...))]`, which the extractors never supported | Capture what the rule needs: `custom` expressions can read `self`, request data comes from the `InputContext`, and database rules are async rules |
+| `garde::Report` from `value.validate()` | `Violations`: each `Violation` has `key()`, `params()` and `message()`, and it displays one message per line with the field paths |
+
+- A rule the derive doesn't know is a compile error at the rule, and an old name (`dive`, `inner`, `prefix`, `suffix`, `matches`, `allow_unvalidated`, `length(chars, ...)`) gets an error that names the new spelling. A field without `#[validate]`, an invalid `pattern` and a rule on a field of the wrong type fail to compile too.
+- Field paths follow serde's `rename` and `rename_all`, so serde errors and rule errors name the same key; `#[validate(rename = "...")]` overrides it.
+- `length` reports whether it measured text or a collection, so a list in a query string now gets the `elements` message (`tags must contain at least 1 elements`) instead of `characters`.
+- `email` accepts ASCII dot-atom addresses with a host name or an address literal (punycode for internationalized domains); `url` accepts RFC 3986 absolute URLs and requires a host for `http`, `https`, `ws`, `wss` and `ftp`. Both parsers have property tests and libFuzzer targets.
+
 ## The framework
 
 ### Foundation
@@ -133,7 +158,7 @@ SQLite is no longer compiled into every build. It is the `sqlite` Cargo feature 
 ### HTTP
 
 - **`navree-http`**: Axum integration with a default pipeline (request ids, client IP resolution through trusted proxies, panic catching, timeouts, security headers, compression, a per-IP rate limit, body limits, maintenance mode), controllers, deny-by-default route access, per-route throttles, signed URLs, CORS and one JSON error shape for every error (`{ "statusCode", "message", "error", "code" }`, validation failures as 400 with `errors`), whose stable `code` a front end translates.
-- **`navree-validation`**: `Valid<Json<T>>`, `Valid<Query<T>>` and friends on garde, with one readable message per broken rule and async `unique` and `exists` rules. International input: phone numbers in E.164 with a per-request default region, rich text sanitized by a configurable policy, names and digits in any script, ISO 3166-1 countries and BCP 47 locales.
+- **`navree-validation`**: `#[derive(Validate)]` rules with `Valid<Json<T>>`, `Valid<Query<T>>` and friends, with one readable message per broken rule and async `unique` and `exists` rules. International input: phone numbers in E.164 with a per-request default region, rich text sanitized by a configurable policy, names and digits in any script, ISO 3166-1 countries and BCP 47 locales.
 - **`navree-api`**: an OpenAPI 3.1 document built from route metadata at `/api/openapi.json`, a docs UI at `/api/docs`, `openapi:export`, and API resource helpers.
 - **`navree-session`**: encrypted session cookies with memory and database stores, and CSRF protection for single-page apps that use cookies.
 
@@ -211,7 +236,7 @@ SQLite is no longer compiled into every build. It is the `sqlite` Cargo feature 
 - **[Custom domains](/docs/packages/custom-domains/)** (`navree-domains`): workspaces on their own domains, with the DNS records to create, verification through TXT records and routing checks on a schedule, automatic TLS through an on-demand proxy's ask endpoint (Harbor's Caddy with `[web.custom_domains]`) or ACME certificates the app gets, renews and serves itself with rustls, the `domain` workspace resolver and `CurrentDomain` for public pages, managed Cloudflare zones, certificate expiry reports to Lighthouse, and fakes for DNS, the CA and certificate probes.
 - **[Documents](/docs/packages/documents/)** (`navree-documents`): PDF from HTML templates or documents built in code, laid out in process by the native engine (HarfRust shaping, bidirectional text, tables whose headers repeat, page-numbered headers and footers, tagged PDF, bundled Noto fonts for Latin, Arabic, Hebrew and Devanagari) or printed by headless Chrome, DOCX, merge, stamps and overlays, and queued renders to a storage disk, behind an operation your users follow when you want one. See [Typst templates become HTML](#typst-templates-become-html).
 - **[Media](/docs/packages/media/)** (`navree-media`, feature `media`): files attached to models in collections that check types sniffed from the content and sizes and keep one or the latest few files, rows in the `media` table and bytes on storage disks; image conversions (resize, crop, WebP, greyscale, blur, responsive variants with a `srcset`, SVG through resvg) with EXIF stripped from originals, queued and regenerated with `media:regenerate`; remote files through the SSRF guard; zip archives with zip-slip and size-bomb guards; text from PDF, DOCX and HTML; video and audio through an FFmpeg sidecar (`media-ffmpeg`); and `MediaFake` for tests.
-- **[Imports and exports](/docs/packages/imports-and-exports/)** (`navree-sheets`): CSV with a byte-order mark and formula escaping and XLSX with typed cells from `#[derive(Exportable)]` rows, streamed or queued to a disk with a signed link; imports that detect the encoding (UTF-16, Windows-1256 and the rest), read CSV, XLSX, XLS and ODS, map headers automatically or from saved mappings, validate every row with garde, stage the rows for a preview and apply them in queue batches with duplicates skipped, updated or refused, and write an error file.
+- **[Imports and exports](/docs/packages/imports-and-exports/)** (`navree-sheets`): CSV with a byte-order mark and formula escaping and XLSX with typed cells from `#[derive(Exportable)]` rows, streamed or queued to a disk with a signed link; imports that detect the encoding (UTF-16, Windows-1256 and the rest), read CSV, XLSX, XLS and ODS, map headers automatically or from saved mappings, validate every row with its rules, stage the rows for a preview and apply them in queue batches with duplicates skipped, updated or refused, and write an error file.
 - **[Workflows](/docs/packages/workflows/)** (`navree-workflows`): durable workflows as `#[workflow]` async functions, whose steps are stored and replayed on resume, with retries, sleeps of minutes or months, event waits with timeouts, versions, cancellation and leases that survive crashes; and **[automations](/docs/packages/automations/)** people build in your app from `#[trigger]`, `#[condition]` and `#[action]` blocks, with JSON Schemas for the editor, versioned definitions per workspace, enrollment policies, waits, simulation and templates.
 - **[Localization](/docs/packages/localization/)** (`navree-i18n`): Fluent translations, plurals, locale negotiation and translated validation messages.
 - **[Browser testing](/docs/packages/browser-testing/)** (`navree-browser`): drive a real browser from your tests over the Chrome DevTools Protocol.

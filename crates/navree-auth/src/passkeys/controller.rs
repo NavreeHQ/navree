@@ -6,11 +6,11 @@ use std::time::Duration;
 
 use axum::extract::Path;
 use axum::response::IntoResponse;
-use garde::Validate;
 use http::{Method, StatusCode};
 use navree_http::{ApiMeta, AppError, Controller, Json, NoContent, RouteDef, schema_fn};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_validation::Valid;
+use navree_validation::Validate;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use utoipa::ToSchema;
@@ -31,11 +31,11 @@ const OPTIONS_PER_MINUTE: u32 = 30;
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct PasskeyRegisterInput {
     /// A name for the passkey ("Work laptop"); `Passkey` when absent.
-    #[garde(length(min = 1, max = MAX_PASSKEY_NAME))]
+    #[validate(length(min = 1, max = MAX_PASSKEY_NAME))]
     #[serde(default)]
     pub name: Option<String>,
     /// The `PublicKeyCredential` JSON.
-    #[garde(skip)]
+    #[validate(skip)]
     #[schema(value_type = Object)]
     pub credential: Value,
 }
@@ -46,7 +46,7 @@ pub struct PasskeyLoginOptionsInput {
     /// The account's email address, to list its passkeys in
     /// `allowCredentials`; without it the browser offers discoverable
     /// passkeys.
-    #[garde(email, length(max = 255))]
+    #[validate(email, length(max = 255))]
     #[serde(default)]
     pub email: Option<String>,
 }
@@ -56,7 +56,7 @@ pub struct PasskeyLoginOptionsInput {
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct PasskeyLoginInput {
     /// The `PublicKeyCredential` JSON.
-    #[garde(skip)]
+    #[validate(skip)]
     #[schema(value_type = Object)]
     pub credential: Value,
 }

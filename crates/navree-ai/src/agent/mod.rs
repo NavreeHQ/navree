@@ -250,7 +250,7 @@ impl ToolOutcome {
 #[doc(hidden)]
 pub async fn call_tool<A, F, Fut, T, E>(arguments: Value, f: F) -> ToolOutcome
 where
-    A: DeserializeOwned + garde::Validate<Context = ()>,
+    A: DeserializeOwned + navree_validation::Validate,
     F: FnOnce(A) -> Fut,
     Fut: Future<Output = Result<T, E>>,
     T: Serialize,
@@ -386,9 +386,9 @@ mod tests {
         assert!(tool.needs_approval && !tool.read_only);
     }
 
-    #[derive(Debug, Deserialize, garde::Validate)]
+    #[derive(Debug, Deserialize, navree_validation::Validate)]
     struct Args {
-        #[garde(length(chars, min = 1))]
+        #[validate(length(min = 1))]
         subject: String,
     }
 

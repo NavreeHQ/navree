@@ -23,11 +23,11 @@ mod other {
         PartialEq,
         serde::Serialize,
         serde::Deserialize,
-        garde::Validate,
+        navree_validation::Validate,
     )]
     #[settings(key = "portal")]
     pub struct PortalSettings {
-        #[garde(skip)]
+        #[validate(skip)]
         pub colour: String,
     }
 }

@@ -5,7 +5,6 @@
 
 use std::sync::Mutex;
 
-use garde::Validate;
 use navree::BoxFuture;
 use navree::db::Db;
 use navree::events::Listener;
@@ -14,6 +13,7 @@ use navree::settings::{
     Scope, ScopeKind, Settings, SettingsChanged, SettingsError, SettingsFake, Source,
 };
 use navree::testing::{TestApp, principal};
+use navree::validation::Validate;
 use navree::workspace::Workspace;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -47,13 +47,13 @@ fn app(sources: ConfigSources) -> AppBuilder {
 #[settings(key = "portal", scopes(global, organization, workspace, user))]
 pub struct PortalSettings {
     /// Whether the leaderboard is on the home page.
-    #[garde(skip)]
+    #[validate(skip)]
     pub show_leaderboard: bool,
     /// The greeting on the home page.
-    #[garde(length(max = 200))]
+    #[validate(length(max = 200))]
     pub welcome_text: String,
     /// Rows per page.
-    #[garde(range(min = 1, max = 100))]
+    #[validate(range(min = 1, max = 100))]
     pub page_size: u32,
 }
 
@@ -72,7 +72,7 @@ impl Default for PortalSettings {
 #[settings(key = "notifications", scopes(global, workspace))]
 pub struct NotificationSettings {
     /// Whether members get a daily digest.
-    #[garde(skip)]
+    #[validate(skip)]
     pub daily_digest: bool,
 }
 

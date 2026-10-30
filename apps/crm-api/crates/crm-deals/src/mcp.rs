@@ -4,9 +4,9 @@
 //! `follow-up-email` prompt, each checked like the matching route.
 
 use crm_core::{Deal, Move, Stage};
-use garde::Validate;
 use navree::mcp::{McpContext, PromptMessage, mcp_server};
 use navree::prelude::*;
+use navree::validation::Validate;
 use serde::Deserialize;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -17,13 +17,13 @@ use crate::{DealBoard, DealFilter, DealResource, DealService, MoveDeal};
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct ListDeals {
     /// Words from the deal title.
-    #[garde(length(chars, max = 100))]
+    #[validate(length(max = 100))]
     pub query: Option<String>,
     /// Only deals in this stage.
-    #[garde(skip)]
+    #[validate(skip)]
     pub stage: Option<Stage>,
     /// Only the user's own deals.
-    #[garde(skip)]
+    #[validate(skip)]
     #[serde(default)]
     pub mine: bool,
 }
@@ -32,13 +32,13 @@ pub struct ListDeals {
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct MoveDealArgs {
     /// The deal to move.
-    #[garde(skip)]
+    #[validate(skip)]
     pub deal_id: Uuid,
     /// The stage to move it to.
-    #[garde(skip)]
+    #[validate(skip)]
     pub stage: Stage,
     /// Why the deal was lost: required when `stage` is `lost`.
-    #[garde(length(max = 1000))]
+    #[validate(length(max = 1000))]
     pub lost_reason: Option<String>,
 }
 
@@ -46,7 +46,7 @@ pub struct MoveDealArgs {
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct FollowUpArgs {
     /// The deal to follow up on.
-    #[garde(skip)]
+    #[validate(skip)]
     pub deal_id: Uuid,
 }
 

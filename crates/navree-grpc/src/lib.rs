@@ -8,7 +8,7 @@
 //! - **Services.** Implement tonic's generated trait on an `#[injectable]`
 //!   struct and mark the impl block [`#[grpc_service(server = DealsServer)]`](grpc_service).
 //!   Methods take tonic's [`Request<T>`] (or [`Valid<Request<T>>`](Valid)
-//!   to run the message's garde rules), then any Navree extractor (`Uow`,
+//!   to run the message's validation rules), then any Navree extractor (`Uow`,
 //!   `CurrentPrincipal`, `Authorized<E, A>`, ...), and return
 //!   `Result<Response<T>>` with an `AppError`, or a [`Status`]. Each method
 //!   declares its access (`#[public]`, `#[authenticated]`, `#[roles]`,
@@ -70,7 +70,7 @@ pub use status::{error_from_status, status_from_error};
 /// The attribute that serves a tonic service impl with Navree's call
 /// pipeline (see the crate docs).
 pub use navree_macros::grpc_service;
-/// `Valid<Request<T>>`: the message's garde rules run before the method.
+/// `Valid<Request<T>>`: the message's validation rules run before the method.
 pub use navree_validation::Valid;
 /// tonic's request, response, status and streaming types, and the
 /// `async_trait` attribute its generated traits use.

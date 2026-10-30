@@ -17,8 +17,8 @@ OpenAPI, health checks and a CLI with generators.
 
 ## Recognize a Navree app
 
-- `Cargo.toml` depends on `navree` (plus `serde` and `garde`, whose
-  derives name their own crates, and `chrono` and `uuid`).
+- `Cargo.toml` depends on `navree` (plus `serde`, whose derives name their
+  own crate, and `chrono` and `uuid`).
 - `src/app.rs` builds the root with `Navree::app().module(..)` and a
   `// navree:modules` marker; `src/main.rs` calls `app(ConfigSources::defaults()).run()`.
 - Feature code lives in `src/modules/<name>/` (`mod.rs`, `controller.rs`,
@@ -48,7 +48,7 @@ tests/                 tests that boot the whole app
    `Arc<T>` fields, registered in a module's `providers`. Cross-module use
    needs `imports` on one side and `exports` on the other.
 4. **Validate at the edge.** Bodies and queries arrive through
-   `Valid<Json<T>>` / `Valid<Query<T>>` with garde rules on `T`.
+   `Valid<Json<T>>` / `Valid<Query<T>>` with `#[validate]` rules on `T`.
 5. **One error shape.** Handlers return `Result<T>` (`AppError`); every
    error is `{ "statusCode", "message", "error", "code" }`, plus `errors`
    for validation failures. A refusal users see gets its own `code`

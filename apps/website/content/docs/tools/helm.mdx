@@ -379,14 +379,14 @@ impl Resource for DealResource {
     ) -> BoxFuture<'a, Result<RecordOf<Self>>> {
         Box::pin(async move {
             let deals = ctx.get::<DealService>().await?;
-            let input: UpdateDeal = form.parse().await?; // garde validation, errors under each field
+            let input: UpdateDeal = form.parse().await?; // validation, errors under each field
             deals.update_model(ctx.uow(), ctx.user_id(), deal, input).await
         })
     }
 }
 ```
 
-`RecordOf<Self>` is a [record](/docs/orm/models/) of the resource's model (`Record<Deal>`); a service that saves it with `deal.update(uow, |d| ..)` runs the model's hooks. `form.parse::<T>()` deserializes the submitted values into your DTO and validates it with its garde rules, exactly as `Valid<Json<T>>` does, so the panel and your API apply the same validation. The values have already passed the fields' own rules; money is in minor units, dates are `YYYY-MM-DD` and date-times RFC 3339. `form.values()` and `form.get(name)` give them as JSON. An `AppError` from your service appears on the form: a 400 with field errors under the fields, anything else as a message.
+`RecordOf<Self>` is a [record](/docs/orm/models/) of the resource's model (`Record<Deal>`); a service that saves it with `deal.update(uow, |d| ..)` runs the model's hooks. `form.parse::<T>()` deserializes the submitted values into your DTO and validates it with its rules, exactly as `Valid<Json<T>>` does, so the panel and your API apply the same validation. The values have already passed the fields' own rules; money is in minor units, dates are `YYYY-MM-DD` and date-times RFC 3339. `form.values()` and `form.get(name)` give them as JSON. An `AppError` from your service appears on the form: a 400 with field errors under the fields, anything else as a message.
 
 ## The panel's look and pages
 

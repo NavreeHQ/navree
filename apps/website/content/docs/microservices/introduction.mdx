@@ -7,7 +7,7 @@ description: "Split an app into services that call each other and publish events
 
 <Badge feature="micro" /> A Navree app starts as one binary and splits into services when it needs to. `navree-micro` carries the messages between them. A service answers **messages** (request-response: "give me deal 42") and reacts to **events** (fire-and-forget facts: "deal 42 was won"), over the transport you choose: NATS, Kafka, RabbitMQ, Redis Streams, MQTT or plain TCP.
 
-A message handler is written the way you write an HTTP route. It lives in a module, gets its dependencies injected, declares who may call it, validates its input with garde and runs in a unit of work that commits when it succeeds. Guards, access rules and the JSON error shape work the same way, so moving a feature from a route into a service changes how it is called, not how it is written.
+A message handler is written the way you write an HTTP route. It lives in a module, gets its dependencies injected, declares who may call it, validates its input with `#[derive(Validate)]` rules and runs in a unit of work that commits when it succeeds. Guards, access rules and the JSON error shape work the same way, so moving a feature from a route into a service changes how it is called, not how it is written.
 
 <Diagram name="microservices" />
 
@@ -76,15 +76,15 @@ This page and the rest of the section use the CRM split into services. `crm-api`
 Payloads are plain serde types. Put them in a crate both sides depend on, so a change to a payload is a compile error on both sides rather than a surprise at run time:
 
 ```rust title="crates/crm-contracts/src/deals.rs"
-use garde::Validate;
 use navree::events::Event;
+use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// `deals.get`: one deal. Replies with a [`DealView`].
 #[derive(Clone, Debug, Serialize, Deserialize, Validate)]
 pub struct GetDeal {
-    #[garde(skip)]
+    #[validate(skip)]
     pub id: Uuid,
 }
 

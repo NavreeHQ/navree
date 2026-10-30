@@ -254,7 +254,10 @@ mod tests {
                     "basics/validation",
                     "Validation",
                     &[
-                        ("Introduction", "Validate request bodies with garde DTOs."),
+                        (
+                            "Introduction",
+                            "Validate request bodies with derived DTO rules.",
+                        ),
                         (
                             "Unique rules",
                             "Use `AsyncRule::unique` to check the database.",

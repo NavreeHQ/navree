@@ -11,7 +11,7 @@
 use std::fmt;
 
 #[cfg(test)]
-use garde::Validate;
+use navree_validation::Validate;
 use navree_validation::{MessageTranslator, Messages, fold_digits};
 #[cfg(test)]
 use navree_validation::{ValidationErrors, validate};
@@ -211,7 +211,7 @@ pub(crate) fn read_row<R: DeserializeOwned>(fields: Vec<(String, Cell)>) -> Resu
     R::deserialize(RowDeserializer { fields })
 }
 
-/// Reads `fields` into `R` and runs its garde rules; the errors are keyed by
+/// Reads `fields` into `R` and runs its rules; the errors are keyed by
 /// field, in the app's validation wording.
 #[cfg(test)]
 pub(crate) fn check_row<R>(
@@ -219,7 +219,7 @@ pub(crate) fn check_row<R>(
     messages: &Messages,
 ) -> Result<R, ValidationErrors>
 where
-    R: DeserializeOwned + Validate<Context = ()>,
+    R: DeserializeOwned + Validate,
 {
     let row: R = read_row(fields).map_err(|error| {
         let mut errors = ValidationErrors::new();
@@ -568,22 +568,22 @@ mod tests {
 
     #[derive(Debug, Deserialize, PartialEq, Validate)]
     struct Row {
-        #[garde(email)]
+        #[validate(email)]
         email: String,
-        #[garde(skip)]
+        #[validate(skip)]
         age: Option<u8>,
-        #[garde(skip)]
+        #[validate(skip)]
         score: f64,
-        #[garde(skip)]
+        #[validate(skip)]
         active: bool,
-        #[garde(skip)]
+        #[validate(skip)]
         joined: Option<NaiveDate>,
-        #[garde(skip)]
+        #[validate(skip)]
         status: Status,
-        #[garde(skip)]
+        #[validate(skip)]
         #[serde(default)]
         tags: Vec<String>,
-        #[garde(skip)]
+        #[validate(skip)]
         id: Option<Uuid>,
     }
 
@@ -638,7 +638,7 @@ mod tests {
         cells[1].1 = Cell::Float(36.0);
         cells[0].1 = Cell::Float(5551234.0);
         let row: Result<Row, _> = read_row(fields(&cells));
-        // The email is text "5551234", which garde rejects later, not serde.
+        // The email is text "5551234", which the `email` rule rejects later, not serde.
         assert_eq!(row.unwrap().email, "5551234");
     }
 
@@ -705,7 +705,7 @@ mod tests {
     }
 
     #[test]
-    fn garde_rules_run_after_reading() {
+    fn validation_rules_run_after_reading() {
         let mut cells = base();
         cells[0].1 = text("not-an-email");
         let errors = check_row::<Row>(fields(&cells), &Messages::default()).unwrap_err();

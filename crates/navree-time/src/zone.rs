@@ -317,20 +317,6 @@ impl<'de> Deserialize<'de> for Zone {
     }
 }
 
-/// Parsing already checked the name: nothing more to validate, so a
-/// `Zone` field can take `#[garde(dive)]` (or `#[garde(skip)]`).
-impl garde::Validate for Zone {
-    type Context = ();
-
-    fn validate_into(
-        &self,
-        _ctx: &Self::Context,
-        _parent: &mut dyn FnMut() -> garde::Path,
-        _report: &mut garde::Report,
-    ) {
-    }
-}
-
 impl utoipa::PartialSchema for Zone {
     fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
         utoipa::openapi::ObjectBuilder::new()

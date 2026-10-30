@@ -14,7 +14,7 @@ workspace = true
 ## MCP tools, a resource and a prompt on the app's MCP server (navree-mcp),
 ## so agents read and resolve issues. The facade turns it on when both its
 ## `lighthouse` and `mcp` features are on.
-mcp = ["dep:navree-mcp", "dep:garde", "dep:utoipa"]
+mcp = ["dep:navree-mcp", "dep:navree-validation", "dep:utoipa"]
 ## PostgreSQL integration tests (`tests/postgres.rs`, with
 ## NAVREE_TEST_POSTGRES_URL): several processes recording into one database.
 ## Also the test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres`).
@@ -29,7 +29,6 @@ bytes = { workspace = true }
 chrono = { workspace = true }
 cookie = { workspace = true }
 form_urlencoded = { workspace = true }
-garde = { workspace = true, optional = true }
 hex = { workspace = true }
 hmac = { workspace = true }
 http = { workspace = true }
@@ -49,6 +48,8 @@ navree-mcp = { workspace = true, optional = true }
 navree-orm = { workspace = true }
 navree-schedule = { workspace = true }
 navree-telemetry = { workspace = true }
+# The MCP tools' arguments derive `Validate` (feature `mcp`).
+navree-validation = { workspace = true, optional = true }
 navree-view = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

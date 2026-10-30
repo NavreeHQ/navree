@@ -8,10 +8,11 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
-use garde::Validate;
 use navree_contracts::BoxFuture;
 use navree_kernel::BoxError;
 use navree_notify::{MailOverride, NotificationOverrides, TemplateOverrides};
+use navree_validation::Validate;
+use navree_validation::rules::RuleInput;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -56,19 +57,19 @@ pub const MAX_BODY_LEN: usize = 100_000;
 #[serde(default)]
 pub struct NotificationTemplates {
     /// The logo at the top of notification mail: an `https` URL.
-    #[garde(inner(custom(https_url)))]
+    #[validate(custom(https_url))]
     pub logo_url: Option<String>,
     /// The brand color, `#RRGGBB`.
-    #[garde(inner(custom(hex_color)))]
+    #[validate(custom(hex_color))]
     pub brand_color: Option<String>,
     /// The footer line (an address, a note on why the mail came).
-    #[garde(inner(length(max = 1000)))]
+    #[validate(length(max = 1000))]
     pub footer: Option<String>,
     /// More style variables for the templates (`{{ style.accent }}`).
-    #[garde(custom(style_keys))]
+    #[validate(custom(style_keys))]
     pub style: BTreeMap<String, String>,
     /// Subject and body overrides by notification type.
-    #[garde(custom(overrides_fit))]
+    #[validate(custom(overrides_fit))]
     pub templates: BTreeMap<String, TemplateOverride>,
 }
 
@@ -168,32 +169,35 @@ impl TemplateOverrides for SettingsTemplateOverrides {
     }
 }
 
-/// An `https` URL (or `http` on localhost).
-fn https_url<T: AsRef<str> + ?Sized>(value: &T, _ctx: &()) -> garde::Result {
-    let value = value.as_ref();
-    let parsed =
-        url::Url::parse(value.trim()).map_err(|_| garde::Error::new("must be an https URL"))?;
+/// An `https` URL (or `http` on localhost); `None` passes.
+fn https_url<T: RuleInput + ?Sized>(value: &T) -> Result<(), &'static str> {
+    let Some(value) = value.rule_str() else {
+        return Ok(());
+    };
+    let parsed = url::Url::parse(value.trim()).map_err(|_| "must be an https URL")?;
     let local = matches!(parsed.host_str(), Some("localhost" | "127.0.0.1"));
     if parsed.scheme() == "https" || (parsed.scheme() == "http" && local) {
         Ok(())
     } else {
-        Err(garde::Error::new("must be an https URL"))
+        Err("must be an https URL")
     }
 }
 
-/// `#RRGGBB`.
-fn hex_color<T: AsRef<str> + ?Sized>(value: &T, _ctx: &()) -> garde::Result {
-    let value = value.as_ref();
+/// `#RRGGBB`; `None` passes.
+fn hex_color<T: RuleInput + ?Sized>(value: &T) -> Result<(), &'static str> {
+    let Some(value) = value.rule_str() else {
+        return Ok(());
+    };
     let hex = value.strip_prefix('#').unwrap_or("");
     if hex.len() == 6 && hex.bytes().all(|b| b.is_ascii_hexdigit()) {
         Ok(())
     } else {
-        Err(garde::Error::new("must be a color written #RRGGBB"))
+        Err("must be a color written #RRGGBB")
     }
 }
 
 /// Style keys are template names (`accent`), values short.
-fn style_keys(value: &BTreeMap<String, String>, _ctx: &()) -> garde::Result {
+fn style_keys(value: &BTreeMap<String, String>) -> Result<(), String> {
     for (key, text) in value {
         let valid = !key.is_empty()
             && key.len() <= 64
@@ -202,41 +206,37 @@ fn style_keys(value: &BTreeMap<String, String>, _ctx: &()) -> garde::Result {
                 .chars()
                 .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
         if !valid {
-            return Err(garde::Error::new(format!(
+            return Err(format!(
                 "`{key}` is not a style name (lower-case letters, digits and `_`)"
-            )));
+            ));
         }
         if text.len() > 1000 {
-            return Err(garde::Error::new(format!(
-                "`{key}` is longer than 1000 characters"
-            )));
+            return Err(format!("`{key}` is longer than 1000 characters"));
         }
     }
     Ok(())
 }
 
 /// Overrides of known sizes, for notification types with plain names.
-fn overrides_fit(value: &BTreeMap<String, TemplateOverride>, _ctx: &()) -> garde::Result {
+fn overrides_fit(value: &BTreeMap<String, TemplateOverride>) -> Result<(), String> {
     for (notification_type, template) in value {
         if navree_notify::check_category(notification_type).is_err() {
-            return Err(garde::Error::new(format!(
-                "`{notification_type}` is not a notification type"
-            )));
+            return Err(format!("`{notification_type}` is not a notification type"));
         }
         if template
             .subject
             .as_ref()
             .is_some_and(|subject| subject.chars().count() > MAX_SUBJECT_LEN)
         {
-            return Err(garde::Error::new(format!(
+            return Err(format!(
                 "`{notification_type}`: the subject is longer than {MAX_SUBJECT_LEN} characters"
-            )));
+            ));
         }
         for body in [&template.html, &template.text].into_iter().flatten() {
             if body.len() > MAX_BODY_LEN {
-                return Err(garde::Error::new(format!(
+                return Err(format!(
                     "`{notification_type}`: a body is longer than {MAX_BODY_LEN} bytes"
-                )));
+                ));
             }
         }
     }

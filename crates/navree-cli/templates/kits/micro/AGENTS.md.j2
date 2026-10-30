@@ -45,7 +45,7 @@ package: run them in `crates/{{ package }}`.
 
 - **The contract comes first.** A new message or event starts as a type in
   `crates/{{ contracts_package }}`: the payload (`Serialize`, `Deserialize`,
-  `garde::Validate`), the reply type, and a pattern constant
+  `navree::validation::Validate`), the reply type, and a pattern constant
   (`invoices.get`) or an `impl Event` whose `NAME` is the pattern
   (`deal.won`). Services that call this one depend on the crate, so a
   changed payload is a compile error on both sides.

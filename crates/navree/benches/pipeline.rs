@@ -23,7 +23,6 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::time::Duration;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use garde::Validate;
 use http_body_util::BodyExt;
 use navree::App;
 use navree::axum::body::Body;
@@ -31,6 +30,7 @@ use navree::axum::http::{Request, StatusCode};
 use navree::db::{Db, DbOptions, Executor as _, Statement};
 use navree::http::{HttpOptions, build_router};
 use navree::prelude::*;
+use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Runtime;
 use tower::ServiceExt;
@@ -68,9 +68,9 @@ pub struct Message {
 
 #[derive(Deserialize, Validate)]
 pub struct CreateDeal {
-    #[garde(length(chars, min = 1, max = 200))]
+    #[validate(length(min = 1, max = 200))]
     title: String,
-    #[garde(range(min = 0, max = 1_000_000_000_000))]
+    #[validate(range(min = 0, max = 1_000_000_000_000))]
     amount_cents: i64,
 }
 

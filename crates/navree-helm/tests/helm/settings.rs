@@ -18,17 +18,17 @@ use crate::support::*;
     PartialEq,
     serde::Serialize,
     serde::Deserialize,
-    garde::Validate,
+    navree_validation::Validate,
 )]
 #[settings(key = "portal", scopes(global, workspace))]
 pub struct PortalSettings {
-    #[garde(skip)]
+    #[validate(skip)]
     pub show_leaderboard: bool,
-    #[garde(length(max = 20))]
+    #[validate(length(max = 20))]
     pub welcome_text: String,
-    #[garde(range(min = 1, max = 100))]
+    #[validate(range(min = 1, max = 100))]
     pub page_size: u32,
-    #[garde(skip)]
+    #[validate(skip)]
     pub tags: Vec<String>,
 }
 
@@ -52,11 +52,11 @@ impl Default for PortalSettings {
     PartialEq,
     serde::Serialize,
     serde::Deserialize,
-    garde::Validate,
+    navree_validation::Validate,
 )]
 #[settings(key = "billing-mail", scopes(global), permission = "billing.manage")]
 pub struct BillingMail {
-    #[garde(skip)]
+    #[validate(skip)]
     pub sender: String,
 }
 

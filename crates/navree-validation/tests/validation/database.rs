@@ -1,5 +1,5 @@
 //! `ValidAsync` and `AsyncRule`: `unique` and `exists` run inside the
-//! request's unit of work, after the garde rules pass.
+//! request's unit of work, after the validation rules pass.
 
 use navree_db::{Db, Executor, Statement};
 use navree_validation::{AsyncRule, RuleError};
@@ -88,10 +88,10 @@ async fn exists_rule(scratch: Scratch) {
     );
 }
 
-async fn garde_rules_run_before_async_rules(scratch: Scratch) {
+async fn validation_rules_run_before_async_rules(scratch: Scratch) {
     let app = database_app(&scratch).await;
 
-    // `title` fails garde, so the `exists` query never runs.
+    // `title` fails its rules, so the `exists` query never runs.
     let response = app
         .client()
         .post("/db/deals")
@@ -254,7 +254,7 @@ on_every_server!(
     "navree_validation";
     unique_rule_rejects_existing_and_ignores_self,
     exists_rule,
-    garde_rules_run_before_async_rules,
+    validation_rules_run_before_async_rules,
     rejects_bad_identifier_in_rule,
     async_rules_on_query_and_form,
     check_rules_run_in_the_unit_of_work_with_the_path_parameter,

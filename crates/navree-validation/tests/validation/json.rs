@@ -1,4 +1,4 @@
-//! `Valid<Json<T>>`: malformed bodies, serde errors and garde failures all
+//! `Valid<Json<T>>`: malformed bodies, serde errors and rule failures all
 //! become 400 errors with field-level messages.
 
 use serde_json::json;
@@ -232,7 +232,7 @@ async fn bodies_are_deserialized_from_their_bytes() {
     assert!(deserializer.contains("SliceRead"), "{deserializer}");
     assert!(!deserializer.contains("Value"), "{deserializer}");
 
-    // A garde failure still reports against the body as JSON.
+    // A rule failure still reports against the body as JSON.
     let response = app
         .client()
         .post("/v/probe")

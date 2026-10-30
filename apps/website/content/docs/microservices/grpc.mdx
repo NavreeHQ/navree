@@ -19,7 +19,6 @@ navree = { git = "https://github.com/NavreeHQ/navree", features = ["grpc"] }
 tonic = "0.14"
 tonic-prost = "0.14"
 prost = "0.14"
-garde = { version = "0.23", features = ["derive"] } # rules on request messages
 tokio-stream = { version = "0.1", features = ["sync"] } # streaming methods
 
 [build-dependencies]
@@ -84,7 +83,7 @@ message DealEvent {
 }
 ```
 
-Generate the Rust code in `build.rs`. protox compiles the `.proto` files into a descriptor set, which you write to `OUT_DIR` for server reflection and Connect's JSON encoding, and tonic-prost-build generates the messages, the server trait and the client from it. The attributes add garde rules to the request messages you want validated:
+Generate the Rust code in `build.rs`. protox compiles the `.proto` files into a descriptor set, which you write to `OUT_DIR` for server reflection and Connect's JSON encoding, and tonic-prost-build generates the messages, the server trait and the client from it. The attributes add validation rules to the request messages you want validated:
 
 ```rust title="services/deals/build.rs"
 use std::{env, fs, path::PathBuf};
@@ -98,17 +97,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::write(out.join("deals_descriptor.bin"), descriptors.encode_to_vec())?;
 
     tonic_prost_build::configure()
-        .type_attribute(".crm.deals.v1.MoveDealRequest", "#[derive(garde::Validate)]")
-        .field_attribute(".crm.deals.v1.MoveDealRequest.id", "#[garde(skip)]")
-        .field_attribute(".crm.deals.v1.MoveDealRequest.stage", "#[garde(length(min = 1))]")
-        .field_attribute(".crm.deals.v1.MoveDealRequest.position", "#[garde(range(min = 0))]")
-        .field_attribute(".crm.deals.v1.MoveDealRequest.lost_reason", "#[garde(length(chars, max = 1000))]")
+        .type_attribute(".crm.deals.v1.MoveDealRequest", "#[derive(navree::validation::Validate)]")
+        .field_attribute(".crm.deals.v1.MoveDealRequest.id", "#[validate(skip)]")
+        .field_attribute(".crm.deals.v1.MoveDealRequest.stage", "#[validate(length(min = 1))]")
+        .field_attribute(".crm.deals.v1.MoveDealRequest.position", "#[validate(range(min = 0))]")
+        .field_attribute(".crm.deals.v1.MoveDealRequest.lost_reason", "#[validate(length(max = 1000))]")
         .compile_fds(descriptors)?;
     Ok(())
 }
 ```
 
-A garde derive needs a rule (or `#[garde(skip)]`) on every field of the message, so name each one.
+The derive needs a rule (or `#[validate(skip)]`) on every field of the message, so name each one.
 
 Include the generated code in a module:
 
@@ -183,7 +182,7 @@ impl Deals for DealsGrpc {
 
 The methods are tonic's, with three additions that `#[grpc_service]` handles:
 
-- **The first parameter is tonic's `Request<T>`**, as the trait declares it, or `Valid<Request<T>>` to validate the message with its garde rules first.
+- **The first parameter is tonic's `Request<T>`**, as the trait declares it, or `Valid<Request<T>>` to validate the message with its rules first.
 - **Navree extractors may follow it**: `Uow`, `CurrentPrincipal`, `CurrentUser`, `Abilities`, `Accessible<E, A>`, `Authorized<E, A>`, `Scoped<T>`, `CurrentWorkspace` and your own (any `FromRequestParts` whose rejection is an `AppError`). The macro generates the method tonic expects and runs the extractors on the call's metadata and extensions.
 - **The result may be `Result<Response<T>>`**, Navree's result with `AppError`, so `?` works on database errors, a `Status` from another service and anything else. The macro converts errors to a `Status` (see [errors](#errors)). Returning `Result<Response<T>, Status>` works too. Write the result type out: the macro reads `Response<T>` from it, so a type alias for the whole result is an error.
 
@@ -277,7 +276,7 @@ The route attributes that only mean something for HTTP (`#[get]` and the other v
 
 ### Validation
 
-`Valid<Request<T>>` runs the garde rules of a message type, which you add in `build.rs` with `type_attribute` and `field_attribute` as above, with the app's validation messages. A message that breaks a rule ends the call with `INVALID_ARGUMENT`, a message listing every broken rule, and a `google.rpc.BadRequest` detail with one field violation per rule, which gRPC clients in every language can read:
+`Valid<Request<T>>` runs the validation rules of a message type, which you add in `build.rs` with `type_attribute` and `field_attribute` as above, with the app's validation messages. A message that breaks a rule ends the call with `INVALID_ARGUMENT`, a message listing every broken rule, and a `google.rpc.BadRequest` detail with one field violation per rule, which gRPC clients in every language can read:
 
 ```text
 code: INVALID_ARGUMENT

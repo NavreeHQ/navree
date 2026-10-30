@@ -13,7 +13,7 @@ error format and pagination.
 | Workers | One process. `AppBuilder::run` builds Tokio's (1.54.1) default multi-thread runtime: one worker per CPU, 8 under the benchmark's cpuset. The `serve` command runs `axum::serve` on `0.0.0.0:8080` |
 | Database | navree-db `DatabaseModule` on sqlx 0.9.0 (PostgreSQL), one pool of 64 connections (`database.max_connections = 64`, `migrate_on_boot = false`) |
 | JWT | navree-auth `AuthModule`: its `JwtStrategy` (HS256 on `navree_crypto::jose`, with HMAC from RustCrypto `hmac`/`sha2` in navree-crypto; the measured run predates that and used jsonwebtoken 11.1.0 with the same HMAC crates; HS256, signature, `exp`, `iss = navree`, token type `access`), then the `CurrentUser` extractor loads the `users` row (navree-auth's `user` entity) |
-| Validation | navree-validation `Valid<Query<T>>` and `Valid<Json<T>>` on garde 0.23.0; failures are 400s in Navree's error format |
+| Validation | navree-validation `Valid<Query<T>>` and `Valid<Json<T>>` with `#[derive(Validate)]` rules; failures are 400s in Navree's error format |
 
 Configuration: `config/app.toml` (Navree's conventional file) plus the
 harness's variables, mapped in `main.rs`: `DATABASE_URL` → `database.url`,
@@ -104,7 +104,7 @@ CORS is off (Navree's default when `http.cors.allowed_origins` is empty).
 - **Pagination input.** Navree's own `PageQuery` extractor clamps
   `per_page` to 100 and defaults to 15, while the spec wants a 400 above 100
   and a default of 20. So the query goes through navree-validation
-  (`DealsQuery` with garde `range` rules) and feeds `PageQuery::new`,
+  (`DealsQuery` with `range` rules) and feeds `PageQuery::new`,
   `paginate` and `Page`, Navree's pagination shape.
 - **Transactions.** The deals routes use the request's unit of work, as the
   reference CRM (`apps/crm-api`) does: on PostgreSQL every unit-of-work
@@ -115,7 +115,7 @@ CORS is off (Navree's default when `http.cors.allowed_origins` is empty).
   `name`), the CRM's embed pattern, rather than a join.
 - **Validation status** is 400: Navree answers every validation failure with
   400 (it has no 422s). Serde errors (missing field, fractional amount,
-  unknown stage) are reported one at a time, before the garde rules.
+  unknown stage) are reported one at a time, before the validation rules.
 - New deals get UUID v7 ids (Navree's convention) and `Utc::now()` timestamps.
 - `auth.registration = false`; navree-auth's other routes (login, refresh,
   account) are mounted but unused.

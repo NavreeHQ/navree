@@ -1,7 +1,7 @@
 //! Request and response bodies of `/api/v1/projects`.
 
 use chrono::{DateTime, Utc};
-use garde::Validate;
+use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -33,13 +33,13 @@ impl ProjectStatus {
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreateProject {
     /// 1 to 120 characters.
-    #[garde(length(min = 1, max = 120))]
+    #[validate(length(min = 1, max = 120))]
     pub name: String,
     /// At most 2000 characters.
-    #[garde(length(max = 2000))]
+    #[validate(length(max = 2000))]
     pub description: Option<String>,
     /// `active` (the default) or `archived`.
-    #[garde(skip)]
+    #[validate(skip)]
     #[serde(default)]
     pub status: ProjectStatus,
 }
@@ -49,13 +49,13 @@ pub struct CreateProject {
 #[derive(Debug, Default, Deserialize, Validate, ToSchema)]
 pub struct UpdateProject {
     /// 1 to 120 characters.
-    #[garde(length(min = 1, max = 120))]
+    #[validate(length(min = 1, max = 120))]
     pub name: Option<String>,
     /// At most 2000 characters.
-    #[garde(length(max = 2000))]
+    #[validate(length(max = 2000))]
     pub description: Option<String>,
     /// `active` or `archived`.
-    #[garde(skip)]
+    #[validate(skip)]
     pub status: Option<ProjectStatus>,
 }
 
@@ -80,10 +80,10 @@ impl UpdateProject {
 #[derive(Debug, Default, Deserialize, Validate, ToSchema)]
 pub struct ProjectFilter {
     /// Only projects with this status.
-    #[garde(skip)]
+    #[validate(skip)]
     pub status: Option<ProjectStatus>,
     /// Only projects whose name contains this text.
-    #[garde(length(max = 120))]
+    #[validate(length(max = 120))]
     pub search: Option<String>,
 }
 

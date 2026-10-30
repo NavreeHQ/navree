@@ -26,7 +26,6 @@ notify = ["dep:navree-notify", "dep:url"]
 [dependencies]
 axum = { workspace = true }
 chrono = { workspace = true }
-garde = { workspace = true }
 http = { workspace = true }
 navree-access = { workspace = true }
 navree-audit = { workspace = true }

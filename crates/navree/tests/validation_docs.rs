@@ -3,11 +3,11 @@
 //! compiled and run.
 #![cfg(all(feature = "validation-phone", feature = "validation-html"))]
 
-use garde::Validate;
 use navree::BoxFuture;
 use navree::axum::http::request::Parts;
 use navree::prelude::*;
 use navree::testing::TestApp;
+use navree::validation::Validate;
 use navree::validation::{
     Country, Folded, HtmlPolicy, InputContext, Locale, Phone, PhoneOptions, RegionSource, SafeHtml,
     ValidationOptions, fold_digits, rules,
@@ -20,22 +20,22 @@ use utoipa::ToSchema;
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct CreateContact {
     /// A name in any script.
-    #[garde(length(chars, min = 1, max = 100), custom(rules::unicode_name))]
+    #[validate(length(min = 1, max = 100), custom(rules::unicode_name))]
     pub name: String,
     /// E.164 once deserialized.
-    #[garde(skip)]
+    #[validate(skip)]
     pub phone: Phone,
     /// Optional.
-    #[garde(skip)]
+    #[validate(skip)]
     pub mobile: Option<Phone>,
     /// Upper case once deserialized.
-    #[garde(skip)]
+    #[validate(skip)]
     pub country: Country,
     /// Canonical case once deserialized.
-    #[garde(skip)]
+    #[validate(skip)]
     pub locale: Option<Locale>,
     /// Sanitized once deserialized.
-    #[garde(length(chars, max = 20_000))]
+    #[validate(length(max = 20_000))]
     pub notes: SafeHtml,
 }
 
@@ -43,10 +43,10 @@ pub struct CreateContact {
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct VerifyCode {
     /// Six digits.
-    #[garde(length(min = 6, max = 6), pattern(r"^[0-9]+$"))]
+    #[validate(length(min = 6, max = 6), pattern(r"^[0-9]+$"))]
     pub code: Folded<String>, // "٦٥٤٣٢١" arrives as "654321"
     /// A small number.
-    #[garde(range(min = 1, max = 99))]
+    #[validate(range(min = 1, max = 99))]
     pub quantity: Option<Folded<u32>>, // "٤٢" and 42 are both 42
 }
 
@@ -54,7 +54,7 @@ pub struct VerifyCode {
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct NewComment {
     /// Measured after sanitizing.
-    #[garde(length(chars, min = 1, max = 20_000))]
+    #[validate(length(min = 1, max = 20_000))]
     pub body: SafeHtml,
 }
 
@@ -62,7 +62,7 @@ pub struct NewComment {
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct DocumentedContact {
     /// A string in the document.
-    #[garde(skip)]
+    #[validate(skip)]
     #[schema(value_type = String)]
     pub phone: Phone,
 }

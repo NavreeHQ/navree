@@ -3,10 +3,10 @@
 
 use std::time::Duration;
 
-use garde::Validate;
 use navree_ai::{
     AiError, AiFake, AiOptions, Attachment, FakeReply, Finish, Message, ModelConfig, Role,
 };
+use navree_validation::Validate;
 use serde::Deserialize;
 use serde_json::json;
 use utoipa::ToSchema;
@@ -172,12 +172,12 @@ struct Triage {
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 struct FollowUpEmail {
     /// The subject line.
-    #[garde(length(chars, min = 1, max = 80))]
+    #[validate(length(min = 1, max = 80))]
     subject: String,
     /// The body.
-    #[garde(length(chars, min = 1, max = 2000))]
+    #[validate(length(min = 1, max = 2000))]
     body: String,
-    #[garde(skip)]
+    #[validate(skip)]
     send_on: Option<chrono::NaiveDate>,
 }
 
@@ -267,7 +267,7 @@ async fn a_repair_still_carries_the_attachments() {
 }
 
 #[tokio::test]
-async fn validated_checks_the_garde_rules_and_repairs() {
+async fn validated_checks_the_validation_rules_and_repairs() {
     let fake = AiFake::new();
     fake.respond_with([
         FakeReply::json(json!({ "subject": "x".repeat(100), "body": "Hi", "send_on": null })),

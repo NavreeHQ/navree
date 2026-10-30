@@ -1,6 +1,6 @@
 [package]
 name = "navree-validation"
-description = "Navree ValidationModule: Valid<T> extractors on garde, field-level messages, async unique/exists rules, international input (phone numbers, sanitized HTML, names and digits in any script, countries, locales)."
+description = "Navree ValidationModule: #[derive(Validate)] rules, Valid<T> extractors, field-level messages, async unique/exists rules, international input (phone numbers, sanitized HTML, names and digits in any script, countries, locales)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,6 +16,9 @@ workspace = true
 phone = ["dep:rlibphonenumber"]
 ## `SafeHtml`: rich text sanitized by the app's `HtmlPolicy` (ammonia).
 html = ["dep:ammonia"]
+## `Validate` for navree-time's `Zone`, `LocalDay` and `DayRange`
+## (`Valid<Query<DayRange>>`).
+time = ["dep:navree-time"]
 ## Runs the PostgreSQL suite (`NAVREE_TEST_POSTGRES_URL`).
 postgres = ["navree-db/postgres"]
 ## Runs the MySQL suite (`NAVREE_TEST_MYSQL_URL`).
@@ -27,7 +30,6 @@ axum = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 form_urlencoded = { workspace = true }
-garde = { workspace = true }
 http = { workspace = true }
 http-body-util = { workspace = true }
 icu_locale_core = { workspace = true }
@@ -35,11 +37,15 @@ navree-config = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+navree-time = { workspace = true, optional = true }
+navree-validation-macros = { workspace = true }
 rlibphonenumber = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_path_to_error = { workspace = true }
 serde_urlencoded = { workspace = true }
+# `pattern("...")` rules.
+regex = { workspace = true }
 thiserror = { workspace = true }
 unicode-properties = { workspace = true }
 uuid = { workspace = true }
@@ -49,5 +55,13 @@ uuid = { workspace = true }
 navree-db = { workspace = true, features = ["sqlite"] }
 futures-util = { workspace = true }
 navree-testing = { workspace = true }
+# Its own `time` feature, for the tests of `DayRange`.
+navree-validation = { workspace = true, features = ["time"] }
+# The parsers' property tests (`email`, `url`).
+proptest = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+# The derive's compile errors (tests/ui).
+trybuild = { workspace = true }
+# An independent URL parser the `url` rule is checked against.
+url = { workspace = true }

@@ -225,18 +225,18 @@ pub(crate) fn merge(
 
 #[cfg(test)]
 mod tests {
-    use garde::Validate;
+    use navree_validation::Validate;
     use serde_json::json;
 
     use super::*;
 
     #[derive(Debug, Serialize, Deserialize, Validate, Default, PartialEq)]
     struct PortalSettings {
-        #[garde(skip)]
+        #[validate(skip)]
         show_leaderboard: bool,
-        #[garde(skip)]
+        #[validate(skip)]
         welcome_text: String,
-        #[garde(skip)]
+        #[validate(skip)]
         max_items: u32,
     }
 

@@ -369,11 +369,11 @@ use navree::prelude::*;
 use navree::search::Search;
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize, garde::Validate)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct SearchContacts {
-    #[garde(length(min = 1, max = 200))]
+    #[validate(length(min = 1, max = 200))]
     pub q: String,
-    #[garde(skip)]
+    #[validate(skip)]
     pub status: Option<String>,
 }
 

@@ -5,10 +5,10 @@
 use std::sync::Arc;
 
 use axum::extract::Request;
-use garde::Validate;
 use http::Method;
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
+use navree_validation::Validate;
 use navree_validation::{Valid, ValidAsync, ValidInput};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -24,7 +24,7 @@ struct Lines<T>(T);
 
 impl<T> ValidInput for Lines<T>
 where
-    T: DeserializeOwned + Validate<Context = ()> + Send,
+    T: DeserializeOwned + Validate + Send,
 {
     type Target = T;
 
@@ -156,7 +156,7 @@ async fn valid_wraps_a_valid_input_with_the_json_field_errors() {
         .assert_error(400, "unreadable input");
 }
 
-async fn valid_async_runs_the_database_rules_after_the_garde_rules(scratch: Scratch) {
+async fn valid_async_runs_the_database_rules_after_the_validation_rules(scratch: Scratch) {
     let app = navree_testing::TestApp::builder()
         .config("http.per_ip_rate_limit", Value::Null)
         .config("database.url", scratch.url.as_str())
@@ -201,5 +201,5 @@ async fn valid_async_runs_the_database_rules_after_the_garde_rules(scratch: Scra
 
 on_every_server!(
     "navree_validation";
-    valid_async_runs_the_database_rules_after_the_garde_rules,
+    valid_async_runs_the_database_rules_after_the_validation_rules,
 );

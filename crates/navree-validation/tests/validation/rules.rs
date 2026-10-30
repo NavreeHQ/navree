@@ -1,4 +1,4 @@
-//! navree's extra garde rules: `confirmed`, `rules::uuid`, `rules::date_ymd`
+//! navree's extra rules: `confirmed`, `rules::uuid`, `rules::date_ymd`
 //! and `rules::one_of`.
 
 use serde_json::json;
@@ -137,13 +137,13 @@ async fn app_rules_use_the_message_table_or_their_own_text() {
 
 /// A value that arrives some other way than a JSON body (a gRPC message):
 /// the same rules and messages through `navree_validation::validate`.
-#[derive(garde::Validate)]
+#[derive(navree_validation::Validate)]
 struct MoveDeal {
-    #[garde(length(min = 1))]
+    #[validate(length(min = 1))]
     stage: String,
-    #[garde(range(min = 0))]
+    #[validate(range(min = 0))]
     position: Option<i64>,
-    #[garde(skip)]
+    #[validate(skip)]
     id: String,
 }
 

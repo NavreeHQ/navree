@@ -24,7 +24,6 @@ sqlite = ["navree/sqlite"]
 async-graphql = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
-garde = { workspace = true }
 # Every package the evidence app shows: the `full` set plus the opt-in
 # packages, the PostgreSQL driver and NATS for micro.
 navree = { workspace = true, features = [

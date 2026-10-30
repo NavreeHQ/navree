@@ -123,7 +123,7 @@ impl Settings {
     /// level of `scope`'s target, in `uow`, and returns the result.
     ///
     /// The values after the patch, inherited ones included, are checked
-    /// with `T`'s garde rules first. A field set to the value it inherits
+    /// with `T`'s validation rules first. A field set to the value it inherits
     /// is still stored: it no longer follows the level above.
     ///
     /// # Errors

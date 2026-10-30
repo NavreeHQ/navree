@@ -85,17 +85,17 @@ async fn formatting_and_fluent_functions() {
 
 #[tokio::test]
 async fn validation_errors_are_in_the_requested_language() {
-    use garde::Validate;
     use navree_http::Json;
     use navree_macros::{controller, injectable, module};
     use navree_validation::Valid;
+    use navree_validation::Validate;
     use serde::Deserialize;
 
     #[derive(Deserialize, Validate)]
     struct NewContact {
-        #[garde(length(chars, min = 1))]
+        #[validate(length(min = 1))]
         first_name: String,
-        #[garde(length(chars, min = 1))]
+        #[validate(length(min = 1))]
         last_name: String,
     }
 

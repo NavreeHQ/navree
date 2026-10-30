@@ -15,7 +15,6 @@ async-graphql = { workspace = true }
 axum = { workspace = true }
 base64 = { workspace = true }
 futures-util = { workspace = true }
-garde = { workspace = true }
 http = { workspace = true }
 navree-access = { workspace = true }
 navree-auth = { workspace = true }

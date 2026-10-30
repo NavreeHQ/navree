@@ -8,10 +8,10 @@ use std::future::Future;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use garde::Validate;
 use navree_access::{ActionMarker, Authorized, AuthorizedRecord, SubjectRecords};
 use navree_http::{AccessSpec, AppError, CanSpec};
 use navree_kernel::BoxFuture;
+use navree_validation::Validate;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
@@ -424,7 +424,7 @@ impl Call {
 
     /// The arguments as a `T`, deserialized and validated like a request
     /// body: a 400 with field errors when they are invalid.
-    pub async fn args<T: DeserializeOwned + Validate<Context = ()>>(&self) -> Result<T, AppError> {
+    pub async fn args<T: DeserializeOwned + Validate>(&self) -> Result<T, AppError> {
         navree_validation::validate_value(self.arguments.clone(), Some(self.cx.app())).await
     }
 

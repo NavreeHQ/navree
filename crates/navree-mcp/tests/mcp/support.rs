@@ -5,7 +5,6 @@
 
 use std::sync::{Arc, Mutex};
 
-use garde::Validate;
 use navree_access::{
     AbilityCtx, AccessModule, AccessOptions, AccessService, ActionMarker, Authorized, MANAGE, READ,
     Read, Rules, UPDATE, Update, field,
@@ -20,6 +19,7 @@ use navree_mcp::{McpContext, McpModule, ModuleBuilderMcpExt, PromptMessage, Reso
 use navree_orm::Model as _;
 use navree_orm::access::AccessibleQuery as _;
 use navree_testing::{TestApp, TestAppBuilder, principal};
+use navree_validation::Validate;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -137,13 +137,13 @@ impl Stage {
 #[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
 pub struct ListDeals {
     /// Words from the deal title.
-    #[garde(length(chars, max = 100))]
+    #[validate(length(max = 100))]
     pub query: Option<String>,
     /// Only deals in this stage.
-    #[garde(skip)]
+    #[validate(skip)]
     pub stage: Option<Stage>,
     /// Only the user's own deals.
-    #[garde(skip)]
+    #[validate(skip)]
     #[serde(default)]
     pub mine: bool,
 }
@@ -151,47 +151,47 @@ pub struct ListDeals {
 #[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
 pub struct CreateDeal {
     /// The deal's title.
-    #[garde(length(min = 1, max = 100))]
+    #[validate(length(min = 1, max = 100))]
     pub title: String,
     /// The amount, in cents.
-    #[garde(range(min = 0))]
+    #[validate(range(min = 0))]
     pub amount_cents: i64,
 }
 
 #[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
 pub struct MoveDealArgs {
     /// The deal to move.
-    #[garde(skip)]
+    #[validate(skip)]
     pub deal_id: Uuid,
     /// The stage to move it to.
-    #[garde(skip)]
+    #[validate(skip)]
     pub stage: Stage,
 }
 
 #[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
 pub struct RenameDeal {
     /// The deal to rename.
-    #[garde(skip)]
+    #[validate(skip)]
     pub deal_id: Uuid,
     /// Its new title.
-    #[garde(length(min = 1))]
+    #[validate(length(min = 1))]
     pub title: String,
 }
 
 #[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
 pub struct FollowUpArgs {
     /// The deal to follow up on.
-    #[garde(skip)]
+    #[validate(skip)]
     pub deal_id: Uuid,
 }
 
 #[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
 pub struct SummarizeArgs {
     /// How many days back.
-    #[garde(range(min = 1, max = 90))]
+    #[validate(range(min = 1, max = 90))]
     pub days: u32,
     /// Whether lost deals count.
-    #[garde(skip)]
+    #[validate(skip)]
     #[serde(default)]
     pub include_lost: bool,
 }

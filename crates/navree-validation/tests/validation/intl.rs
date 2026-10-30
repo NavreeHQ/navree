@@ -6,11 +6,11 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axum::extract::Query;
-use garde::Validate;
 use http::Method;
 use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_testing::TestApp;
+use navree_validation::Validate;
 use navree_validation::rules;
 use navree_validation::{Country, Folded, Locale, Valid, ValidationModule, ValidationOptions};
 use serde::{Deserialize, Serialize};
@@ -21,24 +21,24 @@ use crate::support::{app_with, errors};
 /// A person, named in any script.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct Person {
-    #[garde(length(chars, min = 1, max = 100), custom(rules::unicode_name))]
+    #[validate(length(min = 1, max = 100), custom(rules::unicode_name))]
     pub name: String,
-    #[garde(custom(rules::unicode_name))]
+    #[validate(custom(rules::unicode_name))]
     pub nickname: Option<String>,
 }
 
 /// A one-time code and a quantity, typed with any digits.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct Code {
-    #[garde(length(min = 6, max = 6), pattern(r"^[0-9]+$"))]
+    #[validate(length(min = 6, max = 6), pattern(r"^[0-9]+$"))]
     pub code: Folded<String>,
-    #[garde(range(min = 1, max = 99))]
+    #[validate(range(min = 1, max = 99))]
     pub quantity: Option<Folded<u32>>,
 }
 
 /// Typed country and locale fields, normalized while deserializing.
 #[derive(Debug, Deserialize, Serialize, Validate)]
-#[garde(allow_unvalidated)]
+#[validate(skip_unmarked)]
 pub struct Profile {
     pub country: Country,
     pub locale: Option<Locale>,
@@ -47,9 +47,9 @@ pub struct Profile {
 /// The same checks on plain strings, which keep the input as sent.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct RawProfile {
-    #[garde(custom(rules::country))]
+    #[validate(custom(rules::country))]
     pub country: String,
-    #[garde(custom(rules::locale))]
+    #[validate(custom(rules::locale))]
     pub locale: Option<String>,
 }
 

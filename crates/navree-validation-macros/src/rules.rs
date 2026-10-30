@@ -1,0 +1,532 @@
+//! The `#[validate(...)]` grammar: container options and field rules,
+//! parsed and checked into a model the expansion reads.
+
+use proc_macro2::Span;
+use syn::ext::IdentExt;
+#[cfg(test)]
+use syn::parse::Parse;
+use syn::parse::ParseStream;
+use syn::spanned::Spanned;
+use syn::{Expr, Ident, LitStr, Token, parenthesized};
+
+/// Options on the struct or enum.
+#[derive(Default)]
+pub(crate) struct Container {
+    /// `crate = "path"`: the runtime crate's path, when it can't be found.
+    pub(crate) krate: Option<syn::Path>,
+    /// `skip_unmarked`: fields without `#[validate]` have no rules.
+    pub(crate) skip_unmarked: bool,
+}
+
+/// The rules of one field (or of each item, inside `each`).
+#[derive(Default)]
+pub(crate) struct FieldRules {
+    /// `skip`: the field has no rules.
+    pub(crate) skip: bool,
+    /// `rename = "name"`: the field's name in paths.
+    pub(crate) rename: Option<LitStr>,
+    pub(crate) rules: Vec<Rule>,
+}
+
+/// One rule, with the span its errors point at.
+pub(crate) struct Rule {
+    pub(crate) span: Span,
+    pub(crate) kind: Kind,
+}
+
+/// The rules.
+pub(crate) enum Kind {
+    Required,
+    Length {
+        bytes: bool,
+        min: Option<Expr>,
+        max: Option<Expr>,
+    },
+    Range {
+        min: Option<Expr>,
+        max: Option<Expr>,
+    },
+    /// A rule on text with no arguments (`email`, `url`, `ip`, ...): the
+    /// name of its check function.
+    Text(&'static str),
+    /// A rule on text with a string argument (`contains`, `starts_with`,
+    /// `ends_with`).
+    TextWith(&'static str, LitStr),
+    Pattern(LitStr),
+    SameAs(Ident),
+    Custom(Expr),
+    Nested,
+    Each(Vec<Rule>),
+}
+
+impl Kind {
+    /// The rule's name, for messages about duplicates.
+    fn name(&self) -> &'static str {
+        match self {
+            Kind::Required => "required",
+            Kind::Length { .. } => "length",
+            Kind::Range { .. } => "range",
+            Kind::Text(name) | Kind::TextWith(name, _) => name,
+            Kind::Pattern(_) => "pattern",
+            Kind::SameAs(_) => "same_as",
+            Kind::Custom(_) => "custom",
+            Kind::Nested => "nested",
+            Kind::Each(_) => "each",
+        }
+    }
+}
+
+/// Rules with no arguments that check text, and their check functions.
+const TEXT_RULES: &[&str] = &[
+    "email",
+    "url",
+    "ip",
+    "ipv4",
+    "ipv6",
+    "ascii",
+    "alphanumeric",
+    "credit_card",
+];
+
+/// Rules that check text against a string.
+const TEXT_WITH_RULES: &[&str] = &["contains", "starts_with", "ends_with"];
+
+/// Every field rule, for the unknown-rule message.
+const FIELD_RULES: &str = "skip, rename, required, length, range, email, url, ip, ipv4, ipv6, \
+     ascii, alphanumeric, credit_card, contains, starts_with, ends_with, pattern, same_as, \
+     custom, nested, each";
+
+/// Where a list of rules appears.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Level {
+    Field,
+    Each,
+}
+
+impl Container {
+    /// Reads one `#[validate(...)]` on the struct or enum.
+    pub(crate) fn parse_into(&mut self, attr: &syn::Attribute) -> syn::Result<()> {
+        attr.parse_args_with(|input: ParseStream| {
+            while !input.is_empty() {
+                let key = input.call(Ident::parse_any)?;
+                match key.to_string().as_str() {
+                    "crate" => {
+                        input.parse::<Token![=]>()?;
+                        let path: LitStr = input.parse()?;
+                        if self.krate.is_some() {
+                            return Err(syn::Error::new(key.span(), "duplicate `crate`"));
+                        }
+                        self.krate = Some(path.parse()?);
+                    }
+                    "skip_unmarked" => self.skip_unmarked = true,
+                    _ => {
+                        return Err(syn::Error::new(
+                            key.span(),
+                            format!(
+                                "unknown option `{key}` on a type: expected `crate = \"...\"` or `skip_unmarked` (rules go on fields)"
+                            ),
+                        ));
+                    }
+                }
+                if !input.is_empty() {
+                    input.parse::<Token![,]>()?;
+                }
+            }
+            Ok(())
+        })
+    }
+}
+
+impl FieldRules {
+    /// Reads one `#[validate(...)]` on a field (a field may have several).
+    pub(crate) fn parse_into(&mut self, attr: &syn::Attribute) -> syn::Result<()> {
+        if matches!(attr.meta, syn::Meta::Path(_)) {
+            return Err(syn::Error::new(
+                attr.span(),
+                "`#[validate]` needs its rules: `#[validate(length(max = 255))]`, or `#[validate(skip)]`",
+            ));
+        }
+        attr.parse_args_with(|input: ParseStream| {
+            let parsed = parse_rules(input, Level::Field)?;
+            if let Some(span) = parsed.skip {
+                if self.skip {
+                    return Err(syn::Error::new(span, "duplicate `skip`"));
+                }
+                self.skip = true;
+            }
+            if let Some(rename) = parsed.rename {
+                if self.rename.is_some() {
+                    return Err(syn::Error::new(rename.span(), "duplicate `rename`"));
+                }
+                self.rename = Some(rename);
+            }
+            self.rules.extend(parsed.rules);
+            Ok(())
+        })
+    }
+
+    /// Checks the field's rules as a whole: `skip` alone, no rule twice
+    /// (except `custom`), `each` not empty.
+    pub(crate) fn check(&self) -> syn::Result<()> {
+        if self.skip
+            && let Some(rule) = self.rules.first()
+        {
+            return Err(syn::Error::new(
+                rule.span,
+                "a field with `skip` has no other rules: remove `skip` or this rule",
+            ));
+        }
+        check_list(&self.rules)
+    }
+}
+
+/// No rule twice in one list (except `custom`), recursively.
+fn check_list(rules: &[Rule]) -> syn::Result<()> {
+    for (i, rule) in rules.iter().enumerate() {
+        if !matches!(rule.kind, Kind::Custom(_))
+            && rules[..i]
+                .iter()
+                .any(|earlier| earlier.kind.name() == rule.kind.name())
+        {
+            return Err(syn::Error::new(
+                rule.span,
+                format!(
+                    "duplicate `{}`: give each rule once (only `custom` may repeat)",
+                    rule.kind.name()
+                ),
+            ));
+        }
+        if let Kind::Each(inner) = &rule.kind {
+            check_list(inner)?;
+        }
+    }
+    Ok(())
+}
+
+/// A parsed list of rules.
+struct Parsed {
+    skip: Option<Span>,
+    rename: Option<LitStr>,
+    rules: Vec<Rule>,
+}
+
+fn parse_rules(input: ParseStream, level: Level) -> syn::Result<Parsed> {
+    let mut parsed = Parsed {
+        skip: None,
+        rename: None,
+        rules: Vec::new(),
+    };
+    while !input.is_empty() {
+        let name = input.call(Ident::parse_any)?;
+        let span = name.span();
+        let text = name.to_string();
+        let kind = match text.as_str() {
+            "skip" | "rename" if level == Level::Each => {
+                return Err(syn::Error::new(
+                    span,
+                    format!("`{text}` applies to the field, not to its items"),
+                ));
+            }
+            "skip" => {
+                no_arguments(input, &text)?;
+                parsed.skip = Some(span);
+                None
+            }
+            "rename" => {
+                input.parse::<Token![=]>()?;
+                parsed.rename = Some(input.parse()?);
+                None
+            }
+            "required" => {
+                no_arguments(input, &text)?;
+                Some(Kind::Required)
+            }
+            "nested" => {
+                no_arguments(input, &text)?;
+                Some(Kind::Nested)
+            }
+            "length" => Some(parse_length(input, span)?),
+            "range" => {
+                let (min, max, _) = parse_bounds(input, span, "range", false)?;
+                Some(Kind::Range { min, max })
+            }
+            "pattern" => {
+                let content = arguments(input, span, "pattern(\"^[a-z]+$\")")?;
+                let pattern: LitStr = content.parse()?;
+                no_more(&content)?;
+                if let Err(error) = regex::Regex::new(&pattern.value()) {
+                    return Err(syn::Error::new(
+                        pattern.span(),
+                        format!("invalid regular expression: {error}"),
+                    ));
+                }
+                Some(Kind::Pattern(pattern))
+            }
+            "same_as" => {
+                if level == Level::Each {
+                    return Err(syn::Error::new(
+                        span,
+                        "`same_as` compares two fields, so it can't apply to items",
+                    ));
+                }
+                let content = arguments(input, span, "same_as(other_field)")?;
+                let other: Ident = content.parse()?;
+                no_more(&content)?;
+                Some(Kind::SameAs(other))
+            }
+            "custom" => {
+                let content = arguments(input, span, "custom(path::to::rule)")?;
+                let expr: Expr = content.parse()?;
+                no_more(&content)?;
+                Some(Kind::Custom(expr))
+            }
+            "each" => {
+                let content = arguments(input, span, "each(length(max = 30))")?;
+                let inner = parse_rules(&content, Level::Each)?;
+                if inner.rules.is_empty() {
+                    return Err(syn::Error::new(
+                        span,
+                        "`each` needs the rules its items follow: `each(length(max = 30))`",
+                    ));
+                }
+                Some(Kind::Each(inner.rules))
+            }
+            other => {
+                if let Some(rule) = TEXT_RULES.iter().find(|rule| **rule == other) {
+                    no_arguments(input, other)?;
+                    Some(Kind::Text(rule))
+                } else if let Some(rule) = TEXT_WITH_RULES.iter().find(|rule| **rule == other) {
+                    let content = arguments(input, span, &format!("{other}(\"text\")"))?;
+                    let value: LitStr = content.parse()?;
+                    no_more(&content)?;
+                    Some(Kind::TextWith(rule, value))
+                } else {
+                    return Err(unknown_rule(&name));
+                }
+            }
+        };
+        if let Some(kind) = kind {
+            parsed.rules.push(Rule { span, kind });
+        }
+        if !input.is_empty() {
+            input.parse::<Token![,]>()?;
+        }
+    }
+    Ok(parsed)
+}
+
+/// An unknown rule, with the rule to use when the name is a familiar one.
+fn unknown_rule(name: &Ident) -> syn::Error {
+    let hint = match name.to_string().as_str() {
+        "dive" => Some("`nested`, to validate a field that derives `Validate`"),
+        "inner" => Some("`each(...)`, to give the items of a collection rules"),
+        "prefix" => Some("`starts_with(\"...\")`"),
+        "suffix" => Some("`ends_with(\"...\")`"),
+        "matches" => Some("`same_as(other_field)`"),
+        "regex" => Some("`pattern(\"...\")`"),
+        "allow_unvalidated" => Some("`skip_unmarked` on the struct"),
+        "context" => Some("a `custom` rule that captures what it needs"),
+        "min" | "max" => Some("`length(min = ...)` or `range(min = ...)`"),
+        _ => None,
+    };
+    let message = match hint {
+        Some(hint) => format!("unknown rule `{name}`: use {hint}"),
+        None => format!("unknown rule `{name}`: expected one of {FIELD_RULES}"),
+    };
+    syn::Error::new(name.span(), message)
+}
+
+/// The parenthesized arguments of a rule that needs them.
+fn arguments<'a>(
+    input: ParseStream<'a>,
+    span: Span,
+    example: &str,
+) -> syn::Result<syn::parse::ParseBuffer<'a>> {
+    if !input.peek(syn::token::Paren) {
+        return Err(syn::Error::new(
+            span,
+            format!("this rule needs arguments: `{example}`"),
+        ));
+    }
+    let content;
+    parenthesized!(content in input);
+    Ok(content)
+}
+
+/// A rule that takes no arguments has none.
+fn no_arguments(input: ParseStream, rule: &str) -> syn::Result<()> {
+    if input.peek(syn::token::Paren) || input.peek(Token![=]) {
+        return Err(input.error(format!("`{rule}` takes no arguments")));
+    }
+    Ok(())
+}
+
+/// Nothing follows the argument.
+fn no_more(content: ParseStream) -> syn::Result<()> {
+    if content.is_empty() {
+        Ok(())
+    } else {
+        Err(content.error("unexpected argument: this rule takes one"))
+    }
+}
+
+fn parse_length(input: ParseStream, span: Span) -> syn::Result<Kind> {
+    let (min, max, bytes) = parse_bounds(input, span, "length", true)?;
+    Ok(Kind::Length { bytes, min, max })
+}
+
+/// `min = expr`, `max = expr` (and, for `length`, `bytes`): at least one
+/// bound, and `min` not above `max` when both are integer literals.
+fn parse_bounds(
+    input: ParseStream,
+    span: Span,
+    rule: &str,
+    length: bool,
+) -> syn::Result<(Option<Expr>, Option<Expr>, bool)> {
+    let example = format!("{rule}(min = 1, max = 100)");
+    let content = arguments(input, span, &example)?;
+    let mut min: Option<Expr> = None;
+    let mut max: Option<Expr> = None;
+    let mut bytes = false;
+    while !content.is_empty() {
+        let key = content.call(Ident::parse_any)?;
+        match key.to_string().as_str() {
+            "min" | "max" => {
+                content.parse::<Token![=]>()?;
+                let value: Expr = content.parse()?;
+                let slot = if key == "min" { &mut min } else { &mut max };
+                if slot.is_some() {
+                    return Err(syn::Error::new(key.span(), format!("duplicate `{key}`")));
+                }
+                *slot = Some(value);
+            }
+            "bytes" if length => bytes = true,
+            "chars" if length => {
+                return Err(syn::Error::new(
+                    key.span(),
+                    "`length` counts characters already: remove `chars` (write `bytes` to count bytes)",
+                ));
+            }
+            _ => {
+                let expected = if length {
+                    "`min = ...`, `max = ...` or `bytes`"
+                } else {
+                    "`min = ...` or `max = ...`"
+                };
+                return Err(syn::Error::new(
+                    key.span(),
+                    format!("unknown `{rule}` argument `{key}`: expected {expected}"),
+                ));
+            }
+        }
+        if !content.is_empty() {
+            content.parse::<Token![,]>()?;
+        }
+    }
+    if min.is_none() && max.is_none() {
+        return Err(syn::Error::new(
+            span,
+            format!("`{rule}` needs a bound: `{example}`"),
+        ));
+    }
+    if let (Some(low), Some(high)) = (literal(min.as_ref()), literal(max.as_ref()))
+        && low > high
+    {
+        return Err(syn::Error::new(
+            max.as_ref().map_or(span, Spanned::span),
+            format!("`{rule}` can never pass: `min` ({low}) is above `max` ({high})"),
+        ));
+    }
+    Ok((min, max, bytes))
+}
+
+/// The value of an integer literal bound (`10`, `-1`, `10_000`).
+fn literal(expr: Option<&Expr>) -> Option<i128> {
+    match expr? {
+        Expr::Lit(lit) => match &lit.lit {
+            syn::Lit::Int(int) => int.base10_parse().ok(),
+            _ => None,
+        },
+        Expr::Unary(unary) if matches!(unary.op, syn::UnOp::Neg(_)) => {
+            literal(Some(&unary.expr)).map(|value| -value)
+        }
+        _ => None,
+    }
+}
+
+/// So `syn::parse2::<FieldRules>` works in the unit tests.
+#[cfg(test)]
+impl Parse for FieldRules {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let parsed = parse_rules(input, Level::Field)?;
+        Ok(FieldRules {
+            skip: parsed.skip.is_some(),
+            rename: parsed.rename,
+            rules: parsed.rules,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use quote::quote;
+
+    use super::*;
+
+    fn parse(tokens: proc_macro2::TokenStream) -> syn::Result<FieldRules> {
+        let rules: FieldRules = syn::parse2(tokens)?;
+        rules.check()?;
+        Ok(rules)
+    }
+
+    fn error(tokens: proc_macro2::TokenStream) -> String {
+        match parse(tokens) {
+            Ok(_) => panic!("expected an error"),
+            Err(error) => error.to_string(),
+        }
+    }
+
+    #[test]
+    fn rules_parse() {
+        let rules = parse(quote!(
+            required,
+            length(min = 1, max = MAX),
+            each(length(bytes, max = 30), custom(f)),
+            custom(g),
+            custom(h)
+        ))
+        .unwrap();
+        assert_eq!(rules.rules.len(), 5);
+        assert!(matches!(rules.rules[2].kind, Kind::Each(ref inner) if inner.len() == 2));
+        assert!(parse(quote!(skip)).unwrap().skip);
+        assert_eq!(
+            parse(quote!(rename = "firstName", email))
+                .unwrap()
+                .rename
+                .unwrap()
+                .value(),
+            "firstName"
+        );
+    }
+
+    #[test]
+    fn mistakes_are_named() {
+        assert!(error(quote!(skip, email)).contains("a field with `skip` has no other rules"));
+        assert!(error(quote!(email, email)).contains("duplicate `email`"));
+        assert!(error(quote!(length)).contains("this rule needs arguments"));
+        assert!(error(quote!(length())).contains("`length` needs a bound"));
+        assert!(error(quote!(length(min = 5, max = 1))).contains("can never pass"));
+        assert!(error(quote!(range(min = -1, max = -5))).contains("can never pass"));
+        assert!(error(quote!(length(chars, max = 5))).contains("counts characters already"));
+        assert!(error(quote!(range(bytes, max = 5))).contains("unknown `range` argument"));
+        assert!(error(quote!(email(x))).contains("takes no arguments"));
+        assert!(error(quote!(dive)).contains("use `nested`"));
+        assert!(error(quote!(inner(email))).contains("use `each(...)`"));
+        assert!(error(quote!(frobnicate)).contains("expected one of"));
+        assert!(error(quote!(pattern("("))).contains("invalid regular expression"));
+        assert!(error(quote!(each())).contains("`each` needs the rules"));
+        assert!(error(quote!(each(skip))).contains("applies to the field"));
+        assert!(error(quote!(each(same_as(x)))).contains("can't apply to items"));
+        assert!(error(quote!(each(email, email))).contains("duplicate `email`"));
+    }
+}

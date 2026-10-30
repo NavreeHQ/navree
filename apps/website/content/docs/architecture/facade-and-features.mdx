@@ -17,7 +17,7 @@ serde = { version = "1", features = ["derive"] }
 
 The crates aren't on crates.io yet, so the dependency comes from Git: `cargo add --git https://github.com/NavreeHQ/navree navree` adds it for you. An app created with `navree new` depends on a local checkout of Navree instead (a `path` dependency); see [where new apps get Navree from](/docs/getting-started/installation/#where-new-apps-get-navree-from).
 
-`main` needs nothing else: `AppBuilder::run` starts its own Tokio runtime. Add `tokio` when you write `#[tokio::test]` tests, and add `serde`, `garde` or `utoipa` directly when you use their derives, because derive macros name their own crate.
+`main` needs nothing else: `AppBuilder::run` starts its own Tokio runtime. Add `tokio` when you write `#[tokio::test]` tests, and add `serde` or `utoipa` directly when you use their derives, because derive macros name their own crate. `#[derive(Validate)]` comes with `navree`.
 
 Then one import brings the usual names into scope:
 
@@ -75,7 +75,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::storage` | navree-storage | `storage` | `StorageModule`: [disks](/docs/digging-deeper/storage/), signed links, direct uploads, disk sync |
 | `navree::time` | navree-time | `time` | `TimeModule`: [time zones](/docs/digging-deeper/time-zones/), `CurrentZone`, local days, send windows, holidays |
 | `navree::session` | navree-session | `session` | `SessionModule`: cookie sessions and CSRF |
-| `navree::validation` | navree-validation | `validation` | `Valid` extractors on garde |
+| `navree::validation` | navree-validation | `validation` | `#[derive(Validate)]` rules and `Valid` extractors |
 | `navree::queue` | navree-queue | `queue` | `QueueModule`: database and memory job queues |
 | `navree::audit` | navree-audit | `audit` | `AuditModule`: the audit trail |
 | `navree::access` | navree-access | `access` | `AccessModule`: roles, permissions, abilities |

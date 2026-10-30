@@ -74,7 +74,7 @@ model = "gpt-5"`,
     label: "Structured output",
     hint: "ai.structured::<T>()",
     title: "Ask for a type, get a checked value",
-    text: "`ai.structured::<T>` sends the JSON Schema of `T` from the same `ToSchema` derive your OpenAPI document uses, deserializes the answer and, with `.validated()`, checks it against its garde rules.",
+    text: "`ai.structured::<T>` sends the JSON Schema of `T` from the same `ToSchema` derive your OpenAPI document uses, deserializes the answer and, with `.validated()`, checks it against its validation rules.",
     points: [
       "Doc comments become field descriptions the model reads",
       "Invalid answers go back to the model to repair, up to a limit",
@@ -87,13 +87,13 @@ model = "gpt-5"`,
 #[derive(Debug, Deserialize, Serialize, ToSchema, Validate)]
 pub struct FollowUpEmail {
     /// The subject line, without a prefix like "Re:".
-    #[garde(length(chars, min = 1, max = 80))]
+    #[validate(length(min = 1, max = 80))]
     pub subject: String,
     /// The plain-text body, signed with the rep's first name.
-    #[garde(length(chars, min = 1, max = 2000))]
+    #[validate(length(min = 1, max = 2000))]
     pub body: String,
     /// The day to send it, when the activity suggests one.
-    #[garde(skip)]
+    #[validate(skip)]
     pub send_on: Option<NaiveDate>,
 }
 

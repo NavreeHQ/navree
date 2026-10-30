@@ -8,7 +8,6 @@ use std::time::Duration;
 
 use axum::response::{IntoResponse, Response};
 use futures_util::StreamExt;
-use garde::Validate;
 use navree_access::{CurrentAccess, PrincipalAccess};
 use navree_ai::{
     AgentOptions, AgentReply, AgentStream, Ai, AiError, AiFake, AiModule, AiOptions, Attachment,
@@ -21,6 +20,7 @@ use navree_config::{Config, ConfigSources};
 use navree_db::PageQuery;
 use navree_http::AppError;
 use navree_kernel::{Module, ModuleBuilder};
+use navree_validation::Validate;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use utoipa::ToSchema;
@@ -32,13 +32,13 @@ use crate::agents::NotesAssistant;
 #[derive(Debug, Deserialize, Serialize, ToSchema, Validate)]
 pub struct FollowUpEmail {
     /// The subject line, without a prefix like "Re:".
-    #[garde(length(chars, min = 1, max = 80))]
+    #[validate(length(min = 1, max = 80))]
     pub subject: String,
     /// The plain-text body, signed with the rep's first name.
-    #[garde(length(chars, min = 1, max = 2000))]
+    #[validate(length(min = 1, max = 2000))]
     pub body: String,
     /// The day to send it, when the activity suggests one.
-    #[garde(skip)]
+    #[validate(skip)]
     pub send_on: Option<chrono::NaiveDate>,
 }
 

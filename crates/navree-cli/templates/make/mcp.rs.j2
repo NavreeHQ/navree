@@ -2,20 +2,20 @@
 //! resources and prompts AI clients reach at `/mcp` (and over stdio with
 //! `mcp:serve --user <email>`).
 
-use garde::Validate;
 use navree::mcp::{McpContext, mcp_server};
+use navree::validation::Validate;
 use navree::{Result, injectable};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use utoipa::ToSchema;
 
 /// The arguments of `{{ name }}_echo`. Field doc comments become the
-/// descriptions in the tool's input schema; garde checks them before the
-/// tool runs.
+/// descriptions in the tool's input schema; their `#[validate]` rules are
+/// checked before the tool runs.
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct {{ pascal }}EchoArgs {
     /// The text to send back.
-    #[garde(length(chars, min = 1, max = 200))]
+    #[validate(length(min = 1, max = 200))]
     pub text: String,
 }
 

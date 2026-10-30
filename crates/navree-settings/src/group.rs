@@ -3,7 +3,7 @@
 
 use std::fmt;
 
-use garde::Validate;
+use navree_validation::Validate;
 use navree_validation::{Messages, ValidationErrors, validate_json};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -22,9 +22,9 @@ use crate::ScopeKind;
 /// #[derive(Settings, Serialize, Deserialize, Validate, Default)]
 /// #[settings(key = "portal", scopes(global, organization, workspace))]
 /// pub struct PortalSettings {
-///     #[garde(skip)]
+///     #[validate(skip)]
 ///     pub show_leaderboard: bool,
-///     #[garde(length(max = 500))]
+///     #[validate(length(max = 500))]
 ///     pub welcome_text: String,
 /// }
 /// ```
@@ -32,15 +32,15 @@ use crate::ScopeKind;
 /// By hand, the same:
 ///
 /// ```
-/// use garde::Validate;
+/// use navree_validation::Validate;
 /// use navree_settings::{ScopeKind, SettingsGroup};
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Serialize, Deserialize, Validate, Default)]
 /// pub struct PortalSettings {
-///     #[garde(skip)]
+///     #[validate(skip)]
 ///     pub show_leaderboard: bool,
-///     #[garde(length(max = 500))]
+///     #[validate(length(max = 500))]
 ///     pub welcome_text: String,
 /// }
 ///
@@ -55,10 +55,10 @@ use crate::ScopeKind;
 /// The type serializes to a JSON object whose top-level fields are the
 /// settings (serde's renames apply); each field is stored, inherited and
 /// reported on its own. `Default` gives the values when nothing is stored,
-/// and garde's rules check every write. Register the type with
+/// and its validation rules check every write. Register the type with
 /// `SettingsModule::for_feature::<T>()` or `m.settings::<T>()`.
 pub trait SettingsGroup:
-    Serialize + DeserializeOwned + Default + Validate<Context = ()> + Send + Sync + 'static
+    Serialize + DeserializeOwned + Default + Validate + Send + Sync + 'static
 {
     /// The stored key (`portal`): lower-case letters, digits, `-`, `_` and
     /// `.`, at most [`MAX_KEY_LEN`] characters. Values are keyed by it, so
@@ -191,7 +191,7 @@ impl SettingsDefinition {
         (self.canonical)(value)
     }
 
-    /// `value` deserialized into the type and checked with its garde rules;
+    /// `value` deserialized into the type and checked with its rules;
     /// failures name the field.
     pub fn validate(&self, value: &Value, messages: &Messages) -> Result<Value, ValidationErrors> {
         (self.validate)(value, messages)
@@ -254,9 +254,9 @@ mod tests {
 
     #[derive(Serialize, Deserialize, Validate, Default)]
     struct PortalSettings {
-        #[garde(skip)]
+        #[validate(skip)]
         show_leaderboard: bool,
-        #[garde(length(max = 5))]
+        #[validate(length(max = 5))]
         welcome_text: String,
     }
 
@@ -266,7 +266,7 @@ mod tests {
     }
 
     #[derive(Serialize, Deserialize, Validate, Default)]
-    #[garde(allow_unvalidated)]
+    #[validate(skip_unmarked)]
     struct NotAnObject(u32);
 
     impl SettingsGroup for NotAnObject {

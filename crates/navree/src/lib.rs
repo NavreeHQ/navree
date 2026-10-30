@@ -32,7 +32,7 @@
 //! | | | `storage-gcs`, `storage-azure` (opt-in) | Google Cloud Storage and Azure Blob Storage disks |
 //! | `time` | navree-time | `time` | `TimeModule`: time zones, `CurrentZone`, local days, send windows, holidays |
 //! | `session` | navree-session | `session` | `SessionModule`: cookie sessions and CSRF |
-//! | `validation` | navree-validation | `validation` | `Valid` extractors on garde |
+//! | `validation` | navree-validation | `validation` | `#[derive(Validate)]` rules and `Valid` extractors |
 //! | `queue` | navree-queue | `queue` | `QueueModule`: database and memory job queues, batches, operations |
 //! | `audit` | navree-audit | `audit` | `AuditModule`: the audit trail |
 //! | `access` | navree-access | `access` | `AccessModule`: roles, permissions, abilities |
@@ -102,7 +102,8 @@
 //! [`patch`] and [`delete`], which `#[controller]` consumes). Their
 //! expansions name the runtime crates through this facade (`::navree::kernel`,
 //! `::navree::http`, `::navree::access`), so an app depends on `navree` alone
-//! (plus `serde` and `garde`, whose derives name their own crates).
+//! (plus `serde`, whose derives name its own crate; `#[derive(Validate)]`
+//! names `::navree::validation`).
 //!
 //! ```no_run
 //! # // Inside this crate's own doctests the macros name `crate::kernel` and

@@ -1,4 +1,4 @@
-//! `Valid<T>` arguments: garde rules before the field runs, with the
+//! `Valid<T>` arguments: validation rules before the field runs, with the
 //! messages validation gives everywhere else.
 
 use navree_testing::principal;

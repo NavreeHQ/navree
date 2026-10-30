@@ -8,12 +8,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use axum::extract::{Form, Query};
-use garde::Validate;
 use http::Method;
 use http::request::Parts;
 use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_testing::TestApp;
+use navree_validation::Validate;
 use navree_validation::rules;
 use navree_validation::{
     Country, ModuleBuilderValidationExt, Phone, RegionSource, Valid, ValidationModule,
@@ -26,7 +26,7 @@ use crate::support::{app_with, errors};
 
 /// A contact with typed phone numbers.
 #[derive(Debug, Deserialize, Serialize, Validate)]
-#[garde(allow_unvalidated)]
+#[validate(skip_unmarked)]
 pub struct Contact {
     pub phone: Phone,
     pub mobile: Option<Phone>,
@@ -35,14 +35,14 @@ pub struct Contact {
 /// A contact whose number stays a string, checked by `rules::phone`.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct RawContact {
-    #[garde(custom(rules::phone))]
+    #[validate(custom(rules::phone))]
     pub phone: String,
 }
 
 /// No phone at all: never asks the region source.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct Note {
-    #[garde(length(min = 1))]
+    #[validate(length(min = 1))]
     pub text: String,
 }
 
@@ -438,7 +438,7 @@ async fn the_phone_message_is_overridable() {
 /// A message that arrives without a request (a gRPC call, a job payload).
 #[derive(Validate)]
 struct CallBack {
-    #[garde(custom(rules::phone))]
+    #[validate(custom(rules::phone))]
     number: String,
 }
 

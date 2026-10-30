@@ -5,10 +5,10 @@
 //! Run with `cargo test -p navree --features ai --test ai`.
 #![cfg(feature = "ai")]
 
-use garde::Validate;
 use navree::ai::utoipa::{self, ToSchema};
 use navree::ai::{Agent, AgentOptions, AgentRun, Ai, FakeReply, agent};
 use navree::prelude::*;
+use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
 
 /// A stand-in subject for `#[can]`.
@@ -23,7 +23,7 @@ impl Subject for Note {
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct Lookup {
     /// What to look up, in the user's words.
-    #[garde(length(chars, min = 1, max = 200))]
+    #[validate(length(min = 1, max = 200))]
     pub query: String,
 }
 

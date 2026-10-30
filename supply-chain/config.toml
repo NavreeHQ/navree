@@ -317,10 +317,6 @@ criteria = "safe-to-deploy"
 version = "0.2.4"
 criteria = "safe-to-deploy"
 
-[[exemptions.castaway]]
-version = "0.2.4"
-criteria = "safe-to-deploy"
-
 [[exemptions.cbc]]
 version = "0.1.2"
 criteria = "safe-to-deploy"
@@ -391,10 +387,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.combine]]
 version = "4.6.9"
-criteria = "safe-to-deploy"
-
-[[exemptions.compact_str]]
-version = "0.9.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.compression-codecs]]
@@ -828,14 +820,6 @@ criteria = "safe-to-run"
 [[exemptions.g2poly]]
 version = "1.2.2"
 criteria = "safe-to-run"
-
-[[exemptions.garde]]
-version = "0.23.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.garde_derive]]
-version = "0.23.0"
-criteria = "safe-to-deploy"
 
 [[exemptions.generator]]
 version = "0.8.11"

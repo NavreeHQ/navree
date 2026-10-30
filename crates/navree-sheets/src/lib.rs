@@ -24,7 +24,7 @@
 //!   Windows-1256, Shift_JIS and the rest), the CSV, TSV, XLSX, XLS or ODS
 //!   file is read, headers are mapped to columns (chosen, saved for files
 //!   with the same headers, or automatic), every row is read and validated
-//!   (garde, in the app's validation wording), and rows that repeat a key
+//!   (the validation rules, in the app's validation wording), and rows that repeat a key
 //!   or whose key the app already has are found. The staged rows can be
 //!   previewed ([`Imports::rows`]); applying ([`Imports::apply`]) saves
 //!   them in queue batches, each row in its own unit of work, with

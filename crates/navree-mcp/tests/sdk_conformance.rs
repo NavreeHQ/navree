@@ -15,7 +15,6 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use garde::Validate;
 use navree_auth::{AuthModule, AuthService, ClientMeta};
 use navree_crypto::CryptoModule;
 use navree_db::DatabaseModule;
@@ -24,6 +23,7 @@ use navree_kernel::{Module, ModuleBuilder};
 use navree_macros::{injectable, mcp_server};
 use navree_mcp::{McpContext, McpModule, ModuleBuilderMcpExt, PromptMessage, serve_stdio};
 use navree_testing::TestApp;
+use navree_validation::Validate;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -31,7 +31,7 @@ use serde_json::{Value, json};
 #[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
 pub struct Greet {
     /// Who to greet.
-    #[garde(length(min = 1, max = 50))]
+    #[validate(length(min = 1, max = 50))]
     pub name: String,
 }
 
@@ -39,7 +39,7 @@ pub struct Greet {
 #[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
 pub struct Review {
     /// What to review.
-    #[garde(length(min = 1))]
+    #[validate(length(min = 1))]
     pub topic: String,
 }
 

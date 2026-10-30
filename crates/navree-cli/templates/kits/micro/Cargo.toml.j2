@@ -23,8 +23,6 @@ kit_version = "{{ kit_version }}"
 [workspace.dependencies]
 {{ contracts_package }} = { path = "crates/{{ contracts_package }}" }
 chrono = { version = "0.4", features = ["serde"] }
-# garde's derive names `::garde`, so the crates depend on it directly.
-garde = { version = "0.23", features = ["derive"] }
 # Each crate turns on the navree features it uses.
 navree = {{ navree_workspace_dependency }}
 serde = { version = "1", features = ["derive"] }

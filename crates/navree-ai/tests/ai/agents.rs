@@ -6,7 +6,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::StreamExt;
-use garde::Validate;
 use navree_access::{Create, Manage, PrincipalAccess, Read, Rules, Update};
 use navree_ai::{
     Agent, AgentOptions, AgentRun, Ai, AiError, Conversations, FakeReply, ModuleBuilderAiExt,
@@ -19,6 +18,7 @@ use navree_macros::injectable;
 use navree_orm::Model as _;
 use navree_orm::access::AccessibleQuery;
 use navree_testing::TestApp;
+use navree_validation::Validate;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use utoipa::ToSchema;
@@ -29,24 +29,24 @@ use crate::support::{Note, agent_app, start, user};
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct ListNotes {
     /// Words from the title. Leave out to list every note.
-    #[garde(length(chars, max = 100))]
+    #[validate(length(max = 100))]
     pub query: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct AddNote {
     /// One line, e.g. "Call Dana about the quote".
-    #[garde(length(chars, min = 1, max = 50))]
+    #[validate(length(min = 1, max = 50))]
     pub title: String,
 }
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct RenameNote {
     /// The note's id, from `list_notes`.
-    #[garde(skip)]
+    #[validate(skip)]
     pub note_id: Uuid,
     /// The new title.
-    #[garde(length(chars, min = 1, max = 50))]
+    #[validate(length(min = 1, max = 50))]
     pub title: String,
 }
 

@@ -6,7 +6,6 @@
 use std::collections::HashSet;
 use std::sync::{Mutex, PoisonError};
 
-use garde::Validate;
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, Rules};
 use navree_contracts::{AuthVia, BoxError, Principal};
 use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
@@ -23,6 +22,7 @@ use navree_sheets::{
 };
 use navree_storage::{Storage, StorageModule};
 use navree_testing::{TestApp, TestAppBuilder, TestClient};
+use navree_validation::Validate;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -124,15 +124,15 @@ pub async fn contacts<E: Executor + ?Sized>(exec: &E) -> Vec<Contact> {
 #[derive(Debug, Deserialize, Validate, Importable)]
 pub struct ContactRow {
     #[import(header = "Email", aliases = ["E-mail", "البريد الإلكتروني"])]
-    #[garde(email)]
+    #[validate(email)]
     pub email: String,
     #[import(header = "Name", aliases = ["الاسم"])]
-    #[garde(length(min = 1, max = 100))]
+    #[validate(length(min = 1, max = 100))]
     pub name: String,
-    #[garde(range(min = 0, max = 150))]
+    #[validate(range(min = 0, max = 150))]
     pub age: Option<u32>,
     #[serde(default)]
-    #[garde(skip)]
+    #[validate(skip)]
     pub vip: bool,
 }
 

@@ -44,7 +44,7 @@ tests/
 
 ### The root directory
 
-- **`Cargo.toml`** names the package and its dependencies: `navree` (with its `postgres` feature, the driver of TimescaleDB), plus `serde` and `garde`, whose derive macros name their own crates, and `chrono`, `uuid` and `serde_json`. It ends with an empty `[workspace]` table, so the app is a workspace of its own; remove it to make the app a member of an enclosing workspace. The `[profile.dev]` settings keep debug builds quick to link and compile Argon2 with optimisations, which keeps password hashing bearable in development.
+- **`Cargo.toml`** names the package and its dependencies: `navree` (with its `postgres` feature, the driver of TimescaleDB), plus `serde`, whose derive macros name their own crate, and `chrono`, `uuid` and `serde_json`. It ends with an empty `[workspace]` table, so the app is a workspace of its own; remove it to make the app a member of an enclosing workspace. The `[profile.dev]` settings keep debug builds quick to link and compile Argon2 with optimisations, which keeps password hashing bearable in development.
 - **`.env`** holds this machine's settings and secrets, such as `APP_KEY`. `navree new` creates it from `.env.example`, and git ignores it. See [Configuration](/docs/getting-started/configuration/#the-env-file).
 - **`.env.example`** lists the keys `.env` needs, without secrets. Commit it.
 - **`config/app.toml`** holds the settings every environment shares: the listening address, the database URL, the log level, the mail transport and so on.

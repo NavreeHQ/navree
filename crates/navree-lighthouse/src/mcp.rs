@@ -25,13 +25,13 @@ use std::future::Future;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use garde::Validate;
 use navree_access::Subject as _;
 use navree_http::AppError;
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_mcp::{
     Call, McpItem, McpOutput, McpServer, PromptDef, PromptMessage, ResourceDef, ToolDef,
 };
+use navree_validation::Validate;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -84,60 +84,60 @@ impl StatusFilter {
 pub struct ListIssuesArgs {
     /// Only issues with this status: `open` (the default), `resolved`,
     /// `resolved_in_next_release`, `ignored`, or `any` for every status.
-    #[garde(skip)]
+    #[validate(skip)]
     #[serde(default)]
     pub status: Option<StatusFilter>,
     /// Only issues of this kind.
-    #[garde(skip)]
+    #[validate(skip)]
     #[serde(default)]
     pub kind: Option<IssueKind>,
     /// Only issues of this level.
-    #[garde(skip)]
+    #[validate(skip)]
     #[serde(default)]
     pub level: Option<Level>,
     /// Only issues with an occurrence in this release.
-    #[garde(length(max = 200))]
+    #[validate(length(max = 200))]
     #[serde(default)]
     pub release: Option<String>,
     /// Only issues whose latest occurrence is in this environment.
-    #[garde(length(max = 100))]
+    #[validate(length(max = 100))]
     #[serde(default)]
     pub environment: Option<String>,
     /// Only issues of routes containing this text (`POST /api/v1/invoices`).
-    #[garde(length(max = 500))]
+    #[validate(length(max = 500))]
     #[serde(default)]
     pub route: Option<String>,
     /// Only issues of job types containing this text.
-    #[garde(length(max = 200))]
+    #[validate(length(max = 200))]
     #[serde(default)]
     pub job: Option<String>,
     /// Only issues with an occurrence tagged so, written `key:value`.
-    #[garde(length(max = 200))]
+    #[validate(length(max = 200))]
     #[serde(default)]
     pub tag: Option<String>,
     /// Only issues with an occurrence for this user id.
-    #[garde(length(max = 100))]
+    #[validate(length(max = 100))]
     #[serde(default)]
     pub user: Option<String>,
     /// Only issues with an occurrence in this workspace id.
-    #[garde(length(max = 100))]
+    #[validate(length(max = 100))]
     #[serde(default)]
     pub workspace: Option<String>,
     /// Text in the title.
-    #[garde(length(max = 200))]
+    #[validate(length(max = 200))]
     #[serde(default)]
     pub search: Option<String>,
     /// The order: `last_seen` (the default), `first_seen` (newest issues
     /// first) or `count`.
-    #[garde(skip)]
+    #[validate(skip)]
     #[serde(default)]
     pub sort: Option<IssueSort>,
     /// The page, from 1.
-    #[garde(range(min = 1))]
+    #[validate(range(min = 1))]
     #[serde(default)]
     pub page: Option<u64>,
     /// Issues per page, 1 to 100 (25 by default).
-    #[garde(range(min = 1, max = 100))]
+    #[validate(range(min = 1, max = 100))]
     #[serde(default)]
     pub per_page: Option<u64>,
 }
@@ -172,7 +172,7 @@ impl ListIssuesArgs {
 #[derive(Clone, Debug, Deserialize, Validate, utoipa::ToSchema)]
 pub struct IssueArgs {
     /// The issue's id.
-    #[garde(skip)]
+    #[validate(skip)]
     pub issue_id: Uuid,
 }
 
@@ -180,14 +180,14 @@ pub struct IssueArgs {
 #[derive(Clone, Debug, Deserialize, Validate, utoipa::ToSchema)]
 pub struct OccurrencesArgs {
     /// The issue's id.
-    #[garde(skip)]
+    #[validate(skip)]
     pub issue_id: Uuid,
     /// The page, from 1.
-    #[garde(range(min = 1))]
+    #[validate(range(min = 1))]
     #[serde(default)]
     pub page: Option<u64>,
     /// Occurrences per page, 1 to 100 (25 by default).
-    #[garde(range(min = 1, max = 100))]
+    #[validate(range(min = 1, max = 100))]
     #[serde(default)]
     pub per_page: Option<u64>,
 }
@@ -197,7 +197,7 @@ pub struct OccurrencesArgs {
 pub struct TraceArgs {
     /// The stored trace's id (an occurrence's `sample_id`, or a route's
     /// slowest trace).
-    #[garde(skip)]
+    #[validate(skip)]
     pub trace_id: Uuid,
 }
 
@@ -205,7 +205,7 @@ pub struct TraceArgs {
 #[derive(Clone, Debug, Default, Deserialize, Validate, utoipa::ToSchema)]
 pub struct PeriodArgs {
     /// The period: `1h`, `24h` (the default) or `7d`.
-    #[garde(skip)]
+    #[validate(skip)]
     #[serde(default)]
     pub period: Option<Period>,
 }
@@ -215,10 +215,10 @@ pub struct PeriodArgs {
 pub struct RouteArgs {
     /// The method and route template, as `lighthouse_list_routes` lists
     /// them (`GET /api/v1/deals/{id}`).
-    #[garde(length(min = 1, max = 500))]
+    #[validate(length(min = 1, max = 500))]
     pub endpoint: String,
     /// The period: `1h`, `24h` (the default) or `7d`.
-    #[garde(skip)]
+    #[validate(skip)]
     #[serde(default)]
     pub period: Option<Period>,
 }
@@ -227,16 +227,16 @@ pub struct RouteArgs {
 #[derive(Clone, Debug, Deserialize, Validate, utoipa::ToSchema)]
 pub struct ResolveIssueArgs {
     /// The issue's id.
-    #[garde(skip)]
+    #[validate(skip)]
     pub issue_id: Uuid,
     /// Resolve it in the next release: only an occurrence from another
     /// release than the current one reopens it. Use this when the fix is
     /// not deployed yet.
-    #[garde(skip)]
+    #[validate(skip)]
     #[serde(default)]
     pub in_next_release: bool,
     /// A comment kept on the issue, such as the change that fixes it.
-    #[garde(length(max = 2000))]
+    #[validate(length(max = 2000))]
     #[serde(default)]
     pub comment: Option<String>,
 }
@@ -246,18 +246,18 @@ pub struct ResolveIssueArgs {
 #[derive(Clone, Debug, Deserialize, Validate, utoipa::ToSchema)]
 pub struct IgnoreIssueArgs {
     /// The issue's id.
-    #[garde(skip)]
+    #[validate(skip)]
     pub issue_id: Uuid,
     /// Ignore it until then (RFC 3339).
-    #[garde(skip)]
+    #[validate(skip)]
     #[serde(default)]
     pub until: Option<DateTime<Utc>>,
     /// Ignore it for this many more occurrences (at least 1).
-    #[garde(skip)]
+    #[validate(skip)]
     #[serde(default)]
     pub occurrences: Option<i64>,
     /// A comment kept on the issue.
-    #[garde(length(max = 2000))]
+    #[validate(length(max = 2000))]
     #[serde(default)]
     pub comment: Option<String>,
 }
@@ -266,7 +266,7 @@ pub struct IgnoreIssueArgs {
 #[derive(Clone, Debug, Deserialize, Validate, utoipa::ToSchema)]
 pub struct FixIssueArgs {
     /// The issue's id.
-    #[garde(skip)]
+    #[validate(skip)]
     pub issue_id: Uuid,
 }
 
@@ -317,7 +317,7 @@ fn clean(comment: Option<String>) -> Option<String> {
 /// A tool whose arguments are a `T`, running `run` with the service.
 fn tool<T, R, F, Fut>(lighthouse: &Arc<Lighthouse>, def: ToolDef, run: F) -> McpItem
 where
-    T: DeserializeOwned + Validate<Context = ()> + utoipa::ToSchema + Send + 'static,
+    T: DeserializeOwned + Validate + utoipa::ToSchema + Send + 'static,
     R: Serialize,
     F: Fn(Arc<Lighthouse>, T) -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = Result<R, AppError>> + Send + 'static,

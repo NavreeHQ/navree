@@ -15,10 +15,10 @@ use crate::support::{NotificationSettings, PortalSettings, ViewPreferences};
     PartialEq,
     serde::Serialize,
     serde::Deserialize,
-    garde::Validate,
+    navree_validation::Validate,
 )]
 pub struct TeamPortalSettings {
-    #[garde(skip)]
+    #[validate(skip)]
     pub visible: bool,
 }
 

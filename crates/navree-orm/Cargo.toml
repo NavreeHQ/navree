@@ -75,8 +75,6 @@ uuid = { workspace = true }
 [dev-dependencies]
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
-# `#[derive(garde::Validate)]` in the validation tests names `::garde`.
-garde = { workspace = true }
 insta = { workspace = true }
 # The crate's own tests use its `access`, `testing` and `validation`
 # features.

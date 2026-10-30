@@ -27,7 +27,6 @@ navree = { git = "https://github.com/NavreeHQ/navree", features = ["grpc"] }
 tonic = "0.14"
 tonic-prost = "0.14"
 prost = "0.14"
-garde = { version = "0.23", features = ["derive"] } # only for Valid<Request<T>>
 tokio-stream = { version = "0.1", features = ["sync"] } # only for streams
 
 [build-dependencies]
@@ -57,12 +56,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::write(out.join("deals_descriptor.bin"), descriptors.encode_to_vec())?;
 
     tonic_prost_build::configure()
-        // garde rules for Valid<Request<MoveDealRequest>>: every field needs one, or skip
-        .type_attribute(".crm.deals.v1.MoveDealRequest", "#[derive(garde::Validate)]")
-        .field_attribute(".crm.deals.v1.MoveDealRequest.id", "#[garde(skip)]")
-        .field_attribute(".crm.deals.v1.MoveDealRequest.stage", "#[garde(length(min = 1))]")
-        .field_attribute(".crm.deals.v1.MoveDealRequest.position", "#[garde(range(min = 0))]")
-        .field_attribute(".crm.deals.v1.MoveDealRequest.lost_reason", "#[garde(length(chars, max = 1000))]")
+        // rules for Valid<Request<MoveDealRequest>>: every field needs one, or skip
+        .type_attribute(".crm.deals.v1.MoveDealRequest", "#[derive(navree::validation::Validate)]")
+        .field_attribute(".crm.deals.v1.MoveDealRequest.id", "#[validate(skip)]")
+        .field_attribute(".crm.deals.v1.MoveDealRequest.stage", "#[validate(length(min = 1))]")
+        .field_attribute(".crm.deals.v1.MoveDealRequest.position", "#[validate(range(min = 0))]")
+        .field_attribute(".crm.deals.v1.MoveDealRequest.lost_reason", "#[validate(length(max = 1000))]")
         .compile_fds(descriptors)?;
     Ok(())
 }
@@ -123,7 +122,7 @@ impl Deals for DealsGrpc {
     #[can(Move, Deal, from = "id")]
     async fn move_deal(
         &self,
-        Valid(request): Valid<Request<pb::MoveDealRequest>>, // garde rules first
+        Valid(request): Valid<Request<pb::MoveDealRequest>>, // its rules first
         uow: Uow,
         CurrentPrincipal(me): CurrentPrincipal,
         deal: Authorized<Deal, Move>,

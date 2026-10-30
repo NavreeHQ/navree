@@ -3,9 +3,9 @@
 
 use chrono::{DateTime, Utc};
 use crm_core::{Activity, ActivityKind, SubjectType};
-use garde::Validate;
 use navree::mcp::{McpContext, mcp_server};
 use navree::prelude::*;
+use navree::validation::Validate;
 use serde::Deserialize;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -17,22 +17,22 @@ use crate::{ActivityResource, ActivityService, CreateActivity};
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct LogActivity {
     /// The deal it is about.
-    #[garde(skip)]
+    #[validate(skip)]
     pub deal_id: Uuid,
     /// What happened: a note, call, email or meeting, or a task to do.
-    #[garde(skip)]
+    #[validate(skip)]
     pub kind: ActivityKind,
     /// The one-line summary.
     #[serde(deserialize_with = "trimmed")]
-    #[garde(length(min = 1, max = 255))]
+    #[validate(length(min = 1, max = 255))]
     pub subject: String,
     /// Details.
     #[serde(default)]
-    #[garde(length(max = 10000))]
+    #[validate(length(max = 10000))]
     pub body: Option<String>,
     /// When a task is due (RFC 3339).
     #[serde(default)]
-    #[garde(skip)]
+    #[validate(skip)]
     pub due_at: Option<DateTime<Utc>>,
 }
 

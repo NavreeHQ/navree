@@ -3,7 +3,7 @@
 //! language model's tool arguments). [`validate`](crate::validate) checks a
 //! value that is already deserialized.
 
-use garde::Validate;
+use crate::Validate;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
@@ -15,7 +15,7 @@ use crate::{Messages, ValidationErrors};
 /// an object`).
 const ROOT: &str = "input";
 
-/// Deserializes `input` into `T` and runs `T`'s garde rules, reporting
+/// Deserializes `input` into `T` and runs `T`'s validation rules, reporting
 /// failures exactly as [`Valid<Json<T>>`](crate::Valid) does (`"subject
 /// should not be empty"`, `"kind must be one of the following values: note,
 /// call"`), rendered with `messages`. Failures about the input as a whole
@@ -25,14 +25,14 @@ const ROOT: &str = "input";
 /// [`InputContext::scope`](crate::InputContext::scope).
 ///
 /// ```
-/// use garde::Validate;
+/// use navree_validation::Validate;
 /// use navree_validation::{Messages, validate_json};
 /// use serde::Deserialize;
 /// use serde_json::json;
 ///
 /// #[derive(Debug, Deserialize, Validate)]
 /// struct LogCall {
-///     #[garde(length(chars, min = 1, max = 255))]
+///     #[validate(length(min = 1, max = 255))]
 ///     subject: String,
 /// }
 ///
@@ -52,7 +52,7 @@ const ROOT: &str = "input";
 /// ```
 pub fn validate_json<T>(input: &Value, messages: &Messages) -> Result<T, ValidationErrors>
 where
-    T: DeserializeOwned + Validate<Context = ()>,
+    T: DeserializeOwned + Validate,
 {
     let value = match from_json::<T>(input) {
         Ok(value) => value,
@@ -87,11 +87,11 @@ mod tests {
 
     #[derive(Debug, Deserialize, Validate)]
     struct Args {
-        #[garde(length(chars, min = 1, max = 5))]
+        #[validate(length(min = 1, max = 5))]
         subject: String,
-        #[garde(skip)]
+        #[validate(skip)]
         kind: Kind,
-        #[garde(range(min = 1))]
+        #[validate(range(min = 1))]
         #[serde(default = "one")]
         count: u32,
     }

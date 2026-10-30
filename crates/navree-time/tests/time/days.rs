@@ -1,7 +1,6 @@
 //! `LocalDay` and `DayRange`: calendar days counted on a zone's clock.
 
 use chrono::{TimeDelta, Timelike, Weekday};
-use garde::Validate;
 use navree_time::{DayRange, LocalDay, Zone};
 
 use crate::support::{date, day, utc, zone};
@@ -175,15 +174,8 @@ fn ranges_have_helpers_for_common_windows() {
 fn a_range_ending_before_it_starts_is_refused() {
     let error = DayRange::new(day("2026-10-31"), day("2026-10-01")).unwrap_err();
     assert!(error.to_string().contains("before"), "{error}");
-
-    let backwards = DayRange {
-        from: day("2026-10-31"),
-        to: day("2026-10-01"),
-    };
-    let report = backwards.validate().unwrap_err();
-    let text = report.to_string();
-    assert!(text.contains("to"), "{text}");
-    assert!(DayRange::single(day("2026-10-01")).validate().is_ok());
+    // A range deserialized from a request is checked by navree-validation
+    // (`Valid<Query<DayRange>>`), whose tests cover it.
 }
 
 #[test]

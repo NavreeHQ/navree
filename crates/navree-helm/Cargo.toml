@@ -27,7 +27,6 @@ axum = { workspace = true }
 chrono = { workspace = true }
 cookie = { workspace = true }
 form_urlencoded = { workspace = true }
-garde = { workspace = true }
 http = { workspace = true }
 navree-access = { workspace = true }
 navree-audit = { workspace = true }

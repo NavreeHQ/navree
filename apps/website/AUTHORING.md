@@ -58,7 +58,7 @@ Every page starts with two fields:
 ```mdx
 ---
 title: "Validation"
-description: "Validated extractors on garde, with field-level error messages."
+description: "`#[derive(Validate)]` rules and validated extractors, with field-level error messages."
 ---
 ```
 
@@ -117,7 +117,7 @@ Don't write an `# h1` in the body: the title is the page's heading.
   `/performance/`. Link to Navree's measurements with
   `[performance](/performance/)`, never `/benchmarks/`: that URL only
   redirects to `/performance/`.
-- External links use full URLs: `[garde](https://docs.rs/garde)`.
+- External links use full URLs: `[Axum](https://docs.rs/axum)`.
 
 ## Code blocks
 
@@ -316,7 +316,7 @@ Internal links use paths; links starting with `http` open the other site.
 ```mdx
 <LinkCards>
   <LinkCard href="/docs/basics/validation/" title="Validation">
-    Validated extractors on garde, with field-level messages.
+    `#[derive(Validate)]` rules and validated extractors, with field-level messages.
   </LinkCard>
   <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
     Background jobs with retries and backoff.
@@ -355,7 +355,7 @@ to get something done.
   another framework or use one as a reference point: no "like X", "X-style",
   "the way you know from X" or "X calls these ...". Describe the feature,
   its behaviour and its limits. Naming the libraries Navree is built on is
-  good (Tokio, Axum, Hyper, Tower, sqlx, garde, tonic, rustls,
+  good (Tokio, Axum, Hyper, Tower, sqlx, tonic, rustls,
   Argon2), and so are protocols and standards: "speaks the Pusher protocol,
   so pusher-js and any Pusher client connects", OpenAPI 3.1, OAuth 2.1,
   OpenTelemetry, MCP. The JSON error shape

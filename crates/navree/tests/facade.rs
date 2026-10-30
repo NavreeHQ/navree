@@ -279,11 +279,11 @@ impl Library for LibraryItem {}
     Default,
     serde::Serialize,
     serde::Deserialize,
-    garde::Validate,
+    navree::validation::Validate,
 )]
 #[settings(key = "facade", scopes(global, user))]
 struct FacadeSettings {
-    #[garde(skip)]
+    #[validate(skip)]
     compact: bool,
 }
 
@@ -607,9 +607,10 @@ const ALWAYS: [&str; 5] = [
 /// Proc-macro crates that a module crate re-exports, as (macro crate,
 /// module crate): they come with the module crate's feature (`orm` brings
 /// navree-orm-macros through navree-orm), so the facade does not name them.
-const COMPANION_MACROS: [(&str, &str); 2] = [
+const COMPANION_MACROS: [(&str, &str); 3] = [
     ("navree-orm-macros", "navree-orm"),
     ("navree-i18n-macros", "navree-i18n"),
+    ("navree-validation-macros", "navree-validation"),
 ];
 
 impl Features {

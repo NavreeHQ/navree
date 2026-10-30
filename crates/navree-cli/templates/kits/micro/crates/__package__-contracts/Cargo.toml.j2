@@ -8,9 +8,8 @@ publish.workspace = true
 
 [dependencies]
 chrono.workspace = true
-garde.workspace = true
-# Only the `Event` trait: a client that depends on this crate gets no more
-# of navree than that.
-navree = { workspace = true, features = ["events"] }
+# The `Event` trait and `#[derive(Validate)]` for the payloads: a client
+# that depends on this crate gets no more of navree than that.
+navree = { workspace = true, features = ["events", "validation"] }
 serde.workspace = true
 uuid.workspace = true

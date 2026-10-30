@@ -6,9 +6,9 @@ use std::future::Future;
 use std::sync::Arc;
 
 use async_graphql::{Context, Error, InputType, InputValueError, InputValueResult, Value};
-use garde::Validate;
 use navree_db::Uow;
 use navree_http::AppError;
+use navree_validation::Validate;
 
 pub use crate::root::{ErasedObject, ErasedSubscription};
 pub use navree_access::{ActionMarker, Subject};
@@ -266,14 +266,10 @@ impl<T: InputType> InputType for ValidArg<T> {
     }
 }
 
-/// Runs `T`'s garde rules on the argument `name`: the value, or a
+/// Runs `T`'s validation rules on the argument `name`: the value, or a
 /// `BAD_REQUEST` error with every message and the field errors under
 /// `name.<field>` (messages from the app's validation messages).
-pub fn validate<T: Validate<Context = ()>>(
-    ctx: &Context<'_>,
-    name: &str,
-    arg: ValidArg<T>,
-) -> Result<T, Error> {
+pub fn validate<T: Validate>(ctx: &Context<'_>, name: &str, arg: ValidArg<T>) -> Result<T, Error> {
     let op = operation(ctx)?;
     match navree_validation::validate(&arg.value, arg.input.as_ref(), &op.shared.messages, name) {
         Ok(()) => Ok(arg.value),

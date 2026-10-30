@@ -1,13 +1,13 @@
 //! Request bodies and queries, with their validation rules.
 //!
-//! Required body fields are `Option`s with garde's `required` rule, so a
+//! Required body fields are `Option`s with `required` rule, so a
 //! request missing several of them gets every error at once (a serde
 //! "missing field" error would stop at the first).
 
 use crm_core::Stage;
-use garde::Validate;
-use navree::validation::rule_error;
+use navree::validation::Validate;
 use navree::validation::rules::{self, RuleInput};
+use navree::validation::{Violation, rule_error};
 use serde::{Deserialize, Deserializer};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -22,36 +22,36 @@ pub const MAX_AMOUNT_CENTS: i64 = 1_000_000_000_000_000;
 #[schema(as = DealInput)]
 pub struct CreateDeal {
     /// The title.
-    #[garde(required, custom(not_blank), length(max = 255))]
+    #[validate(required, custom(not_blank), length(max = 255))]
     #[schema(value_type = String, required = true)]
     pub title: Option<String>,
     /// The company (must exist).
-    #[garde(required)]
+    #[validate(required)]
     #[schema(value_type = String, format = Uuid, required = true)]
     pub company_id: Option<Uuid>,
     /// The main contact (must exist).
-    #[garde(skip)]
+    #[validate(skip)]
     pub contact_id: Option<Uuid>,
     /// The value in cents, from 0 to [`MAX_AMOUNT_CENTS`].
-    #[garde(required, range(min = 0, max = MAX_AMOUNT_CENTS))]
+    #[validate(required, range(min = 0, max = MAX_AMOUNT_CENTS))]
     #[schema(value_type = i64, required = true, minimum = 0, maximum = 1_000_000_000_000_000_i64)]
     pub amount_cents: Option<i64>,
     /// The ISO 4217 code (default `USD`; stored upper-case).
-    #[garde(custom(currency_code))]
+    #[validate(custom(currency_code))]
     pub currency: Option<String>,
     /// The stage (default `lead`).
-    #[garde(skip)]
+    #[validate(skip)]
     pub stage: Option<Stage>,
     /// Why the deal was lost: required when `stage` is `lost`.
-    #[garde(length(max = 1000))]
+    #[validate(length(max = 1000))]
     pub lost_reason: Option<String>,
     /// `YYYY-MM-DD`.
-    #[garde(custom(rules::date_ymd))]
+    #[validate(custom(rules::date_ymd))]
     #[schema(format = Date)]
     pub expected_close_date: Option<String>,
     /// The owner (default: the signed-in user; someone else needs
     /// `manage` on deals).
-    #[garde(skip)]
+    #[validate(skip)]
     pub owner_id: Option<Uuid>,
 }
 
@@ -62,37 +62,37 @@ pub struct CreateDeal {
 #[schema(as = DealUpdateInput)]
 pub struct UpdateDeal {
     /// The title.
-    #[garde(custom(not_blank), length(max = 255))]
+    #[validate(custom(not_blank), length(max = 255))]
     pub title: Option<String>,
     /// The company (must exist).
-    #[garde(skip)]
+    #[validate(skip)]
     pub company_id: Option<Uuid>,
     /// The main contact (must exist), or `null`.
     #[serde(default, deserialize_with = "present")]
-    #[garde(skip)]
+    #[validate(skip)]
     #[schema(value_type = Option<String>, format = Uuid)]
     pub contact_id: Option<Option<Uuid>>,
     /// The value in cents, from 0 to [`MAX_AMOUNT_CENTS`].
-    #[garde(range(min = 0, max = MAX_AMOUNT_CENTS))]
+    #[validate(range(min = 0, max = MAX_AMOUNT_CENTS))]
     #[schema(minimum = 0, maximum = 1_000_000_000_000_000_i64)]
     pub amount_cents: Option<i64>,
     /// The ISO 4217 code (stored upper-case).
-    #[garde(custom(currency_code))]
+    #[validate(custom(currency_code))]
     pub currency: Option<String>,
     /// A new stage: the deal moves to the end of that column (needs `move`
     /// on the deal).
-    #[garde(skip)]
+    #[validate(skip)]
     pub stage: Option<Stage>,
     /// Why the deal was lost: required when it becomes `lost`.
-    #[garde(length(max = 1000))]
+    #[validate(length(max = 1000))]
     pub lost_reason: Option<String>,
     /// `YYYY-MM-DD`, or `null`.
     #[serde(default, deserialize_with = "present")]
-    #[garde(custom(rules::date_ymd))]
+    #[validate(custom(rules::date_ymd))]
     #[schema(value_type = Option<String>, format = Date)]
     pub expected_close_date: Option<Option<String>>,
     /// A new owner (needs `manage` on deals).
-    #[garde(skip)]
+    #[validate(skip)]
     pub owner_id: Option<Uuid>,
 }
 
@@ -101,15 +101,15 @@ pub struct UpdateDeal {
 #[schema(as = DealMoveInput)]
 pub struct MoveDeal {
     /// The target stage.
-    #[garde(required)]
+    #[validate(required)]
     #[schema(value_type = Stage, required = true)]
     pub stage: Option<Stage>,
     /// The 0-based index within the target stage (default: the end;
     /// larger values mean the end); the other deals there shift.
-    #[garde(range(min = 0))]
+    #[validate(range(min = 0))]
     pub position: Option<i64>,
     /// Why the deal was lost: required when `stage` is `lost`.
-    #[garde(length(max = 1000))]
+    #[validate(length(max = 1000))]
     pub lost_reason: Option<String>,
 }
 
@@ -117,16 +117,16 @@ pub struct MoveDeal {
 #[derive(Debug, Default, Deserialize, Validate)]
 pub struct DealFilter {
     /// Only deals in this stage.
-    #[garde(skip)]
+    #[validate(skip)]
     pub stage: Option<Stage>,
     /// Only deals this user owns.
-    #[garde(skip)]
+    #[validate(skip)]
     pub owner_id: Option<Uuid>,
     /// Only deals of this company.
-    #[garde(skip)]
+    #[validate(skip)]
     pub company_id: Option<Uuid>,
     /// Part of the title (case-insensitive).
-    #[garde(skip)]
+    #[validate(skip)]
     pub search: Option<String>,
 }
 
@@ -134,7 +134,7 @@ pub struct DealFilter {
 #[derive(Debug, Default, Deserialize, Validate)]
 pub struct BoardFilter {
     /// Only deals this user owns.
-    #[garde(skip)]
+    #[validate(skip)]
     pub owner_id: Option<Uuid>,
 }
 
@@ -149,7 +149,7 @@ where
 }
 
 /// Not empty or whitespace only (message key `required`).
-fn not_blank<T: RuleInput + ?Sized, C: ?Sized>(value: &T, _ctx: &C) -> garde::Result {
+fn not_blank<T: RuleInput + ?Sized>(value: &T) -> Result<(), Violation> {
     match value.rule_str() {
         Some(text) if text.trim().is_empty() => Err(rule_error("required", &[])),
         _ => Ok(()),
@@ -157,11 +157,9 @@ fn not_blank<T: RuleInput + ?Sized, C: ?Sized>(value: &T, _ctx: &C) -> garde::Re
 }
 
 /// Three ASCII letters (any case).
-fn currency_code<T: RuleInput + ?Sized, C: ?Sized>(value: &T, _ctx: &C) -> garde::Result {
+fn currency_code<T: RuleInput + ?Sized>(value: &T) -> Result<(), &'static str> {
     match value.rule_str() {
-        Some(code) if !is_currency_code(code) => Err(garde::Error::new(
-            ":attribute must be a 3-letter currency code",
-        )),
+        Some(code) if !is_currency_code(code) => Err(":attribute must be a 3-letter currency code"),
         _ => Ok(()),
     }
 }

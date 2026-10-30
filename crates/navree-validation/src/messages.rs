@@ -225,7 +225,7 @@ pub trait MessageTranslator: Send + Sync + 'static {
     ) -> String;
 
     /// The display name of `field`, for messages that come as text with an
-    /// `:attribute` placeholder (an app rule's `garde::Error::new`).
+    /// `:attribute` placeholder (a custom rule's own text).
     fn attribute(&self, messages: &Messages, field: &str) -> String;
 }
 

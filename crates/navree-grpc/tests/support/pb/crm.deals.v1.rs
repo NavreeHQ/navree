@@ -20,20 +20,20 @@ pub struct ListDealsResponse {
     #[prost(uint64, tag = "2")]
     pub total: u64,
 }
-#[derive(garde::Validate)]
+#[derive(navree_validation::Validate)]
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct MoveDealRequest {
     #[prost(string, tag = "1")]
-    #[garde(skip)]
+    #[validate(skip)]
     pub id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    #[garde(length(min = 1))]
+    #[validate(length(min = 1))]
     pub stage: ::prost::alloc::string::String,
     #[prost(int64, optional, tag = "3")]
-    #[garde(range(min = 0))]
+    #[validate(range(min = 0))]
     pub position: ::core::option::Option<i64>,
     #[prost(string, optional, tag = "4")]
-    #[garde(length(chars, max = 1000))]
+    #[validate(length(max = 1000))]
     pub lost_reason: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

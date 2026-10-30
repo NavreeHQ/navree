@@ -9,12 +9,12 @@
 //!   `task-export` (on by default).
 
 use async_graphql::{Context, SimpleObject};
-use garde::Validate;
 use navree::flags::flag;
 use navree::graphql::{ContextExt, resolver};
 use navree::mcp::{McpContext, mcp_server};
 use navree::orm::prelude::*;
 use navree::prelude::*;
+use navree::validation::Validate;
 use navree::workspace::Workspaces;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -108,7 +108,7 @@ impl EvidenceResolver {
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct SummaryArgs {
     /// The workspace's slug, such as `acme`.
-    #[garde(length(min = 1, max = 64))]
+    #[validate(length(min = 1, max = 64))]
     pub workspace: String,
 }
 

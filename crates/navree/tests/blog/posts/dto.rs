@@ -1,6 +1,6 @@
 //! Request bodies and their validation rules.
 
-use garde::Validate;
+use navree::validation::Validate;
 use serde::Deserialize;
 use utoipa::ToSchema;
 
@@ -8,10 +8,10 @@ use utoipa::ToSchema;
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreatePost {
     /// 3 to 200 characters.
-    #[garde(length(min = 3, max = 200))]
+    #[validate(length(min = 3, max = 200))]
     pub title: String,
     /// Not empty.
-    #[garde(length(min = 1, max = 10_000))]
+    #[validate(length(min = 1, max = 10_000))]
     pub body: String,
 }
 
@@ -19,10 +19,10 @@ pub struct CreatePost {
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct UpdatePost {
     /// 3 to 200 characters.
-    #[garde(length(min = 3, max = 200))]
+    #[validate(length(min = 3, max = 200))]
     pub title: Option<String>,
     /// Not empty.
-    #[garde(length(min = 1, max = 10_000))]
+    #[validate(length(min = 1, max = 10_000))]
     pub body: Option<String>,
 }
 

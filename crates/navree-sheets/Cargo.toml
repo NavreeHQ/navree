@@ -35,7 +35,6 @@ chrono = { workspace = true }
 csv = { workspace = true }
 encoding_rs = { workspace = true }
 futures-util = { workspace = true }
-garde = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
 navree-config = { workspace = true }

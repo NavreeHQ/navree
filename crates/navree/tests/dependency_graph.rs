@@ -65,6 +65,9 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-harbor", 0, &[]),
     // `embed_locales!` for navree-i18n (proc-macro; no navree dependencies).
     rule("navree-i18n-macros", 0, &[]),
+    // `#[derive(Validate)]` (re-exported by navree-validation; proc-macro, no
+    // navree dependencies).
+    rule("navree-validation-macros", 0, &[]),
     // The bounded in-process cache (sharded, SIEVE eviction, TTL and TTI,
     // single-flight loading) under every framework cache: below everything
     // that keeps one (navree-cache, navree-access, navree-oauth,
@@ -125,7 +128,13 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-time", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db"]),
     // L4
     rule("navree-session", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto", "navree-db"]),
-    rule("navree-validation", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db"]),
+    // Its derive comes from navree-validation-macros; `Validate` for
+    // navree-time's zones, days and day ranges (optional feature `time`;
+    // time never depends on validation).
+    rule("navree-validation", 4, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
+        "navree-validation-macros", "navree-time",
+    ]),
     // The audit trail is a navree-orm model (`AuditRecord`), listed through
     // the ORM (same layer; the ORM never depends on audit) and written with
     // navree-db's statements.
@@ -395,12 +404,14 @@ const HIERARCHY: &[Rule] = &[
     // pruned on the schedule; a server-rendered dashboard (navree-view)
     // signed in through navree-auth, with an encrypted cookie
     // (navree-crypto), behind navree-access abilities; with its `mcp`
-    // feature, tools, a resource and a prompt on navree-mcp's server. Its
-    // tables are navree-orm models.
+    // feature, tools, a resource and a prompt on navree-mcp's server, whose
+    // arguments derive navree-validation's `Validate`. Its tables are
+    // navree-orm models.
     rule("navree-lighthouse", 7, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
         "navree-crypto", "navree-view", "navree-http-client", "navree-db", "navree-mail",
         "navree-schedule", "navree-access", "navree-auth", "navree-mcp", "navree-orm",
+        "navree-validation",
     ]),
     // Logbook: a telemetry sink and a data-change observer (navree-db), an
     // HTTP layer and UI (navree-http, navree-view), replay as the signed-in

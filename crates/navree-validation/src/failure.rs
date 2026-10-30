@@ -1,21 +1,22 @@
 //! Raw validation failures (a field path plus a rule key and parameters),
-//! collected from garde reports, serde errors and async rules, and rendered
-//! into [`ValidationErrors`] with a [`Messages`] table at the end.
+//! collected from [`Violations`], serde errors and async rules, and
+//! rendered into [`ValidationErrors`] with a [`Messages`] table at the end.
 //!
-//! garde's built-in rules report through its `I18n` hook; inside
-//! [`scope`] that hook (and navree's own rules, see [`rule_error`]) encode the
-//! rule key and parameters into the garde message, so the template is picked
-//! only when rendering: once the app's [`Messages`] are known and with the
-//! JSON input at hand (`min`/`max` on an array use the `array` messages).
+//! Rules report a [`Violation`]: a rule key with its parameters, or a text.
+//! The template is picked only when rendering, once the app's [`Messages`]
+//! are known and with the JSON input at hand (a custom rule's generic
+//! `min.length` uses the `array` messages on an array).
+//!
+//! serde errors are text, so inside the extractors ([`encoding`]) the
+//! international types encode their rule key into the error message
+//! ([`serde_error`]), and [`from_serde`] decodes it.
 
-use std::borrow::Cow;
 use std::cell::Cell;
 use std::fmt::Display;
 
-use garde::i18n::{I18n, InvalidCreditCard, InvalidEmail, InvalidPhoneNumber, InvalidUrl, IpKind};
 use serde_json::Value;
 
-use crate::{MessageTranslator, Messages, ValidationErrors};
+use crate::{MessageTranslator, Messages, ValidationErrors, Violation, Violations};
 
 /// Starts an encoded rule message: `MARK key (SEP name=value)*`.
 const MARK: &str = "\u{1f}navree\u{1f}";
@@ -40,7 +41,7 @@ pub(crate) enum Rule {
         key: String,
         params: Vec<(String, String)>,
     },
-    /// A ready message (a custom garde rule with its own text).
+    /// A ready message (a custom rule with its own text).
     Text(String),
 }
 
@@ -57,13 +58,8 @@ impl Failure {
 }
 
 thread_local! {
-    /// Whether navree's i18n hook is installed on this thread.
+    /// Whether serde errors encode their rule key on this thread.
     static ACTIVE: Cell<bool> = const { Cell::new(false) };
-}
-
-/// Runs `f` (synchronous garde validation) with navree's message encoding.
-pub(crate) fn scope<R>(f: impl FnOnce() -> R) -> R {
-    encoding(|| garde::with_i18n(NavreeI18n, f))
 }
 
 /// Runs `f` (deserializing input) with navree's message encoding, so the
@@ -91,12 +87,14 @@ pub(crate) fn serde_error<E: serde::de::Error>(rule: &str, plain: impl Display) 
     }
 }
 
-/// A garde error for `rule` with `params`, rendered from the app's message
-/// table (so it can be overridden like any built-in rule). Use it in your
-/// own garde `custom` rules:
+/// A [`Violation`] of `rule` with `params`, rendered from the app's
+/// message table (so it can be overridden like any built-in rule). Use it
+/// in your own `custom` rules:
 ///
 /// ```
-/// fn even(value: &u32, _: &()) -> garde::Result {
+/// use navree_validation::Violation;
+///
+/// fn even(value: &u32) -> Result<(), Violation> {
 ///     if value.is_multiple_of(2) {
 ///         Ok(())
 ///     } else {
@@ -108,20 +106,15 @@ pub(crate) fn serde_error<E: serde::de::Error>(rule: &str, plain: impl Display) 
 ///
 /// A rule key without a template (default or override) renders the
 /// `invalid` template. Custom rules may also return plain text with an
-/// `:attribute` placeholder (`garde::Error::new(":attribute must be odd")`).
+/// `:attribute` placeholder (`Err(":attribute must be odd")`).
 ///
-/// Outside navree's extractors the message is rendered at once from the
-/// default table, for a field called `value`.
-pub fn rule_error(rule: &str, params: &[(&str, &dyn Display)]) -> garde::Error {
-    if ACTIVE.with(Cell::get) {
-        garde::Error::new(encode(rule, params))
-    } else {
-        let params: Vec<(&str, String)> = params
-            .iter()
-            .map(|(name, value)| (*name, value.to_string()))
-            .collect();
-        garde::Error::new(Messages::default().render("value", resolve_key(rule, None), &params))
-    }
+/// It is `Violation::rule(rule)` with each parameter added by
+/// [`with`](Violation::with).
+pub fn rule_error(rule: &str, params: &[(&str, &dyn Display)]) -> Violation {
+    params.iter().fold(
+        Violation::rule(rule.to_owned()),
+        |violation, (name, value)| violation.with((*name).to_owned(), value),
+    )
 }
 
 fn encode(rule: &str, params: &[(&str, &dyn Display)]) -> String {
@@ -150,116 +143,24 @@ fn decode(message: &str) -> Rule {
     Rule::Keyed { key, params }
 }
 
-/// Encoded messages for garde's built-in rules.
-struct NavreeI18n;
-
-fn keyed(rule: &str, params: &[(&str, &dyn Display)]) -> Cow<'static, str> {
-    Cow::Owned(encode(rule, params))
-}
-
-impl I18n for NavreeI18n {
-    fn length_lower_than(&self, min: usize) -> Cow<'static, str> {
-        keyed("min.length", &[("min", &min)])
-    }
-
-    fn length_greater_than(&self, max: usize) -> Cow<'static, str> {
-        keyed("max.length", &[("max", &max)])
-    }
-
-    fn range_lower_than(&self, min: &dyn Display) -> Cow<'static, str> {
-        keyed("min.numeric", &[("min", min)])
-    }
-
-    fn range_greater_than(&self, max: &dyn Display) -> Cow<'static, str> {
-        keyed("max.numeric", &[("max", max)])
-    }
-
-    fn credit_card_invalid(&self, _reason: InvalidCreditCard) -> Cow<'static, str> {
-        keyed("credit_card", &[])
-    }
-
-    fn pattern_no_match(&self, pattern: &dyn Display) -> Cow<'static, str> {
-        keyed("regex", &[("pattern", pattern)])
-    }
-
-    fn contains_missing(&self, pattern: &dyn Display) -> Cow<'static, str> {
-        keyed("contains", &[("value", pattern)])
-    }
-
-    fn url_invalid(&self, _reason: InvalidUrl) -> Cow<'static, str> {
-        keyed("url", &[])
-    }
-
-    fn prefix_missing(&self, pattern: &dyn Display) -> Cow<'static, str> {
-        keyed("starts_with", &[("values", pattern)])
-    }
-
-    fn suffix_missing(&self, pattern: &dyn Display) -> Cow<'static, str> {
-        keyed("ends_with", &[("values", pattern)])
-    }
-
-    fn phone_number_invalid(&self, _reason: InvalidPhoneNumber) -> Cow<'static, str> {
-        keyed("phone", &[])
-    }
-
-    fn ip_invalid(&self, kind: IpKind) -> Cow<'static, str> {
-        let rule = match kind {
-            IpKind::Any => "ip",
-            IpKind::V4 => "ipv4",
-            IpKind::V6 => "ipv6",
-        };
-        keyed(rule, &[])
-    }
-
-    fn matches_field_mismatch(&self, field: &dyn Display) -> Cow<'static, str> {
-        keyed("same", &[("other", field)])
-    }
-
-    fn email_invalid(&self, _reason: InvalidEmail) -> Cow<'static, str> {
-        keyed("email", &[])
-    }
-
-    fn ascii_invalid(&self) -> Cow<'static, str> {
-        keyed("ascii", &[])
-    }
-
-    fn alphanumeric_invalid(&self) -> Cow<'static, str> {
-        keyed("alpha_num", &[])
-    }
-
-    fn required_not_set(&self) -> Cow<'static, str> {
-        keyed("required", &[])
-    }
-}
-
-/// The failures of a garde report.
-pub(crate) fn from_report(report: garde::Report) -> Vec<Failure> {
-    report
-        .into_inner()
+/// The failures of a value's [`Violations`].
+pub(crate) fn from_violations(violations: Violations) -> Vec<Failure> {
+    violations
         .into_iter()
-        .map(|(path, error)| Failure {
-            path: dotted(&path),
-            rule: decode(error.message()),
+        .map(|(path, violation)| Failure {
+            path,
+            rule: match violation.as_text() {
+                Some(text) => Rule::Text(text.to_owned()),
+                None => Rule::Keyed {
+                    key: violation.key().unwrap_or_default().to_owned(),
+                    params: violation
+                        .params()
+                        .map(|(name, value)| (name.to_owned(), value.to_owned()))
+                        .collect(),
+                },
+            },
         })
         .collect()
-}
-
-/// `items[0].sku` as `items.0.sku`, from the path's serialized components
-/// (`[["key", "items"], ["index", "0"], ...]`; unnamed components skipped).
-fn dotted(path: &garde::Path) -> String {
-    let Ok(Value::Array(components)) = serde_json::to_value(path) else {
-        return path.to_string();
-    };
-    components
-        .iter()
-        .filter_map(|component| match component {
-            Value::Array(pair) if pair.first().and_then(Value::as_str) != Some("none") => {
-                pair.get(1).and_then(Value::as_str)
-            }
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join(".")
 }
 
 /// The failure for a serde error `message` at `path`: a missing field is
@@ -431,9 +332,10 @@ fn expected_rule(expected: &str) -> &'static str {
 }
 
 /// The rule whose template renders `key`: `min.length` and `max.length`
-/// become the `array` variant when the input at the path is an array or an
-/// object, else the `string` variant.
-fn resolve_key<'a>(key: &'a str, input: Option<&Value>) -> &'a str {
+/// (from a custom rule that doesn't know what it measured) become the
+/// `array` variant when the input at the path is an array or an object,
+/// else the `string` variant. The built-in `length` reports its variant.
+pub(crate) fn resolve_key<'a>(key: &'a str, input: Option<&Value>) -> &'a str {
     let collection = matches!(input, Some(Value::Array(_) | Value::Object(_)));
     match (key, collection) {
         ("min.length", true) => "min.array",
@@ -518,10 +420,26 @@ mod tests {
     }
 
     #[test]
-    fn garde_paths_become_dotted() {
-        let path = garde::Path::new("items").join(0).join("sku");
-        assert_eq!(dotted(&path), "items.0.sku");
-        assert_eq!(dotted(&garde::Path::empty()), "");
+    fn violations_become_failures() {
+        let mut violations = Violations::new();
+        violations.add("items.0.sku", Violation::rule("min.string").with("min", 1));
+        violations.add("name", Violation::text(":attribute must be odd"));
+        assert_eq!(
+            from_violations(violations),
+            [
+                Failure {
+                    path: "items.0.sku".into(),
+                    rule: Rule::Keyed {
+                        key: "min.string".into(),
+                        params: vec![("min".into(), "1".into())],
+                    },
+                },
+                Failure {
+                    path: "name".into(),
+                    rule: Rule::Text(":attribute must be odd".into()),
+                },
+            ]
+        );
     }
 
     #[test]
@@ -645,16 +563,13 @@ mod tests {
     }
 
     #[test]
-    fn rule_error_outside_scope_renders_defaults() {
+    fn rule_error_is_a_keyed_violation() {
         let error = rule_error("uuid", &[]);
         assert_eq!(error.message(), "value must be a UUID");
-        let inside = scope(|| rule_error("uuid", &[]));
+        let error = rule_error("date_format", &[("format", &"YYYY-MM-DD")]);
         assert_eq!(
-            decode(inside.message()),
-            Rule::Keyed {
-                key: "uuid".into(),
-                params: vec![]
-            }
+            error,
+            Violation::rule("date_format").with("format", "YYYY-MM-DD")
         );
     }
 }

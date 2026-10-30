@@ -99,7 +99,9 @@ pub use navree_schedule::{ModuleBuilderScheduleExt as _, ScheduleModule};
 #[cfg(feature = "session")]
 pub use navree_session::SessionModule;
 #[cfg(feature = "validation")]
-pub use navree_validation::{ModuleBuilderValidationExt as _, Valid, ValidAsync, ValidationModule};
+pub use navree_validation::{
+    ModuleBuilderValidationExt as _, Valid, ValidAsync, Validate, ValidationModule,
+};
 
 #[cfg(feature = "auth")]
 pub use navree_auth::{AuthModule, AuthService, CurrentUser, ModuleBuilderAuthExt as _};

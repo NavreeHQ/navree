@@ -221,8 +221,8 @@ async fn signups(
 ```
 
 - `LocalDay` is a date written `yyyy-MM-dd`. It parses only that form, so `2026-1-5` and `27/10/2026` are 400s on the field. `LocalDay::of(at, &zone)` is the day an instant falls on; `day.utc_bounds(&zone)` is its half-open span, 23 or 25 hours long when clocks change. `day.at(time, &zone)` is a time of that day.
-- `DayRange { from, to }` deserializes from a query string or a body and validates with garde: `to` before `from` is a 400 (`to must not be before from`). `DayRange::new(from, to)`, `single(day)`, `last_days(7, &zone, now)` and `month_of(day)` build one in code; `days()` iterates it and `day_count()` counts it.
-- Both are `garde::Validate` (with nothing to check), so a field of either type can use `#[garde(dive)]` or `#[garde(skip)]`.
+- `DayRange { from, to }` deserializes from a query string or a body and validates itself, so `Valid<Query<DayRange>>` turns `to` before `from` into a 400 (`to must not be before from`). `DayRange::new(from, to)`, `single(day)`, `last_days(7, &zone, now)` and `month_of(day)` build one in code; `days()` iterates it and `day_count()` counts it.
+- `Zone` and `LocalDay` implement `Validate` with nothing to check, so a field of either type takes `#[validate(nested)]` or `#[validate(skip)]`.
 
 ### Echoing the zone
 
@@ -383,12 +383,12 @@ cargo run -- time:zones --country AU
 
 ## Validation
 
-A field of type `Zone` checks and normalizes itself. To keep the name as a string, use the garde rule:
+A field of type `Zone` checks and normalizes itself. To keep the name as a string, use the rule:
 
 ```rust
 #[derive(Deserialize, Validate)]
 pub struct UpdateProfile {
-    #[garde(custom(navree::time::rules::time_zone))]
+    #[validate(custom(navree::time::rules::time_zone))]
     pub timezone: Option<String>,
 }
 ```

@@ -8,7 +8,7 @@ use http::StatusCode;
 use http::header::CONTENT_TYPE;
 use navree_http::AppError;
 use navree_validation::ValidInput;
-use navree_validation::garde::Validate;
+use navree_validation::Validate;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
@@ -19,7 +19,7 @@ use crate::Codec;
 ///
 /// A payload that does not decode is a 400 reply with serde's message.
 /// `Valid<Payload<T>>` and `ValidAsync<Payload<T>>` (navree-validation)
-/// also run the garde rules and the database rules of `T`, with the same
+/// also run the validation rules and the database rules of `T`, with the same
 /// field errors as `Valid<Json<T>>` on a route.
 ///
 /// ```ignore
@@ -93,7 +93,7 @@ where
 /// `Valid<Payload<T>>` and `ValidAsync<Payload<T>>`.
 impl<T> ValidInput for Payload<T>
 where
-    T: DeserializeOwned + Validate<Context = ()> + Send,
+    T: DeserializeOwned + Validate + Send,
 {
     type Target = T;
 

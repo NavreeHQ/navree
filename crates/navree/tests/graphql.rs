@@ -5,10 +5,10 @@
 //! Run with `cargo test -p navree --features graphql --test graphql`.
 
 use async_graphql::{Context, InputObject, SimpleObject};
-use garde::Validate;
 use navree::graphql::{ContextExt, GraphqlSchema, Result, resolver};
 use navree::prelude::*;
 use navree::testing::{TestApp, principal};
+use navree::validation::Validate;
 use serde_json::json;
 
 #[derive(Clone, Debug, SimpleObject)]
@@ -20,7 +20,7 @@ struct GreetingObject {
 
 #[derive(Debug, InputObject, Validate)]
 struct RenameInput {
-    #[garde(length(chars, min = 2, max = 20))]
+    #[validate(length(min = 2, max = 20))]
     name: String,
 }
 

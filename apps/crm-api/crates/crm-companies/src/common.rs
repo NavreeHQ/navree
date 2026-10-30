@@ -3,6 +3,8 @@
 //! a query, the documented page shape and CSV cells.
 
 use navree::db::PageMeta;
+use navree::validation::Violation;
+use navree::validation::rules::RuleInput;
 use serde::de::value::StringDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use utoipa::ToSchema;
@@ -80,12 +82,13 @@ fn non_blank(value: String) -> Option<String> {
 }
 
 /// The `required` rule for strings that are present but blank: "<field>
-/// should not be empty", like a missing field.
-pub(crate) fn not_blank<T: AsRef<str> + ?Sized>(value: &T, _ctx: &()) -> garde::Result {
-    if value.as_ref().trim().is_empty() {
-        Err(navree::validation::rule_error("required", &[]))
-    } else {
-        Ok(())
+/// should not be empty", like a missing field. `None` passes.
+pub(crate) fn not_blank<T: RuleInput + ?Sized>(value: &T) -> Result<(), Violation> {
+    match value.rule_str() {
+        Some(text) if text.trim().is_empty() => {
+            Err(navree::validation::rule_error("required", &[]))
+        }
+        _ => Ok(()),
     }
 }
 

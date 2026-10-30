@@ -5,7 +5,7 @@
 //!
 //! - [`Ai::text`] for text, [`Ai::structured`] for a typed value (JSON
 //!   Schema from utoipa's `ToSchema`, the provider's structured-output mode,
-//!   a repair loop, and garde rules with `.validated()`), [`Ai::stream`] for
+//!   a repair loop, and validation rules with `.validated()`), [`Ai::stream`] for
 //!   a [`TextStream`] that is also a server-sent events response.
 //! - **Providers are drivers**: Anthropic (Messages API), OpenAI (chat
 //!   completions, and any compatible server), Google Gemini, Mistral,

@@ -254,14 +254,14 @@ pub struct Post {
 //! Request bodies of the posts API, with their validation rules
 //! (checked by the `Valid` extractor before the handler runs).
 
-use garde::Validate;
+use navree::validation::Validate;
 use serde::Deserialize;
 
 /// The body of `POST /api/v1/posts`.
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreatePost {
     /// 1 to 255 characters.
-    #[garde(length(min = 1, max = 255))]
+    #[validate(length(min = 1, max = 255))]
     pub name: String,
 }
 
@@ -269,7 +269,7 @@ pub struct CreatePost {
 #[derive(Debug, Deserialize, Validate)]
 pub struct UpdatePost {
     /// 1 to 255 characters.
-    #[garde(length(min = 1, max = 255))]
+    #[validate(length(min = 1, max = 255))]
     pub name: Option<String>,
 }
 

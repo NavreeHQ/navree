@@ -69,15 +69,15 @@ The CRM as services:
 Payloads are plain serde types in a crate every service depends on, so a change to a payload is a compile error on both sides instead of a failure in production:
 
 ```rust title="crates/crm-contracts/src/deals.rs"
-use garde::Validate;
 use navree::events::Event;
+use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// `deals.get`: one deal. Replies with a [`DealView`].
 #[derive(Clone, Debug, Serialize, Deserialize, Validate)]
 pub struct GetDeal {
-    #[garde(skip)]
+    #[validate(skip)]
     pub id: Uuid,
 }
 

@@ -14,7 +14,6 @@
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use garde::Validate;
 use libfuzzer_sys::fuzz_target;
 use navree_fuzz::block_on;
 use navree_http::AppError;
@@ -24,6 +23,7 @@ use navree_mcp::{
     ToolDef,
 };
 use navree_testing::{TestApp, TestClient, principal};
+use navree_validation::Validate;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -34,17 +34,17 @@ const PATIENCE: Duration = Duration::from_secs(20);
 #[derive(Deserialize, Validate, utoipa::ToSchema)]
 struct Echo {
     /// What to repeat.
-    #[garde(length(max = 64))]
+    #[validate(length(max = 64))]
     text: String,
     /// How many times.
-    #[garde(range(max = 100))]
+    #[validate(range(max = 100))]
     times: Option<u32>,
 }
 
 #[derive(Deserialize, Validate, utoipa::ToSchema)]
 struct Greet {
     /// Who to greet.
-    #[garde(length(min = 1, max = 32))]
+    #[validate(length(min = 1, max = 32))]
     name: String,
 }
 

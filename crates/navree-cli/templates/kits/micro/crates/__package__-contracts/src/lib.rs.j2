@@ -12,8 +12,8 @@
 //! ```
 
 use chrono::{DateTime, Utc};
-use garde::Validate;
 use navree::events::Event;
+use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -26,7 +26,7 @@ pub const GET_INVOICE: &str = "invoices.get";
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
 pub struct GetInvoice {
     /// The invoice's id.
-    #[garde(skip)]
+    #[validate(skip)]
     pub id: Uuid,
 }
 
@@ -87,13 +87,13 @@ impl InvoiceStatus {
 /// arrives).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
 pub struct DealWon {
-    #[garde(skip)]
+    #[validate(skip)]
     pub deal_id: Uuid,
     /// The deal's amount in cents.
-    #[garde(range(min = 0))]
+    #[validate(range(min = 0))]
     pub amount_cents: i64,
     /// An ISO 4217 code (`EUR`).
-    #[garde(length(min = 3, max = 3))]
+    #[validate(length(min = 3, max = 3))]
     pub currency: String,
 }
 

@@ -1,19 +1,19 @@
 ---
 name: navree-validation
-description: "Validates request input in Navree with garde DTOs and the `Valid` and `ValidAsync` extractors, including Navree's extra rules, required fields, nested data, database `unique`/`exists` rules, international input (E.164 `Phone`, sanitized `SafeHtml` rich text, names in any script, native digits with `Folded`, `Country`, `Locale`), custom rules and messages, manual `ValidationErrors` and the 400 response shape. Use when writing a request body or query DTO, adding or customizing validation rules or messages, accepting phone numbers, rich text, non-Latin names or digits, checking uniqueness against the database, or when a test expects a 400 with `errors`."
+description: "Validates request input in Navree with `#[derive(Validate)]` DTOs and the `Valid` and `ValidAsync` extractors, including Navree's extra rules, required fields, nested data, database `unique`/`exists` rules, international input (E.164 `Phone`, sanitized `SafeHtml` rich text, names in any script, native digits with `Folded`, `Country`, `Locale`), custom rules and messages, manual `ValidationErrors` and the 400 response shape. Use when writing a request body or query DTO, adding or customizing validation rules or messages, accepting phone numbers, rich text, non-Latin names or digits, checking uniqueness against the database, or when a test expects a 400 with `errors`."
 ---
 
 # Validation
 
 Navree validates input before the handler runs. Describe the rules on a DTO
-with garde, take `Valid<Json<T>>` (or `Valid<Query<T>>`, `Valid<Form<T>>`)
+with `#[derive(Validate)]`, take `Valid<Json<T>>` (or `Valid<Query<T>>`, `Valid<Form<T>>`)
 in the handler, and invalid input becomes a 400 with one message per broken
 rule. The DTO lives in the module's `dto.rs`.
 
 ## Steps
 
 1. Write the DTO: `#[derive(Debug, Deserialize, Validate)]`, and a
-   `#[garde(..)]` attribute on **every** field (`#[garde(skip)]` when it has
+   `#[validate(..)]` attribute on **every** field (`#[validate(skip)]` when it has
    no rule; a field without one is a compile error).
 2. Take it with `Valid(Json(input)): Valid<Json<CreateContact>>` as the
    handler's last argument (`Valid(Query(f)): Valid<Query<T>>` for query
@@ -21,34 +21,33 @@ rule. The DTO lives in the module's `dto.rs`.
 3. For database checks, implement `AsyncRules` and take `ValidAsync<..>`.
 4. Test the failure with `.assert_validation_error("field")`.
 
-The app depends on `garde` directly (`navree new` adds
-`garde = { version = "0.23", features = ["derive", "email"] }`); add the
-`url` or `regex` features for those rules.
+The derive comes with `navree` (`navree::validation::Validate`, also in the
+prelude); the app needs no other dependency for it, and every rule is
+always available.
 
 ## Template
 
 ```rust
-use garde::Validate;
-use navree::validation::rules;
+use navree::validation::{Validate, rules};
 use serde::Deserialize;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateContact {
-    #[garde(length(chars, min = 1, max = 100))]    // `chars` counts characters, not bytes
+    #[validate(length(min = 1, max = 100))]        // characters; `length(bytes, ..)` counts bytes
     pub first_name: String,
-    #[garde(email)]
+    #[validate(email)]
     pub email: String,
-    #[garde(range(min = 16, max = 120))]           // rules on an Option run only when Some
+    #[validate(range(min = 16, max = 120))]        // rules on an Option run only when Some
     pub age: Option<u8>,
-    #[garde(length(max = 10), inner(length(min = 1, max = 30)))]
+    #[validate(length(max = 10), each(length(min = 1, max = 30)))]
     pub tags: Vec<String>,
-    #[garde(custom(rules::one_of(&["lead", "customer", "churned"])))]
+    #[validate(custom(rules::one_of(&["lead", "customer", "churned"])))]
     pub status: String,
-    #[garde(skip)]
-    pub stage: Stage,                              // an enum: serde rejects unknown values
-    #[garde(dive)]
-    pub address: Option<Address>,                  // nested: errors at `address.city`
+    #[validate(skip)]
+    pub stage: Stage,                               // an enum: serde rejects unknown values
+    #[validate(nested)]
+    pub address: Option<Address>,                   // nested: errors at `address.city`
 }
 
 #[derive(Debug, Deserialize)]
@@ -60,18 +59,18 @@ pub enum Stage {
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct Address {
-    #[garde(length(min = 1))]
+    #[validate(length(min = 1))]
     pub city: String,
 }
 
 /// A PATCH body: every field optional, `required` where a value is mandatory.
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateDeal {
-    #[garde(required, length(chars, max = 255))]
+    #[validate(required, length(max = 255))]
     pub title: Option<String>,
-    #[garde(required)]
+    #[validate(required)]
     pub company_id: Option<Uuid>,
-    #[garde(required, range(min = 0))]
+    #[validate(required, range(min = 0))]
     pub amount_cents: Option<i64>,
 }
 ```
@@ -103,17 +102,23 @@ path (`address.city`, `tags.1`) to its messages. Malformed JSON is
 
 ## Rules
 
-- garde: `length(min, max)` (bytes; add `chars`), `range`, `required`,
-  `email`, `url`, `pattern(r"..")`, `ascii`, `alphanumeric`, `contains`,
-  `prefix`, `suffix`, `ip`, `matches(other)`, `dive`, `inner(..)`,
-  `custom(f)`, `skip`.
+- `#[validate(..)]`: `length(min, max)` (characters of text, items of a
+  collection; `length(bytes, ..)` counts bytes), `range`, `required`, `email`,
+  `url`, `pattern(r"..")` (checked at compile time), `ascii`, `alphanumeric`,
+  `contains("x")`, `starts_with("x")`, `ends_with("x")`, `ip`, `ipv4`, `ipv6`,
+  `credit_card`, `same_as(other)`, `nested`, `each(..)` (rules on every item
+  of a list, set or map), `custom(f)`, `skip`. Several rules run in the order
+  written; rules on an `Option` pass on `None`.
+- `#[validate(skip_unmarked)]` on the struct lets fields without
+  `#[validate]` go unchecked. Paths follow serde's `rename` / `rename_all`;
+  a `#[serde(flatten)]` field with `nested` reports at the parent's path.
 - `navree::validation::rules` (use with `custom(..)`; `None` passes):
   `rules::one_of(&[..])`, `rules::uuid`, `rules::date_ymd`,
   `rules::unicode_name`, `rules::country`, `rules::locale`, `rules::phone`
   (see International input below).
 - `navree::validation::confirmed`:
-  `#[garde(length(min = 8), custom(confirmed(&self.password_confirmation)))]`
-  with `#[garde(skip)] pub password_confirmation: String`.
+  `#[validate(length(min = 8), custom(confirmed(&self.password_confirmation)))]`
+  with `#[validate(skip)] pub password_confirmation: String`.
 - serde errors come first and one at a time (a missing required field:
   `title should not be empty`). To report every missing field at once, make
   the fields `Option` with `required`, as `CreateDeal` above.
@@ -127,23 +132,22 @@ numbers in any format, rich text from an editor: use these types and rules,
 which normalize the value while the extractor deserializes it.
 
 ```rust
-use garde::Validate;
-use navree::validation::{rules, Country, Folded, Locale, Phone, SafeHtml};
+use navree::validation::{rules, Country, Folded, Locale, Phone, SafeHtml, Validate};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateContact {
-    #[garde(length(chars, min = 1, max = 100), custom(rules::unicode_name))]
+    #[validate(length(min = 1, max = 100), custom(rules::unicode_name))]
     pub name: String,          // "अमृतपाल सिंह", "مُحَمَّد" pass; "<b>", "😀", "١٢٣" fail
-    #[garde(skip)]
+    #[validate(skip)]
     pub phone: Phone,          // "+٩٧١ ٥٠ ١٢٣ ٤٥٦٧" -> "+971501234567" (E.164)
-    #[garde(skip)]
+    #[validate(skip)]
     pub country: Country,      // "gb" -> "GB" (ISO 3166-1 alpha-2)
-    #[garde(skip)]
+    #[validate(skip)]
     pub locale: Option<Locale>, // "en-gb" -> "en-GB" (BCP 47)
-    #[garde(length(min = 6, max = 6), pattern(r"^[0-9]+$"))]
+    #[validate(length(min = 6, max = 6), pattern(r"^[0-9]+$"))]
     pub code: Folded<String>,  // "٦٥٤٣٢١" -> "654321" before the rules run
-    #[garde(length(chars, max = 20_000))]
+    #[validate(length(max = 20_000))]
     pub notes: SafeHtml,       // sanitized: no script, on* handler or javascript: link
 }
 ```
@@ -172,17 +176,18 @@ pub struct CreateContact {
 ## Custom rules
 
 ```rust
-use navree::validation::rule_error;
+use navree::validation::{rule_error, Violation};
 
-pub fn not_blank(value: &str, _ctx: &()) -> garde::Result {
+// A function of the value: `Result<(), E>` with `E: Into<Violation>`.
+pub fn not_blank(value: &str) -> Result<(), &'static str> {
     if value.trim().is_empty() {
-        Err(garde::Error::new(":attribute must not be blank"))
+        Err(":attribute must not be blank") // a text (`&str` or `String`) is the message
     } else {
         Ok(())
     }
 }
 
-pub fn even(value: &u32, _ctx: &()) -> garde::Result {
+pub fn even(value: &u32) -> Result<(), Violation> {
     if value.is_multiple_of(2) {
         Ok(())
     } else {
@@ -191,8 +196,16 @@ pub fn even(value: &u32, _ctx: &()) -> garde::Result {
 }
 ```
 
-The extractors need `Validate<Context = ()>`: garde's `#[garde(context(..))]`
-isn't supported. Rules that need the database are async rules.
+`Violation::rule("even").with("value", value)` is the same as `rule_error`;
+`Violation::text(..)` wraps a text. A `custom` expression can read `self`
+(`custom(confirmed(&self.password_confirmation))`). There is no context
+parameter: request data comes from the `InputContext` (default phone region,
+HTML policy), and rules that need the database are async rules.
+
+`value.validate()` returns `Result<(), Violations>` (each `Violation` has
+`key()`, `params()` and `message()` with the built-in template;
+`Violations` prints one message per line with the paths). For the app's
+messages as `ValidationErrors`, use `validate_in(&value, Some(&ctx)).await`.
 
 ## Database rules
 
@@ -214,7 +227,7 @@ impl AsyncRules for UpdateUser {
 async fn update(&self, Path(id): Path<Uuid>, ValidAsync(Json(input)): ValidAsync<Json<UpdateUser>>) -> Result<Json<Value>> { /* ... */ }
 ```
 
-Async rules run after every garde rule passes, inside the request's unit of
+Async rules run after every `#[validate]` rule passes, inside the request's unit of
 work (the app needs `DatabaseModule`). Table and column names must match
 `[a-z_][a-z0-9_]*`; never build them from input. A rule compares one column
 with one value: it can't add `deleted_at IS NULL`, so check soft-deleted
@@ -275,12 +288,14 @@ app.acting_as(principal(Uuid::now_v7()))
 
 ## Common mistakes
 
-- A field with no `#[garde(..)]` attribute (compile error): add `skip`.
-- `length(max = 255)` on text with accents counts bytes: use `length(chars, max = 255)`.
+- A field with no `#[validate(..)]` attribute (compile error): add `skip`.
+- Old spellings (`dive`, `inner`, `prefix`, `suffix`, `matches`, `length(chars, ..)`,
+  `allow_unvalidated`): the compile error names the new one (`nested`, `each`,
+  `starts_with`, `ends_with`, `same_as`, `length(..)`, `skip_unmarked`).
 - Storing rich text as a `String` and rendering it as HTML (stored XSS): use `SafeHtml`.
 - A `String` phone field compared or deduplicated as typed: use `Phone` and store E.164.
 - `pattern(r"^[0-9]+$")` on a code typed with Arabic-Indic digits: wrap the field in `Folded`.
-- An ASCII-only name rule (`alphanumeric`, `[A-Za-z]`): use `rules::unicode_name`.
+- An ASCII-only name rule (`ascii`, `[A-Za-z]`): use `rules::unicode_name`.
 - Taking `Json<T>` without `Valid`: nothing is checked.
 - Putting `Valid<Json<T>>` before another extractor: the body extractor must be last.
 - Expecting a 422: Navree answers every input error with 400.

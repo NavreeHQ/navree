@@ -195,20 +195,6 @@ impl<'de> Deserialize<'de> for LocalDay {
     }
 }
 
-/// Parsing already checked the day: a `LocalDay` field can take
-/// `#[garde(dive)]` (or `#[garde(skip)]`).
-impl garde::Validate for LocalDay {
-    type Context = ();
-
-    fn validate_into(
-        &self,
-        _ctx: &Self::Context,
-        _parent: &mut dyn FnMut() -> garde::Path,
-        _report: &mut garde::Report,
-    ) {
-    }
-}
-
 impl utoipa::PartialSchema for LocalDay {
     fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
         utoipa::openapi::ObjectBuilder::new()
@@ -227,8 +213,9 @@ impl utoipa::ToSchema for LocalDay {}
 /// report, counted in the tenant's days.
 ///
 /// It deserializes from `{"from": "2026-10-01", "to": "2026-10-31"}` (a
-/// query string or a body) and validates with garde (`to` must not be
-/// before `from`), so `Valid<Query<DayRange>>` takes it from a request.
+/// query string or a body), and navree-validation checks that `to` is not
+/// before `from` (its `time` feature, which the facade turns on), so
+/// `Valid<Query<DayRange>>` takes it from a request.
 /// [`utc_bounds`](DayRange::utc_bounds) turns it into the half-open span of
 /// instants to filter rows by.
 ///
@@ -243,24 +230,11 @@ impl utoipa::ToSchema for LocalDay {}
 /// assert_eq!(october.day_count(), 31);
 /// # Ok::<(), navree_time::LocalDayError>(())
 /// ```
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    Serialize,
-    Deserialize,
-    garde::Validate,
-    utoipa::ToSchema,
-)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct DayRange {
     /// The first day.
-    #[garde(skip)]
     pub from: LocalDay,
     /// The last day (included).
-    #[garde(custom(on_or_after(&self.from)))]
     pub to: LocalDay,
 }
 
@@ -272,17 +246,6 @@ pub struct DayRangeError {
     pub from: LocalDay,
     /// The last day.
     pub to: LocalDay,
-}
-
-/// garde: the last day is not before `from`.
-fn on_or_after(from: &LocalDay) -> impl FnOnce(&LocalDay, &()) -> garde::Result + '_ {
-    move |to, _| {
-        if to < from {
-            Err(garde::Error::new(":attribute must not be before from"))
-        } else {
-            Ok(())
-        }
-    }
 }
 
 impl DayRange {

@@ -10,7 +10,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use garde::Validate;
 use http::header::ORIGIN;
 use http_body_util::BodyExt;
 use navree_contracts::AuditSink;
@@ -21,6 +20,7 @@ use navree_mcp::protocol::MAX_JSON_DEPTH;
 use navree_mcp::testing::McpTestClient;
 use navree_mcp::{McpContext, McpModule, McpNotifier, ModuleBuilderMcpExt, PromptMessage};
 use navree_testing::{TestApp, TestClient};
+use navree_validation::Validate;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -39,7 +39,7 @@ static COUNTED: [AtomicU64; 3] = [AtomicU64::new(0), AtomicU64::new(0), AtomicU6
 #[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
 pub struct Counter {
     /// The counter's index.
-    #[garde(range(max = 2))]
+    #[validate(range(max = 2))]
     pub counter: usize,
 }
 

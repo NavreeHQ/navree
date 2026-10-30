@@ -51,7 +51,7 @@ let at = zone.to_utc(naive_local);                 // gap: moves forward; repeat
   tz backward links reject `Asia/Calcutta`, `US/Eastern`, `Europe/Kiev`.
 - A field of type `Zone` deserializes through `Zone::parse` (400 on the
   field when unknown). For `String` fields use
-  `#[garde(custom(navree::time::rules::time_zone))]`.
+  `#[validate(custom(navree::time::rules::time_zone))]`.
 
 ## The request's zone
 

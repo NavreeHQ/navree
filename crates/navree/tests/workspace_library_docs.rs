@@ -376,13 +376,13 @@ pub mod helm {
 
     use super::model::Template;
 
-    #[derive(serde::Deserialize, garde::Validate)]
+    #[derive(serde::Deserialize, navree::validation::Validate)]
     struct TemplateForm {
-        #[garde(length(min = 1))]
+        #[validate(length(min = 1))]
         slug: String,
-        #[garde(length(min = 1))]
+        #[validate(length(min = 1))]
         name: String,
-        #[garde(skip)]
+        #[validate(skip)]
         body: Option<String>,
     }
 

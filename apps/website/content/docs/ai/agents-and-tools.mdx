@@ -177,11 +177,11 @@ impl Agent for DealsAssistant {
 
 ### Arguments
 
-Arguments are one struct per tool. It derives `Deserialize`, `ToSchema` and `garde::Validate`, the same derives as a [validated request body](/docs/basics/validation/):
+Arguments are one struct per tool. It derives `Deserialize`, `ToSchema` and `Validate`, the same derives as a [validated request body](/docs/basics/validation/):
 
 ```rust title="crates/crm-deals/src/assistant.rs"
 use chrono::{DateTime, Utc};
-use garde::Validate;
+use navree::validation::Validate;
 use serde::Deserialize;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -189,13 +189,13 @@ use uuid::Uuid;
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct SearchDeals {
     /// Words from the deal title, e.g. "Acme renewal". Leave out to list every deal.
-    #[garde(length(chars, max = 100))]
+    #[validate(length(max = 100))]
     pub query: Option<String>,
     /// Only deals in this stage.
-    #[garde(skip)]
+    #[validate(skip)]
     pub stage: Option<Stage>,
     /// Only the user's own deals.
-    #[garde(skip)]
+    #[validate(skip)]
     #[serde(default)]
     pub mine: bool,
 }
@@ -203,26 +203,26 @@ pub struct SearchDeals {
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct DealRef {
     /// The deal's id, from `search_deals`.
-    #[garde(skip)]
+    #[validate(skip)]
     pub deal_id: Uuid,
 }
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct LogActivity {
     /// The deal's id, from `search_deals`.
-    #[garde(skip)]
+    #[validate(skip)]
     pub deal_id: Uuid,
     /// `note`, `call`, `email`, `meeting`, or `task` for something to do later.
-    #[garde(skip)]
+    #[validate(skip)]
     pub kind: ActivityKind,
     /// One line, e.g. "Call Dana about the revised quote".
-    #[garde(length(chars, min = 1, max = 255))]
+    #[validate(length(min = 1, max = 255))]
     pub subject: String,
     /// Details, if any.
-    #[garde(length(chars, max = 5000))]
+    #[validate(length(max = 5000))]
     pub body: Option<String>,
     /// For tasks: when it is due (RFC 3339, UTC).
-    #[garde(skip)]
+    #[validate(skip)]
     pub due_at: Option<DateTime<Utc>>,
 }
 ```
@@ -307,10 +307,10 @@ use navree::ai::{Ai, AgentReply};
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct AskAssistant {
-    #[garde(length(chars, min = 1, max = 4000))]
+    #[validate(length(min = 1, max = 4000))]
     pub message: String,
     /// Continue this conversation; leave out to start a new one.
-    #[garde(skip)]
+    #[validate(skip)]
     pub conversation_id: Option<Uuid>,
 }
 
@@ -452,10 +452,10 @@ The front end shows the call, and the user's answer continues the run. The CRM h
 ```rust title="crates/crm-deals/src/assistant_controller.rs"
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct Decision {
-    #[garde(skip)]
+    #[validate(skip)]
     pub conversation_id: Uuid,
     /// Why the user said no, passed on to the model.
-    #[garde(length(chars, max = 500))]
+    #[validate(length(max = 500))]
     pub reason: Option<String>,
 }
 

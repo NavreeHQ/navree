@@ -5,7 +5,6 @@
 
 use std::sync::Arc;
 
-use garde::Validate;
 use navree_access::{AccessModule, AccessOptions, AccessService};
 use navree_audit::AuditModule;
 use navree_cache::{CacheModule, CacheOptions};
@@ -20,6 +19,7 @@ use navree_macros::{controller, injectable, module};
 use navree_orm::Model as _;
 use navree_settings::{ModuleBuilderSettingsExt, Setting, Settings, SettingsModule};
 use navree_testing::{TestApp, TestAppBuilder, TestClient, principal};
+use navree_validation::Validate;
 use navree_workspace::{
     NewOrganization, NewWorkspace, OrgMembers, OrgRole, Organization, Organizations, Workspace,
     WorkspaceModule, WorkspaceRole, WorkspaceSelector, Workspaces,
@@ -33,11 +33,11 @@ use uuid::Uuid;
 #[derive(navree_settings::Settings, Clone, Debug, PartialEq, Serialize, Deserialize, Validate)]
 #[settings(key = "portal", scopes(global, organization, workspace, user))]
 pub struct PortalSettings {
-    #[garde(skip)]
+    #[validate(skip)]
     pub show_leaderboard: bool,
-    #[garde(length(max = 40))]
+    #[validate(length(max = 40))]
     pub welcome_text: String,
-    #[garde(range(min = 1, max = 100))]
+    #[validate(range(min = 1, max = 100))]
     pub page_size: u32,
 }
 
@@ -61,9 +61,9 @@ impl Default for PortalSettings {
     permission = "notifications.manage"
 )]
 pub struct NotificationSettings {
-    #[garde(skip)]
+    #[validate(skip)]
     pub daily_digest: bool,
-    #[garde(length(max = 60))]
+    #[validate(length(max = 60))]
     pub sender_name: String,
 }
 
@@ -73,9 +73,9 @@ pub struct NotificationSettings {
 )]
 #[settings(scopes(user))]
 pub struct ViewPreferences {
-    #[garde(skip)]
+    #[validate(skip)]
     pub compact: bool,
-    #[garde(skip)]
+    #[validate(skip)]
     pub theme: String,
 }
 
@@ -85,7 +85,7 @@ pub struct ViewPreferences {
 )]
 #[settings(key = "forgotten")]
 pub struct ForgottenSettings {
-    #[garde(skip)]
+    #[validate(skip)]
     pub on: bool,
 }
 

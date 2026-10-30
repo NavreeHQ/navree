@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use axum::extract::{FromRequest, Request};
 use axum::response::{IntoResponse, Response};
-use garde::Validate;
 use http::header::CONTENT_TYPE;
 use http::{Method, StatusCode};
 use navree_db::Uow;
@@ -14,6 +13,7 @@ use navree_http::{
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_validation::Valid;
+use navree_validation::Validate;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -28,13 +28,13 @@ use crate::{
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct RegisterInput {
     /// The display name.
-    #[garde(length(min = 1, max = 255))]
+    #[validate(length(min = 1, max = 255))]
     pub name: String,
     /// The email address.
-    #[garde(email, length(max = 255))]
+    #[validate(email, length(max = 255))]
     pub email: String,
     /// The password (at least `auth.password_min_length` characters).
-    #[garde(length(max = 1024))]
+    #[validate(length(max = 1024))]
     #[schema(format = Password)]
     pub password: String,
 }
@@ -43,10 +43,10 @@ pub struct RegisterInput {
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct LoginInput {
     /// The email address.
-    #[garde(email, length(max = 255))]
+    #[validate(email, length(max = 255))]
     pub email: String,
     /// The password.
-    #[garde(length(min = 1, max = 1024))]
+    #[validate(length(min = 1, max = 1024))]
     #[schema(format = Password)]
     pub password: String,
 }
@@ -55,7 +55,7 @@ pub struct LoginInput {
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct RefreshInput {
     /// The refresh token of the last token pair.
-    #[garde(length(min = 1, max = 512))]
+    #[validate(length(min = 1, max = 512))]
     pub refresh_token: String,
 }
 
@@ -63,11 +63,11 @@ pub struct RefreshInput {
 #[derive(Debug, Default, Deserialize, Validate, ToSchema)]
 pub struct LogoutInput {
     /// The session to end (its refresh token).
-    #[garde(length(max = 512))]
+    #[validate(length(max = 512))]
     #[serde(default)]
     pub refresh_token: Option<String>,
     /// End every session of the user.
-    #[garde(skip)]
+    #[validate(skip)]
     #[serde(default)]
     pub all: bool,
 }
@@ -331,7 +331,7 @@ pub(crate) struct OptionalBody<T>(pub(crate) T);
 
 impl<T, S> FromRequest<S> for OptionalBody<T>
 where
-    T: DeserializeOwned + Validate<Context = ()> + Default + Send,
+    T: DeserializeOwned + Validate + Default + Send,
     S: Send + Sync,
 {
     type Rejection = AppError;

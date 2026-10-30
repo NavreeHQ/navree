@@ -5,7 +5,6 @@
 
 use std::collections::HashSet;
 
-use garde::Validate;
 use navree::access::{AbilityCtx, AccessModule, AccessOptions, Rules};
 use navree::contracts::{AuthVia, Principal};
 use navree::db::Db;
@@ -16,6 +15,7 @@ use navree::sheets::{
     ImportContext, ImportStatus, Importable, Imports, RowRejected, Upload, UploadOptions,
 };
 use navree::testing::TestApp;
+use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
@@ -136,15 +136,15 @@ impl Export for ContactsExport {
 #[derive(Deserialize, Validate, Importable)]
 struct ContactInput {
     #[import(header = "Email", aliases = ["E-mail", "Email address"])]
-    #[garde(email)]
+    #[validate(email)]
     email: String,
-    #[garde(length(min = 1, max = 100))]
+    #[validate(length(min = 1, max = 100))]
     name: String,
     #[import(aliases = ["Organization"])]
-    #[garde(length(max = 100))]
+    #[validate(length(max = 100))]
     company: Option<String>,
     #[serde(default)]
-    #[garde(skip)]
+    #[validate(skip)]
     vip: bool,
 }
 

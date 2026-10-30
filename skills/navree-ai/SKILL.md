@@ -1,6 +1,6 @@
 ---
 name: navree-ai
-description: "Language models in a Navree app with navree-ai: the opt-in `ai` facade feature, `AiModule` and the `ai` config section (providers anthropic, openai and OpenAI-compatible servers, gemini, mistral, ollama, bedrock; named models with fallbacks), the `Ai` service (`ai.text`, `ai.structured::<T>` with a JSON Schema from utoipa's `ToSchema` and `.validated()` garde rules, `ai.stream` as a `TextStream` that is also an SSE response, `chunked`, `on_finish`), attachments, failover and retries, per-user token budgets, metrics, `AiError` statuses, agents (`Agent`, `#[agent]`, `#[tool]`, `#[tool(read_only)]`, `#[tool(needs_approval)]`, `#[can]` / `#[permissions]` / `#[roles]` on tools, `AgentRun`, `ai.agent::<A>()` with `acting_as`, `conversation`, `prompt`, `structured`, `stream`, `approve`, `reject`), conversation memory (`Conversations`, `ai:prune`), `Embeddings`, `VectorStore` (memory, pgvector, Qdrant) with `Filter`s, `Chunker`, `ai.rerank`, `navree make:agent`, and `AiFake` / `FakeReply` / `ai.fake = true` in tests. Use when adding AI features (summaries, drafts, extraction, classification, chat, an assistant that calls your services, answers from your own data), configuring providers or models, writing or testing agents and tools, indexing text into vectors, or debugging an AI request that fails with 503, 429, 502, 500, `AiError::Config`, `NoFakeReply`, an SSRF refusal, or a tool the model is never offered."
+description: "Language models in a Navree app with navree-ai: the opt-in `ai` facade feature, `AiModule` and the `ai` config section (providers anthropic, openai and OpenAI-compatible servers, gemini, mistral, ollama, bedrock; named models with fallbacks), the `Ai` service (`ai.text`, `ai.structured::<T>` with a JSON Schema from utoipa's `ToSchema` and `#[validate]` rules checked by `.validated()`, `ai.stream` as a `TextStream` that is also an SSE response, `chunked`, `on_finish`), attachments, failover and retries, per-user token budgets, metrics, `AiError` statuses, agents (`Agent`, `#[agent]`, `#[tool]`, `#[tool(read_only)]`, `#[tool(needs_approval)]`, `#[can]` / `#[permissions]` / `#[roles]` on tools, `AgentRun`, `ai.agent::<A>()` with `acting_as`, `conversation`, `prompt`, `structured`, `stream`, `approve`, `reject`), conversation memory (`Conversations`, `ai:prune`), `Embeddings`, `VectorStore` (memory, pgvector, Qdrant) with `Filter`s, `Chunker`, `ai.rerank`, `navree make:agent`, and `AiFake` / `FakeReply` / `ai.fake = true` in tests. Use when adding AI features (summaries, drafts, extraction, classification, chat, an assistant that calls your services, answers from your own data), configuring providers or models, writing or testing agents and tools, indexing text into vectors, or debugging an AI request that fails with 503, 429, 502, 500, `AiError::Config`, `NoFakeReply`, an SSRF refusal, or a tool the model is never offered."
 ---
 
 # AI SDK, agents and RAG
@@ -107,21 +107,21 @@ let response = self
 ```
 
 Structured output (`T: Deserialize + ToSchema`; `.validated()` needs
-`garde::Validate`):
+`Validate`):
 
 ```rust
-use garde::Validate;
 use navree::ai::utoipa::{self, ToSchema}; // or the app's own utoipa
+use navree::validation::Validate;
 use serde::Deserialize;
 
 /// A follow-up email.
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct FollowUpEmail {
     /// The subject line, without "Re:".
-    #[garde(length(chars, min = 1, max = 80))]
+    #[validate(length(min = 1, max = 80))]
     pub subject: String,
     /// The plain-text body.
-    #[garde(length(chars, min = 1, max = 2000))]
+    #[validate(length(min = 1, max = 2000))]
     pub body: String,
 }
 
@@ -198,7 +198,7 @@ let reply = self
 ```
 
 Tool arguments: one struct deriving `Deserialize`, `ToSchema` and
-`garde::Validate`, field doc comments for the model; or no arguments at all.
+`Validate`, field doc comments for the model; or no arguments at all.
 
 RAG:
 

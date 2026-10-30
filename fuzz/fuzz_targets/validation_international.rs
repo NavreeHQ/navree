@@ -51,7 +51,7 @@ fn phone(text: &str, region: u8) {
 }
 
 fn names_and_tags(text: &str) {
-    if rules::unicode_name(text, &()).is_ok() {
+    if rules::unicode_name(text).is_ok() {
         assert!(
             !text.chars().any(|c| c.is_control()
                 || matches!(c, '<' | '>' | '&' | '"' | '/' | '\\' | ';' | '=' | '`')),
@@ -61,9 +61,9 @@ fn names_and_tags(text: &str) {
     }
     let folded = fold_digits(text);
     assert_eq!(fold_digits(&folded), folded, "folding is idempotent");
-    let _ = rules::phone(text, &());
-    let _ = rules::country(text, &());
-    let _ = rules::locale(text, &());
+    let _ = rules::phone(text);
+    let _ = rules::country(text);
+    let _ = rules::locale(text);
     if let Ok(country) = Country::parse(text) {
         assert_eq!(Country::parse(country.as_str()), Ok(country));
     }

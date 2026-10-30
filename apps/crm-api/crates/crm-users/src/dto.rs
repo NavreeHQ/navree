@@ -1,7 +1,7 @@
 //! Request bodies and queries, with their validation rules.
 
 use crm_core::UserRole;
-use garde::Validate;
+use navree::validation::Validate;
 use serde::{Deserialize, Deserializer};
 use utoipa::ToSchema;
 
@@ -9,17 +9,17 @@ use utoipa::ToSchema;
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreateUser {
     /// The display name.
-    #[garde(length(min = 1, max = 255))]
+    #[validate(length(min = 1, max = 255))]
     pub name: String,
     /// The email address (trimmed; stored lower-cased; unique).
     #[serde(deserialize_with = "trimmed")]
-    #[garde(email, length(max = 255))]
+    #[validate(email, length(max = 255))]
     pub email: String,
     /// The password (at least `auth.password_min_length` characters).
-    #[garde(length(min = 1, max = 1024))]
+    #[validate(length(min = 1, max = 1024))]
     pub password: String,
     /// The CRM role.
-    #[garde(skip)]
+    #[validate(skip)]
     pub role: UserRole,
 }
 
@@ -32,10 +32,10 @@ fn trimmed<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Erro
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct UpdateUser {
     /// The display name.
-    #[garde(length(min = 1, max = 255))]
+    #[validate(length(min = 1, max = 255))]
     pub name: Option<String>,
     /// The CRM role (replaces the user's roles).
-    #[garde(skip)]
+    #[validate(skip)]
     pub role: Option<UserRole>,
 }
 

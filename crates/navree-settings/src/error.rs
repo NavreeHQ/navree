@@ -57,7 +57,7 @@ pub enum SettingsError {
     /// A patch that is not a JSON object.
     #[error("{0}")]
     InvalidPatch(String),
-    /// The values after a patch fail to deserialize or break a garde rule;
+    /// The values after a patch fail to deserialize or break a validation rule;
     /// the errors are keyed by field.
     #[error("invalid settings: {}", .0.summary().unwrap_or_default())]
     Invalid(ValidationErrors),

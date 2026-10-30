@@ -12,7 +12,7 @@ use uuid::Uuid;
 const ID_COLUMN: &str = "id";
 
 /// Database rules of a DTO, run by [`ValidAsync`](crate::ValidAsync) after
-/// its garde rules pass, inside the request's unit of work.
+/// its rules pass, inside the request's unit of work.
 ///
 /// ```
 /// use navree_validation::{AsyncRule, AsyncRules};

@@ -123,20 +123,20 @@ The ORM generates the key and fills `created_at` and `updated_at` when it create
 
 ## Validate the input
 
-Request bodies are plain structs with [garde](https://docs.rs/garde) rules. The `Valid` extractor checks them before the handler runs. Replace `dto.rs`:
+Request bodies are plain structs with `#[derive(Validate)]` rules. The `Valid` extractor checks them before the handler runs. Replace `dto.rs`:
 
 ```rust title="src/modules/tasks/dto.rs"
 //! Request bodies of the tasks API, with their validation rules
 //! (checked by the `Valid` extractor before the handler runs).
 
-use garde::Validate;
+use navree::validation::Validate;
 use serde::Deserialize;
 
 /// The body of `POST /api/v1/tasks`.
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateTask {
     /// 1 to 200 characters.
-    #[garde(length(min = 1, max = 200))]
+    #[validate(length(min = 1, max = 200))]
     pub title: String,
 }
 
@@ -144,10 +144,10 @@ pub struct CreateTask {
 #[derive(Debug, Deserialize, Validate)]
 pub struct UpdateTask {
     /// 1 to 200 characters.
-    #[garde(length(min = 1, max = 200))]
+    #[validate(length(min = 1, max = 200))]
     pub title: Option<String>,
     /// Marks the task done or not done.
-    #[garde(skip)]
+    #[validate(skip)]
     pub done: Option<bool>,
 }
 
@@ -166,7 +166,7 @@ impl UpdateTask {
 }
 ```
 
-garde requires a rule on every field, so `done` says `#[garde(skip)]`; serde already guarantees it is a boolean. `changed_fields` feeds field-level access rules, which you can add later without touching the controller. [Validation](/docs/basics/validation/) lists the rules and the error format.
+Every field needs a rule, so `done` says `#[validate(skip)]`; serde already guarantees it is a boolean. `changed_fields` feeds field-level access rules, which you can add later without touching the controller. [Validation](/docs/basics/validation/) lists the rules and the error format.
 
 ## Write the service
 

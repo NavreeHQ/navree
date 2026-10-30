@@ -95,7 +95,7 @@ are plural. Generators never overwrite a file.
   `#[can(Action, Subject)]`. Never make a route `#[public]` to get past a
   401 or a 403: grant the permission or add an ability rule.
 - **Input.** Request bodies are DTOs deriving `Deserialize`,
-  `garde::Validate` and `utoipa::ToSchema`; handlers take
+  `navree::validation::Validate` and `utoipa::ToSchema`; handlers take
   `Valid(Json(input)): Valid<Json<T>>`, and declare `#[api(..)]` so the
   OpenAPI document{% if web %} (and the front end's generated client){% endif %} stays exact.
 - **Errors.** Handlers return `Result<T>` (`AppError`): `AppError::not_found()`,

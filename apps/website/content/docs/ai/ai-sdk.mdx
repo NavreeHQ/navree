@@ -348,7 +348,7 @@ Free text is for people. When code consumes the answer, ask for a type. `ai.stru
 
 ```rust title="crates/crm-deals/src/insights.rs"
 use chrono::NaiveDate;
-use garde::Validate;
+use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -356,13 +356,13 @@ use utoipa::ToSchema;
 #[derive(Debug, Deserialize, Serialize, ToSchema, Validate)]
 pub struct FollowUpEmail {
     /// The subject line, without a prefix like "Re:".
-    #[garde(length(chars, min = 1, max = 80))]
+    #[validate(length(min = 1, max = 80))]
     pub subject: String,
     /// The plain-text body, signed with the rep's first name.
-    #[garde(length(chars, min = 1, max = 2000))]
+    #[validate(length(min = 1, max = 2000))]
     pub body: String,
     /// The day to send it, when the activity suggests one.
-    #[garde(skip)]
+    #[validate(skip)]
     pub send_on: Option<NaiveDate>,
 }
 
@@ -395,7 +395,7 @@ How it works:
 
 1. The JSON Schema comes from utoipa's `ToSchema`, the same derive your [OpenAPI](/docs/digging-deeper/openapi/) document uses, with the types it refers to under `$defs`. Doc comments become field descriptions, and the model reads them, so write them for the model: units, formats, what to leave out. An app without its own `utoipa` dependency imports the derive as `use navree::ai::utoipa::{self, ToSchema};`.
 2. Navree asks the provider for JSON that matches the schema with the provider's own structured-output mode (Anthropic, OpenAI, Gemini, Mistral and Ollama have one). Bedrock gets the schema in the system prompt instead. The answer is read as JSON (code fences and surrounding prose are tolerated) and deserialized into `T`.
-3. With `.validated()` (available when `T` derives `garde::Validate`), the value is also checked against its rules, the same rules as a [validated request](/docs/basics/validation/).
+3. With `.validated()` (available when `T` derives `Validate`), the value is also checked against its rules, the same rules as a [validated request](/docs/basics/validation/).
 4. When the answer doesn't deserialize or breaks a rule, the errors go back to the model with a request to correct it, up to `ai.structured_retries` times. After that the request fails with `AiError::InvalidOutput`.
 
 `T` needs `Deserialize` and `ToSchema`. A refusal fails a structured request with `AiError::Refused`. Enums work as they do in your API, so classification is a type; a `T` that isn't an object (an enum, a list) is asked for as `{"value": ...}` and unwrapped, since providers want an object at the top:
@@ -744,7 +744,7 @@ A transient error (`unavailable`, `rate_limited`) is retried `ai.max_retries` ti
 | Method | Returns (awaited) |
 |---|---|
 | `text(prompt)` | `TextResponse` |
-| `structured::<T>(prompt)` | `T` (`.validated()` adds its garde rules) |
+| `structured::<T>(prompt)` | `T` (`.validated()` adds its validation rules) |
 | `stream(prompt)` | `TextStream`: a `Stream` of `StreamEvent`, and a response |
 | `agent::<A>()` | An agent run builder; see [Agents and tools](/docs/ai/agents-and-tools/) |
 | `rerank(query, matches)` | The matches re-ordered; see [reranking](/docs/ai/embeddings-and-rag/#reranking) |

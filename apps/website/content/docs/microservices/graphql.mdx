@@ -240,19 +240,19 @@ Refusals are logged on target `navree::security` and, with an audit trail, recor
 
 ## Validation
 
-Wrap an input object in `Valid<T>`, the same `Valid` routes use, and its garde rules run before the field does. Derive `InputObject` and `Validate` on the same struct:
+Wrap an input object in `Valid<T>`, the same `Valid` routes use, and its validation rules run before the field does. Derive `InputObject` and `Validate` on the same struct:
 
 ```rust title="src/deals/graphql/types.rs"
 use async_graphql::InputObject;
-use garde::Validate;
+use navree::validation::Validate;
 
 #[derive(Debug, InputObject, Validate)]
 pub struct MoveDealInput {
-    #[garde(skip)]
+    #[validate(skip)]
     pub stage: Stage,
-    #[garde(range(min = 0))]
+    #[validate(range(min = 0))]
     pub position: Option<i64>,
-    #[garde(length(chars, max = 1000))]
+    #[validate(length(max = 1000))]
     pub lost_reason: Option<String>,
 }
 ```

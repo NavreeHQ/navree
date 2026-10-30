@@ -2,13 +2,13 @@
 //! index passages, search inside one deal, rerank, then a structured answer
 //! that cites its sources by number.
 
-use garde::Validate;
 use navree_ai::{
     Ai, AiModule, Chunker, Embeddings, FakeReply, Filter, ModuleBuilderAiExt, VectorCollection,
     VectorMatch, VectorRecord, VectorStore,
 };
 use navree_kernel::{Module, ModuleBuilder};
 use navree_testing::TestApp;
+use navree_validation::Validate;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use utoipa::ToSchema;
@@ -18,13 +18,13 @@ use uuid::Uuid;
 #[derive(Debug, Deserialize, Serialize, ToSchema, Validate)]
 pub struct GroundedAnswer {
     /// The answer in at most four sentences, using only the sources.
-    #[garde(length(chars, min = 1, max = 2000))]
+    #[validate(length(min = 1, max = 2000))]
     pub answer: String,
     /// The numbers of the sources the answer uses, e.g. [1, 3].
-    #[garde(skip)]
+    #[validate(skip)]
     pub sources: Vec<usize>,
     /// False when the sources don't contain the answer.
-    #[garde(skip)]
+    #[validate(skip)]
     pub answered: bool,
 }
 

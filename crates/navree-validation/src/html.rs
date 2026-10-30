@@ -257,7 +257,7 @@ mod safe {
     use super::HtmlPolicy;
     use crate::context;
     use crate::failure::serde_error;
-    use crate::rules::RuleInput;
+    use crate::rules::{Length, Measure, RuleInput, Unit};
 
     /// Rich text from the client, sanitized by the app's [`HtmlPolicy`]
     /// while it is deserialized: a handler holding a `SafeHtml` never holds
@@ -274,13 +274,13 @@ mod safe {
     ///   and [`into_inner`](SafeHtml::into_inner) give it back.
     ///
     /// ```
-    /// use garde::Validate;
+    /// use navree_validation::Validate;
     /// use navree_validation::SafeHtml;
     /// use serde::Deserialize;
     ///
     /// #[derive(Deserialize, Validate)]
     /// struct NewComment {
-    ///     #[garde(length(chars, min = 1, max = 10_000))]
+    ///     #[validate(length(min = 1, max = 10_000))]
     ///     body: SafeHtml,
     /// }
     ///
@@ -383,33 +383,9 @@ mod safe {
         }
     }
 
-    impl garde::rules::AsStr for SafeHtml {
-        fn as_str(&self) -> &str {
-            &self.0
-        }
-    }
-
-    impl garde::rules::length::HasSimpleLength for SafeHtml {
-        fn length(&self) -> usize {
-            self.0.len()
-        }
-    }
-
-    impl garde::rules::length::HasBytes for SafeHtml {
-        fn num_bytes(&self) -> usize {
-            self.0.len()
-        }
-    }
-
-    impl garde::rules::length::HasChars for SafeHtml {
-        fn num_chars(&self) -> usize {
-            self.0.chars().count()
-        }
-    }
-
-    impl garde::rules::length::HasGraphemes for SafeHtml {
-        fn num_graphemes(&self) -> usize {
-            garde::rules::length::HasGraphemes::num_graphemes(&self.0)
+    impl Length for SafeHtml {
+        fn measure(&self, unit: Unit) -> Option<Measure> {
+            self.0.measure(unit)
         }
     }
 }

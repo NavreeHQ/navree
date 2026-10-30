@@ -1,13 +1,13 @@
 //! The registered importers, by name, with their row types erased, and the
-//! row checker (serde, then garde, in the app's validation wording).
+//! row checker (serde, then the validation rules, in the app's validation wording).
 
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
-use garde::Validate;
 use navree_contracts::BoxError;
 use navree_db::Uow;
 use navree_kernel::{AppContext, BoxFuture, Injectable, ModuleId};
+use navree_validation::Validate;
 use navree_validation::{MessageTranslator, Messages, ValidationErrors, validate_in};
 use serde::de::DeserializeOwned;
 
@@ -181,11 +181,11 @@ impl RowChecker {
         }
     }
 
-    /// `fields` read into `R`, then `R`'s garde rules; errors by field,
+    /// `fields` read into `R`, then `R`'s validation rules; errors by field,
     /// rules on the whole row under `row`.
     pub(crate) async fn check<R>(&self, fields: Vec<(String, Cell)>) -> Result<R, ValidationErrors>
     where
-        R: DeserializeOwned + Validate<Context = ()>,
+        R: DeserializeOwned + Validate,
     {
         let row: R = read_row(fields).map_err(|error| {
             let mut errors = ValidationErrors::new();

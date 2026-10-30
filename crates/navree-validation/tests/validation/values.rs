@@ -1,23 +1,23 @@
 //! `validate`: the rules and messages of the extractors, for values that
 //! do not come from an HTTP body (GraphQL arguments, message payloads).
 
-use garde::Validate;
+use navree_validation::Validate;
 use navree_validation::{Messages, validate};
 use serde_json::json;
 
 #[derive(Validate)]
 struct Line {
-    #[garde(length(min = 1))]
+    #[validate(length(min = 1))]
     sku: String,
 }
 
 #[derive(Validate)]
 struct Order {
-    #[garde(length(min = 2))]
+    #[validate(length(min = 2))]
     items: Vec<String>,
-    #[garde(length(min = 2))]
+    #[validate(length(min = 2))]
     note: String,
-    #[garde(dive)]
+    #[validate(nested)]
     lines: Vec<Line>,
 }
 

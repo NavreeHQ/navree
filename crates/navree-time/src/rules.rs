@@ -1,17 +1,13 @@
-//! garde rules for zone names kept as strings.
+//! Validation rules for zone names kept as strings, for
+//! `#[validate(custom(navree_time::rules::time_zone))]` on a `String` or
+//! `Option<String>` field.
 //!
 //! ```
-//! use garde::Validate;
+//! use navree_time::rules::time_zone;
 //!
-//! #[derive(Validate)]
-//! struct UpdateProfile {
-//!     #[garde(custom(navree_time::rules::time_zone))]
-//!     timezone: Option<String>,
-//! }
-//!
-//! assert!(UpdateProfile { timezone: Some("Asia/Calcutta".into()) }.validate().is_ok());
-//! assert!(UpdateProfile { timezone: None }.validate().is_ok());
-//! assert!(UpdateProfile { timezone: Some("Mars/Base".into()) }.validate().is_err());
+//! assert!(time_zone(&Some("Asia/Calcutta".to_owned())).is_ok());
+//! assert!(time_zone(&None::<String>).is_ok());
+//! assert!(time_zone("Mars/Base").is_err());
 //! ```
 //!
 //! A field of type [`Zone`](crate::Zone) needs no rule: it deserializes
@@ -57,13 +53,15 @@ impl<T: ZoneInput> ZoneInput for Option<T> {
     }
 }
 
-/// garde: the value is an IANA time zone name (legacy aliases included;
-/// normalize with [`Zone::parse`] before storing it).
-pub fn time_zone<T: ZoneInput + ?Sized, C: ?Sized>(value: &T, _ctx: &C) -> garde::Result {
+/// The value is an IANA time zone name (legacy aliases included;
+/// normalize with [`Zone::parse`] before storing it). It fails with the
+/// message `:attribute must be a valid IANA time zone name`, which
+/// navree-validation renders with the field's name.
+pub fn time_zone<T: ZoneInput + ?Sized>(value: &T) -> Result<(), &'static str> {
     match value.zone_text() {
-        Some(text) if Zone::parse(text).is_err() => Err(garde::Error::new(
-            ":attribute must be a valid IANA time zone name",
-        )),
+        Some(text) if Zone::parse(text).is_err() => {
+            Err(":attribute must be a valid IANA time zone name")
+        }
         _ => Ok(()),
     }
 }

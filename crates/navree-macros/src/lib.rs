@@ -466,7 +466,7 @@ pub fn notification(args: TokenStream, item: TokenStream) -> TokenStream {
 /// before the method: guests get `UNAUTHENTICATED`, refusals `FORBIDDEN`.
 ///
 /// An argument typed `Valid<T>` (navree-validation's) is parsed as `T` and
-/// validated with `T`'s garde rules before the method runs. Mutation fields
+/// validated with `T`'s validation rules before the method runs. Mutation fields
 /// run in a unit of work of their own (committed when the method returns
 /// `Ok`). The expansion names the runtime through `::navree::graphql` (or
 /// `::navree_graphql`), so it needs `navree` with the `graphql` feature (or
@@ -490,7 +490,7 @@ pub fn resolver(args: TokenStream, item: TokenStream) -> TokenStream {
 /// DealsGrpc`). Each method is the trait's, with three additions:
 ///
 /// - the first parameter is tonic's `Request<T>`, or `Valid<Request<T>>`
-///   to run the message's garde rules first (`INVALID_ARGUMENT` with a
+///   to run the message's validation rules first (`INVALID_ARGUMENT` with a
 ///   `google.rpc.BadRequest` detail when one breaks);
 /// - Navree extractors may follow it (`Uow`, `CurrentPrincipal`,
 ///   `Authorized<E, A>`, `Accessible<E, A>`, `Scoped<T>`, ...), run on the
@@ -610,9 +610,9 @@ pub fn derive_searchable(input: TokenStream) -> TokenStream {
 /// #[derive(Settings, Serialize, Deserialize, Validate, Default)]
 /// #[settings(key = "portal", scopes(global, organization, workspace))]
 /// pub struct PortalSettings {
-///     #[garde(skip)]
+///     #[validate(skip)]
 ///     pub show_leaderboard: bool,
-///     #[garde(length(max = 500))]
+///     #[validate(length(max = 500))]
 ///     pub welcome_text: String,
 /// }
 /// ```
@@ -675,9 +675,9 @@ pub fn derive_exportable(input: TokenStream) -> TokenStream {
 /// #[derive(Deserialize, Validate, Importable)]
 /// struct RecipientRow {
 ///     #[import(header = "Email", aliases = ["E-mail", "Email address"])]
-///     #[garde(email)]
+///     #[validate(email)]
 ///     email: String,
-///     #[garde(length(max = 100))]
+///     #[validate(length(max = 100))]
 ///     first_name: Option<String>,
 /// }
 /// ```
@@ -732,7 +732,7 @@ pub fn derive_importable(input: TokenStream) -> TokenStream {
 ///
 /// - `&McpContext` (the caller);
 /// - for tools and prompts, one arguments value (a struct deriving
-///   `Deserialize`, `utoipa::ToSchema` and `garde::Validate`; its schema is
+///   `Deserialize`, `utoipa::ToSchema` and `navree_validation::Validate`; its schema is
 ///   the tool's input schema or the prompt's arguments, and it is validated
 ///   before the method runs);
 /// - for resource templates, parameters named like the URI's variables
@@ -802,7 +802,7 @@ pub fn mcp_prompt(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// A tool is an `async fn` taking `&self`, the run (`&AgentRun`) and at
 /// most one arguments value, whose type derives `Deserialize`, utoipa's
 /// `ToSchema` (its JSON Schema, field doc comments included) and
-/// `garde::Validate`; it returns a `Result` of anything that serializes,
+/// `navree_validation::Validate`; it returns a `Result` of anything that serializes,
 /// with an error that converts into `AppError`. The method name is the tool
 /// name; its doc comment, required, is the description. `#[can]` with
 /// marker types needs `navree` (or `navree-access`) among the dependencies;

@@ -9,7 +9,7 @@
 //!   fields are the settings: its stored key, the levels it may be stored
 //!   at (`scopes(global, organization, workspace, user)`), its description
 //!   and its permissions. `Default` gives the values when nothing is
-//!   stored; garde's rules check every write. Register each type with
+//!   stored; its validation rules check every write. Register each type with
 //!   [`SettingsModule::for_feature`] or `m.settings::<T>()`
 //!   ([`ModuleBuilderSettingsExt`]).
 //! - **Resolution.** [`Settings::resolve`] reads the chain of a [`Scope`]
@@ -19,7 +19,7 @@
 //!   its [`Source`]. The [`Setting<T>`] extractor resolves for the
 //!   request's user and workspace.
 //! - **Writes.** [`Settings::update`] sets fields at a scope's level,
-//!   validated with garde and refused with the failing fields named;
+//!   validated and refused with the failing fields named;
 //!   [`Settings::inherit`] makes a field follow the level above again.
 //!   Writes take the unit of work they belong to, clear the cached values
 //!   they affect (cache tags per key and level), write a `settings.updated`
@@ -40,7 +40,7 @@
 //!
 //! ```
 //! # tokio::runtime::Runtime::new().unwrap().block_on(async {
-//! use garde::Validate;
+//! use navree_validation::Validate;
 //! use navree_settings::{Scope, SettingsFake, SettingsGroup, Source};
 //! use serde::{Deserialize, Serialize};
 //! use serde_json::json;
@@ -49,9 +49,9 @@
 //! /// What the member portal shows.
 //! #[derive(Serialize, Deserialize, Validate, Default)] // and #[derive(Settings)]
 //! struct PortalSettings {
-//!     #[garde(skip)]
+//!     #[validate(skip)]
 //!     show_leaderboard: bool,
-//!     #[garde(length(max = 500))]
+//!     #[validate(length(max = 500))]
 //!     welcome_text: String,
 //! }
 //!

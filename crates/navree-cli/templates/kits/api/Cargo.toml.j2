@@ -13,8 +13,6 @@ kit_version = "{{ kit_version }}"
 
 [dependencies]
 chrono = { version = "0.4", features = ["serde"] }
-# garde's derive names `::garde`, so the app depends on it directly.
-garde = { version = "0.23", features = ["derive", "email", "regex"] }
 # The default features (every core module, Helm, workspaces) plus billing,
 # social sign-in and the PostgreSQL driver.
 navree = {{ navree_dependency }}

@@ -26,7 +26,6 @@ axum = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 form_urlencoded = { workspace = true }
-garde = { workspace = true }
 http = { workspace = true }
 # `User` is the access subject `User` (no module import).
 navree-access = { workspace = true }

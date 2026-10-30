@@ -1,21 +1,21 @@
 //! The admin panel's resources: what Helm shows and edits for each model.
 
-use garde::Validate;
 use navree::BoxFuture;
 use navree::auth::{AuthService, User};
 use navree::billing::entity::subscription::Model as Subscription;
 use navree::crypto::generate_key;
 use navree::helm::{Field, Filter, FormData, Metric, RecordOf, Resource, SaveContext};
 use navree::prelude::*;
+use navree::validation::Validate;
 use navree::workspace::{Workspace, Workspaces};
 use serde::Deserialize;
 
 /// The fields of a user created in the panel.
 #[derive(Debug, Deserialize, Validate)]
 struct NewUserForm {
-    #[garde(length(min = 1, max = 100))]
+    #[validate(length(min = 1, max = 100))]
     name: String,
-    #[garde(email)]
+    #[validate(email)]
     email: String,
 }
 

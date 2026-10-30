@@ -1,7 +1,7 @@
-//! Request query and body, with their validation rules (navree-validation on
-//! garde: every failure is a 400 in Navree's error format).
+//! Request query and body, with their validation rules (navree-validation's
+//! `#[derive(Validate)]`: every failure is a 400 in Navree's error format).
 
-use garde::Validate;
+use navree::validation::Validate;
 use navree::db::PageQuery;
 use serde::Deserialize;
 
@@ -16,11 +16,11 @@ pub const MAX_AMOUNT_CENTS: i64 = 1_000_000_000_000;
 pub struct DealsQuery {
     /// The 1-based page number.
     #[serde(default = "first_page")]
-    #[garde(range(min = 1))]
+    #[validate(range(min = 1))]
     pub page: u64,
     /// The page size.
     #[serde(default = "default_per_page")]
-    #[garde(range(min = 1, max = 100))]
+    #[validate(range(min = 1, max = 100))]
     pub per_page: u64,
 }
 
@@ -43,12 +43,12 @@ fn default_per_page() -> u64 {
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateDeal {
     /// 1..=200 characters.
-    #[garde(length(chars, min = 1, max = 200))]
+    #[validate(length(min = 1, max = 200))]
     pub title: String,
     /// 0..=10^12, an integer.
-    #[garde(range(min = 0, max = MAX_AMOUNT_CENTS))]
+    #[validate(range(min = 0, max = MAX_AMOUNT_CENTS))]
     pub amount_cents: i64,
     /// One of `lead`, `qualified`, `proposal`, `negotiation`, `won`, `lost`.
-    #[garde(skip)]
+    #[validate(skip)]
     pub stage: Stage,
 }

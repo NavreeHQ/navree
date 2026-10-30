@@ -176,14 +176,14 @@ impl SettingsRegistry {
 
 #[cfg(test)]
 mod tests {
-    use garde::Validate;
+    use navree_validation::Validate;
     use serde::{Deserialize, Serialize};
 
     use super::*;
     use crate::{ScopeKind, SettingsGroup};
 
     #[derive(Serialize, Deserialize, Validate, Default)]
-    #[garde(allow_unvalidated)]
+    #[validate(skip_unmarked)]
     struct Portal {
         show_leaderboard: bool,
     }
@@ -196,7 +196,7 @@ mod tests {
         use super::*;
 
         #[derive(Serialize, Deserialize, Validate, Default)]
-        #[garde(allow_unvalidated)]
+        #[validate(skip_unmarked)]
         pub struct Portal {
             pub colour: String,
         }
@@ -207,7 +207,7 @@ mod tests {
     }
 
     #[derive(Serialize, Deserialize, Validate, Default)]
-    #[garde(allow_unvalidated)]
+    #[validate(skip_unmarked)]
     struct Nowhere {
         x: bool,
     }
@@ -218,7 +218,7 @@ mod tests {
     }
 
     #[derive(Serialize, Deserialize, Validate, Default)]
-    #[garde(allow_unvalidated)]
+    #[validate(skip_unmarked)]
     struct BadKey {
         x: bool,
     }

@@ -104,28 +104,28 @@ Every request body is a struct with its rules beside its fields. The handler tak
 #[schema(as = DealInput)]
 pub struct CreateDeal {
     /// The title.
-    #[garde(required, custom(not_blank), length(max = 255))]
+    #[validate(required, custom(not_blank), length(max = 255))]
     #[schema(value_type = String, required = true)]
     pub title: Option<String>,
     /// The company (must exist).
-    #[garde(required)]
+    #[validate(required)]
     #[schema(value_type = String, format = Uuid, required = true)]
     pub company_id: Option<Uuid>,
     /// The value in cents, from 0 to [`MAX_AMOUNT_CENTS`].
-    #[garde(required, range(min = 0, max = MAX_AMOUNT_CENTS))]
+    #[validate(required, range(min = 0, max = MAX_AMOUNT_CENTS))]
     #[schema(value_type = i64, required = true, minimum = 0, maximum = 1_000_000_000_000_000_i64)]
     pub amount_cents: Option<i64>,
     /// The ISO 4217 code (default `USD`; stored upper-case).
-    #[garde(custom(currency_code))]
+    #[validate(custom(currency_code))]
     pub currency: Option<String>,
     /// The stage (default `lead`).
-    #[garde(skip)]
+    #[validate(skip)]
     pub stage: Option<Stage>,
     // ... contact_id, lost_reason, expected_close_date, owner_id
 }
 ```
 
-Required fields are `Option`s with garde's `required` rule rather than plain fields. A missing plain field stops deserialization at the first one; with `required`, a client that sends `{}` learns about every missing field in one round trip:
+Required fields are `Option`s with the `required` rule rather than plain fields. A missing plain field stops deserialization at the first one; with `required`, a client that sends `{}` learns about every missing field in one round trip:
 
 ```json title="400 Bad Request"
 {
@@ -408,7 +408,7 @@ See [HTTP tests](/docs/testing/http-tests/).
     `#[api]`, schemas, exporting and the docs UI.
   </LinkCard>
   <LinkCard href="/docs/basics/validation/" title="Validation">
-    Validated extractors on garde, with field-level messages.
+    `#[derive(Validate)]` rules and validated extractors, with field-level messages.
   </LinkCard>
   <LinkCard href="/docs/basics/errors/" title="Errors">
     The error shape, `AppError` and mapping your own errors.

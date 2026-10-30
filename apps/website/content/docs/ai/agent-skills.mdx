@@ -21,7 +21,7 @@ Start with **`navree`**. It explains what a Navree app is, how one is laid out, 
 | `navree-new-app` | Install the CLI, create an app with `navree new`, set `APP_KEY` and run `navree dev` |
 | `navree-modules-and-di` | Define modules and providers, wire dependencies, use `for_root` / `from_config` / `for_feature`, and fix boot-time graph errors |
 | `navree-controllers-and-routing` | Add controllers, routes, extractors, responses and access attributes, and debug 401, 403, 404, 405 or 415 on a route |
-| `navree-validation` | Validate bodies and query strings with garde DTOs, `unique` and `exists` rules, custom rules and messages |
+| `navree-validation` | Validate bodies and query strings with `#[derive(Validate)]` DTOs, `unique` and `exists` rules, custom rules and messages |
 | `navree-errors-and-responses` | Return errors in Navree's JSON shape, map your error types to statuses, and shape responses, headers and downloads |
 | `navree-orm` | Models with `#[derive(Model)]`, the query builder, records, relationships and eager loading, scopes and soft deletes, casts, events and observers, factories, `#[navree::test]` databases, route model binding, and workspace and access scoping |
 | `navree-migrations` | Migrations with the schema builder: tables, columns per database, indexes and foreign keys, migration sets and their order, `migrate`, `--pretend`, rollbacks, `migrate:fresh` and `schema:dump` |
@@ -77,13 +77,13 @@ Every skill follows the same shape. This is the beginning of `navree-validation`
 ```text title="skills/navree-validation/SKILL.md"
 ---
 name: navree-validation
-description: Validates request input in Navree with garde DTOs and the `Valid` and `ValidAsync` extractors. Covers DTO rules, Navree's extra rules (`one_of`, `uuid`, `date_ymd`, `confirmed`), required fields, nested data, database rules (`AsyncRule::unique`, `exists`), custom rules and messages, manual `ValidationErrors`, the 400 response shape and tests. Use when writing a request body or query DTO, adding or customizing validation rules or messages, checking uniqueness against the database, or when a test expects a 400 with `errors`.
+description: Validates request input in Navree with `#[derive(Validate)]` DTOs and the `Valid` and `ValidAsync` extractors. Covers DTO rules, Navree's extra rules (`one_of`, `uuid`, `date_ymd`, `confirmed`), required fields, nested data, database rules (`AsyncRule::unique`, `exists`), custom rules and messages, manual `ValidationErrors`, the 400 response shape and tests. Use when writing a request body or query DTO, adding or customizing validation rules or messages, checking uniqueness against the database, or when a test expects a 400 with `errors`.
 ---
 
 # Validation
 
 Navree validates input before the handler runs. Describe the rules on a DTO
-with garde, take `Valid<Json<T>>` (or `Valid<Query<T>>`, `Valid<Form<T>>`)
+with `#[derive(Validate)]`, take `Valid<Json<T>>` (or `Valid<Query<T>>`, `Valid<Form<T>>`)
 in the handler, and invalid input becomes a 400 with one message per broken
 rule. The DTO lives in the module's `dto.rs`.
 

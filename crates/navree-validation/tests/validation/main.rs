@@ -3,6 +3,7 @@
 
 mod database;
 mod databases;
+mod derive;
 mod form;
 #[cfg(feature = "html")]
 mod html;

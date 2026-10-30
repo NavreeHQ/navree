@@ -7,7 +7,7 @@ description: "CSV and Excel imports and exports with navree-sheets: the `sheets`
 
 `navree::sheets` (crate `navree-sheets`, facade feature `sheets`, in `full`)
 writes CSV and XLSX from typed rows and runs import pipelines: upload,
-encoding detection, reading, header mapping, garde validation per row, a
+encoding detection, reading, header mapping, validation per row, a
 staging table with a preview, batched apply with duplicate modes, and an
 error file. Everything below is in the code: when in doubt read
 `crates/navree-sheets/src` and its tests in `crates/navree-sheets/tests/sheets/`,
@@ -95,21 +95,21 @@ impl Export for ContactsExport {
 
 ## Steps: add an import
 
-1. Describe a row: serde reads it, garde checks it, `Importable` lists its
+1. Describe a row: serde reads it, its `#[validate]` rules check it, `Importable` lists its
    columns.
 
 ```rust
 #[derive(Deserialize, Validate, Importable)]
 struct ContactInput {
     #[import(header = "Email", aliases = ["E-mail", "Email address"])]
-    #[garde(email)]
+    #[validate(email)]
     email: String,
-    #[garde(length(min = 1, max = 100))]
+    #[validate(length(min = 1, max = 100))]
     name: String,                         // header "Name", required
-    #[garde(length(max = 100))]
+    #[validate(length(max = 100))]
     company: Option<String>,              // optional: an Option or #[serde(default)]
     #[serde(default)]
-    #[garde(skip)]
+    #[validate(skip)]
     vip: bool,
 }
 ```
@@ -173,7 +173,7 @@ impl Import for ContactsImport {
   header set in any order and case), else automatic (header, field name or
   alias, letters and digits only, lower case).
 - **Rows:** cells read as people type them (any script's digits, decimal
-  comma, yes/no, ISO dates, enum names in any case), then garde. Keys that
+  comma, yes/no, ISO dates, enum names in any case), then the rules. Keys that
   repeat in the file are `repeated`; keys `existing` knows are `duplicate`.
 
 ## Testing templates

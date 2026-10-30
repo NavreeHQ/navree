@@ -120,22 +120,22 @@ async fn the_inherited_values_are_validated_with_the_patch() {
         PartialEq,
         serde::Serialize,
         serde::Deserialize,
-        garde::Validate,
+        navree_validation::Validate,
     )]
     #[settings(key = "board")]
     struct BoardSettings {
-        #[garde(skip)]
+        #[validate(skip)]
         leaderboard: bool,
-        #[garde(custom(at_least_ten_with_leaderboard(&self.leaderboard)))]
+        #[validate(custom(at_least_ten_with_leaderboard(&self.leaderboard)))]
         size: u32,
     }
 
     fn at_least_ten_with_leaderboard(
         leaderboard: &bool,
-    ) -> impl FnOnce(&u32, &()) -> garde::Result + '_ {
-        move |size, _| {
+    ) -> impl FnOnce(&u32) -> Result<(), &'static str> + '_ {
+        move |size| {
             if *leaderboard && *size < 10 {
-                Err(garde::Error::new("the leaderboard needs at least 10 rows"))
+                Err("the leaderboard needs at least 10 rows")
             } else {
                 Ok(())
             }

@@ -8,7 +8,6 @@
 use std::sync::Arc;
 
 use axum::extract::{Form, Query};
-use garde::Validate;
 use http::Method;
 use navree_db::{Backend, DatabaseModule, Db, Executor, Statement, Uow};
 use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
@@ -16,6 +15,7 @@ use navree_kernel::{
     BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver,
 };
 use navree_testing::TestApp;
+use navree_validation::Validate;
 use navree_validation::rules::{self, confirmed};
 use navree_validation::{AsyncRule, AsyncRules, UowCheck, Valid, ValidAsync};
 use serde::{Deserialize, Serialize};
@@ -26,49 +26,49 @@ use crate::databases::Scratch;
 /// The `min`/`max`/`email` family.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct CreateUser {
-    #[garde(length(min = 2, max = 50))]
+    #[validate(length(min = 2, max = 50))]
     pub name: String,
-    #[garde(email)]
+    #[validate(email)]
     pub email: String,
-    #[garde(range(min = 18))]
+    #[validate(range(min = 18))]
     pub age: u32,
-    #[garde(length(min = 1))]
+    #[validate(length(min = 1))]
     pub tags: Vec<String>,
 }
 
 /// Nested structs and lists (`dive`).
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct CreateOrder {
-    #[garde(dive)]
+    #[validate(nested)]
     pub customer: Customer,
-    #[garde(dive, length(min = 1))]
+    #[validate(nested, length(min = 1))]
     pub items: Vec<Item>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct Customer {
-    #[garde(dive)]
+    #[validate(nested)]
     pub address: Address,
 }
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct Address {
-    #[garde(length(min = 1))]
+    #[validate(length(min = 1))]
     pub city: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct Item {
-    #[garde(length(min = 1))]
+    #[validate(length(min = 1))]
     pub sku: String,
-    #[garde(range(min = 1))]
+    #[validate(range(min = 1))]
     pub quantity: u32,
 }
 
-/// Field types serde checks before garde runs.
+/// Field types serde checks before the rules run.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 #[serde(deny_unknown_fields)]
-#[garde(allow_unvalidated)]
+#[validate(skip_unmarked)]
 pub struct Typed {
     pub title: String,
     pub count: i64,
@@ -89,51 +89,51 @@ pub enum Stage {
 /// Query-string filters.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct Search {
-    #[garde(length(min = 2))]
+    #[validate(length(min = 2))]
     pub q: Option<String>,
-    #[garde(range(min = 1, max = 100))]
+    #[validate(range(min = 1, max = 100))]
     pub per_page: Option<u32>,
 }
 
 /// A form post.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct Subscribe {
-    #[garde(email)]
+    #[validate(email)]
     pub email: String,
-    #[garde(skip)]
+    #[validate(skip)]
     pub newsletter: Option<bool>,
 }
 
 /// `confirmed`: `password` must equal `password_confirmation`.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct Register {
-    #[garde(length(min = 8), custom(confirmed(&self.password_confirmation)))]
+    #[validate(length(min = 8), custom(confirmed(&self.password_confirmation)))]
     pub password: String,
-    #[garde(skip)]
+    #[validate(skip)]
     pub password_confirmation: String,
 }
 
 /// navree's extra rules.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct Schedule {
-    #[garde(custom(rules::uuid))]
+    #[validate(custom(rules::uuid))]
     pub owner_id: String,
-    #[garde(custom(rules::date_ymd))]
+    #[validate(custom(rules::date_ymd))]
     pub due_on: Option<String>,
-    #[garde(custom(rules::one_of(&["lead", "won"])))]
+    #[validate(custom(rules::one_of(&["lead", "won"])))]
     pub stage: String,
 }
 
 /// App-defined rules: a keyed one (`even`) and a plain-text one.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct Parity {
-    #[garde(custom(is_even))]
+    #[validate(custom(is_even))]
     pub even: u32,
-    #[garde(custom(is_odd))]
+    #[validate(custom(is_odd))]
     pub odd: u32,
 }
 
-fn is_even(value: &u32, _: &()) -> garde::Result {
+fn is_even(value: &u32) -> Result<(), navree_validation::Violation> {
     if value.is_multiple_of(2) {
         Ok(())
     } else {
@@ -141,18 +141,18 @@ fn is_even(value: &u32, _: &()) -> garde::Result {
     }
 }
 
-fn is_odd(value: &u32, _: &()) -> garde::Result {
+fn is_odd(value: &u32) -> Result<(), &'static str> {
     if !value.is_multiple_of(2) {
         Ok(())
     } else {
-        Err(garde::Error::new(":attribute must be an odd number"))
+        Err(":attribute must be an odd number")
     }
 }
 
 /// `unique` on `users.email`, ignoring the `{id}` of the route, if any.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct UserEmail {
-    #[garde(email)]
+    #[validate(email)]
     pub email: String,
 }
 
@@ -168,9 +168,9 @@ impl AsyncRules for UserEmail {
 /// `exists` on `companies.id`; `null` skips the rule.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct NewDeal {
-    #[garde(length(min = 1))]
+    #[validate(length(min = 1))]
     pub title: String,
-    #[garde(skip)]
+    #[validate(skip)]
     pub company_id: Option<uuid::Uuid>,
 }
 
@@ -189,7 +189,7 @@ impl AsyncRules for NewDeal {
 /// unless the route's `{code}` is `admin` (the record being updated).
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct Handle {
-    #[garde(skip)]
+    #[validate(skip)]
     pub code: Option<String>,
 }
 
@@ -223,7 +223,7 @@ impl AsyncRules for Handle {
 /// A rule with an identifier that is not a plain SQL name.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct Sneaky {
-    #[garde(length(min = 1))]
+    #[validate(length(min = 1))]
     pub name: String,
 }
 
@@ -378,9 +378,9 @@ impl<'de> Deserialize<'de> for Probe {
 /// A body with a [`Probe`].
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct Probed {
-    #[garde(skip)]
+    #[validate(skip)]
     pub probe: Probe,
-    #[garde(length(min = 1))]
+    #[validate(length(min = 1))]
     pub name: String,
 }
 

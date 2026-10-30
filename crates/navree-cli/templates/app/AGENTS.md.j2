@@ -88,8 +88,8 @@ snake_case; module names are plural. Generators never overwrite a file.
   registered in `wire`. A module only sees its own providers, the exports of
   modules it imports, and global modules.
 - **Input.** Request bodies are DTOs deriving `Deserialize` and
-  `garde::Validate`; every field has a `#[garde(..)]` rule or
-  `#[garde(skip)]`. Handlers take `Valid(Json(input)): Valid<Json<T>>`
+  `navree::validation::Validate`; every field has a `#[validate(..)]` rule or
+  `#[validate(skip)]`. Handlers take `Valid(Json(input)): Valid<Json<T>>`
   (or `Valid<Query<T>>`), so invalid input never reaches them.
 - **Errors.** Handlers return `Result<T>` (`navree::Result`, error type
   `AppError`): `AppError::not_found()`, `AppError::forbidden()`,

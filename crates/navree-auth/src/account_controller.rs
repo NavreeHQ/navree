@@ -7,13 +7,13 @@ use std::sync::Arc;
 
 use axum::extract::Path;
 use axum::response::IntoResponse;
-use garde::Validate;
 use http::{Method, StatusCode};
 use navree_http::{
     ApiMeta, AppError, Controller, Json, NoContent, RouteDef, ValidSignature, schema_fn,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_validation::Valid;
+use navree_validation::Validate;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -28,7 +28,7 @@ use crate::{
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct ForgotPasswordInput {
     /// The email address of the account.
-    #[garde(email, length(max = 255))]
+    #[validate(email, length(max = 255))]
     pub email: String,
 }
 
@@ -36,13 +36,13 @@ pub struct ForgotPasswordInput {
 #[derive(Deserialize, Validate, ToSchema)]
 pub struct ResetPasswordInput {
     /// The email address of the account.
-    #[garde(email, length(max = 255))]
+    #[validate(email, length(max = 255))]
     pub email: String,
     /// The token from the reset mail.
-    #[garde(length(min = 1, max = 512))]
+    #[validate(length(min = 1, max = 512))]
     pub token: String,
     /// The new password (at least `auth.password_min_length` characters).
-    #[garde(length(max = 1024))]
+    #[validate(length(max = 1024))]
     #[schema(format = Password)]
     pub password: String,
 }
@@ -51,11 +51,11 @@ pub struct ResetPasswordInput {
 #[derive(Deserialize, Validate, ToSchema)]
 pub struct ChangePasswordInput {
     /// The password in use.
-    #[garde(length(min = 1, max = 1024))]
+    #[validate(length(min = 1, max = 1024))]
     #[schema(format = Password)]
     pub current_password: String,
     /// The new password (at least `auth.password_min_length` characters).
-    #[garde(length(max = 1024))]
+    #[validate(length(max = 1024))]
     #[schema(format = Password)]
     pub password: String,
 }
@@ -64,16 +64,16 @@ pub struct ChangePasswordInput {
 #[derive(Default, Deserialize, Validate, ToSchema)]
 pub struct UpdateProfileInput {
     /// The new display name.
-    #[garde(length(min = 1, max = 255))]
+    #[validate(length(min = 1, max = 255))]
     #[serde(default)]
     pub name: Option<String>,
     /// The new email address (unverified until the mailed link is
     /// followed). Changing it requires `current_password`.
-    #[garde(email, length(max = 255))]
+    #[validate(email, length(max = 255))]
     #[serde(default)]
     pub email: Option<String>,
     /// The password in use: required when `email` changes.
-    #[garde(length(max = 1024))]
+    #[validate(length(max = 1024))]
     #[schema(format = Password)]
     #[serde(default)]
     pub current_password: Option<String>,
@@ -83,7 +83,7 @@ pub struct UpdateProfileInput {
 #[derive(Deserialize, Validate, ToSchema)]
 pub struct ConfirmTwoFactorInput {
     /// A current code from the authenticator app.
-    #[garde(length(min = 1, max = 16))]
+    #[validate(length(min = 1, max = 16))]
     pub code: String,
 }
 
@@ -91,7 +91,7 @@ pub struct ConfirmTwoFactorInput {
 #[derive(Deserialize, Validate, ToSchema)]
 pub struct DisableTwoFactorInput {
     /// The account password.
-    #[garde(length(min = 1, max = 1024))]
+    #[validate(length(min = 1, max = 1024))]
     #[schema(format = Password)]
     pub password: String,
 }
@@ -101,14 +101,14 @@ pub struct DisableTwoFactorInput {
 #[derive(Deserialize, Validate, ToSchema)]
 pub struct TwoFactorVerifyInput {
     /// The `challenge_token` of the login response.
-    #[garde(length(min = 1, max = 4096))]
+    #[validate(length(min = 1, max = 4096))]
     pub challenge_token: String,
     /// A current code from the authenticator app.
-    #[garde(length(min = 1, max = 16))]
+    #[validate(length(min = 1, max = 16))]
     #[serde(default)]
     pub code: Option<String>,
     /// One of the recovery codes (single use).
-    #[garde(length(min = 1, max = 64))]
+    #[validate(length(min = 1, max = 64))]
     #[serde(default)]
     pub recovery_code: Option<String>,
 }

@@ -1,6 +1,6 @@
 //! Request and response bodies of `/api/v1/profile`.
 
-use garde::Validate;
+use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -15,10 +15,10 @@ pub const DEFAULT_TIMEZONE: &str = "UTC";
 #[derive(Debug, Deserialize, Validate)]
 pub struct UpdateProfile {
     /// At most 1000 characters.
-    #[garde(length(max = 1000))]
+    #[validate(length(max = 1000))]
     pub bio: Option<String>,
     /// 1 to 64 characters, e.g. `Europe/Paris`.
-    #[garde(length(min = 1, max = 64))]
+    #[validate(length(min = 1, max = 64))]
     pub timezone: Option<String>,
 }
 

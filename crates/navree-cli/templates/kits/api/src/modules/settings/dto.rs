@@ -1,6 +1,6 @@
 //! Request and response bodies of `/api/v1/settings`.
 
-use garde::Validate;
+use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -12,11 +12,11 @@ use navree::workspace::Workspace;
 #[derive(Debug, Default, Deserialize, Validate, ToSchema)]
 pub struct UpdateWorkspace {
     /// 1 to 100 characters.
-    #[garde(length(min = 1, max = 100))]
+    #[validate(length(min = 1, max = 100))]
     pub name: Option<String>,
     /// Lower-case letters, digits and single dashes (`acme-inc`); the web
     /// app's URLs (`/w/<slug>/`) and the `X-Workspace` header use it.
-    #[garde(length(min = 1, max = 64), pattern(r"^[a-z0-9]+(-[a-z0-9]+)*$"))]
+    #[validate(length(min = 1, max = 64), pattern(r"^[a-z0-9]+(-[a-z0-9]+)*$"))]
     pub slug: Option<String>,
 }
 
@@ -65,10 +65,10 @@ impl Default for NotificationSettings {
 /// present change.
 #[derive(Debug, Default, Deserialize, Validate, ToSchema)]
 pub struct UpdateNotifications {
-    #[garde(skip)]
+    #[validate(skip)]
     pub project_activity: Option<bool>,
-    #[garde(skip)]
+    #[validate(skip)]
     pub weekly_summary: Option<bool>,
-    #[garde(skip)]
+    #[validate(skip)]
     pub product_updates: Option<bool>,
 }

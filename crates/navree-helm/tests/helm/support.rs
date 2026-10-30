@@ -8,7 +8,6 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
-use garde::Validate;
 use navree_access::{
     AbilityCtx, AccessModule, AccessOptions, AccessService, ActionMarker, CREATE, DELETE, READ,
     Rules, UPDATE, field,
@@ -26,6 +25,7 @@ use navree_http::AppError;
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_orm::{Builder, Model, Record};
 use navree_testing::{TestApp, TestAppBuilder, TestClient, principal};
+use navree_validation::Validate;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -202,21 +202,21 @@ pub fn options() -> AccessOptions {
 /// The input of a new deal, validated like the API's DTO.
 #[derive(Debug, Deserialize, Validate)]
 pub struct NewDeal {
-    #[garde(length(min = 1, max = 200))]
+    #[validate(length(min = 1, max = 200))]
     pub title: String,
-    #[garde(range(min = 0))]
+    #[validate(range(min = 0))]
     pub amount_cents: i64,
-    #[garde(skip)]
+    #[validate(skip)]
     pub currency: Option<String>,
-    #[garde(skip)]
+    #[validate(skip)]
     pub stage: Option<String>,
-    #[garde(skip)]
+    #[validate(skip)]
     pub company_id: Option<Uuid>,
-    #[garde(skip)]
+    #[validate(skip)]
     pub expected_close_date: Option<NaiveDate>,
-    #[garde(skip)]
+    #[validate(skip)]
     pub notes: Option<String>,
-    #[garde(skip)]
+    #[validate(skip)]
     pub priority: Option<bool>,
 }
 

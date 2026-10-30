@@ -3,11 +3,11 @@
 
 use std::sync::Arc;
 
-use garde::Validate;
 use http::Method;
 use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_testing::TestApp;
+use navree_validation::Validate;
 use navree_validation::{SafeHtml, Valid, ValidationModule};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -17,9 +17,9 @@ use crate::support::{app_with, errors};
 /// A comment with a rich-text body; its length is the sanitized length.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct Comment {
-    #[garde(length(chars, min = 1, max = 40))]
+    #[validate(length(min = 1, max = 40))]
     pub body: SafeHtml,
-    #[garde(skip)]
+    #[validate(skip)]
     pub signature: Option<SafeHtml>,
 }
 
@@ -173,7 +173,7 @@ async fn xss_payloads_never_survive() {
 #[tokio::test]
 async fn length_rules_measure_the_sanitized_html() {
     let app = app_with(HtmlTestModule).await;
-    // Mostly a script: the body that reaches garde is short enough.
+    // Mostly a script: the body that reaches the rules is short enough.
     let script = format!("<script>{}</script><p>hi</p>", "x".repeat(500));
     app.client()
         .post("/html/comments")

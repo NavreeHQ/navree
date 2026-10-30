@@ -21,7 +21,6 @@ and its tests (`tests/graphql/`, `tests/docs_examples.rs`).
 [dependencies]
 navree = { git = "https://github.com/NavreeHQ/navree", features = ["graphql"] }
 async-graphql = { version = "7.2", default-features = false, features = ["chrono", "uuid"] }
-garde = "0.23"   # for Valid<T> inputs (the derive names ::garde)
 ```
 
 2. Add the module to the app root. It needs `ConfigModule` and `HttpModule`;
@@ -46,7 +45,7 @@ Navree::app()
 
 ```rust
 use async_graphql::{ComplexObject, Enum, InputObject, SimpleObject};
-use garde::Validate;
+use navree::validation::Validate;
 
 #[derive(Clone, Debug, SimpleObject)]
 #[graphql(name = "Deal", complex)]
@@ -59,9 +58,9 @@ pub struct DealObject {
 
 #[derive(Debug, InputObject, Validate)]
 pub struct MoveDealInput {
-    #[garde(skip)]
+    #[validate(skip)]
     pub stage: Stage,
-    #[garde(range(min = 0))]
+    #[validate(range(min = 0))]
     pub position: Option<i64>,
 }
 ```

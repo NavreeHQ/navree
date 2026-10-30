@@ -44,10 +44,10 @@ pub struct NoteResource {
 }
 
 /// What `POST /api/v1/notes` takes.
-#[derive(Debug, Deserialize, garde::Validate, ToSchema)]
+#[derive(Debug, Deserialize, navree::validation::Validate, ToSchema)]
 pub struct CreateNote {
     /// 1 to 2000 characters.
-    #[garde(length(chars, min = 1, max = 2000))]
+    #[validate(length(min = 1, max = 2000))]
     pub body: String,
 }
 

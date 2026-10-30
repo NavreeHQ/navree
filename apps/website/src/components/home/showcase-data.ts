@@ -198,19 +198,19 @@ impl DealsController {
     label: "Validation",
     file: "src/modules/deals/dto.rs",
     title: "Bad input never reaches your handler",
-    text: "Valid<Json<T>> deserializes the body and runs its garde rules first. A failure is one 400 response that lists every field's errors in Navree's JSON error shape, the same shape as every other error. Below is the answer to a blank title and a negative amount with no company.",
+    text: "Valid<Json<T>> deserializes the body and runs its validation rules first. A failure is one 400 response that lists every field's errors in Navree's JSON error shape, the same shape as every other error. Below is the answer to a blank title and a negative amount with no company.",
     href: "/docs/basics/validation/",
     linkText: "Read about validation",
     code: `// Options with \`required\`: one response lists every missing field.
 #[derive(Deserialize, Validate)]
 pub struct CreateDeal {
-    #[garde(required, custom(not_blank), length(max = 255))]
+    #[validate(required, custom(not_blank), length(max = 255))]
     pub title: Option<String>,
-    #[garde(required)]
+    #[validate(required)]
     pub company_id: Option<Uuid>,
-    #[garde(required, range(min = 0, max = MAX_AMOUNT_CENTS))]
+    #[validate(required, range(min = 0, max = MAX_AMOUNT_CENTS))]
     pub amount_cents: Option<i64>,
-    #[garde(skip)]
+    #[validate(skip)]
     pub stage: Option<Stage>,
     // ...
 }
