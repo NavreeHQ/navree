@@ -15,7 +15,7 @@
 //!   (with its first statement, `SELECT 1`) and commits it, outside HTTP.
 //! - `kernel/get`: `AppContext::get::<Db>()`, the service locator.
 //!
-//! Run them with `cargo bench -p navree --bench pipeline` (add
+//! Run them with `cargo bench -p navree --features sqlite --bench pipeline` (add
 //! `-- --quick` for a shorter run, or `-- --test` to run each once).
 #![allow(missing_docs)]
 

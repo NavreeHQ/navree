@@ -1,6 +1,6 @@
 ---
 name: navree-performance
-description: "Make a Navree app faster per request, or check that a change didn't make it slower: the request-pipeline benchmarks (`cargo bench -p navree --bench pipeline`), the `database` pool settings (`test_before_acquire`, `idle_timeout_secs`, `max_lifetime_secs`, `max_connections`) and `database.transaction_settings`, what the fixed HTTP layers cost and when they merge into one middleware, which modules make model writes serialize change events, reading through the pool instead of a transaction, and the service locator in hot paths. Use when throughput or latency matters, when a load test shows Navree using its CPUs while the database idles, or before changing navree-http, navree-db or navree-kernel code on the request path."
+description: "Make a Navree app faster per request, or check that a change didn't make it slower: the request-pipeline benchmarks (`cargo bench -p navree --features sqlite --bench pipeline`), the `database` pool settings (`test_before_acquire`, `idle_timeout_secs`, `max_lifetime_secs`, `max_connections`) and `database.transaction_settings`, what the fixed HTTP layers cost and when they merge into one middleware, which modules make model writes serialize change events, reading through the pool instead of a transaction, and the service locator in hot paths. Use when throughput or latency matters, when a load test shows Navree using its CPUs while the database idles, or before changing navree-http, navree-db or navree-kernel code on the request path."
 ---
 
 # Performance
@@ -15,11 +15,11 @@ and `crates/navree-db/src/http.rs` when you need the detail.
 ## Measure first
 
 ```sh
-cargo bench -p navree --bench pipeline              # every benchmark
-cargo bench -p navree --bench pipeline -- pipeline/json --save-baseline before
+cargo bench -p navree --features sqlite --bench pipeline              # every benchmark
+cargo bench -p navree --features sqlite --bench pipeline -- pipeline/json --save-baseline before
 # ...change something...
-cargo bench -p navree --bench pipeline -- pipeline/json --baseline before
-cargo bench -p navree --bench pipeline -- --test    # run each once (CI)
+cargo bench -p navree --features sqlite --bench pipeline -- pipeline/json --baseline before
+cargo bench -p navree --features sqlite --bench pipeline -- --test    # run each once (CI)
 ```
 
 | Benchmark | What it measures |
@@ -103,7 +103,7 @@ per_ip_rate_limit = 600       # sharded by IP; a single client IP shares one key
 
 ## Checks
 
-- `cargo bench -p navree --bench pipeline -- --baseline before` shows no
+- `cargo bench -p navree --features sqlite --bench pipeline -- --baseline before` shows no
   regression for the benchmarks your change touches.
 - `cargo test -p navree-http -p navree-db -p navree-kernel` stay green: the
   pipeline tests pin the order of the fixed layers, the request id on every

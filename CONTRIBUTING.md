@@ -141,8 +141,9 @@ migrations, abilities, platform modules), `crm-companies` (companies and contact
 ## Requirements
 
 - Rust 1.95 or newer (edition 2024; the build machine uses 1.99.1). On
-  Windows, the MSVC build tools (SQLite is compiled from source through the
-  bundled `libsqlite3-sys`).
+  Windows, the MSVC build tools (the workspace's tests run on SQLite, compiled
+  from source through the bundled `libsqlite3-sys`; a PostgreSQL or MySQL
+  build of `navree` compiles none).
 - Optional: [sccache](https://github.com/mozilla/sccache), to share compiled
   dependencies between target directories. The repository doesn't set a
   compiler wrapper; set `RUSTC_WRAPPER=sccache`, or `rustc-wrapper =
@@ -486,7 +487,11 @@ allowlisted: revoke and rotate it, then tell security@navree.com.
 
 ### Features and drivers
 
-- Databases: SQLite (bundled) by default; enable PostgreSQL with the
-  `postgres` feature of `navree` (or `navree-db`).
+- Databases: every driver is its own opt-in feature of `navree` (or
+  `navree-db`): `postgres`, `mysql` and `sqlite` (the bundled SQLite library,
+  the one place that compiles it). Crates whose tests run on SQLite turn
+  `navree-db/sqlite` on in their `[dev-dependencies]`. `crates/navree/tests/dependency_graph.rs`
+  checks that `navree` with `postgres` and without `sqlite` has no
+  `libsqlite3-sys`.
 - External versions live only in the root `[workspace.dependencies]`; crates
   use `dep = { workspace = true }`.

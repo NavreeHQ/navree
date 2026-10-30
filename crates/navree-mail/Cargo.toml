@@ -63,6 +63,8 @@ utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
 # The server scenarios catch a failing scenario to drop its database.
 futures-util = { workspace = true }
 base64 = { workspace = true }

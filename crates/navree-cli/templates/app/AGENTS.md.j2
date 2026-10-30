@@ -131,6 +131,15 @@ snake_case; module names are plural. Generators never overwrite a file.
 - **PostgreSQL** runs locally with `navree dock up`; tests run on SQLite,
   with the same migrations.
 {% endif %}
+{% if database == "mysql" %}
+- **Drivers.** The app compiles only the `mysql` feature of `navree`;
+  `[dev-dependencies]` turns `sqlite` on for the tests, so a release build
+  compiles no SQLite.
+{% elif database != "sqlite" %}
+- **Drivers.** The app compiles only the `postgres` feature of `navree`;
+  `[dev-dependencies]` turns `sqlite` on for the tests, so a release build
+  compiles no SQLite.
+{% endif %}
 - **Configuration.** `config/app.toml` holds shared settings; `APP_*`
   environment variables override it (`APP_DATABASE__URL` sets
   `database.url`). `.env` only fills keys that config/app.toml leaves out.

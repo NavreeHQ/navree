@@ -4,6 +4,7 @@
 //! DirectoryRead>` (macros), the job-side client, a provider type of your
 //! own, the report on the connections table and the `ConnectionUnhealthy`
 //! listener.
+#![cfg(feature = "sqlite")]
 #![cfg(feature = "integrations")]
 // The page's examples are written as an app writes them, without doc comments.
 #![allow(missing_docs)]

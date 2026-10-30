@@ -81,9 +81,11 @@
 //! `i18n`, `dock`, `harbor`, `navigator`, `browser`, `otel`), and the
 //! `storage-s3` driver but not `storage-gcs` or `storage-azure`. A feature
 //! also turns on the features of the crates its crate builds on (`auth`
-//! turns on `access`, `db`, `http`, ...). SQLite is built in; the `postgres`
-//! feature adds navree-db's PostgreSQL driver and the `mysql` feature its
-//! MySQL and MariaDB driver, and the opt-in `otel` feature adds
+//! turns on `access`, `db`, `http`, ...). The database drivers are opt-in
+//! features that each turn on `db`: `postgres` adds navree-db's PostgreSQL
+//! driver, `mysql` its MySQL and MariaDB driver and `sqlite` its SQLite
+//! driver (the bundled library; a PostgreSQL or MySQL build compiles no
+//! SQLite), and the opt-in `otel` feature adds
 //! navree-observe's OTLP span exporter. `validation-phone` and
 //! `validation-html` (both in `full`) add navree-validation's `Phone` and
 //! `SafeHtml`. `search-tantivy` adds search's embedded Tantivy engine.

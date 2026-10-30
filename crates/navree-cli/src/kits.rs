@@ -108,6 +108,10 @@ pub struct KitContext {
     /// The right-hand side of `navree = ...` in `Cargo.toml`, with the
     /// kit's features (`saas`, `api`).
     pub navree_dependency: String,
+    /// The right-hand side of `navree = ...` in `[dev-dependencies]`: the
+    /// `sqlite` driver, which the kit's tests run on (each test boots the
+    /// app on a fresh SQLite file); the app itself compiles no SQLite.
+    pub navree_test_dependency: String,
     /// The right-hand side of `navree = ...` in a workspace's
     /// `[workspace.dependencies]`: default features off (`micro`).
     pub navree_workspace_dependency: String,
@@ -139,6 +143,7 @@ impl KitContext {
             web: kit.has_web(),
             title: app.name.title(),
             navree_dependency: app.navree.dependency_with_features(kit.navree_features()),
+            navree_test_dependency: app.navree.dependency_with_features(&["sqlite"]),
             navree_workspace_dependency: app.navree.dependency_without_default_features(),
             navree_features: kit
                 .navree_features()

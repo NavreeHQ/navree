@@ -4,6 +4,7 @@
 //! client examples, and the page's test.
 //!
 //! Run with `cargo test -p navree --features grpc --test grpc`.
+#![cfg(feature = "sqlite")]
 
 // The page's code declares public items, as an app crate would.
 #![allow(missing_docs)]

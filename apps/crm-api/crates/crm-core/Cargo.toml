@@ -20,4 +20,6 @@ utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree = { workspace = true, features = ["sqlite"] }
 tokio = { workspace = true }

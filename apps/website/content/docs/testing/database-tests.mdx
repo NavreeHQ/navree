@@ -7,7 +7,14 @@ Most of what an API does ends up in the database, so most tests check it there: 
 
 ## A database for every test
 
-`TestApp::builder().temp_database()` points the app at a new SQLite file in a temporary directory and turns on `database.migrate_on_boot`. For an app you boot with `from_builder`, `temp_sqlite_url()` gives you the URL, and you set `database.migrate_on_boot` yourself ([booting your whole app](/docs/testing/getting-started/#booting-your-whole-app)). Every test starts from an empty database with every module's migrations applied, and the file is deleted with the app:
+`TestApp::builder().temp_database()` points the app at a new SQLite file in a temporary directory and turns on `database.migrate_on_boot`. For an app you boot with `from_builder`, `temp_sqlite_url()` gives you the URL, and you set `database.migrate_on_boot` yourself ([booting your whole app](/docs/testing/getting-started/#booting-your-whole-app)). Every test starts from an empty database with every module's migrations applied, and the file is deleted with the app. The test databases are SQLite, so the app's tests need the `sqlite` Cargo feature: in `[dev-dependencies]` for an app that runs on PostgreSQL or MySQL, so its release build still compiles no SQLite (`navree new` writes it):
+
+```toml title="Cargo.toml"
+[dev-dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["sqlite"] }
+```
+
+Without it a test fails at boot with "enable the `sqlite` feature of navree-db". Here is a test:
 
 ```rust
 use navree::db::DatabaseModule;

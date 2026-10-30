@@ -13,8 +13,12 @@ time series) is the default database: `navree new` writes its URL and turns
 on the `postgres` feature of `navree`, and `navree dock up` runs it. Plain
 PostgreSQL uses the same feature; MySQL and MariaDB the `mysql` feature
 (`mysql://` or `mariadb://` URLs; MySQL 8's default accounts sign in over
-TLS); SQLite is compiled in (tests, `navree new --database sqlite`, and the
-fallback when `database.url` is unset). navree-db provides: a
+TLS); SQLite is the opt-in `sqlite` feature (the bundled library: tests,
+`navree new --database sqlite`, and the fallback when `database.url` is
+unset; without the feature that fallback stops the boot with "enable the
+`sqlite` feature of navree-db", and a PostgreSQL or MySQL build compiles no
+SQLite). An app on PostgreSQL or MySQL turns `sqlite` on in
+`[dev-dependencies]` only, for its tests. navree-db provides: a
 connection pool from the `database` section (on SQLx), a **unit of
 work** per request (one lazy transaction, committed when the response status
 is below 400), the migrator, seeders and pagination, and the **change

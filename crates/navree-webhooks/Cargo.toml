@@ -57,6 +57,8 @@ utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
 navree-access = { workspace = true }
 navree-queue = { workspace = true }
 navree-testing = { workspace = true }

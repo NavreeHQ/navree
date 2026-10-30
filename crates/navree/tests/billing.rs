@@ -1,6 +1,7 @@
 //! The billing docs page's examples (`packages/billing.mdx`), compiled
 //! through the facade with the macros, and the testing example run end to
 //! end. Billing is opt-in: `cargo test -p navree --features billing --test billing`.
+#![cfg(feature = "sqlite")]
 #![cfg(feature = "billing")]
 
 use std::sync::Mutex;

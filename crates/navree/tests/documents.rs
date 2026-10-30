@@ -3,6 +3,7 @@
 //! alone: a controller that downloads a certificate, queues an export and
 //! builds a Word report, an export behind an operation, a module that
 //! ships its templates, and the fake.
+#![cfg(feature = "sqlite")]
 
 #![cfg(feature = "documents")]
 

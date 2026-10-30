@@ -52,6 +52,10 @@ impl fmt::Debug for TempDirGuard {
 /// Each test gets its own database **file**: an in-memory SQLite database
 /// would give every pool connection a different database.
 ///
+/// Connecting needs navree-db's `sqlite` feature (a crate whose tests use
+/// this URL turns it on in `[dev-dependencies]`); this function only
+/// writes the URL.
+///
 /// ```
 /// let (url, _guard) = navree_testing::temp_sqlite_url();
 /// assert!(url.starts_with("sqlite://") && url.ends_with("?mode=rwc"));
