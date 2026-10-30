@@ -10,7 +10,10 @@ use navree_dock::{
 
 /// An app directory with `Cargo.toml` (package `crm-api`) and `dock.toml`.
 fn app(dock_toml: &str) -> tempfile::TempDir {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     std::fs::write(
         dir.path().join("Cargo.toml"),
         "[package]\nname = \"crm-api\"\nversion = \"0.1.0\"\n",

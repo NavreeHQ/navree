@@ -60,7 +60,10 @@ async fn rotated_videos_report_their_displayed_size() {
 
 #[tokio::test]
 async fn frames_and_transcodes_run_ffmpeg_with_the_right_arguments() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let fake = FfmpegFake::new();
     let ffmpeg = fake.ffmpeg();
 
@@ -178,7 +181,10 @@ async fn real_ffmpeg_when_installed() {
         eprintln!("SKIPPED real_ffmpeg_when_installed: ffmpeg is not on the PATH");
         return;
     }
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let source = dir.path().join("source.mp4");
     let args: Vec<String> = [
         "-y",

@@ -218,7 +218,10 @@ mod tests {
 
     #[test]
     fn the_app_defaults_to_the_package() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         app(dir.path(), HARBOR);
         let project = Project::load(dir.path(), Environment::production()).unwrap();
         assert_eq!(project.config.app, "crm-api");
@@ -228,7 +231,10 @@ mod tests {
 
     #[test]
     fn a_missing_file_says_to_run_init() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let error = Project::load(dir.path(), Environment::named("staging").unwrap()).unwrap_err();
         let message = error.to_string();
         assert!(message.contains("harbor.staging.toml"), "{message}");
@@ -237,7 +243,10 @@ mod tests {
 
     #[test]
     fn load_validates_and_open_does_not() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         app(dir.path(), "[servers.app-1]\nhost = \"203.0.113.10\"\n");
         assert!(Project::open(dir.path(), Environment::production()).is_ok());
         let error = Project::load(dir.path(), Environment::production()).unwrap_err();
@@ -249,7 +258,10 @@ mod tests {
 
     #[test]
     fn secrets_are_set_revealed_and_unset() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         app(dir.path(), HARBOR);
         let key = SecretKey::generate();
         let mut project = Project::load(dir.path(), Environment::production()).unwrap();
@@ -281,7 +293,10 @@ mod tests {
 
     #[test]
     fn the_key_comes_from_the_variable_or_the_file() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         app(dir.path(), HARBOR);
         let project = Project::load(dir.path(), Environment::production()).unwrap();
         assert!(matches!(
@@ -298,7 +313,10 @@ mod tests {
 
     #[test]
     fn rotation_re_encrypts_every_secret_and_replaces_the_key() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         app(dir.path(), HARBOR);
         let old = SecretKey::generate();
         std::fs::write(dir.path().join("harbor.key"), old.encode()).unwrap();
@@ -317,7 +335,10 @@ mod tests {
 
     #[test]
     fn host_keys_are_saved() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         app(dir.path(), HARBOR);
         let mut project = Project::load(dir.path(), Environment::production()).unwrap();
         project

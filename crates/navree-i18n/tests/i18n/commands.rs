@@ -47,7 +47,10 @@ fn write(root: &Path, relative: &str, source: &str) {
 
 #[tokio::test]
 async fn check_passes_when_every_locale_is_complete() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     write(dir.path(), "en/main.ftl", "hello = Hello\n");
     write(dir.path(), "fr/main.ftl", "hello = Bonjour\n");
     let app = TestApp::builder()
@@ -63,7 +66,10 @@ async fn check_passes_when_every_locale_is_complete() {
 
 #[tokio::test]
 async fn check_reports_syntax_errors_instead_of_failing_the_boot() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     write(
         dir.path(),
         "en/main.ftl",
@@ -121,7 +127,10 @@ async fn missing_lists_ids_for_a_translator() {
 
 #[tokio::test]
 async fn publish_copies_the_shipped_validation_messages() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     write(
         dir.path(),
         "fr/validation.ftl",

@@ -542,7 +542,10 @@ mod tests {
 
     #[test]
     fn rotated_files_are_found_newest_first() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let logs = dir.path().join("storage/logs");
         std::fs::create_dir_all(&logs).unwrap();
         for name in [
@@ -597,7 +600,10 @@ mod tests {
     }
 
     fn write_log(lines: &[&str]) -> (tempfile::TempDir, Vec<PathBuf>) {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let path = dir.path().join("navree.log");
         std::fs::write(&path, lines.join("\n") + "\n").unwrap();
         (dir, vec![path])

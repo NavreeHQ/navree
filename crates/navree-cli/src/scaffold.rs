@@ -133,7 +133,10 @@ mod tests {
 
     #[test]
     fn writes_files_and_directories() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let mut set = FileSet::new();
         set.add("a/b/c.rs", "fn main() {}\n");
         set.add("top.txt", "hi\n");
@@ -147,7 +150,10 @@ mod tests {
 
     #[test]
     fn never_overwrites_and_writes_nothing_on_conflict() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         std::fs::write(dir.path().join("taken.rs"), "mine").unwrap();
         let mut set = FileSet::new();
         set.add("new.rs", "new");

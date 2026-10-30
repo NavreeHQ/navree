@@ -143,7 +143,10 @@ mod tests {
     use super::*;
 
     fn app() -> tempfile::TempDir {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         std::fs::write(
             dir.path().join("Cargo.toml"),
             "[package]\nname = \"crm-api\"\nversion = \"0.1.0\"\n",

@@ -476,7 +476,10 @@ async fn fonts_come_from_the_bundle_and_the_font_directories() {
         }
         other => panic!("{other:?}"),
     }
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     std::fs::copy(
         concat!(
             env!("CARGO_MANIFEST_DIR"),

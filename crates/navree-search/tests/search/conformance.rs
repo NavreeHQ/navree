@@ -381,7 +381,10 @@ async fn database_engine_on_sqlite_conforms() {
 #[cfg(feature = "tantivy")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tantivy_engine_conforms() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let engine = navree_search::TantivyEngine::open(&navree_search::TantivyOptions {
         path: dir.path().to_path_buf(),
         memory_budget_mb: 15,

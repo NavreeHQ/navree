@@ -131,7 +131,10 @@ struct Bench {
 }
 
 async fn boot() -> Bench {
-    let dir = tempfile::tempdir().expect("temp dir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("temp dir");
     let url = format!(
         "sqlite://{}?mode=rwc",
         dir.path().join("bench.db").display()

@@ -7,7 +7,10 @@ use crate::support::app;
 #[tokio::test]
 async fn the_command_writes_the_sdl_and_checks_it() {
     let (app, _audit) = app().await;
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let path = dir.path().join("nested").join("schema.graphql");
     let shown = path.to_str().unwrap();
 

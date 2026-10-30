@@ -36,7 +36,10 @@ fn file_names(dir: &Path) -> Vec<String> {
 
 #[test]
 fn file_gets_the_same_redacted_lines_after_flush() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let path = dir.path().join("app.log");
     let options = with_file(json(), &path, Rotation::Never);
     let out = capture(&options, |control| {
@@ -53,7 +56,10 @@ fn file_gets_the_same_redacted_lines_after_flush() {
 
 #[test]
 fn file_lines_are_plain_text_in_pretty_format() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let path = dir.path().join("app.log");
     capture(&with_file(pretty(), &path, Rotation::Never), |control| {
         tracing::warn!(attempt = 2, "retrying");
@@ -70,7 +76,10 @@ fn file_lines_are_plain_text_in_pretty_format() {
 
 #[test]
 fn daily_files_carry_the_date_before_the_extension() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let options = with_file(pretty(), &dir.path().join("navree.log"), Rotation::Daily);
     capture(&options, |control| {
         tracing::info!("dated");
@@ -89,7 +98,10 @@ fn daily_files_carry_the_date_before_the_extension() {
 
 #[test]
 fn missing_log_directory_is_created() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let path = dir.path().join("storage").join("logs").join("navree.log");
     capture(&with_file(pretty(), &path, Rotation::Never), |control| {
         tracing::info!("nested");
@@ -106,7 +118,10 @@ fn flush_without_a_file_is_a_no_op() {
 
 #[test]
 fn no_file_lines_are_dropped_when_the_writer_keeps_up() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let options = with_file(pretty(), &dir.path().join("app.log"), Rotation::Never);
     capture(&options, |control| {
         for i in 0..100 {

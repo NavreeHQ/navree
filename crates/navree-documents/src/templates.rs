@@ -204,8 +204,14 @@ mod tests {
 
     #[test]
     fn files_win_over_embedded_ones_and_the_first_directory_wins() {
-        let first = tempfile::tempdir().unwrap();
-        let second = tempfile::tempdir().unwrap();
+        let first = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
+        let second = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         std::fs::create_dir_all(first.path().join("a")).unwrap();
         std::fs::create_dir_all(second.path().join("a")).unwrap();
         std::fs::write(first.path().join("a/one.html"), "first").unwrap();

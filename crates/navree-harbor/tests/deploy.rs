@@ -31,7 +31,10 @@ struct FakeBuild {
 impl Build for FakeBuild {
     fn build(&self, _release: &ReleaseMeta, target: &Target) -> navree_harbor::Result<Artifact> {
         self.targets.lock().unwrap().push(target.clone());
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let archive = dir.path().join("release.tar.gz");
         std::fs::write(&archive, vec![0u8; 14_200_000]).unwrap();
         Ok(Artifact {

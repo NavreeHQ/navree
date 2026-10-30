@@ -16,6 +16,15 @@ use navree_db::{
 use navree_kernel::{App, Module, ModuleBuilder, Navree};
 use navree_schema::{Schema, SchemaResult, raw};
 
+/// The temporary-directory guard of navree-testing (its reaper retries a
+/// folder Windows will not delete while SQLite has a file open, and its
+/// sweep removes the folders of earlier runs). This crate cannot
+/// depend on navree-testing, so the file is included.
+#[allow(dead_code)]
+#[path = "../../navree-testing/src/temp.rs"]
+mod temp;
+pub use temp::TempDirGuard;
+
 mod m0001_create_companies {
     use navree_schema::{Schema, SchemaResult};
 
@@ -287,7 +296,7 @@ async fn pretend_status_and_dumps(url: &str, copy_url: &str) {
     assert_eq!(companies(&pool).await, ["Acme"]);
 
     // A dump loads into an empty database, which then has nothing pending.
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     let path = dir.path().join("schema.sql");
     Migrator::dump(ctx, Some(&path)).await.unwrap();
     let dump = std::fs::read_to_string(&path).unwrap();
@@ -452,19 +461,19 @@ impl Scratch {
     }
 }
 
-fn sqlite_url(dir: &tempfile::TempDir, file: &str) -> String {
+fn sqlite_url(dir: &TempDirGuard, file: &str) -> String {
     format!("sqlite://{}?mode=rwc", dir.path().join(file).display())
 }
 
 #[tokio::test]
 async fn pretend_status_and_dumps_on_sqlite() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     pretend_status_and_dumps(&sqlite_url(&dir, "a.db"), &sqlite_url(&dir, "b.db")).await;
 }
 
 #[tokio::test]
 async fn failures_on_sqlite() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     failures(&sqlite_url(&dir, "a.db")).await;
 }
 
@@ -499,7 +508,7 @@ async fn on_mysql() {
 /// a transaction (rolled back with it) and the `Db`.
 #[tokio::test]
 async fn schemas_run_on_every_connection() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     let db = Db::connect(&DbOptions {
         url: sqlite_url(&dir, "a.db"),
         ..DbOptions::default()

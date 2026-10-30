@@ -142,10 +142,7 @@ fn the_age_comes_from_the_variable_when_it_is_a_number_of_seconds() {
 }
 
 /// A reaper whose remover fails `failures` times, then deletes.
-fn failing_then_deleting(
-    failures: usize,
-    window: Duration,
-) -> (Reaper, Arc<AtomicUsize>) {
+fn failing_then_deleting(failures: usize, window: Duration) -> (Reaper, Arc<AtomicUsize>) {
     let attempts = Arc::new(AtomicUsize::new(0));
     let counted = attempts.clone();
     let reaper = Reaper::start(
@@ -174,7 +171,11 @@ fn the_reaper_retries_until_the_folder_can_be_deleted() {
     reaper.finish();
 
     assert!(!stuck.exists(), "deleted once the files were free");
-    assert_eq!(attempts.load(Ordering::SeqCst), 4, "three failures, one success");
+    assert_eq!(
+        attempts.load(Ordering::SeqCst),
+        4,
+        "three failures, one success"
+    );
 }
 
 #[test]

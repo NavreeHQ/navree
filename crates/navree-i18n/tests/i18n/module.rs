@@ -108,7 +108,10 @@ async fn embedded_files_need_no_directory() {
 
 #[tokio::test]
 async fn a_syntax_error_fails_the_boot_naming_the_file_and_line() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     fs::create_dir_all(dir.path().join("en")).unwrap();
     fs::write(
         dir.path().join("en/main.ftl"),
@@ -172,7 +175,10 @@ async fn saved_locales_need_a_database() {
 
 #[tokio::test]
 async fn reload_picks_up_changed_files() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     fs::create_dir_all(dir.path().join("en")).unwrap();
     let file = dir.path().join("en/main.ftl");
     fs::write(&file, "greeting = Hello\n").unwrap();

@@ -24,7 +24,10 @@ fn local_client() -> HttpClient {
 }
 
 fn media(client: Option<HttpClient>, options: MediaOptions) -> (Media, tempfile::TempDir) {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let mut builder = Media::builder(storage(dir.path())).options(options);
     if let Some(client) = client {
         builder = builder.http_client(client);

@@ -3,18 +3,26 @@
 #![allow(dead_code)]
 
 use navree_db::DbOptions;
-use tempfile::TempDir;
+
+/// The temporary-directory guard of navree-testing (its reaper retries a
+/// folder Windows will not delete while SQLite has a file open, and its
+/// sweep removes the folders of earlier runs). This crate cannot
+/// depend on navree-testing, so the file is included.
+#[allow(dead_code)]
+#[path = "../../../navree-testing/src/temp.rs"]
+mod temp;
+pub use temp::TempDirGuard;
 
 /// A fresh temporary SQLite database file. Keep the guard alive for the
 /// duration of the test; dropping it deletes the directory.
 pub struct TempDb {
-    pub dir: TempDir,
+    pub dir: TempDirGuard,
     pub url: String,
 }
 
 impl TempDb {
     pub fn new() -> Self {
-        let dir = tempfile::tempdir().expect("temp dir");
+        let dir = TempDirGuard::new();
         let path = dir.path().join("test.db");
         let url = format!("sqlite://{}?mode=rwc", path.display());
         Self { dir, url }

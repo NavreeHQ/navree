@@ -322,7 +322,10 @@ async fn embeddings_page(
 
 #[test]
 fn the_documented_configuration_reads_from_toml() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let path = dir.path().join("app.toml");
     std::fs::write(
         &path,

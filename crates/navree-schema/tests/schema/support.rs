@@ -3,10 +3,18 @@
 #![allow(dead_code)]
 
 use navree_schema::{Schema, SchemaResult, Target};
-use tempfile::TempDir;
 
 #[path = "../common/conn.rs"]
 mod conn;
+
+/// The temporary-directory guard of navree-testing (its reaper retries a
+/// folder Windows will not delete while SQLite has a file open, and its
+/// sweep removes the folders of earlier runs). This crate cannot
+/// depend on navree-testing, so the file is included.
+#[allow(dead_code)]
+#[path = "../../../navree-testing/src/temp.rs"]
+mod temp;
+pub use temp::TempDirGuard;
 
 #[allow(unused_imports)]
 pub use conn::{TestConn, TestTx, text_rows};
@@ -92,13 +100,13 @@ macro_rules! sql_for {
 
 /// A fresh temporary SQLite database. Keep it alive for the test.
 pub struct TempSqlite {
-    pub dir: TempDir,
+    pub dir: TempDirGuard,
     pub url: String,
 }
 
 impl TempSqlite {
     pub fn new() -> TempSqlite {
-        let dir = tempfile::tempdir().expect("temp dir");
+        let dir = TempDirGuard::new();
         let path = dir.path().join("schema.db");
         let url = format!("sqlite://{}?mode=rwc", path.display());
         TempSqlite { dir, url }

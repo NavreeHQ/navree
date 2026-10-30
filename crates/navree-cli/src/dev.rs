@@ -380,7 +380,10 @@ mod tests {
 
     #[test]
     fn web_dev_server_follows_the_lockfile() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         assert_eq!(web_invocation(dir.path()), None);
         let web = dir.path().join("web");
         std::fs::create_dir(&web).unwrap();
@@ -403,7 +406,10 @@ mod tests {
     /// A fresh starter kit has no lockfile yet: `packageManager` decides.
     #[test]
     fn web_dev_server_follows_the_package_manager_field() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let web = dir.path().join("web");
         std::fs::create_dir(&web).unwrap();
         std::fs::write(

@@ -216,7 +216,8 @@ mod tests {
 
     #[test]
     fn fixtures_are_read_and_deserialized() {
-        let dir = std::env::temp_dir().join(format!("navree-fixtures-{}", uuid::Uuid::now_v7()));
+        let dir =
+            std::env::temp_dir().join(format!("navree-test-fixtures-{}", uuid::Uuid::now_v7()));
         std::fs::create_dir_all(dir.join("crm")).unwrap();
         std::fs::write(
             dir.join("crm").join("tasks.json"),

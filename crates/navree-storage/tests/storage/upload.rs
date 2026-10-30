@@ -104,7 +104,10 @@ fn images(max_bytes: u64) -> UploadRules {
 
 #[tokio::test]
 async fn upload_streams_the_file_under_a_random_name() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let storage = storage(root.path());
 
     for name in DISKS {
@@ -134,7 +137,10 @@ async fn upload_streams_the_file_under_a_random_name() {
 
 #[tokio::test]
 async fn upload_rejects_wrong_mime_and_too_large() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let storage = storage(root.path());
 
     for name in DISKS {
@@ -218,7 +224,10 @@ async fn upload_rejects_wrong_mime_and_too_large() {
 
 #[tokio::test]
 async fn upload_over_the_request_body_limit_is_payload_too_large() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let disk = storage(root.path()).disk("memory").unwrap();
     let router = router(disk.clone(), images(1024 * 1024), 16 * 1024);
 
@@ -233,7 +242,10 @@ async fn upload_over_the_request_body_limit_is_payload_too_large() {
 
 #[tokio::test]
 async fn text_uploads_take_their_type_from_the_file_name() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let disk = storage(root.path()).disk("memory").unwrap();
     let csv = UploadRules::new(1024, ["text/csv"]);
     let router = router(disk.clone(), csv, 1024 * 1024);
@@ -287,7 +299,10 @@ async fn text_uploads_take_their_type_from_the_file_name() {
 
 #[tokio::test]
 async fn wildcard_types_and_empty_files() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let disk = storage(root.path()).disk("memory").unwrap();
     let router = router(
         disk.clone(),

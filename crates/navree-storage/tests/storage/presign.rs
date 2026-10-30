@@ -45,7 +45,10 @@ async fn upload(
 
 #[tokio::test]
 async fn the_route_checks_size_type_and_expiry() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let clock = Arc::new(FixedClock::new(Utc::now()));
     let app = boot(root.path(), clock.clone()).await;
     let storage = app.app.ctx().get::<Storage>().await.unwrap();
@@ -124,7 +127,10 @@ async fn the_route_checks_size_type_and_expiry() {
 
 #[tokio::test]
 async fn forged_links_are_refused() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let app = boot(root.path(), Arc::new(FixedClock::new(Utc::now()))).await;
     let storage = app.app.ctx().get::<Storage>().await.unwrap();
     let disk = storage.disk("local").unwrap();

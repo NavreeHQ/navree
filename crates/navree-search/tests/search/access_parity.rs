@@ -440,6 +440,9 @@ fn the_database_engine_returns_what_sql_lists() {
 #[cfg(feature = "tantivy")]
 #[test]
 fn the_tantivy_engine_returns_what_sql_lists() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     parity("tantivy", Some(dir.path()), 128);
 }

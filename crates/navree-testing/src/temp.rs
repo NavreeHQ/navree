@@ -206,7 +206,11 @@ impl Reaper {
                         }
                         continue;
                     }
-                    let due = pending.iter().map(|p| p.next).min().unwrap_or_else(Instant::now);
+                    let due = pending
+                        .iter()
+                        .map(|p| p.next)
+                        .min()
+                        .unwrap_or_else(Instant::now);
                     let wait = due.saturating_duration_since(Instant::now());
                     if open {
                         match receiver.recv_timeout(wait) {
@@ -302,9 +306,7 @@ pub(crate) fn sweep_dir(root: &Path, now: SystemTime, max_age: Duration) -> usiz
         let Ok(born) = meta.created().or_else(|_| meta.modified()) else {
             continue;
         };
-        let old_enough = now
-            .duration_since(born)
-            .is_ok_and(|age| age >= max_age);
+        let old_enough = now.duration_since(born).is_ok_and(|age| age >= max_age);
         if old_enough && fs::remove_dir_all(entry.path()).is_ok() {
             removed += 1;
         }

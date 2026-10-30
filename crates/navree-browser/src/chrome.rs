@@ -358,7 +358,10 @@ mod tests {
 
     #[test]
     fn the_environment_variable_wins_and_must_name_a_file() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let chrome = dir.path().join("my-chrome");
         touch(&chrome);
         let env = env_of(&[(CHROME_ENV, &chrome)]);
@@ -384,7 +387,10 @@ mod tests {
 
     #[test]
     fn system_chrome_comes_before_the_caches_then_edge_last() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let program_files = dir.path().join("pf");
         let local = dir.path().join("local");
         let env = env_of(&[("PROGRAMFILES", &program_files), ("LOCALAPPDATA", &local)]);
@@ -443,7 +449,10 @@ mod tests {
 
     #[test]
     fn linux_looks_on_the_path_and_in_the_xdg_cache() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let bin = dir.path().join("bin");
         let cache = dir.path().join("cache");
         let env = env_of(&[("PATH", &bin), ("XDG_CACHE_HOME", &cache)]);
@@ -489,7 +498,10 @@ mod tests {
 
     #[test]
     fn mac_apps_and_chrome_for_testing_bundles() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let found = chrome_for_testing(dir.path(), Os::Mac);
         assert!(found[0].ends_with(
             "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
@@ -508,7 +520,10 @@ mod tests {
 
     #[test]
     fn versions_sort_numerically() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         for name in ["9.0.1", "141.0.7390.54", "156.0.8078.47", "notes"] {
             std::fs::create_dir_all(dir.path().join(name)).unwrap();
         }

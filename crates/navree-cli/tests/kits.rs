@@ -25,7 +25,10 @@ fn app(name: &str, kit: Kit) -> NewApp {
 }
 
 fn generate(name: &str, kit: Kit) -> (tempfile::TempDir, PathBuf) {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let root = create_app(dir.path(), &app(name, kit), now()).unwrap();
     (dir, root)
 }
@@ -597,7 +600,10 @@ fn the_created_message_lists_the_kit_s_next_steps() {
 fn ui_next_goes_with_the_saas_kit_only() {
     // The SaaS kit's front end is Next.js: saying so changes nothing.
     let (_dir, saas) = generate("acme", Kit::Saas);
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let explicit = create_app(
         dir.path(),
         &NewApp {
@@ -610,7 +616,10 @@ fn ui_next_goes_with_the_saas_kit_only() {
     assert_eq!(tree(&explicit), tree(&saas));
     // The other kits have no front end.
     for kit in [Kit::Api, Kit::Micro] {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let error = create_app(
             dir.path(),
             &NewApp {
@@ -642,7 +651,10 @@ fn kits_run_on_timescaledb_or_postgres() {
     assert!(read(&timescale, "README.md").contains("# TimescaleDB and Mailpit"));
 
     for kit in [Kit::Saas, Kit::Api, Kit::Micro] {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let postgres = NewApp {
             database: Database::Postgres,
             ..app("acme", kit)
@@ -665,7 +677,10 @@ fn kits_run_on_timescaledb_or_postgres() {
         assert!(message.contains("# PostgreSQL and "), "{kit}: {message}");
 
         for database in [Database::Mysql, Database::Sqlite] {
-            let dir = tempfile::tempdir().unwrap();
+            let dir = tempfile::Builder::new()
+                .prefix("navree-test-")
+                .tempdir()
+                .unwrap();
             let error = create_app(
                 dir.path(),
                 &NewApp {
@@ -683,7 +698,10 @@ fn kits_run_on_timescaledb_or_postgres() {
 
 #[test]
 fn kits_refuse_a_directory_that_is_not_empty() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     std::fs::create_dir(dir.path().join("acme")).unwrap();
     std::fs::write(dir.path().join("acme").join("notes.txt"), "mine").unwrap();
     assert!(create_app(dir.path(), &app("acme", Kit::Saas), now()).is_err());

@@ -187,7 +187,10 @@ mod tests {
 
     #[test]
     fn the_nearest_package_is_the_app() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         write(
             &dir.path().join("Cargo.toml"),
             "[workspace]\nmembers = [\"apps/crm\"]\n",
@@ -228,7 +231,10 @@ version = "0.11.0"
 
     #[test]
     fn declared_features_include_the_workspace_ones() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         write(
             &dir.path().join("Cargo.toml"),
             "[workspace]\n[workspace.dependencies]\nnavree = { version = \"0.1\", features = [\"postgres\"] }\n",
@@ -253,7 +259,10 @@ version = "0.11.0"
 
     #[test]
     fn configuration_is_read_from_the_app_directory() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         write(
             &dir.path().join("Cargo.toml"),
             "[package]\nname = \"app\"\n",

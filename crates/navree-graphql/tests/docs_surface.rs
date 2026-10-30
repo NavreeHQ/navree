@@ -111,7 +111,10 @@ async fn the_schema_routes_and_command_exist() {
         );
     }
     assert!(routes.iter().all(|route| route.access.public));
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let file = dir.path().join("schema.graphql");
     app.run_command("graphql:schema", &[file.to_str().unwrap()])
         .await

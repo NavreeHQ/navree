@@ -53,7 +53,10 @@ fn error_of<T: serde::de::DeserializeOwned + std::fmt::Debug>(
 
 #[test]
 fn dotenv_does_not_override_app_toml_but_the_environment_overrides_both() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     write(
         &dir,
         ".env",
@@ -77,7 +80,10 @@ fn dotenv_does_not_override_app_toml_but_the_environment_overrides_both() {
 
 #[test]
 fn an_environment_file_after_the_base_file_overrides_it_and_a_missing_one_is_skipped() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     write(&dir, ".env", "APP_NAME=dotenv\nAPP_ONLY__DOTENV=1\n");
     write(
         &dir,
@@ -119,7 +125,10 @@ fn no_sources_is_an_empty_tree() {
 
 #[test]
 fn the_same_file_listed_twice_loads_twice_and_changes_nothing() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let toml = write(&dir, "app.toml", "a = 1\n[b]\nc = [1, 2]\n");
     let config = Config::load(&ConfigSources::new().file(&toml).file(&toml)).expect("load");
     assert_eq!(tree(&config), json!({ "a": 1, "b": { "c": [1, 2] } }));
@@ -281,7 +290,10 @@ fn an_empty_prefix_takes_every_name() {
 
 #[test]
 fn dotenv_entries_map_like_environment_variables_with_the_app_prefix_only() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let dotenv = write(
         &dir,
         ".env",
@@ -396,7 +408,10 @@ fn a_layer_never_removes_keys_it_does_not_mention() {
 
 #[test]
 fn toml_files_merge_with_environment_overlays_on_top() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let base = write(
         &dir,
         "base.toml",
@@ -428,7 +443,10 @@ fn toml_files_merge_with_environment_overlays_on_top() {
 
 #[test]
 fn toml_keys_keep_their_case_and_values_keep_their_kind() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let toml = write(
         &dir,
         "app.toml",
@@ -462,7 +480,10 @@ fn toml_keys_keep_their_case_and_values_keep_their_kind() {
 
 #[test]
 fn a_byte_order_mark_and_crlf_line_endings_are_accepted() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let toml = write(&dir, "app.toml", "\u{feff}a = 1\r\n[b]\r\nc = \"x\"\r\n");
     let config = Config::load(&ConfigSources::new().file(&toml)).expect("load");
     assert_eq!(tree(&config), json!({ "a": 1, "b": { "c": "x" } }));
@@ -470,7 +491,10 @@ fn a_byte_order_mark_and_crlf_line_endings_are_accepted() {
 
 #[test]
 fn an_empty_file_is_an_empty_layer() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let toml = write(&dir, "app.toml", "");
     let dotenv = write(&dir, ".env", "# only a comment\n");
     let config = Config::load(&ConfigSources::new().file(&toml).dotenv(&dotenv)).expect("load");
@@ -479,7 +503,10 @@ fn an_empty_file_is_an_empty_layer() {
 
 #[test]
 fn toml_syntax_errors_name_the_file_the_line_and_the_column() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let cases = [
         ("a = 1\na = 2\n", "line 2, column 1"),
         ("[a\n", "line 1, column 3"),
@@ -501,7 +528,10 @@ fn toml_syntax_errors_name_the_file_the_line_and_the_column() {
 
 #[test]
 fn toml_errors_never_contain_the_text_of_the_file() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     for src in [
         "password = hunter2\n",
         "password = \"hunter2\n",
@@ -519,7 +549,10 @@ fn toml_errors_never_contain_the_text_of_the_file() {
 
 #[test]
 fn a_file_that_is_not_utf8_is_an_io_error_naming_the_file() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let path = dir.path().join("app.toml");
     std::fs::write(&path, b"a = \"\xff\"").expect("write");
     let error = Config::load(&ConfigSources::new().file(&path)).expect_err("not UTF-8");
@@ -532,7 +565,10 @@ fn a_file_that_is_not_utf8_is_an_io_error_naming_the_file() {
 
 #[test]
 fn dotenv_syntax_errors_name_the_file_and_the_line() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let dotenv = write(&dir, ".env", "APP_A=1\nnot a pair\n");
     let error = Config::load(&ConfigSources::new().dotenv(&dotenv)).expect_err("invalid .env");
     assert!(
@@ -547,7 +583,10 @@ fn dotenv_syntax_errors_name_the_file_and_the_line() {
 
 #[test]
 fn a_malformed_file_fails_the_load_even_after_valid_sources() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let good = write(&dir, "good.toml", "a = 1\n");
     let bad = write(&dir, "bad.toml", "a = \n");
     assert!(Config::load(&ConfigSources::new().file(&good).file(&bad)).is_err());
@@ -565,7 +604,10 @@ struct Port {
 
 #[test]
 fn integers_convert_from_toml_numbers_and_from_environment_strings() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let toml = write(&dir, "app.toml", "port = 8080\n");
     let from_toml = Config::load(&ConfigSources::new().file(&toml)).expect("load");
     assert_eq!(
@@ -887,7 +929,10 @@ fn untagged_enums_and_flattened_maps_see_the_native_kinds() {
         #[serde(flatten)]
         rest: HashMap<String, Value>,
     }
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let toml = write(&dir, "app.toml", "n = 5\nextra = 1.5\nname = \"x\"\n");
     let from_toml = Config::load(&ConfigSources::new().file(&toml)).expect("load");
     let holder = from_toml.section::<Holder>("").expect("toml");
@@ -1147,7 +1192,10 @@ fn a_missing_field_names_its_path_below_the_section() {
 
 #[test]
 fn a_wrong_type_names_the_key_and_the_source_it_came_from() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let toml = write(&dir, "app.toml", "[server]\nport = \"hunter2\"\n");
     let dotenv = write(&dir, ".env", "APP_SERVER__PORT=hunter2\n");
     let section = |sources: &ConfigSources| {
@@ -1177,7 +1225,10 @@ fn a_wrong_type_names_the_key_and_the_source_it_came_from() {
 
 #[test]
 fn the_source_named_is_the_one_whose_value_won() {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let base = write(&dir, "base.toml", "[server]\nport = \"base\"\n");
     let local = write(&dir, "local.toml", "[server]\nport = \"local\"\n");
     let config = Config::load(&ConfigSources::new().file(&base).file(&local)).expect("load");

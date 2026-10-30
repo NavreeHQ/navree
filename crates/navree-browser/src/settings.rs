@@ -196,7 +196,10 @@ mod tests {
 
     #[test]
     fn the_target_dir_is_found_from_the_executable() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let target = dir.path().join("custom-target");
         std::fs::create_dir_all(target.join("debug/deps")).unwrap();
         std::fs::write(target.join(".rustc_info.json"), "{}").unwrap();

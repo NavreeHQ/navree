@@ -345,7 +345,10 @@ mod tests {
 
     #[test]
     fn font_directories_add_families_and_skip_other_files() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         std::fs::create_dir_all(dir.path().join("nested")).unwrap();
         std::fs::copy(
             concat!(env!("CARGO_MANIFEST_DIR"), "/fonts/NotoSansHebrew-Bold.ttf"),

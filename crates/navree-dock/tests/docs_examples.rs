@@ -278,7 +278,10 @@ fn the_env_command() {
 /// "Getting started": `navree dock up` after adding postgres and mailpit.
 #[test]
 fn the_getting_started_output() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let file = parse("[services.postgres]\n[services.mailpit]\n");
     let dock = Dock::new(dir.path(), file, FakeExecutor::new()).unwrap();
     let mut out = Vec::new();
@@ -308,7 +311,10 @@ fn the_getting_started_output() {
 /// "Commands": the `navree dock status` table.
 #[test]
 fn the_status_output() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let file = parse(
         "[services.postgres]\n[services.redis]\n[services.mailpit]\n[services.meilisearch]\n",
     );
@@ -330,7 +336,10 @@ fn the_status_output() {
 /// "The library" (docs) and "Using the library" (skill `navree-dock`).
 #[test]
 fn the_library_examples() -> Result<(), navree_dock::DockError> {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     std::fs::write(dir.path().join("dock.toml"), "[services.redis]\n").unwrap();
     let file = DockFile::load(dir.path())?;
     let lines: Vec<String> = file

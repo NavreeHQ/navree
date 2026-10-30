@@ -15,7 +15,10 @@ pub fn write(dir: &Path, name: &str, source: &str) {
 
 /// A temporary views directory holding `templates` (name, source).
 pub fn views_dir(templates: &[(&str, &str)]) -> TempDir {
-    let dir = tempfile::tempdir().expect("temp dir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("temp dir");
     for (name, source) in templates {
         write(dir.path(), name, source);
     }

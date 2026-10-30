@@ -74,7 +74,10 @@ fn navree_new_output_compiles_against_the_workspace() {
     }
     .join("generated-app");
 
-    let parent = tempfile::tempdir().unwrap();
+    let parent = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let now = Timestamp::now();
     let app = NewApp {
         name: AppName::parse("demo").unwrap(),

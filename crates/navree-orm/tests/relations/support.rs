@@ -10,8 +10,7 @@ use navree_contracts::{Clock, FixedClock};
 use navree_db::{DatabaseModule, Db, DbOptions, Executor, ExecutorExt, Statement};
 use navree_kernel::Module;
 use navree_orm::relations::MorphMap;
-use navree_testing::TestApp;
-use tempfile::TempDir;
+use navree_testing::{TempDirGuard, TestApp};
 
 use crate::models::{Company, Deal, Event, SCHEMA, Ticket};
 
@@ -45,7 +44,7 @@ impl QueryLog {
 pub struct TestDb {
     pub db: Db,
     pub log: QueryLog,
-    _dir: TempDir,
+    _dir: TempDirGuard,
 }
 
 /// Creates the test tables.
@@ -71,7 +70,7 @@ pub fn register_morphs() {
 /// A database of its own, logging the statements it runs.
 pub async fn sqlite() -> TestDb {
     register_morphs();
-    let dir = tempfile::tempdir().expect("a temporary directory");
+    let dir = TempDirGuard::new();
     let url = format!(
         "sqlite://{}?mode=rwc",
         dir.path().join("relations.db").display()

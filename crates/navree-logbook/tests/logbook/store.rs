@@ -8,6 +8,8 @@ use navree_logbook::{
     Entry, EntryKind, Filter, ListQuery, LogbookStore, MemoryStore, SqliteStore, StatusMatch, Term,
 };
 
+use navree_testing::TempDirGuard;
+
 use crate::support::{dump, entry_at, query, request};
 
 /// Runs the whole suite against a fresh store from `make`.
@@ -67,12 +69,12 @@ macro_rules! conformance {
     };
 }
 
-async fn memory() -> (Arc<dyn LogbookStore>, Option<tempfile::TempDir>) {
+async fn memory() -> (Arc<dyn LogbookStore>, Option<TempDirGuard>) {
     (Arc::new(MemoryStore::new()), None)
 }
 
-async fn sqlite() -> (Arc<dyn LogbookStore>, Option<tempfile::TempDir>) {
-    let dir = tempfile::tempdir().unwrap();
+async fn sqlite() -> (Arc<dyn LogbookStore>, Option<TempDirGuard>) {
+    let dir = TempDirGuard::new();
     let store = SqliteStore::open(dir.path().join("storage").join("logbook.db"))
         .await
         .unwrap();
@@ -351,7 +353,7 @@ async fn clears_everything_on(store: Arc<dyn LogbookStore>) {
 
 #[tokio::test]
 async fn the_file_store_survives_a_restart() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     let path = dir.path().join("logbook.db");
     {
         let store = SqliteStore::open(&path).await.unwrap();

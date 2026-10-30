@@ -442,7 +442,7 @@ async fn pruning_keeps_the_newest_entries() {
 
 #[tokio::test]
 async fn the_store_is_pruned_at_boot() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = navree_testing::TempDirGuard::new();
     let file = dir.path().join("logbook.db");
     {
         let store = SqliteStore::open(&file).await.unwrap();
@@ -491,7 +491,7 @@ async fn logbook_clear_deletes_every_entry() {
 
 #[tokio::test]
 async fn the_file_store_writes_its_own_sqlite_file() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = navree_testing::TempDirGuard::new();
     let file = dir.path().join("storage").join("logbook.db");
     let app = TestApp::builder()
         .config("logbook.enabled", true)

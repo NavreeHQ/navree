@@ -499,7 +499,10 @@ async fn schema_migrations_run_through_the_facade() {
         }
     }
 
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let url = format!("sqlite://{}?mode=rwc", dir.path().join("app.db").display());
     let app = Navree::app()
         .module(DatabaseModule::for_root(navree::db::DbOptions {

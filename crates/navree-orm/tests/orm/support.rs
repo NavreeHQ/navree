@@ -9,8 +9,7 @@ use navree_contracts::{Clock, FixedClock};
 use navree_db::Executor as _;
 use navree_db::{DatabaseModule, Db, DbOptions};
 use navree_kernel::Module;
-use navree_testing::TestApp;
-use tempfile::TempDir;
+use navree_testing::{TempDirGuard, TestApp};
 
 use crate::models::SCHEMA;
 
@@ -18,7 +17,7 @@ use crate::models::SCHEMA;
 /// test: dropping it deletes the file.
 pub struct TestDb {
     pub db: Db,
-    _dir: TempDir,
+    _dir: TempDirGuard,
 }
 
 /// Creates the test tables.
@@ -33,7 +32,7 @@ pub async fn create_tables(db: &Db) {
 
 /// A database of its own, without an app.
 pub async fn sqlite() -> TestDb {
-    let dir = tempfile::tempdir().expect("a temporary directory");
+    let dir = TempDirGuard::new();
     let url = format!("sqlite://{}?mode=rwc", dir.path().join("orm.db").display());
     let db = Db::connect(&DbOptions {
         url,

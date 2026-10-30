@@ -213,7 +213,10 @@ async fn no_build_never_runs_cargo_build() {
 
 #[tokio::test]
 async fn outside_an_app_every_tool_says_where_to_start() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let fixture = Fixture::new("");
     let navigator = fixture.navigator_with(NavigatorOptions {
         path: dir.path().to_path_buf(),

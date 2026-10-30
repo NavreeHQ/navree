@@ -22,7 +22,10 @@ fn with_public_disk(root: &std::path::Path, base_url: Option<&str>) -> Storage {
 
 #[test]
 fn url_joins_the_public_url_and_the_encoded_path() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let storage = with_public_disk(root.path(), None);
     let public = storage.disk("public").unwrap();
 
@@ -48,7 +51,10 @@ fn url_joins_the_public_url_and_the_encoded_path() {
 
 #[tokio::test]
 async fn temporary_url_is_signed_and_points_at_the_storage_route() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let storage = with_public_disk(root.path(), None);
     let expires = Utc.with_ymd_and_hms(2030, 1, 2, 3, 4, 5).unwrap();
     let disk = storage.disk("memory").unwrap();
@@ -107,7 +113,10 @@ async fn temporary_url_is_signed_and_points_at_the_storage_route() {
 
 #[tokio::test]
 async fn temporary_url_uses_the_base_url() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let storage = with_public_disk(root.path(), Some("https://api.example.com/"));
     let url = storage
         .default_disk()
@@ -122,7 +131,10 @@ async fn temporary_url_uses_the_base_url() {
 
 #[test]
 fn invalid_options_are_rejected() {
-    let root = tempfile::tempdir().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let invalid = |options: StorageOptions| match Storage::new(&options, SIGNING_KEY) {
         Err(StorageError::InvalidOptions(message)) => message,
         other => panic!("must be rejected: {other:?}"),

@@ -25,7 +25,10 @@ fn workspace() -> PathBuf {
 
 #[test]
 fn new_then_make_module_from_inside_the_app() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let workspace = workspace();
     let output = navree(
         dir.path(),
@@ -70,7 +73,10 @@ fn new_then_make_module_from_inside_the_app() {
 
 #[test]
 fn invalid_names_fail_with_a_suggestion() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     std::fs::write(dir.path().join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
     let output = navree(dir.path(), &["make:module", "BlogPosts"]);
     assert!(!output.status.success());
@@ -91,7 +97,10 @@ fn invalid_names_fail_with_a_suggestion() {
 
 #[test]
 fn make_outside_an_app_fails() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let output = navree(dir.path(), &["make:service", "posts", "pricing"]);
     assert!(!output.status.success());
     assert!(
@@ -103,7 +112,10 @@ fn make_outside_an_app_fails() {
 
 #[test]
 fn runtime_commands_run_in_the_app_binary_with_their_exit_code() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let app = dir.path();
     std::fs::create_dir(app.join("src")).unwrap();
     std::fs::write(
@@ -137,7 +149,10 @@ fn runtime_commands_run_in_the_app_binary_with_their_exit_code() {
 
 #[test]
 fn forwarded_commands_get_the_dock_settings() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let app = dir.path();
     std::fs::create_dir(app.join("src")).unwrap();
     std::fs::write(
@@ -174,7 +189,10 @@ fn forwarded_commands_get_the_dock_settings() {
 
 #[test]
 fn dock_add_env_and_remove_need_no_container_runtime() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     std::fs::write(
         dir.path().join("Cargo.toml"),
         "[package]\nname = \"crm-api\"\nversion = \"0.1.0\"\n",
@@ -230,7 +248,10 @@ fn dock_add_env_and_remove_need_no_container_runtime() {
 
 #[test]
 fn harbor_commands_run_in_the_cli_not_in_the_app() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let app = dir.path();
     std::fs::write(
         app.join("Cargo.toml"),

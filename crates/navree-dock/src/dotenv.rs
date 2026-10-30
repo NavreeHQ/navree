@@ -264,7 +264,10 @@ mod tests {
 
     #[test]
     fn write_dotenv_creates_and_updates_the_file() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let first = write_dotenv(dir.path(), &settings()).unwrap();
         assert!(first.changed);
         assert_eq!(

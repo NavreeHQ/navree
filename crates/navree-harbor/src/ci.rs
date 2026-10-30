@@ -94,7 +94,10 @@ mod tests {
 
     #[test]
     fn the_production_workflow() {
-        let repo = tempfile::tempdir().unwrap();
+        let repo = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         std::fs::create_dir(repo.path().join(".git")).unwrap();
         let workflow = github_workflow(repo.path(), &Environment::production(), "main").unwrap();
         assert_eq!(
@@ -142,7 +145,10 @@ mod tests {
 
     #[test]
     fn an_app_ignored_by_the_repository_around_it_gets_its_own_workflow() {
-        let repo = tempfile::tempdir().unwrap();
+        let repo = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         if !git(repo.path(), &["init", "-q"]) {
             println!("SKIPPED: git is not available");
             return;
@@ -166,7 +172,10 @@ mod tests {
 
     #[test]
     fn an_app_with_a_repository_of_its_own_uses_it() {
-        let outer = tempfile::tempdir().unwrap();
+        let outer = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let app = outer.path().join("app");
         std::fs::create_dir_all(&app).unwrap();
         if !git(&app, &["init", "-q"]) {
@@ -180,7 +189,10 @@ mod tests {
 
     #[test]
     fn a_staging_workflow_for_a_service_in_a_subdirectory() {
-        let repo = tempfile::tempdir().unwrap();
+        let repo = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         std::fs::create_dir(repo.path().join(".git")).unwrap();
         let dir = repo.path().join("services").join("billing");
         std::fs::create_dir_all(&dir).unwrap();

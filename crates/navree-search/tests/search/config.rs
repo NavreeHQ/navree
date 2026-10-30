@@ -188,7 +188,10 @@ async fn two_models_cannot_share_an_index() {
 #[cfg(feature = "tantivy")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_app_on_tantivy_syncs_and_searches() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let app = crate::support::builder("tantivy", "inline")
         .config(
             "search.tantivy.path",

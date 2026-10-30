@@ -173,7 +173,10 @@ mod tests {
 
     #[tokio::test]
     async fn down_and_up_toggle_the_file_and_the_state() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let mode = MaintenanceMode::new(dir.path().join("framework").join("down"));
         assert_eq!(mode.current().await, None);
 
@@ -194,7 +197,10 @@ mod tests {
 
     #[tokio::test]
     async fn a_file_removed_by_another_process_is_noticed_within_a_second() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let path = dir.path().join("down");
         std::fs::write(&path, r#"{"retry": 5}"#).unwrap();
         let mode = MaintenanceMode::new(path.clone());
@@ -213,7 +219,10 @@ mod tests {
     /// same state.
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn concurrent_requests_agree_on_the_state() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let mode = std::sync::Arc::new(MaintenanceMode::new(dir.path().join("down")));
         let readers = |mode: &std::sync::Arc<MaintenanceMode>| {
             (0..64)
@@ -242,7 +251,10 @@ mod tests {
 
     #[tokio::test]
     async fn a_file_written_by_another_process_is_noticed() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let path = dir.path().join("down");
         std::fs::write(&path, "not json").unwrap();
         let mode = MaintenanceMode::new(path);

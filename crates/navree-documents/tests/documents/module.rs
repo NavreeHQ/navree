@@ -323,7 +323,10 @@ async fn queued_renders_run_on_a_worker() {
 #[tokio::test]
 async fn documents_render_writes_a_pdf_file() {
     let app = app().build().await;
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let data = dir.path().join("data.json");
     std::fs::write(
         &data,

@@ -228,7 +228,10 @@ fn the_page_examples_are_valid() {
 /// The library example: `Project::load` and `servers_with`.
 #[test]
 fn the_library_example() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     std::fs::write(dir.path().join("harbor.toml"), common::MULTI).unwrap();
     let project = Project::load(dir.path(), Environment::production()).unwrap();
     let web: Vec<&str> = project

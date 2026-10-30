@@ -91,7 +91,10 @@ pub fn service() -> Service {
 }
 
 pub fn service_with(options: MediaOptions) -> Service {
-    let dir = tempfile::tempdir().expect("temp dir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("temp dir");
     let storage = storage(dir.path());
     let media = Media::builder(storage.clone())
         .options(options)

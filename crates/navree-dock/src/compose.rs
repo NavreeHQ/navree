@@ -122,7 +122,10 @@ mod tests {
 
     #[test]
     fn write_creates_the_file_and_a_self_ignoring_directory() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let file = DockFile::parse("[services.redis]\n", "shop").unwrap();
         let path = write(dir.path(), &file).unwrap();
         assert_eq!(path, dir.path().join(COMPOSE_FILE));

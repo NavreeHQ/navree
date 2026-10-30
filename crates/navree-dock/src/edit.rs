@@ -169,7 +169,10 @@ mod tests {
     use super::*;
 
     fn app() -> tempfile::TempDir {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         std::fs::write(
             dir.path().join("Cargo.toml"),
             "[package]\nname = \"crm-api\"\nversion = \"0.1.0\"\n\n[dependencies]\nnavree = { path = \"../navree\" }\n",
@@ -305,7 +308,10 @@ mod tests {
             error.to_string(),
             "redis is not in dock.toml; add it with `navree dock:add redis`"
         );
-        let empty = tempfile::tempdir().unwrap();
+        let empty = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         assert!(matches!(
             remove_service(empty.path(), "redis"),
             Err(DockError::NoDockFile(_))

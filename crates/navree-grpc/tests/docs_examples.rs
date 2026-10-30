@@ -34,7 +34,10 @@ fn options_from(sources: &ConfigSources) -> GrpcOptions {
 /// `config/app.toml` with `[grpc]` and `[grpc.clients.deals]`.
 #[test]
 fn the_toml_configuration() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
     let file = dir.path().join("app.toml");
     std::fs::write(
         &file,

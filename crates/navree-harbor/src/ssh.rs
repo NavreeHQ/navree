@@ -483,7 +483,10 @@ mod tests {
         let fake = FakeExecutor::default();
         let ssh = ssh(&fake, None, Identity::agent()).with_sudo(true);
         ssh.script("base", "true").unwrap();
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         let archive = dir.path().join("r.tar.gz");
         std::fs::write(&archive, b"archive").unwrap();
         ssh.upload(&archive, "/srv/app/releases/r.tar.gz").unwrap();
@@ -502,7 +505,10 @@ mod tests {
 
     #[test]
     fn identities() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
         // Nothing configured, no default key: the agent.
         let identity = Identity::resolve(None, None, Some(dir.path())).unwrap();
         assert_eq!(identity.path(), None);

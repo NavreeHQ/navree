@@ -4,7 +4,10 @@ use navree_config::{Config, ConfigSources};
 use serde_json::json;
 
 fn config() -> Config {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .expect("tempdir");
     let toml = dir.path().join("app.toml");
     std::fs::write(
         &toml,
