@@ -2,8 +2,8 @@
 
 This file holds the design of the parts of navree-db that other crates
 build on. The engine itself (pools, statements, values, rows, errors,
-transactions, units of work) is described in
-`docs/design`, §2.1.
+transactions, units of work) is described in the crate documentation
+(`src/lib.rs` and the modules under `src/engine/`).
 
 ## Records: typed rows below the ORM
 

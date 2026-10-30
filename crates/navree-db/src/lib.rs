@@ -7,8 +7,7 @@
 //!   (SQL and bound [`Value`]s; portable `?` placeholders), [`Row`]s read
 //!   as any [`FromValue`] type, classified [`DbError`]s, [`Transaction`]s
 //!   with savepoints, and the [`Executor`] they share with [`Db`] and
-//!   [`Uow`]. Statements are timed and reported like everything else below
-//!   (see `docs/design`).
+//!   [`Uow`]. Statements are timed and reported like everything else below.
 //! - [`DatabaseModule`] is global: it connects the pool at boot and exports
 //!   [`Db`] and [`DbOptions`] (section `database`). TimescaleDB, Navree's
 //!   default database, and plain PostgreSQL are behind the `postgres`

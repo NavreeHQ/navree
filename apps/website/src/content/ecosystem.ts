@@ -1,8 +1,7 @@
 /**
  * Navree's first-party ecosystem: every package and tool, in one list.
  * The homepage, /ecosystem/ and the docs read from here, so names, crates
- * and commands stay the same everywhere. The canonical catalogue is in
- * docs/design §5.
+ * and commands stay the same everywhere.
  *
  * `status` is the truth in the repository. The site renders everything as
  * available unless `site.showPlannedBadges` is true, in which case planned

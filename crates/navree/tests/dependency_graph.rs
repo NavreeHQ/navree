@@ -1,8 +1,8 @@
-//! Enforces the crate hierarchy of the build design (spec §3) on every test run.
+//! Enforces Navree's crate hierarchy on every test run.
 //!
 //! Every `navree*` dependency edge in the workspace (normal, dev and build) must be
-//! allowed by [`HIERARCHY`], which encodes the "Allowed runtime dependency edges"
-//! table of `docs/design`.
+//! allowed by [`HIERARCHY`], the table of allowed runtime dependency edges
+//! between the layers.
 //!
 //! Three exceptions, all for dev-dependencies only:
 //! - A crate may dev-depend on itself, to turn on its own features in its

@@ -1431,8 +1431,7 @@ and write them through the ORM where that keeps behaviour and reads
 better.
 
 (History: this section records how the tables moved while SeaORM was
-still in the tree. The data-layer move, steps 5 to 8
-(`docs/design`),
+still in the tree. The move of the data layer onto navree-db's own engine
 replaced what it describes as transitional: the dual derives, `Repo`,
 `db.conn()` and `&*tx` executors, `DbErr` conversions and the SeaORM
 migrations are gone; every table is a model or a navree-db record, and
