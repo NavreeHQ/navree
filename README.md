@@ -154,7 +154,7 @@ let won = Deal::query()
 
 | | |
 |---|---|
-| **Data** | An ORM with relations, eager loading, scopes, casts, lifecycle events and factories; a schema builder and migrations; PostgreSQL, TimescaleDB (the default), MySQL, SQLite and MongoDB |
+| **Data** | An ORM with relations, eager loading, scopes, casts, lifecycle events and factories; a schema builder and migrations; PostgreSQL, TimescaleDB (the default), MySQL, SQLite (opt-in) and MongoDB |
 | **Identity** | JWT with rotating refresh tokens, two-factor, passkeys, magic links, sessions, impersonation, single sign-on (SAML and OpenID Connect), social sign-in and an OAuth 2.1 server |
 | **Tenancy** | Workspaces and organizations, roles and abilities, invitations, row, schema or database isolation, custom domains with automatic TLS and SCIM directory sync |
 | **APIs** | Versioned REST routes, validation, OpenAPI 3.1, GraphQL, gRPC, microservices over NATS, Kafka or RabbitMQ, and signed webhooks in both directions |

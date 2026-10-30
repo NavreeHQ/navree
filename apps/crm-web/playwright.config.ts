@@ -31,7 +31,7 @@ const realServers: PlaywrightTestConfig["webServer"] = [
     command: "node e2e/start-api.mjs",
     url: `${apiUrl}/health/ready`,
     env: {
-      CARGO_TARGET_DIR: process.env.CARGO_TARGET_DIR ?? path.join(repoRoot, "target/agents/crm-e2e"),
+      CARGO_TARGET_DIR: process.env.CARGO_TARGET_DIR ?? path.join(repoRoot, "target/builds/crm-e2e"),
       APP_KEY: process.env.E2E_APP_KEY,
       // A database of its own: the suite never touches the dev database (storage/crm.db).
       APP_DATABASE__URL: "sqlite://storage/e2e.db?mode=rwc",

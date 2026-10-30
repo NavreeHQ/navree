@@ -19,7 +19,7 @@ browser ── same-origin /api/*, /broadcasting/auth ──▶ Nitro BFF (serve
 pnpm install
 
 # 1. The API: crm-api on http://127.0.0.1:8092, on its own SQLite file
-#    target/agents/crm-nuxt/crm.db (seeded with crm-demo the first time).
+#    target/builds/crm-nuxt/crm.db (seeded with crm-demo the first time).
 pnpm api                # serve (seeds a new database first)
 pnpm api:fresh          # migrate:fresh + db:seed crm-demo, then serve
 node scripts/start-api.mjs --worker   # also run queue:work (deal notifications)
@@ -34,11 +34,11 @@ pnpm dev:mock
 
 Sign in as `rep1@navree.test`, `rep2@`, `manager@` or `admin@navree.test`; every account uses `password123`.
 
-`scripts/start-api.mjs` runs the crm-api binary from `$CRM_API_BIN`, else `target/agents/crm-nuxt/crm-api(.exe)`,
-else a copy of `target/agents/patterns/debug/crm-api(.exe)`. Build one with
-`CARGO_TARGET_DIR=target/agents/crm-nuxt cargo build -p crm-api` and point `CRM_API_BIN` at it. It never touches
+`scripts/start-api.mjs` runs the crm-api binary from `$CRM_API_BIN`, else `target/builds/crm-nuxt/crm-api(.exe)`,
+else a copy of `target/builds/patterns/debug/crm-api(.exe)`. Build one with
+`CARGO_TARGET_DIR=target/builds/crm-nuxt cargo build -p crm-api` and point `CRM_API_BIN` at it. It never touches
 `apps/crm-api`'s own database or `.env`: it sets `APP_DATABASE__URL`, `APP_HTTP__ADDR`, `APP_APP__URL`, an `APP_KEY`
-kept in `target/agents/crm-nuxt/app-key.txt`, `APP_REALTIME__ALLOWED_ORIGINS` (this app's origin, for the socket) and
+kept in `target/builds/crm-nuxt/app-key.txt`, `APP_REALTIME__ALLOWED_ORIGINS` (this app's origin, for the socket) and
 a lifted per-IP rate limit (every browser reaches the API from 127.0.0.1 through the BFF). Change the port with
 `CRM_API_PORT` and the web origin with `CRM_WEB_ORIGIN`.
 
@@ -77,7 +77,7 @@ pnpm gen:api       # regenerate app/lib/api/schema.d.ts from openapi.json
 `pnpm e2e` needs nothing listening on :8092 or :3102. Playwright starts:
 
 1. crm-api (`node scripts/start-api.mjs --fresh --db e2e`): `migrate:fresh`, `db:seed crm-demo` and `serve` on
-   http://127.0.0.1:8092, on its own database `target/agents/crm-nuxt/e2e.db` with a fresh `APP_KEY` per run;
+   http://127.0.0.1:8092, on its own database `target/builds/crm-nuxt/e2e.db` with a fresh `APP_KEY` per run;
 2. this app's production build (`pnpm build`, then `node .output/server/index.mjs`) on :3102 with
    `NAVREE_COOKIE_SECURE=0`.
 

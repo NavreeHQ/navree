@@ -1,7 +1,7 @@
 # Navree CRM web
 
-The Next.js 16 front end for Navree CRM (`apps/crm-api`). It talks to the API contract in
-`docs/design` §7 and runs standalone against an in-browser mock of it.
+The Next.js 16 front end for Navree CRM (`apps/crm-api`). It talks to the crm-api REST API (its OpenAPI
+document is served at `/api/openapi.json`) and runs standalone against an in-browser mock of it.
 
 ## Run
 
@@ -82,7 +82,7 @@ E2E_REAL_API=1 pnpm e2e   # the whole system: real crm-api + production build, e
 `E2E_REAL_API=1 pnpm e2e` needs Rust (cargo) and nothing listening on :8080 or :3000. Playwright then starts:
 
 1. crm-api (`e2e/start-api.mjs`, from `apps/crm-api`): `cargo run -p crm-api -- migrate:fresh`, `db:seed crm-demo`,
-   then `serve` on http://127.0.0.1:8080, with `CARGO_TARGET_DIR=target/agents/crm-e2e` (repo root), its own database
+   then `serve` on http://127.0.0.1:8080, with `CARGO_TARGET_DIR=target/builds/crm-e2e` (repo root), its own database
    `apps/crm-api/storage/e2e.db` (the dev database `crm.db` is untouched), a fresh `APP_KEY` per run and the per-IP
    rate limit lifted (every browser reaches the API from 127.0.0.1 through the BFF). The first run compiles the API.
 2. this app: `pnpm build && pnpm start` on :3000 with `NAVREE_API_URL=http://127.0.0.1:8080`, `NAVREE_COOKIE_SECURE=0`.

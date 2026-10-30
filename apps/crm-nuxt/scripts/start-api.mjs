@@ -5,12 +5,12 @@
 //   node scripts/start-api.mjs              # serve on http://127.0.0.1:8092 (seeds a new database first)
 //   node scripts/start-api.mjs --fresh      # migrate:fresh + db:seed crm-demo, then serve
 //   node scripts/start-api.mjs --worker     # also run queue:work (deal notifications, mail to the log)
-//   node scripts/start-api.mjs --db e2e     # use target/agents/crm-nuxt/e2e.db instead of crm.db
+//   node scripts/start-api.mjs --db e2e     # use target/builds/crm-nuxt/e2e.db instead of crm.db
 //
-// The binary: $CRM_API_BIN, else target/agents/crm-nuxt/crm-api.exe (crm-api on Linux and macOS),
-// else a copy of target/agents/patterns/debug/crm-api(.exe). Build one with
-//   CARGO_TARGET_DIR=target/agents/crm-nuxt cargo build -p crm-api
-// and point CRM_API_BIN at target/agents/crm-nuxt/debug/crm-api(.exe).
+// The binary: $CRM_API_BIN, else target/builds/crm-nuxt/crm-api.exe (crm-api on Linux and macOS),
+// else a copy of target/builds/patterns/debug/crm-api(.exe). Build one with
+//   CARGO_TARGET_DIR=target/builds/crm-nuxt cargo build -p crm-api
+// and point CRM_API_BIN at target/builds/crm-nuxt/debug/crm-api(.exe).
 //
 // Environment: CRM_API_PORT (8092), CRM_WEB_ORIGIN (http://localhost:3102), APP_LOG__LEVEL (warn).
 import { spawn, spawnSync } from "node:child_process";
@@ -22,7 +22,7 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "../../..");
 const apiDir = path.join(repoRoot, "apps/crm-api");
-const stateDir = path.join(repoRoot, "target/agents/crm-nuxt");
+const stateDir = path.join(repoRoot, "target/builds/crm-nuxt");
 const exe = process.platform === "win32" ? "crm-api.exe" : "crm-api";
 
 const args = process.argv.slice(2);
@@ -38,7 +38,7 @@ function binary() {
   if (process.env.CRM_API_BIN) return process.env.CRM_API_BIN;
   const own = path.join(stateDir, exe);
   if (!existsSync(own)) {
-    const shared = path.join(repoRoot, "target/agents/patterns/debug", exe);
+    const shared = path.join(repoRoot, "target/builds/patterns/debug", exe);
     if (!existsSync(shared)) {
       console.error(`[crm-api] No binary at ${own}. Build one (see the top of this script) or set CRM_API_BIN.`);
       process.exit(1);

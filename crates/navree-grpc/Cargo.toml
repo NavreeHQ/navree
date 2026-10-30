@@ -58,6 +58,8 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 navree-access = { workspace = true }
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
 navree-events = { workspace = true }
 navree-mail = { workspace = true }
 navree-observe = { workspace = true }

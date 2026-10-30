@@ -30,11 +30,11 @@ fn settings() -> IndexSettings {
 }
 
 /// A port nothing listens on.
+/// A URL nothing listens on. A port taken from `bind("127.0.0.1:0")` and
+/// released again can be bound by another test's mock server before the
+/// request is sent; port 1 is never bound by the tests or their services.
 fn closed_port_url() -> String {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = listener.local_addr().unwrap().port();
-    drop(listener);
-    format!("http://127.0.0.1:{port}")
+    "http://127.0.0.1:1".to_owned()
 }
 
 async fn mount_tasks(server: &MockServer) {

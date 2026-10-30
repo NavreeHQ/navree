@@ -6,7 +6,7 @@ import { defineConfig, devices, type PlaywrightTestConfig } from "@playwright/te
  *
  * `pnpm e2e` starts both servers:
  * 1. crm-api on http://127.0.0.1:8092 (`scripts/start-api.mjs --fresh --db e2e`): migrate:fresh,
- *    db:seed crm-demo and serve, on its own SQLite file target/agents/crm-nuxt/e2e.db and a fresh
+ *    db:seed crm-demo and serve, on its own SQLite file target/builds/crm-nuxt/e2e.db and a fresh
  *    APP_KEY per run;
  * 2. this app's production build (`nuxt build`, then `node .output/server/index.mjs`) on :3102,
  *    talking to it through the BFF.
