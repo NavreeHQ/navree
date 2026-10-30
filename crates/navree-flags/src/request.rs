@@ -5,10 +5,10 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use axum::extract::FromRequestParts;
 use http::StatusCode;
 use http::request::Parts;
 use navree_contracts::AuthState;
+use navree_http::extract::FromRequestParts;
 use navree_http::{AppError, Guard, RouteDef};
 use navree_kernel::{AppContext, BoxFuture};
 use navree_workspace::{CurrentWorkspace, WorkspaceConfig};
@@ -130,7 +130,7 @@ async fn request_workspace(parts: &mut Parts, ctx: &AppContext) -> Option<Curren
         return Some(current.clone());
     }
     ctx.try_get::<WorkspaceConfig>().await?;
-    CurrentWorkspace::from_request_parts(parts, &()).await.ok()
+    CurrentWorkspace::from_request_parts(parts).await.ok()
 }
 
 impl fmt::Debug for CurrentFlags {
@@ -141,10 +141,10 @@ impl fmt::Debug for CurrentFlags {
     }
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for CurrentFlags {
+impl FromRequestParts for CurrentFlags {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         CurrentFlags::of_request(parts).await
     }
 }
@@ -228,4 +228,17 @@ pub fn requires_flag<F: Flag>(route: RouteDef, status: u16) -> RouteDef {
     route
         .guard(RequireFlag::with_status::<F>(status))
         .extension(FLAG_EXTENSION, F::NAME)
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_http::handler::Endpoint;
+
+    use super::*;
+
+    #[test]
+    fn handlers_on_the_current_flags_are_native() {
+        async fn handler(_: CurrentFlags) {}
+        assert!(Endpoint::new(handler).is_native());
+    }
 }

@@ -5,11 +5,11 @@ use std::fmt;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use axum::extract::FromRequestParts;
 use http::request::Parts;
 use navree_access::{Ability, PrincipalAccess};
 use navree_contracts::{AuthState, RequestId};
 use navree_db::Uow;
+use navree_http::extract::FromRequestParts;
 use navree_http::{AppError, Guard, PathParams, RouteMeta};
 use navree_kernel::{AppContext, BoxError, BoxFuture};
 use navree_orm::Builder;
@@ -209,10 +209,10 @@ impl fmt::Debug for CurrentWorkspace {
     }
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for CurrentWorkspace {
+impl FromRequestParts for CurrentWorkspace {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         resolve_request(parts, &Source::Configured).await
     }
 }
@@ -622,10 +622,10 @@ impl Deref for WorkspaceUow {
     }
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for WorkspaceUow {
+impl FromRequestParts for WorkspaceUow {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let current = resolve_request(parts, &Source::Configured).await?;
         match current.isolation() {
             Isolation::Database => Ok(WorkspaceUow(tenant_uow(parts, &current).await?)),
@@ -706,7 +706,23 @@ async fn tenant_uow(parts: &Parts, current: &CurrentWorkspace) -> Result<Uow, Ap
 
 #[cfg(test)]
 mod tests {
+    use navree_http::handler::Endpoint;
+
     use super::*;
+    use crate::{CurrentOrganization, CurrentPartition, PartitionScope};
+
+    #[test]
+    fn handlers_on_the_workspace_extractors_are_native() {
+        async fn handler(
+            _: CurrentWorkspace,
+            _: WorkspaceUow,
+            _: CurrentOrganization,
+            _: CurrentPartition,
+            _: PartitionScope,
+        ) {
+        }
+        assert!(Endpoint::new(handler).is_native());
+    }
 
     #[test]
     fn requests_write_by_method_unless_they_declare_their_intent() {

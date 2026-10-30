@@ -645,3 +645,9 @@ async fn routes_can_be_turned_off_and_are_documented() {
         document["components"]["schemas"]
     );
 }
+
+#[test]
+fn handlers_on_a_setting_are_native() {
+    async fn handler(_: navree_settings::Setting<PortalSettings>) {}
+    assert!(navree_http::handler::Endpoint::new(handler).is_native());
+}

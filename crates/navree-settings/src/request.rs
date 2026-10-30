@@ -3,10 +3,10 @@
 use std::fmt;
 use std::ops::Deref;
 
-use axum::extract::FromRequestParts;
 use http::request::Parts;
 use navree_contracts::AuthState;
 use navree_http::AppError;
+use navree_http::extract::FromRequestParts;
 use navree_kernel::AppContext;
 use navree_workspace::{CurrentWorkspace, WorkspaceConfig};
 use uuid::Uuid;
@@ -83,10 +83,10 @@ impl<T: SettingsGroup> fmt::Debug for Setting<T> {
     }
 }
 
-impl<T: SettingsGroup, S: Send + Sync> FromRequestParts<S> for Setting<T> {
+impl<T: SettingsGroup> FromRequestParts for Setting<T> {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let ctx = app_context(parts)?;
         let settings = ctx
             .get::<Settings>()
@@ -133,7 +133,7 @@ pub(crate) async fn request_workspace(
     if ctx.try_get::<WorkspaceConfig>().await.is_none() {
         return Ok(None);
     }
-    match CurrentWorkspace::from_request_parts(parts, &()).await {
+    match CurrentWorkspace::from_request_parts(parts).await {
         Ok(current) => Ok(Some(current)),
         Err(error) if error.code == "workspace_required" => Ok(None),
         Err(error) => Err(error),

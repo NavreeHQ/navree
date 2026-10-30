@@ -4,9 +4,9 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::ops::Deref;
 
-use axum::extract::FromRequestParts;
 use http::request::Parts;
 use navree_http::AppError;
+use navree_http::extract::FromRequestParts;
 use navree_kernel::AppContext;
 use navree_workspace::{CurrentOrganization, CurrentWorkspace};
 
@@ -21,10 +21,10 @@ use crate::{ConnectionInfo, Integrations, IntegrationsError, Level, Owner, Provi
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IntegrationOwner(pub Owner);
 
-impl<S: Send + Sync> FromRequestParts<S> for IntegrationOwner {
+impl FromRequestParts for IntegrationOwner {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         if let Some(owner) = parts.extensions.get::<IntegrationOwner>() {
             return Ok(*owner);
         }
@@ -34,16 +34,12 @@ impl<S: Send + Sync> FromRequestParts<S> for IntegrationOwner {
             .map_err(IntegrationsError::into_app_error)?;
         let owner = match level {
             Level::App => Owner::App,
-            Level::Workspace => Owner::Workspace(
-                CurrentWorkspace::from_request_parts(parts, state)
-                    .await?
-                    .id(),
-            ),
-            Level::Organization => Owner::Organization(
-                CurrentOrganization::from_request_parts(parts, state)
-                    .await?
-                    .id(),
-            ),
+            Level::Workspace => {
+                Owner::Workspace(CurrentWorkspace::from_request_parts(parts).await?.id())
+            }
+            Level::Organization => {
+                Owner::Organization(CurrentOrganization::from_request_parts(parts).await?.id())
+            }
         };
         parts.extensions.insert(IntegrationOwner(owner));
         Ok(IntegrationOwner(owner))
@@ -120,16 +116,15 @@ impl<P: Provider, S: ScopeSet> fmt::Debug for Connection<P, S> {
     }
 }
 
-impl<St, P, S> FromRequestParts<St> for Connection<P, S>
+impl<P, S> FromRequestParts for Connection<P, S>
 where
-    St: Send + Sync,
     P: Provider,
     S: ScopeSet,
 {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &St) -> Result<Self, Self::Rejection> {
-        let IntegrationOwner(owner) = IntegrationOwner::from_request_parts(parts, state).await?;
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
+        let IntegrationOwner(owner) = IntegrationOwner::from_request_parts(parts).await?;
         let integrations = integrations(parts).await?;
         let client = integrations
             .client(owner, P::KEY, S::NAME)
@@ -141,5 +136,20 @@ where
             client: client.into(),
             _scopes: PhantomData,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_http::handler::Endpoint;
+
+    use super::*;
+    use crate::MicrosoftGraph;
+    use crate::provider::DefaultScopes;
+
+    #[test]
+    fn handlers_on_the_integration_extractors_are_native() {
+        async fn handler(_: IntegrationOwner, _: Connection<MicrosoftGraph, DefaultScopes>) {}
+        assert!(Endpoint::new(handler).is_native());
     }
 }

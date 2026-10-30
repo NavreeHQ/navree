@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
-use axum::extract::FromRequestParts;
 use http::request::Parts;
 use navree_http::AppError;
+use navree_http::extract::FromRequestParts;
 use navree_integrations::{Level, Owner};
 use navree_kernel::AppContext;
 use navree_workspace::{CurrentOrganization, CurrentWorkspace};
@@ -18,26 +18,22 @@ use crate::Directory;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DirectoryOwner(pub Owner);
 
-impl<S: Send + Sync> FromRequestParts<S> for DirectoryOwner {
+impl FromRequestParts for DirectoryOwner {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         if let Some(owner) = parts.extensions.get::<DirectoryOwner>() {
             return Ok(*owner);
         }
         let directory = directory(parts).await?;
         let owner = match directory.level()? {
             Level::App => Owner::App,
-            Level::Workspace => Owner::Workspace(
-                CurrentWorkspace::from_request_parts(parts, state)
-                    .await?
-                    .id(),
-            ),
-            Level::Organization => Owner::Organization(
-                CurrentOrganization::from_request_parts(parts, state)
-                    .await?
-                    .id(),
-            ),
+            Level::Workspace => {
+                Owner::Workspace(CurrentWorkspace::from_request_parts(parts).await?.id())
+            }
+            Level::Organization => {
+                Owner::Organization(CurrentOrganization::from_request_parts(parts).await?.id())
+            }
         };
         parts.extensions.insert(DirectoryOwner(owner));
         Ok(DirectoryOwner(owner))
@@ -53,4 +49,17 @@ pub(crate) async fn directory(parts: &Parts) -> Result<Arc<Directory>, AppError>
     ctx.get::<Directory>()
         .await
         .map_err(|_| AppError::internal("DirectoryOwner needs DirectoryModule in the app"))
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_http::handler::Endpoint;
+
+    use super::*;
+
+    #[test]
+    fn handlers_on_the_directory_owner_are_native() {
+        async fn handler(_: DirectoryOwner) {}
+        assert!(Endpoint::new(handler).is_native());
+    }
 }

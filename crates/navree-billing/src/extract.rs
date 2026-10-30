@@ -2,10 +2,10 @@
 
 use std::ops::Deref;
 
-use axum::extract::FromRequestParts;
 use http::StatusCode;
 use http::request::Parts;
 use navree_http::AppError;
+use navree_http::extract::FromRequestParts;
 use navree_kernel::AppContext;
 
 use crate::billing::Billing;
@@ -39,10 +39,10 @@ impl Deref for Subscribed {
     }
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for Subscribed {
+impl FromRequestParts for Subscribed {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         if let Some(subscribed) = parts.extensions.get::<Subscribed>() {
             return Ok(subscribed.clone());
         }

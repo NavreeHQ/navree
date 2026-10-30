@@ -4,11 +4,12 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use axum::extract::{FromRequestParts, Path, Query};
+use axum::extract::{Path, Query};
 use http::Method;
 use http::request::Parts;
 use navree_access::AbilityFactory;
 use navree_db::Uow;
+use navree_http::extract::FromRequestParts as _;
 use navree_http::{ApiMeta, AppError, Controller, Json, RouteDef, schema_fn};
 use navree_kernel::{AppContext, BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_workspace::{CurrentOrganization, CurrentWorkspace};
@@ -408,14 +409,14 @@ async fn route_scope(
             Ok(Scope::global())
         }
         ScopeKind::Organization => {
-            let organization = CurrentOrganization::from_request_parts(parts, &()).await?;
+            let organization = CurrentOrganization::from_request_parts(parts).await?;
             if let Some(permission) = needs {
                 organization.authorize(permission)?;
             }
             Ok(Scope::from(&organization))
         }
         ScopeKind::Workspace => {
-            let workspace = CurrentWorkspace::from_request_parts(parts, &()).await?;
+            let workspace = CurrentWorkspace::from_request_parts(parts).await?;
             if let Some(permission) = needs {
                 workspace.authorize(permission)?;
             }

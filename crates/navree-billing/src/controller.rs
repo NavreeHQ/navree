@@ -4,13 +4,13 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use axum::extract::FromRequestParts;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use http::request::Parts;
 use http::{HeaderMap, Method};
 use navree_auth::AuthService;
 use navree_contracts::AuthState;
+use navree_http::extract::FromRequestParts;
 use navree_http::{ApiMeta, AppError, Controller, Json, RouteDef, schema_fn};
 use navree_kernel::{AppContext, BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_workspace::InWorkspace;
@@ -207,10 +207,10 @@ impl From<WebhookReceipt> for WebhookAnswer {
 /// The request's billable (see `billing.routes_billable`).
 struct RouteBillable(BillableRef);
 
-impl<S: Send + Sync> FromRequestParts<S> for RouteBillable {
+impl FromRequestParts for RouteBillable {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let billing = billing_of(parts).await?;
         Ok(RouteBillable(billing.request_billable(parts).await?))
     }
@@ -228,10 +228,10 @@ async fn billing_of(parts: &Parts) -> Result<Arc<Billing>, AppError> {
 /// The signed-in user's email, to prefill a checkout.
 struct SignedInEmail(Option<String>);
 
-impl<S: Send + Sync> FromRequestParts<S> for SignedInEmail {
+impl FromRequestParts for SignedInEmail {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let Some(user_id) = parts
             .extensions
             .get::<AuthState>()
@@ -599,7 +599,15 @@ fn api(
 
 #[cfg(test)]
 mod tests {
+    use navree_http::handler::Endpoint;
+
     use super::*;
+
+    #[test]
+    fn handlers_on_the_billing_extractors_are_native() {
+        async fn handler(_: RouteBillable, _: SignedInEmail, _: crate::Subscribed) {}
+        assert!(Endpoint::new(handler).is_native());
+    }
 
     #[test]
     fn origins_are_scheme_and_host() {

@@ -7,11 +7,11 @@ use std::fmt;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use axum::extract::FromRequestParts;
 use http::request::Parts;
 use navree_access::{Ability, PrincipalAccess};
 use navree_contracts::AuthState;
 use navree_db::Uow;
+use navree_http::extract::FromRequestParts;
 use navree_http::{AppError, Guard};
 use navree_kernel::{AppContext, BoxFuture};
 use navree_orm::Builder;
@@ -178,10 +178,10 @@ impl fmt::Debug for CurrentOrganization {
     }
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for CurrentOrganization {
+impl FromRequestParts for CurrentOrganization {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         resolve_organization(parts, &OrgSource::Configured).await
     }
 }
@@ -417,10 +417,10 @@ impl Deref for CurrentPartition {
     }
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for CurrentPartition {
+impl FromRequestParts for CurrentPartition {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         resolve_partitions(parts)
             .await?
             .current
@@ -485,10 +485,10 @@ impl PartitionScope {
     }
 }
 
-impl<S: Send + Sync> FromRequestParts<S> for PartitionScope {
+impl FromRequestParts for PartitionScope {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         resolve_partitions(parts).await
     }
 }

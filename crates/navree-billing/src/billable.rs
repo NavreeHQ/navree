@@ -1,7 +1,6 @@
 //! [`Billable`]: what can be charged (a workspace, a user, a type of your
 //! own), and [`BillableRef`], a billable by type and id.
 
-use axum::extract::FromRequestParts;
 use http::request::Parts;
 use navree_auth::{CurrentUser, User};
 use navree_http::AppError;
@@ -157,7 +156,7 @@ impl Billable for Workspace {
 
     fn from_request(parts: &mut Parts) -> BoxFuture<'_, Result<BillableRef, AppError>> {
         Box::pin(async move {
-            let workspace = CurrentWorkspace::from_request_parts(parts, &()).await?;
+            let workspace = CurrentWorkspace::from_request_parts(parts).await?;
             Ok(BillableRef::of(workspace.workspace()))
         })
     }
