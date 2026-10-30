@@ -13,7 +13,7 @@
 //!   the host is a host name (labels of letters, digits and hyphens, the
 //!   last not a number: all digits, or `0x` and hex digits), an IPv4
 //!   address or a bracketed IPv6 address, and it is required except for
-//!   `file` (`file:///etc/hosts`). Other
+//!   `file` (`file:///etc/hosts`), which takes no credentials or port. Other
 //!   schemes take any RFC 3986 host (`urn:isbn:0451450523`,
 //!   `mailto:ada@example.com` and `custom://anything` pass).
 //! - Internationalized host names are accepted in their ASCII form
@@ -88,8 +88,9 @@ fn is_authority(authority: &str, web: bool, file: bool) -> bool {
     if !port.is_none_or(is_port) {
         return false;
     }
-    // Credentials or a port for no host (`a://@`, `a://:80`) name nothing.
-    if host.is_empty() && (userinfo.is_some() || port.is_some()) {
+    // Credentials or a port for no host (`a://@`, `a://:80`) name nothing, and
+    // a `file` URL has neither.
+    if (host.is_empty() || file) && (userinfo.is_some() || port.is_some()) {
         return false;
     }
     if let Some(literal) = host.strip_prefix('[') {
@@ -189,6 +190,7 @@ mod tests {
             "ftp://ftp.example.com/pub",
             "ws://example.com/socket",
             "file:///etc/hosts",
+            "file://localhost/etc/hosts",
             "https://0x.example.com",
             "https://example.0xg",
             "file://server/share",
@@ -243,6 +245,9 @@ mod tests {
             "https://example.com/\n",
             "https://example.com#a#b",
             "file://user@/x",
+            "file://user@host/x",
+            "file://a+@a/p?",
+            "file://host:80/x",
             "a://@?",
             "a://:80/",
         ] {

@@ -22,6 +22,7 @@ use navree_fuzz::{block_on, split_nul};
 use navree_http::extract::{FromRequest, urlencoded};
 use navree_http::{Form, Json, Query};
 use serde::Deserialize;
+use serde_json::Value;
 
 #[derive(Debug, Deserialize, PartialEq)]
 #[allow(dead_code)]
@@ -75,6 +76,36 @@ fn print(pairs: &[(String, String)]) -> String {
         .map(|(name, value)| format!("{}={}", encode(name), encode(value)))
         .collect::<Vec<_>>()
         .join("&")
+}
+
+/// Equal, but for floats, which may read back one bit apart: a parsed number
+/// is the nearest float to within a step, not always the same one.
+fn same(left: &Value, right: &Value) -> bool {
+    match (left, right) {
+        (Value::Number(left), Value::Number(right)) => {
+            left == right
+                || match (left.as_f64(), right.as_f64()) {
+                    (Some(left), Some(right)) => {
+                        (left - right).abs() <= left.abs().max(right.abs()) * 1e-14
+                    }
+                    _ => false,
+                }
+        }
+        (Value::Array(left), Value::Array(right)) => {
+            left.len() == right.len()
+                && left
+                    .iter()
+                    .zip(right)
+                    .all(|(left, right)| same(left, right))
+        }
+        (Value::Object(left), Value::Object(right)) => {
+            left.len() == right.len()
+                && left
+                    .iter()
+                    .all(|(key, left)| right.get(key).is_some_and(|right| same(left, right)))
+        }
+        _ => left == right,
+    }
 }
 
 fuzz_target!(|data: &[u8]| {
@@ -143,7 +174,7 @@ fuzz_target!(|data: &[u8]| {
                     let printed = serde_json::to_vec(&value).expect("a value prints");
                     let again = Json::<serde_json::Value>::from_bytes(&printed)
                         .expect("printed JSON reads back");
-                    assert_eq!(again.0, value);
+                    assert!(same(&again.0, &value), "{value} read back as {}", again.0);
                 }
                 Err(rejection) => client_error(rejection.status()),
             }
