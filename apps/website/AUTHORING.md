@@ -41,16 +41,6 @@ built all come from it.
   manifest. To move or rename a page, change both, and search the docs for
   links to the old URL.
 
-Every page of the docs already exists as a stub. Each stub has its
-front-matter, a summary of what the page will cover and a callout titled
-"This page is being written". **Write into the existing file and delete the
-callout** when the page is done. Keep the file names: other pages link to
-them.
-
-The comments in the manifest name each section's content owner (A to F).
-"Digging deeper" has two owners; the comment above each group of pages says
-whose they are.
-
 ## Front-matter
 
 Every page starts with two fields:
@@ -85,11 +75,11 @@ status: "planned"
 - **Write it as finished documentation** of a shipped package:
   installation (the facade feature or the crate), configuration (config
   keys and environment variables), the API with realistic examples,
-  testing, and a reference table where useful. The page is also the
-  package's design, so follow Navree's existing conventions exactly
-  (`for_root`, `from_config` and `for_feature`, config key and env var
-  names, extractors, errors, fakes) and use the names, crates and commands
-  of the ecosystem catalogue (`src/content/ecosystem.ts`).
+  testing, and a reference table where useful. Follow Navree's existing
+  conventions exactly (`for_root`, `from_config` and `for_feature`, config
+  key and env var names, extractors, errors, fakes) and use the names,
+  crates and commands of the ecosystem catalogue
+  (`src/content/ecosystem.ts`).
 - **Don't claim its code compiles.** Samples must be consistent with each
   other and with the rest of Navree, but they can't be checked yet.
 - **The site decides how it shows.** `showPlannedBadges` in
@@ -214,19 +204,19 @@ Use `cargo test -p navree-validation` while you work on one crate.
 
 ### Tabs
 
-Alternatives the reader chooses between: SQLite or PostgreSQL, Cargo or the
+Alternatives the reader chooses between: PostgreSQL or SQLite, Cargo or the
 CLI. Each tab can hold any Markdown, code blocks included.
 
 ```mdx
 <Tabs>
-<Tab label="SQLite">
-
-SQLite is the default. There is nothing to install.
-
-</Tab>
 <Tab label="PostgreSQL">
 
 Turn on the `postgres` feature, then set `database.url`.
+
+</Tab>
+<Tab label="SQLite">
+
+SQLite is opt-in: turn on the `sqlite` feature. There is nothing to install.
 
 </Tab>
 </Tabs>
@@ -305,7 +295,7 @@ paragraph, not in the heading (it would end up in the heading's link id):
 
 <Badge feature="queue" /> A listener can run on a queue worker instead of in the request.
 
-<Badge>Since 0.1</Badge> <Badge tone="accent">New</Badge> <Badge tone="warning">Experimental</Badge>
+<Badge>Since 0.2</Badge> <Badge tone="accent">New</Badge> <Badge tone="warning">Experimental</Badge>
 ```
 
 ### LinkCards

@@ -12,8 +12,10 @@ MongoDB.
 | Path | Crate | Feature | Module to add | Config section | What it gives |
 |---|---|---|---|---|---|
 | `navree::kernel` | navree-kernel | always | (the kernel) | | `Navree::app()`, `AppBuilder`, `Module`, `ModuleBuilder`, the DI container, `CommandSpec` |
-| `navree::contracts` | navree-contracts | always | | | `Principal`, `Job`, `JobContext`, `Clock`, `SystemClock`, `FixedClock`, `Broadcaster`, `Dispatcher`, `Secret<T>`, `RequestId` |
-| `navree::config` | navree-config | always | `ConfigModule::for_root(sources)` | | `ConfigSources`, `Config`, `ConfigSection` |
+| `navree::bounded` | navree-bounded | always | | | the bounded in-process `Cache`: strict capacity, SIEVE eviction, TTL and TTI, single-flight loading |
+| `navree::contracts` | navree-contracts | always | | | `Principal`, `Job`, `JobContext`, `Clock`, `SystemClock`, `FixedClock`, `Broadcaster`, `Dispatcher`, `Secret<T>`, `RequestId`, `CredentialRevoker` |
+| `navree::config` | navree-config | always | `ConfigModule::for_root(sources)` | | `ConfigSources`, `Config`, `ConfigSection` (`.env`, TOML and JSON files, `APP_*` variables) |
+| `navree::telemetry` | navree-telemetry | `telemetry` (turned on by the modules that emit events) | | | typed telemetry events, sinks, W3C trace context |
 | `navree::http` | navree-http | `http` | `HttpModule::from_config()` | `http` | controllers, `AppError`, `Json`, `Created`, `NoContent`, `CurrentPrincipal`, `ClientIp`, `Guard`, `RouteDef` |
 | `navree::log` | navree-log | `log` | `LoggerModule::from_config()` | `log` | tracing subscriber, JSON or pretty output |
 | `navree::crypto` | navree-crypto | `crypto` | `CryptoModule::from_config()` | `hashing` (+ `app.key`) | AES-256-GCM `Encrypter`, Argon2id hasher, `generate_key`, `random_token`, `sha256_hex`; `jose`: `SigningKey`, `VerifyingKey`, `Jws`, `Jwk`, `JwkSet`; `totp`: `Totp`, `Secret` (RFC 6238, `otpauth://` URLs); `qr`: `QrCode`, `EcLevel` (ISO/IEC 18004, SVG) |
@@ -66,7 +68,9 @@ Navree::app()
     .module(ViewModule::from_config())
     .module(MailModule::from_config())
     .module(QueueModule::from_config())
+    .module(ScheduleModule::for_root())
     .module(OrmModule::from_config())
+    .module(Housekeeping) // schedules `model:prune` daily at 03:00
     .module(ValidationModule::from_config())
     .module(AuthModule::from_config())
     .module(AccessModule::for_root(AccessOptions {
@@ -75,12 +79,14 @@ Navree::app()
     }))
     .module(ApiModule::from_config())
     .module(ObserveModule::from_config())
+    .module(LighthouseModule::from_config())
+    .module(LogbookModule::from_config())
     .module(modules::users::UsersModule)
 // navree:modules
 ```
 
-Add `ScheduleModule::for_root()`, `AuditModule::from_config()`,
-`NotifyModule::from_config()`, `RealtimeModule::from_config()`,
-`StorageModule::from_config()` or `HttpClientModule::from_config()` above
-the feature modules when a feature needs them. Configure each framework
-module once, in the root; feature modules import it by type.
+Add `AuditModule::from_config()`, `NotifyModule::from_config()`,
+`RealtimeModule::from_config()`, `StorageModule::from_config()` or
+`HttpClientModule::from_config()` above the feature modules when a feature
+needs them. Configure each framework module once, in the root; feature
+modules import it by type.

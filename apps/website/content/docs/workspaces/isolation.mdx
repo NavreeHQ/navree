@@ -135,9 +135,7 @@ workspaces.enter(&uow, workspace.id).await?; // navree.workspace for this transa
 uow.commit().await?;
 ```
 
-SQLite and MySQL have no row-level security, and `Workspaces::enter` sets nothing there. On them, row isolation is the scoping alone: a query that leaves out the workspace filter sees every workspace's rows, so read and write workspace data through `WorkspaceRepo` (or a `#[model(workspace)]` model).
-
-On SQLite, `enter` and the request do nothing to the transaction: `WorkspaceRepo` and the route record checks are the scope.
+SQLite and MySQL have no row-level security, and neither a workspace request nor `Workspaces::enter` sets anything in their transactions. The unit of work still records the workspace, which scopes `#[model(workspace)]` models. On them, row isolation is the scoping alone: a query that leaves out the workspace filter sees every workspace's rows, so read and write workspace data through `WorkspaceRepo` (or a `#[model(workspace)]` model), and let the route record checks guard the records a route loads.
 
 ### Organizations and partitions
 
@@ -223,6 +221,7 @@ database_url = "sqlite://storage/workspaces/{id}.db?mode=rwc"
 # database_url = "postgres://app:secret@db.internal/workspace_{id}"
 ```
 
+- The template's scheme needs its driver: `sqlite://` the `sqlite` Cargo feature of `navree`, `postgres://` the `postgres` feature.
 - `WorkspaceDatabases` (exported by the module) opens one connection pool per workspace on first use, with the pool settings of the `database` section, and keeps it for the life of the process.
 - The first time a process opens a workspace's database, it runs the pending workspace migrations (`workspace_migrations`, as above). `navree workspace:migrate` runs them for every workspace.
 - A SQLite file and its directory are created on first use. A PostgreSQL database must exist before first use: create it when the workspace is created, for example in a `WorkspaceCreated` listener.

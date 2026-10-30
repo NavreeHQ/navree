@@ -24,7 +24,9 @@ navree = { git = "https://github.com/NavreeHQ/navree", features = ["ai"] }
 
    It brings `navree::ai` (the crate, the `#[agent]` macro, and `utoipa`
    re-exported) and puts `AiModule` and `ModuleBuilderAiExt` in the prelude.
-   Add `"postgres"` for the pgvector store.
+   Add `"postgres"` for the pgvector store. Agents and conversation memory
+   need a database driver feature of `navree` (`postgres`, `mysql` or
+   `sqlite`).
 
 2. Add the module. It is global and needs only `ConfigModule`.
    `DatabaseModule` is needed for agents (tool units of work), conversation
@@ -221,7 +223,7 @@ Tests:
 
 ```rust
 let app = TestApp::builder()
-    .temp_database()
+    .temp_database()            // SQLite: needs navree's `sqlite` feature in [dev-dependencies]
     .config("ai.fake", true)
     // ... the app's modules, AiModule::from_config()
     .build()
@@ -282,8 +284,10 @@ assert_eq!(fake.tool_results("search_deals").len(), 1);
   `AiError::Unauthenticated`.
 - **Vectors**: every embedding must have `ai.vectors.dimensions` entries; a
   different size is `AiError::Config` naming both. Collection names are
-  lower-case letters, digits and `_`. Qdrant uses its REST port (6333).
-  pgvector needs PostgreSQL with the `vector` extension allowed.
+  lower-case letters, digits and `_`. Qdrant uses its REST port (6333); on
+  Qdrant `gt`/`gte`/`lt`/`lte` filters take numbers and RFC 3339 dates.
+  pgvector needs PostgreSQL (the `postgres` feature) with the `vector`
+  extension allowed; with `memory` the store needs no database.
 - **Budgets** count only requests with `.user(..)` (agents always do);
   embeddings never count.
 - **`StreamEvent` is `#[non_exhaustive]`**: end a `match` with `_ => ..`.

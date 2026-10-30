@@ -33,7 +33,7 @@
 //! - **Executors**: every terminal method takes the executor first — a
 //!   [`Db`](navree_db::Db) or a [`Uow`](navree_db::Uow) — so statements run
 //!   in the request's transaction, with its actor, workspace settings and
-//!   change events (the audit trail), exactly like navree-db's repositories.
+//!   change events (the audit trail).
 //!   Models and queries can live on named connections
 //!   (`#[model(connection = "..")]`, `on_connection`, [`using_connection`])
 //!   and read from the writer when replicas exist (`use_write`,

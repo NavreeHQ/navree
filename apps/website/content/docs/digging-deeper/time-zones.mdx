@@ -13,7 +13,7 @@ description: "Zones for users, workspaces and organizations: the request's zone,
 - `SendWindow` finds the next moment inside working hours on the recipient's clock, skipping weekends and public holidays.
 - `daily_at("09:00").per_workspace_local()` runs a scheduled task once per workspace, at nine on each workspace's clock.
 
-The IANA time zone database is compiled into the binary (release 2025b in this version), so nothing depends on the server's own tz data.
+The IANA time zone database is compiled into the binary (release 2025b in this version; `navree::time::tzdata_version()` returns it), so nothing depends on the server's own tz data.
 
 ## Registering the module
 
@@ -397,7 +397,7 @@ It accepts any IANA name, legacy aliases included (`None` passes); normalize wit
 
 ## Testing
 
-`ZonesFake` is an in-memory zone source for one level. At the user level it answers for the signed-in user; at other levels for the owner whose id a header names. Clones share their owners, so a test can change zones after boot:
+`ZonesFake` is an in-memory zone source for one level. At the user level it answers for the signed-in user; at other levels for the owner whose id a header names. Clones share their owners, so a test can change zones after boot. The example boots the app with `temp_database()`, a SQLite file, so the app's tests need the `sqlite` feature (see [database tests](/docs/testing/database-tests/)):
 
 ```rust title="tests/zones.rs"
 use navree::contracts::{ZoneLevel, ZoneOwner};

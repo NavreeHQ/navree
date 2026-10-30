@@ -1631,6 +1631,8 @@ macro_rules! scope_api {
 
             /// Saves a screenshot of the viewport as
             /// `<artifacts>/<test name>/NN-<name>.png` and returns its path.
+            /// The page is brought to the front first, so a page another
+            /// page of the browser covers still gets its picture.
             pub async fn screenshot(&self, name: impl AsRef<str>) -> Result<PathBuf, BrowserError> {
                 let name = name.as_ref();
                 let s = &self.scope;
@@ -1638,7 +1640,8 @@ macro_rules! scope_api {
                     .await
             }
 
-            /// Saves a screenshot of the whole page, beyond the viewport.
+            /// Saves a screenshot of the whole page, beyond the viewport
+            /// (the page is brought to the front first, like `screenshot`).
             pub async fn screenshot_full_page(
                 &self,
                 name: impl AsRef<str>,

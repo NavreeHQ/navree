@@ -430,7 +430,7 @@ The page is served at `/admin/pages/pipeline` and appears in the menu for users 
 
 ## Security
 
-- **Sign-in.** The panel's sign-in screen uses your app's users through `AuthService`: password, then a two-factor code (or a recovery code) when the account has [two-factor authentication](/docs/security/account-flows/#two-factor-authentication) on, with the same login throttle as `POST /api/auth/login`. The code check is the API's: a six-digit TOTP from `navree::crypto::totp` (30-second steps, one step of clock drift either way), compared in constant time, and each code works once, whether it was used at the panel or at `POST /api/auth/2fa/verify`. The session is an encrypted, httpOnly, `SameSite=Strict` cookie named `navree_helm`, scoped to `/admin`, so your API never accepts it. It lasts `helm.session_minutes`, renewed while you use the panel, and is `Secure` on every host but `localhost`. Signing out revokes the sign-in's refresh token.
+- **Sign-in.** The panel's sign-in screen uses your app's users through `AuthService`: password, then a two-factor code (or a recovery code) when the account has [two-factor authentication](/docs/security/account-flows/#two-factor-authentication) on, with the same login throttle and the same [sign-in policies](/docs/security/authentication/#sign-in-policies) as `POST /api/auth/login` (a domain that enforces single sign-on can't use a password here either). The code check is the API's: a six-digit TOTP from `navree::crypto::totp` (30-second steps, one step of clock drift either way), compared in constant time, and each code works once, whether it was used at the panel or at `POST /api/auth/2fa/verify`. The session is an encrypted, httpOnly, `SameSite=Strict` cookie named `navree_helm`, scoped to `/admin`, so your API never accepts it. It lasts `helm.session_minutes`, renewed while you use the panel, and is `Secure` on every host but `localhost`. Signing out revokes the sign-in's refresh token.
 - **CSRF.** Every change the panel makes sends a CSRF token (a `_csrf` form field, or the `X-CSRF-Token` header), and requests without it are refused with 403. The sign-in form has its own token. If your app also uses `SessionModule`, add the panel to its exceptions (`session.csrf_except = ["/admin/*"]`): Helm checks its own token there.
 - **Deny by default.** Nobody enters without `view` on `Helm`, and every screen and API call checks the user's ability on the subject and the record, as [above](#authorization). The super-admin role passes every check.
 - **Strict pages.** Pages are served with a strict Content Security Policy (no inline scripts or styles), `X-Frame-Options: DENY` and `Cache-Control: no-store`. Field values are escaped; `Field::markdown` renders without raw HTML and keeps only `http(s)`, `mailto` and relative links.
@@ -471,7 +471,7 @@ async fn reps_read_every_deal_but_edit_only_their_own() {
 }
 ```
 
-`boot_app` builds the app with `TestApp::builder().fake_auth()` so `acting_as` works next to `AuthModule`.
+`boot_app` builds the app with `TestApp::builder().fake_auth()` so `acting_as` works next to `AuthModule`, and with `.temp_database()`, which points the app at a SQLite file: the test crate needs the `sqlite` feature of `navree` in its `[dev-dependencies]`, which `navree new` writes.
 
 ### The JSON API
 

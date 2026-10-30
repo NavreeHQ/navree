@@ -33,7 +33,10 @@
 //!   delivery log and provider events, emitted as [`events`]),
 //!   [`Suppressions`], [`Outbox`] (mail held for approval), open and click
 //!   tracking, the provider webhook and admin routes of [`MailController`]
-//!   and the commands `mail:test` and `mail:suppressions`.
+//!   and the commands `mail:test` and `mail:suppressions`. The tables
+//!   (PostgreSQL, MySQL and SQLite) are navree-db records in [`entity`]
+//!   (`DeliveryRow`, `EventRow`, ...): read them freely, change them
+//!   through the services.
 //! - [`SendingDomains`] checks SPF, DKIM and DMARC (`mail:domains`);
 //!   [`MailFake`] records mail and plays the provider in tests.
 //! - Inbound mail (crate feature `inbound`, module [`inbound`]): received

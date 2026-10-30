@@ -109,12 +109,13 @@ per_ip_rate_limit = 600       # sharded by IP; a single client IP shares one key
   pipeline tests pin the order of the fixed layers, the request id on every
   response, the timeout and panic responses, run-to-completion on
   disconnect, and the statements a unit of work sends
-  (`crates/navree-db/tests/db/transaction_settings.rs`).
+  (`crates/navree-db/tests/engine/units.rs`).
 
 ## Gotchas
 
-- A request that keeps a row stream or query future of its unit of work
-  alive past the handler fails to commit ("its transaction is still in use").
+- A request that keeps a row stream of its unit of work alive past the
+  handler holds the connection: the commit waits until the stream ends or is
+  dropped.
 - `transaction_settings = false` with a trigger that reads
   `current_setting('navree.actor', true)` silently records an empty actor.
 - Benchmarks of one client IP put every request on the same limiter key: the

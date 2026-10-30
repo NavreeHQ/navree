@@ -31,19 +31,16 @@ export type DocsLink = {
 
 export const sections: DocsSection[] = [
   {
-    // Owner: A
     slug: "prologue",
     title: "Prologue",
     pages: ["introduction", "release-notes", "roadmap", "contributing"],
   },
   {
-    // Owner: A
     slug: "getting-started",
     title: "Getting started",
     pages: ["installation", "your-first-app", "configuration", "directory-structure", "starter-kits", "deployment"],
   },
   {
-    // Owner: B
     slug: "architecture",
     title: "Architecture concepts",
     pages: [
@@ -56,7 +53,6 @@ export const sections: DocsSection[] = [
     ],
   },
   {
-    // Owner: patterns
     slug: "patterns",
     title: "Architecture patterns",
     pages: [
@@ -70,7 +66,6 @@ export const sections: DocsSection[] = [
     ],
   },
   {
-    // Owner: B
     slug: "basics",
     title: "The basics",
     pages: [
@@ -88,7 +83,6 @@ export const sections: DocsSection[] = [
     ],
   },
   {
-    // Owner: C
     slug: "security",
     title: "Security",
     pages: [
@@ -105,7 +99,6 @@ export const sections: DocsSection[] = [
     ],
   },
   {
-    // Owner: workspace
     slug: "workspaces",
     title: "Workspaces",
     pages: [
@@ -121,7 +114,6 @@ export const sections: DocsSection[] = [
     ],
   },
   {
-    // Owner: D
     slug: "database",
     title: "Database",
     pages: [
@@ -140,7 +132,6 @@ export const sections: DocsSection[] = [
     ],
   },
   {
-    // Owner: orm
     slug: "orm",
     title: "ORM",
     pages: [
@@ -167,22 +158,19 @@ export const sections: DocsSection[] = [
     slug: "digging-deeper",
     title: "Digging deeper",
     pages: [
-      // Owner: E
       "cache",
-      // Owner: redis
       "redis",
       "events",
       "queues",
       "batches-and-operations",
       "scheduling",
-      "time-zones", // Owner: time-zones
+      "time-zones",
       "mail",
       "mail-delivery",
-      "inbound-mail", // Owner: mail-inbound
+      "inbound-mail",
       "notifications",
-      "notification-channels", // Owner: notify-channels
-      "notification-preferences", // Owner: notify-preferences
-      // Owner: F
+      "notification-channels",
+      "notification-preferences",
       "storage",
       "http-client",
       "broadcasting",
@@ -194,7 +182,6 @@ export const sections: DocsSection[] = [
     ],
   },
   {
-    // Owner: frontend
     slug: "frontend",
     title: "Front end",
     pages: [
@@ -209,13 +196,11 @@ export const sections: DocsSection[] = [
     ],
   },
   {
-    // Owner: micro
     slug: "microservices",
     title: "Microservices",
     pages: ["introduction", "transports", "request-response", "events", "grpc", "graphql", "tracing"],
   },
   {
-    // Owner: aidocs
     slug: "ai",
     title: "AI",
     pages: [
@@ -230,7 +215,6 @@ export const sections: DocsSection[] = [
     ],
   },
   {
-    // Owner: pkg
     slug: "packages",
     title: "Packages",
     pages: [
@@ -254,13 +238,11 @@ export const sections: DocsSection[] = [
     ],
   },
   {
-    // Owner: tools
     slug: "tools",
     title: "Tools",
     pages: ["lighthouse", "logbook", "fleet", "helm", "harbor", "dock"],
   },
   {
-    // Owner: D
     slug: "testing",
     title: "Testing",
     pages: [
@@ -273,7 +255,6 @@ export const sections: DocsSection[] = [
     ],
   },
   {
-    // Owner: F
     slug: "example-app",
     title: "Example application",
     pages: ["crm-tour"],

@@ -251,7 +251,7 @@ export function TestingVisual() {
       <div className="text-fg">
         <span className="text-fg-3">$ </span>cargo test
       </div>
-      {["reps_read_every_deal_but_edit_only_their_own", "the_board_loads_in_three_queries"].map((t) => (
+      {["reps_change_only_their_own_deals", "board_groups_by_stage_with_totals"].map((t) => (
         <div key={t} className="flex justify-between gap-3">
           <span className="truncate text-fg-2">test {t}</span>
           <span className="shrink-0 text-accent">ok</span>

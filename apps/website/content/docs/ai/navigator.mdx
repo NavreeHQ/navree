@@ -29,7 +29,7 @@ Connect your agent to it once, and it can ask your app:
 
 When the app includes [Lighthouse](/docs/tools/lighthouse/#the-json-api-for-scripts-and-agents) (a file under `src/` adds `LighthouseModule`, as `navree new` apps do), Navigator adds its five read tools (`lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_slow_routes`, `lighthouse_slow_queries` and `lighthouse_failed_jobs`), reading Lighthouse's tables in your local database. See [Lighthouse's tools](#lighthouses-tools).
 
-Everything is read-only, and Navigator runs only on your machine, over stdio, for the project you start it in. It is for development; your production binary doesn't contain it. The code lives in the `navree-navigator` crate, which the CLI runs; the facade re-exports it as `navree::navigator` behind the opt-in `navigator` feature, for tools and tests.
+Everything is read-only, and Navigator runs only on your machine, over stdio, for the project you start it in. It speaks MCP protocol versions `2024-11-05` to `2025-11-25` and the stateless `2026-07-28`, so any current client connects. It is for development; your production binary doesn't contain it. The code lives in the `navree-navigator` crate, which the CLI runs; the facade re-exports it as `navree::navigator` behind the opt-in `navigator` feature, for tools and tests.
 
 ## Connecting your agent
 
@@ -110,7 +110,7 @@ Navigator runs next to your app, not inside it:
 3. For routes, it runs the binary with `routes --json`, which boots the app without serving traffic, as `navree routes --json` does. Navigator adds `APP_DATABASE__MIGRATE_ON_BOOT=false` and `APP_LOG__LEVEL=error` to that process's environment, so asking never migrates your database and adds nothing to your log but errors. Answers are cached until `cargo build` produces a new binary, that is until a source file changes.
 4. For the database, it reads your configuration exactly as the app does (`.env`, `config/app.toml`, `APP_*` variables, plus the settings of your `dock.toml` services, as `navree dev` passes them) and connects to `database.url` itself, read-only. For pending migrations it runs the binary with `migrate:status --json`.
 5. For logs, it reads the log file your app writes (`log.file`).
-6. For the docs, it searches the documentation of the Navree version in your lockfile. Navigator ships with the docs of its own version; for another version it downloads `https://navree.com/v/<version>/docs.json` once and caches it under `~/.navree/docs/<version>/` (`NAVREE_HOME` replaces `~/.navree`, and `NAVREE_DOCS_URL` replaces `https://navree.com`, for a mirror).
+6. For the docs, it searches the documentation of the Navree version in your lockfile. Navigator ships with the docs of its own version, so an app on that version needs no download. For another version it reads the cache, `~/.navree/docs/<version>/docs.json` (`NAVREE_HOME` replaces `~/.navree`), and otherwise downloads `https://navree.com/v/<version>/docs.json` once and caches it there (`NAVREE_DOCS_URL` replaces `https://navree.com`, for a mirror; `--docs-offline` never downloads). When that fails too (the site has no bundle for the version, the download errors, or the lockfile doesn't pin `navree`), Navigator answers from the docs it ships with and says in a `note` which versions differ.
 
 A build that fails doesn't stop the other tools: `list_routes` and friends return the compiler's first error, which is often what the agent needed to see, while `describe_schema`, `read_logs` and `search_docs` keep working.
 
@@ -148,7 +148,7 @@ The app's commands with their one-line help, as `navree list` shows them: the bu
 
 ### describe_schema
 
-The database as it is, not as the code says it should be: tables, columns with their types, nullability, defaults and primary keys, indexes and foreign keys. It also lists the migrations that have run (the rows of `navree_migrations`) and those that haven't (from `migrate:status --json`), so the agent knows when a column it sees in an entity doesn't exist yet. When the app can't answer (it doesn't build), `pending` says why. A `table` argument returns one table.
+The database as it is, not as the code says it should be: tables, columns with their types, nullability, defaults and primary keys, indexes and foreign keys. It also lists the migrations that have run (the rows of `navree_migrations`) and those that haven't (from `migrate:status --json`), so the agent knows when a column it sees in a model doesn't exist yet. When the app can't answer (it doesn't build), `pending` says why. A `table` argument returns one table.
 
 ### query_database
 
@@ -192,9 +192,9 @@ The configuration tree your app sees, merged from `.env`, `config/app.toml` and 
 
 ### search_docs and read_doc
 
-`search_docs` searches these docs for the Navree version in your `Cargo.lock` and returns the best sections with an excerpt each, their address on navree.com and the slug `read_doc` takes. `read_doc` returns one page as Markdown: give it a slug (`basics/validation`), a `/docs/...` path or a navree.com URL, and optionally a `section` (its heading or anchor) to read only that part. An agent working on an app pinned to an older Navree reads the docs of that version, not of the latest release, so the APIs it finds are the APIs it has. When those docs can't be had (offline and not cached), Navigator answers from the docs it ships with and says so in a `note`.
+`search_docs` searches these docs for the Navree version in your `Cargo.lock` and returns the best sections with an excerpt each, their address on navree.com and the slug `read_doc` takes. `read_doc` returns one page as Markdown: give it a slug (`basics/validation`), a `/docs/...` path or a navree.com URL, and optionally a `section` (its heading or anchor) to read only that part. An agent working on an app pinned to an older Navree reads the docs of that version, not of the latest release, so the APIs it finds are the APIs it has. When those docs can't be had (offline and not cached, or navree.com has no bundle for that version), Navigator answers from the docs it ships with and says so in a `note` that names both versions, so the agent knows to check APIs against the code.
 
-A version's docs are one JSON file, `docs.json`: `{"version": "0.1.0", "pages": [{"slug": "ai/navigator", "title": "Navigator", "description": "...", "planned": false, "sections": [{"heading": "Options", "anchor": "options", "markdown": "..."}]}]}`, each page split at its `##` headings, the site's components written as plain Markdown.
+A version's docs are one JSON file, `docs.json`: `{"version": "0.2.0", "pages": [{"slug": "ai/navigator", "title": "Navigator", "description": "...", "planned": false, "sections": [{"heading": "Options", "anchor": "options", "markdown": "..."}]}]}`, each page split at its `##` headings, the site's components written as plain Markdown.
 
 ### Lighthouse's tools
 

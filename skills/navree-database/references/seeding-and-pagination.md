@@ -12,6 +12,7 @@ that uses the model's factory).
 ```rust
 use navree::BoxFuture;
 use navree::db::{Db, Seeder};
+use navree::orm::OrmError;
 use navree::prelude::*;
 
 /// `db:seed demo-posts`: three posts, only into an empty table.
@@ -28,17 +29,27 @@ impl Seeder for PostSeeder {
             if Post::query().exists(db).await? {
                 return Ok(()); // safe to run twice
             }
-            db.transaction(|uow| async move {
-                for name in ["Hello", "Second", "Third"] {
-                    Post::create(
-                        &uow,
-                        Post { name: name.to_owned(), published: true, ..Post::default() },
-                    )
-                    .await?;
+            // A unit of work, so the posts are audited and commit together.
+            let uow = db.uow(None, None).await;
+            let created = uow
+                .scope(async {
+                    for name in ["Hello", "Second", "Third"] {
+                        Post::create(
+                            &uow,
+                            Post { name: name.to_owned(), published: true, ..Post::default() },
+                        )
+                        .await?;
+                    }
+                    Ok::<_, OrmError>(())
+                })
+                .await;
+            match created {
+                Ok(()) => uow.commit().await?,
+                Err(error) => {
+                    uow.rollback().await?;
+                    return Err(error.into());
                 }
-                Ok(())
-            })
-            .await?;
+            }
             Ok(())
         })
     }

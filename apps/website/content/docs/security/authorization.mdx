@@ -133,6 +133,7 @@ pub fn define(ctx: &AbilityCtx, rules: &mut Rules) {
 | `user` | `Some(AccessUser { id, roles })` for a signed-in user (`has_role`, `has_any_role`); `None` for guests |
 | `permissions` | The user's permission strings, through their roles and granted directly, sorted |
 | `team_id` | Inside a workspace request, `Some(workspace id)`, and `user.roles` and `permissions` describe the member's workspace role; `None` otherwise. See [How workspace roles reach access control](/docs/workspaces/members-and-roles/#how-workspace-roles-reach-access-control) |
+| `organization_id` | Inside an [organization](/docs/workspaces/organizations/) request, or a workspace that belongs to one, `Some(organization id)`; `None` otherwise |
 | `permission_subjects` | The permission prefix of every registered subject, for `grant_permissions` |
 
 The function is a plain `fn(&AbilityCtx, &mut Rules)`: it can't capture state or query the database. Everything a rule decides on must be a role, a permission, or a column of the record being checked.
@@ -436,18 +437,22 @@ The record loader doesn't know about soft deletes. A soft-deleted row still load
 
 ### Checks in services
 
-Some decisions depend on the input as well as the record. The `Abilities` extractor gives the user's compiled rules (`Arc<Ability>`), and `Authorized::ability()` the same; check them with `can`:
+Some decisions depend on the input as well as the record. The `Abilities` extractor gives the user's compiled rules (`Arc<Ability>`), and `Authorized::ability()` the same. For a model's record, `AbilityExt` (in `navree::orm::access`) checks an action against it:
 
 ```rust
-use navree::access::{Ability, record_json};
+use navree::access::Ability;
+use navree::orm::access::AbilityExt;
 
-pub fn ensure_can_publish(ability: &Ability, post: &Model) -> Result<()> {
-    if !ability.can(PUBLISH, "Post", Some(&record_json(post))) {
+pub fn ensure_can_publish(ability: &Ability, post: &Record<Post>) -> Result<()> {
+    // `Publish` is the action marker defined above.
+    if !ability.allows(Publish, post) {
         return Err(AppError::forbidden().with_detail("You may not publish this post."));
     }
     Ok(())
 }
 ```
+
+`ability.authorize(Publish, post)?` is the same check with the 403 built in, and `ability.allows_action("publish", post)` takes the action by name. For a record that isn't a model, `ability.can(PUBLISH, "Post", Some(&row_json(&row)))` checks the JSON the conditions see.
 
 The CRM's deal service does this when a `PATCH` changes a deal's stage, which needs `move` as well as `update`:
 

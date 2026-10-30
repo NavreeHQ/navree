@@ -19,7 +19,7 @@ Every delivery over these channels is a row in `notification_deliveries`. Status
 
 ## Routing a notifiable
 
-A notifiable says where each channel reaches it. Every `route_*` method has a default of `None`, which skips the channel for that recipient, so implement the ones you use:
+A notifiable says where each channel reaches it. Every `route_*` method of these channels has a default of `None`, which skips the channel for that recipient, so implement the ones you use (`route_mail` is required, and returns `None` to skip the mail):
 
 ```rust title="src/modules/people/employee.rs"
 use navree::notify::{Notifiable, TeamsRoute, USER_NOTIFIABLE_TYPE};
@@ -592,7 +592,7 @@ async fn due_training_is_texted_and_stop_opts_out() {
 | `SmsFake`, `WhatsAppFake` | `sent()`, `sent_to(number)` | `refuse`, `opt_out_at_provider(number)`, `deliver`, `fail`, `reply`; `read` for WhatsApp |
 | `WebPushFake` | `sent()`, `sent_to(endpoint)` | `refuse`, `expire(endpoint)`: the endpoint answers as gone |
 
-Every fake has `assert_sent(|sent| ..)` and `assert_nothing_sent()`, and records deliveries as provider `fake`. To test a real driver against a local mock server, give its table an `endpoint`: the HTTP client's SSRF policy allows a configured endpoint's host.
+Every fake has `assert_sent(|sent| ..)` and `assert_nothing_sent()`, and records deliveries as provider `fake`. `temp_database()` creates a SQLite database, so the app's tests need the `sqlite` Cargo feature ([database tests](/docs/testing/database-tests/)). To test a real driver against a local mock server, give its table an `endpoint`: the HTTP client's SSRF policy allows a configured endpoint's host.
 
 ## Errors
 

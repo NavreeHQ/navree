@@ -53,7 +53,7 @@ Contract tests assert the routes, the schema names and the error responses, so a
 
 ## Resources: what clients receive
 
-A resource is the shape a client sees. Keep it separate from the entity: the table can gain a column, rename one or split in two without the API noticing. The CRM's deal resource adds the computed `probability` and embeds the company, contact and owner, so a client draws a deal card from one response:
+A resource is the shape a client sees. Keep it separate from the model: the table can gain a column, rename one or split in two without the API noticing. The CRM's deal resource adds the computed `probability` and embeds the company, contact and owner, so a client draws a deal card from one response:
 
 ```rust title="crates/crm-deals/src/resource.rs"
 /// A deal as the API returns it: the row plus `probability` (from the
@@ -309,7 +309,7 @@ async fn index(
 - `page` starts at 1; `per_page` defaults to 15 and is capped at 100. Anything that isn't a positive integer is a 400.
 - `Accessible<Deal, Read>` turns the caller's access rules into SQL, so a page only contains rows the caller may read and `total` counts only those.
 - Filters are a validated query struct (`DealFilter`) next to `PageQuery`.
-- For feeds and infinite scroll, cursor pagination (`CursorQuery`, `cursor_paginate_desc`) returns `next_cursor` instead of page numbers and never shifts when rows are added.
+- For feeds and infinite scroll, cursor pagination (`CursorRequest` and the query's `cursor_paginate`) returns `next_cursor` instead of page numbers and never shifts when rows are added.
 
 `Page<T>` is generic, so give each list a named schema for the document. The CRM's `DealPage` has the same `data` and `meta` members, and the route says `response = DealPage`. See [Pagination](/docs/database/pagination/).
 

@@ -1,6 +1,6 @@
 ---
 name: navree-cli-generators
-description: "Uses the `navree` CLI: `navree new`, every `make:*` generator with the files it writes and what it registers, the marker comments, `navree dev`, forwarding to the app's own commands, and console commands with `CommandSpec`. Use when generating any code in a Navree app (module, controller, service, entity, migration, job, event, listener, mail, notification, policy, command, test, MCP server), running an app command such as migrate or queue:work, or adding a custom command."
+description: "Uses the `navree` CLI: `navree new`, every `make:*` generator with the files it writes and what it registers, the marker comments, `navree dev`, forwarding to the app's own commands, and console commands with `CommandSpec`. Use when generating any code in a Navree app (module, controller, service, model, factory, seeder, migration, job, event, listener, mail, notification, policy, command, test, MCP server, Helm resource), running an app command such as migrate or queue:work, or adding a custom command."
 ---
 
 # The navree CLI and generators
@@ -11,8 +11,10 @@ Two command lines:
   dev loop and the app's local services (`navree dock`, skill
   `navree-dock`). It depends on no Navree runtime crate.
 - **The app's binary** owns runtime commands (`serve`, `migrate`,
-  `queue:work`, ...). `navree <command>` forwards anything that isn't `new`,
-  `make:*`, `dev` or `dock*` as `cargo run --quiet -- <command>`. In
+  `queue:work`, ...). `navree <command>` forwards anything the CLI doesn't
+  own (`new`, `make:*`, `dev`, `check`, `gate`, `dock*`, the Harbor commands,
+  `mcp`, `skills:install`, `browser:install`, `openapi:client`) as
+  `cargo run --quiet -- <command>`. In
   production, run the binary itself: `./my-app migrate`. When the app has
   a `dock.toml`, `navree dev` and forwarded commands get its services'
   settings as environment variables.
@@ -38,10 +40,11 @@ hint with the line to add. Keep the markers:
 | `navree make:module posts --crud` | the same with five JSON routes (`#[can]` on `Post`), DTOs with `changed_fields`, a `#[model(subject)]` model, owner-based tests | same |
 | `make:controller posts admin` | `controllers/admin.rs`, `AdminController` at `/api/v1/admin` | the controller in `wire` |
 | `make:service posts pricing` | `services/pricing.rs`, `PricingService` | `m.provider::<..>()` in `wire` |
-| `make:model posts Tag` | `models/tag.rs`, an ORM model (table `tags`: id, name, timestamps); `--migration`, `--factory`, `--seeder`, `--controller`, `--policy`, or `--all`, add companions that refer to each other (see `navree-orm`) | `m.model::<..>()` in `wire` (and each companion's registration) |
+| `make:model posts Tag` | `models/tag.rs`, an ORM model (table `tags`: id, name, timestamps); `--migration`, `--factory`, `--seeder`, `--controller`, `--policy`, or `--all`, add companions that refer to each other; `--pivot` makes the table of a many-to-many (`post_tag`) (see `navree-orm`) | `m.model::<..>()` in `wire` (and each companion's registration) |
 | `make:factory posts tag` | `factories/tag.rs`, a model factory (`--model <model>` when the names differ) | nothing; link it with `#[model(factory = ..)]` |
 | `make:seeder posts demo_data` | `seeders/demo_data.rs`, `DemoDataSeeder` named `demo_data` | `seeder::<..>` in `wire` |
 | `make:entity posts tag` | `entities/tag.rs`, an ORM model (table `tags`: id, timestamps; `make:model` without companions) | nothing; prints the `make:migration` to run |
+| `make:resource posts Tag` | `resources/tag.rs`, a Helm resource with a field per column of `models/tag.rs` (made by `make:model`; see `navree-helm`) | `pub mod resources;` and `navree::helm::ModuleBuilderHelmExt::resource::<..>(m)` in `wire` |
 | `make:migration posts create_tags_table` | `migrations/m<timestamp>_create_tags_table.rs` (CREATE TABLE when named `create_<table>_table`, else empty up/down) | adds it to the module's `MigrationSet` (creating the set and `m.migrations(..)` if needed) |
 | `make:job posts publish_post` | `jobs/publish_post.rs`, job `posts.publish_post` | `m.job::<..>()` in `wire` |
 | `make:event posts post_published` | `events/post_published.rs`, event `posts.post_published` | nothing |
@@ -69,9 +72,10 @@ navree dev                               # build, serve, rebuild + restart on ch
 navree dev --no-web -- --addr 0.0.0.0:8080
 ```
 
-Watches `src/`, `config/`, `migrations/`, `Cargo.toml`, `.env`, `build.rs`;
+Watches `src/`, `config/`, `migrations/`, `crates/`, `Cargo.toml`, `.env`, `build.rs`;
 keeps the last good build serving when a build fails; starts `web/`'s dev
-server too (pnpm, yarn or npm by lockfile).
+server too (pnpm, yarn or npm by lockfile, else by the `packageManager`
+field of `web/package.json`).
 
 ## App commands
 
@@ -141,8 +145,8 @@ async fn clear(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
   that doesn't exist.
 - `CamelCase` or singular module names (`navree make:module Post`): use `posts`.
 - Running `navree help` to list app commands (use `navree list`).
-- `navree new` writes `navree = "0.1.0"` when it can't find a checkout:
-  pass `--navree-path`.
+- `navree new` writes `navree = "0.2.0"` (the CLI's own version) when it
+  can't find a checkout: pass `--navree-path`.
 
 ## Docs
 

@@ -263,12 +263,12 @@ fn plain_postgres_mysql_and_sqlite_are_options() {
 
 #[test]
 fn a_published_navree_takes_the_driver_feature_too() {
-    let source = NavreeSource::Version("0.1.0".to_owned());
+    let source = NavreeSource::Version("0.2.0".to_owned());
     assert_eq!(
         source.dependency_with_features(&["postgres"]),
-        r#"{ version = "0.1.0", features = ["postgres"] }"#
+        r#"{ version = "0.2.0", features = ["postgres"] }"#
     );
-    assert_eq!(source.dependency_with_features(&[]), r#""0.1.0""#);
+    assert_eq!(source.dependency_with_features(&[]), r#""0.2.0""#);
     let path = NavreeSource::Path(PathBuf::from("/opt/navree/crates/navree"));
     assert_eq!(
         path.dependency_with_features(&["mysql"]),
@@ -464,8 +464,8 @@ fn agents_md_describes_the_conventions_and_claude_md_imports_it() {
 
 #[test]
 fn a_published_navree_is_a_version_requirement() {
-    let source = NavreeSource::Version("0.1.0".to_owned());
-    assert_eq!(source.dependency(), r#""0.1.0""#);
+    let source = NavreeSource::Version("0.2.0".to_owned());
+    assert_eq!(source.dependency(), r#""0.2.0""#);
     let windows = NavreeSource::Path(PathBuf::from(r"C:\src\navree\crates\navree"));
     assert_eq!(
         windows.dependency(),

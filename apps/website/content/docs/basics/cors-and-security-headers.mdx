@@ -47,7 +47,7 @@ and every actual response, errors included, gets:
 ```http
 access-control-allow-origin: https://app.example.com
 access-control-allow-credentials: true
-access-control-expose-headers: x-request-id,etag,location,retry-after,content-disposition
+access-control-expose-headers: x-request-id,etag,location,retry-after,content-disposition,x-navree-demo
 vary: Origin
 ```
 
@@ -55,7 +55,7 @@ vary: Origin
 - **Credentials** (cookies, `Authorization`) are allowed, so `fetch(url, { credentials: "include" })` works.
 - **Methods**: `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE` and `OPTIONS`.
 - **Request headers**: the thirteen listed above, explicitly, since browsers don't accept a wildcard together with credentials. They cover bearer tokens, JSON bodies, conditional requests, tracing, request ids, the CSRF headers and the Pusher socket id.
-- **Exposed headers**: `X-Request-Id`, `ETag`, `Location`, `Retry-After` and `Content-Disposition` are readable from JavaScript.
+- **Exposed headers**: `X-Request-Id`, `ETag`, `Location`, `Retry-After`, `Content-Disposition` and `X-Navree-Demo` (set on responses about a [demo workspace](/docs/workspaces/demo-workspaces/)) are readable from JavaScript.
 - **Preflight caching**: browsers may reuse a preflight answer for 600 seconds.
 
 The protocol, exactly:

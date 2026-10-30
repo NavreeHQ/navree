@@ -243,6 +243,7 @@ A new name is trimmed and must not be empty. A new **email address** needs more 
 
   A wrong password is `current_password is incorrect`, and wrong passwords count towards the [login throttle](/docs/security/authentication/#the-login-throttle) of that account and address (429 once it is used up).
 - The address must be free: `400 email has already been taken` otherwise.
+- The [sign-in policies](/docs/security/authentication/#sign-in-policies) must allow a password for the old address and for the new one, once the current password checks out. An account of a domain that enforces [single sign-on](/docs/security/single-sign-on/#enforcement) can't leave it, and no account can take an address of such a domain: the answer is `403 sso_required` and nothing changes.
 - The new address is unverified until the user follows the verification link mailed to it.
 - The old address gets a notice ("Your email address was changed"), so a takeover doesn't go unnoticed.
 - A pending password reset for the old address is cancelled.
@@ -270,7 +271,7 @@ Content-Type: application/json
 
 Changing the password revokes every refresh token of the account and returns a **new token pair** for the caller, so this device stays signed in and every other session ends. Store the new tokens; the CRM's BFF swaps its cookies for them. The access tokens of other devices keep working until they expire.
 
-`current_password` is checked like a login: a wrong one is a 400 (`current_password is incorrect`) and counts towards the login throttle. The new password must meet the password policy, and a pending password reset is cancelled.
+`current_password` is checked like a login: a wrong one is a 400 (`current_password is incorrect`) and counts towards the login throttle. The new password must meet the password policy, and a pending password reset is cancelled. An account that a [sign-in policy](/docs/security/authentication/#sign-in-policies) keeps off passwords (single sign-on enforced for its domain, say) gets the policy's refusal, such as `403 sso_required`, before anything is checked or changed.
 
 ## Two-factor authentication
 

@@ -29,16 +29,18 @@ Paths are full paths: the API prefix and version included (`/api/v1/deals`), wit
 | `.form(&value)` | A form body (`application/x-www-form-urlencoded`). |
 | `.query(&value)` | Appends form-encoded parameters to the query string: `.query(&[("per_page", "10")])`. |
 | `.header(name, value)` | Sets a header, replacing a default. |
+| `.without_header(name)` | Leaves a header out, a default (`Accept`, `Origin`) or one set earlier; a later `.header` with the same name sends it again. Clients that aren't browsers (a webhook sender, an MCP client) send no `Origin`. |
 | `.bearer(token)` | `Authorization: Bearer <token>`. |
 | `.body(bytes)` | A raw body; set its `Content-Type` with `.header`. |
 | `.send().await` | Runs the request and returns a `TestResponse`. |
+| `.send_stream().await` | Runs the request and returns the `http::Response<Body>` with its body unread, for streams such as server-sent events (read it with `http_body_util::BodyExt`). |
 
 Every request is sent as a browser-less API client would send it, with a few defaults:
 
 - `Accept: application/json`, and `Origin` set to the first of the app's allowed CORS origins (when it has any). A header you set yourself wins.
 - The client's address is `127.0.0.1`. That is what the per-IP rate limit sees, and its default is 600 requests a minute, so tests that send many requests turn it off with `.config("http.per_ip_rate_limit", serde_json::Value::Null)`.
 - Redirects are returned, not followed.
-- The whole response body is read before `send` returns, so a test can't read an endless stream such as server-sent events.
+- The whole response body is read before `send` returns, so an endless stream such as server-sent events needs `send_stream` instead.
 
 ## Acting as a user
 

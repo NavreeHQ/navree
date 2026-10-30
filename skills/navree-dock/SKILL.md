@@ -15,7 +15,8 @@ the app's code changes.
 A new app runs on TimescaleDB: `navree new` writes a `dock.toml` with
 `[services.postgres]` and the matching `database.url`, so `navree dock up`
 is the first command in a new app (apps made with `--database sqlite` need
-no services). Add more services when the app uses search, a broker, object
+no services, and `--database mysql` writes no `dock.toml`: Dock does not run
+MySQL). Add more services when the app uses search, a broker, object
 storage or a real mail inbox.
 
 ## Steps
@@ -140,7 +141,8 @@ PostgreSQL, or to another major version, needs an empty volume:
 ## Tests on TimescaleDB
 
 `TestApp` reads neither `.env` nor the environment, so tests run on SQLite
-(hypertables become regular tables). For a test that needs TimescaleDB
+(a new app turns the `sqlite` feature on in its `[dev-dependencies]` for
+this; hypertables become regular tables). For a test that needs TimescaleDB
 (`first`/`last`, month buckets, continuous aggregates), pass the URL
 yourself and skip when there is none:
 

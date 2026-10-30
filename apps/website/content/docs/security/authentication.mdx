@@ -16,7 +16,7 @@ A browser app shouldn't hold the tokens in JavaScript at all. The [BFF pattern](
 
 ## Setting up
 
-<Badge feature="auth" /> The `auth` feature of the `navree` facade (part of the default `full` feature) brings `navree-auth` and the crates it builds on: `crypto`, `db`, `http`, `validation`, `cache`, `mail`, `access` and `http-client`. Add `AuthModule` to your app root with the modules it needs:
+<Badge feature="auth" /> The `auth` feature of the `navree` facade (part of the default `full` feature) brings `navree-auth` and the crates it builds on: `crypto`, `db`, `orm`, `http`, `validation`, `cache`, `mail`, `access` and `http-client`. Add `AuthModule` to your app root with the modules it needs:
 
 ```rust title="src/main.rs"
 use navree::prelude::*;
@@ -258,6 +258,7 @@ Access tokens are JWTs signed with HS256 (HMAC-SHA-256), written and read by [`n
 | `sid` | The [session](/docs/security/sessions/) (refresh-token family) |
 | `auth_time` | When the user last signed in or [confirmed](/docs/security/sessions/#confirming-the-password-or-a-code), in Unix seconds |
 | `act` | For an [impersonation](/docs/security/impersonation/) session, `{"sub": <the impersonator's id>}` (RFC 8693) |
+| `sign_in` | On challenge tokens only (a [two-factor](/docs/security/account-flows/#signing-in-with-a-second-factor) or a platform sign-in): how the user signed in (`{"method": "password"}`, `{"method": "social", "provider": "github"}`, ...), so the second step asks the [sign-in policies](#sign-in-policies) about the same method |
 
 | `typ` | |
 |---|---|
@@ -277,8 +278,6 @@ When it verifies a token, `JwtService` accepts only HS256 and checks, in this or
 - the token type, so a challenge token never works as an access token;
 - `iat`, which can't be more than 30 seconds ahead of the app's `dyn Clock`;
 - the expiry, last, with 30 seconds of leeway (`navree::auth::LEEWAY_SECS`). An expired token is `401 Token expired`, and only a token that is valid in every other way gets that answer.
-
-The algorithm, the claims and the leeway are the ones earlier releases used, so tokens issued before an upgrade keep verifying until they expire. Only the order of the header's two members changed: `alg` now comes first.
 
 Access tokens are stateless. Nothing revokes one before it expires: not a logout, not a password change. Keep `auth.jwt.access_ttl_secs` short; refresh tokens are the part that gets revoked.
 
@@ -1038,7 +1037,7 @@ async fn offboard(auth: &AuthService) -> Result<(), navree::auth::AuthError> {
 
 Modules that issue credentials take part by registering a `CredentialRevoker` (`navree::contracts::CredentialRevoker`, with `m.credential_revoker::<R>()` from `ModuleBuilderRevocationExt`); `navree-oauth` registers one, so `navree-auth` and [single sign-on](/docs/security/single-sign-on/#offboarding) don't depend on it. Your own module can end its API keys or invitations the same way: `revoke_for_users(&[Uuid])` returns the count of each kind it ended. Every revoker runs even when one fails; the first failure comes back as `AuthError::Revocation { module, .. }` after the others finish, and the call can be repeated. The call is audited as `auth.credentials_revoked`.
 
-Access tokens of `navree-auth` are signed and stateless: one a client already holds works until it expires (`auth.access_ttl_secs`, 15 minutes by default) but cannot be refreshed. OAuth access tokens and personal access tokens are looked up on every request and stop at once (other instances that cache lookups, `oauth.token_cache_secs`, may take up to that long). The scan that finds a domain's users reads every user's email in pages: it suits an offboarding, not a request.
+Access tokens of `navree-auth` are signed and stateless: one a client already holds works until it expires (`auth.jwt.access_ttl_secs`, 15 minutes by default) but cannot be refreshed. OAuth access tokens and personal access tokens are looked up on every request and stop at once (other instances that cache lookups, `oauth.token_cache_secs`, may take up to that long). The scan that finds a domain's users reads every user's email in pages: it suits an offboarding, not a request.
 
 ## Limits
 

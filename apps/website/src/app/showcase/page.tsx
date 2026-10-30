@@ -102,13 +102,12 @@ export default function ShowcasePage() {
               <h2 className="font-display text-display-sm font-semibold text-fg">Start from the same code</h2>
               <p className="mt-3 max-w-xl text-[0.9375rem] leading-relaxed text-pretty text-fg-2">
                 The SaaS starter kit is built from the CRM&apos;s patterns: sign-in, workspaces, billing, an admin panel
-                and a backend-for-frontend, on Next.js or Nuxt.
+                and a backend-for-frontend on Next.js. The CRM&apos;s Nuxt app shows the same contract on Nuxt.
               </p>
             </div>
             <div>
               <div className="grid gap-2">
-                <CommandLine command="navree new acme --kit saas --ui next" />
-                <CommandLine command="navree new acme --kit saas --ui nuxt" />
+                <CommandLine command="navree new acme --kit saas" />
               </div>
               <ArrowLink href="/docs/getting-started/starter-kits/" className="mt-6">
                 Read about the starter kits

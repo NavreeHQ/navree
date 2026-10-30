@@ -12,10 +12,10 @@
 /// `social_accounts`: provider accounts linked to users.
 ///
 /// The module's own writes of accounts go through [`insert`], [`update`]
-/// and [`delete`]: ORM statements in a unit of work that record the same
-/// change events `navree_db::Repo` recorded (the model's `Serialize` form,
-/// so the encrypted tokens never reach an observer; an update carries only
-/// the changed fields).
+/// and [`delete`]: ORM statements in a unit of work that record a change
+/// event for each write (the model's `Serialize` form, so the encrypted
+/// tokens never reach an observer; an update carries only the changed
+/// fields).
 pub mod social_account {
     use std::fmt;
 

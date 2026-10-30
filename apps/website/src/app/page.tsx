@@ -28,8 +28,8 @@ export const metadata: Metadata = pageMetadata({
 /**
  * The homepage, top to bottom: what Navree is, what every app gets, the
  * code, the reference CRM built with it, the shapes of system it builds, workspaces, AI, the ecosystem,
- * shipping, performance, the crates, and the way in. Sections owned by
- * other pages' workers (architecture, AI, ecosystem, performance) render
+ * shipping, performance, the crates, and the way in. The sections that
+ * summarize another page (architecture, AI, ecosystem, performance) render
  * their own content; each sits under a hairline divider drawn here.
  *
  * Every section below the hero is its own Suspense boundary. Nothing
@@ -83,7 +83,7 @@ export default function Home() {
 
 /**
  * One section, hydrated on its own. `divided` draws the hairline above the
- * sections other workers own.
+ * sections that summarize another page.
  */
 function Part({ children, divided }: { children: ReactNode; divided?: boolean }) {
   return <Suspense>{divided ? <div className="cv-auto border-t border-line">{children}</div> : children}</Suspense>;

@@ -162,25 +162,29 @@ on the request's own write lock ("database is locked" after 5 s).
 ## Outside a request
 
 ```rust
-// A command or job: a new unit of work that commits on Ok, rolls back on Err.
+// A command or job: open a unit of work, run the work in its scope, then
+// commit or roll back. The actor is who the audit log records.
 let db = ctx.get::<Db>().await?;               // in a job: ctx.app.get::<Db>()
-db.transaction(|uow| async move {
-    Post::query().where_(Post::PUBLISHED.eq(false)).delete(&uow).await?;
-    Ok(())
-})
-.await?;
-
-// Work done on behalf of a user (the audit log records them as the actor):
-let uow = db.uow(Some(user_id), None).await;
-let result = uow.scope(async { Post::find_or_fail(&uow, id).await }).await;
+let uow = db.uow(Some(user_id), None).await;   // None: no actor
+let result = uow
+    .scope(async {
+        let mut post = Post::find_or_fail(&uow, id).await?;
+        post.delete(&uow).await?;
+        Ok::<_, OrmError>(())
+    })
+    .await;
 match result {
-    Ok(_) => uow.commit().await?,
+    Ok(()) => uow.commit().await?,
     Err(error) => {
         uow.rollback().await?;
         return Err(error.into());
     }
 }
 ```
+
+`db.transaction(|uow| async move { .. })` is the shorter form for statement
+work: its closure returns `Result<_, DbError>` (an `OrmError` from a model
+call does not convert into it, so model work uses the form above).
 
 `uow.after_commit(move || Box::pin(async move { .. }))` runs work only after
 a successful commit (broadcasts, calls to other systems). Queued jobs, queued
@@ -226,12 +230,23 @@ test_before_acquire = false                # true: ping every checkout (one roun
 idle_timeout_secs = 600                    # 0: keep idle connections
 max_lifetime_secs = 1800                   # 0: no limit
 transaction_settings = true                # false: no navree.actor / @navree_actor per transaction
+# read_urls = ["postgres://.../replica"]   # read replicas; `sticky = true` reads from the writer after a write
+# direct_url = "postgres://.../direct"     # past a transaction-mode pooler: migrations run on it
 
 [database.mysql]                           # MySQL and MariaDB only
 strict = true                              # strict SQL mode plus ONLY_FULL_GROUP_BY (default)
 # isolation_level = "read_committed"       # the server's (REPEATABLE READ) when unset
 # modes = ["STRICT_ALL_TABLES"]            # the exact SQL mode instead of `strict`
+
+# [database.postgres]                      # search_path, timezone, application_name,
+#                                          # synchronous_commit, isolation_level, ssl_mode
+# [database.sqlite]                        # journal_mode, busy_timeout_ms, foreign_keys, synchronous, pragmas
+# [database.connections.analytics]         # a named connection (`db.connection("analytics")`), same keys
+# url = "postgres://.../analytics"
 ```
+
+`navree db:monitor` shows the connections each database has open and
+`navree db [connection]` opens its own client (`psql`, `mysql`, `sqlite3`).
 
 On MySQL the unit of work sets `@navree_actor` and `@navree_request_id`
 (cleared before commit or rollback) where PostgreSQL uses `set_config`
@@ -263,9 +278,10 @@ a `Db`, `Transaction` or `Uow`: whole chunks go on a hypertable, one
 - Forgetting `m.migrations(..)` in the module's `wire`, or the set's
   `.after([..])` for tables it references.
 - Not ordering a paginated query, or ordering by a non-unique column only.
-- Keeping a row stream (`Executor::fetch`) or a query future of a unit of
-  work in a struct or spawned task past the request: the commit fails with
-  "its transaction is still in use".
+- Keeping a row stream (`Executor::fetch`) of a unit of work in a struct or
+  spawned task past the request: the stream holds the transaction's
+  connection, so every later statement and the commit wait until it ends or
+  is dropped. Drop streams before the unit of work ends.
 - In-memory SQLite (`sqlite::memory:`): each pool connection sees a
   different database. Tests use temp files.
 - Hand-rolling soft deletes: a model does all of it with

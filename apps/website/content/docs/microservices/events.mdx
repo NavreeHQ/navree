@@ -19,7 +19,7 @@ Inject `ServiceClient` and call `emit` with the pattern and the event:
 
 ```rust title="services/deals/src/service.rs"
 use crm_contracts::deals::{DealView, DealWon, MoveDeal, Stage};
-use crm_core::entities::deal;
+use crm_core::Deal;
 use navree::prelude::*;
 use uuid::Uuid;
 
@@ -33,7 +33,7 @@ impl DealService {
         &self,
         uow: &Uow,
         me: Uuid,
-        deal: deal::Model,
+        deal: Deal,
         input: MoveDeal,
     ) -> Result<DealView> {
         let was_won = deal.stage == crm_core::Stage::Won;
@@ -229,7 +229,7 @@ cargo run -p notifications -- micro:flush                                       
 0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23  deal.won  attempts=5  2026-10-26 08:14:02  smtp refused the message
 ```
 
-`micro:retry` hands the event back to this service's handler in the process that runs the command, not to every subscriber, with its attempts starting over; an event that fails again is a new dead letter. The same operations are on the `DeadLetters` service, for an admin screen: `list()`, `find(id)`, `retry(id)` (`true` when the event was handled), `retry_all()` (how many were handled and how many failed again) and `flush()`. Each `DeadLetter` has the `id`, `pattern`, `message_id`, `headers`, `payload`, `attempts`, the last `error` and `failed_at`.
+`micro:retry` hands the event back to this service's handler in the process that runs the command, not to every subscriber, with its attempts starting over; an event that fails again is a new dead letter. The same operations are on the `DeadLetters` service, for an admin screen: `list()`, `find(id)`, `retry(id)` (`true` when the event was handled), `retry_all()` (how many were handled and how many failed again) and `flush()`. Each `DeadLetter` has the `id`, `service`, `pattern`, `handler_pattern` (the pattern of the handler that failed, such as `deal.*`), `message_id`, `headers`, `payload`, `attempts`, the last `error` and `failed_at`; `decode::<T>()` returns the payload as a `T`, or `None` when it doesn't decode.
 
 ## Idempotency and the inbox
 

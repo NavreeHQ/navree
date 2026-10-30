@@ -47,7 +47,8 @@ pub trait SubjectRecords: Subject + Send + Sync + 'static {
 
     /// The record as ability conditions see it: one member per column,
     /// UUIDs as hyphenated strings, timestamps as RFC 3339 UTC strings with
-    /// microseconds (see [`record_json`](crate::record_json)), so a record
+    /// microseconds (`navree_orm::access::record_json` for an ORM model,
+    /// [`row_json`](crate::row_json) for a navree-db record), so a record
     /// check agrees with the SQL list filter.
     fn record_json(record: &Self::Record) -> Value;
 

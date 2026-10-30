@@ -18,9 +18,12 @@
 //! - [`NotifyModule`] is global: it provides and exports [`Notifier`]
 //!   ([`NotifyOptions`], section `notify`), [`DeliveryLog`], [`OptOuts`] and
 //!   [`PushSubscriptions`], registers job `notify.send`
-//!   ([`SendNotificationJob`]) and command `notify:vapid`, and migrates
-//!   `notifications`, `notification_deliveries`, `notification_opt_outs`
-//!   and `push_subscriptions`.
+//!   ([`SendNotificationJob`]) and the commands `notify:vapid` and
+//!   `notify:release`, and migrates `notifications`,
+//!   `notification_deliveries`, `notification_opt_outs`,
+//!   `push_subscriptions`, `notification_preferences` and
+//!   `notification_deferrals` (migration set `notify`; PostgreSQL, MySQL
+//!   and SQLite).
 //! - The Slack, Teams, SMS, WhatsApp and web push channels send through a
 //!   driver per channel ([`SlackDriver`], [`TeamsDriver`], [`SmsDriver`],
 //!   [`WhatsAppDriver`], [`WebPushDriver`]): the app's own (a fake such as

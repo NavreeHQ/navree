@@ -292,7 +292,7 @@ pub(crate) fn validate_field_name(name: &str) -> Result<(), RuleError> {
 
 /// A field to build [`Conditions`] on; see [`field`].
 ///
-/// `FieldRef::new` is `const`, so entity column constants can be declared
+/// `FieldRef::new` is `const`, so column-name constants can be declared
 /// once and reused: `const AUTHOR_ID: FieldRef = FieldRef::new("author_id");`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FieldRef(Cow<'static, str>);

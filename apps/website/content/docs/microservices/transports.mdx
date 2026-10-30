@@ -195,7 +195,7 @@ max_age_hours = 168
 | Key | Default | Meaning |
 |---|---|---|
 | `micro.nats.jetstream` | `true` | Events through JetStream (at least once). `false` uses core publish-subscribe (at most once). |
-| `micro.nats.stream` | `NAVREE` | The stream that stores events. |
+| `micro.nats.stream` | `NAVREE` | The stream that stores events. Letters, digits, `_` and `-`. |
 | `micro.nats.replicas` | `1` | Stream replicas. Use 3 on a cluster. |
 | `micro.nats.max_age_hours` | `168` | How long the stream keeps events. |
 | `micro.nats.ack_wait_secs` | `30` | How long an unacknowledged event waits before redelivery. Raised to the handler's `#[timeout]` when that is longer. |
@@ -427,7 +427,7 @@ impl DeliveryActions for SqsActions {
 
 Each `Subscription` names a pattern, its kind (`PatternKind::Message` or `PatternKind::Event`), the group that shares it (`Group::Service(name)`, or `Group::Instance(id)` for [broadcast](/docs/microservices/events/#every-instance-broadcast) events), whether it is `ordered`, and its `ack_wait`. For each message it receives, the transport sends `Delivery::new(envelope, index, attempt, actions)` into the channel, where `index` is the position of the matching subscription and `actions` implements `DeliveryActions`: Navree calls `ack`, `retry_in(delay)` or `reply(envelope)` once the handler is done. The trait's other methods have defaults you override as needed: `setup` (what `micro:setup` declares), `supports_wildcards`, `is_connected` (the readiness check), `dead_letter` (the `transport` dead-letter destination) and `close`.
 
-The app finishes booting once the transport says its subscriptions are registered. A broker that drops a message nobody is subscribed to (core NATS does) loses a request that arrives before the broker has read the subscription, so such a transport overrides `listen_subscribed`, which is `listen` plus a `Subscribed` handle, and calls `subscribed.signal()` once the broker has confirmed them (the NATS transport flushes its connection first). The default signals at once and calls `listen`, which is right when the broker keeps messages for a subscriber that has not arrived yet.
+`micro:listen`, and `MicroModule::start_listener` in a test, go on once the transport says its subscriptions are registered; an in-memory transport's app waits for it at boot. A broker that drops a message nobody is subscribed to (core NATS does) loses a request that arrives before the broker has read the subscription, so such a transport overrides `listen_subscribed`, which is `listen` plus a `Subscribed` handle, and calls `subscribed.signal()` once the broker has confirmed them (the NATS transport flushes its connection first). The default signals at once and calls `listen`, which is right when the broker keeps messages for a subscriber that has not arrived yet.
 
 `navree::micro::conformance` holds the behavior every transport must have, as checks you run against yours: implement its `Harness` (which builds instances of a service and a client) and call `conformance::run(&harness)` from a test. Navree's own transports pass it. Install the transport with `Transport::custom`:
 

@@ -254,14 +254,14 @@ impl Agent for DealsAssistant {
     href: "/docs/ai/mcp-servers/",
     linkText: "MCP servers",
     file: "crates/crm-deals/src/mcp.rs",
-    code: `/// The CRM's MCP server: deals and their activity.
+    code: `/// The deals part of the CRM's MCP server.
 #[injectable]
-pub struct CrmMcp {
+pub struct DealsMcp {
     deals: Arc<DealService>,
 }
 
 #[mcp_server]
-impl CrmMcp {
+impl DealsMcp {
     /// Lists the deals the user can see, newest first. Returns at most 25.
     #[mcp_tool(read_only)]
     #[can(Read, Deal)]

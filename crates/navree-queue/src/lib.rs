@@ -20,7 +20,9 @@
 //!   contract other drivers implement.
 //! - Workers ([`Queue::work`], command `queue:work`) reserve jobs atomically
 //!   (SQLite: `UPDATE … WHERE id = (SELECT … LIMIT 1) RETURNING`;
-//!   PostgreSQL adds `FOR UPDATE SKIP LOCKED`), run each attempt within the
+//!   PostgreSQL adds `FOR UPDATE SKIP LOCKED`; MySQL, which cannot return
+//!   the rows of an `UPDATE`, locks the candidate with `SELECT … FOR UPDATE
+//!   SKIP LOCKED` in a short transaction first), run each attempt within the
 //!   job's `timeout_secs` (a panic or a timeout is a failed attempt), retry
 //!   failed attempts after [`Backoff::delay_for`](navree_contracts::Backoff::delay_for)
 //!   and move a job that used its `max_attempts` to the failed jobs

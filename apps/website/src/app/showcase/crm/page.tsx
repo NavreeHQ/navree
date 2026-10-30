@@ -67,7 +67,7 @@ const Code = ({ children }: { children: ReactNode }) => <code className="inline-
 
 const facts = [
   { value: "8", label: "CRM modules", text: "Four feature crates on one shared core" },
-  { value: "19", label: "framework modules", text: "HTTP to real time, configured once" },
+  { value: "20", label: "framework modules", text: "HTTP to real time, configured once" },
   { value: "3", label: "roles", text: "Checked on routes, in SQL and in the browser" },
   { value: "2", label: "front ends", text: "Next.js and Nuxt on one BFF contract" },
 ];
@@ -477,32 +477,39 @@ function StartYourOwn() {
         lead={
           <p>
             The SaaS starter kit is built from the CRM&apos;s patterns: an API with sign-in, workspaces, billing and an admin
-            panel, and a front end with the same BFF. Choose the front end with <Code>--ui</Code>.
+            panel, and a Next.js front end with the same BFF. The Nuxt front end is the CRM&apos;s own, on the{" "}
+            <Code>@navree/nuxt</Code> module.
           </p>
         }
         action={<ArrowLink href="/docs/getting-started/starter-kits/">Read about the starter kits</ArrowLink>}
       />
       <div className="mt-12 grid gap-3 lg:mt-16 lg:grid-cols-2">
-        {(["next", "nuxt"] as const).map((id) => {
-          const fe = frontEnds[id];
-          return (
-            <div key={id} className="flex min-w-0 flex-col rounded-2xl border border-line bg-ink-1 p-6 shadow-bezel sm:p-7">
-              <p className="font-mono text-xs tracking-[0.12em] text-fg-3 uppercase">{fe.name} front end</p>
-              <h3 className="mt-2 font-display text-display-sm font-semibold text-fg">
-                {id === "next" ? "A SaaS app on Next.js" : "A SaaS app on Nuxt"}
-              </h3>
-              <div className="mt-6 space-y-2">
-                <CommandLine command={`navree new acme --kit saas --ui ${id}`} />
-                <CommandLine command="cd acme" />
-                <CommandLine command="navree dev" />
-              </div>
-              <p className="mt-5 text-[0.9375rem] leading-relaxed text-pretty text-fg-2">
-                <Code>navree dev</Code> serves the API on :8080 and the web app on :3000. To run them apart, use{" "}
-                <Code>navree dev --no-web</Code> and <Code>pnpm dev</Code> in <Code>web/</Code>.
-              </p>
-            </div>
-          );
-        })}
+        <div className="flex min-w-0 flex-col rounded-2xl border border-line bg-ink-1 p-6 shadow-bezel sm:p-7">
+          <p className="font-mono text-xs tracking-[0.12em] text-fg-3 uppercase">{frontEnds.next.name} front end</p>
+          <h3 className="mt-2 font-display text-display-sm font-semibold text-fg">A SaaS app on Next.js</h3>
+          <div className="mt-6 space-y-2">
+            <CommandLine command="navree new acme --kit saas" />
+            <CommandLine command="cd acme" />
+            <CommandLine command="navree dev" />
+          </div>
+          <p className="mt-5 text-[0.9375rem] leading-relaxed text-pretty text-fg-2">
+            <Code>navree dev</Code> serves the API on :8080 and the web app on :3000. To run them apart, use{" "}
+            <Code>navree dev --no-web</Code> and <Code>pnpm dev</Code> in <Code>web/</Code>.
+          </p>
+        </div>
+        <div className="flex min-w-0 flex-col rounded-2xl border border-line bg-ink-1 p-6 shadow-bezel sm:p-7">
+          <p className="font-mono text-xs tracking-[0.12em] text-fg-3 uppercase">{frontEnds.nuxt.name} front end</p>
+          <h3 className="mt-2 font-display text-display-sm font-semibold text-fg">A Nuxt app on the same API</h3>
+          <p className="mt-6 text-[0.9375rem] leading-relaxed text-pretty text-fg-2">
+            Put <Code>@navree/nuxt</Code> in the modules of <Code>nuxt.config.ts</Code> and Nitro serves the same BFF contract.
+            The packages are in <Code>packages/js/</Code> of the repository, and the CRM&apos;s own Nuxt app is in{" "}
+            <Code>{frontEnds.nuxt.app}</Code>. The{" "}
+            <Link href="/docs/frontend/nuxt/" className="link">
+              Nuxt guide
+            </Link>{" "}
+            shows the setup.
+          </p>
+        </div>
       </div>
     </Section>
   );

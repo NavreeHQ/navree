@@ -39,7 +39,7 @@ It also adds `workspaces.organization_id`, the organization a workspace is attac
 
 ## Creating organizations
 
-The `Organizations` service creates organizations and attaches workspaces to them. As with the workspace services, writes take the unit of work to run in, go through the model API and emit their events once it commits:
+The `Organizations` service creates organizations and attaches workspaces to them. As with the workspace services, writes take the unit of work to run in, record their changes in it for the audit trail and emit their events once it commits:
 
 ```rust
 use navree::workspace::{NewOrganization, Organizations};

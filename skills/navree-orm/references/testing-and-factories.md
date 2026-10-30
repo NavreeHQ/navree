@@ -124,9 +124,11 @@ async fn eager_loads_are_batched(db: TestDb) -> Result<(), BoxError> {
 ```
 
 - `#[navree::test]` needs no `#[tokio::test]`. `database = "sqlite"`
-  (default), `"memory"`, `"postgres"` or `"mysql"`; real servers come from
-  `NAVREE_TEST_POSTGRES_URL` / `NAVREE_TEST_MYSQL_URL` (or
-  `target/test-databases.env`) and the test returns early without one.
+  (default), `"memory"`, `"postgres"` or `"mysql"`; the SQLite ones need the
+  `sqlite` feature of `navree` in `[dev-dependencies]` (`postgres` and
+  `mysql` their own); real servers come from `NAVREE_TEST_POSTGRES_URL` /
+  `NAVREE_TEST_MYSQL_URL` (or `target/test-databases.env`) and the test
+  returns early without one.
 - A template can boot the app on `template.url()` with
   `database.migrate_on_boot` to run the real migrations once.
 - Assertions: `assert_database_has`, `assert_database_missing`,
@@ -136,7 +138,8 @@ async fn eager_loads_are_batched(db: TestDb) -> Result<(), BoxError> {
 - Events: `ModelEventFake` in a `TestApp` (`override_value(fake.clone())`),
   then `fake.assert_fired::<Deal>(ModelEvent::Created)`.
 - Through the app: `TestApp::builder().temp_database()` migrates a fresh
-  SQLite file per test; use the assertions on `app.get::<Db>().await`.
+  SQLite file per test (the `sqlite` feature again); use the assertions on
+  `app.get::<Db>().await`.
 
 Docs: https://navree.com/docs/orm/factories/,
 https://navree.com/docs/orm/testing/

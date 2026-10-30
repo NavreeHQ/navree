@@ -197,7 +197,7 @@ The `workspace.demo` keys are described with [demo workspaces](/docs/workspaces/
 
 ## The services
 
-`WorkspaceModule` exports three services, four more for [organizations](/docs/workspaces/organizations/) (`Organizations`, `OrgMembers`, `AccessRequests`) and [partitions](/docs/workspaces/partitions/) (`Partitions`), and `DemoWorkspaces` for [demo workspaces](/docs/workspaces/demo-workspaces/). Writes take the unit of work to run in (the request's `Uow`, or one from `Db::uow` in jobs and commands), go through the model API so the [audit trail](/docs/security/audit-log/) records them, and emit their events once the unit of work commits.
+`WorkspaceModule` exports three services, four more for [organizations](/docs/workspaces/organizations/) (`Organizations`, `OrgMembers`, `AccessRequests`) and [partitions](/docs/workspaces/partitions/) (`Partitions`), and `DemoWorkspaces` for [demo workspaces](/docs/workspaces/demo-workspaces/). Writes take the unit of work to run in (the request's `Uow`, or one from `Db::uow` in jobs and commands), record their changes in it as change events that the [audit trail](/docs/security/audit-log/) reads, and emit their events once the unit of work commits.
 
 | Service | Methods |
 |---|---|
@@ -379,7 +379,7 @@ async fn members_create_deals_in_their_workspace() {
 }
 ```
 
-Each test gets its own SQLite file, so workspaces never leak between tests.
+Each test gets its own SQLite file, so workspaces never leak between tests. SQLite is an opt-in feature: a new app's `[dev-dependencies]` turn `sqlite` on for its tests (see [database tests](/docs/testing/database-tests/)).
 
 <LinkCards>
   <LinkCard href="/docs/workspaces/resolution/" title="Resolving the workspace">

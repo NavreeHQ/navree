@@ -220,8 +220,8 @@ impl DealService {
         &self,
         uow: &Uow,
         me: Uuid,
-        before: Option<&deal::Model>,
-        after: deal::Model,
+        before: Option<&Record<Deal>>,
+        mut after: Record<Deal>,
     ) -> Result<DealResource> {
         // ...
         let won =
@@ -295,7 +295,7 @@ Two more errors can come back from the bus:
 
 ### Failures of queued listeners
 
-A queued listener's failure surfaces on the worker, not in `emit`. Its job is retried like any [job](/docs/digging-deeper/queues/#retries-and-backoff), with the default `JobOptions`: queue `default`, 3 attempts, exponential backoff from 1 second capped at 5 minutes, and a 120-second timeout per attempt. These options can't be changed per listener in 0.1; when a listener needs other settings, have it dispatch a job of its own with them.
+A queued listener's failure surfaces on the worker, not in `emit`. Its job is retried like any [job](/docs/digging-deeper/queues/#retries-and-backoff), with the default `JobOptions`: queue `default`, 3 attempts, exponential backoff from 1 second capped at 5 minutes, and a 120-second timeout per attempt. These options can't be changed per listener; when a listener needs other settings, have it dispatch a job of its own with them.
 
 ## Queued listener jobs
 
@@ -397,6 +397,8 @@ async fn winning_a_deal_counts_it_and_queues_the_owner_notification() {
     app.shutdown().await.unwrap();
 }
 ```
+
+`temp_database()` gives each test its own SQLite file, so the app's tests need the `sqlite` Cargo feature (see [database tests](/docs/testing/database-tests/)).
 
 To test what a queued listener does, keep the real queue and run it: the CRM's tests change a deal over HTTP, then run every pending job with `crm.run_queue()` (which calls `Queue::run_pending`) and assert on the notifications and mail that result. See `crm-deals/tests/deals/notifications.rs` and [fakes](/docs/testing/fakes/).
 

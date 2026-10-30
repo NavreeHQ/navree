@@ -61,7 +61,7 @@ const isolation: { name: string; code: string; glyph: ReactNode; text: string }[
     name: "Row",
     code: 'isolation = "row"',
     glyph: <RowGlyph />,
-    text: "One set of tables with a workspace_id column. The repository scopes every query, and PostgreSQL row-level security enforces it in the database.",
+    text: "One set of tables with a workspace_id column. The model scopes every query to the current workspace, and PostgreSQL row-level security enforces it in the database.",
   },
   {
     name: "Schema",

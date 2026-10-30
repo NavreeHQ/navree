@@ -80,7 +80,7 @@ export function StarterKitsVisual() {
 /** Dock: `navree dock up`, as its docs print it. */
 export function DockVisual() {
   const services = [
-    { name: "postgres", image: "postgres:17", addr: "127.0.0.1:5432", ready: "2.1 s" },
+    { name: "postgres", image: "timescale/timescaledb:2.31.0-pg17", addr: "127.0.0.1:5432", ready: "2.0 s" },
     { name: "redis", image: "redis:7", addr: "127.0.0.1:6379", ready: "0.4 s" },
     { name: "mailpit", image: "axllent/mailpit:v1.31", addr: "127.0.0.1:1025", ready: "0.6 s" },
   ];

@@ -305,6 +305,7 @@ pub trait Migration: Send + Sync + 'static {
     fn up(&self, schema: &Schema<'_>) -> impl Future<Output = SchemaResult> + Send;
     fn down(&self, schema: &Schema<'_>) -> impl Future<Output = SchemaResult> + Send;
     fn within_transaction(&self) -> bool { true }
+    fn within_transaction_on_mysql(&self) -> bool { false }
 }
 ```
 
@@ -353,7 +354,7 @@ too.
 | `migrate:reset [--pretend] [--force]` | Reverts every migration, newest first |
 | `migrate:refresh [--step N] [--seed] [--force]` | Reset (or roll back N), then migrate |
 | `migrate:fresh [--seed] [--drop-views] [--drop-types] [--step] [--schema-path P] [--force]` | Drops every table (then views; PostgreSQL types with `--drop-types`, an error elsewhere checked before anything is dropped), then migrates |
-| `migrate:status [--pending]` | Every migration with its batch, or the pending ones |
+| `migrate:status [--pending] [--json]` | Every migration with its batch, or the pending ones; `--json` prints `module`, `name`, `applied`, `batch` and `applied_at` of each |
 | `schema:dump [--path P]` | Writes the schema and the `navree_migrations` rows to `{schema.dump_path}/{driver}-schema.sql` |
 
 - **Context.** Each migration runs inside a [`MigrationContext`]: its
@@ -439,7 +440,11 @@ database.
 - `Missing { message }`: a table, column or index that does not exist;
 - `Dump { message }`: a dump that could not be read or written.
 
-Inside the migrator it converts to `DbErr::Migration` with the same text.
+Inside the migrator a failing migration is reported as
+`navree_db::MigrationError::Failed { migration, source }`, with the
+`SchemaError` as its source; on navree-db's connections a `Database` error's
+source is the `navree_db::DbError`, which can be downcast to read its kind
+and code.
 
 ## 9. Testing
 
@@ -488,10 +493,9 @@ Inside the migrator it converts to `DbErr::Migration` with the same text.
   TimescaleDB cannot turn back into a plain table in place. Their prune
   commands go through `navree_db::prune_time_series`. The facade's
   `time_series` suite checks all of it on real TimescaleDB and MySQL
-  servers. Every framework migration is a schema migration; the ones that
-  create the framework's tables kept their names and spell out the column
-  types the databases already have (unbounded `varchar` on PostgreSQL,
-  `binary(16)` UUIDs on MySQL where they were), so new databases get the
-  same columns as the ones already migrated, and those find nothing
-  pending (the facade's `production_migrations` suite checks the
-  upgrade).
+  servers. Every framework migration is a schema migration with a stable name;
+  the ones that create the framework's tables spell out their column types
+  (unbounded `varchar` on PostgreSQL, `binary(16)` UUIDs on MySQL), so a new
+  database gets the same columns as one migrated by an earlier release, and
+  that one finds nothing pending (the facade's `production_migrations`
+  suite checks the upgrade).

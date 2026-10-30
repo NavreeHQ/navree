@@ -441,7 +441,7 @@ A batch's counters change in the same transaction that finishes each of its jobs
 
 ### Faking batches
 
-[`QueueFake`](/docs/digging-deeper/queues/#faking-the-queue) records batches apart from single jobs: a batch's jobs are not in `dispatched()`.
+[`QueueFake`](/docs/digging-deeper/queues/#faking-the-queue) records batches apart from single jobs: a batch's jobs are not in `dispatched()`. The example boots the app with `temp_database()`, a SQLite file, so the app's tests need the `sqlite` feature (see [database tests](/docs/testing/database-tests/)).
 
 ```rust title="tests/import.rs"
 #[tokio::test]

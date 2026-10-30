@@ -11,8 +11,8 @@ use tokio::time::Instant;
 use crate::store::parse_integer;
 use crate::{CacheError, CacheStore};
 
-/// The most entries a [`MemoryStore`] holds unless told otherwise
-/// (`cache.memory_max_entries`).
+/// The most entries a [`MemoryStore`] holds unless built with
+/// [`MemoryStore::with_capacity`] (there is no configuration key for it).
 pub const DEFAULT_MAX_ENTRIES: usize = 1_000_000;
 
 /// An in-process [`CacheStore`]: a bounded cache with a TTL per entry.

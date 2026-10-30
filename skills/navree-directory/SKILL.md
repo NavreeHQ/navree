@@ -157,8 +157,8 @@ impl DirectorySink for RecipientSink {
   `id`/`meta`/`groups`) and read back unchanged; the normalized user is
   derived. `userName` and `externalId` unique per connection
   (case-insensitive userName) -> 409 `uniqueness`.
-- Filters: full grammar; `userName eq`, `externalId eq`, `id eq`,
-  `displayName eq` are indexed. PATCH: RFC ops plus `Replace`, `"False"`,
+- Filters: full grammar, at most 16 KiB and 32 levels deep (`invalidFilter`);
+  `userName eq`, `externalId eq`, `id eq`, `displayName eq` are indexed. PATCH: RFC ops plus `Replace`, `"False"`,
   path keys in path-less values, `remove members` with a value list,
   add/replace through a filter that matches nothing.
 - Errors: SCIM shape (`invalidSyntax`, `invalidFilter`, `invalidPath`,

@@ -13,16 +13,19 @@ argument picks the job. It reads `.env` and `config/app.toml` from its
 To have all of this done for you on Ubuntu servers (provisioning, systemd
 units, Caddy with TLS, blue-green releases with health checks and
 rollbacks), load the `navree-harbor` skill and use `navree harbor:provision`
-and `navree deploy`. This skill is for running the app on your own setup.
+and `navree deploy`; a load balancer in front of Harbor's Caddy goes in
+`deploy.trusted_proxies` (Caddy keeps its `X-Forwarded-For`, and the app's
+`http.trusted_proxies` lists it after loopback). This skill is for running
+the app on your own setup.
 
 ## Steps
 
 1. Build: `cargo build --release` (binary: `target/release/<package>`).
    Build on the target platform (or cross-compile). No OpenSSL or SQLite
    library is needed at runtime (SQLite is compiled in only with the
-   `sqlite` feature). Until the crates are published, the build
-   machine needs the Navree checkout at the path in `Cargo.toml` (or point
-   the dependency at the Git repository).
+   `sqlite` feature). Until the crates are published, the machine that
+   builds the release needs the Navree checkout at the path in `Cargo.toml`
+   (or point the dependency at the Git repository).
 2. Copy to the server: the binary, `config/app.toml` and a writable
    `storage/` (plus `resources/views/` if you use template files).
 
@@ -165,6 +168,14 @@ from the environment, `APP_HTTP__ADDR=0.0.0.0:8080`. A two-stage build
 Navree checkout into the build stage while the app depends on it by path.
 
 ## The database
+
+A new app runs on TimescaleDB (`features = ["postgres"]` on `navree`): in
+production use a TimescaleDB server, or PostgreSQL with the `timescaledb`
+extension, create the extension once, and set `APP_SCHEMA__TIMESCALEDB=require`
+so a migration stops on a server without it instead of creating regular
+tables. Plain PostgreSQL works too (hypertables become regular tables).
+An app built without the driver of its `database.url` stops at boot with a
+message naming the feature to enable.
 
 SQLite (`features = ["sqlite"]` on `navree`) suits one server: WAL mode, a 5 s busy timeout; keep
 `storage/` on a persistent disk and back the file up. For several servers

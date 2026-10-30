@@ -13,6 +13,8 @@ This is what `navree new planner` writes:
 .env                  # local settings and secrets (git-ignored)
 .env.example          # the keys .env needs, committed
 .gitignore
+AGENTS.md             # conventions for coding agents
+CLAUDE.md             # imports AGENTS.md
 Cargo.toml            # the package; depends on navree
 README.md
 dock.toml             # the database navree dock up runs
@@ -44,18 +46,20 @@ tests/
 
 ### The root directory
 
-- **`Cargo.toml`** names the package and its dependencies: `navree` (with its `postgres` feature, the driver of TimescaleDB), plus `serde`, whose derive macros name their own crate, and `chrono`, `uuid` and `serde_json`. It ends with an empty `[workspace]` table, so the app is a workspace of its own; remove it to make the app a member of an enclosing workspace. The `[profile.dev]` settings keep debug builds quick to link and compile Argon2 with optimisations, which keeps password hashing bearable in development.
+- **`Cargo.toml`** names the package and its dependencies: `navree` (with the driver feature of the app's database: `postgres` for TimescaleDB and PostgreSQL, `mysql` or `sqlite`), plus `serde`, whose derive macros name their own crate, and `chrono`, `uuid` and `serde_json`. In `[dev-dependencies]`, `navree` appears again with its `sqlite` feature, because every test boots the app on a fresh SQLite file; the app itself compiles only the driver of its own database. Without `--navree-path`, `navree` is a `path` dependency on the checkout the CLI was built from, or `"0.2.0"` (the CLI's own version) when there is none. The file ends with an empty `[workspace]` table, so the app is a workspace of its own; remove it to make the app a member of an enclosing workspace. The `[profile.dev]` settings keep debug builds quick to link and compile Argon2 with optimisations, which keeps password hashing bearable in development.
+- **`.git/`** is created by `navree new` (`git init`, nothing committed) unless the app is already inside a Git repository or Git is not installed. Tools that read `.gitignore`, such as Tailwind CSS 4, need a repository.
 - **`.env`** holds this machine's settings and secrets, such as `APP_KEY`. `navree new` creates it from `.env.example`, and git ignores it. See [Configuration](/docs/getting-started/configuration/#the-env-file).
 - **`.env.example`** lists the keys `.env` needs, without secrets. Commit it.
 - **`config/app.toml`** holds the settings every environment shares: the listening address, the database URL, the log level, the mail transport and so on.
 - **`dock.toml`** lists the services [Dock](/docs/tools/dock/) runs on your machine: the app's database, TimescaleDB, whose URL `config/app.toml` names. Run `navree dock up` before the app. An app made with `--database sqlite` or `--database mysql` has none.
 - **`README.md`** lists the everyday commands.
+- **`AGENTS.md`** tells coding agents how the app is laid out, which generators to use and the conventions to follow; **`CLAUDE.md`** imports it. [Agent skills](/docs/ai/agent-skills/) adds task-by-task guidance.
 
 ### `src/`
 
 - **`main.rs`** is the binary. It calls `planner::app(ConfigSources::defaults()).run()`, which runs the command on the command line: `serve` when there is none, or `migrate`, `queue:work` and the rest. A deployed app needs only this binary and its configuration.
 - **`lib.rs`** exposes `app`, `abilities` and `modules`, so tests in `tests/` can boot exactly what `main` boots.
-- **`app.rs`** is the root module. It adds every module the app uses, each configured once: `ConfigModule`, `LoggerModule`, `CryptoModule`, `HttpModule`, `DatabaseModule`, `CacheModule`, `EventsModule`, `ViewModule`, `MailModule`, `QueueModule`, `ValidationModule`, `AuthModule`, `AccessModule`, `ApiModule`, `ObserveModule`, then the feature modules. Remove the platform modules you don't need, and add the others (`ScheduleModule`, `StorageModule`, `RealtimeModule`, `NotifyModule`, `AuditModule`, ...) when you do.
+- **`app.rs`** is the root module. It adds every module the app uses, each configured once: `ConfigModule`, `LoggerModule`, `CryptoModule`, `HttpModule`, `DatabaseModule`, `CacheModule`, `EventsModule`, `ViewModule`, `MailModule`, `QueueModule`, `ScheduleModule`, `OrmModule`, `ValidationModule`, `AuthModule`, `AccessModule`, `ApiModule`, `ObserveModule`, `LighthouseModule` and `LogbookModule`, a small `Housekeeping` module that schedules `model:prune` daily at 03:00, then the feature modules. Remove the platform modules you don't need, and add the others (`StorageModule`, `RealtimeModule`, `NotifyModule`, `AuditModule`, ...) when you do.
 - **`abilities.rs`** is the function that builds each user's access rules. It grants the permissions of the user's roles, then the rules of each module's policy. See [Authorization](/docs/security/authorization/).
 - **`modules/`** holds the feature modules, one directory each.
 
@@ -81,8 +85,12 @@ The `make:<kind>` generators add files in a directory per kind, inside the modul
 |---|---|
 | `navree make:controller tasks admin` | `controllers/admin.rs` |
 | `navree make:service tasks pricing` | `services/pricing.rs` |
-| `navree make:entity tasks draft` | `entities/draft.rs` |
+| `navree make:entity tasks draft` | `entities/draft.rs`: a bare ORM model |
+| `navree make:model tasks task --all` | `models/task.rs`, plus its migration, `factories/task.rs`, `seeders/task.rs`, `controllers/task.rs` and `policies/task.rs` (pick any with `--migration`, `--factory`, `--seeder`, `--controller`, `--policy`; `--pivot` makes the table of a many-to-many) |
 | `navree make:migration tasks add_due_date` | `migrations/m<timestamp>_add_due_date.rs` |
+| `navree make:factory tasks pinned_task --model task` | `factories/pinned_task.rs` |
+| `navree make:seeder tasks demo_tasks` | `seeders/demo_tasks.rs`, registered for `db:seed` |
+| `navree make:resource tasks task` | `resources/task.rs`: a [Helm](/docs/tools/helm/) admin-panel resource with a field for each column of `models/task.rs` (made by `make:model`) |
 | `navree make:job tasks send_digest` | `jobs/send_digest.rs` |
 | `navree make:event tasks task_completed` | `events/task_completed.rs` |
 | `navree make:listener tasks notify_owner --event task_completed` | `listeners/notify_owner.rs` |
@@ -91,6 +99,7 @@ The `make:<kind>` generators add files in a directory per kind, inside the modul
 | `navree make:policy tasks task` | `policies/task.rs` |
 | `navree make:command tasks prune_done` | `commands/prune_done.rs` |
 | `navree make:agent tasks assistant` | `agents/assistant.rs` |
+| `navree make:mcp tasks board` | `mcp/board.rs`: an MCP server with one tool |
 | `navree make:test tasks completing` | `tests/completing.rs` |
 
 Every generator also declares the new file's module and, where the item must be registered, adds the registration. [Console commands and the CLI](/docs/digging-deeper/cli/) covers each one.
@@ -157,12 +166,13 @@ The browser only talks to the Next.js server, which talks to the API. The tokens
 
 ## The framework repository
 
-Navree is developed in one repository, [NavreeHQ/navree](https://github.com/NavreeHQ/navree): the framework's crates, the CLI, the agent skills, a reference application, the performance harness and this website.
+Navree is developed in one repository, [NavreeHQ/navree](https://github.com/NavreeHQ/navree): the framework's crates, the CLI, the agent skills, reference applications, the JavaScript packages, the performance harness, the evidence harness, the fuzz targets and this website.
 
 <FileTree title="navree/">{`
-Cargo.toml            # the workspace: crates/*, apps/crm-api, apps/crm-api/crates/*
+Cargo.toml            # the workspace: crates/*, apps/crm-api, apps/crm-api/crates/*, apps/evidence-app
 Cargo.lock
 rustfmt.toml
+deny.toml             # cargo-deny: licenses, bans, advisories, sources
 crates/
   navree/             # the facade; dependency-graph and full-stack tests
   navree-kernel/      # one crate per module...
@@ -176,13 +186,22 @@ apps/
     crates/           # crm-core, crm-companies, crm-deals, crm-activities, crm-users, crm-testkit
     tests/
   crm-web/            # the CRM front end (Next.js), Vitest and Playwright
+  crm-nuxt/           # the CRM front end (Nuxt)
+  evidence-app/       # the app the evidence harness runs under load
   website/            # navree.com and these docs
+packages/js/          # @navree/client, bff, next, nuxt and theme (pnpm workspace)
 skills/               # the agent skills, one SKILL.md per directory
 bench/                # the performance harness: SPEC.md, the load runner, results
+e2e/                  # the evidence harness: Docker Compose, k6 scenarios, checks
+fuzz/                 # fuzz targets for the parsers of untrusted input (its own workspace)
+supply-chain/         # cargo-vet audits and imports
+scripts/              # development scripts
 assets/               # the logo
 deploy/               # scripts that deploy navree.com
+.github/              # CI workflows, Dependabot and code owners
+.semgrep/             # Semgrep rules specific to Navree
 `}</FileTree>
 
 Each framework crate has the usual `src/`, and most keep their integration tests in one binary under `tests/<name>/`, such as `crates/navree-config/tests/config/main.rs`. `crates/navree-cli/templates/` holds the templates behind `navree new` and the generators, so it is the reference for what a new app contains.
 
-The crates form eight layers, from the kernel up to the facade and the CLI, and a test checks every dependency between them against the allowed edges. [The crate hierarchy](/docs/architecture/crate-hierarchy/) explains them, and [Contributing](/docs/prologue/contributing/) explains how to build and test the repository.
+The crates form nine layers (L0 to L8), from the kernel up to the facade and the CLI, and a test checks every dependency between them against the allowed edges. [The crate hierarchy](/docs/architecture/crate-hierarchy/) explains them, and [Contributing](/docs/prologue/contributing/) explains how to build and test the repository.

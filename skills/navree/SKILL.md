@@ -134,6 +134,7 @@ navree list                                 # every command of the app
 | Provisioning Ubuntu servers and zero-downtime deploys, rollbacks, deploy secrets, container images, push-to-deploy (`harbor.toml`, `navree deploy`) | `navree-harbor` |
 | Sign in with Google, GitHub, Apple, Microsoft or an OpenID Connect provider | `navree-social` |
 | A customer's company identity provider (Okta, Entra ID, Google Workspace, AD FS) per organization or workspace: SAML or OpenID Connect, verified domains, forcing SSO, provisioning members | `navree-sso` |
+| Letting third-party apps, CLIs, devices or AI clients act for your users: an OAuth 2.1 and OpenID Connect provider, consent screens, device codes, client credentials, personal access tokens | `navree-oauth` |
 | Sending webhooks to customers' URLs, receiving Stripe, GitHub, Paddle or other signed webhooks | `navree-webhooks` |
 | Connecting a customer's Microsoft 365, Google Workspace, Slack, an OAuth API or an API key to their workspace or organization; calling Graph, the Google Admin SDK or Slack on a tenant's behalf; least-privilege scopes, token refresh, unhealthy connections | `navree-integrations` |
 | Provisioning a customer's employees: SCIM from Entra ID or Okta, syncing from Microsoft Graph, Google Workspace, Okta, LDAP or Active Directory into your own model; dry runs, held runs, deactivating leavers | `navree-directory` |
@@ -179,7 +180,9 @@ navree list                                 # every command of the app
 
 ## More
 
-- `references/crates.md`: every facade module, its crate, its module type
-  and its configuration section.
+- `references/crates.md`: the core facade modules, their crates, module
+  types and configuration sections, and the root a new app gets. The other
+  modules (workspaces, billing, search, ...) are in the skill named in the
+  table above.
 - Docs: https://navree.com/docs/ (as text for models: https://navree.com/llms.txt).
 - The reference app: `apps/crm-api` in https://github.com/NavreeHQ/navree.

@@ -32,7 +32,7 @@ export function Manifest({ className }: { className?: string }) {
       <div className="bezel-core @container">
         <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
           <span className="font-mono text-xs tracking-[0.14em] text-fg-2 uppercase">Manifest</span>
-          <span className="font-mono text-xs text-fg-3">navree 0.1 · {site.license}</span>
+          <span className="font-mono text-xs text-fg-3">navree 0.2 · {site.license}</span>
         </div>
         <table className="w-full border-collapse text-left">
           <caption className="sr-only">Some of what comes with Navree, where it lives in your app, and whether it is included</caption>

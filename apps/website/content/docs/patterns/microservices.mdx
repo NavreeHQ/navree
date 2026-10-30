@@ -271,7 +271,7 @@ In a [multi-tenant](/docs/patterns/multi-tenancy/) app, the current workspace tr
 
 ## Tracing across services
 
-Every message carries the request id and the OpenTelemetry trace context. A request to `crm-api` that sends `deals.get`, which emits `deal.won`, which the notifications service handles, is one trace in your tracing backend, with a span per hop and the time spent in the broker. Logs carry the same request id in every service. See [Distributed tracing](/docs/microservices/tracing/).
+Every message carries the request id and the OpenTelemetry trace context. A request to `crm-api` that sends `deals.get`, which emits `deal.won`, which the notifications service handles, is one trace in your tracing backend: each service continues the trace its message carried, so its queries, jobs and mail are spans of the same trace. Logs carry the same request id in every service. See [Distributed tracing](/docs/microservices/tracing/).
 
 ## gRPC between services
 

@@ -76,12 +76,11 @@ Any [event](/docs/digging-deeper/events/) can be a webhook. Implement `WebhookEv
 use navree::BoxFuture;
 use navree::prelude::*;
 use navree::webhooks::{WebhookContext, WebhookEvent};
-use navree::orm::prelude::*;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use super::entities::deal;
 use super::events::DealWon;
+use super::model::Deal;
 
 impl WebhookEvent for DealWon {
     const DESCRIPTION: &'static str = "A deal moved to won.";
@@ -94,7 +93,7 @@ impl WebhookEvent for DealWon {
     /// What goes in `data`: the deal as the API shows it.
     fn payload<'a>(&'a self, ctx: &'a WebhookContext) -> BoxFuture<'a, Result<Value, BoxError>> {
         Box::pin(async move {
-            let deal = deal::Model::find(ctx.db(), self.deal_id).await?;
+            let deal = Deal::find(ctx.db(), self.deal_id).await?;
             Ok(json!({ "deal": deal, "won_by": self.won_by }))
         })
     }

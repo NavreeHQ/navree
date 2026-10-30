@@ -57,6 +57,7 @@ conventions, and says which skill to load for each task.
 | [`navree-harbor`](navree-harbor/SKILL.md) | Provision Ubuntu servers and ship zero-downtime releases with `navree deploy`: `harbor.toml`, secrets, rollbacks, several servers, `build:image`, GitHub Actions |
 | [`navree-social`](navree-social/SKILL.md) | Sign in with Google, GitHub, Apple and other providers; linked accounts |
 | [`navree-sso`](navree-sso/SKILL.md) | SAML 2.0 and OpenID Connect single sign-on per organization or workspace, verified domains, provisioning |
+| [`navree-oauth`](navree-oauth/SKILL.md) | An OAuth 2.1 and OpenID Connect provider: clients, authorization code with PKCE and consent, client credentials, device and refresh grants, scopes mapped to permissions, personal access tokens, introspection and revocation (feature `oauth`) |
 | [`navree-webhooks`](navree-webhooks/SKILL.md) | Signed outgoing webhooks with retries, and verified incoming ones |
 | [`navree-integrations`](navree-integrations/SKILL.md) | Workspace and organization connections to Microsoft 365, Google Workspace, Slack, OAuth 2.0 APIs and API keys: consent flows, service accounts, scope sets, typed clients, health checks, `IntegrationsFake` (feature `integrations`) |
 | [`navree-directory`](navree-directory/SKILL.md) | Directory sync: a SCIM 2.0 server for identity providers, pull connections to Microsoft Graph, Google Workspace, Okta, LDAP and Active Directory, `DirectorySink`, runs with dry runs and a deactivation limit, `DirectoryFake` (feature `directory`) |

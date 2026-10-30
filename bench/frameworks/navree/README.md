@@ -7,7 +7,7 @@ error format and pagination.
 
 | | |
 |---|---|
-| Framework | Navree 0.1.0 from this repository (`crates/navree`, a path dependency; features `auth`, `log`, `orm`, `postgres`) |
+| Framework | Navree 0.2.0 from this repository (`crates/navree`, a path dependency; features `auth`, `log`, `orm`, `postgres`) |
 | Runtime | Rust 1.99.1 (`rust:1-bookworm` build stage, `debian:bookworm-slim` runtime); release profile `opt-level = 3`, `lto = "thin"`, `codegen-units = 1` |
 | HTTP | navree-http on Axum 0.8.9, hyper 1.12.0, tower-http 0.7.1 |
 | Workers | One process. `AppBuilder::run` builds Tokio's (1.54.1) default multi-thread runtime: one worker per CPU, 8 under the benchmark's cpuset. The `serve` command runs `axum::serve` on `0.0.0.0:8080` |

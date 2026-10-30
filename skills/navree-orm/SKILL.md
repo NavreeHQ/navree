@@ -294,10 +294,11 @@ navree model:prune           # deletes what prunable models select
 - `use navree::prelude::*;` alone for `#[relations]` or `#[scopes]`: they
   come from `navree::orm::prelude`.
 - Calling a scope without importing its trait (`DealScopes`).
-- Passing the pool (`db.pool()`) or a `Transaction` from `db.begin()` in a
-  request: its writes skip the unit of work, so they neither roll back with
-  the request nor reach the audit log. Pass `&uow`, or `&db`, which joins
-  the request's unit of work.
+- Running statements on the pool (`db.pool()`) or on a `Transaction` from
+  `db.begin()` in a request: their writes skip the unit of work, so they
+  neither roll back with the request nor reach the audit log. ORM methods
+  take `&uow` or `&db` (which joins the request's unit of work), and raw
+  statements should too.
 - Lazy loads in a loop (N+1): eager load with `with`.
 - `latest()` on a model without `timestamps`: use `latest_by(column)`.
 - Mass updates and deletes (`query.update`, `query.delete`, bulk inserts)

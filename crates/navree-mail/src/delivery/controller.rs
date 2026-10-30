@@ -246,7 +246,9 @@ impl Controller for MailController {
 }
 
 impl MailController {
-    /// Records provider events; errors are logged, the provider gets 204.
+    /// Records provider events and answers 204. A failure is returned as the
+    /// response (a 500 for most store errors), so the provider delivers the
+    /// events again.
     async fn ingest(&self, events: Vec<ProviderEvent>) -> Result<NoContent, AppError> {
         self.deliveries.record_all(events).await?;
         Ok(NoContent)

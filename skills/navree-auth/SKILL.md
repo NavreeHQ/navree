@@ -190,7 +190,7 @@ subscriptions of navree-auth, then asks every `dyn CredentialRevoker`
 refresh tokens, unexchanged codes, remembered consent). It returns
 `CredentialsRevoked { users, by_kind }` (`revoked("personal_access_tokens")`,
 `total()`) and audits `auth.credentials_revoked`. The domain is read like
-`attempt.domain()`. Access JWTs already issued live out `auth.access_ttl_secs`
+`attempt.domain()`. Access JWTs already issued live out `auth.jwt.access_ttl_secs`
 (15 minutes) but can't be refreshed. Your module can take part:
 `m.credential_revoker::<R>()` (`navree::contracts::ModuleBuilderRevocationExt`)
 with `R: CredentialRevoker` and `revoke_for_users(&[Uuid])`. A failing revoker

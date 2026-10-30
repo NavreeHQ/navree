@@ -99,7 +99,7 @@ On the way out, this layer writes one log line per request (target `navree::requ
 ### Security headers and compression
 
 - **Security headers** (`http.security_headers`, on by default) adds `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Strict-Transport-Security: max-age=31536000; includeSubDomains` and a `Content-Security-Policy` of `default-src 'none'; frame-ancestors 'none'; base-uri 'none'` to every response that doesn't set them itself.
-- **Compression** (`http.compression`, on by default) compresses responses with gzip when the client accepts them. Server-sent events (`text/event-stream`) aren't compressed.
+- **Compression** (`http.compression`, on by default) compresses responses with gzip when the client accepts them. Brotli isn't built in. Server-sent events (`text/event-stream`) aren't compressed.
 
 ### Error rendering
 
@@ -114,7 +114,7 @@ Handlers, extractors, guards and inner layers return `AppError`s; this layer tur
 ### Maintenance mode, rate limit, body limit
 
 - **Maintenance mode.** While the file `http.maintenance_file` (default `storage/framework/down`) exists, every request gets a 503, except the paths in `http.maintenance_except` (default `/health/live`, `/health/ready` and `/metrics`). The `down` and `up` commands create and remove the file; the layer looks at it at most once a second. See [maintenance mode](/docs/digging-deeper/maintenance-mode/).
-- **Per-IP rate limit.** Each client IP may send `http.per_ip_rate_limit` requests per minute (600 by default). Over the limit, the answer is a 429 with `Retry-After`. See [rate limiting](/docs/basics/rate-limiting/), which also shows how to turn it off.
+- **Per-IP rate limit.** Each client IP may send `http.per_ip_rate_limit` requests per minute (600 by default). An IPv6 client is counted by network: the first `http.rate_limit_ipv6_prefix` bits of its address (64 by default, a /64), so a client cannot get a fresh budget by changing the low bits of its address. Over the limit, the answer is a 429 with `Retry-After`. See [rate limiting](/docs/basics/rate-limiting/), which also shows how to turn it off.
 - **Body limit.** Body extractors (`Json`, `Form`, `String`, `Bytes`) read at most `http.body_limit_bytes` (2 MiB by default); more is a 413.
 
 ### Session, authentication and the unit of work
@@ -146,7 +146,7 @@ A route that isn't `#[public]` needs a principal. Without one, the request gets 
 </Step>
 <Step title="Throttle">
 
-A route with `#[throttle(limit = 10, per = "1m")]` counts requests per user (per client IP for guests). Over the limit: 429 with `Retry-After`.
+A route with `#[throttle(limit = 10, per = "1m")]` counts requests per user (per client IP for guests, an IPv6 client by its network as above). Over the limit: 429 with `Retry-After`.
 
 </Step>
 <Step title="Guards">

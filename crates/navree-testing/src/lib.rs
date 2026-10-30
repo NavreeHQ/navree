@@ -5,9 +5,11 @@
 //! - [`TestApp`] boots an app for one test. [`TestApp::builder`] assembles
 //!   it from modules, with hermetic configuration
 //!   ([`TestAppBuilder::config`]), a private SQLite database
-//!   ([`TestAppBuilder::temp_database`]) and provider overrides;
-//!   [`TestApp::from_builder`] boots an app root built elsewhere (for
-//!   example `crm_api::app(sources)`).
+//!   ([`TestAppBuilder::temp_database`]; navree-db's `sqlite` feature must
+//!   be on in the test build), provider overrides and values that live as
+//!   long as the app ([`TestAppBuilder::hold`]); [`TestApp::from_builder`]
+//!   boots an app root built elsewhere (for example
+//!   `crm_api::app(sources)`).
 //! - [`TestClient`] sends requests in-process through the app's full router
 //!   (request id, CORS, session, authentication, unit of work, ...), with a
 //!   cookie jar, `Accept: application/json`, the app's first CORS origin as
@@ -18,7 +20,10 @@
 //! - [`TestAuthenticator`] and [`TestApp::acting_as`] authenticate requests
 //!   as any `Principal` ([`principal`] builds a plain test user).
 //! - [`temp_sqlite_url`], [`TempDirGuard`] and [`FixedClock`] provide
-//!   databases and controllable time.
+//!   databases and controllable time. Every test folder is named
+//!   `navree-test-<random>` under the system temporary directory; folders
+//!   that cannot be deleted at once (an open database file on Windows) are
+//!   retried in the background and swept by later runs.
 //! - [`TestApp::isolation_suite`] generates cross-tenant tests from a
 //!   module's route table: from one tenant, another tenant's records are a
 //!   404, are not listed and cannot be created into ([`Tenancy`] creates the

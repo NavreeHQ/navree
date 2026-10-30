@@ -119,7 +119,7 @@ can run again (check `has_table` or `has_column` first).
 | Command | Does |
 |---|---|
 | `navree migrate [--step] [--pretend] [--seed]` | runs pending migrations as one batch (`--step`: one each); `--pretend` prints the SQL |
-| `navree migrate:status [--pending]` | every migration with its batch and status |
+| `navree migrate:status [--pending] [--json]` | every migration with its batch and status |
 | `navree migrate:rollback [--step N \| --batch N] [--pretend]` | reverts the last batch, the last N migrations, or batch N |
 | `navree migrate:reset [--pretend]` | reverts everything |
 | `navree migrate:refresh [--step N] [--seed]` | reset (or N), then migrate |

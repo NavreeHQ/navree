@@ -229,12 +229,12 @@ and `Unsupported` as `Unsupported`.
   own, dropped at the end. Without the variable those tests pass with a
   notice, unless `NAVREE_TEST_REQUIRE_SERVICES=1`.
 
-## 9. Hand-offs
+## 9. Other ORM features
 
-- **orm-streams** (merged): `on_conflict` in `InsertIr` compiles to the
+- **Streams and bulk writes.** `on_conflict` in `InsertIr` compiles to the
   bulk writes of section 4; `DocumentDriver::stream` lets `cursor` and
   `lazy` read MongoDB cursors through `stream_documents`.
-- **orm-relations**: relations load through `IN` lists (`$in`);
-  existence queries and relation aggregates compile to `$lookup`s already.
-- **orm-factories**: factories create models through `Model::create`, which
+- **Relationships.** Relations load through `IN` lists (`$in`); existence
+  queries and relation aggregates compile to `$lookup`s.
+- **Factories.** Factories create models through `Model::create`, which
   runs on `MongoDb` like on `Db`.

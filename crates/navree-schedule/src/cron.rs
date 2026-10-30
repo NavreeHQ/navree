@@ -61,7 +61,7 @@ pub const MAX_EXPRESSION_LEN: usize = 256;
 /// How many years ahead the search for a next run looks.
 const SEARCH_YEARS: i32 = 400;
 
-/// A parsed cron expression. See the [module documentation](self) for the
+/// A parsed cron expression. See the [crate documentation](crate) for the
 /// accepted language and the daylight saving time rules.
 ///
 /// ```
@@ -368,7 +368,7 @@ impl fmt::Display for CronExpression {
 
 impl CronExpression {
     /// Parses `text`. Anything outside the accepted language (see the
-    /// [module documentation](self)) is an error naming the field and the
+    /// [crate documentation](crate)) is an error naming the field and the
     /// bad token.
     pub fn parse(text: &str) -> Result<Self, CronError> {
         let trimmed = text.trim_matches(is_blank);
@@ -650,7 +650,7 @@ impl CronExpression {
 
     /// Whether the expression follows the wall clock through clock changes
     /// (a `*` in the minute or the hour field) rather than running each
-    /// local time once. See the [module documentation](self).
+    /// local time once. See the [crate documentation](crate).
     pub fn follows_wall_clock(&self) -> bool {
         self.wildcard_time
     }

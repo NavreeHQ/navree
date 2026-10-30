@@ -182,7 +182,7 @@ where
         &self.model
     }
 
-    /// The record as conditions see it (see [`record_json`](crate::record_json)).
+    /// The record as conditions see it ([`SubjectRecords::record_json`]).
     pub fn record(&self) -> &Value {
         &self.record
     }

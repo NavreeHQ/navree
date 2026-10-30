@@ -1,6 +1,6 @@
 [package]
 name = "navree-search"
-description = "Navree SearchModule: full-text and vector search over entities, on the database, Meilisearch, Typesense, Tantivy or memory, kept in sync through the queue."
+description = "Navree SearchModule: full-text and vector search over models, on the database, Meilisearch, Typesense, Tantivy or memory, kept in sync through the queue."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

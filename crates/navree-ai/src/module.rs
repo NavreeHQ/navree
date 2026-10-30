@@ -28,8 +28,10 @@ use crate::{Ai, AiError, AiOptions, Embeddings};
 /// [`ModuleBuilderAiExt::vector_collection`] are created at boot.
 ///
 /// It needs only `ConfigModule`. `DatabaseModule` is needed for
-/// conversation memory and pgvector; `CacheModule` shares budgets and the
-/// embeddings cache between processes (without it both live in the
+/// conversation memory and pgvector (conversation memory runs on
+/// PostgreSQL, MySQL or MariaDB, and SQLite, whichever driver the app
+/// turns on; pgvector needs PostgreSQL); `CacheModule` shares budgets and
+/// the embeddings cache between processes (without it both live in the
 /// process's memory). Agents also need `AuthModule` (their user) and
 /// `AccessModule` (their abilities).
 ///

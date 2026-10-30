@@ -18,7 +18,7 @@ Take a `PageQuery` in the handler, order the query, and call `paginate` on it wi
 use navree::orm::{OrmError, Record};
 use navree::prelude::*;
 
-use super::entity::Deal;
+use super::models::deal::Deal;
 
 impl DealService {
     /// One page of deals, newest first.
@@ -213,7 +213,7 @@ async fn feed(&self, uow: Uow, cursor: CursorRequest) -> Result<CursorPage<Recor
 }
 ```
 
-The client asks for the next page with `?cursor=` and the `next_cursor` it got; `null` means there is none.
+The client asks for the next page with `?cursor=` and the `next_cursor` it got, or the previous page with the `prev_cursor`; `null` means there is none.
 
 - `CursorRequest` reads `cursor` (absent for the first page) and `limit` (default: the model's page size, at most 100). A malformed cursor or a `limit` that isn't a positive integer is a 400.
 - The query's order decides the direction: `order_by_desc(Deal::ID)` is newest first, `order_by(Deal::ID)` oldest first. The key is added as a tie-breaker.

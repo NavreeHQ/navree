@@ -30,7 +30,7 @@
 //! use navree_dock::{Dock, DockFile, FakeExecutor};
 //!
 //! # fn main() -> Result<(), navree_dock::DockError> {
-//! let dir = tempfile::tempdir().unwrap();
+//! let dir = tempfile::Builder::new().prefix("navree-test-").tempdir().unwrap();
 //! let file = DockFile::parse("[services.postgres]\n[services.mailpit]\n", "crm-api")?;
 //! assert_eq!(
 //!     file.env()[0],

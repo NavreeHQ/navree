@@ -25,7 +25,8 @@ workspace's records. Three tools prove it:
    ```rust
    m.workspace_scoped::<Deal>()        // workspace model and access subject (record checks by id)
        .workspace_entity::<DealNote>()  // workspace model, not an access subject
-       .global_entity::<Currency>();    // one set of rows for every workspace
+       .global_entity::<Currency>()     // one set of rows for every workspace
+       .library::<Template>();          // global, organization and workspace rows
    ```
 
    Workspace models are `#[derive(Model)]` structs that implement
@@ -68,9 +69,9 @@ app's config and a migrated database (`navree migrate` first). Errors exit
 | Check | From | Fails on (error) / reports (warning) |
 |---|---|---|
 | `api.docs` | `ApiModule` | error: a route without `#[api]` (not in `api.undocumented`) |
-| `workspace.entities` | `WorkspaceModule` | error: a table the app's source defines outside the ORM that is not classified, or classified both ways (models are classified in `register`, as above) |
-| `workspace.repo` | `WorkspaceModule` | error: a direct read or write of such a workspace table that bypasses `WorkspaceRepo` |
-| `workspace.tables` | `WorkspaceModule` | every classified table (models too): error: no workspace column; warning: no index starting with it, row-level security off (PostgreSQL), table missing |
+| `workspace.entities` | `WorkspaceModule` | error: a model the app's source defines (a struct deriving `Model`) that is classified in no way, or in more than one: workspace (`#[model(workspace)]`, `workspace_scoped`, `workspace_entity`), global (`global_entity`) or library (`library`) |
+| `workspace.repo` | `WorkspaceModule` | error: a registered workspace model reached through the `Model` entry points (`Deal::query()`, `find`, `create`, ...) instead of `WorkspaceRepo`; for a `#[model(workspace)]` model, a query that leaves its scope (`.without_workspace_scope()`, `.without_global_scopes()`) |
+| `workspace.tables` | `WorkspaceModule` | every table registered with `workspace_scoped` or `workspace_entity`: error: no workspace column; warning: no index starting with it, row-level security off (PostgreSQL), table missing; read on SQLite and PostgreSQL only |
 | `i18n.translations` | built in | runs the app's `i18n:check` when a module registers it, else skipped |
 | `db.migrations` | built in | runs the app's `migrate:lint` when a module registers it, else skipped |
 
@@ -82,8 +83,8 @@ The `workspace.entities` and `workspace.repo` scans read the app's source
 as text: they follow `use` trees, renames, globs and `type` aliases, and
 skip `tests/`, `benches/`, `examples/` and `#[cfg(test)]`. They cannot see
 through generics or macros; the isolation suite covers what reaches the
-routes. A `#[model(workspace)]` model is scoped by the ORM itself, not by
-a scan.
+routes. A `#[model(workspace)]` model is scoped by the ORM itself; the scan
+only looks for code that leaves its scope.
 
 ## Isolation suites
 

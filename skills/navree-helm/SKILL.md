@@ -243,7 +243,7 @@ use serde_json::json;
 
 async fn boot_app() -> TestApp {
     TestApp::builder()
-        .temp_database()
+        .temp_database()                           // a SQLite file: dev-dependency feature `sqlite`
         .config("app.key", navree::crypto::generate_key())
         .fake_auth()                               // acting_as next to AuthModule
         .module(CryptoModule::from_config())
@@ -293,7 +293,7 @@ token.
   subject (a type-level check), or the module never called
   `m.resource::<R>()`.
 - **A record is a 404, not a 403:** rows the access filter hides don't exist
-  for that user, like `Accessible<E, Read>` in the API.
+  for that user, like `Accessible<M, Read>` in the API.
 - **A field is greyed out on edit:** a `.fields([..])` or `cannot(..)` rule
   keeps it; sending it anyway is a 403. A field sent that isn't editable is a
   400 (`property x should not exist`).
@@ -305,6 +305,9 @@ token.
 - **"Helm cannot make a new X from a form":** a field's type has no
   `Default` (an enum without `#[default]`, a custom type); give it one or
   override `create`.
+- **Sign-in refused at the panel:** the app's `SignInPolicy`s are asked as for
+  `POST /api/auth/login` (a domain that enforces single sign-on can't use a
+  password), and the login throttle counts the same attempts.
 - **Action records skipped:** records the user can't act on are left out
   (`skipped` in the result); none left is a 403.
 - **File fields** store `{slug}/{random}.{ext}` on the field's disk after

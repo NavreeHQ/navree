@@ -28,7 +28,7 @@ gRPC and GraphQL have packages of their own that share the same modules, guards 
 
 ```toml title="Cargo.toml"
 [dependencies]
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["micro", "micro-nats"] }
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["micro", "micro-nats", "postgres"] }
 ```
 
 | Feature | Adds |
@@ -40,7 +40,9 @@ navree = { git = "https://github.com/NavreeHQ/navree", features = ["micro", "mic
 | `micro-redis` | Redis Streams |
 | `micro-mqtt` | MQTT 5 |
 
-The `micro` features are not part of the default `full` set, because each one brings a broker client. Every client is pure Rust and uses rustls for TLS, so a service still builds into one binary with no OpenSSL or C toolchain. Kafka goes through a small client of Navree's own on the Kafka wire protocol, and needs Kafka 4.0 or later (see [Kafka](/docs/microservices/transports/#kafka)).
+The `micro` features are not part of the default `full` set, because each one brings a broker client. Every client is written in Rust and uses rustls with ring for TLS, so a service still builds into one binary with no OpenSSL and no CMake. Kafka goes through a small client of Navree's own on the Kafka wire protocol, and needs Kafka 4.0 or later (see [Kafka](/docs/microservices/transports/#kafka)).
+
+The outbox, the inbox and the dead letters are tables in the service's database, so a service that has `DatabaseModule` also turns on the feature of its database driver: `postgres` above, or `mysql` or `sqlite` (see [databases](/docs/database/getting-started/)). `micro` turns `db` on, but no driver is on by default.
 
 With `micro` on, the prelude brings `MicroModule`, `ServiceClient`, `Payload`, the `#[message_handlers]` macro and the `m.message_handlers::<T>()` registration method.
 
@@ -50,7 +52,7 @@ To start a new service from a template, use the `micro` [starter kit](/docs/gett
 navree new deals --kit micro
 ```
 
-It writes a service with one module, a message handler, an event handler, a test on the in-memory transport and NATS configured for development.
+It writes a workspace with a service and the contracts crate it shares, with one module, a message handler, an event handler, tests on the in-memory transport and NATS and PostgreSQL configured for development. The service compiles only the PostgreSQL driver; its tests run on SQLite files, so the kit turns `sqlite` on in the service's `[dev-dependencies]` only.
 
 ## A first service
 
@@ -304,7 +306,7 @@ Use it for services with no HTTP routes, or to scale message consumers separatel
 
 A listener reports to [readiness](/docs/digging-deeper/health-and-metrics/): with `ObserveModule` in the app, `/health/ready` includes a `micro` check that fails while the transport is disconnected, so an orchestrator stops sending traffic to an instance that can't reach the broker.
 
-In tests and custom commands, `MicroModule::start_listener(ctx)` starts the listener (and the outbox relay) of a booted app the way `serve` does; it returns `false` when they already run. Apps on the in-memory transport don't need it: their listener starts at boot.
+In tests and custom commands, `MicroModule::start_listener(ctx)` starts the listener (and the outbox relay) of a booted app the way `serve` does; it returns once the broker has registered the listener's subscriptions, so a message sent right after it is not lost, and `false` when the listener already runs. Apps on the in-memory transport don't need it: their listener starts at boot.
 
 ## Configuration
 
@@ -438,6 +440,8 @@ async fn a_rep_reads_their_deal() {
     app.shutdown().await.unwrap();
 }
 ```
+
+`temp_database()` points the test app at a new SQLite file, so a service that runs on PostgreSQL or MySQL turns the `sqlite` feature of `navree` on in its `[dev-dependencies]` for its tests (see [database tests](/docs/testing/database-tests/)).
 
 [Request-response](/docs/microservices/request-response/#testing) and [events](/docs/microservices/events/#testing) cover the fake in full.
 

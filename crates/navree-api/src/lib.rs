@@ -6,9 +6,12 @@
 //! - [`ApiModule`] builds the document from `navree_http::route_table` when the
 //!   app boots and serves it at `GET {api_prefix}/openapi.json` (default
 //!   `/api/openapi.json`), with the [Scalar](https://scalar.com) docs UI at
-//!   `GET {api_prefix}/docs` (both public). The command
-//!   `openapi:export [path]` writes it to a file (default `openapi.json`), for
-//!   typed client generators such as openapi-typescript.
+//!   `GET {api_prefix}/docs` (both public). The UI's script is vendored:
+//!   embedded in the binary and served by the app at
+//!   `{api_prefix}/docs/assets/`, so the page loads nothing from a third
+//!   party and its policy allows scripts from the app's own origin only. The
+//!   command `openapi:export [path]` writes the document to a file (default
+//!   `openapi.json`), for typed client generators such as openapi-typescript.
 //! - Routes describe themselves with [`ApiMeta`](navree_http::ApiMeta)
 //!   (`#[api(...)]` in controllers): request and response schemas come from
 //!   [`navree_http::schema_fn`], and the schemas they reference become

@@ -373,7 +373,7 @@ Choose a code that names what happened (`campaign_already_running`), not the sta
 
 The `code` member is on by default. Set `http.errors.code` to `false` to send the three-member body without it, for clients that validate error bodies strictly:
 
-```toml title="config/default.toml"
+```toml title="config/app.toml"
 [http.errors]
 code = false
 ```

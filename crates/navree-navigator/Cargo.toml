@@ -15,7 +15,7 @@ workspace = true
 [dependencies]
 chrono = { workspace = true }
 futures-util = { workspace = true }
-# Reads the app's configuration exactly as the app does (decision D7).
+# Reads the app's configuration exactly as the app does.
 navree-config = { workspace = true }
 # The settings `navree dev` passes to the app when it has a `dock.toml`.
 navree-dock = { workspace = true }

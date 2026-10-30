@@ -64,12 +64,12 @@ The module also registers a `cache` health check and the `cache:clear` command (
 
 `cache.store = "memory"` (the default) keeps entries in the process, in a bounded cache from `navree::bounded` (the same one the framework uses for abilities, token lookups and verified domains; see [caches of your own](#caches-of-your-own)):
 
-- **At most one million entries.** The bound is hard: a full store evicts an entry before it takes a new key, so it never grows past the limit, however many keys your app creates. Counters and `add` keys can be evicted like any other entry. A store that evicts is a cache, not a database: don't keep anything in it that you can't recompute.
+- **At most one million entries** (`navree::cache::DEFAULT_MAX_ENTRIES`). The bound is hard: a full store evicts an entry before it takes a new key, so it never grows past the limit, however many keys your app creates. Counters and `add` keys can be evicted like any other entry. A store that evicts is a cache, not a database: don't keep anything in it that you can't recompute.
 - **Eviction follows use.** The store uses the SIEVE policy: an entry that was read since the last pass over it is kept, and the entries that were written once and never read go first. A burst of one-off keys (a scan, a crawl, a report) therefore doesn't push out the entries your app keeps reading.
 - **Expiry is exact on read.** A read never returns an entry past its TTL, and removes it. Expired entries that nobody reads are removed as new keys arrive (each new key checks a few entries), or when they are the next candidate for eviction; there is no background thread.
 - **Sharded.** Keys are spread over independently locked shards, so concurrent requests don't queue on one lock. `add` and `increment` are atomic per key.
 
-To change the limit, build the store yourself and override the provider (see [custom stores](#custom-stores)):
+There is no configuration key for the limit. To change it, build the store yourself and override the provider (see [custom stores](#custom-stores)):
 
 ```rust
 use navree::cache::{CacheStore, MemoryStore};
@@ -79,7 +79,7 @@ Navree::app()
     .override_value::<dyn CacheStore>(Arc::new(MemoryStore::with_capacity(50_000)))
 ```
 
-`MemoryStore::sweep(budget)` removes expired entries on demand (it looks at `budget` entries per shard), for an app that wants its memory back during a quiet spell.
+`MemoryStore::sweep(budget)` removes expired entries on demand (it looks at `budget` entries per shard), for an app that wants its memory back during a quiet spell. `capacity()`, `len()` and `is_empty()` report the limit and what the store holds now (expired entries that nothing has removed yet included).
 
 ### The Redis store
 
@@ -443,7 +443,7 @@ impl RateService {
 - **Eviction.** A full cache evicts with SIEVE (see [the memory store](#the-memory-store)): reads keep an entry, one-off keys go first. The capacity is split over the shards and each shard enforces its share, so the total is never exceeded, not even for an instant; a cache keeps a few hundred entries per shard, so it can evict slightly before it is exactly full.
 - **Read-modify-write.** `compute(key, |current| ...)` sees the live value and returns `Compute::Update`, `Store`, `Remove` or `Keep` atomically; it is how the memory store implements `add` and `increment`. Keep the closure short and don't use the cache from inside it.
 
-The cache has no iteration and no eviction listener, and a read hands out a clone of the value. A loop over slightly more keys than fit evicts every entry just before it is needed again (a hit ratio near zero, as with any recency-based policy): size the cache to the working set.
+The other calls are `get`, `contains_key` (which doesn't count as a use), `len`, `is_empty`, `capacity` and `sweep(budget)`; `CacheBuilder::shards(n)` sets the number of shards, and cloning a `Cache` is cheap: clones share the entries. The cache has no iteration and no eviction listener, and a read hands out a clone of the value. A loop over slightly more keys than fit evicts every entry just before it is needed again (a hit ratio near zero, as with any recency-based policy): size the cache to the working set.
 
 ## Testing
 

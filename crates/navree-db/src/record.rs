@@ -14,8 +14,8 @@
 //!   [`Record::delete_where`] for set-based changes (a claim:
 //!   `UPDATE .. SET status = 'released' WHERE id = ? AND status = 'held'`);
 //! - writes through a [`Uow`] that also record [`ChangeEvent`](crate::ChangeEvent)s
-//!   for audit trails and other observers, as `Repo` does: [`insert_recorded`],
-//!   [`update_recorded`], [`delete_recorded`].
+//!   for audit trails and other observers, as navree-orm's model writes do:
+//!   [`insert_recorded`], [`update_recorded`], [`delete_recorded`].
 //!
 //! Column names in filters, ordering and `SET` are checked against the
 //! record's columns (a typo is an [`ErrorKind::InvalidStatement`](crate::ErrorKind::InvalidStatement),

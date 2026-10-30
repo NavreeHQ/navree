@@ -7,7 +7,7 @@ import type { DiagramSpec } from "@/components/diagrams";
  */
 export const crmCrates: DiagramSpec = {
   title: "The CRM API",
-  desc: "crm-api is one binary. Its app.rs registers the CRM's modules on top of the platform. They live in four feature crates: crm-users (users and roles), crm-companies (companies, contacts and the CSV export), crm-deals (deals, the board and deal events) and crm-activities (tasks, the dashboard and reminders). Each feature crate depends only on crm-core, never on another feature; crm-core holds the models, the migrations, the roles and the abilities function. crm-core's platform() configures 19 Navree framework modules, from HTTP and the database to auth, access control, queues and real time.",
+  desc: "crm-api is one binary. Its app.rs registers the CRM's modules on top of the platform. They live in four feature crates: crm-users (users and roles), crm-companies (companies, contacts and the CSV export), crm-deals (deals, the board and deal events) and crm-activities (tasks, the dashboard and reminders). Each feature crate depends only on crm-core, never on another feature; crm-core holds the models, the migrations, the roles and the abilities function. crm-core's platform() configures 20 Navree framework modules, from HTTP and the database to auth, access control, queues and real time.",
   legend: [{ kind: "dep", label: "depends on" }],
   wide: {
     width: 592,
@@ -26,11 +26,11 @@ export const crmCrates: DiagramSpec = {
         w: 288,
         title: "crm-core",
         mono: true,
-        sub: "entities · roles · abilities",
+        sub: "models · roles · abilities",
         icon: "layers",
         tone: "accent",
       },
-      { id: "navree", x: 152, y: 440, w: 288, title: "navree", mono: true, sub: "19 framework modules", icon: "module" },
+      { id: "navree", x: 152, y: 440, w: 288, title: "navree", mono: true, sub: "20 framework modules", icon: "module" },
     ],
     edges: [
       { from: "api.bottom", to: "features.top", kind: "dep", label: "registers their modules", labelMono: false, at: [304, 86] },
@@ -55,11 +55,11 @@ export const crmCrates: DiagramSpec = {
         w: 240,
         title: "crm-core",
         mono: true,
-        sub: "entities · roles · abilities",
+        sub: "models · roles · abilities",
         icon: "layers",
         tone: "accent",
       },
-      { id: "navree", x: 16, y: 584, w: 240, title: "navree", mono: true, sub: "19 framework modules", icon: "module" },
+      { id: "navree", x: 16, y: 584, w: 240, title: "navree", mono: true, sub: "20 framework modules", icon: "module" },
     ],
     edges: [
       { from: "api.bottom", to: "features.top", kind: "dep", label: "app.rs", at: [144, 86] },

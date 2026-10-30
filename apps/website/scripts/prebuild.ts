@@ -124,9 +124,8 @@ function stackRows(readme: ReadmeInfo): StackRow[] {
 // -------------------------------------------------------------- performance
 
 /**
- * The site shows Navree's own measurements only. `bench/` also holds the
- * harness's other implementations and their results (internal engineering
- * data); none of it is read here, copied or shipped.
+ * The site shows Navree's own measurements only: of everything in `bench/`,
+ * only Navree's results and its benchmark app are read, copied or shipped.
  */
 const SUBJECT = "navree";
 
@@ -503,7 +502,8 @@ export type CrateInfo = { name: string; layer: number; module: string | null; de
 function buildCrates(): CrateInfo[] {
   const graph = fs.readFileSync(path.join(REPO, "crates/navree/tests/dependency_graph.rs"), "utf8");
   const crates: CrateInfo[] = [];
-  for (const match of graph.matchAll(/rule\("(navree(?:-[a-z-]+)?)",\s*(\d+)/g)) {
+  // Names may hold digits (navree-i18n), so every crate of the table is counted.
+  for (const match of graph.matchAll(/rule\("(navree(?:-[a-z0-9-]+)?)",\s*(\d+)/g)) {
     const [, name, layer] = match;
     const manifest = path.join(REPO, "crates", name, "Cargo.toml");
     if (!fs.existsSync(manifest)) continue;

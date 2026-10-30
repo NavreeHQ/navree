@@ -24,6 +24,11 @@
 //! [`close`](TestDb::close)d), also when the test panics; SQLite files are
 //! deleted with their directory.
 //!
+//! Each database needs its driver in the test build: navree-db's `sqlite`
+//! feature for the SQLite ones (the default), `postgres` or `mysql` for the
+//! servers. An app turns on the ones its tests use in `[dev-dependencies]`
+//! (`navree = { .., features = ["sqlite"] }`).
+//!
 //! ```
 //! use navree_db::Executor;
 //! use navree_orm::testing::database::Template;

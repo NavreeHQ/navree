@@ -1,46 +1,40 @@
+import { site } from "@site";
+
 import { ScriptedTerminal, type TermLine } from "./scripted-terminal";
 
 /**
- * The hero's session: install the CLI, create an app from the SaaS kit,
- * start it. The output follows the CLI (`navree dev`, the HTTP module's
- * "listening on" line) and the starter-kit docs.
+ * The next steps `navree new` prints for the SaaS kit on the default
+ * database: the command, padded to 30 columns, then its comment.
+ */
+const steps: [string, string][] = [
+  ["navree dock up", "TimescaleDB and Mailpit"],
+  ["navree key:generate", "then set APP_KEY in .env"],
+  ["navree migrate:fresh --seed", "tables and a demo workspace"],
+  ["pnpm --dir web install", "the web app's packages"],
+  ["navree dev", "API on :8080, web app on :3000"],
+];
+
+/**
+ * The hero's session: install the CLI, then create an app from the SaaS
+ * kit. The lines after `navree new` are what the CLI prints once the app
+ * is written.
  */
 const session: TermLine[] = [
-  { cmd: "cargo install navree-cli" },
-  { out: "  Installed navree-cli v0.1.0" },
+  { cmd: site.install.cli },
+  { out: "   Installed package `navree-cli v0.2.0` (executable `navree`)" },
   { cmd: "navree new acme --kit saas", className: "mt-2" },
   { out: "Created acme in ~/code/acme (kit: saas)", className: "text-fg-2" },
-  {
+  { out: "Next steps:", className: "mt-1" },
+  { out: "  cd acme" },
+  ...steps.map(([command, comment]): TermLine => ({
     out: (
       <>
         {"  "}
-        <span className="text-fg-1">src/</span>
-        {"       auth, workspaces, billing"}
+        <span className="text-fg-1">{command}</span>
+        {`${" ".repeat(30 - command.length)} # ${comment}`}
       </>
     ),
-  },
-  {
-    out: (
-      <>
-        {"  "}
-        <span className="text-fg-1">web/</span>
-        {"       Next.js and shadcn/ui"}
-      </>
-    ),
-  },
-  {
-    out: (
-      <>
-        {"  "}
-        <span className="text-fg-1">AGENTS.md</span>
-        {"  and the agent skills"}
-      </>
-    ),
-  },
-  { cmd: "cd acme && navree dev", className: "mt-2" },
-  { out: "[navree dev] building" },
-  { out: "listening on http://127.0.0.1:8080" },
-  { out: "✓ API on :8080, web app on :3000", className: "text-accent" },
+  })),
 ];
 
 export function HeroTerminal() {

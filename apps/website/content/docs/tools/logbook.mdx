@@ -24,7 +24,7 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
 }
 ```
 
-`LogbookModule` is global and needs nothing but `HttpModule`. It records what the modules in your app do, so a module you leave out (say, `MailModule`) has nothing to show. It keeps its entries in its own SQLite file, `storage/logbook.db`, not in your app's database.
+`LogbookModule` is global and needs nothing but `HttpModule`. It records what the modules in your app do, so a module you leave out (say, `MailModule`) has nothing to show. It keeps its entries in a SQLite file of its own, `storage/logbook.db`, never in your app's database. That file store is part of the [`sqlite` feature](/docs/database/getting-started/#sqlite) of the `navree` facade, which compiles the bundled SQLite library: an app on SQLite has it (`navree new --database sqlite` writes it), and an app on PostgreSQL or MySQL adds it next to its driver to get the file, as in `features = ["postgres", "sqlite"]`. Without the feature Logbook keeps its entries in memory, and `logbook.store = "file"` stops the boot with a message naming the feature.
 
 Start the app and open the timeline:
 
@@ -37,7 +37,7 @@ navree dev
 2026-10-26T09:02:11.219502Z  INFO navree::http: listening on http://127.0.0.1:8080 addr=127.0.0.1:8080
 ```
 
-Because entries are stored on disk, they survive the restarts `navree dev` makes when you change the code: the request that failed before your fix is still there after it.
+The first line reads `recording to memory` when Logbook keeps its entries in memory. Entries in the file are stored on disk, so they survive the restarts `navree dev` makes when you change the code: the request that failed before your fix is still there after it. Entries in memory are gone with each restart.
 
 ## The timeline
 
@@ -51,7 +51,7 @@ A queued job continues the trace of the request that dispatched it. A job's deta
 
 ## What Logbook records
 
-Each kind of entry comes from a **watcher**. Every watcher is on by default; turn one off with `logbook.watchers.<name> = false`. Logbook builds on the app's [telemetry events](/docs/digging-deeper/health-and-metrics/#telemetry-events) and on the data changes models record.
+Each kind of entry comes from a **watcher**. Every watcher is on by default; turn one off with `logbook.watchers.<name> = false`. Logbook builds on the app's [telemetry events](/docs/digging-deeper/health-and-metrics/#telemetry-events) and on the data changes that models record in a unit of work.
 
 | Watcher | Records | Detail |
 |---|---|---|
@@ -65,7 +65,7 @@ Each kind of entry comes from a **watcher**. Every watcher is on by default; tur
 | `exceptions` | 5xx responses, panics and errors you report with `Telemetry::report_exception` | The error and its source chain, the location of a panic |
 | `http_client` | Calls through `HttpClient` | Method, URL, status, duration, attempts, error |
 | `notifications` | Every notification, one entry per channel | Type, notifiable, channel, notification id |
-| `models` | Every insert, update and delete through a model | Table, id, the changed columns with old and new values |
+| `models` | Every insert, update and delete a model makes in a unit of work | Table, id, the changed columns with old and new values |
 | `schedule` | Every scheduled task that runs | Task, the minute it was due, error, duration |
 
 A job's error is part of its entry; the `exceptions` watcher records errors of requests and your own reports.
@@ -174,8 +174,8 @@ The page reads a JSON API under the same path, with the same access rules:
 
 | Store | Where | Use it for |
 |---|---|---|
-| `file` (default) | A SQLite file, `logbook.file` (`storage/logbook.db`) | Everyday development: entries survive restarts. |
-| `memory` | The process's memory | Tests, and machines where you'd rather not write the file. |
+| `file` (default with the `sqlite` feature) | A SQLite file, `logbook.file` (`storage/logbook.db`) | Everyday development: entries survive restarts. Needs the `sqlite` feature. |
+| `memory` (default without it) | The process's memory | Tests, builds without SQLite, and machines where you'd rather not write the file. |
 
 Logbook keeps the newest `logbook.max_entries` entries (10,000) and nothing older than `logbook.keep_hours` (24), pruning at boot and every five minutes while the app runs. Batches are pruned whole, never half. To start over:
 
@@ -245,6 +245,8 @@ async fn the_board_loads_in_three_queries() {
 }
 ```
 
+On PostgreSQL and MySQL, a unit of work also runs a statement of its own that makes `navree.actor` and `navree.request_id` readable in SQL (`database.transaction_settings`, on by default). Logbook lists it like any other query, so a test on those databases that counts queries leaves it out or sets `database.transaction_settings` to `false`.
+
 A `Batch` has `queries()`, `duplicate_queries()`, `events()`, `jobs()`, `mail()`, `cache_calls()`, `logs()`, `exceptions()`, `http_calls()`, `notifications()`, `models()`, `dumps()`, `tags()`, its own entry as `head()` (with `request()` for a request) and `entries()` for everything, in order. `last_request()`, `last_job()`, `last_schedule()` and `batch(id)` find one; `entries(&ListQuery)` takes a [filter](#filtering); `clear()` empties the store between steps of a test. `Logbook::in_memory(options)` gives a recording Logbook outside an app.
 
 ## Configuration
@@ -255,7 +257,7 @@ Every key of the `logbook` section is optional. From the environment: `APP_LOGBO
 |---|---|---|
 | `logbook.enabled` | `true` in debug builds, `false` in release builds | Record and serve anything at all. |
 | `logbook.path` | `/_logbook` | Where the UI is served. |
-| `logbook.store` | `file` | `file` or `memory`. |
+| `logbook.store` | `file` with the `sqlite` feature, `memory` without it | `file` or `memory`. `file` in a build without the `sqlite` feature stops the boot. |
 | `logbook.file` | `storage/logbook.db` | The SQLite file of the `file` store. |
 | `logbook.max_entries` | `10000` | Entries kept. |
 | `logbook.keep_hours` | `24` | Age after which entries are pruned. |

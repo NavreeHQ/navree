@@ -32,8 +32,8 @@ const MAX_E164_LEN: usize = 16;
 ///
 /// Inside the extractors an invalid number is a field error with the
 /// message key `phone` (`phone must be a valid phone number`). "Valid"
-/// means the number matches its region's numbering plan; nobody checks
-/// that it is in service.
+/// means the number matches its region's numbering plan and fits E.164's
+/// 15 digits; nobody checks that it is in service.
 ///
 /// It serializes as the E.164 string, which is the form to store. The
 /// extension is not part of E.164: read it from

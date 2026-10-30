@@ -203,8 +203,9 @@ fake.assert_deleted(id);
   `fail`, `assert_ran`). To fake only FFmpeg in a real app:
   `.override_value::<dyn FfmpegRunner>(FfmpegFake::new().runner())`.
 - With the real module: `TestApp` + `StorageModule::for_root` with a
-  `DiskConfig::Memory` disk + `config("media.store", "memory")` (or a temp
-  database). A `QueueFake` dispatcher records `GenerateConversions`; run it
+  `DiskConfig::Memory` disk + `config("media.store", "memory")` (or
+  `temp_database()`, a SQLite file: the test build needs the `sqlite` feature
+  in `[dev-dependencies]`). A `QueueFake` dispatcher records `GenerateConversions`; run it
   with `job.handle(JobContext { app: app.ctx().clone(), job_id, attempt: 1 })`.
 - Outside an app: `Media::builder(Arc<Storage>).options(..).register::<M>().build()?`
   (memory rows, conversions at once, real HTTP client with the default SSRF policy).

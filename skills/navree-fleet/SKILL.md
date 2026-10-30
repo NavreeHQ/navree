@@ -37,7 +37,8 @@ Navree::app()
 2. Run `navree migrate` (migration set `fleet`, after `queue`: tables
    `fleet_masters`, `fleet_state`, `fleet_jobs`, `fleet_metrics`; on
    TimescaleDB the last two are hypertables, an hour and a day per chunk,
-   and trimming drops whole chunks).
+   and trimming drops whole chunks; on PostgreSQL, MySQL and SQLite they are
+   regular tables with a time index and trimming deletes the old rows).
 
 3. Describe supervisors (optional: without any, one supervisor `default`
    works `queue.queues` or `queue.default_queue`):
@@ -144,9 +145,10 @@ A running master emits it (needs `EventsModule`) at most once per queue per
 
 ## Testing
 
-- What Fleet decides: `TestApp` with `.config("fleet.dashboard", false)`,
-  a `FixedClock` override, dispatch jobs, then `fleet.long_waits()` /
-  `fleet.workload()`.
+- What Fleet decides: `TestApp` with `.temp_database()` (a SQLite file: the
+  test crate's `navree` dev-dependency needs the `sqlite` feature, which
+  `navree new` writes), `.config("fleet.dashboard", false)`, a `FixedClock`
+  override, dispatch jobs, then `fleet.long_waits()` / `fleet.workload()`.
 - The balancer: `next_allocation(&supervisor, &current, &workload, shift)`
   with `QueueWorkload::new(queue, waiting, running, oldest_wait_secs,
   avg_runtime_ms)` and `Supervisor::resolve(name, &SupervisorOptions, &queue_options)`.

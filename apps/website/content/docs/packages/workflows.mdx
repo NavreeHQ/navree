@@ -463,7 +463,7 @@ async fn signing_up_starts_the_onboarding() {
 
 `started::<W>()` returns the recorded inputs, `started_runs()` every start with its options, `assert_nothing_started()` and `assert_cancelled(id)` check the rest. Reads through the fake's `Workflows` see each start as a pending run; nothing executes.
 
-**Run workflows for real.** With a fixed clock, runs execute inline in tests (no queue), and `tick()` wakes their timers once you move the clock:
+**Run workflows for real.** With a fixed clock, runs execute inline in tests (no queue), and `tick()` wakes their timers once you move the clock. `temp_database()` creates a SQLite file, so the test build needs the `sqlite` feature ([database tests](/docs/testing/database-tests/#a-database-for-every-test)):
 
 ```rust title="tests/onboarding.rs"
 #[tokio::test]

@@ -183,7 +183,7 @@ A domain routes sign-in only once its owner proves it is theirs. Adding one answ
 
 ```http
 POST /api/sso/connections/acme/domains HTTP/1.1
-Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 Content-Type: application/json
 
 { "domain": "acme.com" }
@@ -264,7 +264,7 @@ Enforcement decides at sign-in: sessions, [personal access tokens](/docs/package
 let ended = auth.revoke_credentials_of_domain("acme.com").await?;
 ```
 
-It ends the sessions, personal access tokens, OAuth access and refresh tokens, unexchanged authorization codes and the remembered consent of every user whose email is on the domain, so they sign in again through the connection. It is a navree-auth call (`AuthService`), because this module doesn't depend on navree-oauth: OAuth takes part by registering a `CredentialRevoker`. [Authentication](/docs/security/authentication/#offboarding-a-user-or-a-domain) has the details, including what happens to access tokens that are already in a client's hands (they expire within `auth.access_ttl_secs`).
+It ends the sessions, personal access tokens, OAuth access and refresh tokens, unexchanged authorization codes and the remembered consent of every user whose email is on the domain, so they sign in again through the connection. It is a navree-auth call (`AuthService`), because this module doesn't depend on navree-oauth: OAuth takes part by registering a `CredentialRevoker`. [Authentication](/docs/security/authentication/#offboarding-a-user-or-a-domain) has the details, including what happens to access tokens that are already in a client's hands (they expire within `auth.jwt.access_ttl_secs`).
 
 ## How sign-in works
 
@@ -297,7 +297,7 @@ Content-Type: application/json
 ```json
 {
   "user": { "__type": "User", "id": "01a17d03-5a1e-7f2c-b3d4-e5f6a7b8c9d0", "name": "Ada Lovelace", "email": "ada@acme.com", "email_verified_at": "2026-10-27T12:00:03Z", "created_at": "2026-10-27T12:00:03Z" },
-  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "refresh_token": "01a17d03-5a2b-7d10-8c9e-0f1a2b3c4d5e.k3Lq9...",
   "token_type": "Bearer",
   "expires_in": 900,

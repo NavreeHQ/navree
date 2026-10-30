@@ -109,7 +109,7 @@ async fn show(&self, ws: CurrentWorkspace) -> Json<serde_json::Value> {
 | Method | Returns |
 |---|---|
 | `id()` | The workspace id |
-| `workspace()` | The `Workspace` row (`id`, `name`, `slug`, `owner_id`, `organization_id`, `timezone`, `country`, `created_at`, `updated_at`) |
+| `workspace()` | The `Workspace` row (`id`, `name`, `slug`, `owner_id`, `organization_id`, `timezone`, `country`, `kind`, `created_at`, `updated_at`) |
 | `member()` | The user's `Member` row (for an organization grant, built from the organization membership) |
 | `user_id()` | The signed-in user's id |
 | `role()` | Their `WorkspaceRole` |

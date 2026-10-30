@@ -1,6 +1,6 @@
 ---
 title: "Migrations"
-description: "Module-owned migrations written with the schema builder: generating them, `up` and `down`, migration sets and their order, transactions, reading the database, data changes and porting older migrations."
+description: "Module-owned migrations written with the schema builder: generating them, `up` and `down`, migration sets and their order, transactions, reading the database, data changes and rewriting one."
 ---
 
 Migrations are version control for your schema: each one changes the database a step and records that it ran, so every copy of the database (yours, a colleague's, CI's, production's) reaches the same structure by running the same steps. In Navree a migration is a Rust type with an `up` method that applies a change and a `down` method that reverses it, written with the [schema builder](/docs/database/schema-builder/), which writes the right SQL for PostgreSQL (with [TimescaleDB](/docs/database/timescaledb/)), MySQL, MariaDB and SQLite.
@@ -224,11 +224,11 @@ On SQLite, migrations run on a connection of their own with foreign keys off, so
 
 That connection uses your `database.sqlite` settings (journal mode, `busy_timeout`, pragmas), and each migration's transaction begins with `BEGIN IMMEDIATE`, as units of work do, taking SQLite's write lock before the migration reads anything. While workers, a scheduler or another process write to the same file, a migration therefore waits its turn (up to `busy_timeout`, 5 seconds by default) instead of failing with `database is locked` when it goes from reading a table to changing it. The migration's own changes and its `navree_migrations` row are written on that one connection, in that one transaction.
 
-## Porting a migration
+## Rewriting a migration
 
 The schema builder is the one way to write a migration: `MigrationSet::migration` takes a `navree::schema::Migration`, and so do the per-workspace sets (`m.workspace_migrations(..)`, for [schema and database isolation](/docs/workspaces/isolation/)).
 
-A migration you rewrite for the schema builder keeps its exact name, so the row `navree_migrations` already holds for it still counts and it doesn't run again. Port the body, not the name: `migration!(m20261026_093000_create_deals_table)` takes the file's module name, and `SchemaMigration::new(name, migration)` takes the name as a string when the type isn't in a file of its own. Port one migration at a time and run `navree migrate --pretend` on a database that has already run them: it must plan nothing.
+A migration is recorded by its module and name. One you rewrite keeps its exact name, so the row `navree_migrations` already holds for it still counts and it doesn't run again: change the body, not the name. `migration!(m20261026_093000_create_deals_table)` takes the file's module name, and `SchemaMigration::new(name, migration)` takes the name as a string when the type isn't in a file of its own. Rewrite one migration at a time and run `navree migrate --pretend` on a database that has already run them: it must plan nothing.
 
 ## Testing migrations
 

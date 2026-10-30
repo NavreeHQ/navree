@@ -111,7 +111,16 @@ path (`address.city`, `tags.1`) to its messages. Malformed JSON is
   written; rules on an `Option` pass on `None`.
 - `#[validate(skip_unmarked)]` on the struct lets fields without
   `#[validate]` go unchecked. Paths follow serde's `rename` / `rename_all`;
-  a `#[serde(flatten)]` field with `nested` reports at the parent's path.
+  a `#[serde(flatten)]` field with `nested` reports at the parent's path;
+  `#[validate(rename = "..")]` on a field sets its name in paths.
+- Each rule once per field (only `custom` may repeat); `length` and `range`
+  need `min` or `max`. `length(chars, ..)` is an error (`length` counts
+  characters already) and there is no `equal`: write `length(min = n, max = n)`.
+  `length(bytes, ..)` still words its message in "characters".
+- The derive also takes enums and tuple structs (a newtype's field reports at
+  the value's own path), and `#[validate(crate = "path")]` names the
+  validation crate when neither `navree` nor `navree-validation` is a direct
+  dependency.
 - `navree::validation::rules` (use with `custom(..)`; `None` passes):
   `rules::one_of(&[..])`, `rules::uuid`, `rules::date_ymd`,
   `rules::unicode_name`, `rules::country`, `rules::locale`, `rules::phone`
@@ -197,7 +206,10 @@ pub fn even(value: &u32) -> Result<(), Violation> {
 ```
 
 `Violation::rule("even").with("value", value)` is the same as `rule_error`;
-`Violation::text(..)` wraps a text. A `custom` expression can read `self`
+`Violation::text(..)` wraps a text. To take what Navree's rules take
+(`String`, `&str`, `Cow<str>`, `Folded` text, `Option`s; `None` passes), be
+generic over `rules::RuleInput` and read `value.rule_str()`. A `custom`
+expression can read `self`
 (`custom(confirmed(&self.password_confirmation))`). There is no context
 parameter: request data comes from the `InputContext` (default phone region,
 HTML policy), and rules that need the database are async rules.
@@ -231,7 +243,10 @@ Async rules run after every `#[validate]` rule passes, inside the request's unit
 work (the app needs `DatabaseModule`). Table and column names must match
 `[a-z_][a-z0-9_]*`; never build them from input. A rule compares one column
 with one value: it can't add `deleted_at IS NULL`, so check soft-deleted
-references in the service. Outside a request: `rule.passes(&executor).await`
+references in the service, or build the rule on the model with
+`navree::orm::validation::{unique, exists}` (scopes, `where_(..)`,
+soft-delete handling), or wrap your own queries in `AsyncRule::check(field,
+rule, UowCheck)`. Outside a request: `rule.passes(&executor).await`
 on a `Db`, `Transaction` or `Uow` (any navree-db `Executor`); a failed query
 is `RuleError::Database` holding a boxed `DbError`.
 

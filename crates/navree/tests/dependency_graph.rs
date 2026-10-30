@@ -95,7 +95,7 @@ const HIERARCHY: &[Rule] = &[
     // Navigator: the MCP server for coding agents (`navree mcp`) and the
     // embedded agent skills (`navree skills:install`). A tool crate the CLI
     // runs outside the app: it reads the app's configuration with
-    // navree-config (decision D7) and Dock's settings; the facade re-exports
+    // navree-config and Dock's settings; the facade re-exports
     // it behind the opt-in `navigator` feature.
     rule("navree-navigator", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-dock"]),
     // L3

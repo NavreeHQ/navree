@@ -142,7 +142,7 @@ pub struct DealSummaries {
 }
 
 impl DealSummaries {
-    pub async fn maybe_summarize(&self, deal: &deal::Model, workspace_id: Uuid) -> Result<(), BoxError> {
+    pub async fn maybe_summarize(&self, deal: &Deal, workspace_id: Uuid) -> Result<(), BoxError> {
         let scope = FlagScope::user(deal.owner_id).workspace(workspace_id);
         if !self.flags.active::<AiSummaries>(&scope).await? {
             return Ok(());

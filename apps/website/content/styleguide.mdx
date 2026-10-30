@@ -77,7 +77,7 @@ fn main() -> Result<(), BoxError> {
 addr = "127.0.0.1:8080"
 
 [database]
-url = "sqlite://storage/app.db?mode=rwc"
+url = "postgres://navree:navree@127.0.0.1:5432/blog"
 ```
 
 ```sh title=".env"
@@ -90,22 +90,22 @@ APP_DATABASE__URL=postgres://localhost/blog
 ## Tabs
 
 <Tabs>
+<Tab label="PostgreSQL">
+
+A new app runs on TimescaleDB or PostgreSQL. Turn on the `postgres` feature, then point `database.url` at your server.
+
+```sh
+cargo add --git https://github.com/NavreeHQ/navree navree --features postgres
+```
+
+</Tab>
 <Tab label="SQLite">
 
-SQLite is the default. Nothing to install: the driver is compiled in.
+SQLite is opt-in. Turn on the `sqlite` feature; there is nothing to install.
 
 ```toml title="config/app.toml"
 [database]
 url = "sqlite://storage/app.db?mode=rwc"
-```
-
-</Tab>
-<Tab label="PostgreSQL">
-
-Turn on the `postgres` feature, then point `database.url` at your server.
-
-```sh
-cargo add --git https://github.com/NavreeHQ/navree navree --features postgres
 ```
 
 </Tab>
@@ -153,7 +153,7 @@ tests/
 
 ## Badges
 
-The queue needs a feature of the facade <Badge feature="queue" /> and the scheduler too <Badge feature="schedule" />. Other labels: <Badge>Since 0.1</Badge> <Badge tone="accent">New</Badge> <Badge tone="warning">Experimental</Badge>
+The queue needs a feature of the facade <Badge feature="queue" /> and the scheduler too <Badge feature="schedule" />. Other labels: <Badge>Since 0.2</Badge> <Badge tone="accent">New</Badge> <Badge tone="warning">Experimental</Badge>
 
 ## Link cards
 

@@ -9,7 +9,7 @@ Dock starts the services your app needs on your machine. List them in `dock.toml
 
 Dock is part of the `navree` CLI and drives Docker or Podman, whichever you have. You write no Compose file and change nothing in your app's code: Dock generates the Compose file from `dock.toml` and runs it with `docker compose` or `podman compose`. The same `dock.toml` starts the same services in CI, so your tests run against what you develop against.
 
-A new Navree app runs on [TimescaleDB](/docs/database/timescaledb/), Navree's default database, and `navree new` writes a `dock.toml` that runs it: `navree dock up` is the first thing you do in a new app. Its mail goes to the log until you add Mailpit. Add more services when your app uses a search engine, a message broker or object storage. (An app made with `navree new --database sqlite` needs no services at all.)
+A new Navree app runs on [TimescaleDB](/docs/database/timescaledb/), Navree's default database, and `navree new` writes a `dock.toml` that runs it: `navree dock up` is the first thing you do in a new app. Its mail goes to the log until you add Mailpit. Add more services when your app uses a search engine, a message broker or object storage. (An app made with `navree new --database sqlite` needs no services at all, and one made with `--database mysql` gets no `dock.toml`: Dock does not run MySQL.)
 
 ## What you need
 
@@ -262,7 +262,7 @@ Dock runs the same containers with either. With `runtime = "auto"` it uses Docke
 export NAVREE_DOCK_RUNTIME=podman
 ```
 
-Dock writes the Compose file it runs to `.navree/dock/compose.yaml` before every command. Don't edit it, edit `dock.toml`; the `.navree/` directory carries its own `.gitignore`, so it never reaches git. Containers and volumes carry the label `dev.navree.dock.project=<project>`, so `docker ps --filter label=dev.navree.dock.project` lists everything Dock started.
+Dock writes the Compose file it runs to `.navree/dock/compose.yaml` each time it runs Compose: `navree dock up`, and `navree dock down` without service names. Don't edit it, edit `dock.toml`; the `.navree/` directory carries its own `.gitignore`, so it never reaches git. Containers and volumes carry the label `dev.navree.dock.project=<project>`, so `docker ps --filter label=dev.navree.dock.project` lists everything Dock started.
 
 ## In CI
 
@@ -290,7 +290,7 @@ jobs:
 
 ### Tests against TimescaleDB
 
-`TestApp` never reads `.env` or the environment, so tests run on a temporary SQLite database by default and need no service: the same migrations run there, with hypertables as regular tables. For tests that must run on TimescaleDB (a continuous aggregate, `first` and `last`, month buckets), hand the URL to the test app yourself:
+`TestApp` never reads `.env` or the environment, so tests run on a temporary SQLite database by default and need no service (a new app turns the `sqlite` feature on in its `[dev-dependencies]` for this): the same migrations run there, with hypertables as regular tables. For tests that must run on TimescaleDB (a continuous aggregate, `first` and `last`, month buckets), hand the URL to the test app yourself:
 
 ```rust title="tests/timescaledb.rs"
 use navree::prelude::*;

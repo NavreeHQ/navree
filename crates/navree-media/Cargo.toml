@@ -1,6 +1,6 @@
 [package]
 name = "navree-media"
-description = "Navree MediaModule: files attached to entities in collections, image conversions and responsive variants, safe remote downloads, zip archives with zip-slip and size-bomb guards, text extraction from PDF, DOCX and HTML, and video through an FFmpeg sidecar."
+description = "Navree MediaModule: files attached to models in collections, image conversions and responsive variants, safe remote downloads, zip archives with zip-slip and size-bomb guards, text extraction from PDF, DOCX and HTML, and video through an FFmpeg sidecar."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

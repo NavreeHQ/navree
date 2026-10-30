@@ -706,7 +706,7 @@ tonic-prost = { workspace = true }
 name = "graphql"
 required-features = ["graphql"]
 
-# The gRPC docs example through the facade (`cargo test -p navree --features grpc --test grpc`).
+# The gRPC docs example through the facade (`cargo test -p navree --features grpc,sqlite --test grpc`).
 [[test]]
 name = "grpc"
 required-features = ["grpc"]

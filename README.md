@@ -28,7 +28,7 @@
 
 <p align="center">
   <img alt="Rust 1.95 or newer" src="https://img.shields.io/badge/rust-1.95%2B-3dff8f?style=flat-square&logo=rust&logoColor=white&labelColor=0b0f0c">
-  <img alt="Version 0.1" src="https://img.shields.io/badge/version-0.1-3dff8f?style=flat-square&labelColor=0b0f0c">
+  <img alt="Version 0.2" src="https://img.shields.io/badge/version-0.2-3dff8f?style=flat-square&labelColor=0b0f0c">
   <img alt="License: MIT or Apache-2.0" src="https://img.shields.io/badge/license-MIT%20or%20Apache--2.0-3dff8f?style=flat-square&labelColor=0b0f0c">
   <a href="https://navree.com/llms.txt"><img alt="Docs for AI agents: llms.txt" src="https://img.shields.io/badge/docs%20for%20agents-llms.txt-3dff8f?style=flat-square&labelColor=0b0f0c"></a>
 </p>

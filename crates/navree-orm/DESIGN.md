@@ -2,11 +2,12 @@
 
 This is the map of the Navree ORM: how its crates fit together, what
 `#[derive(Model)]` generates, how a query becomes SQL (or a document
-command) and runs on a `Db` or inside a `Uow`, and where every later feature
-plugs in. Sections 1 to 10 describe the core as shipped; section 11 assigns
-the remaining features to the feature tracks, naming the files, traits,
-seams and macro attributes each one owns, so they can work in parallel with
-few conflicts.
+command) and runs on a `Db` or inside a `Uow`, and where each feature
+plugs in. Sections 1 to 10 describe the core; section 11 describes the
+feature areas built on it (relationships, the lifecycle, attributes,
+streams and bulk writes, connections, factories and testing, MongoDB, the
+framework's own models), naming the files, traits, seams and macro
+attributes each one owns; section 12 covers the lifecycle in detail.
 
 Principles:
 
@@ -18,14 +19,14 @@ Principles:
   the metadata.
 - **String-flexible where it pays.** Untyped columns (`col("deals.title")`,
   JSON paths `col("meta->status")`), raw SQL with portable `?` placeholders
-  (`where_raw`, `select_raw`, `order_by_raw`), and later relation paths
+  (`where_raw`, `select_raw`, `order_by_raw`), and relation paths
   (`"company.owner"`).
 - **Built on navree-db.** Connections, the pool, the unit of work (`Uow`:
   transaction, actor, request id, change events, after-commit hooks,
   `set_config` for audit and workspace row-level security), migrations and
-  the page shape stay in navree-db. Every statement runs through them, so
-  audit trails, workspace isolation and after-commit work keep working.
-  The ORM runs on navree-db's engine (its values, rows, pools,
+  the page shape live in navree-db. Every statement runs through them, so
+  audit trails, workspace isolation and after-commit work apply to every
+  write. The ORM runs on navree-db's engine (its values, rows, pools,
   transactions and executor).
 - **One driver abstraction.** A query is first a driver-neutral value (the
   IR, `navree_orm::ir`), then SQL for PostgreSQL/TimescaleDB, MySQL or
@@ -39,14 +40,14 @@ Principles:
 |---|---|---|
 | `navree-orm` | L4 | Models, records, collections, the builders, the IR, SQL per dialect, execution on `Db`/`Uow`, casts, scopes, hooks, pagination, the relation and document-driver seams |
 | `navree-orm-macros` | L0 | `#[derive(Model)]`, `#[scopes]`, `#[relations]`, `#[accessors]`/`#[accessor]` and `#[test]` (proc macros; no runtime navree dependencies) |
-| `navree-mongo` | L5 | MongoDB: `MongoModule`, `MongoDriver: DocumentDriver`, sessions and units of work, the schema builder and migrations on collections (mongodb track; its own `DESIGN.md`) |
-| `navree-schema` | L3/L4 | Migrations and the schema builder (own design; the ORM does not depend on it) |
+| `navree-mongo` | L5 | MongoDB: `MongoModule`, `MongoDriver: DocumentDriver`, sessions and units of work, the schema builder and migrations on collections (its own `DESIGN.md`) |
+| `navree-schema` | L2 | Migrations and the schema builder (its own `DESIGN.md`; the ORM does not depend on it) |
 
 `navree-orm` depends on navree-kernel, navree-contracts, navree-http,
 navree-db and navree-orm-macros. Its HIERARCHY row
 (`crates/navree/tests/dependency_graph.rs`) also allows navree-config,
 navree-telemetry, navree-events, navree-crypto and navree-api, for the
-lifecycle and attributes tracks. The attribute layer uses navree-crypto
+lifecycle and the attribute layer. The attribute layer uses navree-crypto
 (encrypted and hashed casts), navree-config (the configuration casts can
 read) and navree-api (records as API resources), plus utoipa (OpenAPI
 schemas of models), argon2 (recognising Argon2 hashes without hashing),
@@ -110,7 +111,7 @@ src/
   collection.rs     Collection<M>
   pagination.rs     PageRequest, SimplePage, CursorPage, CursorRequest (extractor), Builder::{paginate, simple_paginate, cursor_paginate}
   cast.rs           Cast, CastError, AsJson, StringEnum, IntEnum, encode/decode helpers; re-exports the built-in casts
-  attributes/       the attribute layer (section 11, orm-attributes)
+  attributes/       the attribute layer (section 11, Attributes)
     mod.rs          re-exports
     context.rs      CastContext: the services casts use (encrypter, hasher, clock, config, dialect), resolved per operation; scopes
     fill.rs         Attributes, attrs!, fill / force_fill / fill_only / set_attribute / set_json_path, guards, unguarded, DiscardPolicy
@@ -126,7 +127,7 @@ src/
     model_ref.rs    ModelRef, ModelRefs (records in queued jobs)
   scope.rs          GlobalScope, Scoped, SoftDeletes, scope grouping
   expr.rs           Expr constructors: col, val, raw, func, aggregates, arithmetic, subquery, time_bucket, first, last
-  relations/        relationships (section 11, orm-relations): definitions, relation queries,
+  relations/        relationships (section 11, Relationships): definitions, relation queries,
                     eager and lazy loading, existence, aggregates, pivots, morphs, touches
   driver.rs         DocumentDriver, InsertOutcome
   doc_models.rs     `__doc_models` (hidden): the models the doc examples use, so every example compiles
@@ -211,7 +212,7 @@ The attribute layer adds container keys (`fillable(..)`, `guarded(..)`,
 `"datetime_format(\"..\")"`, `"unix_timestamp"`, `"unix_timestamp_ms"`,
 `"encrypted"`, `"encrypted_json"`, `"hashed"`, `"binary_uuid"`,
 `"binary_ulid"`, `"vector"`, `cast` alone, `cast(path, args..)`); section
-11 (orm-attributes) describes them.
+11 (Attributes) describes them.
 
 The derive generates:
 
@@ -255,8 +256,8 @@ methods are the static API: `query`, `where_`, `all`, `find`,
 `first_or_new`, `create_or_first`, `update_or_create`, plus
 `global_scopes()` (written by the derive from `#[model(global_scopes(..))]`)
 and `hooks()` (empty in core; the derive writes it for model-level hooks
-such as the relations track's `touches`, while app-wide hooks come from
-the container).
+such as relationships' `touches`, while app-wide hooks come from the
+container).
 
 ### Keys
 
@@ -303,8 +304,8 @@ everything a `Value` is built from for untyped columns.
 | `exists`, `recently_created` | persistence state |
 | `changes`, `previous` | what the last save changed: new and old values |
 | `extras` | selected columns that are not model columns (`select_raw`, `select_sub`, `with_count` results, pivot columns) |
-| `relations` | loaded relations (section 11, relations) |
-| `attributes` | per-record `hidden`/`visible`/`appends` overrides and the columns whose stored form is stale (section 11, attributes) |
+| `relations` | loaded relations (section 11, Relationships) |
+| `attributes` | per-record `hidden`/`visible`/`appends` overrides and the columns whose stored form is stale (section 11, Attributes) |
 
 Instance API: `new` (also `From<M>`), `model`, `model_mut`, `key`,
 `save`, `update(exec, |m| ..)`, `delete`, `refresh`,
@@ -337,7 +338,7 @@ Records serialize through `attributes::serialize` (`Serialize for
 Record<M>`): the model's own serde output (keys, renames, skips), cast
 outputs, one date-time format, the extras, the appended accessors, then
 the loaded relations, filtered by `visible` and `hidden` (section 11,
-attributes).
+Attributes).
 
 ### Persistence flows (`persist.rs`)
 
@@ -383,9 +384,9 @@ trashed record reloads). `replicate` copies the columns without key and
 creation/update timestamps.
 
 Change events go to the unit of work the statement ran in (`&Uow`, or the
-task's current unit of work that `&Db` joined), like `navree_db::Repo`:
-`entity` is the table, `id` the key text, values are the stored column
-values as JSON (decimals as exact strings). Mass writes record no events.
+task's current unit of work that `&Db` joined): `entity` is the table,
+`id` the key text, values are the stored column values as JSON (decimals
+as exact strings). Mass writes record no events.
 
 Timestamps come from the app's `dyn Clock` when the executor's pool belongs
 to an app (`Db::app()`), else `Utc::now()`, truncated to microseconds so the
@@ -574,9 +575,8 @@ Terminal methods take `&E where E: Executor + ?Sized`:
 
 | Executor | Reads | Writes |
 |---|---|---|
-| `Db` | the task's current unit of work when its transaction is open on this pool (`Db::reader`), else a read replica (the writer without replicas, after the unit of work wrote, or with `use_write`/`using_writer`) | the task's current unfinished unit of work on this pool (events recorded there), else the pool |
+| `Db` | the task's current unit of work when its transaction is open on this pool (`Db::read_executor`), else a read replica (the writer without replicas, after the unit of work wrote, or with `use_write`/`using_writer`) | the task's current unfinished unit of work on this pool (events recorded there), else the pool |
 | `Uow` | its transaction | its transaction, events recorded |
-| `DatabaseConnection`, `DatabaseTransaction` | as given | as given, no events |
 | `Arc<E>` | as `E` | as `E` |
 | a document store's executor | `Target::Document` | `Target::Document` |
 
@@ -598,7 +598,7 @@ and `sticky` its later reads stay on the writer. `Target` runs IR:
 `fetch`, `stream`, `aggregate`, `exists`, `insert`, `update`, `delete`,
 and nests a savepoint (`begin_savepoint`, `on_transaction`) or a
 transaction of its own (`begin_atomic`). `ExecContext` (from
-`Target::context()`) gives hooks and later tracks the app, the unit of
+`Target::context()`) gives hooks and features the app, the unit of
 work, the dialect and `now()`.
 
 `SqlTarget` announces each statement and each transaction it begins to the
@@ -652,9 +652,8 @@ cursor holds its transaction's connection (`ensure_free`).
 ### The renderer (`render/`)
 
 `navree_orm::render` is the ORM's own SQL renderer: every statement the
-ORM runs is written by it. It holds no sea-query or SeaORM code (a unit
-test reads its sources to keep it so); its values are
-`crate::value::Value` and its output `crate::sql::Statement`.
+ORM runs is written by it. Its values are `crate::value::Value` and its
+output `crate::sql::Statement`.
 
 - **The tree** (`ast.rs`): statements are queries (`WITH [RECURSIVE]`, a
   body of `SELECT`s combined by `UNION`/`INTERSECT`/`EXCEPT [ALL]`, and the
@@ -713,26 +712,24 @@ test reads its sources to keep it so); its values are
   `postgres` and `mysql` features and their URLs): a corpus of IR
   statements covering every lowered feature, each rendered, run and
   compared by result rows, rows changed and returned, and every fixture
-  table after a write with what the sea-query compiler the renderer
-  replaced did with the same case on the same server (recorded before it
-  was deleted: `tests/differential/compiler/<database>.jsonl`, its SQL and
-  outcome per case); and statements built as trees (CTEs, `CASE`,
+  table after a write with the outcome recorded for the same case on the
+  same server (`tests/differential/compiler/<database>.jsonl`: its SQL
+  and outcome per case); and statements built as trees (CTEs, `CASE`,
   windows, upserts with a condition, `INTERSECT`, lateral joins, an access
   filter) checked against the rows they must return on every database.
   Its executor (`tests/differential/exec.rs`) is the one place that
   touches a driver: statements run on navree-db's own engine (its pools,
   transactions and statements on SQLx, rows read as navree-db values),
-  the layer the ORM's statements run on once the ORM moves to it.
-  Where the renderer deliberately differs (the compiler's SQL was wrong
-  there: a JSON key holding `"` on MySQL, `main.table` on SQLite, a union
-  inside a union or a part limited per group on SQLite, a raw window order
-  with `NULLS LAST` on MySQL), the case says so and the run requires the
-  difference.
+  the layer the ORM's statements run on.
+  Where the renderer deliberately differs from a recorded outcome (the
+  recorded SQL was wrong there: a JSON key holding `"` on MySQL,
+  `main.table` on SQLite, a union inside a union or a part limited per
+  group on SQLite, a raw window order with `NULLS LAST` on MySQL), the case
+  says so and the run requires the difference.
 
-The renderer replaced the earlier compiler entirely: `Where::Sql` went
-with the data-layer move's step 5 (navree-access builds its filters as
-`SqlFilter`s), and since step 8 units of work run on navree-db's
-transactions only.
+Access filters reach the renderer as render-tree conditions
+(navree-access builds them as `SqlFilter`s), and units of work run on
+navree-db's transactions only.
 
 ### Document drivers (`driver.rs`)
 
@@ -908,16 +905,15 @@ extractor (400 for a malformed cursor or limit).
   (`# use navree_orm::__doc_models::*;`); the crate root has a runnable
   example on SQLite. New examples follow the same pattern.
 
-## 11. The feature tracks
+## 11. Feature areas
 
-Each track owns new files and extends core types with inherent `impl`
-blocks in its own files (Rust allows `impl Builder<M>` in any module of the
-crate). Shared files get small, separate additions: `lib.rs` module lines
-and re-exports, `prelude.rs`, the facade prelude, the macro parsers' key
-lists. The seams below exist so tracks fill them instead of rewriting core
-flows.
+Each area owns its own files and extends core types with inherent `impl`
+blocks in them (Rust allows `impl Builder<M>` in any module of the crate).
+The shared files carry only small additions: `lib.rs` module lines and
+re-exports, `prelude.rs`, the facade prelude, the macro parsers' key lists.
+The seams below are where an area plugs into the core flows.
 
-### orm-relations (shipped)
+### Relationships
 
 Relationships live in `src/relations/`:
 
@@ -1017,7 +1013,7 @@ How the pieces fit:
 - **Access.** `with_accessible(path, &filter)` adds an `AccessFilter`'s
   condition for each related model along the path (`morph_to`: per model).
 
-Core edits it made: the `Builder` field and the `fetch` call; `Model::relation`,
+Where it touches the core: the `Builder` field and the `fetch` call; `Model::relation`,
 `relation_names`, `relation_meta`, `morph_name`, `foreign_key_name`,
 `touched_relations`, and `query()` applying the model's defaults (`where_`
 too); `ModelMeta`'s relation metadata (`morph_name`, `foreign_key`,
@@ -1029,54 +1025,52 @@ pivot-model identity, `refresh` reloading loaded relations); the
 `with_count` and `pivot(foreign_key, related_key)` live in
 `navree-orm-macros/src/model/relations.rs`.
 
-Seams left for other tracks:
+How relationships meet the other areas:
 
-- **orm-streams.** Relation `upsert` (filling the foreign key and morph
-  type) waits for `InsertIr::on_conflict`; chunks and streams on relations
-  build on `into_query()` and the relation's finisher (pivots); relations
-  to models on other connections need named connections (existence
-  subqueries across connections will be refused with `Unsupported`, eager
-  loads will run on the related model's connection).
-- **orm-lifecycle (`OrmModule`).** Boot step: register the morph map and
-  `MorphMap::require` from `[orm] require_morph_map`. (Lazy loading already
-  follows the module's strict modes.)
-- **Access.** navree-access's `Ability` implements `AccessFilter` where both
-  crates meet (the facade, or an adapter crate): navree-orm cannot depend
-  on navree-access.
+- **Connections.** A relation to a model on another connection follows that
+  model's connection; an existence check that crosses connections is
+  refused, with the advice to load the related keys and filter with
+  `where_in`.
+- **Lifecycle.** Lazy loading follows the module's strict modes
+  (`prevent_lazy_loading`, `auto_eager_load`).
+- **Access.** `Builder::with_accessible(path, &filter)` adds an
+  `AccessFilter`'s condition for each related model along the path; the
+  filter can be an ability's rules turned into a condition, a workspace, a
+  closure or a rule written by hand.
 - **Document drivers.** Belongs-to, has-one/many and morph eager loads are
   plain batched `IN` queries any driver answers; pivot and through
   relations join, and per-parent limits use a window, so they need SQL.
 
-### orm-lifecycle (shipped; section 12)
+### Lifecycle (section 12)
 
-- Owns `src/events/`, `src/quiet.rs`, `src/soft_deletes.rs`,
+- Files: `src/events/`, `src/quiet.rs`, `src/soft_deletes.rs`,
   `src/lifecycle.rs`, `src/global_scopes.rs`, `src/strict.rs`,
   `src/options.rs`, `src/module.rs`, `src/prune.rs`, `src/broadcast.rs`,
   and `navree-orm-macros/src/model/lifecycle.rs`.
-- Seams it offers the other tracks:
+- Seams it offers the other areas:
   - `ModelHook::kind()`: a hook implemented directly is a
-    `HookKind::Behaviour` (runs at once, also in quiet operations), so the
-    relations track's `touches` hooks keep writing inside the transaction.
+    `HookKind::Behaviour` (runs at once, also in quiet operations), so
+    relationships' `touches` hooks keep writing inside the transaction.
     Observers, closure listeners, `Dispatch` and broadcasts are listeners.
   - `fn hooks()` is written by `lifecycle::hook_entries` +
-    `lifecycle::hooks_fn` (one `static` per model): a track that declares
+    `lifecycle::hooks_fn` (one `static` per model): a feature that declares
     hooks on the model (`touches`) adds its entries to that list.
   - Strict modes: `ExecContext::strictness()` (per app) where there is an
     executor, `strict::current()` where there is none;
     `Strictness::check(Violation::..)` answers a violation (error, handler,
-    or tolerated). The attributes track's `fill` calls it with
+    or tolerated). The attribute layer's `fill` calls it with
     `Violation::DiscardedAttributes` (`OrmError::MassAssignment`); the
-    relations track's lazy-loading check with `Violation::LazyLoading`
+    lazy-loading check of relationships with `Violation::LazyLoading`
     (`OrmError::LazyLoading`) and reads `auto_eager_loads()`.
-  - `OrmModule` registers boot steps in `module.rs::register`; tracks add
-    theirs as separate lines (the model registry, `RegisteredModel`, serves
-    `model:show` and the morph map too).
+  - `OrmModule` registers boot steps in `module.rs::register`, one line per
+    step (the model registry, `RegisteredModel`, serves `model:show` and
+    `model:prune`).
   - `ModelEventFake` (in `events/`) is the testing stand-in for listeners;
     `ModelMeta::pruning()` tells tooling whether a model is prunable.
 
-### orm-attributes
+### Attributes
 
-Shipped. Owns `src/attributes/` (layout in section 2),
+Files: `src/attributes/` (layout in section 2),
 `navree-orm-macros/src/model/attributes.rs` (the derive's attribute keys,
 listed in its `CONTAINER_KEYS` and `FIELD_KEYS`) and
 `navree-orm-macros/src/accessors.rs`. The metadata goes on `ModelMeta` and
@@ -1192,17 +1186,17 @@ the writer without global scopes, failing with `ModelNotFound` when one is
 gone (`restore_or_skip` gives `None`; `ModelRefs::restore` keeps the order
 and leaves out records deleted since).
 
-Seams for the other tracks:
+Where attributes meet the other areas:
 
-- orm-lifecycle: `fill` answers discarded keys with
+- Lifecycle: `fill` answers discarded keys with
   `Strictness::check(Violation::DiscardedAttributes)` when no
   `DiscardPolicy` is set for the task or the process (a `strict::scope`
   outranks the process's policy); a quiet `force_create` is
   `without_events` around `Model::force_create`.
-- orm-relations: `ModelRef::relations()` names the relations to load again
+- Relationships: `ModelRef::relations()` names the relations to load again
   after `restore` (which returns the record without them); serialized
   relations already apply each related record's visibility and appends.
-- orm-factories: states and overrides can be `Attributes` applied with
+- Factories: states and overrides can be `Attributes` applied with
   `force_fill`.
 
 Compile errors (pinned by `tests/ui/model_attributes_*.rs`): unknown
@@ -1213,7 +1207,7 @@ fewer than two columns, `cast` with `inbound`, accessor signatures,
 setters that would shadow record methods, and `appends(..)` names that are
 not accessors.
 
-### orm-streams (shipped)
+### Streams, bulk writes, raw statements and connections
 
 - **Streams** (`src/streams.rs`). Both builders have `chunk(exec, n, f)`
   (the callback returns `ControlFlow` to stop), `chunk_map`, `each`,
@@ -1221,8 +1215,7 @@ not accessors.
   (keysets, safe while the callback updates the rows), `each_by_id`,
   `lazy`, `lazy_by_id`, `lazy_by_id_desc`, `lazy_by_column` (async streams
   of records or rows fetched a page at a time, through `Builder::fetch`, so
-  `Retrieved` hooks fire and the eager loads of the relations track will
-  apply per page), and `cursor` (one statement whose rows stream as the
+  `Retrieved` hooks fire and eager loads apply per page), and `cursor` (one statement whose rows stream as the
   database sends them; it holds its connection, and inside a transaction
   other statements on that transaction fail fast instead of waiting for
   it). `navree_orm::cursor(exec, raw(..))` streams a raw statement. Chunks
@@ -1275,7 +1268,7 @@ not accessors.
   through the app's `dyn EventSink`; `navree db [connection] [--read |
   --write]` opens `psql`, `mysql`, `mariadb`, `sqlite3` or `mongosh` with
   the configured credentials (passwords through the environment).
-- **Not moved, by design.** Table prefixes per connection (PostgreSQL
+- **Left out by design.** Table prefixes per connection (PostgreSQL
   schemas or a separate database instead: prefixes would leak into raw
   SQL, row-level security policies and hypertable names). Low-level
   handles (raw driver connections, separate read and write handles,
@@ -1283,13 +1276,13 @@ not accessors.
   models use): the pool owns its connections and replaces lost ones,
   executors are explicit, and tests boot their own app. Moving one record
   to another connection at runtime: pass that connection's executor.
-- **Waiting on the relations track**: eager loads per chunk of `chunk`,
-  `each` and `lazy` (every page already runs through `Builder::fetch`,
-  where eager loading plugs in).
+- **Eager loads and streams.** Every page of `chunk`, `each` and `lazy`
+  runs through `Builder::fetch`, where eager loading plugs in, so
+  relations load per page; `cursor` decodes row by row and loads none.
 
-### orm-factories
+### Factories, seeding and testing
 
-Built. What each part is and where it plugs in:
+What each part is and where it plugs in:
 
 - **Factories** (`src/factory/`): `ModelFactory` (a `definition` from a
   `FactoryContext`: index, count, a seeded `Faker`, the clock,
@@ -1381,9 +1374,9 @@ Built. What each part is and where it plugs in:
   its access feature, seeder and controller), `make:factory <module> <name>
   [--model M]`, `make:seeder <module> <name>`.
 
-### mongodb
+### MongoDB
 
-Built as `crates/navree-mongo` (L5; facade features `mongo` and `mongodb`,
+The `crates/navree-mongo` crate (L5; facade features `mongo` and `mongodb`,
 opt-in); its `DESIGN.md` has the details.
 
 - `MongoDriver: DocumentDriver` compiles the IR into filter documents,
@@ -1402,7 +1395,7 @@ opt-in); its `DESIGN.md` has the details.
 - Embedded documents and arrays are JSON casts; joins, subqueries
   (`EXISTS`, `IN`, scalar) and unions are `$lookup` and `$unionWith`, an
   equality with the enclosing document matched by `localField` and
-  `foreignField` so an index serves it. Relations (orm-relations) load
+  `foreignField` so an index serves it. Relations load
   through the IR's `IN` lists, which become `$in`.
 - Units of work: `MongoUow` (a session with a transaction, the actor and
   request id, change events for `MongoChangeObserver`s inside the
@@ -1424,56 +1417,32 @@ opt-in); its `DESIGN.md` has the details.
   against `NAVREE_TEST_MONGODB_URL` (a replica set), locally through
   `scripts/dev-databases.ps1` and in CI (`.github/workflows/mongodb.yml`).
 
-### orm-adopt-crates (shipped): the framework's tables as models
+### The framework's tables as models
 
 The framework crates' tables are navree-orm models, and the crates read
 and write them through the ORM where that keeps behaviour and reads
-better.
+better. Apps query the same types: `AuditRecord::query()`,
+`User::query()`, typed columns and records.
 
-(History: this section records how the tables moved while SeaORM was
-still in the tree. The move of the data layer onto navree-db's own engine
-replaced what it describes as transitional: the dual derives, `Repo`,
-`db.conn()` and `&*tx` executors, `DbErr` conversions and the SeaORM
-migrations are gone; every table is a model or a navree-db record, and
-every migration a navree-schema one.)
-
-- **One struct, two derives.** A table whose SeaORM entity is public API
-  (apps, Helm's panels and tests query `Entity`, `Column` and
-  `ActiveModel`) keeps it: its `Model` derives `DeriveEntityModel` and
-  `navree_orm::Model` together, with `#[model(table = "..")]` (and
-  `primary_key`, `column = ".."` where the entity says so). The struct is
-  both; nothing public changes, and apps gain `AuditRecord::query()`,
-  `User::query()`, typed columns and records. `tests/orm/entities.rs` pins
-  the pattern: rows written by one API read by the other, dirty tracking,
-  serialization through the struct's own serde (secrets marked
-  `#[serde(skip_serializing)]` stay out of records too). The derive must
-  name the trait by path (`navree_orm::Model`): the struct is called
-  `Model`.
 - **The tables.** navree-audit (`audit_logs`, `AuditRecord`), navree-notify
   (`notifications`), navree-queue (`failed_jobs`: `FailedJob` itself, with
   `JsonText` payload and options and a `unix_timestamp_ms` failure time),
   navree-auth (users, refresh tokens, password resets, sign-in tokens,
   passkeys), navree-workspace (workspaces, members, invitations,
   organizations and their members and grants, access requests, partitions),
-  navree-social, navree-webhooks, navree-oauth, navree-flags
-  (`feature_flags`), navree-billing and navree-lighthouse. Tables keyed by
-  several columns (flag overrides, saved locales) stay entities: a model
-  has one key column. Crates below the ORM's layer, and navree-access and
-  navree-validation (the ORM's optional dependencies), keep SeaORM.
-- **Executors keep the semantics.** Code that wrote on the pool outside the
-  request (the audit log's own connection) passes `db.conn()`; code that
-  wrote in a transaction it was handed passes `&*tx` (no change events,
-  exactly as the SeaORM statement recorded none); reads that went through
-  `Db::reader` pass `&Db`, which reads the same way.
+  navree-social, navree-webhooks, navree-oauth, navree-sso, navree-flags
+  (`feature_flags`), navree-billing and navree-lighthouse. A model has one
+  key column, so a table keyed by several columns (flag overrides, saved
+  locales) is not saved by key: its crate writes it with the builder's
+  `upsert` (by the unique columns) or with statements.
+- **Records below the ORM.** Crates the ORM depends on or sits above
+  (navree-access and navree-validation, which are its optional
+  dependencies, and crates such as navree-mail and navree-i18n) cannot
+  name `Model`: they declare their tables with navree-db's `record!`, which
+  reads and writes typed rows on statements alone. A `record!` struct can
+  also derive `navree_orm::Model`, as navree-audit's `AuditRecord` does.
 - **Change events.** An ORM write through a `Uow` records the stored column
-  values; `Repo` records the model's serde output. Writes of rows with
-  skipped fields (users, webhook endpoints, social accounts, workspace
-  rows) stay on `Repo`, so audit trails keep their exact content; the
-  plain inserts and updates that recorded no change events moved to the
-  ORM: auth's sessions, sign-in tokens, resets and passkeys, the webhook
-  delivery log, the OAuth server's clients, grants and tokens, failed
-  jobs, stored notifications and audit rows. Reads moved with them
-  (auth's and social sign-in's user lookups too).
+  values; `Uow::record_change` records one by hand.
 - **Secrets and change events (navree-oauth, navree-sso).** A model write
   through a `Uow` records every column's stored value, whatever `serde`
   skips, so a table with digests or ciphertext is written with the
@@ -1490,23 +1459,12 @@ every migration a navree-schema one.)
   secret and a metadata document are set, the document's digest). Both
   crates test it with an observer registered in the app that sees every
   event of the flows (`tests/oauth/secrets.rs`, `tests/sso/secrets.rs`).
-- **Errors.** `From<OrmError> for DbErr` (database errors as SeaORM would
-  have returned them, not-found as `RecordNotFound`, the rest as
-  `DbErr::Custom`) lets services
-  whose API speaks `DbErr` use `?`; the crates' own errors convert through
-  it (`QueueError`, `AuthError`, `WebhooksError`, `OAuthError`,
-  `SocialError`, each into its database variant).
 - **`JsonText`** (`cast.rs`): serde values stored as JSON text in `TEXT`
-  columns, for tables created before JSON columns were used.
-- **Migrations stay SeaORM.** The schema builder's DDL is not the SeaORM
-  migrations' (PostgreSQL `VARCHAR(255)` for `string` where they made
-  unbounded `varchar`; MySQL `CHAR(36)` for `uuid` where they made
-  `binary(16)`, which is how both ORMs bind UUIDs there; MySQL
-  `TIMESTAMP(6)` for `timestamp(0)`), so rewriting the table-creating
-  migrations would give new databases other columns than migrated ones.
-  New migrations of these crates use navree-schema (the hypertable
-  conversions do), and the facade's `framework_models` suite checks the
-  models on SQLite, PostgreSQL and MySQL.
+  columns, for tables that predate JSON columns.
+- **Migrations.** Every framework table is created by a navree-schema
+  migration in its crate's `MigrationSet`, and the facade's
+  `framework_models` suite checks the models on SQLite, PostgreSQL and
+  MySQL.
 
 ## 12. The lifecycle
 

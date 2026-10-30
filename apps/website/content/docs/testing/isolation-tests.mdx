@@ -59,7 +59,7 @@ Isolation suite for DealsModule: 5 routes, 1 passed, 4 failed, 0 skipped
   FAIL  POST    /api/v1/deals       answered 201 and put the record in another workspace (workspace_id)
 ```
 
-`try_run` returns the same report as an `IsolationReport` instead of failing, for tests that look at single routes.
+`try_run` returns the same report as an `IsolationReport` instead of failing on a route that leaks, for tests that look at single routes. Its `Err` is for a suite that can't start: no tenancy, a module without routes, or tenants that can't be created.
 
 ## What the suite sends
 
@@ -199,7 +199,7 @@ app.isolation_suite::<InvoicesModule>()
 | `.skip(method, path, reason)` | Leaves one route out |
 | `.tenancy(t)`, `.workspaces()` | The `Tenancy` that creates the two tenants |
 | `.run().await` | Runs the suite; fails the test with the report when a route fails |
-| `.try_run().await` | Runs the suite and returns the `IsolationReport` |
+| `.try_run().await` | Runs the suite and returns `Result<IsolationReport, BoxError>`: a failed route is in the report, not an error |
 
 `IsolationReport` has `routes` (each a `RouteResult` with `method`, `path` and an `IsolationOutcome` of `Passed`, `Failed` or `Skipped` with its reason), `passed()`, `failed()`, `skipped()` and `is_ok()`, and prints as the table above.
 

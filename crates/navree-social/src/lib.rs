@@ -30,10 +30,18 @@
 //! - **Linking**: a linked account signs in its user; otherwise a user
 //!   with the same **verified** email is linked (`link_by_email`);
 //!   otherwise a user is created when registration is on; otherwise 409.
+//! - **Sign-in policies**: [`Social::sign_in`] asks navree-auth's
+//!   `SignInPolicy`s (`SignInMethod::Social { provider }`) about the
+//!   provider's email before any account is created or linked, and about the
+//!   account before the session, so single sign-on enforcement
+//!   (`sso_required`) holds for social sign-ins too.
 //! - **Tokens**: [`Social::sign_in`] returns navree-auth's
 //!   [`LoginOutcome`](navree_auth::LoginOutcome), two-factor challenge
 //!   included. Provider tokens are stored encrypted with
 //!   `social.store_tokens`, and [`Social::token`] refreshes them.
+//! - **Throttle**: callbacks count against `auth.login_throttle_per_minute`
+//!   per client address (an IPv6 client counts as its network,
+//!   `http.rate_limit_ipv6_prefix`).
 //! - **Tests**: [`Social::fake`] never calls a provider; [`SocialFake`]
 //!   decides what each code returns.
 //!

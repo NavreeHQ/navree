@@ -542,7 +542,7 @@ The client follows the operation with `GET /api/operations/{id}`, its server-sen
 - **Cancelling** the operation (`DELETE /api/operations/{id}`) skips a render that hasn't started; one that is running stops before it saves, and its failure record says it was cancelled.
 - The path is checked before the operation starts, so a bad path leaves no operation behind.
 
-`queue_operation` needs `QueueModule` and `DatabaseModule` (operations live in the app database). It is part of the facade when both the `documents` and `queue` features are on, which `full` gives you; on `navree-documents` directly, it is the crate's `operations` feature.
+`queue_operation` needs `QueueModule` and `DatabaseModule` (operations live in the app database). It is part of the facade when the `documents` and `queue` features are both on (`queue` is in `full`, `documents` is opt-in); on `navree-documents` directly, it is the crate's `operations` feature.
 
 ## Templates in modules
 

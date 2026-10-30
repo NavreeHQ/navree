@@ -1,6 +1,6 @@
 ---
 name: navree-cache-and-http-client
-description: "Caching, locks and outgoing HTTP in Navree: `Cache` (`remember`, `flexible`, counters, tags), atomic `Locks`, and `HttpClient` with retries, timeouts, the SSRF policy and `HttpClient::fake()` for tests. Use when caching an expensive computation or third-party answer, limiting an action per user, preventing two tasks from running at once, calling an external API or webhook, or faking outgoing HTTP in tests."
+description: "Caching, locks and outgoing HTTP in Navree: `Cache` (`remember`, `flexible`, counters, tags), atomic `Locks`, a bounded in-process cache of your own (`navree::bounded::Cache`), and `HttpClient` with retries, timeouts, streaming responses, the SSRF policy and `HttpClient::fake()` for tests. Use when caching an expensive computation or third-party answer, keeping a per-process lookup table that must not grow without limit, limiting an action per user, preventing two tasks from running at once, calling an external API or webhook, or faking outgoing HTTP in tests."
 ---
 
 # Cache, locks and the HTTP client
@@ -167,16 +167,24 @@ then `header`, `bearer(token)`, `with_request_id(&id)` (not automatic),
 ```toml
 [http_client]
 timeout_secs = 30
+connect_timeout_secs = 5
 retries = 2
+retry_base_ms = 200
 max_response_bytes = 10485760
+# user_agent = "my-app/1.0"   # default: navree-http-client/<version>
 
 [http_client.ssrf]
 block_private = true
 allow_hosts = ["billing.internal", "*.svc.cluster.local", "10.20.0.0/16"]
 ```
 
-Header values and bodies are never logged. There is no streaming response
-API (raise `max_response_bytes` or use reqwest directly for big downloads).
+Header values and bodies are never logged. `send()` reads the whole body
+(up to `max_response_bytes`); for server-sent events and other long
+responses use `send_streaming().await?`, which returns a `StreamingResponse`
+as soon as the headers arrive (`chunk().await?`, `into_stream()` or
+`bytes()`); it is sent once, never retried, under the same SSRF policy.
+`http.check_destination(&url).await?` checks a stored URL (a webhook
+endpoint) against the SSRF policy without sending anything.
 
 ## Test with the fake
 

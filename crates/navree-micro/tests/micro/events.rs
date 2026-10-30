@@ -538,10 +538,18 @@ async fn the_relay_publishes_what_a_crashed_process_left_in_the_outbox(scratch: 
     micro.assert_emitted("deal.renamed", |event: &DealRenamed| {
         event.title == "Left behind"
     });
-    let left: i64 = db
-        .fetch_scalar(&Statement::text("SELECT COUNT(*) FROM micro_outbox"))
-        .await
-        .unwrap();
+    // A row is deleted just after its event is published.
+    let mut left = -1;
+    for _ in 0..300 {
+        left = db
+            .fetch_scalar(&Statement::text("SELECT COUNT(*) FROM micro_outbox"))
+            .await
+            .unwrap();
+        if left == 0 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
     assert_eq!(left, 0, "published rows are deleted");
     app.shutdown().await.unwrap();
 }

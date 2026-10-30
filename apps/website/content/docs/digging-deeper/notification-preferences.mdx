@@ -520,7 +520,7 @@ async fn deal_mail_waits_for_the_morning_digest() {
 }
 ```
 
-The held rows are an ORM model, so a test can also read them: `NotificationDeferral::query().get(&db)` lists each with its `reason` and `release_at`. Store preferences for a test with `NotificationPreferences::update`, as a user would through the routes.
+The held rows are an ORM model, so a test can also read them: `NotificationDeferral::query().get(&db)` lists each with its `reason` and `release_at`. Store preferences for a test with `NotificationPreferences::update`, as a user would through the routes. `temp_database()` creates a SQLite database, so the app's tests need the `sqlite` Cargo feature ([database tests](/docs/testing/database-tests/)).
 
 <LinkCards>
   <LinkCard href="/docs/digging-deeper/notifications/" title="Notifications">

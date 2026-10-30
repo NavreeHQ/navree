@@ -60,7 +60,7 @@ impl AuthorizedRecord {
         &self.action
     }
 
-    /// The record as conditions see it (see [`record_json`](crate::record_json)).
+    /// The record as conditions see it ([`SubjectRecords::record_json`](crate::SubjectRecords::record_json)).
     pub fn record(&self) -> &Value {
         &self.json
     }

@@ -21,8 +21,10 @@ its services.
    ```
 
 2. Edit `harbor.toml`: `domain`, the server's `host` and its `roles`
-   (template below). For PostgreSQL add `features = ["postgres"]` under
-   `[build]` and the `postgres` role.
+   (template below). For PostgreSQL add the `postgres` role, and
+   `features = ["postgres"]` under `[build]` when the app defines a
+   `postgres` feature of its own (an app made by `navree new` compiles the
+   driver through its `navree` dependency and needs none).
 3. Store the secrets (encrypted into `harbor.toml`):
 
    ```sh
@@ -104,7 +106,11 @@ rate-limit budget, one login throttle). For an HTTP balancer (no
 so Caddy keeps the balancer's `X-Forwarded-For` and appends its address, and
 the app's `APP_HTTP__TRUSTED_PROXIES` lists the same ranges, so the app finds
 the client. With a PROXY-protocol balancer set `web.proxy_protocol = true`
-too; no header is needed. Re-run `harbor:provision` after changing the list.
+too; no header is needed. After changing the list run `harbor:provision`
+again (the Caddyfile) and `navree deploy` (the app's env file). A `[frontend]`
+behind an HTTP balancer sees the balancer's address as the browser's (Caddy
+appends to the header and the front end trusts one hop); use the PROXY
+protocol there.
 
 ## Commands
 
@@ -201,6 +207,12 @@ assert_eq!(fake.calls()[0].program, "ssh");
 - **`servers.<name>.host_key is not set`**: deploys and every other server
   command need the pinned key; run `navree harbor:provision <name>` first.
   If a server is rebuilt, delete its `host_key` line and provision again.
+  Only `harbor:provision` connects without a pinned key (it accepts the key
+  the server offers and records it); a changed key is refused.
+- **SSH sign-in**: Harbor runs `ssh` in batch mode with `ssh.key`, else
+  `~/.ssh/id_ed25519` when it exists, else your agent
+  (`NAVREE_HARBOR_SSH_KEY` replaces the file). It never asks for a password
+  or passphrase: load a protected key into the agent.
 - **`is not provisioned yet`**: the server has no `/srv/<app>/releases`;
   provision it before deploying.
 - **Health check fails**: the error prints the slot's last 20 log lines.

@@ -146,7 +146,7 @@ These are the rules `#[validate(...)]` takes, with the message Navree renders fo
 | Rule | Checks | Message |
 |---|---|---|
 | `length(min = 2, max = 50)` | string length in characters | `name must be longer than or equal to 2 characters`, `name must be shorter than or equal to 50 characters` |
-| `length(bytes, max = 255)` | string length in UTF-8 bytes | as above |
+| `length(bytes, max = 255)` | string length in UTF-8 bytes | as above (the message still says `characters`; override `min.string` and `max.string` to word it differently) |
 | `length(min = 1, max = 10)` on a list, set or map | number of items | `name must contain at least 1 elements`, `name must contain no more than 10 elements` |
 | `range(min = 1, max = 100)` | numbers, both bounds included | `name must not be less than 1`, `name must not be greater than 100` |
 | `required` | an `Option` is `Some` | `name should not be empty` |
@@ -168,11 +168,13 @@ These are the rules `#[validate(...)]` takes, with the message Navree renders fo
 
 </Callout>
 
-Every field states its rules or `skip`: a field without `#[validate]` is a compile error, so a nested struct is never left unchecked by accident. Put `#[validate(skip_unmarked)]` on the struct to let fields without rules go unchecked. A field can carry several rules, which run in the order written. A rule name that doesn't exist, a `pattern` that isn't a valid regular expression or a rule on a field of the wrong type (`range` on a `String`) fails to compile, with an error at the rule.
+Every field states its rules or `skip`: a field without `#[validate]` is a compile error, so a nested struct is never left unchecked by accident. Put `#[validate(skip_unmarked)]` on the struct to let fields without rules go unchecked. A field can carry several rules, which run in the order written, each once (only `custom` can repeat). A rule name that doesn't exist, a rule twice, a `length` or `range` without a bound or with a literal `min` above its `max`, a `pattern` that isn't a valid regular expression, a `same_as` that names no field of the struct or a rule on a field of the wrong type (`range` on a `String`) fails to compile, with an error at the rule.
 
 Rules on an `Option<T>` only run when the value is `Some`; `required` is the rule that demands one.
 
-`email` accepts an ASCII address with one `@`: a local part of letters, digits and the usual symbols (no quoted local parts, no leading, trailing or doubled dot) and a host name or an address literal such as `[192.0.2.1]`. Internationalized domains pass in their punycode form. `url` accepts an absolute URL: a scheme, then the rest in RFC 3986's syntax; for `http`, `https`, `ws`, `wss` and `ftp` a host is required.
+The derive works on structs (with named fields, as a tuple or as a newtype) and enums, with generics. For an enum, each variant's fields follow the same rules. Tuple fields are named `0`, `1`, and a newtype's field reports at the path of the value itself. The expansion finds the validation crate through `navree` or `navree-validation` in your `Cargo.toml`; `#[validate(crate = "path::to::validation")]` on the type names it when neither is a direct dependency.
+
+`email` accepts an ASCII address of at most 254 bytes with one `@`: a local part of up to 64 letters, digits and the usual symbols (no quoted local parts, no leading, trailing or doubled dot) and a host name or an address literal such as `[192.0.2.1]`. Internationalized domains pass in their punycode form. `url` accepts an absolute URL in ASCII: a scheme, then the rest in RFC 3986's syntax; for `http`, `https`, `ws`, `wss` and `ftp` a host is required (a `file` URL may leave it out). A space or a non-ASCII character in a URL fails: clients percent-encode them.
 
 Field paths use the names serde reads, so a field's `#[serde(rename = "...")]` and the struct's `rename_all` apply to rule errors too. `#[validate(rename = "...")]` sets a field's name in paths.
 
@@ -409,7 +411,7 @@ Without `Folded`, `"٦٥٤٣٢١"` has the right length but fails the pattern, w
 | `07400 123456` | none | `phone must be a valid phone number` |
 | `+44 12` | any | `phone must be a valid phone number` |
 
-Valid means the number fits its region's numbering plan (country code, length, prefixes), from libphonenumber's metadata, through the [rlibphonenumber](https://docs.rs/rlibphonenumber) crate. Nothing checks that the line is in service: send a code to it for that.
+Valid means the number fits its region's numbering plan (country code, length, prefixes), from libphonenumber's metadata, through the [rlibphonenumber](https://docs.rs/rlibphonenumber) crate, and fits E.164's limit of 15 digits (a longer number is invalid even where a numbering plan allows it). Nothing checks that the line is in service: send a code to it for that.
 
 | Method | Returns |
 |---|---|
@@ -721,6 +723,8 @@ The built-in messages are English, with one table per app. [Localization](/docs/
 
 </Callout>
 
+The hook behind that is the `MessageTranslator` trait. When the app provides an `Arc<dyn MessageTranslator>` (`I18nModule` registers one), the extractors render every message through it instead of the table: `message(messages, field, rule, params)` for a rule key and its parameters, `attribute(messages, field)` for the field name inside a text of your own. The `messages` it receives are the app's table, for the translator to fall back on with `Messages::lookup` and `Messages::fill`.
+
 ## Custom rules
 
 A `custom` rule is a function of the value that returns `Result<(), E>`, where `E` is a `Violation`, a `String` or a `&str`. Return `rule_error` (or `Violation::rule`) with a rule key to get a message from the table, so it can be overridden like a built-in one. Or return your own text, which may use `:attribute`:
@@ -753,7 +757,20 @@ pub struct Teams {
 }
 ```
 
-`even` has no built-in template, so it renders the `invalid` one (`size is invalid`) until you add a message for the key `even`, for example `even = ":value is not an even number."` under `[validation.messages]`. `Violation::rule("even").with("value", value)` builds the same violation as `rule_error`.
+`even` has no built-in template, so it renders the `invalid` one (`size is invalid`) until you add a message for the key `even`, for example `even = ":value is not an even number."` under `[validation.messages]`. `Violation::rule("even").with("value", value)` builds the same violation as `rule_error`, and `Violation::text(":attribute must not be blank")` is the text a `&str` or a `String` stands for.
+
+A rule that should take what Navree's rules take (`String`, `&str`, `Cow<str>`, `Folded` text and `Option`s of them, with `None` passing) is generic over `rules::RuleInput` and reads the text with `rule_str()`:
+
+```rust
+use navree::validation::rules::RuleInput;
+
+pub fn filled<T: RuleInput + ?Sized>(value: &T) -> Result<(), &'static str> {
+    match value.rule_str() {
+        Some(text) if text.trim().is_empty() => Err(":attribute must be filled in"),
+        _ => Ok(()),
+    }
+}
+```
 
 `custom` takes any expression that gives such a function, and the expression can read the whole struct through `self`: `custom(confirmed(&self.password_confirmation))`, or `custom(shorter_than(self.max_bio))` with a function of your own that returns a closure.
 
@@ -822,9 +839,11 @@ How they run:
 
 Outside a request, check a rule yourself with `rule.passes(&executor).await` (a `Db`, a `Transaction` or a `Uow`: anything that is a navree-db `Executor`), which returns `Result<bool, RuleError>`. A failed query is `RuleError::Database`, carrying the engine's `DbError` (boxed).
 
+For a check that needs more than one column and one value, `AsyncRule::check(field, rule, check)` wraps a `UowCheck`, which runs its own queries in the request's unit of work and answers `Ok(true)` when the rule passes; `rule.skipped_when(true)` lets it pass without running (an empty value), and `rule.passes_in(&uow)` runs any rule outside a request. The rules on ORM models are built this way: `navree::orm::validation::unique` and `exists` query through the model, so its scopes hold (see [validation rules](/docs/orm/workspaces-and-access/#validation-rules)).
+
 <Callout type="warning" title="No extra conditions">
 
-A rule compares one column with one value. It can't add conditions such as `deleted_at IS NULL`, so `exists` accepts a soft-deleted row. Check such cases in your service, as the CRM does for deleted companies.
+`AsyncRule::unique` and `AsyncRule::exists` compare one column with one value. They can't add conditions such as `deleted_at IS NULL`, so `exists` accepts a soft-deleted row. Check such cases in your service, as the CRM does for deleted companies, or build the rule on the model, whose rules take `where_(..)` conditions and decide how soft-deleted records count.
 
 </Callout>
 
@@ -878,6 +897,8 @@ serde reports nested type errors at their path too: `"quantity": "two"` in the f
 
 To override a nested field's message or name, use its full dotted path: `"customer.address.city" = "city"` under `[validation.attributes]`. List items have their index in the path, so an override for one specific index rarely makes sense; override the rule instead.
 
+<Badge feature="time" /> With `validation` on too, navree-time's types implement `Validate`: `Zone` and `LocalDay` have nothing to check (they validate themselves while deserializing), so a field of either type takes `#[validate(nested)]` or `#[validate(skip)]`, and a `DayRange` checks that `to` is not before `from` (`to must not be before from`, on `to`), so `Valid<Query<DayRange>>` takes a report window from a request. See [time zones](/docs/digging-deeper/time-zones/).
+
 ## Validating by hand
 
 Some checks only make sense in a service: a date range, a rule that depends on the stored record. Collect them in `ValidationErrors` and return them as the same 400:
@@ -902,7 +923,7 @@ pub fn check_dates(starts_on: &str, ends_on: &str) -> Result<()> {
 - To reuse the app's templates, inject `Arc<Messages>` (exported by `ValidationModule`) and call `messages.render("company_id", "exists", &[])`. The CRM does this to report a soft-deleted company as `company_id does not exist`.
 - `AppError::validation(map)` builds the same response from a `BTreeMap<String, Vec<String>>`.
 
-Calling `input.validate()` yourself works anywhere. It returns `Result<(), Violations>`: each `Violation` has its rule `key()`, its `params()` and a `message()` with the built-in template, and `Violations` displays one message per line with the field paths. For the app's messages on a value that didn't come through an extractor (a gRPC message, an event payload), call `validate_in(&value, Some(&ctx)).await` with the app's `AppContext` (its messages and its [input context](#outside-the-extractors); `None` uses the built-in ones), or `validate(&value, None, &messages, "input")` with a `Messages` you hold. Both return `ValidationErrors`, keyed by dotted field path.
+Calling `input.validate()` yourself works anywhere. It returns `Result<(), Violations>`: `get(path)` and `iter()` give the `Violation`s by dotted field path, each with its rule `key()` (`None` for a text of your own, which `as_text()` returns), its `params()` and a `message()` with the built-in template (for a field called `value`; `render(field, &messages)` uses a table you hold), and `Violations` displays one message per line, naming each field by its path. `violations.to_errors(&messages)` turns them into `ValidationErrors`. For the app's messages on a value that didn't come through an extractor (a gRPC message, an event payload), call `validate_in(&value, Some(&ctx)).await` with the app's `AppContext` (its messages and its [input context](#outside-the-extractors); `None` uses the built-in ones), or `validate(&value, None, &messages, "input")` with a `Messages` you hold. Both return `ValidationErrors`, keyed by dotted field path.
 
 ## Testing
 

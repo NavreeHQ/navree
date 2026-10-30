@@ -32,7 +32,7 @@ pub enum EntryKind {
     HttpClient,
     /// A notification delivered over one channel.
     Notification,
-    /// A data change through `Repo`.
+    /// A data change a model made in a unit of work.
     Model,
     /// A scheduled task run (a batch).
     Schedule,
@@ -636,7 +636,7 @@ pub struct NotificationEntry {
     pub channel: String,
 }
 
-/// A data change through `Repo`.
+/// A data change a model made in a unit of work.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ModelEntry {
     /// The table (`deals`).

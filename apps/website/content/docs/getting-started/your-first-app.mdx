@@ -9,17 +9,18 @@ Every command and file below comes from a real run of the CLI, and the finished 
 
 ## Before you start
 
-You need Rust 1.95 or newer and the `navree` CLI. [Installation](/docs/getting-started/installation/) covers both. The commands use a POSIX shell; on Windows, run them in Git Bash or WSL, or adapt the `curl` quoting for PowerShell.
+You need Rust 1.95 or newer and the `navree` CLI. [Installation](/docs/getting-started/installation/) covers both. A new app runs on TimescaleDB, which `navree dock up` starts in a container, so you also need Docker or Podman; to follow this tutorial with nothing else installed, create the app with `navree new planner --database sqlite` and skip `navree dock up` below. The commands use a POSIX shell; on Windows, run them in Git Bash or WSL, or adapt the `curl` quoting for PowerShell.
 
 ## Create the app
 
 ```sh
 navree new planner
 cd planner
+navree dock up
 navree key:generate
 ```
 
-`navree new` writes the app; [Directory structure](/docs/getting-started/directory-structure/) explains each file. `navree key:generate` compiles the app (a few minutes the first time) and prints a key. Put it in `.env`:
+`navree new` writes the app; [Directory structure](/docs/getting-started/directory-structure/) explains each file. `navree dock up` starts the app's database. `navree key:generate` compiles the app (a few minutes the first time) and prints a key. Put it in `.env`:
 
 ```env title=".env"
 APP_KEY=base64:G60q3lWREHaFECJUwNhN58ArvmrSl0sptSaOEWgeBLk=
@@ -95,7 +96,7 @@ schema
     .await
 ```
 
-Migrations are written with the [schema builder](/docs/database/schema-builder/), which writes the SQL for SQLite in development and for PostgreSQL, MySQL or TimescaleDB in production. Each module owns a migration set (`MigrationSet::new("tasks")`), and `navree migrate` runs every module's set in dependency order. [Migrations](/docs/database/migrations/) covers the rest.
+Migrations are written with the [schema builder](/docs/database/schema-builder/), which writes the SQL for whichever database the app runs on: TimescaleDB or PostgreSQL, MySQL and MariaDB, or SQLite (the tests use SQLite). Each module owns a migration set (`MigrationSet::new("tasks")`), and `navree migrate` runs every module's set in dependency order. [Migrations](/docs/database/migrations/) covers the rest.
 
 ## Update the model
 

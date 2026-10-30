@@ -74,8 +74,9 @@ pub struct MediaOptions {
     /// Remove EXIF, XMP, IPTC and text metadata from JPEG, PNG and WebP
     /// originals before they are stored (default `true`).
     pub strip_metadata: bool,
-    /// Delete a model's media when the model is deleted through `Repo`
-    /// (for models with a `MEDIA_TABLE`; default `true`).
+    /// Delete a model's media when the model is deleted through its record
+    /// (`delete`, `Model::destroy`; for models with a `MEDIA_TABLE`; default
+    /// `true`).
     pub delete_with_model: bool,
     /// How long the temporary URLs of [`Media::resource`](crate::Media::resource)
     /// last, in seconds, for disks without a public URL (default 3600).

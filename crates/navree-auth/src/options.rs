@@ -88,7 +88,9 @@ pub struct AuthOptions {
     /// Whether `POST /auth/register` is mounted (public sign-up).
     pub registration: bool,
     /// Failed login attempts allowed per email and client IP per minute
-    /// before `POST /auth/login` answers 429; `0` turns the limit off.
+    /// before `POST /auth/login` answers 429; `0` turns the limit off. An
+    /// IPv6 client is counted as its network
+    /// (`http.rate_limit_ipv6_prefix`, a /64 by default).
     pub login_throttle_per_minute: u32,
     /// The shortest accepted password, in characters.
     pub password_min_length: usize,

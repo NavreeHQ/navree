@@ -92,7 +92,7 @@ Guests never pass `#[can]`: make such a route `#[public]` and filter with
 `Accessible`. A refusal is logged and, with `AuditModule`, written as
 `access.denied`.
 
-## Custom actions and non-entity subjects
+## Custom actions and subjects that aren't models
 
 ```rust
 use navree::access::{ActionMarker, Subject};

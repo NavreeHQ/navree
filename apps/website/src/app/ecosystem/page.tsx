@@ -86,7 +86,7 @@ const gridFor: Record<EcosystemCategory, string> = {
   operate: "md:grid-cols-2",
   build: "md:grid-cols-2",
   capabilities: "md:grid-cols-2 lg:grid-cols-3",
-  connect: "md:grid-cols-2 xl:grid-cols-4",
+  connect: "md:grid-cols-2 xl:grid-cols-3",
   ai: "md:grid-cols-2 lg:grid-cols-3",
   test: "md:grid-cols-2",
 };

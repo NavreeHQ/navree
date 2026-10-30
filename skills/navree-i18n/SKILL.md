@@ -38,7 +38,11 @@ Navree::app()
 ```
 
    With `DatabaseModule` it saves user and workspace locales in
-   `locale_preferences` (migration set `i18n`; run `navree migrate`).
+   `locale_preferences` (migration set `i18n`; run `navree migrate`): columns
+   `scope_type` (`user` or `workspace`), `scope_id` (`uuid`; `BINARY(16)` on
+   MySQL), `locale`, `updated_at`, key `(scope_type, scope_id)`. Write it
+   through `I18n`; `navree::i18n::migration::LocalePreferenceRow` is its
+   `navree::db::Record` for reads.
 
 3. Configure the locales:
 

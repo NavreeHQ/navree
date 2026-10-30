@@ -163,7 +163,7 @@ export function ApiDocument({ errorHtml }: { errorHtml: string }) {
 /* 04: types all the way through. */
 const typed: [string, string][] = [
   ["Valid<Json<CreateDeal>>", "request"],
-  ["Select<deal::Entity>", "query"],
+  ["Builder<Deal>", "query"],
   ["SendTaskReminders: Job", "job"],
   ["DealWon: Event", "event"],
   ["WorkspaceConfig", "config"],

@@ -5,12 +5,12 @@ description: "Follow one request through every service with OpenTelemetry: spans
 
 ## Introduction
 
-<Badge feature="observe" /> In one binary, the [request log line](/docs/basics/logging/#the-request-log-line) and its request id tell you what a request did. Across services, one click in the web app becomes an HTTP request to `crm-api`, a `deals.move` message to the deals service, a few queries, a `deal.won` event to two more services, and a queued mail. A **trace** ties them together: each step is a **span** with a start, a duration, attributes and a parent, and the spans of one click form one tree.
+<Badge feature="observe" /> In one binary, the [request log line](/docs/basics/logging/#the-request-log-line) and its request id tell you what a request did. Across services, one click in the web app becomes an HTTP request to `crm-api`, a `deals.move` message to the deals service, a few queries, a `deal.won` event to two more services, and a queued mail. A **trace** ties them together: each step is a **span** with a start, a duration, attributes and a parent, and the spans of one click share one trace id.
 
 Navree records traces with [OpenTelemetry](https://opentelemetry.io), the open standard for them:
 
-- every request, outgoing call, query, job, scheduled task, cache call and mail is a span, named and labeled with OpenTelemetry's conventions; messages, gRPC calls and GraphQL operations are spans too, with their packages;
-- the trace context travels with every hop: HTTP calls in and out, queued jobs, and messages and gRPC calls with their packages;
+- every request, outgoing call, query, job, scheduled task, cache call and mail is a span, named and labeled with OpenTelemetry's conventions;
+- the trace context travels with every hop: HTTP calls in and out, queued jobs, messages and events between services, and gRPC calls through Navree's channels;
 - spans go to any OpenTelemetry backend over OTLP;
 - log lines written inside a request or job carry its trace id;
 - [Lighthouse](/docs/tools/lighthouse/) links each issue to the trace where it happened.
@@ -18,19 +18,16 @@ Navree records traces with [OpenTelemetry](https://opentelemetry.io), the open s
 Propagation is always on, so trace ids appear in your logs and in the headers your app sends from the first request. Spans are built only when something reads them: the OTLP export, the `stdout` exporter, or `SpanRecorder` in a test. An app that exports nothing pays for a trace id per request and nothing else.
 
 ```text
-GET /api/v1/deals/{id}/move             crm-api         182 ms
-+- send deals.move                      crm-api         171 ms
-   +- process deals.move                deals           164 ms
-      +- SELECT deals                   deals             2 ms
-      +- UPDATE deals                   deals             3 ms
-      +- publish deal.won               deals             2 ms
-         +- process deal.won            notifications    38 ms
-         |  +- INSERT notifications     notifications     2 ms
-         |  +- job mail.send            notifications   310 ms
-         |     +- mail send             notifications   305 ms
-         +- process deal.won            activities       12 ms
-            +- INSERT activities        activities        2 ms
+POST /api/v1/deals/{id}/move            crm-api         182 ms
+SELECT deals                            deals             2 ms
+UPDATE deals                            deals             3 ms
+INSERT notifications                    notifications     2 ms
+job mail.send                           notifications   310 ms
++- mail send                            notifications   305 ms
+INSERT activities                       activities        2 ms
 ```
+
+These are the spans of that one trace, from four services. The `deals.move` message and the `deal.won` event are not spans of their own: they carry the trace context, and the service that handles them continues the trace, so its queries, jobs and mail are spans of the same trace.
 
 Spans are made from Navree's [telemetry events](/docs/digging-deeper/health-and-metrics/#telemetry-events): when a request is answered, a query runs or a job attempt ends, `ObserveModule` turns the event into a span of the request's or job's trace.
 
@@ -114,7 +111,7 @@ Without a backend, set `observe.tracing.stdout = true` and read the spans in the
 
 ## What is traced
 
-Navree names spans and sets attributes the way OpenTelemetry's semantic conventions say, so backends recognize HTTP, database, messaging and RPC spans and draw them accordingly.
+Navree names spans and sets attributes the way OpenTelemetry's semantic conventions say, so backends recognize HTTP and database spans and draw them accordingly.
 
 | What | Span name | Kind | Main attributes |
 |---|---|---|---|
@@ -125,15 +122,8 @@ Navree names spans and sets attributes the way OpenTelemetry's semantic conventi
 | A scheduled task run | `task prune-sessions` | internal | `navree.task` |
 | A cache call | `cache get`, `cache put`, `cache forget` | internal | `navree.cache.store`, `navree.cache.hit` |
 | A mail sent | `mail send` | client | `navree.mail.transport` |
-| A message sent | `send deals.move` | client | `messaging.system`, `messaging.destination.name`, `messaging.message.id`, `navree.service` |
-| A message handled | `process deals.move` | server | the same, plus `navree.reply_status` |
-| An event published | `publish deal.won` | producer | `messaging.system`, `messaging.destination.name`, `messaging.message.id` |
-| An event handled | `process deal.won` | consumer | the same, plus `messaging.consumer.group.name`, `navree.attempt` |
-| A gRPC call served | `crm.deals.v1.Deals/GetDeal` | server | `rpc.system`, `rpc.service`, `rpc.method`, `rpc.grpc.status_code` |
-| A gRPC call made | `crm.deals.v1.Deals/GetDeal` | client | the same |
-| A GraphQL operation | `query DealBoard`, `mutation MoveDeal` | internal | `graphql.operation.type`, `graphql.operation.name` |
 
-The first seven come with the core modules; the messaging, gRPC and GraphQL spans come with [microservices](/docs/microservices/introduction/), [gRPC](/docs/microservices/grpc/) and [GraphQL](/docs/microservices/graphql/).
+Messages and events are not spans of their own: they carry the trace context (see [context propagation](#context-propagation)), and the queries, calls, jobs and mail of the handler that handles them are spans of the trace. A GraphQL operation is an HTTP request, so its span is the request's (`POST /graphql`). A [gRPC](/docs/microservices/grpc/) call is not a span of the trace; its context is passed on to the calls it makes through Navree's channels.
 
 - A request's span covers the whole request. Queries, outgoing calls, cache calls and mail sent while it runs are its children; so are its log lines, through their trace id.
 - An outgoing call is one span for all its attempts: `http.request.resend_count` says how many retries it took.
@@ -150,21 +140,21 @@ Some rules hold for every span:
 
 Navree uses W3C Trace Context (`traceparent` and `tracestate`) on every hop, so spans from different services join the same trace, whatever language a service is written in:
 
-| Hop | Carried in | The span on the other side is |
+| Hop | Carried in | On the other side |
 |---|---|---|
-| HTTP into a Navree app | request headers | a child of the caller's span |
-| `HttpClient` out of a Navree app | request headers, added by Navree | a child of the `GET` client span |
-| Queued jobs, queued listeners, queued mail | the job's row (`jobs.trace_parent`) | `job` is a child of the span that dispatched it |
-| `ServiceClient::send` | message headers | `process` is a child of `send` |
-| `ServiceClient::emit` and forwarded events | message headers (and the outbox row) | each service's `process` is a child of `publish` |
-| gRPC, both ways | call metadata | a child of the caller's span |
-| GraphQL subscriptions | the WebSocket's `connection_init` | each event's span links to the subscription |
+| HTTP into a Navree app | request headers | the request's span is a child of the caller's span |
+| `HttpClient` out of a Navree app | request headers, added by Navree | the request's span is a child of the `GET` client span |
+| Queued jobs, queued listeners, queued mail | the job's row (`jobs.trace_parent`) | the `job` span is a child of the span that dispatched it |
+| `ServiceClient::send` | message headers | the handler runs in the same trace |
+| `ServiceClient::emit` and forwarded events | message headers (and the outbox row) | each subscribing service's handler runs in the same trace |
+| gRPC through Navree's channels | call metadata | the server records the caller's `traceparent` on the call's log span, and its channels pass it on |
 
 - **Incoming HTTP.** navree-http reads `traceparent` and `tracestate` on every request. A valid header continues the caller's trace with a new span; a missing or malformed one starts a new trace. The `observe.tracing` keys `enabled`, `trust_incoming` and `sample_ratio` apply even without `ObserveModule`.
 - **Outgoing HTTP.** Inside a request or job, every `HttpClient` request carries a `traceparent` for a new client span of the current trace, and the current `tracestate`. A request that sets its own `traceparent` header keeps it.
 - **Queued jobs.** A job dispatched inside a request or job records that span's `traceparent` with the job (the `jobs.trace_parent` column, added by the queue's migrations). Each attempt continues that trace, whatever `trust_incoming` says, since the value came from your own app. Queued listeners and queued mail are jobs, so they follow. Jobs dispatched outside a request or job, and failed jobs retried with `navree queue:retry`, start a new trace.
+- **Messages and events.** `ServiceClient` puts a `traceparent` for a new span of the current trace on every message it sends (`send` and `emit`), and the current `tracestate`. A message sent outside any trace starts one, sampled by `sample_ratio`. The service that handles the message continues the trace with a new span, whatever `trust_incoming` says, since messages come from your own services, and runs the handler in it: the handler's queries, outgoing calls, cache calls, mail and the jobs it dispatches belong to the trace, and what it sends continues it again. With `observe.tracing.enabled = false`, messages carry no `traceparent`.
 
-An event published through the [outbox](/docs/microservices/events/#the-outbox) keeps the context of the code that emitted it: the outbox stores it with the row, so the `publish` span sits under the request that changed the deal even when a relay on another instance sent it.
+An event published through the [outbox](/docs/microservices/events/#the-outbox) keeps the context of the code that emitted it: the outbox stores the event's headers, `traceparent` included, with the row, so the services that handle it continue the trace of the request that changed the deal even when a relay on another instance sent it.
 
 Browsers can join too. The app's CORS settings allow the `traceparent` and `tracestate` request headers, so a front end instrumented with OpenTelemetry's web SDK starts the trace at the click, and the backend's spans continue it.
 
@@ -202,7 +192,7 @@ tokio::spawn(TelemetryContext::propagate(async move {
 Recording every trace is right in development and for most apps. At high volume, record a share of them with `observe.tracing.sample_ratio`:
 
 - the decision is made when a trace starts, from its trace id, so every service makes the same decision for the same trace;
-- a request that arrives with a trusted `traceparent` follows the caller's decision, and a queued job follows the request that dispatched it, so traces are never cut in half;
+- a request that arrives with a trusted `traceparent` follows the caller's decision, and a queued job or a message follows the request that dispatched it, so traces are never cut in half;
 - unsampled requests still get a trace id: it is in the logs and propagated to the next service, but none of their spans are built or exported.
 
 A ratio below `1.0` drops error traces too, since nobody knows at the start that a request will fail. To keep every trace with an error and a share of the rest, keep `sample_ratio = 1.0` and let an OpenTelemetry Collector make the decision at the end of each trace (tail sampling).

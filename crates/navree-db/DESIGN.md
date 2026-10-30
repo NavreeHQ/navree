@@ -127,13 +127,13 @@ backend.
    `is_retryable()`), wrapped in the crate's own error.
 6. Units of work: test on SQLite, PostgreSQL and MySQL.
 
-For navree-access (step 5) the same applies to its 6 tables: its ability
+For navree-access the same applies to its 6 tables: its ability
 filters become `Filter::raw` fragments (portable SQL with `?`), the shape
 `navree_orm::Filter::raw` accepts.
 
 ## Prepared statements and parameter types
 
-### The problem
+### The problem it solves
 
 Statements run through SQLx, which prepares each statement once per
 connection and caches it by its SQL text. On PostgreSQL the prepare
@@ -168,7 +168,7 @@ statement had run with a value of another type (`CAST(? AS CHAR)` and
 comparisons were right). SQLite types values, not parameters or columns,
 and answered every run as a first run.
 
-### The fix: the statement's text names its types
+### How: the statement's text names its types
 
 `driver::Keyed` builds the text a statement is prepared with: the SQL as
 written, then a comment naming the type each value binds, as the driver
@@ -180,7 +180,7 @@ SELECT id FROM measures WHERE amount > $1 ORDER BY id /* params: INT8 */
 SELECT id FROM measures WHERE amount > $1 ORDER BY id /* params: FLOAT8 */
 ```
 
-SQLx's cache key is the text, so the key is now the SQL plus the
+SQLx's cache key is the text, so the key is the SQL plus the
 parameter types: a run with other types is another statement, prepared
 for its own types; runs with the same types share one prepared statement
 per connection, as before. The names come from the same `Encode`/`Type`

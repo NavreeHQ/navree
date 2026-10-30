@@ -36,7 +36,7 @@ Navree::app()
 
 The notifier looks these services up when it sends, so an app without one of them still boots: only the channels that need the missing service fail, with `NotifyError::Unavailable`, and the others still deliver.
 
-The module is global, migrates the `notifications` table, the tables of the other channels (`notification_deliveries`, `notification_opt_outs`, `push_subscriptions`) and of preferences (`notification_preferences`, `notification_deferrals`; migration set `notify`) and reads the `notify` section:
+The module is global, migrates the `notifications` table, the tables of the other channels (`notification_deliveries`, `notification_opt_outs`, `push_subscriptions`) and of preferences (`notification_preferences`, `notification_deferrals`; migration set `notify`) on PostgreSQL (with TimescaleDB), MySQL and SQLite (the `sqlite` feature), and reads the `notify` section:
 
 ```toml title="config/app.toml"
 [notify]
@@ -278,7 +278,7 @@ Sending mail during a request makes the user wait for the SMTP server. With `not
 
 - The jobs carry the rendered output, not the notification, so notification types need no registration with the queue. `NotifyModule` registers `notify.send`.
 - A retried database job doesn't store the row twice.
-- `send_now` always delivers at once, even with queueing on.
+- `send_now` never queues, even with queueing on: it delivers during the call (inside a unit of work, once it commits).
 - In an app without a queue, queued notifications are delivered at once, with a warning logged the first time.
 
 The CRM leaves `notify.queue` off. Its deal notifications are sent from a [queued listener](/docs/digging-deeper/events/#queued-listeners), so the whole listener, notification included, already runs on a worker; its reminders run from the scheduler.
@@ -289,7 +289,7 @@ The CRM leaves `notify.queue` off. Its deal notifications are sent from a [queue
 
 Each delivery stores a row in `notifications`: `id`, `notifiable_type`, `notifiable_id`, `type`, `data` (JSON), `read_at` (null while unread) and `created_at`. Times come from the app's `dyn Clock`, to the microsecond.
 
-Rows are never deleted for you. To prune old ones, schedule a task over the `navree::notify::notifications` entity, as in [scheduling functions](/docs/digging-deeper/scheduling/#scheduling-functions).
+Rows are never deleted for you. To prune old ones, schedule a task that deletes through the `navree::notify::notifications::Model` (see [in code](#in-code)), as in [scheduling functions](/docs/digging-deeper/scheduling/#scheduling-functions).
 
 ### Broadcast
 
@@ -423,6 +423,7 @@ let unread = Stored::query()
 | `InvalidRecipient` | A number isn't valid E.164, or a push subscription is invalid. |
 | `Unavailable` | A channel's service isn't in the app (or the app has shut down). |
 | `Several` | More than one channel failed; each error in channel order. |
+| `InvalidPreferences` | A change to [notification preferences](/docs/digging-deeper/notification-preferences/#in-code) was refused; the messages by field. |
 
 ## Testing
 
@@ -497,6 +498,8 @@ async fn followers_hear_about_moved_contacts() {
     app.shutdown().await.unwrap();
 }
 ```
+
+`temp_database()` creates a SQLite database, so the app's tests need the `sqlite` Cargo feature ([database tests](/docs/testing/database-tests/)).
 
 The CRM tests notifications end to end in `crm-deals/tests/deals/notifications.rs`: a manager reassigns a deal over HTTP, the test checks that nothing was delivered yet, runs the queue with `crm.run_queue()`, then reads the new owner's `/api/notifications` and the mail the array transport kept.
 

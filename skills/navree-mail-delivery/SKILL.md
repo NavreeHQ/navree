@@ -28,7 +28,8 @@ their customers. All of it is in the `mail` facade feature.
 1. Root modules: `CryptoModule` (encrypts stored transports and held mail
    with `APP_KEY`), `DatabaseModule`, `EventsModule`, `ViewModule`,
    `MailModule`. Migration set `mail` creates `mail_transports`,
-   `mail_deliveries`, `mail_events`, `mail_suppressions`, `mail_outbox`.
+   `mail_deliveries`, `mail_events`, `mail_suppressions`, `mail_outbox`
+   (PostgreSQL, MySQL, SQLite).
 2. `[mail.delivery] enabled = true` (boot fails without `DatabaseModule`).
    Keys: `suppress`, `auto_suppress`, `tenants`, `routes` (all default true).
 3. Send for a tenant: `mailer.for_scope(&workspace.mail_scope()).queue(&mail)`
@@ -84,7 +85,6 @@ networks. Also `get`, `list`, `config(id)`, `set_enabled`, `remove`,
   (`use navree::db::Record as _`). Change them only through the services.
 - `MailError::Store` wraps the database error: `error.db_error()` gives the
   `DbError` (`kind()`, `is_retryable()`).
-
 - Admin routes (permission `mail.manage`): `/api/mail/deliveries`,
   `/deliveries/{id}`, `/suppressions` (GET, POST, DELETE `{id}`), `/outbox`,
   `/outbox/{id}/release`, `/outbox/{id}/discard`, `/transports/usable`.
@@ -123,8 +123,9 @@ fake.bounce(app.ctx(), "ada@example.com").await?;   // also deliver, soft_bounce
 assert!(app.get::<Suppressions>().await.is_suppressed(None, "ada@example.com").await?);
 ```
 
-API transports: set `endpoint` to a wiremock server (its host is let
-through the SSRF policy). Domain checks: override `dyn DnsResolver` with
+`temp_database()` is SQLite: the app's `[dev-dependencies]` turn on the
+`sqlite` feature of `navree`. API transports: set `endpoint` to a wiremock
+server (its host is let through the SSRF policy). Domain checks: override `dyn DnsResolver` with
 `StaticResolver::new().record(name, txt)`.
 
 ## Common mistakes

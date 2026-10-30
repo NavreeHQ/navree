@@ -64,10 +64,10 @@ export function Hero() {
             className="group inline-flex max-w-full items-center gap-2.5 rounded-full border border-line-2 bg-ink-1/80 py-1 pr-3.5 pl-1 text-sm text-fg-1 shadow-bezel transition-colors hover:border-fg-3"
           >
             <span className="rounded-full border border-accent/25 bg-accent/10 px-2.5 py-0.5 font-mono text-xs font-medium text-accent">
-              0.1
+              0.2
             </span>
             <span className="truncate sm:hidden">Read the release notes</span>
-            <span className="truncate max-sm:hidden">Workspaces, the ecosystem and AI-native tooling</span>
+            <span className="truncate max-sm:hidden">Navree&apos;s own data layer, tighter security and supply-chain checks</span>
             <ArrowRightIcon
               aria-hidden
               className="size-3.5 shrink-0 text-fg-3 transition-transform duration-300 ease-(--ease-out-quint) group-hover:translate-x-0.5 group-hover:text-fg"

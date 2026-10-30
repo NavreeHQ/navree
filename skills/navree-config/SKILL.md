@@ -150,9 +150,10 @@ JSON logs and no template reloading; debug builds to pretty logs and reloading.
 `trusted_proxies`, `per_ip_rate_limit`, `rate_limit_ipv6_prefix` (64: IPv6
 clients share a limit per /64), `body_limit_bytes`, `timeout_secs`,
 `cors.allowed_origins`, `security_headers`), `log`, `hashing`, `validation`,
-`database`, `auth`, `audit`, `cache`, `queue`, `mail`, `notify`, `storage`,
-`http_client`, `realtime`, `view`, `api`, `observe`, `session`. Each
-module's skill lists its keys.
+`database`, `schema`, `orm`, `auth`, `audit`, `cache`, `queue`, `mail`,
+`notify`, `storage`, `http_client`, `realtime`, `view`, `api`, `observe`,
+`session`, `time`, `workspace`; the other modules read a section named
+after them. Each module's skill lists its keys.
 
 ## In tests
 

@@ -129,7 +129,7 @@ Bill users instead with `BillingModule::for_feature::<navree::auth::User>()`. To
 use navree::billing::Billable;
 use uuid::Uuid;
 
-use super::entity::Model as Organization;
+use super::entity::Organization;
 
 impl Billable for Organization {
     /// Stored with customers and subscriptions; keep it stable.
@@ -565,7 +565,8 @@ To test against the provider's own test mode, use real test keys (`sk_test_...`,
 | `InvalidWebhook` | 400 | `invalid_webhook_signature` |
 | `InvalidPayload` | 400 | `invalid_webhook_payload` |
 | `Provider` | 502 | `payment_provider_error` (no URL or key reaches the client) |
-| `Db`, `Fake`, `Config`, `Other` | 500 | `internal_error` |
+| `Db`, `Orm` | 404 for a missing record, 409 for a unique or foreign-key violation, else 500 | `not_found`, `conflict`, `internal_error` |
+| `Fake`, `Config`, `Other` | 500 | `internal_error` |
 | no valid subscription (`Subscribed`) | 402 | `subscription_required` |
 
 | Command | What it does |

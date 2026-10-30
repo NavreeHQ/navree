@@ -209,7 +209,9 @@ sent.assert_sent(|m| m.to == ["ada@example.com"] && m.subject == "Welcome aboard
 With `QueueModule` in the test app, queued mail reaches the array transport
 only after `app.get::<Queue>().await.run_pending().await`; or check the
 dispatch with `QueueFake` (`SendMailJob`). Count database notifications with
-`notifier.unread_count(&db, &user)`.
+`notifier.unread_count(&db, &user)`; the test app then needs `DatabaseModule`
+and `.temp_database()` (SQLite: the `sqlite` feature of `navree` in
+`[dev-dependencies]`).
 
 ## Common mistakes
 

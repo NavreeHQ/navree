@@ -65,7 +65,7 @@ whole chunks. Tune them in an app migration:
 use navree::db::prune_time_series;
 
 // Inside a transaction: count, drop the chunks before the cutoff, delete the rest.
-let deleted = prune_time_series(&*tx, "events", "occurred_at", Utc::now() - TimeDelta::days(90)).await?;
+let deleted = prune_time_series(&tx, "events", "occurred_at", Utc::now() - TimeDelta::days(90)).await?;
 ```
 
 The cutoff is a `DateTime<Utc>` for timestamp columns, an `i64` for integer

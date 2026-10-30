@@ -100,7 +100,7 @@ export const scenarios: Scenario[] = [
         kind: "tool",
         name: "module_graph",
         args: 'module: "DealsModule"',
-        result: [<>DealsModule exports DealService, DealRepository</>],
+        result: [<>DealsModule exports DealService</>],
       },
       {
         kind: "run",

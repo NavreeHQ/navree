@@ -23,7 +23,7 @@ The user is identified from the bearer token or the session, as on any route.
 </Step>
 <Step title="Resolve the workspace">
 
-The resolvers run in the configured order until one finds a workspace slug or id: the `X-Workspace` header, a path segment (`/api/w/acme/...`), a subdomain (`acme.app.example.com`) or a claim of the bearer token. A request that names no workspace is a 400, and an unknown workspace a 404.
+The resolvers run in the configured order until one finds a workspace slug or id: the `X-Workspace` header, a path segment (`/api/w/acme/...`), a subdomain (`acme.app.example.com`), a claim of the bearer token or the workspace's own verified domain. A request that names no workspace is a 400, and an unknown workspace a 404.
 
 </Step>
 <Step title="Check membership">
@@ -89,6 +89,7 @@ Pick the resolvers that match how clients address a workspace:
 | `path` | `/api/w/acme/projects` | URLs that name the workspace, shareable links |
 | `subdomain` | `acme.app.example.com` | A branded URL per customer; set `workspace.base_domain` |
 | `claim` | a `workspace` claim in the bearer JWT | Tokens issued for one workspace |
+| `domain` | `crm.acme-corp.com` | A customer's own domain, verified by [custom domains](/docs/packages/custom-domains/) |
 
 A resolver finds a slug or an id, and the first one that finds something wins. The `path` resolver reads the segment after `path_prefix`, so it applies to routes whose path contains it, such as a controller mounted at `/w/{workspace}/projects`; for those, `InWorkspace::from_path("workspace")` reads the route parameter directly. Keep the list short: every resolver you add is another way to name a workspace that your clients and your tests have to agree on. [Resolution](/docs/workspaces/resolution/) covers each resolver and its settings.
 

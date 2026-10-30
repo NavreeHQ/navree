@@ -13,7 +13,7 @@ description: "Schedules on cron expressions, declared in modules: commands, jobs
 
 ## Registering the module
 
-Add `ScheduleModule` once, in your app root. It has no options. It needs `DatabaseModule`: its `schedule` migration set creates the `schedule_runs` table, a [hypertable](/docs/database/timescaledb/#navrees-own-tables) on `tick` on TimescaleDB.
+Add `ScheduleModule` once, in your app root (an app made by `navree new` has it already). It has no options. It needs `DatabaseModule`: its `schedule` migration set creates the `schedule_runs` table, a [hypertable](/docs/database/timescaledb/#navrees-own-tables) on `tick` on TimescaleDB and a regular table with an index on `tick` on any other database.
 
 ```rust title="src/app.rs"
 Navree::app()
@@ -128,7 +128,7 @@ async fn close_stale_deals(ctx: AppContext) -> Result<(), BoxError> {
 
 ### Task names
 
-Each task needs a unique name, at most 191 characters: it keys the task's runs in `schedule_runs`. Two tasks with the same name fail the boot, naming both modules. Rename a command or job task with `.name(...)`:
+Each task needs a unique name, at most 191 bytes: it keys the task's runs in `schedule_runs`. Two tasks with the same name fail the boot, naming both modules. Rename a command or job task with `.name(...)`:
 
 ```rust
 s.command("audit:prune", &["--days", "90"])
@@ -176,7 +176,7 @@ Every field takes:
 - A value: `30`, `MAR`, `FRI`.
 - A range: `9-17`, `MON-FRI`. A range can't wrap around; write `22-23,0-2` for the night.
 - A step: `*/15`, or `10-40/10` over a range. Steps count from the start of the range, so `*/15` in the day of month is the 1st, 16th and 31st. A step needs `*` or a range in front of it: `5/15` is rejected.
-- A comma list of these: `0,15,30,45`, `1,15`, `JAN,JUL`, `*/20,5`.
+- A comma list of these: `0,15,30,45`, `1,15`, `JAN,JUL`, `*/20,5`. A bare `*` can't be one of the items, since it already means every value.
 
 Two fields take more:
 
@@ -202,6 +202,28 @@ scheduled task `report` (module `ReportsModule`) has an invalid schedule `61 * *
 That covers a seconds or year field, names in the wrong field (`MON` as a minute), `@reboot` and `@midnight`, empty list items (`1,,2`), ranges that run backwards (`10-5`), a lone `L` in the day of week (write `5L`) and an expression over 256 bytes.
 
 An expression that can never match, such as `0 0 30 2 *`, is accepted: the search for its next run looks 400 years ahead (the calendar repeats every 400 years, so a longer search couldn't find more) and then gives up. `schedule:list` shows `never` for it, and it never runs.
+
+#### Checking an expression in code
+
+The parser is public as `navree::schedule::CronExpression`, for a setting or a form field that holds an expression. `parse` (or `str::parse`) returns a `CronError` with the `field()`, the `token()` and the `reason()`; `MAX_EXPRESSION_LEN` is the 256-byte limit. `next_after(instant, &zone)` gives the first run after an instant on the clock of a `chrono` time zone (`Zone::tz()` gives one), and `is_due(tick, &zone)` says whether a whole minute is a run, by the rules in [When clocks change](#when-clocks-change):
+
+```rust
+use chrono::{TimeZone, Utc};
+use navree::schedule::CronExpression;
+
+let cron: CronExpression = "*/15 9-17 * * MON-FRI".parse().unwrap();
+let after = Utc.with_ymd_and_hms(2026, 10, 26, 9, 7, 0).unwrap();
+assert_eq!(
+    cron.next_after(after, &Utc),
+    Some(Utc.with_ymd_and_hms(2026, 10, 26, 9, 15, 0).unwrap())
+);
+
+let error = "61 * * * *".parse::<CronExpression>().unwrap_err();
+assert_eq!((error.field(), error.token()), ("minute", "61"));
+assert_eq!(error.reason(), "is out of range, use 0 to 59");
+```
+
+`next_after` returns `None` for an expression that never matches.
 
 ## Time zones
 
@@ -245,8 +267,8 @@ m.schedule(|s| {
 
 At each tick the scheduler asks `Zones` for every workspace and its zone (its `timezone`, else its country's primary zone, else its [organization's](/docs/digging-deeper/time-zones/#workspaces-and-organizations) zone, else `time.default_zone`) and runs the task for each workspace whose clock shows 09:00. The app needs `TimeModule` (the boot fails without it) and `WorkspaceModule`, which provides the workspaces' zones.
 
-- Each workspace's run is claimed on its own in `schedule_runs`, as `<task>@<workspace id>`, so a task that runs per workspace has a name of at most 154 characters. `without_overlapping` works per workspace.
-- Inside the run, `LocalRun::current()` gives the workspace (`owner`), its `zone`, and the tick in UTC (`tick`) and on the workspace's clock (`local`). Plain tasks see a `LocalRun` too, with no owner and the zone `UTC`.
+- Each workspace's run is claimed on its own in `schedule_runs`, as `<task>@<workspace id>`, so a task that runs per workspace has a name of at most 154 bytes. `without_overlapping` works per workspace.
+- Inside the run, `LocalRun::current()` gives the workspace (`owner`), its `zone`, and the tick in UTC (`tick`) and on the workspace's clock (`local`). Other tasks see a `LocalRun` too, with no owner and the zone their frequency is read on (`UTC` by default).
 - `s.job_with(f)` builds the job from the run, so each workspace gets its own job on the queue. `s.job(value)` dispatches the same value for every workspace.
 - `per_user_local()` and `per_local(level)` do the same per user (with a user-level zone source) or per organization.
 
@@ -269,7 +291,7 @@ The scheduler sees a running run in its own process (an in-process lock) and on 
 
 ## Running on one server
 
-You can run the scheduler on every server, for redundancy. Each due tick of each task is claimed in the database first, with an `INSERT … ON CONFLICT DO NOTHING` on `schedule_runs` keyed by task and minute; only the scheduler whose insert succeeds runs it, and the others report it skipped. A second `schedule:run` in the same minute skips it too.
+You can run the scheduler on every server, for redundancy. Each due tick of each task is claimed in the database first, with an `INSERT … ON CONFLICT DO NOTHING` (`INSERT IGNORE` on MySQL) on `schedule_runs` keyed by task and minute; only the scheduler whose insert succeeds runs it, and the others report it skipped. A second `schedule:run` in the same minute skips it too.
 
 Every task already runs on one server per tick; `.on_one_server()` exists so your intent is written down, and changes nothing.
 
@@ -334,7 +356,7 @@ Rows are kept for seven days; the scheduler deletes older ones at the top of eve
 
 ## Testing
 
-Resolve the `Scheduler` and call `tick` with a time: it runs the tasks due at that minute, waits for them and returns one `RunOutcome` per due task (`task`, `tick` and a `RunStatus`). Tasks that aren't due are left out. Override the app's `dyn Clock` with a `FixedClock` so the tasks see the same time:
+Resolve the `Scheduler` and call `tick` with a time: it runs the tasks due at that minute, waits for them and returns one `RunOutcome` per due task (`task`, `tick` and a `RunStatus`). Tasks that aren't due are left out. Override the app's `dyn Clock` with a `FixedClock` so the tasks see the same time. The example boots the app with `temp_database()`, a SQLite file, so the app's tests need the `sqlite` feature (see [database tests](/docs/testing/database-tests/)):
 
 ```rust title="tests/schedule.rs"
 use chrono::{DateTime, Utc};

@@ -22,6 +22,17 @@
 //! - **Personal access tokens** ([`PersonalAccessTokens`]), revocation (RFC
 //!   7009), introspection (RFC 7662) and, behind
 //!   `oauth.dynamic_registration`, dynamic client registration (RFC 7591).
+//! - **Rate limits** (`oauth.rate_limits`, [`RateLimitOptions`]): the token,
+//!   introspection, revocation and device authorization endpoints are
+//!   limited per client IP address (an IPv6 client counts as its network,
+//!   `http.rate_limit_ipv6_prefix`) before anything is checked, and per
+//!   client once it has authenticated; public clients are limited per IP
+//!   only. A request over a limit is a 429 with `Retry-After`.
+//! - **Offboarding:** the module registers a
+//!   `navree_contracts::CredentialRevoker`, so navree-auth's
+//!   `AuthService::revoke_credentials_of_domain` and `revoke_all_credentials`
+//!   also end the users' personal access tokens, OAuth tokens, unexchanged
+//!   codes and remembered consent.
 //!
 //! Tokens are opaque (`nva_` access, `nvr_` refresh, `nvp_` personal) and
 //! stored as SHA-256 digests.

@@ -34,7 +34,10 @@
 //!   through [`EventStream`].
 //! - **Limits and tooling:** depth and complexity limits, introspection and
 //!   GraphiQL in debug builds, batching on request, and the command
-//!   `graphql:schema [path] [--check]`.
+//!   `graphql:schema [path] [--check]`. Introspection lists the public
+//!   schema only (the resolvers' internal part types are removed). GraphiQL
+//!   is embedded in the binary and served from `<path>/assets/`, so its page
+//!   allows scripts from `'self'` only and WebSockets to the request host.
 //!
 //! ```ignore
 //! use async_graphql::{Context, SimpleObject};

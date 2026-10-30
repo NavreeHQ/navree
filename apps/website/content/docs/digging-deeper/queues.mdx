@@ -27,7 +27,7 @@ Every driver implements the public `QueueStore` trait, so other backends can be 
 
 ## Configuration
 
-Add `QueueModule` once, in your app root. The database driver needs `DatabaseModule`:
+Add `QueueModule` once, in your app root (an app made by `navree new` has it already). The database driver needs `DatabaseModule`:
 
 ```rust title="src/app.rs"
 Navree::app()
@@ -171,7 +171,7 @@ A job doesn't run inside a unit of work. When it writes to the database, open a 
 ```rust
 let db = ctx.app.get::<Db>().await?;
 db.transaction(|uow| async move {
-    // ... write through `&uow` (models, statements)
+    // ... run statements on `&uow`; the closure returns Result<_, DbError>
     Ok(())
 })
 .await?;
@@ -454,7 +454,7 @@ The CRM runs one server and one worker in development: `cargo run -p crm-api -- 
 
 ### Faking the queue
 
-`QueueFake` records jobs instead of queueing them. Install its queue in place of the app's, then assert on what was dispatched:
+`QueueFake` records jobs instead of queueing them. Install its queue in place of the app's, then assert on what was dispatched. The examples boot the app with `temp_database()`, a SQLite file, so the app's tests need the `sqlite` feature (see [database tests](/docs/testing/database-tests/)):
 
 ```rust title="tests/export.rs"
 use navree::prelude::*;

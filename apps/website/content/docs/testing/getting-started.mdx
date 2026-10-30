@@ -24,10 +24,11 @@ use navree::testing::{TestApp, principal};
 | `temp_sqlite_url()`, `TempDirGuard` | A fresh SQLite database file and the guard that deletes it. |
 | `FixedClock` | A clock that stands still until you move it; see [fakes](/docs/testing/fakes/#the-clock). |
 
-Tests are async, so your app needs `tokio` as a dev-dependency. An app made by `navree new` has it:
+Tests are async, so your app needs `tokio` as a dev-dependency. The test databases are SQLite files, and SQLite is an opt-in feature, so the dev-dependencies also turn it on. An app made by `navree new` has both:
 
 ```toml title="Cargo.toml"
 [dev-dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["sqlite"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
@@ -98,12 +99,14 @@ Where to put tests:
 | `.config(key, value)` | Sets a configuration key (a dotted path) to a JSON value, above every other source. Later calls win. |
 | `.sources(sources)` | Replaces the base configuration sources (none by default); `.config` values still apply on top. |
 | `.temp_database()` | Points `database.url` at a new SQLite file and sets `database.migrate_on_boot = true`. |
+| `.memory_database()` | Points `database.url` at an in-memory SQLite database, migrated at boot. Its pool keeps one connection, so a unit of work holds the database until it ends. |
+| `.hold(value)` | Keeps `value` alive as long as the app and drops it after the app and its temporary directories: a guard that drops a test's own database on a PostgreSQL or MySQL server, say. |
 | `.override_value::<T>(Arc<T>)` | Replaces the provider of `T` everywhere, for [fakes](/docs/testing/fakes/). |
 | `.fake_auth()` | Authenticates with the `TestAuthenticator` even when the app has its own; see [HTTP tests](/docs/testing/http-tests/#apps-with-navree-auth). |
 | `.build().await` | Boots the app, panicking with the boot error if it fails. |
 | `.try_build().await` | Boots the app and returns the boot error instead. |
 
-`temp_database()` sets the configuration only: add `DatabaseModule` yourself, or a module that imports it. Don't add a `ConfigModule` of your own, because the builder has configured one already and the boot would fail.
+`temp_database()` sets the configuration only: add `DatabaseModule` yourself, or a module that imports it. Don't add a `ConfigModule` of your own, because the builder has configured one already and the boot would fail. Logbook is off in a test app (`logbook.enabled = false` under the default sources); turn it back on with `.config("logbook.enabled", true)`, usually with `.config("logbook.store", "memory")`.
 
 Once built, a `TestApp` gives you:
 
@@ -127,7 +130,8 @@ use navree::testing::{TempDirGuard, TestApp, TestAuthenticator, principal, temp_
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-/// Hermetic settings: no `.env`, a fresh database, fast password hashing.
+/// Hermetic settings: no `.env`, a fresh database, fast password hashing,
+/// Logbook off.
 fn sources() -> (ConfigSources, TempDirGuard) {
     let (url, guard) = temp_sqlite_url();
     let sources = ConfigSources::new()
@@ -137,6 +141,7 @@ fn sources() -> (ConfigSources, TempDirGuard) {
         .set("http.per_ip_rate_limit", Value::Null)
         .set("mail.transport", "array")
         .set("observe.metrics", false)
+        .set("logbook.enabled", false)
         .set("hashing.memory_kib", 1024)
         .set("hashing.iterations", 1);
     (sources, guard)
@@ -185,21 +190,22 @@ The settings above make the app hermetic and fast:
 | `http.per_ip_rate_limit` = `null` | Every test request comes from 127.0.0.1, and the default limit is 600 requests a minute per IP. |
 | `mail.transport` = `"array"` | Mail is kept in memory, to [assert on](/docs/testing/fakes/#mail). |
 | `observe.metrics` = `false` | Skips the Prometheus recorder. |
+| `logbook.enabled` = `false` | Logbook records nothing (a builder-made test app has it off already). |
 | `hashing.memory_kib`, `hashing.iterations` | Argon2id with production settings is slow on purpose; cheap settings keep logins in tests fast. |
 
 ## The test database
 
-`temp_database()` and `temp_sqlite_url()` create a new directory in the system's temporary directory (named `navree-test-...`) and point the app at a `database.sqlite` file inside it. SQLite creates the file on first connect, and `migrate_on_boot` runs every module's migrations, so each test starts from an empty, migrated schema. The directory is deleted when the `TestApp` (or the guard) is dropped.
+`temp_database()` and `temp_sqlite_url()` create a new directory in the system's temporary directory (named `navree-test-<random>`) and point the app at a `database.sqlite` file inside it. SQLite creates the file on first connect, and `migrate_on_boot` runs every module's migrations, so each test starts from an empty, migrated schema. The directory is deleted when the `TestApp` (or the guard) is dropped. The SQLite driver must be compiled in: without the `sqlite` feature in the test build, the app stops at boot and asks for it.
 
 A file is used rather than an in-memory database because an in-memory SQLite database belongs to one connection: every connection in the pool would see a different, empty database.
 
 <Callout type="tip" title="Call shutdown on Windows">
 
-Deleting the directory is best effort. On Windows, files a database pool still holds open can't be deleted when the guard drops. The guard then hands the directory to a background thread that retries for about 30 seconds without holding up the test, and the first guard of each test process removes `navree-test-*` directories left by earlier runs once they are an hour old (`NAVREE_TEST_SWEEP_AGE_SECS` sets another age, in seconds). End tests with `app.shutdown().await` anyway: it closes the pool before deleting the directory, so nothing is left to retry.
+Deleting the directory is best effort. On Windows, files a database pool still holds open can't be deleted when the guard drops. The guard then hands the directory to a background thread that retries for about 30 seconds without holding up the test, and the first guard of each test process removes `navree-test-*` directories left by earlier runs once they are an hour old (`NAVREE_TEST_SWEEP_AGE_SECS` sets another age, in seconds, and makes the sweep run at once; otherwise the sweep runs at most every ten minutes). End tests with `app.shutdown().await` anyway: it closes the pool before deleting the directory, so nothing is left to retry.
 
 </Callout>
 
-Tests run on SQLite only: there is no helper that creates a PostgreSQL database per test. [Database tests](/docs/testing/database-tests/) covers preparing data and asserting on it.
+`TestApp`'s own databases are SQLite. To test an app against PostgreSQL or MySQL, create a database of its own on a real server with the ORM's `#[navree::test(database = "postgres")]` ([ORM testing](/docs/orm/testing/#real-servers)), point `database.url` at its `url()`, and keep the `TestDb` alive with `.hold(..)` until the app is gone. [Database tests](/docs/testing/database-tests/) covers preparing data and asserting on it.
 
 ## Running tests
 

@@ -1,6 +1,7 @@
 //! The Compose file Dock generates from `dock.toml` and hands to
 //! `docker compose` or `podman compose`. Nobody edits it: it is rewritten
-//! before every command, under `.navree/dock/` (which ignores itself in git).
+//! each time Dock runs Compose (`up`, and `down` without service names),
+//! under `.navree/dock/` (which ignores itself in git).
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};

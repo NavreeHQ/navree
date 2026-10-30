@@ -128,7 +128,7 @@ fn register(m: &mut ModuleBuilder, options: Option<HelmOptions>) {
 /// Helm registrations on a [`ModuleBuilder`].
 pub trait ModuleBuilderHelmExt {
     /// Registers resource `R` as a provider of this module and adds it to
-    /// the panel. Its entity's subject is registered with navree-access
+    /// the panel. Its model's subject is registered with navree-access
     /// (`AccessModule::for_feature`), so permissions on its prefix map to
     /// it.
     fn resource<R: Resource + Injectable>(&mut self) -> &mut Self;

@@ -125,13 +125,13 @@ pub struct PoolStats {
 impl Db {
     /// Opens a pool for `options` (creating the directory of a SQLite file).
     ///
-    /// The URL's scheme picks the driver: `sqlite:`, `postgres://` (the
-    /// `postgres` feature), `mysql://` or `mariadb://` (the `mysql`
-    /// feature). A URL whose driver is not compiled in fails with a message
-    /// naming the feature to turn on. `options` are checked first, as the
-    /// `database` configuration section is (an invalid pool size or SQL
-    /// mode fails before anything connects), so options built in code get
-    /// the same errors as configured ones.
+    /// The URL's scheme picks the driver: `sqlite:` (the `sqlite` feature),
+    /// `postgres://` (the `postgres` feature), `mysql://` or `mariadb://`
+    /// (the `mysql` feature). A URL whose driver is not compiled in fails
+    /// with a message naming the feature to turn on. `options` are checked
+    /// first, as the `database` configuration section is (an invalid pool
+    /// size or SQL mode fails before anything connects), so options built
+    /// in code get the same errors as configured ones.
     ///
     /// ```no_run
     /// # async fn demo() -> Result<(), navree_db::DbError> {

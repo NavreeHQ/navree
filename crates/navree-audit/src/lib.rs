@@ -4,7 +4,7 @@
 //! changes, in the table `audit_logs`.
 //!
 //! - **Data changes** made through a `navree_db::Uow` (navree-orm models
-//!   saved in it, navree-db's recorded record writes, or `navree_db::Repo`)
+//!   saved in it, or navree-db's recorded record writes)
 //!   are written as `data` entries by a `dyn ChangeObserver`
 //!   (`observe`) inside the unit of work's transaction, so a
 //!   rolled-back change leaves no audit row. Entries carry the unit of

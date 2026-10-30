@@ -45,12 +45,13 @@ This is the CRM's deals module, from `crates/crm-deals/src/lib.rs`:
 pub struct DealsModule;
 
 impl DealsModule {
-    /// The owner notifications (a queued listener of both events) and
-    /// their mail template.
+    /// The owner notifications (a queued listener of both events), their
+    /// mail template and the deals part of the MCP server.
     fn wire(&self, m: &mut ModuleBuilder) {
         m.listen::<DealAssigned, NotifyDealOwner>()
             .on::<DealWon, NotifyDealOwner>()
             .templates(notification::TEMPLATES);
+        m.mcp_server::<DealsMcp>();
     }
 }
 ```
@@ -63,7 +64,7 @@ A module can resolve exactly three kinds of providers: its own, the exports of t
 
 That gives each module a small, explicit surface:
 
-- **Exports are the API.** Export services, not entities or controllers. A service method is a contract you can keep while its internals change.
+- **Exports are the API.** Export services, not models or controllers. A service method is a contract you can keep while its internals change.
 - **Imports are the dependencies.** Read a module's `imports` and you know everything it can call. A reviewer sees a new dependency as a one-line change to the attribute.
 - **Everything else is private.** Helpers, listeners, repositories and controllers stay inside.
 
@@ -159,6 +160,7 @@ The root stays short. `platform` adds the framework modules, configured once, an
 ```rust title="apps/crm-api/src/app.rs"
 pub fn app(sources: ConfigSources) -> AppBuilder {
     platform(Navree::app(), sources)
+        .module(McpModule::from_config()) // section `mcp`; serves /mcp
         .module(CrmCoreModule)
         .module(UsersModule)
         .module(CompaniesModule)
@@ -173,7 +175,7 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
 
 ### The shared core module
 
-Some things belong to no single feature: the entities several features read, enums, roles and abilities, and the event types other modules listen to. Put them in one core module that every feature imports. The CRM's `CrmCoreModule` owns the tables, registers every entity as an access subject and seeds the roles:
+Some things belong to no single feature: the models several features read, enums, roles and abilities, and the event types other modules listen to. Put them in one core module that every feature imports. The CRM's `CrmCoreModule` owns the tables, registers every model as an access subject and seeds the roles:
 
 ```rust title="crates/crm-core/src/module.rs"
 #[module(
@@ -192,6 +194,12 @@ impl CrmCoreModule {
     fn wire(&self, m: &mut ModuleBuilder) {
         m.migrations(migrations());
         m.seeder::<RolesSeeder>();
+        m.model::<models::Company>()
+            .model::<models::Contact>()
+            .model::<models::Deal>()
+            .model::<models::Activity>()
+            .model::<models::User>()
+            .model::<models::Role>();
     }
 }
 ```
@@ -251,19 +259,20 @@ The event type is the only thing the two modules share. When modules live in sep
 
 ## One database, tables per module
 
-A modular monolith usually shares one database. Keep ownership clear anyway: **each table belongs to one module, and only that module writes to it.** Other modules change it by calling the owner's exported service, and read it through the service or a shared entity.
+A modular monolith usually shares one database. Keep ownership clear anyway: **each table belongs to one module, and only that module writes to it.** Other modules change it by calling the owner's exported service, and read it through the service or a shared model.
 
 Each module registers its own migration set, and `migrate` runs the sets in dependency order:
 
 ```rust title="src/modules/deals/migrations/mod.rs"
 use navree::db::MigrationSet;
+use navree::schema::migration;
 
 mod m20261026_090000_create_deals_table;
 
 pub fn migrations() -> MigrationSet {
     MigrationSet::new("deals")
         .after(["companies"])
-        .migration(m20261026_090000_create_deals_table::Migration)
+        .migration(migration!(m20261026_090000_create_deals_table))
 }
 ```
 

@@ -506,7 +506,7 @@ Return a `MediaError` from a handler with `?`. A refused file answers with a sta
 | `Unsupported` | 415 | `unsupported_media_type` | Text extraction of a type it doesn't read |
 | `NotFound` | 404 | `media_not_found` | No item has this id |
 | `MissingConversion` | 404 | `conversion_not_found` | The item has no generated conversion of this name |
-| `NoPublicUrl`, `Ffmpeg`, `File`, `Queue`, `Storage(..)`, `Db(..)` | 500 | `internal_error` | A disk, the database, the queue or FFmpeg failed |
+| `NoPublicUrl`, `Ffmpeg`, `File`, `Queue`, `Storage(..)`, `Db(..)`, `Orm(..)` | 500 | `internal_error` | A disk, the database, the queue or FFmpeg failed |
 
 ## Testing
 
@@ -542,7 +542,7 @@ The fake replaces `Media` wherever it is injected, so the app needs neither `Med
 - `fake.ffmpeg()` (with `media-ffmpeg`) answers `ffprobe` with a 10-second 1280x720 H.264 video by default (`probe_json(..)` sets another), writes frames of the probed size and placeholder transcodes, records every run (`assert_ran`) and can `fail(..)`. To keep the real `Media` and fake only FFmpeg, override `Arc<dyn FfmpegRunner>` with `FfmpegFake::new().runner()`.
 - `MediaFake::with_options(MediaOptions { .. })` takes options (its disks are always the memory disk).
 
-To test with the real store, use `TestApp::builder().temp_database()` and `StorageModule` with a memory disk: the migrations create `media`, and queued conversions are dispatched to whatever queue the app has (a `QueueFake` records them, and `GenerateConversions { .. }.handle(ctx)` runs one). Outside an app, `Media::builder(storage).options(..).register::<Course>().build()?` builds the service on your disks with memory rows.
+To test with the real store, use `TestApp::builder().temp_database()` (a SQLite file, so the test build needs the `sqlite` feature: [database tests](/docs/testing/database-tests/#a-database-for-every-test)) and `StorageModule` with a memory disk: the migrations create `media`, and queued conversions are dispatched to whatever queue the app has (a `QueueFake` records them, and `GenerateConversions { .. }.handle(ctx)` runs one). Outside an app, `Media::builder(storage).options(..).register::<Course>().build()?` builds the service on your disks with memory rows.
 
 ## Reference
 
@@ -581,7 +581,7 @@ To test with the real store, use `TestApp::builder().temp_database()` and `Stora
 | `extract_text`, `open_archive`, `unpack`, `zip` | Documents and archives |
 | `register::<M>()`, `options()`, `storage()`, `store()`, `ffmpeg()` | The service |
 
-The `media` table: `id` (UUID; `BINARY(16)` on MySQL), `model_type`, `model_id`, `collection`, `name`, `file_name`, `mime_type`, `disk`, `conversions_disk`, `path`, `size`, `width`, `height`, `conversions`, `metadata` and `custom_properties` (JSON; `JSONB` on PostgreSQL), `order_column`, `created_at` and `updated_at`, indexed by `(model_type, model_id, collection)`. Rows are kept by a `MediaStore`: `DatabaseStore` or `MemoryStore`, or your own through `Media::builder(..).store(..)`.
+The `media` table: `id` (UUID; `BINARY(16)` on MySQL), `model_type`, `model_id`, `collection`, `name`, `file_name`, `mime_type`, `disk`, `conversions_disk`, `path`, `size`, `width`, `height`, `conversions`, `metadata` and `custom_properties` (JSON; `JSONB` on PostgreSQL), `order_column`, `created_at` and `updated_at`, indexed by `(model_type, model_id, collection)`. Rows are kept by a `MediaStore`: `DatabaseStore` or `MemoryStore`, or your own through `Media::builder(..).store(..)`; its `delete_owner(&Uow, model_type, model_id)` runs in the unit of work the change observer was given.
 
 <LinkCards>
   <LinkCard href="/docs/digging-deeper/storage/" title="File storage">

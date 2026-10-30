@@ -16,7 +16,7 @@ export const metadata: Metadata = pageMetadata({
 /** The four first steps, above the full index. */
 const startHere = [
   { href: "/docs/getting-started/installation/", title: "Install the CLI", text: "Rust, the `navree` command and a new app." },
-  { href: "/docs/getting-started/your-first-app/", title: "Build your first app", text: "An entity, routes, auth and tests." },
+  { href: "/docs/getting-started/your-first-app/", title: "Build your first app", text: "A model, routes, auth and tests." },
   { href: "/docs/patterns/overview/", title: "Choose an architecture", text: "Monolith, services, multi-tenant and more." },
   { href: "/docs/ai/introduction/", title: "Set up your agent", text: "Skills, Navigator and docs for models." },
 ];

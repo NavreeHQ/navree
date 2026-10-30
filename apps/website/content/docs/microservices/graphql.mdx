@@ -190,7 +190,7 @@ Navree's request state comes from the context through `ContextExt`:
 | `ctx.principal()` | The authenticated viewer (`&Principal`); an `UNAUTHENTICATED` error for guests. |
 | `ctx.current_user().await` | The viewer's user record (`AuthModule`). |
 | `ctx.abilities().await` | The viewer's abilities. |
-| `ctx.accessible::<E, A>().await` | A SQL filter for the records of `E` the viewer may `A`. |
+| `ctx.accessible::<E, A>().await` | A SQL filter for the records of `E` the viewer may `A`. With navree-orm, `scope.query()` (the `AccessibleQuery` trait, `navree::orm::access`) starts a query of those records. |
 | `ctx.authorized::<E, A>()` | The record a `#[can(.., from = "arg")]` check loaded. |
 | `ctx.workspace().await` | The current [workspace](/docs/workspaces/introduction/), resolved and checked like the `CurrentWorkspace` extractor. A [read-only demo workspace](/docs/workspaces/demo-workspaces/#read-only-demos) answers queries and subscriptions and refuses mutations. |
 | `ctx.loader::<L>()` | This request's [dataloader](#dataloaders) of type `L`. |
@@ -294,7 +294,7 @@ A GraphQL response carries errors next to the data, so a failed field doesn't fa
 How an error gets its status:
 
 - an `AppError` keeps its own (`AppError::conflict(..)` is a `CONFLICT`);
-- a database error maps as on routes: a missing record is `NOT_FOUND` with `"statusCode": 404`, a unique or foreign-key violation `CONFLICT`;
+- a database error (`navree::db::DbError`, or an `AppError` that carries one, which is what `?` makes of an `OrmError` in a function that returns navree's `Result`) maps as on routes: a missing record is `NOT_FOUND` with `"statusCode": 404`, a unique or foreign-key violation `CONFLICT`;
 - an error type a module maps with `m.map_error::<E>(..)` gets that mapping;
 - a plain message (`async_graphql::Error::new(..)`, a `String`) and async-graphql's own errors are `BAD_REQUEST`;
 - anything else is a server error: the message becomes `"Internal server error"` while the real error is logged on target `navree::error` with the request id.
@@ -408,9 +408,9 @@ In development, open `http://localhost:8080/graphql` in a browser to get GraphiQ
 { "Authorization": "Bearer eyJhbGciOiJIUzI1NiIs..." }
 ```
 
-GraphiQL sends it with every query, and in the `connection_init` payload of its subscriptions. The page loads nothing from a third party: GraphiQL 3.8.3, React 18.3.1 and React DOM 18.3.1 are embedded in your binary with their MIT licenses and served by the app at `/graphql/assets/`, cached for a year. Its `Content-Security-Policy` allows scripts from your own origin only (even the page's start-up code is a file, not an inline script), and requests to your own origin plus WebSockets to the host the page was requested from, `ws://` and `wss://` of the request's `Host` (`connect-src 'self' ws://api.acme.test wss://api.acme.test`), not to any host. The `Host` has to reach the app unchanged, so a reverse proxy should forward it; a `Host` that isn't a plain name or `name:port` leaves the policy at `'self'`.
+GraphiQL sends it with every query, and in the `connection_init` payload of its subscriptions. The page loads nothing from a third party: GraphiQL 3.8.3, React 18.3.1 and React DOM 18.3.1 are embedded in your binary with their MIT licenses and served by the app at `<path>/assets/` (`/graphql/assets/`), cached for a year. Its `Content-Security-Policy` allows scripts from your own origin only (even the page's start-up code is a file, not an inline script), and requests to your own origin plus WebSockets to the host the page was requested from, `ws://` and `wss://` of the request's `Host` (`connect-src 'self' ws://api.acme.test wss://api.acme.test`), not to any host. The `Host` has to reach the app unchanged, so a reverse proxy should forward it; a `Host` that isn't a plain name or `name:port` leaves the policy at `'self'`.
 
-GraphiQL is served only when `graphql.graphiql` is on (debug builds by default) and only to requests that accept HTML. Any other `GET` on the endpoint answers 405, and so does every `GET` in release builds: queries are always `POST`s with a JSON body, so a link or an image tag on another site can't run one, and the [CSRF protection](/docs/basics/sessions-and-csrf/) of cookie sessions applies to them like any other `POST`.
+GraphiQL and its files are served only when `graphql.graphiql` is on (debug builds by default), and the page only to requests that accept HTML. Any other `GET` on the endpoint answers 405, and so does every `GET` in release builds: queries are always `POST`s with a JSON body, so a link or an image tag on another site can't run one, and the [CSRF protection](/docs/basics/sessions-and-csrf/) of cookie sessions applies to them like any other `POST`.
 
 ## Batching
 
@@ -434,7 +434,7 @@ cargo run -- graphql:schema schema.graphql --check
 
 ## Testing
 
-Test GraphQL through the endpoint with `TestClient`, as you test routes. `assert_json_path` reads into `data` and `errors`:
+Test GraphQL through the endpoint with `TestClient`, as you test routes. `assert_json_path` reads into `data` and `errors`. Test databases are SQLite files, so an app that runs on PostgreSQL turns on the `sqlite` Cargo feature in its `[dev-dependencies]` ([database tests](/docs/testing/database-tests/)):
 
 ```rust title="tests/graphql_deals.rs"
 use navree::prelude::*;

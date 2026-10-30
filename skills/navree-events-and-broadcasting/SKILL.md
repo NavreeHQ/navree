@@ -195,7 +195,7 @@ pusher.subscribe("private-deals").bind("deal.updated", (payload) => { /* ... */ 
 ```rust
 let fake = QueueFake::new();
 let app = TestApp::builder()
-    .temp_database()
+    .temp_database()                       // a SQLite file: needs the `sqlite` feature in dev-dependencies
     .module(DatabaseModule::from_config())
     .module(CacheModule::from_config())
     .module(QueueModule::from_config())

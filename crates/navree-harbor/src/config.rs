@@ -203,7 +203,11 @@ pub struct DeployConfig {
     /// The port of Caddy's internal entry (always the live slot).
     #[serde(default = "default_internal_port")]
     pub internal_port: u16,
-    /// Proxies trusted besides Caddy (addresses or CIDR ranges).
+    /// The load balancers in front of Caddy (addresses or CIDR ranges).
+    /// Caddy's `trusted_proxies` takes them, so an HTTP balancer's
+    /// `X-Forwarded-For` survives; the app's `http.trusted_proxies` lists
+    /// them after loopback; and `web.proxy_protocol` accepts the PROXY
+    /// protocol from them.
     #[serde(default)]
     pub trusted_proxies: Vec<String>,
 }

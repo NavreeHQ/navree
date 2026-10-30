@@ -60,7 +60,7 @@ impl AuthService {
     ///
     /// Access tokens issued by navree-auth are stateless: one already in
     /// a client's hands works until it expires
-    /// (`auth.access_ttl_secs`, 15 minutes by default); it cannot be
+    /// (`auth.jwt.access_ttl_secs`, 15 minutes by default); it cannot be
     /// refreshed any more. Every other kind stops at once.
     ///
     /// Every revoker runs even when one fails; the first failure is

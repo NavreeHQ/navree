@@ -23,7 +23,7 @@ propagation, export, `SpanRecorder`).
 | Event (`TelemetryEvent::*`) | `EventKind` | Emitted by | When |
 |---|---|---|---|
 | `RequestHandled` | `RequestHandled` | navree-http | the response is ready (`method`, `route` template or `None`, `path`, `status`, `duration`, `user_id`, `workspace_id`, `request_id`, `client_ip`) |
-| `QueryExecuted` | `QueryExecuted` | navree-db | a statement ran (`sql` with placeholders, `duration`, `rows: None`, `connection` without password, `failed`) |
+| `QueryExecuted` | `QueryExecuted` | navree-db | a statement ran (`sql` with placeholders, `duration`, `rows` when known, `connection` without password, `failed`) |
 | `JobProcessed` / `JobFailed` | `JobProcessed` / `JobFailed` | navree-queue workers | an attempt ended (`queue`, `job_type`, `job_id`, `attempt`, `duration`; failed adds `error`, `will_retry`) |
 | `ScheduledTaskRan` | `ScheduledTaskRan` | navree-schedule | a task ran (`task`, `tick`, `duration`, `error`) |
 | `MailSent` | `MailSent` | navree-mail | the transport accepted it (recipients, subject, bodies, `transport`, `duration`) |

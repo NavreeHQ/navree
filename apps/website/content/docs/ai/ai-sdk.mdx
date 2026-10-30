@@ -54,7 +54,7 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
 }
 ```
 
-`AiModule` is global: every module injects `Arc<Ai>`, `Arc<Embeddings>`, `Arc<VectorStore>` and `Arc<Conversations>` without importing it. It needs only `ConfigModule`. `DatabaseModule` is needed for [conversation memory](/docs/ai/agents-and-tools/#memory) and the pgvector store, and `CacheModule` makes [budgets](#token-limits-and-budgets) and the embeddings cache shared between processes; without it both live in the process's memory. [Agents](/docs/ai/agents-and-tools/) also need `AuthModule` (the user they act for) and `AccessModule` (that user's abilities).
+`AiModule` is global: every module injects `Arc<Ai>`, `Arc<Embeddings>`, `Arc<VectorStore>` and `Arc<Conversations>` without importing it. It needs only `ConfigModule`. `DatabaseModule` is needed for [conversation memory](/docs/ai/agents-and-tools/#memory) and the pgvector store, and it needs a database driver feature of `navree` (`postgres`, `mysql` or `sqlite`; the pgvector store needs `postgres`). `CacheModule` makes [budgets](#token-limits-and-budgets) and the embeddings cache shared between processes; without it both live in the process's memory. [Agents](/docs/ai/agents-and-tools/) also need `AuthModule` (the user they act for) and `AccessModule` (that user's abilities).
 
 The module also contributes the `ai` [migration set](/docs/database/migrations/) (`ai_conversations` and `ai_messages`), the `ai:prune` command, and the mapping of an `AiError` returned from a handler to its status.
 
@@ -99,7 +99,7 @@ APP_AI__PROVIDERS__OPENAI__API_KEY=sk-proj-...
 
 A provider table needs no other key when the defaults suit you, so the two lines above are the whole provider configuration for this example. Every value maps to an environment variable the usual way (`APP_AI__DEFAULT=fast`, `APP_AI__MODELS__FAST__MODEL=claude-sonnet-5-5`), and `fallbacks` also accepts a comma-separated string (`APP_AI__MODELS__SMART__FALLBACKS=fast,backup`).
 
-The boot fails, naming the key, when a model names an unknown provider, a fallback names an unknown model, the fallbacks form a cycle, or `default` names no model. A missing API key doesn't fail the boot: requests to that provider fail with `AiError::Config`, and the log warns once at startup. `Config::redacted()` and the logs mask every `api_key`, `secret_access_key` and `key`.
+The boot fails, naming the key, when a model names an unknown provider, a fallback names an unknown model, the fallbacks form a cycle, or `default` names no model. A missing API key doesn't fail the boot: requests to that provider fail with `AiError::Config`, and the log warns once at startup. `Config::redacted()` and the logs mask every `api_key`, `access_key_id`, `secret_access_key`, `session_token` and `key`.
 
 ### Top-level keys
 

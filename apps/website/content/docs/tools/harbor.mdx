@@ -16,7 +16,7 @@ Everything lives in one file, `harbor.toml`, in your repository: the servers and
 - **The CLI**: `cargo install --git https://github.com/NavreeHQ/navree navree-cli`.
 - **One or more servers running Ubuntu 22.04 or 24.04 LTS**, on x86-64 or ARM64, from any provider, with SSH access as `root` using a key. A server with 1 GB of memory runs a small app with its database; 2 GB or more is comfortable.
 - **A domain** whose DNS `A` (and `AAAA`) record points at the server that takes web traffic, so Caddy can get a certificate.
-- **An OpenSSH client** (`ssh`) on the machine you deploy from. macOS, Linux and Windows 10 or later include one, and the `ssh` that comes with Git for Windows works too. Harbor runs it for every connection, so your `~/.ssh` keys and agent work as usual.
+- **An OpenSSH client** (`ssh`) on the machine you deploy from. macOS, Linux and Windows 10 or later include one, and the `ssh` that comes with Git for Windows works too. Harbor runs it for every connection, in batch mode: it never stops to ask for a password or a passphrase, so load a protected key into your SSH agent. It signs in with the key in `ssh.key`, else `~/.ssh/id_ed25519` when that file exists, else your SSH agent.
 - **To build on macOS or Windows**, Docker or Podman: Harbor builds the Linux binary in a container. On Linux it can build natively.
 
 ## Getting started
@@ -58,6 +58,8 @@ roles = ["web", "worker", "scheduler", "postgres", "redis"]
 APP_APP__URL = "https://crm.example.com"
 APP_MAIL__FROM = "Navree CRM <crm@example.com>"
 ```
+
+`build.features` names Cargo features of your app's own package, such as a `postgres = ["navree/postgres"]` feature that turns the database driver on. Leave `[build]` out when the `navree` dependency in your `Cargo.toml` already lists the driver, as it does in an app made by `navree new`.
 
 </Step>
 <Step title="Add your secrets">
@@ -234,7 +236,7 @@ ReadWritePaths=/srv/crm-api/shared
 WantedBy=multi-user.target
 ```
 
-`/etc/crm-api/blue.env` sets `APP_HTTP__ADDR=127.0.0.1:8081`, and `green.env` port 8082. The worker unit, `crm-api-worker@.service` (one instance per `processes.worker.instances`: `@1`, `@2`, ...), and the scheduler unit, `crm-api-scheduler.service`, are the same with `WorkingDirectory=/srv/crm-api/current` and their own commands; they start once the first release is live. Every unit has the same hardening: the app can write to `shared/` and nowhere else. A `postgres` server also gets `crm-api-backup.service` and its daily `crm-api-backup.timer`.
+`/etc/crm-api/blue.env` sets `APP_HTTP__ADDR=127.0.0.1:8081`, and `green.env` port 8082. The worker unit, `crm-api-worker@.service` (one instance per `processes.worker.instances`: `@1`, `@2`, ...), and the scheduler unit, `crm-api-scheduler.service`, are the same with `WorkingDirectory=/srv/crm-api/current` and their own commands; they start once the first release is live. These units have the same hardening: the app can write to `shared/` and nowhere else. (The front end's units, if any, have the same except that `ProtectSystem=full` makes only the system directories read-only.) A `postgres` server also gets `crm-api-backup.service` and its daily `crm-api-backup.timer`.
 
 ### The Caddy site
 
@@ -407,9 +409,9 @@ roles = ["postgres", "redis"]
 - **One of each data server.** At most one server has the `postgres` role and one the `redis` role; they can be the same server.
 - **Rolling deploys.** Harbor builds once, uploads to every server in parallel and migrates once. Then it switches the web servers one at a time, each after its own health check. If one fails, Harbor switches the ones it already moved back to the previous release, so all web servers always run the same release. Workers and the scheduler restart once every web server is on the new release.
 - **A load balancer in front.** With more than one web server, put your provider's load balancer in front, forwarding ports 80 and 443 to each one. Caddy still terminates TLS. Either way, list the balancer's addresses in `deploy.trusted_proxies`, so Caddy and your app see each client's address instead of the balancer's (every client would share one address, one rate-limit budget and one login throttle):
-    - **An HTTP balancer** (it adds `X-Forwarded-For` and doesn't speak the PROXY protocol): `deploy.trusted_proxies` is what Caddy's `trusted_proxies` takes. Caddy keeps the `X-Forwarded-For` the balancer sends from those ranges and adds the balancer's address to it, rather than replacing the header with the balancer's address, and from the same list your app's `http.trusted_proxies` takes the balancer off the end of the chain to find the client. The Caddyfile `harbor:provision` writes has `servers { trusted_proxies static 10.0.0.0/24 }`. Any other peer is believed by neither: a client reaching Caddy directly can't name its own address with the header. Re-run `navree harbor:provision` after changing the list.
+    - **An HTTP balancer** (it adds `X-Forwarded-For` and doesn't speak the PROXY protocol): `deploy.trusted_proxies` is what Caddy's `trusted_proxies` takes. Caddy keeps the `X-Forwarded-For` the balancer sends from those ranges and adds the balancer's address to it, rather than replacing the header with the balancer's address, and from the same list your app's `http.trusted_proxies` takes the balancer off the end of the chain to find the client. The Caddyfile `harbor:provision` writes has `servers { trusted_proxies static 10.0.0.0/24 }`. Any other peer is believed by neither: a client reaching Caddy directly can't name its own address with the header. After changing the list, run `navree harbor:provision` again (it writes the Caddyfile) and then `navree deploy` (it writes the app's `APP_HTTP__TRUSTED_PROXIES`).
     - **A balancer that speaks the PROXY protocol:** also set `web.proxy_protocol = true`. Caddy then reads each client's address from the protocol on ports 80 and 443, accepting it only from the addresses in `deploy.trusted_proxies`, and `X-Forwarded-For` isn't needed.
-- **SQLite or PostgreSQL.** SQLite suits one server. With several servers, use the `postgres` role and the `postgres` feature.
+- **SQLite or PostgreSQL.** An app built with the `sqlite` feature keeps its database in a file, which suits one server. With several servers, use the `postgres` role and build the app with the `postgres` feature.
 
 To add a server, add its table, run `navree harbor:provision <name>`, then `navree deploy`.
 
@@ -428,7 +430,7 @@ health_check = "/"
 ```
 
 - Harbor builds it during the deploy's build step (natively, or in a `node:<frontend.node_version>-bookworm` container when the binary builds in one), uploads it with the binary into the release, and installs Node.js (`frontend.node_version`, 24) on `web` servers when it provisions them. Without `build` and `command`, Harbor picks npm, pnpm or Yarn from the lockfile.
-- It runs in its own blue and green slots (`frontend.ports`, 3001 and 3002) as `crm-api-frontend@blue` and `@green`, with its own health check, and switches together with the API, so a page and the API it calls always come from the same release. Its environment has `PORT`, `HOSTNAME=127.0.0.1`, `NODE_ENV=production`, `NAVREE_API_URL`, the address of the API slot of the same release, and `NAVREE_TRUSTED_PROXY_HOPS=1`: Caddy is the one proxy in front of it, and it replaces any `X-Forwarded-For` a browser sent with the address it saw. The front end's BFF passes that address on, and the API, which trusts loopback through `APP_HTTP__TRUSTED_PROXIES`, believes it, so every browser has its own rate limit and sign-in throttle.
+- It runs in its own blue and green slots (`frontend.ports`, 3001 and 3002) as `crm-api-frontend@blue` and `@green`, with its own health check, and switches together with the API, so a page and the API it calls always come from the same release. Its environment has `PORT`, `HOSTNAME=127.0.0.1`, `NODE_ENV=production`, `NAVREE_API_URL`, the address of the API slot of the same release, and `NAVREE_TRUSTED_PROXY_HOPS=1`: Caddy is the one proxy in front of it, and it replaces any `X-Forwarded-For` a browser sent with the address it saw. The front end's BFF passes that address on, and the API, which trusts loopback through `APP_HTTP__TRUSTED_PROXIES`, believes it, so every browser has its own rate limit and sign-in throttle. Behind an HTTP load balancer listed in `deploy.trusted_proxies`, Caddy keeps the balancer's `X-Forwarded-For` and appends the balancer's address, so the front end takes the balancer's address for the browser's; a balancer that speaks the PROXY protocol (`web.proxy_protocol`) gives Caddy the browser's address.
 - Caddy serves `domain` from the front end. The API stays on loopback, where the front end's server calls it; set `api_domain` to also serve the API publicly, for example `api.crm.example.com` for mobile clients.
 
 ## Custom domains
@@ -472,7 +474,7 @@ https:// {
 }
 ```
 
-Caddy asks the app before it gets a certificate for a host, and the app says yes only for verified domains, so nobody can make your server request certificates for names you don't serve. Point customers' CNAME records at `domain` (or a host name of yours with the same address) and set the app's `domains.target` to it. The global options belong to the server, so one app per server serves custom domains. Run `navree harbor:provision` again after changing the section.
+Caddy asks the app before it gets a certificate for a host, and the app says yes only for verified domains, so nobody can make your server request certificates for names you don't serve. A workspace verifies a domain with a DNS record only the domain's owner can create, not by adding it first ([custom domains](/docs/packages/custom-domains/#the-first-proof-wins) has the details). Point customers' CNAME records at `domain` (or a host name of yours with the same address) and set the app's `domains.target` to it. The global options belong to the server, so one app per server serves custom domains. Run `navree harbor:provision` again after changing the section.
 
 ## Environments
 
@@ -492,7 +494,7 @@ navree harbor:secrets set APP_KEY --generate --env staging
 |---|---|
 | `navree harbor:status` | Each server's roles, its processes and their state, the current release, disk and memory, and whether installed updates need a reboot. |
 | `navree harbor:logs` | Your app's log lines from journald, merged across servers by time, newest last. `--server`, `--process web` (or `frontend`, `worker`, `scheduler`), `--lines 200` (100 by default, per server) and `--follow` narrow them down. |
-| `navree harbor:run <command> [args]` | Runs one of your app's commands on the first `web` server (or `--server`), from the current release with its environment, on your terminal: `navree harbor:run migrate:status`, `navree harbor:run queue:retry all`. Its exit code is `navree`'s. |
+| `navree harbor:run <command> [args]` | Runs one of your app's commands on the first `web` server (or `--server`), from the current release with its environment, on your terminal: `navree harbor:run migrate:status`, `navree harbor:run queue:retry all`. `navree` exits with the command's exit code. |
 | `navree harbor:ssh [server]` | Opens a shell on a server as the `navree` user (the first `web` server by default). |
 | `navree harbor:backup` | Runs the PostgreSQL backup now on the `postgres` server; `--download` also copies the dump to the current directory. |
 
@@ -587,7 +589,7 @@ The runner verifies each server against the `host_key` in `harbor.toml`, so it n
 
 ## Security
 
-- **SSH.** Keys only, host keys pinned in `harbor.toml`, `fail2ban` on the SSH port. Deploys use the `navree` user, whose `sudo` covers only the app's units and Caddy.
+- **SSH.** Keys only, host keys pinned in `harbor.toml`, `fail2ban` on the SSH port. Every connection checks the server against its recorded `host_key` and is refused when the key differs. Only `navree harbor:provision` connects to a server that has none yet: it accepts the key the server offers on that first contact and records it, and every other command refuses a server without a `host_key`. Deploys use the `navree` user, whose `sudo` covers only the app's units and Caddy.
 - **Network.** A deny-by-default firewall; databases reachable from your servers only; the app itself listens on loopback, behind Caddy.
 - **TLS.** Certificates from Let's Encrypt, renewed automatically, HTTP redirected to HTTPS. Navree's own `Strict-Transport-Security` header tells browsers to stay on HTTPS.
 - **Secrets.** Encrypted at rest in the repository, decrypted only on the deploying machine, stored on servers in a file only root and the app's user can read.

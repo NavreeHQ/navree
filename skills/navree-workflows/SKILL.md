@@ -163,7 +163,8 @@ inside the unit of work see its writes.
 - Code that starts workflows: install `WorkflowsFake`
   (`.override_value(Arc::new(fake.workflows()))`), then
   `fake.assert_started::<Onboarding>(|i| i.user_id == 7)`.
-- Real runs: `TestApp` with `temp_database()`, `DatabaseModule`,
+- Real runs: `TestApp` with `temp_database()` (a SQLite file: the test build
+  needs the `sqlite` feature in `[dev-dependencies]`), `DatabaseModule`,
   `EventsModule`, `WorkflowsModule`, your module, `workflows.routes = false`
   and `workflows.automation_routes = false` (unless you test them with an
   authorizer), and `.override_value::<dyn Clock>(clock.clone())` with a

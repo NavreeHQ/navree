@@ -5,7 +5,7 @@ description: "The `navree` CLI (`new`, every `make:*` generator, `dev`), your ap
 
 Navree has two command lines:
 
-- **The `navree` CLI** creates apps, generates code and runs the development loop. It doesn't depend on any Navree crate: everything it knows about the framework is in the code it writes.
+- **The `navree` CLI** creates apps, generates code and runs the development loop. It depends on no runtime crate of Navree, only on the tool crates behind `navree dock`, Harbor's commands and `navree mcp`: everything it knows about the framework is in the code it writes.
 - **Your app's binary** owns the runtime commands: `serve`, `migrate`, `queue:work` and the rest, registered by the modules you use, plus your own. `navree <command>` forwards to it, so you rarely call the binary yourself.
 
 ## Installing the CLI
@@ -29,10 +29,10 @@ Usage: navree <COMMAND>
 
 Commands:
   new                Create a new app in ./NAME
-  make:module        Generate a feature module: mod.rs, controller.rs, service.rs, entity.rs (the model), dto.rs, migrations/, tests/
+  make:module        Generate a feature module: mod.rs, controller.rs, service.rs, entity.rs, dto.rs, migrations/, tests/
   make:controller    Generate a controller in a module (controllers/NAME.rs)
   make:service       Generate a service in a module (services/NAME.rs)
-  make:entity        Generate a minimal ORM model in a module (entities/NAME.rs)
+  make:entity        Generate a bare ORM model in a module (entities/NAME.rs); `make:model` adds the companions
   make:migration     Generate a migration in a module (create_TABLE_table creates the table)
   make:job           Generate a queued job in a module (jobs/NAME.rs)
   make:event         Generate an event in a module (events/NAME.rs)
@@ -49,6 +49,27 @@ Commands:
   make:seeder        Generate a seeder in a module (seeders/NAME.rs), registered for db:seed
   make:resource      Generate a Helm admin-panel resource for a model of a module (resources/MODEL.rs)
   dev                Serve the app, rebuilding and restarting it when the code changes
+  check              Check the app: its module graph, then the conformity checks (routes documented, entities classified, workspace isolation, translations, migrations)
+  gate               Run fmt, clippy, the tests, navree check and the front end's typecheck, tests and build, one gate at a time on this machine
+  dock               Run the app's local services (dock.toml) with Docker or Podman
+  dock:add           Add a service to dock.toml: postgres, redis, meilisearch, mailpit, minio or nats
+  dock:remove        Stop a service and remove it from dock.toml
+  harbor:init        Write harbor.toml and harbor.key, and ignore the key in Git
+  harbor:provision   Prepare every server, or one, for its roles (safe to run again)
+  harbor:secrets     Encrypted secrets in harbor.toml
+  deploy             Build, upload, migrate, health-check and switch to a new release
+  deploy:rollback    Switch back to the previous release, or to the one you name
+  deploy:releases    List the releases on the servers
+  harbor:status      Each server's roles, processes, current release, disk and memory
+  harbor:logs        The app's log lines from journald, merged across servers
+  harbor:run         Run an app command on a server, from the current release with its environment
+  harbor:ssh         Open a shell on a server as the deploy user
+  harbor:backup      Run the PostgreSQL backup now
+  harbor:ci          Write a CI workflow that tests and deploys every push
+  build:image        Build an OCI image of the app with Docker or Podman
+  mcp                Start Navigator, the MCP server for your coding agent, on stdin/stdout
+  skills:install     Install the Navree agent skills into .claude/skills and .agents/skills
+  browser:install    Download Chrome for Testing into Navree's cache, for navree-browser
   openapi:client     Export the OpenAPI document and generate the front end's typed client schema (schema.d.ts)
   help               Print this message or the help of the given subcommand(s)
 
@@ -56,7 +77,7 @@ Options:
   -h, --help     Print help
   -V, --version  Print version
 
-Every other command runs in the app binary: `navree <command> [args...]` is `cargo run --quiet -- <command> [args...]` (migrate, migrate:fresh --seed, db:seed, queue:work, schedule:run, routes, check --graph, openapi:export, key:generate, <module>:<command>, ...). `navree list` shows the app's commands.
+Every other command runs in the app binary: `navree <command> [args...]` is `cargo run --quiet -- <command> [args...]` (migrate, migrate:fresh --seed, db:seed, model:show, queue:work, schedule:run, routes, openapi:export, key:generate, <module>:<command>, ...). `navree list` shows the app's commands.
 ```
 
 ## Creating an app
@@ -81,6 +102,9 @@ Next steps:
 <FileTree title="navree new blog">{`
 .env                      # a copy of .env.example (never commit it)
 .env.example
+.gitignore
+AGENTS.md                 # conventions for coding agents
+CLAUDE.md                 # imports AGENTS.md
 Cargo.toml                # navree with its postgres feature
 README.md
 dock.toml                 # TimescaleDB for navree dock up
@@ -102,11 +126,12 @@ storage/
 
 | Option | What it does |
 |---|---|
-| `--database <db>` | The database: `timescaledb` (the default; PostgreSQL with hypertables, run by `navree dock up`), `postgres` (plain PostgreSQL, also run by Dock), `mysql` (MySQL or MariaDB, a server of yours) or `sqlite` (a file in `storage/`). It sets `database.url`, the driver feature of the `navree` dependency (`postgres`, `mysql` or `sqlite`: only that driver is compiled into the app) and, for the first two, `dock.toml`. The tests run on SQLite, so `[dev-dependencies]` turns `sqlite` on in every app. The [starter kits](/docs/getting-started/starter-kits/) run on `timescaledb` or `postgres`. |
+| `--kit <saas\|api\|micro>` | Creates the app from a [starter kit](/docs/getting-started/starter-kits/) instead of the minimal app. |
+| `--database <db>` | The database: `timescaledb` (the default; PostgreSQL with hypertables, run by `navree dock up`), `postgres` (plain PostgreSQL, also run by Dock), `mysql` (MySQL or MariaDB, a server of yours) or `sqlite` (a file in `storage/`). `timescale`, `postgresql` and `mariadb` are accepted as aliases. It sets `database.url`, the driver feature of the `navree` dependency (`postgres`, `mysql` or `sqlite`: only that driver is compiled into the app) and, for the first two, `dock.toml`. The tests run on SQLite, so `[dev-dependencies]` turns `sqlite` on in every app. The [starter kits](/docs/getting-started/starter-kits/) run on `timescaledb` or `postgres`. |
 | `--ui next` | Also creates `web/`, a Next.js front end that talks to the API through its own server and keeps the tokens in httpOnly cookies, like the [CRM's](/docs/example-app/crm-tour/#the-web-app). `navree dev` starts it. Default: `--ui none`, API only. |
-| `--navree-path <path>` | Depend on a local checkout (the repository or its `crates/navree`). Without it, the app gets a `path` dependency on the checkout the CLI was built from when it still exists (after `cargo install --git`, Cargo's own copy of the repository), else `navree = "0.1.0"`, which won't build until the crate is on crates.io. |
+| `--navree-path <path>` | Depend on a local checkout (the repository or its `crates/navree`). Without it, the app gets a `path` dependency on the checkout the CLI was built from when it still exists (after `cargo install --git`, Cargo's own copy of the repository), else `navree = "0.2.0"` (the CLI's own version), which won't build until the crate is on crates.io. |
 
-The name may use lower-case letters, digits, `-` and `_`. `navree new` refuses a directory that exists and isn't empty, and formats the generated code with `rustfmt` when it is installed. The app is its own Cargo workspace; remove the `[workspace]` table from its `Cargo.toml` to make it a member of an enclosing one. See [Your first app](/docs/getting-started/your-first-app/) for a walk through it.
+The name may use lower-case letters, digits, `-` and `_`. `navree new` refuses a directory that exists and isn't empty, formats the generated code with `rustfmt` when it is installed, and runs `git init` (nothing is committed) unless the app is inside a repository already or Git is missing. For the starter kits, which ship a `harbor.toml`, it also writes `harbor.key` and keeps it out of Git. The app is its own Cargo workspace; remove the `[workspace]` table from its `Cargo.toml` to make it a member of an enclosing one. See [Your first app](/docs/getting-started/your-first-app/) for a walk through it.
 
 ## Generators
 
@@ -164,7 +189,7 @@ The report lists a file once per edit: here `mod.rs` gets the `pub mod jobs;` de
 |---|---|---|
 | `make:controller posts admin` | `controllers/admin.rs`, `AdminController` | the controller, in `wire` |
 | `make:service posts pricing` | `services/pricing.rs`, `PricingService` | `m.provider::<..>()`, in `wire` |
-| `make:model posts Tag` | `models/tag.rs`, an [ORM model](/docs/orm/models/) for `tags`; `--migration`, `--factory`, `--seeder`, `--controller` and `--policy` (or `--all`) add those, each referring to the others | `m.model::<..>()` and each companion's registration, in `wire` |
+| `make:model posts Tag` | `models/tag.rs`, an [ORM model](/docs/orm/models/) for `tags`; `--migration`, `--factory`, `--seeder`, `--controller` and `--policy` (or `--all`) add those, each referring to the others; `--pivot` makes the table of a many-to-many between the two models its name joins (`post_tag`) | `m.model::<..>()` and each companion's registration, in `wire` |
 | `make:factory posts tag` | `factories/tag.rs`, a [model factory](/docs/orm/factories/) (`--model <model>` when its name differs) | nothing; `#[model(factory = ..)]` links it |
 | `make:seeder posts demo_data` | `seeders/demo_data.rs`, a [seeder](/docs/database/seeding-and-factories/) named `demo_data` | the seeder, in `wire` |
 | `make:entity posts tag` | `entities/tag.rs`, a minimal [ORM model](/docs/orm/models/) for `tags` (an id and the two timestamps) | nothing; prints the `make:migration` to run next |
@@ -197,9 +222,9 @@ navree dev --no-web -- --addr 0.0.0.0:8080
 | `--no-web` | | Don't start the front end in `web/`. |
 | `-- <args>` | | Arguments for the app's `serve` command. |
 
-- It watches `src/`, `config/` and `migrations/`, and `Cargo.toml`, `.env` and `build.rs` at the root. Template files under `resources/` aren't watched: [views reload](/docs/digging-deeper/views/#reloading-during-development) on their own.
+- It watches `src/`, `config/`, `migrations/` and `crates/`, and `Cargo.toml`, `.env` and `build.rs` at the root. Template files under `resources/` aren't watched: [views reload](/docs/digging-deeper/views/#reloading-during-development) on their own.
 - It runs a copy of the binary, so the next build can replace the original while the current server keeps answering, and restarts the server only once the new build succeeds. When a build fails, the previous one keeps serving and the compiler errors are shown.
-- With a `web/package.json`, it also starts the front end's dev server once, with `pnpm`, `yarn` or `npm` depending on the lockfile.
+- With a `web/package.json`, it also starts the front end's dev server once, with `pnpm`, `yarn` or `npm` depending on the lockfile (or on the `packageManager` field of `package.json` before a lockfile exists).
 
 Two limits: the listening socket isn't kept across restarts, so requests fail for the moment the new server takes to start (and open WebSockets drop and reconnect), and if `navree dev` itself is killed forcibly, the server it started keeps running.
 
@@ -212,7 +237,7 @@ The tools of the ecosystem add their own commands to the CLI:
 | `navree new <name> --kit saas` | Creates an app from a [starter kit](/docs/getting-started/starter-kits/) (`saas`, `api` or `micro`). |
 | `navree dock up`, `navree dock down`, `navree dock:add <service>` | Start, stop and add the app's local services with [Dock](/docs/tools/dock/) (also `dock status`, `dock logs`, `dock env`, `dock shell` and `dock:remove`). |
 | `navree openapi:client [--out DIR] [--input FILE]` | Exports the OpenAPI document and generates `schema.d.ts` with openapi-typescript, for the [typed client](/docs/frontend/typed-client/#generating-the-schema). |
-| `navree harbor:provision`, `navree deploy`, `navree deploy:rollback` | Prepare servers and ship releases with [Harbor](/docs/tools/harbor/). |
+| `navree harbor:init`, `harbor:provision`, `harbor:secrets`, `deploy`, `deploy:rollback`, `deploy:releases`, `harbor:status`, `harbor:logs`, `harbor:run`, `harbor:ssh`, `harbor:backup`, `harbor:ci`, `build:image` | Prepare servers, keep their secrets and ship releases with [Harbor](/docs/tools/harbor/). |
 | `navree fleet` | Runs queue workers under [Fleet](/docs/tools/fleet/)'s supervisor. |
 | `navree make:resource <module> <Model>` | Generates a [Helm](/docs/tools/helm/) admin resource for a model of the module (`models/<model>.rs`), with a field per column, and registers it in the module's `wire`. |
 | `navree mcp` | Starts [Navigator](/docs/ai/navigator/), the MCP server for your coding agent. |

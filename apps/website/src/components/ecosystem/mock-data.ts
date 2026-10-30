@@ -312,7 +312,7 @@ export const logbookTimeline: { kind: LogKind; text: string; start: number; dura
   { kind: "query", text: "INSERT INTO deals (id, title, amount_cents, …)", start: 4.7, duration: 2.6 },
   { kind: "model", text: "deal:0199c1d2 created", start: 7.4, duration: 0.3 },
   { kind: "event", text: "deal.created → 2 listeners", start: 7.9, duration: 3.1 },
-  { kind: "query", text: "INSERT INTO audit_log (action, actor_id, …)", start: 8.4, duration: 1.2 },
+  { kind: "query", text: "INSERT INTO audit_logs (id, kind, action, …)", start: 8.4, duration: 1.2 },
   { kind: "job", text: "deals.notify-owner queued on default", start: 11.2, duration: 0.9 },
   { kind: "mail", text: "“New deal: Migration from legacy CRM” queued", start: 12.3, duration: 0.8 },
   { kind: "query", text: "COMMIT", start: 13.3, duration: 2.4 },

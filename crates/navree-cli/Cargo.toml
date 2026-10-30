@@ -29,7 +29,7 @@ heck = { workspace = true }
 minijinja = { workspace = true }
 # `navree dock`, Harbor's commands, and `navree mcp` / `navree skills:install`:
 # tool crates, no runtime crates (Navigator reads configuration with
-# navree-config, D7).
+# navree-config).
 navree-dock = { workspace = true }
 navree-harbor = { workspace = true }
 navree-navigator = { workspace = true }
@@ -41,7 +41,7 @@ reqwest = { workspace = true }
 rustls = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-# Reads entities for `make:resource`.
+# Reads models for `make:resource`.
 syn = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

@@ -101,6 +101,7 @@ impl DealsModule {
         m.listen::<DealAssigned, NotifyDealOwner>()
             .on::<DealWon, NotifyDealOwner>()
             .templates(notification::TEMPLATES);
+        m.mcp_server::<DealsMcp>();
     }
 }
 ```

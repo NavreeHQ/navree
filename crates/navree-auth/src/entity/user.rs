@@ -12,9 +12,9 @@
 //! `Debug` output.
 //!
 //! The module's own writes of users go through [`insert`] and [`update`]:
-//! ORM statements in a unit of work that record the same change events
-//! `navree_db::Repo` recorded (the model's `Serialize` form, so no secret
-//! reaches an observer; an update carries only the changed fields).
+//! ORM statements in a unit of work that record a change event for each
+//! write (the model's `Serialize` form, so no secret reaches an observer; an
+//! update carries only the changed fields).
 
 use std::fmt;
 

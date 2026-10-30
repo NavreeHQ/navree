@@ -32,7 +32,7 @@ With `enabled = false` the routes aren't mounted, and `AuthService::impersonate`
 
 ```http
 POST /api/auth/impersonate/01a17b6d-d0ef-77f7-8097-11dbb4b1f95b HTTP/1.1
-Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 Content-Type: application/json
 
 {"reason": "Ticket #4521: the export button does nothing"}
@@ -40,7 +40,7 @@ Content-Type: application/json
 
 ```json
 {
-  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "expires_in": 900,
   "impersonator_id": "01a17b6d-c8f2-7aa1-9c3e-0d8f6f1b2a77",
   "refresh_token": "01a17b6d-d101-70d8-acae-37a74feaa4bf.YWP7DMg3LhmzNDIto4oUF2Z4BhLYGkQ69WvVowxrn8DQMuSq",

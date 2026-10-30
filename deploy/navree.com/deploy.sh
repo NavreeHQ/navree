@@ -36,6 +36,18 @@ main() {
   mkdir -p "$release"
   cp -a out/. "$release/"
 
+  # Every export holds the docs bundle of its own version only
+  # (v/<version>/docs.json), and Navigator downloads the one for the Navree
+  # version an app uses. Carry the bundles of earlier versions over from the
+  # live release; this export's own bundle stays when the version is the same.
+  if [ -d "$site/current/v" ]; then
+    mkdir -p "$release/v"
+    for bundle in "$site/current/v"/*; do
+      [ -e "$bundle" ] || continue
+      [ -e "$release/v/${bundle##*/}" ] || cp -a "$bundle" "$release/v/"
+    done
+  fi
+
   # Atomic switch: a new symlink renamed over the old one.
   ln -sfn "$release" "$site/current.next"
   mv -Tf "$site/current.next" "$site/current"

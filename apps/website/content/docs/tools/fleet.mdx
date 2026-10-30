@@ -29,7 +29,7 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
 
 `FleetModule` is global and provides the `Fleet` service. It needs `DatabaseModule` and `QueueModule`; the `fleet` command refuses the `memory` queue driver, whose jobs only exist in one process. Its dashboard routes declare access, so with the dashboard on (the default) the app also needs an authenticator (`AuthModule`) and navree-access's route authorizer (`AccessModule`); set `fleet.dashboard = false` in an app without them. With `EventsModule` in the app, a running master emits [long-wait events](#long-wait-alerts). With `ObserveModule`, `GET /metrics` includes [Fleet's gauges](#metrics).
 
-The migration set `fleet` (after `queue`) creates four tables: `fleet_masters` (the running masters, their supervisors and processes, and their heartbeats), `fleet_state` (paused supervisors, the last `fleet:terminate` and long-wait cooldowns), `fleet_jobs` (recently finished job attempts) and `fleet_metrics` (snapshots per queue and job type). On [TimescaleDB](/docs/database/timescaledb/#navrees-own-tables) the last two are hypertables on their Unix millisecond columns, an hour and a day per chunk, and trimming drops whole chunks.
+The migration set `fleet` (after `queue`) creates four tables: `fleet_masters` (the running masters, their supervisors and processes, and their heartbeats), `fleet_state` (paused supervisors, the last `fleet:terminate` and long-wait cooldowns), `fleet_jobs` (recently finished job attempts) and `fleet_metrics` (snapshots per queue and job type). On [TimescaleDB](/docs/database/timescaledb/#navrees-own-tables) the last two are hypertables on their Unix millisecond columns, an hour and a day per chunk, and trimming drops whole chunks; on PostgreSQL, MySQL and SQLite they are regular tables with an index on that column, and trimming deletes the old rows.
 
 ```sh
 navree migrate
@@ -323,7 +323,7 @@ exports        2        41 s         4          3
 
 ## Testing
 
-Test your jobs as you always do, with [`QueueFake`](/docs/testing/fakes/) or a real queue and `run_pending`. To test what Fleet decides, use the `Fleet` service with a fixed clock. Here a queued mail that has waited two minutes is a long wait:
+Test your jobs as you always do, with [`QueueFake`](/docs/testing/fakes/) or a real queue and `run_pending`. To test what Fleet decides, use the `Fleet` service with a fixed clock. Here a queued mail that has waited two minutes is a long wait (`temp_database()` points the app at a SQLite file, so the test crate needs the `sqlite` feature of `navree` in its `[dev-dependencies]`, which `navree new` writes):
 
 ```rust title="tests/long_waits.rs"
 use std::time::Duration;

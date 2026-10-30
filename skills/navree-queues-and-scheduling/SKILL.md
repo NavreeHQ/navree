@@ -10,8 +10,8 @@ description: "Background work in Navree: `Job` types, registering and dispatchin
 retries. `ScheduleModule` runs registered commands, jobs and functions on
 cron schedules (UTC by default, or a zone, or each workspace's local time),
 once per tick across all servers sharing the database.
-A new app has `QueueModule`; add `ScheduleModule::for_root()` to the root
-for schedules.
+A new app has `QueueModule::from_config()` and `ScheduleModule::for_root()`
+in `src/app.rs` already; other apps add them to the root.
 
 ## Steps: a job
 
@@ -57,7 +57,7 @@ impl Job for ExportContacts {
     async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
         let db = ctx.app.get::<Db>().await?;
         db.transaction(|uow| async move {
-            // ... write through &uow (models, statements)
+            // ... run statements on &uow; the closure returns Result<_, DbError>
             Ok(())
         })
         .await?;
@@ -126,7 +126,7 @@ navree queue:flush                         # delete them
 
 ```toml
 [queue]
-driver = "database"        # or "memory" (same process only: tests)
+driver = "database"        # or "memory" (same process only: tests), "redis" (RedisModule)
 workers = 4                # concurrent jobs per queue:work process
 queues = ["exports", "default"]  # what workers process; empty = default_queue
 ```
@@ -227,9 +227,10 @@ month and day-of-week fields; day of week 0-7 (0 and 7 Sunday). Day of
 month also `L`, `LW` (last weekday), `15W` (nearest weekday); day of week
 also `5L` (last Friday), `5#2` (second Friday), `?` for `*`. Day of month
 OR day of week matches unless one is `*`; `+MON` asks for both. No seconds
-or year field, no wrapping ranges, no `5/15`, no empty list items, at most
-256 bytes. A never-matching expression (`0 0 30 2 *`) boots and lists as
-`never`. Clock changes depend on the expression. Fixed-time (no `*` in the
+or year field, no wrapping ranges, no `5/15`, no empty list items, no bare
+`*` inside a list, at most 256 bytes. A never-matching expression
+(`0 0 30 2 *`) boots and lists as `never`. Clock changes depend on the
+expression. Fixed-time (no `*` in the
 minute or hour field; `*/n` counts as `*`; `@daily` `@weekly` `@monthly`
 `@yearly`): a skipped local time runs once, at the first minute after the
 gap (`30 2 * * *` in New York runs at 03:00 on the spring night); a
@@ -238,6 +239,8 @@ repeated local time runs once, the first time (`30 1 * * *` runs at the first
 the wall clock, so it runs in both passes of a repeated hour (`* * * * *`
 every real minute, `0 * * * *` every real hour) and catches nothing up for a
 gap (`30 * * * *` runs at 01:30 and 03:30, not 03:00).
+`navree::schedule::CronExpression` (`parse`, `next_after`, `is_due`) exposes
+the parser for expressions you keep in settings.
 
 Per-workspace runs are claimed as `<task>@<workspace id>` (names at most
 154 bytes); `LocalRun::current()` gives the owner and zone inside a run.
@@ -252,6 +255,9 @@ navree schedule:list       # tasks, expressions, next runs
 ```
 
 ## Test
+
+`temp_database()` is a SQLite file, so the app's `[dev-dependencies]` need
+the `sqlite` feature of `navree` (`navree new` writes it).
 
 ```rust
 use navree::prelude::*;

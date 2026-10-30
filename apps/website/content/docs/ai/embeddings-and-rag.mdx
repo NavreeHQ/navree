@@ -85,7 +85,7 @@ Changing the embedding model changes every vector: re-index after you switch (se
 |---|---|---|
 | `pgvector` | Tables in your app's PostgreSQL database, with an HNSW index | Most apps: no extra service, and vectors back up with your data. |
 | `qdrant` | A [Qdrant](https://qdrant.tech/) server over its REST API, one collection per Navree collection | Tens of millions of vectors, or a search cluster of its own. |
-| `memory` | The process's memory, searched exhaustively | Tests, and development on SQLite. Lost on restart. |
+| `memory` | The process's memory, searched exhaustively | Tests, and development without PostgreSQL (on SQLite, for example). Lost on restart. |
 
 Collections declared with `m.vector_collection(..)` are created at boot; any other collection is created the first time it is used. With `pgvector`, creating one enables the `vector` extension (`CREATE EXTENSION IF NOT EXISTS vector`; on managed PostgreSQL, allow the extension first) and creates its table and indexes; the database must be PostgreSQL. With `qdrant`, a missing collection is created with the configured size and metric. In both, an existing collection of another size fails the boot (or, for an undeclared one, its first use) with `AiError::Config`.
 
@@ -146,7 +146,7 @@ for m in &matches {
 | `search(query)` | A query builder: `.filter(f)`, `.limit(n)` (default 10), `.min_score(s)`, then await. |
 | `count()` | The number of records. |
 
-Filters work on metadata fields: `Filter::eq("kind", "call")`, `Filter::any_of("subject_id", ids)`, `Filter::gte("created_at", "2026-10-01")`, combined with `.and(..)` and `.or(..)`, negated with `Filter::not(..)`. They are applied inside the vector search, so `limit(8)` returns eight matching records, not eight records of which some match. A dotted name (`owner.id`) reaches a nested field; names are letters, digits and `_`. `gt`, `gte`, `lt` and `lte` compare numbers with numbers and strings with strings (RFC 3339 dates compare correctly as strings). Calling `.filter(..)` twice combines both with `and`.
+Filters work on metadata fields: `Filter::eq("kind", "call")`, `Filter::any_of("subject_id", ids)`, `Filter::gte("created_at", "2026-10-01")`, combined with `.and(..)` and `.or(..)`, negated with `Filter::not(..)`. They are applied inside the vector search, so `limit(8)` returns eight matching records, not eight records of which some match. A dotted name (`owner.id`) reaches a nested field; names are letters, digits and `_`. `gt`, `gte`, `lt` and `lte` compare numbers with numbers and strings with strings (RFC 3339 dates compare correctly as strings); on Qdrant they are sent as `range` conditions, which take numbers and RFC 3339 dates. Calling `.filter(..)` twice combines both with `and`.
 
 ## Embeddings
 

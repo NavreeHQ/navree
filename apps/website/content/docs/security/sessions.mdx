@@ -37,7 +37,7 @@ A refreshed access token keeps the session's `auth_time`: refreshing is not sign
 
 ```http
 GET /api/auth/sessions HTTP/1.1
-Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 ```json
@@ -79,7 +79,7 @@ A session is live while its newest refresh token is neither revoked nor expired.
 
 ```http
 DELETE /api/auth/sessions/01a17b6d-d101-70d8-acae-37a6f4002faa HTTP/1.1
-Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 The answer is `204 No Content`. The session's refresh tokens stop working at once; its access tokens keep working until they expire (15 minutes by default), as with every sign-out. Ending the current session is a sign-out. An id that isn't one of the user's live sessions gets `404 Not Found`, so nobody can probe other users' sessions. The route refuses [impersonation](/docs/security/impersonation/) sessions.
@@ -140,7 +140,7 @@ RouteDef::on(Method::DELETE, "/", destroy)
 
 ```http
 POST /api/auth/confirm HTTP/1.1
-Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 Content-Type: application/json
 
 {"password": "correct horse battery"}
@@ -148,7 +148,7 @@ Content-Type: application/json
 
 ```json
 {
-  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "auth_time": 1793073001,
   "expires_in": 900,
   "token_type": "Bearer"

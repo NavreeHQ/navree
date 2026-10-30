@@ -7,7 +7,7 @@ An audit log answers "who did what, and when?" after the fact: who changed a dea
 
 ## Setting up
 
-<Badge feature="audit" /> The `audit` feature of the `navree` facade (part of the default `full` feature) brings `navree-audit`, which builds on `http` and `db`. Add `AuditModule` to your app root:
+<Badge feature="audit" /> The `audit` feature of the `navree` facade (part of the default `full` feature) brings `navree-audit`, which builds on `http`, `db` and `orm`. Add `AuditModule` to your app root:
 
 ```rust title="src/main.rs"
 Navree::app()
@@ -25,7 +25,7 @@ The module also mounts `GET /api/audit`, which requires the permission `audit.re
 
 ### Data changes
 
-Every insert, update and delete you make through a [model](/docs/orm/models/) in a unit of work becomes a `data` entry: in a request, the request's unit of work; elsewhere, one from `Db::uow` (see [The unit of work](/docs/database/unit-of-work/)). The entry is written inside the same transaction, right before it commits (the audit log is a change observer that writes through the unit of work, on either kind of transaction), so a change that rolls back leaves no entry, and an entry never exists without its change.
+Every insert, update and delete you make through a [model](/docs/orm/models/) in a unit of work becomes a `data` entry: in a request, the request's unit of work; elsewhere, one from `Db::uow` (see [The unit of work](/docs/database/unit-of-work/)). The entry is written inside the same transaction, right before it commits (the audit log is a change observer that writes through the unit of work), so a change that rolls back leaves no entry, and an entry never exists without its change.
 
 ```json
 {
@@ -175,7 +175,7 @@ Each row of `audit_logs` is a `navree::audit::AuditRecord`: a model of Navree's 
 
 ```http
 GET /api/audit?action=role_assigned HTTP/1.1
-Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 ```json

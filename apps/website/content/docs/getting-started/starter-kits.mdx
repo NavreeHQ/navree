@@ -64,6 +64,8 @@ Next steps:
 </Step>
 </Steps>
 
+The `saas` and `api` kits depend on `navree` with `billing`, `social` and `postgres` on top of the default features; the `micro` kit's service uses `full`, `micro`, `micro-nats` and `postgres`. Every kit also lists `navree` with `sqlite` under `[dev-dependencies]`, because the tests boot the app on a fresh SQLite file; the app itself compiles only the PostgreSQL driver.
+
 `navree new` takes the same options with every kit: `--navree-path <path>` depends on a local Navree checkout, and `--database postgres` runs plain PostgreSQL instead of TimescaleDB (`timescaledb = false` in `dock.toml`; the kits run on PostgreSQL, so `mysql` and `sqlite` are for the minimal app). A kit brings its own front end or none: `--kit saas --ui next` is the same as `--kit saas`, and `--ui next` with `api` or `micro` is an error. The name may use lower-case letters, digits, `-` and `_`, and the target directory must be empty or missing. When `rustfmt` is installed, the generated Rust is formatted with it. When `git` is installed and the directory is not inside a repository, `navree new` runs `git init` in it (nothing is committed), because tools read `.gitignore` through a repository. Every kit also gets a `harbor.key` next to its `harbor.toml`, ignored by git, so `navree harbor:secrets set APP_KEY --generate` works right away. The saas kit's stylesheet lists the web app's source folders for Tailwind CSS (`@import "tailwindcss" source(none)` and an `@source` line per folder), so it never scans `node_modules`, with or without a repository.
 
 ## The SaaS kit
@@ -157,6 +159,7 @@ The browser's API types are generated from the API's OpenAPI document: `web/lib/
   AGENTS.md                 # conventions for coding agents
   CLAUDE.md                 # imports AGENTS.md
   Cargo.toml
+  README.md
   dock.toml                 # local services: TimescaleDB, Mailpit
   harbor.toml               # servers and deploys
   openapi.json              # the API contract, checked in CI
@@ -186,6 +189,7 @@ The browser's API types are generated from the API's OpenAPI document: `web/lib/
     projects.rs             # the example feature, roles and isolation
     settings.rs             # workspace settings and notifications
     billing.rs              # checkout and trials with the fake provider
+    support/                # the shared test setup: a booted app on a fresh database
   web/
     package.json
     pnpm-lock.yaml          # committed: CI and deploys install from it
@@ -249,6 +253,7 @@ Use it for mobile apps, public APIs, or a front end you build in another stack. 
   AGENTS.md
   CLAUDE.md
   Cargo.toml                # the workspace; default-members = the service
+  README.md
   dock.toml                 # TimescaleDB and NATS
   harbor.toml
   .env.example
@@ -273,6 +278,7 @@ Use it for mobile apps, public APIs, or a front end you build in another stack. 
       tests/
         app.rs              # boots the service, health checks, patterns
         invoices.rs         # handlers called through MicroFake, no broker needed
+        support/            # the shared test setup (see below)
 `}</FileTree>
 
 The handlers are ordinary injectable providers in a module, so they share the container, the access rules and the unit of work with the rest of your code:
@@ -311,7 +317,7 @@ impl InvoiceHandlers {
 
 The module registers them with `m.message_handlers::<InvoiceHandlers>()`. `draft_for_deal` drafts one invoice per deal, so a repeated event changes nothing, and emits `invoice.drafted` with `ServiceClient::emit`, which the outbox publishes once the unit of work commits. An invalid event goes straight to the dead letters (`navree micro:failed`).
 
-`billing-contracts` holds `GetInvoice`, `Invoice`, the `invoices.get` pattern (`GET_INVOICE`) and the events `DealWon` and `InvoiceDrafted`, each an `Event` whose `NAME` is its pattern. It depends on navree with the `events` feature only, so other services depend on it to call this one with `ServiceClient` and get the same types back:
+`billing-contracts` holds `GetInvoice`, `Invoice`, the `invoices.get` pattern (`GET_INVOICE`) and the events `DealWon` and `InvoiceDrafted`, each an `Event` whose `NAME` is its pattern. It depends on navree with the `events` and `validation` features only (the payloads derive `Validate`), so other services depend on it to call this one with `ServiceClient` and get the same types back:
 
 ```rust
 let invoice: Invoice = client.send(GET_INVOICE, &GetInvoice { id }).await?;
@@ -351,7 +357,7 @@ There are two kinds of updates, and neither rewrites your code.
 ```toml title="Cargo.toml"
 [package.metadata.navree]
 kit = "saas"
-kit_version = "0.1.0"
+kit_version = "0.2.0"
 ```
 
 To adopt a later kit's changes, generate a fresh copy with the current CLI and compare the parts you care about:

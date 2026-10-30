@@ -8,7 +8,7 @@
 //!
 //! | Command | What it does | Module |
 //! |---|---|---|
-//! | `navree harbor:init` | `harbor.toml`, `harbor.key`, `.gitignore` | [`init`] |
+//! | `navree harbor:init` | `harbor.toml`, `harbor.key`, `.gitignore` (only the key when `harbor.toml` exists) | [`init`] |
 //! | `navree harbor:provision [server]` | Idempotent provisioning scripts over SSH | [`provision`] |
 //! | `navree harbor:secrets set\|list\|reveal\|unset\|export\|rotate-key` | AES-256-GCM secrets | [`secrets`], [`project`] |
 //! | `navree deploy` | Build, upload, migrate, health-check, switch, drain, prune | [`deploy`], [`build`], [`host`] |

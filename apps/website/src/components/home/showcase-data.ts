@@ -2,22 +2,17 @@
  * The landing page's code tabs. The first four are taken from the CRM
  * (apps/crm-api): the deals module, controller and `CreateDeal` DTO
  * (crates/crm-deals), and a job around crm-activities' `TaskReminders`.
- * They compile: the scratch crate target/docs-check/review depends on
- * navree and the CRM crates and holds each tab as shown; its test produced
- * the 400 response below.
  *
- * The ORM tab compiles as shown: the scratch crate target/docs-check/orm-docs
- * holds the model and the controller (src/showcase.rs), and its test
- * (tests/showcase_tab.rs) ran the query and the save on SQLite: a page is
- * three statements (the count, the page, then the page's companies in one
- * `IN (..)` query), and the save is an UPDATE of `stage` and `updated_at`.
+ * The ORM tab shows a `Deal` model and two controller methods on it: a page
+ * of won deals with their companies in one `IN (..)` query, and a save that
+ * writes only the columns that changed.
  *
- * The Workspaces and Testing tabs are written from the crates' APIs but not
- * compiled: `CurrentWorkspace`, `WorkspaceScoped` and `WorkspaceRepo` from
- * the prelude, `navree::db::paginate` and the `workspace` config section
- * (navree-workspace); `TestApp`, `acting_as` and `assert_error`
- * (navree-testing). Recheck them when those crates change. Keep the tabs
- * short, and keep them true to the APIs.
+ * The Workspaces and Testing tabs are written from the crates' APIs:
+ * `CurrentWorkspace`, `WorkspaceScoped` and `WorkspaceRepo` from the
+ * prelude and the `workspace` config section (navree-workspace); `TestApp`,
+ * `acting_as` and `assert_error` (navree-testing). Recheck every tab when
+ * the crates behind it change. Keep the tabs short, and keep them true to
+ * the APIs.
  */
 export type Showcase = {
   id: string;
@@ -288,13 +283,12 @@ queue.dispatch(SendTaskReminders { day: Utc::now() }).await?;`,
     text: "CurrentWorkspace resolves the workspace from the subdomain, a header, the path or a token claim, loads it and checks that the user is a member, or answers 401, 403 or 404 in the usual JSON shape. WorkspaceRepo scopes every read and write to it, so another workspace's deal is a 404, never a leak.",
     href: "/docs/workspaces/introduction/",
     linkText: "Read about workspaces",
-    code: `use navree::db::paginate;
-use navree::prelude::*; // CurrentWorkspace, WorkspaceRepo, WorkspaceScoped
+    code: `use navree::prelude::*; // CurrentWorkspace, WorkspaceRepo, WorkspaceScoped
 
 // Deals belong to a workspace: their table has a \`workspace_id\`.
-impl WorkspaceScoped for deal::Entity {}
+impl WorkspaceScoped for Deal {}
 
-type Deals = WorkspaceRepo<deal::Entity>;
+type Deals = WorkspaceRepo<Deal>;
 
 #[controller("/deals", version = "1")]
 impl DealsController {
@@ -306,9 +300,9 @@ impl DealsController {
         ws: CurrentWorkspace,
         uow: Uow,
         page: PageQuery,
-    ) -> Result<Page<deal::Model>> {
+    ) -> Result<Page<Record<Deal>>> {
         ws.authorize("deals.read")?;
-        Ok(paginate(Deals::select(ws.id()), &*uow.tx().await?, page).await?)
+        Ok(Deals::query(ws.id()).paginate(&uow, page).await?)
     }
 
     /// Another workspace's deal is a 404.
@@ -319,7 +313,7 @@ impl DealsController {
         ws: CurrentWorkspace,
         uow: Uow,
         Path(id): Path<Uuid>,
-    ) -> Result<Json<deal::Model>> {
+    ) -> Result<Json<Record<Deal>>> {
         Ok(Json(Deals::find_or_fail(&uow, ws.id(), id).await?))
     }
 }`,
@@ -339,7 +333,7 @@ isolation = "row"                 # row | schema | database`,
     label: "Testing",
     file: "src/modules/deals/tests/mod.rs",
     title: "Tests boot the real app, in-process",
-    text: "TestApp boots your modules with a fresh SQLite database, and TestClient sends requests through the whole pipeline: request ids, authentication, access checks, the unit of work and the error format. Nothing listens on a port, so tests run in milliseconds and in parallel.",
+    text: "TestApp boots your modules with a fresh SQLite database (turn on the sqlite feature in your dev-dependencies), and TestClient sends requests through the whole pipeline: request ids, authentication, access checks, the unit of work and the error format. Nothing listens on a port, so tests run in milliseconds and in parallel.",
     href: "/docs/testing/http-tests/",
     linkText: "Read about HTTP tests",
     code: `use navree::prelude::*;

@@ -226,6 +226,9 @@ pub fn accessor(args: TokenStream, item: TokenStream) -> TokenStream {
 /// template the database is empty. On a server that is not configured
 /// (`NAVREE_TEST_POSTGRES_URL`, `NAVREE_TEST_MYSQL_URL`, or
 /// `target/test-databases.env`) the test returns early, after a notice.
+/// The test build needs the database's driver: navree-db's `sqlite` feature
+/// (the facade's `sqlite`) for `"sqlite"` and `"memory"`, `postgres` or
+/// `mysql` for the servers.
 #[proc_macro_attribute]
 pub fn test(args: TokenStream, item: TokenStream) -> TokenStream {
     test::expand(args.into(), item.into())

@@ -175,7 +175,7 @@ impl Loader<Uuid> for CompanyLoader {          // navree::graphql::Loader
             .get(&*self.db)
             .await
             .map_err(Arc::new)?;
-        Ok(rows.into_iter().map(|c| (c.id, CompanyObject::from(&*c))).collect())
+        Ok(rows.into_models().into_iter().map(|c| (c.id, c.into())).collect())
     }
 }
 
@@ -222,7 +222,7 @@ builds), `depth_limit` (16), `complexity_limit` (1000), `batching` (false),
 `keep_alive_secs` (15, 0 = off). Introspection lists only the public schema (the
 per-resolver part types are removed at build, nothing starts with `__` but the
 spec's own types). GraphiQL, React and React DOM are embedded and served at
-`<path>/assets/` with `script-src 'self'`; no CDN. The page's CSP allows
+`<path>/assets/` (only when `graphiql` is on) with `script-src 'self'`; no CDN. The page's CSP allows
 WebSockets only to the request's own host: `connect-src 'self'
 ws://<Host> wss://<Host>` (never bare `ws:`/`wss:`; a `Host` that isn't a
 plain name or `name:port` leaves `'self'`), so a proxy must forward `Host`. In code:
@@ -233,7 +233,8 @@ plain name or `name:port` leaves `'self'`), so a proxy must forward `Host`. In c
 `extensions` carries `code` (`BAD_REQUEST`, `UNAUTHENTICATED`, `FORBIDDEN`,
 `NOT_FOUND`, `CONFLICT`, `INTERNAL_SERVER_ERROR`, ...), `statusCode`,
 `error` and, for `Valid<T>` failures, `errors` (`{"input.position": [..]}`).
-`AppError` keeps its status, `OrmError` and `DbError` map like on routes, `m.map_error::<E>`
+`AppError` keeps its status, a `DbError` (or an `AppError` carrying one, which `?` makes of an
+`OrmError` in a function that returns navree's `Result`) maps like on routes, `m.map_error::<E>`
 mappings apply, plain messages are `BAD_REQUEST`, anything else is a 500
 with message `Internal server error` (logged on `navree::error`).
 HTTP status: 200 when the operation ran (even with field errors); 400 for a
@@ -241,6 +242,10 @@ document that does not parse, breaks the schema or a limit (no `data`);
 415 for a non-JSON body; 405 for GET (GraphiQL only to HTML clients when on).
 
 ## Testing
+
+`temp_database()` is a SQLite file per test, so an app that runs on
+PostgreSQL needs `navree = { git = "...", features = ["sqlite"] }` in its
+`[dev-dependencies]`; without it the test fails at boot asking for the feature.
 
 ```rust
 let app = TestApp::builder()

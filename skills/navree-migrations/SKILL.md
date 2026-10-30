@@ -171,11 +171,11 @@ A data migration on MySQL that should roll back with its record row returns
 `true` from `within_transaction_on_mysql` (default `false`).
 
 Each migration runs on navree-db's own transaction (the direct connection
-when `direct_url` is set); the `navree_migrations` table (module, name,
-batch, `applied_at`) and the run order are the same as ever, so a migration
-keeps its name when it is rewritten and does not run again. Every migration,
-including workspace migrations (`m.workspace_migrations(..)`), implements
-`navree::schema::Migration` and is written with the schema builder.
+when `direct_url` is set) and is recorded in `navree_migrations` by `(module,
+name)`: a migration rewritten with the same name does not run again. Every
+migration, including workspace migrations (`m.workspace_migrations(..)`),
+implements `navree::schema::Migration` and is written with the schema
+builder.
 
 ## Running
 

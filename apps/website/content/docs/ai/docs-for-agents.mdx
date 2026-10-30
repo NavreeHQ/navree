@@ -55,7 +55,7 @@ Navree is a batteries-included Rust framework for building secure, scalable serv
 ## Getting started
 
 - [Installation](https://navree.com/docs/getting-started/installation.md): Install Rust and the `navree` CLI, create an app with `navree new`, and run it with `navree dev`.
-- [Your first app](https://navree.com/docs/getting-started/your-first-app.md): Build a small task-list API with an entity, a migration, validation, JWT authentication, access rules and feature tests, from `navree new` to green tests.
+- [Your first app](https://navree.com/docs/getting-started/your-first-app.md): Build a small task-list API with a model, a migration, validation, JWT authentication, access rules and feature tests, from `navree new` to green tests.
 
 ## The basics
 
@@ -104,7 +104,7 @@ Every docs page has actions next to its title:
 **`AGENTS.md`** is the project's instructions for coding agents, in the format most agents read on their own. It is written for the app it lives in, with the app's name, and covers:
 
 - **Layout**: what lives in `config/`, `src/app.rs`, `src/abilities.rs`, `src/modules/<name>/`, `tests/` and `storage/` (and `web/` for apps created with `--ui next`).
-- **Commands**: `navree dev`, `cargo test`, `cargo clippy --all-targets -- -D warnings`, `cargo fmt`, `navree check`, `navree gate`, `navree routes`, `navree migrate` and `navree list`.
+- **Commands**: `navree dev`, `cargo test`, `cargo clippy --all-targets -- -D warnings`, `cargo fmt`, `navree check`, `navree routes`, `navree migrate` and `navree list`.
 - **Generators**: which `navree make:*` command to run for each kind of code, and the marker comments (`// navree:modules`, `// navree:wire`, `// navree:policies`) they register at.
 - **Conventions**: deny-by-default routes and the access attributes, modules and injected services, validated DTOs, the error shape and `AppError` helpers, the unit of work and models, migrations, configuration and secrets, and tests with `TestApp`.
 - **Before you finish**: format, lint and test, and fix everything they report.

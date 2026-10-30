@@ -42,11 +42,13 @@ navree new blog --navree-path ~/code/navree      # depend on that checkout
   `navree`. The directory must not exist or must be empty.
 - The app depends on Navree by `path`: the `--navree-path` checkout, else
   the checkout the CLI was built from. Only when neither exists does it
-  write `navree = "0.1.0"`. For an app you keep, install the CLI from a
-  clone or pass `--navree-path`; Cargo's git checkouts are a cache.
-- `navree new` doesn't run Cargo or `git init`. The app is its own Cargo
-  workspace (remove `[workspace]` from its `Cargo.toml` to join an
-  enclosing one).
+  write `navree = "0.2.0"` (the CLI's own version). For an app you keep,
+  install the CLI from a clone or pass `--navree-path`; Cargo's git
+  checkouts are a cache.
+- `navree new` doesn't run Cargo. It runs `git init` (no commit) unless the
+  directory is inside a repository already or git is missing. The app is
+  its own Cargo workspace (remove `[workspace]` from its `Cargo.toml` to
+  join an enclosing one).
 - `--database` picks the database: `timescaledb` (the default: PostgreSQL
   with hypertables), `postgres`, `mysql` (also MariaDB) or `sqlite`. It sets
   `database.url`, the `navree` dependency's driver feature (`postgres`,
@@ -124,8 +126,8 @@ curl http://127.0.0.1:8080/health/live        # {"status":"up"}
 ```
 
 Open http://127.0.0.1:8080/api/docs for the generated API reference.
-`navree dev` watches `src/`, `config/`, `migrations/`, `Cargo.toml`,
-`.env` and `build.rs`; a failed build keeps the previous server running.
+`navree dev` watches `src/`, `config/`, `migrations/`, `crates/`,
+`Cargo.toml`, `.env` and `build.rs`; a failed build keeps the previous server running.
 Options: `--no-web`, `--debounce-ms 300`, and serve arguments after `--`
 (`navree dev -- --addr 0.0.0.0:8080`).
 
@@ -138,7 +140,7 @@ config/app.toml         http, database (migrate_on_boot = true), schema (timesca
 dock.toml               [services.postgres]: TimescaleDB for `navree dock up`
 src/main.rs             <crate>::app(ConfigSources::defaults()).run()
 src/lib.rs              pub mod abilities; pub mod modules; pub use app::app;
-src/app.rs              every platform module configured once; `// navree:modules`
+src/app.rs              every platform module configured once (Lighthouse and Logbook included); `// navree:modules`
 src/abilities.rs        ability rules; `// navree:policies`
 src/modules/users/      a profile at GET/PUT /api/v1/profile on top of AuthModule
 tests/app.rs            boots the whole app on a temporary SQLite database

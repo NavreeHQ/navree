@@ -1,8 +1,8 @@
 //! The default writes of a resource: form values straight to the model's
 //! columns, as ORM statements in the request's unit of work, each
-//! recording the change event `navree_db::Repo` recorded: the record's
-//! serialized form, so hidden fields (`#[model(hidden)]`) and fields serde
-//! skips never reach an observer or the audit trail.
+//! recording a change event with the record's serialized form, so hidden
+//! fields (`#[model(hidden)]`) and fields serde skips never reach an
+//! observer or the audit trail.
 
 use std::collections::BTreeMap;
 

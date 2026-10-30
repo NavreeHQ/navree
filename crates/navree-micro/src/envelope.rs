@@ -47,10 +47,11 @@ pub mod headers {
     /// retried message themselves.
     pub const ATTEMPT: &str = "navree-attempt";
     /// Requests: where the reply goes, for transports that route replies
-    /// through the broker (Redis Streams, Kafka, MQTT).
+    /// through the broker with headers (Redis Streams, Kafka).
     pub const REPLY_TO: &str = "navree-reply-to";
     /// Requests and replies: pairs a reply with its request on transports
-    /// that route replies through the broker.
+    /// that route replies through the broker with headers (Redis Streams,
+    /// Kafka).
     pub const CORRELATION_ID: &str = "navree-correlation-id";
 }
 

@@ -250,7 +250,7 @@ The separate listener opens with `serve`, once the HTTP port is listening (other
 | `grpc.max_message_bytes` | `4194304` | The largest message, received or sent. |
 | `grpc.concurrency_per_connection` | `256` | Calls in flight on one HTTP/2 connection of the `grpc.addr` listener. On the shared port, the HTTP server's settings apply. |
 
-As environment variables: `APP_GRPC__ADDR=0.0.0.0:50051`, `APP_GRPC__REFLECTION=false`. In code: `GrpcModule::for_root(GrpcOptions { addr: Some("0.0.0.0:50051".parse()?), ..GrpcOptions::default() })`.
+As environment variables: `APP_GRPC__ADDR=0.0.0.0:50051`, `APP_GRPC__REFLECTION=false`. In code: `GrpcModule::for_root(GrpcOptions { addr: Some("0.0.0.0:50051".parse()?), ..GrpcOptions::default() })`. Invalid options (a zero limit or timeout, a client without a `url`) fail the boot with the key's name.
 
 Inject `GrpcServer` to see what runs: `services()` lists the registered service names, and `local_addr()` (or `wait_bound().await`) gives the address of the `grpc.addr` listener, which helps with `addr = "127.0.0.1:0"` in tests.
 
@@ -417,7 +417,7 @@ curl -X POST http://localhost:8081/crm.deals.v1.Deals/GetDeal \
 
 JSON follows protobuf's JSON mapping (camelCase names, 64-bit integers as strings), transcoded with the descriptor sets registered with `m.grpc_descriptors(..)`; a JSON call to a service without them answers `UNIMPLEMENTED`. Protobuf calls (`application/proto`) need no descriptors. Streaming methods answer Connect's streaming protocol (`application/connect+proto` and `application/connect+json`), and `connect-timeout-ms` sets a call's deadline. Errors use Connect's HTTP statuses and JSON error body. Connect calls are POSTs without compression, the default of Connect's clients.
 
-On the shared port, a Connect request reaches the gRPC services only when its path names a service the app serves, so your JSON routes are never in the way. Browser calls go through the app's [CORS](/docs/basics/cors-and-security-headers/) settings (`http.cors.allowed_origins`); Navree adds the gRPC-Web and Connect headers to the allowed and exposed headers itself.
+On the shared port, a Connect request reaches the gRPC services only when its path names a service the app serves, so your JSON routes are never in the way. Browser calls go through the app's [CORS](/docs/basics/cors-and-security-headers/) settings (`http.cors`; with no `http.cors.allowed_origins`, CORS is off): preflights are answered before a call reaches a service, and Navree adds the gRPC-Web and Connect headers to the allowed and exposed headers itself.
 
 ## Reflection and health
 
@@ -473,7 +473,7 @@ impl DealLookup {
 
 ## Testing
 
-`navree::grpc::testing::TestChannel` connects tonic clients to a `TestApp` in-process, with the whole pipeline and no port:
+`navree::grpc::testing::TestChannel` connects tonic clients to a `TestApp` in-process, with the whole pipeline and no port. `temp_database()` gives the test a SQLite file of its own, so an app that runs on PostgreSQL turns on the `sqlite` Cargo feature in its `[dev-dependencies]` ([database tests](/docs/testing/database-tests/)):
 
 ```rust title="services/deals/tests/grpc.rs"
 use deals::grpc::pb::{GetDealRequest, deals_client::DealsClient};

@@ -34,7 +34,7 @@ A source that turns a table into a scalar or an array, or back, replaces the who
 
 <Callout type="warning" title="`.env` doesn't override `config/app.toml`">
 
-`.env` is read first, so a key that `config/app.toml` also sets keeps the TOML value. A new app's `config/app.toml` sets `http.addr`, `database.url`, `log.level` and `mail.transport`, so changing `APP_HTTP__ADDR`, `APP_DATABASE__URL`, `APP_LOG__LEVEL` or `APP_MAIL__TRANSPORT` in `.env` has no effect, even though the comments in the generated files say otherwise. Real environment variables do override the TOML file. Until this changes, put a setting in either `config/app.toml` or `.env`, not both, and use `.env` for keys the TOML file doesn't set, such as `APP_KEY`.
+`.env` is read first, so a key that `config/app.toml` also sets keeps the TOML value. A new app's `config/app.toml` sets `http.addr`, `database.url`, `log.level` and `mail.transport`, so changing `APP_HTTP__ADDR`, `APP_DATABASE__URL`, `APP_LOG__LEVEL` or `APP_MAIL__TRANSPORT` in `.env` has no effect unless you remove the key from the TOML file. Real environment variables do override the TOML file; that is how `navree dev` hands the settings of [Dock](/docs/tools/dock/)'s services to the app. Put a setting in either `config/app.toml` or `.env`, not both, and use `.env` for keys the TOML file doesn't set, such as `APP_KEY`.
 
 </Callout>
 
@@ -119,6 +119,9 @@ registration = true
 
 [api]
 title = "Planner API"
+# The Lighthouse and Logbook dashboards are pages, not API routes:
+# `navree check` doesn't ask them for #[api] docs.
+undocumented = ["/_lighthouse*", "/_logbook*"]
 ```
 
 Keys keep the case you write them in. Everything a module doesn't find falls back to its default, so the file only needs the settings you change. Keep secrets out of it: it is committed.
@@ -393,6 +396,8 @@ Each module documents its section on its own page:
 | `hashing` | `CryptoModule` | [Encryption and hashing](/docs/security/encryption-and-hashing/) |
 | `validation` | `ValidationModule` | [Validation](/docs/basics/validation/) |
 | `database` | `DatabaseModule` | [Database: getting started](/docs/database/getting-started/) |
+| `schema` | `DatabaseModule` (its migrator) | [The schema builder](/docs/database/schema-builder/), [TimescaleDB](/docs/database/timescaledb/) |
+| `orm` | `OrmModule` | [The ORM](/docs/orm/getting-started/) |
 | `auth` | `AuthModule` | [Authentication](/docs/security/authentication/) |
 | `audit` | `AuditModule` | [The audit log](/docs/security/audit-log/) |
 | `cache` | `CacheModule` | [Cache](/docs/digging-deeper/cache/) |
@@ -407,6 +412,10 @@ Each module documents its section on its own page:
 | `observe` | `ObserveModule` | [Health and metrics](/docs/digging-deeper/health-and-metrics/) |
 | `session` | `SessionModule` | [Sessions and CSRF](/docs/basics/sessions-and-csrf/) |
 | `redis` (`url`, falling back to `REDIS_URL`) | `RedisModule` | [Redis](/docs/digging-deeper/redis/) |
+| `time` | `TimeModule` | [Time zones](/docs/digging-deeper/time-zones/) |
+| `workspace` | `WorkspaceModule` | [Workspaces](/docs/workspaces/introduction/) |
+
+The other modules read a section named after them (`billing`, `search`, `oauth`, `settings`, ...); their pages list the keys.
 
 ## Configuration in tests
 

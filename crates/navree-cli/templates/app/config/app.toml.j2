@@ -1,5 +1,6 @@
-# Settings for every environment. `.env` and APP_* environment variables
-# override them: APP_HTTP__ADDR=0.0.0.0:8080 sets http.addr.
+# Settings for every environment. `.env` fills the keys this file leaves out
+# (secrets such as APP_KEY), and APP_* environment variables override any key:
+# APP_HTTP__ADDR=0.0.0.0:8080 sets http.addr.
 
 [http]
 addr = "127.0.0.1:8080"

@@ -26,12 +26,15 @@ Navree::app()
 ```
 
 2. Run `navree dev` and open `http://127.0.0.1:8080/_logbook` (the boot log
-   prints the URL: `navree::logbook: recording to storage/logbook.db, open ...`).
-3. Entries go to `storage/logbook.db` (its own SQLite file, never the app's
-   database) and survive restarts. `navree logbook:clear` empties it. The
-   file store needs the `sqlite` feature (`navree`'s, or `navree-logbook`'s);
-   a PostgreSQL or MySQL build without it keeps entries in memory, and
-   `logbook.store = "file"` stops the boot.
+   prints the URL: `navree::logbook: recording to storage/logbook.db, open ...`,
+   or `recording to memory` with the memory store).
+3. With the `sqlite` feature (`navree`'s, or `navree-logbook`'s), entries go to
+   `storage/logbook.db` (its own SQLite file, never the app's database) and
+   survive restarts. `navree logbook:clear` empties it. Without the feature (a
+   PostgreSQL or MySQL build, which is what `navree new` writes by default)
+   the store is memory: entries go with each restart, and `logbook.store =
+   "file"` stops the boot. Add `sqlite` next to the driver
+   (`features = ["postgres", "sqlite"]`) to get the file.
 
 ## Steps: find out what a request did
 
@@ -106,7 +109,7 @@ and `curl(id)`. Outside an app, `Logbook::in_memory(options)`.
 |---|---|---|
 | `logbook.enabled` | debug: `true`, release: `false` | `true` in a release build forces it on, with a boot warning |
 | `logbook.path` | `/_logbook` | |
-| `logbook.store` / `logbook.file` | `file` / `storage/logbook.db` | `memory` for tests |
+| `logbook.store` / `logbook.file` | `file` with the `sqlite` feature, else `memory` / `storage/logbook.db` | `memory` for tests; `file` needs the `sqlite` feature |
 | `logbook.max_entries` / `logbook.keep_hours` | `10000` / `24` | pruned at boot and every 5 minutes, batches whole |
 | `logbook.allow_remote` | `false` | then every route needs permission `logbook.view` and a `RouteAuthorizer` |
 | `logbook.log_level` | `debug` | only lines that also pass `log.level` arrive |
@@ -136,6 +139,10 @@ Environment: `APP_LOGBOOK__STORE=memory`, `APP_LOGBOOK__WATCHERS__CACHE=false`.
   `log.level = "debug"` (or the target in `log.levels`).
 - **Queries show placeholders, not values**: navree-db reports statements
   without bound values; duplicate detection compares the statements.
+- **A query count one too high on PostgreSQL or MySQL**: a unit of work
+  starts with a statement that sets `navree.actor` / `@navree_actor`
+  (`database.transaction_settings`, on by default), and Logbook lists it.
+  Filter it out of the count, or set the option to `false` in the test.
 - **Bodies**: `Authorization`, `Cookie` and `Set-Cookie` are never stored;
   fields named like `log.redact` fragments are `[redacted]`; bodies over
   `max_body_kb` are cut, binary and streamed bodies are not stored.

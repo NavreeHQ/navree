@@ -4,7 +4,7 @@ use navree_kernel::{AppContext, BoxError, BoxFuture};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-/// A typed event (what `#[event]` implements).
+/// A typed event: a serializable value with a stable name.
 ///
 /// Events are plain values: emitting one hands a reference to every sync
 /// listener, serializes it as the payload of queued listeners' jobs, and
@@ -34,7 +34,7 @@ pub trait Event: Clone + Serialize + DeserializeOwned + Send + Sync + 'static {
     const NAME: &'static str;
 }
 
-/// Handles events of type `E` (what `#[listener(E)]` implements).
+/// Handles events of type `E`.
 ///
 /// A listener is a provider: it gets its dependencies by constructor
 /// injection and is resolved from the module that subscribed it (see
@@ -50,7 +50,7 @@ pub trait Listener<E: Event>: Send + Sync + 'static {
     ) -> BoxFuture<'a, Result<(), BoxError>>;
 
     /// Whether the event is handed to the queue instead of being handled
-    /// during `emit` (`#[listener(E, queued)]`). A queued listener's job runs
+    /// during `emit` (default `false`). A queued listener's job runs
     /// [`handle`](Listener::handle) on a worker with the deserialized event;
     /// in an app without a job dispatcher it is handled inline.
     fn queued(&self) -> bool {

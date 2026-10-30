@@ -333,7 +333,7 @@ Both forms register the same providers; only the source of `BillingOptions` diff
 
 ### Feature registrations with `for_feature`
 
-`for_feature` is the other half of the convention: a feature module imports `X::for_feature::<T>()` to register something of its own with module `X`. The CRM's `CrmCoreModule` registers its entities as access subjects this way, so `#[can(.., from = "id")]` routes can load their records:
+`for_feature` is the other half of the convention: a feature module imports `X::for_feature::<T>()` to register something of its own with module `X`. The CRM's `CrmCoreModule` registers its models as access subjects this way, so `#[can(.., from = "id")]` routes can load their records:
 
 ```rust title="crates/crm-core/src/module.rs"
 #[module(
@@ -441,7 +441,7 @@ crates/
 
 Every feature module imports `CrmCoreModule`, so the shared tables and roles are set up before the features that use them. A feature that needs another feature's service imports that feature's module, as `DealsModule` would import `CompaniesModule`.
 
-You don't need separate crates. `navree make:module deals` writes a module (controller, service, entity, DTOs, a migration and tests) into `src/modules/deals/` and adds it to the app; with `--crud`, its controller serves the five JSON resource routes, guarded by abilities on its entity. See the [CLI](/docs/digging-deeper/cli/) page.
+You don't need separate crates. `navree make:module deals` writes a module (controller, service, model, DTOs, a migration and tests) into `src/modules/deals/` and adds it to the app; with `--crud`, its controller serves the five JSON resource routes, guarded by abilities on its model. See the [CLI](/docs/digging-deeper/cli/) page.
 
 ## Testing modules
 

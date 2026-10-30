@@ -110,14 +110,14 @@ navree up
 
 ## Testing
 
-`run_command` runs `down` and `up` against a test app. Point the maintenance file at a temporary directory (here with the [tempfile](https://docs.rs/tempfile) crate) so tests don't share it:
+`run_command` runs `down` and `up` against a test app. Point the maintenance file at a temporary directory (a `TempDirGuard` from the testing kit, deleted when it drops) so tests don't share it:
 
 ```rust title="tests/maintenance.rs"
-use navree::testing::TestApp;
+use navree::testing::{TempDirGuard, TestApp};
 
 #[tokio::test]
 async fn the_api_answers_503_while_down() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = TempDirGuard::new();
     let app = TestApp::builder()
         .config("http.maintenance_file", dir.path().join("down").to_string_lossy().into_owned())
         .module(DealsModule) // any module with routes

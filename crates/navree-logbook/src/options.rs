@@ -291,13 +291,14 @@ pub struct Watchers {
     pub cache: bool,
     /// Log lines at `logbook.log_level` or above.
     pub logs: bool,
-    /// 5xx errors, panics and failed jobs' errors.
+    /// 5xx errors, panics and errors reported with
+    /// `Telemetry::report_exception` (a job's error is part of its entry).
     pub exceptions: bool,
     /// Outgoing HTTP calls through `HttpClient`.
     pub http_client: bool,
     /// Notifications, one entry per channel.
     pub notifications: bool,
-    /// Inserts, updates and deletes through `Repo`.
+    /// Inserts, updates and deletes a model makes in a unit of work.
     pub models: bool,
     /// Scheduled task runs.
     pub schedule: bool,

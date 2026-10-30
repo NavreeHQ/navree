@@ -53,7 +53,7 @@ transport = "log"
 
 The `mail.delivery`, `mail.tracking` and `mail.webhooks` sections turn on the delivery log, tracking and provider events; they are described under [mail delivery](/docs/digging-deeper/mail-delivery/).
 
-Each key has an environment variable: `APP_MAIL__FROM`, `APP_MAIL__TRANSPORT`, `APP_MAIL__QUEUE`, `APP_MAIL__RENDER__INLINE_CSS` and so on. An SMTP URL usually holds a password, so keep it out of committed files: set it as an environment variable, which overrides `config/app.toml`, or in `.env`. A `.env` entry only counts for keys that `config/app.toml` doesn't set, because `.env` is read first (see [where settings come from](/docs/getting-started/configuration/#where-settings-come-from)). The CRM's file above sets both `from` and `transport`, and a new app's sets `transport`: remove a key from `[mail]` before you set it in `.env`.
+Each key has an environment variable: `APP_MAIL__FROM`, `APP_MAIL__TRANSPORT`, `APP_MAIL__QUEUE`, `APP_MAIL__RENDER__INLINE_CSS` and so on. An SMTP URL usually holds a password, so keep it out of committed files: set it as an environment variable, which overrides `config/app.toml`, or in `.env`. A `.env` entry only counts for keys that `config/app.toml` doesn't set, because `.env` is read first (see [where settings come from](/docs/getting-started/configuration/#where-settings-come-from)). The CRM's file above sets both `from` and `transport`, a new app's sets `transport` and a starter kit's sets `from`: remove a key from `[mail]` before you set it in `.env`.
 
 ```env title=".env"
 APP_MAIL__FROM="Navree CRM <crm@navree.test>"
@@ -339,7 +339,7 @@ Errors and `info`-level logs never contain message bodies or credentials. The er
 
 ## Previewing mail
 
-Navree 0.1 has no route that shows a mail in the browser. While you work on a template:
+Navree has no route that shows a mail in the browser. While you work on a template:
 
 - **Use the log transport** (the CRM's development setting) with `navree::mail::body` at `debug`, as [above](#log), to read each body in the log.
 - **Use a mail catcher.** Run one such as [Mailpit](https://mailpit.axllent.org/) and point the SMTP transport at it with `APP_MAIL__TRANSPORT=smtp://localhost:1025`. Open its web UI to see every mail rendered, HTML and text.

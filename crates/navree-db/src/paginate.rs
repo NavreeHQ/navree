@@ -1,7 +1,8 @@
 //! The shapes of pagination: offset pages ([`PageQuery`], [`Page`]) and
 //! cursor pages ([`CursorQuery`], [`CursorPage`]), as extractors and
-//! responses. navree-orm's builders fill them (`Builder::paginate`,
-//! `cursor_paginate`); a [`Record`](crate::Record) select has
+//! responses. navree-orm's `Builder::paginate` fills the offset page; its
+//! `cursor_paginate` answers with navree-orm's own `CursorPage` and reads a
+//! `CursorRequest`. A [`Record`](crate::Record) select has
 //! [`page`](crate::Select::page).
 
 use std::collections::BTreeMap;

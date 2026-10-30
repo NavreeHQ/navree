@@ -108,14 +108,15 @@ pub trait MicroTransport: Send + Sync + 'static {
 
     /// [`listen`](Self::listen) that also tells Navree when the broker has
     /// registered every subscription, by calling
-    /// [`subscribed.signal()`](Subscribed::signal). The app finishes
-    /// booting (and a test's `start_listener` returns) only then, so a
-    /// request sent right after boot is not lost on a transport that drops
-    /// messages nobody has subscribed to. Override it when subscribing
-    /// takes a round trip to the broker; signal once the broker has
-    /// confirmed. The default signals at once and calls `listen`, which is
-    /// right for a transport that keeps messages for a subscriber that has
-    /// not arrived yet.
+    /// [`subscribed.signal()`](Subscribed::signal).
+    /// `MicroModule::start_listener` and `micro:listen` go on (and the boot
+    /// of an app whose transport [`listens_at_boot`](Self::listens_at_boot)
+    /// finishes) only then, so a request sent right after is not lost on a
+    /// transport that drops messages nobody has subscribed to. Override it
+    /// when subscribing takes a round trip to the broker; signal once the
+    /// broker has confirmed. The default signals at once and calls `listen`,
+    /// which is right for a transport that keeps messages for a subscriber
+    /// that has not arrived yet.
     fn listen_subscribed(
         &self,
         subscriptions: Vec<Subscription>,

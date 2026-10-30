@@ -1,10 +1,9 @@
 //! The module's own writes: navree-orm statements in a unit of work that
 //! record the change events audit trails read.
 //!
-//! The events carry each model's `Serialize` form, as `navree_db::Repo`
-//! recorded them, so a field kept out of it (an invitation's token digest)
-//! never reaches an observer; an update records only the fields that
-//! changed. Rows are read back after a write, so callers get them as the
+//! The events carry each model's `Serialize` form, so a field kept out of
+//! it (an invitation's token digest) never reaches an observer; an update
+//! records only the fields that changed. Rows are read back after a write, so callers get them as the
 //! database stored them (timestamps at its precision).
 
 use navree_db::{ChangeEvent, ChangeOp, Uow};

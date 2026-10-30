@@ -154,7 +154,9 @@ let released = notifier.release_due().await?;        // one digest mail
 ```
 
 Read held rows with `NotificationDeferral::query().get(&db)`; store
-preferences with `NotificationPreferences::update`.
+preferences with `NotificationPreferences::update`. `temp_database()` is
+SQLite: the app's `[dev-dependencies]` turn on the `sqlite` feature of
+`navree`.
 
 ## Common mistakes
 

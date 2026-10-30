@@ -23,7 +23,7 @@ facade). The docs page is `apps/website/content/docs/tools/lighthouse.mdx`.
 1. The feature is in `full`, so `navree = { .. }` with default features has
    it. With `default-features = false`, add `"lighthouse"` (it turns on
    `telemetry`, `http`, `crypto`, `view`, `http-client`, `db`, `mail`,
-   `schedule`, `access`, `auth`). `LighthouseModule` and
+   `schedule`, `access`, `auth`, `orm`). `LighthouseModule` and
    `ModuleBuilderLighthouseExt` are in the prelude.
 
 2. Add the module after the ones it builds on. `navree new` apps already

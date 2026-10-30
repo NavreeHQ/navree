@@ -119,7 +119,7 @@ enabled = true
 | `mail.delivery.tenants` | `true` | Look up tenant transports in `mail_transports`. |
 | `mail.delivery.routes` | `true` | Mount the [admin routes](#admin-routes) under `/api/mail`. They need a route authorizer (`AccessModule`) and an authenticator, like every permission-checked route: set it to `false` in an app without them. |
 
-`MailModule` contributes the migration set `mail` whether the pipeline is on or not. It creates `mail_transports`, `mail_deliveries`, `mail_events`, `mail_suppressions` and `mail_outbox`. With `enabled = true` and no `DatabaseModule`, the boot fails. Stored transports and held messages are encrypted with the app key, so they also need `CryptoModule` and `APP_KEY`.
+`MailModule` contributes the migration set `mail` whether the pipeline is on or not. It creates `mail_transports`, `mail_deliveries`, `mail_events`, `mail_suppressions` and `mail_outbox` on PostgreSQL (with TimescaleDB), MySQL and SQLite (the `sqlite` feature). With `enabled = true` and no `DatabaseModule`, the boot fails. Stored transports and held messages are encrypted with the app key, so they also need `CryptoModule` and `APP_KEY`.
 
 The services below are the way to change these tables. To read them directly (a report, an export), `navree::mail::entity` has a record per table: `TransportRow`, `DeliveryRow`, `EventRow`, `SuppressionRow` and `OutboxRow`.
 
@@ -133,7 +133,6 @@ let bounced = DeliveryRow::select()
     .count(&*db)
     .await?;
 ```
-
 
 When the pipeline is off, none of this runs: the mailer renders, validates and hands the message to the transport, as described on the [mail page](/docs/digging-deeper/mail/).
 
@@ -303,7 +302,7 @@ Recording an event, with `Deliveries::record`:
 3. suppresses the recipient after a hard bounce or a complaint, in the delivery's workspace;
 4. emits an event once the unit of work commits.
 
-An event for a message the log doesn't know is still logged and still suppresses. The delivery is locked while an event is recorded, so events about one message that arrive at the same time apply one after the other.
+A delivered event moves only a message that is still `sending` or `sent`, and a bounce never replaces a complaint. An event for a message the log doesn't know is still logged and still suppresses. The delivery is locked while an event is recorded, so events about one message that arrive at the same time apply one after the other.
 
 | Event | Name | Fields besides `delivery_id`, `workspace_id`, `provider`, `recipient`, `occurred_at` |
 |---|---|---|
@@ -559,6 +558,7 @@ async fn a_bounced_address_is_not_mailed_again() {
 }
 ```
 
+- `temp_database()` creates a SQLite database, so the app's tests need the `sqlite` Cargo feature ([database tests](/docs/testing/database-tests/)).
 - `sent()`, `sent_to(address)`, `assert_sent(predicate)` and `assert_nothing_sent()` read what was sent. Each message gets the provider id `fake-1`, `fake-2` and so on.
 - `deliver`, `bounce`, `soft_bounce`, `complain`, `open` and `click` report an event for the last message sent to an address, through `Deliveries::record`, so the log, suppressions and `Mail*` events all follow. `events()` lists what the fake reported.
 - For the API transports, point `endpoint` at a local mock server: a configured endpoint's host is allowed through the SSRF policy.

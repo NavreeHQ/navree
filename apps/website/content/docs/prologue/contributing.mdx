@@ -7,7 +7,7 @@ Navree is developed in the open at [github.com/NavreeHQ/navree](https://github.c
 
 ## The repository
 
-Everything lives in one repository: the framework, the CLI, the agent skills, a reference application, the performance harness and this website.
+Everything lives in one repository: the framework, the CLI, the agent skills, reference applications, the JavaScript packages, the performance and evidence harnesses, the fuzz targets and this website.
 
 | Path | What |
 |---|---|
@@ -15,11 +15,16 @@ Everything lives in one repository: the framework, the CLI, the agent skills, a 
 | `crates/navree-*` | One crate per module, plus the kernel, the contracts, the macros and the CLI |
 | `apps/crm-api` | The reference CRM API, a Navree application: `src/`, its feature crates in `crates/` and system tests in `tests/` |
 | `apps/crm-web` | The CRM front end (Next.js), with Vitest unit tests and Playwright specs in `e2e/` |
+| `apps/crm-nuxt` | The same CRM front end in Nuxt |
+| `apps/evidence-app` | One Navree application that wires every package and tool, built into an image and run under load by the harness in `e2e/` |
 | `apps/website` | navree.com and these docs |
+| `packages/js` | The npm packages `@navree/client`, `@navree/bff`, `@navree/next`, `@navree/nuxt` and `@navree/theme`, a pnpm workspace |
 | `skills/` | The agent skills, one directory per skill, each with a `SKILL.md` |
 | `bench/` | The performance harness: the workload's specification, the conformance checks and the results behind [Performance](/performance/) |
+| `e2e/` | The evidence harness: a Docker Compose stack, k6 load scenarios and HTTP checks |
+| `fuzz/` | Fuzz targets for every parser of untrusted input |
 
-The root `Cargo.toml` is a workspace of `crates/*`, `apps/crm-api` and `apps/crm-api/crates/*`. The apps under `bench/` are separate Cargo projects and aren't part of it. [Directory structure](/docs/getting-started/directory-structure/#the-framework-repository) shows the tree.
+The root `Cargo.toml` is a workspace of `crates/*`, `apps/crm-api`, `apps/crm-api/crates/*` and `apps/evidence-app`. The apps under `bench/` and the fuzz targets in `fuzz/` are separate Cargo projects and aren't part of it. [Directory structure](/docs/getting-started/directory-structure/#the-framework-repository) shows the tree.
 
 ## Setting up
 
@@ -39,7 +44,7 @@ cargo test --workspace
 
 ## The crate hierarchy
 
-Navree's crates form layers, from the kernel (L0) through the framework's modules and the ecosystem's packages (L6 and L7) to the facade and the CLI (L8), with applications on top (L9 and up). **A crate may depend only on crates in lower layers, and only along the edges the dependency table allows.** The rule covers dev-dependencies too.
+Navree's crates form layers, from the kernel (L0) through the framework's modules and the ecosystem's packages (L6 and L7) to the facade and the CLI (L8), with applications on top (L9 and up). **A crate may depend only on crates in lower layers, and only along the edges the hierarchy table allows.** The rule covers dev-dependencies too.
 
 Modules often need something from a module beside them: the auth module wants to write to the audit log, a queue worker wants to broadcast. Those needs go through traits in `navree-contracts` (L1), such as `AuditSink`, `Broadcaster`, `Principal` and the job traits. The module that provides the feature registers an implementation, and the module that needs it resolves the trait from the container. No module depends sideways on another.
 
@@ -48,13 +53,15 @@ Modules often need something from a module beside them: the auth module wants to
 - `workspace_dependency_edges_follow_the_hierarchy` reads `cargo metadata` and checks every `navree*` dependency edge (normal, dev and build) against the `HIERARCHY` table.
 - `hierarchy_table_lists_exactly_the_workspace_crates` fails when a crate is missing from the table, or the table names a crate that doesn't exist.
 - `hierarchy_table_never_points_up_and_has_no_cycles` checks the table itself.
-- `lockfile_has_no_aws_lc_openssl_native_tls_or_cmake` keeps native TLS libraries and CMake out of `Cargo.lock`.
+- `lockfile_has_no_aws_lc_openssl_native_tls_or_cmake` keeps native TLS libraries and CMake out of `Cargo.lock`, and `lockfile_follows_the_crypto_policy` keeps `rsa`, `p256`, `p384` and `ed25519-dalek` out of it.
+- `no_other_data_layer_is_in_the_graph` keeps every `sea-*` package out of `Cargo.lock` and out of the workspace's manifests: the data layer is navree-db, navree-orm and navree-schema.
+- `a_build_without_sqlite_has_no_libsqlite3_sys` and `the_sqlite_feature_builds_sqlite_and_no_other_driver` check that SQLite comes only from the `sqlite` feature.
 
-There are two exceptions, both for dev-dependencies: a crate's tests may use any crate in a lower layer (so a crate in L4 can boot modules from L2 and L3 with `navree-testing`), and `navree-macros` may dev-depend on the runtime crates, to expand its macros against them.
+There are three exceptions, all for dev-dependencies: a crate's tests may use any crate in a lower layer (so a crate in L4 can boot modules from L2 and L3 with `navree-testing`), a crate's tests may depend on the crate itself to turn on its own features, and `navree-macros` may dev-depend on the runtime crates, to expand its macros against them.
 
 **Adding a crate?** Give it a row in `HIERARCHY` first, with its layer and allowed dependencies. [The crate hierarchy](/docs/architecture/crate-hierarchy/) shows every layer and edge.
 
-Framework crates implement `Module`, `Injectable` and `Controller` by hand instead of using `navree-macros`. The hierarchy table doesn't let them depend on the macros crate, which also let every crate be built before the macros existed. Apps and the facade's tests use the macros.
+Framework crates implement `Module`, `Injectable` and `Controller` by hand instead of using `navree-macros`, which sits at L0 with no runtime dependencies. Apps and the facade's tests use the macros.
 
 ## Running the tests
 
@@ -104,6 +111,20 @@ Keep `CARGO_BUILD_JOBS` moderate when memory is tight.
   ```
 
   The end-to-end run builds and starts the CRM API on a fresh, seeded database, starts the production build of the web app, and runs every Playwright spec in Chromium against them. The repository's README has the details.
+
+### Dependency, security and fuzz checks
+
+CI runs these on pull requests, and you can run them first:
+
+```sh
+cargo install --locked cargo-deny cargo-vet   # once
+cargo deny check                              # advisories, licenses, bans, sources (deny.toml)
+cargo vet                                     # every crate audited or exempted (supply-chain/)
+scripts/sast.sh all                           # Semgrep with Navree's rules in .semgrep/, and Gitleaks (needs Docker)
+fuzz/docker.sh list                           # the fuzz targets (needs Docker)
+```
+
+A new or updated dependency needs `cargo deny check` and `cargo vet` to pass; `supply-chain/README.md` says how to review or exempt a crate. Every parser of untrusted input has a libFuzzer target in `fuzz/`; a new parser gets one. [CONTRIBUTING.md](https://github.com/NavreeHQ/navree/blob/main/CONTRIBUTING.md) in the repository has the details of each gate, and `SECURITY.md` says how to report a vulnerability.
 
 ## Code style
 

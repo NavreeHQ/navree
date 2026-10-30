@@ -49,8 +49,8 @@ struct ContactRow {
 #[get("/export.csv")]
 #[permissions("contacts.export")]
 async fn export_csv(&self) -> Result<Download> {
-    let contacts = Contact::query().order_by(Contact::EMAIL).get(&*self.db).await?;
-    Ok(self.exports.csv("contacts", contacts.iter().map(|contact| ContactRow::from(&**contact))))
+    let contacts = Contact::query().order_by(Contact::EMAIL).get(&*self.db).await?.into_models();
+    Ok(self.exports.csv("contacts", contacts.into_iter().map(ContactRow::from)))
 }
 ```
 
@@ -209,6 +209,8 @@ app.get::<Queue>().await.run_pending().await?;         // runs the apply batch a
 assert_eq!(imports.find(import.id).await?.counts.created, 1);
 ```
 
+- `temp_database()` creates a SQLite file: the test build needs the `sqlite`
+  feature in `[dev-dependencies]` (`navree new` writes it).
 - Legacy encodings: `encoding_rs::WINDOWS_1256.encode(text).0` for Arabic
   CSV, `[0xFF, 0xFE]` followed by `text.encode_utf16()` little-endian bytes
   for Excel's "Unicode Text".

@@ -45,6 +45,9 @@ transaction_settings = true
 | Key | Default | What it does |
 |---|---|---|
 | `url` | `sqlite://storage/app.db?mode=rwc` | The connection URL: `postgres://...` (TimescaleDB or PostgreSQL), `mysql://...`, `mariadb://...` or `sqlite://...`. A new app sets a TimescaleDB URL, the one Dock's `postgres` service serves. Without a URL, Navree uses a SQLite file, which needs the `sqlite` feature: an app built without it stops at boot and asks for the feature or a URL. |
+| `read_urls` | `[]` | Read replicas of the database at `url`: reads outside a transaction go to them in turn, writes and transactions to `url`. From the environment, a comma-separated list. See [read replicas](/docs/orm/connections-and-transactions/#read-replicas). |
+| `sticky` | `true` | After a unit of work wrote, its task reads from the writer, so a request sees its own writes while replicas catch up. |
+| `direct_url` | unset | A direct connection to the same database that bypasses a transaction-mode pooler (PgBouncer, RDS Proxy) in front of `url`. Migrations run on it, and `db.direct()` hands it out for session work such as advisory locks. It must name the same kind of database as `url`. |
 | `max_connections` | `10` | The most connections in the pool. Must be at least 1. |
 | `min_connections` | `0` | The connections kept open while idle. Must not exceed `max_connections`. |
 | `connect_timeout_secs` | `8` | How long opening a connection may take. Waiting for a free connection from the pool times out after four times this. |
@@ -56,9 +59,11 @@ transaction_settings = true
 | `migrate_on_boot` | `false` | Runs pending migrations when the app boots. Handy in development and tests; run `migrate` in deployments instead. |
 | `transaction_settings` | `true` | Makes the actor and request id of every unit of work readable in SQL: `navree.actor` and `navree.request_id` on PostgreSQL, `@navree_actor` and `@navree_request_id` on MySQL and MariaDB. Turn it off when no trigger or policy reads them: each transaction then saves the statement that sets them (and on MySQL the one that clears them). |
 
+The sections `[database.postgres]` ([session settings](#session-settings)), `[database.mysql]` ([SQL mode and isolation level](#sql-mode-and-isolation-level)) and `[database.sqlite]` ([SQLite settings](#sqlite-settings)) shape the session of every connection to that kind of database, and `[database.connections.<name>]` adds [named connections](/docs/orm/connections-and-transactions/#named-connections), each with any key of this section.
+
 Like every section, these keys can come from environment variables with the `APP_` prefix and `__` between levels: `APP_DATABASE__URL` sets `database.url`. Keep a production URL, and its password, in the environment rather than in `config/app.toml`. A `.env` entry only fills keys that `config/app.toml` leaves out, and a new app's `config/app.toml` sets `database.url`, so `APP_DATABASE__URL` in `.env` has no effect there. See [configuration](/docs/getting-started/configuration/) for the order in which sources apply.
 
-An invalid section stops the boot with a message naming `database` and the problem (an empty `url`, `max_connections = 0`, `min_connections` above `max_connections`, or a `database.mysql.modes` entry that isn't an SQL mode name). Navree never prints the password of the URL: `DbOptions`'s `Debug` output and connection errors show it as `***`.
+An invalid section stops the boot with a message naming `database` and the problem (an empty `url`, `max_connections = 0`, `min_connections` above `max_connections`, a `direct_url` of another kind of database than `url`, a `database.mysql.modes` entry that isn't an SQL mode name, or a value `database.postgres` or `database.sqlite` doesn't accept). Navree never prints the password of the URL: `DbOptions`'s `Debug` output and connection errors show it as `***`.
 
 ## Registering the module
 
@@ -95,7 +100,7 @@ The module is global, so every module can inject `Arc<Db>` and `Arc<DbOptions>` 
 - the unit-of-work layer of the request pipeline and the `Uow` extractor;
 - the mapping of database errors to error responses ([below](#database-errors));
 - the `database` health check, which pings the pool (served by `GET /health/ready` when the app has `ObserveModule`, see [health and metrics](/docs/digging-deeper/health-and-metrics/));
-- the commands `migrate`, `migrate:install`, `migrate:status`, `migrate:rollback`, `migrate:reset`, `migrate:refresh`, `migrate:fresh`, `schema:dump` and `db:seed`;
+- the commands `migrate`, `migrate:install`, `migrate:status`, `migrate:rollback`, `migrate:reset`, `migrate:refresh`, `migrate:fresh`, `schema:dump`, `db:seed`, `db:monitor` (the connections each database has open) and `db` (the database's own client: `psql`, `mysql`, `mariadb` or `sqlite3`; [watching statements](/docs/orm/connections-and-transactions/#watching-statements));
 - closing the pool when the app shuts down, so SQLite checkpoints its write-ahead log.
 
 ## TimescaleDB
@@ -147,9 +152,34 @@ Migrations have run against PostgreSQL 17 with TimescaleDB 2.31 (and against MyS
 
 The facade's `time_series` suite boots the audit, webhooks, Fleet, scheduling and Lighthouse modules on the same servers: their time-series tables become hypertables with the documented time columns, chunk intervals and keys on TimescaleDB, and stay regular tables with time indexes on MySQL; running their conversions again changes nothing; `audit:prune` drops whole chunks; and the [time-bucket queries](/docs/database/timescaledb/#time-bucket-queries) return the same buckets as on SQLite.
 
-One PostgreSQL path outside the ORM is written but has not yet run against a real server: the queue's `SKIP LOCKED` job reservation. Try it in a staging environment before you rely on it.
+The queue's `SKIP LOCKED` job reservation, which is outside the ORM, has a real-server suite of its own: `NAVREE_TEST_DATABASE=postgres cargo test -p navree-queue --features postgres` with `NAVREE_TEST_POSTGRES_URL` set (see [Queues](/docs/digging-deeper/queues/)).
 
 </Callout>
+
+### Session settings
+
+The `database.postgres` section shapes the session of every connection the pool opens. Every key is optional:
+
+```toml title="config/app.toml"
+[database.postgres]
+search_path = ["app", "public"]
+timezone = "UTC"
+application_name = "crm-api"
+synchronous_commit = "on"
+isolation_level = "read_committed"
+ssl_mode = "prefer"
+```
+
+| Key | What it does |
+|---|---|
+| `search_path` | The schemas unqualified names resolve in, in order. A list, or a comma-separated string from the environment (`APP_DATABASE__POSTGRES__SEARCH_PATH=app,public`). Each entry must be a schema name. |
+| `timezone` | The session's time zone, such as `UTC` or `Europe/Berlin`. |
+| `application_name` | The name the server shows for these connections (`pg_stat_activity.application_name`): at most 63 printable characters, without quotes or backslashes. |
+| `synchronous_commit` | `on`, `off`, `local`, `remote_write` or `remote_apply`. |
+| `isolation_level` | The isolation level transactions start with (`default_transaction_isolation`): `read_uncommitted`, `read_committed`, `repeatable_read` or `serializable`, in any case, with spaces or hyphens if you like. |
+| `ssl_mode` | TLS: `disable`, `allow`, `prefer` (the default), `require`, `verify-ca` or `verify-full`. It overrides the URL's `sslmode`. |
+
+Other databases ignore this section.
 
 ### The pool
 
@@ -223,7 +253,7 @@ strict = true
 
 ### How Navree behaves on MySQL
 
-- Each unit-of-work transaction begins with `BEGIN`, then `SET @navree_actor = ?, @navree_request_id = ?`: the signed-in user's id as text, or `NULL`, and the request id. Triggers can read them. (With `transaction_settings = false`, neither this statement nor the one clearing the variables is sent.) The UUIDs that models and entities write are 16 bytes on MySQL, in `BINARY(16)` columns ([below](#types-and-collations)), so a trigger that records who changed a row converts the text:
+- Each unit-of-work transaction begins with `BEGIN`, then `SET @navree_actor = ?, @navree_request_id = ?`: the signed-in user's id as text, or `NULL`, and the request id. Triggers can read them. (With `transaction_settings = false`, neither this statement nor the one clearing the variables is sent.) The UUIDs that models write are 16 bytes on MySQL, in `BINARY(16)` columns ([below](#types-and-collations)), so a trigger that records who changed a row converts the text:
 
   ```sql
   CREATE TRIGGER deals_updated_by BEFORE UPDATE ON deals FOR EACH ROW
@@ -294,6 +324,21 @@ Every unit-of-work transaction starts with `BEGIN IMMEDIATE`, which takes SQLite
 An in-memory database (`sqlite::memory:`) is private to one connection, so every connection in the pool would see a different, empty database. Tests use a temporary file instead; see [database tests](/docs/testing/database-tests/).
 
 </Callout>
+
+### SQLite settings
+
+The `database.sqlite` section changes these, and adds pragmas, for every connection the pool opens. Every key is optional:
+
+```toml title="config/app.toml"
+[database.sqlite]
+journal_mode = "wal"      # delete, truncate, persist, memory, wal or off
+busy_timeout_ms = 5000    # how long a connection waits for a lock
+foreign_keys = true
+synchronous = "normal"    # off, normal, full or extra; SQLite's own default when unset
+pragmas = { cache_size = "-20000", temp_store = "memory" }
+```
+
+`pragmas` runs further `PRAGMA name = value` statements on every connection: a name is letters, digits and `_`, a value letters, digits, `_`, `-` and `.`. Other databases ignore the section.
 
 ## Running queries
 

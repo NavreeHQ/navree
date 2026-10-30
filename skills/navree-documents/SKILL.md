@@ -260,7 +260,7 @@ match documents.status(&queued).await? {
 ### Behind an operation (what users follow)
 
 ```rust
-// needs QueueModule + DatabaseModule; facade: `documents` + `queue` (in `full`)
+// needs QueueModule + DatabaseModule; facade: `documents` (opt-in) + `queue` (in `full`)
 #[post("/audit")]
 #[authenticated]
 async fn export(&self, uow: Uow, CurrentPrincipal(me): CurrentPrincipal, Json(input): Json<ExportInput>)

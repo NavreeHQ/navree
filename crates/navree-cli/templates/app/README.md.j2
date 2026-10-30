@@ -53,7 +53,7 @@ Every command other than `new`, `make:*` and `dev` runs in the app binary
 ## Layout
 
 ```text
-config/app.toml        settings (overridden by .env and APP_* variables)
+config/app.toml        settings (APP_* environment variables override them)
 {% if dock %}
 dock.toml              the local services `navree dock up` runs
 {% endif %}

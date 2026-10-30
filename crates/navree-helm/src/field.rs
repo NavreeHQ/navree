@@ -113,7 +113,7 @@ impl FieldKind {
 /// [`max_size`](Field::max_size) says otherwise (10 MiB).
 pub const DEFAULT_MAX_FILE_BYTES: u64 = 10 * 1024 * 1024;
 
-/// One field of a resource: a column of its entity (or, for `computed`,
+/// One field of a resource: a column of its model (or, for `computed`,
 /// `has_many` and `view`, something derived from the record), how it is
 /// shown and how it is edited.
 ///
@@ -436,7 +436,7 @@ impl Field {
             .unwrap_or_else(|| sentence_case(&self.name))
     }
 
-    /// Whether the field is a column of the entity (not `computed`,
+    /// Whether the field is a column of the model (not `computed`,
     /// `has_many` or `view`).
     pub(crate) fn is_column(&self) -> bool {
         !matches!(

@@ -263,7 +263,9 @@ impl DealLookup {
 }
 ```
 
-Test (in-process, whole pipeline, no port):
+Test (in-process, whole pipeline, no port). `temp_database()` is a SQLite file
+per test, so an app that runs on PostgreSQL turns on the `sqlite` feature of
+`navree` in its `[dev-dependencies]`:
 
 ```rust
 use navree::grpc::Code;

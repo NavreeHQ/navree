@@ -286,5 +286,5 @@ Also: `list_resources()`, `list_resource_templates()`, `list_prompts()`,
   than 64 levels gets `-32600`; batches only on a `2025-03-26` session; at
   most 64 messages wait for a slow client (notifications beyond are
   dropped).
-- `navree::mcp::rmcp` is gone: use `navree::mcp::protocol` for the protocol
-  types.
+- Protocol types (`Tool`, `Resource`, `ResourceTemplate`, `Prompt`) are in
+  `navree::mcp::protocol`; `McpTestClient`'s `list_*` methods return them.

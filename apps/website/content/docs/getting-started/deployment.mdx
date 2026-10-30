@@ -9,7 +9,9 @@ The examples use Linux with nginx and systemd because they are common. Navree do
 
 ## Deploying with Harbor
 
-[Harbor](/docs/tools/harbor/) does everything on this page for you. `navree harbor:provision` prepares an Ubuntu server over SSH with Caddy, PostgreSQL, Redis, TLS, a firewall and systemd units for the server, the queue workers and the scheduler. `navree deploy` ships a release and switches to it atomically once its health check passes, and `navree deploy:rollback` goes back to the previous one. Servers, their roles and the encrypted environment secrets live in `harbor.toml`.
+[Harbor](/docs/tools/harbor/) does everything on this page for you. `navree harbor:provision` prepares an Ubuntu server over SSH with Caddy, PostgreSQL, Redis, TLS, a firewall and systemd units for the server, the queue workers and the scheduler. `navree deploy` ships a release and switches to it atomically once its health check passes, and `navree deploy:rollback` goes back to the previous one. Servers, their roles and the encrypted environment secrets live in `harbor.toml`. `navree new` writes the key that encrypts them to `harbor.key`, which stays out of Git, for the apps that ship a `harbor.toml` (the starter kits).
+
+A load balancer in front of Harbor's Caddy goes in `deploy.trusted_proxies` (addresses or CIDR ranges): Caddy keeps the balancer's `X-Forwarded-For`, and `navree deploy` sets the app's `http.trusted_proxies` to loopback followed by the same addresses.
 
 ```sh
 navree harbor:provision
@@ -87,7 +89,7 @@ Check these before the first deploy:
 |---|---|
 | `APP_KEY` | Without it, JWTs and signed URLs use a random key per process, so every restart signs everyone out, and encryption fails. Every process needs the same key. See [The application key](/docs/getting-started/configuration/#the-application-key). |
 | `database.migrate_on_boot` | New apps set it to `true` in `config/app.toml`. In production, run `migrate` as a deploy step instead, so a failed migration stops the deploy, not the server. |
-| `database.url` | The default is SQLite in `storage/`. For PostgreSQL, build with the `postgres` feature and set a `postgres://` URL. See [Database: getting started](/docs/database/getting-started/). |
+| `database.url` | A new app's `config/app.toml` sets a TimescaleDB URL for development, and the environment variable overrides it. Left out altogether, it is `sqlite://storage/app.db?mode=rwc`, which needs the `sqlite` feature: an app built without the driver of its URL stops at boot with a message naming the feature. Build with `postgres` (TimescaleDB and PostgreSQL) or `mysql`. See [Database: getting started](/docs/database/getting-started/). |
 | `http.addr` | `127.0.0.1:8080` by default. Use `0.0.0.0:8080` when the proxy runs on another host or in another container. |
 | `http.trusted_proxies` | Without it, behind a proxy every request seems to come from the proxy's address, so the per-IP rate limit (600 requests a minute by default) and the login throttle apply to all your users together. |
 | `app.url` | Absolute links in mail, such as email verification, use it. Navree doesn't read `X-Forwarded-Proto` or `Host` to build URLs. |
@@ -117,7 +119,7 @@ The binary runs one command and exits, except for the long-running ones. Every c
 | `key:generate` | Prints a new application key. |
 | `check [--graph]` | Validates the module graph without starting anything. |
 
-Modules add their own. With `ScheduleModule` in the app you get `schedule:work`, `schedule:run` and `schedule:list`, and with `AuditModule` you get `audit:prune`. A new app includes neither. See [Console commands and the CLI](/docs/digging-deeper/cli/).
+Modules add their own. With `ScheduleModule` in the app you get `schedule:work`, `schedule:run` and `schedule:list`, and with `AuditModule` you get `audit:prune`. A new app includes `ScheduleModule` (it schedules `model:prune` daily) but not `AuditModule`. See [Console commands and the CLI](/docs/digging-deeper/cli/).
 
 ## Processes to run
 
@@ -127,7 +129,7 @@ A typical deployment runs up to three long-lived processes from the same binary 
 |---|---|---|
 | Web server | `planner serve` | Always. |
 | Queue worker | `planner queue:work` | You queue jobs, queued mail or queued listeners. New apps use the database queue driver. |
-| Scheduler | `planner schedule:work` | The app includes `ScheduleModule` and declares scheduled tasks. |
+| Scheduler | `planner schedule:work` | The app includes `ScheduleModule` and declares scheduled tasks. A new app does: it prunes models marked `prunable` daily. |
 
 Instead of `schedule:work`, you can run `planner schedule:run` from cron every minute. Each tick of each task runs once however many schedulers share the database, so running the scheduler on several servers is safe.
 

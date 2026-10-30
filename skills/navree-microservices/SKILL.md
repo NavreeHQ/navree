@@ -22,8 +22,10 @@ Everything below is in the code; when in doubt read
 
 ```toml
 [dependencies]
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["micro", "micro-nats"] }
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["micro", "micro-nats", "postgres"] }
 # micro-kafka (Kafka 4.0+), micro-rabbitmq, micro-redis (Redis 6.2+), micro-mqtt (MQTT 5)
+# The outbox, inbox and dead letters are tables in the app's database: turn on its
+# driver (`postgres`, `mysql` or `sqlite`); `micro` turns `db` on but no driver.
 ```
 
 2. Put payloads in a crate both sides share (plain serde types;
@@ -213,6 +215,11 @@ assert!(micro.dead_letters().is_empty());
 app.shutdown().await.unwrap();
 ```
 
+`temp_database()` is a SQLite file, so a service that runs on PostgreSQL or
+MySQL puts `navree = { .., features = ["sqlite"] }` in its
+`[dev-dependencies]` (without it the test fails at boot asking for the
+feature).
+
 Over a network transport in a test, start the listener yourself:
 `MicroModule::start_listener(app.ctx()).await?`.
 
@@ -242,7 +249,11 @@ Handler errors reply with the error's status and JSON body; 5xx bodies say
 - Tests: `cargo test -p navree-micro --all-features` runs the conformance
   suite on memory, TCP and every broker against test servers in
   `tests/micro/*_server.rs`; `NAVREE_TEST_{NATS,KAFKA,RABBITMQ,REDIS,MQTT}_URL`
-  runs it against real brokers.
+  runs it against real brokers. The outbox, inbox and dead letter store runs
+  on a SQLite file always, and on PostgreSQL and MySQL with the crate's
+  `postgres` and `mysql` features and `NAVREE_TEST_POSTGRES_URL` /
+  `NAVREE_TEST_MYSQL_URL` (`NAVREE_TEST_REQUIRE_SERVICES=1` makes a missing
+  server fail instead of being skipped).
 
 ## Gotchas
 
@@ -292,11 +303,13 @@ Handler errors reply with the error's status and JSON body; 5xx bodies say
   with `NoResponders`.
 - **Trace context**: a handler runs in a navree-telemetry
   `TelemetryContext` that continues the sender's `traceparent`; HTTP calls,
-  queries and messages made inside stay in that trace. With
+  queries and messages made inside stay in that trace. The message hop
+  itself is not a span (no `send` / `process` spans). With
   `observe.tracing.enabled = false` messages carry no `traceparent`.
 - **Custom transports** implement `MicroTransport` (and `DeliveryActions`
   for each received message) and should pass
-  `navree::micro::conformance::run(&harness)`. Boot finishes when the
-  transport calls `Subscribed::signal` from `listen_subscribed` (default:
-  at once); override it when the broker drops messages sent before it has
+  `navree::micro::conformance::run(&harness)`. `micro:listen` and
+  `MicroModule::start_listener` return when the transport calls
+  `Subscribed::signal` from `listen_subscribed` (default: at once);
+  override it when the broker drops messages sent before it has
   registered the subscriptions, as core NATS does.

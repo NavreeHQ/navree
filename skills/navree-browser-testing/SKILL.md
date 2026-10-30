@@ -173,6 +173,9 @@ if let Err(error) = Browser::find_chrome() {
   visible part; give boards a wide window (`.window(2200, 1100)`) so the
   target column is on screen.
 - Dialogs (`alert`, `confirm`, `prompt`) are accepted automatically.
+- Screenshots (yours and the failure ones) bring their page to the front
+  first: Chrome draws no frames for a page another page covers, so a test
+  with several pages open still gets the picture of the page that failed.
 - `TestServer` runs on the test's runtime: don't block the test thread
   (no `std::thread::sleep`) while the browser needs the server.
 - `Viewport` user agents: desktop pages see `Chrome/...`, not

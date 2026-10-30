@@ -23,7 +23,7 @@ Both front ends are dark, on the navree.com design tokens, with a sidebar that f
 
 ## Running it
 
-You need Rust (1.95 or newer), Node.js 20.9 or newer and pnpm. No database server: development uses SQLite. Run each long-running command in its own terminal. Start the API, then either front end, or both.
+You need Rust (1.95 or newer), Node.js 20.9 or newer and pnpm. No database server: development uses SQLite, which `crm-api` turns on with its default `sqlite` feature (the `postgres` feature adds the PostgreSQL driver instead). Run each long-running command in its own terminal. Start the API, then either front end, or both.
 
 <Steps>
 <Step title="Create an application key">
@@ -142,6 +142,7 @@ The app's root is short. `platform` adds every framework module the CRM uses, co
 ```rust title="apps/crm-api/src/app.rs"
 pub fn app(sources: ConfigSources) -> AppBuilder {
     platform(Navree::app(), sources)
+        .module(McpModule::from_config()) // section `mcp`; serves /mcp
         .module(CrmCoreModule)
         .module(UsersModule)
         .module(CompaniesModule)
@@ -171,7 +172,7 @@ Splitting this way keeps boundaries honest (a deal can't reach into the contacts
 
 ### The platform
 
-`crm_core::platform` is the list of framework modules, each configured from the app's configuration: Config, Logger, Crypto, Http, Database, Cache, Events, View, Mail, Queue, Schedule, Validation, Auth (with public registration off: admins create accounts), Access, Audit, Notify, Realtime, Api and Observe. It also fills in a few CRM defaults when the configuration leaves them unset, such as the realtime key `navree-crm-key` and `http.trusted_proxies = "127.0.0.1,::1"` (the BFF calls from loopback; it names the browser in `X-Forwarded-For` only when `NAVREE_TRUSTED_PROXY_HOPS` is set, see [client addresses](#the-web-app) below).
+`crm_core::platform` is the list of framework modules, each configured from the app's configuration: Config, Logger, Crypto, Http, Database, Orm (strict outside production), Cache, Events, View, Mail, Queue, Schedule, Validation, Auth (with public registration off: admins create accounts), Access, Audit, Notify, Realtime, Api and Observe. It also fills in a few CRM defaults when the configuration leaves them unset, such as the realtime key `navree-crm-key` and `http.trusted_proxies = "127.0.0.1,::1"` (the BFF calls from loopback; it names the browser in `X-Forwarded-For` only when `NAVREE_TRUSTED_PROXY_HOPS` is set, see [client addresses](#the-web-app) below).
 
 Last, a small module of its own registers the app's `dyn Clock` (the system clock, which tests replace with a fixed one) and the [channel authorisers](/docs/digging-deeper/broadcasting/#authorizing-channels) for `private-crm.deals` and `private-users.{id}`.
 
@@ -241,12 +242,13 @@ The deal service emits [events](/docs/digging-deeper/events/) inside the request
 
 ```rust title="crates/crm-deals/src/lib.rs"
 impl DealsModule {
-    /// The owner notifications (a queued listener of both events) and
-    /// their mail template.
+    /// The owner notifications (a queued listener of both events), their
+    /// mail template and the deals part of the MCP server.
     fn wire(&self, m: &mut ModuleBuilder) {
         m.listen::<DealAssigned, NotifyDealOwner>()
             .on::<DealWon, NotifyDealOwner>()
             .templates(notification::TEMPLATES);
+        m.mcp_server::<DealsMcp>();
     }
 }
 ```
@@ -264,10 +266,11 @@ Notifications are sent by `queue:work`, which doesn't hold the sockets, so the C
 
 ## Scheduled reminders
 
-`ActivitiesModule` registers a command and two [schedules](/docs/digging-deeper/scheduling/):
+`ActivitiesModule` registers a command, two [schedules](/docs/digging-deeper/scheduling/) and its part of the MCP server (below):
 
 ```rust title="crates/crm-activities/src/lib.rs"
 fn wire(&self, m: &mut ModuleBuilder) {
+    m.mcp_server::<ActivitiesMcp>();
     m.command(reminders::reminders_command());
     m.templates(&reminders::TEMPLATES);
     m.schedule(|s| {
@@ -282,6 +285,10 @@ fn wire(&self, m: &mut ModuleBuilder) {
 ```
 
 Every day at 08:00 UTC, `crm:task-reminders` sends everyone with open tasks due today one "Tasks due today" notification (stored, broadcast and mailed). At 03:00 UTC, `audit:prune` trims the [audit log](/docs/security/audit-log/). `schedule:work` runs them; you can also run the reminders by hand with `cargo run -p crm-api -- crm:task-reminders`.
+
+## The MCP server
+
+`McpModule` serves the CRM to AI clients at `/mcp` (and over stdio with `cargo run -p crm-api -- mcp:serve --user <email>`). Clients send the same bearer access token as the REST API. `DealsMcp` adds the tools `list_deals` and `move_deal`, the resources `crm://deals/{id}` and `crm://pipeline` and the prompt `follow-up-email`; `ActivitiesMcp` adds the tool `log_activity`. Each is checked like the matching route, so a rep who may not move another rep's deal can't move it through MCP either. The server's name and instructions are the `[mcp]` section of `config/app.toml`. See [MCP servers](/docs/ai/mcp-servers/) for how they are written.
 
 ## The web app
 
@@ -304,7 +311,7 @@ In both, the server is a backend-for-frontend: the browser only calls same-origi
 
 Nuxt adds one more piece: a server middleware (`server/middleware/session-gate.ts`) answers a page request that has neither cookie with a redirect to `/login?next=...` before the app loads.
 
-`navree new --ui next` generates a smaller version of the same BFF for your own app; see [Creating an app](/docs/digging-deeper/cli/#creating-an-app). The [SaaS starter kit](/docs/getting-started/starter-kits/) takes `--ui next` or `--ui nuxt`.
+`navree new --ui next` generates a smaller version of the same BFF for your own app; see [Creating an app](/docs/digging-deeper/cli/#creating-an-app). The [SaaS starter kit](/docs/getting-started/starter-kits/) comes with a Next.js front end (`--kit saas`).
 
 ## Tests
 
@@ -329,9 +336,9 @@ async fn won_sets_closed_at() {
 }
 ```
 
-The deals suite also checks the broadcasts over a real WebSocket, notifications sent from a separate worker app through the relay, and that role changes and sign-outs end subscriptions. Each feature crate has an `openapi` test that pins the schema names the web app imports.
+The deals suite also checks the broadcasts over a real WebSocket, notifications sent from a separate worker app through the relay, and that role changes and sign-outs end subscriptions. The activities, companies and deals crates each have an `openapi` test that pins the schema names the web app imports.
 
-**System tests**, in `apps/crm-api/tests`, boot the whole API: `app.rs` (it boots, passes `check` and seeds), `e2e.rs` (a rep builds a pipeline, a manager reassigns a deal and the new owner is notified once the queue runs, and every change is in the audit trail), `bff.rs` (the login throttle and rate limits are per browser behind the BFF), `security_audit.rs` (security events reach the audit table) and `pool.rs` (no request needs two database connections at once).
+**System tests**, in `apps/crm-api/tests`, boot the whole API: `app.rs` (it boots, passes `check` and seeds), `e2e.rs` (a rep builds a pipeline, a manager reassigns a deal and the new owner is notified once the queue runs, and every change is in the audit trail), `bff.rs` (the login throttle and rate limits are per browser behind the BFF), `security_audit.rs` (security events reach the audit table), `pool.rs` (no request needs two database connections at once), `mcp.rs` (what each role sees and may do through the MCP server), `servers.rs` (the same day of CRM work on SQLite and on PostgreSQL with TimescaleDB, which must answer alike; the PostgreSQL half runs with `--features postgres` and a server it can create a database on) and `browser.rs` (journeys through the built Next.js app in Chrome, see [browser testing](/docs/packages/browser-testing/)).
 
 **Web tests**: in `apps/crm-web`, Vitest covers the BFF route handlers, the API client, the CASL setup and the mock API (`pnpm test`). Playwright drives the whole system in a real Chromium: with `E2E_REAL_API=1 pnpm e2e` it starts the API on a fresh seeded database and the production build of the web app, then runs the end-to-end specs, such as signing in with tokens kept in httpOnly cookies only, a rep who can't edit another rep's deal, an admin adding a user, a task completed from the Today tab, and a deal moved in one browser moving on another person's board. Without `E2E_REAL_API=1`, only the smoke tests run, against the mock API.
 

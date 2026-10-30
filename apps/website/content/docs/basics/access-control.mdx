@@ -104,7 +104,7 @@ async fn index(
 
 The `Accessible<Deal, Read>` extractor turns the same rules into a SQL filter, so the list holds exactly the deals this user may read.
 
-With `from = "id"`, the authorizer loads the record whose primary key is the `{id}` path parameter, in the request's unit of work, and checks the action against that record. A record that doesn't exist is a 404; a record the user may not touch is a 403. The handler receives the loaded record with the `Authorized<E, A>` extractor, so it doesn't load it again. This is the CRM's deal update:
+With `from = "id"`, the authorizer loads the record whose primary key is the `{id}` path parameter, in the request's unit of work, and checks the action against that record. A record that doesn't exist is a 404; a record the user may not touch is a 403. The handler receives the loaded record with the `Authorized<M, A>` extractor, so it doesn't load it again. This is the CRM's deal update:
 
 ```rust title="crates/crm-deals/src/controller.rs"
 #[patch("/{id}")]
@@ -156,7 +156,7 @@ async fn archive(&self, Path(id): Path<u32>) -> String {
 }
 ```
 
-Register a subject that isn't an entity by importing `AccessModule::for_subject::<Report>()` in its module, so its permission prefix maps to it:
+Register a subject that isn't a model by importing `AccessModule::for_subject::<Report>()` in its module, so its permission prefix maps to it:
 
 ```rust
 #[module(

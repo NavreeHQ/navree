@@ -13,7 +13,10 @@ test has its own app and database.
 
 The kit is `navree::testing` (not in the prelude). Tests need
 `tokio = { version = "1", features = ["macros", "rt-multi-thread"] }` in
-`[dev-dependencies]` (a new app has it).
+`[dev-dependencies]`, and, because the test databases are SQLite files and
+SQLite is an opt-in feature, `navree = { .., features = ["sqlite"] }` there
+too (a new app has both). Without the feature the app stops at boot asking
+for it.
 
 ## Where tests go
 
@@ -72,7 +75,11 @@ async fn only_the_owner_may_update() {
 `TestApp::builder()` adds `ConfigModule` (with **no** sources: no `.env`,
 TOML or environment) and `HttpModule`; don't add your own `ConfigModule`.
 `.temp_database()` sets the URL only: add `DatabaseModule` (or a module
-importing it). `.build()` panics with the boot error; `.try_build()` returns it.
+importing it); `.memory_database()` uses an in-memory SQLite database (one
+connection) instead. `.hold(value)` keeps a value (a guard that drops a test
+database on a PostgreSQL or MySQL server, see `#[navree::test]` in the
+`navree-orm` skill) alive as long as the app. Logbook is off in test apps.
+`.build()` panics with the boot error; `.try_build()` returns it.
 
 | On the app | Does |
 |---|---|
@@ -85,8 +92,9 @@ importing it). `.build()` panics with the boot error; `.try_build()` returns it.
 
 Requests: `.get/.post/.put/.patch/.delete(path)` with the full path
 (`/api/v1/..`), then `.json(&v)`, `.query(&[("per_page", "10")])`,
-`.header(name, value)`, `.bearer(token)`, `.form(&v)`, `.body(bytes)`,
-`.send().await`. Assertions chain and print the body on failure:
+`.header(name, value)`, `.without_header(name)`, `.bearer(token)`, `.form(&v)`,
+`.body(bytes)`, `.send().await` (`.send_stream().await` leaves the body unread,
+for server-sent events). Assertions chain and print the body on failure:
 `assert_status(201)`, `assert_json_path("data.0.name", json!("x"))`,
 `assert_error(404, "Not Found")` or `assert_error(404, None)`,
 `assert_error_code(401, "invalid_credentials")` (the error `code`),
@@ -119,6 +127,7 @@ fn sources() -> (ConfigSources, TempDirGuard) {
         .set("http.per_ip_rate_limit", Value::Null)
         .set("mail.transport", "array")
         .set("observe.metrics", false)
+        .set("logbook.enabled", false)
         .set("hashing.memory_kib", 1024)
         .set("hashing.iterations", 1);
     (sources, guard) // keep the guard alive: dropping it deletes the database

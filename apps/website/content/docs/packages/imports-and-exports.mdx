@@ -623,7 +623,7 @@ An import is visible to the users who hold its importer's permission in its work
 
 ## Testing
 
-Run imports and exports in tests with the memory queue and a memory disk. `run_pending` runs the queued staging, apply and export jobs:
+Run imports and exports in tests with the memory queue and a memory disk. `run_pending` runs the queued staging, apply and export jobs. `temp_database()` creates a SQLite file, so the test build needs the `sqlite` feature ([database tests](/docs/testing/database-tests/#a-database-for-every-test)):
 
 ```rust title="tests/contacts.rs"
 let app = TestApp::builder()

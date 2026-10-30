@@ -82,7 +82,7 @@ semgrep_scan() {
     "$SEMGREP_IMAGE" semgrep scan "${args[@]}" .
 }
 
-# Gitleaks reads history through git, which cannot follow a linked worktree's
+# Gitleaks reads history through git, which cannot follow a linked checkout's
 # .git file from inside a container; scan a bare clone of it instead.
 # $1 is "history", "tree" or "both".
 gitleaks_scan() {

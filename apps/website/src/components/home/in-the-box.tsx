@@ -21,7 +21,9 @@ const docs: Record<string, string> = {
   "navree-view": "/docs/digging-deeper/views/",
   "navree-cache": "/docs/digging-deeper/cache/",
   "navree-http-client": "/docs/digging-deeper/http-client/",
+  "navree-schema": "/docs/database/schema-builder/",
   "navree-db": "/docs/database/getting-started/",
+  "navree-orm": "/docs/orm/getting-started/",
   "navree-testing": "/docs/testing/getting-started/",
   "navree-observe": "/docs/digging-deeper/health-and-metrics/",
   "navree-api": "/docs/digging-deeper/openapi/",
@@ -37,10 +39,35 @@ const docs: Record<string, string> = {
   "navree-notify": "/docs/digging-deeper/notifications/",
   "navree-auth": "/docs/security/authentication/",
   "navree-workspace": "/docs/workspaces/introduction/",
+  "navree-redis": "/docs/digging-deeper/redis/",
+  "navree-mongo": "/docs/orm/mongodb/",
+  "navree-time": "/docs/digging-deeper/time-zones/",
+  "navree-browser": "/docs/packages/browser-testing/",
+  "navree-i18n": "/docs/packages/localization/",
+  "navree-settings": "/docs/packages/settings/",
+  "navree-sso": "/docs/security/single-sign-on/",
+  "navree-oauth": "/docs/packages/oauth-server/",
+  "navree-webhooks": "/docs/packages/webhooks/",
+  "navree-integrations": "/docs/packages/integrations/",
+  "navree-directory": "/docs/packages/directory-sync/",
+  "navree-domains": "/docs/packages/custom-domains/",
+  "navree-documents": "/docs/packages/documents/",
+  "navree-media": "/docs/packages/media/",
+  "navree-sheets": "/docs/packages/imports-and-exports/",
+  "navree-workflows": "/docs/packages/workflows/",
+  "navree-search": "/docs/packages/search/",
   "navree-social": "/docs/packages/social-sign-in/",
   "navree-flags": "/docs/packages/feature-flags/",
   "navree-billing": "/docs/packages/billing/",
+  "navree-ai": "/docs/ai/ai-sdk/",
   "navree-mcp": "/docs/ai/mcp-servers/",
+  "navree-navigator": "/docs/ai/navigator/",
+  "navree-micro": "/docs/microservices/introduction/",
+  "navree-grpc": "/docs/microservices/grpc/",
+  "navree-graphql": "/docs/microservices/graphql/",
+  "navree-lighthouse": "/docs/tools/lighthouse/",
+  "navree-fleet": "/docs/tools/fleet/",
+  "navree-harbor": "/docs/tools/harbor/",
   "navree-logbook": "/docs/tools/logbook/",
   "navree-helm": "/docs/tools/helm/",
   navree: "/docs/architecture/facade-and-features/",
@@ -114,7 +141,7 @@ export function InTheBox() {
                         <span className="font-mono text-[0.84rem] text-fg transition-colors group-hover:text-accent">{c.name}</span>
                         {c.module ? <span className="truncate font-mono text-[0.6875rem] text-fg-3">{c.module}</span> : null}
                       </span>
-                      {/* Phones list names only: 29 descriptions would run three screens. */}
+                      {/* Phones list names only: every description would run to many screens. */}
                       <span className="mt-1 block text-[0.8125rem] leading-relaxed text-fg-3 max-sm:sr-only">{c.description}</span>
                     </Link>
                   </li>

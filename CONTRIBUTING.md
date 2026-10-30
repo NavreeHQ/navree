@@ -50,23 +50,25 @@ L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage  navree-time
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-schema  navree-navigator (dev tool)
 L1  navree-contracts  navree-config  navree-telemetry
-L0  navree-kernel                                navree-macros  navree-orm-macros  navree-i18n-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (tools; no navree deps)
+L0  navree-kernel  navree-bounded                navree-macros  navree-orm-macros  navree-i18n-macros  navree-validation-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (tools; no navree deps)
 ```
 
 | Layer | Crate | What it provides |
 |---|---|---|
 | L0 | `navree-kernel` | Module graph, type-keyed DI container, lifecycle, command runner |
+| L0 | `navree-bounded` | The bounded in-process cache: sharded locks, a strict capacity, SIEVE eviction, TTL and TTI, single-flight loading (re-exported as `navree::bounded`) |
 | L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, `#[resolver]`, route and access attributes |
 | L0 | `navree-orm-macros` | `#[derive(Model)]` and `#[scopes]` (re-exported by `navree-orm`) |
+| L0 | `navree-validation-macros` | `#[derive(Validate)]` and `#[validate(...)]` (re-exported by `navree-validation`) |
 | L0 | `navree-i18n-macros` | `embed_locales!`: Fluent files embedded in the binary, their syntax checked at compile time (used through navree-i18n) |
 | L0 | `navree-dock` | Dock: `dock.toml`, local PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS through `docker compose` or `podman compose`, the app's `.env` settings (behind `navree dock`; opt-in facade feature `dock`) |
 | L0 | `navree-harbor` | Harbor: `harbor.toml`, Ubuntu provisioning over SSH (Caddy with TLS, PostgreSQL, Redis, ufw, a deploy user, systemd units), blue-green releases with health checks and automatic rollback, AES-256-GCM secrets, several servers and roles, `build:image` and a GitHub Actions workflow (behind `navree harbor:*`, `navree deploy*` and `navree build:image`; opt-in facade feature `harbor`) |
 | L1 | `navree-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs with progress and cancellation, permission checks, `Clock`, conformity checks (`conformity:check`) |
-| L1 | `navree-config` | Typed configuration from `.env`, TOML files and `APP_*` variables |
+| L1 | `navree-config` | Typed configuration from `.env`, TOML and JSON files and `APP_*` variables, with limits on file size and nesting and secrets scrubbed from errors and logs |
 | L1 | `navree-telemetry` | Typed telemetry events (requests, queries, jobs, scheduled tasks, mail, notifications, cache, outgoing HTTP, exceptions, log lines, app events) delivered to registered sinks, `TelemetryRecorder`, W3C trace context |
 | L2 | `navree-http` | Axum integration, default Tower layers, JSON errors, controllers, rate limits, trusted proxies |
 | L2 | `navree-log` | tracing subscriber, JSON or pretty output, redaction, rotating files |
-| L2 | `navree-crypto` | AES-256-GCM encrypter with key rotation, Argon2id hasher, token helpers, JOSE helpers (JWS, JWK, PKCS#8 on `ring`) |
+| L2 | `navree-crypto` | AES-256-GCM encrypter with key rotation, Argon2id hasher, token helpers, JOSE helpers (JWS, JWK, PKCS#8 on `ring`), TOTP, QR codes, Web Push encryption |
 | L2 | `navree-events` | Typed event bus with sync and queued listeners |
 | L2 | `navree-view` | MiniJinja templates (mail and other text) |
 | L2 | `navree-cache` | Cache stores (memory on navree-bounded; Redis with navree-redis), remember, tags, locks |
@@ -140,7 +142,7 @@ migrations, abilities, platform modules), `crm-companies` (companies and contact
 
 ## Requirements
 
-- Rust 1.95 or newer (edition 2024; the build machine uses 1.99.1). On
+- Rust 1.95 or newer (edition 2024; CI uses the current stable release). On
   Windows, the MSVC build tools (the workspace's tests run on SQLite, compiled
   from source through the bundled `libsqlite3-sys`; a PostgreSQL or MySQL
   build of `navree` compiles none).
@@ -149,8 +151,7 @@ migrations, abilities, platform modules), `crm-companies` (companies and contact
   compiler wrapper; set `RUSTC_WRAPPER=sccache`, or `rustc-wrapper =
   "sccache"` under `[build]` in a Cargo config outside the repository (for
   example `~/.cargo/config.toml`).
-- For the web app: Node.js 20.9 or newer (the build machine uses 24) and
-  pnpm 11.
+- For the web app: Node.js 20.9 or newer (CI uses 24) and pnpm 11.
 
 No OpenSSL, CMake or NASM is needed: TLS is rustls with the `ring` provider
 everywhere. No database server is needed either: tests and development use
@@ -426,7 +427,7 @@ on the line before the finding (or at its end), with the reason above it:
 ```rust
 // A list of `?` placeholders built here; every value is a bound parameter.
 // nosemgrep: navree-sql-built-from-strings
-let rows = conn.query_all_raw(statement(backend, &sql, values)).await?;
+let rows = uow.fetch_all(Statement::new(backend, sql, values)).await?;
 ```
 
 In JSX the comment goes between the attributes; in a Dockerfile or a workflow it
@@ -456,7 +457,7 @@ allowlisted: revoke and rotate it, then tell security@navree.com.
   branches on `code`, never on the English message. Statuses 422 and
   419 are not used.
 - **PostgreSQL.** The PostgreSQL-only paths (`FOR UPDATE`, `SKIP LOCKED`,
-  advisory locks) are written behind `DbBackend` checks and the `postgres`
+  advisory locks) are written behind `Backend` checks and the `postgres`
   feature, and the performance harness in `bench/` runs on PostgreSQL;
   the default test suite runs on SQLite, and the database tests run on
   real PostgreSQL/TimescaleDB, MySQL and MongoDB servers when
@@ -466,9 +467,8 @@ allowlisted: revoke and rotate it, then tell security@navree.com.
   serve the sockets, such as queue workers, send their broadcasts to the
   serving process over a signed HTTP relay.
 - **Framework crates implement `Module`, `Injectable` and `Controller` by
-  hand** instead of using `navree-macros`, so
-  every crate could be built before the macros existed. Apps and the
-  facade's tests use the macros.
+  hand** instead of using `navree-macros`, which sits at L0 with no runtime
+  dependencies. Apps and the facade's tests use the macros.
 
 ## Layout
 
@@ -484,7 +484,8 @@ allowlisted: revoke and rotate it, then tell security@navree.com.
 | `packages/js` | The front-end npm packages: `@navree/client`, `@navree/bff`, `@navree/next`, `@navree/nuxt`, `@navree/theme` |
 | `skills/` | The agent skills, one `SKILL.md` per directory |
 | `bench/` | The performance harness behind navree.com/performance |
-| `docs/` | Design notes |
+| `fuzz/` | Fuzz targets for the parsers of untrusted input (its own workspace) |
+| `supply-chain/`, `deny.toml`, `.semgrep/`, `.github/` | The supply-chain, static-analysis and CI configuration |
 
 ### Features and drivers
 

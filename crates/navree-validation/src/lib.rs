@@ -42,6 +42,9 @@
 //!   sanitized by the app's [`HtmlPolicy`] while deserializing). Their
 //!   messages come from the same table (`phone`, `country`, `locale`,
 //!   `unicode_name`), so translated tables translate them too.
+//! - With the `time` feature, navree-time's `Zone`, `LocalDay` and `DayRange`
+//!   implement [`Validate`] (a `DayRange` must not end before it starts), so
+//!   `Valid<Query<DayRange>>` takes a report window from a request.
 //!
 //! ```
 //! use navree_validation::Validate;
@@ -186,7 +189,7 @@ pub use value::validate_json;
 /// | `same_as(other)` | equals the field `other` | `same` |
 /// | `custom(f)` | `f(&value)` returns `Ok(())` | the [`Violation`] `f` returns |
 /// | `nested` | the value's own rules (a struct that derives `Validate`, or a list, map or `Option` of them) | theirs, at `field.inner` paths |
-/// | `each(...)` | the rules in brackets on every item of a list, set or map | at `field.0`, `field.key` |
+/// | `each(...)` | the rules inside it, on every item of a list, set or map | at `field.0`, `field.key` |
 ///
 /// Rules on an `Option` pass on `None`; `required` demands a value.
 /// `custom` expressions may use `self` (`custom(confirmed(&self.x))`).
@@ -196,6 +199,10 @@ pub use value::validate_json;
 /// paths. On the type, `#[validate(skip_unmarked)]` lets fields without
 /// `#[validate]` go unchecked, and `#[validate(crate = "...")]` names this
 /// crate's path.
+///
+/// The derive works on structs (named, tuple or newtype) and enums, not
+/// unions, with generics. A newtype's field reports at the path of the value
+/// itself; other tuple fields are named `0`, `1`.
 pub use navree_validation_macros::Validate;
 
 /// What `#[derive(Validate)]` expands to. Not public API.

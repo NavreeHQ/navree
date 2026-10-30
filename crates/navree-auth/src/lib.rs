@@ -66,6 +66,21 @@
 //! - [`CurrentUser`] loads the signed-in [`User`] in handlers;
 //!   [`ClientMeta`] gives the client's IP, user agent and
 //!   request id.
+//! - **Sign-in policies**: every way to a session (passwords, magic links,
+//!   emailed codes, passkeys, trusted token exchange, the second step of a
+//!   two-factor sign-in, social sign-in, single sign-on and the platform
+//!   audience) asks the registered [`SignInPolicy`]s before it issues
+//!   anything ([`AuthService::sign_in`], [`AuthService::check_sign_in`]); a
+//!   refusal is a 403 with the policy's code, such as `sso_required`.
+//!   [`email_domain`] gives the one spelling of an email's domain that
+//!   policies compare.
+//! - **Offboarding**: [`AuthService::revoke_credentials_of_domain`] and
+//!   [`AuthService::revoke_all_credentials`] end every credential of a
+//!   domain's users or of one user (sessions here; personal access tokens
+//!   and OAuth grants through each module's `CredentialRevoker`), and report
+//!   what they ended as [`CredentialsRevoked`].
+//! - **Throttles** count failed logins per email and client network (an IPv4
+//!   address, or an IPv6 /64: `http.rate_limit_ipv6_prefix`).
 //! - [`User`] is navree-access's subject `User` (permission prefix
 //!   `users`, `#[model(subject)]`): import
 //!   `AccessModule::for_feature::<navree_auth::User>()` for
@@ -98,9 +113,11 @@
 //!   `auth.email_verified`, `auth.two_factor_enabled`,
 //!   `auth.two_factor_confirmed`, `auth.two_factor_disabled`,
 //!   `auth.two_factor_recovery_codes_regenerated`,
-//!   `auth.two_factor_challenge`, `auth.two_factor_failed` and
-//!   `auth.two_factor_recovery_code_used`. Writes are audited once their
-//!   unit of work commits.
+//!   `auth.two_factor_challenge`, `auth.two_factor_failed`,
+//!   `auth.two_factor_recovery_code_used`, `auth.throttled`,
+//!   `auth.login_refused` (a [`SignInPolicy`] refused a sign-in),
+//!   `auth.break_glass` and `auth.credentials_revoked`. Writes are audited
+//!   once their unit of work commits.
 //!
 //! ```no_run
 //! use std::sync::Arc;

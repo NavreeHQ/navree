@@ -42,7 +42,7 @@ pub enum AuditError {
 /// every unit of work as a `dyn ChangeObserver`.
 ///
 /// - Data changes recorded in a [`Uow`] (by navree-orm models saved in it,
-///   navree-db's recorded record writes, or `navree_db::Repo`) become `data`
+///   or navree-db's recorded record writes) become `data`
 ///   entries written inside the unit of work's transaction, right before it
 ///   commits ([`ChangeObserver::observe`]): a rolled-back change leaves
 ///   no audit row. The action is

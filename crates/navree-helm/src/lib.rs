@@ -27,10 +27,10 @@
 //!   only protection: the JSON API checks the same rules.
 //! - **Sign-in.** The panel's sign-in screen uses the app's users through
 //!   navree-auth's `AuthService` (password, then a two-factor code; the
-//!   login throttle of `POST /api/auth/login`). The session is an
-//!   encrypted, httpOnly, `SameSite=Strict` cookie scoped to the panel's
-//!   path; every change it makes carries a CSRF token. Bearer tokens work
-//!   too (tests, or a backend-for-frontend).
+//!   login throttle and sign-in policies of `POST /api/auth/login`). The
+//!   session is an encrypted, httpOnly, `SameSite=Strict` cookie scoped to
+//!   the panel's path; every change it makes carries a CSRF token. Bearer
+//!   tokens work too (tests, or a backend-for-frontend).
 //! - **Pages.** Server-rendered with navree-view templates and a small
 //!   stylesheet and script embedded in the crate, under a strict Content
 //!   Security Policy (no inline scripts or styles).

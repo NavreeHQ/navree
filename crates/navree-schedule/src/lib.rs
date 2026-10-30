@@ -18,13 +18,27 @@
 //!   (navree-time's `Zones` lists the workspaces and their zones). Inside a
 //!   run, [`LocalRun::current`] gives the owner and zone, and
 //!   [`Schedule::job_with`] builds a job per owner.
+//! - **Cron language.** [`CronExpression`] is Navree's own parser. A
+//!   frequency is five fields (`minute hour day-of-month month day-of-week`,
+//!   with the names `JAN`-`DEC` and `SUN`-`SAT` in the month and day-of-week
+//!   fields) or one nickname (`@yearly`, `@annually`, `@monthly`, `@weekly`,
+//!   `@daily`, `@hourly`), in any case. Each field takes `*`, values, ranges
+//!   `a-b`, steps `*/s` and `a-b/s`, and comma lists. The day of month also
+//!   takes `L`, `LW` and `15W`; the day of week `5L`, `5#2`, `5#L` and `?`.
+//!   A day matches when its day of month or its day of week matches (unless
+//!   one is `*`); `+MON` asks for both. A seconds or year field, a range that
+//!   wraps, empty list items and everything else is rejected with an error
+//!   naming the field and the bad token ([`CronError`]). An expression with a
+//!   `*` in its minute or hour field follows the wall clock through clock
+//!   changes; any other runs each local time once.
 //! - [`ScheduleModule`] is global and exports the [`Scheduler`]. It needs
 //!   `DatabaseModule`: every run is recorded in [`schedule_runs`](RUNS_TABLE)
 //!   (`task, tick, started_at, finished_at, status, error`, primary key
 //!   `(task, tick)`), created by the module's `schedule` migration set.
 //! - A tick runs a task only if its `INSERT … ON CONFLICT DO NOTHING`
-//!   inserted the `(task, tick)` row, so each tick of each task runs on one
-//!   node, however many schedulers share the database.
+//!   (`INSERT IGNORE` on MySQL) inserted the `(task, tick)` row, so each tick
+//!   of each task runs on one node, however many schedulers share the
+//!   database.
 //!   `without_overlapping` also skips the tick while an earlier run is
 //!   still `running` (an in-process lock plus the table; `running` rows
 //!   older than 24 hours are taken as left over from a crash). Rows older

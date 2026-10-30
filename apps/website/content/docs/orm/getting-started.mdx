@@ -189,7 +189,6 @@ deal.delete(&db).await?;
 |---|---|---|
 | `&Uow` | its transaction | its transaction, with change events recorded for the audit log |
 | `&Db` | the current unit of work's transaction when it is open, else the pool (a read replica when you configure them) | the current unit of work when there is one, else the pool |
-| a `Pool` or a `Transaction` from `db.begin()` | as given | as given, without change events |
 
 In a handler, pass the request's unit of work. `&Db` joins it as well (the current unit of work is the request's while a handler runs), so a service that only has an `Arc<Db>` still writes inside the request's transaction. In commands, jobs and seeders, `&Db` runs on the pool, or open a unit of work with `db.uow(..)`. [Connections and transactions](/docs/orm/connections-and-transactions/) has the details: named connections, read replicas and raw SQL.
 

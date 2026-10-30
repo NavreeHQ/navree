@@ -64,7 +64,7 @@ async fn signing_up_queues_the_welcome_mail() {
 }
 ```
 
-Overriding the app's `Queue` with `fake.queue()` also fakes `QueueModule`'s `dyn Dispatcher`, so jobs that other modules dispatch (queued mail, queued notifications, queued event listeners) are recorded too. In an app without `QueueModule`, install the fake as the dispatcher instead: `.override_value(fake.dispatcher())`.
+`temp_database()` is a SQLite file, so the app's tests need the `sqlite` Cargo feature ([getting started](/docs/testing/getting-started/#the-test-database)). Overriding the app's `Queue` with `fake.queue()` also fakes `QueueModule`'s `dyn Dispatcher`, so jobs that other modules dispatch (queued mail, queued notifications, queued event listeners) are recorded too. In an app without `QueueModule`, install the fake as the dispatcher instead: `.override_value(fake.dispatcher())`.
 
 | Method | What it does |
 |---|---|

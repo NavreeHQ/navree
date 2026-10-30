@@ -29,12 +29,11 @@ them. The engine was replaced instead of allow-listing the findings.
 
 ## Choosing the stack
 
-Each candidate was built as a scratch crate (`target/scratch/pdf-engine/`),
-its lockfile scanned with osv-scanner 2.7.0
-(`osv-scanner scan -L <Cargo.lock>`), and the same sample drawn with it:
-Latin with kerning pairs and ligatures, an invoice line, Arabic, and
-Devanagari, in the bundled Noto fonts. The PDFs were rasterized with hayro
-0.8.0 (pure Rust; its own lockfile scans clean) and compared.
+Each candidate was built as a scratch crate, its lockfile scanned with
+osv-scanner 2.7.0 (`osv-scanner scan -L <Cargo.lock>`), and the same sample
+drawn with it: Latin with kerning pairs and ligatures, an invoice line,
+Arabic, and Devanagari, in the bundled Noto fonts. The PDFs were rasterized
+with hayro 0.8.0 (pure Rust; its own lockfile scans clean) and compared.
 
 | Candidate | Packages | osv-scanner | Output |
 |---|---|---|---|

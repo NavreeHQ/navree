@@ -68,9 +68,12 @@
 //!   than a cutoff; on a TimescaleDB hypertable it drops whole chunks
 //!   instead of deleting row by row.
 //! - [`PageQuery`] / [`Page`] are offset pages (`{"data", "meta":
-//!   {"current_page", "per_page", "total", "last_page"}}`); [`CursorQuery`]
-//!   / [`CursorPage`] page by a UUID v7 key. navree-orm's builders fill
-//!   them (`paginate`, `cursor_paginate`).
+//!   {"current_page", "per_page", "total", "last_page"}}`), filled by
+//!   navree-orm's `Builder::paginate`; [`CursorQuery`] / [`CursorPage`] are
+//!   the `?cursor=&limit=` extractor and `{"data", "next_cursor"}` response
+//!   for a cursor over a UUID v7 key. navree-orm's `cursor_paginate` has
+//!   cursor types of its own (`CursorRequest`, `CursorPage` with a
+//!   `prev_cursor`), which page by any order.
 //! - [`contains_ignore_case`] and [`eq_ignore_case`] match text ignoring
 //!   case beyond ASCII, the same on every database, as statement fragments.
 //! - Database errors returned from handlers with `?` map to error

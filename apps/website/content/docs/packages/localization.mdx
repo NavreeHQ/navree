@@ -42,7 +42,7 @@ Navree::app()
     // ...
 ```
 
-The module is global. It adds a layer that negotiates each request's locale, the `Locale` extractor, the `I18n` service and the `t()` function in [templates](/docs/digging-deeper/views/). It contributes the migration set `i18n`, which creates `locale_preferences` for saved user and workspace locales when the app has `DatabaseModule`.
+The module is global. It adds a layer that negotiates each request's locale, the `Locale` extractor, the `I18n` service and the `t()` function in [templates](/docs/digging-deeper/views/). It contributes the migration set `i18n`, which creates `locale_preferences` for saved user and workspace locales when the app has `DatabaseModule`. The table has a row per user or workspace: `scope_type` (`user` or `workspace`), `scope_id` (a `uuid`, `BINARY(16)` on MySQL and MariaDB), `locale` and `updated_at`, with `(scope_type, scope_id)` as its key. Write it through `I18n`; `navree::i18n::migration::LocalePreferenceRow` is its `navree::db::Record`, for reading it yourself.
 
 ## Configuration
 

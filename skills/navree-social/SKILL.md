@@ -15,8 +15,8 @@ in `crates/navree-social/tests/social/` (fake and wiremock providers) and
 ## Steps: add a provider
 
 1. Turn on the feature: `navree = { ..., features = ["social"] }` (it also
-   turns on `auth`, `http-client`, `crypto`, `cache`, `events`, `db` and
-   `http`).
+   turns on `auth`, `http-client`, `crypto`, `cache`, `events`, `db`, `orm`
+   and `http`).
 2. Add the module after `AuthModule` (it needs Crypto, Database and Auth;
    HttpClient and Cache are used when present):
 

@@ -97,7 +97,7 @@ pub const MANAGE: &str = "manage";
 /// `all`: a rule with this subject matches every subject type.
 pub const ALL: &str = "all";
 
-/// A type that abilities can be checked against, such as an entity.
+/// A type that abilities can be checked against, such as a model.
 ///
 /// ```
 /// use navree_access::engine::Subject;

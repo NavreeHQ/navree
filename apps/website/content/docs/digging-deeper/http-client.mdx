@@ -42,7 +42,7 @@ allow_hosts = ["billing.internal", "*.svc.cluster.local", "10.20.0.0/16"]
 | `retries` | `2` | Retries after the first attempt, for idempotent requests only. |
 | `retry_base_ms` | `200` | The first retry delay; each later one doubles, plus random jitter, up to 30 s. |
 | `max_response_bytes` | `10485760` (10 MiB) | The largest response body read into memory (at least 1). |
-| `user_agent` | `navree-http-client/0.1.0` | The `User-Agent` sent when a request doesn't set its own. |
+| `user_agent` | `navree-http-client/<version>` | The `User-Agent` sent when a request doesn't set its own (`<version>` is the crate's version, for example `navree-http-client/0.2.0`). |
 | `ssrf.block_private` | `true` | Refuse internal addresses (see [the SSRF policy](#the-ssrf-policy)). |
 | `ssrf.allow_hosts` | `[]` | Hosts, host globs, IP addresses and CIDR networks that bypass the policy. |
 
@@ -266,6 +266,14 @@ To call an internal service, list it in `ssrf.allow_hosts`:
 - an IP address, `127.0.0.1`, or a CIDR network, `10.20.0.0/16`.
 
 Set `block_private = false` only when the client never sees user-supplied URLs. The client also ignores the system's proxy settings (`HTTP_PROXY` and friends), so requests go where the policy checked.
+
+To refuse a bad address when you store it, such as a webhook endpoint or a callback URL a user enters, check it without sending anything:
+
+```rust
+self.http.check_destination(&endpoint).await?;
+```
+
+`check_destination` applies the same policy as a request: a malformed URL or a scheme other than `http` or `https` fails with `HttpClientError::Build`, a refused destination with `Blocked`, and a host name that doesn't resolve with `Connect`. A fake client checks IP literals only. Requests are checked again when they are sent, since DNS answers change.
 
 ## Logging
 

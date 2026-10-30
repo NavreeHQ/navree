@@ -163,11 +163,11 @@ impl fmt::Debug for ImportContext {
 ///         Ok(HashSet::new())
 ///     }
 ///
-///     async fn insert(&self, _ctx: &ImportContext, _uow: &Uow, row: ContactRow) -> Result<(), BoxError> {
+///     async fn insert(&self, _ctx: &ImportContext, uow: &Uow, row: ContactRow) -> Result<(), BoxError> {
 ///         if row.name == "Robot" {
 ///             return Err(RowRejected::new("Robots cannot be contacts").into());
 ///         }
-///         // Repo::<contact::Entity>::insert(uow, ...).await?;
+///         // Contact::create(uow, ...).await?;
 ///         Ok(())
 ///     }
 /// }

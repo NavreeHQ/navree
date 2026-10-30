@@ -307,7 +307,7 @@ mod tests {
     }
 
     #[test]
-    fn defaults_read_like_class_validator() {
+    fn the_default_messages_read_as_written() {
         let messages = Messages::default();
         let min = [("min", "2".to_owned())];
         let max = [("max", "255".to_owned())];

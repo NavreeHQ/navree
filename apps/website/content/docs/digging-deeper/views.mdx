@@ -3,7 +3,7 @@ title: "Views and templates"
 description: "MiniJinja templates for mail and other text: where they live, how modules embed them, escaping, filters and reloading."
 ---
 
-<Badge feature="view" /> Navree apps are JSON APIs, so they render no web pages. They still need templates: the HTML and plain-text bodies of emails, CSV headers, the text of a notification. `navree-view` provides them with [MiniJinja](https://docs.rs/minijinja), a Rust implementation of the Jinja2 template language. If you know Jinja, Twig or Nunjucks, you already know the syntax.
+<Badge feature="view" /> Navree apps are JSON APIs, so they render no web pages. They still need templates: the HTML and plain-text bodies of emails, CSV headers, the text of a notification. `navree-view` provides them with [MiniJinja](https://docs.rs/minijinja), a Rust implementation of the Jinja2 template language. If you know Jinja2, you already know the syntax.
 
 ```jinja title="resources/views/mail/invoice.html"
 <p>Hello {{ name }},</p>

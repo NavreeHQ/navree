@@ -51,10 +51,11 @@ use serde::{Deserialize, Deserializer};
 /// TimescaleDB, Navree's default, and plain PostgreSQL (the `postgres`
 /// feature), `mysql://` or `mariadb://` (the `mysql` feature; MariaDB speaks
 /// MySQL's protocol, so both connect through the same driver), or `sqlite:`
-/// (built in). `navree new` writes a TimescaleDB URL, the one Dock's
-/// `postgres` service serves; without any, the default is a SQLite file
-/// (`sqlite://storage/app.db?mode=rwc`), so an app boots with nothing
-/// installed.
+/// (the `sqlite` feature, which compiles the bundled SQLite library). No
+/// driver is on by default. `navree new` writes a TimescaleDB URL, the one
+/// Dock's `postgres` service serves; without any, the default is a SQLite
+/// file (`sqlite://storage/app.db?mode=rwc`), which an app built without
+/// the `sqlite` feature cannot open: it stops at boot, naming the feature.
 ///
 /// `Debug` masks the password of the URL.
 ///

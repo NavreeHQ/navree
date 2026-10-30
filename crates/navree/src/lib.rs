@@ -10,7 +10,7 @@
 //! | [`kernel`] | navree-kernel | always | module graph, DI container, lifecycle, commands |
 //! | [`bounded`] | navree-bounded | always | the bounded in-process `Cache`: strict capacity, SIEVE eviction, TTL and TTI, single-flight loading |
 //! | [`contracts`] | navree-contracts | always | cross-module traits: `Principal`, `Job`, `Clock`, `AuditSink`, ... |
-//! | [`config`] | navree-config | always | `ConfigModule`, `.env`, TOML and `APP_*` sources |
+//! | [`config`] | navree-config | always | `ConfigModule`, `.env`, TOML, JSON and `APP_*` sources |
 //! | `telemetry` | navree-telemetry | `telemetry` | typed telemetry events, sinks, W3C trace context |
 //! | `http` | navree-http | `http` | `HttpModule`, controllers, `AppError` (JSON errors) |
 //! | `log` | navree-log | `log` | `LoggerModule` (tracing) |

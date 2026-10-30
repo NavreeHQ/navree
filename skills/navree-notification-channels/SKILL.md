@@ -106,7 +106,8 @@ Fakes: `SlackFake`, `TeamsFake`, `SmsFake`, `WhatsAppFake`, `WebPushFake`
 `opt_out_at_provider`, `deliver`, `fail`, `reply`, WhatsApp `read`; push
 `expire(endpoint)`). Install every channel `via` lists, or the missing ones
 fail with `NotifyError::Unavailable`. Real drivers test against wiremock by
-setting the table's `endpoint`.
+setting the table's `endpoint`. `temp_database()` is SQLite: the app's
+`[dev-dependencies]` turn on the `sqlite` feature of `navree`.
 
 ## Common mistakes
 
