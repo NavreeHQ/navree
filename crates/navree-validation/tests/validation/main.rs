@@ -11,6 +11,7 @@ mod input;
 mod intl;
 mod json;
 mod module;
+mod native;
 #[cfg(feature = "phone")]
 mod phone;
 mod rules;

@@ -339,8 +339,7 @@ where
         if !req.headers().contains_key(CONTENT_TYPE) {
             return Ok(OptionalBody(T::default()));
         }
-        let Valid(Json(value)) =
-            <Valid<Json<T>> as axum::extract::FromRequest<()>>::from_request(req, &()).await?;
+        let Valid(Json(value)) = <Valid<Json<T>> as FromRequest>::from_request(req).await?;
         Ok(OptionalBody(value))
     }
 }
@@ -374,5 +373,35 @@ mod tests {
         ) {
         }
         assert!(Endpoint::new(handler).is_native());
+    }
+
+    fn logout_request(body: &'static str, limit: Option<usize>) -> Request {
+        let mut request = http::Request::post("/logout")
+            .header(CONTENT_TYPE, "application/json")
+            .body(navree_http::body::Body::from(body))
+            .unwrap();
+        if let Some(limit) = limit {
+            request
+                .extensions_mut()
+                .insert(navree_http::body::BodyLimit(limit));
+        }
+        request
+    }
+
+    #[tokio::test]
+    async fn the_optional_body_is_read_within_the_routes_limit() {
+        let body = r#"{"refresh_token":"abcdefghij","all":true}"#;
+        let OptionalBody(input) =
+            OptionalBody::<LogoutInput>::from_request(logout_request(body, Some(64)))
+                .await
+                .unwrap();
+        assert_eq!(input.refresh_token.as_deref(), Some("abcdefghij"));
+        assert!(input.all);
+
+        let error = OptionalBody::<LogoutInput>::from_request(logout_request(body, Some(16)))
+            .await
+            .err()
+            .expect("past the limit");
+        assert_eq!(error.status, StatusCode::PAYLOAD_TOO_LARGE);
     }
 }

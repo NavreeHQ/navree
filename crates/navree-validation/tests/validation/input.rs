@@ -4,8 +4,8 @@
 
 use std::sync::Arc;
 
-use axum::extract::Request;
 use http::Method;
+use navree_http::extract::Request;
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_validation::Validate;
@@ -29,7 +29,7 @@ where
     type Target = T;
 
     async fn read(req: Request) -> Result<Option<Value>, AppError> {
-        let bytes = axum::body::to_bytes(req.into_body(), 1 << 16)
+        let bytes = navree_http::body::to_bytes(req.into_body(), 1 << 16)
             .await
             .map_err(AppError::internal)?;
         let text = String::from_utf8_lossy(&bytes);

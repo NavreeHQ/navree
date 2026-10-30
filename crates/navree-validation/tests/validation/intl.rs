@@ -5,9 +5,8 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use axum::extract::Query;
 use http::Method;
-use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
+use navree_http::{Controller, Json, ModuleBuilderHttpExt, Query, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_testing::TestApp;
 use navree_validation::Validate;

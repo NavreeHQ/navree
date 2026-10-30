@@ -5,15 +5,13 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use crate::Validate;
-use axum::RequestExt;
-use axum::extract::{Form, FromRequest, FromRequestParts, Query, RawPathParams, Request};
-use bytes::Bytes;
 use http::header::CONTENT_TYPE;
 use http::request::Parts;
 use http::{HeaderMap, Method, StatusCode};
-use http_body_util::BodyExt;
 use navree_db::Uow;
-use navree_http::{AppError, Json};
+use navree_http::body::{BodyLimit, Bytes, read_body as read_limited};
+use navree_http::extract::{FromRequest, FromRequestParts, Request};
+use navree_http::{AppError, Form, Json, PathParams, Query};
 use navree_kernel::AppContext;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -50,9 +48,9 @@ macro_rules! in_context {
 /// rules, with messages from the app's [`Messages`].
 ///
 /// ```
-/// use axum::extract::Query;
+/// use http::Method;
+/// use navree_http::{Json, Query, RouteDef};
 /// use navree_validation::Validate;
-/// use navree_http::Json;
 /// use navree_validation::Valid;
 /// use serde::{Deserialize, Serialize};
 ///
@@ -75,7 +73,8 @@ macro_rules! in_context {
 /// async fn index(Valid(Query(filters)): Valid<Query<Filters>>) -> String {
 ///     format!("{:?}", filters.per_page)
 /// }
-/// # let _: axum::routing::MethodRouter = axum::routing::post(store).get(index);
+/// # let _ = RouteDef::on(Method::POST, "/users", store);
+/// # let _ = RouteDef::on(Method::GET, "/users", index);
 /// ```
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Valid<E>(pub E);
@@ -101,14 +100,13 @@ impl<E> DerefMut for Valid<E> {
     }
 }
 
-impl<T, S> FromRequest<S> for Valid<Json<T>>
+impl<T> FromRequest for Valid<Json<T>>
 where
     T: DeserializeOwned + Validate + Send,
-    S: Send + Sync,
 {
     type Rejection = AppError;
 
-    async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request(req: Request) -> Result<Self, Self::Rejection> {
         let ctx = req.extensions().get::<AppContext>().cloned();
         let (mut parts, body) = json_body(req).await?;
         let mut context = Context::new(ctx.as_ref());
@@ -126,14 +124,13 @@ where
     }
 }
 
-impl<T, S> FromRequestParts<S> for Valid<Query<T>>
+impl<T> FromRequestParts for Valid<Query<T>>
 where
     T: DeserializeOwned + Validate + Send,
-    S: Send + Sync,
 {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let ctx = parts.extensions.get::<AppContext>().cloned();
         let result = validate_urlencoded::<T>(ctx.as_ref(), parts, None, ["query", "query"]).await;
         match result {
@@ -143,14 +140,13 @@ where
     }
 }
 
-impl<T, S> FromRequest<S> for Valid<Form<T>>
+impl<T> FromRequest for Valid<Form<T>>
 where
     T: DeserializeOwned + Validate + Send,
-    S: Send + Sync,
 {
     type Rejection = AppError;
 
-    async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request(req: Request) -> Result<Self, Self::Rejection> {
         let ctx = req.extensions().get::<AppContext>().cloned();
         // Rule failures on the form as a whole are on `body`, even when a
         // `GET` form comes from the query string.
@@ -177,9 +173,9 @@ where
 /// [`Target`](ValidInput::Target), the app's [`Messages`]).
 ///
 /// ```
-/// use axum::extract::Request;
+/// use navree_http::extract::Request;
 /// use navree_validation::Validate;
-/// use navree_http::AppError;
+/// use navree_http::{AppError, RouteDef};
 /// use navree_validation::{Valid, ValidInput};
 /// use serde::Deserialize;
 /// use serde_json::Value;
@@ -194,7 +190,7 @@ where
 ///     type Target = T;
 ///
 ///     async fn read(req: Request) -> Result<Option<Value>, AppError> {
-///         let bytes = axum::body::to_bytes(req.into_body(), 1 << 20)
+///         let bytes = navree_http::body::to_bytes(req.into_body(), 1 << 20)
 ///             .await
 ///             .map_err(|_| AppError::bad_request("unreadable input"))?;
 ///         Ok(serde_json::from_slice(&bytes).ok())
@@ -214,7 +210,7 @@ where
 /// async fn rename(Valid(Input(input)): Valid<Input<Rename>>) -> String {
 ///     input.name
 /// }
-/// # let _: axum::routing::MethodRouter = axum::routing::post(rename);
+/// # let _ = RouteDef::on(http::Method::POST, "/rename", rename);
 /// ```
 pub trait ValidInput: Sized + Send {
     /// The type the input deserializes into.
@@ -230,14 +226,13 @@ pub trait ValidInput: Sized + Send {
     fn wrap(value: Self::Target) -> Self;
 }
 
-impl<E, S> FromRequest<S> for Valid<E>
+impl<E> FromRequest for Valid<E>
 where
     E: ValidInput,
-    S: Send + Sync,
 {
     type Rejection = AppError;
 
-    async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request(req: Request) -> Result<Self, Self::Rejection> {
         let ctx = req.extensions().get::<AppContext>().cloned();
         let Some(input) = E::read(req).await? else {
             return Err(Invalid::new(vec![Failure::keyed("", "json")], None, "body")
@@ -251,19 +246,19 @@ where
     }
 }
 
-impl<E, S> FromRequest<S> for ValidAsync<E>
+impl<E> FromRequest for ValidAsync<E>
 where
     E: ValidInput,
     E::Target: AsyncRules,
-    S: Send + Sync,
 {
     type Rejection = AppError;
 
-    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        let (mut parts, body) = req.into_parts();
-        let request = RuleRequest::of(&mut parts, state).await;
+    async fn from_request(req: Request) -> Result<Self, Self::Rejection> {
+        let (parts, body) = req.into_parts();
+        let request = RuleRequest::of(&parts);
         let Valid(input) =
-            Valid::<Checked<E>>::from_request(Request::from_parts(parts, body), state).await?;
+            <Valid<Checked<E>> as FromRequest>::from_request(Request::from_parts(parts, body))
+                .await?;
         request.check(input.0.async_rules()).await?;
         Ok(ValidAsync(E::wrap(input.0)))
     }
@@ -394,50 +389,48 @@ impl<E> DerefMut for ValidAsync<E> {
     }
 }
 
-impl<T, S> FromRequest<S> for ValidAsync<Json<T>>
+impl<T> FromRequest for ValidAsync<Json<T>>
 where
     T: DeserializeOwned + Validate + AsyncRules + Send,
-    S: Send + Sync,
 {
     type Rejection = AppError;
 
-    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        let (mut parts, body) = req.into_parts();
-        let request = RuleRequest::of(&mut parts, state).await;
+    async fn from_request(req: Request) -> Result<Self, Self::Rejection> {
+        let (parts, body) = req.into_parts();
+        let request = RuleRequest::of(&parts);
         let Valid(Json(value)) =
-            Valid::<Json<T>>::from_request(Request::from_parts(parts, body), state).await?;
+            <Valid<Json<T>> as FromRequest>::from_request(Request::from_parts(parts, body)).await?;
         request.check(value.async_rules()).await?;
         Ok(ValidAsync(Json(value)))
     }
 }
 
-impl<T, S> FromRequestParts<S> for ValidAsync<Query<T>>
+impl<T> FromRequestParts for ValidAsync<Query<T>>
 where
     T: DeserializeOwned + Validate + AsyncRules + Send,
-    S: Send + Sync,
 {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let request = RuleRequest::of(parts, state).await;
-        let Valid(Query(value)) = Valid::<Query<T>>::from_request_parts(parts, state).await?;
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
+        let request = RuleRequest::of(parts);
+        let Valid(Query(value)) =
+            <Valid<Query<T>> as FromRequestParts>::from_request_parts(parts).await?;
         request.check(value.async_rules()).await?;
         Ok(ValidAsync(Query(value)))
     }
 }
 
-impl<T, S> FromRequest<S> for ValidAsync<Form<T>>
+impl<T> FromRequest for ValidAsync<Form<T>>
 where
     T: DeserializeOwned + Validate + AsyncRules + Send,
-    S: Send + Sync,
 {
     type Rejection = AppError;
 
-    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        let (mut parts, body) = req.into_parts();
-        let request = RuleRequest::of(&mut parts, state).await;
+    async fn from_request(req: Request) -> Result<Self, Self::Rejection> {
+        let (parts, body) = req.into_parts();
+        let request = RuleRequest::of(&parts);
         let Valid(Form(value)) =
-            Valid::<Form<T>>::from_request(Request::from_parts(parts, body), state).await?;
+            <Valid<Form<T>> as FromRequest>::from_request(Request::from_parts(parts, body)).await?;
         request.check(value.async_rules()).await?;
         Ok(ValidAsync(Form(value)))
     }
@@ -451,14 +444,18 @@ struct RuleRequest {
 }
 
 impl RuleRequest {
-    async fn of<S: Send + Sync>(parts: &mut Parts, state: &S) -> Self {
-        let path_params = match RawPathParams::from_request_parts(parts, state).await {
-            Ok(params) => params
-                .iter()
-                .map(|(key, value)| (key.to_owned(), value.to_owned()))
-                .collect(),
-            Err(_) => Vec::new(),
-        };
+    /// Reads the app, the unit of work and the route's path parameters
+    /// (none outside a matched route) from the request head.
+    fn of(parts: &Parts) -> Self {
+        let path_params = parts
+            .extensions
+            .get::<PathParams>()
+            .map_or_else(Vec::new, |params| {
+                params
+                    .iter()
+                    .map(|(key, value)| (key.to_owned(), value.to_owned()))
+                    .collect()
+            });
         Self {
             ctx: parts.extensions.get::<AppContext>().cloned(),
             uow: parts.extensions.get::<Uow>().cloned(),
@@ -768,7 +765,7 @@ pub(crate) fn from_json<T: DeserializeOwned>(input: &Value) -> Result<T, Failure
 }
 
 /// Reads a form, keeping the request head: `None` for `GET` and `HEAD`,
-/// whose form is the query string (like Axum's `Form`), else the
+/// whose form is the query string (like [`Form`]), else the
 /// `application/x-www-form-urlencoded` body.
 async fn form_body(req: Request) -> Result<(Parts, Option<Bytes>), AppError> {
     if req.method() == Method::GET || req.method() == Method::HEAD {
@@ -786,30 +783,14 @@ async fn form_body(req: Request) -> Result<(Parts, Option<Bytes>), AppError> {
 }
 
 /// Buffers the body within the route's body limit, keeping the request
-/// head (a region source may need it after the body is read). Failures
-/// read like Axum's `Bytes` rejections.
+/// head (a region source may need it after the body is read): a body past
+/// the limit is a 413, one that cannot be read a 400.
 async fn read_body(req: Request) -> Result<(Parts, Bytes), AppError> {
-    let (parts, body) = req.with_limited_body().into_parts();
-    match body.collect().await {
-        Ok(collected) => Ok((parts, collected.to_bytes())),
-        Err(error) => {
-            let too_large = std::iter::successors(
-                Some(&error as &(dyn std::error::Error + 'static)),
-                |error| error.source(),
-            )
-            .any(|error| error.is::<http_body_util::LengthLimitError>());
-            Err(if too_large {
-                rejected(
-                    StatusCode::PAYLOAD_TOO_LARGE,
-                    "Failed to buffer the request body: length limit exceeded".to_owned(),
-                )
-            } else {
-                rejected(
-                    StatusCode::BAD_REQUEST,
-                    format!("Failed to buffer the request body: {error}"),
-                )
-            })
-        }
+    let limit = BodyLimit::of(req.extensions());
+    let (parts, body) = req.into_parts();
+    match read_limited(body, limit).await {
+        Ok(bytes) => Ok((parts, bytes)),
+        Err(error) => Err(rejected(error.status(), error.to_string())),
     }
 }
 

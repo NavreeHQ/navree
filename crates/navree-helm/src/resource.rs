@@ -1,7 +1,7 @@
 //! The [`Resource`] trait and [`FormData`].
 
-use axum::extract::FromRequest;
 use navree_access::SubjectRecords;
+use navree_http::extract::FromRequest;
 use navree_http::{AppError, Json};
 use navree_kernel::{AppContext, BoxFuture};
 use navree_orm::{Builder, Model, Record};
@@ -219,7 +219,7 @@ impl FormData {
         if let Some(app) = &self.app {
             request.extensions_mut().insert(app.clone());
         }
-        let Valid(Json(value)) = Valid::<Json<T>>::from_request(request, &()).await?;
+        let Valid(Json(value)) = <Valid<Json<T>> as FromRequest>::from_request(request).await?;
         Ok(value)
     }
 }

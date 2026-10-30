@@ -17,7 +17,8 @@ rule. The DTO lives in the module's `dto.rs`.
    no rule; a field without one is a compile error).
 2. Take it with `Valid(Json(input)): Valid<Json<CreateContact>>` as the
    handler's last argument (`Valid(Query(f)): Valid<Query<T>>` for query
-   strings, any position).
+   strings, any position; `Valid(Form(f)): Valid<Form<T>>` for forms, with
+   `Form` from `navree::http`, as the last argument).
 3. For database checks, implement `AsyncRules` and take `ValidAsync<..>`.
 4. Test the failure with `.assert_validation_error("field")`.
 

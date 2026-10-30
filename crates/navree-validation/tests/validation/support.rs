@@ -7,10 +7,9 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Form, Query};
 use http::Method;
 use navree_db::{Backend, DatabaseModule, Db, Executor, Statement, Uow};
-use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
+use navree_http::{Controller, Form, Json, ModuleBuilderHttpExt, Query, RouteDef};
 use navree_kernel::{
     BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver,
 };
@@ -393,7 +392,7 @@ impl Injectable for TestController {
     }
 }
 
-fn ok<T: Serialize>(input: &T) -> Json<Value> {
+pub fn ok<T: Serialize>(input: &T) -> Json<Value> {
     Json(json!({ "ok": input }))
 }
 

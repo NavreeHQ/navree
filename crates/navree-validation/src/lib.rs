@@ -80,7 +80,7 @@
 //!     // `input` passed its rules and the unique rule; `uow` is the same unit of work.
 //!     Ok(Created("/api/users/1".to_owned(), input.name))
 //! }
-//! # let _ = navree_http::RouteDef::on(axum::http::Method::POST, "/", register);
+//! # let _ = navree_http::RouteDef::on(http::Method::POST, "/", register);
 //! ```
 //!
 //! The derive names this crate as `::navree_validation`, or as

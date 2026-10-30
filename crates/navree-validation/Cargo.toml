@@ -26,12 +26,9 @@ mysql = ["navree-db/mysql"]
 
 [dependencies]
 ammonia = { workspace = true, optional = true }
-axum = { workspace = true }
-bytes = { workspace = true }
 chrono = { workspace = true }
 form_urlencoded = { workspace = true }
 http = { workspace = true }
-http-body-util = { workspace = true }
 icu_locale_core = { workspace = true }
 navree-config = { workspace = true }
 navree-db = { workspace = true }

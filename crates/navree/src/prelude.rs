@@ -33,13 +33,9 @@ pub use navree_telemetry::ModuleBuilderTelemetryExt as _;
 
 #[cfg(feature = "http")]
 pub use crate::Result;
-// `Query` stays the previous router's until `Valid<Query<T>>` reads
-// navree-http's.
-#[cfg(feature = "http")]
-pub use axum::extract::Query;
 #[cfg(feature = "http")]
 pub use navree_http::{
-    AppError, Created, HttpModule, Json, ModuleBuilderHttpExt as _, NoContent, Path, Scoped,
+    AppError, Created, HttpModule, Json, ModuleBuilderHttpExt as _, NoContent, Path, Query, Scoped,
 };
 
 #[cfg(feature = "cache")]

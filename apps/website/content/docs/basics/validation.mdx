@@ -46,7 +46,7 @@ The derive comes with `navree`: your app needs no other dependency for it, and e
 
 ### Using the extractor
 
-Wrap the usual Axum extractor in `Valid`. The pattern `Valid(Json(input))` hands you the validated value:
+Wrap the extractor you would take without validation in `Valid`. The pattern `Valid(Json(input))` hands you the validated value:
 
 ```rust title="src/contacts/controller.rs"
 use navree::prelude::*;
@@ -133,9 +133,9 @@ The [error response format](#error-responses) section below explains each member
 1. **Deserialize.** serde turns the input into `T`. A missing field, a wrong type or an unknown enum value fails here, as a field error.
 2. **Validate.** Every rule of `T` runs, and every failure is reported at once.
 
-Some failures are not validation errors and keep their own status: a JSON extractor answers 415 when the `Content-Type` header is not JSON, and a body larger than `http.body_limit_bytes` is a 413. See [errors](/docs/basics/errors/) for those.
+Some failures are not validation errors and keep their own status: a JSON extractor answers 415 when the `Content-Type` header is not JSON, and a body larger than the route's body limit (`http.body_limit_bytes` unless the route sets its own) is a 413. See [errors](/docs/basics/errors/) for those.
 
-`Form` is Axum's: import it with `use navree::axum::extract::Form;`.
+`Form` is `navree::http::Form`, and `Json` and `Query` are in the prelude. Import it with `use navree::http::Form;`.
 
 ## Available rules
 

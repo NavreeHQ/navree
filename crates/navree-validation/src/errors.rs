@@ -2,8 +2,8 @@
 
 use std::collections::BTreeMap;
 
-use axum::response::{IntoResponse, Response};
 use navree_http::AppError;
+use navree_http::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 
 /// Field errors: `{"field.path": ["message", ...]}`, fields in sorted order.

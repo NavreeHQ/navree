@@ -6422,13 +6422,10 @@ name = "navree-validation"
 version = "0.2.0"
 dependencies = [
  "ammonia",
- "axum",
- "bytes",
  "chrono",
  "form_urlencoded",
  "futures-util",
  "http",
- "http-body-util",
  "icu_locale_core",
  "navree-config",
  "navree-db",

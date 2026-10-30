@@ -7,10 +7,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use axum::extract::{Form, Query};
 use http::Method;
 use http::request::Parts;
-use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
+use navree_http::{Controller, Form, Json, ModuleBuilderHttpExt, Query, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_testing::TestApp;
 use navree_validation::Validate;
