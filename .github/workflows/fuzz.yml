@@ -42,6 +42,9 @@ concurrency:
 env:
   NIGHTLY: nightly-2026-10-20
   CARGO_FUZZ: 0.13.2
+  # The prebuilt cargo-fuzz is a static musl binary, and cargo-fuzz defaults to
+  # the target it was built for; the sanitizers need the glibc target.
+  FUZZ_TRIPLE: x86_64-unknown-linux-gnu
   CARGO_INCREMENTAL: "0"
 
 jobs:
@@ -78,7 +81,7 @@ jobs:
           restore-keys: fuzz-corpora-
 
       - name: Build every target
-        run: cargo fuzz build
+        run: cargo fuzz build --target "$FUZZ_TRIPLE"
 
       # Seeds are read from fuzz/seeds/<target>; what a run finds is written
       # to fuzz/corpus/<target>. `-timeout` is the hang limit of one input,
@@ -89,12 +92,12 @@ jobs:
           for target in $(cargo fuzz list); do
             mkdir -p "fuzz/corpus/$target" "fuzz/seeds/$target"
             echo "::group::$target"
-            if ! cargo fuzz run "$target" "fuzz/corpus/$target" "fuzz/seeds/$target" \
+            if ! cargo fuzz run --target "$FUZZ_TRIPLE" "$target" "fuzz/corpus/$target" "fuzz/seeds/$target" \
               -- -max_total_time="$SECONDS_PER_TARGET" -timeout=10 -rss_limit_mb=2048 -max_len=8192; then
               crashed+=("$target")
             fi
             if [ "$EVENT" = schedule ]; then
-              cargo fuzz cmin "$target" "fuzz/corpus/$target"
+              cargo fuzz cmin --target "$FUZZ_TRIPLE" "$target" "fuzz/corpus/$target"
             fi
             echo "::endgroup::"
           done

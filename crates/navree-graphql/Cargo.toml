@@ -38,6 +38,8 @@ uuid = { workspace = true }
 [dev-dependencies]
 chrono = { workspace = true }
 navree-crypto = { workspace = true }
+# The tests run on SQLite files (the driver is opt-in).
+navree-db = { workspace = true, features = ["sqlite"] }
 navree-macros = { workspace = true }
 # The tests' `posts` table is a model and an access subject.
 navree-orm = { workspace = true, features = ["access"] }

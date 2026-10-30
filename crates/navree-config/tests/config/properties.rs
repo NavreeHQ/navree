@@ -362,6 +362,12 @@ proptest! {
             if pointer == "/" {
                 continue; // an empty layer has no leaves
             }
+            // An empty table adds no keys, so the earlier layers' keys under
+            // it stay; the table itself is there.
+            if value.as_object().is_some_and(Map::is_empty) {
+                prop_assert!(merged.pointer(&pointer).is_some_and(Value::is_object), "at {}", pointer);
+                continue;
+            }
             prop_assert_eq!(merged.pointer(&pointer), Some(&value), "at {}", pointer);
         }
     }
