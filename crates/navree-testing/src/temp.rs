@@ -21,7 +21,9 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::{Mutex, Once, OnceLock};
-use std::thread::{self, JoinHandle};
+use std::thread;
+#[cfg(test)]
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime};
 
 use tempfile::TempDir;
@@ -169,6 +171,7 @@ pub(crate) fn global_reaper() -> &'static Reaper {
 /// was handed over.
 pub(crate) struct Reaper {
     sender: Mutex<Option<Sender<PathBuf>>>,
+    #[cfg(test)]
     thread: Mutex<Option<JoinHandle<()>>>,
 }
 
@@ -190,7 +193,7 @@ impl Reaper {
         remover: Remover,
     ) -> Self {
         let (sender, receiver) = mpsc::channel::<PathBuf>();
-        let thread = thread::Builder::new()
+        let handle = thread::Builder::new()
             .name("navree-test-reaper".to_owned())
             .spawn(move || {
                 let mut pending: Vec<Pending> = Vec::new();
@@ -236,9 +239,12 @@ impl Reaper {
                 }
             })
             .ok();
+        #[cfg(not(test))]
+        drop(handle);
         Self {
             sender: Mutex::new(Some(sender)),
-            thread: Mutex::new(thread),
+            #[cfg(test)]
+            thread: Mutex::new(handle),
         }
     }
 
@@ -251,6 +257,7 @@ impl Reaper {
 
     /// Waits until every folder handed over so far is deleted or given up
     /// on, and stops the thread.
+    #[cfg(test)]
     pub(crate) fn finish(&self) {
         if let Ok(mut sender) = self.sender.lock() {
             sender.take();

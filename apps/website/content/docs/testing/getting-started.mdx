@@ -195,7 +195,7 @@ A file is used rather than an in-memory database because an in-memory SQLite dat
 
 <Callout type="tip" title="Call shutdown on Windows">
 
-Deleting the directory is best effort. On Windows, files a database pool still holds open can't be deleted, so a `TestApp` dropped without shutting down may leave its database in `%TEMP%`. End such tests with `app.shutdown().await`, which closes the pool before deleting the directory.
+Deleting the directory is best effort. On Windows, files a database pool still holds open can't be deleted when the guard drops. The guard then hands the directory to a background thread that retries for about 30 seconds without holding up the test, and the first guard of each test process removes `navree-test-*` directories left by earlier runs once they are an hour old (`NAVREE_TEST_SWEEP_AGE_SECS` sets another age, in seconds). End tests with `app.shutdown().await` anyway: it closes the pool before deleting the directory, so nothing is left to retry.
 
 </Callout>
 
