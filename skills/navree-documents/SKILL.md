@@ -139,7 +139,8 @@ line breaking, krilla PDF). It reads this subset and skips everything else:
   outline, title/author/lang metadata, creation date from the `dyn Clock`.
 - Over `documents.native.timeout_secs` (60): `DocumentsError::Timeout` (503).
   A template-tree image that doesn't decode: `Template { file: "images/x.png" }`.
-- `documents.native.max_image_pixels` (25,000,000; 0 fails the boot): a PNG,
+- `documents.native.max_image_pixels` (25,000,000; 0 fails the boot, from config
+  or `DocumentsModule::for_root`): a PNG,
   GIF (screen and first frame) or WebP whose header declares more pixels is
   `DocumentsError::TooLarge` (413) before it is decoded; the message names the
   limit, the file goes to the log. JPEGs are embedded undecoded and not counted.
@@ -221,19 +222,23 @@ let pages = sealed.page_texts()?; // one string per page
 
 `text()` and `page_texts()` allow a page 128 MiB of work and the document
 1 GiB: content decoded (a form again each time it is drawn, plus 1 KiB per
-draw), each font once per document (`ToUnicode` inflated, up to 8 MiB, plus 128
-bytes per code it covers; 16 bytes per width), and marked content's actual text
-each time it is decoded. A page may show 1,000,000 glyphs, produce 8 MiB of
+draw), fonts read (`ToUnicode` inflated, up to 8 MiB, plus 1/16 of the memory
+reading it builds; 16 bytes per width), and marked content's actual text each
+time it is decoded. Fonts and maps are kept per document in 256 MiB, counted as
+lopdf holds them (~256 B per code a map covers, plus a copy of a range's text
+per line splitting it; 17 MB for a full two-byte map, fifteen fit); a map is
+read once for the fonts sharing it; past 256 MiB the least recently used is
+dropped and read again; a single map over 256 MiB is refused. A page may show 1,000,000 glyphs, produce 8 MiB of
 text (the document 64 MiB), nest `q` and marked content 256 deep, and spend
 50,000,000 mark comparisons (a byte of text compared is one). Over any:
 `DocumentsError::TooLarge` (413). These are fixed, not config keys.
 
 Loading inflates each object stream up to 8 MiB (a bigger one is skipped with
-its objects, so `Pdf::from_bytes` refuses a PDF whose page tree is in it). That
-bounds one stream, not the file: loading memory is not bounded by file size
-(objects in a stream can share bytes; a 1 KB file can load tens of MB). Cap
-upload size (`http.body_limit_bytes`, 2 MiB) and read untrusted PDFs where
-running out of memory costs only that read (a queued job on a limited worker).
+its objects, so `Pdf::from_bytes` refuses a PDF whose page tree is in it).
+Nothing bounds loading memory in total (objects in a stream can share bytes,
+encrypted files too; a 1 KB file loads tens of MB, a 2 MiB upload can exhaust
+memory and abort the process). Never load untrusted PDFs in the web process: use
+a process you can lose (a queue worker with a memory limit), and cap the size.
 `stamp`, `overlay` and `merge` keep shared or inherited resources one object.
 
 ## Word documents
