@@ -1872,10 +1872,12 @@ mod tests {
             p.handle(record(in_request(&id), request(&id, "/x", 200, 3)), now);
         }
         let rows = p.take_rows();
+        // A full queue counts at the wall clock, so the burst may cross a minute.
         let minute = |kind: &str| {
             rows.iter()
-                .find(|row| row.key.kind == kind && row.key.resolution == 60)
-                .map_or(0, |row| row.values.count)
+                .filter(|row| row.key.kind == kind && row.key.resolution == 60)
+                .map(|row| row.values.count)
+                .sum::<i64>()
         };
         assert_eq!(minute(kind::REQUEST), 100_000);
         assert_eq!(minute(kind::QUERY), 100_000);

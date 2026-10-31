@@ -2155,12 +2155,9 @@ dependencies = [
 name = "navree-validation"
 version = "0.2.0"
 dependencies = [
- "axum",
- "bytes",
  "chrono",
  "form_urlencoded",
  "http",
- "http-body-util",
  "icu_locale_core",
  "navree-config",
  "navree-db",
