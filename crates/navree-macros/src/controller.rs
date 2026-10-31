@@ -350,9 +350,7 @@ fn check_signature(method: &ImplItemFn) -> syn::Result<()> {
     if !sig.generics.params.is_empty() || sig.generics.where_clause.is_some() {
         errors.push(syn::Error::new_spanned(
             &sig.generics,
-            format!(
-                "route handler `{ident}` cannot be generic: Axum needs concrete extractor types"
-            ),
+            format!("route handler `{ident}` cannot be generic: extractors need concrete types"),
         ));
     }
     errors.finish()

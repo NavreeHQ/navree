@@ -22,7 +22,7 @@ error: route handler `no_receiver` must take `&self`: the generated handler call
 25 |     async fn no_receiver() -> &'static str {
    |              ^^^^^^^^^^^
 
-error: route handler `generic` cannot be generic: Axum needs concrete extractor types
+error: route handler `generic` cannot be generic: extractors need concrete types
   --> tests/ui/controller/bad_handler_signatures.rs:30:21
    |
 30 |     async fn generic<T: Send>(&self) -> &'static str {
