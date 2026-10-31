@@ -20,11 +20,11 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-use axum::extract::{Path, RawQuery, Request};
-use axum::response::Response;
+use axum::extract::Request;
 use http::{HeaderMap, StatusCode};
 use navree_access::AbilityFactory;
-use navree_http::AppError;
+use navree_http::response::Response;
+use navree_http::{AppError, Path, RawQuery};
 use navree_settings::{
     RegisteredSettings, ResolvedSettings, SETTINGS_MANAGE_PERMISSION, Scope, ScopeKind, Settings,
     Source,
@@ -461,7 +461,7 @@ fn settings_error(error: navree_settings::SettingsError) -> AppError {
 
 /// The urlencoded fields of a form, the last value of each name.
 async fn form(request: Request) -> Result<HashMap<String, String>, AppError> {
-    let bytes = axum::body::to_bytes(request.into_body(), 1024 * 1024)
+    let bytes = navree_http::body::to_bytes(request.into_body(), 1024 * 1024)
         .await
         .map_err(|_| AppError::bad_request("The form could not be read."))?;
     Ok(form_urlencoded::parse(&bytes).into_owned().collect())

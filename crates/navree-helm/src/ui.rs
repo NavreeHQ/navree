@@ -4,16 +4,17 @@ use std::collections::{BTreeMap, HashMap};
 use std::error::Error as StdError;
 use std::sync::Arc;
 
-use axum::extract::{FromRequest, Multipart, Path, RawQuery, Request};
-use axum::response::{IntoResponse, Response};
+use axum::extract::{FromRequest, Multipart, Request};
 use http::header::{CACHE_CONTROL, CONTENT_TYPE, SET_COOKIE};
 use http::{HeaderMap, HeaderValue, StatusCode};
 use navree_access::{CREATE, READ};
 use navree_auth::{AuthError, AuthService, ClientMeta, LoginOutcome, TwoFactorProof};
 use navree_contracts::{AuthState, AuthVia};
 use navree_crypto::{Encrypter, constant_time_eq, random_token};
-use navree_http::AppError;
+use navree_http::body::{Bytes, to_bytes};
 use navree_http::extract::FromRequestParts;
+use navree_http::response::{IntoResponse, Response};
+use navree_http::{AppError, Path, RawQuery};
 use navree_kernel::AppContext;
 use navree_storage::{Storage, UploadRules, store_upload};
 use serde::Serialize;
@@ -440,7 +441,7 @@ struct SignIn {
 
 impl SignIn {
     /// The parts of `request` and its body; `None` outside the panel.
-    async fn from(request: Request) -> Option<(SignIn, axum::body::Bytes)> {
+    async fn from(request: Request) -> Option<(SignIn, Bytes)> {
         let (mut parts, body) = request.into_parts();
         let app = parts.extensions.get::<AppContext>().cloned()?;
         let core = app.get::<Core>().await.ok()?;
@@ -453,9 +454,7 @@ impl SignIn {
             .get::<AuthState>()
             .and_then(|s| s.0.as_ref())
             .is_some_and(|p| p.via == AuthVia::Session);
-        let bytes = axum::body::to_bytes(body, 64 * 1024)
-            .await
-            .unwrap_or_default();
+        let bytes = to_bytes(body, 64 * 1024).await.unwrap_or_default();
         Some((
             SignIn {
                 app,
@@ -1371,7 +1370,7 @@ async fn submission(
         .is_some_and(|v| v.starts_with("multipart/form-data"));
     let mut submission = Submission::default();
     if !multipart {
-        let bytes = axum::body::to_bytes(request.into_body(), 16 * 1024 * 1024)
+        let bytes = to_bytes(request.into_body(), 16 * 1024 * 1024)
             .await
             .map_err(|_| AppError::bad_request("The form could not be read."))?;
         for (name, value) in form_urlencoded::parse(&bytes).into_owned() {

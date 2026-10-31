@@ -8,9 +8,9 @@ use std::net::SocketAddr;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use axum::body::Body;
 use navree_contracts::{AuditSink, HealthCheck};
 use navree_db::Db;
+use navree_http::body::Body;
 use navree_http::{Authenticator, ErrorMapper, HttpOptions, HttpServer, RouteAuthorizer};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, Injectable, KernelError, Lifecycle, ProviderKey, Resolver,

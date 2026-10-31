@@ -4,10 +4,10 @@ use std::io::Cursor;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::response::IntoResponse;
 use calamine::{Data, Reader, open_workbook_auto_from_rs};
 use navree_contracts::{Clock, FixedClock};
 use navree_db::Db;
+use navree_http::response::IntoResponse;
 use navree_kernel::{Module, ModuleBuilder};
 use navree_queue::OperationStatus;
 use navree_sheets::{
@@ -335,7 +335,9 @@ async fn an_export_without_a_count_is_stopped_at_the_limit() {
         .unwrap()
         .into_response()
         .into_parts();
-    let error = axum::body::to_bytes(body, usize::MAX).await.unwrap_err();
+    let error = navree_http::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap_err();
     assert!(error.to_string().contains("more than 2 rows"), "{error}");
 }
 

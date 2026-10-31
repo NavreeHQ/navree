@@ -21,7 +21,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use async_graphql::Data;
 use async_graphql::http::{WebSocket as GraphqlSocket, WebSocketProtocols as Protocols, WsMessage};
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
-use axum::response::Response as HttpResponse;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use futures_util::{SinkExt, StreamExt};
@@ -29,6 +28,7 @@ use http::header::{AUTHORIZATION, COOKIE, ORIGIN, SEC_WEBSOCKET_PROTOCOL};
 use http::request::Parts;
 use http::{HeaderMap, HeaderValue};
 use navree_contracts::{AuthState, AuthVia, Principal};
+use navree_http::response::Response as HttpResponse;
 use tokio::sync::watch;
 use tokio::time::{Instant, Interval, Sleep};
 

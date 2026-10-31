@@ -7,13 +7,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::Path;
 use http::Method;
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, AccessService, Rules};
 use navree_auth::{AuthModule, AuthService, ClientMeta};
 use navree_crypto::CryptoModule;
 use navree_db::{DatabaseModule, Db, Executor, Statement};
-use navree_http::{AppError, Controller, ModuleBuilderHttpExt, NoContent, RouteDef};
+use navree_http::{AppError, Controller, ModuleBuilderHttpExt, NoContent, Path, RouteDef};
 use navree_kernel::{
     BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
 };

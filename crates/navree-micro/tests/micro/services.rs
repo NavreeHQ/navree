@@ -7,13 +7,12 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use axum::extract::Path;
 use http::header::AUTHORIZATION;
 use http::request::Parts;
 use navree_access::AccessModule;
 use navree_contracts::{HealthCheck, HealthStatus, Principal};
 use navree_db::DatabaseModule;
-use navree_http::{AppError, Authenticator, HttpServer, Json, ModuleBuilderHttpExt, Result};
+use navree_http::{AppError, Authenticator, HttpServer, Json, ModuleBuilderHttpExt, Path, Result};
 use navree_kernel::{BoxFuture, Factory, Module, ModuleBuilder};
 use navree_macros::{controller, injectable, message_handlers};
 use navree_micro::{

@@ -520,7 +520,7 @@ fn sse_messages(body: &str) -> Vec<Value> {
 
 /// The session's notification stream ([`McpTestClient::listen`]).
 pub struct NotificationStream {
-    body: axum::body::Body,
+    body: navree_http::body::Body,
     buffer: String,
 }
 

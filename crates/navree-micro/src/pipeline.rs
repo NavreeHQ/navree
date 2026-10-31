@@ -9,10 +9,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Router;
-use axum::body::Body;
 use axum::extract::{Request, State};
 use axum::middleware::{Next, from_fn_with_state};
-use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
 use futures_util::FutureExt;
 use http::header::{CONTENT_TYPE, HeaderName, HeaderValue};
@@ -22,6 +20,8 @@ use navree_contracts::{
     AuditEntry, AuditKind, AuditSink, AuthState, AuthVia, Principal, RequestId,
 };
 use navree_db::Uow;
+use navree_http::body::{Body, to_bytes};
+use navree_http::response::{IntoResponse, Response};
 use navree_http::{
     AppError, Authenticator, ErrorMapper, GlobalLayer, LayerSlot, PathParams, RouteAuthorizer,
     RouteMeta,
@@ -361,7 +361,7 @@ impl MessageRouter {
             .and_then(|value| value.to_str().ok())
             .unwrap_or("application/json")
             .to_owned();
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        let body = to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap_or_default();
         let error = (!status.is_success()).then(|| String::from_utf8_lossy(&body).into_owned());
@@ -734,7 +734,7 @@ async fn handler_pipeline(
     match (inbox, message) {
         (Some((store, uow)), Some(message)) if response.status().is_success() => {
             let (response_parts, body) = response.into_parts();
-            let body = match axum::body::to_bytes(body, usize::MAX).await {
+            let body = match to_bytes(body, usize::MAX).await {
                 Ok(body) => body,
                 Err(error) => return AppError::internal(error).into_response(),
             };

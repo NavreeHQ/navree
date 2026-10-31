@@ -10,7 +10,6 @@ use std::sync::Arc;
 use std::task::{Context, Poll, ready};
 use std::time::Duration;
 
-use axum::body::Body;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD_NO_PAD;
 use bytes::Bytes;
@@ -18,6 +17,7 @@ use http::header::{CONTENT_ENCODING, CONTENT_TYPE, HeaderName, HeaderValue};
 use http::{HeaderMap, Method, Request, Response, StatusCode, Version};
 use http_body::Frame;
 use http_body_util::{BodyExt, Limited};
+use navree_http::body::Body;
 use prost::Message as _;
 use prost_reflect::{
     DescriptorPool, DeserializeOptions, DynamicMessage, MessageDescriptor, MethodDescriptor,

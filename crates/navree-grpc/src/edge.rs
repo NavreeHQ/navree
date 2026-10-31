@@ -11,7 +11,6 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use axum::body::Body;
 use axum::extract::{ConnectInfo, State};
 use axum::middleware::{Next, from_fn_with_state};
 use futures_util::future::BoxFuture;
@@ -19,6 +18,7 @@ use http::header::{CONTENT_TYPE, HeaderName, HeaderValue};
 use http::{HeaderMap, Method, Request, Response, StatusCode};
 use http_body::Frame;
 use navree_contracts::RequestId;
+use navree_http::body::Body;
 use navree_http::{ClientIp, CorsLayer, GlobalLayer, HttpOptions, LayerSlot};
 use navree_kernel::{AppContext, RequestScope};
 use tokio::sync::OnceCell;
@@ -581,7 +581,7 @@ async fn shared_port(
     State(state): State<Arc<SharedPort>>,
     request: axum::extract::Request,
     next: Next,
-) -> axum::response::Response {
+) -> navree_http::response::Response {
     if !might_be_grpc(&request) {
         return next.run(request).await;
     }

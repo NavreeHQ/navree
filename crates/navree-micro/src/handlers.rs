@@ -6,12 +6,13 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::response::{IntoResponse, Response};
 use http::StatusCode;
 use http::header::CONTENT_TYPE;
 use navree_events::{Event, EventBus, Listener, ModuleBuilderEventsExt};
+use navree_http::body::Body;
 use navree_http::extract::FromRequestParts;
 use navree_http::handler::Endpoint;
+use navree_http::response::{IntoResponse, Response};
 use navree_http::{AccessSpec, AppError, CanSpec, Guard, Handler};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, Injectable, KernelError, ModuleBuilder, ModuleId, ProviderKey,
@@ -261,7 +262,7 @@ impl ReplyCodec {
     fn encode<T: Serialize + ?Sized>(self, value: &T) -> Response {
         match self.0.encode(value) {
             Ok(bytes) => {
-                let mut response = Response::new(axum::body::Body::from(bytes));
+                let mut response = Response::new(Body::from(bytes));
                 response.headers_mut().insert(
                     CONTENT_TYPE,
                     http::HeaderValue::from_static(self.0.content_type()),

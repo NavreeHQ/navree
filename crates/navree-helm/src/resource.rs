@@ -214,7 +214,7 @@ impl FormData {
             .method(http::Method::POST)
             .uri("/")
             .header(http::header::CONTENT_TYPE, "application/json")
-            .body(axum::body::Body::from(body))
+            .body(navree_http::body::Body::from(body))
             .map_err(AppError::internal)?;
         if let Some(app) = &self.app {
             request.extensions_mut().insert(app.clone());

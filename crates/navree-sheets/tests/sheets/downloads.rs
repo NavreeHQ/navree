@@ -2,10 +2,10 @@
 
 use std::io::Cursor;
 
-use axum::response::IntoResponse;
 use calamine::{Data, Reader, open_workbook_auto_from_rs};
 use chrono::NaiveDate;
 use futures_util::stream;
+use navree_http::response::IntoResponse;
 use navree_kernel::{Module, ModuleBuilder};
 use navree_sheets::{
     CSV_CONTENT_TYPE, Cell, Download, Exportable, Exports, HeaderCatalog, ModuleBuilderSheetsExt,
@@ -49,7 +49,7 @@ fn deals() -> Vec<DealRow> {
 
 async fn body(download: Download) -> (http::response::Parts, Vec<u8>) {
     let (parts, body) = download.into_response().into_parts();
-    let bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+    let bytes = navree_http::body::to_bytes(body, usize::MAX).await.unwrap();
     (parts, bytes.to_vec())
 }
 
@@ -183,7 +183,9 @@ async fn a_failing_stream_cuts_the_download_short() {
     let (_, body) = Download::csv_stream("cut", rows)
         .into_response()
         .into_parts();
-    let error = axum::body::to_bytes(body, usize::MAX).await.unwrap_err();
+    let error = navree_http::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap_err();
     assert!(error.to_string().contains("database went away"), "{error}");
 }
 

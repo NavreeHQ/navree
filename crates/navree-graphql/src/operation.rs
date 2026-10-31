@@ -13,6 +13,7 @@ use navree_access::{CurrentAccess, FieldCheck, PrincipalAccess};
 use navree_auth::{CurrentUser, User};
 use navree_contracts::{AuthState, Principal, RequestId};
 use navree_db::Uow;
+use navree_http::extract::FromRequestParts;
 use navree_http::{AccessSpec, AppError, CanSpec, RouteMeta};
 use navree_kernel::AppContext;
 use navree_workspace::{CurrentWorkspace, DemoIntent};
@@ -21,47 +22,14 @@ use tokio::sync::OnceCell;
 use crate::__private::FieldAccess;
 use crate::schema::Shared;
 
-/// Runs one extractor on an operation's request parts: a Navree extractor
-/// (`navree_http::extract::FromRequestParts`) or one on the previous
-/// framework's trait (`CurrentWorkspace`); `M` is inferred, and a type
-/// implements one of the two, never both. It returns the extractor's own
-/// future (no async wrapper), so a field's future nests no deeper than with
-/// one trait.
-pub(crate) fn extract<T, M>(parts: &mut Parts) -> impl Future<Output = Result<T, AppError>> + Send
+/// Runs one extractor on an operation's request parts. It returns the
+/// extractor's own future (no async wrapper), so a field's future nests no
+/// deeper than the extractor's own.
+pub(crate) fn extract<T>(parts: &mut Parts) -> impl Future<Output = Result<T, AppError>> + Send
 where
-    T: Extract<M>,
+    T: FromRequestParts<Rejection = AppError>,
 {
-    T::extract(parts)
-}
-
-/// An extractor [`extract`] runs; `M` tells the two traits apart.
-pub(crate) trait Extract<M>: Sized {
-    /// Runs the extractor.
-    fn extract(parts: &mut Parts) -> impl Future<Output = Result<Self, AppError>> + Send;
-}
-
-/// Navree's extractors.
-pub(crate) enum ViaNavree {}
-
-/// The previous framework's extractors.
-pub(crate) enum ViaPrevious {}
-
-impl<T> Extract<ViaNavree> for T
-where
-    T: navree_http::extract::FromRequestParts<Rejection = AppError>,
-{
-    fn extract(parts: &mut Parts) -> impl Future<Output = Result<Self, AppError>> + Send {
-        T::from_request_parts(parts)
-    }
-}
-
-impl<T> Extract<ViaPrevious> for T
-where
-    T: axum::extract::FromRequestParts<(), Rejection = AppError> + Send,
-{
-    fn extract(parts: &mut Parts) -> impl Future<Output = Result<Self, AppError>> + Send {
-        T::from_request_parts(parts, &())
-    }
+    T::from_request_parts(parts)
 }
 
 /// Where an operation comes from: the HTTP request (or WebSocket upgrade)
@@ -211,7 +179,7 @@ impl Operation {
         self.access
             .get_or_try_init(|| async {
                 let mut parts = self.parts();
-                let CurrentAccess(access) = extract::<CurrentAccess, _>(&mut parts).await?;
+                let CurrentAccess(access) = extract::<CurrentAccess>(&mut parts).await?;
                 Ok(access)
             })
             .await
@@ -221,7 +189,7 @@ impl Operation {
     /// The viewer's user record (navree-auth).
     pub(crate) async fn current_user(&self) -> Result<User, AppError> {
         self.user
-            .get_or_try_init(|| async { extract::<CurrentUser, _>(&mut self.parts()).await })
+            .get_or_try_init(|| async { extract::<CurrentUser>(&mut self.parts()).await })
             .await
             .map(|user| user.0.clone())
     }
@@ -237,7 +205,7 @@ impl Operation {
                     parts.extensions.insert(uow);
                 }
                 parts.extensions.insert(intent);
-                extract::<CurrentWorkspace, _>(&mut parts).await
+                extract::<CurrentWorkspace>(&mut parts).await
             })
             .await
             .cloned()

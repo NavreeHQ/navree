@@ -3,15 +3,15 @@
 
 use std::sync::{Arc, OnceLock};
 
-use axum::body::Body;
 use axum::extract::Request;
 use axum::middleware::{self, Next};
-use axum::response::Response;
 use http::HeaderMap;
 use http::header::CONTENT_TYPE;
 use http_body::Body as _;
 use http_body_util::BodyExt;
 use navree_contracts::RequestId;
+use navree_http::body::Body;
+use navree_http::response::Response;
 use navree_http::{GlobalLayer, LayerSlot};
 
 use crate::logbook::{Active, HttpCapture};

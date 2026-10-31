@@ -2,10 +2,8 @@
 //! path), its CSRF check, and the request layer that also turns errors
 //! into pages for browsers and sets the pages' security headers.
 
-use axum::body::Body;
 use axum::extract::Request;
 use axum::middleware::Next;
-use axum::response::{IntoResponse, Response};
 use chrono::Utc;
 use cookie::{Cookie, SameSite};
 use http::header::{
@@ -15,6 +13,8 @@ use http::header::{
 use http::{HeaderMap, HeaderValue, Method, StatusCode};
 use navree_contracts::{AuthState, AuthVia, Principal};
 use navree_crypto::{Encrypter, constant_time_eq, random_token};
+use navree_http::body::{Body, to_bytes};
+use navree_http::response::{IntoResponse, Response};
 use navree_http::{AppError, GlobalLayer, LayerSlot};
 use navree_kernel::AppContext;
 use serde::{Deserialize, Serialize};
@@ -228,9 +228,7 @@ async fn browser_errors(
         return redirect(&location);
     }
     let (parts, body) = response.into_parts();
-    let bytes = axum::body::to_bytes(body, 64 * 1024)
-        .await
-        .unwrap_or_default();
+    let bytes = to_bytes(body, 64 * 1024).await.unwrap_or_default();
     let message = serde_json::from_slice::<serde_json::Value>(&bytes)
         .ok()
         .and_then(|body| match &body["message"] {
@@ -393,7 +391,7 @@ async fn check_csrf(request: Request, expected: &str) -> (Request, bool) {
         return (request, false);
     }
     let (parts, body) = request.into_parts();
-    let Ok(bytes) = axum::body::to_bytes(body, 16 * 1024 * 1024).await else {
+    let Ok(bytes) = to_bytes(body, 16 * 1024 * 1024).await else {
         return (Request::from_parts(parts, Body::empty()), false);
     };
     let ok = form_urlencoded::parse(&bytes)

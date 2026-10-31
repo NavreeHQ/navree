@@ -14,15 +14,15 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
-use axum::body::{Body, Bytes, to_bytes};
 use axum::extract::Request;
 use axum::middleware::{Next, from_fn};
-use axum::response::{Html, IntoResponse, Redirect, Response};
 use http::header::{CONTENT_LENGTH, CONTENT_TYPE};
 use http::{HeaderValue, Method, StatusCode};
 use navree_config::Config;
 use navree_contracts::{AuthState, AuthVia, Principal, RequestId};
 use navree_crypto::Encrypter;
+use navree_http::body::{Body, Bytes, to_bytes};
+use navree_http::response::{Html, IntoResponse, Redirect, Response};
 use navree_http::{AppError, GlobalLayer, LayerSlot};
 use navree_kernel::AppContext;
 use tokio::sync::OnceCell;
@@ -256,7 +256,7 @@ fn json_body_fits(request: &Request) -> bool {
         .get(CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
         .is_some_and(|value| value.starts_with("application/json"));
-    use axum::body::HttpBody as _;
+    use navree_http::body::HttpBody as _;
     let length = request
         .headers()
         .get(CONTENT_LENGTH)

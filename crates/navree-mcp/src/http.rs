@@ -23,10 +23,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Router;
-use axum::body::Body;
 use axum::extract::Request;
 use axum::middleware::{Next, from_fn};
-use axum::response::{IntoResponse, Response};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use bytes::Bytes;
@@ -35,6 +33,8 @@ use http::header::{ACCEPT, ALLOW, CACHE_CONTROL, CONTENT_TYPE, ORIGIN, WWW_AUTHE
 use http::{HeaderMap, HeaderValue, Method, StatusCode};
 use navree_cache::Cache;
 use navree_contracts::{AuthState, Principal, RequestId};
+use navree_http::body::{Body, to_bytes};
+use navree_http::response::{IntoResponse, Response};
 use navree_http::{
     ApiMeta, AppError, Controller, GlobalLayer, Json, LayerSlot, RouteDef, RouteMeta,
 };
@@ -168,7 +168,7 @@ impl Transport {
             ));
         }
         let limit = self.settings.max_request_bytes;
-        let bytes = axum::body::to_bytes(body, limit)
+        let bytes = to_bytes(body, limit)
             .await
             .map_err(|_| AppError::payload_too_large(limit).into_response())?;
         let caller = Caller {
@@ -570,9 +570,7 @@ impl Transport {
 
 /// The answer message inside a response this transport built.
 async fn answer_of(response: Response) -> Option<Value> {
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .ok()?;
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.ok()?;
     if let Ok(answer) = serde_json::from_slice::<Value>(&bytes) {
         return Some(answer);
     }

@@ -6,11 +6,11 @@ use std::fmt;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use axum::body::Body;
 use futures_util::future::BoxFuture;
 use http::HeaderMap;
 use http::header::{AUTHORIZATION, HeaderName, HeaderValue};
 use navree_contracts::Principal;
+use navree_http::body::Body;
 use navree_kernel::WeakAppContext;
 use navree_testing::{ActingAs, TestApp};
 use tokio::sync::OnceCell;

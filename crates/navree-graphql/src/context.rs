@@ -150,7 +150,7 @@ impl ContextExt for Context<'_> {
         let (mut parts, ()) = http::Request::new(()).into_parts();
         parts.extensions = (*extensions).clone();
         // The extractor only reads the extensions: it is ready at once.
-        match extract::<Authorized<E, A>, _>(&mut parts).now_or_never() {
+        match extract::<Authorized<E, A>>(&mut parts).now_or_never() {
             Some(Ok(authorized)) => Ok(authorized),
             Some(Err(error)) => Err(error.into()),
             None => Err(missing()),

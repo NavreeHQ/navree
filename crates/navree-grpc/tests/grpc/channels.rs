@@ -5,10 +5,9 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::Path;
 use navree_grpc::testing::TestChannel;
 use navree_grpc::{Code, GrpcChannels};
-use navree_http::{HttpServer, Json, ModuleBuilderHttpExt};
+use navree_http::{HttpServer, Json, ModuleBuilderHttpExt, Path};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_macros::{controller, injectable};
 use navree_testing::{TestApp, TestAppBuilder};

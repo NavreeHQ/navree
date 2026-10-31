@@ -8,9 +8,9 @@ use std::time::Duration;
 
 use axum::extract::Request;
 use axum::middleware::{Next, from_fn_with_state};
-use axum::response::Response;
 use http::{HeaderMap, HeaderName, HeaderValue};
 use navree_contracts::RequestId;
+use navree_http::response::Response;
 use navree_http::{GlobalLayer, HttpOptions, LayerSlot};
 use navree_kernel::AppContext;
 use tokio::sync::OnceCell;

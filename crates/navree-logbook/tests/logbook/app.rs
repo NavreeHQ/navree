@@ -5,14 +5,13 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::Extension;
 use http::{Method, StatusCode};
 use navree_cache::{Cache, CacheModule};
 use navree_contracts::{Job, JobContext};
 use navree_db::navree_schema::{Dialect, Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{DatabaseModule, MigrationSet, ModuleBuilderDbExt, Uow};
 use navree_events::{Event, EventBus, EventsModule};
-use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
+use navree_http::{AppError, Controller, Extension, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver,
 };

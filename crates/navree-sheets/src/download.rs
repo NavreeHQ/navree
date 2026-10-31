@@ -2,8 +2,6 @@
 
 use std::fmt;
 
-use axum::body::Body;
-use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
 use futures_util::stream::{self, BoxStream, Stream, StreamExt};
 use http::header::{
@@ -11,6 +9,8 @@ use http::header::{
     X_CONTENT_TYPE_OPTIONS,
 };
 use navree_contracts::BoxError;
+use navree_http::body::Body;
+use navree_http::response::{IntoResponse, Response};
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 
 use crate::headers::resolve_headers;
@@ -57,7 +57,7 @@ enum DownloadBody {
 ///     let rows = vec![ContactRow { name: "Ada".into(), email: "ada@example.com".into() }];
 ///     Download::csv("contacts.csv", rows)
 /// }
-/// # let _: axum::routing::MethodRouter = axum::routing::get(export);
+/// # let _ = navree_http::RouteDef::on(http::Method::GET, "/export", export);
 /// ```
 pub struct Download {
     filename: String,

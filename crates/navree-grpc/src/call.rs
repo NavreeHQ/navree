@@ -7,12 +7,12 @@ use std::future::Future;
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::Duration;
 
-use axum::extract::FromRequestParts;
 use http::header::USER_AGENT;
 use http::request::Parts;
 use http::{Method, StatusCode, Uri};
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState, RequestId};
 use navree_db::{Db, Uow};
+use navree_http::extract::FromRequestParts;
 use navree_http::{
     AppError, Authenticator, ClientIp, ErrorMapper, PathParams, RouteAuthorizer, RouteMeta,
 };
@@ -458,11 +458,10 @@ async fn record_security(sink: &dyn AuditSink, entry: AuditEntry) {
     }
 }
 
-/// Runs one extractor on the call's request parts: a Navree extractor
-/// (`navree_http::extract::FromRequestParts`) or, during the move, one
-/// still on the previous framework's trait; `M` is inferred. It returns the
+/// Runs one extractor on the call's request parts: any
+/// `navree_http::extract::FromRequestParts`; `M` is inferred. It returns the
 /// extractor's own future (no async wrapper), so a call's future nests no
-/// deeper than with one trait.
+/// deeper than the extractor's own.
 pub fn extract<T, M>(parts: &mut Parts) -> impl Future<Output = Result<T, CallError>> + Send
 where
     T: Extract<M>,
@@ -470,7 +469,7 @@ where
     T::extract(parts)
 }
 
-/// An extractor [`extract`] runs; `M` tells the two traits apart.
+/// An extractor [`extract`] runs.
 pub trait Extract<M>: Sized {
     /// Runs the extractor.
     fn extract(parts: &mut Parts) -> impl Future<Output = Result<Self, CallError>> + Send;
@@ -480,27 +479,13 @@ pub trait Extract<M>: Sized {
 #[derive(Debug)]
 pub enum ViaNavree {}
 
-/// The previous framework's extractors.
-#[derive(Debug)]
-pub enum ViaPrevious {}
-
 impl<T> Extract<ViaNavree> for T
 where
-    T: navree_http::extract::FromRequestParts,
+    T: FromRequestParts,
     T::Rejection: Into<CallError>,
 {
     async fn extract(parts: &mut Parts) -> Result<Self, CallError> {
         T::from_request_parts(parts).await.map_err(Into::into)
-    }
-}
-
-impl<T> Extract<ViaPrevious> for T
-where
-    T: FromRequestParts<()> + Send,
-    T::Rejection: Into<CallError>,
-{
-    async fn extract(parts: &mut Parts) -> Result<Self, CallError> {
-        T::from_request_parts(parts, &()).await.map_err(Into::into)
     }
 }
 

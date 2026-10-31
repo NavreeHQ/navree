@@ -3,9 +3,9 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use axum::extract::Query;
 use http::Uri;
 use navree_contracts::BoxError;
+use navree_http::Query;
 use navree_kernel::{AppContext, BoxFuture, Injectable, ModuleId};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
