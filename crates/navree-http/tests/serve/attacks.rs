@@ -18,6 +18,7 @@ use navree_http::routing::Router;
 use navree_http::ws::{Message, WebSocket, WebSocketUpgrade};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, DuplexStream};
 use tokio::net::{TcpSocket, TcpStream};
+#[cfg(windows)]
 use tokio::sync::Notify;
 use tokio::time::{sleep, timeout};
 
