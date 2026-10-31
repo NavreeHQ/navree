@@ -40,14 +40,18 @@ test("the command menu opens with Ctrl+K, jumps to a screen and starts a new dea
   await page.keyboard.press("Control+k");
   const menu = page.getByRole("dialog", { name: "Command menu" });
   await expect(menu).toBeVisible();
+  const searched = page.waitForResponse((r) => r.url().includes("/companies?search=comp"));
   await menu.getByRole("combobox").fill("comp");
-  await menu.getByRole("option", { name: "Companies" }).click();
+  await searched;
+  await menu.getByRole("option", { name: "Companies", exact: true }).click();
   await expect(page).toHaveURL("/companies");
   await expect(page.getByRole("heading", { level: 1, name: "Companies" })).toBeVisible();
 
   // Create: goes to the board and opens its "New deal" dialog.
   await page.keyboard.press("Control+k");
+  const creating = page.waitForResponse((r) => r.url().includes("/deals?search=new"));
   await menu.getByRole("combobox").fill("new deal");
+  await creating;
   await expect(menu.getByRole("option", { name: "New deal" })).toBeVisible();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL("/deals");

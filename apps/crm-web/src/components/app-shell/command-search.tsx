@@ -149,19 +149,20 @@ export function CommandSearch() {
   const shownPages = pages.filter((p) => matches(filter, p.label, p.keywords));
   const shownCreate = creatable.filter((c) => matches(filter, c.label, ["add", "create", c.kind]));
   const showSignOut = matches(filter, "Sign out", ["log out", "logout"]);
+  const hasCommands = shownPages.length + shownCreate.length > 0 || showSignOut;
 
-  // Results arrive asynchronously, so keep the highlighted item in state and default it to the first result.
+  // Results arrive asynchronously, so keep the highlighted item in state and default it to the first command or result.
   const [highlighted, setHighlighted] = useState("");
-  const firstValue =
-    term.length < 2
-      ? (shownPages[0]?.label ?? shownCreate[0]?.label ?? (showSignOut ? "Sign out" : ""))
-      : companies.data?.data[0]
-        ? `company-${companies.data.data[0].id}`
-        : contacts.data?.data[0]
-          ? `contact-${contacts.data.data[0].id}`
-          : deals.data?.data[0]
-            ? `deal-${deals.data.data[0].id}`
-            : "";
+  const firstResult = !enabled
+    ? ""
+    : companies.data?.data[0]
+      ? `company-${companies.data.data[0].id}`
+      : contacts.data?.data[0]
+        ? `contact-${contacts.data.data[0].id}`
+        : deals.data?.data[0]
+          ? `deal-${deals.data.data[0].id}`
+          : "";
+  const firstValue = shownPages[0]?.label ?? shownCreate[0]?.label ?? (showSignOut ? "Sign out" : firstResult);
 
   const searching = enabled && (companies.isFetching || contacts.isFetching || deals.isFetching);
   const results = enabled
@@ -201,7 +202,7 @@ export function CommandSearch() {
             }}
           />
           <CommandList>
-            {term.length < 2 ? (
+            {term.length < 2 || hasCommands ? (
               <StaticCommands
                 pages={shownPages}
                 creatable={shownCreate}
@@ -210,7 +211,8 @@ export function CommandSearch() {
                 onCreate={create}
                 onSignOut={signOut}
               />
-            ) : (
+            ) : null}
+            {term.length >= 2 ? (
               <>
                 <CommandEmpty>{searching ? "Searching…" : `Nothing matches “${term}”.`}</CommandEmpty>
                 {results > 0 && companies.data?.data.length ? (
@@ -249,7 +251,7 @@ export function CommandSearch() {
                   </CommandGroup>
                 ) : null}
               </>
-            )}
+            ) : null}
           </CommandList>
           <div
             className="hidden items-center gap-4 border-t bg-ink-0/40 px-4 py-2 text-xs text-fg-3 sm:flex"
@@ -277,7 +279,7 @@ export function CommandSearch() {
   );
 }
 
-/** The commands shown before a search (screens, new records, signing out), already filtered by what was typed. */
+/** The commands (screens, new records, signing out), already filtered by what was typed; they stay above a search's results. */
 function StaticCommands({
   pages: shownPages,
   creatable: shownCreate,
