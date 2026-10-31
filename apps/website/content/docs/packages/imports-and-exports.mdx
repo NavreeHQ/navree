@@ -64,6 +64,8 @@ disk = ""                      # the disk of uploads and error files ("": the de
 directory = "imports"
 max_upload_bytes = 20971520    # the largest upload (20 MiB)
 max_rows = 100000              # the most data rows one file may have
+max_columns = 16384            # the most columns one file may have
+max_cells = 10000000           # the most cells (rows times columns) one file may hold
 chunk_size = 500               # rows per staging step and per apply job
 keep_days = 7                  # sheets:prune deletes imports older than this
 routes = true                  # the /api/imports routes
@@ -480,7 +482,7 @@ The encoding found (or given with `encoding`) is the import's `encoding`. The de
 
 Workbooks are recognized by their content, whatever their name: XLSX (and XLSM and XLSB), XLS and ODS. Numbers, booleans and dates keep their types.
 
-The header row is the first row with a value; empty rows are skipped. A blank header is named `Column 3`, and a repeated one gets ` (2)`. Rows are numbered the way the spreadsheet shows them, so "row 14" in the preview is row 14 in Excel. A file with more than `sheets.imports.max_rows` data rows fails the import with "The file has more than 100000 rows.".
+The header row is the first row with a value; empty rows are skipped. A blank header is named `Column 3`, and a repeated one gets ` (2)`. Rows are numbered the way the spreadsheet shows them, so "row 14" in the preview is row 14 in Excel. A file with more than `sheets.imports.max_rows` data rows fails the import with "The file has more than 100000 rows.". The limits are checked while the file is read, so a file that breaks one is refused without being held in memory first. A file with more than `sheets.imports.max_columns` columns fails with "The file has more than 16384 columns.". Every row is padded to the width of the header, so the table is as large as the header's width times the number of rows however short the lines are; `sheets.imports.max_cells` bounds that product, and a file that goes past it fails with "The file has more than 10000000 cells (rows times columns).". The defaults are the width of an Excel sheet and 100,000 rows of 100 columns.
 
 ### Mapping columns
 
@@ -664,7 +666,8 @@ Over HTTP, post a `multipart/form-data` body with `importer` and `file` fields. 
 
 ## Limits
 
-- Staging reads the whole file into memory, so `sheets.imports.max_upload_bytes` bounds its memory as well as its size.
+- Staging reads the whole file into memory, so `sheets.imports.max_upload_bytes` bounds its memory as well as its size, and `sheets.imports.max_columns` and `sheets.imports.max_cells` bound the table made from it.
+- Staging reads the file on Tokio's blocking pool, so a large file doesn't hold up the app's async threads, and the queue's job timeout can fire while it reads.
 - Duplicates are found while staging. A record created between staging and applying is caught by your database's unique constraints: the row fails with your `insert`'s error.
 - The jobs run on the `default` queue.
 

@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use super::jobs::{ApplyImportChunk, FinishImport, StageImport};
 use super::mapping::{self, normalize};
-use super::read::{ReadOptions, read_table, refuse};
+use super::read::{ReadOptions, read_table_blocking, refuse};
 use super::registry::{ImporterRegistration, ImporterRegistry, RowChecker, SaveError};
 use super::store::{self, NewRow};
 use super::{
@@ -648,15 +648,18 @@ impl Imports {
         };
         let disk = support::disk(&app, &record.disk).await?;
         let bytes = disk.get(&record.path).await?;
-        let read = read_table(
-            &bytes,
-            &record.filename,
+        let read = read_table_blocking(
+            bytes,
+            record.filename.clone(),
             &ReadOptions {
                 encoding: record.encoding.as_deref(),
                 sheet: record.sheet.as_deref(),
                 max_rows: self.options.imports.max_rows,
+                max_columns: self.options.imports.max_columns,
+                max_cells: self.options.imports.max_cells,
             },
-        );
+        )
+        .await;
         let table = match read {
             Ok(table) => table,
             Err(error) => {
@@ -673,7 +676,6 @@ impl Imports {
                 };
             }
         };
-        drop(bytes);
         record.format = Some(table.kind);
         record.encoding = table.encoding.map(str::to_owned).or(record.encoding);
         record.headers = table.headers.clone();

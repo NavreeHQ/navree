@@ -27,6 +27,8 @@ use crate::CsvOptions;
 /// directory = "imports"          # where on the disk
 /// max_upload_bytes = 20971520    # the largest upload (20 MiB)
 /// max_rows = 100000              # the most data rows one file may have
+/// max_columns = 16384            # the most columns one file may have
+/// max_cells = 10000000           # the most cells (rows times columns) one file may hold
 /// chunk_size = 500               # rows per staging step and per apply job
 /// keep_days = 7                  # sheets:prune deletes imports older than this
 /// routes = true                  # the /api/imports routes
@@ -93,6 +95,12 @@ pub struct ImportOptions {
     pub max_upload_bytes: u64,
     /// The most data rows a file may have (default 100,000).
     pub max_rows: u64,
+    /// The most columns a file may have (default 16,384, the width of an
+    /// Excel sheet).
+    pub max_columns: u64,
+    /// The most cells a file may hold, counting every row at the width of
+    /// the header (default 10,000,000: 100,000 rows of 100 columns).
+    pub max_cells: u64,
     /// Rows checked per staging step and saved per apply job (default 500).
     pub chunk_size: u64,
     /// `sheets:prune` deletes imports (their rows, upload and error file)
@@ -109,6 +117,8 @@ impl Default for ImportOptions {
             directory: "imports".to_owned(),
             max_upload_bytes: 20 * 1024 * 1024,
             max_rows: 100_000,
+            max_columns: 16_384,
+            max_cells: 10_000_000,
             chunk_size: 500,
             keep_days: 7,
             routes: true,
@@ -135,6 +145,12 @@ impl ConfigSection for SheetsOptions {
         }
         if self.imports.max_rows == 0 {
             return Err("`imports.max_rows` must be at least 1".to_owned());
+        }
+        if self.imports.max_columns == 0 {
+            return Err("`imports.max_columns` must be at least 1".to_owned());
+        }
+        if self.imports.max_cells == 0 {
+            return Err("`imports.max_cells` must be at least 1".to_owned());
         }
         if self.imports.chunk_size == 0 {
             return Err("`imports.chunk_size` must be at least 1".to_owned());
@@ -193,6 +209,19 @@ mod tests {
                 .unwrap_err()
                 .contains("sheets.csv.delimiter")
         );
+    }
+
+    #[test]
+    fn the_import_size_limits_are_at_least_one() {
+        for key in ["max_columns", "max_cells"] {
+            let mut options = SheetsOptions::default();
+            match key {
+                "max_columns" => options.imports.max_columns = 0,
+                _ => options.imports.max_cells = 0,
+            }
+            let message = options.validate().unwrap_err();
+            assert!(message.contains(&format!("imports.{key}")), "{message}");
+        }
     }
 
     #[test]

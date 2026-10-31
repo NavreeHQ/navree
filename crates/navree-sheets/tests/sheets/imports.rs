@@ -660,6 +660,54 @@ async fn files_that_cannot_be_read_fail_the_import() {
 }
 
 #[tokio::test]
+async fn files_over_the_column_and_cell_limits_fail_the_import() {
+    let app = support::builder()
+        .config("sheets.imports.max_columns", 4)
+        .config("sheets.imports.max_cells", 12)
+        .build()
+        .await;
+    let admin = app.acting_as(principal(ADMIN));
+
+    // Five columns.
+    let record = staged(
+        &app,
+        &admin,
+        "wide.csv",
+        b"Email,Name,C,D,E\na@x.io,A\n",
+        &[],
+    )
+    .await;
+    assert_eq!(record["status"], "failed");
+    assert_eq!(record["error"], "The file has more than 4 columns.");
+
+    // Short rows still count at the width of the header: four columns by
+    // four rows is sixteen cells.
+    let record = staged(
+        &app,
+        &admin,
+        "padded.csv",
+        b"Email,Name,C,D\na@x.io\nb@x.io\nc@x.io\n",
+        &[],
+    )
+    .await;
+    assert_eq!(record["status"], "failed");
+    assert_eq!(
+        record["error"],
+        "The file has more than 12 cells (rows times columns)."
+    );
+    let op = operation(
+        &app,
+        Uuid::parse_str(record["operation_id"].as_str().unwrap()).unwrap(),
+    )
+    .await;
+    assert_eq!(op.status, OperationStatus::Failed);
+
+    // Within both limits the import stages as before.
+    let record = staged(&app, &admin, "ok.csv", b"Email,Name\na@x.io,A\n", &[]).await;
+    assert_eq!(record["status"], "staged");
+}
+
+#[tokio::test]
 async fn imports_are_listed_shown_to_permitted_users_and_deleted() {
     let app = support::app().await;
     let admin = app.acting_as(principal(ADMIN));

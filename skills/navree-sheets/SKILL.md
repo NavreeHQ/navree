@@ -258,7 +258,11 @@ assert_eq!(imports.find(import.id).await?.counts.created, 1);
   by the database's unique constraint and the row fails with `insert`'s
   error.
 - Staging holds the whole file in memory: `sheets.imports.max_upload_bytes`
-  bounds memory as well as size.
+  bounds memory as well as size. Rows are padded to the header's width, so
+  `sheets.imports.max_columns` (16,384) and `sheets.imports.max_cells`
+  (10,000,000, rows times columns) bound the table too; a file past either
+  fails the import with a message, and `max_rows` is checked while reading.
+  The file is read on the blocking pool.
 - The `/api/exports` and `/api/imports` routes mount only when the app has
   an authenticator and `sheets.*.routes` is true.
 - With the `i18n` feature, headers come from Fluent (`contacts.email` is the
