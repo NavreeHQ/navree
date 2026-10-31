@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 use zip::ZipArchive;
 use zip::write::SimpleFileOptions;
 
+use crate::service::blocking;
 use crate::{ArchiveError, MediaError};
 
 /// Entries smaller than this are not held to [`ArchiveLimits::max_ratio`]:
@@ -227,7 +228,9 @@ impl Archive {
 
     /// Writes every file under `prefix` on `disk` (directories are
     /// implied by the paths) and returns what was written. The total is
-    /// checked again against `max_total_bytes` while unpacking.
+    /// checked again against `max_total_bytes` while unpacking. Each entry
+    /// is inflated on Tokio's blocking pool, so the task that awaits this
+    /// is free to serve others meanwhile.
     pub async fn extract_to(
         mut self,
         disk: &Disk,
@@ -239,7 +242,13 @@ impl Archive {
             if self.entries[position].is_dir {
                 continue;
             }
-            let contents = self.read_at(position)?;
+            let (archive, contents) = blocking(move || {
+                let contents = self.read_at(position);
+                Ok((self, contents))
+            })
+            .await?;
+            self = archive;
+            let contents = contents?;
             report.bytes += contents.len() as u64;
             if self.limits.max_total_bytes > 0 && report.bytes > self.limits.max_total_bytes {
                 return Err(ArchiveError::TooLarge {

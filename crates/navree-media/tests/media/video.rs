@@ -172,6 +172,42 @@ async fn the_process_runner_kills_a_tool_that_runs_too_long() {
     assert!(started.elapsed() < Duration::from_secs(15));
 }
 
+/// A tool reads files an upload chose, so it must not inherit the server's
+/// secrets: `env` lists exactly what a child receives.
+#[cfg(unix)]
+#[tokio::test]
+async fn the_process_runner_passes_only_the_path_to_the_tool() {
+    let output = ProcessRunner
+        .run("env", &[], Duration::from_secs(30))
+        .await
+        .unwrap();
+    let text = String::from_utf8(output.stdout).unwrap();
+    let names: Vec<&str> = text
+        .lines()
+        .filter_map(|line| line.split_once('=').map(|(name, _)| name))
+        .collect();
+    // `cargo test` itself sets `CARGO_MANIFEST_DIR` and more for this process.
+    assert!(
+        std::env::var_os("CARGO_MANIFEST_DIR").is_some(),
+        "the test process has variables a child could inherit"
+    );
+    assert_eq!(names, vec!["PATH"], "the child inherited: {names:?}");
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn the_process_runner_passes_only_what_the_tool_needs_to_start() {
+    let args = vec!["/c".to_owned(), "set".to_owned()];
+    let output = ProcessRunner
+        .run("cmd", &args, Duration::from_secs(30))
+        .await
+        .unwrap();
+    let text = String::from_utf8_lossy(&output.stdout).to_ascii_lowercase();
+    assert!(std::env::var_os("CARGO_MANIFEST_DIR").is_some());
+    assert!(!text.contains("cargo_manifest_dir"), "{text}");
+    assert!(text.contains("systemroot="), "{text}");
+}
+
 /// The real tools, when FFmpeg is on the PATH (skipped with a notice
 /// otherwise).
 #[tokio::test]

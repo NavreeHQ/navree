@@ -185,6 +185,44 @@ async fn extract_to_writes_every_file_under_the_prefix() {
     );
 }
 
+/// Inflating an archive is CPU work: it must not hold the task that awaits
+/// `extract_to`. On a runtime with one thread, a task spawned beside it
+/// gets to run before the extraction finishes only if the extraction
+/// yields while it inflates.
+#[tokio::test]
+async fn extract_to_lets_other_tasks_run_while_it_inflates() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let mut options = StorageOptions {
+        default: "memory".into(),
+        ..StorageOptions::default()
+    };
+    options.disks.clear();
+    options.disks.insert("memory".into(), DiskConfig::Memory);
+    let storage = Storage::new(&options, b"key").unwrap();
+    let disk = storage.default_disk();
+
+    let page = vec![b'a'; 256 * 1024];
+    let names: Vec<String> = (0..8).map(|i| format!("pages/{i}.html")).collect();
+    let entries: Vec<(&str, &[u8])> = names
+        .iter()
+        .map(|name| (name.as_str(), page.as_slice()))
+        .collect();
+    let archive = Archive::open(zip_of(&entries), &limits()).unwrap();
+
+    let ran = Arc::new(AtomicBool::new(false));
+    let flag = ran.clone();
+    let other = tokio::spawn(async move { flag.store(true, Ordering::SeqCst) });
+    let report = archive.extract_to(&disk, "scorm").await.unwrap();
+    assert_eq!(report.files.len(), 8);
+    assert!(
+        ran.load(Ordering::SeqCst),
+        "a task spawned beside the extraction did not run until it finished"
+    );
+    other.await.unwrap();
+}
+
 #[test]
 fn zip_builder_round_trips_and_refuses_unsafe_names() {
     let mut zip = ZipBuilder::new();

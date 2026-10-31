@@ -100,8 +100,18 @@ pub trait FfmpegRunner: Send + Sync + 'static {
     ) -> BoxFuture<'a, Result<FfmpegOutput, MediaError>>;
 }
 
-/// Runs the tools as child processes: no shell, no standard input, killed
-/// when the timeout passes (or the future is dropped).
+/// The only variables a tool inherits: where to find programs, and on
+/// Windows the system directory its libraries load from. Nothing else of
+/// the server's environment (its keys, database URLs, tokens) reaches a
+/// process that reads files an upload chose.
+#[cfg(not(windows))]
+const INHERITED_ENV: &[&str] = &["PATH"];
+#[cfg(windows)]
+const INHERITED_ENV: &[&str] = &["PATH", "SystemRoot"];
+
+/// Runs the tools as child processes: no shell, no standard input, an
+/// environment cleared down to [`INHERITED_ENV`] (`PATH`, and `SystemRoot`
+/// on Windows), killed when the timeout passes (or the future is dropped).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ProcessRunner;
 
@@ -113,8 +123,14 @@ impl FfmpegRunner for ProcessRunner {
         timeout: Duration,
     ) -> BoxFuture<'a, Result<FfmpegOutput, MediaError>> {
         Box::pin(async move {
-            let child = tokio::process::Command::new(program)
-                .args(args)
+            let mut command = tokio::process::Command::new(program);
+            command.args(args).env_clear();
+            for name in INHERITED_ENV {
+                if let Some(value) = std::env::var_os(name) {
+                    command.env(name, value);
+                }
+            }
+            let child = command
                 .stdin(Stdio::null())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
