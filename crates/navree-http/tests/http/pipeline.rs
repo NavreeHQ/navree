@@ -599,8 +599,8 @@ async fn body_limit_returns_413() {
 fn client_ip_of_a_request_follows_the_proxy_settings() {
     use std::net::{IpAddr, SocketAddr};
 
-    use axum::extract::ConnectInfo;
     use navree_http::ClientIp;
+    use navree_http::serve::ConnectInfo;
 
     let mut request = Request::get("/")
         .header("x-forwarded-for", "203.0.113.9")

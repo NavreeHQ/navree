@@ -186,7 +186,7 @@ Navree's own modules use the same hooks, which shows what each is for:
 <Steps>
 <Step title="The server stops accepting connections">
 
-`serve` lets in-flight requests finish, for up to `http.shutdown_grace_secs` (30 seconds by default). Requests still running after that are dropped, with a warning in the log.
+`serve` closes connections with nothing in flight and lets in-flight requests finish, for up to `http.shutdown_grace_secs` (30 seconds by default). Requests still running after that are dropped, with a warning in the log.
 
 </Step>
 <Step title="Units of work complete">

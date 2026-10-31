@@ -159,6 +159,7 @@ call site: `.map_err(|e| AppError::new(StatusCode::BAD_GATEWAY, "rates_unavailab
 | any other `DbError` or `OrmError` | 500, `internal_error` |
 | missing route / wrong method | 404 `not_found` / 405 `method_not_allowed` with `Allow` |
 | body over `http.body_limit_bytes` (2 MiB) | 413 `payload_too_large` |
+| body stalled or too slow (`http.server.body_read_timeout_ms`, `body_min_bytes_per_sec`) | 408 `request_timeout` |
 | wrong `Content-Type` for `Json` | 415 `unsupported_media_type` |
 | per-IP limit or `#[throttle]` exceeded | 429 `too_many_requests` with `Retry-After` |
 | request over `http.timeout_secs` (30) or `#[timeout]` | 503 `request_timeout` |

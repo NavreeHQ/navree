@@ -6,7 +6,6 @@ use std::convert::Infallible;
 use std::fmt;
 use std::net::SocketAddr;
 use std::sync::{Arc, OnceLock};
-use std::time::Duration;
 
 use navree_contracts::{AuditSink, HealthCheck};
 use navree_db::Db;
@@ -156,11 +155,10 @@ impl Lifecycle for GrpcServer {
                 let server = ctx.get::<GrpcServer>().await?;
                 let http = ctx.try_get::<HttpServer>().await;
                 let token = ctx.shutdown_token();
-                let grace = Duration::from_secs(
-                    ctx.try_get::<HttpOptions>()
-                        .await
-                        .map_or(30, |options| options.shutdown_grace_secs),
-                );
+                let http_options = ctx
+                    .try_get::<HttpOptions>()
+                    .await
+                    .map_or_else(HttpOptions::default, |options| (*options).clone());
                 ctx.tracker().spawn(async move {
                     // Only `serve` binds the HTTP port; other commands
                     // (migrate, routes, ...) never open the gRPC one.
@@ -169,7 +167,9 @@ impl Lifecycle for GrpcServer {
                         _ = http.wait_bound() => {}
                         () = token.cancelled() => return,
                     }
-                    if let Err(error) = listen(&server, edge, addr, token.clone(), grace).await {
+                    if let Err(error) =
+                        listen(&server, edge, addr, token.clone(), http_options).await
+                    {
                         tracing::error!(target: "navree::grpc", %addr, %error, "the gRPC listener failed; stopping the app");
                         token.cancel();
                     }
@@ -340,63 +340,33 @@ async fn build(
     Ok((edge, names))
 }
 
-/// Serves the edge on its own listener until `token` is cancelled, then
-/// lets open calls finish for up to `grace`.
+/// Serves the edge on its own listener, on the HTTP server with the
+/// `http.server` limits, until `token` is cancelled, then lets open calls
+/// finish for up to `http.shutdown_grace_secs`.
 async fn listen(
     server: &GrpcServer,
     edge: Arc<Edge>,
     addr: SocketAddr,
     token: CancellationToken,
-    grace: Duration,
+    mut options: HttpOptions,
 ) -> Result<(), BoxError> {
-    use hyper_util::rt::{TokioExecutor, TokioIo};
-    use hyper_util::server::conn::auto::Builder;
-
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .map_err(|error| format!("cannot listen on {addr}: {error}"))?;
     let local = listener.local_addr()?;
     server.bound.send_replace(Some(local));
     tracing::info!(target: "navree::grpc", addr = %local, "gRPC listening on {local}");
-    let concurrency = server.options.concurrency_per_connection;
-    let graceful = hyper_util::server::graceful::GracefulShutdown::new();
-    loop {
-        tokio::select! {
-            accepted = listener.accept() => {
-                let (stream, peer) = match accepted {
-                    Ok(accepted) => accepted,
-                    Err(error) => {
-                        tracing::warn!(target: "navree::grpc", %error, "accepting a connection failed");
-                        continue;
-                    }
-                };
-                let edge = edge.clone();
-                let watcher = graceful.watcher();
-                tokio::spawn(async move {
-                    let service = hyper::service::service_fn(move |request: http::Request<hyper::body::Incoming>| {
-                        let edge = edge.clone();
-                        async move {
-                            Ok::<_, Infallible>(edge.handle_from(request.map(Body::new), peer).await)
-                        }
-                    });
-                    let mut builder = Builder::new(TokioExecutor::new());
-                    builder.http2().max_concurrent_streams(concurrency);
-                    let connection = builder.serve_connection(TokioIo::new(stream), service);
-                    if let Err(error) = watcher.watch(connection).await {
-                        tracing::debug!(target: "navree::grpc", %error, "connection closed with an error");
-                    }
-                });
-            }
-            () = token.cancelled() => break,
-        }
-    }
-    tokio::select! {
-        () = graceful.shutdown() => {}
-        () = tokio::time::sleep(grace) => {
-            tracing::warn!(target: "navree::grpc", ?grace, "open calls did not finish within the grace period; closing them");
-        }
-    }
+    options.server.http2_max_concurrent_streams = server.options.concurrency_per_connection;
+    let service = tower::service_fn(move |request: http::Request<Body>| {
+        let edge = edge.clone();
+        async move { Ok::<_, Infallible>(edge.handle_from(request).await) }
+    });
+    let served = navree_http::serve(listener, service)
+        .options(&options)
+        .with_graceful_shutdown(token.cancelled_owned())
+        .await;
     server.bound.send_replace(None);
+    served?;
     tracing::info!(target: "navree::grpc", "gRPC listener stopped");
     Ok(())
 }

@@ -268,7 +268,7 @@ hosts = ["app.example.com"]                # your own hosts get certificates too
 
 Try the setup against Let's Encrypt's staging directory first (`directory_url = "https://acme-staging-v02.api.letsencrypt.org/directory"`, the constant `LETS_ENCRYPT_STAGING`). A private CA, or a test CA, goes in `directory_url` with its root in `domains.acme.ca_file`.
 
-To serve HTTPS from a server of your own, leave `https_addr` unset and hand it the certificates: `domains.certificates()` is a `DomainCertificates`, a rustls `ResolvesServerCert`, and `server_config()` builds a `rustls::ServerConfig` around it (ring, TLS 1.2 and 1.3, ALPN `h2` and `http/1.1`). `HttpsServer::bind(&ctx, addr)` and `serve()` run the module's listener yourself.
+To serve HTTPS from a server of your own, leave `https_addr` unset and hand it the certificates: `domains.certificates()` is a `DomainCertificates`, a rustls `ResolvesServerCert`, and `server_config()` builds a `rustls::ServerConfig` around it (ring, TLS 1.2 and 1.3, ALPN `h2` and `http/1.1`). `HttpsServer::bind(&ctx, addr)` and `serve()` run the module's listener yourself; it's the same server as `serve`, so the [connection limits](/docs/getting-started/deployment/#connection-limits) apply, and a TLS handshake holds a slot under `http.server.max_connections` and has `http.server.header_read_timeout_ms` to finish.
 
 ### Off
 

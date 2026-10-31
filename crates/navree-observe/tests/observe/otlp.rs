@@ -87,7 +87,7 @@ async fn receiver(received: Received) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     tokio::spawn(async move {
-        axum::serve(listener, router).await.unwrap();
+        navree_http::serve(listener, router).await.unwrap();
     });
     format!("http://{address}")
 }

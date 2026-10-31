@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 use std::future::Future;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::Duration;
 
@@ -13,6 +14,7 @@ use http::{Method, StatusCode, Uri};
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState, RequestId};
 use navree_db::{Db, Uow};
 use navree_http::extract::FromRequestParts;
+use navree_http::serve::BodyReadLimit;
 use navree_http::{
     AppError, Authenticator, ClientIp, ErrorMapper, PathParams, RouteAuthorizer, RouteMeta,
 };
@@ -134,9 +136,12 @@ pub(crate) struct CallInfo {
     pub(crate) runtime: Arc<Runtime>,
     pub(crate) service: Arc<ServiceRuntime>,
     pub(crate) path: Arc<str>,
-    /// When the method must have returned: the client's `grpc-timeout`, or
-    /// `grpc.timeout_secs`.
+    /// When the method must have returned: the client's `grpc-timeout`, up
+    /// to `grpc.timeout_secs`.
     pub(crate) deadline: Instant,
+    /// Set when [`call`] takes over: from then on it keeps the deadline, and
+    /// rolls back what the method opened.
+    pub(crate) in_the_pipeline: Arc<AtomicBool>,
 }
 
 /// The error of a call: an [`AppError`] (mapped to a status) or a
@@ -229,6 +234,7 @@ where
             "this service is not served by GrpcModule: register it with m.grpc_service::<T>()",
         ));
     };
+    info.in_the_pipeline.store(true, Ordering::Relaxed);
     let Some(ctx) = info.runtime.ctx.upgrade() else {
         return Err(Status::unavailable("the server is shutting down"));
     };
@@ -455,6 +461,17 @@ fn security_entry(parts: &Parts, meta: &RouteMeta, check: &str) -> AuditEntry {
 async fn record_security(sink: &dyn AuditSink, entry: AuditEntry) {
     if let Err(error) = sink.record(entry).await {
         tracing::warn!(target: "navree::audit", %error, "could not write a security audit entry");
+    }
+}
+
+/// A method that takes a stream is starting: its body is a conversation, and
+/// sits silent between messages, so the pace of a request body no longer
+/// applies. Runs after the access check, and only for such a method: before
+/// that the body is an upload like any other, and a unary request is read
+/// whole before tonic calls the method, so it never gets here unread.
+pub fn lift_body_limit(parts: &Parts) {
+    if let Some(limit) = parts.extensions.get::<BodyReadLimit>() {
+        limit.lift();
     }
 }
 

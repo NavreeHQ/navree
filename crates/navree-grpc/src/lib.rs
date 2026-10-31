@@ -19,7 +19,7 @@
 //! - **The call pipeline.** Request id and tracing, the interceptor, the
 //!   app's `Authenticator`, the access check, guards and the route
 //!   authorizer (`#[can(.., from = "id")]` loads the record named by the
-//!   message's `id` field), the deadline (`grpc-timeout`, or
+//!   message's `id` field), the deadline (`grpc-timeout`, up to
 //!   `grpc.timeout_secs`), then the method in a unit of work that commits
 //!   when it returns `Ok`. Errors become the status of the same meaning
 //!   ([`status_from_error`]); `?` on a `Status` in an HTTP handler gives the
@@ -88,6 +88,7 @@ pub mod __private {
     pub use tonic::service::interceptor::InterceptedService;
 
     pub use crate::call::{
-        CallError, RecordKey, RecordKeyFn, call, extract, finish, returns, validate,
+        CallError, RecordKey, RecordKeyFn, call, extract, finish, lift_body_limit, returns,
+        validate,
     };
 }

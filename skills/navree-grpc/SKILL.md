@@ -362,12 +362,18 @@ an HTTP handler or a gRPC method gives the AppError of the same meaning
 - gRPC needs HTTP/2 end to end: behind a proxy use h2c to the app (Caddy
   `reverse_proxy h2c://127.0.0.1:8080`).
 - `grpc.addr` opens only with `serve`, after the HTTP port; other content
-  types there get 415. `GrpcServer::wait_bound()` gives its address.
+  types there get 415. `GrpcServer::wait_bound()` gives its address. It runs
+  on the HTTP server with the `http.server` limits; client and bidirectional
+  streaming methods lift the body pace once a call passes its access check
+  (a hand-written service lifts `BodyReadLimit` itself), and idle connections
+  get a GOAWAY.
 - `GrpcChannels::get(name)` is a 500 naming `grpc.clients.<name>` when it is
   not configured. Metadata you set on a request wins over forwarded values.
-- Client deadlines (`grpc-timeout`) cut the method off and roll back; the
-  default is `grpc.timeout_secs`, else `http.timeout_secs`. Streams end with
-  DEADLINE_EXCEEDED at the client's deadline and UNAVAILABLE on shutdown.
+- The deadline is the client's `grpc-timeout`, up to `grpc.timeout_secs`, else
+  `http.timeout_secs`: a client can shorten it, not extend it. It counts from
+  the call's arrival, so reading a unary message is inside it, and it cuts the
+  method off and rolls back. Response streams end with DEADLINE_EXCEEDED at the
+  client's deadline and UNAVAILABLE on shutdown.
 - Reflection is off in release builds unless `grpc.reflection = true`.
 - `CurrentWorkspace` reads `x-workspace` metadata (header resolution);
   `WorkspaceUow` under database isolation is not available in gRPC calls.

@@ -42,7 +42,8 @@ pub struct GrpcOptions {
     /// Serve `grpc.health.v1.Health`, answered from the app's readiness
     /// checks (default `true`).
     pub health: bool,
-    /// The deadline of a call whose client sets none, in seconds (default:
+    /// The deadline of a call whose client sets none, and the longest one a
+    /// client's `grpc-timeout` can ask for, in seconds (default:
     /// `http.timeout_secs`).
     pub timeout_secs: Option<u64>,
     /// The largest message received or sent, in bytes (default 4 MiB).
@@ -73,8 +74,8 @@ impl Default for GrpcOptions {
 }
 
 impl GrpcOptions {
-    /// The deadline of calls without `grpc-timeout`: `timeout_secs`, else
-    /// `http_timeout_secs`.
+    /// The deadline of calls without `grpc-timeout`, and the longest one
+    /// that header can ask for: `timeout_secs`, else `http_timeout_secs`.
     pub fn default_timeout(&self, http_timeout_secs: u64) -> Duration {
         Duration::from_secs(self.timeout_secs.unwrap_or(http_timeout_secs))
     }

@@ -187,7 +187,8 @@ let app = TestApp::builder()
 - `ProbeFake`: `expires(host, at)`, `fail(host, reason)`.
 - `DnsProviderFake`: `records(kind, name)`, `fail_next`.
 - `HttpsServer::bind(app.ctx(), "127.0.0.1:0")` then `serve()` serves the
-  app over TLS in a test.
+  app over TLS in a test, with the `http.server` limits (handshakes count
+  toward `max_connections`).
 
 ## Gotchas
 

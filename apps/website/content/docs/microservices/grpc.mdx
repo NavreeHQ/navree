@@ -237,7 +237,7 @@ web = true
 connect = true
 ```
 
-The separate listener opens with `serve`, once the HTTP port is listening (other commands, such as `migrate`, never open it), speaks HTTP/1.1 and HTTP/2, and answers `415` to anything that isn't gRPC, gRPC-Web or Connect.
+The separate listener opens with `serve`, once the HTTP port is listening (other commands, such as `migrate`, never open it), speaks HTTP/1.1 and HTTP/2, and answers `415` to anything that isn't gRPC, gRPC-Web or Connect. It runs on the same server as the HTTP port, with the same [connection limits](/docs/getting-started/deployment/#connection-limits); `grpc.concurrency_per_connection` replaces `http.server.http2_max_concurrent_streams`. Client and bidirectional streaming methods of a `#[grpc_service]` stop being held to the request body's pace once a call has passed its access check, because a stream sits silent between messages. Everything else keeps the pace, including the message of a unary or server streaming call, which is read before the method runs, so a client can't hold a connection by not sending it. A `#[public]` streaming method passes that check with no credentials, so anyone can hold a bidirectional one open: authenticate streams unless you mean that. A service written by hand lifts the pace itself, with `navree::http::serve::BodyReadLimit` from the request's extensions. An idle connection gets a GOAWAY after `http.server.idle_timeout_ms`, and clients reconnect for the next call.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -246,7 +246,7 @@ The separate listener opens with `serve`, once the HTTP port is listening (other
 | `grpc.connect` | `true` | Accept the Connect protocol, with protobuf or JSON. |
 | `grpc.reflection` | `true` in debug builds | Serve server reflection (`v1` and `v1alpha`) for the descriptor sets registered with `m.grpc_descriptors(..)`. |
 | `grpc.health` | `true` | Serve `grpc.health.v1.Health`, from the app's readiness checks. |
-| `grpc.timeout_secs` | `http.timeout_secs` | The deadline of a call whose client sets none. |
+| `grpc.timeout_secs` | `http.timeout_secs` | The deadline of a call whose client sets none, and the longest one a client can ask for. |
 | `grpc.max_message_bytes` | `4194304` | The largest message, received or sent. |
 | `grpc.concurrency_per_connection` | `256` | Calls in flight on one HTTP/2 connection of the `grpc.addr` listener. On the shared port, the HTTP server's settings apply. |
 
@@ -259,7 +259,7 @@ Inject `GrpcServer` to see what runs: `services()` lists the registered service 
 Every call, unary or streaming, goes through these steps before your method runs:
 
 1. **Request id and tracing.** `x-request-id` from the metadata, or a new one, returned in the response metadata; the call runs in a `grpc` span with its path, request id, user and the caller's `traceparent`. Each finished call is logged with its code and latency, and counted in the `grpc_server_handled_total` and `grpc_server_handling_seconds` metrics.
-2. **The deadline**: the client's `grpc-timeout`, or `grpc.timeout_secs`, counted from the call's arrival.
+2. **The deadline**: the client's `grpc-timeout`, up to `grpc.timeout_secs`, counted from the call's arrival, so reading a unary message is inside it.
 3. **Interceptors** you attached to the service, if any.
 4. **Authentication** of the `authorization` metadata, by the app's `dyn Authenticator`: a bearer token works exactly as on HTTP. Invalid credentials end the call with `UNAUTHENTICATED`, and so does a missing one on a method that isn't `#[public]`.
 5. **Guards** (`#[guard(..)]` on the impl block or the method), which see the metadata as request headers.
@@ -375,7 +375,7 @@ When the app shuts down, open streams end with `UNAVAILABLE`; when the client's 
 
 ## Deadlines and metadata
 
-A client's `grpc-timeout` is the call's deadline. When it passes, the method is cut off, its unit of work rolls back, and the client gets `DEADLINE_EXCEEDED`. Calls without one get `grpc.timeout_secs`. Calls your method makes through a [Navree channel](#calling-other-grpc-services) inherit the remaining time.
+A client's `grpc-timeout` is the call's deadline, up to `grpc.timeout_secs`: a client can shorten it, not extend it, and calls without one get `grpc.timeout_secs`. It counts from the call's arrival. A client still sending a unary message when it passes gets `DEADLINE_EXCEEDED` before anything has run; once your method is running, it is cut off, its unit of work rolls back, and the client gets `DEADLINE_EXCEEDED`. A response stream your method has returned is not held to `grpc.timeout_secs`: it runs until it ends, or until the client's own `grpc-timeout`. Calls your method makes through a [Navree channel](#calling-other-grpc-services) inherit the remaining time.
 
 Navree reads and writes these metadata keys:
 
@@ -385,7 +385,7 @@ Navree reads and writes these metadata keys:
 | `x-request-id` | in and out | The request id; generated when missing, always returned. |
 | `traceparent`, `tracestate` | in | The caller's trace context, recorded on the call's span and passed on by Navree channels. |
 | `x-workspace` | in | The [workspace](/docs/workspaces/resolution/) of the call, when header resolution is on. `CurrentWorkspace` reads it. |
-| `grpc-timeout` | in | The deadline. |
+| `grpc-timeout` | in | The deadline, up to `grpc.timeout_secs`. |
 
 Read any other metadata from the request: `request.metadata().get("x-client-version")`.
 

@@ -23,6 +23,7 @@ use prost_reflect::{
     DescriptorPool, DeserializeOptions, DynamicMessage, MessageDescriptor, MethodDescriptor,
     SerializeOptions,
 };
+use tokio::time::Instant;
 use tonic::{Code, Status};
 use tower::ServiceExt;
 
@@ -99,22 +100,26 @@ fn is_protocol_header(name: &HeaderName) -> bool {
         || name.starts_with("grpc-")
 }
 
-/// The gRPC request for a Connect request's parts and body.
+/// The `connect-timeout-ms` header.
+fn connect_timeout(headers: &HeaderMap) -> Result<Option<Duration>, Status> {
+    let Some(value) = headers.get("connect-timeout-ms") else {
+        return Ok(None);
+    };
+    value
+        .to_str()
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .map(|ms| Some(Duration::from_millis(ms)))
+        .ok_or_else(|| Status::invalid_argument("connect-timeout-ms is not a number"))
+}
+
+/// The gRPC request for a Connect request's parts and body, with `timeout`
+/// left for the call.
 fn grpc_request(
     parts: http::request::Parts,
     body: tonic::body::Body,
-) -> Result<Request<tonic::body::Body>, Status> {
-    let timeout = match parts.headers.get("connect-timeout-ms") {
-        Some(value) => Some(
-            value
-                .to_str()
-                .ok()
-                .and_then(|v| v.parse::<u64>().ok())
-                .map(Duration::from_millis)
-                .ok_or_else(|| Status::invalid_argument("connect-timeout-ms is not a number"))?,
-        ),
-        None => None,
-    };
+    timeout: Option<Duration>,
+) -> Request<tonic::body::Body> {
     let mut request = Request::new(body);
     *request.method_mut() = Method::POST;
     *request.uri_mut() = parts.uri;
@@ -134,7 +139,7 @@ fn grpc_request(
         headers.insert("grpc-timeout", value);
     }
     *request.extensions_mut() = parts.extensions;
-    Ok(request)
+    request
 }
 
 /// Whether the request is compressed with anything but `identity`.
@@ -180,9 +185,14 @@ async fn try_unary(
         Codec::Json => Some(connect.json_method(&path)?),
         Codec::Proto => None,
     };
-    let bytes = Limited::new(body, connect.max_message_bytes)
-        .collect()
+    // The whole call has this long, reading the message included: nothing
+    // else times a client sending it just above the pace of a request body.
+    let timeout = core.timeout(connect_timeout(&parts.headers)?);
+    let arrival = Instant::now();
+    let read = Limited::new(body, connect.max_message_bytes).collect();
+    let bytes = tokio::time::timeout(timeout, read)
         .await
+        .map_err(|_| Status::deadline_exceeded("Deadline exceeded"))?
         .map_err(|_| {
             Status::resource_exhausted(format!(
                 "the message is larger than {} bytes",
@@ -197,7 +207,8 @@ async fn try_unary(
     let grpc = grpc_request(
         parts,
         tonic::body::Body::new(http_body_util::Full::new(frame(0, &message))),
-    )?;
+        Some(timeout.saturating_sub(arrival.elapsed())),
+    );
     let response = core
         .oneshot(grpc)
         .await
@@ -400,10 +411,11 @@ pub(crate) async fn streaming(
         }),
         None => tonic::body::Body::new(body),
     };
-    let grpc = match grpc_request(parts, body) {
-        Ok(grpc) => grpc,
+    let timeout = match connect_timeout(&parts.headers) {
+        Ok(timeout) => timeout,
         Err(status) => return failed(status),
     };
+    let grpc = grpc_request(parts, body, timeout);
     let response = core
         .oneshot(grpc)
         .await

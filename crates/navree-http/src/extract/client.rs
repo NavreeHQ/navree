@@ -3,11 +3,11 @@
 use std::convert::Infallible;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
-use axum::extract::ConnectInfo;
 use http::HeaderMap;
 use http::request::Parts;
 
 use super::FromRequestParts;
+use crate::serve::ConnectInfo;
 
 /// The client IP address. The pipeline computes it once per request (from
 /// the connection, or from `X-Forwarded-For` / `X-Real-IP` when the peer is
@@ -81,7 +81,7 @@ impl ProxyTrust {
     }
 
     /// Whether the headers of a request from `peer` are believed.
-    fn trusts(&self, peer: Option<IpAddr>) -> bool {
+    pub(crate) fn trusts(&self, peer: Option<IpAddr>) -> bool {
         self.any || peer.is_some_and(|peer| self.is_proxy(peer))
     }
 

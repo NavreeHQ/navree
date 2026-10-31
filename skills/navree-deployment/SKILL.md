@@ -64,10 +64,11 @@ APP_OBSERVE__METRICS_TOKEN=a-long-random-string   # /metrics is public otherwise
 |---|---|
 | `APP_KEY` | without it encryption fails and every restart signs users out; different keys break tokens and relayed broadcasts |
 | `database.migrate_on_boot=false` | a failing migration should stop the deploy, not the server |
-| `http.trusted_proxies` | otherwise every client shares the proxy's IP for the per-IP limit (600/min) and the login throttle |
+| `http.trusted_proxies` | otherwise every client shares the proxy's IP for the per-IP limit (600/min) and the login throttle, and the proxy counts against `http.server.max_connections_per_ip` (256), so a busy proxy has its connections closed |
 | `app.url` | Navree doesn't build URLs from `Host` or `X-Forwarded-Proto` |
 | `observe.metrics_token` | protect `GET /metrics` (or block it at the proxy) |
 | `auth.registration` | turn public sign-up off if accounts are created by admins |
+| `http.server.max_connections` | 10,000 by default, WebSockets included: keep it below the open-file limit (`LimitNOFILE`), raise both for many sockets |
 
 ## Processes
 
@@ -77,7 +78,8 @@ APP_OBSERVE__METRICS_TOKEN=a-long-random-string   # /metrics is public otherwise
 | queue worker | `./myapp queue:work` | jobs, queued mail, queued listeners or notifications |
 | scheduler | `./myapp schedule:work` (or `./myapp schedule:run` from cron every minute) | `ScheduleModule` with tasks |
 
-On SIGTERM: `serve` drains requests for `http.shutdown_grace_secs` (30 s),
+On SIGTERM: `serve` closes idle connections and drains requests for
+`http.shutdown_grace_secs` (30 s),
 `queue:work` finishes running jobs, then background tasks and shutdown hooks
 get up to 30 s each. Give the process manager a stop timeout above that
 (`TimeoutStopSec=100`). Restart workers after every deploy (they keep the
@@ -152,6 +154,43 @@ server {
 ```
 
 Serve over HTTPS: Navree sends `Strict-Transport-Security` by default.
+
+## Connection limits
+
+The server bounds what a client can hold, on `http.addr`,
+`domains.acme.https_addr` and `grpc.addr`. Defaults suit production:
+
+| Key (`http.server.`) | Default | Limit |
+|---|---|---|
+| `header_read_timeout_ms` | 10000 | connect to end of head; first HTTP/2 stream; next HTTP/1 head from its first byte (a head pipelined after a request with a body has `idle_timeout_ms`) |
+| `idle_timeout_ms` | 75000 | no request in flight (GOAWAY first on HTTP/2); keep above the load balancer's idle timeout |
+| `body_read_timeout_ms` | 20000 | a stall while a handler reads the body: 408, connection closes (on HTTP/2 only the stream ends) |
+| `body_min_bytes_per_sec` | 256 | average body pace; each byte earns back `1 / rate` s of the timeout |
+| `http2_keep_alive_interval_ms` / `_timeout_ms` | 30000 / 20000 | pings; an unanswered one closes the connection |
+| `http2_max_concurrent_streams` | 200 | requests open on one connection |
+| `max_connections` | 10000 | open connections, WebSockets and TLS handshakes included |
+| `max_connections_per_ip` | 256 | open connections per client address (IPv6: per `http.rate_limit_ipv6_prefix` network); over it the connection is closed; it limits what one address can hold and does not stop a client with many addresses; peers in `http.trusted_proxies` are not counted, so behind a proxy list it there or raise this |
+| `max_header_bytes` | 32768 | head size (431); at least 8192 |
+| `max_headers` | 100 | headers on a request, either protocol (431, before the app); on HTTP/2 a browser's cookies can count one each |
+| `write_stall_timeout_ms` | 60000 | a response that stops moving: the socket takes nothing (connection closes), or HTTP/2 flow control holds it back (stream reset, connection stays); each byte moved starts it over; does not reach an HTTP/2 WebSocket held back by flow control (use `upgraded_idle_timeout_ms`, or a timeout on the handler's writes) |
+| `upgraded_idle_timeout_ms` | off | a WebSocket with no bytes from its client (the server's own heartbeat doesn't count, so the client must answer it); on HTTP/2, once only upgraded streams are left, only `DATA` counting |
+
+At the cap clients wait, nearly all in the listen backlog, and are served as
+slots free up, so bursts are absorbed. For a client that waits and has sent
+something, the longest-idle connection closes, one per client, and a connection
+that has only started its next head counts as idle; a client that has sent
+nothing closes nothing. Slots of clients that haven't finished a request come
+back at the limits above. Look for
+`http.server.max_connections reached` and
+`http.server.max_connections_per_ip reached` in the log. `Option` keys are off
+with `None` in code; `0` fails the boot.
+
+WebSockets are not bounded by default: a quiet one can be healthy. Check who
+may open one in the handler, give the protocol a heartbeat, and set
+`upgraded_idle_timeout_ms` above it to have the server close silent ones (the
+handler must be reading). A body that isn't an upload calls `lift()` on the
+request's `navree::http::serve::BodyReadLimit`; client and bidirectional gRPC
+streaming methods do once a call has passed its access check.
 
 ## Health checks
 

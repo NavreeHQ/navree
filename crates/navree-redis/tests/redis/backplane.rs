@@ -113,12 +113,9 @@ async fn node(t: &TestRedis) -> Node {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(
-        axum::serve(
-            listener,
-            router.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .with_graceful_shutdown(app.ctx().shutdown_token().cancelled_owned())
-        .into_future(),
+        navree_http::serve(listener, router)
+            .with_graceful_shutdown(app.ctx().shutdown_token().cancelled_owned())
+            .into_future(),
     );
     let realtime = app.ctx().get::<Realtime>().await.unwrap();
     Node {

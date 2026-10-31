@@ -5,6 +5,7 @@
 #[path = "../support/mod.rs"]
 mod support;
 
+mod attacks;
 mod channels;
 mod metrics;
 mod pipeline;

@@ -49,7 +49,16 @@ compression = true
 
 [http.cors]
 allowed_origins = ["http://localhost:3000"]
+
+[http.server]
+header_read_timeout_ms = 10000
+idle_timeout_ms = 75000
+max_connections = 10000
+max_connections_per_ip = 256
+write_stall_timeout_ms = 60000
 ```
+
+`http.server` holds the limits on connections, which the server enforces before a request reaches these layers. See [Connection limits](/docs/getting-started/deployment/#connection-limits).
 
 ## Adding a global layer
 

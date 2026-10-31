@@ -91,9 +91,10 @@ Check these before the first deploy:
 | `database.migrate_on_boot` | New apps set it to `true` in `config/app.toml`. In production, run `migrate` as a deploy step instead, so a failed migration stops the deploy, not the server. |
 | `database.url` | A new app's `config/app.toml` sets a TimescaleDB URL for development, and the environment variable overrides it. Left out altogether, it is `sqlite://storage/app.db?mode=rwc`, which needs the `sqlite` feature: an app built without the driver of its URL stops at boot with a message naming the feature. Build with `postgres` (TimescaleDB and PostgreSQL) or `mysql`. See [Database: getting started](/docs/database/getting-started/). |
 | `http.addr` | `127.0.0.1:8080` by default. Use `0.0.0.0:8080` when the proxy runs on another host or in another container. |
-| `http.trusted_proxies` | Without it, behind a proxy every request seems to come from the proxy's address, so the per-IP rate limit (600 requests a minute by default) and the login throttle apply to all your users together. |
+| `http.trusted_proxies` | Without it, behind a proxy every request seems to come from the proxy's address, so the per-IP rate limit (600 requests a minute by default) and the login throttle apply to all your users together, and the proxy's connections count against `http.server.max_connections_per_ip`. |
 | `app.url` | Absolute links in mail, such as email verification, use it. Navree doesn't read `X-Forwarded-Proto` or `Host` to build URLs. |
 | `observe.metrics_token` | `GET /metrics` is public by default. Set a token, or block the path at the proxy. |
+| `http.server.max_connections` | 10,000 at once by default, WebSockets included. Keep it below the process's open-file limit, and raise both for an app with many sockets. See [Connection limits](#connection-limits). |
 
 Keep the environment file readable only by root and the app's user: it holds the application key and the passwords. Navree never logs them; `Config`'s debug output masks secret-looking keys and URL passwords.
 
@@ -135,7 +136,7 @@ Instead of `schedule:work`, you can run `planner schedule:run` from cron every m
 
 All of them stop cleanly on `SIGTERM` (or Ctrl-C):
 
-- `serve` stops accepting connections and waits up to `http.shutdown_grace_secs` (30 seconds) for requests in flight.
+- `serve` stops accepting connections, closes connections with nothing in flight, and waits up to `http.shutdown_grace_secs` (30 seconds) for requests in flight.
 - `queue:work` finishes the jobs it is running (up to `queue.workers`, 4 by default) and takes no new ones.
 - Then the app waits up to 30 seconds for background tasks, and up to 30 seconds more for shutdown hooks, before it exits.
 
@@ -286,6 +287,50 @@ With `APP_HTTP__TRUSTED_PROXIES=127.0.0.1,::1`, Navree takes the client's addres
 `http.trust_proxy = true` trusts the headers from every peer. Use it only when nothing can reach the app except through the proxy; `trusted_proxies` is safer.
 
 Navree sends security headers by default, including `Strict-Transport-Security`, which tells browsers to use HTTPS only. Serve the app over HTTPS, as above. See [CORS and security headers](/docs/basics/cors-and-security-headers/).
+
+## Connection limits
+
+A client can hold a connection without ever finishing a request: sending its headers a byte at a time, stopping halfway through a body, connecting and saying nothing, or asking for a response and not reading it. The server bounds all of these, with or without a proxy in front, on every listener the app opens (`http.addr`, `domains.acme.https_addr` and `grpc.addr`). The defaults are meant for production, so most apps set nothing.
+
+| Setting | Default | What it limits |
+|---|---|---|
+| `http.server.header_read_timeout_ms` | `10000` | Connecting and sending a whole request head, TLS handshake apart. A client that takes longer is disconnected, however steadily it sends. On HTTP/2, a new connection has this long to open its first stream. On a keep-alive connection, the time starts at the first byte of the head. A head pipelined after a request with a body can't be seen until it's complete, so it has `idle_timeout_ms` instead. |
+| `http.server.idle_timeout_ms` | `75000` | How long a connection stays open with no request in flight. HTTP/2 connections get a GOAWAY first, and nothing a client sends extends it. |
+| `http.server.body_read_timeout_ms` | `20000` | How long a handler reading a request body waits on the client. A stall this long is a 408, and the connection closes. On HTTP/2 only the stream ends. |
+| `http.server.body_min_bytes_per_sec` | `256` | The slowest a body may arrive, on average, so a client dripping bytes runs out of `body_read_timeout_ms` even though it never stalls for long. |
+| `http.server.http2_keep_alive_interval_ms` | `30000` | How often a quiet HTTP/2 connection is pinged, which finds dead peers while a request is in flight. |
+| `http.server.http2_keep_alive_timeout_ms` | `20000` | How long a client has to answer a ping before the connection closes. |
+| `http.server.http2_max_concurrent_streams` | `200` | Requests open at once on one HTTP/2 connection. |
+| `http.server.max_connections` | `10000` | Connections open at once, WebSockets and TLS handshakes included. |
+| `http.server.max_connections_per_ip` | `256` | Connections open at once from one client address. It limits what one address can hold, not a client with many addresses. Reverse proxies you list in `http.trusted_proxies` aren't counted. |
+| `http.server.max_header_bytes` | `32768` | The largest request head: the request line and headers on HTTP/1, the header list on HTTP/2, where each header also counts 32 bytes. Over it, the answer is a 431, though a client still sending when the connection closes may see a reset instead. At least 8192. |
+| `http.server.max_headers` | `100` | Headers on a request. Over it, the answer is a 431 and the request never reaches your app. On HTTP/2 a browser may send each cookie as a header of its own, and each counts. |
+| `http.server.write_stall_timeout_ms` | `60000` | How long a response may go without moving because the client has stopped taking it. |
+| `http.server.upgraded_idle_timeout_ms` | Off | How long an upgraded connection, such as a WebSocket, may go with no bytes from its client. |
+
+```toml title="config/app.toml"
+[http.server]
+idle_timeout_ms = 120000
+max_connections = 50000
+```
+
+Or from the environment: `APP_HTTP__SERVER__MAX_CONNECTIONS=50000`. The time a handler takes isn't here: `http.timeout_secs` covers that.
+
+**At the cap** new clients aren't refused: they wait, nearly all of them in the operating system's listen backlog, nothing is read from them, and they're served in turn as connections close. A burst over the cap is absorbed this way. For a client that's waiting and has sent something, the connection that has been idle the longest closes, the way it would at its idle timeout, so keep-alive connections can't keep anyone out. A connection that has only started its next request counts as idle, so that can't keep anyone out either. Each waiting client costs one connection at most, and a client that has sent nothing costs none: it has `header_read_timeout_ms` to wait, and gives way to newer clients once a good many are waiting. Connections that haven't finished a request lose their slots at the limits above, within seconds. WebSockets are the exception, below. A client still waiting when the backlog overflows, or when its own timeout runs out, gets a connection error. The log says `http.server.max_connections reached` at most once a minute.
+
+**One address** can hold `max_connections_per_ip` connections. That limits what one address can hold: it doesn't stop a client with many addresses, which `max_connections` is then the limit for. IPv4 clients are counted per address and IPv6 clients per network, by `http.rate_limit_ipv6_prefix`, as the rate limits are. A connection over the limit is closed at once rather than queued, because the server only learns the address by accepting it. The log says `http.server.max_connections_per_ip reached` at most once a minute.
+
+A proxy's connections all come from one address, so peers in `http.trusted_proxies` aren't counted, and with `http.trust_proxy = true` no peer is. Behind a proxy, list it, or raise this limit: it needs to be listed for the rate limits anyway, and a busy proxy that isn't hits this limit and its requests fail. The limit sees the socket's peer, so it can't tell the clients behind a proxy apart: limit those at the proxy. The default of 256 leaves room for an office sharing one address, but a large carrier NAT or a backend that isn't a proxy and opens more connections than that needs a higher limit, or `None`.
+
+**A response on its way** isn't idle, so neither `idle_timeout_ms` nor a waiting client cuts it off, even once your handler has finished. **A response nobody reads** can't hold a connection, though. When the socket takes nothing for `write_stall_timeout_ms`, the connection closes. When an HTTP/2 client stops one response with flow control, the socket is fine, so only that stream is reset, and the rest of the connection carries on. Each byte the socket takes starts the limit over, and on HTTP/2 each 16 KiB the client takes from a response, so a slow download that keeps moving is never cut off. A client that pauses for longer loses the response, including a video player that stops reading while it's paused, and has to ask for the rest. A gRPC client that stops reading a stream that long gets the same.
+
+**Behind a load balancer**, keep `idle_timeout_ms` above the balancer's idle timeout (often 60 seconds), so the balancer closes first and never sends a request into a connection the app is closing.
+
+**WebSockets** are the one thing these limits don't bound by default. A WebSocket keeps its slot for as long as it's open, and no limit above ends a quiet one, because it may well be healthy and the server can't tell it from a client doing nothing. So check who may open one in the handler, and give the protocol a heartbeat that drops a peer that stops answering. To have the server close silent ones, set `upgraded_idle_timeout_ms` above that heartbeat: past it with no bytes from the client, the socket closes and the handler's read fails, so the handler must be reading. Only the client's bytes count, so the client has to answer the heartbeat: the server's own pings don't keep a silent client's socket open. On HTTP/2, a WebSocket is one stream of its connection. The timeout starts once nothing else is left on the connection, only `DATA` frames count, not keep-alive pings or the other frames that look after a connection, and a connection whose WebSockets have closed goes back to `idle_timeout_ms`. `write_stall_timeout_ms` doesn't reach an HTTP/2 WebSocket that the client holds back with flow control, because the server can't tell a write waiting for the client from a socket with nothing to say. `upgraded_idle_timeout_ms` ends one whose client has gone silent, and a handler that writes to a client it doesn't trust should put a timeout on its writes.
+
+**A request body that isn't an upload** can opt out of the pace: `serve` puts a `navree::http::serve::BodyReadLimit` in the extensions of a request with a body, and `lift()` ends the limit for that request. Client and bidirectional streaming gRPC methods do this once a call has passed its access check.
+
+The keys of type `Option<..>` (all but the HTTP/2 timeout and streams and the two header limits) are turned off the way [`http.per_ip_rate_limit`](/docs/basics/rate-limiting/#the-per-ip-limit) is, with `None` in code: `0` fails the boot.
 
 ## Health checks
 

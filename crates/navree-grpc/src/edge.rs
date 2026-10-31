@@ -5,13 +5,14 @@
 
 use std::collections::HashSet;
 use std::convert::Infallible;
-use std::net::SocketAddr;
-use std::pin::Pin;
+use std::future::Future;
+use std::pin::{Pin, pin};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use axum::extract::{ConnectInfo, State};
+use axum::extract::State;
 use axum::middleware::{Next, from_fn_with_state};
 use futures_util::future::BoxFuture;
 use http::header::{CONTENT_TYPE, HeaderName, HeaderValue};
@@ -136,6 +137,20 @@ impl GrpcCore {
             }),
         }
     }
+
+    /// See [`CoreInner::timeout`].
+    pub(crate) fn timeout(&self, client: Option<Duration>) -> Duration {
+        self.inner.timeout(client)
+    }
+}
+
+impl CoreInner {
+    /// How long a call may take: what the client asked for, up to the
+    /// server's own deadline.
+    fn timeout(&self, client: Option<Duration>) -> Duration {
+        let server = self.runtime.default_timeout;
+        client.map_or(server, |client| client.min(server))
+    }
 }
 
 impl Service<Request<tonic::body::Body>> for GrpcCore {
@@ -152,26 +167,25 @@ impl Service<Request<tonic::body::Body>> for GrpcCore {
         Box::pin(async move {
             let path: Arc<str> = request.uri().path().into();
             let now = Instant::now();
-            let client_deadline = grpc_timeout(request.headers()).map(|timeout| now + timeout);
-            let deadline = client_deadline.unwrap_or(now + inner.runtime.default_timeout);
+            let client_timeout = grpc_timeout(request.headers());
+            let client_deadline = client_timeout.map(|timeout| now + timeout);
+            let deadline = now + inner.timeout(client_timeout);
+            let in_the_pipeline = Arc::new(AtomicBool::new(false));
             if let Some(service) = service_of(&path).and_then(|name| inner.services.get(name)) {
                 request.extensions_mut().insert(CallInfo {
                     runtime: inner.runtime.clone(),
                     service: service.clone(),
                     path: path.clone(),
                     deadline,
+                    in_the_pipeline: in_the_pipeline.clone(),
                 });
             }
             let request_id = request
                 .extensions()
                 .get::<RequestId>()
                 .map(|id| id.as_str().to_owned());
-            let response = inner
-                .routes
-                .clone()
-                .oneshot(request)
-                .await
-                .unwrap_or_else(|never| match never {});
+            let routed = inner.routes.clone().oneshot(request);
+            let response = until_the_head(routed, deadline, &in_the_pipeline).await;
             let header_code = Status::from_header_map(response.headers()).map(|s| s.code());
             let log = CallLog {
                 start: now,
@@ -190,6 +204,28 @@ impl Service<Request<tonic::body::Body>> for GrpcCore {
             }))
         })
     }
+}
+
+/// The response head of `routed`, by `deadline`. tonic reads a unary message
+/// before it calls the method, so until the pipeline starts nothing else
+/// times the call: not authenticated yet, a client sending it just above the
+/// pace of a request body would otherwise hold its slot for hours. Once the
+/// pipeline has started it answers at the deadline itself, after rolling back
+/// what the method opened, and cutting that off here would lose the rollback.
+/// Services outside the pipeline (health, reflection) are held to the
+/// deadline until their head.
+async fn until_the_head(
+    routed: impl Future<Output = Result<Response<tonic::body::Body>, Infallible>>,
+    deadline: Instant,
+    in_the_pipeline: &AtomicBool,
+) -> Response<tonic::body::Body> {
+    let mut routed = pin!(routed);
+    let response = match tokio::time::timeout_at(deadline, routed.as_mut()).await {
+        Ok(response) => response,
+        Err(_) if in_the_pipeline.load(Ordering::Relaxed) => routed.await,
+        Err(_) => return Status::deadline_exceeded("Deadline exceeded").into_http(),
+    };
+    response.unwrap_or_else(|never| match never {})
 }
 
 /// What the log line of a finished call reports.
@@ -344,8 +380,9 @@ impl Service<Request<Body>> for Dispatch {
 
     fn call(&mut self, request: Request<Body>) -> Self::Future {
         let this = self.clone();
+        let kind = classify(&request);
         Box::pin(async move {
-            Ok(match (classify(&request), this.web, this.connect) {
+            Ok(match (kind, this.web, this.connect) {
                 (Kind::Grpc, _, _) => this
                     .core
                     .oneshot(request.map(tonic::body::Body::new))
@@ -484,13 +521,8 @@ impl Edge {
         response
     }
 
-    /// Serves one connection's request from `peer` (the separate listener).
-    pub(crate) async fn handle_from(
-        &self,
-        mut request: Request<Body>,
-        peer: SocketAddr,
-    ) -> Response<Body> {
-        request.extensions_mut().insert(ConnectInfo(peer));
+    /// Serves one request of the separate listener.
+    pub(crate) async fn handle_from(&self, request: Request<Body>) -> Response<Body> {
         if classify(&request) == Kind::Other {
             return plain(
                 StatusCode::UNSUPPORTED_MEDIA_TYPE,

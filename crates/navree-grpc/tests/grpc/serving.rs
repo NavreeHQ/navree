@@ -11,10 +11,13 @@ use navree_grpc::{
     Code, GrpcMethod, GrpcModule, GrpcServer, GrpcService, ModuleBuilderGrpcExt, Request, Response,
     ServiceLimits, Status,
 };
-use navree_http::{HttpModule, HttpServer};
+use navree_http::{Authenticator, HttpModule, HttpServer};
 use navree_kernel::{BoxFuture, Factory, Module, ModuleBuilder, Navree};
 use navree_macros::injectable;
 use navree_testing::TestApp;
+use prost::Message as _;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 use tonic::service::Routes;
 use tonic_health::pb::HealthCheckRequest;
 use tonic_health::pb::health_check_response::ServingStatus;
@@ -24,10 +27,12 @@ use tonic_reflection::pb::v1::server_reflection_client::ServerReflectionClient;
 use tonic_reflection::pb::v1::server_reflection_request::MessageRequest;
 use tonic_reflection::pb::v1::server_reflection_response::MessageResponse;
 
+use crate::support::pb::deals::DealEvent;
+use crate::support::pb::deals::deals_client::DealsClient;
 use crate::support::pb::ping::ping_client::PingClient;
 use crate::support::pb::ping::ping_server::{Ping, PingServer};
 use crate::support::pb::ping::{PingReply, PingRequest};
-use crate::support::{GuardedPingModule, PingModule, deals_app, ping_app};
+use crate::support::{BearerAuthenticator, GuardedPingModule, PingModule, deals_app, ping_app};
 
 fn ping(message: &str) -> PingRequest {
     PingRequest {
@@ -354,11 +359,194 @@ async fn grpc_addr_gives_grpc_a_listener_of_its_own() {
         );
     })
     .await;
-    assert_eq!(
-        app.get::<GrpcServer>().await.local_addr(),
-        None,
-        "the listener stopped"
+    // The listener's own task stops it, after `serve` has returned.
+    let server = app.get::<GrpcServer>().await;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while server.local_addr().is_some() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the listener stopped");
+}
+
+/// The listener runs on the HTTP server, so a client that connects and says
+/// nothing is cut off here as on the HTTP port.
+#[tokio::test]
+async fn the_grpc_port_holds_clients_to_the_http_server_limits() {
+    use tokio::io::AsyncReadExt;
+
+    let app = ping_app()
+        .config("http.addr", "127.0.0.1:0")
+        .config("grpc.addr", "127.0.0.1:0")
+        .config("http.shutdown_grace_secs", 1)
+        .config("http.server.header_read_timeout_ms", 200)
+        .build()
+        .await;
+    serving(&app, async {
+        app.get::<HttpServer>().await.wait_bound().await;
+        let addr = tokio::time::timeout(
+            Duration::from_secs(5),
+            app.get::<GrpcServer>().await.wait_bound(),
+        )
+        .await
+        .expect("the gRPC listener starts with serve");
+        let mut silent = tokio::net::TcpStream::connect(addr).await.unwrap();
+        let mut rest = Vec::new();
+        let read = tokio::time::timeout(Duration::from_secs(30), silent.read_to_end(&mut rest))
+            .await
+            .expect("the silent client is disconnected");
+        assert!(read.is_err() || rest.is_empty(), "{rest:?}");
+    })
+    .await;
+}
+
+/// Sends two messages on one stream, with a silence between them much
+/// longer than `http.server.body_read_timeout_ms`.
+async fn a_stream_survives_a_silence(addr: std::net::SocketAddr) {
+    let channel = tonic::transport::Endpoint::from_shared(format!("http://{addr}"))
+        .unwrap()
+        .connect()
+        .await
+        .unwrap();
+    let event = |stage: &str| DealEvent {
+        deal_id: "1".to_owned(),
+        stage: stage.to_owned(),
+    };
+    let (sender, messages) = mpsc::channel(1);
+    let mut request = tonic::Request::new(ReceiverStream::new(messages));
+    request.metadata_mut().insert(
+        "authorization",
+        format!("Bearer {}", uuid::Uuid::now_v7()).parse().unwrap(),
     );
+    let mut client = DealsClient::new(channel);
+    let mut echoed = client.echo(request).await.unwrap().into_inner();
+    sender.send(event("first")).await.unwrap();
+    assert_eq!(echoed.message().await.unwrap(), Some(event("first")));
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    sender.send(event("second")).await.unwrap();
+    assert_eq!(echoed.message().await.unwrap(), Some(event("second")));
+    drop(sender);
+    assert_eq!(echoed.message().await.unwrap(), None);
+}
+
+/// A stream sits silent between messages: it is not held to the pace of a
+/// request body.
+#[tokio::test]
+async fn a_silent_stream_stays_open_on_the_http_port() {
+    let app = deals_app()
+        .override_value::<dyn Authenticator>(Arc::new(BearerAuthenticator))
+        .config("http.addr", "127.0.0.1:0")
+        .config("http.shutdown_grace_secs", 1)
+        .config("http.server.body_read_timeout_ms", 100)
+        .build()
+        .await;
+    serving(&app, async {
+        let addr = app.get::<HttpServer>().await.wait_bound().await;
+        a_stream_survives_a_silence(addr).await;
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn a_silent_stream_stays_open_on_a_listener_of_its_own() {
+    let app = deals_app()
+        .override_value::<dyn Authenticator>(Arc::new(BearerAuthenticator))
+        .config("http.addr", "127.0.0.1:0")
+        .config("grpc.addr", "127.0.0.1:0")
+        .config("http.shutdown_grace_secs", 1)
+        .config("http.server.body_read_timeout_ms", 100)
+        .build()
+        .await;
+    serving(&app, async {
+        app.get::<HttpServer>().await.wait_bound().await;
+        let addr = tokio::time::timeout(
+            Duration::from_secs(5),
+            app.get::<GrpcServer>().await.wait_bound(),
+        )
+        .await
+        .expect("the gRPC listener starts with serve");
+        a_stream_survives_a_silence(addr).await;
+    })
+    .await;
+}
+
+/// One enveloped message of a stream, as a chunk of a request body.
+fn message_chunk(stage: &str) -> Vec<u8> {
+    let message = DealEvent {
+        deal_id: "1".to_owned(),
+        stage: stage.to_owned(),
+    }
+    .encode_to_vec();
+    let mut envelope = vec![0];
+    envelope.extend_from_slice(&(message.len() as u32).to_be_bytes());
+    envelope.extend_from_slice(&message);
+    let mut chunk = format!("{:x}\r\n", envelope.len()).into_bytes();
+    chunk.extend_from_slice(&envelope);
+    chunk.extend_from_slice(b"\r\n");
+    chunk
+}
+
+/// Reads until `expected` has arrived.
+async fn answered(client: &mut tokio::net::TcpStream, expected: &str) {
+    use tokio::io::AsyncReadExt;
+
+    let mut seen = Vec::new();
+    let mut chunk = [0_u8; 1024];
+    tokio::time::timeout(Duration::from_secs(30), async {
+        while !String::from_utf8_lossy(&seen).contains(expected) {
+            let read = client.read(&mut chunk).await.expect("the stream stays");
+            assert_ne!(
+                read,
+                0,
+                "the stream ended: {}",
+                String::from_utf8_lossy(&seen)
+            );
+            seen.extend_from_slice(&chunk[..read]);
+        }
+    })
+    .await
+    .expect("the message is echoed");
+}
+
+/// Two messages on one call over HTTP/1, with a silence between them much
+/// longer than `http.server.body_read_timeout_ms`.
+async fn a_call_survives_a_silence(addr: std::net::SocketAddr, content_type: &str) {
+    use tokio::io::AsyncWriteExt;
+
+    let mut client = tokio::net::TcpStream::connect(addr).await.unwrap();
+    let head = format!(
+        "POST /crm.deals.v1.Deals/Echo HTTP/1.1\r\n\
+        Host: test\r\n\
+        Content-Type: {content_type}\r\n\
+        Authorization: Bearer {}\r\n\
+        Transfer-Encoding: chunked\r\n\r\n",
+        uuid::Uuid::now_v7()
+    );
+    client.write_all(head.as_bytes()).await.unwrap();
+    client.write_all(&message_chunk("first")).await.unwrap();
+    answered(&mut client, "first").await;
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    client.write_all(&message_chunk("second")).await.unwrap();
+    answered(&mut client, "second").await;
+}
+
+/// The lift comes from the method, so the other protocols get it too.
+#[tokio::test]
+async fn a_silent_stream_stays_open_over_connect_and_grpc_web() {
+    let app = deals_app()
+        .override_value::<dyn Authenticator>(Arc::new(BearerAuthenticator))
+        .config("http.addr", "127.0.0.1:0")
+        .config("http.shutdown_grace_secs", 1)
+        .config("http.server.body_read_timeout_ms", 100)
+        .build()
+        .await;
+    serving(&app, async {
+        let addr = app.get::<HttpServer>().await.wait_bound().await;
+        a_call_survives_a_silence(addr, "application/connect+proto").await;
+        a_call_survives_a_silence(addr, "application/grpc-web+proto").await;
+    })
+    .await;
 }
 
 #[tokio::test]

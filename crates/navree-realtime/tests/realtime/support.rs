@@ -182,14 +182,9 @@ impl Server {
         let addr = listener.local_addr().unwrap();
         let token = app.ctx().shutdown_token();
         tokio::spawn(
-            axum::serve(
-                listener,
-                router
-                    .clone()
-                    .into_make_service_with_connect_info::<SocketAddr>(),
-            )
-            .with_graceful_shutdown(token.cancelled_owned())
-            .into_future(),
+            navree_http::serve(listener, router.clone())
+                .with_graceful_shutdown(token.cancelled_owned())
+                .into_future(),
         );
         let realtime = app.ctx().get::<Realtime>().await.expect("Realtime");
         Server {

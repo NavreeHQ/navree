@@ -1,10 +1,8 @@
 //! [`HttpModule`], the [`HttpServer`] provider and the `serve`, `routes`,
 //! `down` and `up` commands.
 
-use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Duration;
 
 use axum::extract::rejection::{FormRejection, JsonRejection, PathRejection, QueryRejection};
 use navree_config::{Config, ModuleBuilderConfigExt};
@@ -21,7 +19,7 @@ use crate::{
     AppError, HttpOptions, ModuleBuilderHttpExt, RouteMeta, UrlSigner, build_router, route_table,
 };
 
-/// The HTTP module: Axum server, default layer stack, JSON errors,
+/// The HTTP module: the server, default layer stack, JSON errors,
 /// controllers. Global; provides and exports [`HttpOptions`], [`HttpServer`]
 /// and [`UrlSigner`]; registers the commands `serve`, `routes`, `down` and
 /// `up`; and checks every route at boot (access declarations, duplicate
@@ -283,27 +281,13 @@ async fn serve(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
     server.set_bound(Some(local));
     tracing::info!(target: "navree::http", addr = %local, "listening on http://{local}");
 
-    let token = ctx.shutdown_token();
-    let grace = Duration::from_secs(server.options().shutdown_grace_secs);
-    let serving = axum::serve(
-        listener,
-        router.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .with_graceful_shutdown(token.clone().cancelled_owned())
-    .into_future();
-    let result = tokio::select! {
-        result = serving => result.map_err(BoxError::from),
-        () = async {
-            token.cancelled().await;
-            tokio::time::sleep(grace).await;
-        } => {
-            tracing::warn!(target: "navree::http", ?grace, "in-flight requests did not finish within the grace period; closing them");
-            Ok(())
-        }
-    };
+    let result = crate::serve(listener, router)
+        .options(server.options())
+        .with_graceful_shutdown(ctx.shutdown_token().cancelled_owned())
+        .await;
     server.set_bound(None);
     tracing::info!(target: "navree::http", "server stopped");
-    result
+    Ok(result?)
 }
 
 /// `routes [--json]`: prints the route table.

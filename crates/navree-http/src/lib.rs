@@ -28,6 +28,9 @@
 //!   [`LayerSlot::Context`] → router → per-route:
 //!   authentication → per-user throttle → [`Guard`]s → [`RouteAuthorizer`]
 //!   → route timeout → handler → audit action.
+//! - [`serve()`] runs an app on a listener: HTTP/1 and HTTP/2 on hyper, with
+//!   graceful shutdown and the limits of [`ServerOptions`], so a client
+//!   cannot hold a connection without finishing a request.
 //! - Every error is an [`AppError`] rendered in one JSON shape, as
 //!   `application/json`: `{"statusCode": 404, "message": "Not Found",
 //!   "error": "Not Found", "code": "not_found"}`; `code` is one of the
@@ -102,6 +105,7 @@ pub mod response;
 mod route;
 mod router;
 pub mod routing;
+pub mod serve;
 mod signed;
 
 pub use auth::{Authenticator, CurrentPrincipal, Guard, RouteAuthorizer};
@@ -114,9 +118,10 @@ pub use limiter::{KeyedRateLimiter, Limited};
 pub use maintenance::{MaintenanceInfo, MaintenanceMode};
 pub use module::{HttpModule, HttpServer};
 pub use network::{DEFAULT_IPV6_PREFIX, rate_limit_key};
-pub use options::{CorsOptions, ErrorOptions, HttpOptions};
+pub use options::{CorsOptions, ErrorOptions, HttpOptions, ServerOptions};
 pub use response::{Created, IntoResponse, NoContent, Response};
 pub use route::{AccessSpec, ApiMeta, CanSpec, RouteDef, RouteMeta, SchemaFn, Throttle, schema_fn};
 pub use router::{RouteErrors, build_router, route_table};
 pub use routing::PathParams;
+pub use serve::serve;
 pub use signed::{UrlSigner, ValidSignature};

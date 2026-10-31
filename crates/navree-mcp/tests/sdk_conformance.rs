@@ -11,7 +11,6 @@
 //! cargo test -p navree-mcp --test sdk_conformance -- --ignored --nocapture
 //! ```
 
-use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -144,12 +143,7 @@ async fn the_official_typescript_sdk_speaks_to_the_server() {
     let http = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let http_addr = http.local_addr().unwrap();
     tokio::spawn(async move {
-        axum::serve(
-            http,
-            router.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await
-        .unwrap();
+        navree_http::serve(http, router).await.unwrap();
     });
 
     // The stdio transport, one connection per client, as `mcp:serve` runs

@@ -48,7 +48,7 @@ Then `on_init` runs for every provider that registered lifecycle hooks, followed
 
 ### Serving
 
-Finally the command runs. `serve` builds the router, binds `http.addr` (`127.0.0.1:8080` by default, or `--addr HOST:PORT`) and logs `listening on http://127.0.0.1:8080`. From here, every request goes through the pipeline below, until a shutdown signal starts the [graceful shutdown](/docs/architecture/lifecycle-hooks/#graceful-shutdown).
+Finally the command runs. `serve` builds the router, binds `http.addr` (`127.0.0.1:8080` by default, or `--addr HOST:PORT`) and logs `listening on http://127.0.0.1:8080`. From here, every request goes through the pipeline below, until a shutdown signal starts the [graceful shutdown](/docs/architecture/lifecycle-hooks/#graceful-shutdown). Before that, the server itself bounds what a client can hold: a head that takes too long or a connection left idle never reaches the pipeline. See [Connection limits](/docs/getting-started/deployment/#connection-limits).
 
 ## The life of a request
 

@@ -371,6 +371,10 @@ Install the CLI from the Git repository, and let new apps depend on the reposito
 
 The sections below, from The framework to Design decisions, list what Navree includes. They describe the code of the current release; the 0.2.0 notes above say what changed since 0.1.0.
 
+## Connection limits
+
+The `serve` command runs on `navree::http::serve`, which bounds what a client can hold (slow headers, slow bodies, idle connections, responses it stops reading, unanswered HTTP/2 pings, the number of connections in all and per address) with the safe defaults of [`http.server`](/docs/getting-started/deployment/#connection-limits). A full server closes its longest-idle connection for a client that's waiting and has sent something. Behind a reverse proxy, list it in `http.trusted_proxies`, or its connections count against `http.server.max_connections_per_ip` (256). WebSockets are bounded only if you set `http.server.upgraded_idle_timeout_ms`. A request head over 32 KiB or with over 100 headers is a 431, and the peer's address is `navree::http::serve::ConnectInfo`. A gRPC client's `grpc-timeout` can shorten `grpc.timeout_secs` but not extend it, so raise that key if a method needs longer than the default of `http.timeout_secs`.
+
 ## The framework
 
 ### Foundation

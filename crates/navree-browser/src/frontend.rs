@@ -388,7 +388,7 @@ impl Proxy {
             };
             let _ = bound.send(listener.local_addr());
             let app = axum::Router::new().fallback(forward).with_state(state);
-            let _ = axum::serve(listener, app).await;
+            let _ = navree_http::serve(listener, app).await;
         });
         let addr = address
             .await

@@ -11,9 +11,9 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-# The previous router: its body and response types, its serve loop and its
-# middleware, until the move takes them to navree-http's own; the crates not
-# yet moved still use its extractors.
+# The previous router: its body and response types and its middleware, until
+# the move takes them to navree-http's own; the crates not yet moved still
+# use its extractors.
 axum = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
@@ -23,7 +23,12 @@ futures-util = { workspace = true }
 hex = { workspace = true }
 hmac = { workspace = true }
 http = { workspace = true }
+http-body = { workspace = true }
 http-body-util = { workspace = true }
+# The server: the HTTP/1 and HTTP/2 wire protocols, and the protocol detection
+# and connection builder on top of them.
+hyper = { workspace = true, features = ["http1", "http2", "server"] }
+hyper-util = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-kernel = { workspace = true }
@@ -36,6 +41,8 @@ serde_json = { workspace = true }
 serde_path_to_error = { workspace = true }
 sha2 = { workspace = true }
 tokio = { workspace = true }
+# Tells a server's connections that it is shutting down.
+tokio-util = { workspace = true }
 # The per-route pipeline is a Tower layer of its own.
 tower = { workspace = true }
 tower-http = { workspace = true }
@@ -50,6 +57,8 @@ criterion = { workspace = true }
 # previous matcher, the urlencoded parser and deserializer, percent-decoding.
 form_urlencoded = { workspace = true }
 http-body-util = { workspace = true }
+# The HTTP/2 client of the server's tests (tests/serve).
+hyper = { workspace = true, features = ["client", "http1", "http2"] }
 matchit = { workspace = true }
 percent-encoding = { workspace = true }
 proptest = { workspace = true }
@@ -57,6 +66,8 @@ serde_json = { workspace = true }
 serde_urlencoded = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
+# The WebSocket client of the server's tests.
+tokio-tungstenite = { workspace = true }
 tower = { workspace = true }
 # Only the CORS differential test compares against tower-http's CorsLayer;
 # dev-dependency features do not reach normal builds.

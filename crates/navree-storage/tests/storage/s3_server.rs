@@ -75,7 +75,7 @@ impl S3Server {
         let url = format!("http://{}", listener.local_addr().unwrap());
         let app = Router::new().fallback(handle).with_state(state.clone());
         let task = tokio::spawn(async move {
-            axum::serve(listener, app).await.unwrap();
+            navree_http::serve(listener, app).await.unwrap();
         });
         Self { url, state, task }
     }

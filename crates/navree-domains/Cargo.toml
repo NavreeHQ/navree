@@ -69,6 +69,9 @@ uuid = { workspace = true }
 x509-parser = { workspace = true }
 
 [dev-dependencies]
+# HTTP/2 over TLS against the HTTPS listener.
+hyper = { workspace = true, features = ["client", "http2"] }
+hyper-util = { workspace = true }
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
 navree-access = { workspace = true }

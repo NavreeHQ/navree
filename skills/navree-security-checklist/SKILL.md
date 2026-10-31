@@ -88,6 +88,15 @@ Go through it in order; each item says how to check.
 
 - [ ] `http.per_ip_rate_limit` is on (600/min default; never `null` in
   production). Expensive or abusable routes have `#[throttle(limit, per)]`.
+- [ ] The `http.server` limits are on (never `null` for
+  `header_read_timeout_ms`, `idle_timeout_ms`, `body_read_timeout_ms`,
+  `write_stall_timeout_ms`, `max_connections` or `max_connections_per_ip` in
+  production), and `BodyReadLimit::lift()` appears only on routes whose body
+  is a stream, after the caller is authenticated: they stop clients holding
+  connections.
+- [ ] WebSocket routes authenticate the caller and have a heartbeat. The
+  server does not bound a quiet socket unless
+  `http.server.upgraded_idle_timeout_ms` is set.
 - [ ] Behind a proxy, load balancer or BFF: `http.trusted_proxies` lists
   it (else everyone shares one IP and one login throttle). Avoid
   `http.trust_proxy = true` unless nothing reaches the app directly.

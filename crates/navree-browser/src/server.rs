@@ -2,6 +2,7 @@
 
 use std::net::SocketAddr;
 
+use navree_http::HttpOptions;
 use navree_kernel::AppContext;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
@@ -37,6 +38,9 @@ impl TestServer {
         let router = navree_http::build_router(ctx).await.map_err(|error| {
             BrowserError::Server(format!("cannot build the app's router: {error}"))
         })?;
+        let options = ctx.get::<HttpOptions>().await.map_err(|error| {
+            BrowserError::Server(format!("cannot read the HTTP options: {error}"))
+        })?;
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .map_err(|e| BrowserError::io("cannot listen on 127.0.0.1", e))?;
@@ -45,8 +49,8 @@ impl TestServer {
             .map_err(|e| BrowserError::io("cannot read the listening address", e))?;
         let (shutdown, stop) = oneshot::channel::<()>();
         let task = tokio::spawn(async move {
-            let service = router.into_make_service_with_connect_info::<SocketAddr>();
-            let _ = axum::serve(listener, service)
+            let _ = navree_http::serve(listener, router)
+                .options(&options)
                 .with_graceful_shutdown(async {
                     let _ = stop.await;
                 })

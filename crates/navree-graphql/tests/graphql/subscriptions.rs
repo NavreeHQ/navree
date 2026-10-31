@@ -171,12 +171,9 @@ impl Server {
         let addr = listener.local_addr().unwrap();
         let token = app.ctx().shutdown_token();
         tokio::spawn(
-            axum::serve(
-                listener,
-                router.into_make_service_with_connect_info::<SocketAddr>(),
-            )
-            .with_graceful_shutdown(token.cancelled_owned())
-            .into_future(),
+            navree_http::serve(listener, router)
+                .with_graceful_shutdown(token.cancelled_owned())
+                .into_future(),
         );
         Server { app, addr }
     }

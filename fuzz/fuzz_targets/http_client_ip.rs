@@ -9,9 +9,9 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
 use arbitrary::Arbitrary;
-use axum::extract::ConnectInfo;
 use http::{HeaderMap, HeaderName, HeaderValue};
 use libfuzzer_sys::fuzz_target;
+use navree_http::serve::ConnectInfo;
 use navree_http::{ClientIp, HttpOptions, rate_limit_key};
 
 #[derive(Debug, Arbitrary)]

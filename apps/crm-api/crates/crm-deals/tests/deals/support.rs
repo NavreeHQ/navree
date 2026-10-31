@@ -167,12 +167,9 @@ pub async fn serve(crm: &TestCrm) -> SocketAddr {
     let addr = listener.local_addr().expect("the bound address");
     let shutdown = crm.ctx().shutdown_token();
     tokio::spawn(
-        navree::axum::serve(
-            listener,
-            router.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .with_graceful_shutdown(shutdown.cancelled_owned())
-        .into_future(),
+        navree::http::serve(listener, router)
+            .with_graceful_shutdown(shutdown.cancelled_owned())
+            .into_future(),
     );
     addr
 }

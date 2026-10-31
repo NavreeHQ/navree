@@ -4,13 +4,13 @@
 use std::net::{Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
-use axum::extract::ConnectInfo;
 use http::header::{AUTHORIZATION, HeaderName, HeaderValue};
 use http::{Method, Request};
 use http_body_util::BodyExt;
 use navree_auth::{JwtService, TokenType};
 use navree_contracts::RequestId;
 use navree_http::body::Body;
+use navree_http::serve::ConnectInfo;
 use serde::{Deserialize, Serialize};
 use tower::ServiceExt;
 use uuid::Uuid;

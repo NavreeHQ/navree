@@ -244,6 +244,8 @@ A request body may be at most `http.body_limit_bytes`, 2 MiB by default. The lim
 - **Before the handler:** a `Content-Length` over the limit is refused with a 413 before any byte is read: `"The request body must not exceed 2097152 bytes."`.
 - **While reading:** a body sent without a length (chunked) is cut off once it passes the limit, and the extractor answers 413: `"Failed to buffer the request body: length limit exceeded"`.
 
+A body must also keep moving. A client that stalls for `http.server.body_read_timeout_ms` (20 seconds), or averages less than `http.server.body_min_bytes_per_sec` (256), gets a 408, `"Failed to buffer the request body: it arrived too slowly"`, and the connection closes (on HTTP/2, only the stream ends). Only time spent waiting on the client counts, so a slow handler costs it nothing. See [Connection limits](/docs/getting-started/deployment/#connection-limits).
+
 ```toml title="config/app.toml"
 [http]
 body_limit_bytes = 2097152

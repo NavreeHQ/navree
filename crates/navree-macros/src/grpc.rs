@@ -490,6 +490,11 @@ fn wrapper(method: &Method, grpc: &TokenStream) -> TokenStream {
         _ => quote!(::core::option::Option::None),
     };
 
+    // The body runs once the call has passed its access check.
+    let lift = method
+        .message_ty
+        .is_none()
+        .then(|| quote!(#grpc::__private::lift_body_limit(&#parts);));
     let (first_pat, first_ty, valid) = &method.first;
     let first = if *valid {
         quote_spanned! {first_ty.span()=>
@@ -514,6 +519,7 @@ fn wrapper(method: &Method, grpc: &TokenStream) -> TokenStream {
                 #name,
                 #record_key,
                 move |#request, mut #parts: #grpc::__private::Parts| async move {
+                    #lift
                     #first
                     #(#extractors)*
                     let _ = &mut #parts;
