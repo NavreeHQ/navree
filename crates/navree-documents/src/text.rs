@@ -1103,11 +1103,18 @@ struct MapShape {
 
 /// The shape of the ToUnicode map `cmap`, or the cap it is over. The
 /// memory counts [`MAP_TEXT_MEMORY`] for each byte of the map; for each
-/// line, two ranges of [`MAP_RANGE_MEMORY`] holding the largest text any
-/// line maps to (a range lopdf keeps, and the copy a later line splitting
-/// it makes) and [`MAP_CODE_MEMORY`]; for each code a range covers,
+/// line, two ranges of [`MAP_RANGE_MEMORY`]; for each code a range covers,
 /// [`MAP_CODE_MEMORY`] and its text (codes of one or two bytes are at most
-/// 65,792, however many lines cover them); and each text of a list.
+/// 65,792, however many lines cover them); each text of a list; and the
+/// copies lopdf makes of a text longer than one unit.
+///
+/// lopdf copies a range's text when a later line lands inside the range
+/// and splits it: two copies are made and the original dropped. Each line
+/// splits one range at most, and a range can be split no more often than
+/// it has codes (ranges that join because they map to the same text, no
+/// more often than their codes together). So the splits, as many as the
+/// lines at most, are given to the longest texts first, each counting two
+/// copies, plus two copies of the longest made in passing.
 ///
 /// The map is read as lopdf reads a map it accepts, so every count is
 /// exact for those; a map lopdf refuses builds nothing. Comments run to the
@@ -1131,6 +1138,9 @@ fn map_shape(cmap: &[u8]) -> Result<MapShape, DocumentsError> {
     let mut line: Vec<Hex> = Vec::with_capacity(2);
     let mut list: Option<(usize, u64, u64)> = None;
     let (mut text_most, mut code_memory) = (0u64, 0u64);
+    // The texts of more than one unit that lines map to, with the codes
+    // of each line: what lopdf may copy, and how often.
+    let mut copied: Vec<(u64, u64)> = Vec::new();
     let (mut short, mut short_most, mut long) = (0u64, 0u64, 0u64);
     let mut at = 0;
     while let Some(token) = next_token(cmap, &mut at) {
@@ -1159,7 +1169,11 @@ fn map_shape(cmap: &[u8]) -> Result<MapShape, DocumentsError> {
                 line.push(hex);
                 if line.len() == 2 {
                     let units = line[1].digits / 4;
-                    text_most = text_most.max(text_memory(units));
+                    let value = text_memory(units);
+                    text_most = text_most.max(value);
+                    if value > 0 {
+                        copied.push((value, 1));
+                    }
                     code_memory = code_memory.saturating_add(MAP_CODE_MEMORY + 2 * units);
                     line.clear();
                     shape.lines += 1;
@@ -1183,8 +1197,11 @@ fn map_shape(cmap: &[u8]) -> Result<MapShape, DocumentsError> {
                 None => {
                     let units = hex.digits / 4;
                     let value = text_memory(units);
-                    range_codes(&line, units, &mut short, &mut short_most, &mut long);
+                    let codes = range_codes(&line, units, &mut short, &mut short_most, &mut long);
                     text_most = text_most.max(value);
+                    if value > 0 {
+                        copied.push((value, codes));
+                    }
                     line.clear();
                     shape.lines += 1;
                 }
@@ -1194,8 +1211,9 @@ fn map_shape(cmap: &[u8]) -> Result<MapShape, DocumentsError> {
             }
             Token::Close if section == In::Ranges => {
                 if let Some((_, memory, most)) = list.take() {
-                    range_codes(&line, most, &mut short, &mut short_most, &mut long);
+                    let codes = range_codes(&line, most, &mut short, &mut short_most, &mut long);
                     text_most = text_most.max(memory);
+                    copied.push((memory, codes));
                     code_memory = code_memory.saturating_add(memory);
                     line.clear();
                     shape.lines += 1;
@@ -1209,9 +1227,20 @@ fn map_shape(cmap: &[u8]) -> Result<MapShape, DocumentsError> {
     }
     let lines = shape.lines as u64;
     let short = short.min(SHORT_CODES.saturating_mul(short_most));
+    copied.sort_unstable_by_key(|&(value, _)| std::cmp::Reverse(value));
+    let (mut copies, mut splits) = (2 * text_most, lines);
+    for (value, codes) in copied {
+        let these = splits.min(codes.max(1));
+        copies = copies.saturating_add((2 * value).saturating_mul(these));
+        splits -= these;
+        if splits == 0 {
+            break;
+        }
+    }
     shape.memory = MAP_TEXT_MEMORY
         .saturating_mul(cmap.len() as u64)
-        .saturating_add((2 * lines).saturating_mul(MAP_RANGE_MEMORY.saturating_add(text_most)))
+        .saturating_add((2 * lines).saturating_mul(MAP_RANGE_MEMORY))
+        .saturating_add(copies)
         .saturating_add(code_memory)
         .saturating_add(short)
         .saturating_add(long);
@@ -1220,26 +1249,35 @@ fn map_shape(cmap: &[u8]) -> Result<MapShape, DocumentsError> {
 
 /// Counts the codes of the range `line` (its first and last code), each
 /// with its text of `units` UTF-16 units: `short` for codes of one or two
-/// bytes (and the most one costs), `long` for longer ones.
-fn range_codes(line: &[Hex], units: u64, short: &mut u64, short_most: &mut u64, long: &mut u64) {
+/// bytes (and the most one costs), `long` for longer ones. Returns how many
+/// codes it has: none when lopdf would not read it, and then no map at all.
+fn range_codes(
+    line: &[Hex],
+    units: u64,
+    short: &mut u64,
+    short_most: &mut u64,
+    long: &mut u64,
+) -> u64 {
     let [low, high] = line else {
-        return;
+        return 0;
     };
     // lopdf reads a range only between codes of one length, in order.
     let (Some(first), Some(last)) = (low.code, high.code) else {
-        return;
+        return 0;
     };
     if low.digits != high.digits || !matches!(low.digits, 2 | 4 | 6 | 8) || last < first {
-        return;
+        return 0;
     }
+    let codes = last - first + 1;
     let per_code = MAP_CODE_MEMORY + 2 * units;
-    let codes = (last - first + 1).saturating_mul(per_code);
+    let memory = codes.saturating_mul(per_code);
     if low.digits <= 4 {
-        *short = short.saturating_add(codes);
+        *short = short.saturating_add(memory);
         *short_most = (*short_most).max(per_code);
     } else {
-        *long = long.saturating_add(codes);
+        *long = long.saturating_add(memory);
     }
+    codes
 }
 
 fn map_over(what: &str, cap: usize) -> DocumentsError {
@@ -2930,5 +2968,53 @@ mod tests {
             ..Limits::default()
         };
         too_large(page_texts_within(&document, dropped));
+    }
+
+    /// One range of `<0000>` to `<00FF>` with a list of `texts` texts, then
+    /// `codes` single codes after it.
+    fn one_list_and_codes(texts: usize, codes: usize) -> String {
+        let mut cmap = String::from(MAP_HEAD);
+        cmap.push_str(
+            "1 beginbfrange
+<0000> <00FF> [",
+        );
+        cmap.push_str(&"<0041> ".repeat(texts));
+        cmap.push_str(
+            "]
+endbfrange
+",
+        );
+        for block in 0..codes.div_ceil(100) {
+            let count = (codes - block * 100).min(100);
+            cmap.push_str(&format!(
+                "{count} beginbfchar
+"
+            ));
+            for line in block * 100..block * 100 + count {
+                cmap.push_str(&format!(
+                    "<{:04X}> <{:04X}>
+",
+                    0x0100 + line,
+                    0x4E00 + line % 0x5000
+                ));
+            }
+            cmap.push_str(
+                "endbfchar
+",
+            );
+        }
+        cmap.push_str(MAP_TAIL);
+        cmap
+    }
+
+    #[test]
+    fn maps_with_one_long_list_and_many_codes_read() {
+        // No line lands inside the list's range, so lopdf never copies the
+        // list: each map takes it a few megabytes.
+        for (texts, codes) in [(256, 9_000), (64, 40_000), (50, 65_000)] {
+            let document = page_of_map(one_list_and_codes(texts, codes));
+            let texts = page_texts_within(&document, Limits::default());
+            assert_eq!(texts.unwrap(), ["A"], "{codes} codes");
+        }
     }
 }
