@@ -6,9 +6,9 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use axum::Router;
-use axum::body::{Body, Bytes};
-use axum::http::{HeaderMap, Request, StatusCode};
+use http::{HeaderMap, Request, StatusCode};
 use http_body_util::BodyExt;
+use navree_http::body::{Body, Bytes};
 use navree_http::{HttpModule, HttpOptions, build_router};
 use navree_kernel::{App, AppBuilder};
 use navree_storage::{DiskConfig, Storage, StorageOptions};

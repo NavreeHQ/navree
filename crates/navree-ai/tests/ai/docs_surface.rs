@@ -6,7 +6,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::response::{IntoResponse, Response};
 use futures_util::StreamExt;
 use navree_access::{CurrentAccess, PrincipalAccess};
 use navree_ai::{
@@ -19,6 +18,7 @@ use navree_ai::{
 use navree_config::{Config, ConfigSources};
 use navree_db::PageQuery;
 use navree_http::AppError;
+use navree_http::response::{IntoResponse, Response};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_validation::Validate;
 use serde::{Deserialize, Serialize};

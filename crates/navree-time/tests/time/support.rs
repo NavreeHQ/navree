@@ -6,13 +6,13 @@
 
 use std::sync::Arc;
 
-use axum::body::Body;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use http::request::Parts;
 use http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::{AuthVia, Principal};
+use navree_http::body::Body;
 use navree_http::{AppError, Authenticator, HttpModule, HttpOptions, build_router};
 use navree_kernel::{App, AppBuilder, BoxFuture, Navree};
 use navree_time::{LocalDay, Zone};

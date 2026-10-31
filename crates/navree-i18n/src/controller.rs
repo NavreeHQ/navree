@@ -4,9 +4,9 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use axum::response::{IntoResponse, Response};
 use http::Method;
 use navree_db::{Db, Uow};
+use navree_http::response::{IntoResponse, Response};
 use navree_http::{
     ApiMeta, AppError, Authenticator, Controller, CurrentPrincipal, Json, NoContent, RouteDef,
     schema_fn,

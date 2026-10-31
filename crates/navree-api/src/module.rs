@@ -3,9 +3,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use axum::body::Bytes;
 use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_contracts::ModuleBuilderConformityExt;
+use navree_http::body::Bytes;
 use navree_http::{HttpModule, ModuleBuilderHttpExt};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, CommandSpec, Injectable, KernelError, Lifecycle, Module,

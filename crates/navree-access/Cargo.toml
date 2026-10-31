@@ -24,7 +24,6 @@ mysql = ["navree-db/mysql"]
 # migration), services, the route authorizer, extractors, endpoints and
 # commands.
 [dependencies]
-axum = { workspace = true }
 chrono = { workspace = true }
 http = { workspace = true }
 navree-bounded = { workspace = true }

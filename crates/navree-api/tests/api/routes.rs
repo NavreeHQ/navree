@@ -1,6 +1,6 @@
 //! `GET {api_prefix}/openapi.json` and the docs UI at `GET {api_prefix}/docs`.
 
-use axum::http::StatusCode;
+use http::StatusCode;
 use navree_api::ApiOptions;
 
 use crate::support::{app, boot, document, get};

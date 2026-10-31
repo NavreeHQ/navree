@@ -5,11 +5,9 @@
 
 use std::sync::Arc;
 
-use axum::Json;
-use axum::extract::Path;
-use axum::http::Method;
+use http::Method;
 use navree_crypto::{CryptoModule, generate_key};
-use navree_http::{Controller, ModuleBuilderHttpExt, RouteDef};
+use navree_http::{Controller, Json, ModuleBuilderHttpExt, Path, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_session::{Session, SessionModule, SessionOptions};
 use navree_testing::{TestApp, TestAppBuilder, TestClient};

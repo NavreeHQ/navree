@@ -1,9 +1,9 @@
 //! Rendering a page: [`render`], the [`HtmlPage`] response with its content
 //! security policy, and the sidebar cookie.
 
-use axum::http::header::{CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, COOKIE};
-use axum::http::{HeaderMap, HeaderValue};
-use axum::response::{IntoResponse, Response};
+use http::header::{CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, COOKIE};
+use http::{HeaderMap, HeaderValue};
+use navree_http::response::{IntoResponse, Response};
 use navree_view::{ViewError, Views};
 use serde::Serialize;
 

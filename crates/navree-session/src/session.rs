@@ -3,8 +3,8 @@
 use std::fmt;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use axum::http::request::Parts;
 use chrono::{DateTime, Utc};
+use http::request::Parts;
 use navree_contracts::SessionRecord;
 use navree_http::AppError;
 use navree_http::extract::{FromRequestParts, OptionalFromRequestParts};

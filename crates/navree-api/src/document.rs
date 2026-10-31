@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use axum::http::StatusCode;
+use http::StatusCode;
 use navree_http::{ERROR_CONTENT_TYPE, RouteMeta, SchemaFn, schema_fn};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -547,7 +547,7 @@ fn reason(status: u16) -> &'static str {
         .unwrap_or("Response")
 }
 
-/// The OpenAPI form of an Axum path (`{*rest}` becomes `{rest}`) and its
+/// The OpenAPI form of a route path (`{*rest}` becomes `{rest}`) and its
 /// parameter names, in order.
 fn openapi_path(path: &str) -> (String, Vec<String>) {
     let mut out = String::with_capacity(path.len());
@@ -574,7 +574,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn axum_paths_become_openapi_paths() {
+    fn route_paths_become_openapi_paths() {
         assert_eq!(
             openapi_path("/api/deals"),
             ("/api/deals".to_owned(), vec![])

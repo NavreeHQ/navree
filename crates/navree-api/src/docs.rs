@@ -9,12 +9,11 @@
 
 use std::sync::Arc;
 
-use axum::body::Bytes;
-use axum::extract::Path;
-use axum::http::header::{CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE};
-use axum::http::{HeaderValue, Method};
-use axum::response::{IntoResponse, Response};
-use navree_http::{AppError, Controller, HttpOptions, RouteDef};
+use http::header::{CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE};
+use http::{HeaderValue, Method};
+use navree_http::body::Bytes;
+use navree_http::response::{IntoResponse, Response};
+use navree_http::{AppError, Controller, HttpOptions, Path, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use utoipa_scalar::Scalar;
 

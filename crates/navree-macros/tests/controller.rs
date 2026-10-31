@@ -4,11 +4,11 @@
 use std::sync::Arc;
 
 use axum::Router;
-use axum::body::Body;
 use http::request::Parts;
 use http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use navree_contracts::{AuthVia, Principal};
+use navree_http::body::Body;
 use navree_http::{
     AppError, Authenticator, HttpModule, HttpOptions, RouteAuthorizer, RouteMeta, build_router,
     route_table,
@@ -449,8 +449,8 @@ async fn can_uses_action_and_subject_markers() {
 mod extractors {
     use std::sync::Arc;
 
-    use axum::extract::{Path, Query};
     use navree_http::{CurrentPrincipal, Json};
+    use navree_http::{Path, Query};
     use navree_kernel::ModuleBuilder;
     use navree_macros::{controller, injectable, module};
     use serde::Deserialize;
@@ -481,7 +481,7 @@ mod extractors {
             Json(json!({ "id": id, "q": search.q, "greeting": self.greeting.0 }))
         }
 
-        // The body extractor comes last, as Axum requires.
+        // The body extractor comes last, as the extractors require.
         #[patch("/{team}/{id}")]
         async fn rename(
             &self,

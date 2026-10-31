@@ -6,10 +6,9 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use axum::extract::Path;
-use axum::http::{HeaderMap, Method, StatusCode};
-use axum::response::{IntoResponse, Response};
-use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
+use http::{HeaderMap, Method, StatusCode};
+use navree_http::response::{IntoResponse, Response};
+use navree_http::{Controller, Json, ModuleBuilderHttpExt, Path, RouteDef};
 use navree_kernel::{
     BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver,
 };

@@ -7,12 +7,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::Form;
-use axum::http::header::{COOKIE, SET_COOKIE};
-use axum::http::{HeaderMap, Method};
-use axum::response::{Html, IntoResponse, Json, Redirect};
+use http::header::{COOKIE, SET_COOKIE};
+use http::{HeaderMap, Method};
 use navree_browser::{Browser, TestServer};
-use navree_http::{Controller, ModuleBuilderHttpExt, RouteDef};
+use navree_http::response::{Html, IntoResponse, Redirect};
+use navree_http::{Controller, Form, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_testing::TestApp;
 use serde::Deserialize;
@@ -174,7 +173,7 @@ impl Controller for FixtureController {
             RouteDef::on(
                 Method::POST,
                 "!/api/deals/{id}/move",
-                |axum::extract::Path(id): axum::extract::Path<String>| async move {
+                |navree_http::Path(id): navree_http::Path<String>| async move {
                     tokio::time::sleep(Duration::from_millis(100)).await;
                     Json(json!({ "moved": id }))
                 },

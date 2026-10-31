@@ -3,11 +3,10 @@
 
 use std::sync::{Arc, Mutex};
 
-use axum::Json;
-use axum::http::Method;
+use http::Method;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, BoxError, BoxFuture, SessionStore};
 use navree_crypto::CryptoModule;
-use navree_http::{Controller, ModuleBuilderHttpExt, RouteDef, route_table};
+use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef, route_table};
 use navree_kernel::{Factory, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_session::{MemoryStore, Session, SessionModule, SessionOptions};
 use navree_testing::TestApp;

@@ -4,11 +4,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::body::Body;
-use axum::response::IntoResponse;
 use futures_util::StreamExt;
 use http_body_util::BodyExt;
 use navree_ai::{Ai, AiError, AiFake, AiModule, FakeReply, StreamEvent, TextStream};
+use navree_http::body::Body;
+use navree_http::response::IntoResponse;
 use navree_http::{Controller, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxError, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_testing::TestApp;
@@ -308,6 +308,6 @@ async fn a_text_stream_is_served_through_the_http_pipeline() {
 
 #[test]
 fn bodies_are_plain() {
-    // A compile-time check that TextStream works with axum's Body.
+    // A compile-time check that TextStream works with navree-http's Body.
     let _ = |stream: TextStream| -> Body { stream.into_response().into_body() };
 }

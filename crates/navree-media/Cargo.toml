@@ -59,7 +59,6 @@ zip = { workspace = true }
 [dev-dependencies]
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
-axum = { workspace = true }
 navree-media = { path = ".", features = ["ffmpeg"] }
 navree-testing = { workspace = true }
 tempfile = { workspace = true }

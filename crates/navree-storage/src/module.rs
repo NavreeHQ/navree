@@ -4,8 +4,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::multipart::MultipartError;
-use axum::http::StatusCode;
 use futures_util::future::join_all;
+use http::StatusCode;
 use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_contracts::{BoxFuture, HealthCheck, HealthStatus};
 use navree_crypto::{AppKey, Encrypter};

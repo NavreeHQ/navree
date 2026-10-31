@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use axum::http::Method;
+use http::Method;
 use navree_audit::{AuditModule, AuditOptions, DEFAULT_SKIP_FIELDS};
 use navree_config::{Config, ConfigModule, ConfigSources};
 use navree_db::DatabaseModule;

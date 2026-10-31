@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use axum::http::Method;
+use http::Method;
 use navree_db::{Page, PageQuery};
 use navree_http::{ApiMeta, AppError, Controller, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};

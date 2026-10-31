@@ -4,12 +4,11 @@
 
 use std::sync::Arc;
 
-use axum::Json;
-use axum::http::Method;
-use axum::http::request::Parts;
+use http::Method;
+use http::request::Parts;
 use navree_contracts::{AuthVia, BoxFuture, Principal};
 use navree_http::{
-    AppError, Authenticator, Controller, CurrentPrincipal, ModuleBuilderHttpExt, NoContent,
+    AppError, Authenticator, Controller, CurrentPrincipal, Json, ModuleBuilderHttpExt, NoContent,
     RouteDef,
 };
 use navree_kernel::{Injectable, KernelError, Module, ModuleBuilder, Resolver};

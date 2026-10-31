@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use axum::http::StatusCode;
+use http::StatusCode;
 use navree_api::ApiModule;
 use navree_config::{ConfigModule, ConfigSources};
 use navree_http::{Authenticator, HttpModule, RouteAuthorizer};

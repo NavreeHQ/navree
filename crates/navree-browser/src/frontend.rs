@@ -9,11 +9,11 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, LazyLock, Mutex, RwLock, Weak};
 use std::time::{Duration, Instant};
 
-use axum::body::Body;
 use axum::extract::{Request, State};
-use axum::response::{IntoResponse, Response};
 use http::{HeaderName, StatusCode, Uri, header};
 use hyper_util::rt::TokioIo;
+use navree_http::body::Body;
+use navree_http::response::{IntoResponse, Response};
 use navree_kernel::AppContext;
 use serde_json::json;
 use tokio::sync::OwnedMutexGuard;
@@ -441,7 +441,7 @@ fn problem(status: StatusCode, message: &str) -> Response {
         "message": message,
         "error": status.canonical_reason().unwrap_or_default(),
     });
-    (status, axum::Json(body)).into_response()
+    (status, navree_http::Json(body)).into_response()
 }
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -501,7 +501,7 @@ async fn answers(url: &str) -> bool {
         });
         let request = http::Request::get(path)
             .header(header::HOST, format!("{host}:{port}"))
-            .body(http_body_util::Empty::<axum::body::Bytes>::new())
+            .body(http_body_util::Empty::<navree_http::body::Bytes>::new())
             .ok()?;
         sender.send_request(request).await.ok().map(drop)
     };

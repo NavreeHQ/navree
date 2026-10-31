@@ -14,7 +14,6 @@ workspace = true
 default = []
 ## OTLP export of spans (gRPC and HTTP/protobuf) through the OpenTelemetry SDK.
 otel = [
-    "dep:http",
     "dep:opentelemetry",
     "dep:opentelemetry_sdk",
     "dep:opentelemetry-otlp",
@@ -22,10 +21,9 @@ otel = [
 ]
 
 [dependencies]
-axum = { workspace = true }
 chrono = { workspace = true }
 futures-util = { workspace = true }
-http = { workspace = true, optional = true }
+http = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-http = { workspace = true }
@@ -44,7 +42,7 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-http = { workspace = true }
+axum = { workspace = true }
 navree-http-client = { workspace = true }
 opentelemetry-proto = { workspace = true }
 prost = { workspace = true }

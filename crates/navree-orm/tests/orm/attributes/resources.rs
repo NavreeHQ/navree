@@ -4,12 +4,13 @@
 
 use std::sync::Arc;
 
-use axum::extract::Path;
 use chrono::NaiveDate;
 use http::Method;
 use navree_api::{ApiModule, ApiOptions, ApiResource};
 use navree_db::{DatabaseModule, Db, PageQuery, Uow};
-use navree_http::{ApiMeta, AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef, schema_fn};
+use navree_http::{
+    ApiMeta, AppError, Controller, Json, ModuleBuilderHttpExt, Path, RouteDef, schema_fn,
+};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_orm::attributes::{
     ModelSchema, Resource, cursor_page_schema, page_schema, simple_page_schema,

@@ -9,13 +9,13 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use axum::response::{IntoResponse, Response};
 use futures_util::{Stream, StreamExt};
 use navree_access::{AbilityFactory, PrincipalAccess};
 use navree_auth::AuthService;
 use navree_contracts::{AuthVia, Clock, Principal, SystemClock};
 use navree_db::Db;
 use navree_http::AppError;
+use navree_http::response::{IntoResponse, Response};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use tokio::sync::mpsc;

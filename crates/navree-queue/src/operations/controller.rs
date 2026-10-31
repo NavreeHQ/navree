@@ -6,14 +6,13 @@ use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::{Path, Query};
-use axum::response::sse::{Event, KeepAlive, Sse};
 use futures_util::Stream;
 use http::Method;
 use navree_contracts::{BoxError, BoxFuture, Principal};
+use navree_http::response::sse::{Event, KeepAlive, Sse};
 use navree_http::{
-    ApiMeta, AppError, Authenticator, Controller, CurrentPrincipal, Json, RouteDef, SchemaFn,
-    schema_fn,
+    ApiMeta, AppError, Authenticator, Controller, CurrentPrincipal, Json, Path, Query, RouteDef,
+    SchemaFn, schema_fn,
 };
 use navree_kernel::{AppContext, Injectable, KernelError, ProviderKey, Resolver};
 use navree_realtime::ChannelDecision;

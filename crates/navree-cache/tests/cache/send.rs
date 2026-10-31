@@ -1,4 +1,4 @@
-//! Every async API returns `Send` futures, so it can be used from axum
+//! Every async API returns `Send` futures, so it can be used from request
 //! handlers and spawned tasks.
 
 use std::future::Future;

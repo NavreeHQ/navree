@@ -5,11 +5,11 @@
 use std::sync::{Arc, Mutex};
 
 use axum::Router;
-use axum::body::{Body, Bytes};
 use axum::extract::State;
 use axum::routing::post;
 use http::{HeaderMap, Method, Request, StatusCode};
 use navree_config::{ConfigModule, ConfigSources};
+use navree_http::body::{Body, Bytes};
 use navree_http::{Controller, HttpModule, ModuleBuilderHttpExt, RouteDef, build_router};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, Resolver};
 use navree_observe::ObserveModule;
@@ -39,7 +39,7 @@ async fn http_export(
     State(received): State<Received>,
     headers: HeaderMap,
     body: Bytes,
-) -> impl axum::response::IntoResponse {
+) -> impl navree_http::response::IntoResponse {
     let request = ExportTraceServiceRequest::decode(body).expect("an OTLP trace request");
     received.0.lock().unwrap().push((headers, request));
     (

@@ -249,9 +249,9 @@ pub fn module(args: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// Each method with `#[get("/p")]`, `#[post]`, `#[put]`, `#[patch]` or
 /// `#[delete]` becomes one `RouteDef` (a missing path means `"/"`; a path
-/// starting with `!` is absolute). Paths use Axum 0.8 captures (`{id}`,
+/// starting with `!` is absolute). Paths use Navree's route patterns (`{id}`,
 /// `{*rest}`). The method must be a non-generic `async fn` taking `&self`;
-/// its other arguments are Axum extractors (the body extractor last) and its
+/// its other arguments are extractors (the body extractor last) and its
 /// return type implements `IntoResponse`. The generated handler captures the
 /// controller (`Arc<Self>`), so handlers use injected fields through `self`.
 /// Methods without a route attribute stay plain methods.
@@ -303,7 +303,7 @@ pub fn module(args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 /// use std::sync::Arc;
 ///
-/// use axum::extract::Path;
+/// use navree_http::Path;
 /// use navree_access::{Subject, Update};
 /// use navree_http::{Controller, Json};
 /// use navree_macros::{controller, injectable};

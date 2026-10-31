@@ -3,9 +3,8 @@
 
 use std::sync::Arc;
 
-use axum::extract::Query;
 use navree_db::{Db, Page, PageQuery};
-use navree_http::{AppError, ModuleBuilderHttpExt};
+use navree_http::{AppError, ModuleBuilderHttpExt, Query};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_macros::{controller, injectable};
 use navree_search::Search;

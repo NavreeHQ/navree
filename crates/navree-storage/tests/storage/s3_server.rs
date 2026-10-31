@@ -11,12 +11,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use axum::Router;
-use axum::body::{Body, Bytes};
 use axum::extract::{Request, State};
-use axum::http::{HeaderMap, Method, StatusCode};
-use axum::response::{IntoResponse, Response};
 use chrono::{DateTime, NaiveDateTime, Utc};
+use http::{HeaderMap, Method, StatusCode};
 use navree_crypto::{hmac_sha256, sha256_hex};
+use navree_http::body::{Body, Bytes};
+use navree_http::response::{IntoResponse, Response};
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, percent_decode_str, utf8_percent_encode};
 
 /// The access key the server accepts.
@@ -127,7 +127,7 @@ async fn handle(State(state): State<Arc<ServerState>>, request: Request) -> Resp
         .unwrap()
         .push(format!("{} {raw_path}?{raw_query}", parts.method));
     let query = parse_query(&raw_query);
-    let body = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+    let body = navree_http::body::to_bytes(body, usize::MAX).await.unwrap();
 
     if let Err(message) = authorize(&parts.method, &raw_path, &query, &parts.headers, &body) {
         return error(StatusCode::FORBIDDEN, "SignatureDoesNotMatch", &message);

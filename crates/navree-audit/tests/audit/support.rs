@@ -6,7 +6,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use axum::http::request::Parts;
+use http::request::Parts;
 use navree_audit::{AuditLog, AuditModule, AuditRecord};
 use navree_contracts::AuthState;
 use navree_db::navree_schema::{

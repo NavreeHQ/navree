@@ -5,16 +5,15 @@
 
 use std::sync::Arc;
 
-use axum::body::Body;
-use axum::extract::Path;
 use http::{Method, Request, StatusCode};
 use http_body_util::BodyExt;
 use navree_db::{
     DatabaseModule, Db, DbError, Executor, MigrationSet, ModuleBuilderDbExt, Uow, map_db_error,
     record,
 };
+use navree_http::body::Body;
 use navree_http::{
-    AppError, Controller, HttpModule, HttpOptions, Json, ModuleBuilderHttpExt, RouteDef,
+    AppError, Controller, HttpModule, HttpOptions, Json, ModuleBuilderHttpExt, Path, RouteDef,
     build_router,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, Resolver};

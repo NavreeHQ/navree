@@ -2,13 +2,12 @@
 
 use std::sync::Arc;
 
-use axum::body::Bytes;
-use axum::extract::Path;
-use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, ETAG};
-use axum::http::{HeaderValue, Method};
-use axum::response::{IntoResponse, Response};
+use http::header::{CACHE_CONTROL, CONTENT_TYPE, ETAG};
+use http::{HeaderValue, Method};
 use navree_config::{Config, ConfigSection};
-use navree_http::{AppError, Controller, ModuleBuilderHttpExt, RouteDef};
+use navree_http::body::Bytes;
+use navree_http::response::{IntoResponse, Response};
+use navree_http::{AppError, Controller, ModuleBuilderHttpExt, Path, RouteDef};
 use navree_kernel::{
     BoxError, BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, ModuleId,
     ProviderKey, Resolver,

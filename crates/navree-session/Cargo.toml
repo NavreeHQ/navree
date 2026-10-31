@@ -20,6 +20,7 @@ mysql = ["navree-db/mysql"]
 axum = { workspace = true }
 chrono = { workspace = true }
 cookie = { workspace = true }
+http = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-crypto = { workspace = true }

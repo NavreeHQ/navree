@@ -3,9 +3,9 @@
 
 use std::sync::Arc;
 
-use axum::body::Body;
 use http::{Method, Request};
 use navree_db::{DatabaseModule, Db, DbOptions, Executor, Statement, Uow};
+use navree_http::body::Body;
 use navree_http::{
     AppError, Controller, HttpModule, HttpOptions, ModuleBuilderHttpExt, RouteDef, build_router,
 };

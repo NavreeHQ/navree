@@ -5,12 +5,11 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use axum::Json;
-use axum::http::Method;
 use chrono::{TimeDelta, Utc};
+use http::Method;
 use navree_contracts::{SessionRecord, SessionStore};
 use navree_db::{DatabaseModule, Db, Executor, ExecutorExt, Migrator, Statement, Uow};
-use navree_http::{Controller, ModuleBuilderHttpExt, RouteDef};
+use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_session::Session;
 use navree_session::{DatabaseStore, SessionModule, SessionOptions, SessionStoreKind};

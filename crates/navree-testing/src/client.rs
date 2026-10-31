@@ -4,13 +4,13 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use axum::Router;
-use axum::body::Body;
 use axum::extract::ConnectInfo;
 use bytes::Bytes;
 use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, COOKIE, ORIGIN, SET_COOKIE};
 use http::{HeaderName, HeaderValue, Method, Request};
 use http_body_util::BodyExt;
 use navree_contracts::Principal;
+use navree_http::body::Body;
 use serde::Serialize;
 use tower::ServiceExt;
 

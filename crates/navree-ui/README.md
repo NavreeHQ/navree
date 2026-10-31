@@ -108,7 +108,7 @@ extend `ui/auth.html`, a centered panel with the app's mark, and fill
 ### 3. A handler builds the `Shell` and renders
 
 ```rust
-use axum::http::HeaderMap;
+use http::HeaderMap;
 use navree_http::AppError;
 use navree_ui::{
     Crumb, HtmlPage, MenuItem, NavGroup, NavItem, Ui, UserMenu, render, sidebar_collapsed,

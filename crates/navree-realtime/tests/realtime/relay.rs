@@ -5,9 +5,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::body::Body;
 use http::{Request, StatusCode};
 use navree_contracts::Broadcaster;
+use navree_http::body::Body;
 use navree_realtime::RealtimeOptions;
 use serde_json::json;
 use uuid::Uuid;

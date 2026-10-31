@@ -5,11 +5,11 @@
 
 use std::sync::Arc;
 
-use axum::body::{Body, Bytes};
-use axum::http::{HeaderMap, Method, Request, StatusCode, request::Parts};
+use http::{HeaderMap, Method, Request, StatusCode, request::Parts};
 use http_body_util::BodyExt;
 use navree_api::{ApiDocs, ApiModule, ApiOptions};
 use navree_contracts::Principal;
+use navree_http::body::{Body, Bytes};
 use navree_http::{
     ApiMeta, AppError, Authenticator, Controller, HttpModule, HttpOptions, ModuleBuilderHttpExt,
     RouteAuthorizer, RouteDef, RouteMeta, build_router, schema_fn,

@@ -51,7 +51,7 @@ impl Controller for UploadController {
             RouteDef::on(
                 Method::POST,
                 "/{collection}",
-                move |axum::extract::Path(collection): axum::extract::Path<String>, body: Bytes| {
+                move |navree_http::Path(collection): navree_http::Path<String>, body: Bytes| {
                     let this = upload.clone();
                     async move {
                         let item = this

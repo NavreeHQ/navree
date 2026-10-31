@@ -5,10 +5,10 @@ use std::sync::{Arc, OnceLock};
 
 use axum::extract::{Request, State};
 use axum::middleware::Next;
-use axum::response::Response;
 use http::header::{ACCEPT_LANGUAGE, CONTENT_LANGUAGE, COOKIE, HeaderValue};
 use http::request::Parts;
 use navree_contracts::AuthState;
+use navree_http::response::Response;
 use navree_kernel::AppContext;
 use navree_workspace::{CurrentWorkspace, WorkspaceConfig, Workspaces, requested_workspace};
 use uuid::Uuid;

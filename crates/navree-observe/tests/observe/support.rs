@@ -7,11 +7,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use axum::Router;
-use axum::body::{Body, Bytes};
 use http::{HeaderMap, Request, StatusCode};
 use http_body_util::BodyExt;
 use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::{BoxFuture, HealthCheck, HealthStatus};
+use navree_http::body::{Body, Bytes};
 use navree_http::{HttpModule, HttpOptions, build_router};
 use navree_kernel::{App, AppBuilder, Factory, Module, ModuleBuilder, Navree};
 use navree_observe::{ObserveModule, ObserveOptions};

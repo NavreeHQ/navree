@@ -18,7 +18,7 @@ pub struct NoAuthenticator;
 impl navree_http::Authenticator for NoAuthenticator {
     fn authenticate<'a>(
         &'a self,
-        _parts: &'a mut axum::http::request::Parts,
+        _parts: &'a mut http::request::Parts,
     ) -> navree_kernel::BoxFuture<
         'a,
         Result<Option<navree_contracts::Principal>, navree_http::AppError>,

@@ -2,10 +2,9 @@
 
 use std::sync::Arc;
 
-use axum::extract::Query;
 use http::{Method, StatusCode};
 use navree_contracts::{ZoneLevel, ZoneOwner};
-use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
+use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, Query, RouteDef};
 use navree_kernel::{App, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_time::{CurrentZone, DayRange, TimeModule, WithZone, ZonesFake};
 use serde_json::{Value, json};

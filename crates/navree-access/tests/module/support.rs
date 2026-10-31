@@ -5,7 +5,6 @@
 
 use std::sync::{Arc, Mutex};
 
-use axum::extract::Path;
 use chrono::{DateTime, Utc};
 use http::Method;
 use navree_access::{
@@ -16,7 +15,7 @@ use navree_contracts::{AuditEntry, AuditSink, BoxError, BoxFuture};
 use navree_db::navree_schema::{Dialect, Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::record::{self, Filter};
 use navree_db::{Db, Executor, Kind, MigrationSet, ModuleBuilderDbExt, Record, Uow};
-use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
+use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, Path, RouteDef};
 use navree_kernel::{Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_testing::{TestApp, TestAppBuilder};
 use serde::Serialize;

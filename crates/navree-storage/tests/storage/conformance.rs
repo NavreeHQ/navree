@@ -5,13 +5,13 @@
 use std::collections::BTreeMap;
 
 use axum::Router;
-use axum::body::Body;
-use axum::http::Request;
 use bytes::Bytes;
 use chrono::{Duration, Utc};
 use futures_util::{TryStreamExt, stream};
+use http::Request;
 use http_body_util::BodyExt;
 use navree_contracts::HealthStatus;
+use navree_http::body::Body;
 use navree_storage::{
     Disk, DiskConfig, Storage, StorageError, SyncOptions, UploadRejection, UploadRules, upload_path,
 };

@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use axum::http::{HeaderMap, Method};
+use http::{HeaderMap, Method};
 use navree_http::{Controller, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{
     BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,

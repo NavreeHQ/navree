@@ -35,7 +35,6 @@ validation = ["dep:navree-validation"]
 [dependencies]
 # PHC-string parsing for hashed attributes (hashing itself is navree-crypto's).
 argon2 = { workspace = true }
-axum = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 # Streams (`lazy`, `cursor`) and the channel their generator hands rows over.

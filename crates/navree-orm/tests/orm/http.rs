@@ -4,10 +4,9 @@
 
 use std::sync::Arc;
 
-use axum::extract::Path;
 use http::{Method, StatusCode};
 use navree_db::{Db, PageQuery, Uow};
-use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
+use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, Path, RouteDef};
 use navree_kernel::{
     BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
 };

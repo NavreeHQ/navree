@@ -4,13 +4,14 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::Extension;
 use axum::Router;
-use axum::body::Body;
 use chrono::Utc;
 use http::{Method, Request};
 use navree_config::{ConfigModule, ConfigSources};
-use navree_http::{AppError, Controller, HttpModule, ModuleBuilderHttpExt, RouteDef, build_router};
+use navree_http::body::Body;
+use navree_http::{
+    AppError, Controller, Extension, HttpModule, ModuleBuilderHttpExt, RouteDef, build_router,
+};
 use navree_http_client::{FakeResponse, FakeServer, HttpClient};
 use navree_kernel::{
     App, AppContext, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, Resolver,

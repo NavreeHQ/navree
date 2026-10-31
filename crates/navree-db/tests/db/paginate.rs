@@ -2,12 +2,12 @@
 //! `CursorPage`): the extractors, the response shapes, and a record
 //! select's pages.
 
-use axum::response::IntoResponse;
 use http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use navree_db::{CursorPage, CursorQuery, Page, PageMeta, PageQuery, Record, record};
 use navree_http::AppError;
 use navree_http::extract::FromRequestParts;
+use navree_http::response::IntoResponse;
 use serde_json::json;
 
 use crate::fixtures::{Note, notes_db};

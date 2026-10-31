@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use axum::http::request::Parts;
+use http::request::Parts;
 use navree_contracts::AuditKind;
 use navree_http::extract::FromRequestParts;
 use navree_http::{AppError, Query};

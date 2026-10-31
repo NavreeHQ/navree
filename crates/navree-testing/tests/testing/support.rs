@@ -22,12 +22,11 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use axum::Json;
-use axum::response::{IntoResponse, Response};
 use http::header::{COOKIE, SET_COOKIE};
 use http::{HeaderMap, Method, StatusCode};
+use navree_http::response::{IntoResponse, Response};
 use navree_http::{
-    AppError, ClientIp, Controller, CurrentPrincipal, ModuleBuilderHttpExt, RouteDef,
+    AppError, ClientIp, Controller, CurrentPrincipal, Json, ModuleBuilderHttpExt, RouteDef,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use serde_json::{Value, json};

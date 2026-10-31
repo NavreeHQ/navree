@@ -2,12 +2,11 @@
 
 use std::sync::Arc;
 
-use axum::Json;
-use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, HeaderName};
-use axum::http::{HeaderValue, Method, StatusCode};
-use axum::response::{IntoResponse, Response};
+use http::header::{CACHE_CONTROL, CONTENT_TYPE, HeaderName};
+use http::{HeaderValue, Method, StatusCode};
 use metrics_exporter_prometheus::PrometheusHandle;
-use navree_http::{ApiMeta, Controller, RouteDef};
+use navree_http::response::{IntoResponse, Response};
+use navree_http::{ApiMeta, Controller, Json, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use serde_json::json;
 

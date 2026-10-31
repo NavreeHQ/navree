@@ -5,9 +5,9 @@ use std::fmt;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use axum::http::HeaderValue;
-use axum::http::header::{AUTHORIZATION, WWW_AUTHENTICATE};
-use axum::http::request::Parts;
+use http::HeaderValue;
+use http::header::{AUTHORIZATION, WWW_AUTHENTICATE};
+use http::request::Parts;
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
 use navree_contracts::Secret;
 use navree_http::{AppError, ClientIp, Guard};
