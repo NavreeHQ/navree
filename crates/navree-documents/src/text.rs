@@ -11,7 +11,7 @@
 //! lines that are mostly right to left are then put in reading order, run
 //! by run. Form XObjects are followed, so overlays are included.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use lopdf::Encoding;
 use lopdf::content::Content;
@@ -34,13 +34,32 @@ const FORM_DRAW_COST: usize = 1024;
 /// closed. The PDF 1.7 reference gives 28 as an implementation limit for
 /// `q`; 256 leaves room for files that never close what they open.
 const MAX_NESTING: usize = 256;
-/// What each code a font's `ToUnicode` map covers costs, in bytes of work,
-/// besides the map's own bytes (128): about the memory lopdf takes for it,
-/// since it keeps every code of every range.
-const TO_UNICODE_CODE_COST: u64 = 128;
-/// What each character width a font sets costs, in bytes of work (16):
-/// about the memory it takes.
+/// What reading a font costs in work for each byte of memory it builds
+/// (one byte for every 16): building the memory is the work.
+const MEMORY_PER_WORK: usize = 16;
+/// What each character width a font sets costs, in bytes of work (16).
 const WIDTH_COST: usize = 16;
+/// What each character width a font sets holds in memory, at most (24
+/// bytes: an entry of a hash map, with room to grow).
+const WIDTH_MEMORY: usize = 24;
+/// What a font holds besides its widths and maps (256 bytes).
+const FONT_INFO_MEMORY: usize = 256;
+
+// What lopdf holds while it reads a ToUnicode map, measured on its
+// structures and rounded up (see `to_unicode_memory`).
+
+/// For each byte of the map: the lines it parses before it builds the map.
+const MAP_TEXT_MEMORY: u64 = 8;
+/// For each range it keeps, besides the text the range maps to.
+const MAP_RANGE_MEMORY: u64 = 96;
+/// For each code it covers: the entry of the reverse lookup it builds for
+/// every code, besides the code's text. Measured at about 190 bytes once
+/// read and 230 at the peak of reading, for a map of every two-byte code.
+const MAP_CODE_MEMORY: u64 = 256;
+/// For each text of more than one UTF-16 unit, besides its units.
+const MAP_TEXT_VALUE_MEMORY: u64 = 32;
+/// For each text of a list (`[<..> <..>]`), besides its units.
+const MAP_LIST_ITEM_MEMORY: u64 = 56;
 /// The highest code a composite font can show: codes have two bytes.
 const MAX_COMPOSITE_CODE: u32 = 0xFFFF;
 /// The highest code a simple font can show: codes have one byte.
@@ -53,11 +72,10 @@ const MAX_SIMPLE_CODE: u64 = 0xFF;
 pub(crate) struct Limits {
     /// Bytes of work one page may take (128 MiB): its content decoded,
     /// counting a form again every time it is drawn, and
-    /// [`FORM_DRAW_COST`] for each draw; the fonts the document uses for
-    /// the first time on it (their `ToUnicode` maps inflated, plus
-    /// [`TO_UNICODE_CODE_COST`] for each code a map covers, and
-    /// [`WIDTH_COST`] for each width they set); and the actual text of
-    /// marked content each time it is decoded.
+    /// [`FORM_DRAW_COST`] for each draw; the fonts it reads (a `ToUnicode`
+    /// map's inflated bytes and one byte for every [`MEMORY_PER_WORK`] of
+    /// the memory reading it builds, and [`WIDTH_COST`] for each width);
+    /// and the actual text of marked content each time it is decoded.
     pub(crate) page_work: usize,
     /// The same, over all the pages (1 GiB).
     pub(crate) document_work: usize,
@@ -73,6 +91,13 @@ pub(crate) struct Limits {
     /// The same, over all the pages (64 MiB): some fifteen thousand dense
     /// pages. The text is returned whole, so this is memory as well.
     pub(crate) document_text: usize,
+    /// Memory the fonts and `ToUnicode` maps read for a document may hold
+    /// at once (256 MiB), as lopdf holds it: [`MAP_CODE_MEMORY`] for each
+    /// code a map covers, 17 MB for a map of every two-byte code, of which
+    /// fifteen fit. Past the limit, what was used longest ago is dropped
+    /// and read again when a page needs it. One map that would take more on
+    /// its own is refused.
+    pub(crate) font_memory: usize,
 }
 
 impl Default for Limits {
@@ -84,6 +109,7 @@ impl Default for Limits {
             page_steps: 50_000_000,
             page_text: 8 * 1024 * 1024,
             document_text: 64 * 1024 * 1024,
+            font_memory: 256 * 1024 * 1024,
         }
     }
 }
@@ -100,9 +126,9 @@ pub(crate) fn page_texts_within(
 ) -> Result<Vec<String>, DocumentsError> {
     let mut texts = Vec::new();
     let (mut work, mut text) = (0usize, 0usize);
-    // A font is read once for the whole document, however many names and
-    // pages use it.
-    let mut fonts = HashMap::new();
+    // Fonts and their maps are kept for the whole document, within
+    // `limits.font_memory`.
+    let mut fonts = FontCache::default();
     for page_id in document.get_pages().into_values() {
         let mut walker = Walker {
             document,
@@ -288,7 +314,7 @@ struct Chunk {
 
 /// What a font needs for decoding and widths.
 struct FontInfo<'a> {
-    encoding: Option<Encoding<'a>>,
+    decoding: Decoding<'a>,
     /// Bytes per character code: 2 for composite fonts, 1 otherwise.
     code_len: usize,
     widths: HashMap<u32, f32>,
@@ -329,12 +355,137 @@ struct Mark {
     chunk: Option<usize>,
 }
 
+/// How lopdf decodes a font's strings.
+enum Decoding<'a> {
+    /// With the encoding read with the font.
+    Own(Option<Encoding<'a>>),
+    /// With its `ToUnicode` map alone: the map stream, read once for every
+    /// font that has it.
+    Map(&'a lopdf::Stream),
+}
+
+/// What the cache holds, with the memory it takes and when it was last used.
+struct Held<T> {
+    value: T,
+    memory: usize,
+    used: u64,
+}
+
+/// The fonts and `ToUnicode` maps read so far in a document, by the address
+/// of their dictionary or stream (which stays put while the document is
+/// read), within [`Limits::font_memory`].
+#[derive(Default)]
+struct FontCache<'a> {
+    fonts: HashMap<usize, Held<FontInfo<'a>>>,
+    maps: HashMap<usize, Held<Option<Encoding<'a>>>>,
+    /// The memory all of it holds.
+    memory: usize,
+    /// Counts the runs of text shown: what the current one uses is never
+    /// dropped.
+    clock: u64,
+}
+
+fn address<T>(value: &T) -> usize {
+    value as *const T as usize
+}
+
+impl<'a> FontCache<'a> {
+    /// Makes sure `font`, and the map it decodes with, are read, reading
+    /// what is not (again, if it was dropped), and marks them used now.
+    fn read(
+        &mut self,
+        document: &'a Document,
+        font: &'a Dictionary,
+        budget: &mut Budget,
+    ) -> Result<(), DocumentsError> {
+        let limit = budget.limits.font_memory;
+        let key = address(font);
+        match self.fonts.get_mut(&key) {
+            Some(held) => held.used = self.clock,
+            None => {
+                let (value, memory) = font_info(document, font, budget)?;
+                self.make_room(memory, limit)?;
+                self.memory += memory;
+                let used = self.clock;
+                self.fonts.insert(
+                    key,
+                    Held {
+                        value,
+                        memory,
+                        used,
+                    },
+                );
+            }
+        }
+        let Decoding::Map(stream) = self.fonts[&key].value.decoding else {
+            return Ok(());
+        };
+        match self.maps.get_mut(&address(stream)) {
+            Some(held) => held.used = self.clock,
+            None => {
+                let memory = map_memory(stream, budget)?;
+                self.make_room(memory, limit)?;
+                // The map alone decides the encoding of any font that
+                // decodes with it alone: this font's is every such font's.
+                let value = match font.get_font_encoding_with_limit(document, MAX_TO_UNICODE) {
+                    Ok(encoding) => Some(encoding),
+                    Err(lopdf::Error::Decompress(DecompressError::MemoryLimitExceeded {
+                        ..
+                    })) => return Err(to_unicode_too_large()),
+                    Err(_) => None,
+                };
+                self.memory += memory;
+                let used = self.clock;
+                self.maps.insert(
+                    address(stream),
+                    Held {
+                        value,
+                        memory,
+                        used,
+                    },
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Drops what was used longest ago, but not what is in use now, until
+    /// `memory` more fits under `limit`; fails when it cannot fit at all.
+    fn make_room(&mut self, memory: usize, limit: usize) -> Result<(), DocumentsError> {
+        if memory > limit {
+            return Err(font_too_large(limit));
+        }
+        while self.memory + memory > limit {
+            let font = oldest_of(&self.fonts, self.clock);
+            let map = oldest_of(&self.maps, self.clock);
+            let dropped = match (font, map) {
+                (Some(font), Some(map)) if map.0 < font.0 => {
+                    self.maps.remove(&map.1).map(|held| held.memory)
+                }
+                (Some(font), _) => self.fonts.remove(&font.1).map(|held| held.memory),
+                (None, Some(map)) => self.maps.remove(&map.1).map(|held| held.memory),
+                // Only what is in use now is left.
+                (None, None) => break,
+            };
+            self.memory -= dropped.unwrap_or(0);
+        }
+        Ok(())
+    }
+}
+
+/// When the entry of `held` used longest ago, before `clock`, was used, and
+/// its key.
+fn oldest_of<T>(held: &HashMap<usize, Held<T>>, clock: u64) -> Option<(u64, usize)> {
+    held.iter()
+        .filter(|(_, held)| held.used < clock)
+        .map(|(&key, held)| (held.used, key))
+        .min()
+}
+
 struct Walker<'a> {
     document: &'a Document,
     chunks: Vec<Chunk>,
-    /// The fonts the document used so far, by the address of their
-    /// dictionary (which stays put while the document is read).
-    fonts: HashMap<usize, FontInfo<'a>>,
+    fonts: FontCache<'a>,
     /// The font dictionary a font name stands for, by the address of the
     /// resources it is looked up in.
     font_names: HashMap<(Option<usize>, Vec<u8>), Option<&'a Dictionary>>,
@@ -543,11 +694,19 @@ impl<'a> Walker<'a> {
         let Some(font_name) = state.font.as_deref() else {
             return Ok(());
         };
-        let Some(address) = self.font(resources, resources_key, font_name)? else {
+        let Some(font_key) = self.font(resources, resources_key, font_name)? else {
             return Ok(());
         };
-        let Some(font) = self.fonts.get(&address) else {
+        let Some(font) = self.fonts.fonts.get(&font_key).map(|held| &held.value) else {
             return Ok(());
+        };
+        let encoding = match &font.decoding {
+            Decoding::Own(encoding) => encoding.as_ref(),
+            Decoding::Map(stream) => self
+                .fonts
+                .maps
+                .get(&address(*stream))
+                .and_then(|held| held.value.as_ref()),
         };
         let device = multiply(*tm, ctm);
         let size = state.size * (device[0] * device[3] - device[1] * device[2]).abs().sqrt();
@@ -606,9 +765,7 @@ impl<'a> Walker<'a> {
                             }
                             continue;
                         }
-                        let text = font
-                            .encoding
-                            .as_ref()
+                        let text = encoding
                             .and_then(|e| e.bytes_to_string(code).ok())
                             .unwrap_or_default();
                         if text.is_empty() || text == "\u{fffd}" {
@@ -640,9 +797,8 @@ impl<'a> Walker<'a> {
         Ok(())
     }
 
-    /// The font `name` stands for in `resources`, read the first time the
-    /// document uses it: the address of its dictionary, the key of
-    /// [`fonts`](Self::fonts).
+    /// The font `name` stands for in `resources`, read if it is not held:
+    /// the address of its dictionary, its key in [`fonts`](Self::fonts).
     fn font(
         &mut self,
         resources: Option<&'a Dictionary>,
@@ -661,12 +817,11 @@ impl<'a> Walker<'a> {
         let Some(dictionary) = dictionary else {
             return Ok(None);
         };
-        let address = dictionary as *const Dictionary as usize;
-        if !self.fonts.contains_key(&address) {
-            let info = font_info(self.document, dictionary, &mut self.budget)?;
-            self.fonts.insert(address, info);
-        }
-        Ok(Some(address))
+        // A new run of text: what it reads is not dropped while it is shown.
+        self.fonts.clock += 1;
+        self.fonts
+            .read(self.document, dictionary, &mut self.budget)?;
+        Ok(Some(address(dictionary)))
     }
 
     fn font_dictionary(&self, resources: &'a Dictionary, name: &[u8]) -> Option<&'a Dictionary> {
@@ -722,35 +877,34 @@ fn to_unicode_too_large() -> DocumentsError {
     ))
 }
 
-/// Reads `font` for decoding and widths, charging `budget` for it.
+/// Reads `font` for decoding and widths, charging `budget` for it: what
+/// it needs and the memory that holds. A font that decodes with its
+/// `ToUnicode` map alone leaves the map to [`FontCache::read`], so that
+/// fonts sharing a map read it once.
 fn font_info<'a>(
     doc: &'a Document,
     font: &'a Dictionary,
     budget: &mut Budget,
-) -> Result<FontInfo<'a>, DocumentsError> {
-    // lopdf keeps every code a ToUnicode map covers: count them before it
-    // reads the map.
-    let to_unicode = font
-        .get(b"ToUnicode")
-        .ok()
-        .and_then(|o| doc.dereference(o).ok())
-        .and_then(|(_, o)| o.as_stream().ok());
-    if let Some(stream) = to_unicode {
-        match stream.get_plain_content_with_limit(MAX_TO_UNICODE) {
-            Ok(map) => budget.charge(map.len().saturating_add(to_unicode_cost(&map)))?,
-            Err(lopdf::Error::Decompress(DecompressError::MemoryLimitExceeded { .. })) => {
-                return Err(to_unicode_too_large());
+) -> Result<(FontInfo<'a>, usize), DocumentsError> {
+    let mut memory = FONT_INFO_MEMORY;
+    let decoding = match map_alone(doc, font) {
+        Some(map) => Decoding::Map(map),
+        None => {
+            if let Some(map) = map_under_differences(doc, font) {
+                memory += map_memory(map, budget)?;
             }
-            // lopdf cannot read it either, and falls back.
-            Err(_) => {}
+            Decoding::Own(
+                match font.get_font_encoding_with_limit(doc, MAX_TO_UNICODE) {
+                    Ok(encoding) => Some(encoding),
+                    Err(lopdf::Error::Decompress(DecompressError::MemoryLimitExceeded {
+                        ..
+                    })) => {
+                        return Err(to_unicode_too_large());
+                    }
+                    Err(_) => None,
+                },
+            )
         }
-    }
-    let encoding = match font.get_font_encoding_with_limit(doc, MAX_TO_UNICODE) {
-        Ok(encoding) => Some(encoding),
-        Err(lopdf::Error::Decompress(DecompressError::MemoryLimitExceeded { .. })) => {
-            return Err(to_unicode_too_large());
-        }
-        Err(_) => None,
     };
     let composite = font
         .get(b"Subtype")
@@ -812,13 +966,15 @@ fn font_info<'a>(
             None => standard = true,
         }
     }
-    Ok(FontInfo {
-        encoding,
+    memory += widths.len() * WIDTH_MEMORY;
+    let info = FontInfo {
+        decoding,
         code_len: if composite { 2 } else { 1 },
         widths,
         default_width,
         standard,
-    })
+    };
+    Ok((info, memory))
 }
 
 impl FontInfo<'_> {
@@ -886,106 +1042,284 @@ fn parse_cid_widths(
     Ok(())
 }
 
-/// An estimate of the memory lopdf takes to read the ToUnicode map `cmap`,
-/// in bytes, that is never below it: [`TO_UNICODE_CODE_COST`] for each code
-/// the map can cover, plus what each code's text takes when it is copied
-/// for every code of a range. lopdf keeps every code of every `bfrange`
-/// line, so one line of twenty bytes can cover four billion codes.
+/// The memory lopdf can take to read the ToUnicode map `cmap`, in bytes,
+/// never below it. lopdf parses the map's lines, keeps a range for each
+/// (each split of a range by a later line keeps a copy of its text, so a
+/// long list of texts split many times is copied many times), and builds a
+/// reverse lookup with an entry for every code of every range: one line of
+/// twenty bytes can cover four billion codes.
 ///
-/// A line lopdf reads as a range is two codes in angle brackets with only
-/// spaces or tabs between them, of the same length, then its text (`<..>`
-/// or `[..]`). Every such pair is counted wherever it is in the map, so
-/// that no comment or string can hide one; every other code in angle
-/// brackets counts once (a `bfchar` line). Codes of one or two bytes are at
-/// most 65,792, however many lines cover them.
-fn to_unicode_cost(cmap: &[u8]) -> usize {
+/// The estimate counts [`MAP_TEXT_MEMORY`] for each byte of the map; for
+/// each line, two ranges of [`MAP_RANGE_MEMORY`] holding the largest text
+/// any range holds, and [`MAP_CODE_MEMORY`]; and for each code a range
+/// covers, [`MAP_CODE_MEMORY`] and its text. A line lopdf reads as a range
+/// is two codes in angle brackets with only spaces or tabs between them,
+/// of the same length, then its text (`<..>` or `[..]`); every such pair is
+/// counted wherever it is in the map, so that no comment or string can hide
+/// one. A text with a comment inside, which real maps never have, counts as
+/// the longest lopdf reads. Codes of one or two bytes are at most 65,792,
+/// however many lines cover them.
+fn to_unicode_memory(cmap: &[u8]) -> usize {
     /// Codes of one or two bytes there can be.
     const SHORT_CODES: u64 = 256 + 65_536;
-    /// The text a code may map to, at most: 256 UTF-16 units.
-    const MAX_TEXT: u64 = 512;
+    let length = cmap.len() as u64;
     let spaces = |at: usize| {
         at + cmap[at.min(cmap.len())..]
             .iter()
             .take_while(|&&b| b == b' ' || b == b'\t')
             .count()
     };
-    // `<` hex digits `>` at `at`: the digits and where it ends.
-    let code_at = |at: usize| -> Option<(&[u8], usize)> {
-        if cmap.get(at) != Some(&b'<') {
-            return None;
-        }
-        let digits = cmap[at + 1..]
-            .iter()
-            .take_while(|b| b.is_ascii_hexdigit())
-            .count();
-        let end = at + 1 + digits;
-        (cmap.get(end) == Some(&b'>')).then(|| (&cmap[at + 1..end], end + 1))
-    };
     let value = |digits: &[u8]| {
         std::str::from_utf8(digits)
             .ok()
             .and_then(|digits| u64::from_str_radix(digits, 16).ok())
     };
-    let (mut short, mut short_most, mut long, mut single) = (0u64, 0u64, 0u64, 0u64);
-    // The code before, and where it ended.
+    // Texts in angle brackets, their UTF-16 units in bytes, and the most
+    // memory one text a range keeps can take.
+    let (mut texts, mut text_bytes, mut text_most) = (0u64, 0u64, 0u64);
+    let mut commented = false;
+    let (mut short, mut short_most, mut long) = (0u64, 0u64, 0u64);
+    // The code before, if it has nothing but hex digits, and where it ended.
     let mut previous: Option<(&[u8], usize)> = None;
     let mut at = 0;
     while let Some(offset) = cmap[at..].iter().position(|&b| b == b'<') {
         let start = at + offset;
-        let Some((digits, end)) = code_at(start) else {
-            // Not a code: go on from the next byte, which may start one.
-            at = start + 1;
-            previous = None;
-            continue;
+        let hex = match hex_text(cmap, start) {
+            Text::Hex(hex) => hex,
+            Text::Commented => {
+                commented = true;
+                at = start + 1;
+                previous = None;
+                continue;
+            }
+            // Not a text: go on from the next byte, which may start one.
+            Text::Not => {
+                at = start + 1;
+                previous = None;
+                continue;
+            }
         };
-        single = single.saturating_add(1);
-        if let Some((low, low_end)) = previous
+        texts += 1;
+        text_bytes += hex.digits / 2;
+        text_most = text_most.max(text_memory(hex.digits / 4));
+        let digits = &cmap[start + 1..hex.end - 1];
+        if hex.pure
+            && let Some((low, low_end)) = previous
             && spaces(low_end) == start
             && low.len() == digits.len()
             && matches!(digits.len(), 2 | 4 | 6 | 8)
+            && let (Some((memory, units)), Some(low), Some(high)) =
+                (range_text(cmap, spaces(hex.end)), value(low), value(digits))
+            && high >= low
         {
-            let text_at = spaces(end);
-            // The text a range maps each code to, copied for each code: one
-            // unit is kept as a number; more are copied; a list of texts
-            // holds one per code, already counted in the map's bytes.
-            let text = match cmap.get(text_at) {
-                Some(b'[') => Some(0),
-                Some(b'<') => match code_at(text_at) {
-                    Some((text, _)) if !text.is_empty() && text.len().is_multiple_of(4) => {
-                        Some(if text.len() == 4 {
-                            0
-                        } else {
-                            text.len() as u64 / 2
-                        })
-                    }
-                    // lopdf reads no such text, and then no map at all.
-                    Some(_) => None,
-                    None => Some(MAX_TEXT),
-                },
-                _ => None,
-            };
-            if let (Some(text), Some(low), Some(high)) = (text, value(low), value(digits))
-                && high >= low
-            {
-                let codes = high - low + 1;
-                let cost = codes.saturating_mul(TO_UNICODE_CODE_COST + text);
-                if digits.len() <= 4 {
-                    short = short.saturating_add(cost);
-                    short_most = short_most.max(TO_UNICODE_CODE_COST + text);
-                } else {
-                    long = long.saturating_add(cost);
-                }
+            text_most = text_most.max(memory);
+            let per_code = MAP_CODE_MEMORY + 2 * units;
+            let codes = (high - low + 1).saturating_mul(per_code);
+            if digits.len() <= 4 {
+                short = short.saturating_add(codes);
+                short_most = short_most.max(per_code);
+            } else {
+                long = long.saturating_add(codes);
             }
         }
-        previous = Some((digits, end));
-        at = end;
+        previous = hex.pure.then_some((digits, hex.end));
+        at = hex.end;
+    }
+    if commented {
+        text_most = text_most.max(text_memory(MAX_TEXT_UNITS));
+        text_bytes = text_bytes.saturating_add(length / 2);
     }
     let short = short.min(SHORT_CODES.saturating_mul(short_most));
-    let total = single
-        .saturating_mul(TO_UNICODE_CODE_COST)
+    // Every line has at least two texts in angle brackets.
+    let lines = texts / 2 + 1;
+    let total = (MAP_TEXT_MEMORY.saturating_mul(length))
+        .saturating_add((2 * lines).saturating_mul(MAP_RANGE_MEMORY.saturating_add(text_most)))
+        .saturating_add(lines.saturating_mul(MAP_CODE_MEMORY))
+        .saturating_add(text_bytes)
         .saturating_add(short)
         .saturating_add(long);
     usize::try_from(total).unwrap_or(usize::MAX)
+}
+
+/// The most UTF-16 units lopdf reads in one text of a map.
+const MAX_TEXT_UNITS: u64 = 256;
+
+/// What lopdf keeps for a text of `units` UTF-16 units: one unit is kept
+/// as a number.
+fn text_memory(units: u64) -> u64 {
+    if units <= 1 {
+        0
+    } else {
+        MAP_TEXT_VALUE_MEMORY + 2 * units
+    }
+}
+
+/// A text in angle brackets.
+struct Hex {
+    /// Its hex digits.
+    digits: u64,
+    /// Whether it has nothing but hex digits (a code must).
+    pure: bool,
+    /// Where it ends, after `>`.
+    end: usize,
+}
+
+enum Text {
+    Hex(Hex),
+    /// `<` hex digits and spaces, then a comment.
+    Commented,
+    /// Not a text.
+    Not,
+}
+
+/// The text in angle brackets at `at`: hex digits, maybe with spaces
+/// between them. A comment inside ends the reading, so that it cannot hide
+/// what follows.
+fn hex_text(cmap: &[u8], at: usize) -> Text {
+    if cmap.get(at) != Some(&b'<') {
+        return Text::Not;
+    }
+    let (mut digits, mut pure) = (0u64, true);
+    for (offset, &byte) in cmap[at + 1..].iter().enumerate() {
+        match byte {
+            b'>' => {
+                return Text::Hex(Hex {
+                    digits,
+                    pure,
+                    end: at + offset + 2,
+                });
+            }
+            b'%' => return Text::Commented,
+            b' ' | b'\t' | b'\r' | b'\n' | b'\0' | b'\x0C' => pure = false,
+            byte if byte.is_ascii_hexdigit() => digits += 1,
+            _ => return Text::Not,
+        }
+    }
+    Text::Not
+}
+
+/// The text a range maps its codes to, at `at`: what lopdf keeps of it,
+/// and the most UTF-16 units it gives one code. `None` where lopdf reads no
+/// text, and then no map at all.
+fn range_text(cmap: &[u8], at: usize) -> Option<(u64, u64)> {
+    match cmap.get(at)? {
+        b'<' => match hex_text(cmap, at) {
+            Text::Hex(hex) if hex.digits > 0 && hex.digits.is_multiple_of(4) => {
+                let units = hex.digits / 4;
+                Some((text_memory(units), units))
+            }
+            Text::Commented => Some((text_memory(MAX_TEXT_UNITS), MAX_TEXT_UNITS)),
+            _ => None,
+        },
+        // A list of texts, one for each code from the first: kept whole.
+        b'[' => {
+            let (mut memory, mut most) = (MAP_TEXT_VALUE_MEMORY, 0u64);
+            let mut at = at + 1;
+            loop {
+                match cmap.get(at)? {
+                    b']' => return Some((memory, most)),
+                    b' ' | b'\t' | b'\r' | b'\n' | b'\0' | b'\x0C' => at += 1,
+                    _ => match hex_text(cmap, at) {
+                        Text::Hex(hex) => {
+                            let units = hex.digits / 4;
+                            memory += MAP_LIST_ITEM_MEMORY + 2 * units;
+                            most = most.max(units);
+                            at = hex.end;
+                        }
+                        // Texts that cannot be measured: as many as the rest
+                        // of the map could hold, each the longest.
+                        Text::Commented => {
+                            let rest = (cmap.len() - at) as u64 / 3 + 1;
+                            let each = MAP_LIST_ITEM_MEMORY + 2 * MAX_TEXT_UNITS;
+                            return Some((memory + rest * each, MAX_TEXT_UNITS));
+                        }
+                        Text::Not => return None,
+                    },
+                }
+            }
+        }
+        _ => None,
+    }
+}
+
+/// The `ToUnicode` map lopdf decodes `font` with alone, as it decides:
+/// a font with the map and no `Encoding`, or `Identity-H` or `Identity-V`
+/// as its `Encoding`.
+fn map_alone<'a>(document: &'a Document, font: &'a Dictionary) -> Option<&'a lopdf::Stream> {
+    if !font.has_type(b"Font") {
+        return None;
+    }
+    let map = font
+        .get_deref(b"ToUnicode", document)
+        .ok()?
+        .as_stream()
+        .ok()?;
+    let Ok(mut encoding) = font.get(b"Encoding") else {
+        return Some(map);
+    };
+    let mut seen = HashSet::new();
+    loop {
+        match encoding {
+            Object::Reference(id) if seen.insert(*id) => {
+                encoding = document.get_object(*id).ok()?;
+            }
+            Object::Name(name) if name == b"Identity-H" || name == b"Identity-V" => {
+                return Some(map);
+            }
+            _ => return None,
+        }
+    }
+}
+
+/// The `ToUnicode` map lopdf reads with `font` when its `Encoding` is a
+/// dictionary whose `BaseEncoding` is `Identity-H` or `Identity-V`.
+fn map_under_differences<'a>(
+    document: &'a Document,
+    font: &'a Dictionary,
+) -> Option<&'a lopdf::Stream> {
+    let (_, encoding) = document.dereference(font.get(b"Encoding").ok()?).ok()?;
+    let base = encoding
+        .as_dict()
+        .ok()?
+        .get(b"BaseEncoding")
+        .ok()?
+        .as_name()
+        .ok()?;
+    if base != b"Identity-H" && base != b"Identity-V" {
+        return None;
+    }
+    font.get_deref(b"ToUnicode", document)
+        .ok()?
+        .as_stream()
+        .ok()
+}
+
+/// Counts what reading the `ToUnicode` map in `stream` takes, before lopdf
+/// reads it: the memory, returned and held to the limit for fonts, and as
+/// work the map's bytes and a share of the memory.
+fn map_memory(stream: &lopdf::Stream, budget: &mut Budget) -> Result<usize, DocumentsError> {
+    match stream.get_plain_content_with_limit(MAX_TO_UNICODE) {
+        Ok(map) => {
+            let memory = to_unicode_memory(&map);
+            if memory > budget.limits.font_memory {
+                return Err(font_too_large(budget.limits.font_memory));
+            }
+            budget.charge(map.len().saturating_add(memory / MEMORY_PER_WORK))?;
+            Ok(memory)
+        }
+        Err(lopdf::Error::Decompress(DecompressError::MemoryLimitExceeded { .. })) => {
+            Err(to_unicode_too_large())
+        }
+        // lopdf cannot read it either, and falls back.
+        Err(_) => Ok(0),
+    }
+}
+
+fn font_too_large(limit: usize) -> DocumentsError {
+    DocumentsError::TooLarge(format!(
+        "a font of a PDF takes more memory to read than the limit of {} for fonts",
+        size(limit)
+    ))
 }
 
 fn page_resources(document: &Document, page_id: ObjectId) -> Option<&Dictionary> {
@@ -1955,5 +2289,202 @@ mod tests {
     fn the_marks_message_reads_as_one_sentence() {
         let message = assemble(loose_marks(200), 1_000).unwrap_err().to_string();
         assert!(!message.contains("  "), "{message:?}");
+    }
+
+    const MAP_HEAD: &str = "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n\
+                            /CMapName /Sample def\n\
+                            1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n";
+    const MAP_TAIL: &str = "endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n";
+
+    /// The map of every two-byte code to itself that some writers emit:
+    /// 256 lines of `<XX00> <XXFF> <XX00>`.
+    fn identity_map() -> String {
+        let mut cmap = String::from(MAP_HEAD);
+        for block in 0..2 {
+            cmap.push_str("128 beginbfrange\n");
+            for high in block * 128..(block + 1) * 128 {
+                cmap.push_str(&format!("<{high:02X}00> <{high:02X}FF> <{high:02X}00>\n"));
+            }
+            cmap.push_str("endbfrange\n");
+        }
+        cmap.push_str(MAP_TAIL);
+        cmap
+    }
+
+    /// A range over every two-byte code whose text is a list of `texts`
+    /// strings, then `codes` single codes inside it, each splitting it.
+    fn split_list_map(texts: usize, codes: usize) -> String {
+        let mut cmap = String::from(MAP_HEAD);
+        cmap.push_str("1 beginbfrange\n<0000> <FFFF> [");
+        cmap.push_str(&"<0041> ".repeat(texts));
+        cmap.push_str("]\nendbfrange\n");
+        cmap.push_str(&format!("{codes} beginbfchar\n"));
+        for i in 0..codes {
+            cmap.push_str(&format!("<{:04X}> <0042>\n", 2 * i + 1));
+        }
+        cmap.push_str("endbfchar\n");
+        cmap.push_str(MAP_TAIL);
+        cmap
+    }
+
+    /// `cmap` as a compressed stream.
+    fn map_stream(document: &mut Document, cmap: &str) -> ObjectId {
+        let mut stream = Stream::new(Dictionary::new(), cmap.as_bytes().to_vec());
+        stream.compress().unwrap();
+        document.add_object(stream)
+    }
+
+    /// A composite font whose ToUnicode map is `map`.
+    fn composite_font(document: &mut Document, map: ObjectId) -> ObjectId {
+        document.add_object(dictionary! {
+            "Type" => "Font", "Subtype" => "Type0", "BaseFont" => "Sample",
+            "Encoding" => "Identity-H",
+            "ToUnicode" => map,
+        })
+    }
+
+    /// One page per entry of `contents`, each with its own resources from
+    /// `resources`.
+    fn pages_each_with(
+        resources: impl FnOnce(&mut Document) -> Vec<Dictionary>,
+        contents: &[Vec<u8>],
+    ) -> Document {
+        let mut document = pages_with(|_| Dictionary::new(), contents);
+        let resources = resources(&mut document);
+        for (page_id, resources) in document.get_pages().into_values().zip(resources) {
+            document
+                .get_object_mut(page_id)
+                .and_then(Object::as_dict_mut)
+                .unwrap()
+                .set("Resources", resources);
+        }
+        document
+    }
+
+    /// Showing code `0041` in fonts `/F0` to `/F{fonts - 1}`, a line each.
+    fn showing_each_font(fonts: usize) -> Vec<u8> {
+        (0..fonts)
+            .flat_map(|i| {
+                format!(
+                    "BT /F{i} 12 Tf 1 0 0 1 10 {} Tm <0041> Tj ET\n",
+                    780 - i * 14
+                )
+                .into_bytes()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_to_unicode_range_split_by_many_codes_is_refused() {
+        // A range whose text is a list of 1,000 strings, split by 1,000
+        // single codes: each piece keeps a copy of the whole list, about
+        // 60 MB from 21 KB of map.
+        let page = |cmap: String| {
+            pages_with(
+                move |document| {
+                    let map = map_stream(document, &cmap);
+                    let font = composite_font(document, map);
+                    dictionary! { "Font" => dictionary! { "F1" => font } }
+                },
+                &[b"BT /F1 12 Tf 1 0 0 1 10 700 Tm <0001> Tj ET".to_vec()],
+            )
+        };
+        let tight = Limits {
+            font_memory: 32 * 1024 * 1024,
+            ..Limits::default()
+        };
+        let message = too_large(page_texts_within(&page(split_list_map(1000, 1000)), tight));
+        assert!(message.contains("32 MiB"), "{message}");
+        // A few splits are read as before: code 1 is one of them.
+        assert_eq!(
+            page_texts_within(&page(split_list_map(10, 10)), tight).unwrap(),
+            ["B"]
+        );
+    }
+
+    #[test]
+    fn a_page_of_composite_fonts_with_full_identity_maps_reads() {
+        // Sixteen fonts, each with its own map of all 65,536 codes.
+        let fonts = 16;
+        let document = pages_each_with(
+            |document| {
+                let mut names = Dictionary::new();
+                for i in 0..fonts {
+                    let map = map_stream(document, &identity_map());
+                    names.set(format!("F{i}"), composite_font(document, map));
+                }
+                vec![dictionary! { "Font" => names }]
+            },
+            &[showing_each_font(fonts)],
+        );
+        let texts = page_texts_within(&document, Limits::default()).unwrap();
+        assert_eq!(texts, [vec!["A"; fonts].join("\n")]);
+    }
+
+    #[test]
+    fn composite_fonts_with_full_identity_maps_read_across_a_document() {
+        // Twenty-four pages, each with a font of its own, then a page using
+        // all of them. Memory for fonts holds three maps: the last page
+        // reads most of them again, and that costs it little work.
+        let fonts = 24;
+        let mut contents: Vec<Vec<u8>> = (0..fonts).map(|_| showing_each_font(1)).collect();
+        contents.push(showing_each_font(fonts));
+        let document = pages_each_with(
+            |document| {
+                let ids: Vec<ObjectId> = (0..fonts)
+                    .map(|_| {
+                        let map = map_stream(document, &identity_map());
+                        composite_font(document, map)
+                    })
+                    .collect();
+                let mut all = Dictionary::new();
+                for (i, id) in ids.iter().enumerate() {
+                    all.set(format!("F{i}"), *id);
+                }
+                let mut resources: Vec<Dictionary> = ids
+                    .iter()
+                    .map(|id| dictionary! { "Font" => dictionary! { "F0" => *id } })
+                    .collect();
+                resources.push(dictionary! { "Font" => all });
+                resources
+            },
+            &contents,
+        );
+        let limits = Limits {
+            document_work: 64 * 1024 * 1024,
+            font_memory: 40 * 1024 * 1024,
+            ..Limits::default()
+        };
+        let texts = page_texts_within(&document, limits).unwrap();
+        assert_eq!(texts.len(), fonts + 1);
+        assert!(texts[..fonts].iter().all(|text| text == "A"), "{texts:?}");
+        assert_eq!(texts[fonts], vec!["A"; fonts].join("\n"));
+    }
+
+    #[test]
+    fn fonts_sharing_one_map_read_it_once() {
+        // Thirty-two fonts, each its own dictionary, all with one map of
+        // 16,384 codes.
+        let fonts = 32;
+        let cmap =
+            format!("{MAP_HEAD}1 beginbfrange\n<0000> <3FFF> <4E00>\nendbfrange\n{MAP_TAIL}");
+        let document = pages_each_with(
+            |document| {
+                let map = map_stream(document, &cmap);
+                let mut names = Dictionary::new();
+                for i in 0..fonts {
+                    names.set(format!("F{i}"), composite_font(document, map));
+                }
+                vec![dictionary! { "Font" => names }]
+            },
+            &[showing_each_font(fonts)],
+        );
+        // Room for reading the map once.
+        let once = Limits {
+            page_work: 1024 * 1024,
+            ..Limits::default()
+        };
+        let texts = page_texts_within(&document, once).unwrap();
+        assert_eq!(texts, [vec!["\u{4e41}"; fonts].join("\n")]);
     }
 }
