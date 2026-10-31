@@ -295,7 +295,7 @@ paragraph, not in the heading (it would end up in the heading's link id):
 
 <Badge feature="queue" /> A listener can run on a queue worker instead of in the request.
 
-<Badge>Since 0.2</Badge> <Badge tone="accent">New</Badge> <Badge tone="warning">Experimental</Badge>
+<Badge>Since 1.0</Badge> <Badge tone="accent">New</Badge> <Badge tone="warning">Experimental</Badge>
 ```
 
 ### LinkCards

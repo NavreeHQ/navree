@@ -21,7 +21,7 @@ You don't need OpenSSL, CMake or NASM: TLS is rustls with the `ring` provider ev
 
 <Callout type="note" title="Navree is not on crates.io yet">
 
-The 0.2 crates haven't been published, so `cargo install navree-cli` doesn't work yet. Until they are, install the CLI from the Git repository. Once they're published, `cargo install navree-cli` will be all you need.
+The 1.0 crates haven't been published, so `cargo install navree-cli` doesn't work yet. Until they are, install the CLI from the Git repository. Once they're published, `cargo install navree-cli` will be all you need.
 
 </Callout>
 
@@ -54,7 +54,7 @@ navree --version
 ```
 
 ```text
-navree 0.2.0
+navree 1.0.0
 ```
 
 ### Where new apps get Navree from
@@ -63,7 +63,7 @@ The CLI doesn't depend on the framework; it writes the dependency into your app'
 
 1. With `--navree-path <path>`, the Navree checkout at that path (the repository, or its `crates/navree` directory).
 2. Otherwise, the checkout the CLI was built from, when it still exists. After `cargo install --path`, that is your clone. After `cargo install --git`, it is Cargo's own copy of the repository under `~/.cargo/git/checkouts`.
-3. Otherwise, the published crate at the CLI's own version: `navree = "0.2.0"`.
+3. Otherwise, the published crate at the CLI's own version: `navree = "1.0.0"`.
 
 Until the crates are published, the third case fails to build. For an app you plan to keep, clone the repository and either install the CLI from the clone or pass `--navree-path`. Cargo's Git checkouts are a cache that Cargo can clean up.
 

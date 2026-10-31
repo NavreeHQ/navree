@@ -145,7 +145,7 @@ async fn clear(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
   that doesn't exist.
 - `CamelCase` or singular module names (`navree make:module Post`): use `posts`.
 - Running `navree help` to list app commands (use `navree list`).
-- `navree new` writes `navree = "0.2.0"` (the CLI's own version) when it
+- `navree new` writes `navree = "1.0.0"` (the CLI's own version) when it
   can't find a checkout: pass `--navree-path`.
 
 ## Docs

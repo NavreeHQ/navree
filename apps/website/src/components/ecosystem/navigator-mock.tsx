@@ -176,7 +176,7 @@ export function NavigatorMock({ className }: { className?: string }) {
           <div className="mt-auto border-t border-line px-4 py-3 text-xs leading-5 text-fg-3">
             <div className="flex justify-between gap-3">
               <span>Version</span>
-              <span className="font-mono text-fg-2">navree 0.2 · rust 1.95</span>
+              <span className="font-mono text-fg-2">navree 1.0 · rust 1.95</span>
             </div>
             <div className="flex justify-between gap-3">
               <span>Database</span>

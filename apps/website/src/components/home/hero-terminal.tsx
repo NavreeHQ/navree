@@ -21,7 +21,7 @@ const steps: [string, string][] = [
  */
 const session: TermLine[] = [
   { cmd: site.install.cli },
-  { out: "   Installed package `navree-cli v0.2.0` (executable `navree`)" },
+  { out: "   Installed package `navree-cli v1.0.0` (executable `navree`)" },
   { cmd: "navree new acme --kit saas", className: "mt-2" },
   { out: "Created acme in ~/code/acme (kit: saas)", className: "text-fg-2" },
   { out: "Next steps:", className: "mt-1" },

@@ -1,6 +1,6 @@
 ---
 name: navree-documents
-description: "PDF and Word documents with navree-documents: the opt-in `documents` facade feature, `DocumentsModule` and the `documents` config section, `Documents::pdf(name, &data)` and `render(&Render)`, `.html` templates (navree-view syntax, `locale`/`dir` variables) for two engines: the native engine (default, in process: the HTML subset it reads, inline styles, `@page`, `header`/`footer` elements with `pageNumber`/`totalPages` spans, tables with repeating headers, images from the template tree, bundled Noto Sans/Serif/Mono, Arabic, Hebrew and Devanagari fonts, font dirs, tagged PDF) and headless Chrome (full CSS, assets from the template tree, `/_navree/fonts.css`, blocked network, the page pool, `documents.chrome.path`/`endpoint`, `NAVREE_BROWSER_CHROME`), `PrintOptions` for both, `PdfDocument` built in code and `render_document`, engine choice (`documents.engine`, `Render::engine`), right-to-left text, `Pdf` responses and `download`/`inline`, `Pdf::merge`, `stamp`, `overlay`, `text()` in tests, `Docx`, `save`, `queue` with `QueuedDocument` and `status`, `queue_operation` (a queued export behind a navree-queue operation users follow, `RENDER_FAILED_MESSAGE`), the `documents.render` job, its progress and its `.failed` record, `m.document_files`, the `documents:render` and `documents:fonts` commands, and `DocumentsFake`. Use when generating certificates, invoices, reports or exports as PDF or DOCX, adding a document template, building a PDF in code, rendering Arabic, Hebrew or other right-to-left documents, stamping or merging PDFs, queueing a long export, testing a document's text, moving a template off Typst, or debugging TemplateNotFound, a template error, a 503 from an engine, CSS the native engine ignores, or tofu boxes instead of letters."
+description: "PDF and Word documents with navree-documents: the opt-in `documents` facade feature, `DocumentsModule` and the `documents` config section, `Documents::pdf(name, &data)` and `render(&Render)`, `.html` templates (navree-view syntax, `locale`/`dir` variables) for two engines: the native engine (default, in process: the HTML subset it reads, inline styles, `@page`, `header`/`footer` elements with `pageNumber`/`totalPages` spans, tables with repeating headers, images from the template tree, bundled Noto Sans/Serif/Mono, Arabic, Hebrew and Devanagari fonts, font dirs, tagged PDF) and headless Chrome (full CSS, assets from the template tree, `/_navree/fonts.css`, blocked network, the page pool, `documents.chrome.path`/`endpoint`, `NAVREE_BROWSER_CHROME`), `PrintOptions` for both, `PdfDocument` built in code and `render_document`, engine choice (`documents.engine`, `Render::engine`), right-to-left text, `Pdf` responses and `download`/`inline`, `Pdf::merge`, `stamp`, `overlay`, `text()` in tests, `Docx`, `save`, `queue` with `QueuedDocument` and `status`, `queue_operation` (a queued export behind a navree-queue operation users follow, `RENDER_FAILED_MESSAGE`), the `documents.render` job, its progress and its `.failed` record, `m.document_files`, the `documents:render` and `documents:fonts` commands, and `DocumentsFake`. Use when generating certificates, invoices, reports or exports as PDF or DOCX, adding a document template, building a PDF in code, rendering Arabic, Hebrew or other right-to-left documents, stamping or merging PDFs, queueing a long export, testing a document's text, or debugging TemplateNotFound, a template error, a 503 from an engine, CSS the native engine ignores, or tofu boxes instead of letters."
 ---
 
 # Documents
@@ -373,15 +373,6 @@ The fake's PDF text is `"<template>\nkey: value\n..."` (Latin-1);
 `render_document` on the fake's `Documents` lays out with the bundled fonts.
 Chrome tests in the crate run against a mock DevTools endpoint; real-browser
 tests read `NAVREE_BROWSER_CHROME`.
-
-## Moving a Typst template
-
-The Typst engine is gone (`typst` feature, `TypstEngine`, `Render::typst`,
-`documents.typst`). Rewrite `name.typ` as `name.html`: data are variables
-(`{{ name }}`, not `json("/data.json")`), `{{ locale }}`/`{{ dir }}` replace
-`sys.inputs`, `@page` sets the page, `<footer>` with `pageNumber`/`totalPages`
-spans numbers pages. Rename `documents.typst` to `documents.native` and
-`engine = "typst"` to `"native"`. `Render::html` no longer forces Chrome.
 
 ## Checks before you finish
 

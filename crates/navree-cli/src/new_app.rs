@@ -157,12 +157,12 @@ impl NavreeSource {
     /// ```
     /// use navree_cli::new_app::NavreeSource;
     ///
-    /// let published = NavreeSource::Version("0.2.0".to_owned());
+    /// let published = NavreeSource::Version("1.0.0".to_owned());
     /// assert_eq!(
     ///     published.dependency_with_features(&["postgres"]),
-    ///     r#"{ version = "0.2.0", features = ["postgres"] }"#
+    ///     r#"{ version = "1.0.0", features = ["postgres"] }"#
     /// );
-    /// assert_eq!(published.dependency_with_features(&[]), r#""0.2.0""#);
+    /// assert_eq!(published.dependency_with_features(&[]), r#""1.0.0""#);
     /// ```
     pub fn dependency_with_features(&self, features: &[&str]) -> String {
         if features.is_empty() {
@@ -400,7 +400,7 @@ pub fn app_files(app: &NewApp, now: Timestamp) -> Result<FileSet, TemplateError>
 ///     ui: Ui::None,
 ///     kit: None,
 ///     database: Database::Timescaledb,
-///     navree: NavreeSource::Version("0.2.0".to_owned()),
+///     navree: NavreeSource::Version("1.0.0".to_owned()),
 /// };
 /// let message = created_message(&app, Path::new("/src/my-shop"));
 /// assert!(message.contains("navree dock up"));

@@ -2,10 +2,9 @@
 
 ## Supported versions
 
-Navree is pre-1.0. Until 1.0, only the **latest 0.x release** receives
-security fixes. Fixes are published as a new patch release of that line; older
-0.x releases are not patched, so upgrade to the latest release to pick them up.
-Once 1.0 ships, this section will list the supported release lines.
+Only the **latest 1.x release** receives security fixes. Fixes are published as a new patch release of that line;
+older releases are not patched, so upgrade to the latest release to pick them up.
+When more than one release line is supported, this section will list them.
 
 ## Reporting a vulnerability
 

@@ -42,7 +42,7 @@ navree new blog --navree-path ~/code/navree      # depend on that checkout
   `navree`. The directory must not exist or must be empty.
 - The app depends on Navree by `path`: the `--navree-path` checkout, else
   the checkout the CLI was built from. Only when neither exists does it
-  write `navree = "0.2.0"` (the CLI's own version). For an app you keep,
+  write `navree = "1.0.0"` (the CLI's own version). For an app you keep,
   install the CLI from a clone or pass `--navree-path`; Cargo's git
   checkouts are a cache.
 - `navree new` doesn't run Cargo. It runs `git init` (no commit) unless the

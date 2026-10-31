@@ -1,377 +1,11 @@
 ---
 title: "Release notes"
-description: "Navree 0.2.0: the data layer on sqlx without SeaORM, SQLite as an opt-in feature, Navree's own router, validation, JWT, TOTP, cron, configuration, CORS, MCP and cache code, security hardening and supply-chain checks; how to upgrade from 0.1; and what 0.1.0 shipped."
+description: "Navree 1.0.0, the first release: the framework with its own router, extractors, validation, data layer on sqlx, ORM and schema builder, SQLite as an opt-in feature, security limits, the first-party ecosystem, the CLI and starter kits, and supply-chain checks and fuzzing."
 ---
 
-## Navree 0.2.0
+## Navree 1.0.0
 
-0.2.0 replaces the data layer, makes SQLite an opt-in feature, puts Navree's own router, extractors and validation derive in place of the routing and validation crates it used before, swaps eight more third-party building blocks for code Navree owns, hardens sign-in, rate limiting and the edge, and adds supply-chain checks, fuzzing and tests that clean up after themselves. Everything shares one version number: the crates, the `navree` CLI, the starter kits and the `@navree/*` npm packages are all 0.2.0.
-
-<Callout type="warning" title="Upgrading from 0.1">
-
-0.2.0 breaks apps that use the SeaORM-based data API or garde, and it changes routing details, a few other APIs, defaults and behaviors. [Upgrading from 0.1](#upgrading-from-01) lists each change with the steps to take.
-
-</Callout>
-
-### The data layer is Navree's own
-
-Navree no longer builds on SeaORM, sea-query or sea-orm-migration, and no `sea-*` crate is in the dependency tree (a test keeps it that way).
-
-- **`navree-db`** runs directly on sqlx: pools that honor every `database.*` setting, statements, rows, errors classified the same way on every database (`DbError` with an `ErrorKind`), transactions with savepoints, and the `Executor` that pools, transactions, units of work and `Db` share. A unit of work always runs on `navree-db`'s own transaction.
-- **`navree-orm`** writes its own SQL for PostgreSQL with TimescaleDB, MySQL and MariaDB, and SQLite, and runs it through `navree-db`.
-- **`navree-schema`** is the only migration system: the schema builder, the migrator and schema dumps.
-- **Every crate moved with them.** Authentication, access, audit, workspaces, queues, notifications, mail, billing, flags, settings, sign-in, OAuth, SSO, webhooks, workflows, localization, integrations, media, AI, Logbook, Fleet, search, Helm, Lighthouse, imports and exports, directory sync, custom domains, time zones, sessions, scheduling, microservices and the generators and starter kits now use [models](/docs/orm/models/), `navree-db` statements and schema-builder migrations. Existing tables need no change by hand: models read the same columns, and a database migrated by 0.1 keeps its migration history. Two migrations are new (custom domains and, on SQLite, search); `migrate` runs them.
-- Statements stay correct on PostgreSQL and MySQL when a placeholder's value type changes between runs, and SQLite migrations begin `IMMEDIATE`, so they queue for the write lock instead of failing with "database is locked".
-
-### SQLite is opt-in
-
-SQLite is no longer compiled into every build. It is the `sqlite` Cargo feature of `navree` (and of `navree-db`), off by default like `postgres` and `mysql`, so a PostgreSQL or MySQL build compiles no SQLite C code: the bundled SQLite library is most of the C in a build, and `cargo tree -i libsqlite3-sys` finds nothing without the feature. `navree new` writes the driver feature you chose, and `sqlite` in `[dev-dependencies]`, because tests run on SQLite files. [Upgrading from 0.1](#2-turn-on-the-sqlite-feature-where-you-use-it) has the steps.
-
-### Validation is Navree's own
-
-`#[derive(Validate)]` and its `#[validate(...)]` field rules are Navree's code, in the new `navree-validation-macros` crate and the rule runtime of `navree-validation`; garde is gone from every manifest, and so are its vet exemptions. Every field states its rules or `#[validate(skip)]`, so a field added later can't go unchecked: a field without either is a compile error (`#[validate(skip_unmarked)]` on the type opts out). The rules are `required`, `length`, `range`, `email`, `url`, `ip`, `ipv4`, `ipv6`, `ascii`, `alphanumeric`, `credit_card`, `contains`, `starts_with`, `ends_with`, `pattern` (checked at compile time), `same_as`, `custom`, `nested`, `each(...)` and `rename`. The email (RFC 5321) and URL (RFC 3986) parsers are Navree's own, with property tests and a libFuzzer target. A failure is a `Violation`: a rule key and parameters, or a text, at a dotted path that follows serde's `rename` and `rename_all`. The [400 response](/docs/basics/validation/#error-responses) keeps its format and its messages. `navree-validation` has an optional `time` feature that implements `Validate` for the zones, days and day ranges of `navree-time`.
-
-### Navree's own router and extractors
-
-`navree-http` routes requests itself. The router matches the path as the client sent it, segment by segment, and never rewrites it: static segments before parameters before catch-alls, percent-decoded parameter values, `HEAD`, `OPTIONS` and 405 with `Allow`, and boot-time checks for conflicting routes. Handlers are async functions whose arguments are extractors: `Path`, `Query`, `RawQuery`, `Form`, `Json`, `Multipart`, `WebSocketUpgrade`, `Extension`, `Scoped`, `ClientIp` and `CurrentPrincipal` are Navree's own, with body limits, limits on every part of a form and on WebSocket frames, an urlencoded parser and media-type parsing, and rejections that render in the unchanged JSON error format. `RouteDef::on(method, path, handler)` takes such a handler. `HeaderMap`, `Method`, `Uri`, `Version`, `Extensions`, `Bytes`, `String` and `Request` are extractors too. [Upgrading from 0.1](#5-check-the-routing-changes) lists the behaviors that changed.
-
-### Navree's own code in place of third-party crates
-
-- **Tokens.** `navree_crypto::jose` signs and verifies JSON Web Signatures (HS256, EdDSA, ES256, RS256 and their siblings) on `ring` and reads and publishes JSON Web Keys; `navree-auth` issues its tokens through it. Tokens issued by 0.1 still verify.
-- **Two-factor codes and QR codes.** `navree_crypto::totp` (RFC 6238, with `otpauth://` URLs) and `navree_crypto::qr` (ISO/IEC 18004, as SVG) make the two-factor setup. The secrets, URLs and codes are the same as before, so enrolled authenticator apps keep working.
-- **Cron.** `navree_schedule::CronExpression` is Navree's own parser and next-run search, with a documented language and clear errors.
-- **Configuration.** `navree-config` has its own loader for `.env`, TOML and JSON files and `APP_*` variables, with limits on file size and nesting and secrets kept out of errors.
-- **CORS.** `navree-http` has its own CORS layer, used by the HTTP pipeline and the gRPC edge. The `http.cors.*` keys are unchanged.
-- **MCP.** `navree-mcp` has its own protocol layer and transports (protocol versions `2024-11-05` to `2025-11-25` and the stateless `2026-07-28`), checked against the official MCP TypeScript SDK's client. Navigator's own stdio server uses it too.
-- **Cache.** The in-memory cache store is `navree-bounded`'s bounded store: at most 1,000,000 entries, with SIEVE eviction.
-- **Compression.** Responses are compressed with gzip; Brotli is gone.
-- **API docs and GraphiQL.** The API reference UI and GraphiQL ship inside the app instead of loading scripts from a CDN.
-
-### Security hardening
-
-- **IPv6 clients count by network.** The per-IP limit, the login, social and OAuth throttles count an IPv6 client as its network (`http.rate_limit_ipv6_prefix`, default 64), so one host can't dodge a limit by changing addresses within its prefix. `X-Forwarded-For` entries may carry a port.
-- **One sign-in policy for every path.** `navree-auth` asks every `SignInPolicy` before a password, magic link, emailed code, passkey, social, token-exchange or second-step sign-in, and before an email change. `navree-sso` enforces single sign-on through it, so an SSO domain refuses every other way in, not only passwords. Helm's panel sign-in asks the same policies. Sign-in domains are normalized, so every spelling of an SSO domain matches.
-- **Offboarding in one call.** `revoke_credentials_of_domain` (and `revoke_all_credentials`) revokes every credential of the users of a domain.
-- **OAuth endpoint limits.** The token, introspection, revocation and device endpoints have per-client and per-IP rate limits (`oauth.rate_limits`); public clients are limited per IP only.
-- **Custom domain claims by proof of control.** A pending claim never blocks the owner of a domain, a verified claim wins, a transfer needs fresh proof, and failed claims are deleted after `domains.verification.failed_retention_hours`.
-- **Tighter content security policies.** The API reference and GraphiQL load scripts from the app itself (`script-src 'self'`), GraphiQL's WebSockets may only reach the request's host, and GraphQL hides its internal types from introspection.
-- **Client addresses behind proxies.** The `@navree/bff` backend-for-frontend forwards the browser's address (`clientIpHeader`, `NAVREE_CLIENT_IP_HEADER`), and Harbor's Caddy trusts the load balancer's `X-Forwarded-For` (`deploy.trusted_proxies`).
-- **Parser limits and fixes.** Fuzzing found crashes in the parsers for host names, phone numbers, email domains and SCIM filters; they are fixed, and SCIM filters are capped at 16 KiB and 32 levels.
-- **Imports are limited by shape as well as size.** A short CSV with a very wide header used to be padded to the header's width on every row, so a few hundred kilobytes could ask for tens of gigabytes. `sheets.imports.max_columns` (default 16,384, the width of an Excel sheet) and `sheets.imports.max_cells` (default 10,000,000, every row counted at the header's width) refuse such a file with a message on the import, and `sheets.imports.max_rows` is now checked while the file is read instead of after every row is in memory. Files under the limits read exactly as before. CSV, TSV and XLSX files are refused while they are read, a record or a cell at a time, without their rows being held; XLS, ODS and XLSB files are still read into a range of the sheet first, so for them the limits apply after that range is in memory. A header repeated thousands of times is named in linear time, with the same names, and staging reads the file on the blocking pool so the job's timeout can fire, and the reading stops at its next record when it does. An XLSX sheet whose cells are not in row order (Excel never writes one) is held only up to those limits, and is refused when it has more cells with a value than `max_cells` even if the table would have fitted. `sheets.imports.max_inflated_bytes` (default 1 GiB) refuses a workbook with a part that unpacks to more than that by the size its zip file declares, before it is read: `max_upload_bytes` bounds the file, not what it unpacks to, and the XLSX reader keeps the shared strings whole. `sheets.imports.max_text_bytes` (default 256 MiB) bounds the text the table keeps, counting a shared string again for each cell it is in, so a small CSV, TSV or XLSX file can't ask for gigabytes of copies (XLS, ODS and XLSB are counted only after their library has copied each string into every cell, so they can still expand in memory before they are refused); the unpacked-size check applies to every file opened as a workbook, however its format was detected. **Breaking change:** `ImportOptions` gained the public fields `max_columns`, `max_cells`, `max_inflated_bytes` and `max_text_bytes` and is not `#[non_exhaustive]`, so code that builds it as a full struct literal needs the four fields (or `..ImportOptions::default()`).
-- **Inbound mail parses off the async threads.** `Inbound::receive` and `Inbound::read` parse on Tokio's blocking pool, and a message that makes the parser panic is `InboundError::Unparseable` (a 400).
-- **Limits on reading PDFs and images.** Reading a PDF's text is held to a budget of work, 128 MiB a page and 1 GiB a document, that counts the content decoded (a form drawn again counts again), the fonts read, and the actual text of marked content; a page is also held to 1,000,000 glyphs, 8 MiB of text (64 MiB for the document), 256 levels of `q` and of marked content, and 50,000,000 comparisons attaching marks. A font's `ToUnicode` map is checked before lopdf reads it, however the font's encoding leads to it: more than 64 codespace ranges, 131,072 lines, 256 texts in one list or 65,792 in all lists is refused, and the map is counted as the memory lopdf builds for it (about 256 bytes for each code it covers, and the copies a split range makes), as are an encoding's `Differences`. Fonts and maps are read once for all the fonts that share them and kept within 256 MiB per document (plus the widths of one font), the least recently used dropped and read again past that at a cost in work, and a map that would take more on its own is refused. The comparison of every glyph with every other that made a line of a million glyphs take hours is gone, and in `Pdf::text` and `Pdf::page_texts` a `ToUnicode` map of a few bytes can no longer cover billions of codes. These limits are those of navree-documents' text reading only. The native engine refuses a PNG, GIF or WebP with more pixels than `documents.native.max_image_pixels` (default 25,000,000; 0 fails the boot, from configuration or from `DocumentsModule::for_root`) before decoding it; a JPEG goes into the PDF undecoded and is not counted. These return `DocumentsError::TooLarge`, a 413, whose message names the limit but no template file. `NativeOptions` has a new field, `max_image_pixels`: code that builds it without `..NativeOptions::default()` needs it.
-- **Loading an untrusted PDF can abort the process.** An object stream may inflate to at most 8 MiB, but nothing bounds the memory loading takes in total: every object stream is parsed as the file loads, the objects in one can share their bytes and are each parsed in full, and encrypted files are read the same way. A PDF within the default request body limit can exhaust memory, and the process aborts. Load PDFs from people you do not trust in a process you can afford to lose, such as a queue worker with a memory limit, not in the one serving requests.
-- **Stamps, overlays and merges keep shared resources shared.** Resources that pages inherit or share stay one object, so stamping a document of many pages and many fonts no longer copies every font onto every page, and a page the page tree lists twice is stamped once.
-- **A PDF that cannot be read is a 400.** `DocumentsError::Pdf` answers 400 with its message instead of 500. A fault of the server while writing an edited PDF is `DocumentsError::Engine` with `engine: "pdf"`, and an edit the app should not have asked for (merging nothing, a text stamp Helvetica cannot show) is the new `DocumentsError::Edit`; both stay 500, without details. `DocumentsError` has two new variants, `TooLarge` and `Edit`, and code that matched `Pdf` for those edits now sees `Edit`.
-- **FFmpeg starts with a clean environment.** `ProcessRunner` passes `ffmpeg` and `ffprobe` only `PATH`, the temporary directory (`TMPDIR`; `TEMP` and `TMP` on Windows, where a tool without them would write its temporary files in the Windows directory) and, on Windows, `SystemRoot`, so a file they open cannot reach the server's secrets through the process. A build that needs `LD_LIBRARY_PATH` goes behind a wrapper script named in `media.ffmpeg.ffmpeg`. `Archive::extract_to` inflates on the blocking pool.
-- **Lighthouse counts exactly under load.** Counts are never queued, the detail queue is bounded and samples what it drops (`lighthouse_sampled_out_total`), and the default trace sampling is 0.1.
-
-### Supply-chain checks, fuzzing and test folders
-
-- **Gates on every change.** `cargo-deny` (advisories, licenses, bans, sources), `cargo-vet`, OSV-Scanner over every lockfile, Semgrep with Navree's own rules, Gitleaks over the history, a daily vulnerability scan, and GitHub Actions pinned to commit SHAs. Tagged releases get a CycloneDX SBOM. [Contributing](/docs/prologue/contributing/) lists them, `SECURITY.md` says how to report a vulnerability and `CODEOWNERS` names the reviewers.
-- **Fuzzing.** A separate `fuzz/` workspace has a target for every parser of untrusted input; CI runs each briefly when `fuzz/` changes and for longer every week.
-- **Test folders clean up after themselves.** Every temporary folder a test makes is named `navree-test-*`; `TempDirGuard` deletes it, retrying for a short while on Windows where an open handle blocks the delete, and a sweep that runs at most every ten minutes removes the `navree-test-*` folders more than an hour old that a crashed run left behind.
-
-### The CLI and the starter kits
-
-- New apps depend on `navree` with the driver feature of the database you chose and `sqlite` in `[dev-dependencies]`. When `navree new` finds no checkout to point at, the dependency is the CLI's own version (`0.2.0`), not a fixed one. Generators write models and schema-builder migrations, and no generated `Cargo.toml` lists `sea-orm`.
-- `navree new` runs `git init` (nothing is committed) unless the directory is inside a repository, and writes `harbor.key` for apps that ship a `harbor.toml` (the starter kits). `navree harbor:init` on an existing `harbor.toml` writes only a missing key. `navree make:resource <module> <Model>` reads `models/<model>.rs`.
-- The starter kits run on the new APIs. Their `kit_version` is 0.2.0, the SaaS kit's `.env.example` gains `NAVREE_TRUSTED_PROXY_HOPS` and `NAVREE_CLIENT_IP_HEADER`, and the kits' CI, READMEs and `AGENTS.md` files follow the changes above. To pick up a kit's changes, generate a fresh copy and compare, as [Starter kits](/docs/getting-started/starter-kits/#updating) describes.
-
-### Fixes
-
-- Search: typo tolerance and engine edge cases (`search.postgres.typo_threshold`), SQLite full-text rows keyed by rowid, Qdrant date ranges and Meilisearch `drop_index`.
-- Scheduling: interval-style crons follow the wall clock through clock changes, and fixed-time crons run each local time once.
-- Microservices: `start_listener` and `micro:listen` return once the transport has confirmed its subscriptions, so a request sent right after boot over NATS is no longer lost.
-- Browser testing: a screenshot brings its page to the front first, failure screenshots included.
-- Harbor: SSH options, key-only `harbor:init`, the `harbor:ci` workflow in an app that its repository ignores, and running Harbor on Windows.
-
-## Upgrading from 0.1
-
-Work through these steps in order and build after each. Most apps need steps 1 to 5 and a look at step 7.
-
-### 1. Raise the version
-
-Point the `navree` dependency at 0.2.0: `cargo update -p navree` for a Git dependency on the branch you track, or `version = "0.2.0"` once the crates are published, or a `path` to a 0.2.0 checkout. Reinstall the CLI so that `navree new` and the generators match:
-
-```sh
-cargo install --git https://github.com/NavreeHQ/navree navree-cli --force
-```
-
-If your front end uses `@navree/client`, `@navree/bff`, `@navree/next`, `@navree/nuxt` or `@navree/theme`, move them to 0.2.0 together. Run `navree skills:install` again to refresh the agent skills.
-
-### 2. Turn on the `sqlite` feature where you use it
-
-SQLite is no longer built in. Add the `sqlite` feature wherever SQLite runs:
-
-- **An app on SQLite**: `navree = { git = "https://github.com/NavreeHQ/navree", features = ["sqlite"] }`. `navree new --database sqlite` writes it.
-- **An app on PostgreSQL or MySQL** changes nothing it runs on, but its tests run on SQLite files (`TestApp`'s `temp_database()` and `memory_database()`, and the default of `#[navree::test]`). Add the same entry to `[dev-dependencies]`: `navree = { git = "https://github.com/NavreeHQ/navree", features = ["sqlite"] }`.
-- **`database.url` left out** still means `sqlite://storage/app.db?mode=rwc`, so an app built without the feature stops at boot with "enable the `sqlite` feature of navree-db" instead of falling back to a file. Set the URL, or turn the feature on.
-- **Logbook's `file` store** is a SQLite file of its own, so it needs the feature too (`navree`'s `sqlite`, or `navree-logbook`'s). Without it `logbook.store` defaults to `memory`, and `logbook.store = "file"` fails at boot. A generated PostgreSQL app therefore keeps its Logbook entries in memory under `navree dev` unless you add the feature to its `[dependencies]`.
-- **Crates that depend on `navree-db` directly** turn `sqlite` on where their tests need it (`navree-db = { git = "https://github.com/NavreeHQ/navree", features = ["sqlite"] }` in `[dev-dependencies]`).
-- **Apps that use `micro` with `DatabaseModule`** must enable a driver feature (`postgres`, `mysql` or `sqlite`); the `micro` feature turns on `db` but no driver.
-
-### 3. Move from SeaORM to models and the schema builder
-
-An app has one data API now: [models](/docs/orm/models/) and records, the [schema builder](/docs/database/schema-builder/), and the `Executor`, `Statement` and `Uow` types of `navree::db`.
-
-1. **Drop the dependencies.** Remove `sea-orm`, `sea-orm-migration` and `sea-query` from `Cargo.toml`, along with `async-trait` if only migrations used it. `#[derive(Model)]` needs no crate of its own.
-2. **Rewrite each entity as a model** (below), and each migration as a schema-builder migration (below). Existing tables need no change: models read the same columns, and a database migrated by the old migrator keeps its history.
-3. **Replace the old calls** using the table below. The compiler finds them all: every removed name is gone from `navree::db`.
-4. **Match on the new errors.** `DbErr` becomes `DbError`, and queries made through models return `OrmError`.
-
-| Before | Now |
-|---|---|
-| `navree::db::sea_orm`, `navree::db::sea_orm_migration` | Removed |
-| A module with `Model`, `Relation` and `ActiveModel` types, `DeriveEntityModel` | A struct with `#[derive(Model)]` and `#[model(table = "...", timestamps)]` |
-| `Entity::find()`, `Column::X.eq(..)`, `ActiveModel { .. }.insert(..)` | `Post::query()`, `Post::TITLE.eq(..)`, `Post::create(&uow, ..)` |
-| `Repo::<E>::insert`, `update`, `delete`; `navree::db::{Repo, Reader, Factory, create, create_many}`; `navree::prelude::Repo` | `Model::create(&uow, ..)`, `record.save(&uow)`, `record.delete(&uow)`. They record the same change events. |
-| `navree::db::paginate`, `cursor_paginate`, `cursor_paginate_desc` on a `Select` | `Builder::paginate(&uow, page)` and `Builder::cursor_paginate(&uow, cursor)` with `CursorRequest`; the `Page` shape is unchanged |
-| `seed::Factory` with `type Entity`; `ModelFactory` as `navree_db::Factory` | [Model factories](/docs/orm/factories/): `navree::orm::factory::ModelFactory` (still in the prelude, under the `orm` feature) |
-| `uow.tx()`, `uow.open_tx()`, `DatabaseTransaction` | A `Uow` is an `Executor`: pass `&uow`. Nest work with `uow.savepoint()`; begin your own transaction with `Db::begin`. |
-| `DatabaseConnection`, `db.conn()`, `db.read_conn()`, `Db::from_connection`, `Db::reader` | `Db` is an `Executor`; `db.pool()` and `db.read_pool()` give the pools, `db.read_executor()` the replica to read from |
-| `ConnectionTrait` (`execute_raw`, `query_one_raw`, `query_all_raw`, `execute_unprepared`) | `Executor::{execute, fetch_optional, fetch_all, execute_script}` |
-| `Statement::from_sql_and_values`, `from_string`; `QueryResult::try_get`; `ExecResult` | `Statement::new(backend, sql, values)`, `Statement::portable(sql, values)` (`?` placeholders), `Statement::text(sql)`; `Row::get::<T>(name)`; `Executed { rows_affected, last_insert_id }` |
-| `DbErr`, `SqlErr`; `DbBackend` | `DbError` with `ErrorKind` (`is_unique_violation()`, `is_foreign_key_violation()`, `is_not_found()`, `is_retryable()`); `Backend`. Model queries return `OrmError` (`db_error()` gives the `DbError` inside). |
-| `map_db_error(&DbErr)` | `map_db_error(&DbError)` |
-| `ChangeObserver::observe(&self, &DatabaseTransaction, &Uow, changes) -> Result<(), DbErr>` | `ChangeObserver::observe(&self, &Uow, changes) -> Result<(), DbError>` |
-| `LoggedQuery { values: Vec<sea_orm::Value>, backend: DbBackend }` | `values: Vec<navree_db::Value>`, `backend: Backend` |
-| `navree_orm::Value::BigInt(Some(42))`, `Value::BigInt(None)` | `Value::I64(42)`, `Value::Null(Kind::I64)`: `navree_orm::Value` is `navree_db::Value` |
-| `Field::from_sql(&QueryResult, ..)`; `Row::sql()` | `Field::from_sql(&navree_db::Row, ..)`; `Row::db_row()`, `Row::into_db_row()` |
-| `From<sea_query::Condition>` and `From<sea_query::Expr>` for `Filter`; `Where::Sql` | `Filter::raw(Statement::portable(..))` or builder conditions (`Post::TITLE.eq(..)`, `where_raw`); `Where::Tree` |
-| `navree_orm::sql::compile_*`; `Dialect::from_backend`, `to_sea_orm` | `navree_orm::sql::render_*`; `Dialect::backend()` |
-| `OrmError::Db(DbErr)`, the `source` of `ModelNotFound` and `Timeout` | The same variants hold a `DbError`; `OrmError` no longer converts into `DbErr` |
-| `prune_time_series(conn: &impl ConnectionTrait, ..)` | `prune_time_series(&impl Executor, ..)` |
-| `MigrationTrait`, `SchemaManager`, `MigrationName`; `MigrationSet::migration(impl MigrationTrait)` | `navree::schema::Migration` and the schema builder; register with `migration!` (or `SchemaMigration::new(name, m)`) |
-| `Schema::new(db.conn())`; a custom `SchemaConnection` over a SeaORM connection | `Schema::new(&db)` (a `Db`, `Pool`, `Transaction` or `Uow`); a custom `SchemaConnection` implements `backend() -> Dialect`, `execute(&str)` and `query(&str, &[SchemaValue]) -> Vec<SchemaRow>` |
-| `SchemaError::Database` holding a `DbErr`; `From<SchemaError> for DbErr`; `Dialect::of` | A boxed database error (a `DbError` on `navree-db` connections); the conversion and `Dialect::of` are gone |
-| `sea_query` filters (`Expr`, `Condition`) | Builder conditions (`Post::TITLE.eq(..)`, `where_raw`) or a `Statement::portable` fragment |
-
-`Db::transaction(|uow| async move { .. })` is the shorter form for work that returns `Result<_, DbError>`, as statement-only work does. A model call returns `OrmError`, which does not convert into `DbError`, so work with models belongs in a service that takes the request's `&Uow`, or in a unit of work you open yourself and run in its scope:
-
-```rust
-let uow = db.uow(Some(user_id), None).await; // the actor the audit log records
-let result = uow
-    .scope(async {
-        let mut post = Post::find_or_fail(&uow, id).await?;
-        post.delete(&uow).await?;
-        Ok::<_, OrmError>(())
-    })
-    .await;
-match result {
-    Ok(()) => uow.commit().await?,
-    Err(error) => {
-        uow.rollback().await?;
-        return Err(error.into());
-    }
-}
-```
-
-Builds of the main branch between the two releases had a `database.native_units_of_work` option and a `NAVREE_TEST_NATIVE_UNITS_OF_WORK` variable. Both are gone and nothing reads them; delete any you set. A unit of work always runs on `navree-db`'s own transaction.
-
-A migration written for the old API:
-
-```rust
-use navree::db::sea_orm_migration::prelude::*;
-
-#[derive(DeriveMigrationName)]
-pub struct Migration;
-
-#[async_trait::async_trait]
-impl MigrationTrait for Migration {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table(Alias::new("posts"))
-                    .col(ColumnDef::new(Alias::new("id")).uuid().not_null().primary_key())
-                    .col(ColumnDef::new(Alias::new("title")).string().not_null())
-                    .to_owned(),
-            )
-            .await
-    }
-}
-```
-
-becomes:
-
-```rust
-use navree::schema::prelude::*;
-
-pub struct Migration;
-
-impl navree::schema::Migration for Migration {
-    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
-        schema
-            .create("posts", |t| {
-                t.uuid_primary();
-                t.string("title");
-            })
-            .await
-    }
-
-    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
-        schema.drop_if_exists("posts").await
-    }
-}
-```
-
-and the entity that read the table:
-
-```rust
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize)]
-#[sea_orm(table_name = "posts")]
-pub struct Model {
-    #[sea_orm(primary_key, auto_increment = false)]
-    pub id: Uuid,
-    pub title: String,
-}
-```
-
-becomes a model:
-
-```rust
-#[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
-#[model(table = "posts")]
-pub struct Post {
-    pub id: Uuid,
-    pub title: String,
-}
-```
-
-Read it with `Post::query().where_(Post::TITLE.eq("Hello")).get(&uow)` and write it with `Post::create(&uow, Post { title: "Hello".into(), ..Post::default() })`.
-
-### 4. Move from garde to `#[derive(Validate)]`
-
-The derive comes with `navree`, so the app needs no validation crate of its own.
-
-1. **Drop `garde`** from `Cargo.toml`, and replace `use garde::Validate;` with `use navree::validation::Validate;` (it is also in the prelude). A `build.rs` that adds `#[derive(garde::Validate)]` and `#[garde(..)]` to generated gRPC messages writes `#[derive(navree::validation::Validate)]` and `#[validate(..)]` instead.
-2. **Rename the attribute and the rules.** `#[garde(...)]` is `#[validate(...)]`. Every field still states its rules or `#[validate(skip)]`. An old rule name is a compile error that names the new spelling, so the compiler leads you through the rest.
-3. **Check the `length` rules.** `length(min = 1)` now counts characters; garde's plain `length` counted bytes. Write `length(bytes, max = 255)` where a byte limit is what you meant, and drop `chars` from `length(chars, ...)`.
-4. **Rewrite custom rules.** A rule is a function of the value alone, returning `Result<(), E>` with `E: Into<Violation>`; a `Violation`, a `String` and a `&str` all qualify. Rules that need request data read it from the `InputContext`, and rules that query the database are async rules.
-5. **Replace the bounds and the report.** `Validate<Context = ()>` is `Validate`, and `garde::Report` is `Violations`. `navree::validation::garde` is gone.
-
-| Before | Now |
-|---|---|
-| `#[garde(...)]` | `#[validate(...)]`; `skip`, `required`, `range`, `email`, `url`, `pattern`, `custom`, `ascii`, `alphanumeric`, `contains`, `ip`, `ipv4`, `ipv6` and `credit_card` keep their names |
-| `length(chars, min = 1)`; plain `length(min = 1)` on a string | `length(min = 1)`, which counts characters; `length(bytes, min = 1)` counts bytes |
-| `dive` | `nested` |
-| `inner(...)` | `each(...)` on a list, set or map; on an `Option`, the rules go on the field itself, since they apply to the `Some` value and pass on `None` |
-| `prefix("x")`, `suffix("x")`, `matches(other)` | `starts_with("x")`, `ends_with("x")`, `same_as(other)` |
-| `#[garde(allow_unvalidated)]` | `#[validate(skip_unmarked)]` on the type |
-| `fn rule(value: &T, _ctx: &()) -> garde::Result` | `fn rule(value: &T) -> Result<(), E>` with `E: Into<Violation>` |
-| `garde::Error::new(text)` | `Violation::text(text)`, or return the `&str` or `String` |
-| `rule_error(key, params)` returning a garde error | `rule_error(key, params)` returns a `Violation` (also `Violation::rule(key).with(name, value)`) |
-| `rules::{uuid, date_ymd, one_of, confirmed, unicode_name, country, locale, phone}` taking a context parameter; `navree_time::rules::time_zone(value, ctx)` | The same functions without the context: `fn(&T) -> Result<(), Violation>`; `one_of` and `confirmed` return `impl FnOnce(&T) -> Result<(), Violation>` |
-| `AsStr`, `HasSimpleLength` and `Bounds` of garde, implemented for your own wrapper types | `navree::validation::rules::{RuleInput, Length, Range}` |
-| `Validate<Context = ()>` bounds, on `Import::Row`, on settings groups, on agent tool arguments and on your own generic code | `Validate` |
-| `#[garde(context(...))]`, which the extractors never supported | `custom` expressions can read `self`, request data comes from the `InputContext`, and database rules are async rules |
-| `garde::Report` from `value.validate()` | `Violations`: each `Violation` has `key()`, `params()` and `message()`, and it displays one message per line with the field paths |
-| `AsyncRule::passes<C: ConnectionTrait>(&C)`; `RuleError::Database { source: DbErr }`; `unique` and `exists` taking `sea_orm::Value` | `passes<E: Executor + ?Sized>(&E)`; `source: Box<DbError>`; `impl Into<navree_db::Value>` |
-
-What else changes for an app that keeps its DTOs:
-
-- **Field paths follow serde.** A rule failure names the field the way serde does, with `rename` and `rename_all` applied, so a DTO with `#[serde(rename_all = "camelCase")]` reports `firstName` in its `errors` map where 0.1 reported the Rust name for rule failures and the serde name for parse failures. `#[validate(rename = "...")]` overrides the name. A front end that reads the `errors` map by key needs no change when the DTO has no renamed fields.
-- **`length` on a collection** reports the `elements` message (`tags must contain at least 1 elements`), also when the input came from a query string. The `characters` message is for text and `bytes` for `length(bytes, ...)`.
-- **Stricter parsers.** `email` accepts ASCII dot-atom addresses (at most 254 bytes, a local part of at most 64) with a host name or an address literal, with punycode for internationalized domains. `url` accepts ASCII RFC 3986 absolute URLs and requires a host for `http`, `https`, `ws`, `wss` and `ftp`. `Phone` rejects numbers with more than 15 digits, the E.164 limit.
-- **New compile errors.** A rule given twice on a field (only `custom` may repeat), `length()` or `range()` with no bound, a literal `min` above `max`, `same_as` naming no field, and `skip` combined with other rules.
-
-### 5. Check the routing changes
-
-`navree-http` has its own router and extractors. Handlers, `#[controller]` routes and `RouteDef::on` keep their shape; these behaviors change:
-
-- **Paths the router can't route unambiguously are a 400 before any guard or handler runs**: a `.` or `..` segment (raw or percent-encoded), a backslash, and `%2F`, `%5C` or `%00` in the value of a `{name}` parameter. A value that isn't UTF-8 once decoded is a 400 too. A proxy or a test that sent such paths and expected a 404 now gets a 400.
-- **An empty segment no longer matches a parameter.** `/deals//move` and a trailing slash are a 404 for `/deals/{id}/move` and `/deals/{id}`. Parameter values arrive percent-decoded, and `+` stays `+`.
-- **A parameter must be a whole segment.** `#[get("/v{n}")]` and `#[get("/{name}.json")]` are compile errors; capture the segment and parse it in the handler.
-- **Routes that differ only in parameter names fail the boot.** `/deals/{id}` and `/deals/{deal}` for one method name the same route twice: keep one name. `HttpModule` lists every such conflict in the boot error.
-- **`OPTIONS` answers 204 with an `Allow` header** for a known path, without running a route, unless a route handles `OPTIONS` itself. CORS preflights are still answered by the CORS layer first. A client that treated the old 405 on `OPTIONS` as a signal needs a change.
-- **`Form` checks its media type exactly.** It reads `application/x-www-form-urlencoded` only (parameters allowed), and answers 415 for anything else. `Json` reads `application/json` and `+json` types. A request with two `Content-Type` headers is a 415 for both.
-- **Hand-written extractors lose the state parameter.** Implement `navree::http::extract::FromRequestParts` (or `FromRequest`, for one that reads the body) without the `S` that the traits of `navree::axum` took, as in the example below the list. There is one set of extractor traits: an extractor still written against the old ones doesn't compile in a handler.
-- **Imports move.** `Path`, `Form`, `Extension`, `Json` and `Query` are `navree::http::{Path, Form, Extension, Json, Query}`, and `navree::http::body::Bytes` and `navree::http::extract::Request` replace their `navree::axum` twins. The prelude's `Path`, `Json` and `Query` are Navree's. `IntoResponse`, `IntoResponseParts`, `Response`, `Html`, `Redirect`, `AppendHeaders` and the server-sent events types are Navree's own, in `navree::http::response`, and `Body` and `to_bytes` in `navree::http::body`. They read the same on the wire. A body's error is a `BoxError`, and `Event::json_data` fails with a `serde_json::Error`. `navree::axum` is gone from the facade: `HeaderMap`, `Method`, `Uri`, `Version` and `StatusCode` come from the `http` crate, which your app adds to its dependencies.
-- **Middleware moves too.** `from_fn`, `from_fn_with_state`, `Next` and `State` are `navree::http::middleware::*`, with `navree::http::extract::Request`: a function written for `navree::axum::middleware::Next` needs only its imports changed, and `State` must be its first argument. `build_router` returns an `AppRouter`, which is what a `GlobalLayer` wraps. It has `layer`, and it is a Tower service, so `tower::ServiceExt::oneshot` calls it in a test. `AppRouter::new` takes any service, and `AppRouter::from_handler` a catch-all handler.
-- **`Multipart` moves, and has limits.** Import `navree::http::extract::Multipart`, with `Field` and `MultipartError` beside it. A form may have 1,000 parts, a part without a file name 1 MiB and a part's headers 16 KiB (413 past them; `http.multipart`, or `form.with_limits(..)` in a handler), and a file answers to the route's body limit as before. `field.text()` keeps to the 1 MiB whatever the part calls itself. A form with a boundary over 70 characters, two boundaries or two `Content-Type` headers is a 400. A body that's too slow is a 408. `MultipartError` is an enum now, and its `Display` is the same message as `body_text()`. A form that needs more sets its own limits: see [Multipart forms](/docs/basics/requests/#multipart-forms).
-- **WebSockets move, and are smaller.** Import `WebSocketUpgrade`, `WebSocket`, `Message`, `CloseFrame` and `Utf8Bytes` from `navree::http::ws`. A client's frame and message are limited to 1 MiB each, down from 16 MiB and 64 MiB: raise them with `max_frame_size` and `max_message_size`. The handshake is stricter: `Sec-WebSocket-Key` must be one base64 value of 16 bytes, `Sec-WebSocket-Version` one header saying `13`, `Connection` and `Upgrade` are read as lists of tokens (so `Connection: not-upgrade` no longer passes, and `keep-alive` and `Upgrade` on two lines does), and an HTTP/1.0 request can't upgrade. A wrong version's 400 now names `Sec-WebSocket-Version: 13`. `accept_unmasked_frames`, `on_failed_upgrade` and `set_selected_protocol` are gone, and a socket's errors are `WebSocketError`. See [WebSockets](/docs/basics/requests/#websockets).
-- **`RouteDef` takes Navree handlers.** `RouteDef::on(method, path, handler)` takes an async function or closure whose arguments are extractors, and its `handler` field is an `Endpoint`. `RouteDef::new(method, path, method_router)` is gone: use `RouteDef::on`.
-- **All the decoded path parameters** are a `PathParams` extractor (`navree::http::PathParams`) for the handlers and extractors that need more than `Path<T>` gives them.
-
-A hand-written extractor changes like this:
-
-```rust
-// before
-impl<S: Send + Sync> FromRequestParts<S> for Tenant {
-    type Rejection = AppError;
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, AppError> { .. }
-}
-
-// now
-impl FromRequestParts for Tenant {
-    type Rejection = AppError;
-    async fn from_request_parts(parts: &mut Parts) -> Result<Self, AppError> { .. }
-}
-```
-
-### 6. Update what the crates exposed
-
-These crates handed SeaORM types to your code. Each change below is a rename or a changed signature the compiler reports.
-
-**Every `Entity`, `ActiveModel`, `Column` and `Relation` is gone.** The entity modules of the framework's own tables (`navree_auth::{user, refresh_token, password_reset_token, login_token, passkey}`, the workspace, organization and partition modules of `navree_workspace::entity`, billing, flags, settings, OAuth, SSO, social, notifications, Lighthouse, webhooks and others) keep only their `Model`, now a navree-orm model with typed column constants (`issue::Model::STATUS`, `Issue::query()`). `navree_mail::entity::*` are now `TransportRow`, `DeliveryRow`, `EventRow`, `SuppressionRow` and `OutboxRow`, and `navree_access::entity::*` are `RoleRow`, `PermissionRow`, `RolePermissionRow`, `UserRoleRow`, `UserPermissionRow` and `AccessMetaRow`: `navree-db` records, queried with `use navree::db::Record as _; DeliveryRow::select()`. `navree_i18n::migration::locale_preference` is `LocalePreferenceRow`.
-
-**Error enums.** The variants that held a `DbErr` hold a `navree_db::DbError` now (`AuthError::Db`, `AccessError::Db`, `OAuthError::Db`, `SsoError::Db`, `SocialError::Db`, `QueueError::Db`, `ScheduleError::Db`, `MailError::Db`, `NotifyError::Database`, `WorkspaceError::Db`, `BillingError::Db`, `FlagsError::Database`, `SettingsError::Database`, `SearchError::Db`, `WebhooksError::Db`, `IntegrationsError::Db`, `DirectoryError::Db`, `DomainsError::Db`, `MediaError::Db`, `SheetsError::Db`, `WorkflowsError::Database`, `I18nError::Database`, `FleetError::Database`, `LighthouseError::Db`). The crates that run model queries gained an `Orm(OrmError)` variant, and an `OrmError` no longer converts into the `Db` variant. Add the arm to exhaustive matches.
-
-| Crate | Before | Now |
-|---|---|---|
-| `navree-auth` | `PasswordSignInPolicy` (`check(&self, email: &str)`) | `SignInPolicy` (`check(&self, &SignInAttempt)`), with `SignInMethod`, `SignInAudience` and `email_domain` |
-| `navree-auth` | `password_sign_in_policy::<P>()` on the module builder; `AuthError::PasswordSignInRefused` | `sign_in_policy::<P>()`; `AuthError::SignInRefused { code, message }` |
-| `navree-auth` | `AccessModule::for_feature::<navree_auth::user::Entity>()` | `AccessModule::for_feature::<navree_auth::User>()`; `navree_auth::user::insert(&uow, user)` creates a user |
-| `navree-auth` | Struct literals of `Claims` and `PlatformOptions` | Both gained a field (`Claims::sign_in`, `PlatformOptions::break_glass`, default `true`): add `..Default::default()` or the field |
-| `navree-access` | `Accessible::condition()`, `Accessible::apply(Select)` | `Accessible::sql_filter(&columns)` for hand-written SQL; `navree::orm::access::AccessibleQuery::{apply, query}` for models |
-| `navree-access` | `Ability::sql_filter` returning a `sea_query` expression; `EntityColumns<E>` | `SqlFilter` (`.to_statement(backend)` gives the portable fragment); `TypedColumns`, or `navree::orm::access::ModelColumns<M>` |
-| `navree-access` | `navree_access::record_json` for entities; the blanket `SubjectRecords` for SeaORM entities | `navree::orm::access::record_json` for models and `navree_access::row_json` for `navree-db` records; `#[derive(Model)]` with `#[model(subject = ...)]` implements `SubjectRecords` (by hand for a `navree-db` record) |
-| `navree-audit` | `AuditFilter::apply(Select)` | `AuditFilter::query()`, an ORM `Builder`; `AuditLog::list` fails with `OrmError`, `record_in` and `prune` with `DbError` |
-| `navree-oauth` | Unlimited token, introspection, revocation and device endpoints | Rate limits by client and IP (see step 7); `OAuthError::TooManyRequests { retry_after }`; `OAuthOptions::rate_limits` |
-| `navree-sso` | `SsoProfile::email_domain() -> Option<&str>` | `Option<String>` |
-| `navree-workspace` | `WorkspaceScoped: EntityTrait`; `WorkspaceRepo<E>`, `OrgRepo<E>`, `PartitionRepo<E>` with `select(..)` and `scope(.., Select<E>)` | `WorkspaceScoped: navree_orm::Model`; the repos are generic over a model `M`: `query(..)` and `scope(.., Builder<M>)`; `find`, `insert`, `update` and `delete` take any `&impl Executor` and work on `Record<M>`; a missing record is `OrmError::ModelNotFound` (still a 404) |
-| `navree-workspace` | `workspace_scoped::<E>()`, `workspace_entity::<E>()`, `global_entity::<E>()` on the module builder | The same methods take a model (`workspace_scoped::<Project>()`); `library::<M>()` is new |
-| `navree-workspace` | `IsolationSuiteExt::factory` over a `navree_db::Factory` | A navree-orm `Factory<F: ModelFactory>` whose model is `WorkspaceScoped` |
-| `navree-search` | `Searchable: EntityTrait`; `document(&Model, ctx)`; `SearchContext::conn()` | `Searchable: Model`, put `#[derive(Searchable)]` on the `#[derive(Model)]` struct; `document(&Record<Self>, ctx)`; `SearchContext::uow()` |
-| `navree-webhooks` | `WebhookContext::conn()` | `WebhookContext::db()`, for example `Deal::find(ctx.db(), id)` |
-| `navree-helm` | `Resource::Entity` (a SeaORM entity that is a `Subject`); `query(&self, Select<Entity>)` | `Resource::Model` (a model with `#[model(subject = "..")]`); `query(&self, Builder<Model>) -> Builder<Model>`; `create`, `update` and `delete` take and return `RecordOf<Self>`; `Filter<M>`, `Action<M>` and `Metric<M>` are generic over the model. `navree make:resource <module> <Model>` reads `models/<model>.rs`. |
-| `navree-ai` | `AgentRun::accessible::<E: EntityTrait + Subject, A>()` and `authorize::<E, A>(id: impl Into<sea_orm::Value>)` | `accessible::<S: Subject, A>()` and `authorize::<S: SubjectRecords, A>(id: impl ToString)` with the model as the type; a tool's `#[can(Create, note::Entity)]` is `#[can(Create, Note)]` |
-| `navree-graphql` | `ContextExt::accessible::<E, A>` with `E: EntityTrait + Subject`; `accessible.apply(Entity::find())` | `E` is the model (`Deal`); `scope.query()` or `scope.apply(Deal::query())`. A loader's `type Error = Arc<DbErr>` is `Arc<DbError>` or `Arc<OrmError>`. |
-| `navree-mcp` | `navree::mcp::rmcp`; `McpTestClient::list_tools` and friends returning `rmcp::model` types | `navree::mcp::protocol` (`Tool`, `Resource`, `ResourceTemplate`, `Prompt`, `Implementation`, `ToolAnnotations`); the test client returns those types |
-| `navree-queue` | `Queue::push_observed(&self, tx: &DatabaseTransaction, uow: &Uow, envelope)` | `push_observed(&self, uow: &Uow, envelope)` |
-| `navree-notify` | `Notifier::{notifications, unread_count, mark_as_read, mark_all_as_read}<C: ConnectionTrait>(conn, ..)`, called with `uow.db().conn()` | `<E: Executor + ?Sized>(exec: &E, ..)` returning `OrmError`; pass `&uow` or `uow.db()` |
-| `navree-time` | `Zone::sql(DbBackend)`; `ZoneSql::local_timestamp` and `local_date` taking and returning a `sea_query` expression | `Zone::sql(Backend)`; they take and return a `Statement` fragment; `ZoneSql::column(name)` is new |
-| `navree-validation` | The async rule and `RuleError` changes of [step 4](#4-move-from-garde-to-derivevalidate) |
-| `navree-media` | `MediaStore::delete_owner(&self, tx: &DatabaseTransaction, model_type, model_id)` | `delete_owner(&self, uow: &Uow, model_type, model_id)` |
-| `navree-logbook` | `ChangeObserver for Logbook` with the old `observe` | Follows `ChangeObserver::observe(&Uow, ..)` above |
-| `navree-cache` | An unbounded memory store | At most 1,000,000 entries; `MemoryStore::with_capacity`, `capacity`, `len`, `is_empty` and `sweep` are new |
-| `navree-schedule` | `croner`'s parser | `CronExpression`, with `CronError` and `MAX_EXPRESSION_LEN` (256) |
-
-### 7. Check the defaults and behaviors that changed
-
-- **Sign-in.** Every sign-in path asks the `SignInPolicy`s, including the second step of two-factor sign-in and email and password changes, and an SSO domain refuses every non-SSO method. A password change or email change by an SSO user answers 403 `sso_required`. Tokens now carry a `sign_in` claim for challenge tokens; the header is `{"alg","typ"}`; verification refuses tokens over 8 KiB and tokens with a `kid` or `crit` header. Tokens issued before the upgrade still verify.
-- **Rate limits.** An IPv6 client counts as its /64 network (`http.rate_limit_ipv6_prefix`). The OAuth endpoints are limited per minute, per client and per IP: token 300 and 120, introspection 1200 and 600, revocation 300 and 60, device authorization 60 and 30. Set a limit to `0` to turn it off, for example for a load test.
-- **Compression.** `http.compression` is gzip only; a client that accepts only `br` gets an uncompressed response.
-- **Cron.** These expressions are refused at boot now: names in the minute, hour or day-of-month field (`MON * * * *`), a weekday name as the month, empty list items (`1,,2`), a lone `L` in the day of week, `1-5#2`, `?/5` and a bare `*` inside a list. A task with `in_zone`, `in_default_zone` or `per_*_local` and a `*` in the minute or hour field (`0 * * * *`, `*/15 * * * *`, `@hourly`) follows the wall clock: it runs in both passes of a repeated hour and catches nothing up after a gap. UTC tasks are unchanged.
-- **Lighthouse.** `lighthouse.sample.requests` and `lighthouse.sample.jobs` default to `0.1` (they were `1.0`): set them to `1.0` to keep every trace. The metric `lighthouse_dropped_total` is `lighthouse_sampled_out_total`, and `Overview` has a `sampled_out` field. `lighthouse.buffer` bounds the detail queue only; counts are exact.
-- **Logbook.** `logbook.store` defaults to `memory` unless the `sqlite` feature is on (step 2).
-- **API reference and GraphiQL.** Their scripts are served by the app (`GET {api_prefix}/docs/assets/{file}` and `GET <graphiql path>/assets/{file}`) and the content security policy is `script-src 'self'`. Behind a proxy, forward the `Host` header: GraphiQL's WebSockets are allowed to the request's host only.
-- **gRPC.** The edge uses `navree_http::CorsLayer`: origins match byte for byte, `*` is never sent, a request with two `Origin` headers is refused and preflights never reach the service. The `http.cors.*` keys are unchanged.
-- **Custom domains.** `custom_domains.host` is no longer unique: the owner is the row with `verified_host` set (the new migration backfills it). `domain_taken` means "verified for another workspace, or this workspace already holds a claim", and a pending claim of another workspace blocks nobody. SQL of your own against `custom_domains` must use `verified_host` for the owner.
-- **Harbor.** After setting `deploy.trusted_proxies`, run `navree harbor:provision` and then `navree deploy`: Caddy then trusts the load balancer's `X-Forwarded-For`, and the front end's environment sets `NAVREE_TRUSTED_PROXY_HOPS=1`.
-- **Microservices.** `start_listener` and `micro:listen` return after the transport confirms its subscriptions. Custom `MicroTransport`s compile unchanged.
-- **Search.** The `search` migration creates nothing on MySQL, and the `postgres` engine is refused there at boot. On SQLite a new migration rebuilds the full-text table keyed by rowid.
-- **Outgoing HTTP.** The default `user_agent` of `navree-http-client` is `navree-http-client/<version>` of the running crate.
-- **Telemetry.** The `method` label of `http_requests_total` and `http_request_duration_seconds`, and `RequestHandled.method`, is one of the standard methods or `OTHER`.
-
-### 8. Regenerate what you copied
-
-Generated code is yours, so nothing changes in an existing app by itself. To take a template change, generate a fresh app (or kit) with the 0.2.0 CLI and compare the files you care about: the `Cargo.toml` dependency lines, `tests/app.rs`, the CI workflow, the web kit's `.env.example` and the models, migrations and services the generators write.
-
-## Navree 0.1.0
-
-0.1.0 is Navree's first release. It ships the framework (the kernel, the shared contracts, the module crates, the `navree` facade that re-exports them, the attribute macros and the `navree` CLI) together with the first-party ecosystem: tools for monitoring, debugging, queues, administration, deployment and local services, and packages for search, AI, microservices, OAuth, billing and more. Everything shares one version number, is open source under MIT or Apache-2.0 and is free to self-host.
+Navree 1.0.0 is Navree's first release. It ships the framework (the kernel, the shared contracts, the module crates, the `navree` facade that re-exports them, the attribute macros and the `navree` CLI) together with the first-party ecosystem: tools for monitoring, debugging, queues, administration, deployment and local services, and packages for search, AI, microservices, OAuth, billing and more. Everything shares one version number: the crates, the `navree` CLI, the starter kits and the `@navree/*` npm packages are all 1.0.0. Navree is open source under MIT or Apache-2.0 and free to self-host, and from 1.0 it follows semantic versioning (see the [roadmap](/docs/prologue/roadmap/)).
 
 <Callout type="note" title="Installing from Git">
 
@@ -379,7 +13,7 @@ Install the CLI from the Git repository, and let new apps depend on the reposito
 
 </Callout>
 
-The sections below, from The framework to Design decisions, list what Navree includes. They describe the code of the current release; the 0.2.0 notes above say what changed since 0.1.0.
+The sections below list what Navree includes. They describe the code of this release.
 
 ## Connection limits
 
@@ -397,23 +31,28 @@ The `serve` command runs on `navree::http::serve`, which bounds what a client ca
 
 ### HTTP
 
-- **`navree-http`**: the HTTP module, with a default pipeline (request ids, client IP resolution through trusted proxies, panic catching, timeouts, security headers, compression, a per-IP rate limit, body limits, maintenance mode), controllers, deny-by-default route access, per-route throttles, signed URLs, CORS and one JSON error shape for every error (`{ "statusCode", "message", "error", "code" }`, validation failures as 400 with `errors`), whose stable `code` a front end translates.
-- **`navree-validation`**: `#[derive(Validate)]` rules with `Valid<Json<T>>`, `Valid<Query<T>>` and friends, with one readable message per broken rule and async `unique` and `exists` rules. International input: phone numbers in E.164 with a per-request default region, rich text sanitized by a configurable policy, names and digits in any script, ISO 3166-1 countries and BCP 47 locales.
+- **`navree-http`**: the HTTP module, with a default pipeline (request ids, client IP resolution through trusted proxies, panic catching, timeouts, security headers, compression, a per-IP rate limit, body limits, maintenance mode), controllers, deny-by-default route access, per-route throttles, signed URLs, CORS and one JSON error shape for every error (`{ "statusCode", "message", "error", "code" }`, validation failures as 400 with `errors`), whose stable `code` a front end translates. Responses are compressed with gzip (`http.compression`); a client that accepts only `br` gets an uncompressed response. The per-IP limit and the login, social and OAuth throttles count an IPv6 client as its network (`http.rate_limit_ipv6_prefix`, default 64), so one host can't dodge a limit by changing addresses within its prefix, and `X-Forwarded-For` entries may carry a port. The CORS layer is Navree's own and serves the HTTP pipeline and the gRPC edge: origins match byte for byte, `*` is never sent, a request with two `Origin` headers is refused and, on the gRPC edge, preflights never reach the service.
+- **Routing**: `navree-http` routes requests itself. The router matches the path as the client sent it, segment by segment, and never rewrites it: static segments before parameters before catch-alls, percent-decoded parameter values (`+` stays `+`), `HEAD`, `OPTIONS` and 405 with `Allow`, and boot-time checks for conflicting routes. A path it can't route unambiguously is a 400 before any guard or handler runs: a `.` or `..` segment (raw or percent-encoded), a backslash, `%2F`, `%5C` or `%00` in the value of a `{name}` parameter, and a value that isn't UTF-8 once decoded. An empty segment doesn't match a parameter, so `/deals//move` and a trailing slash are a 404 for `/deals/{id}/move` and `/deals/{id}`. A parameter is a whole segment: `#[get("/v{n}")]` and `#[get("/{name}.json")]` are compile errors, so capture the segment and parse it in the handler. Routes that differ only in parameter names (`/deals/{id}` and `/deals/{deal}` for one method) fail the boot, and `HttpModule` lists every such conflict in the boot error. `OPTIONS` on a known path answers 204 with an `Allow` header without running a route, unless a route handles `OPTIONS` itself; CORS preflights are answered by the CORS layer first.
+- **Extractors**: handlers are async functions whose arguments are extractors, and `RouteDef::on(method, path, handler)` takes such a handler. `Path`, `Query`, `RawQuery`, `Form`, `Json`, `Multipart`, `WebSocketUpgrade`, `Extension`, `Scoped`, `ClientIp` and `CurrentPrincipal` are Navree's own, with body limits, limits on every part of a form and on WebSocket frames, an urlencoded parser and media-type parsing, and rejections that render in the JSON error format. `HeaderMap`, `Method`, `Uri`, `Version`, `Extensions`, `Bytes`, `String` and `Request` are extractors too, and `PathParams` (`navree::http::PathParams`) gives all the decoded path parameters. `Form` reads `application/x-www-form-urlencoded` only (parameters allowed) and answers 415 for anything else; `Json` reads `application/json` and `+json` types; a request with two `Content-Type` headers is a 415 for both. A hand-written extractor implements `navree::http::extract::FromRequestParts`, or `FromRequest` for one that reads the body. `IntoResponse`, `IntoResponseParts`, `Response`, `Html`, `Redirect`, `AppendHeaders` and the server-sent events types are in `navree::http::response`, `Body` and `to_bytes` in `navree::http::body`, and `from_fn`, `from_fn_with_state`, `Next` and `State` in `navree::http::middleware`. `HeaderMap`, `Method`, `Uri`, `Version` and `StatusCode` come from the `http` crate, which your app adds to its dependencies. `build_router` returns an `AppRouter`, which is what a `GlobalLayer` wraps; it is a Tower service, so `tower::ServiceExt::oneshot` calls it in a test.
+- **Multipart forms**: `navree::http::extract::Multipart`, with `Field` and `MultipartError` beside it. A form may have 1,000 parts, a part without a file name 1 MiB and a part's headers 16 KiB (413 past them; `http.multipart`, or `form.with_limits(..)` in a handler), and a file answers to the route's body limit. `field.text()` keeps to the 1 MiB whatever the part calls itself. A form with a boundary over 70 characters, two boundaries or two `Content-Type` headers is a 400, and a body that's too slow is a 408. See [Multipart forms](/docs/basics/requests/#multipart-forms).
+- **WebSockets**: `WebSocketUpgrade`, `WebSocket`, `Message`, `CloseFrame` and `Utf8Bytes` are in `navree::http::ws`, and a socket's errors are `WebSocketError`. A client's frame and message are limited to 1 MiB each (`max_frame_size` and `max_message_size` raise them). The handshake is strict: `Sec-WebSocket-Key` must be one base64 value of 16 bytes, `Sec-WebSocket-Version` one header saying `13` (a wrong version's 400 names `Sec-WebSocket-Version: 13`), `Connection` and `Upgrade` are read as lists of tokens (so `Connection: not-upgrade` fails and `keep-alive` and `Upgrade` on two lines passes), and an HTTP/1.0 request can't upgrade. See [WebSockets](/docs/basics/requests/#websockets).
+- **`navree-validation`**: `#[derive(Validate)]` rules with `Valid<Json<T>>`, `Valid<Query<T>>` and friends, with one readable message per broken rule and async `unique` and `exists` rules. International input: phone numbers in E.164 with a per-request default region (a number with more than 15 digits is refused), rich text sanitized by a configurable policy, names and digits in any script, ISO 3166-1 countries and BCP 47 locales. The derive and its `#[validate(...)]` field rules are Navree's own, in the `navree-validation-macros` crate and the rule runtime of `navree-validation`. Every field states its rules or `#[validate(skip)]`, so a field added later can't go unchecked: a field with neither is a compile error (`#[validate(skip_unmarked)]` on the type opts out). The rules are `required`, `length`, `range`, `email`, `url`, `ip`, `ipv4`, `ipv6`, `ascii`, `alphanumeric`, `credit_card`, `contains`, `starts_with`, `ends_with`, `pattern` (checked at compile time), `same_as`, `custom`, `nested`, `each(...)` and `rename`. `length` counts characters; `length(bytes, ...)` counts bytes. A rule given twice on a field (only `custom` may repeat), `length()` or `range()` with no bound, a literal `min` above `max`, `same_as` naming no field, and `skip` combined with other rules are compile errors. A custom rule is a function of the value alone, returning `Result<(), E>` with `E: Into<Violation>` (a `Violation`, a `String` and a `&str` all qualify); rules that need request data read it from the `InputContext`, and rules that query the database are async rules. The email (RFC 5321) and URL (RFC 3986) parsers are Navree's own, with property tests and a libFuzzer target: `email` accepts an ASCII dot-atom address of at most 254 bytes with a local part of at most 64, and a host name or an address literal, with punycode for internationalized domains; `url` accepts ASCII absolute URLs and requires a host for `http`, `https`, `ws`, `wss` and `ftp`. A failure is a `Violation`: a rule key and parameters, or a text, at a dotted path that follows serde's `rename` and `rename_all` (`#[validate(rename = "...")]` overrides the name), so a DTO with `#[serde(rename_all = "camelCase")]` reports `firstName`. `length` on a collection reports the `elements` message (`tags must contain at least 1 elements`), also when the input came from a query string. `Violations` displays one message per line with the field paths. The [400 response](/docs/basics/validation/#error-responses) has the JSON error format. `navree-validation` has an optional `time` feature that implements `Validate` for the zones, days and day ranges of `navree-time`.
 - **`navree-api`**: an OpenAPI 3.1 document built from route metadata at `/api/openapi.json`, a docs UI at `/api/docs`, `openapi:export`, and API resource helpers.
 - **`navree-session`**: encrypted session cookies with memory and database stores, and CSRF protection for single-page apps that use cookies.
 
 ### Data
 
-- **`navree-db`**: a database engine on sqlx (pools, statements, rows, transactions and the `Executor` they share) with a unit of work per request (a transaction that commits when the response succeeds) that records change events, per-module migration sets, seeders, pagination and the `migrate`, `migrate:rollback`, `migrate:fresh`, `migrate:status` and `db:seed` commands. TimescaleDB is the default database (`navree new` sets it up and Dock runs it), with hypertables for Navree's own time-series tables and chunk-dropping pruning (`prune_time_series`); plain PostgreSQL with the same `postgres` feature, MySQL and MariaDB with `mysql`, and SQLite with `sqlite`.
-- **`navree-orm`**: the [ORM](/docs/orm/getting-started/). Models are structs with `#[derive(Model)]` and typed column constants; a query builder with joins, subqueries, unions, aggregates, JSON and full-text conditions, row locks and bulk writes; records with dirty tracking; relationships of every kind with batched eager loading and lazy-loading prevention; casts, accessors and serialization; model events, observers and broadcasts; global and local scopes, soft deletes and pruning; offset and cursor pagination, chunks and streams; factories with fake data; `#[navree::test]` databases with templates and assertions; route model binding; and workspace and access-control scoping. It runs in the unit of work on PostgreSQL with TimescaleDB, MySQL and MariaDB, SQLite and, with `navree-mongo`, MongoDB.
-- **`navree-schema`**: the [schema builder](/docs/database/schema-builder/) migrations are written with: tables, columns, indexes, foreign keys and check constraints in Rust, written as each database's SQL, SQLite table rebuilds, TimescaleDB hypertables, reading the live schema, and [schema dumps](/docs/database/squashing-migrations/) that replace a long migration history.
-- **`navree-cache`**: a bounded memory cache store with `remember`, tags, stale-while-revalidate and atomic locks.
+- **`navree-db`**: a database engine on sqlx: pools that honor every `database.*` setting, statements, rows, errors classified the same way on every database (`DbError` with an `ErrorKind`), transactions with savepoints, and the `Executor` that pools, transactions, units of work and `Db` share. A unit of work per request (a transaction that commits when the response succeeds) always runs on `navree-db`'s own transaction and records change events. It also has per-module migration sets, seeders, pagination and the `migrate`, `migrate:rollback`, `migrate:fresh`, `migrate:status` and `db:seed` commands. TimescaleDB is the default database (`navree new` sets it up and Dock runs it), with hypertables for Navree's own time-series tables and chunk-dropping pruning (`prune_time_series`); plain PostgreSQL with the same `postgres` feature, MySQL and MariaDB with `mysql`, and SQLite with `sqlite`. Statements are correct on PostgreSQL and MySQL when a placeholder's value type differs between runs, and SQLite migrations begin `IMMEDIATE`, so they queue for the write lock rather than failing with "database is locked".
+- **SQLite is opt-in.** It is the `sqlite` Cargo feature of `navree` (and of `navree-db`), off by default like `postgres` and `mysql`, so a PostgreSQL or MySQL build compiles no SQLite C code: the bundled SQLite library is most of the C in a build, and `cargo tree -i libsqlite3-sys` finds nothing without the feature. `navree new` writes the driver feature you chose, and `sqlite` in `[dev-dependencies]`, because tests run on SQLite files (`TestApp`'s `temp_database()` and `memory_database()`, and the default of `#[navree::test]`). With `database.url` left out the database is `sqlite://storage/app.db?mode=rwc`, so an app built without the feature stops at boot with "enable the `sqlite` feature of navree-db". Logbook's `file` store is a SQLite file of its own, so it needs the feature too (`navree`'s `sqlite`, or `navree-logbook`'s): without it `logbook.store` defaults to `memory`, and `logbook.store = "file"` fails at boot. An app that uses `micro` with `DatabaseModule` enables a driver feature (`postgres`, `mysql` or `sqlite`); the `micro` feature turns on `db` but no driver.
+- **`navree-orm`**: the [ORM](/docs/orm/getting-started/). Models are structs with `#[derive(Model)]` and typed column constants; a query builder with joins, subqueries, unions, aggregates, JSON and full-text conditions, row locks and bulk writes; records with dirty tracking; relationships of every kind with batched eager loading and lazy-loading prevention; casts, accessors and serialization; model events, observers and broadcasts; global and local scopes, soft deletes and pruning; offset and cursor pagination, chunks and streams; factories with fake data; `#[navree::test]` databases with templates and assertions; route model binding; and workspace and access-control scoping. It writes its own SQL and runs it through `navree-db` in the unit of work on PostgreSQL with TimescaleDB, MySQL and MariaDB, SQLite and, with `navree-mongo`, MongoDB. Queries made through models return `OrmError` (`db_error()` gives the `DbError` inside), and `navree_orm::Value` is `navree_db::Value`. The framework's own tables are models, and the modules that own tables migrate them with schema-builder migrations.
+- **`navree-schema`**: the only migration system, built on the [schema builder](/docs/database/schema-builder/): tables, columns, indexes, foreign keys and check constraints in Rust, written as each database's SQL, SQLite table rebuilds, TimescaleDB hypertables, reading the live schema, and [schema dumps](/docs/database/squashing-migrations/) that replace a long migration history.
+- **`navree-cache`**: a bounded memory cache store (at most 1,000,000 entries, with SIEVE eviction; `MemoryStore::with_capacity`, `capacity`, `len`, `is_empty` and `sweep`) with `remember`, tags, stale-while-revalidate and atomic locks.
 
 ### Security
 
-- **`navree-auth`**: 15-minute JWT access tokens and 30-day rotating refresh tokens with reuse detection, pluggable authentication strategies, `CurrentUser`, registration, password change and reset, email verification, TOTP two-factor authentication with recovery codes and a policy that requires it per role or per workspace, and login throttling. Users list and end their sessions; `#[recent_auth]` asks for the password or a code again before sensitive actions; support staff impersonate users behind `#[not_while_impersonating]` guards, with the impersonator on every audit entry; magic links, emailed sign-in codes and passkeys (ES256 and Ed25519) sign users in without a password; platform administrators sign in apart with two-factor authentication always; and trusted sibling systems hand their users over with signed tokens.
+- **`navree-auth`**: 15-minute JWT access tokens and 30-day rotating refresh tokens with reuse detection, pluggable authentication strategies, `CurrentUser`, registration, password change and reset, email verification, TOTP two-factor authentication with recovery codes and a policy that requires it per role or per workspace, and login throttling. Every sign-in path asks each `SignInPolicy` (`check(&self, &SignInAttempt)`, with `SignInMethod`, `SignInAudience` and `email_domain`): password, magic link, emailed code, passkey, social, token-exchange and second-step sign-in, and an email or password change. Sign-in domains are normalized, so every spelling of an SSO domain matches. An SSO user's password or email change answers 403 `sso_required`. A refused sign-in is `AuthError::SignInRefused { code, message }`. `revoke_credentials_of_domain` (and `revoke_all_credentials`) revokes every credential of the users of a domain, for offboarding in one call. Tokens carry a `sign_in` claim for challenge tokens, the header is `{"alg","typ"}`, and verification refuses tokens over 8 KiB and tokens with a `kid` or `crit` header. Users list and end their sessions; `#[recent_auth]` asks for the password or a code again before sensitive actions; support staff impersonate users behind `#[not_while_impersonating]` guards, with the impersonator on every audit entry; magic links, emailed sign-in codes and passkeys (ES256 and Ed25519) sign users in without a password; platform administrators sign in apart with two-factor authentication always; and trusted sibling systems hand their users over with signed tokens.
 - **`navree-access`**: roles, permissions and abilities, record checks for `#[can(.., from = "id")]` routes, SQL list filters with `Accessible`, the abilities endpoint that shares the rules with front ends (in the JSON form `@casl/ability` reads), management routes and the `access:role`, `access:grant` and `access:explain` commands.
-- **`navree-crypto`**: AES-256-GCM encryption with key rotation, Argon2id password hashing on a bounded blocking pool, token helpers and `key:generate`. `navree_crypto::jose` signs and verifies JSON Web Signatures (HS256, EdDSA, ES256, RS256 and their siblings) on `ring`, reads and publishes JSON Web Keys and key sets, and loads PKCS#8 keys such as Apple's `.p8` files and the public keys of X.509 certificates; it also signs and reads the HS256 tokens of `navree-auth`. `navree_crypto::totp` makes and checks time-based one-time passwords (RFC 6238, with `otpauth://` URLs) and `navree_crypto::qr` encodes QR codes (ISO/IEC 18004) as SVG, for the two-factor flows.
+- **`navree-crypto`**: AES-256-GCM encryption with key rotation, Argon2id password hashing on a bounded blocking pool, token helpers and `key:generate`. `navree_crypto::jose` is Navree's own: it signs and verifies JSON Web Signatures (HS256, EdDSA, ES256, RS256 and their siblings) on `ring`, reads and publishes JSON Web Keys and key sets, and loads PKCS#8 keys such as Apple's `.p8` files and the public keys of X.509 certificates; it also signs and reads the HS256 tokens of `navree-auth`. `navree_crypto::totp` makes and checks time-based one-time passwords (RFC 6238, with `otpauth://` URLs) and `navree_crypto::qr` encodes QR codes (ISO/IEC 18004) as SVG, for the two-factor flows; both are Navree's own code.
 - **`navree-audit`**: an audit log of data changes, sign-ins, permission changes and access denials, with `audit:prune`.
 
 ### Workspaces
@@ -424,7 +63,7 @@ The `serve` command runs on `navree::http::serve`, which bounds what a client ca
 
 - **`navree-queue`**: database and memory job queues with workers, retries with backoff, unique and delayed jobs, failed-job storage and the `queue:work`, `queue:failed`, `queue:retry` and `queue:flush` commands. Jobs dispatched during a request are queued only if its transaction commits. [Batches](/docs/digging-deeper/batches-and-operations/) run many jobs as one with `then`, `catch` and `finally` callbacks, jobs report progress with `ctx.progress`, and operations show long work to users: `GET /api/operations/{id}`, an SSE progress stream, a private channel, cooperative cancel and a watchdog that fails or restarts stalled work.
 - **`navree-events`**: a typed event bus with synchronous and queued listeners.
-- **`navree-schedule`**: schedules on cron expressions in UTC, in a time zone (`in_zone`) or once per workspace at its local time (`per_workspace_local`), overlap prevention, single-node runs across servers sharing a database, and `schedule:run`, `schedule:work` and `schedule:list`.
+- **`navree-schedule`**: schedules on cron expressions in UTC, in a time zone (`in_zone`) or once per workspace at its local time (`per_workspace_local`), overlap prevention, single-node runs across servers sharing a database, and `schedule:run`, `schedule:work` and `schedule:list`. `navree_schedule::CronExpression` is Navree's own parser and next-run search, with a documented language, `CronError` and `MAX_EXPRESSION_LEN` (256). These are refused at boot: names in the minute, hour or day-of-month field (`MON * * * *`), a weekday name as the month, empty list items (`1,,2`), a lone `L` in the day of week, `1-5#2`, `?/5` and a bare `*` inside a list. In a zone (`in_zone`, `in_default_zone` and `per_*_local`), an expression with a `*` in the minute or hour field (`0 * * * *`, `*/15 * * * *`, `@hourly`) follows the wall clock: it runs in both passes of a repeated hour and catches nothing up after a gap, and fixed-time crons run each local time once.
 - **`navree-time`**: time zones for users, workspaces and organizations. `CurrentZone`, local days and report windows counted in the tenant's days, send windows with weekends and public holidays, `AT TIME ZONE` with a checked zone, zone names every PostgreSQL accepts, and the public zone list at `/api/time/zones`. See [Time zones](/docs/digging-deeper/time-zones/).
 
 ### Communication
@@ -437,8 +76,8 @@ The `serve` command runs on `navree::http::serve`, which bounds what a client ca
 ### Integrations and operations
 
 - **`navree-storage`**: named disks on object_store, streaming, signed temporary URLs and upload checks.
-- **`navree-http-client`**: outgoing HTTP with retries, timeouts, an SSRF policy and fakes for tests.
-- **`navree-observe`**: `/health/live`, `/health/ready` with per-module checks, and Prometheus metrics at `/metrics`.
+- **`navree-http-client`**: outgoing HTTP with retries, timeouts, an SSRF policy and fakes for tests. The default `user_agent` is `navree-http-client/<version>` of the running crate.
+- **`navree-observe`**: `/health/live`, `/health/ready` with per-module checks, and Prometheus metrics at `/metrics`. The `method` label of `http_requests_total` and `http_request_duration_seconds`, and `RequestHandled.method`, is one of the standard methods or `OTHER`.
 
 ### Testing
 
@@ -448,22 +87,22 @@ The `serve` command runs on `navree::http::serve`, which bounds what a client ca
 
 ### Tools
 
-- **[Lighthouse](/docs/tools/lighthouse/)** (`navree-lighthouse`): application monitoring inside your app, with a dashboard at `/_lighthouse`. Exceptions grouped by fingerprint, slow requests and queries, failed jobs, sampled traces, alerts to email, Slack and signed webhooks through the queue, a JSON API so scripts can read and resolve issues, and MCP tools, an issue resource and a fix-this-issue prompt for agents (with the `mcp` feature).
+- **[Lighthouse](/docs/tools/lighthouse/)** (`navree-lighthouse`): application monitoring inside your app, with a dashboard at `/_lighthouse`. Exceptions grouped by fingerprint, slow requests and queries, failed jobs, sampled traces, alerts to email, Slack and signed webhooks through the queue, a JSON API so scripts can read and resolve issues, and MCP tools, an issue resource and a fix-this-issue prompt for agents (with the `mcp` feature). Counts are exact under load: they are never queued, the detail queue (`lighthouse.buffer`) is bounded and samples what it drops (`lighthouse_sampled_out_total`, and `sampled_out` on `Overview`), and `lighthouse.sample.requests` and `lighthouse.sample.jobs` default to `0.1` (set them to `1.0` to keep every trace).
 - **[Logbook](/docs/tools/logbook/)** (`navree-logbook`): a local debugging timeline at `/_logbook` of every request, query, job, mail, event, cache call and log line, with filters and request replay. Development only.
 - **[Fleet](/docs/tools/fleet/)** (`navree-fleet`): a queue dashboard at `/_fleet` and a worker supervisor (`navree fleet`) with auto-balanced workers per queue, throughput, wait and runtime metrics, retries for failed jobs, pause and continue, and long-wait alerts.
-- **[Helm](/docs/tools/helm/)** (`navree-helm`): an admin panel at `/admin` generated from your entities, with fields, filters, actions and metrics per resource (`navree make:resource`). It respects your access rules.
-- **[Harbor](/docs/tools/harbor/)**: server provisioning and zero-downtime deployments from the CLI (`navree harbor:provision`, `navree deploy`, `navree deploy:rollback`), configured in `harbor.toml`, with health-checked atomic releases, encrypted secrets, several servers and roles, container images and push-to-deploy from GitHub Actions.
+- **[Helm](/docs/tools/helm/)** (`navree-helm`): an admin panel at `/admin` generated from your models, with fields, filters, actions and metrics per resource (`navree make:resource`). It respects your access rules.
+- **[Harbor](/docs/tools/harbor/)**: server provisioning and zero-downtime deployments from the CLI (`navree harbor:provision`, `navree deploy`, `navree deploy:rollback`), configured in `harbor.toml`, with health-checked atomic releases, encrypted secrets, several servers and roles, container images and push-to-deploy from GitHub Actions. Behind a load balancer, `deploy.trusted_proxies` makes Caddy trust the balancer's `X-Forwarded-For` (run `navree harbor:provision` and then `navree deploy`), and the front end's environment sets `NAVREE_TRUSTED_PROXY_HOPS=1`.
 - **[Dock](/docs/tools/dock/)**: local services for development. `navree dock up` starts TimescaleDB (or plain PostgreSQL), Redis, Meilisearch, Mailpit, MinIO and NATS in Docker or Podman, configured in `dock.toml`.
-- **[Navigator](/docs/ai/navigator/)**: the MCP server for your coding agent (`navree mcp`). It lists routes, the module graph and providers, the database schema, recent logs and the last error, runs read-only SQL and searches the docs for your version.
+- **[Navigator](/docs/ai/navigator/)**: the MCP server for your coding agent (`navree mcp`). It lists routes, the module graph and providers, the database schema, recent logs and the last error, runs read-only SQL and searches the docs for your version. Its stdio server runs on the protocol layer of `navree-mcp`.
 
 ### Packages
 
-- **[Search](/docs/packages/search/)** (`navree-search`): full-text and vector search over your models with `#[derive(Searchable)]`, on PostgreSQL full text, Meilisearch, Typesense or embedded Tantivy, with vectors in pgvector or Qdrant and indexes kept in sync through the queue.
+- **[Search](/docs/packages/search/)** (`navree-search`): full-text and vector search over your models with `#[derive(Searchable)]`, on PostgreSQL full text, Meilisearch, Typesense or embedded Tantivy, with vectors in pgvector or Qdrant and indexes kept in sync through the queue. Typo tolerance on PostgreSQL is `search.postgres.typo_threshold`. The `search` migration creates nothing on MySQL, and the `postgres` engine is refused there at boot; on SQLite the full-text table is keyed by rowid.
 - **[AI SDK](/docs/ai/ai-sdk/)** (`navree-ai`): text, structured output, streaming, [agents with tools](/docs/ai/agents-and-tools/), [embeddings and RAG](/docs/ai/embeddings-and-rag/), with provider failover across Anthropic, OpenAI, Google Gemini, Mistral, Ollama and AWS Bedrock, and `AiFake` for tests.
-- **[MCP servers](/docs/ai/mcp-servers/)** (`navree-mcp`, feature `mcp`): expose your app's tools, resources and prompts to AI clients with `#[mcp_server]`, over streamable HTTP at `/mcp` or stdio (`mcp:serve --user`), authenticated by your app's bearer tokens or OAuth (RFC 9728 metadata), with per-tool permissions, filtered lists, `McpTestClient` and `navree make:mcp`. The protocol layer is Navree's own: protocol versions `2024-11-05` to `2025-11-25` and the stateless `2026-07-28`, with Origin checks, random session ids bound to their user, size and depth limits, cancellation and bounded queues, checked against the official MCP TypeScript SDK's client.
-- **[Microservices](/docs/microservices/introduction/)** (`navree-micro`): request-response and events between services over TCP, NATS, Kafka, RabbitMQ, Redis Streams and MQTT, and hybrid apps that serve HTTP and messages from one binary.
-- **[gRPC](/docs/microservices/grpc/)** (`navree-grpc`) and **[GraphQL](/docs/microservices/graphql/)** (`navree-graphql`): gRPC, gRPC-Web and Connect services on tonic, and GraphQL on async-graphql with dataloaders and subscriptions, both sharing your modules, guards and access rules.
-- **[OAuth server](/docs/packages/oauth-server/)** (`navree-oauth`): OAuth 2.1 and OpenID Connect for third-party apps, with PKCE, client credentials, device codes, scopes and consent, and personal access tokens.
+- **[MCP servers](/docs/ai/mcp-servers/)** (`navree-mcp`, feature `mcp`): expose your app's tools, resources and prompts to AI clients with `#[mcp_server]`, over streamable HTTP at `/mcp` or stdio (`mcp:serve --user`), authenticated by your app's bearer tokens or OAuth (RFC 9728 metadata), with per-tool permissions, filtered lists, `McpTestClient` (its calls return the `navree::mcp::protocol` types) and `navree make:mcp`. The protocol layer is Navree's own: protocol versions `2024-11-05` to `2025-11-25` and the stateless `2026-07-28`, with Origin checks, random session ids bound to their user, size and depth limits, cancellation and bounded queues, checked against the official MCP TypeScript SDK's client.
+- **[Microservices](/docs/microservices/introduction/)** (`navree-micro`): request-response and events between services over TCP, NATS, Kafka, RabbitMQ, Redis Streams and MQTT, and hybrid apps that serve HTTP and messages from one binary. `start_listener` and `micro:listen` return once the transport has confirmed its subscriptions, so a request sent right after boot over NATS is not lost.
+- **[gRPC](/docs/microservices/grpc/)** (`navree-grpc`) and **[GraphQL](/docs/microservices/graphql/)** (`navree-graphql`): gRPC, gRPC-Web and Connect services on tonic, and GraphQL on async-graphql with dataloaders and subscriptions, both sharing your modules, guards and access rules. GraphQL hides its internal types from introspection, and the API reference UI and GraphiQL ship inside the app: their scripts are served by it (`GET {api_prefix}/docs/assets/{file}` and `GET <graphiql path>/assets/{file}`) under a content security policy of `script-src 'self'`, and GraphiQL's WebSockets may only reach the request's host, so behind a proxy forward the `Host` header.
+- **[OAuth server](/docs/packages/oauth-server/)** (`navree-oauth`): OAuth 2.1 and OpenID Connect for third-party apps, with PKCE, client credentials, device codes, scopes and consent, and personal access tokens. The token, introspection, revocation and device endpoints have per-client and per-IP rate limits (`oauth.rate_limits`, per minute: token 300 and 120, introspection 1200 and 600, revocation 300 and 60, device authorization 60 and 30; public clients are limited per IP only; `0` turns a limit off, for a load test for example). A limited request is `OAuthError::TooManyRequests { retry_after }`.
 - **[Social sign-in](/docs/packages/social-sign-in/)** (`navree-social`): sign-in with Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn, Discord, X and any OpenID Connect provider, linked to Navree users and ending with normal Navree tokens.
 - **[Single sign-on](/docs/security/single-sign-on/)** (`navree-sso`): SAML 2.0 and OpenID Connect sign-in per organization or workspace, verified email domains that route sign-in and can refuse passwords, and just-in-time provisioning with group to role mapping. SAML signatures are verified in Rust (exclusive canonicalization, RSA-SHA256 and ECDSA on `ring`; SHA-1 refused), with `SsoFake` for tests.
 - **[Billing](/docs/packages/billing/)** (`navree-billing`): subscriptions, trials, usage metering and invoices with Stripe or Paddle, for users or workspaces.
@@ -473,13 +112,13 @@ The `serve` command runs on `navree::http::serve`, which bounds what a client ca
 - **[Webhooks](/docs/packages/webhooks/)** (`navree-webhooks`): signed outgoing webhooks with queue-backed retries and a delivery log, and verified incoming ones from Stripe, GitHub, Paddle, AWS SNS, Google Pub/Sub, Microsoft Graph, Twilio, Slack, Mailgun, Postmark and Standard Webhooks senders, with their handshakes answered.
 - **[Integrations](/docs/packages/integrations/)** (`navree-integrations`): each workspace or organization connects its own Microsoft 365 (admin consent and app-only tokens), Google Workspace (service-account keys with domain-wide delegation), Slack, OAuth 2.0 APIs and API keys; credentials encrypted with the application key, tokens refreshed once under a lock, least-privilege scope sets per feature, scheduled health checks that emit `ConnectionUnhealthy`, and typed clients such as `Connection<MicrosoftGraph>`.
 - **[Directory sync](/docs/packages/directory-sync/)** (`navree-directory`): each workspace or organization keeps its people in step with its directory, pushed by Microsoft Entra ID, Okta or any identity provider over a SCIM 2.0 server (filters, PATCH as providers send it, a bearer token per connection), or pulled from Microsoft Graph with delta queries, Google Workspace, Okta, and LDAP or Active Directory over TLS; one normalized directory mapped into your model by `impl DirectorySink`, in runs that stage, diff and apply with dry runs, a deactivation limit that holds a suspicious run for approval, progress on operations and every change recorded; events for created, updated and deactivated users, and `DirectoryFake` for tests.
-- **[Custom domains](/docs/packages/custom-domains/)** (`navree-domains`): workspaces on their own domains, with the DNS records to create, verification through TXT records and routing checks on a schedule, automatic TLS through an on-demand proxy's ask endpoint (Harbor's Caddy with `[web.custom_domains]`) or ACME certificates the app gets, renews and serves itself with rustls, the `domain` workspace resolver and `CurrentDomain` for public pages, managed Cloudflare zones, certificate expiry reports to Lighthouse, and fakes for DNS, the CA and certificate probes.
-- **[Documents](/docs/packages/documents/)** (`navree-documents`): PDF from HTML templates or documents built in code, laid out in process by the native engine (HarfRust shaping, bidirectional text, tables whose headers repeat, page-numbered headers and footers, tagged PDF, bundled Noto fonts for Latin, Arabic, Hebrew and Devanagari) or printed by headless Chrome, DOCX, merge, stamps and overlays, and queued renders to a storage disk, behind an operation your users follow when you want one. See [Typst templates become HTML](#typst-templates-become-html).
+- **[Custom domains](/docs/packages/custom-domains/)** (`navree-domains`): workspaces on their own domains, with the DNS records to create, verification through TXT records and routing checks on a schedule, automatic TLS through an on-demand proxy's ask endpoint (Harbor's Caddy with `[web.custom_domains]`) or ACME certificates the app gets, renews and serves itself with rustls, the `domain` workspace resolver and `CurrentDomain` for public pages, managed Cloudflare zones, certificate expiry reports to Lighthouse, and fakes for DNS, the CA and certificate probes. A claim is decided by proof of control: a pending claim never blocks the owner of a domain, a verified claim wins (the owner is the `custom_domains` row with `verified_host` set), a transfer needs fresh proof, `domain_taken` means "verified for another workspace, or this workspace already holds a claim", and failed claims are deleted after `domains.verification.failed_retention_hours`.
+- **[Documents](/docs/packages/documents/)** (`navree-documents`): PDF from HTML templates or documents built in code, laid out in process by the native engine (HarfRust shaping, bidirectional text, tables whose headers repeat, page-numbered headers and footers, tagged PDF, bundled Noto fonts for Latin, Arabic, Hebrew and Devanagari) or printed by headless Chrome, DOCX, merge, stamps and overlays, and queued renders to a storage disk, behind an operation your users follow when you want one. The native engine reads the same `.html` templates as Chrome ([The native engine](/docs/packages/documents/#the-native-engine) lists the HTML it reads), and `documents.engine` (`native` by default, or `chrome`) or `.engine(EngineKind::Chrome)` on a render chooses between them.
 - **[Media](/docs/packages/media/)** (`navree-media`, feature `media`): files attached to models in collections that check types sniffed from the content and sizes and keep one or the latest few files, rows in the `media` table and bytes on storage disks; image conversions (resize, crop, WebP, greyscale, blur, responsive variants with a `srcset`, SVG through resvg) with EXIF stripped from originals, queued and regenerated with `media:regenerate`; remote files through the SSRF guard; zip archives with zip-slip and size-bomb guards; text from PDF, DOCX and HTML; video and audio through an FFmpeg sidecar (`media-ffmpeg`); and `MediaFake` for tests.
 - **[Imports and exports](/docs/packages/imports-and-exports/)** (`navree-sheets`): CSV with a byte-order mark and formula escaping and XLSX with typed cells from `#[derive(Exportable)]` rows, streamed or queued to a disk with a signed link; imports that detect the encoding (UTF-16, Windows-1256 and the rest), read CSV, XLSX, XLS and ODS, map headers automatically or from saved mappings, validate every row with its rules, stage the rows for a preview and apply them in queue batches with duplicates skipped, updated or refused, and write an error file.
 - **[Workflows](/docs/packages/workflows/)** (`navree-workflows`): durable workflows as `#[workflow]` async functions, whose steps are stored and replayed on resume, with retries, sleeps of minutes or months, event waits with timeouts, versions, cancellation and leases that survive crashes; and **[automations](/docs/packages/automations/)** people build in your app from `#[trigger]`, `#[condition]` and `#[action]` blocks, with JSON Schemas for the editor, versioned definitions per workspace, enrollment policies, waits, simulation and templates.
 - **[Localization](/docs/packages/localization/)** (`navree-i18n`): Fluent translations, plurals, locale negotiation and translated validation messages.
-- **[Browser testing](/docs/packages/browser-testing/)** (`navree-browser`): drive a real browser from your tests over the Chrome DevTools Protocol.
+- **[Browser testing](/docs/packages/browser-testing/)** (`navree-browser`): drive a real browser from your tests over the Chrome DevTools Protocol. A screenshot brings its page to the front first, failure screenshots included.
 - **[Starter kits](/docs/getting-started/starter-kits/)**: `navree new <name> --kit saas`, `--kit api` or `--kit micro`. The SaaS kit has a Next.js and shadcn/ui front end with sign-in, workspaces, billing, settings and admin.
 
 ### AI-native
@@ -492,11 +131,13 @@ The `serve` command runs on `navree::http::serve`, which bounds what a client ca
 
 The `navree` binary (crate `navree-cli`) creates apps, generates code and runs the dev loop:
 
-- `navree new <name>`, with `--kit` for a [starter kit](/docs/getting-started/starter-kits/), `--ui next` for a Next.js front end that keeps tokens in httpOnly cookies, and `--navree-path` to choose the Navree checkout.
-- `navree make:module <name> [--crud]` and `make:<kind>` generators for controllers, services, entities, migrations, jobs, events, listeners, mail, notifications, policies, commands, AI agents and tests. Generators never overwrite files; they register what they create at marker comments.
+- `navree new <name>`, with `--kit` for a [starter kit](/docs/getting-started/starter-kits/), `--ui next` for a Next.js front end that keeps tokens in httpOnly cookies, and `--navree-path` to choose the Navree checkout. New apps depend on `navree` with the driver feature of the database you chose and `sqlite` in `[dev-dependencies]`. When `navree new` finds no checkout to point at, the dependency is the CLI's own version (`1.0.0`). It runs `git init` (nothing is committed) unless the directory is inside a repository, and writes `harbor.key` for apps that ship a `harbor.toml` (the starter kits); `navree harbor:init` on an existing `harbor.toml` writes only a missing key.
+- `navree make:module <name> [--crud]` and `make:<kind>` generators for controllers, services, models, migrations, jobs, events, listeners, mail, notifications, policies, commands, AI agents and tests. Generators write models and schema-builder migrations, never overwrite files, and register what they create at marker comments. `navree make:resource <module> <Model>` reads `models/<model>.rs`.
 - `navree dev`, which rebuilds and restarts the app when its code changes, and keeps the last good build serving when a build fails.
 - The ecosystem's commands: `navree dock up`, `navree deploy`, `navree fleet`, `navree mcp` and `navree skills:install`.
 - Every other command is forwarded to the app's binary.
+
+The starter kits record `kit_version = "1.0.0"` in the app's `Cargo.toml`. The SaaS kit's `.env.example` has `NAVREE_TRUSTED_PROXY_HOPS` and `NAVREE_CLIENT_IP_HEADER`, and the kits ship their CI workflow, READMEs and `AGENTS.md`. A kit is a template, so a later kit's changes reach new apps only: to pick them up, generate a fresh copy and compare, as [Starter kits](/docs/getting-started/starter-kits/#updating) describes.
 
 ## The reference CRM
 
@@ -506,17 +147,27 @@ The `navree` binary (crate `navree-cli`) creates apps, generates code and runs t
 
 A Navree app is one binary that needs a few megabytes at idle and starts in milliseconds. [Performance](/performance/) has Navree's measurements, the workload behind them, the method and how to reproduce them on your own machine.
 
-## Typst templates become HTML
+## Security hardening
 
-Before 0.1.0, `navree-documents` compiled `.typ` templates with the Typst crates. Those crates brought six dependencies that are no longer maintained (`bincode`, `paste`, `rustybuzz`, `ttf-parser`, `unsafe-libyaml` and `yaml-rust`), which the vulnerability scan reports, so the Typst engine is replaced by a native engine built on maintained crates (krilla, HarfRust, Skrifa, unicode-bidi, ICU4X). It reads the same `.html` templates as Chrome, and [Documents built in code](/docs/packages/documents/#documents-built-in-code) adds `PdfDocument`.
+- **Client addresses behind proxies.** The `@navree/bff` backend-for-frontend forwards the browser's address (`clientIpHeader`, `NAVREE_CLIENT_IP_HEADER`), and Harbor's Caddy trusts the load balancer's `X-Forwarded-For` (`deploy.trusted_proxies`).
+- **Content security policies.** The API reference and GraphiQL load scripts from the app itself (`script-src 'self'`), GraphiQL's WebSockets may only reach the request's host, and GraphQL hides its internal types from introspection.
+- **Parser limits.** The parsers for host names, phone numbers, email domains and SCIM filters are fuzzed. SCIM filters are capped at 16 KiB and 32 levels.
+- **Imports are limited by shape as well as size.** `sheets.imports.max_columns` (default 16,384, the width of an Excel sheet) and `sheets.imports.max_cells` (default 10,000,000) refuse a file with a message on the import. Every row counts at the header's width, because a short CSV with a very wide header is padded to that width on every row, so a few hundred kilobytes could otherwise ask for tens of gigabytes. `sheets.imports.max_rows` is checked while the file is read, not after every row is in memory.
+- **How each format is read.** CSV, TSV and XLSX files are refused while they are read, a record or a cell at a time, without their rows being held. XLS, ODS and XLSB files are read into a range of the sheet first, so for them the limits apply after that range is in memory. A header repeated thousands of times is named in linear time. Staging reads the file on the blocking pool so the job's timeout can fire, and the reading stops at its next record when it does. An XLSX sheet whose cells are not in row order (Excel never writes one) is held only up to those limits, and is refused when it has more cells with a value than `max_cells` even if the table would have fitted.
+- **Workbooks that unpack to a lot.** `sheets.imports.max_inflated_bytes` (default 1 GiB) refuses a workbook with a part that unpacks to more than that by the size its zip file declares, before it is read: `max_upload_bytes` bounds the file, not what it unpacks to, and the XLSX reader keeps the shared strings whole. The check applies to every file opened as a workbook, however its format was detected. `sheets.imports.max_text_bytes` (default 256 MiB) bounds the text the table keeps, counting a shared string again for each cell it is in, so a small CSV, TSV or XLSX file can't ask for gigabytes of copies. XLS, ODS and XLSB are counted only after their library has copied each string into every cell, so they can still expand in memory before they are refused.
+- **Inbound mail parses off the async threads.** `Inbound::receive` and `Inbound::read` parse on Tokio's blocking pool, and a message that makes the parser panic is `InboundError::Unparseable` (a 400).
+- **Limits on reading PDFs and images.** Reading a PDF's text is held to a budget of work, 128 MiB a page and 1 GiB a document, that counts the content decoded (a form drawn again counts again), the fonts read, and the actual text of marked content. A page is also held to 1,000,000 glyphs, 8 MiB of text (64 MiB for the document), 256 levels of `q` and of marked content, and 50,000,000 comparisons attaching marks. A font's `ToUnicode` map is checked before lopdf reads it, however the font's encoding leads to it: more than 64 codespace ranges, 131,072 lines, 256 texts in one list or 65,792 in all lists is refused. The map is counted as the memory lopdf builds for it (about 256 bytes for each code it covers, and the copies a split range makes), as are an encoding's `Differences`, so a `ToUnicode` map of a few bytes can't cover billions of codes in `Pdf::text` and `Pdf::page_texts`. Fonts and maps are read once for all the fonts that share them and kept within 256 MiB per document (plus the widths of one font); past that the least recently used are dropped and read again, at a cost in work, and a map that would take more on its own is refused. These limits are those of navree-documents' text reading only.
+- **Image limits.** The native engine refuses a PNG, GIF or WebP with more pixels than `documents.native.max_image_pixels` (default 25,000,000; 0 fails the boot, from configuration or from `DocumentsModule::for_root`) before decoding it; a JPEG goes into the PDF undecoded and is not counted. These refusals are `DocumentsError::TooLarge`, a 413, whose message names the limit but no template file.
+- **Loading an untrusted PDF can abort the process.** An object stream may inflate to at most 8 MiB, but nothing bounds the memory loading takes in total: every object stream is parsed as the file loads, the objects in one can share their bytes and are each parsed in full, and encrypted files are read the same way. A PDF within the default request body limit can exhaust memory, and the process aborts. Load PDFs from people you do not trust in a process you can afford to lose, such as a queue worker with a memory limit, not in the one serving requests.
+- **Stamps, overlays and merges keep shared resources shared.** Resources that pages inherit or share stay one object, so stamping a document of many pages and many fonts doesn't copy every font onto every page, and a page the page tree lists twice is stamped once.
+- **PDF errors.** A PDF that cannot be read is `DocumentsError::Pdf`, a 400 with its message. A fault of the server while writing an edited PDF is `DocumentsError::Engine` with `engine: "pdf"`, and an edit the app should not have asked for (merging nothing, a text stamp Helvetica cannot show) is `DocumentsError::Edit`; both are 500, without details.
+- **FFmpeg starts with a clean environment.** `ProcessRunner` passes `ffmpeg` and `ffprobe` only `PATH`, the temporary directory (`TMPDIR`; `TEMP` and `TMP` on Windows, where a tool without them would write its temporary files in the Windows directory) and, on Windows, `SystemRoot`, so a file they open cannot reach the server's secrets through the process. A build that needs `LD_LIBRARY_PATH` goes behind a wrapper script named in `media.ffmpeg.ffmpeg`. `Archive::extract_to` inflates on the blocking pool.
 
-If your app used Typst templates:
+## Supply-chain checks, fuzzing and test folders
 
-- **Rewrite each `.typ` template as `.html`.** The render's data are template variables (`{{ name }}`, not `json("/data.json")`), `{{ locale }}` and `{{ dir }}` replace `sys.inputs`, `@page { size; margin }` sets the page, and a `<footer>` with `<span class="pageNumber">` and `<span class="totalPages">` numbers pages. [The native engine](/docs/packages/documents/#the-native-engine) lists the HTML it reads; the same file also prints in Chrome.
-- **Renamed**: the crate feature `typst` is `native` (on by default), `TypstEngine` is `NativeEngine`, `TypstOptions` is `NativeOptions`, `EngineKind::Typst` is `EngineKind::Native`, and the `documents.typst` section is `documents.native` (`bundled_fonts`, `font_dirs` and `timeout_secs` keep their names; `print` is new). `engine = "native"` and `documents:render --engine native` name the engine; `typst` is refused with a message that says so.
-- **Removed**: `Render::typst`, `TemplateSource::Typst`, `TYPST_EXTENSION` and `documents.typst.packages_dir`.
-- **Changed**: `Render::html(..)` no longer sends a render to Chrome by itself. `documents.engine` decides, `native` by default; set it to `chrome`, or call `.engine(EngineKind::Chrome)` on the render, to keep printing with Chrome.
-- **Added**: Noto Serif, Noto Sans Mono and Noto Sans Hebrew join the bundled fonts, in both engines.
+- **Gates on every change.** `cargo-deny` (advisories, licenses, bans, sources), `cargo-vet`, OSV-Scanner over every lockfile, Semgrep with Navree's own rules, Gitleaks over the history, a daily vulnerability scan, and GitHub Actions pinned to commit SHAs. Tagged releases get a CycloneDX SBOM. [Contributing](/docs/prologue/contributing/) lists them, `SECURITY.md` says how to report a vulnerability and `CODEOWNERS` names the reviewers.
+- **Fuzzing.** A separate `fuzz/` workspace has a target for every parser of untrusted input; CI runs each briefly when `fuzz/` changes and for longer every week.
+- **Test folders clean up after themselves.** Every temporary folder a test makes is named `navree-test-*`; `TempDirGuard` deletes it, retrying for a short while on Windows where an open handle blocks the delete, and a sweep that runs at most every ten minutes removes the `navree-test-*` folders more than an hour old that a crashed run left behind.
 
 ## Design decisions
 

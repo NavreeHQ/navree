@@ -47,9 +47,6 @@ impl std::str::FromStr for EngineKind {
         match name {
             "native" => Ok(EngineKind::Native),
             "chrome" => Ok(EngineKind::Chrome),
-            "typst" => Err(
-                "the typst engine was replaced by `native`: write the template as HTML".to_owned(),
-            ),
             other => Err(format!("unknown PDF engine `{other}` (native or chrome)")),
         }
     }
@@ -93,12 +90,11 @@ mod tests {
         assert_eq!(EngineKind::Chrome.extension(), "html");
         assert_eq!("chrome".parse::<EngineKind>(), Ok(EngineKind::Chrome));
         assert_eq!("native".parse::<EngineKind>(), Ok(EngineKind::Native));
-        assert!("wkhtml".parse::<EngineKind>().is_err());
         assert!(
-            "typst"
+            "wkhtml"
                 .parse::<EngineKind>()
                 .unwrap_err()
-                .contains("native")
+                .contains("native or chrome")
         );
         assert_eq!(EngineKind::default(), EngineKind::Native);
         assert_eq!(serde_json::to_value(EngineKind::Chrome).unwrap(), "chrome");

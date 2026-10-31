@@ -1,22 +1,21 @@
 ---
 title: "Roadmap"
-description: "Where Navree goes after 0.2: the 1.0 API freeze, long-term support, more drivers and starter kits, Windows services and ongoing performance work."
+description: "Where Navree goes after 1.0: semantic versioning, long-term support, more drivers and starter kits, Windows services and ongoing performance work."
 ---
 
 This page describes where Navree is heading. It has no dates: each item ships when it is ready, and the [release notes](/docs/prologue/release-notes/) record what each release brings. If one of these matters to you, [Contributing](/docs/prologue/contributing/) explains how to help.
 
-## Navree 1.0 and the API freeze
+## Versioning
 
-0.x releases may still change public APIs; each change is listed in the release notes with what to do about it. Navree 1.0 freezes the public API of every crate in the framework and the ecosystem:
+Navree follows semantic versioning from 1.0. The public API of every crate in the framework and the ecosystem stays compatible across 1.x: minor and patch releases are safe to take, and a breaking change waits for 2.0. What comes with it:
 
-- **Semantic versioning.** After 1.0, a breaking change needs a new major version. Minor and patch releases are safe to take.
 - **crates.io.** Every crate is published, so `cargo install navree-cli` and `cargo add navree` replace the Git installs.
 - **A minimum supported Rust version** stated for each release, and raised only in minor releases.
 - **Upgrade guides** for every major version, with the changes your code needs.
 
 ## Long-term support
 
-From 1.0, Navree publishes a support policy: how long each release line gets bug fixes and security fixes, and which major versions are long-term support (LTS) releases with the longest security window. Security fixes are released for every supported line at the same time, with an advisory.
+Navree will publish a support policy: how long each release line gets bug fixes and security fixes, and which major versions are long-term support (LTS) releases with the longest security window. Security fixes are released for every supported line at the same time, with an advisory.
 
 ## More drivers
 

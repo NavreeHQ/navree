@@ -17,15 +17,14 @@ names none, so one template can go to either engine.
 
 ## Why a native engine
 
-The engine it replaces compiled Typst templates with `typst`, `typst-pdf`
-and `typst-layout` 0.15.1, the latest release. Through them the workspace
-carried six crates that osv-scanner reports as unmaintained: `bincode`,
-`paste`, `rustybuzz`, `ttf-parser`, `unsafe-libyaml` and `yaml-rust`
-(through syntect, hayagriva, biblatex, serde_yaml, fontdb, usvg and
-krilla's `simple-text` feature), plus `postcard`, `heapless` 0.7 and
-`atomic-polyfill` through `icu_provider_blob`. Typst depends on
-`rustybuzz` and `ttf-parser` directly, so no feature selection removes
-them. The engine was replaced instead of allow-listing the findings.
+A typesetting engine such as Typst (`typst`, `typst-pdf` and `typst-layout`
+0.15.1) would bring six crates that osv-scanner reports as unmaintained:
+`bincode`, `paste`, `rustybuzz`, `ttf-parser`, `unsafe-libyaml` and
+`yaml-rust` (through syntect, hayagriva, biblatex, serde_yaml, fontdb, usvg
+and krilla's `simple-text` feature), plus `postcard`, `heapless` 0.7 and
+`atomic-polyfill` through `icu_provider_blob`. Typst depends on `rustybuzz`
+and `ttf-parser` directly, so no feature selection removes them. Navree
+lays documents out itself rather than allow-list those findings.
 
 ## Choosing the stack
 
@@ -40,7 +39,7 @@ with hayro 0.8.0 (pure Rust; its own lockfile scans clean) and compared.
 | (a) krilla 0.8.2 (`default-features = false`, `raster-images`), harfrust 0.15.0, skrifa 0.49.0, unicode-bidi 0.3.18, icu_segmenter 2.4.0 | 92 | no issues | Kerned Latin (`AV`, `Wa`, `To.`), `fi`/`ffi` ligatures, joined right-to-left Arabic, Devanagari conjuncts and reph placed correctly. Fonts embedded as subset CID fonts with `ToUnicode` maps; tagged PDF supported. |
 | (b1) printpdf 0.12.8 without features (`png`, `jpeg`) | 118 | no issues | No shaping: glyphs come from the cmap one character at a time. No kerning, Arabic letters unjoined and in logical (wrong) order, Devanagari with visible viramas and misplaced vowel signs. |
 | (b2) printpdf 0.12.8 with `text_layout` only | 137 | no issues | Shaping lives in azul-layout's text3 engine, reachable only through the HTML pipeline; no public shaping API without it. |
-| (b3) printpdf 0.12.8 with its default `html` feature | 144 | **RUSTSEC-2025-0141** (`bincode` 1.3.3, unmaintained, through `hyphenation` in azul-layout) | Not usable: the finding is what this work removes. |
+| (b3) printpdf 0.12.8 with its default `html` feature | 144 | **RUSTSEC-2025-0141** (`bincode` 1.3.3, unmaintained, through `hyphenation` in azul-layout) | Not usable: it brings an unmaintained crate. |
 
 Stack (a) has zero findings and is the only one with correct shaping, so
 it was chosen. krilla brings its own skrifa 0.42 for subsetting while

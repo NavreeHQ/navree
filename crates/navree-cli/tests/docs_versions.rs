@@ -13,7 +13,7 @@ fn repo_file(path: &str) -> String {
         .replace('\r', "")
 }
 
-/// `0.2` for `0.2.0`.
+/// `1.0` for `1.0.0`.
 fn series(version: &str) -> String {
     version.split('.').take(2).collect::<Vec<_>>().join(".")
 }

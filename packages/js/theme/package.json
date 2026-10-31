@@ -1,6 +1,6 @@
 {
   "name": "@navree/theme",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "navree.com's dark theme: Tailwind CSS 4 tokens, shadcn/ui and shadcn-vue colors, self-hosted fonts, and the tokens as data.",
   "license": "MIT OR Apache-2.0",
   "type": "module",

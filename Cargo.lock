@@ -1418,7 +1418,7 @@ checksum = "790eea4361631c5e7d22598ecd5723ff611904e3344ce8720784c93e3d83d40b"
 
 [[package]]
 name = "crm-activities"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "crm-core",
@@ -1434,7 +1434,7 @@ dependencies = [
 
 [[package]]
 name = "crm-api"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "crm-activities",
@@ -1453,7 +1453,7 @@ dependencies = [
 
 [[package]]
 name = "crm-companies"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "crm-core",
@@ -1470,7 +1470,7 @@ dependencies = [
 
 [[package]]
 name = "crm-core"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "navree",
@@ -1483,7 +1483,7 @@ dependencies = [
 
 [[package]]
 name = "crm-deals"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "crm-core",
@@ -1501,7 +1501,7 @@ dependencies = [
 
 [[package]]
 name = "crm-testkit"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "crm-core",
@@ -1514,7 +1514,7 @@ dependencies = [
 
 [[package]]
 name = "crm-users"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "crm-core",
@@ -2121,7 +2121,7 @@ dependencies = [
 
 [[package]]
 name = "evidence-app"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "async-graphql",
  "async-trait",
@@ -4394,7 +4394,7 @@ checksum = "a8afc6df942f4c022d70c5725e18df1a705773870e5b7f96fde94ca0334ce77a"
 
 [[package]]
 name = "navree"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "async-graphql",
  "base64 0.23.1",
@@ -4484,7 +4484,7 @@ dependencies = [
 
 [[package]]
 name = "navree-access"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "http",
@@ -4507,7 +4507,7 @@ dependencies = [
 
 [[package]]
 name = "navree-ai"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -4550,7 +4550,7 @@ dependencies = [
 
 [[package]]
 name = "navree-api"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "http",
  "http-body-util",
@@ -4571,7 +4571,7 @@ dependencies = [
 
 [[package]]
 name = "navree-audit"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "http",
@@ -4593,7 +4593,7 @@ dependencies = [
 
 [[package]]
 name = "navree-auth"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -4632,7 +4632,7 @@ dependencies = [
 
 [[package]]
 name = "navree-billing"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -4670,7 +4670,7 @@ dependencies = [
 
 [[package]]
 name = "navree-bounded"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "futures",
  "hashbrown 0.17.1",
@@ -4680,7 +4680,7 @@ dependencies = [
 
 [[package]]
 name = "navree-browser"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.23.1",
  "futures-util",
@@ -4703,7 +4703,7 @@ dependencies = [
 
 [[package]]
 name = "navree-cache"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "bytes",
  "navree-bounded",
@@ -4722,7 +4722,7 @@ dependencies = [
 
 [[package]]
 name = "navree-cli"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -4750,7 +4750,7 @@ dependencies = [
 
 [[package]]
 name = "navree-config"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "navree-contracts",
  "navree-kernel",
@@ -4766,7 +4766,7 @@ dependencies = [
 
 [[package]]
 name = "navree-contracts"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "navree-kernel",
@@ -4779,7 +4779,7 @@ dependencies = [
 
 [[package]]
 name = "navree-crypto"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -4804,7 +4804,7 @@ dependencies = [
 
 [[package]]
 name = "navree-db"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -4834,7 +4834,7 @@ dependencies = [
 
 [[package]]
 name = "navree-directory"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -4874,7 +4874,7 @@ dependencies = [
 
 [[package]]
 name = "navree-dock"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "insta",
  "serde_json",
@@ -4886,7 +4886,7 @@ dependencies = [
 
 [[package]]
 name = "navree-documents"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -4924,7 +4924,7 @@ dependencies = [
 
 [[package]]
 name = "navree-domains"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -4969,7 +4969,7 @@ dependencies = [
 
 [[package]]
 name = "navree-events"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "navree-contracts",
  "navree-kernel",
@@ -4983,7 +4983,7 @@ dependencies = [
 
 [[package]]
 name = "navree-flags"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "http",
@@ -5015,7 +5015,7 @@ dependencies = [
 
 [[package]]
 name = "navree-fleet"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "http",
@@ -5046,7 +5046,7 @@ dependencies = [
 
 [[package]]
 name = "navree-graphql"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "async-graphql",
  "base64 0.23.1",
@@ -5081,7 +5081,7 @@ dependencies = [
 
 [[package]]
 name = "navree-grpc"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -5132,7 +5132,7 @@ dependencies = [
 
 [[package]]
 name = "navree-harbor"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -5155,7 +5155,7 @@ dependencies = [
 
 [[package]]
 name = "navree-helm"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "cookie",
@@ -5191,7 +5191,7 @@ dependencies = [
 
 [[package]]
 name = "navree-http"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -5238,7 +5238,7 @@ dependencies = [
 
 [[package]]
 name = "navree-http-client"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "backon",
  "bytes",
@@ -5264,7 +5264,7 @@ dependencies = [
 
 [[package]]
 name = "navree-i18n"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "fixed_decimal",
@@ -5306,7 +5306,7 @@ dependencies = [
 
 [[package]]
 name = "navree-i18n-macros"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "fluent-syntax",
  "proc-macro2",
@@ -5317,7 +5317,7 @@ dependencies = [
 
 [[package]]
 name = "navree-integrations"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -5358,7 +5358,7 @@ dependencies = [
 
 [[package]]
 name = "navree-kernel"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "serde_json",
  "thiserror 2.0.21",
@@ -5369,7 +5369,7 @@ dependencies = [
 
 [[package]]
 name = "navree-lighthouse"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -5411,7 +5411,7 @@ dependencies = [
 
 [[package]]
 name = "navree-log"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "navree-config",
  "navree-kernel",
@@ -5429,7 +5429,7 @@ dependencies = [
 
 [[package]]
 name = "navree-logbook"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -5471,7 +5471,7 @@ dependencies = [
 
 [[package]]
 name = "navree-macros"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "heck",
  "http",
@@ -5496,7 +5496,7 @@ dependencies = [
 
 [[package]]
 name = "navree-mail"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -5541,7 +5541,7 @@ dependencies = [
 
 [[package]]
 name = "navree-mcp"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -5580,7 +5580,7 @@ dependencies = [
 
 [[package]]
 name = "navree-media"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -5621,7 +5621,7 @@ dependencies = [
 
 [[package]]
 name = "navree-micro"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "async-nats",
  "base64 0.23.1",
@@ -5667,7 +5667,7 @@ dependencies = [
 
 [[package]]
 name = "navree-mongo"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "bson",
  "chrono",
@@ -5693,7 +5693,7 @@ dependencies = [
 
 [[package]]
 name = "navree-navigator"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "futures-util",
@@ -5715,7 +5715,7 @@ dependencies = [
 
 [[package]]
 name = "navree-notify"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -5755,7 +5755,7 @@ dependencies = [
 
 [[package]]
 name = "navree-oauth"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -5790,7 +5790,7 @@ dependencies = [
 
 [[package]]
 name = "navree-observe"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "futures-util",
@@ -5822,7 +5822,7 @@ dependencies = [
 
 [[package]]
 name = "navree-orm"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "argon2",
  "base64 0.23.1",
@@ -5862,7 +5862,7 @@ dependencies = [
 
 [[package]]
 name = "navree-orm-macros"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "heck",
@@ -5874,7 +5874,7 @@ dependencies = [
 
 [[package]]
 name = "navree-queue"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "futures-util",
@@ -5905,7 +5905,7 @@ dependencies = [
 
 [[package]]
 name = "navree-realtime"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "bytes",
  "dashmap 6.2.1",
@@ -5935,7 +5935,7 @@ dependencies = [
 
 [[package]]
 name = "navree-redis"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -5964,7 +5964,7 @@ dependencies = [
 
 [[package]]
 name = "navree-schedule"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -5989,7 +5989,7 @@ dependencies = [
 
 [[package]]
 name = "navree-schema"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "insta",
  "navree-config",
@@ -6004,7 +6004,7 @@ dependencies = [
 
 [[package]]
 name = "navree-search"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "futures",
@@ -6037,7 +6037,7 @@ dependencies = [
 
 [[package]]
 name = "navree-session"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "cookie",
@@ -6063,7 +6063,7 @@ dependencies = [
 
 [[package]]
 name = "navree-settings"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "http",
@@ -6098,7 +6098,7 @@ dependencies = [
 
 [[package]]
 name = "navree-sheets"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "bytes",
  "calamine",
@@ -6139,7 +6139,7 @@ dependencies = [
 
 [[package]]
 name = "navree-social"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -6173,7 +6173,7 @@ dependencies = [
 
 [[package]]
 name = "navree-sso"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -6214,7 +6214,7 @@ dependencies = [
 
 [[package]]
 name = "navree-storage"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -6245,7 +6245,7 @@ dependencies = [
 
 [[package]]
 name = "navree-telemetry"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "navree-kernel",
@@ -6257,7 +6257,7 @@ dependencies = [
 
 [[package]]
 name = "navree-testing"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -6279,7 +6279,7 @@ dependencies = [
 
 [[package]]
 name = "navree-time"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -6304,7 +6304,7 @@ dependencies = [
 
 [[package]]
 name = "navree-ui"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "http",
  "insta",
@@ -6321,7 +6321,7 @@ dependencies = [
 
 [[package]]
 name = "navree-validation"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "ammonia",
  "chrono",
@@ -6355,7 +6355,7 @@ dependencies = [
 
 [[package]]
 name = "navree-validation-macros"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "heck",
  "proc-macro-crate",
@@ -6367,7 +6367,7 @@ dependencies = [
 
 [[package]]
 name = "navree-view"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "minijinja",
@@ -6383,7 +6383,7 @@ dependencies = [
 
 [[package]]
 name = "navree-webhooks"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -6425,7 +6425,7 @@ dependencies = [
 
 [[package]]
 name = "navree-workflows"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "futures-util",
@@ -6453,7 +6453,7 @@ dependencies = [
 
 [[package]]
 name = "navree-workspace"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.23.1",
  "chrono",

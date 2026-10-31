@@ -11,7 +11,7 @@ impl GraphReport {
     ///
     /// ```json
     /// {
-    ///   "navree": "0.2.0",
+    ///   "navree": "1.0.0",
     ///   "modules": [
     ///     {"name": "DealsModule", "global": false, "root": false,
     ///      "imports": ["DatabaseModule"], "exports": ["crm::DealService"],
