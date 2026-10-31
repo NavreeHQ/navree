@@ -21,7 +21,7 @@ use crate::print::PrintOptions;
 /// bundled_fonts = true      # Noto Sans, Serif and Mono; Noto Sans Arabic, Hebrew and Devanagari
 /// font_dirs = ["resources/fonts"]
 /// timeout_secs = 60
-/// max_image_pixels = 25000000   # the most pixels one image may have (width x height)
+/// max_image_pixels = 25000000   # the most pixels one PNG, GIF or WebP may have (width x height)
 ///
 /// [documents.native.print]
 /// paper = "a4"
@@ -76,6 +76,13 @@ impl Default for DocumentsOptions {
 
 impl ConfigSection for DocumentsOptions {
     const KEY: &'static str = "documents";
+
+    fn validate(&self) -> Result<(), String> {
+        if self.native.max_image_pixels == 0 {
+            return Err("`native.max_image_pixels` must be at least 1".to_owned());
+        }
+        Ok(())
+    }
 }
 
 /// The native engine's settings (`documents.native`).
@@ -89,10 +96,12 @@ pub struct NativeOptions {
     pub font_dirs: Vec<PathBuf>,
     /// Time limit for one render, in seconds (default 60).
     pub timeout_secs: u64,
-    /// The most pixels (width times height) one image in a document may
-    /// have (default 25,000,000: 5000 by 5000, or an A3 page at 600 dots
-    /// per inch). A larger image is [`DocumentsError::TooLarge`] before it
-    /// is decoded. At least 1.
+    /// The most pixels (width times height) one PNG, GIF or WebP image in a
+    /// document may have (default 25,000,000: 5000 by 5000, or an A3 page
+    /// at 600 dots per inch). A larger image is
+    /// [`DocumentsError::TooLarge`] before it is decoded. A JPEG is not
+    /// counted: it goes into the PDF as it is, without being decoded. At
+    /// least 1; 0 fails the boot.
     ///
     /// [`DocumentsError::TooLarge`]: crate::DocumentsError::TooLarge
     pub max_image_pixels: u64,
@@ -215,6 +224,15 @@ mod tests {
         assert_eq!(options.chrome.timeout_secs, 30);
         assert!(!options.chrome.no_sandbox);
         assert!(!options.chrome.allow_network);
+    }
+
+    #[test]
+    fn an_image_pixel_limit_of_zero_is_refused_at_boot() {
+        assert_eq!(DocumentsOptions::default().validate(), Ok(()));
+        let mut options = DocumentsOptions::default();
+        options.native.max_image_pixels = 0;
+        let message = options.validate().unwrap_err();
+        assert!(message.contains("native.max_image_pixels"), "{message}");
     }
 
     #[test]

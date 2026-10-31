@@ -406,11 +406,22 @@ fn write_document(
                     source,
                     pixels,
                     max,
-                } => DocumentsError::TooLarge(format!(
-                    "{}an image has {pixels} pixels, more than the limit of {max} pixels \
-             (documents.native.max_image_pixels)",
-                    source.map_or_else(String::new, |file| format!("{file}: "))
-                )),
+                } => {
+                    // The client sees the message: the file goes to the logs.
+                    if let Some(file) = source {
+                        tracing::warn!(
+                            target: "navree_documents",
+                            file,
+                            pixels,
+                            max,
+                            "an image has more pixels than documents.native.max_image_pixels"
+                        );
+                    }
+                    DocumentsError::TooLarge(format!(
+                        "an image has {pixels} pixels, more than the limit of {max} pixels \
+                         (documents.native.max_image_pixels)"
+                    ))
+                }
                 LayoutError::NoFonts => DocumentsError::EngineUnavailable {
                     engine: ENGINE,
                     reason:

@@ -867,8 +867,12 @@ impl<'f> Layout<'f> {
         if let Some(decoded) = self.images.get(&key) {
             return Ok(decoded.clone());
         }
-        // The decoders allocate for what the header declares: count it first.
-        if let Some(pixels) = declared_pixels(&image.bytes)
+        // The decoders allocate for what the header declares: count it
+        // first. A JPEG goes into the PDF as it is, only its header read, so
+        // its pixels cost nothing here and it is not counted.
+        let jpeg = image.bytes.starts_with(&[0xFF, 0xD8]);
+        if !jpeg
+            && let Some(pixels) = declared_pixels(&image.bytes)
             && pixels > self.max_image_pixels
         {
             return Err(LayoutError::ImageTooLarge {

@@ -712,8 +712,38 @@ fn a_gif_frame_larger_than_its_screen_counts_by_the_frame() {
     assert!(matches!(error, DocumentsError::TooLarge(_)), "{error:?}");
 }
 
+/// `jpeg` with its frame header changed to declare `width` by `height`.
+fn jpeg_declaring(mut jpeg: Vec<u8>, width: u16, height: u16) -> Vec<u8> {
+    let mut at = 2;
+    loop {
+        assert_eq!(jpeg[at], 0xFF, "a marker at {at}");
+        let marker = jpeg[at + 1];
+        if matches!(marker, 0xC0..=0xC2) {
+            // Marker, length, precision, then height and width.
+            jpeg[at + 5..at + 7].copy_from_slice(&height.to_be_bytes());
+            jpeg[at + 7..at + 9].copy_from_slice(&width.to_be_bytes());
+            return jpeg;
+        }
+        at += 2 + usize::from(u16::from_be_bytes([jpeg[at + 2], jpeg[at + 3]]));
+    }
+}
+
+#[test]
+fn a_jpeg_with_more_pixels_than_the_limit_is_embedded_as_it_is() {
+    // A photo of 8000 by 6000 (48 million pixels, what phones take): the
+    // PDF carries a JPEG as it is, so its pixels are never decoded here.
+    let photo = std::fs::read(fixtures_dir().join("images/photo.jpg")).unwrap();
+    let large = jpeg_declaring(photo, 8000, 6000);
+    let pdf = PdfDocument::new()
+        .paragraph("Photo")
+        .image(Image::new(large))
+        .build()
+        .unwrap();
+    assert!(pdf.text().unwrap().contains("Photo"));
+}
+
 #[tokio::test]
-async fn the_pixel_limit_is_configured_with_the_engine_and_names_the_file() {
+async fn the_pixel_limit_is_configured_with_the_engine_and_keeps_the_file_out_of_the_message() {
     let options = navree_documents::NativeOptions {
         max_image_pixels: 10_000,
         ..navree_documents::NativeOptions::default()
@@ -733,7 +763,8 @@ async fn the_pixel_limit_is_configured_with_the_engine_and_names_the_file() {
     let engine = NativeEngine::with_options(templates, options);
     match engine.render(&Render::template("page")).await {
         Err(DocumentsError::TooLarge(message)) => {
-            assert!(message.contains("images/logo.png"), "{message}");
+            // The client gets this message: template files stay in the logs.
+            assert!(!message.contains("logo.png"), "{message}");
             assert!(message.contains("10100"), "{message}");
         }
         other => panic!("{other:?}"),

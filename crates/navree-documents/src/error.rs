@@ -7,9 +7,10 @@ use navree_http::AppError;
 ///
 /// Returned from a handler with `?`, a variant is a 500 response unless it
 /// says otherwise (`EngineUnavailable` and `Timeout` are 503, `Pdf` is
-/// 400, `TooLarge` is 413). A 500 is logged with the full message and the response carries
-/// only the reason phrase, so template paths and data never reach the
-/// client; the 400 and 413 say what is wrong with the input.
+/// 400, `TooLarge` is 413). A 500 is logged with the full message and the
+/// response carries only the reason phrase, so template paths and data
+/// never reach the client; the 400 and 413 say what is wrong with the
+/// input, and their messages name no template file.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum DocumentsError {
@@ -66,16 +67,22 @@ pub enum DocumentsError {
         /// The limit.
         secs: u64,
     },
-    /// The bytes are not a PDF this crate can read, or the request to edit
-    /// it cannot be done (merging nothing, a stamp in a script Helvetica
-    /// lacks). A fault of the server while writing the result is
-    /// [`Engine`](Self::Engine) instead.
+    /// The bytes are not a PDF this crate can read: the client's error. A
+    /// fault of the server while writing an edited PDF is
+    /// [`Engine`](Self::Engine), and an edit the app should not have asked
+    /// for is [`Edit`](Self::Edit).
     #[error("invalid PDF: {0}")]
     Pdf(String),
+    /// The app asked for an edit of a PDF that cannot be done: merging no
+    /// documents, a text stamp in a script Helvetica cannot show, an
+    /// overlay without pages. A bug in the app, so a 500.
+    #[error("the PDF cannot be edited: {0}")]
+    Edit(String),
     /// An input is over a limit this crate sets so that a small file cannot
-    /// cost a server unbounded memory or time: a PDF page that takes too
-    /// much work to read, or an image with more pixels than
-    /// `documents.native.max_image_pixels`. The message names the limit.
+    /// cost a server unbounded memory or time: a PDF that takes too much
+    /// work to read or holds too much text, or an image with more pixels
+    /// than `documents.native.max_image_pixels`. The message names the
+    /// limit, and no template file.
     #[error("{0}")]
     TooLarge(String),
     /// Building the DOCX file failed.
@@ -175,6 +182,8 @@ mod tests {
         let too_large = DocumentsError::TooLarge("a page needs too much work".into());
         assert_eq!(too_large.status(), StatusCode::PAYLOAD_TOO_LARGE);
         assert_eq!(too_large.to_string(), "a page needs too much work");
+        let edit = DocumentsError::Edit("nothing to merge".into());
+        assert_eq!(edit.status(), StatusCode::INTERNAL_SERVER_ERROR);
         let missing = DocumentsError::TemplateNotFound {
             name: "x".into(),
             tried: vec!["x.html".into()],

@@ -157,7 +157,7 @@ impl Stamp {
             .chars()
             .map(|c| match c as u32 {
                 code @ (0x20..=0x7e | 0xa0..=0xff) => Ok(code as u8),
-                _ => Err(DocumentsError::Pdf(format!(
+                _ => Err(DocumentsError::Edit(format!(
                     "a text stamp is set in Helvetica, which cannot show {c:?}; \
                      render the stamp with the native engine and use Pdf::overlay"
                 ))),

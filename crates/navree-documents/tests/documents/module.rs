@@ -47,6 +47,12 @@ impl Controller for DocumentsController {
                 Ok::<_, AppError>(pdf)
             })
             .public(),
+            RouteDef::on(Method::GET, "/merge-nothing", || async {
+                // An app that merges an empty list: its own bug.
+                let pdf = Pdf::merge(Vec::<&Pdf>::new())?;
+                Ok::<_, AppError>(pdf)
+            })
+            .public(),
             RouteDef::on(Method::GET, "/certificate", move || {
                 let this = download.clone();
                 async move {
@@ -205,6 +211,23 @@ async fn a_pdf_that_cannot_be_read_is_a_400_that_says_so() {
         .assert_error(400, None);
     assert!(
         response.text().contains("invalid PDF"),
+        "{}",
+        response.text()
+    );
+}
+
+#[cfg(feature = "native")]
+#[tokio::test]
+async fn an_edit_the_app_cannot_ask_for_is_a_500_without_details() {
+    let app = app().build().await;
+    let response = app
+        .client()
+        .get("/documents/merge-nothing")
+        .send()
+        .await
+        .assert_error(500, None);
+    assert!(
+        !response.text().contains("nothing to merge"),
         "{}",
         response.text()
     );

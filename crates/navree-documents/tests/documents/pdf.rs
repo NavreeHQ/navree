@@ -16,9 +16,10 @@ fn merge_keeps_every_page_in_order() {
     assert!(pages[3].starts_with("Invoice 42"), "{pages:?}");
     assert_eq!(merged.text().unwrap().matches('\u{c}').count(), 3);
     assert_eq!(invoice.append(&terms).unwrap().page_count().unwrap(), 3);
+    // Merging nothing is the app's mistake, not the input's.
     assert!(matches!(
         Pdf::merge(Vec::<&Pdf>::new()),
-        Err(DocumentsError::Pdf(_))
+        Err(DocumentsError::Edit(_))
     ));
 }
 
@@ -55,8 +56,8 @@ fn pdf_with_an_inflating_object_stream(inflated: usize) -> Vec<u8> {
 
 #[test]
 fn a_pdf_whose_object_stream_inflates_past_the_limit_is_refused() {
-    // 72 MiB of spaces: a few kilobytes on disk, over the 64 MiB a single
-    // object stream may inflate to.
+    // 72 MiB of spaces: a few kilobytes on disk, far over the 8 MiB a
+    // single object stream may inflate to.
     let bomb = pdf_with_an_inflating_object_stream(72 * 1024 * 1024);
     assert!(
         bomb.len() < 256 * 1024,
@@ -308,6 +309,291 @@ fn a_to_unicode_map_that_inflates_past_the_limit_is_refused() {
     // A map of ordinary size is read, and its font simply shows nothing here.
     let small = Pdf::from_bytes(pdf_with_an_inflating_to_unicode_map(1024)).unwrap();
     assert!(small.text().is_ok());
+}
+
+#[test]
+fn an_object_stream_over_the_load_limit_is_refused() {
+    // 9 MiB of spaces, over the 8 MiB an object stream may inflate to.
+    let error = Pdf::from_bytes(pdf_with_an_inflating_object_stream(9 * 1024 * 1024)).unwrap_err();
+    assert!(matches!(error, DocumentsError::Pdf(_)), "{error:?}");
+    let under = Pdf::from_bytes(pdf_with_an_inflating_object_stream(7 * 1024 * 1024)).unwrap();
+    assert_eq!(under.page_count().unwrap(), 1);
+}
+
+/// Saves `document` with object streams, as compact as lopdf writes it.
+fn compact(mut document: lopdf::Document) -> Vec<u8> {
+    let options = lopdf::SaveOptions::builder()
+        .use_object_streams(true)
+        .use_xref_streams(true)
+        .compression_level(9)
+        .build();
+    let mut bytes = Vec::new();
+    document.save_with_options(&mut bytes, options).unwrap();
+    bytes
+}
+
+/// `pages` pages showing their number, with `fonts` font names for one
+/// font: in resources the page tree passes down to every page, or (with
+/// `shared`) in one resources object each page refers to.
+fn pdf_with_many_fonts_on_many_pages(pages: usize, fonts: usize, shared: bool) -> Vec<u8> {
+    use lopdf::{Dictionary, Object, Stream, dictionary};
+
+    let mut document = lopdf::Document::with_version("1.7");
+    let pages_id = document.new_object_id();
+    let font = document.add_object(dictionary! {
+        "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica",
+        "Encoding" => "WinAnsiEncoding",
+    });
+    let mut names = Dictionary::new();
+    for i in 0..fonts {
+        names.set(format!("F{i}"), font);
+    }
+    let resources = dictionary! { "Font" => names };
+    let shared_id = shared.then(|| document.add_object(resources.clone()));
+    let kids: Vec<Object> = (0..pages)
+        .map(|i| {
+            let content = format!("BT /F0 12 Tf 50 700 Td (Page {i}) Tj ET");
+            let content_id = document.add_object(Stream::new(dictionary! {}, content.into_bytes()));
+            let mut page = dictionary! {
+                "Type" => "Page", "Parent" => pages_id, "Contents" => content_id,
+            };
+            if let Some(id) = shared_id {
+                page.set("Resources", id);
+            }
+            document.add_object(page).into()
+        })
+        .collect();
+    let mut tree = dictionary! {
+        "Type" => "Pages", "Kids" => kids, "Count" => pages as i64,
+        "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
+    };
+    if !shared {
+        tree.set("Resources", resources);
+    }
+    document.objects.insert(pages_id, Object::Dictionary(tree));
+    let catalog = document.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    document.trailer.set("Root", catalog);
+    compact(document)
+}
+
+/// The names in each page's `category` resources (`Font`, `XObject`), as
+/// a viewer finds them: following references and the page tree.
+fn resource_names(pdf: &Pdf, category: &[u8]) -> Vec<std::collections::BTreeSet<Vec<u8>>> {
+    use lopdf::Object;
+
+    let document = lopdf::Document::load_mem(pdf).unwrap();
+    let resolve = |object: &Object| -> Object {
+        let mut object = object.clone();
+        while let Object::Reference(id) = object {
+            object = document.get_object(id).unwrap().clone();
+        }
+        object
+    };
+    document
+        .get_pages()
+        .into_values()
+        .map(|page_id| {
+            let mut node = document.get_dictionary(page_id).unwrap();
+            let resources = loop {
+                if let Ok(resources) = node.get(b"Resources") {
+                    break resolve(resources);
+                }
+                let parent = node.get(b"Parent").unwrap().as_reference().unwrap();
+                node = document.get_dictionary(parent).unwrap();
+            };
+            resources
+                .as_dict()
+                .unwrap()
+                .get(category)
+                .map(resolve)
+                .ok()
+                .map(|names| {
+                    names
+                        .as_dict()
+                        .unwrap()
+                        .iter()
+                        .map(|(k, _)| k.clone())
+                        .collect()
+                })
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
+fn names(fonts: usize, extra: &[&str]) -> std::collections::BTreeSet<Vec<u8>> {
+    (0..fonts)
+        .map(|i| format!("F{i}").into_bytes())
+        .chain(extra.iter().map(|name| name.as_bytes().to_vec()))
+        .collect()
+}
+
+#[test]
+fn stamping_pages_that_inherit_resources_adds_them_once() {
+    // 200 pages under one tree that gives each 200 font names. Copying the
+    // names onto every page writes 40,000 of them.
+    let edit = |fonts: usize| {
+        let pdf = Pdf::from_bytes(pdf_with_many_fonts_on_many_pages(200, fonts, false)).unwrap();
+        pdf.stamp(&Stamp::text("DRAFT")).unwrap()
+    };
+    let (few, many) = (edit(1), edit(200));
+    let grown = many.len() - few.len();
+    assert!(
+        grown < 32 * 1024,
+        "199 more names grew the stamped file by {grown} bytes"
+    );
+    // Every page still finds every font, and the stamp's.
+    for page in resource_names(&many, b"Font") {
+        assert_eq!(page, names(200, &["NavreeStamp"]));
+    }
+    let texts = many.page_texts().unwrap();
+    assert_eq!(texts.len(), 200);
+    assert!(
+        texts[199].contains("Page 199") && texts[199].contains("DRAFT"),
+        "{}",
+        texts[199]
+    );
+}
+
+#[test]
+fn stamping_pages_that_share_one_resources_object_keeps_it_shared() {
+    let edit = |fonts: usize| {
+        let pdf = Pdf::from_bytes(pdf_with_many_fonts_on_many_pages(200, fonts, true)).unwrap();
+        pdf.stamp(&Stamp::text("DRAFT")).unwrap()
+    };
+    let (few, many) = (edit(1), edit(200));
+    let grown = many.len() - few.len();
+    assert!(
+        grown < 32 * 1024,
+        "199 more names grew the stamped file by {grown} bytes"
+    );
+    for page in resource_names(&many, b"Font") {
+        assert_eq!(page, names(200, &["NavreeStamp"]));
+    }
+    // A stamp on some pages leaves the others as they were.
+    let pdf = Pdf::from_bytes(pdf_with_many_fonts_on_many_pages(3, 2, true)).unwrap();
+    let first = pdf.stamp(&Stamp::text("X").pages(Pages::First)).unwrap();
+    let fonts = resource_names(&first, b"Font");
+    assert_eq!(fonts[0], names(2, &["NavreeStamp"]));
+    assert_eq!(fonts[1], names(2, &[]));
+    assert_eq!(fonts[2], names(2, &[]));
+}
+
+#[test]
+fn merging_pages_that_inherit_resources_adds_them_once() {
+    let edit = |fonts: usize| {
+        let pdf = Pdf::from_bytes(pdf_with_many_fonts_on_many_pages(200, fonts, false)).unwrap();
+        Pdf::merge([&pdf, &Pdf::from_lines(["The end"])]).unwrap()
+    };
+    let (few, many) = (edit(1), edit(200));
+    let grown = many.len() - few.len();
+    assert!(
+        grown < 32 * 1024,
+        "199 more names grew the merged file by {grown} bytes"
+    );
+    let fonts = resource_names(&many, b"Font");
+    assert_eq!(fonts.len(), 201);
+    for page in &fonts[..200] {
+        assert_eq!(*page, names(200, &[]));
+    }
+    assert_eq!(fonts[200], [b"F1".to_vec()].into());
+    assert_eq!(many.page_texts().unwrap()[200], "The end");
+}
+
+#[test]
+fn an_overlay_on_pages_that_inherit_resources_adds_them_once() {
+    let seal = Pdf::from_lines(["SEAL"]);
+    let edit = |fonts: usize| {
+        let pdf = Pdf::from_bytes(pdf_with_many_fonts_on_many_pages(200, fonts, false)).unwrap();
+        pdf.overlay(&seal, Pages::All).unwrap()
+    };
+    let (few, many) = (edit(1), edit(200));
+    let grown = many.len() - few.len();
+    assert!(
+        grown < 32 * 1024,
+        "199 more names grew the file by {grown} bytes"
+    );
+    for page in resource_names(&many, b"Font") {
+        assert_eq!(page, names(200, &[]));
+    }
+    for page in resource_names(&many, b"XObject") {
+        assert_eq!(page, [b"NavreeOverlay".to_vec()].into());
+    }
+    assert!(many.page_texts().unwrap()[5].contains("SEAL"));
+}
+
+#[test]
+fn a_page_listed_many_times_in_the_page_tree_is_stamped_once() {
+    use lopdf::{Object, Stream, dictionary};
+
+    // One page object listed 2,000 times. Wrapping its contents again for
+    // each listing makes its list of contents grow by two every time.
+    let mut document = lopdf::Document::with_version("1.7");
+    let pages_id = document.new_object_id();
+    let font = document.add_object(dictionary! {
+        "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica",
+    });
+    let content = document.add_object(Stream::new(
+        dictionary! {},
+        b"BT /F1 12 Tf 50 700 Td (Again) Tj ET".to_vec(),
+    ));
+    let page = document.add_object(dictionary! {
+        "Type" => "Page", "Parent" => pages_id, "Contents" => content,
+        "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
+        "Resources" => dictionary! { "Font" => dictionary! { "F1" => font } },
+    });
+    // The page tree is read up to one listing per object in the file.
+    for i in 0..2000 {
+        document.add_object(Object::Integer(i));
+    }
+    document.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Pages", "Kids" => vec![Object::Reference(page); 2000], "Count" => 2000,
+        }),
+    );
+    let catalog = document.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    document.trailer.set("Root", catalog);
+    let pdf = Pdf::from_bytes(compact(document)).unwrap();
+    assert!(pdf.page_count().unwrap() >= 1000);
+
+    let stamped = pdf.stamp(&Stamp::text("DRAFT")).unwrap();
+    let document = lopdf::Document::load_mem(&stamped).unwrap();
+    let page_id = *document.get_pages().values().next().unwrap();
+    let contents = document
+        .get_dictionary(page_id)
+        .unwrap()
+        .get(b"Contents")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .len();
+    assert_eq!(
+        contents,
+        3,
+        "the page's contents were wrapped {} times",
+        (contents - 1) / 2
+    );
+}
+
+#[test]
+fn edits_the_app_cannot_ask_for_are_server_errors() {
+    let nothing = Pdf::merge(Vec::<&Pdf>::new()).unwrap_err();
+    assert_eq!(
+        nothing.status(),
+        http::StatusCode::INTERNAL_SERVER_ERROR,
+        "{nothing:?}"
+    );
+    let script = Pdf::from_lines(["x"])
+        .stamp(&Stamp::text("مدفوع"))
+        .unwrap_err();
+    assert_eq!(
+        script.status(),
+        http::StatusCode::INTERNAL_SERVER_ERROR,
+        "{script:?}"
+    );
+    // Input that is not a PDF stays the client's error.
+    let garbage = Pdf::from_bytes(&b"not a pdf"[..]).unwrap_err();
+    assert_eq!(garbage.status(), http::StatusCode::BAD_REQUEST);
 }
 
 #[test]

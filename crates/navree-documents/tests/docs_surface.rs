@@ -361,15 +361,17 @@ fn errors_and_statuses() {
             secs: 30,
         },
         DocumentsError::Pdf("p".into()),
+        DocumentsError::Edit("e".into()),
         DocumentsError::TooLarge("t".into()),
         DocumentsError::Docx("d".into()),
         DocumentsError::Queue("q".into()),
     ];
     let statuses: Vec<u16> = errors.iter().map(|e| e.status().as_u16()).collect();
     // A PDF that cannot be read is the caller's: 400; one over a limit: 413.
+    // An edit the app should not have asked for is the app's: 500.
     assert_eq!(
         statuses,
-        vec![500, 500, 500, 503, 500, 503, 400, 413, 500, 500]
+        vec![500, 500, 500, 503, 500, 503, 400, 500, 413, 500, 500]
     );
     let _ = [
         DocumentStatus::Pending,
