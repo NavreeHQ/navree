@@ -10,12 +10,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::routing::any;
 use bytes::Bytes;
 use http::{Method, Request, Response, StatusCode};
 use navree_http::ServerOptions;
 use navree_http::body::{Body, read_body};
+use navree_http::routing::Router;
+use navree_http::ws::{Message, WebSocket, WebSocketUpgrade};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, DuplexStream};
 use tokio::net::{TcpSocket, TcpStream};
 use tokio::sync::Notify;
@@ -296,13 +296,12 @@ async fn silent_socket(mut socket: WebSocket) {
     while socket.recv().await.is_some() {}
 }
 
-fn websocket_app() -> axum::Router {
-    axum::Router::new()
-        .route(
-            "/ws",
-            any(|upgrade: WebSocketUpgrade| async move { upgrade.on_upgrade(silent_socket) }),
-        )
-        .route("/", any(|| async { "hello" }))
+fn websocket_app() -> Router {
+    let socket = |upgrade: WebSocketUpgrade| async move { upgrade.on_upgrade(silent_socket) };
+    Router::new()
+        .route(Method::GET, "/ws", socket)
+        .route(Method::CONNECT, "/ws", socket)
+        .route(Method::GET, "/", || async { "hello" })
 }
 
 /// A WebSocket that says nothing keeps its slot through every limit of HTTP.
@@ -1933,14 +1932,11 @@ async fn a_storm_over_the_address_limit_leaves_no_count_behind() {
 /// its socket closes.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_address_count_follows_the_socket() {
-    let app = websocket_app().route(
-        "/panic",
-        any(|| async {
-            if true {
-                panic!("a handler panics");
-            }
-        }),
-    );
+    let app = websocket_app().route(Method::GET, "/panic", || async {
+        if true {
+            panic!("a handler panics");
+        }
+    });
     let server = start(
         app,
         ServerOptions {
@@ -2058,12 +2054,11 @@ fn connect_block(path: &str) -> Vec<u8> {
 async fn a_client_behind_a_websocket_held_back_by_flow_control(
     server: ServerOptions,
 ) -> (crate::support::Served, TcpStream, TcpStream) {
-    let app = axum::Router::new()
-        .route(
-            "/ws",
-            any(|upgrade: WebSocketUpgrade| async move { upgrade.on_upgrade(writing_socket) }),
-        )
-        .route("/", any(|| async { "hello" }));
+    let socket = |upgrade: WebSocketUpgrade| async move { upgrade.on_upgrade(writing_socket) };
+    let app = Router::new()
+        .route(Method::GET, "/ws", socket)
+        .route(Method::CONNECT, "/ws", socket)
+        .route(Method::GET, "/", || async { "hello" });
     let server = start(
         app,
         ServerOptions {
@@ -2147,12 +2142,11 @@ async fn pinging_socket(mut socket: WebSocket) {
 /// are the only bytes, and they show nothing about the client.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_server_heartbeat_does_not_keep_a_silent_websocket_alive() {
-    let app = axum::Router::new()
-        .route(
-            "/ws",
-            any(|upgrade: WebSocketUpgrade| async move { upgrade.on_upgrade(pinging_socket) }),
-        )
-        .route("/", any(|| async { "hello" }));
+    let socket = |upgrade: WebSocketUpgrade| async move { upgrade.on_upgrade(pinging_socket) };
+    let app = Router::new()
+        .route(Method::GET, "/ws", socket)
+        .route(Method::CONNECT, "/ws", socket)
+        .route(Method::GET, "/", || async { "hello" });
     let server = start(
         app,
         ServerOptions {

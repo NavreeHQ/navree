@@ -150,7 +150,8 @@ JSON logs and no template reloading; debug builds to pretty logs and reloading.
 `trusted_proxies`, `per_ip_rate_limit`, `rate_limit_ipv6_prefix` (64: IPv6
 clients share a limit per /64), `body_limit_bytes`, `timeout_secs`,
 `cors.allowed_origins`, `security_headers`, `server` (connection limits: see
-navree-deployment)), `log`, `hashing`, `validation`,
+navree-deployment), `multipart` (`max_parts`, `max_field_bytes`,
+`max_file_bytes`, `max_header_bytes`)), `log`, `hashing`, `validation`,
 `database`, `schema`, `orm`, `auth`, `audit`, `cache`, `queue`, `mail`,
 `notify`, `storage`, `http_client`, `realtime`, `view`, `api`, `observe`,
 `session`, `time`, `workspace`; the other modules read a section named

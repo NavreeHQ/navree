@@ -413,6 +413,43 @@ fn multipart(fields: &[(String, String)], file: (&str, &str, &str, &[u8])) -> (S
     (format!("multipart/form-data; boundary={boundary}"), body)
 }
 
+/// Mailgun sends the whole message as a text field of the form, so a field
+/// may be as long as a message, well past a form's usual limit.
+#[tokio::test]
+async fn a_mailgun_mime_route_takes_a_message_longer_than_a_form_field() {
+    let mail = inbound_app(MAILBOXES, |b| {
+        b.config("mail.inbound.mailgun.signing_key", MAILGUN_KEY)
+    })
+    .await;
+    let mut message = String::from_utf8(fixture("reply.eml")).unwrap();
+    for _ in 0..30_000 {
+        message.push_str(&"x".repeat(76));
+        message.push_str("\r\n");
+    }
+    assert!(message.len() > 2 * 1024 * 1024);
+    let mut fields = signed_fields(chrono::Utc::now().timestamp());
+    fields.extend([
+        ("recipient".to_owned(), "reply+abc@in.acme.test".to_owned()),
+        ("sender".to_owned(), "ada@example.com".to_owned()),
+        ("body-mime".to_owned(), message.clone()),
+    ]);
+    let (content_type, body) = multipart(
+        &fields,
+        ("attachment-1", "a.txt", "text/plain", b"attached"),
+    );
+
+    mail.app
+        .client()
+        .post("/api/mail/inbound/mailgun/mime")
+        .header("content-type", content_type)
+        .body(body)
+        .send()
+        .await
+        .assert_status(200);
+
+    assert_eq!(mail.seen()[0].2.raw().as_ref(), message.as_bytes());
+}
+
 #[tokio::test]
 async fn a_mailgun_route_with_parsed_fields_is_rebuilt() {
     let mail = inbound_app(MAILBOXES, |b| {

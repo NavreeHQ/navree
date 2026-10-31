@@ -16,8 +16,15 @@
 //!   percent-decoding of parameters, static before parameter before
 //!   catch-all, `HEAD`, `OPTIONS` and 405 with `Allow`. Handlers are async
 //!   functions whose arguments are [`extract`]ors ([`Path`], [`Query`],
-//!   [`Json`], [`Form`], [`Extension`], [`Scoped`], ...).
-//! - [`build_router`] assembles the app. Request pipeline, outermost first:
+//!   [`Json`], [`Form`], [`Multipart`], [`Extension`], [`Scoped`], ...).
+//!   [`ws`] turns a request into a WebSocket.
+//! - Responses are anything [`IntoResponse`](response::IntoResponse) (with
+//!   [`Html`](response::Html), [`Redirect`](response::Redirect) and
+//!   [server-sent events](response::sse)), bodies are a boxed
+//!   [`Body`](body::Body) that streams, and [`middleware`] turns an async
+//!   function into a Tower layer.
+//! - [`build_router`] assembles the app as an [`AppRouter`], which
+//!   [`GlobalLayer`]s wrap. Request pipeline, outermost first:
 //!   [`LayerSlot::Edge`] (protocols that share the port but not the
 //!   pipeline, such as gRPC) → request id → tracing and request log → CORS
 //!   → panic catcher → timeout →
@@ -87,6 +94,7 @@
 //! ```
 #![forbid(unsafe_code)]
 
+mod app;
 mod auth;
 pub mod body;
 pub mod codes;
@@ -97,6 +105,7 @@ pub mod extract;
 pub mod handler;
 mod limiter;
 mod maintenance;
+pub mod middleware;
 mod module;
 mod network;
 mod options;
@@ -107,12 +116,16 @@ mod router;
 pub mod routing;
 pub mod serve;
 mod signed;
+pub mod ws;
 
+pub use app::AppRouter;
 pub use auth::{Authenticator, CurrentPrincipal, Guard, RouteAuthorizer};
 pub use controller::{ApplyLayer, Controller, GlobalLayer, LayerSlot, ModuleBuilderHttpExt};
 pub use cors::{Cors, CorsLayer};
 pub use error::{AppError, ERROR_CONTENT_TYPE, ErrorMapper, Result};
-pub use extract::{ClientIp, Extension, Form, Json, Path, Query, RawQuery, Scoped};
+pub use extract::{
+    ClientIp, Extension, Form, Json, Multipart, MultipartLimits, Path, Query, RawQuery, Scoped,
+};
 pub use handler::Handler;
 pub use limiter::{KeyedRateLimiter, Limited};
 pub use maintenance::{MaintenanceInfo, MaintenanceMode};

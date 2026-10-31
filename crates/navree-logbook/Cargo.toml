@@ -23,7 +23,6 @@ postgres = ["navree-db/postgres"]
 mysql = ["navree-db/mysql"]
 
 [dependencies]
-axum = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 form_urlencoded = { workspace = true }

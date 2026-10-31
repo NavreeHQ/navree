@@ -4757,7 +4757,6 @@ dependencies = [
 name = "navree-browser"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "futures-util",
  "http",
@@ -4882,7 +4881,6 @@ dependencies = [
 name = "navree-db"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "chrono",
  "futures-util",
@@ -5003,7 +5001,6 @@ dependencies = [
 name = "navree-domains"
 version = "0.2.0"
 dependencies = [
- "axum",
  "bytes",
  "chrono",
  "hickory-resolver",
@@ -5127,7 +5124,6 @@ name = "navree-graphql"
 version = "0.2.0"
 dependencies = [
  "async-graphql",
- "axum",
  "base64 0.23.1",
  "chrono",
  "futures-util",
@@ -5162,7 +5158,6 @@ dependencies = [
 name = "navree-grpc"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "bytes",
  "dashmap 6.2.1",
@@ -5237,7 +5232,6 @@ dependencies = [
 name = "navree-helm"
 version = "0.2.0"
 dependencies = [
- "axum",
  "chrono",
  "cookie",
  "form_urlencoded",
@@ -5279,6 +5273,7 @@ dependencies = [
  "chrono",
  "criterion",
  "dashmap 6.2.1",
+ "encoding_rs",
  "form_urlencoded",
  "futures-util",
  "hex",
@@ -5289,7 +5284,10 @@ dependencies = [
  "hyper",
  "hyper-util",
  "matchit",
+ "memchr",
  "metrics",
+ "mime",
+ "multer",
  "navree-config",
  "navree-contracts",
  "navree-kernel",
@@ -5344,7 +5342,6 @@ dependencies = [
 name = "navree-i18n"
 version = "0.2.0"
 dependencies = [
- "axum",
  "chrono",
  "fixed_decimal",
  "fluent-bundle",
@@ -5450,7 +5447,6 @@ dependencies = [
 name = "navree-lighthouse"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "bytes",
  "chrono",
@@ -5511,7 +5507,6 @@ dependencies = [
 name = "navree-logbook"
 version = "0.2.0"
 dependencies = [
- "axum",
  "bytes",
  "chrono",
  "form_urlencoded",
@@ -5554,7 +5549,6 @@ dependencies = [
 name = "navree-macros"
 version = "0.2.0"
 dependencies = [
- "axum",
  "heck",
  "http",
  "http-body-util",
@@ -5580,7 +5574,6 @@ dependencies = [
 name = "navree-mail"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "bytes",
  "chrono",
@@ -5627,7 +5620,6 @@ name = "navree-mcp"
 version = "0.2.0"
 dependencies = [
  "async-trait",
- "axum",
  "base64 0.23.1",
  "bytes",
  "chrono",
@@ -5708,7 +5700,6 @@ name = "navree-micro"
 version = "0.2.0"
 dependencies = [
  "async-nats",
- "axum",
  "base64 0.23.1",
  "bytes",
  "chrono",
@@ -5802,7 +5793,6 @@ dependencies = [
 name = "navree-notify"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "chrono",
  "form_urlencoded",
@@ -5843,7 +5833,6 @@ dependencies = [
 name = "navree-oauth"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "chrono",
  "form_urlencoded",
@@ -5879,7 +5868,6 @@ dependencies = [
 name = "navree-observe"
 version = "0.2.0"
 dependencies = [
- "axum",
  "chrono",
  "futures-util",
  "http",
@@ -5995,7 +5983,6 @@ dependencies = [
 name = "navree-realtime"
 version = "0.2.0"
 dependencies = [
- "axum",
  "bytes",
  "dashmap 6.2.1",
  "futures-util",
@@ -6026,7 +6013,6 @@ dependencies = [
 name = "navree-redis"
 version = "0.2.0"
 dependencies = [
- "axum",
  "bytes",
  "chrono",
  "futures-util",
@@ -6129,7 +6115,6 @@ dependencies = [
 name = "navree-session"
 version = "0.2.0"
 dependencies = [
- "axum",
  "chrono",
  "cookie",
  "futures-util",
@@ -6191,7 +6176,6 @@ dependencies = [
 name = "navree-sheets"
 version = "0.2.0"
 dependencies = [
- "axum",
  "bytes",
  "calamine",
  "chardetng",
@@ -6307,7 +6291,6 @@ dependencies = [
 name = "navree-storage"
 version = "0.2.0"
 dependencies = [
- "axum",
  "bytes",
  "chrono",
  "futures-util",
@@ -6351,7 +6334,6 @@ dependencies = [
 name = "navree-testing"
 version = "0.2.0"
 dependencies = [
- "axum",
  "bytes",
  "chrono",
  "cookie",
@@ -6548,7 +6530,6 @@ dependencies = [
 name = "navree-workspace"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "chrono",
  "form_urlencoded",

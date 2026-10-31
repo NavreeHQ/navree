@@ -98,7 +98,7 @@ To check the values (lengths, formats, ranges, uniqueness) and answer with a mes
 | `String` | The body as UTF-8 text |
 | `navree::http::body::Bytes` | The raw body |
 | `navree::http::Form<T>` | An `application/x-www-form-urlencoded` body (for `GET` and `HEAD`, the query string) |
-| `navree::axum::extract::Multipart` | A `multipart/form-data` body, part by part; [file storage](/docs/digging-deeper/storage/) has helpers for uploads |
+| `navree::http::extract::Multipart` | A `multipart/form-data` body, part by part ([multipart forms](#multipart-forms)); [file storage](/docs/digging-deeper/storage/) has helpers for uploads |
 | `navree::http::extract::Request` | The whole request |
 
 ```rust
@@ -252,6 +252,89 @@ body_limit_bytes = 2097152
 ```
 
 A route that needs a different limit, larger for an import or smaller for a webhook, sets its own with `.body_limit(bytes)` on a hand-written `RouteDef`. The route attributes have no body-limit attribute yet, so such a route goes in a [hand-written controller](/docs/basics/routing/#writing-controllers-by-hand). File uploads have their own size and type rules on top; see [file storage](/docs/digging-deeper/storage/).
+
+## Multipart forms
+
+`Multipart` reads a `multipart/form-data` body one part at a time, and reads nothing until you ask for a part. Like any body extractor it's the handler's last argument:
+
+```rust
+use navree::http::extract::Multipart;
+
+#[post("/")]
+async fn store(&self, mut form: Multipart) -> Result<String> {
+    let mut bytes = 0;
+    while let Some(mut field) = form.next_field().await? {
+        let name = field.name().unwrap_or_default().to_owned();
+        while let Some(chunk) = field.chunk().await? {
+            bytes += chunk.len();
+        }
+        tracing::debug!(name, "read a part");
+    }
+    Ok(format!("{bytes} bytes"))
+}
+```
+
+`field.bytes()` and `field.text()` read a whole value, `name`, `file_name`, `content_type` and `headers` describe the part, and a part you don't read is skipped. A form is often read before anyone is signed in, so everything a client can make the parser hold has a limit:
+
+| Limit | Default | Past it |
+|---|---|---|
+| The route's body limit | `http.body_limit_bytes` or `.body_limit(bytes)` | 413 `"Request payload is too large"`, with or without a `Content-Length` |
+| `http.multipart.max_parts` | 1,000 | 413, counting parts you skip |
+| `http.multipart.max_field_bytes` | 1 MiB | 413, for a part without a file name; `field.text()` keeps to it for every part |
+| `http.multipart.max_file_bytes` | None: the body limit | 413, for a part with a file name |
+| `http.multipart.max_header_bytes` | 16 KiB | 413, for the headers of one part, or for what comes before the first delimiter |
+
+A form must also keep the [pace of a body](#body-limits): a stall or a drip is a 408, at any point of the form. A missing boundary, a boundary over RFC 2046's 70 characters, or two boundaries or `Content-Type` headers are a 400 before anything is read, and so is a form that's malformed or stops before its closing delimiter. A failure is final: calling `next_field` again gives the same error, so a form cut short never looks like a shorter form. Propagate the errors with `?` and they keep their status.
+
+The limits are options, and a handler can set its own, for a form with a large text value:
+
+```rust
+use navree::http::MultipartLimits;
+
+let limits = MultipartLimits { max_field_bytes: 8 * 1024 * 1024, ..form.limits() };
+let mut form = form.with_limits(limits);
+```
+
+Names and file names are what the client sent. `field.file_name()` may hold a path, `..` or anything else: Navree doesn't read it as a path, and you shouldn't either. [`store_upload`](/docs/digging-deeper/storage/#file-uploads) keeps only its last component and stores the file under a random name. A file name is the client's own claim, so `max_file_bytes` is no way of keeping text small: that's what `max_field_bytes` and `field.text()` are for.
+
+```toml title="config/app.toml"
+[http.multipart]
+max_parts = 1000
+max_field_bytes = 1048576
+max_header_bytes = 16384
+```
+
+## WebSockets
+
+`navree::http::ws::WebSocketUpgrade` is the extractor for a WebSocket. Return what `on_upgrade` gives you, and your function runs with the socket once the client has its answer:
+
+```rust
+use http::Method;
+use navree::http::RouteDef;
+use navree::http::ws::{Message, WebSocket, WebSocketUpgrade};
+
+fn socket_route() -> RouteDef {
+    RouteDef::on(Method::GET, "/live", |upgrade: WebSocketUpgrade| async move {
+        upgrade.on_upgrade(echo)
+    })
+    .authenticated()
+}
+
+async fn echo(mut socket: WebSocket) {
+    while let Some(Ok(message)) = socket.recv().await {
+        if matches!(message, Message::Text(_)) && socket.send(message).await.is_err() {
+            return;
+        }
+    }
+}
+```
+
+The extractor checks the handshake before your handler runs: an HTTP/1.1 `GET` with `Connection: upgrade`, `Upgrade: websocket`, `Sec-WebSocket-Version: 13` and one `Sec-WebSocket-Key` that's the base64 of 16 bytes. Anything else is a 4xx in the error format, and a wrong version answers with the version that would work. Over HTTP/2 a WebSocket is a `CONNECT` with `:protocol` `websocket`, so a route that takes both declares both methods.
+
+- **Sizes.** A client's frame and message are limited to 1 MiB each. A longer one ends the connection from its header, before the payload is buffered, and `socket.recv()` gives an error whose `is_too_large()` is true. Set your own with `upgrade.max_frame_size(bytes)` and `upgrade.max_message_size(bytes)`.
+- **Subprotocols.** `upgrade.protocols(["v2", "v1"])` picks the first of your list that the client offered. `upgrade.requested_protocols()` lists what it offered.
+- **Origins.** A browser sends cookies with an upgrade from any page, and CORS doesn't apply to one. A handler that trusts a cookie checks `upgrade.origin_allowed(&allowed)`: true with no `Origin` (not a browser), for a listed origin, and for the server's own. [Broadcasting](/docs/digging-deeper/broadcasting/) does this for you.
+- **Time.** A quiet socket stays open unless you set [`http.server.upgraded_idle_timeout_ms`](/docs/getting-started/deployment/#connection-limits).
 
 ## Writing your own extractor
 

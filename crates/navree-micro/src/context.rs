@@ -7,13 +7,13 @@ use std::future::Future;
 use std::sync::{Arc, LazyLock, Mutex, MutexGuard, PoisonError};
 use std::time::SystemTime;
 
-use axum::extract::Request;
-use axum::middleware::{Next, from_fn};
 use http::header::AUTHORIZATION;
 use http::request::Parts;
 use navree_contracts::{AuthState, RequestId};
 use navree_db::Uow;
 use navree_http::extract::FromRequestParts;
+use navree_http::extract::Request;
+use navree_http::middleware::{Next, from_fn};
 use navree_http::response::Response;
 use navree_http::{AppError, GlobalLayer, LayerSlot};
 use navree_telemetry::{TelemetryContext, TraceContext};

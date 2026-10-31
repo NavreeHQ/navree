@@ -20,7 +20,6 @@ postgres = ["navree-db/postgres"]
 mysql = ["navree-db/mysql"]
 
 [dependencies]
-axum = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 # DNS lookups for verification: TXT, CNAME and addresses, the system's

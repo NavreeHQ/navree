@@ -5,13 +5,13 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use axum::body::Body;
-use axum::extract::Request;
-use axum::middleware::Next;
 use axum::routing::{get, post};
 use http::request::Parts;
 use http::{Method, StatusCode};
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState};
+use navree_http::body::Body;
+use navree_http::extract::Request;
+use navree_http::middleware::Next;
 use navree_http::{
     AppError, CurrentPrincipal, GlobalLayer, Guard, HttpOptions, LayerSlot, ModuleBuilderHttpExt,
     RouteAuthorizer, RouteDef, RouteMeta,
@@ -461,7 +461,7 @@ async fn guest_throttle_counts_ipv6_clients_by_network() {
 /// the `x-trail` request header.
 fn trail_layer(slot: LayerSlot, name: &'static str) -> GlobalLayer {
     GlobalLayer::new(slot, name, move |_ctx, router| {
-        Ok(router.layer(axum::middleware::from_fn(
+        Ok(router.layer(navree_http::middleware::from_fn(
             move |mut request: Request, next: Next| async move {
                 let mut trail = request
                     .headers()
@@ -496,17 +496,13 @@ impl<const N: usize> Module for LayerModule<N> {
 #[tokio::test]
 async fn global_layers_applied_in_slot_order() {
     let app = Setup::new(vec![
-        RouteDef::new(
-            Method::GET,
-            "/trail",
-            get(|request: Request| async move {
-                request
-                    .headers()
-                    .get("x-trail")
-                    .map(|v| v.to_str().unwrap().to_owned())
-                    .unwrap_or_default()
-            }),
-        )
+        RouteDef::on(Method::GET, "/trail", |request: Request| async move {
+            request
+                .headers()
+                .get("x-trail")
+                .map(|v| v.to_str().unwrap().to_owned())
+                .unwrap_or_default()
+        })
         .public(),
     ])
     .authenticated()
@@ -534,17 +530,13 @@ async fn global_layers_applied_in_slot_order() {
 #[tokio::test]
 async fn authentication_precedes_the_slots_without_session_layers() {
     let app = Setup::new(vec![
-        RouteDef::new(
-            Method::GET,
-            "/trail",
-            get(|request: Request| async move {
-                request
-                    .headers()
-                    .get("x-trail")
-                    .map(|v| v.to_str().unwrap().to_owned())
-                    .unwrap_or_default()
-            }),
-        )
+        RouteDef::on(Method::GET, "/trail", |request: Request| async move {
+            request
+                .headers()
+                .get("x-trail")
+                .map(|v| v.to_str().unwrap().to_owned())
+                .unwrap_or_default()
+        })
         .public(),
         RouteDef::new(Method::GET, "/private", get(|| async { "secret" })).authenticated(),
     ])
@@ -573,14 +565,14 @@ struct EdgeModule;
 impl Module for EdgeModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.http_layer(GlobalLayer::new(LayerSlot::Edge, "edge", |_ctx, router| {
-            Ok(router.layer(axum::middleware::from_fn(
+            Ok(router.layer(navree_http::middleware::from_fn(
                 |request: Request, next: Next| async move {
                     if request.uri().path().starts_with("/edge") {
                         let seen = request
                             .extensions()
                             .get::<navree_contracts::RequestId>()
                             .is_some();
-                        return axum::response::IntoResponse::into_response(format!(
+                        return navree_http::response::IntoResponse::into_response(format!(
                             "edge saw a request id: {seen}"
                         ));
                     }
@@ -619,6 +611,88 @@ async fn edge_layers_run_before_every_fixed_layer() {
     let missing = app.get("/api/missing").await;
     assert_eq!(missing.status, StatusCode::NOT_FOUND);
     assert_eq!(missing.headers["x-edge"], "passed");
+}
+
+/// A layer in `slot` that panics on `/boom`, and on `/refuse` answers a
+/// plain 403 itself.
+struct TroubleModule(LayerSlot);
+
+impl Module for TroubleModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.http_layer(GlobalLayer::new(self.0, "trouble", |_ctx, router| {
+            Ok(router.layer(navree_http::middleware::from_fn(
+                |request: Request, next: Next| async move {
+                    match request.uri().path() {
+                        "/api/boom" => panic!("the layer exploded"),
+                        "/api/refuse" => navree_http::response::IntoResponse::into_response(
+                            StatusCode::FORBIDDEN,
+                        ),
+                        _ => next.run(request).await,
+                    }
+                },
+            )))
+        }));
+    }
+}
+
+#[tokio::test]
+async fn a_panic_in_a_global_layer_is_a_json_error_with_every_header() {
+    for slot in [
+        LayerSlot::Session,
+        LayerSlot::AuthContext,
+        LayerSlot::Uow,
+        LayerSlot::Context,
+    ] {
+        let app = Setup::new(vec![ok_route(Method::GET, "/inner").public()])
+            .module(TroubleModule(slot))
+            .boot()
+            .await;
+
+        let response = app.get("/api/boom").await;
+        let body = response.assert_error(500);
+        assert_eq!(body["message"], "Internal server error", "{slot:?}");
+        assert!(response.header("x-request-id").is_some(), "{slot:?}");
+        let response = app
+            .send(crate::support::from_origin(
+                "GET",
+                "/api/boom",
+                crate::support::ORIGIN,
+            ))
+            .await;
+        assert_eq!(
+            response.header("access-control-allow-origin"),
+            Some(crate::support::ORIGIN),
+            "{slot:?}"
+        );
+
+        // The next request is served: the stack is not left broken.
+        assert_eq!(app.get("/api/inner").await.status, StatusCode::OK);
+
+        // A plain refusal from a layer renders in the JSON error format.
+        let body = app.get("/api/refuse").await.assert_error(403);
+        assert_eq!(body["error"], "Forbidden", "{slot:?}");
+    }
+}
+
+/// An edge layer is outside the panic catcher and the error stage, which the
+/// documentation of `LayerSlot::Edge` says.
+#[tokio::test]
+async fn a_panic_at_the_edge_is_not_caught_and_a_refusal_is_not_rendered() {
+    let app = Setup::new(vec![ok_route(Method::GET, "/inner").public()])
+        .module(TroubleModule(LayerSlot::Edge))
+        .boot()
+        .await;
+
+    let refused = app.get("/api/refuse").await;
+    assert_eq!(refused.status, StatusCode::FORBIDDEN);
+    assert_eq!(refused.text(), "");
+    assert!(refused.header("x-request-id").is_none());
+
+    let request = Request::get("/api/boom").body(Body::empty()).unwrap();
+    let outcome =
+        futures_util::FutureExt::catch_unwind(std::panic::AssertUnwindSafe(app.send(request)))
+            .await;
+    assert!(outcome.is_err(), "the panic reaches whoever serves the app");
 }
 
 #[tokio::test]
@@ -665,11 +739,9 @@ async fn audit_action_recorded_on_success() {
         ok_route(Method::POST, "/publish")
             .authenticated()
             .audit("post.published"),
-        RouteDef::new(
-            Method::POST,
-            "/fail",
-            post(|| async { Err::<(), _>(AppError::conflict("Already published.")) }),
-        )
+        RouteDef::on(Method::POST, "/fail", || async {
+            Err::<(), _>(AppError::conflict("Already published."))
+        })
         .authenticated()
         .audit("post.failed"),
     ])
@@ -713,15 +785,9 @@ async fn security_events_are_audited() {
         ok_route(Method::GET, "/limited")
             .authenticated()
             .throttle(1, Duration::from_secs(60)),
-        RouteDef::new(
-            Method::POST,
-            "/owner",
-            post(|| async {
-                Err::<(), _>(
-                    AppError::forbidden().with_detail("Only managers may change the owner"),
-                )
-            }),
-        )
+        RouteDef::on(Method::POST, "/owner", || async {
+            Err::<(), _>(AppError::forbidden().with_detail("Only managers may change the owner"))
+        })
         .authenticated(),
         ok_route(Method::GET, "/guarded")
             .authenticated()

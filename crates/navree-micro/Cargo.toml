@@ -29,7 +29,6 @@ mysql = ["navree-db/mysql"]
 
 [dependencies]
 async-nats = { workspace = true, optional = true }
-axum = { workspace = true }
 base64 = { workspace = true, optional = true }
 bytes = { workspace = true }
 chrono = { workspace = true }

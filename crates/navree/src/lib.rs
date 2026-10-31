@@ -344,9 +344,8 @@ pub use navree_harbor as harbor;
 #[cfg(feature = "navigator")]
 pub use navree_navigator as navigator;
 
-/// The previous router, for the types navree-http does not have yet
-/// (`navree::axum::extract::Multipart`, ...). It goes once navree-http has
-/// them all.
+/// The previous router, for code still written against it. It goes once
+/// navree-http's extractors cover what it has.
 #[cfg(feature = "http")]
 pub use axum;
 

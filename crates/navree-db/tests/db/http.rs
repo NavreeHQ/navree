@@ -268,7 +268,7 @@ fn http_options() -> HttpOptions {
 
 struct Setup {
     app: App,
-    router: axum::Router,
+    router: navree_http::AppRouter,
     db: Db,
     _temp: TempDb,
 }
@@ -295,7 +295,7 @@ async fn setup() -> Setup {
     }
 }
 
-async fn send(router: &axum::Router, request: Request<Body>) -> (StatusCode, Value) {
+async fn send(router: &navree_http::AppRouter, request: Request<Body>) -> (StatusCode, Value) {
     let response = router.clone().oneshot(request).await.unwrap();
     let status = response.status();
     let body = response.into_body().collect().await.unwrap().to_bytes();

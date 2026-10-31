@@ -20,10 +20,10 @@
 
 use std::collections::BTreeMap;
 
-use axum::body::Body;
 use axum::extract::FromRequest as _;
 use http::{Method, Request, StatusCode};
 use http_body_util::BodyExt;
+use navree_http::body::Body;
 use navree_http::extract::FromRequest;
 use proptest::prelude::*;
 use serde::Deserialize;
@@ -78,7 +78,8 @@ where
             .await
             .map(|json| format!("{:?}", json.0))
             .map_err(|rejection| (rejection.status().as_u16(), rejection.body_text()));
-    let theirs = axum::Json::<T>::from_request(json_request(content_type, body), &())
+    let request = json_request(content_type, body).map(axum::body::Body::new);
+    let theirs = axum::Json::<T>::from_request(request, &())
         .await
         .map(|json| format!("{:?}", json.0))
         .map_err(|rejection| previous(rejection.status(), rejection.body_text()));
@@ -271,7 +272,8 @@ where
     .await
     .map(|form| format!("{:?}", form.0))
     .map_err(|rejection| (rejection.status().as_u16(), rejection.body_text()));
-    let theirs = axum::Form::<T>::from_request(form_request(method, content_type, body), &())
+    let request = form_request(method, content_type, body).map(axum::body::Body::new);
+    let theirs = axum::Form::<T>::from_request(request, &())
         .await
         .map(|form| format!("{:?}", form.0))
         .map_err(|rejection| previous(rejection.status(), rejection.body_text()));
@@ -418,12 +420,12 @@ where
         ),
     );
     let response = router
-        .oneshot(Request::get(path).body(Body::empty()).unwrap())
+        .oneshot(Request::get(path).body(axum::body::Body::empty()).unwrap())
         .await
         .unwrap();
     // The error layer turns the previous framework's text rejections into
     // the JSON error format; server errors show no detail.
-    server_errors_without_detail(outcome(response).await)
+    server_errors_without_detail(outcome(response.map(Body::new)).await)
 }
 
 /// A 5xx shows `"Internal server error"`, whatever its text.

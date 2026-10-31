@@ -5,14 +5,13 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 
-use axum::Router;
-use axum::body::{Body, Bytes};
 use http::{HeaderMap, Request, StatusCode};
 use http_body_util::BodyExt;
 use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::{AuthVia, Principal};
+use navree_http::body::{Body, Bytes};
 use navree_http::{
-    Authenticator, Controller, HttpModule, HttpOptions, ModuleBuilderHttpExt, RouteDef,
+    AppRouter, Authenticator, Controller, HttpModule, HttpOptions, ModuleBuilderHttpExt, RouteDef,
     build_router,
 };
 use navree_kernel::{
@@ -262,7 +261,7 @@ impl Setup {
 /// A booted app and its router.
 pub struct TestApp {
     pub app: App,
-    pub router: Router,
+    pub router: AppRouter,
 }
 
 impl TestApp {

@@ -3,11 +3,11 @@
 
 use std::sync::Arc;
 
-use axum::Router;
 use http::request::Parts;
 use http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use navree_contracts::{AuthVia, Principal};
+use navree_http::AppRouter;
 use navree_http::body::Body;
 use navree_http::{
     AppError, Authenticator, HttpModule, HttpOptions, RouteAuthorizer, RouteMeta, build_router,
@@ -58,7 +58,7 @@ impl RouteAuthorizer for AllowAll {
 
 /// Boots `HttpModule` plus `module`, with the fake authenticator and the
 /// allow-all authorizer, and builds the router.
-async fn boot(module: impl Module) -> (App, Router) {
+async fn boot(module: impl Module) -> (App, AppRouter) {
     let options = HttpOptions {
         per_ip_rate_limit: None,
         ..HttpOptions::default()
@@ -76,7 +76,7 @@ async fn boot(module: impl Module) -> (App, Router) {
 }
 
 /// Sends `request` and returns the status and the body as text.
-async fn send(router: &Router, request: Request<Body>) -> (StatusCode, String) {
+async fn send(router: &AppRouter, request: Request<Body>) -> (StatusCode, String) {
     let response = router.clone().oneshot(request).await.expect("infallible");
     let status = response.status();
     let body = response

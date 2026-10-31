@@ -4,10 +4,10 @@
 
 use std::sync::Arc;
 
-use axum::extract::Request;
-use axum::middleware::Next;
 use navree_contracts::{BoxError, BoxFuture, PermissionCheck, Principal};
 use navree_db::Uow;
+use navree_http::extract::Request;
+use navree_http::middleware::Next;
 use navree_http::{GlobalLayer, LayerSlot, ModuleBuilderHttpExt, Response};
 use navree_kernel::{Factory, Module, ModuleBuilder};
 use navree_notify::{
@@ -319,7 +319,7 @@ impl Module for EnterWorkspace {
         m.http_layer(GlobalLayer::new(
             LayerSlot::Context,
             "test-workspace",
-            |_ctx, router| Ok(router.layer(axum::middleware::from_fn(enter))),
+            |_ctx, router| Ok(router.layer(navree_http::middleware::from_fn(enter))),
         ));
     }
 }

@@ -25,10 +25,9 @@ syn = { workspace = true }
 # of navree-macros only; see crates/navree/tests/dependency_graph.rs). The DI
 # macro tests need the kernel, plus navree-http for
 # `#[module(controllers = [..])]`; the controller macro tests build
-# real routers, so they add axum, navree-access (action and subject markers for
+# real routers, so they add navree-access (action and subject markers for
 # `#[can]`), navree-contracts (a fake authenticator) and friends.
 [dev-dependencies]
-axum = { workspace = true }
 http = { workspace = true }
 http-body-util = { workspace = true }
 navree-access = { workspace = true }

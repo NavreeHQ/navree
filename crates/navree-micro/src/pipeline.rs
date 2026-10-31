@@ -8,9 +8,6 @@ use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::Router;
-use axum::extract::{Request, State};
-use axum::middleware::{Next, from_fn_with_state};
 use bytes::Bytes;
 use futures_util::FutureExt;
 use http::header::{CONTENT_TYPE, HeaderName, HeaderValue};
@@ -20,7 +17,10 @@ use navree_contracts::{
     AuditEntry, AuditKind, AuditSink, AuthState, AuthVia, Principal, RequestId,
 };
 use navree_db::Uow;
+use navree_http::AppRouter;
 use navree_http::body::{Body, to_bytes};
+use navree_http::extract::Request;
+use navree_http::middleware::{Next, State, from_fn_with_state};
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{
     AppError, Authenticator, ErrorMapper, GlobalLayer, LayerSlot, PathParams, RouteAuthorizer,
@@ -95,7 +95,7 @@ pub(crate) struct PipelineSettings {
 
 /// The app's message handlers behind their pipeline.
 pub(crate) struct MessageRouter {
-    router: Router,
+    router: AppRouter,
     pub(crate) patterns: Vec<Arc<Registered>>,
     mappers: Vec<ErrorMapper>,
     trace: TracePolicy,
@@ -223,7 +223,7 @@ impl MessageRouter {
         }
         // Navree's router matches; the layers below still wrap the previous
         // framework's router type (`GlobalLayer`).
-        let mut router = Router::new().fallback_service(routes);
+        let mut router = AppRouter::new(routes);
 
         // Authentication first, then the app's authentication-context and
         // unit-of-work layers (the session slot is HTTP's alone), outermost

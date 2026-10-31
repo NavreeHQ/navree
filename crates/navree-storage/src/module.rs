@@ -3,7 +3,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::multipart::MultipartError;
 use futures_util::future::join_all;
 use http::StatusCode;
 use navree_config::{Config, ModuleBuilderConfigExt};
@@ -130,7 +129,6 @@ fn register(m: &mut ModuleBuilder, options: Option<StorageOptions>) {
     .exports::<Disk>()
     .controller::<StorageController>()
     .map_error::<StorageError>(storage_error)
-    .map_error::<MultipartError>(crate::upload::client_error)
     .command(crate::sync::command());
 }
 

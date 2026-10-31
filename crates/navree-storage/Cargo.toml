@@ -22,7 +22,6 @@ azure = ["object_store/azure-base", "__cloud"]
 __cloud = ["object_store/ring", "object_store/reqwest", "dep:reqwest", "dep:rustls"]
 
 [dependencies]
-axum = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 futures-util = { workspace = true }

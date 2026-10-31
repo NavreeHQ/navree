@@ -5,9 +5,9 @@
 #![allow(missing_docs)]
 
 use http::{HeaderValue, Method};
-use navree::axum::extract::Request;
-use navree::axum::middleware::{self, Next};
+use navree::http::extract::Request;
 use navree::http::handler::Endpoint;
+use navree::http::middleware::{self, Next, State};
 use navree::http::response::Response;
 use navree::http::{Controller, GlobalLayer, LayerSlot, RouteDef};
 use navree::prelude::*;
@@ -23,6 +23,27 @@ async fn response_time(request: Request, next: Next) -> Response {
         response.headers_mut().insert("x-response-time", value);
     }
     response
+}
+
+async fn tagged(State(tag): State<&'static str>, request: Request, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    response
+        .headers_mut()
+        .insert("x-tag", HeaderValue::from_static(tag));
+    response
+}
+
+#[module(register = Self::wire)]
+pub struct TaggedModule;
+
+impl TaggedModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.http_layer(GlobalLayer::new(
+            LayerSlot::Session,
+            "tagged",
+            |_ctx, router| Ok(router.layer(middleware::from_fn_with_state("docs", tagged))),
+        ));
+    }
 }
 
 #[module(register = Self::wire)]
@@ -83,6 +104,22 @@ async fn a_global_layer_wraps_every_response() {
         .await
         .assert_status(200);
     assert!(response.header("x-response-time").is_some());
+}
+
+#[tokio::test]
+async fn a_layer_with_state_gets_it_as_its_first_argument() {
+    let app = TestApp::builder()
+        .module(TaggedModule)
+        .module(TokensModule)
+        .build()
+        .await;
+    let response = app
+        .acting_as(principal(Uuid::now_v7()))
+        .post("/api/v1/tokens")
+        .send()
+        .await
+        .assert_status(200);
+    assert_eq!(response.header("x-tag"), Some("docs"));
 }
 
 #[tokio::test]

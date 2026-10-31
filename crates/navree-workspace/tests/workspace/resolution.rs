@@ -219,14 +219,14 @@ impl Module for PinModule {
         m.http_layer(navree_http::GlobalLayer::new(
             navree_http::LayerSlot::AuthContext,
             "test-pin",
-            |_ctx, router| Ok(router.layer(axum::middleware::from_fn(pin_from_header))),
+            |_ctx, router| Ok(router.layer(navree_http::middleware::from_fn(pin_from_header))),
         ));
     }
 }
 
 async fn pin_from_header(
-    mut request: axum::extract::Request,
-    next: axum::middleware::Next,
+    mut request: navree_http::extract::Request,
+    next: navree_http::middleware::Next,
 ) -> navree_http::Response {
     let pin = request
         .headers()

@@ -7,15 +7,15 @@ use std::fmt;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use axum::body::Body;
-use axum::response::{IntoResponse, Response};
 use http::header::{CONTENT_TYPE, HeaderName, HeaderValue, RETRY_AFTER, X_CONTENT_TYPE_OPTIONS};
 use http::{HeaderMap, StatusCode};
 use navree_kernel::BoxError;
 use serde::Serialize;
 
+use crate::body::Body;
 use crate::codes;
 use crate::options::ErrorOptions;
+use crate::response::{IntoResponse, Response};
 
 /// The content type of every error response.
 pub const ERROR_CONTENT_TYPE: &str = "application/json";

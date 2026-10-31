@@ -5,12 +5,12 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use axum::extract::ws::WebSocketUpgrade;
 use http::header::{CONTENT_TYPE, HOST, ORIGIN};
 use http::{HeaderMap, Method};
 use navree_contracts::{AuthState, Principal};
 use navree_http::body::Bytes;
 use navree_http::response::Response;
+use navree_http::ws::WebSocketUpgrade;
 use navree_http::{
     ApiMeta, AppError, Controller, CurrentPrincipal, Extension, Json, Path, RouteDef,
 };

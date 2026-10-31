@@ -523,6 +523,32 @@ async fn large_files_are_staged_and_applied_in_batches() {
     assert_eq!(stored_contacts(&app).await.len(), 2_000);
 }
 
+/// The `file` part is the file whether or not the client names it, so it has
+/// the limit of imports and not the smaller one of a form field.
+#[tokio::test]
+async fn a_file_part_without_a_file_name_has_the_limit_of_imports() {
+    let app = support::builder().build().await;
+    let admin = app.acting_as(principal(ADMIN));
+    let boundary = "navree-sheets-test-boundary";
+    let mut body = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"importer\"\r\n\r\ncontacts\r\n\
+         --{boundary}\r\nContent-Disposition: form-data; name=\"file\"\r\n\r\n"
+    )
+    .into_bytes();
+    body.extend_from_slice(&vec![b'a'; 2 * 1024 * 1024]);
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    admin
+        .post("/api/imports")
+        .header(
+            "content-type",
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .body(body)
+        .send()
+        .await
+        .assert_status(202);
+}
+
 #[tokio::test]
 async fn uploads_are_refused_with_a_reason() {
     let app = support::builder()
@@ -531,6 +557,24 @@ async fn uploads_are_refused_with_a_reason() {
         .await;
     let admin = app.acting_as(principal(ADMIN));
     upload(&admin, "big.csv", &[b'a'; 65], &[])
+        .await
+        .assert_error_code(413, "payload_too_large");
+    let boundary = "navree-sheets-test-boundary";
+    let mut unnamed = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"importer\"\r\n\r\ncontacts\r\n\
+         --{boundary}\r\nContent-Disposition: form-data; name=\"file\"\r\n\r\n"
+    )
+    .into_bytes();
+    unnamed.extend_from_slice(&[b'a'; 65]);
+    unnamed.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    admin
+        .post("/api/imports")
+        .header(
+            "content-type",
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .body(unnamed)
+        .send()
         .await
         .assert_error_code(413, "payload_too_large");
     upload(&admin, "c.csv", b"%PDF-1.7 ...", &[])

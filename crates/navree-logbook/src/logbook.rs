@@ -56,7 +56,7 @@ pub(crate) struct Active {
     /// The app, for replays.
     pub(crate) app: OnceLock<WeakAppContext>,
     /// The router replays run through (built on the first replay).
-    pub(crate) router: tokio::sync::OnceCell<axum::Router>,
+    pub(crate) router: tokio::sync::OnceCell<navree_http::AppRouter>,
     /// `http://<http.addr>`, for "Copy as curl".
     pub(crate) base_url: OnceLock<String>,
 }

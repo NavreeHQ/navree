@@ -6,9 +6,11 @@
 mod attacks;
 mod connections;
 mod http2;
+mod multipart;
 mod requests;
 mod shutdown;
 mod slow_clients;
 mod slow_readers;
 mod support;
+mod websocket_attacks;
 mod websockets;

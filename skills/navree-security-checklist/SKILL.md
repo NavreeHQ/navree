@@ -96,7 +96,11 @@ Go through it in order; each item says how to check.
   connections.
 - [ ] WebSocket routes authenticate the caller and have a heartbeat. The
   server does not bound a quiet socket unless
-  `http.server.upgraded_idle_timeout_ms` is set.
+  `http.server.upgraded_idle_timeout_ms` is set. A route that trusts a cookie
+  checks `upgrade.origin_allowed(&allowed)`: CORS does not apply to an
+  upgrade. A raised `max_frame_size` or `max_message_size` has a reason.
+- [ ] A raised `http.multipart` limit or `form.with_limits(..)` has a reason,
+  and `field.file_name()` is never used as a path.
 - [ ] Behind a proxy, load balancer or BFF: `http.trusted_proxies` lists
   it (else everyone shares one IP and one login throttle). Avoid
   `http.trust_proxy = true` unless nothing reaches the app directly.

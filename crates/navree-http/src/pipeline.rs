@@ -14,10 +14,6 @@ use std::panic::AssertUnwindSafe;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use axum::body::Body;
-use axum::extract::{Request, State};
-use axum::middleware::Next;
-use axum::response::{IntoResponse, Response};
 use futures_util::FutureExt;
 use http::header::{
     CONTENT_LENGTH, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HeaderName, HeaderValue,
@@ -36,12 +32,15 @@ use tokio::time::Instant;
 use tracing::Instrument;
 use uuid::Uuid;
 
+use crate::body::{Body, HttpBody as _};
 use crate::codes;
 use crate::error::{ErrorFormat, PendingError};
-use crate::extract::ProxyTrust;
+use crate::extract::{ProxyTrust, Request};
 use crate::limiter::KeyedRateLimiter;
 use crate::maintenance::MaintenanceMode;
+use crate::middleware::{Next, State};
 use crate::network::rate_limit_key;
+use crate::response::{IntoResponse, Response};
 use crate::{AppError, Authenticator, ClientIp, ErrorMapper, RouteMeta};
 
 /// The request id header.
@@ -493,7 +492,7 @@ fn with_security_headers(mut response: Response) -> Response {
 
 /// Renders every error response in the JSON error shape: [`AppError`]s (mapped
 /// by the contributed [`ErrorMapper`]s, 5xx logged with the request id) and
-/// plain-text or empty error responses from Axum and Tower layers.
+/// plain-text or empty error responses from Tower layers and extractors.
 async fn render_errors<F, Fut>(
     mappers: &[ErrorMapper],
     format: ErrorFormat,
@@ -617,7 +616,6 @@ fn header_str<'a>(headers: &'a HeaderMap, name: &HeaderName) -> Option<&'a str> 
 
 /// An error response with no body or a small plain-text body.
 fn needs_normalizing(response: &Response) -> bool {
-    use axum::body::HttpBody as _;
     let status = response.status();
     if !(status.is_client_error() || status.is_server_error()) {
         return false;
@@ -851,7 +849,7 @@ mod tests {
         assert!(!needs_normalizing(&ok));
         let json = (
             StatusCode::BAD_REQUEST,
-            axum::Json(serde_json::json!({"custom": true})),
+            crate::Json(serde_json::json!({"custom": true})),
         )
             .into_response();
         assert!(

@@ -8,11 +8,11 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::Router;
 use futures_util::{SinkExt, StreamExt};
 use http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use navree_contracts::{AuthVia, Principal, Secret};
+use navree_http::AppRouter;
 use navree_http::body::Body;
 use navree_http::{AppError, Authenticator, HttpModule, HttpOptions, build_router};
 use navree_kernel::{
@@ -159,7 +159,7 @@ pub fn app(options: RealtimeOptions) -> AppBuilder {
 pub struct Server {
     pub app: App,
     pub addr: SocketAddr,
-    pub router: Router,
+    pub router: AppRouter,
     pub realtime: Arc<Realtime>,
 }
 

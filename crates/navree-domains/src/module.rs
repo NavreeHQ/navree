@@ -2,10 +2,10 @@
 
 use std::sync::Arc;
 
-use axum::middleware::from_fn;
 use navree_config::ModuleBuilderConfigExt;
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_events::{Listener, ModuleBuilderEventsExt};
+use navree_http::middleware::from_fn;
 use navree_http::{GlobalLayer, LayerSlot, ModuleBuilderHttpExt};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, Factory, Injectable, KernelError, Lifecycle, Module,

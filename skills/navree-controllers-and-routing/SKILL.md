@@ -142,7 +142,8 @@ authenticator (`AuthModule`), or the boot fails. Rules themselves:
 | `ClientIp(ip)` (`navree::http`) | the client address (honours `http.trusted_proxies`) |
 | `Extension(id): Extension<RequestId>` | the request id (`navree::http::Extension`, `navree::contracts::RequestId`) |
 | `headers: HeaderMap` (`http::HeaderMap`) | every header |
-| `String`, `navree::http::body::Bytes`, `navree::axum::extract::Multipart` | raw bodies, uploads |
+| `String`, `navree::http::body::Bytes`, `navree::http::extract::Multipart` | raw bodies, uploads; `Multipart` has limits on parts, fields, files and part headers (`http.multipart`, `form.with_limits(..)`) |
+| `navree::http::ws::WebSocketUpgrade` | a WebSocket: return `upgrade.on_upgrade(handler)`; frames and messages stop at 1 MiB unless you set `max_frame_size` and `max_message_size`; a handler that trusts a cookie checks `upgrade.origin_allowed(&allowed)` |
 | `Scoped<T>` | a request-scoped provider |
 
 Only one extractor may read the body, and it must be the **last**

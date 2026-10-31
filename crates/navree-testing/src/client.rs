@@ -3,12 +3,12 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use axum::Router;
 use bytes::Bytes;
 use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, COOKIE, ORIGIN, SET_COOKIE};
 use http::{HeaderName, HeaderValue, Method, Request};
 use http_body_util::BodyExt;
 use navree_contracts::Principal;
+use navree_http::AppRouter;
 use navree_http::body::Body;
 use navree_http::serve::ConnectInfo;
 use serde::Serialize;
@@ -70,7 +70,7 @@ pub struct TestClient {
 /// What every client of one app shares.
 pub(crate) struct Target {
     /// The app's full router.
-    pub(crate) router: Router,
+    pub(crate) router: AppRouter,
     /// The default `Origin` header.
     pub(crate) origin: Option<HeaderValue>,
     /// Whether the app authenticates with the `TestAuthenticator`.

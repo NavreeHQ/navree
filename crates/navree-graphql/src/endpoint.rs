@@ -5,13 +5,13 @@
 use std::sync::Arc;
 
 use async_graphql::{BatchRequest, BatchResponse, Response};
-use axum::extract::ws::WebSocketUpgrade;
 use http::header::{ACCEPT, ALLOW, CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HOST};
 use http::request::Parts;
 use http::{HeaderMap, HeaderValue, Method, StatusCode};
 use navree_contracts::AuthState;
 use navree_http::body::{Body, Bytes};
 use navree_http::response::{IntoResponse, Response as HttpResponse};
+use navree_http::ws::WebSocketUpgrade;
 use navree_http::{AppError, Controller, Path, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Resolver};
 

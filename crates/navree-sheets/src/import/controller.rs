@@ -2,11 +2,11 @@
 
 use std::sync::Arc;
 
-use axum::extract::Multipart;
 use bytes::BytesMut;
 use http::{Method, StatusCode};
 use navree_contracts::Principal;
 use navree_db::Uow;
+use navree_http::extract::{Multipart, MultipartError, MultipartLimits};
 use navree_http::response::IntoResponse;
 use navree_http::{
     AppError, Authenticator, Controller, CurrentPrincipal, Json, NoContent, Path, Query, RouteDef,
@@ -154,10 +154,17 @@ struct UploadForm {
     options: UploadOptions,
 }
 
-async fn read_form(mut form: Multipart, limit: u64) -> Result<UploadForm, AppError> {
-    let bad = |error: axum::extract::multipart::MultipartError| {
+async fn read_form(form: Multipart, limit: u64) -> Result<UploadForm, AppError> {
+    let bad = |error: MultipartError| {
         AppError::bad_request(format!("the upload cannot be read: {}", error.body_text()))
     };
+    // The file has the limit of the imports, with or without a file name; the
+    // loop below refuses it first.
+    let limits = MultipartLimits {
+        max_field_bytes: limit.saturating_add(1),
+        ..form.limits()
+    };
+    let mut form = form.with_limits(limits);
     let mut out = UploadForm {
         importer: None,
         file: None,

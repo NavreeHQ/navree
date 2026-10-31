@@ -4,10 +4,10 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::Router;
 use chrono::Utc;
 use http::{Method, Request};
 use navree_config::{ConfigModule, ConfigSources};
+use navree_http::AppRouter;
 use navree_http::body::Body;
 use navree_http::{
     AppError, Controller, Extension, HttpModule, ModuleBuilderHttpExt, RouteDef, build_router,
@@ -79,7 +79,7 @@ impl Module for RoutesModule {
 
 struct Setup {
     app: App,
-    router: Router,
+    router: AppRouter,
     spans: SpanRecorder,
     server: FakeServer,
 }

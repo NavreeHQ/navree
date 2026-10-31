@@ -156,7 +156,7 @@ Inject `Arc<Media>` and start with `add(model, collection, source)`. The source 
 A multipart upload goes through the request's unit of work:
 
 ```rust title="src/modules/courses/controller.rs"
-use navree::axum::extract::Multipart;
+use navree::http::extract::Multipart;
 use navree::media::{Media, MediaResource, MediaSource};
 use navree::prelude::*;
 

@@ -315,7 +315,7 @@ Set the `Content-Type` yourself when you serve files this way; the [temporary UR
 `store_upload` streams one multipart file field through your app to a disk, checking it as it goes. Take the `Multipart` extractor (it must be the last argument), get the field, and pass it with `UploadRules`:
 
 ```rust title="src/modules/avatars/controller.rs"
-use navree::axum::extract::Multipart;
+use navree::http::extract::Multipart;
 use navree::prelude::*;
 use navree::storage::{Storage, StoredFile, UploadRules, store_upload};
 

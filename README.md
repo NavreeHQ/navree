@@ -59,7 +59,7 @@ for backends, designed, documented and released together.
 - **AI-native.** Agent skills, an MCP server for your coding agent, docs
   written for models as well as people, and an AI SDK for your product.
 - **One binary.** Web server, queue workers and scheduler ship as one
-  release, built on Tokio, Axum, Hyper, Tower and rustls.
+  release, built on Tokio, Hyper, Tower and rustls.
 
 ## Get started
 

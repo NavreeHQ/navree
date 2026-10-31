@@ -1,8 +1,8 @@
 //! Navree's router in the full pipeline: what reaches a handler, what is
 //! refused before one runs, methods, body limits and route conflicts.
 
-use axum::body::Body;
 use http::{Method, Request, StatusCode};
+use navree_http::body::Body;
 use navree_http::{Json, Path, Query, RouteDef};
 use serde::Deserialize;
 

@@ -94,7 +94,7 @@ sorted), `url(path)` (needs `public_url`). No copy or move helper: stream
 ## Uploads through the app (multipart)
 
 ```rust
-use navree::axum::extract::Multipart;
+use navree::http::extract::Multipart;
 use navree::prelude::*;
 use navree::storage::{Storage, StoredFile, UploadRules, store_upload};
 

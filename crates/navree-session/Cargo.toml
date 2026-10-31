@@ -17,7 +17,6 @@ postgres = ["navree-db/postgres"]
 mysql = ["navree-db/mysql"]
 
 [dependencies]
-axum = { workspace = true }
 chrono = { workspace = true }
 cookie = { workspace = true }
 http = { workspace = true }

@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::ws::{CloseFrame, Message, Utf8Bytes, WebSocket};
+use navree_http::ws::{CloseFrame, Message, Utf8Bytes, WebSocket};
 use serde_json::json;
 use tokio::sync::mpsc;
 use tokio::time::Instant;

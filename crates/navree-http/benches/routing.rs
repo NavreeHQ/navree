@@ -14,6 +14,9 @@
 //! - `previous_extractors/one_param`: a handler still on the previous
 //!   framework's extractors, mounted on Navree's router (it runs behind the
 //!   previous router's matching for its route, as during the move).
+//! - `stack/*`: a request through four `from_fn` layers around Navree's
+//!   router, on [`AppRouter`] against the previous framework's router and
+//!   middleware with Navree's router as its fallback.
 //!
 //! Run with `cargo bench -p navree-http --bench routing` (add `-- --quick`
 //! for a shorter run).
@@ -25,12 +28,14 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use axum::body::Body;
 use criterion::{Criterion, criterion_group, criterion_main};
 use http::{Method, Request, StatusCode};
+use navree_http::body::Body;
 use navree_http::handler::Endpoint;
+use navree_http::middleware::{self, Next};
+use navree_http::response::{IntoResponse, Response};
 use navree_http::routing::{PathTree, Router};
-use navree_http::{AppError, Path};
+use navree_http::{AppError, AppRouter, Path};
 use tower::{Layer, Service, ServiceExt};
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
@@ -96,15 +101,13 @@ impl<S> Layer<S> for Boxing {
 #[derive(Clone)]
 struct Boxed<S>(S);
 
-impl<S> Service<Request<Body>> for Boxed<S>
+impl<S, B> Service<Request<B>> for Boxed<S>
 where
-    S: Service<Request<Body>, Response = axum::response::Response, Error = Infallible>
-        + Clone
-        + Send
-        + 'static,
+    S: Service<Request<B>, Error = Infallible> + Clone + Send + 'static,
     S::Future: Send + 'static,
+    B: Send + 'static,
 {
-    type Response = axum::response::Response;
+    type Response = S::Response;
     type Error = Infallible;
     type Future = BoxFuture<Result<Self::Response, Infallible>>;
 
@@ -112,7 +115,7 @@ where
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, request: Request<Body>) -> Self::Future {
+    fn call(&mut self, request: Request<B>) -> Self::Future {
         let inner = self.0.clone();
         Box::pin(async move { inner.oneshot(request).await })
     }
@@ -127,13 +130,10 @@ struct Errors<S>(S);
 
 impl<S> Service<Request<Body>> for Errors<S>
 where
-    S: Service<Request<Body>, Response = axum::response::Response, Error = Infallible>
-        + Clone
-        + Send
-        + 'static,
+    S: Service<Request<Body>, Response = Response, Error = Infallible> + Clone + Send + 'static,
     S::Future: Send + 'static,
 {
-    type Response = axum::response::Response;
+    type Response = Response;
     type Error = Infallible;
     type Future = BoxFuture<Result<Self::Response, Infallible>>;
 
@@ -142,7 +142,6 @@ where
     }
 
     fn call(&mut self, request: Request<Body>) -> Self::Future {
-        use axum::response::IntoResponse;
         use http_body_util::BodyExt;
 
         let inner = self.0.clone();
@@ -230,7 +229,46 @@ fn previous() -> axum::Router {
     }
     // The JSON 404 `build_router` mounted as the previous router's fallback,
     // as Navree's router answers it.
-    router.fallback(|| async { AppError::not_found() })
+    router
+        .fallback_service(tower::service_fn(|_: axum::extract::Request| {
+            std::future::ready(Ok::<_, Infallible>(AppError::not_found().into_response()))
+        }))
+        .with_state(())
+}
+
+fn navree_response(response: axum::response::Response) -> Response {
+    response.map(Body::new)
+}
+
+async fn pass(request: navree_http::extract::Request, next: Next) -> Response {
+    next.run(request).await
+}
+
+async fn previous_pass(
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    next.run(request).await
+}
+
+/// Navree's router behind four middlewares on [`AppRouter`].
+fn app_stack() -> AppRouter {
+    let mut app = AppRouter::new(navree(false));
+    for _ in 0..4 {
+        app = app.layer(middleware::from_fn(pass));
+    }
+    app
+}
+
+/// Navree's router behind four middlewares on the previous router.
+fn previous_stack() -> axum::Router {
+    let routes =
+        navree(false).map_request(|request: axum::extract::Request| request.map(Body::new));
+    let mut app = axum::Router::new().fallback_service(routes);
+    for _ in 0..4 {
+        app = app.layer(axum::middleware::from_fn(previous_pass));
+    }
+    app
 }
 
 fn filter(method: &Method) -> axum::routing::MethodFilter {
@@ -239,7 +277,7 @@ fn filter(method: &Method) -> axum::routing::MethodFilter {
 
 async fn send<S>(service: S, method: Method, path: &str, expected: StatusCode)
 where
-    S: Service<Request<Body>, Response = axum::response::Response, Error = Infallible>,
+    S: Service<Request<Body>, Response = Response, Error = Infallible>,
 {
     let request = Request::builder()
         .method(method)
@@ -294,7 +332,7 @@ fn routing(c: &mut Criterion) {
     group.finish();
 
     let ours = Errors(navree(false));
-    let theirs = Errors(previous());
+    let theirs = Errors(tower::util::MapResponseLayer::new(navree_response).layer(previous()));
     let cases: [(&str, Method, &str, StatusCode); 5] = [
         ("static", Method::GET, "/api/v1/deals", StatusCode::OK),
         (
@@ -334,6 +372,32 @@ fn routing(c: &mut Criterion) {
                 .iter(|| send(theirs.clone(), method.clone(), path, *status));
         });
     }
+    group.finish();
+
+    let app = app_stack();
+    let previous_app = tower::util::MapResponseLayer::new(navree_response).layer(previous_stack());
+    let mut group = c.benchmark_group("stack");
+    group.measurement_time(Duration::from_secs(4));
+    group.bench_function("navree", |b| {
+        b.to_async(&rt).iter(|| {
+            send(
+                app.clone(),
+                Method::GET,
+                "/api/v1/deals/123",
+                StatusCode::OK,
+            )
+        });
+    });
+    group.bench_function("previous", |b| {
+        b.to_async(&rt).iter(|| {
+            send(
+                previous_app.clone(),
+                Method::GET,
+                "/api/v1/deals/123",
+                StatusCode::OK,
+            )
+        });
+    });
     group.finish();
 
     let bridged = Errors(navree(true));

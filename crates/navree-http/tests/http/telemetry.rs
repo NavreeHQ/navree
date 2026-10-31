@@ -1,9 +1,9 @@
 //! Telemetry: `RequestHandled` and `ExceptionReported` events, the request's
 //! `TelemetryContext`, and W3C trace context on incoming requests.
 
-use axum::body::Body;
 use http::Method;
 use navree_config::ConfigSources;
+use navree_http::body::Body;
 use navree_http::{AppError, RouteDef};
 use navree_telemetry::{EventKind, TelemetryContext, TelemetryRecorder, current_trace_id};
 use serde_json::json;

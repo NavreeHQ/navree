@@ -25,7 +25,7 @@ cargo bench -p navree --features sqlite --bench pipeline -- --test    # run each
 | Benchmark | What it measures |
 |---|---|
 | `pipeline/json` | `GET /json` through the whole router: every fixed layer, the unit-of-work layer, the per-route pipeline |
-| `axum/json` | the same handler on a bare Axum router: the floor to compare `pipeline/json` with |
+| `bare/json` | the same handler on a bare `routing::Router`: the floor to compare `pipeline/json` with |
 | `pipeline/json_x64` | 64 `/json` requests at once on four worker threads: shows contention |
 | `pipeline/db` | `GET /db`: one `SELECT` by primary key through the pool (SQLite) |
 | `pipeline/insert` | `POST /deals`: `Valid<Json<T>>`, then `Deal::create` in the request's unit of work, committed |
@@ -33,7 +33,7 @@ cargo bench -p navree --features sqlite --bench pipeline -- --test    # run each
 | `kernel/get` | `AppContext::get::<Db>()` |
 
 Compare a change against a saved baseline on the same machine, and read
-`pipeline/json` relative to `axum/json` of the same run: absolute times
+`pipeline/json` relative to `bare/json` of the same run: absolute times
 move with the machine's load. The full cross-framework load test is
 `node bench/run.mjs` (Docker; see `bench/SPEC.md`).
 
@@ -94,8 +94,8 @@ per_ip_rate_limit = 600       # sharded by IP; a single client IP shares one key
 - Inject providers (`Arc<T>` fields, `#[injectable]`) instead of calling
   `ctx.get` per request.
 - Register a `GlobalLayer` as a Tower `Layer` with its own service rather
-  than `axum::middleware::from_fn` when it runs on every request: every
-  `from_fn` layer adds boxed futures and clones of the inner stack.
+  than `navree::http::middleware::from_fn` when it runs on every request:
+  every `from_fn` layer adds boxed futures.
 - Leave `LogbookModule` out of production builds you benchmark: even with
   `logbook.enabled = false` it registers a change observer (so model writes
   serialize their events) and a `Session`-slot layer (so authentication

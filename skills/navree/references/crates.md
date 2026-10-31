@@ -45,8 +45,8 @@ MongoDB.
 | `navree::billing` | navree-billing | `billing` (opt-in, not in `full`) | `BillingModule::from_config()` + `BillingModule::for_feature::<Workspace>()` | `billing` | `Billing`, `Billable`, `Subscribed`, `/api/billing/*`, `BillingFake`, `billing:*` commands |
 | `navree::dock` | navree-dock | `dock` (opt-in, not in `full`) | (a tool, not a module) | `dock.toml` | `DockFile`, `Dock`, `app_env`: the library behind `navree dock` |
 
-Also re-exported: `navree::axum` (for `navree::axum::extract::Multipart`,
-`navree::axum::middleware::from_fn`, ...), the macros (`module`,
+Also re-exported: `navree::axum` (for code still written against it), the
+macros (`module`,
 `injectable`, `controller`, `get`, `post`, `put`, `patch`, `delete`) and,
 at the root, `BoxFuture`, `KernelError`, `ModuleId`, `ProviderKey` and
 `Scope`.

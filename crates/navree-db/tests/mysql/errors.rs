@@ -152,7 +152,7 @@ impl Module for NotesModule {
     }
 }
 
-async fn send(router: &axum::Router, request: Request<Body>) -> (StatusCode, Value) {
+async fn send(router: &navree_http::AppRouter, request: Request<Body>) -> (StatusCode, Value) {
     let response = router.clone().oneshot(request).await.unwrap();
     let status = response.status();
     let body = response.into_body().collect().await.unwrap().to_bytes();

@@ -4,12 +4,12 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use axum::extract::multipart::{Field, MultipartError};
 use bytes::{Bytes, BytesMut};
 use futures_util::stream;
 use http::StatusCode;
 use navree_crypto::random_token;
 use navree_http::AppError;
+use navree_http::extract::{Field, MultipartError};
 use serde::{Deserialize, Serialize};
 
 use crate::path::normalize;
@@ -98,7 +98,7 @@ pub struct StoredFile {
 /// - 400 for a malformed multipart body, 500 for a storage failure.
 ///
 /// ```no_run
-/// use axum::extract::Multipart;
+/// use navree_http::extract::Multipart;
 /// use navree_http::{AppError, Json};
 /// use navree_storage::{Disk, StoredFile, UploadRules, store_upload};
 ///
@@ -131,7 +131,7 @@ pub async fn store_upload(
     let mut head = BytesMut::new();
     let mut finished = false;
     while head.len() < SNIFF_BYTES {
-        match field.chunk().await.map_err(multipart_error)? {
+        match field.chunk().await.map_err(|error| error.to_app_error())? {
             Some(chunk) => head.extend_from_slice(&chunk),
             None => {
                 finished = true;
@@ -178,7 +178,7 @@ pub async fn store_upload(
         Err(StorageError::Stream { source }) => match source.downcast::<UploadError>() {
             Ok(error) => match *error {
                 UploadError::TooLarge => Err(too_large()),
-                UploadError::Multipart(error) => Err(multipart_error(error)),
+                UploadError::Multipart(error) => Err(error.to_app_error()),
             },
             Err(source) => Err(AppError::internal(source)),
         },
@@ -287,25 +287,6 @@ fn limited<'a>(
 /// A 400 with one message for `field`.
 fn invalid(field: &str, message: String) -> AppError {
     AppError::validation(BTreeMap::from([(field.to_owned(), vec![message])]))
-}
-
-/// A multipart parsing failure: its own status (400, 413, ...), and its
-/// message as the error message of client errors.
-fn multipart_error(error: MultipartError) -> AppError {
-    match client_error(&error) {
-        Some(app_error) => app_error,
-        None => AppError::internal(error),
-    }
-}
-
-/// The client error (4xx) a multipart failure stands for; `None` for a
-/// server-side failure. Registered by `StorageModule` as an error mapper, so
-/// `multipart.next_field().await?` in a handler keeps the status.
-pub(crate) fn client_error(error: &MultipartError) -> Option<AppError> {
-    let status = error.status();
-    status
-        .is_client_error()
-        .then(|| AppError::from_status(status).with_detail(error.body_text()))
 }
 
 #[cfg(test)]

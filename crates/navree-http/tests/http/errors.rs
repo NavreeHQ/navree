@@ -4,10 +4,10 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use axum::Json;
-use axum::body::Body;
-use axum::routing::{get, post};
+use axum::routing::post;
 use http::{Method, Request};
 use navree_config::ConfigSources;
+use navree_http::body::Body;
 use navree_http::{AppError, ErrorOptions, HttpOptions, ModuleBuilderHttpExt, RouteDef};
 use serde::Deserialize;
 use serde_json::json;
@@ -15,25 +15,21 @@ use serde_json::json;
 use crate::support::{Setup, json_request, options};
 
 fn validation_route() -> RouteDef {
-    RouteDef::new(
-        Method::POST,
-        "/validate",
-        post(|| async {
-            let mut errors = BTreeMap::new();
-            errors.insert(
-                "name".to_owned(),
-                vec![
-                    "name should not be empty".to_owned(),
-                    "name must be a string".to_owned(),
-                ],
-            );
-            errors.insert(
-                "email".to_owned(),
-                vec!["email must be a valid email address".to_owned()],
-            );
-            Err::<(), _>(AppError::validation(errors))
-        }),
-    )
+    RouteDef::on(Method::POST, "/validate", || async {
+        let mut errors = BTreeMap::new();
+        errors.insert(
+            "name".to_owned(),
+            vec![
+                "name should not be empty".to_owned(),
+                "name must be a string".to_owned(),
+            ],
+        );
+        errors.insert(
+            "email".to_owned(),
+            vec!["email must be a valid email address".to_owned()],
+        );
+        Err::<(), _>(AppError::validation(errors))
+    })
     .public()
 }
 
@@ -160,22 +156,14 @@ async fn forged_request_id_is_replaced() {
 #[tokio::test]
 async fn internal_errors_hide_their_detail() {
     let app = Setup::new(vec![
-        RouteDef::new(
-            Method::GET,
-            "/io",
-            get(|| async {
-                Err::<(), AppError>(std::io::Error::other("disk /secret/path is full").into())
-            }),
-        )
+        RouteDef::on(Method::GET, "/io", || async {
+            Err::<(), AppError>(std::io::Error::other("disk /secret/path is full").into())
+        })
         .public(),
-        RouteDef::new(
-            Method::GET,
-            "/question-mark",
-            get(|| async {
-                let n: i32 = "not a number".parse()?;
-                Ok::<_, AppError>(n.to_string())
-            }),
-        )
+        RouteDef::on(Method::GET, "/question-mark", || async {
+            let n: i32 = "not a number".parse()?;
+            Ok::<_, AppError>(n.to_string())
+        })
         .public(),
     ])
     .boot()
@@ -271,11 +259,9 @@ impl std::error::Error for DuplicateKey {}
 #[tokio::test]
 async fn contributed_error_mapper_maps_typed_errors() {
     let app = Setup::new(vec![
-        RouteDef::new(
-            Method::POST,
-            "/dup",
-            post(|| async { Err::<(), AppError>(DuplicateKey.into()) }),
-        )
+        RouteDef::on(Method::POST, "/dup", || async {
+            Err::<(), AppError>(DuplicateKey.into())
+        })
         .public(),
     ])
     .register(|m| {

@@ -58,7 +58,6 @@ url = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-axum = { workspace = true }
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
 navree-testing = { workspace = true }

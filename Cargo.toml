@@ -125,6 +125,8 @@ percent-encoding = "2.3.2"
 url = "2.5.8"
 mime = "0.3.17"
 mime_guess = "2.0.5"
+memchr = "2.8.3"
+multer = "3.1.0"
 infer = "0.22.0"
 # TLS: rustls with the ring provider only (no aws-lc, no OpenSSL).
 rustls = { version = "0.23.46", default-features = false, features = ["logging", "ring", "std", "tls12"] }

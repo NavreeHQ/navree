@@ -10,12 +10,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use axum::Router;
-use axum::extract::{Request, State};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use http::{HeaderMap, Method, StatusCode};
 use navree_crypto::{hmac_sha256, sha256_hex};
+use navree_http::AppRouter;
 use navree_http::body::{Body, Bytes};
+use navree_http::extract::Request;
 use navree_http::response::{IntoResponse, Response};
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, percent_decode_str, utf8_percent_encode};
 
@@ -73,7 +73,8 @@ impl S3Server {
             .insert(BUCKET.to_owned(), BTreeMap::new());
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
-        let app = Router::new().fallback(handle).with_state(state.clone());
+        let served = state.clone();
+        let app = AppRouter::from_handler(move |request: Request| handle(served.clone(), request));
         let task = tokio::spawn(async move {
             navree_http::serve(listener, app).await.unwrap();
         });
@@ -113,7 +114,7 @@ impl Drop for S3Server {
 }
 
 /// Every request.
-async fn handle(State(state): State<Arc<ServerState>>, request: Request) -> Response {
+async fn handle(state: Arc<ServerState>, request: Request) -> Response {
     let delay = *state.delay.lock().unwrap();
     if let Some(delay) = delay {
         tokio::time::sleep(delay).await;

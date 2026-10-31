@@ -7,6 +7,7 @@ mod access;
 mod errors;
 mod logs;
 mod matching;
+mod multipart;
 mod pipeline;
 mod routes;
 mod server;

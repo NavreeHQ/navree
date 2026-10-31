@@ -6,10 +6,10 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::Request;
-use axum::middleware::{Next, from_fn_with_state};
 use http::{HeaderMap, HeaderName, HeaderValue};
 use navree_contracts::RequestId;
+use navree_http::extract::Request;
+use navree_http::middleware::{Next, State, from_fn_with_state};
 use navree_http::response::Response;
 use navree_http::{GlobalLayer, HttpOptions, LayerSlot};
 use navree_kernel::AppContext;
@@ -77,7 +77,7 @@ pub(crate) fn http_context_layer() -> GlobalLayer {
 }
 
 async fn record_http_context(
-    axum::extract::State(timeout): axum::extract::State<Arc<OnceCell<Duration>>>,
+    State(timeout): State<Arc<OnceCell<Duration>>>,
     request: Request,
     next: Next,
 ) -> Response {

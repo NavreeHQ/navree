@@ -4,13 +4,13 @@
 
 use std::collections::BTreeMap;
 
-use axum::Router;
 use bytes::Bytes;
 use chrono::{Duration, Utc};
 use futures_util::{TryStreamExt, stream};
 use http::Request;
 use http_body_util::BodyExt;
 use navree_contracts::HealthStatus;
+use navree_http::AppRouter;
 use navree_http::body::Body;
 use navree_storage::{
     Disk, DiskConfig, Storage, StorageError, SyncOptions, UploadRejection, UploadRules, upload_path,
@@ -28,7 +28,7 @@ pub struct Subject {
 /// Sends requests to signed links: the app's router for path-only links of
 /// local and memory disks, the network for absolute ones.
 pub struct Http {
-    pub router: Option<Router>,
+    pub router: Option<AppRouter>,
     pub client: Option<reqwest::Client>,
 }
 
@@ -51,7 +51,7 @@ impl Http {
     }
 
     /// `http` for an app's disks.
-    pub fn app(router: Router) -> Self {
+    pub fn app(router: AppRouter) -> Self {
         Self {
             router: Some(router),
             client: None,

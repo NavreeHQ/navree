@@ -3,9 +3,6 @@
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
-use axum::Router;
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::routing::any;
 use futures_util::{SinkExt, StreamExt};
 use http::{Method, Request, StatusCode, Version};
 use http_body_util::Empty;
@@ -13,6 +10,8 @@ use hyper::client::conn::http2;
 use hyper::ext::Protocol;
 use hyper_util::rt::{TokioExecutor, TokioIo, TokioTimer};
 use navree_http::ServerOptions;
+use navree_http::routing::Router;
+use navree_http::ws::{Message, WebSocket, WebSocketUpgrade};
 use tokio_tungstenite::tungstenite::Message as ClientMessage;
 use tokio_tungstenite::tungstenite::protocol::Role;
 use tokio_tungstenite::{WebSocketStream, connect_async};
@@ -28,12 +27,11 @@ async fn echo(mut socket: WebSocket) {
 }
 
 fn app() -> Router {
+    let socket = |upgrade: WebSocketUpgrade| async move { upgrade.on_upgrade(echo) };
     Router::new()
-        .route(
-            "/ws",
-            any(|upgrade: WebSocketUpgrade| async move { upgrade.on_upgrade(echo) }),
-        )
-        .route("/", any(|| async { "hello" }))
+        .route(Method::GET, "/ws", socket)
+        .route(Method::CONNECT, "/ws", socket)
+        .route(Method::GET, "/", || async { "hello" })
 }
 
 /// Every limit that could cut a quiet connection, short.

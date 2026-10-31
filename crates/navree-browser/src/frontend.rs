@@ -9,10 +9,11 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, LazyLock, Mutex, RwLock, Weak};
 use std::time::{Duration, Instant};
 
-use axum::extract::{Request, State};
 use http::{HeaderName, StatusCode, Uri, header};
 use hyper_util::rt::TokioIo;
+use navree_http::AppRouter;
 use navree_http::body::Body;
+use navree_http::extract::Request;
 use navree_http::response::{IntoResponse, Response};
 use navree_kernel::AppContext;
 use serde_json::json;
@@ -387,7 +388,8 @@ impl Proxy {
                 }
             };
             let _ = bound.send(listener.local_addr());
-            let app = axum::Router::new().fallback(forward).with_state(state);
+            let app =
+                AppRouter::from_handler(move |request: Request| forward(state.clone(), request));
             let _ = navree_http::serve(listener, app).await;
         });
         let addr = address
@@ -418,7 +420,7 @@ const HOP_BY_HOP: [HeaderName; 6] = [
     header::UPGRADE,
 ];
 
-async fn forward(State(upstream): State<Upstream>, request: Request) -> Response {
+async fn forward(upstream: Upstream, request: Request) -> Response {
     let target = *upstream.read().unwrap_or_else(|e| e.into_inner());
     let Some(addr) = target else {
         return problem(

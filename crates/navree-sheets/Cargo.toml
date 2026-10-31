@@ -24,8 +24,6 @@ postgres = ["navree-db/postgres", "navree-queue/postgres"]
 mysql = ["navree-db/mysql"]
 
 [dependencies]
-# The import routes (multipart uploads) and the `Download` response.
-axum = { workspace = true }
 bytes = { workspace = true }
 # XLSX, XLS and ODS reading.
 calamine = { workspace = true }

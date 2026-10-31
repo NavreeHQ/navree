@@ -5,9 +5,9 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use axum::Router;
 use http::{HeaderMap, Request, StatusCode};
 use http_body_util::BodyExt;
+use navree_http::AppRouter;
 use navree_http::body::{Body, Bytes};
 use navree_http::{HttpModule, HttpOptions, build_router};
 use navree_kernel::{App, AppBuilder};
@@ -56,7 +56,7 @@ pub async fn boot_error(builder: AppBuilder) -> String {
 /// A booted app and its router.
 pub struct TestApp {
     pub app: App,
-    pub router: Router,
+    pub router: AppRouter,
 }
 
 impl TestApp {

@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::{Arc, Mutex};
 
-use axum::body::Body;
 use http::Method;
+use navree_http::body::Body;
 use navree_http::{AppError, RouteDef};
 use tracing::field::{Field, Visit};
 use tracing::{Event, Subscriber};

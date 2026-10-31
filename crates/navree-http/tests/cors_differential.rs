@@ -25,9 +25,9 @@
 use std::convert::Infallible;
 use std::time::Duration;
 
-use axum::body::Body;
 use http::{HeaderName, HeaderValue, Method, Request, Response, StatusCode};
 use navree_http::CorsLayer;
+use navree_http::body::Body;
 use tower::{ServiceBuilder, ServiceExt, service_fn};
 use tower_http::cors::{AllowOrigin, CorsLayer as TowerCors};
 

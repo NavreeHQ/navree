@@ -66,7 +66,7 @@ L0  navree-kernel  navree-bounded                navree-macros  navree-orm-macro
 | L1 | `navree-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs with progress and cancellation, permission checks, `Clock`, conformity checks (`conformity:check`) |
 | L1 | `navree-config` | Typed configuration from `.env`, TOML and JSON files and `APP_*` variables, with limits on file size and nesting and secrets scrubbed from errors and logs |
 | L1 | `navree-telemetry` | Typed telemetry events (requests, queries, jobs, scheduled tasks, mail, notifications, cache, outgoing HTTP, exceptions, log lines, app events) delivered to registered sinks, `TelemetryRecorder`, W3C trace context |
-| L2 | `navree-http` | Axum integration, default Tower layers, JSON errors, controllers, rate limits, trusted proxies |
+| L2 | `navree-http` | Router, extractors, responses and middleware, the server, default Tower layers, JSON errors, controllers, rate limits, trusted proxies |
 | L2 | `navree-log` | tracing subscriber, JSON or pretty output, redaction, rotating files |
 | L2 | `navree-crypto` | AES-256-GCM encrypter with key rotation, Argon2id hasher, token helpers, JOSE helpers (JWS, JWK, PKCS#8 on `ring`), TOTP, QR codes, Web Push encryption |
 | L2 | `navree-events` | Typed event bus with sync and queued listeners |
@@ -320,6 +320,7 @@ token's claims read back, a rendered query holds only the user's words.
 | `mcp_protocol`, `mcp_server` | JSON-RPC parsing and stdio framing; a booted MCP server over HTTP and stdio |
 | `http_client_ip`, `http_cors` | `X-Forwarded-For`, `X-Real-IP`, trusted proxies, the rate-limit key; CORS origins; signed URLs |
 | `http_routing`, `http_extract` | route patterns, path matching and precedence, path checks and parameter decoding; query strings, forms and JSON bodies through the extractors |
+| `http_multipart`, `ws_handshake` | `multipart/form-data` boundaries, delimiters, part heads and limits, split into chunks of every size; the headers of a WebSocket handshake |
 | `host_names` | email domains, custom-domain normalization, the `Host` header |
 | `sso_saml_response`, `sso_saml_metadata`, `sso_xml` | SAML responses, identity provider metadata, XML and Canonical XML |
 | `webhooks_signatures` | the signature headers and bodies of every incoming webhook verifier |

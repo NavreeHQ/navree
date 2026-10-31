@@ -20,9 +20,9 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-use axum::extract::Request;
 use http::{HeaderMap, StatusCode};
 use navree_access::AbilityFactory;
+use navree_http::extract::Request;
 use navree_http::response::Response;
 use navree_http::{AppError, Path, RawQuery};
 use navree_settings::{

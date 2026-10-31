@@ -4,10 +4,10 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
-use axum::extract::ws::Utf8Bytes;
 use dashmap::DashMap;
 use dashmap::mapref::entry::Entry;
 use navree_contracts::{Broadcaster, Principal, Secret};
+use navree_http::ws::Utf8Bytes;
 use navree_http::{AppError, HttpServer};
 use navree_kernel::{AppContext, BoxError, BoxFuture, Contributed};
 use serde::Serialize;
@@ -636,23 +636,7 @@ impl Realtime {
     /// browser), an allowed origin (or `*`), or the server's own origin
     /// (`host` is the request's `Host` header).
     pub(crate) fn origin_allowed(&self, origin: Option<&str>, host: Option<&str>) -> bool {
-        let Some(origin) = origin else {
-            return true;
-        };
-        let origin = origin.trim().trim_end_matches('/');
-        if self.allowed_origins.iter().any(|allowed| {
-            allowed == "*"
-                || allowed
-                    .trim()
-                    .trim_end_matches('/')
-                    .eq_ignore_ascii_case(origin)
-        }) {
-            return true;
-        }
-        match (origin.split_once("://"), host) {
-            (Some((_, authority)), Some(host)) => authority.eq_ignore_ascii_case(host.trim()),
-            _ => false,
-        }
+        navree_http::ws::origin_allowed(origin, host, &self.allowed_origins)
     }
 
     /// Registers a new connection with a fresh socket id; returns it and the

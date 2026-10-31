@@ -13,9 +13,12 @@
 //! | [`Query<T>`](crate::Query), [`RawQuery`](crate::RawQuery) | the query string | 400 `Failed to deserialize query string: ...` |
 //! | [`Form<T>`](crate::Form) | an `application/x-www-form-urlencoded` body (the query string for `GET` and `HEAD`) | 415, 413, 400 |
 //! | [`Json<T>`](crate::Json) | an `application/json` (or `+json`) body | 415, 413, 400 |
+//! | [`Multipart`] | a `multipart/form-data` body, part by part, within [`MultipartLimits`] | 400, then 413, 408 and 400 while reading ([`MultipartError`]) |
+//! | [`WebSocketUpgrade`](crate::ws::WebSocketUpgrade) | a WebSocket handshake | 400, 405, 426 |
 //! | [`Extension<T>`](crate::Extension) | a value the pipeline put in the request | 500 |
 //! | [`Scoped<T>`](crate::Scoped) | a provider of the app, for this request | 500 |
 //! | [`ClientIp`](crate::ClientIp), [`CurrentPrincipal`](crate::CurrentPrincipal), [`PathParams`](crate::routing::PathParams) | what the pipeline found | 401 for a guest (`CurrentPrincipal`) |
+//! | [`Request`], [`Body`](crate::body::Body) | the whole request, or its body unread (only as the last argument) | never |
 //! | `Option<T>` | `T`, or `None` when it is absent (for `T` implementing [`OptionalFromRequestParts`] / [`OptionalFromRequest`]) | `T`'s, when present but invalid |
 //! | `Result<T, T::Rejection>` | `T` or its rejection, for the handler to decide | never |
 
@@ -31,6 +34,7 @@ mod extension;
 mod form;
 mod json;
 mod media;
+mod multipart;
 mod path;
 mod query;
 pub mod rejection;
@@ -42,8 +46,10 @@ pub(crate) use client::{IpNetwork, ProxyTrust};
 pub use extension::Extension;
 pub use form::Form;
 pub use json::Json;
+pub use multipart::{Field, Multipart, MultipartLimits};
 pub use path::Path;
 pub use query::{Query, RawQuery};
+pub use rejection::MultipartError;
 pub use scoped::Scoped;
 
 /// A request, as handlers and extractors see it.
@@ -125,6 +131,22 @@ pub trait OptionalFromRequest<M = via::ViaRequest>: Sized + Send {
     fn from_request(
         request: Request,
     ) -> impl Future<Output = Result<Option<Self>, Self::Rejection>> + Send;
+}
+
+impl FromRequest for Request {
+    type Rejection = Infallible;
+
+    async fn from_request(request: Request) -> Result<Self, Infallible> {
+        Ok(request)
+    }
+}
+
+impl FromRequest for crate::body::Body {
+    type Rejection = Infallible;
+
+    async fn from_request(request: Request) -> Result<Self, Infallible> {
+        Ok(request.into_body())
+    }
 }
 
 impl<T: OptionalFromRequestParts> FromRequestParts for Option<T> {

@@ -226,7 +226,7 @@ dependencies = [
  "sha1 0.10.7",
  "sync_wrapper",
  "tokio",
- "tokio-tungstenite",
+ "tokio-tungstenite 0.29.0",
  "tower",
  "tower-layer",
  "tower-service",
@@ -692,7 +692,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d045de693cb712d0b22c6a64be5b953f67b3ce00ab5ad3dd5d8b441886ab8e1a"
 dependencies = [
  "quote",
- "syn 2.0.119",
+ "syn 3.0.9",
 ]
 
 [[package]]
@@ -925,7 +925,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2359,7 +2359,6 @@ dependencies = [
 name = "navree-db"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "chrono",
  "futures-util",
@@ -2419,7 +2418,6 @@ dependencies = [
 name = "navree-domains"
 version = "0.2.0"
 dependencies = [
- "axum",
  "bytes",
  "chrono",
  "hickory-resolver",
@@ -2475,11 +2473,15 @@ dependencies = [
  "arbitrary",
  "axum",
  "base64 0.23.1",
+ "bytes",
  "chrono",
  "chrono-tz",
  "futures",
  "http",
+ "hyper",
  "libfuzzer-sys",
+ "mime",
+ "multer",
  "navree-auth",
  "navree-config",
  "navree-contracts",
@@ -2519,6 +2521,7 @@ dependencies = [
  "bytes",
  "chrono",
  "dashmap 6.2.1",
+ "encoding_rs",
  "futures-util",
  "hex",
  "hmac",
@@ -2527,7 +2530,10 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
+ "memchr",
  "metrics",
+ "mime",
+ "multer",
  "navree-config",
  "navree-contracts",
  "navree-kernel",
@@ -2538,6 +2544,7 @@ dependencies = [
  "serde_path_to_error",
  "sha2 0.11.1",
  "tokio",
+ "tokio-tungstenite 0.30.0",
  "tokio-util",
  "tower",
  "tower-http",
@@ -2617,7 +2624,6 @@ dependencies = [
 name = "navree-logbook"
 version = "0.2.0"
 dependencies = [
- "axum",
  "bytes",
  "chrono",
  "form_urlencoded",
@@ -2659,7 +2665,6 @@ dependencies = [
 name = "navree-mail"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "bytes",
  "chrono",
@@ -2701,7 +2706,6 @@ name = "navree-mcp"
 version = "0.2.0"
 dependencies = [
  "async-trait",
- "axum",
  "base64 0.23.1",
  "bytes",
  "chrono",
@@ -2734,7 +2738,6 @@ dependencies = [
 name = "navree-micro"
 version = "0.2.0"
 dependencies = [
- "axum",
  "bytes",
  "chrono",
  "futures-util",
@@ -2767,7 +2770,6 @@ dependencies = [
 name = "navree-oauth"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "chrono",
  "form_urlencoded",
@@ -2873,7 +2875,6 @@ dependencies = [
 name = "navree-realtime"
 version = "0.2.0"
 dependencies = [
- "axum",
  "bytes",
  "dashmap 6.2.1",
  "hex",
@@ -2992,7 +2993,6 @@ dependencies = [
 name = "navree-storage"
 version = "0.2.0"
 dependencies = [
- "axum",
  "bytes",
  "chrono",
  "futures-util",
@@ -3029,7 +3029,6 @@ dependencies = [
 name = "navree-testing"
 version = "0.2.0"
 dependencies = [
- "axum",
  "bytes",
  "cookie",
  "http",
@@ -3157,7 +3156,6 @@ dependencies = [
 name = "navree-workspace"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "chrono",
  "form_urlencoded",
@@ -4002,7 +4000,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4059,7 +4057,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4706,10 +4704,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4866,7 +4864,19 @@ dependencies = [
  "futures-util",
  "log",
  "tokio",
- "tungstenite",
+ "tungstenite 0.29.0",
+]
+
+[[package]]
+name = "tokio-tungstenite"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17a073bfed563fa236697a068031408a93cd9522e08abf9933ead3e73411bd71"
+dependencies = [
+ "futures-util",
+ "log",
+ "tokio",
+ "tungstenite 0.30.0",
 ]
 
 [[package]]
@@ -5040,6 +5050,22 @@ dependencies = [
  "log",
  "rand 0.9.5",
  "sha1 0.10.7",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "tungstenite"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e48ac77174b19c110a50ab2128b24215ac9cb40e0e12e093fb602d175c569d22"
+dependencies = [
+ "bytes",
+ "data-encoding",
+ "http",
+ "httparse",
+ "log",
+ "rand 0.10.3",
+ "sha1 0.11.0",
  "thiserror 2.0.21",
 ]
 
@@ -5379,7 +5405,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

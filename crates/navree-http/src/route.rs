@@ -407,7 +407,7 @@ mod tests {
                 let request = http::Request::builder()
                     .method(method)
                     .uri("/x")
-                    .body(axum::body::Body::empty())
+                    .body(crate::body::Body::empty())
                     .unwrap();
                 router.oneshot(request).await.unwrap().status()
             }

@@ -18,7 +18,6 @@ postgres = ["navree-db/postgres"]
 mysql = ["navree-db/mysql"]
 
 [dependencies]
-axum = { workspace = true }
 chrono = { workspace = true }
 fixed_decimal = { workspace = true }
 fluent-bundle = { workspace = true }

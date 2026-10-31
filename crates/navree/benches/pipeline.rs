@@ -2,8 +2,8 @@
 //!
 //! - `pipeline/json`: `GET /json` through the whole router: every global
 //!   layer, the unit-of-work layer and the per-route pipeline, one request
-//!   at a time. `axum/json` is the same handler on a bare Axum router, the
-//!   floor the pipeline is measured against.
+//!   at a time. `bare/json` is the same handler on a bare `routing::Router`,
+//!   the floor the pipeline is measured against.
 //! - `pipeline/json_x64`: 64 `/json` requests at once on four worker
 //!   threads, where process-wide locks show up.
 //! - `pipeline/db`: `GET /db`, one `SELECT` by primary key through the pool
@@ -126,7 +126,7 @@ pub struct BenchModule;
 /// SQLite file and the (absent) maintenance file.
 struct Bench {
     app: App,
-    router: navree::axum::Router,
+    router: navree::http::AppRouter,
     _dir: tempfile::TempDir,
 }
 
@@ -179,7 +179,7 @@ async fn boot() -> Bench {
 }
 
 /// Sends `request` and reads the whole body; panics unless `expected`.
-async fn send(router: navree::axum::Router, request: Request<Body>, expected: StatusCode) {
+async fn send(router: navree::http::AppRouter, request: Request<Body>, expected: StatusCode) {
     let response = router.oneshot(request).await.expect("infallible");
     let status = response.status();
     let body = response.into_body().collect().await.expect("body");
@@ -211,14 +211,15 @@ fn pipeline(c: &mut Criterion) {
     let rt = runtime();
     let bench = rt.block_on(boot());
     let router = bench.router.clone();
-    let bare = navree::axum::Router::new().route(
+    let bare = navree::http::AppRouter::new(navree::http::routing::Router::new().route(
+        http::Method::GET,
         "/json",
-        navree::axum::routing::get(|| async {
-            navree::axum::Json(Message {
+        || async {
+            navree::http::Json(Message {
                 message: "Hello, World!",
             })
-        }),
-    );
+        },
+    ));
 
     let mut group = c.benchmark_group("pipeline");
     group.measurement_time(Duration::from_secs(5));
@@ -250,7 +251,7 @@ fn pipeline(c: &mut Criterion) {
     });
     group.finish();
 
-    let mut group = c.benchmark_group("axum");
+    let mut group = c.benchmark_group("bare");
     group.measurement_time(Duration::from_secs(5));
     group.bench_function("json", |b| {
         b.to_async(&rt)

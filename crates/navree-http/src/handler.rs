@@ -26,6 +26,7 @@ use http::request::Parts;
 use tower::util::BoxCloneSyncService;
 use tower::{Layer, Service, ServiceExt};
 
+use crate::body::Body;
 use crate::extract::{FromRequest, FromRequestParts, Request};
 use crate::response::{IntoResponse, Response};
 
@@ -100,8 +101,13 @@ where
     async fn extract(parts: &mut Parts) -> Result<Self, Response> {
         <T as axum::extract::FromRequestParts<()>>::from_request_parts(parts, &())
             .await
-            .map_err(IntoResponse::into_response)
+            .map_err(from_previous)
     }
+}
+
+/// A rejection of the previous framework's as a response.
+fn from_previous(rejection: impl axum::response::IntoResponse) -> Response {
+    axum::response::IntoResponse::into_response(rejection).into_response()
 }
 
 /// The last argument: extracted from the whole request.
@@ -131,9 +137,10 @@ where
     const PREVIOUS: bool = true;
 
     async fn extract(request: Request) -> Result<Self, Response> {
+        let request = request.map(axum::body::Body::new);
         <T as axum::extract::FromRequest<(), M>>::from_request(request, &())
             .await
-            .map_err(IntoResponse::into_response)
+            .map_err(from_previous)
     }
 }
 
@@ -242,7 +249,7 @@ impl Endpoint {
     /// The previous framework's method router, run as is.
     pub fn from_method_router(router: axum::routing::MethodRouter) -> Self {
         Self {
-            service: BoxCloneSyncService::new(router),
+            service: from_previous_service(router),
             previous: true,
         }
     }
@@ -280,12 +287,34 @@ impl Endpoint {
         if !self.previous {
             return self.service;
         }
-        let previous = axum::Router::new().route_service(pattern, self.service);
+        let inner = self
+            .service
+            .map_request(|request: axum::extract::Request| request.map(Body::new));
+        let previous = axum::Router::new().route_service(pattern, inner);
         match body_limit {
-            Some(limit) => BoxCloneSyncService::new(DefaultBodyLimit::max(limit).layer(previous)),
-            None => BoxCloneSyncService::new(previous),
+            Some(limit) => from_previous_service(DefaultBodyLimit::max(limit).layer(previous)),
+            None => from_previous_service(previous),
         }
     }
+
+    /// The endpoint's service, without any path matching.
+    pub(crate) fn into_service(self) -> BoxedService {
+        self.service
+    }
+}
+
+/// A service of the previous framework's, answering with Navree's response.
+fn from_previous_service<S>(service: S) -> BoxedService
+where
+    S: Service<Request, Response = axum::response::Response, Error = Infallible>
+        + Clone
+        + Send
+        + Sync
+        + 'static,
+    S::Future: Send + 'static,
+{
+    let native = |response: axum::response::Response| response.map(Body::new);
+    BoxCloneSyncService::new(ServiceExt::<Request>::map_response(service, native))
 }
 
 impl std::fmt::Debug for Endpoint {

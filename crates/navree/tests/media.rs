@@ -9,8 +9,8 @@
 
 use std::io::Write;
 
-use navree::axum::extract::Multipart;
 use navree::db::Db;
+use navree::http::extract::Multipart;
 use navree::media::archive::{Archive, ArchiveLimits};
 use navree::media::images::{self, ImageOptions};
 use navree::media::{

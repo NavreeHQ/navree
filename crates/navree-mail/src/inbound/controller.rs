@@ -3,11 +3,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use axum::extract::{FromRequest, Multipart, Request};
 use chrono::{DateTime, Utc};
 use http::{HeaderMap, Method, header};
 use navree_contracts::{Clock, SystemClock};
-use navree_http::body::Bytes;
+use navree_http::body::{BodyLimit, Bytes, read_body};
+use navree_http::extract::{FromRequest, Multipart, MultipartLimits, Request};
 use navree_http::{ApiMeta, AppError, Controller, Json, Query, RouteDef};
 use navree_http_client::{HttpClient, HttpClientOptions};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
@@ -305,9 +305,15 @@ impl InboundController {
             .is_some_and(|value| value.to_ascii_lowercase().starts_with("multipart/"));
         let mut form = MailgunForm::default();
         if multipart {
-            let mut parts = Multipart::from_request(request, &())
+            let parts = Multipart::from_request(request)
                 .await
                 .map_err(|_| malformed("the body is not a multipart form"))?;
+            // Mailgun sends the whole message as a field, not as a file.
+            let limits = MultipartLimits {
+                max_field_bytes: self.options.inbound.body_limit() as u64,
+                ..parts.limits()
+            };
+            let mut parts = parts.with_limits(limits);
             while let Some(field) = parts.next_field().await.map_err(|error| {
                 if error.status() == http::StatusCode::PAYLOAD_TOO_LARGE {
                     to_app_error(InboundError::TooLarge {
@@ -341,7 +347,8 @@ impl InboundController {
                 }
             }
         } else {
-            let body = Bytes::from_request(request, &())
+            let limit = BodyLimit::of(request.extensions());
+            let body = read_body(request.into_body(), limit)
                 .await
                 .map_err(|_| malformed("the body could not be read"))?;
             form.fields = url::form_urlencoded::parse(&body)

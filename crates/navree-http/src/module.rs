@@ -105,6 +105,9 @@ fn register(m: &mut ModuleBuilder, options: Option<HttpOptions>) {
         .map_error::<rejection::QueryRejection>(|r| Some(r.to_app_error()))
         .map_error::<rejection::PathRejection>(|r| Some(r.to_app_error()))
         .map_error::<rejection::ExtensionRejection>(|r| Some(r.to_app_error()))
+        .map_error::<rejection::MultipartRejection>(|r| Some(r.to_app_error()))
+        .map_error::<rejection::MultipartError>(|r| Some(r.to_app_error()))
+        .map_error::<rejection::WebSocketRejection>(|r| Some(r.to_app_error()))
         .map_error::<BodyError>(|r| Some(AppError::rejection(r.status(), r.to_string())))
         // The previous framework's rejections, from the crates not yet moved.
         .map_error::<JsonRejection>(|r| Some(AppError::rejection(r.status(), r.body_text())))

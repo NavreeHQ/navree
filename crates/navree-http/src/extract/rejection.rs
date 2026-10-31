@@ -8,6 +8,7 @@
 use std::fmt;
 
 use http::StatusCode;
+use http::header::{HeaderValue, SEC_WEBSOCKET_VERSION};
 
 pub use super::path::PathErrorKind;
 use crate::AppError;
@@ -49,6 +50,8 @@ rejection!(
     FormRejection,
     JsonRejection,
     ExtensionRejection,
+    MultipartRejection,
+    MultipartError,
 );
 
 /// [`Path`](crate::Path) could not deserialize the route's parameters.
@@ -192,6 +195,178 @@ impl ExtensionRejection {
             "Missing request extension: Extension of type `{}` was not found",
             self.0
         )
+    }
+}
+
+/// [`Multipart`](crate::extract::Multipart): the request names no usable
+/// boundary (400). A boundary is required, at most 70 characters, and named
+/// once, by one `Content-Type`.
+#[derive(Debug)]
+pub struct MultipartRejection;
+
+impl MultipartRejection {
+    /// 400.
+    pub fn status(&self) -> StatusCode {
+        StatusCode::BAD_REQUEST
+    }
+
+    /// The message.
+    pub fn body_text(&self) -> String {
+        "Invalid `boundary` for `multipart/form-data` request".to_owned()
+    }
+}
+
+/// [`Multipart`](crate::extract::Multipart) could not go on reading a form.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum MultipartError {
+    /// More parts than `max_parts` (413).
+    TooManyParts {
+        /// The limit.
+        limit: usize,
+    },
+    /// A part without a file name longer than `max_field_bytes` (413).
+    FieldTooLarge {
+        /// The limit.
+        limit: u64,
+    },
+    /// A part with a file name longer than `max_file_bytes` (413).
+    FileTooLarge {
+        /// The limit.
+        limit: u64,
+    },
+    /// A part's head, or what comes before the first delimiter, longer than
+    /// `max_header_bytes` (413).
+    HeadTooLarge {
+        /// The limit.
+        limit: usize,
+    },
+    /// The body could not be read: past the route's limit (413), too slowly
+    /// for the server (408), or the connection failed (400).
+    Body(BodyError),
+    /// The body is not a well-formed form, or stops before its end (400).
+    Malformed(String),
+}
+
+impl MultipartError {
+    /// The status.
+    pub fn status(&self) -> StatusCode {
+        match self {
+            MultipartError::TooManyParts { .. }
+            | MultipartError::FieldTooLarge { .. }
+            | MultipartError::FileTooLarge { .. }
+            | MultipartError::HeadTooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
+            MultipartError::Body(error) => error.status(),
+            MultipartError::Malformed(_) => StatusCode::BAD_REQUEST,
+        }
+    }
+
+    /// The message.
+    pub fn body_text(&self) -> String {
+        match self {
+            MultipartError::TooManyParts { limit } => {
+                format!("A form may have at most {limit} parts")
+            }
+            MultipartError::FieldTooLarge { limit } => {
+                format!("A form field may have at most {limit} bytes")
+            }
+            MultipartError::FileTooLarge { limit } => {
+                format!("A file may have at most {limit} bytes")
+            }
+            MultipartError::HeadTooLarge { limit } => {
+                format!("The headers of a form part may have at most {limit} bytes")
+            }
+            MultipartError::Body(BodyError::TooLarge) => "Request payload is too large".to_owned(),
+            MultipartError::Body(error) => error.to_string(),
+            MultipartError::Malformed(error) => error.clone(),
+        }
+    }
+}
+
+/// [`WebSocketUpgrade`](crate::ws::WebSocketUpgrade): the request is not a
+/// well-formed handshake, or cannot become a socket.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum WebSocketRejection {
+    /// Not HTTP/1.1 or later (400).
+    HttpVersion,
+    /// An HTTP/1.1 handshake that is not a `GET` (405).
+    MethodNotGet,
+    /// An HTTP/2 handshake that is not a `CONNECT` (405).
+    MethodNotConnect,
+    /// `Connection` does not list `upgrade` (400).
+    Connection,
+    /// `Upgrade` does not list `websocket` (400).
+    Upgrade,
+    /// An HTTP/2 `:protocol` that is not `websocket` (400).
+    Protocol,
+    /// `Sec-WebSocket-Version` is not one header saying `13` (400, with the
+    /// header that names the version this server speaks).
+    Version,
+    /// No `Sec-WebSocket-Key` (400).
+    KeyMissing,
+    /// A `Sec-WebSocket-Key` that is not one base64 value of 16 bytes (400).
+    Key,
+    /// The connection cannot be upgraded: no server is behind this request,
+    /// or a layer took the upgrade (426).
+    NotUpgradable,
+}
+
+impl WebSocketRejection {
+    /// The status.
+    pub fn status(&self) -> StatusCode {
+        match self {
+            WebSocketRejection::MethodNotGet | WebSocketRejection::MethodNotConnect => {
+                StatusCode::METHOD_NOT_ALLOWED
+            }
+            WebSocketRejection::NotUpgradable => StatusCode::UPGRADE_REQUIRED,
+            _ => StatusCode::BAD_REQUEST,
+        }
+    }
+
+    /// The message.
+    pub fn body_text(&self) -> String {
+        match self {
+            WebSocketRejection::HttpVersion => "WebSockets need HTTP/1.1 or later",
+            WebSocketRejection::MethodNotGet => "Request method must be `GET`",
+            WebSocketRejection::MethodNotConnect => "Request method must be `CONNECT`",
+            WebSocketRejection::Connection => "Connection header did not include 'upgrade'",
+            WebSocketRejection::Upgrade => "`Upgrade` header did not include 'websocket'",
+            WebSocketRejection::Protocol => "`:protocol` pseudo-header did not include 'websocket'",
+            WebSocketRejection::Version => "`Sec-WebSocket-Version` header did not include '13'",
+            WebSocketRejection::KeyMissing => "`Sec-WebSocket-Key` header missing",
+            WebSocketRejection::Key => "`Sec-WebSocket-Key` must be the base64 of 16 bytes",
+            WebSocketRejection::NotUpgradable => {
+                "WebSocket request couldn't be upgraded since no upgrade state was present"
+            }
+        }
+        .to_owned()
+    }
+
+    /// The rejection as an [`AppError`].
+    pub fn to_app_error(&self) -> AppError {
+        let error = AppError::rejection(self.status(), self.body_text());
+        match self {
+            // RFC 6455 section 4.4: name the version that would work.
+            WebSocketRejection::Version => {
+                error.with_header(SEC_WEBSOCKET_VERSION, HeaderValue::from_static("13"))
+            }
+            _ => error,
+        }
+    }
+}
+
+impl fmt::Display for WebSocketRejection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.body_text())
+    }
+}
+
+impl std::error::Error for WebSocketRejection {}
+
+impl IntoResponse for WebSocketRejection {
+    fn into_response(self) -> Response {
+        self.to_app_error().into_response()
     }
 }
 

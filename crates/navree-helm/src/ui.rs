@@ -4,7 +4,6 @@ use std::collections::{BTreeMap, HashMap};
 use std::error::Error as StdError;
 use std::sync::Arc;
 
-use axum::extract::{FromRequest, Multipart, Request};
 use http::header::{CACHE_CONTROL, CONTENT_TYPE, SET_COOKIE};
 use http::{HeaderMap, HeaderValue, StatusCode};
 use navree_access::{CREATE, READ};
@@ -12,7 +11,7 @@ use navree_auth::{AuthError, AuthService, ClientMeta, LoginOutcome, TwoFactorPro
 use navree_contracts::{AuthState, AuthVia};
 use navree_crypto::{Encrypter, constant_time_eq, random_token};
 use navree_http::body::{Bytes, to_bytes};
-use navree_http::extract::FromRequestParts;
+use navree_http::extract::{FromRequest, FromRequestParts, Multipart, Request};
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{AppError, Path, RawQuery};
 use navree_kernel::AppContext;
@@ -1378,7 +1377,7 @@ async fn submission(
         }
         return Ok(submission);
     }
-    let mut form = Multipart::from_request(request, &())
+    let mut form = Multipart::from_request(request)
         .await
         .map_err(|_| AppError::bad_request("The form could not be read."))?;
     while let Some(field) = form

@@ -5,7 +5,7 @@ description: "What Navree is, the ideas it is built on, what comes in the box, w
 
 Navree is a framework for building efficient, secure and scalable server-side applications in Rust. It gives you an application architecture out of the box: features live in modules, modules declare what they import and export, and a dependency-injection container wires them together when the app boots, refusing to start if anything is missing. Around that structure sits a complete standard library for backends, from routing and validation to workspaces, queues, monitoring and AI, designed together, documented together and released together. The result is code that stays easy to test, easy to change and easy to hand to a new teammate, or to an AI agent.
 
-Navree runs on [Tokio](https://tokio.rs), [Axum](https://docs.rs/axum), Hyper and Tower, works with data through its own [ORM](/docs/orm/getting-started/), which writes its SQL and runs it on [sqlx](https://docs.rs/sqlx) connections, validates input with its own `#[derive(Validate)]` rules, speaks TLS through rustls and hashes passwords with Argon2id. A whole application compiles to one binary.
+Navree runs on [Tokio](https://tokio.rs), [Hyper](https://hyper.rs) and [Tower](https://docs.rs/tower), works with data through its own [ORM](/docs/orm/getting-started/), which writes its SQL and runs it on [sqlx](https://docs.rs/sqlx) connections, validates input with its own `#[derive(Validate)]` rules, speaks TLS through rustls and hashes passwords with Argon2id. A whole application compiles to one binary.
 
 This documentation describes Navree 0.2. The [release notes](/docs/prologue/release-notes/) list what it ships, and the [roadmap](/docs/prologue/roadmap/) says where it goes next.
 
@@ -90,7 +90,7 @@ Each module is its own crate, and the `navree` crate re-exports all of them, one
 | Area | Modules |
 |---|---|
 | Foundation | The kernel (module graph, dependency injection, lifecycle hooks, commands); typed configuration from `.env`, TOML files and `APP_*` variables; structured logging with redaction |
-| HTTP | Controllers and route attributes on Axum, deny-by-default access declarations, one JSON error shape (`{ "statusCode", "message", "error", "code" }`) with stable, translatable error codes, rate limits, CORS and security headers, signed URLs, maintenance mode |
+| HTTP | Controllers and route attributes on Navree's own router, deny-by-default access declarations, one JSON error shape (`{ "statusCode", "message", "error", "code" }`) with stable, translatable error codes, rate limits, CORS and security headers, signed URLs, maintenance mode |
 | Validation | `#[derive(Validate)]` rules and `Valid<T>` extractors, one readable message per broken rule, async `unique` and `exists` rules |
 | Database | An ORM with typed queries, relationships and eager loading, casts, events, scopes, soft deletes, factories and test helpers; a unit of work per request; per-module migrations written with a schema builder, seeders and pagination; TimescaleDB by default (PostgreSQL with hypertables), plain PostgreSQL, MySQL and MariaDB, SQLite for tests, and MongoDB through a document driver |
 | Security | JWT access tokens with rotating refresh tokens, pluggable authentication strategies, registration, password reset, email verification and two-factor authentication; roles, permissions and abilities with record checks and SQL list filters, shared with the front end; AES-256-GCM encryption and Argon2id hashing; an audit log |

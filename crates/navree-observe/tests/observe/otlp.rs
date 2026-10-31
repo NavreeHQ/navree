@@ -4,12 +4,10 @@
 
 use std::sync::{Arc, Mutex};
 
-use axum::Router;
-use axum::extract::State;
-use axum::routing::post;
 use http::{HeaderMap, Method, Request, StatusCode};
 use navree_config::{ConfigModule, ConfigSources};
 use navree_http::body::{Body, Bytes};
+use navree_http::routing::Router;
 use navree_http::{Controller, HttpModule, ModuleBuilderHttpExt, RouteDef, build_router};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, Resolver};
 use navree_observe::ObserveModule;
@@ -36,7 +34,7 @@ impl Received {
 
 /// OTLP/HTTP: `POST /v1/traces` with a protobuf body.
 async fn http_export(
-    State(received): State<Received>,
+    received: Received,
     headers: HeaderMap,
     body: Bytes,
 ) -> impl navree_http::response::IntoResponse {
@@ -50,11 +48,7 @@ async fn http_export(
 
 /// OTLP/gRPC: the `TraceService/Export` call over HTTP/2, with gRPC's
 /// length-prefixed messages and a `grpc-status` trailer.
-async fn grpc_export(
-    State(received): State<Received>,
-    headers: HeaderMap,
-    body: Bytes,
-) -> http::Response<Body> {
+async fn grpc_export(received: Received, headers: HeaderMap, body: Bytes) -> http::Response<Body> {
     assert!(body.len() >= 5, "a gRPC frame");
     let request = ExportTraceServiceRequest::decode(&body[5..]).expect("an OTLP trace request");
     received.0.lock().unwrap().push((headers, request));
@@ -77,13 +71,18 @@ async fn grpc_export(
 
 /// Starts a receiver on 127.0.0.1; returns its base URL.
 async fn receiver(received: Received) -> String {
+    let exported = received.clone();
     let router = Router::new()
-        .route("/v1/traces", post(http_export))
         .route(
-            "/opentelemetry.proto.collector.trace.v1.TraceService/Export",
-            post(grpc_export),
+            Method::POST,
+            "/v1/traces",
+            move |headers: HeaderMap, body: Bytes| http_export(exported.clone(), headers, body),
         )
-        .with_state(received);
+        .route(
+            Method::POST,
+            "/opentelemetry.proto.collector.trace.v1.TraceService/Export",
+            move |headers: HeaderMap, body: Bytes| grpc_export(received.clone(), headers, body),
+        );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     tokio::spawn(async move {

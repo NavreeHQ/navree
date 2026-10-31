@@ -2,7 +2,7 @@ use std::convert::Infallible;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use axum::body::Body;
+use crate::body::Body;
 use http::StatusCode;
 use tower::{ServiceBuilder, ServiceExt, service_fn};
 

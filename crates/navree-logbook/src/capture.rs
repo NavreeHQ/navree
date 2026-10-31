@@ -3,14 +3,14 @@
 
 use std::sync::{Arc, OnceLock};
 
-use axum::extract::Request;
-use axum::middleware::{self, Next};
 use http::HeaderMap;
 use http::header::CONTENT_TYPE;
 use http_body::Body as _;
 use http_body_util::BodyExt;
 use navree_contracts::RequestId;
 use navree_http::body::Body;
+use navree_http::extract::Request;
+use navree_http::middleware::{self, Next};
 use navree_http::response::Response;
 use navree_http::{GlobalLayer, LayerSlot};
 

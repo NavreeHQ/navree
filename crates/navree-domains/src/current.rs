@@ -1,10 +1,10 @@
 //! [`CurrentDomain`] and the request layer that marks requests to a
 //! verified custom domain.
 
-use axum::extract::Request;
-use axum::middleware::Next;
 use http::request::Parts;
+use navree_http::extract::Request;
 use navree_http::extract::{FromRequestParts, OptionalFromRequestParts};
+use navree_http::middleware::Next;
 use navree_http::{AppError, Response};
 use navree_kernel::AppContext;
 use navree_workspace::DomainWorkspace;

@@ -2,18 +2,18 @@
 
 use std::sync::Arc;
 
-use axum::Router;
-use axum::extract::{DefaultBodyLimit, Multipart, State};
-use axum::routing::post;
 use bytes::Bytes;
 use futures_util::StreamExt;
-use http::Request;
+use http::{Method, Request};
 use http_body_util::BodyExt;
-use navree_http::body::Body;
+use navree_http::body::{Body, BodyLimit};
+use navree_http::extract::Multipart;
+use navree_http::routing::Router;
 use navree_http::{AppError, Json};
 use navree_storage::{Disk, StoredFile, UploadRules, store_upload};
 use serde_json::Value;
 use tower::ServiceExt;
+use tower::util::MapRequestLayer;
 
 use crate::support::{DISKS, storage};
 
@@ -35,7 +35,7 @@ struct Upload {
 }
 
 async fn upload(
-    State(state): State<Arc<Upload>>,
+    state: Arc<Upload>,
     mut multipart: Multipart,
 ) -> Result<Json<StoredFile>, AppError> {
     let field = multipart
@@ -47,10 +47,15 @@ async fn upload(
 }
 
 fn router(disk: Disk, rules: UploadRules, body_limit: usize) -> Router {
+    let state = Arc::new(Upload { disk, rules });
     Router::new()
-        .route("/upload", post(upload))
-        .layer(DefaultBodyLimit::max(body_limit))
-        .with_state(Arc::new(Upload { disk, rules }))
+        .route(Method::POST, "/upload", move |form: Multipart| {
+            upload(state.clone(), form)
+        })
+        .route_layer(MapRequestLayer::new(move |mut request: Request<Body>| {
+            request.extensions_mut().insert(BodyLimit(body_limit));
+            request
+        }))
 }
 
 fn router_with(disk: Disk, rules: UploadRules) -> Router {
@@ -68,9 +73,7 @@ fn multipart(field: &str, file_name: &str, content_type: &str, contents: &[u8]) 
     body.extend_from_slice(contents);
     body.extend_from_slice(format!("\r\n--{BOUNDARY}--\r\n").as_bytes());
     // Sent in 1 KiB chunks that arrive one at a time, like a network upload
-    // (multer reads everything that is ready at once). The first chunk is
-    // ready immediately: multer 3.1 reports an incomplete stream when its
-    // first poll is pending and the whole body then arrives with the end.
+    // (multer reads everything that is ready at once).
     let chunks: Vec<Bytes> = body.chunks(1024).map(Bytes::copy_from_slice).collect();
     let slow = futures_util::stream::iter(chunks)
         .enumerate()

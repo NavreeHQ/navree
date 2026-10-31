@@ -4,10 +4,10 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use axum::body::{Body, Bytes};
-use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use http::{Method, Request, StatusCode};
+use navree_http::body::{Body, Bytes};
+use navree_http::response::IntoResponse;
 use navree_http::{AppError, HttpOptions, RouteDef};
 
 use crate::support::{ORIGIN, Setup, bytes, from_origin, options};
@@ -44,15 +44,11 @@ fn error_routes() -> Vec<RouteDef> {
             }),
         )
         .public(),
-        RouteDef::new(
-            Method::GET,
-            "/invalid",
-            get(|| async {
-                let mut errors = BTreeMap::new();
-                errors.insert("name".to_owned(), vec!["Required.".to_owned()]);
-                AppError::validation(errors)
-            }),
-        )
+        RouteDef::on(Method::GET, "/invalid", || async {
+            let mut errors = BTreeMap::new();
+            errors.insert("name".to_owned(), vec!["Required.".to_owned()]);
+            AppError::validation(errors)
+        })
         .public(),
     ]
 }

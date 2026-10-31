@@ -8,6 +8,8 @@ use navree_config::ConfigSection;
 use navree_contracts::Secret;
 use serde::{Deserialize, Deserializer};
 
+use crate::extract::MultipartLimits;
+
 /// HTTP server settings (configuration section `http`; every key optional).
 ///
 /// ```toml
@@ -81,6 +83,8 @@ pub struct HttpOptions {
     pub errors: ErrorOptions,
     /// The limits on connections (`http.server`).
     pub server: ServerOptions,
+    /// The limits on `multipart/form-data` forms (`http.multipart`).
+    pub multipart: MultipartLimits,
 }
 
 /// The limits on connections, enforced by [`serve`](crate::serve()) on every
@@ -328,6 +332,7 @@ impl Default for HttpOptions {
             shutdown_grace_secs: 30,
             errors: ErrorOptions::default(),
             server: ServerOptions::default(),
+            multipart: MultipartLimits::default(),
         }
     }
 }
@@ -417,6 +422,7 @@ impl HttpOptions {
             errors.push("http.per_ip_rate_limit must be at least 1 (or unset)".to_owned());
         }
         self.server.check(&mut errors);
+        self.multipart.check(&mut errors);
         if !(1..=128).contains(&self.rate_limit_ipv6_prefix) {
             errors.push(format!(
                 "http.rate_limit_ipv6_prefix must be between 1 and 128 (got {})",

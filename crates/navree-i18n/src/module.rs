@@ -176,7 +176,10 @@ fn register(m: &mut ModuleBuilder, options: Option<I18nOptions>) {
         "i18n.locale",
         move |_ctx, router| {
             let slot = for_layer.clone();
-            Ok(router.layer(axum::middleware::from_fn_with_state(slot, negotiate::layer)))
+            Ok(router.layer(navree_http::middleware::from_fn_with_state(
+                slot,
+                negotiate::layer,
+            )))
         },
     ));
     m.view_environment(move |env| views::configure(env, &slot));

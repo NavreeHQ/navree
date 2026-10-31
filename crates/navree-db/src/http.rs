@@ -7,10 +7,10 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use axum::extract::Request;
 use http::request::Parts;
 use navree_contracts::{AuthState, Impersonator, RequestId};
 use navree_http::extract::FromRequestParts;
+use navree_http::extract::Request;
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{AppError, GlobalLayer, LayerSlot};
 use navree_kernel::{AppContext, BoxFuture};

@@ -6,8 +6,6 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
-use axum::extract::Request;
-use axum::middleware::{Next, from_fn};
 use chrono::{DateTime, Utc};
 use http::header::{AUTHORIZATION, WWW_AUTHENTICATE};
 use http::request::Parts;
@@ -15,7 +13,9 @@ use http::{HeaderValue, StatusCode};
 use navree_access::{ALL, Ability, AbilityFactory, MANAGE, Rules};
 use navree_auth::Strategy;
 use navree_contracts::{AuthVia, BoxFuture, Principal};
+use navree_http::extract::Request;
 use navree_http::extract::{FromRequestParts, OptionalFromRequestParts};
+use navree_http::middleware::{Next, from_fn};
 use navree_http::{AppError, GlobalLayer, LayerSlot, Response, RouteMeta};
 use navree_kernel::{AppContext, Injectable, KernelError, ProviderKey, Resolver};
 use navree_workspace::PinnedWorkspace;

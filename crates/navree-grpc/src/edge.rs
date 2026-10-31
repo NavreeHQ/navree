@@ -12,14 +12,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use axum::extract::State;
-use axum::middleware::{Next, from_fn_with_state};
 use futures_util::future::BoxFuture;
 use http::header::{CONTENT_TYPE, HeaderName, HeaderValue};
 use http::{HeaderMap, Method, Request, Response, StatusCode};
 use http_body::Frame;
 use navree_contracts::RequestId;
 use navree_http::body::Body;
+use navree_http::middleware::{Next, State, from_fn_with_state};
 use navree_http::{ClientIp, CorsLayer, GlobalLayer, HttpOptions, LayerSlot};
 use navree_kernel::{AppContext, RequestScope};
 use tokio::sync::OnceCell;
@@ -611,7 +610,7 @@ fn might_be_grpc<B>(request: &Request<B>) -> bool {
 
 async fn shared_port(
     State(state): State<Arc<SharedPort>>,
-    request: axum::extract::Request,
+    request: navree_http::extract::Request,
     next: Next,
 ) -> navree_http::response::Response {
     if !might_be_grpc(&request) {

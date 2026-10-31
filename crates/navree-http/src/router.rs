@@ -9,9 +9,6 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use axum::Router;
-use axum::extract::DefaultBodyLimit;
-use axum::middleware::from_fn_with_state;
 use http::header::{CONTENT_LENGTH, HeaderName};
 use http::request::Parts;
 use http::{Method, StatusCode};
@@ -30,6 +27,7 @@ use crate::error::ErrorFormat;
 use crate::extract::{ProxyTrust, Request};
 use crate::handler::{BoxedService, Endpoint};
 use crate::limiter::KeyedRateLimiter;
+use crate::middleware::from_fn_with_state;
 use crate::network::rate_limit_key;
 use crate::pipeline::{
     self, CheckStages, ContextState, GuardStages, Requester, Stages, TimeoutOverride, X_REQUEST_ID,
@@ -37,7 +35,7 @@ use crate::pipeline::{
 use crate::response::{IntoResponse, Response};
 use crate::routing::PathPattern;
 use crate::{
-    AppError, Authenticator, ClientIp, CorsLayer, CorsOptions, ErrorMapper, GlobalLayer,
+    AppError, AppRouter, Authenticator, ClientIp, CorsLayer, CorsOptions, ErrorMapper, GlobalLayer,
     HttpOptions, HttpServer, LayerSlot, RouteAuthorizer, RouteDef, RouteMeta, routing,
 };
 
@@ -52,10 +50,7 @@ use crate::{
 /// [`Authenticator`] or a [`RouteAuthorizer`] that is not registered.
 /// `HttpModule` runs this check at boot, so these mistakes stop the app
 /// before it binds a port.
-///
-/// The global layers still wrap the previous framework's router type,
-/// whose only service is Navree's router.
-pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
+pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
     let server = ctx
         .get::<HttpServer>()
         .await
@@ -86,7 +81,7 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
     if !errors.is_empty() {
         return Err(RouteErrors(errors).into());
     }
-    let mut router = Router::new().fallback_service(routes_router);
+    let mut router = AppRouter::new(routes_router);
     // Without `Session`-slot layers nothing comes between the fixed layers
     // and authentication, so it runs as their last stage: one middleware
     // fewer on every request.
@@ -102,13 +97,10 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
         Some(pipeline::Authentication(authenticator))
     };
 
-    // Fixed layers, innermost first (`Router::layer` wraps like an onion).
+    // Fixed layers, innermost first (`AppRouter::layer` wraps like an onion).
     // The fixed layers between two Tower layers run as the stages of one
     // middleware (see `Stages`): the checks inside compression, the guard
     // inside CORS, the request context outermost.
-    // The app's body limit for the previous framework's body extractors;
-    // Navree's read the route's `BodyLimit`, set by the route pipeline.
-    router = router.layer(DefaultBodyLimit::max(options.body_limit_bytes));
     let mappers = ctx
         .contributions::<ErrorMapper>()
         .into_iter()
@@ -163,14 +155,14 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
 
 /// Wraps `router` in one middleware running `stages`, which are left empty
 /// for the next one.
-fn with_stages(router: Router, stages: &mut Stages) -> Router {
+fn with_stages(router: AppRouter, stages: &mut Stages) -> AppRouter {
     let stages = Arc::new(std::mem::take(stages));
     router.layer(from_fn_with_state(stages, pipeline::run_stages))
 }
 
 /// Applies the contributed [`LayerSlot::Edge`] layers around everything
 /// (the first registered is outermost).
-fn apply_edge(ctx: &AppContext, mut router: Router) -> Result<Router, BoxError> {
+fn apply_edge(ctx: &AppContext, mut router: AppRouter) -> Result<AppRouter, BoxError> {
     let contributed = ctx.contributions::<GlobalLayer>();
     for layer in contributed
         .iter()
@@ -408,11 +400,12 @@ fn mount(router: &mut routing::Router, route: Mounted, shared: &Shared) -> Resul
         .parse::<Method>()
         .map_err(|error| format!("route `{} {}`: {error}", meta.method, meta.full_path))?;
     let handler = route.handler;
+    let body_limit = runtime.body_limit;
     router
         .try_route_service(method, &meta.full_path, |pattern| {
             BoxCloneSyncService::new(RouteService {
                 runtime,
-                inner: handler.mount(pattern, meta.body_limit),
+                inner: handler.mount(pattern, Some(body_limit)),
             })
         })
         .map_err(|error| {
@@ -701,9 +694,9 @@ type SlotEntry<'a> = (LayerSlot, usize, Option<(&'a GlobalLayer, &'static str)>)
 /// fixed stages authenticate.
 fn apply_slots(
     ctx: &AppContext,
-    mut router: Router,
+    mut router: AppRouter,
     authenticate: Option<Option<Arc<dyn Authenticator>>>,
-) -> Result<Router, BoxError> {
+) -> Result<AppRouter, BoxError> {
     let contributed = ctx.contributions::<GlobalLayer>();
     let mut layers: Vec<SlotEntry<'_>> = contributed
         .iter()

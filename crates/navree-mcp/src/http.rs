@@ -22,9 +22,6 @@ use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::Router;
-use axum::extract::Request;
-use axum::middleware::{Next, from_fn};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use bytes::Bytes;
@@ -33,7 +30,10 @@ use http::header::{ACCEPT, ALLOW, CACHE_CONTROL, CONTENT_TYPE, ORIGIN, WWW_AUTHE
 use http::{HeaderMap, HeaderValue, Method, StatusCode};
 use navree_cache::Cache;
 use navree_contracts::{AuthState, Principal, RequestId};
+use navree_http::AppRouter;
 use navree_http::body::{Body, to_bytes};
+use navree_http::extract::Request;
+use navree_http::middleware::{Next, from_fn};
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{
     ApiMeta, AppError, Controller, GlobalLayer, Json, LayerSlot, RouteDef, RouteMeta,
@@ -1082,7 +1082,7 @@ pub(crate) fn challenge_layer() -> GlobalLayer {
     GlobalLayer::new(
         LayerSlot::Session,
         "mcp-challenge",
-        |_ctx, router: Router| Ok(router.layer(from_fn(challenge))),
+        |_ctx, router: AppRouter| Ok(router.layer(from_fn(challenge))),
     )
 }
 

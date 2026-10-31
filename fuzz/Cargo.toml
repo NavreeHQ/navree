@@ -20,9 +20,15 @@ arbitrary = { version = "1.4.2", features = ["derive"] }
 chrono = { version = "0.4.45", default-features = false, features = ["std", "clock"] }
 chrono-tz = "0.10.4"
 http = "1.5.0"
+# The HTTP/2 `:protocol` of a handshake.
+hyper = { version = "1.12.0", features = ["http2", "server"] }
 libfuzzer-sys = "0.4.13"
 axum = { version = "0.8.9", default-features = false }
+bytes = "1.12.1"
 futures = { version = "0.3.34", default-features = false, features = ["executor"] }
+# The reference of `http_multipart`, and how it reads a `Content-Type`.
+mime = "0.3.17"
+multer = "3.1.0"
 navree-auth = { path = "../crates/navree-auth" }
 navree-config = { path = "../crates/navree-config" }
 navree-contracts = { path = "../crates/navree-contracts" }
@@ -102,6 +108,13 @@ bench = false
 [[bin]]
 name = "http_extract"
 path = "fuzz_targets/http_extract.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "http_multipart"
+path = "fuzz_targets/http_multipart.rs"
 test = false
 doc = false
 bench = false
@@ -242,6 +255,13 @@ bench = false
 [[bin]]
 name = "webhooks_signatures"
 path = "fuzz_targets/webhooks_signatures.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ws_handshake"
+path = "fuzz_targets/ws_handshake.rs"
 test = false
 doc = false
 bench = false

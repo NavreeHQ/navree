@@ -175,7 +175,7 @@ enum BodyError {
     /// Not the declared size.
     Size(u64),
     /// The client's body failed.
-    Body(axum::Error),
+    Body(navree_kernel::BoxError),
 }
 
 impl std::fmt::Display for BodyError {

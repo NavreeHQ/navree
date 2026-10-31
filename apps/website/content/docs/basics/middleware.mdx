@@ -5,7 +5,7 @@ description: "The global Tower layers Navree installs and their order, adding yo
 
 ## Introduction
 
-Middleware is code that runs around your handlers: it can read and change the request before the handler, refuse it, and read and change the response after. Navree is built on Axum and Tower, so its middleware is Tower layers, and anything written for Axum (`axum::middleware::from_fn`, `tower-http` layers) works.
+Middleware is code that runs around your handlers: it can read and change the request before the handler, refuse it, and read and change the response after. Navree is built on Tower, so its middleware is Tower layers: write one as an async function with `navree::http::middleware::from_fn`, or use any `tower-http` layer.
 
 Navree installs a fixed pipeline of layers for you: request ids, logging, CORS, timeouts, security headers, compression, error rendering, maintenance mode, rate limiting and body limits. On top of that you can:
 
@@ -62,12 +62,12 @@ write_stall_timeout_ms = 60000
 
 ## Adding a global layer
 
-A module contributes a global layer with `m.http_layer(GlobalLayer::new(slot, name, apply))`. `apply` receives the `AppContext` and the router, and returns the router wrapped in your layer. This one adds an `X-Response-Time` header to every response:
+A module contributes a global layer with `m.http_layer(GlobalLayer::new(slot, name, apply))`. `apply` receives the `AppContext` and the app's `AppRouter`, and returns it wrapped in your layer with `router.layer(...)`, which takes any Tower layer. This one adds an `X-Response-Time` header to every response:
 
 ```rust title="src/modules/timing.rs"
 use http::HeaderValue;
-use navree::axum::extract::Request;
-use navree::axum::middleware::{self, Next};
+use navree::http::extract::Request;
+use navree::http::middleware::{self, Next};
 use navree::http::response::Response;
 use navree::http::{GlobalLayer, LayerSlot};
 use navree::prelude::*;
@@ -99,6 +99,23 @@ impl TimingModule {
 
 Add `TimingModule` to the app like any module. The layer wraps every route, and the 404 fallback too.
 
+A function that needs a value of its own takes it through `middleware::from_fn_with_state(value, function)`: the value is its first argument, as `State<T>`, and is cloned for each request. Between that and `Next`, a middleware's arguments are extractors like a handler's, and the last one may read the body; `Request` takes the whole request.
+
+```rust
+use http::HeaderValue;
+use navree::http::extract::Request;
+use navree::http::middleware::{Next, State};
+use navree::http::response::Response;
+
+async fn tagged(State(tag): State<&'static str>, request: Request, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    response
+        .headers_mut()
+        .insert("x-tag", HeaderValue::from_static(tag));
+    response
+}
+```
+
 ### Choosing a slot
 
 The slot decides where the layer runs relative to authentication and the unit of work. The names say what the framework puts there, but any layer can use any slot:
@@ -127,10 +144,10 @@ The matched route's metadata isn't on the request yet when global layers run (ro
 This layer uses the `AppContext` to resolve `Tenants`, an app service, and the `AuthState` to refuse every request from a suspended account:
 
 ```rust title="src/modules/tenancy.rs"
-use navree::axum::extract::Request;
-use navree::axum::middleware::{self, Next};
-use navree::http::response::{IntoResponse, Response};
 use navree::contracts::AuthState;
+use navree::http::extract::Request;
+use navree::http::middleware::{self, Next};
+use navree::http::response::{IntoResponse, Response};
 use navree::http::{GlobalLayer, LayerSlot};
 use navree::prelude::*;
 
@@ -259,9 +276,9 @@ The route attributes have no way to attach an arbitrary Tower layer to one route
 
 ```rust
 use http::{HeaderValue, Method};
-use navree::axum::extract::Request;
-use navree::axum::middleware::{self, Next};
+use navree::http::extract::Request;
 use navree::http::handler::Endpoint;
+use navree::http::middleware::{self, Next};
 use navree::http::response::Response;
 use navree::http::{Controller, RouteDef};
 use navree::prelude::*;

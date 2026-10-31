@@ -5,12 +5,11 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::sync::Arc;
 
-use axum::Router;
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, Injectable, KernelError, ModuleBuilder, ModuleId, Resolver,
 };
 
-use crate::{AppError, ErrorMapper, RouteDef};
+use crate::{AppError, AppRouter, ErrorMapper, RouteDef};
 
 /// A group of routes sharing a prefix and an API version (what
 /// `#[controller("/deals", version = "1")]` implements). Controllers are
@@ -98,7 +97,8 @@ pub enum LayerSlot {
 }
 
 /// The function that wraps the app router in a [`GlobalLayer`].
-pub type ApplyLayer = Arc<dyn Fn(&AppContext, Router) -> Result<Router, BoxError> + Send + Sync>;
+pub type ApplyLayer =
+    Arc<dyn Fn(&AppContext, AppRouter) -> Result<AppRouter, BoxError> + Send + Sync>;
 
 /// App-wide middleware contributed by a module with
 /// [`ModuleBuilderHttpExt::http_layer`]. `apply` wraps the router
@@ -114,9 +114,9 @@ pub type ApplyLayer = Arc<dyn Fn(&AppContext, Router) -> Result<Router, BoxError
 /// they render in Navree's JSON error shape.
 ///
 /// ```
-/// use axum::extract::Request;
-/// use axum::middleware::{self, Next};
-/// use axum::response::{IntoResponse, Response};
+/// use navree_http::extract::Request;
+/// use navree_http::middleware::{self, Next};
+/// use navree_http::response::{IntoResponse, Response};
 /// use navree_http::{AppError, GlobalLayer, LayerSlot, ModuleBuilderHttpExt};
 /// use navree_kernel::{AppContext, Module, ModuleBuilder};
 ///
@@ -156,7 +156,7 @@ impl GlobalLayer {
     /// A layer in `slot` applied by `apply`.
     pub fn new<F>(slot: LayerSlot, name: &'static str, apply: F) -> Self
     where
-        F: Fn(&AppContext, Router) -> Result<Router, BoxError> + Send + Sync + 'static,
+        F: Fn(&AppContext, AppRouter) -> Result<AppRouter, BoxError> + Send + Sync + 'static,
     {
         Self {
             slot,

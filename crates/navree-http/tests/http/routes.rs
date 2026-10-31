@@ -2,13 +2,13 @@
 
 use std::sync::Arc;
 
-use axum::body::Body;
 use axum::extract::Path;
 use axum::routing::get;
 use chrono::{TimeZone, Utc};
 use http::{Method, Request, StatusCode};
 use navree_config::ConfigSources;
 use navree_contracts::{Clock, FixedClock, Secret};
+use navree_http::body::Body;
 use navree_http::{
     ClientIp, Created, HttpOptions, Json, NoContent, RouteDef, UrlSigner, ValidSignature,
     route_table,

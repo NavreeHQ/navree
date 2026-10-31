@@ -2,8 +2,6 @@
 //! path), its CSRF check, and the request layer that also turns errors
 //! into pages for browsers and sets the pages' security headers.
 
-use axum::extract::Request;
-use axum::middleware::Next;
 use chrono::Utc;
 use cookie::{Cookie, SameSite};
 use http::header::{
@@ -14,6 +12,8 @@ use http::{HeaderMap, HeaderValue, Method, StatusCode};
 use navree_contracts::{AuthState, AuthVia, Principal};
 use navree_crypto::{Encrypter, constant_time_eq, random_token};
 use navree_http::body::{Body, to_bytes};
+use navree_http::extract::Request;
+use navree_http::middleware::Next;
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{AppError, GlobalLayer, LayerSlot};
 use navree_kernel::AppContext;
@@ -83,7 +83,7 @@ pub(crate) struct PanelSession {
 /// app's authenticator).
 pub(crate) fn layer() -> GlobalLayer {
     GlobalLayer::new(LayerSlot::AuthContext, "helm", |_ctx, router| {
-        Ok(router.layer(axum::middleware::from_fn(panel_layer)))
+        Ok(router.layer(navree_http::middleware::from_fn(panel_layer)))
     })
 }
 
