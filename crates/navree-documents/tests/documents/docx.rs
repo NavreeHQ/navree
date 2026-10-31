@@ -1,9 +1,9 @@
 //! DOCX: building, reading back, right-to-left documents, images and the
 //! response.
 
-use axum::response::IntoResponse;
 use navree_documents::docx::{Align, Image, Paragraph, Run, Table};
 use navree_documents::{DOCX_CONTENT_TYPE, DocumentsError, Docx, DocxFile, Margins, Paper};
+use navree_http::IntoResponse;
 
 use crate::support::{assert_golden, fixtures_dir};
 

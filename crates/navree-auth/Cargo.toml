@@ -19,7 +19,6 @@ postgres = ["navree-db/postgres"]
 mysql = ["navree-db/mysql"]
 
 [dependencies]
-axum = { workspace = true }
 # base64 and ring: token exchange (JWS verification of trusted issuers' tokens)
 # and passkeys (WebAuthn signatures), until navree_crypto::jose carries them.
 # The service's own tokens, TOTP codes and QR codes are navree-crypto's.

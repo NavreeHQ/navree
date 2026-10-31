@@ -7,11 +7,10 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::Path;
-use axum::response::IntoResponse;
 use http::{Method, StatusCode};
 use navree_http::{
-    ApiMeta, AppError, Controller, CurrentPrincipal, Json, NoContent, RouteDef, schema_fn,
+    ApiMeta, AppError, Controller, CurrentPrincipal, IntoResponse, Json, NoContent, Path, Response,
+    RouteDef, schema_fn,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_validation::Valid;
@@ -560,7 +559,7 @@ impl SessionController {
 }
 
 /// 202 with the passwordless answer.
-fn sent() -> axum::response::Response {
+fn sent() -> Response {
     (
         StatusCode::ACCEPTED,
         Json(AuthMessage {
@@ -571,12 +570,9 @@ fn sent() -> axum::response::Response {
 }
 
 /// Adds `impersonator_id` to a sign-in response body.
-async fn with_impersonator(
-    response: axum::response::Response,
-    impersonator: Uuid,
-) -> Result<axum::response::Response, AppError> {
+async fn with_impersonator(response: Response, impersonator: Uuid) -> Result<Response, AppError> {
     let (parts, body) = response.into_parts();
-    let bytes = axum::body::to_bytes(body, usize::MAX)
+    let bytes = navree_http::body::to_bytes(body, usize::MAX)
         .await
         .map_err(AppError::internal)?;
     let mut value: Value = serde_json::from_slice(&bytes).map_err(AppError::internal)?;

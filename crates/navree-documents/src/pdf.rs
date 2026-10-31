@@ -3,11 +3,11 @@
 
 use std::fmt;
 
-use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
 use http::header::{CONTENT_DISPOSITION, HeaderValue};
 use lopdf::content::{Content, Operation};
 use lopdf::{Dictionary, Document, Object, ObjectId, Stream, StringFormat, dictionary};
+use navree_http::{IntoResponse, Response};
 
 use crate::DocumentsError;
 use crate::download::{Download, PDF_CONTENT_TYPE};

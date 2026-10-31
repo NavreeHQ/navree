@@ -227,7 +227,7 @@ impl Module for PinModule {
 async fn pin_from_header(
     mut request: axum::extract::Request,
     next: axum::middleware::Next,
-) -> axum::response::Response {
+) -> navree_http::Response {
     let pin = request
         .headers()
         .get("x-test-pin")

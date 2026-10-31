@@ -8,7 +8,6 @@ use std::sync::Arc;
 
 use axum::extract::Request;
 use axum::middleware::{Next, from_fn};
-use axum::response::Response;
 use chrono::{DateTime, Utc};
 use http::header::{AUTHORIZATION, WWW_AUTHENTICATE};
 use http::request::Parts;
@@ -17,7 +16,7 @@ use navree_access::{ALL, Ability, AbilityFactory, MANAGE, Rules};
 use navree_auth::Strategy;
 use navree_contracts::{AuthVia, BoxFuture, Principal};
 use navree_http::extract::{FromRequestParts, OptionalFromRequestParts};
-use navree_http::{AppError, GlobalLayer, LayerSlot, RouteMeta};
+use navree_http::{AppError, GlobalLayer, LayerSlot, Response, RouteMeta};
 use navree_kernel::{AppContext, Injectable, KernelError, ProviderKey, Resolver};
 use navree_workspace::PinnedWorkspace;
 use uuid::Uuid;

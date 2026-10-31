@@ -24,7 +24,6 @@ notify = ["dep:navree-notify"]
 mail = ["dep:navree-mail", "navree-mail/inbound"]
 
 [dependencies]
-axum = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }

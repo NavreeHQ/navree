@@ -4,10 +4,10 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::Path;
-use axum::response::IntoResponse;
 use http::{Method, StatusCode};
-use navree_http::{ApiMeta, AppError, Controller, Json, NoContent, RouteDef, schema_fn};
+use navree_http::{
+    ApiMeta, AppError, Controller, IntoResponse, Json, NoContent, Path, RouteDef, schema_fn,
+};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_validation::Valid;
 use navree_validation::Validate;

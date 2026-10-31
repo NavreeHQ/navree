@@ -25,7 +25,6 @@ docx = ["dep:docx-rs"]
 operations = ["dep:navree-queue", "dep:navree-db"]
 
 [dependencies]
-axum = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }

@@ -16,12 +16,12 @@ postgres = ["navree-db/postgres"]
 mysql = ["navree-db/mysql"]
 
 [dependencies]
-axum = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 form_urlencoded = { workspace = true }
 hex = { workspace = true }
 hmac = { workspace = true }
+http = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 # VAPID signatures (ES256 through `jose`) and push message encryption.
@@ -58,6 +58,7 @@ url = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+axum = { workspace = true }
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
 navree-testing = { workspace = true }

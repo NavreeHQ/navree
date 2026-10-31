@@ -13,7 +13,6 @@
 
 use std::sync::Arc;
 
-use axum::extract::Path;
 use http::Method;
 use navree_access::{AccessModule, AccessOptions};
 use navree_contracts::{ConformityOptions, ConformityReport};
@@ -22,7 +21,7 @@ use navree_db::{
     DatabaseModule, DbOptions, Executor, MigrationSet, ModuleBuilderDbExt, Pool, Statement,
     Value as DbValue,
 };
-use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
+use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, Path, RouteDef};
 use navree_kernel::{
     BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver,
 };

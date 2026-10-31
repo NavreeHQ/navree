@@ -7,7 +7,7 @@
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use axum::http::Method;
+use http::Method;
 use navree_access::{AccessModule, AccessOptions, AccessService};
 use navree_auth::{
     AuthModule, AuthService, ClientMeta, CurrentUser, User, not_while_impersonating,
@@ -17,7 +17,7 @@ use navree_contracts::{AuditEntry, AuditSink, AuthState, BoxError, BoxFuture, Cl
 use navree_crypto::{CryptoModule, generate_key};
 use navree_db::DatabaseModule;
 use navree_db::Db;
-use navree_http::{Controller, CurrentPrincipal, Json, ModuleBuilderHttpExt, RouteDef};
+use navree_http::{Controller, CurrentPrincipal, Extension, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_mail::{MailModule, MailOptions, Mailer, Message, TransportConfig};
 use navree_testing::{TestApp, TestAppBuilder, TestClient, TestResponse};
@@ -198,7 +198,7 @@ async fn whoami(CurrentPrincipal(principal): CurrentPrincipal) -> Json<Value> {
     }))
 }
 
-async fn ping(state: axum::Extension<AuthState>) -> Json<Value> {
+async fn ping(state: Extension<AuthState>) -> Json<Value> {
     Json(json!({ "pong": true, "guest": state.0.0.is_none() }))
 }
 

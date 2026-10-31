@@ -7,8 +7,8 @@ pub(crate) mod patch;
 pub(crate) mod resources;
 pub(crate) mod server;
 
-use axum::response::{IntoResponse, Response};
 use http::{HeaderValue, StatusCode, header};
+use navree_http::{IntoResponse, Response};
 use serde_json::{Value, json};
 
 pub use filter::{AttrPath, CompareOp, Filter, FilterError, PatchPath};

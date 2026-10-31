@@ -4669,7 +4669,6 @@ dependencies = [
 name = "navree-auth"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "chrono",
  "form_urlencoded",
@@ -4709,7 +4708,6 @@ dependencies = [
 name = "navree-billing"
 version = "0.2.0"
 dependencies = [
- "axum",
  "bytes",
  "chrono",
  "form_urlencoded",
@@ -4914,7 +4912,6 @@ dependencies = [
 name = "navree-directory"
 version = "0.2.0"
 dependencies = [
- "axum",
  "bytes",
  "chrono",
  "hex",
@@ -4967,7 +4964,6 @@ dependencies = [
 name = "navree-documents"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "bytes",
  "chrono",
@@ -5064,7 +5060,6 @@ dependencies = [
 name = "navree-flags"
 version = "0.2.0"
 dependencies = [
- "axum",
  "chrono",
  "http",
  "navree-access",
@@ -5097,7 +5092,6 @@ dependencies = [
 name = "navree-fleet"
 version = "0.2.0"
 dependencies = [
- "axum",
  "chrono",
  "http",
  "memory-stats",
@@ -5398,7 +5392,6 @@ dependencies = [
 name = "navree-integrations"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "bytes",
  "chrono",
@@ -5810,6 +5803,7 @@ dependencies = [
  "form_urlencoded",
  "hex",
  "hmac 0.13.0",
+ "http",
  "navree-config",
  "navree-contracts",
  "navree-crypto",
@@ -6158,7 +6152,6 @@ dependencies = [
 name = "navree-settings"
 version = "0.2.0"
 dependencies = [
- "axum",
  "chrono",
  "http",
  "navree-access",
@@ -6235,7 +6228,6 @@ dependencies = [
 name = "navree-social"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "chrono",
  "form_urlencoded",
@@ -6270,7 +6262,6 @@ dependencies = [
 name = "navree-sso"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "chrono",
  "flate2",
@@ -6483,7 +6474,6 @@ dependencies = [
 name = "navree-webhooks"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "bytes",
  "chrono",
@@ -6526,7 +6516,6 @@ dependencies = [
 name = "navree-workflows"
 version = "0.2.0"
 dependencies = [
- "axum",
  "chrono",
  "futures-util",
  "http",

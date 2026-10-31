@@ -4,13 +4,12 @@
 
 use std::sync::Arc;
 
-use axum::extract::Path;
 use chrono::{DateTime, Utc};
 use http::Method;
 use navree_db::Executor as _;
 use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{Db, MigrationSet, ModuleBuilderDbExt, Uow};
-use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
+use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, Path, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_orm::prelude::*;
 use navree_workspace::library::{

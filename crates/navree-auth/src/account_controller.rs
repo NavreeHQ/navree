@@ -5,11 +5,10 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
-use axum::extract::Path;
-use axum::response::IntoResponse;
 use http::{Method, StatusCode};
 use navree_http::{
-    ApiMeta, AppError, Controller, Json, NoContent, RouteDef, ValidSignature, schema_fn,
+    ApiMeta, AppError, Controller, IntoResponse, Json, NoContent, Path, RouteDef, ValidSignature,
+    schema_fn,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_validation::Valid;

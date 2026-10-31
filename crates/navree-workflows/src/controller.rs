@@ -2,12 +2,13 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, Query};
 use http::Method;
 use http::request::Parts;
 use navree_db::PageQuery;
 use navree_http::extract::FromRequestParts;
-use navree_http::{ApiMeta, AppError, Controller, Json, RouteDef, SchemaFn, schema_fn};
+use navree_http::{
+    ApiMeta, AppError, Controller, Json, Path, Query, RouteDef, SchemaFn, schema_fn,
+};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_workspace::{CurrentWorkspace, InWorkspace, WorkspaceConfig};
 use serde::{Deserialize, Serialize};

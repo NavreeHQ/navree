@@ -24,7 +24,6 @@ mysql = ["navree-db/mysql"]
 notify = ["dep:navree-notify", "dep:url"]
 
 [dependencies]
-axum = { workspace = true }
 chrono = { workspace = true }
 http = { workspace = true }
 navree-access = { workspace = true }

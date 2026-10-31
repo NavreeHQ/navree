@@ -21,7 +21,6 @@ postgres = ["navree-db/postgres"]
 mysql = ["navree-db/mysql"]
 
 [dependencies]
-axum = { workspace = true }
 chrono = { workspace = true }
 http = { workspace = true }
 navree-audit = { workspace = true }

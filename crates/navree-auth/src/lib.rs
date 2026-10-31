@@ -122,7 +122,7 @@
 //! ```no_run
 //! use std::sync::Arc;
 //!
-//! use axum::http::Method;
+//! use http::Method;
 //! use navree_auth::{AuthModule, CurrentUser};
 //! use navree_config::{ConfigModule, ConfigSources};
 //! use navree_crypto::CryptoModule;

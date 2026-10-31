@@ -6,7 +6,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use axum::extract::Path;
 use navree_access::{AccessModule, AccessOptions, AccessService};
 use navree_audit::AuditModule;
 use navree_cache::{CacheModule, CacheOptions};
@@ -16,7 +15,7 @@ use navree_db::navree_schema::{
 use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt, Uow};
 use navree_events::{EventBus, EventsModule};
 use navree_flags::{CurrentFlags, Flags, FlagsModule, ModuleBuilderFlagsExt, PlanResolver};
-use navree_http::{AppError, Json};
+use navree_http::{AppError, Json, Path};
 use navree_kernel::{BoxError, BoxFuture, Module, ModuleBuilder};
 use navree_macros::{controller, flag, injectable, module};
 use navree_orm::Model as _;

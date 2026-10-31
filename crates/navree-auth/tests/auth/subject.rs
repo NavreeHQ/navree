@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use axum::http::Method;
+use http::Method;
 use navree_access::{
     AbilityCtx, AccessModule, AccessOptions, AccessService, Authorized, READ, Read, Rules, Subject,
     UPDATE, Update, field,

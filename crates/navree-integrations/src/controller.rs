@@ -3,11 +3,10 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use axum::extract::{Path, Query};
 use http::{Method, Uri};
 use navree_http::{
-    ApiMeta, AppError, Controller, Created, CurrentPrincipal, Json, NoContent, RouteDef, SchemaFn,
-    schema_fn,
+    ApiMeta, AppError, Controller, Created, CurrentPrincipal, Json, NoContent, Path, Query,
+    RouteDef, SchemaFn, schema_fn,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_workspace::{InOrganization, InWorkspace};

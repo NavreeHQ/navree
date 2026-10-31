@@ -21,7 +21,6 @@ postgres = ["navree-db/postgres"]
 mysql = ["navree-db/mysql"]
 
 [dependencies]
-axum = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 # SAML's HTTP-Redirect binding deflates the request (miniz_oxide, pure Rust).

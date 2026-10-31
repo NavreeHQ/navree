@@ -1,11 +1,11 @@
 //! [`Download`]: a document as an HTTP response that names its file.
 
-use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
 use http::header::{
     CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE, HeaderValue,
     X_CONTENT_TYPE_OPTIONS,
 };
+use navree_http::{IntoResponse, Response};
 
 /// The content type of PDF documents.
 pub const PDF_CONTENT_TYPE: &str = "application/pdf";

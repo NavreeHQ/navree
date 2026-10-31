@@ -2,11 +2,10 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, Query};
 use http::{Method, StatusCode, Uri};
 use navree_http::{
-    ApiMeta, AppError, Controller, Created, CurrentPrincipal, Json, NoContent, RouteDef, SchemaFn,
-    schema_fn,
+    ApiMeta, AppError, Controller, Created, CurrentPrincipal, Json, NoContent, Path, Query,
+    RouteDef, SchemaFn, schema_fn,
 };
 use navree_integrations::Level;
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
@@ -172,8 +171,8 @@ fn location(uri: &Uri, id: Uuid) -> String {
 /// 202 with a body.
 struct Accepted<T>(T);
 
-impl<T: Serialize> axum::response::IntoResponse for Accepted<T> {
-    fn into_response(self) -> axum::response::Response {
+impl<T: Serialize> navree_http::IntoResponse for Accepted<T> {
+    fn into_response(self) -> navree_http::Response {
         (StatusCode::ACCEPTED, Json(self.0)).into_response()
     }
 }

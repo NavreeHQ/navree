@@ -6,11 +6,11 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::Path;
 use http::{Method, Uri};
 use navree_db::Uow;
 use navree_http::{
-    ApiMeta, AppError, Controller, Created, CurrentPrincipal, Json, NoContent, RouteDef, schema_fn,
+    ApiMeta, AppError, Controller, Created, CurrentPrincipal, Json, NoContent, Path, RouteDef,
+    schema_fn,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use serde::{Deserialize, Serialize};

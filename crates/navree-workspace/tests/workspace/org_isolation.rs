@@ -8,7 +8,7 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use http::Method;
 use navree_db::{Executor as _, Statement, Uow, Value as DbValue};
-use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
+use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, Path, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_orm::prelude::*;
 use navree_workspace::{
@@ -59,7 +59,7 @@ async fn report(org: CurrentOrganization, uow: Uow) -> Result<Json<Value>, AppEr
 async fn show_deal(
     org: CurrentOrganization,
     uow: Uow,
-    axum::extract::Path(id): axum::extract::Path<Uuid>,
+    Path(id): Path<Uuid>,
 ) -> Result<Json<Deal>, AppError> {
     Ok(Json(
         OrgRepo::<Deal>::find_or_fail(&uow, org.workspace_ids(), id)
@@ -172,7 +172,7 @@ impl Module for ProbeModule {
 async fn pin_from_header(
     mut request: axum::extract::Request,
     next: axum::middleware::Next,
-) -> axum::response::Response {
+) -> navree_http::Response {
     let pin = request
         .headers()
         .get("x-test-pin")

@@ -1,7 +1,6 @@
 //! Word documents (DOCX): [`Docx`], built block by block on
 //! [docx-rs](https://docs.rs/docx-rs), and [`DocxFile`], the result.
 
-use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
 use docx_rs::{
     AbstractNumbering, AlignmentType, BreakType, Footer, Header, IndentLevel, Level, LevelJc,
@@ -9,6 +8,7 @@ use docx_rs::{
     PageOrientationType, Pic, RunFonts, SpecialIndentType, Start, Style, StyleType, TableCell,
     TableRow,
 };
+use navree_http::{IntoResponse, Response};
 
 use crate::DocumentsError;
 use crate::download::{DOCX_CONTENT_TYPE, Download};

@@ -3,11 +3,10 @@
 
 use std::sync::Arc;
 
-use axum::extract::Path;
 use http::Method;
 use navree_access::{Abilities, Authorized, CurrentAccess, Update};
 use navree_db::Uow;
-use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
+use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, Path, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_orm::prelude::*;
 use navree_workspace::{CurrentWorkspace, InWorkspace, WorkspaceRepo};
