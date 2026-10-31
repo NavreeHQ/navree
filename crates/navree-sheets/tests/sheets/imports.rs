@@ -708,6 +708,28 @@ async fn files_over_the_column_and_cell_limits_fail_the_import() {
 }
 
 #[tokio::test]
+async fn a_workbook_that_unpacks_past_the_limit_fails_the_import() {
+    let app = support::builder()
+        .config("sheets.imports.max_inflated_bytes", 100)
+        .build()
+        .await;
+    let admin = app.acting_as(principal(ADMIN));
+    let file = write_xlsx(
+        "People",
+        &[],
+        &["Email".to_owned(), "Name".to_owned()],
+        &[vec![Cell::Text("a@x.io".into()), Cell::Text("A".into())]],
+    )
+    .unwrap();
+    let record = staged(&app, &admin, "people.xlsx", &file, &[]).await;
+    assert_eq!(record["status"], "failed");
+    assert_eq!(
+        record["error"],
+        "The workbook has a part that unpacks to more than 100 bytes."
+    );
+}
+
+#[tokio::test]
 async fn imports_are_listed_shown_to_permitted_users_and_deleted() {
     let app = support::app().await;
     let admin = app.acting_as(principal(ADMIN));

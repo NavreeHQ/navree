@@ -258,16 +258,25 @@ assert_eq!(imports.find(import.id).await?.counts.created, 1);
   by the database's unique constraint and the row fails with `insert`'s
   error.
 - Staging holds the whole file in memory: `sheets.imports.max_upload_bytes`
-  bounds memory as well as size. Rows are padded to the header's width, so
+  bounds the file, not what a workbook unpacks to (a zip can unpack a
+  thousand-fold; calamine keeps `sharedStrings.xml` and a cell's text whole):
+  `sheets.imports.max_inflated_bytes` (1 GiB) refuses a workbook (XLSX, XLSB,
+  ODS) with a part that declares more than that unpacked, before reading it;
+  the zip reader stops a part at its declared size, so a lie in either
+  direction fails. Rows are padded to the header's width, so
   `sheets.imports.max_columns` (16,384) and `sheets.imports.max_cells`
   (10,000,000, rows times columns) bound the table too; a file past either
   fails the import with a message, and `max_rows` is checked while reading.
   That holds for CSV, TSV and XLSX (read a record or cell at a time, in
   order); XLS, ODS and XLSB are read into a range of the sheet's whole used
   area first, so the limits apply to the table made from it, after it is in
-  memory, and so for an XLSX sheet whose cells are not in row order. The file
-  is read on the blocking pool, and the reading stops at its next record
-  when the job's timeout drops it.
+  memory. An XLSX sheet whose cells are not in row order (Excel never
+  writes one) is held only up to the limits (`max_rows` + 1 rows,
+  `max_cells` cells, cells past `max_columns` as marks): over that it is
+  refused, even if the table would have fitted. After a refusal the rest of
+  an XLSX sheet is still read through, keeping nothing, until the job's
+  timeout stops it. The file is read on the blocking pool, and the reading
+  stops at its next record when the job's timeout drops it.
 - The `/api/exports` and `/api/imports` routes mount only when the app has
   an authenticator and `sheets.*.routes` is true.
 - With the `i18n` feature, headers come from Fluent (`contacts.email` is the

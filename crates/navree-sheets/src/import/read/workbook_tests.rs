@@ -195,6 +195,10 @@ fn came_to(result: Result<Table, SheetsError>) -> Result<Table, String> {
     result.map_err(|error| format!("{error:?}"))
 }
 
+fn refused_for(result: &Result<Table, SheetsError>, what: &str) -> bool {
+    matches!(result, Err(SheetsError::UnsupportedFile(message)) if message.contains(what))
+}
+
 /// The same limits, tight and loose, that every workbook below is read with.
 fn every_limit() -> Vec<ReadOptions<'static>> {
     let mut all = vec![limits(1_000)];
@@ -216,14 +220,59 @@ fn every_limit() -> Vec<ReadOptions<'static>> {
     all
 }
 
+/// What an XLSX workbook's first sheet holds: whether its cells come by row
+/// and then by column, how many positions in the first `max_columns` columns
+/// have a value, and how many rows have one.
+fn shape_of(bytes: &[u8], max_columns: u64) -> (bool, u64, u64) {
+    let mut xlsx = calamine::Xlsx::new(Cursor::new(bytes)).unwrap();
+    let name = xlsx.sheet_names()[0].clone();
+    let Ok(mut reader) = xlsx.worksheet_cells_reader(&name) else {
+        return (true, 0, 0);
+    };
+    let (mut in_order, mut last) = (true, None);
+    let mut positions = std::collections::BTreeSet::new();
+    while let Some(cell) = reader.next_cell().unwrap() {
+        if matches!(cell.get_value(), calamine::DataRef::Empty) {
+            continue;
+        }
+        in_order &= last.is_none_or(|last| cell.get_position() > last);
+        last = Some(cell.get_position());
+        if u64::from(cell.get_position().1) < max_columns {
+            positions.insert(cell.get_position());
+        }
+    }
+    let rows: std::collections::BTreeSet<u32> = positions.iter().map(|(row, _)| *row).collect();
+    (in_order, positions.len() as u64, rows.len() as u64)
+}
+
+/// Reads `bytes` as the range did, under every limit, and as it is read now.
+///
+/// A sheet whose cells are not in order is held, until it ends, only up to
+/// `max_cells` cells and `max_rows + 1` rows. That is the one difference
+/// from the range, which held them all: such a sheet is refused when it has
+/// more cells, or rows, with a value than that, though the table made of it
+/// would have been within the limits.
 fn assert_read_as_a_range(label: &str, bytes: &[u8]) {
     for options in every_limit() {
         let expected = came_to(read_as_a_range(bytes, &options));
         let read = came_to(read_table(bytes, "book.xlsx", &options));
-        assert_eq!(
-            read, expected,
-            "{label}: max_rows {}, max_columns {}, max_cells {}",
-            options.max_rows, options.max_columns, options.max_cells
+        if read == expected {
+            continue;
+        }
+        let (in_order, cells, rows) = shape_of(bytes, options.max_columns);
+        let held_too_much = match &read {
+            Err(message) if message.contains("cells (rows times columns)") => {
+                cells > options.max_cells
+            }
+            Err(message) if message.contains("TooManyRows") => rows > options.max_rows + 1,
+            _ => false,
+        };
+        assert!(
+            !in_order && held_too_much,
+            "{label}: max_rows {}, max_columns {}, max_cells {}\n read {read:?}\n was  {expected:?}",
+            options.max_rows,
+            options.max_columns,
+            options.max_cells
         );
     }
 }
@@ -772,9 +821,11 @@ fn kib_of(key: &str) -> u64 {
 }
 
 /// Eight cells in each of 100,000 rows, a number to a cell. Calamine's range
-/// of this sheet holds 800,000 cells: about 80 MB; one row is 8 cells.
+/// of this sheet holds 800,000 cells: about 80 MB; one row is 8 cells. With
+/// `swap`, the first row lists its first two cells the other way round, so
+/// that the sheet is not in order.
 #[cfg(target_os = "linux")]
-fn long_book() -> Vec<u8> {
+fn long_book(swap: bool) -> Vec<u8> {
     book_of(
         &[("Sheet1", &|out| {
             write!(
@@ -783,7 +834,12 @@ fn long_book() -> Vec<u8> {
             )?;
             for r in 1..=100_000u32 {
                 write!(out, r#"<row r="{r}">"#)?;
-                for (c, name) in ["A", "B", "C", "D", "E", "F", "G", "H"].iter().enumerate() {
+                let names = if swap && r == 1 {
+                    ["B", "A", "C", "D", "E", "F", "G", "H"]
+                } else {
+                    ["A", "B", "C", "D", "E", "F", "G", "H"]
+                };
+                for (c, name) in names.iter().enumerate() {
                     if r == 1 {
                         write!(
                             out,
@@ -802,6 +858,45 @@ fn long_book() -> Vec<u8> {
     )
 }
 
+/// Two columns and 4,000 rows, each with a 10 KB text in column K, out of
+/// order (the first row lists B before A). 40 MB of text in all.
+#[cfg(target_os = "linux")]
+fn far_text_book() -> Vec<u8> {
+    let text = "x".repeat(10_000);
+    book_of(
+        &[("Sheet1", &|out| {
+            write!(
+                out,
+                r#"<?xml version="1.0"?><worksheet xmlns="{NS}"><sheetData>"#
+            )?;
+            write!(
+                out,
+                r#"<row r="1"><c r="B1" t="inlineStr"><is><t>b</t></is></c><c r="A1" t="inlineStr"><is><t>a</t></is></c></row>"#
+            )?;
+            for r in 2..=4_000u32 {
+                write!(
+                    out,
+                    r#"<row r="{r}"><c r="A{r}"><v>{r}</v></c><c r="B{r}"><v>1</v></c><c r="K{r}" t="inlineStr"><is><t>{text}</t></is></c></row>"#
+                )?;
+            }
+            write!(out, "</sheetData></worksheet>")
+        })],
+        &[],
+        false,
+    )
+}
+
+/// Reads `bytes` and says how much memory that took at most, in KiB, after
+/// forgetting the peak of everything before.
+#[cfg(target_os = "linux")]
+fn read_measured(bytes: &[u8], options: &ReadOptions<'_>) -> (Result<Table, SheetsError>, u64) {
+    std::fs::write("/proc/self/clear_refs", "5").expect("clear_refs");
+    let before = kib_of("VmHWM:");
+    let result = read_table(bytes, "book.xlsx", options);
+    let peak = kib_of("VmHWM:");
+    (result, peak.saturating_sub(before))
+}
+
 /// Runs alone in a process (see the test below), so that nothing else's
 /// memory is counted: reads a workbook of 800,000 cells that a limit of ten
 /// rows refuses, and checks how much memory that took at most.
@@ -809,26 +904,76 @@ fn long_book() -> Vec<u8> {
 #[test]
 #[ignore = "runs in a process of its own, from the test below"]
 fn the_peak_memory_of_reading_a_workbook_over_its_limits() {
-    let bytes = long_book();
-    // Forget the peak of building the workbook.
-    std::fs::write("/proc/self/clear_refs", "5").expect("clear_refs");
-    let before = kib_of("VmHWM:");
-    let result = read_table(&bytes, "book.xlsx", &limits(10));
-    let peak = kib_of("VmHWM:");
+    let bytes = long_book(false);
+    let (result, used) = read_measured(&bytes, &limits(10));
     assert!(
         matches!(result, Err(SheetsError::TooManyRows { limit: 10 })),
         "{result:?}"
     );
-    let used = peak.saturating_sub(before);
     assert!(
         used < 24 * 1024,
         "reading held {used} KiB at most, over a bound of 24 MiB"
     );
 }
 
+/// The same, with a sheet that is not in order.
 #[cfg(target_os = "linux")]
 #[test]
-fn a_workbook_is_not_held_in_memory_before_its_limits_apply() {
+#[ignore = "runs in a process of its own, from the test below"]
+fn the_peak_memory_of_reading_an_unordered_workbook_over_its_row_limit() {
+    let bytes = long_book(true);
+    let (result, used) = read_measured(&bytes, &limits(10));
+    assert!(
+        matches!(result, Err(SheetsError::TooManyRows { limit: 10 })),
+        "{result:?}"
+    );
+    assert!(
+        used < 24 * 1024,
+        "reading held {used} KiB at most, over a bound of 24 MiB"
+    );
+}
+
+/// And under a cell limit that the rows do not reach first.
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "runs in a process of its own, from the test below"]
+fn the_peak_memory_of_reading_an_unordered_workbook_over_its_cell_limit() {
+    let bytes = long_book(true);
+    let options = ReadOptions {
+        max_cells: 100,
+        ..limits(1_000_000)
+    };
+    let (result, used) = read_measured(&bytes, &options);
+    assert!(refused_for(&result, "cells"), "{result:?}");
+    assert!(
+        used < 24 * 1024,
+        "reading held {used} KiB at most, over a bound of 24 MiB"
+    );
+}
+
+/// Text in columns past the column limit is not kept.
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "runs in a process of its own, from the test below"]
+fn the_peak_memory_of_reading_an_unordered_workbook_with_text_past_the_column_limit() {
+    let bytes = far_text_book();
+    let options = ReadOptions {
+        max_columns: 5,
+        ..limits(10_000)
+    };
+    let (result, used) = read_measured(&bytes, &options);
+    let table = result.unwrap();
+    assert_eq!(table.headers, ["a", "b"]);
+    assert_eq!(table.rows.len(), 3_999);
+    assert!(
+        used < 12 * 1024,
+        "reading held {used} KiB at most, over a bound of 12 MiB; the text is 40,000"
+    );
+}
+
+/// Runs one of the tests above, alone in a process.
+#[cfg(target_os = "linux")]
+fn run_alone(test: &str) {
     let this = module_path!().split_once("::").unwrap().1;
     // Runs this test binary again, for one test, so that the peak memory it
     // measures is that test's own and no other test's.
@@ -836,7 +981,7 @@ fn a_workbook_is_not_held_in_memory_before_its_limits_apply() {
     let output = std::process::Command::new(std::env::current_exe().unwrap())
         .args([
             "--exact",
-            &format!("{this}::the_peak_memory_of_reading_a_workbook_over_its_limits"),
+            &format!("{this}::{test}"),
             "--ignored",
             "--test-threads=1",
         ])
@@ -850,4 +995,176 @@ fn a_workbook_is_not_held_in_memory_before_its_limits_apply() {
     );
     // That it ran, not that it was filtered out.
     assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_workbook_is_not_held_in_memory_before_its_limits_apply() {
+    run_alone("the_peak_memory_of_reading_a_workbook_over_its_limits");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_workbook_out_of_order_is_not_held_in_memory_before_its_limits_apply() {
+    run_alone("the_peak_memory_of_reading_an_unordered_workbook_over_its_row_limit");
+    run_alone("the_peak_memory_of_reading_an_unordered_workbook_over_its_cell_limit");
+    run_alone("the_peak_memory_of_reading_an_unordered_workbook_with_text_past_the_column_limit");
+}
+
+/// `count` rows of `width` numbers, the first row's first two cells the
+/// other way round: a sheet that is not in order.
+fn unordered_rows(count: u32, width: u8) -> String {
+    let column = |c: u8| (b'A' + c) as char;
+    let mut rows = row(1, &[text_at("B1", "second"), text_at("A1", "first")]);
+    for r in 2..=count {
+        let cells: Vec<String> = (0..width)
+            .map(|c| number_at(&format!("{}{r}", column(c)), "1"))
+            .collect();
+        rows.push_str(&row(r, &cells));
+    }
+    rows
+}
+
+#[test]
+fn an_unordered_sheet_over_a_limit_is_refused_as_an_ordered_one_is() {
+    let rows = unordered_rows(40, 2);
+    let bytes = book(&rows, "", &[]);
+    let result = read_table(&bytes, "book.xlsx", &limits(5));
+    assert!(
+        matches!(result, Err(SheetsError::TooManyRows { limit: 5 })),
+        "{result:?}"
+    );
+    let result = read_table(
+        &bytes,
+        "book.xlsx",
+        &ReadOptions {
+            max_cells: 30,
+            ..limits(100)
+        },
+    );
+    assert!(refused_for(&result, "more than 30 cells"), "{result:?}");
+    // Within the limits it is read.
+    let table = read_table(&bytes, "book.xlsx", &limits(39)).unwrap();
+    assert_eq!(table.rows.len(), 39);
+    assert_eq!(table.headers, ["first", "second"]);
+}
+
+#[test]
+fn an_unordered_sheet_over_a_limit_is_still_unreadable_when_it_is_cut_short() {
+    let bytes = unfinished_book(&unordered_rows(40, 2));
+    for options in [limits(5), limits(1_000)] {
+        let result = read_table(&bytes, "book.xlsx", &options);
+        assert!(refused_for(&result, "cannot be read"), "{result:?}");
+    }
+}
+
+#[test]
+fn text_past_the_column_limit_of_an_unordered_sheet_still_makes_its_row_a_row() {
+    // Row 3 has only a cell past the column limit: it is a row, empty in
+    // every column the table keeps, as it is when the sheet is in order.
+    let rows = [
+        row(1, &[text_at("B1", "b"), text_at("A1", "a")]),
+        row(2, &[number_at("A2", "1"), number_at("B2", "2")]),
+        row(3, &[text_at("H3", "far")]),
+        row(4, &[number_at("A4", "3")]),
+    ]
+    .concat();
+    let bytes = book(&rows, "", &[]);
+    let options = ReadOptions {
+        max_columns: 4,
+        ..limits(10)
+    };
+    let table = read_table(&bytes, "book.xlsx", &options).unwrap();
+    let numbers: Vec<u64> = table.rows.iter().map(|r| r.number).collect();
+    assert_eq!(numbers, [2, 3, 4]);
+    assert_eq!(table.rows[1].cells, [Cell::Empty, Cell::Empty]);
+    assert_read_as_a_range("far text, unordered", &bytes);
+}
+
+/// A workbook whose shared strings are one text of `len` bytes, read by a
+/// header cell.
+fn book_with_shared_text(len: usize) -> Vec<u8> {
+    let text = "x".repeat(len);
+    book(
+        &row(1, &[r#"<c r="A1" t="s"><v>0</v></c>"#.into()]),
+        "",
+        &[&text],
+    )
+}
+
+/// The same bytes with the size the zip file declares for `part` changed.
+fn declaring(bytes: &[u8], part: &str, size: u32) -> Vec<u8> {
+    let mut bytes = bytes.to_vec();
+    let mut at = 0;
+    let mut changed = 0;
+    while let Some(found) = bytes[at..].windows(4).position(|w| w == b"PK\x01\x02") {
+        let header = at + found;
+        let name_length = u16::from_le_bytes([bytes[header + 28], bytes[header + 29]]) as usize;
+        let name = &bytes[header + 46..header + 46 + name_length];
+        if name == part.as_bytes() {
+            bytes[header + 24..header + 28].copy_from_slice(&size.to_le_bytes());
+            changed += 1;
+        }
+        at = header + 4;
+    }
+    assert_eq!(changed, 1, "{part} is in the central directory once");
+    bytes
+}
+
+#[test]
+fn a_part_that_unpacks_past_the_limit_is_refused_before_it_is_read() {
+    // 2 MiB of text that is 2 KB in the file.
+    let bytes = book_with_shared_text(2 * 1024 * 1024);
+    assert!(bytes.len() < 20_000, "{} bytes", bytes.len());
+    let options = |max_inflated_bytes| ReadOptions {
+        max_inflated_bytes,
+        ..limits(10)
+    };
+    let result = read_table(&bytes, "book.xlsx", &options(1024 * 1024));
+    assert!(
+        refused_for(&result, "unpacks to more than 1048576 bytes"),
+        "{result:?}"
+    );
+    // Within the limit it is read: a header of that text, and no rows.
+    let table = read_table(&bytes, "book.xlsx", &options(4 * 1024 * 1024)).unwrap();
+    assert_eq!(table.headers[0].len(), 2 * 1024 * 1024);
+}
+
+#[test]
+fn the_sheet_part_is_held_to_the_same_limit() {
+    let rows = unordered_rows(40_000, 4);
+    let bytes = book(&rows, "", &[]);
+    let result = read_table(
+        &bytes,
+        "book.xlsx",
+        &ReadOptions {
+            max_inflated_bytes: 1024 * 1024,
+            ..limits(100_000)
+        },
+    );
+    assert!(refused_for(&result, "unpacks to more than"), "{result:?}");
+}
+
+#[test]
+fn a_part_that_declares_more_than_it_unpacks_to_is_refused() {
+    let bytes = declaring(
+        &book_with_shared_text(1000),
+        "xl/sharedStrings.xml",
+        0x7fff_ffff,
+    );
+    let result = read_table(&bytes, "book.xlsx", &limits(10));
+    assert!(refused_for(&result, "unpacks to more than"), "{result:?}");
+}
+
+#[test]
+fn a_part_that_declares_less_than_it_unpacks_to_cannot_be_read() {
+    // The zip reader stops a part at its declared size, so the declared size
+    // bounds what is read whatever the part holds.
+    let bytes = declaring(
+        &book_with_shared_text(100_000),
+        "xl/sharedStrings.xml",
+        1000,
+    );
+    let result = read_table(&bytes, "book.xlsx", &limits(10));
+    assert!(refused_for(&result, "cannot be read"), "{result:?}");
 }

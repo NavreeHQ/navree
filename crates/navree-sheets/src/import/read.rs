@@ -82,6 +82,8 @@ pub(crate) struct ReadOptions<'a> {
     pub(crate) max_columns: u64,
     /// The most cells allowed, every row counted at the header's width.
     pub(crate) max_cells: u64,
+    /// The most a part of a zipped workbook may unpack to.
+    pub(crate) max_inflated_bytes: u64,
     /// Raised when nobody waits for the reading any more; the reading then
     /// stops at the next record.
     pub(crate) stop: Option<&'a AtomicBool>,
@@ -111,6 +113,7 @@ impl Default for ReadOptions<'_> {
             max_rows: 0,
             max_columns: limits.max_columns,
             max_cells: limits.max_cells,
+            max_inflated_bytes: limits.max_inflated_bytes,
             stop: None,
         }
     }
@@ -176,8 +179,12 @@ pub(crate) async fn read_table_blocking(
 ) -> Result<Table, SheetsError> {
     let encoding = options.encoding.map(str::to_owned);
     let sheet = options.sheet.map(str::to_owned);
-    let (max_rows, max_columns, max_cells) =
-        (options.max_rows, options.max_columns, options.max_cells);
+    let (max_rows, max_columns, max_cells, max_inflated_bytes) = (
+        options.max_rows,
+        options.max_columns,
+        options.max_cells,
+        options.max_inflated_bytes,
+    );
     let read = blocking(move |stop| {
         read_table(
             &bytes,
@@ -188,6 +195,7 @@ pub(crate) async fn read_table_blocking(
                 max_rows,
                 max_columns,
                 max_cells,
+                max_inflated_bytes,
                 stop: Some(stop),
             },
         )
@@ -326,6 +334,9 @@ fn read_workbook(bytes: &[u8], options: &ReadOptions<'_>) -> Result<Table, Sheet
     let unreadable = |error: calamine::Error| {
         SheetsError::UnsupportedFile(format!("The workbook cannot be read: {error}"))
     };
+    if bytes.starts_with(ZIP) {
+        check_unpacked_sizes(bytes, options.max_inflated_bytes)?;
+    }
     let mut workbook = open_workbook_auto_from_rs(Cursor::new(bytes)).map_err(unreadable)?;
     let kind = match &workbook {
         calamine::Sheets::Xls(_) => FileKind::Xls,
@@ -360,6 +371,30 @@ fn read_workbook(bytes: &[u8], options: &ReadOptions<'_>) -> Result<Table, Sheet
     let mut table = tabulator.finish()?;
     table.kind = kind;
     Ok(table)
+}
+
+/// Refuses a zipped workbook with a part that unpacks to more than `limit`
+/// bytes, by the size the zip file declares for it, before any part is read:
+/// calamine keeps the shared strings whole and a text of a cell whole, and
+/// a small file can unpack to a thousand times its size. The zip reader stops
+/// a part at its declared size, so a file that declares less than a part
+/// holds cannot be read, and one that declares more is refused here.
+fn check_unpacked_sizes(bytes: &[u8], limit: u64) -> Result<(), SheetsError> {
+    // A file that is not a zip archive is for calamine to say so.
+    let Ok(mut archive) = zip::ZipArchive::new(Cursor::new(bytes)) else {
+        return Ok(());
+    };
+    for index in 0..archive.len() {
+        let Ok(part) = archive.by_index_raw(index) else {
+            continue;
+        };
+        if part.size() > limit {
+            return Err(SheetsError::UnsupportedFile(format!(
+                "The workbook has a part that unpacks to more than {limit} bytes."
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// The rows of a range, the sheet's used area, as a table is made of them.
@@ -523,6 +558,16 @@ fn push_row(tabulator: &mut Tabulator, row: OpenRow) -> Result<(), SheetsError> 
 }
 
 /// The rows of a sheet whose cells are not in order, by row and column.
+///
+/// The cells with a value are kept, by position, until the sheet ends; a
+/// position given twice keeps its last cell. What is kept is bounded by the
+/// limits: a cell in a column past `max_columns` is kept as a mark that the
+/// row has something there (the table cuts every row at its header, which
+/// is no wider than `max_columns`), and the sheet is refused as soon as it
+/// holds more than `max_rows + 1` rows (the header and the data rows) or
+/// more than `max_cells` cells. The rest of the sheet is then still read,
+/// keeping nothing, so that a sheet that cannot be read is reported as
+/// that.
 fn tabulate_unordered<RS: Read + std::io::Seek>(
     xlsx: &mut calamine::Xlsx<RS>,
     name: &str,
@@ -532,18 +577,43 @@ fn tabulate_unordered<RS: Read + std::io::Seek>(
     let Some(mut reader) = sheet_cells(xlsx, name)? else {
         return Ok(());
     };
-    // A position given twice keeps the last cell.
     let mut sheet: BTreeMap<u32, BTreeMap<u32, Cell>> = BTreeMap::new();
+    let mut held = 0u64;
+    let mut refused = None;
     while let Some(cell) = reader.next_cell().map_err(xlsx_error)? {
         options.ensure_running()?;
-        if matches!(cell.get_value(), calamine::DataRef::Empty) {
+        if refused.is_some() || matches!(cell.get_value(), calamine::DataRef::Empty) {
             continue;
         }
         let (row, column) = cell.get_position();
-        sheet
-            .entry(row)
-            .or_default()
-            .insert(column, data_cell(&Data::from(cell.get_value().clone())));
+        let mut cell = data_cell(&Data::from(cell.get_value().clone()));
+        if u64::from(column) >= options.max_columns && !cell.is_empty() {
+            cell = Cell::Bool(true);
+        }
+        match sheet.get_mut(&row).and_then(|cells| cells.get_mut(&column)) {
+            Some(kept) => *kept = cell,
+            // Nothing and an empty cell are the same.
+            None if cell.is_empty() => {}
+            None => {
+                sheet.entry(row).or_default().insert(column, cell);
+                held += 1;
+            }
+        }
+        refused = if held > options.max_cells {
+            Some(too_many_cells(options.max_cells))
+        } else if sheet.len() as u64 > options.max_rows.saturating_add(1) {
+            Some(SheetsError::TooManyRows {
+                limit: options.max_rows,
+            })
+        } else {
+            None
+        };
+        if refused.is_some() {
+            sheet = BTreeMap::new();
+        }
+    }
+    if let Some(error) = refused {
+        return Err(error);
     }
     for (row, cells) in sheet {
         let used = cells
@@ -645,10 +715,7 @@ impl Tabulator {
         let width = headers.len();
         let held = (self.rows.len() as u64 + 2).saturating_mul(width as u64);
         if held > self.max_cells {
-            return Err(SheetsError::UnsupportedFile(format!(
-                "The file has more than {} cells (rows times columns).",
-                self.max_cells
-            )));
+            return Err(too_many_cells(self.max_cells));
         }
         let mut row = Vec::with_capacity(width);
         row.extend(cells.take(width));
@@ -670,6 +737,12 @@ impl Tabulator {
             rows: self.rows,
         })
     }
+}
+
+fn too_many_cells(limit: u64) -> SheetsError {
+    SheetsError::UnsupportedFile(format!(
+        "The file has more than {limit} cells (rows times columns)."
+    ))
 }
 
 /// Header texts: trailing empty headers dropped, blank ones named
