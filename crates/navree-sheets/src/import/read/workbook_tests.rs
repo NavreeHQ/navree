@@ -1351,3 +1351,102 @@ fn a_shared_string_in_many_cells_is_not_copied_past_the_text_limit() {
     run_alone("the_peak_memory_of_reading_one_shared_string_in_many_cells");
     run_alone("the_peak_memory_of_reading_one_shared_string_in_many_cells_out_of_order");
 }
+
+/// A workbook whose one shared string is `text`, used by `cells` cells under
+/// a header. With `tail`, a cell that comes before the
+/// ones before it ends the sheet, so that it is not in order.
+fn book_of_one_shared_string(text: &str, cells: u32, tail: bool) -> Vec<u8> {
+    let mut rows = row(1, &[text_at("A1", "h")]);
+    for r in 2..=cells + 1 {
+        rows.push_str(&row(r, &[format!(r#"<c r="A{r}" t="s"><v>0</v></c>"#)]));
+    }
+    if tail {
+        rows.push_str(&row(1, &[text_at("B1", "b")]));
+    }
+    book(&rows, "", &[text])
+}
+
+#[test]
+fn a_padded_shared_string_costs_what_its_text_costs_in_every_cell() {
+    // 256 KiB of padding round one character, or round nothing, in 100 cells.
+    // Scanning and copying all of it for every cell takes seconds in a debug
+    // build (25 MB of text); trimmed once it takes milliseconds.
+    let padding = " ".repeat(256 * 1024);
+    for (label, text) in [
+        ("padded", format!("{padding}x{padding}")),
+        ("blank", padding.clone()),
+        ("plain", "x".to_owned()),
+    ] {
+        for tail in [false, true] {
+            let bytes = book_of_one_shared_string(&text, 100, tail);
+            let started = std::time::Instant::now();
+            let result = read_table(&bytes, "x.xlsx", &limits(1_000));
+            let took = started.elapsed();
+            let table = result.unwrap_or_else(|error| panic!("{label}: {error}"));
+            let rows = if label == "blank" { 0 } else { 100 };
+            assert_eq!(table.rows.len(), rows, "{label}");
+            if rows > 0 {
+                assert_eq!(table.rows[0].cells[0], Cell::Text("x".into()), "{label}");
+            }
+            assert!(
+                took < std::time::Duration::from_millis(400),
+                "{label} (out of order: {tail}): 101 cells of {} bytes took {took:?}",
+                text.len()
+            );
+        }
+    }
+}
+
+#[test]
+fn error_cells_count_as_the_text_they_are_kept_as() {
+    // `#DIV/0!` is kept as `#Div0`: 5 bytes, after the 1 byte header.
+    let mut rows = row(1, &[text_at("A1", "h")]);
+    for r in 2..=4 {
+        rows.push_str(&row(
+            r,
+            &[format!(r#"<c r="A{r}" t="e"><v>#DIV/0!</v></c>"#)],
+        ));
+    }
+    let in_order = book(&rows, "", &[]);
+    rows.push_str(&row(1, &[text_at("B1", "b")]));
+    let out_of_order = book(&rows, "", &[]);
+    for (label, bytes, header) in [("in order", in_order, 1), ("out of order", out_of_order, 2)] {
+        let kept = header + 3 * 5;
+        let table = read_table(&bytes, "x.xlsx", &text_limit(kept)).unwrap();
+        assert_eq!(table.rows.len(), 3, "{label}");
+        assert_eq!(
+            table.rows[0].cells[0],
+            Cell::Text("#Div0".into()),
+            "{label}"
+        );
+        let result = read_table(&bytes, "x.xlsx", &text_limit(kept - 1));
+        assert!(
+            refused_for(&result, "bytes of text"),
+            "{label}: {:?}",
+            result.map(|table| table.rows.len())
+        );
+    }
+}
+
+/// 1,500 cells of one 16 KiB shared string (24 MiB of text in the table),
+/// with a cell at the end that is out of order.
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "runs in a process of its own, from the test below"]
+fn the_peak_memory_of_reading_a_sheet_that_turns_out_of_order() {
+    let text = "x".repeat(16 * 1024);
+    let bytes = book_of_one_shared_string(&text, 1_499, true);
+    let (result, used) = read_measured(&bytes, &limits(100_000));
+    let table = result.unwrap();
+    assert_eq!(table.rows.len(), 1_499);
+    assert!(
+        used < 36 * 1024,
+        "reading held {used} KiB at most, over a bound of 36 MiB; the table is 24,000 and a second one 24,000 more"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_first_reading_is_given_up_when_the_sheet_is_read_again() {
+    run_alone("the_peak_memory_of_reading_a_sheet_that_turns_out_of_order");
+}

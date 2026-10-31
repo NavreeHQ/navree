@@ -266,7 +266,11 @@ assert_eq!(imports.find(import.id).await?.counts.created, 1);
   the zip reader stops a part at its declared size, so a lie in either
   direction fails. `sheets.imports.max_text_bytes` (256 MiB) bounds the text
   the table keeps, counted per cell (a shared string counts again for each
-  cell it is in), before it is copied; a file past it fails the import. Rows are padded to the header's width, so
+  cell it is in); a file past it fails the import. For CSV, TSV and XLSX it
+  is counted before the text is copied; XLS, ODS and XLSB are read into a
+  range first that copies a shared string or a repeated row into every cell
+  (ODS: every repeated row or column), so they are counted after the copies
+  are in memory. Rows are padded to the header's width, so
   `sheets.imports.max_columns` (16,384) and `sheets.imports.max_cells`
   (10,000,000, rows times columns) bound the table too; a file past either
   fails the import with a message, and `max_rows` is checked while reading.

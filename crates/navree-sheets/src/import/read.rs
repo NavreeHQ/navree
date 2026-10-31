@@ -486,7 +486,9 @@ fn tabulate_cells<RS: Read + std::io::Seek>(
     if stream_rows(xlsx, name, &mut tabulator, options)? == Order::Kept {
         return Ok(tabulator);
     }
-    let mut tabulator = Tabulator::new(options);
+    // The rows of the first reading are dropped, not held while the sheet
+    // is read again.
+    tabulator = Tabulator::new(options);
     tabulate_unordered(xlsx, name, &mut tabulator, options)?;
     Ok(tabulator)
 }
@@ -515,6 +517,7 @@ fn stream_rows<RS: Read + std::io::Seek>(
     // keeping none, because a cell out of order would change the answer:
     // the rows would not be the ones read so far.
     let mut refused = None;
+    let mut texts = Texts::default();
     while let Some(cell) = reader.next_cell().map_err(xlsx_error)? {
         options.ensure_running()?;
         // The range of a sheet leaves out the cells with nothing in them.
@@ -531,7 +534,7 @@ fn stream_rows<RS: Read + std::io::Seek>(
         }
         // Text is measured where it is, and counted, before it is copied:
         // a shared string is one text for any number of cells.
-        let text = text_of(cell.get_value());
+        let text = texts.of(cell.get_value());
         if text.is_some_and(str::is_empty) {
             continue;
         }
@@ -552,12 +555,11 @@ fn stream_rows<RS: Read + std::io::Seek>(
         open.used = column + 1;
         // Cells past the header's width are cut, so they are not kept.
         if column < tabulator.width() {
-            if let Err(error) = text.map_or(Ok(()), |text| tabulator.charge(text.len())) {
+            if let Err(error) = tabulator.charge(kept_bytes(cell.get_value(), text)) {
                 refused = Some(error);
                 continue;
             }
-            open.cells
-                .push((column, data_cell(&Data::from(cell.get_value().clone()))));
+            open.cells.push((column, cell_of(cell.get_value(), text)));
         }
     }
     if let Some(finished) = open.take().filter(|_| refused.is_none()) {
@@ -570,16 +572,65 @@ fn push_row(tabulator: &mut Tabulator, row: OpenRow) -> Result<(), SheetsError> 
     tabulator.push_counted(u64::from(row.row) + 1, row.used, dense(row.cells, row.used))
 }
 
-/// The text of a cell value that is text, trimmed, as it is kept; none for
-/// the values that are not.
-fn text_of<'a>(value: &'a calamine::DataRef<'_>) -> Option<&'a str> {
-    use calamine::DataRef;
-    match value {
-        DataRef::String(text) | DataRef::DateTimeIso(text) | DataRef::DurationIso(text) => {
-            Some(text.trim())
+/// Shared strings at least this long are trimmed once, not for every cell
+/// that uses them.
+const LONG_SHARED_STRING: usize = 256;
+
+/// The text of cell values, trimmed as it is kept.
+#[derive(Default)]
+struct Texts {
+    /// Where the trimmed text of a long shared string starts, and how long it
+    /// is, by the address and length of the string (the strings of a workbook
+    /// do not move while it is read).
+    shared: HashMap<(usize, usize), (usize, usize)>,
+}
+
+impl Texts {
+    /// The text of a cell value that is text, trimmed; none for the values
+    /// that are not. A shared string, which any number of cells may use, is
+    /// not scanned again for each of them.
+    fn of<'a>(&mut self, value: &'a calamine::DataRef<'_>) -> Option<&'a str> {
+        use calamine::DataRef;
+        match value {
+            DataRef::String(text) | DataRef::DateTimeIso(text) | DataRef::DurationIso(text) => {
+                Some(text.trim())
+            }
+            DataRef::SharedString(text) if text.len() < LONG_SHARED_STRING => Some(text.trim()),
+            DataRef::SharedString(text) => {
+                let (start, length) = *self
+                    .shared
+                    .entry((text.as_ptr() as usize, text.len()))
+                    .or_insert_with(|| {
+                        let trimmed = text.trim();
+                        (
+                            trimmed.as_ptr() as usize - text.as_ptr() as usize,
+                            trimmed.len(),
+                        )
+                    });
+                Some(&text[start..start + length])
+            }
+            _ => None,
         }
-        DataRef::SharedString(text) => Some(text.trim()),
-        _ => None,
+    }
+}
+
+/// The bytes of text a cell value is kept as: its trimmed `text`, or for an
+/// error the text it is made into.
+fn kept_bytes(value: &calamine::DataRef<'_>, text: Option<&str>) -> usize {
+    match (value, text) {
+        (_, Some(text)) => text.len(),
+        (calamine::DataRef::Error(error), None) => format!("#{error:?}").len(),
+        _ => 0,
+    }
+}
+
+/// The cell a value is kept as, given its trimmed `text` when it has some:
+/// the same as [`data_cell`] makes of it, without a copy of the untrimmed
+/// text.
+fn cell_of(value: &calamine::DataRef<'_>, text: Option<&str>) -> Cell {
+    match text {
+        Some(text) => Cell::Text(text.to_owned()),
+        None => data_cell(&Data::from(value.clone())),
     }
 }
 
@@ -606,23 +657,24 @@ fn tabulate_unordered<RS: Read + std::io::Seek>(
     let mut sheet: BTreeMap<u32, BTreeMap<u32, Cell>> = BTreeMap::new();
     let mut held = 0u64;
     let mut refused = None;
+    let mut texts = Texts::default();
     while let Some(cell) = reader.next_cell().map_err(xlsx_error)? {
         options.ensure_running()?;
         if refused.is_some() || matches!(cell.get_value(), calamine::DataRef::Empty) {
             continue;
         }
         let (row, column) = cell.get_position();
-        let text = text_of(cell.get_value());
+        let text = texts.of(cell.get_value());
         let cell = if text.is_some_and(str::is_empty) {
             Cell::Empty
         } else if u64::from(column) >= options.max_columns {
             Cell::Bool(true)
-        } else if let Err(error) = text.map_or(Ok(()), |text| tabulator.charge(text.len())) {
+        } else if let Err(error) = tabulator.charge(kept_bytes(cell.get_value(), text)) {
             refused = Some(error);
             sheet = BTreeMap::new();
             continue;
         } else {
-            data_cell(&Data::from(cell.get_value().clone()))
+            cell_of(cell.get_value(), text)
         };
         match sheet.get_mut(&row).and_then(|cells| cells.get_mut(&column)) {
             Some(kept) => *kept = cell,
