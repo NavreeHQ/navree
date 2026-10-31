@@ -5,8 +5,3 @@
 id = "RUSTSEC-2026-0258"
 ignoreUntil = 2027-01-31
 reason = "h2 0.3.27 is the last 0.3.x and actix-http 3.20 still requires it (h2 0.4 is only in actix/actix-web#4321). Not reachable here: the app binds plain HTTP/1.1 without TLS, so the HTTP/2 code never runs."
-
-[[IgnoredVulns]]
-id = "GHSA-qwgh-2vcv-g2f7"
-ignoreUntil = 2027-01-31
-reason = "block-buffer 0.10.4 via digest 0.10 and sha2 0.10, which sqlx-core 0.9.0 (the latest sqlx) uses for Postgres SCRAM authentication; the fix is only in block-buffer 0.12 (digest 0.11). Not reachable: the cursor is corrupted only when the SHA-256 compression callback panics and the panic is caught with the hasher reused, and SHA-256 compression does not panic."

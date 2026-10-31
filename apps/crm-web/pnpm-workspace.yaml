@@ -2,3 +2,11 @@ allowBuilds:
   sharp: false
   unrs-resolver: false
   msw: false
+
+# minimatch before 11.0.1 is open to a denial of service from a crafted pattern
+# (GHSA-g3hv-75wg-m249). typescript-estree 8.72 (typescript-eslint) asks for
+# minimatch 10 and calls only its named `minimatch` function, which minimatch 11
+# keeps. ESLint 9 and its plugins use minimatch 3, whose default export 11 does
+# not have, so they stay (see osv-scanner.toml).
+overrides:
+  "@typescript-eslint/typescript-estree>minimatch": ^11.0.1

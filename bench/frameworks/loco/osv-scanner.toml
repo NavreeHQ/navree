@@ -16,8 +16,3 @@ reason = "crypto-bigint 0.5.5 via the same jsonwebtoken rust_crypto backend (ell
 id = "RUSTSEC-2024-0449"
 ignoreUntil = 2027-01-31
 reason = "unsafe-libyaml is unmaintained (an informational advisory). Loco reads its YAML config with serde_yaml_ng and keeps it (Loco #1883); config files are trusted input here."
-
-[[IgnoredVulns]]
-id = "GHSA-qwgh-2vcv-g2f7"
-ignoreUntil = 2027-01-31
-reason = "block-buffer 0.10.4 via digest 0.10, which Loco's RustCrypto stack (argon2 0.5, hmac 0.12, sha2 0.10, blake2 0.10, jsonwebtoken 10) and sqlx-core 0.9.0 use; the fix is only in block-buffer 0.12 (digest 0.11), which none of them have moved to. Not reachable: the cursor is corrupted only when a hash's compression callback panics and the panic is caught with the hasher reused, and these compression functions do not panic."

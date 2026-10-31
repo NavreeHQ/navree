@@ -1,7 +1,0 @@
-# Known findings in this benchmark app that have no fix yet. Reviewed
-# 2026-10-27; each entry expires so it gets looked at again.
-
-[[IgnoredVulns]]
-id = "GHSA-qwgh-2vcv-g2f7"
-ignoreUntil = 2027-01-31
-reason = "block-buffer 0.10.4 is the block buffer of digest 0.10, which sha2 0.10 (sqlx-core 0.9.0, under navree-db) still uses, at its latest release; the fix is only in block-buffer 0.12 (digest 0.11). Not reachable: the cursor is corrupted only when the compression callback panics and the panic is caught with the hasher reused, and SHA-256 compression does not panic."

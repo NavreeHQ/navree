@@ -30,6 +30,9 @@
     "typescript": "~6.0.3"
   },
   "overrides": {
-    "multer": "^2.5.0"
+    "multer": "^2.5.0",
+    "@nestjs/cli": {
+      "minimatch": "^11.0.1"
+    }
   }
 }

@@ -52,7 +52,7 @@
   "peerDependencies": {
     "@casl/ability": "^6.0.0 || ^7.0.0",
     "@casl/vue": "^2.2.0 || ^3.0.0",
-    "nuxt": "^3.13.0 || ^4.0.0",
+    "nuxt": "^4.6.3",
     "pusher-js": "^8.0.0",
     "vue": "^3.5.0",
     "vue-router": "^4.4.0 || ^5.0.0"

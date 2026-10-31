@@ -13,6 +13,15 @@ overrides:
   # listhen (nuxt dev's HTTPS certificates) asks for node-forge ^1.4.0;
   # 1.4.0 accepts forged RSA PKCS#1 v1.5 signatures (GHSA-86w9-cpqp-85rv).
   node-forge: 1.4.2
+  # Nitro's bundler tooling (archiver-utils, @vercel/nft, js-beautify) asks for
+  # glob 10 to 13, and glob and minimatch before 14 and 11 are open to a
+  # denial of service from a crafted pattern (GHSA-3g3m-2fjr-6pw4,
+  # GHSA-g3hv-75wg-m249). Their newest releases still ask for those lines.
+  # glob 14 and minimatch 11 keep the named exports they call (glob, globSync,
+  # sync, hasMagic, Minimatch, escape).
+  glob@<14: ^14.0.2
+  minimatch@>=9 <11: ^11.0.1
+  readdir-glob>minimatch: ^11.0.1
 
 patchedDependencies:
   # Nitro's bundler (@rollup/plugin-node-resolve 16.0.3) uses deepmerge 4.3.1, the

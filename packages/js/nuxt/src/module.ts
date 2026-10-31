@@ -34,7 +34,7 @@ const navreeModule: NuxtModule<NavreeModuleOptions> = defineNuxtModule<NavreeMod
   meta: {
     name: "@navree/nuxt",
     configKey: "navree",
-    compatibility: { nuxt: ">=3.13.0" },
+    compatibility: { nuxt: ">=4.6.3" },
   },
   defaults,
   setup(options, nuxt) {

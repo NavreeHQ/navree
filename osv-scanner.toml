@@ -1,8 +1,4 @@
 # Known findings in the workspace's Cargo.lock that have no fixed release
-# their dependents can use. Reviewed 2026-10-27; each entry expires so it
-# gets looked at again.
-
-[[IgnoredVulns]]
-id = "GHSA-qwgh-2vcv-g2f7"
-ignoreUntil = 2027-01-31
-reason = "block-buffer 0.10.4 is the block buffer of digest 0.10, which sha1 0.10 (p12-keystore 0.2.1), sha2 0.10 (sqlx-core 0.9.0) and crc-fast 1.10 (object_store 0.14.2) still use, all at their latest releases; the fix is only in block-buffer 0.12 (digest 0.11). Not reachable: the buffer's cursor is corrupted only when its block-compression callback panics and the caller catches the panic and reuses the hasher, and here the callbacks are the SHA-1, SHA-256 and CRC block functions, which do not panic."
+# their dependents can use. Reviewed 2026-10-31; each entry expires so it
+# gets looked at again. There are none at present. Lockfiles elsewhere in the
+# repository have their own osv-scanner.toml next to them.
