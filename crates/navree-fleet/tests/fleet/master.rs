@@ -504,15 +504,18 @@ async fn long_waits_raise_one_event_per_cooldown_across_masters() {
     assert_eq!(events[0].wait_secs, 120);
     assert_eq!(events[0].threshold_secs, 60);
 
-    // After the cooldown (15 minutes), the next one.
+    // After the cooldown (15 minutes), the next one. The masters stop first:
+    // a heartbeat that measured the wait before the jump could claim after it.
+    one.stop().await;
+    two.stop().await;
     clock.advance(Duration::from_secs(15 * 60));
+    let again = Running::start(&h).await;
     eventually("a second event", || async {
         inbox.0.lock().unwrap().len() == 2
     })
     .await;
     assert_eq!(inbox.0.lock().unwrap()[1].wait_secs, 120 + 15 * 60);
-    one.stop().await;
-    two.stop().await;
+    again.stop().await;
 }
 
 #[tokio::test]
