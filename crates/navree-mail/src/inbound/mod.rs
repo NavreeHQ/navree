@@ -54,6 +54,7 @@ pub use tokens::ReplyTokens;
 
 pub(crate) use error::map_inbound_error;
 
+use mail::blocking;
 use mailbox::{HandlerSource, MailboxRegistration};
 use sources::SesContent;
 
@@ -240,7 +241,8 @@ impl Inbound {
                 max: self.options.max_size,
             });
         }
-        let mut mail = incoming.parse_at(self.clock.now())?;
+        let received_at = self.clock.now();
+        let mut mail = blocking(move || incoming.parse_at(received_at)).await?;
         if mail.stored.is_none() {
             mail.stored = self.store(&mail).await?;
         }
@@ -411,7 +413,7 @@ impl Inbound {
             InboundError::Config("reading a stored message needs StorageModule".into())
         })?;
         let raw = storage.disk(&stored.disk)?.get(&stored.path).await?;
-        let mut mail = InboundMail::parse(raw)?;
+        let mut mail = blocking(move || InboundMail::parse(raw)).await?;
         mail.stored = Some(stored.clone());
         Ok(mail)
     }

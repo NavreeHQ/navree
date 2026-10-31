@@ -102,6 +102,26 @@ impl fmt::Debug for Attachment {
     }
 }
 
+/// Runs `parse` on Tokio's blocking pool: a message can make the parser
+/// work for a long time, and an async worker thread is not for that.
+pub(crate) async fn blocking<T, F>(parse: F) -> Result<T, InboundError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, InboundError> + Send + 'static,
+{
+    match tokio::task::spawn_blocking(parse).await {
+        Ok(result) => result,
+        // A parser that panics on this message: the message is the problem.
+        Err(error) if error.is_panic() => {
+            tracing::warn!(target: "navree::mail", %error, "parsing an inbound message panicked");
+            Err(InboundError::Unparseable(
+                "the parser failed on the message".to_owned(),
+            ))
+        }
+        Err(_) => Err(InboundError::Config("the app is shutting down".to_owned())),
+    }
+}
+
 /// The SMTP envelope as the provider reports it: who the mail server
 /// accepted the message from and for. Recipients here include `Bcc` and
 /// forwarding addresses that the headers never show.
@@ -719,5 +739,13 @@ mod tests {
         assert_eq!(ada.to_string(), "Ada <Ada@Example.com>");
         assert_eq!(ada.normalized(), "ada@example.com");
         assert_eq!(Address::new("x@y.test").to_string(), "x@y.test");
+    }
+
+    #[tokio::test]
+    async fn a_parser_that_panics_leaves_an_unparseable_message() {
+        let result = blocking(|| -> Result<(), InboundError> { panic!("the parser failed") }).await;
+        assert!(matches!(result, Err(InboundError::Unparseable(_))));
+        let parsed = blocking(|| Ok(7)).await;
+        assert_eq!(parsed.unwrap(), 7);
     }
 }

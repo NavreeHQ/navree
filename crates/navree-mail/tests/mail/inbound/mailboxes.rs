@@ -483,3 +483,76 @@ fn stored_mail_serializes() {
     );
     let _: fn(&Inbound) = |_| {};
 }
+
+/// Records whether a task spawned before the message arrived has run by
+/// the time the mailbox gets the message.
+struct Watch {
+    other_ran: Arc<std::sync::atomic::AtomicBool>,
+    saw: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl Module for Watch {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let (other_ran, saw) = (self.other_ran.clone(), self.saw.clone());
+        m.mailbox(
+            "watch@acme.test",
+            move |_mail: InboundMail, _ctx: MailboxContext| {
+                let other_ran = other_ran.load(std::sync::atomic::Ordering::SeqCst);
+                saw.store(other_ran, std::sync::atomic::Ordering::SeqCst);
+                async move { Ok(()) }
+            },
+        );
+    }
+}
+
+/// On a runtime with one thread, a task spawned before the message can
+/// only run if the parsing gave the thread up.
+#[tokio::test(flavor = "current_thread")]
+async fn a_received_message_is_parsed_off_the_async_thread() {
+    let other_ran = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let saw = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mail = inbound_app(&[], |b| {
+        b.module(Watch {
+            other_ran: other_ran.clone(),
+            saw: saw.clone(),
+        })
+    })
+    .await;
+    let inbound = mail.inbound().await;
+
+    let flag = other_ran.clone();
+    let other = tokio::spawn(async move { flag.store(true, std::sync::atomic::Ordering::SeqCst) });
+    let received = inbound.receive(reply("watch@acme.test")).await.unwrap();
+    other.await.unwrap();
+
+    assert_eq!(received.status, InboundStatus::Handled);
+    assert!(
+        saw.load(std::sync::atomic::Ordering::SeqCst),
+        "the message was parsed on the async thread"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_stored_message_is_read_back_off_the_async_thread() {
+    let mail = inbound_app(&[], |b| b).await;
+    let inbound = mail.inbound().await;
+    let disk = mail.app.get::<Storage>().await.disk("mail").unwrap();
+    disk.put("one.eml", fixture("reply.eml")).await.unwrap();
+    let stored = StoredMail {
+        disk: "mail".into(),
+        path: "one.eml".into(),
+    };
+
+    let other_ran = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let flag = other_ran.clone();
+    let other = tokio::spawn(async move { flag.store(true, std::sync::atomic::Ordering::SeqCst) });
+    let read = inbound.read(&stored).await.unwrap();
+    let ran_during_the_read = other_ran.load(std::sync::atomic::Ordering::SeqCst);
+    other.await.unwrap();
+
+    assert_eq!(read.stored, Some(stored));
+    assert!(
+        ran_during_the_read,
+        "the message was parsed on the async thread"
+    );
+}

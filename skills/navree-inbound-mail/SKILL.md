@@ -73,7 +73,11 @@ let ticket = ctx.verified_uuid("token")?;
 `subject`, `date`, `text`, `html`, `headers`, `attachments`, `size`,
 `fingerprint`, `stored`, `received_at`; `header(name)`, `header_all(name)`,
 `raw()`, `reply_text()`, `is_auto_reply()`. Forwarded messages:
-`attachment.is_message()`, `attachment.as_mail()?`.
+`attachment.is_message()`, `attachment.as_mail()?`. `Inbound::receive` and
+`Inbound::read` parse on the blocking pool (a panicking parser is
+`Unparseable`, a 400); `InboundMail::parse`, `Incoming::parse` and
+`as_mail` are sync and parse on the caller's thread, so wrap them in
+`spawn_blocking` in async code when the bytes are untrusted.
 
 ## Microsoft 365 and Gmail mailboxes
 

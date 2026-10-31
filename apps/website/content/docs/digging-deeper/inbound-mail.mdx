@@ -280,6 +280,8 @@ The file is written before the mailbox runs, so a message whose handler fails is
 
 `mail.inbound.max_size` (default 25 MiB) is the largest raw message accepted. A larger one is refused before it is parsed: `InboundError::TooLarge`, a 413 with code `mail_too_large`. The source routes accept request bodies up to twice the limit, since providers that post JSON or forms encode the message in base64.
 
+`Inbound::receive` and `Inbound::read` parse on Tokio's blocking pool, so a large or deeply nested message doesn't hold one of the app's async threads while it is read. A parser that panics on a message is `InboundError::Unparseable` (a 400), not a failed request. `InboundMail::parse`, `Incoming::parse` and `Attachment::as_mail` are plain functions that parse on the thread that calls them; in async code, call them from `tokio::task::spawn_blocking` when the bytes come from outside.
+
 ## Sources
 
 Each source is a public route under `/api/mail/inbound`, checked with its own secret and mounted only when that secret is set. Put the secrets in `.env`: `APP_MAIL__INBOUND__POSTMARK__TOKEN=...`.
