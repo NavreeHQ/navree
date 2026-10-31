@@ -9,6 +9,7 @@ use std::sync::Arc;
 use krilla::image::Image as PdfImage;
 
 use super::fonts::FontBook;
+use super::image_size::declared_pixels;
 use super::model::{
     Align, Block, Borders, Cell, Color, Direction, Image, List, ListKind, Paragraph, PdfDocument,
     Row, RunKind, Table, TextStyle, VAlign, mm_to_pt,
@@ -229,6 +230,12 @@ pub(crate) enum LayoutError {
         source: Option<String>,
         message: String,
     },
+    /// An image whose header declares more pixels than the limit.
+    ImageTooLarge {
+        source: Option<String>,
+        pixels: u64,
+        max: u64,
+    },
     /// No font at all (bundled fonts off and no font directory).
     NoFonts,
 }
@@ -261,11 +268,12 @@ pub(crate) fn lay_out(
     document: &PdfDocument,
     fonts: &FontBook,
     date: &str,
+    max_image_pixels: u64,
 ) -> Result<LaidDocument, LayoutError> {
     if fonts.is_empty() {
         return Err(LayoutError::NoFonts);
     }
-    let mut layout = Layout::new(document, fonts, date);
+    let mut layout = Layout::new(document, fonts, date, max_image_pixels);
     layout.run(document)
 }
 
@@ -278,10 +286,12 @@ struct Layout<'f> {
     lang: Option<Arc<str>>,
     fields: Fields,
     images: HashMap<(usize, usize), PdfImage>,
+    /// The most pixels an image may have.
+    max_image_pixels: u64,
 }
 
 impl<'f> Layout<'f> {
-    fn new(document: &PdfDocument, fonts: &'f FontBook, date: &str) -> Self {
+    fn new(document: &PdfDocument, fonts: &'f FontBook, date: &str, max_image_pixels: u64) -> Self {
         let default_families: Arc<[String]> = Arc::from(vec!["Noto Sans".to_owned()]);
         let defaults = TextStyle {
             font: Some(default_families.clone()),
@@ -306,6 +316,7 @@ impl<'f> Layout<'f> {
                 ..Fields::default()
             },
             images: HashMap::new(),
+            max_image_pixels,
         }
     }
 
@@ -855,6 +866,16 @@ impl<'f> Layout<'f> {
         let key = (image.bytes.as_ptr() as usize, image.bytes.len());
         if let Some(decoded) = self.images.get(&key) {
             return Ok(decoded.clone());
+        }
+        // The decoders allocate for what the header declares: count it first.
+        if let Some(pixels) = declared_pixels(&image.bytes)
+            && pixels > self.max_image_pixels
+        {
+            return Err(LayoutError::ImageTooLarge {
+                source: image.source.clone(),
+                pixels,
+                max: self.max_image_pixels,
+            });
         }
         let bytes = image.bytes.clone();
         let data: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(bytes.clone());
@@ -1687,7 +1708,7 @@ mod tests {
         for i in 0..120 {
             document = document.paragraph(format!("Paragraph number {i} of the report."));
         }
-        let laid = lay_out(&document, book(), "2026-10-27").unwrap();
+        let laid = lay_out(&document, book(), "2026-10-27", 25_000_000).unwrap();
         assert!(laid.pages.len() >= 3, "{}", laid.pages.len());
         // Nothing below the bottom margin, nothing lost.
         let bottom = laid.height - mm_to_pt(20.0);
@@ -1710,7 +1731,7 @@ mod tests {
             .paragraph("First page")
             .page_break()
             .paragraph("Second page");
-        let laid = lay_out(&document, book(), "").unwrap();
+        let laid = lay_out(&document, book(), "", 25_000_000).unwrap();
         assert_eq!(laid.pages.len(), 2);
         assert_eq!(all_text(&laid.pages[1]), "Second page");
 
@@ -1725,7 +1746,7 @@ mod tests {
             let document = document
                 .heading(2, "Findings")
                 .paragraph("The first finding.");
-            let laid = lay_out(&document, book(), "").unwrap();
+            let laid = lay_out(&document, book(), "", 25_000_000).unwrap();
             for page in &laid.pages {
                 assert_ne!(texts(page).last().map(String::as_str), Some("Findings"));
             }
@@ -1750,7 +1771,7 @@ mod tests {
         for i in 0..90 {
             table = table.row([format!("Control {i}"), "Passed".to_owned()]);
         }
-        let laid = lay_out(&PdfDocument::new().table(table), book(), "").unwrap();
+        let laid = lay_out(&PdfDocument::new().table(table), book(), "", 25_000_000).unwrap();
         assert!(laid.pages.len() >= 2, "{}", laid.pages.len());
         for page in &laid.pages {
             let texts = texts(page);
@@ -1792,7 +1813,7 @@ mod tests {
     fn a_row_taller_than_a_page_splits_between_lines() {
         let tall: String = (0..140).map(|i| format!("Line {i}\n")).collect();
         let table = Table::new().header(["Notes"]).row([tall.as_str()]);
-        let laid = lay_out(&PdfDocument::new().table(table), book(), "").unwrap();
+        let laid = lay_out(&PdfDocument::new().table(table), book(), "", 25_000_000).unwrap();
         assert!(laid.pages.len() >= 2, "{}", laid.pages.len());
         let lines: Vec<String> = laid
             .pages
@@ -1818,7 +1839,7 @@ mod tests {
         for i in 0..100 {
             document = document.paragraph(format!("Paragraph {i}"));
         }
-        let laid = lay_out(&document, book(), "").unwrap();
+        let laid = lay_out(&document, book(), "", 25_000_000).unwrap();
         let count = laid.pages.len();
         assert!(count >= 2);
         let top = mm_to_pt(20.0);
@@ -1869,6 +1890,7 @@ mod tests {
                 .paragraph("Body"),
             book(),
             "",
+            25_000_000,
         )
         .unwrap();
         let page = &laid.pages[0];
@@ -1898,7 +1920,7 @@ mod tests {
                 .header(["الضابط", "الحالة"])
                 .row(["المصادقة", "ناجح"]),
         );
-        let laid = lay_out(&document, book(), "").unwrap();
+        let laid = lay_out(&document, book(), "", 25_000_000).unwrap();
         let x_of = |text: &str| {
             laid.pages[0]
                 .draws
@@ -1919,7 +1941,7 @@ mod tests {
                 .item("Rotate the keys")
                 .item_with("Restore a backup", List::bullets().item("Database")),
         );
-        let laid = lay_out(&document, book(), "").unwrap();
+        let laid = lay_out(&document, book(), "", 25_000_000).unwrap();
         let page = &laid.pages[0];
         let find = |text: &str| {
             page.draws

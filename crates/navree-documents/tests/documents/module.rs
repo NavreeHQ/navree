@@ -41,6 +41,12 @@ impl Controller for DocumentsController {
         let status = self.clone();
         let embedded = self.clone();
         vec![
+            RouteDef::on(Method::GET, "/unreadable", || async {
+                // Bytes a client uploaded that are not a PDF.
+                let pdf = Pdf::from_bytes(&b"%PDF-1.7 and then nothing"[..])?;
+                Ok::<_, AppError>(pdf)
+            })
+            .public(),
             RouteDef::on(Method::GET, "/certificate", move || {
                 let this = download.clone();
                 async move {
@@ -182,6 +188,23 @@ async fn template_errors_are_500s_without_details() {
     // The template's file and message stay in the logs.
     assert!(
         !response.text().contains("broken.html"),
+        "{}",
+        response.text()
+    );
+}
+
+#[cfg(feature = "native")]
+#[tokio::test]
+async fn a_pdf_that_cannot_be_read_is_a_400_that_says_so() {
+    let app = app().build().await;
+    let response = app
+        .client()
+        .get("/documents/unreadable")
+        .send()
+        .await
+        .assert_error(400, None);
+    assert!(
+        response.text().contains("invalid PDF"),
         "{}",
         response.text()
     );

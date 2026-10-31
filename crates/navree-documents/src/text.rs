@@ -11,7 +11,7 @@
 //! lines that are mostly right to left are then put in reading order, run
 //! by run. Form XObjects are followed, so overlays are included.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use lopdf::Encoding;
 use lopdf::content::Content;
@@ -23,22 +23,71 @@ use crate::DocumentsError;
 const MAX_CONTENT: usize = 64 * 1024 * 1024;
 /// How deep form XObjects may nest.
 const MAX_FORM_DEPTH: usize = 8;
+/// What one font's `ToUnicode` map may inflate to (8 MiB; real ones are
+/// kilobytes).
+const MAX_TO_UNICODE: usize = 8 * 1024 * 1024;
+/// What each time a form is drawn costs besides its content, in bytes of
+/// work: looking it up, inflating it, setting it up.
+const FORM_DRAW_COST: usize = 1024;
+
+/// How much work reading the text of a PDF may take, so that a small file
+/// cannot make a call run for hours or fill the memory. Every figure is
+/// per call unless it says otherwise.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Limits {
+    /// Bytes of content decoded for one page, counting a form again every
+    /// time it is drawn, and [`FORM_DRAW_COST`] for each draw (128 MiB).
+    pub(crate) page_work: usize,
+    /// The same, over all the pages (1 GiB).
+    pub(crate) document_work: usize,
+    /// Glyphs one page may show (1,000,000).
+    pub(crate) page_glyphs: usize,
+    /// Comparisons one page may spend attaching marks to the glyphs they
+    /// sit on (50,000,000).
+    pub(crate) page_steps: usize,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            page_work: 128 * 1024 * 1024,
+            document_work: 1024 * 1024 * 1024,
+            page_glyphs: 1_000_000,
+            page_steps: 50_000_000,
+        }
+    }
+}
 
 /// The text of every page, in page order.
 pub(crate) fn page_texts(document: &Document) -> Result<Vec<String>, DocumentsError> {
+    page_texts_within(document, Limits::default())
+}
+
+/// [`page_texts`] under `limits`.
+pub(crate) fn page_texts_within(
+    document: &Document,
+    limits: Limits,
+) -> Result<Vec<String>, DocumentsError> {
     let mut texts = Vec::new();
+    let mut document_work = 0usize;
     for page_id in document.get_pages().into_values() {
         let mut walker = Walker {
             document,
             chunks: Vec::new(),
             fonts: HashMap::new(),
+            limits,
+            work: 0,
+            work_allowed: limits
+                .page_work
+                .min(limits.document_work.saturating_sub(document_work)),
         };
         let content = document
             .get_page_content_with_limit(page_id, MAX_CONTENT)
             .map_err(|e| DocumentsError::Pdf(e.to_string()))?;
         let resources = page_resources(document, page_id);
         walker.walk(&content, resources, IDENTITY, 0)?;
-        texts.push(assemble(walker.chunks));
+        document_work += walker.work;
+        texts.push(assemble(walker.chunks, limits.page_steps)?);
     }
     Ok(texts)
 }
@@ -130,6 +179,10 @@ struct Walker<'a> {
     document: &'a Document,
     chunks: Vec<Chunk>,
     fonts: HashMap<(Option<usize>, Vec<u8>), Option<FontInfo<'a>>>,
+    limits: Limits,
+    /// The work done on this page so far, and the most it may take.
+    work: usize,
+    work_allowed: usize,
 }
 
 impl<'a> Walker<'a> {
@@ -140,6 +193,7 @@ impl<'a> Walker<'a> {
         base: Matrix,
         depth: usize,
     ) -> Result<(), DocumentsError> {
+        self.charge(content.len())?;
         let content = Content::decode(content).map_err(|e| DocumentsError::Pdf(e.to_string()))?;
         let resources_key = resources.map(|r| r as *const Dictionary as usize);
         let mut ctm = base;
@@ -241,7 +295,7 @@ impl<'a> Walker<'a> {
                         &mut tm,
                         ctm,
                         &mut marks,
-                    );
+                    )?;
                 }
                 // `/ReversedChars` needs no handling: glyphs are ordered by
                 // where they are drawn, not by the order they are shown in.
@@ -267,6 +321,7 @@ impl<'a> Walker<'a> {
                     let Some(form) = self.form(resources, name) else {
                         continue;
                     };
+                    self.charge(FORM_DRAW_COST)?;
                     let matrix = form
                         .dict
                         .get(b"Matrix")
@@ -299,6 +354,20 @@ impl<'a> Walker<'a> {
         Ok(())
     }
 
+    /// Counts `amount` bytes of work, or fails when the page (or the
+    /// document) has used all it may.
+    fn charge(&mut self, amount: usize) -> Result<(), DocumentsError> {
+        self.work = self.work.saturating_add(amount);
+        if self.work > self.work_allowed {
+            return Err(DocumentsError::TooLarge(format!(
+                "a PDF page takes more work to read than allowed: more than {} MiB of content, \
+                 counting every time a form is drawn",
+                self.limits.page_work / (1024 * 1024)
+            )));
+        }
+        Ok(())
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn show(
         &mut self,
@@ -309,17 +378,20 @@ impl<'a> Walker<'a> {
         tm: &mut Matrix,
         ctm: Matrix,
         marks: &mut [Mark],
-    ) {
+    ) -> Result<(), DocumentsError> {
         let Some(font_name) = state.font.clone() else {
-            return;
+            return Ok(());
         };
         let key = (resources_key, font_name.clone());
         if !self.fonts.contains_key(&key) {
-            let info = resources.and_then(|r| self.font_info(r, &font_name));
+            let info = match resources {
+                Some(resources) => self.font_info(resources, &font_name)?,
+                None => None,
+            };
             self.fonts.insert(key.clone(), info);
         }
         let Some(Some(font)) = self.fonts.get(&key) else {
-            return;
+            return Ok(());
         };
         let device = multiply(*tm, ctm);
         let size = state.size * (device[0] * device[3] - device[1] * device[2]).abs().sqrt();
@@ -358,6 +430,9 @@ impl<'a> Walker<'a> {
                                     chunk.x1 = chunk.x1.max(x1);
                                 }
                                 None => {
+                                    if self.chunks.len() >= self.limits.page_glyphs {
+                                        return Err(too_many_glyphs(self.limits.page_glyphs));
+                                    }
                                     mark.chunk = Some(self.chunks.len());
                                     self.chunks.push(Chunk {
                                         x0,
@@ -379,6 +454,9 @@ impl<'a> Walker<'a> {
                         if text.is_empty() || text == "\u{fffd}" {
                             continue;
                         }
+                        if self.chunks.len() >= self.limits.page_glyphs {
+                            return Err(too_many_glyphs(self.limits.page_glyphs));
+                        }
                         self.chunks.push(Chunk {
                             x0,
                             x1,
@@ -398,6 +476,7 @@ impl<'a> Walker<'a> {
                 }
             }
         }
+        Ok(())
     }
 
     fn properties(
@@ -430,16 +509,35 @@ impl<'a> Walker<'a> {
         (subtype == b"Form").then_some(stream)
     }
 
-    fn font_info(&self, resources: &'a Dictionary, name: &[u8]) -> Option<FontInfo<'a>> {
+    fn font_info(
+        &self,
+        resources: &'a Dictionary,
+        name: &[u8],
+    ) -> Result<Option<FontInfo<'a>>, DocumentsError> {
         let doc = self.document;
-        let fonts = resources
+        let font = resources
             .get(b"Font")
             .ok()
             .and_then(|o| doc.dereference(o).ok())
-            .and_then(|(_, o)| o.as_dict().ok())?;
-        let (_, font) = doc.dereference(fonts.get(name).ok()?).ok()?;
-        let font = font.as_dict().ok()?;
-        let encoding = font.get_font_encoding(doc).ok();
+            .and_then(|(_, o)| o.as_dict().ok())
+            .and_then(|fonts| fonts.get(name).ok())
+            .and_then(|o| doc.dereference(o).ok())
+            .and_then(|(_, o)| o.as_dict().ok());
+        let Some(font) = font else {
+            return Ok(None);
+        };
+        let encoding = match font.get_font_encoding_with_limit(doc, MAX_TO_UNICODE) {
+            Ok(encoding) => Some(encoding),
+            Err(lopdf::Error::Decompress(lopdf::DecompressError::MemoryLimitExceeded {
+                ..
+            })) => {
+                return Err(DocumentsError::TooLarge(format!(
+                    "a font's ToUnicode map inflates to more than {} MiB",
+                    MAX_TO_UNICODE / (1024 * 1024)
+                )));
+            }
+            Err(_) => None,
+        };
         let composite = font
             .get(b"Subtype")
             .and_then(Object::as_name)
@@ -495,13 +593,13 @@ impl<'a> Walker<'a> {
                 None => standard = true,
             }
         }
-        Some(FontInfo {
+        Ok(Some(FontInfo {
             encoding,
             code_len: if composite { 2 } else { 1 },
             widths,
             default_width,
             standard,
-        })
+        }))
     }
 }
 
@@ -633,8 +731,33 @@ fn classify(text: &str) -> Class {
     }
 }
 
-/// The glyphs of a page as lines of text.
-fn assemble(mut chunks: Vec<Chunk>) -> String {
+fn too_many_glyphs(limit: usize) -> DocumentsError {
+    DocumentsError::TooLarge(format!(
+        "a PDF page shows more than {limit} glyphs, more than can be put in order"
+    ))
+}
+
+/// What is left of a page's budget of comparisons.
+struct Steps(usize);
+
+impl Steps {
+    /// Spends `count` comparisons, or fails when the page has used them
+    /// all.
+    fn spend(&mut self, count: usize) -> Result<(), DocumentsError> {
+        self.0 = self.0.checked_sub(count).ok_or_else(|| {
+            DocumentsError::TooLarge(
+                "a PDF page has too many marks (accents, dots, vowel signs) to put on the letters                  they belong to"
+                    .into(),
+            )
+        })?;
+        Ok(())
+    }
+}
+
+/// The glyphs of a page as lines of text; `steps` is the page's budget of
+/// comparisons.
+fn assemble(mut chunks: Vec<Chunk>, steps: usize) -> Result<String, DocumentsError> {
+    let mut steps = Steps(steps);
     // Horizontal text first, top to bottom; then each other direction.
     chunks.sort_by(|a, b| {
         (a.angle != 0)
@@ -658,7 +781,7 @@ fn assemble(mut chunks: Vec<Chunk>) -> String {
     let mut out = Vec::with_capacity(lines.len());
     for (_, _, _, mut line) in lines {
         line.sort_by(|a, b| a.x0.total_cmp(&b.x0));
-        let line = attach_marks(line);
+        let line = attach_marks(line, &mut steps)?;
         // Visual order, with a space where two glyphs do not touch.
         let mut visual: Vec<String> = Vec::with_capacity(line.len() * 2);
         let mut previous: Option<&Chunk> = None;
@@ -676,28 +799,103 @@ fn assemble(mut chunks: Vec<Chunk>) -> String {
         }
         out.push(reading_order(visual).concat().trim().to_owned());
     }
-    out.join("\n")
+    Ok(out.join("\n"))
+}
+
+/// Which glyphs of a line repeat another one: `duplicate[i]` is true when
+/// some other glyph with the same text is wider than glyph `i` (or as wide,
+/// and earlier) and spans its centre.
+///
+/// Within the glyphs that share a text, they are taken from the widest down
+/// (earlier first among equals): each is a duplicate when the centre falls
+/// in the union of the ones taken before it, kept as disjoint intervals.
+/// That is the same answer as comparing every pair, in time proportional to
+/// the number of glyphs times its logarithm.
+fn duplicates(line: &[Chunk], steps: &mut Steps) -> Result<Vec<bool>, DocumentsError> {
+    let mut duplicate = vec![false; line.len()];
+    let mut by_text: HashMap<&str, Vec<usize>> = HashMap::new();
+    for (index, chunk) in line.iter().enumerate() {
+        by_text.entry(chunk.text.as_str()).or_default().push(index);
+    }
+    for group in by_text.into_values() {
+        if group.len() < 2 {
+            continue;
+        }
+        let ordered = group.iter().all(|&i| {
+            let chunk = &line[i];
+            chunk.x0.is_finite() && chunk.x1.is_finite()
+        });
+        if !ordered {
+            // Coordinates that are not numbers have no order to sweep in:
+            // compare each pair, as long as the page's budget lasts.
+            for &i in &group {
+                steps.spend(group.len())?;
+                let a = &line[i];
+                let centre = (a.x0 + a.x1) / 2.0;
+                duplicate[i] = group.iter().any(|&j| {
+                    let b = &line[j];
+                    j != i
+                        && b.x0 <= centre
+                        && centre <= b.x1
+                        && ((b.x1 - b.x0) > (a.x1 - a.x0)
+                            || ((b.x1 - b.x0) == (a.x1 - a.x0) && j < i))
+                });
+            }
+            continue;
+        }
+        let width = |i: usize| line[i].x1 - line[i].x0 + 0.0;
+        let mut ranked = group;
+        ranked.sort_by(|&a, &b| width(b).total_cmp(&width(a)).then(a.cmp(&b)));
+        // Disjoint closed intervals, by start: start -> end.
+        let mut covered: BTreeMap<i32, (f32, f32)> = BTreeMap::new();
+        for i in ranked {
+            let chunk = &line[i];
+            let (start, end) = (chunk.x0 + 0.0, chunk.x1 + 0.0);
+            let centre = (chunk.x0 + chunk.x1) / 2.0 + 0.0;
+            duplicate[i] = covered
+                .range(..=order_key(centre))
+                .next_back()
+                .is_some_and(|(_, &(_, to))| centre <= to);
+            // Add [start, end], merging what it touches.
+            let (mut from, mut to) = (start, end);
+            if let Some((&key, &(before, until))) = covered.range(..=order_key(from)).next_back()
+                && until >= from
+            {
+                from = before;
+                to = to.max(until);
+                covered.remove(&key);
+            }
+            let absorbed: Vec<i32> = covered
+                .range(order_key(from)..=order_key(to))
+                .map(|(&key, _)| key)
+                .collect();
+            for key in absorbed {
+                if let Some((_, until)) = covered.remove(&key) {
+                    to = to.max(until);
+                }
+            }
+            covered.insert(order_key(from), (from, to));
+        }
+    }
+    Ok(duplicate)
+}
+
+/// A key that sorts finite `f32`s in numeric order (`-0.0` and `0.0` as
+/// one).
+fn order_key(value: f32) -> i32 {
+    let bits = (value + 0.0).to_bits() as i32;
+    bits ^ (((bits >> 31) as u32) >> 1) as i32
 }
 
 /// Zero-width glyphs (marks: dots, vowel signs, accents drawn apart) of a
 /// line in visual order, merged into the glyph they sit on: dropped when
 /// they repeat its text (fonts that draw a letter's dots as a separate
 /// glyph map both to the letter), appended to it otherwise.
-fn attach_marks(line: Vec<Chunk>) -> Vec<Chunk> {
+fn attach_marks(line: Vec<Chunk>, steps: &mut Steps) -> Result<Vec<Chunk>, DocumentsError> {
     let is_mark = |c: &Chunk| (c.x1 - c.x0) < 0.05 * c.size.max(1.0);
     // A glyph centered inside another glyph with the same text is the same
     // character drawn twice (a letter's dots, or fake bold): keep the wider.
-    let mut duplicate = vec![false; line.len()];
-    for (i, a) in line.iter().enumerate() {
-        let centre = (a.x0 + a.x1) / 2.0;
-        duplicate[i] = line.iter().enumerate().any(|(j, b)| {
-            j != i
-                && b.text == a.text
-                && b.x0 <= centre
-                && centre <= b.x1
-                && ((b.x1 - b.x0) > (a.x1 - a.x0) || ((b.x1 - b.x0) == (a.x1 - a.x0) && j < i))
-        });
-    }
+    let duplicate = duplicates(&line, steps)?;
     let line: Vec<Chunk> = line
         .into_iter()
         .zip(duplicate)
@@ -714,6 +912,7 @@ fn attach_marks(line: Vec<Chunk>) -> Vec<Chunk> {
         }
     }
     for mark in marks {
+        steps.spend(bases.len() + 1)?;
         let tolerance = 0.1 * mark.size.max(1.0);
         let base = bases
             .iter_mut()
@@ -732,7 +931,7 @@ fn attach_marks(line: Vec<Chunk>) -> Vec<Chunk> {
             }
         }
     }
-    bases
+    Ok(bases)
 }
 
 /// Strings of a line in visual (left-to-right) order, each already in
@@ -851,6 +1050,161 @@ mod tests {
         assert_eq!(classify("٤٢"), Class::Number);
         assert_eq!(classify(" - "), Class::Neutral);
         assert_eq!(classify("अनन्या"), Class::Ltr);
+    }
+
+    fn document_of(lines: &[&str]) -> Document {
+        Document::load_mem(crate::Pdf::from_lines(lines).as_ref()).unwrap()
+    }
+
+    #[test]
+    fn a_page_with_too_many_glyphs_is_refused() {
+        let document = document_of(&["Hello, world"]);
+        let tight = Limits {
+            page_glyphs: 11,
+            ..Limits::default()
+        };
+        let error = page_texts_within(&document, tight).unwrap_err();
+        assert!(matches!(error, DocumentsError::TooLarge(_)), "{error:?}");
+        let fits = Limits {
+            page_glyphs: 12,
+            ..Limits::default()
+        };
+        assert_eq!(
+            page_texts_within(&document, fits).unwrap(),
+            ["Hello, world"]
+        );
+    }
+
+    #[test]
+    fn a_page_that_takes_too_much_work_is_refused() {
+        let document = document_of(&["Hello, world"]);
+        let page_length = document
+            .get_page_content(*document.get_pages().values().next().unwrap())
+            .len();
+        let tight = Limits {
+            page_work: page_length - 1,
+            ..Limits::default()
+        };
+        let error = page_texts_within(&document, tight).unwrap_err();
+        assert!(matches!(error, DocumentsError::TooLarge(_)), "{error:?}");
+        let fits = Limits {
+            page_work: page_length,
+            ..Limits::default()
+        };
+        assert_eq!(
+            page_texts_within(&document, fits).unwrap(),
+            ["Hello, world"]
+        );
+        // The pages together are held to their own limit.
+        let two = document_of(&["one"]);
+        let both = Limits {
+            document_work: 1,
+            ..Limits::default()
+        };
+        assert!(page_texts_within(&two, both).is_err());
+    }
+
+    /// `count` zero-width glyphs, 12 points apart, on one baseline: marks
+    /// that sit on nothing, so each is kept as a glyph of its own.
+    fn loose_marks(count: usize) -> Vec<Chunk> {
+        (0..count)
+            .map(|i| Chunk {
+                x0: i as f32 * 12.0,
+                x1: i as f32 * 12.0,
+                y: 700.0,
+                angle: 0,
+                size: 12.0,
+                text: "a".into(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn marks_are_attached_within_a_budget_of_comparisons() {
+        // 200 marks, each compared with the ones kept before it and itself:
+        // 1 + 2 + ... + 200 = 20,100 comparisons.
+        let text = assemble(loose_marks(200), 25_000).unwrap();
+        assert_eq!(text.matches('a').count(), 200);
+        let error = assemble(loose_marks(200), 15_000).unwrap_err();
+        assert!(matches!(error, DocumentsError::TooLarge(_)), "{error:?}");
+    }
+
+    /// What `duplicates` computes, by comparing every glyph with every other.
+    fn duplicates_by_comparison(line: &[Chunk]) -> Vec<bool> {
+        line.iter()
+            .enumerate()
+            .map(|(i, a)| {
+                let centre = (a.x0 + a.x1) / 2.0;
+                line.iter().enumerate().any(|(j, b)| {
+                    j != i
+                        && b.text == a.text
+                        && b.x0 <= centre
+                        && centre <= b.x1
+                        && ((b.x1 - b.x0) > (a.x1 - a.x0)
+                            || ((b.x1 - b.x0) == (a.x1 - a.x0) && j < i))
+                })
+            })
+            .collect()
+    }
+
+    #[test]
+    fn duplicates_are_the_same_as_comparing_every_pair() {
+        // A small generator of lines with many ties, touching ends,
+        // zero widths and negative zeros: three texts, positions on a grid.
+        let mut state = 0x2545_f491_4f6c_dd1du64;
+        let mut next = move |bound: u64| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state % bound
+        };
+        for round in 0..400 {
+            let count = 1 + next(40) as usize;
+            let line: Vec<Chunk> = (0..count)
+                .map(|_| {
+                    let x0 = next(30) as f32 * 0.5 - 3.0;
+                    let width = [0.0, 0.5, 1.0, 2.5, 6.0][next(5) as usize];
+                    Chunk {
+                        x0,
+                        x1: x0 + width,
+                        y: 0.0,
+                        angle: 0,
+                        size: 10.0,
+                        text: ["a", "b", "c"][next(if round % 2 == 0 { 3 } else { 1 }) as usize]
+                            .into(),
+                    }
+                })
+                .collect();
+            let mut steps = Steps(usize::MAX);
+            assert_eq!(
+                duplicates(&line, &mut steps).unwrap(),
+                duplicates_by_comparison(&line),
+                "round {round}: {line:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn glyphs_without_coordinates_are_still_compared() {
+        let at = |x0: f32, x1: f32| Chunk {
+            x0,
+            x1,
+            y: 0.0,
+            angle: 0,
+            size: 10.0,
+            text: "a".into(),
+        };
+        let line = vec![
+            at(0.0, 4.0),
+            at(1.0, 3.0),
+            at(f32::NAN, 2.0),
+            at(f32::NEG_INFINITY, f32::INFINITY),
+        ];
+        let mut steps = Steps(usize::MAX);
+        assert_eq!(
+            duplicates(&line, &mut steps).unwrap(),
+            duplicates_by_comparison(&line)
+        );
     }
 
     #[test]

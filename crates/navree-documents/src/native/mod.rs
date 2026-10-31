@@ -28,6 +28,7 @@ mod convert;
 mod css;
 mod fonts;
 mod html;
+mod image_size;
 mod layout;
 mod model;
 mod tags;
@@ -335,7 +336,12 @@ impl NativeEngine {
     }
 
     fn write(&self, document: &PdfDocument) -> Result<Pdf, DocumentsError> {
-        write_document(document, &self.fonts(), self.clock.as_ref())
+        write_document(
+            document,
+            &self.fonts(),
+            self.clock.as_ref(),
+            self.options.max_image_pixels,
+        )
     }
 }
 
@@ -358,42 +364,62 @@ impl PdfDocument {
     /// [`Documents::render_document`](crate::Documents::render_document)
     /// use the configured fonts and the app's clock instead.
     pub fn build(&self) -> Result<Pdf, DocumentsError> {
-        write_document(self, &FontBook::bundled(), &SystemClock)
+        write_document(
+            self,
+            &FontBook::bundled(),
+            &SystemClock,
+            NativeOptions::default().max_image_pixels,
+        )
     }
 }
 
-/// Lays out and writes `document`.
+/// Lays out and writes `document`; no image may have more than
+/// `max_image_pixels`.
 fn write_document(
     document: &PdfDocument,
     fonts: &FontBook,
     clock: &dyn Clock,
+    max_image_pixels: u64,
 ) -> Result<Pdf, DocumentsError> {
     let now = clock.now();
     let date = now.format("%Y-%m-%d").to_string();
-    let laid = layout::lay_out(document, fonts, &date).map_err(|error| match error {
-        LayoutError::Image {
-            source: Some(file),
-            message,
-        } => DocumentsError::Template {
-            file,
-            line: None,
-            column: None,
-            message: format!("the image does not decode: {message}"),
-        },
-        LayoutError::Image {
-            source: None,
-            message,
-        } => DocumentsError::Engine {
-            engine: ENGINE,
-            message: format!("an image does not decode: {message}"),
-        },
-        LayoutError::NoFonts => DocumentsError::EngineUnavailable {
-            engine: ENGINE,
-            reason: "no fonts: documents.native.bundled_fonts is off and no font directory \
+    let laid =
+        layout::lay_out(document, fonts, &date, max_image_pixels.max(1)).map_err(|error| {
+            match error {
+                LayoutError::Image {
+                    source: Some(file),
+                    message,
+                } => DocumentsError::Template {
+                    file,
+                    line: None,
+                    column: None,
+                    message: format!("the image does not decode: {message}"),
+                },
+                LayoutError::Image {
+                    source: None,
+                    message,
+                } => DocumentsError::Engine {
+                    engine: ENGINE,
+                    message: format!("an image does not decode: {message}"),
+                },
+                LayoutError::ImageTooLarge {
+                    source,
+                    pixels,
+                    max,
+                } => DocumentsError::TooLarge(format!(
+                    "{}an image has {pixels} pixels, more than the limit of {max} pixels \
+             (documents.native.max_image_pixels)",
+                    source.map_or_else(String::new, |file| format!("{file}: "))
+                )),
+                LayoutError::NoFonts => DocumentsError::EngineUnavailable {
+                    engine: ENGINE,
+                    reason:
+                        "no fonts: documents.native.bundled_fonts is off and no font directory \
                      has fonts"
-                .into(),
-        },
-    })?;
+                            .into(),
+                },
+            }
+        })?;
     let info = write::Info {
         title: document.title.clone(),
         author: document.author.clone(),

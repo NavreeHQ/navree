@@ -627,6 +627,122 @@ async fn images_that_do_not_decode_name_their_file() {
     }
 }
 
+/// A grayscale PNG of `width` by `height` pixels, all black: a few
+/// kilobytes whatever the size.
+fn png(width: u32, height: u32) -> Vec<u8> {
+    fn crc32(bytes: &[u8]) -> u32 {
+        let mut crc = !0u32;
+        for byte in bytes {
+            crc ^= u32::from(*byte);
+            for _ in 0..8 {
+                crc = if crc & 1 == 1 {
+                    (crc >> 1) ^ 0xEDB8_8320
+                } else {
+                    crc >> 1
+                };
+            }
+        }
+        !crc
+    }
+    fn chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
+        out.extend((data.len() as u32).to_be_bytes());
+        let start = out.len();
+        out.extend(kind);
+        out.extend(data);
+        let crc = crc32(&out[start..]);
+        out.extend(crc.to_be_bytes());
+    }
+    let mut header = Vec::new();
+    header.extend(width.to_be_bytes());
+    header.extend(height.to_be_bytes());
+    header.extend([8, 0, 0, 0, 0]);
+    // Each row is a filter byte (none) and one byte per pixel.
+    let mut rows = lopdf::Stream::new(
+        lopdf::Dictionary::new(),
+        vec![0u8; (width as usize + 1) * height as usize],
+    );
+    rows.compress().unwrap();
+    let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
+    chunk(&mut out, b"IHDR", &header);
+    chunk(&mut out, b"IDAT", &rows.content);
+    chunk(&mut out, b"IEND", &[]);
+    out
+}
+
+/// A GIF whose screen is 1 by 1 and whose first frame is `width` by
+/// `height`; the frame has no pixel data.
+fn gif_with_a_large_frame(width: u16, height: u16) -> Vec<u8> {
+    let mut out = b"GIF89a".to_vec();
+    out.extend([1, 0, 1, 0, 0, 0, 0]);
+    out.push(0x2C);
+    out.extend([0, 0, 0, 0]);
+    out.extend(width.to_le_bytes());
+    out.extend(height.to_le_bytes());
+    out.extend([0, 2, 0, 0x3B]);
+    out
+}
+
+#[test]
+fn an_image_with_more_pixels_than_the_limit_is_refused_before_it_is_decoded() {
+    // 6000 by 5000 is 30 million pixels, over the 25 million by default;
+    // the file is a few kilobytes, and decoding it would take 30 MB or more.
+    let big = png(6000, 5000);
+    assert!(big.len() < 128 * 1024, "{} bytes", big.len());
+    let error = PdfDocument::new()
+        .image(Image::new(big))
+        .build()
+        .unwrap_err();
+    assert!(matches!(error, DocumentsError::TooLarge(_)), "{error:?}");
+    assert_eq!(error.status(), http::StatusCode::PAYLOAD_TOO_LARGE);
+    let message = error.to_string();
+    assert!(
+        message.contains("30000000") && message.contains("25000000"),
+        "{message}"
+    );
+    assert!(message.contains("max_image_pixels"), "{message}");
+}
+
+#[test]
+fn a_gif_frame_larger_than_its_screen_counts_by_the_frame() {
+    // The screen says 1 by 1; the frame says 6000 by 5000.
+    let error = PdfDocument::new()
+        .image(Image::new(gif_with_a_large_frame(6000, 5000)))
+        .build()
+        .unwrap_err();
+    assert!(matches!(error, DocumentsError::TooLarge(_)), "{error:?}");
+}
+
+#[tokio::test]
+async fn the_pixel_limit_is_configured_with_the_engine_and_names_the_file() {
+    let options = navree_documents::NativeOptions {
+        max_image_pixels: 10_000,
+        ..navree_documents::NativeOptions::default()
+    };
+    let templates = Templates::from_files([
+        (
+            "page.html",
+            b"<p>Logo</p><img src=\"images/logo.png\">".to_vec(),
+        ),
+        ("images/logo.png", png(100, 101)),
+        (
+            "small.html",
+            b"<p>Logo</p><img src=\"images/small.png\">".to_vec(),
+        ),
+        ("images/small.png", png(100, 100)),
+    ]);
+    let engine = NativeEngine::with_options(templates, options);
+    match engine.render(&Render::template("page")).await {
+        Err(DocumentsError::TooLarge(message)) => {
+            assert!(message.contains("images/logo.png"), "{message}");
+            assert!(message.contains("10100"), "{message}");
+        }
+        other => panic!("{other:?}"),
+    }
+    // Exactly at the limit is within it.
+    let pdf = engine.render(&Render::template("small")).await.unwrap();
+    assert!(pdf.text().unwrap().contains("Logo"));
+}
+
 #[tokio::test]
 async fn data_that_is_not_json_fails_before_rendering() {
     let mut map = std::collections::BTreeMap::new();

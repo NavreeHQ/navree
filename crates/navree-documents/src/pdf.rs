@@ -6,7 +6,9 @@ use std::fmt;
 use bytes::Bytes;
 use http::header::{CONTENT_DISPOSITION, HeaderValue};
 use lopdf::content::{Content, Operation};
-use lopdf::{Dictionary, Document, Object, ObjectId, Stream, StringFormat, dictionary};
+use lopdf::{
+    Dictionary, Document, LoadOptions, Object, ObjectId, Stream, StringFormat, dictionary,
+};
 use navree_http::{IntoResponse, Response};
 
 use crate::DocumentsError;
@@ -17,6 +19,12 @@ use crate::text::decode_text_string;
 /// Decompressed content allowed per page while reading a PDF (64 MiB), so
 /// a small file cannot inflate without bound.
 const MAX_PAGE_CONTENT: usize = 64 * 1024 * 1024;
+
+/// What one object stream or cross-reference stream may inflate to while a
+/// PDF loads (64 MiB). The objects inside are parsed as the stream is read,
+/// before any page is looked at. A stream over the limit is skipped, with
+/// the objects it holds, as a damaged one is.
+const MAX_LOADED_STREAM: usize = 64 * 1024 * 1024;
 
 /// A PDF document: the bytes an engine rendered, or any PDF loaded with
 /// [`Pdf::from_bytes`].
@@ -412,7 +420,11 @@ impl Pdf {
     }
 
     fn load(&self) -> Result<Document, DocumentsError> {
-        Document::load_mem(&self.0).map_err(pdf_error)
+        let options = LoadOptions {
+            max_decompressed_size: Some(MAX_LOADED_STREAM),
+            ..LoadOptions::default()
+        };
+        Document::load_mem_with_options(&self.0, options).map_err(pdf_error)
     }
 }
 
@@ -476,7 +488,10 @@ fn save(mut document: Document) -> Result<Pdf, DocumentsError> {
     let mut out = Vec::new();
     document
         .save_to(&mut out)
-        .map_err(|error| DocumentsError::Pdf(error.to_string()))?;
+        .map_err(|error| DocumentsError::Engine {
+            engine: "pdf",
+            message: format!("the document could not be written: {error}"),
+        })?;
     Ok(Pdf(Bytes::from(out)))
 }
 

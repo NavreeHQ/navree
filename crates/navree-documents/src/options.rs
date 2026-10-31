@@ -21,6 +21,7 @@ use crate::print::PrintOptions;
 /// bundled_fonts = true      # Noto Sans, Serif and Mono; Noto Sans Arabic, Hebrew and Devanagari
 /// font_dirs = ["resources/fonts"]
 /// timeout_secs = 60
+/// max_image_pixels = 25000000   # the most pixels one image may have (width x height)
 ///
 /// [documents.native.print]
 /// paper = "a4"
@@ -88,6 +89,13 @@ pub struct NativeOptions {
     pub font_dirs: Vec<PathBuf>,
     /// Time limit for one render, in seconds (default 60).
     pub timeout_secs: u64,
+    /// The most pixels (width times height) one image in a document may
+    /// have (default 25,000,000: 5000 by 5000, or an A3 page at 600 dots
+    /// per inch). A larger image is [`DocumentsError::TooLarge`] before it
+    /// is decoded. At least 1.
+    ///
+    /// [`DocumentsError::TooLarge`]: crate::DocumentsError::TooLarge
+    pub max_image_pixels: u64,
     /// The page settings renders use unless they bring their own (an
     /// `@page` rule in the template wins while `prefer_css_page_size`
     /// is on).
@@ -100,6 +108,7 @@ impl Default for NativeOptions {
             bundled_fonts: true,
             font_dirs: Vec::new(),
             timeout_secs: 60,
+            max_image_pixels: 25_000_000,
             print: PrintOptions::default(),
         }
     }
@@ -200,6 +209,7 @@ mod tests {
         assert_eq!(options.disk, None);
         assert!(options.native.bundled_fonts);
         assert_eq!(options.native.timeout_secs, 60);
+        assert_eq!(options.native.max_image_pixels, 25_000_000);
         assert_eq!(options.native.print, PrintOptions::default());
         assert_eq!(options.chrome.pool_size, 2);
         assert_eq!(options.chrome.timeout_secs, 30);
