@@ -173,25 +173,32 @@ async fn the_process_runner_kills_a_tool_that_runs_too_long() {
 }
 
 /// A tool reads files an upload chose, so it must not inherit the server's
-/// secrets: `env` lists exactly what a child receives.
+/// secrets: `env` lists exactly what a child receives. That is where to
+/// find programs, and where the server keeps its temporary files when it
+/// has been told to.
 #[cfg(unix)]
 #[tokio::test]
-async fn the_process_runner_passes_only_the_path_to_the_tool() {
+async fn the_process_runner_passes_only_what_the_tool_needs_to_start() {
     let output = ProcessRunner
         .run("env", &[], Duration::from_secs(30))
         .await
         .unwrap();
     let text = String::from_utf8(output.stdout).unwrap();
-    let names: Vec<&str> = text
+    let mut names: Vec<&str> = text
         .lines()
         .filter_map(|line| line.split_once('=').map(|(name, _)| name))
         .collect();
+    names.sort_unstable();
     // `cargo test` itself sets `CARGO_MANIFEST_DIR` and more for this process.
     assert!(
         std::env::var_os("CARGO_MANIFEST_DIR").is_some(),
         "the test process has variables a child could inherit"
     );
-    assert_eq!(names, vec!["PATH"], "the child inherited: {names:?}");
+    let mut expected = vec!["PATH"];
+    if std::env::var_os("TMPDIR").is_some() {
+        expected.push("TMPDIR");
+    }
+    assert_eq!(names, expected, "the child inherited: {names:?}");
 }
 
 #[cfg(windows)]
@@ -206,6 +213,20 @@ async fn the_process_runner_passes_only_what_the_tool_needs_to_start() {
     assert!(std::env::var_os("CARGO_MANIFEST_DIR").is_some());
     assert!(!text.contains("cargo_manifest_dir"), "{text}");
     assert!(text.contains("systemroot="), "{text}");
+    // Without them a tool that needs a temporary file gets one in the
+    // Windows directory.
+    for name in ["TEMP", "TMP"] {
+        let value = std::env::var(name).expect("the test process has a temporary directory");
+        let line = format!(
+            "{}={}",
+            name.to_ascii_lowercase(),
+            value.to_ascii_lowercase()
+        );
+        assert!(
+            text.lines().any(|l| l.trim_end() == line),
+            "no {line} in {text}"
+        );
+    }
 }
 
 /// The real tools, when FFmpeg is on the PATH (skipped with a notice

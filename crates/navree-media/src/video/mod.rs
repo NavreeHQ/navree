@@ -27,6 +27,7 @@ mod fake;
 mod probe;
 mod transcode;
 
+use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -100,18 +101,41 @@ pub trait FfmpegRunner: Send + Sync + 'static {
     ) -> BoxFuture<'a, Result<FfmpegOutput, MediaError>>;
 }
 
-/// The only variables a tool inherits: where to find programs, and on
-/// Windows the system directory its libraries load from. Nothing else of
-/// the server's environment (its keys, database URLs, tokens) reaches a
-/// process that reads files an upload chose.
+/// The only variables a tool inherits: where to find programs (`PATH`),
+/// where it puts temporary files (`TMPDIR`; `TEMP` and `TMP` on Windows,
+/// where a tool without them uses the Windows directory) and, on Windows,
+/// the system directory its libraries load from (`SystemRoot`). Nothing
+/// else of the server's environment (its keys, database URLs, tokens)
+/// reaches a process that reads files an upload chose. Neither tool needs
+/// a home directory, a locale or a library path to probe, take a frame or
+/// transcode.
 #[cfg(not(windows))]
-const INHERITED_ENV: &[&str] = &["PATH"];
+const INHERITED_ENV: &[&str] = &["PATH", "TMPDIR"];
 #[cfg(windows)]
-const INHERITED_ENV: &[&str] = &["PATH", "SystemRoot"];
+const INHERITED_ENV: &[&str] = &["PATH", "SystemRoot", "TEMP", "TMP"];
+
+/// The variables of `vars` that a tool inherits ([`INHERITED_ENV`]; Windows
+/// does not tell `Path` from `PATH`).
+fn inherited_env(
+    vars: impl IntoIterator<Item = (OsString, OsString)>,
+) -> Vec<(OsString, OsString)> {
+    vars.into_iter()
+        .filter(|(name, _)| {
+            INHERITED_ENV.iter().any(|allowed| {
+                if cfg!(windows) {
+                    name.eq_ignore_ascii_case(allowed)
+                } else {
+                    name == OsStr::new(allowed)
+                }
+            })
+        })
+        .collect()
+}
 
 /// Runs the tools as child processes: no shell, no standard input, an
-/// environment cleared down to [`INHERITED_ENV`] (`PATH`, and `SystemRoot`
-/// on Windows), killed when the timeout passes (or the future is dropped).
+/// environment cleared down to [`INHERITED_ENV`] (`PATH`, the temporary
+/// directory, and `SystemRoot` on Windows), killed when the timeout passes
+/// (or the future is dropped).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ProcessRunner;
 
@@ -123,14 +147,10 @@ impl FfmpegRunner for ProcessRunner {
         timeout: Duration,
     ) -> BoxFuture<'a, Result<FfmpegOutput, MediaError>> {
         Box::pin(async move {
-            let mut command = tokio::process::Command::new(program);
-            command.args(args).env_clear();
-            for name in INHERITED_ENV {
-                if let Some(value) = std::env::var_os(name) {
-                    command.env(name, value);
-                }
-            }
-            let child = command
+            let child = tokio::process::Command::new(program)
+                .args(args)
+                .env_clear()
+                .envs(inherited_env(std::env::vars_os()))
                 .stdin(Stdio::null())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
@@ -315,6 +335,59 @@ mod tests {
         assert_eq!(format_secs(0.0), "0");
         assert_eq!(format_secs(12.0), "12");
         assert_eq!(format_secs(-3.0), "0");
+    }
+
+    fn env(pairs: &[(&str, &str)]) -> Vec<(OsString, OsString)> {
+        pairs
+            .iter()
+            .map(|(name, value)| (OsString::from(name), OsString::from(value)))
+            .collect()
+    }
+
+    #[test]
+    fn a_tool_inherits_the_path_and_the_temporary_directory_and_no_secret() {
+        let server = env(&[
+            ("APP_KEY", "base64:not-for-a-tool"),
+            ("DATABASE_URL", "postgres://user:password@db/app"),
+            ("AWS_SECRET_ACCESS_KEY", "secret"),
+            ("HOME", "/home/server"),
+            ("LD_LIBRARY_PATH", "/opt/lib"),
+            ("TMPDIR_URL", "https://example.test"),
+            ("PATHS", "no"),
+            ("PATH", "/usr/bin"),
+            ("TMPDIR", "/var/tmp/app"),
+            ("TEMP", r"C:\Temp"),
+            ("TMP", r"C:\Temp"),
+            ("SystemRoot", r"C:\Windows"),
+        ]);
+        let mut names: Vec<String> = inherited_env(server)
+            .into_iter()
+            .map(|(name, _)| name.to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        let expected: &[&str] = if cfg!(windows) {
+            &["PATH", "SystemRoot", "TEMP", "TMP"]
+        } else {
+            &["PATH", "TMPDIR"]
+        };
+        assert_eq!(names, expected);
+    }
+
+    #[test]
+    fn a_tool_gets_the_values_the_server_has() {
+        let inherited = inherited_env(env(&[("PATH", "/usr/bin:/bin"), ("KEY", "secret")]));
+        assert_eq!(inherited, env(&[("PATH", "/usr/bin:/bin")]));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_variable_names_are_matched_whatever_their_case() {
+        let inherited = inherited_env(env(&[
+            ("Path", r"C:\bin"),
+            ("temp", r"C:\Temp"),
+            ("Tmp", r"C:\Temp"),
+        ]));
+        assert_eq!(inherited.len(), 3);
     }
 
     #[test]

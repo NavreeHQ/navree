@@ -181,9 +181,10 @@ below its width), `nonqueued()` / `queued()`, and with `media-ffmpeg`
 - `media-ffmpeg`: `media.ffmpeg()` / `video::Ffmpeg::new(FfmpegOptions)` with
   `probe`, `frame`, `transcode`, `version`; `media.ffmpeg.{ffmpeg, ffprobe,
   timeout_secs, threads}`. Keep transcodes queued. The tools run with an
-  empty environment but `PATH` (and `SystemRoot` on Windows): no `APP_KEY` or
-  database URL reaches them; a build that needs `LD_LIBRARY_PATH` goes behind
-  a wrapper script named in `media.ffmpeg.ffmpeg`.
+  empty environment but `PATH`, the temporary directory (`TMPDIR`; `TEMP` and
+  `TMP` on Windows) and `SystemRoot` on Windows: no `APP_KEY` or database URL
+  reaches them; a build that needs `LD_LIBRARY_PATH` goes behind a wrapper
+  script named in `media.ffmpeg.ffmpeg`.
 
 ## Testing
 
