@@ -6134,6 +6134,7 @@ dependencies = [
  "tracing",
  "utoipa",
  "uuid",
+ "zip",
 ]
 
 [[package]]

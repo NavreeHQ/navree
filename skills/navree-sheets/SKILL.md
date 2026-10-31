@@ -262,7 +262,12 @@ assert_eq!(imports.find(import.id).await?.counts.created, 1);
   `sheets.imports.max_columns` (16,384) and `sheets.imports.max_cells`
   (10,000,000, rows times columns) bound the table too; a file past either
   fails the import with a message, and `max_rows` is checked while reading.
-  The file is read on the blocking pool.
+  That holds for CSV, TSV and XLSX (read a record or cell at a time, in
+  order); XLS, ODS and XLSB are read into a range of the sheet's whole used
+  area first, so the limits apply to the table made from it, after it is in
+  memory, and so for an XLSX sheet whose cells are not in row order. The file
+  is read on the blocking pool, and the reading stops at its next record
+  when the job's timeout drops it.
 - The `/api/exports` and `/api/imports` routes mount only when the app has
   an authenticator and `sheets.*.routes` is true.
 - With the `i18n` feature, headers come from Fluent (`contacts.email` is the

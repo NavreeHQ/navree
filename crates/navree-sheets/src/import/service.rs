@@ -657,6 +657,7 @@ impl Imports {
                 max_rows: self.options.imports.max_rows,
                 max_columns: self.options.imports.max_columns,
                 max_cells: self.options.imports.max_cells,
+                stop: None,
             },
         )
         .await;

@@ -1,11 +1,13 @@
 //! Reading an uploaded file into a [`Table`]: the header row and the data
 //! rows, from CSV, TSV, XLSX, XLS or ODS.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::{Cursor, Read};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use bytes::Bytes;
-use calamine::{Data, Reader, open_workbook_auto_from_rs};
+use calamine::{Data, Range, Reader, open_workbook_auto_from_rs};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -80,6 +82,22 @@ pub(crate) struct ReadOptions<'a> {
     pub(crate) max_columns: u64,
     /// The most cells allowed, every row counted at the header's width.
     pub(crate) max_cells: u64,
+    /// Raised when nobody waits for the reading any more; the reading then
+    /// stops at the next record.
+    pub(crate) stop: Option<&'a AtomicBool>,
+}
+
+impl ReadOptions<'_> {
+    /// An error once the reading has been told to stop.
+    fn ensure_running(&self) -> Result<(), SheetsError> {
+        if self.stop.is_some_and(|stop| stop.load(Ordering::Relaxed)) {
+            return Err(SheetsError::Io(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                "nobody is waiting for the file to be read",
+            )));
+        }
+        Ok(())
+    }
 }
 
 impl Default for ReadOptions<'_> {
@@ -93,6 +111,7 @@ impl Default for ReadOptions<'_> {
             max_rows: 0,
             max_columns: limits.max_columns,
             max_cells: limits.max_cells,
+            stop: None,
         }
     }
 }
@@ -130,6 +149,7 @@ pub(crate) fn read_table(
     filename: &str,
     options: &ReadOptions<'_>,
 ) -> Result<Table, SheetsError> {
+    options.ensure_running()?;
     refuse(bytes)?;
     let extension = filename
         .rsplit_once('.')
@@ -158,7 +178,7 @@ pub(crate) async fn read_table_blocking(
     let sheet = options.sheet.map(str::to_owned);
     let (max_rows, max_columns, max_cells) =
         (options.max_rows, options.max_columns, options.max_cells);
-    let read = tokio::task::spawn_blocking(move || {
+    let read = blocking(move |stop| {
         read_table(
             &bytes,
             &filename,
@@ -168,6 +188,7 @@ pub(crate) async fn read_table_blocking(
                 max_rows,
                 max_columns,
                 max_cells,
+                stop: Some(stop),
             },
         )
     })
@@ -182,6 +203,27 @@ pub(crate) async fn read_table_blocking(
             ))
         }
         Err(error) => Err(SheetsError::app(error)),
+    }
+}
+
+/// Runs `job` on Tokio's blocking pool and waits for it. `job` is given a
+/// flag that is raised when nobody waits for it any more (the future is
+/// dropped, as a timeout does), so that it can stop instead of carrying on
+/// with a file and a table nobody will use.
+async fn blocking<T: Send + 'static>(
+    job: impl FnOnce(&AtomicBool) -> T + Send + 'static,
+) -> Result<T, tokio::task::JoinError> {
+    let stop = Arc::new(AtomicBool::new(false));
+    let _raised_on_drop = Raise(stop.clone());
+    tokio::task::spawn_blocking(move || job(&stop)).await
+}
+
+/// Raises its flag when dropped.
+struct Raise(Arc<AtomicBool>);
+
+impl Drop for Raise {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Relaxed);
     }
 }
 
@@ -220,6 +262,7 @@ fn read_records(
     // do not count).
     let mut previous = 0u64;
     for record in reader.records() {
+        options.ensure_running()?;
         let record = record.map_err(|error| {
             SheetsError::UnsupportedFile(format!("The CSV file cannot be read: {error}"))
         })?;
@@ -289,24 +332,46 @@ fn read_workbook(bytes: &[u8], options: &ReadOptions<'_>) -> Result<Table, Sheet
         calamine::Sheets::Ods(_) => FileKind::Ods,
         _ => FileKind::Xlsx,
     };
-    let range = match options.sheet.map(str::trim).filter(|s| !s.is_empty()) {
-        Some(name) => {
-            if !workbook.sheet_names().iter().any(|n| n == name) {
-                return Err(SheetsError::UnsupportedFile(format!(
-                    "The workbook has no sheet named `{name}`."
-                )));
+    let name =
+        match options.sheet.map(str::trim).filter(|s| !s.is_empty()) {
+            Some(name) => {
+                if !workbook.sheet_names().iter().any(|n| n == name) {
+                    return Err(SheetsError::UnsupportedFile(format!(
+                        "The workbook has no sheet named `{name}`."
+                    )));
+                }
+                name.to_owned()
             }
-            workbook.worksheet_range(name).map_err(unreadable)?
+            None => workbook.sheet_names().first().cloned().ok_or_else(|| {
+                SheetsError::UnsupportedFile("The workbook has no sheets.".into())
+            })?,
+        };
+    let tabulator = match &mut workbook {
+        // An XLSX sheet is read cell by cell, so that the limits apply
+        // before the rows are held.
+        calamine::Sheets::Xlsx(xlsx) => tabulate_cells(xlsx, &name, options)?,
+        // The other formats are read into a range first, all of the sheet's
+        // used area, and tabulated from that.
+        other => {
+            let range = other.worksheet_range(&name).map_err(unreadable)?;
+            tabulate_range(&range, options)?
         }
-        None => workbook
-            .worksheet_range_at(0)
-            .ok_or_else(|| SheetsError::UnsupportedFile("The workbook has no sheets.".into()))?
-            .map_err(unreadable)?,
     };
+    let mut table = tabulator.finish()?;
+    table.kind = kind;
+    Ok(table)
+}
+
+/// The rows of a range, the sheet's used area, as a table is made of them.
+fn tabulate_range(
+    range: &Range<Data>,
+    options: &ReadOptions<'_>,
+) -> Result<Tabulator, SheetsError> {
     let first_row = range.start().map_or(0, |(row, _)| u64::from(row));
     let first_col = range.start().map_or(0, |(_, col)| col as usize);
     let mut tabulator = Tabulator::new(options);
     for (index, row) in range.rows().enumerate() {
+        options.ensure_running()?;
         // Cells left of the range's first column are empty.
         let mut cells = vec![Cell::Empty; first_col];
         cells.extend(row.iter().map(data_cell));
@@ -316,9 +381,182 @@ fn read_workbook(bytes: &[u8], options: &ReadOptions<'_>) -> Result<Table, Sheet
             .map_or(0, |index| index + 1);
         tabulator.push(first_row + index as u64 + 1, used, cells)?;
     }
-    let mut table = tabulator.finish()?;
-    table.kind = kind;
-    Ok(table)
+    Ok(tabulator)
+}
+
+/// The cells of a worksheet row, given with their columns in increasing
+/// order, as the row they stand for: `used` cells, empty where none was
+/// given. Produced as it is taken, so a row of a million columns costs
+/// what is taken from it.
+fn dense(
+    cells: impl IntoIterator<Item = (usize, Cell)>,
+    used: usize,
+) -> impl Iterator<Item = Cell> {
+    let mut cells = cells.into_iter().peekable();
+    (0..used).map(move |at| match cells.next_if(|(column, _)| *column == at) {
+        Some((_, cell)) => cell,
+        None => Cell::Empty,
+    })
+}
+
+/// Whether a sheet's cells came in the order a spreadsheet writes them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Order {
+    /// By row, and by column within a row, each position once.
+    Kept,
+    /// Some cell came at or before the one before it.
+    Broken,
+}
+
+fn xlsx_error(error: calamine::XlsxError) -> SheetsError {
+    SheetsError::UnsupportedFile(format!(
+        "The workbook cannot be read: {}",
+        calamine::Error::Xlsx(error)
+    ))
+}
+
+/// The cells of the sheet `name`, in the order the file has them, without
+/// the ones that are empty; none when the sheet is not a worksheet (a chart
+/// sheet).
+fn sheet_cells<'a, RS: Read + std::io::Seek>(
+    xlsx: &'a mut calamine::Xlsx<RS>,
+    name: &str,
+) -> Result<Option<calamine::XlsxCellReader<'a, RS>>, SheetsError> {
+    match xlsx.worksheet_cells_reader(name) {
+        Ok(reader) => Ok(Some(reader)),
+        Err(calamine::XlsxError::NotAWorksheet(_)) => Ok(None),
+        Err(error) => Err(xlsx_error(error)),
+    }
+}
+
+/// An XLSX sheet as a table, read cell by cell.
+///
+/// A worksheet lists its cells by row and, within a row, by column, so the
+/// rows are taken one at a time and the limits apply to each as it is
+/// read; no cell is kept past its row. A sheet that lists cells in another
+/// order (Excel never writes one) is read whole, as sparse cells, and
+/// tabulated from there: the same table either way.
+fn tabulate_cells<RS: Read + std::io::Seek>(
+    xlsx: &mut calamine::Xlsx<RS>,
+    name: &str,
+    options: &ReadOptions<'_>,
+) -> Result<Tabulator, SheetsError> {
+    let mut tabulator = Tabulator::new(options);
+    if stream_rows(xlsx, name, &mut tabulator, options)? == Order::Kept {
+        return Ok(tabulator);
+    }
+    let mut tabulator = Tabulator::new(options);
+    tabulate_unordered(xlsx, name, &mut tabulator, options)?;
+    Ok(tabulator)
+}
+
+/// One row of a worksheet, while its cells come: the ones with a value that
+/// the table could keep, and how far the row reaches.
+struct OpenRow {
+    row: u32,
+    /// One past the column of the last cell with a value.
+    used: usize,
+    cells: Vec<(usize, Cell)>,
+}
+
+fn stream_rows<RS: Read + std::io::Seek>(
+    xlsx: &mut calamine::Xlsx<RS>,
+    name: &str,
+    tabulator: &mut Tabulator,
+    options: &ReadOptions<'_>,
+) -> Result<Order, SheetsError> {
+    let Some(mut reader) = sheet_cells(xlsx, name)? else {
+        return Ok(Order::Kept);
+    };
+    let mut last = None;
+    let mut open: Option<OpenRow> = None;
+    // The first limit the rows break. The cells after it are still read,
+    // keeping none, because a cell out of order would change the answer:
+    // the rows would not be the ones read so far.
+    let mut refused = None;
+    while let Some(cell) = reader.next_cell().map_err(xlsx_error)? {
+        options.ensure_running()?;
+        // The range of a sheet leaves out the cells with nothing in them.
+        if matches!(cell.get_value(), calamine::DataRef::Empty) {
+            continue;
+        }
+        let (row, column) = cell.get_position();
+        if last.is_some_and(|last| cell.get_position() <= last) {
+            return Ok(Order::Broken);
+        }
+        last = Some(cell.get_position());
+        if refused.is_some() {
+            continue;
+        }
+        let cell = data_cell(&Data::from(cell.get_value().clone()));
+        if cell.is_empty() {
+            continue;
+        }
+        if open.as_ref().is_some_and(|open| open.row != row) {
+            refused = open
+                .take()
+                .and_then(|finished| push_row(tabulator, finished).err());
+            if refused.is_some() {
+                continue;
+            }
+        }
+        let open = open.get_or_insert_with(|| OpenRow {
+            row,
+            used: 0,
+            cells: Vec::new(),
+        });
+        let column = column as usize;
+        open.used = column + 1;
+        // Cells past the header's width are cut, so they are not kept.
+        if column < tabulator.width() {
+            open.cells.push((column, cell));
+        }
+    }
+    if let Some(finished) = open.take() {
+        refused = push_row(tabulator, finished).err();
+    }
+    refused.map_or(Ok(Order::Kept), Err)
+}
+
+fn push_row(tabulator: &mut Tabulator, row: OpenRow) -> Result<(), SheetsError> {
+    tabulator.push(u64::from(row.row) + 1, row.used, dense(row.cells, row.used))
+}
+
+/// The rows of a sheet whose cells are not in order, by row and column.
+fn tabulate_unordered<RS: Read + std::io::Seek>(
+    xlsx: &mut calamine::Xlsx<RS>,
+    name: &str,
+    tabulator: &mut Tabulator,
+    options: &ReadOptions<'_>,
+) -> Result<(), SheetsError> {
+    let Some(mut reader) = sheet_cells(xlsx, name)? else {
+        return Ok(());
+    };
+    // A position given twice keeps the last cell.
+    let mut sheet: BTreeMap<u32, BTreeMap<u32, Cell>> = BTreeMap::new();
+    while let Some(cell) = reader.next_cell().map_err(xlsx_error)? {
+        options.ensure_running()?;
+        if matches!(cell.get_value(), calamine::DataRef::Empty) {
+            continue;
+        }
+        let (row, column) = cell.get_position();
+        sheet
+            .entry(row)
+            .or_default()
+            .insert(column, data_cell(&Data::from(cell.get_value().clone())));
+    }
+    for (row, cells) in sheet {
+        let used = cells
+            .iter()
+            .rev()
+            .find(|(_, cell)| !cell.is_empty())
+            .map_or(0, |(column, _)| *column as usize + 1);
+        let cells = cells
+            .into_iter()
+            .map(|(column, cell)| (column as usize, cell));
+        tabulator.push(u64::from(row) + 1, used, dense(cells, used))?;
+    }
+    Ok(())
 }
 
 /// A workbook cell as a [`Cell`]: text trimmed, dates as dates (or
@@ -361,6 +599,16 @@ impl Tabulator {
             headers: None,
             rows: Vec::new(),
         }
+    }
+
+    /// How many cells of a row the table keeps: the header's width, and
+    /// before there is a header the most columns it may have.
+    fn width(&self) -> usize {
+        let width = self
+            .headers
+            .as_ref()
+            .map_or(self.max_columns, |headers| headers.len() as u64);
+        usize::try_from(width).unwrap_or(usize::MAX)
     }
 
     /// Adds the record on row `number`. `used` is how many of its cells
@@ -794,6 +1042,143 @@ mod tests {
         assert!(reads < 100, "{reads} of 1001 lines were read");
     }
 
+    /// Hands out one line per `read`, and raises `flag` at the `at`th.
+    struct Interrupting {
+        next: std::vec::IntoIter<String>,
+        reads: usize,
+        at: usize,
+        flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    }
+
+    impl Read for Interrupting {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let Some(line) = self.next.next() else {
+                return Ok(0);
+            };
+            self.reads += 1;
+            if self.reads == self.at {
+                self.flag.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+            buf[..line.len()].copy_from_slice(line.as_bytes());
+            Ok(line.len())
+        }
+    }
+
+    #[test]
+    fn a_reading_nobody_waits_for_stops_at_the_next_record() {
+        let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let lines: Vec<String> = std::iter::once(
+            "a
+"
+            .to_owned(),
+        )
+        .chain((0..1_000).map(|i| {
+            format!(
+                "{i}
+"
+            )
+        }))
+        .collect();
+        let mut source = Interrupting {
+            next: lines.into_iter(),
+            reads: 0,
+            at: 10,
+            flag: flag.clone(),
+        };
+        let result = read_records(
+            &mut source,
+            b',',
+            &ReadOptions {
+                max_rows: 10_000,
+                stop: Some(&flag),
+                ..ReadOptions::default()
+            },
+        );
+        assert!(
+            matches!(result, Err(SheetsError::Io(ref e)) if e.kind() == std::io::ErrorKind::Interrupted),
+            "{}",
+            outcome(&result)
+        );
+        // The csv reader reads ahead a little, not through the file.
+        assert!(
+            source.reads < 100,
+            "{} of 1001 lines were read",
+            source.reads
+        );
+    }
+
+    #[test]
+    fn a_reading_nobody_waits_for_does_not_start_a_file() {
+        let flag = std::sync::atomic::AtomicBool::new(true);
+        let workbook = crate::write_xlsx("S", &[], &["a".into()], &[vec![Cell::Int(1)]]).unwrap();
+        for (file, name) in [
+            (
+                &b"a
+1
+"[..],
+                "x.csv",
+            ),
+            (&workbook[..], "x.xlsx"),
+        ] {
+            let result = read_table(
+                file,
+                name,
+                &ReadOptions {
+                    stop: Some(&flag),
+                    ..options()
+                },
+            );
+            assert!(
+                matches!(result, Err(SheetsError::Io(ref e)) if e.kind() == std::io::ErrorKind::Interrupted),
+                "{name}: {}",
+                outcome(&result)
+            );
+        }
+        flag.store(false, std::sync::atomic::Ordering::Relaxed);
+        let result = read_table(
+            b"a
+1
+",
+            "x.csv",
+            &ReadOptions {
+                stop: Some(&flag),
+                ..options()
+            },
+        );
+        assert_eq!(result.unwrap().rows.len(), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_blocking_job_is_told_to_stop_when_nobody_waits_for_it() {
+        use futures_util::FutureExt;
+        use std::sync::atomic::Ordering;
+
+        let (stopped, seen) = std::sync::mpsc::channel();
+        let job = move |stop: &std::sync::atomic::AtomicBool| {
+            // Runs until it is told to stop; gives up after a while so that a
+            // failure ends.
+            let give_up = std::time::Instant::now() + std::time::Duration::from_secs(20);
+            while !stop.load(Ordering::Relaxed) && std::time::Instant::now() < give_up {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            stopped.send(stop.load(Ordering::Relaxed)).unwrap();
+        };
+        // Polled once, so the job is on the blocking pool, and dropped, as a
+        // timeout drops it.
+        assert!(blocking(job).now_or_never().is_none());
+        let was_told = seen
+            .recv_timeout(std::time::Duration::from_secs(60))
+            .unwrap();
+        assert!(was_told, "the job ran until it gave up");
+    }
+
+    #[tokio::test]
+    async fn a_blocking_job_that_is_waited_for_returns_what_it_returns() {
+        assert_eq!(blocking(|_| 7).await.unwrap(), 7);
+        let panicked = blocking(|_| -> u8 { panic!("a parser panics") }).await;
+        assert!(panicked.unwrap_err().is_panic());
+    }
+
     /// The naming `headers_of` had when it searched the whole list for
     /// every suffix.
     fn searched_headers_of(cells: &[Cell]) -> Vec<String> {
@@ -923,3 +1308,6 @@ mod tests {
         assert!(other.is_finished(), "the reading ran on the async thread");
     }
 }
+
+#[cfg(test)]
+mod workbook_tests;

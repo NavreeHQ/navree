@@ -71,3 +71,5 @@ navree-testing = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
+# Hand-built workbooks for the reading tests.
+zip = { workspace = true }
