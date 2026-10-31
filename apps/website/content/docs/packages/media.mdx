@@ -422,7 +422,7 @@ let report = media
 // report.files: ["scorm/0199.../imsmanifest.xml", "scorm/0199.../sco/index.html", ...]
 ```
 
-`media.open_archive(&item)` opens an item's archive with the configured limits, and `Archive::extract_to(&disk, prefix)` writes every file under a prefix, checking the total again as it goes. To build one, `ZipBuilder::new()` takes `file(path, bytes)` and `directory(path)` and refuses unsafe names; `media.zip(&items)` puts the originals of several items in one archive, naming duplicates `report (2).pdf`.
+`media.open_archive(&item)` opens an item's archive with the configured limits, and `Archive::extract_to(&disk, prefix)` writes every file under a prefix, checking the total again as it goes. Each entry is inflated on Tokio's blocking pool, so a large package does not hold up the task that awaits it. To build one, `ZipBuilder::new()` takes `file(path, bytes)` and `directory(path)` and refuses unsafe names; `media.zip(&items)` puts the originals of several items in one archive, naming duplicates `report (2).pdf`.
 
 | Limit | Default | Refused with |
 |---|---|---|
@@ -457,7 +457,7 @@ for (number, page) in document.pages.iter().enumerate() {
 
 ## Video and audio
 
-<Badge feature="media-ffmpeg" /> With `media-ffmpeg`, video and audio files are probed when they are added, and conversions can grab frames and transcode. The work runs in `ffmpeg` and `ffprobe`, started as child processes without a shell and killed after `media.ffmpeg.timeout_secs`. Inputs are opened with `-protocol_whitelist file`, so a crafted upload (a playlist hidden in a container) cannot make FFmpeg fetch URLs. FFmpeg still parses whatever people upload: run it with the least privileges you can, in its own container or as a user that can read nothing else.
+<Badge feature="media-ffmpeg" /> With `media-ffmpeg`, video and audio files are probed when they are added, and conversions can grab frames and transcode. The work runs in `ffmpeg` and `ffprobe`, started as child processes without a shell and killed after `media.ffmpeg.timeout_secs`. Inputs are opened with `-protocol_whitelist file`, so a crafted upload (a playlist hidden in a container) cannot make FFmpeg fetch URLs. The tools start with an empty environment except `PATH` (and `SystemRoot` on Windows), so a file they read cannot reach your `APP_KEY`, database URL or other secrets through the process. If your FFmpeg build needs more (`LD_LIBRARY_PATH` for a bundled copy, say), point `media.ffmpeg.ffmpeg` and `media.ffmpeg.ffprobe` at small wrapper scripts that set it. FFmpeg still parses whatever people upload: run it with the least privileges you can, in its own container or as a user that can read nothing else.
 
 ```rust
 use navree::media::video::Transcode;

@@ -59,6 +59,7 @@ disk = "documents"                   # storage disk for save and queue (default:
 bundled_fonts = true                 # the bundled Noto families
 font_dirs = ["resources/fonts"]      # more fonts, searched recursively
 timeout_secs = 60                    # per render
+max_image_pixels = 25000000          # the most pixels (width x height) one image may have
 
 [documents.native.print]
 paper = "a4"                         # a4 | a3 | a5 | letter | legal
@@ -258,6 +259,8 @@ The native engine reads no other CSS: no selectors or classes in stylesheets, no
 
 A render that takes longer than `documents.native.timeout_secs` (60) is `DocumentsError::Timeout`, a 503. An image in the template tree that does not decode is a `DocumentsError::Template` naming the file.
 
+An image is counted before it is decoded, from the size its header declares: a PNG's `IHDR`, a JPEG's first frame header, a GIF's screen and first frame, a WebP's canvas and first picture. More than `documents.native.max_image_pixels` (25,000,000: 5000 by 5000, or an A3 page at 600 dots per inch) is a `DocumentsError::TooLarge`, a 413, that names the file and the limit. A decoder allocates for what the header declares, so a file of a few kilobytes can ask for gigabytes. The limit is per image; set it lower if your templates only ever print logos.
+
 ## Documents built in code
 
 When a document is mostly data, build it in code with `PdfDocument`. It has the blocks of the HTML subset, and `documents.render_document` lays it out with the configured fonts and the app's clock:
@@ -372,7 +375,7 @@ Ok(pdf.inline("invoice-42.pdf"))     // shown, saved under that name
 
 Both return a `Download`, which also takes any bytes: `Download::new(bytes, "text/csv", "deals.csv")`. The file name is sent as plain ASCII and as UTF-8 (`filename*`), so `شهادة.pdf` keeps its name; path separators, quotes and control characters are removed. Document responses carry `Cache-Control: private, no-store`, because documents usually hold personal data, and `X-Content-Type-Options: nosniff`.
 
-A `DocumentsError` returned with `?` is a 500 response, or 503 when an engine is unavailable or timed out. The response carries only the status's standard message; the template's file, line and message stay in your logs.
+A `DocumentsError` returned with `?` is a 500 response, or 503 when an engine is unavailable or timed out. The response carries only the status's standard message; the template's file, line and message stay in your logs. The two errors that are the client's fault answer with their message: `Pdf` is a 400 (the bytes are not a PDF this crate can read, such as an upload in a handler that calls `Pdf::from_bytes(..)?`), and `TooLarge` is a 413 (an input is over one of the limits below).
 
 ## Merging, stamping and overlays
 
@@ -405,6 +408,8 @@ let stamped = invoice.overlay(&seal, Pages::All)?;
 ## Reading text back
 
 `pdf.text()` returns what the pages show, pages separated by a form feed (`\u{c}`), and `pdf.page_texts()` one string per page. Strings on one baseline form a line, in reading order: right-to-left lines come back right to left, run by run, so Arabic reads naturally next to Latin text and numbers. It is meant for tests and checks (`assert!(pdf.text()?.contains("Ada Lovelace"))`); columns and tables are not reconstructed.
+
+A PDF is untrusted input, so reading one has limits, fixed in the code like the other limits of `Pdf` (they are not configuration keys). Loading a PDF inflates each object stream and cross-reference stream up to 64 MiB; a stream that would inflate further is skipped with the objects in it, as a damaged one is, so a PDF whose page tree sits in one has no pages and `Pdf::from_bytes` refuses it. Reading text, a page may take 128 MiB of content, counting a form again every time it is drawn plus 1 KiB for each draw, and the whole document 1 GiB; a page may show 1,000,000 glyphs and spend 50,000,000 comparisons attaching marks (accents, dots, vowel signs drawn apart) to the letters they sit on; a font's `ToUnicode` map may inflate to 8 MiB. Over any of them, `text()` and `page_texts()` return `DocumentsError::TooLarge`. Documents below the limits read exactly as before: a form drawn ten thousand times, or a line of sixty thousand glyphs, is well within them.
 
 ## Word documents
 
@@ -637,6 +642,7 @@ Every engine implements `PdfEngine` and passes the same conformance suite: the n
 | `documents.native.bundled_fonts` | `true` | Load the bundled Noto fonts |
 | `documents.native.font_dirs` | `[]` | More font directories |
 | `documents.native.timeout_secs` | `60` | Limit per native render |
+| `documents.native.max_image_pixels` | `25000000` | The most pixels one image may have; more is `TooLarge` |
 | `documents.native.print` | A4, 10 mm margins | Default `PrintOptions` of the native engine |
 | `documents.chrome.path` | `NAVREE_BROWSER_CHROME`, then the usual paths | The Chrome executable |
 | `documents.chrome.endpoint` | none | A running Chrome: `ws://..` or `http://host:9222` |
@@ -665,9 +671,11 @@ Every engine implements `PdfEngine` and passes the same conformance suite: the n
 | `Template { file, line, column, message }` | 500 | The template failed to render, or an image in it does not decode |
 | `Data(..)` | 500 | The data does not serialize to JSON |
 | `EngineUnavailable { engine, reason }` | 503 | The engine is not compiled in, Chrome can't start, or there are no fonts |
-| `Engine { engine, message }` | 500 | The engine failed while rendering |
+| `Engine { engine, message }` | 500 | The engine failed while rendering, or writing an edited PDF failed (`engine` is `pdf`) |
 | `Timeout { engine, secs }` | 503 | The render took longer than its limit |
-| `Pdf(..)`, `Docx(..)` | 500 | Reading or editing a PDF, or writing a DOCX, failed |
+| `Pdf(..)` | 400 | The bytes are not a PDF that can be read, or the edit asked for cannot be done |
+| `TooLarge(..)` | 413 | An image has more pixels than `max_image_pixels`, or a PDF is over a reading limit |
+| `Docx(..)` | 500 | Writing a DOCX failed |
 | `Storage(..)`, `Queue(..)` | 500 | The disk or the queue failed |
 
 <LinkCards>

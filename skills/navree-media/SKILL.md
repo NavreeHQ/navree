@@ -171,7 +171,8 @@ below its width), `nonqueued()` / `queued()`, and with `media-ffmpeg`
 - `archive::Archive::open(bytes, &ArchiveLimits)`: refuses zip slip,
   symlinks, encrypted entries, duplicates and bombs (`unsafe_archive`,
   `archive_too_large`); `entries`, `files`, `contains`, `read`,
-  `extract_to(&disk, prefix)`. `media.open_archive(&item)`,
+  `extract_to(&disk, prefix)` (each entry inflated on the blocking pool).
+  `media.open_archive(&item)`,
   `media.unpack(&item, disk, prefix)` (SCORM), `media.zip(&items)`,
   `archive::ZipBuilder`.
 - `text::extract(bytes, mime)` / `media.extract_text(&item)` →
@@ -179,7 +180,10 @@ below its width), `nonqueued()` / `queued()`, and with `media-ffmpeg`
   DOCX, HTML/XHTML, `text/*`; `unsupported_media_type` (415) otherwise. No OCR.
 - `media-ffmpeg`: `media.ffmpeg()` / `video::Ffmpeg::new(FfmpegOptions)` with
   `probe`, `frame`, `transcode`, `version`; `media.ffmpeg.{ffmpeg, ffprobe,
-  timeout_secs, threads}`. Keep transcodes queued.
+  timeout_secs, threads}`. Keep transcodes queued. The tools run with an
+  empty environment but `PATH` (and `SystemRoot` on Windows): no `APP_KEY` or
+  database URL reaches them; a build that needs `LD_LIBRARY_PATH` goes behind
+  a wrapper script named in `media.ffmpeg.ffmpeg`.
 
 ## Testing
 

@@ -139,6 +139,9 @@ line breaking, krilla PDF). It reads this subset and skips everything else:
   outline, title/author/lang metadata, creation date from the `dyn Clock`.
 - Over `documents.native.timeout_secs` (60): `DocumentsError::Timeout` (503).
   A template-tree image that doesn't decode: `Template { file: "images/x.png" }`.
+- `documents.native.max_image_pixels` (25,000,000, at least 1): an image whose
+  header (PNG, JPEG, GIF screen and frame, WebP) declares more pixels is
+  `DocumentsError::TooLarge` (413) naming the file, before it is decoded.
 
 ## Building a PDF in code
 
@@ -194,7 +197,10 @@ renders templates (`render`, `render_html`) and documents (`render_document`).
 - `TemplateNotFound { name, tried }` names `<name>.html`.
 - `Template { file, line, column, message }`: `certificates/course.html:3: undefined value`.
 - Returned with `?`: 500 (`EngineUnavailable` and `Timeout`: 503); the body
-  never contains the template's details.
+  never contains the template's details. `Pdf(..)` (bytes that are not a
+  readable PDF) is a 400 and `TooLarge(..)` (an image or PDF over a limit) a
+  413; both send their message. Writing an edited PDF failing is
+  `Engine { engine: "pdf" }`, a 500.
 
 ## Editing PDFs and reading them
 
@@ -209,6 +215,13 @@ let sealed = copy.overlay(&seal, Pages::Last)?;  // any script
 let text = sealed.text()?;        // pages joined by '\u{c}', RTL in reading order
 let pages = sealed.page_texts()?; // one string per page
 ```
+
+Loading a PDF inflates each object stream up to 64 MiB (a bigger one is skipped
+with its objects, so `Pdf::from_bytes` refuses a PDF whose page tree is in
+it). `text()` and `page_texts()` allow a page 128 MiB of content (a form counts
+again each time it is drawn, plus 1 KiB per draw) and the document 1 GiB, a
+page 1,000,000 glyphs and 50,000,000 mark comparisons, a `ToUnicode` map 8 MiB;
+over any, `DocumentsError::TooLarge` (413). These are fixed, not config keys.
 
 ## Word documents
 
