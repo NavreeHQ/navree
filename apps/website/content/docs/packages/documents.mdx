@@ -59,7 +59,7 @@ disk = "documents"                   # storage disk for save and queue (default:
 bundled_fonts = true                 # the bundled Noto families
 font_dirs = ["resources/fonts"]      # more fonts, searched recursively
 timeout_secs = 60                    # per render
-max_image_pixels = 25000000          # the most pixels (width x height) one image may have
+max_image_pixels = 25000000          # the most pixels (width x height) of a PNG, GIF or WebP
 
 [documents.native.print]
 paper = "a4"                         # a4 | a3 | a5 | letter | legal
@@ -259,7 +259,7 @@ The native engine reads no other CSS: no selectors or classes in stylesheets, no
 
 A render that takes longer than `documents.native.timeout_secs` (60) is `DocumentsError::Timeout`, a 503. An image in the template tree that does not decode is a `DocumentsError::Template` naming the file.
 
-An image is counted before it is decoded, from the size its header declares: a PNG's `IHDR`, a JPEG's first frame header, a GIF's screen and first frame, a WebP's canvas and first picture. More than `documents.native.max_image_pixels` (25,000,000: 5000 by 5000, or an A3 page at 600 dots per inch) is a `DocumentsError::TooLarge`, a 413, that names the file and the limit. A decoder allocates for what the header declares, so a file of a few kilobytes can ask for gigabytes. The limit is per image; set it lower if your templates only ever print logos.
+A PNG, GIF or WebP image is counted before it is decoded, from the size its header declares: a PNG's `IHDR`, a GIF's screen and first frame, a WebP's canvas and first picture. More than `documents.native.max_image_pixels` (25,000,000: 5000 by 5000, or an A3 page at 600 dots per inch) is a `DocumentsError::TooLarge`, a 413, whose message names the limit; the image's file goes to the log, not to the client. A decoder allocates for what the header declares, so a file of a few kilobytes can ask for gigabytes. A JPEG is not counted: it goes into the PDF as it is and only its header is read, so a 48-megapixel phone photo prints as it always did. A GIF's frame is also held to the GIF decoder's own limit of 50 MB, about 12,500,000 pixels; a frame between that and the pixel limit does not decode. The limit is per image; set it lower if your templates only ever print logos. `0` fails the boot.
 
 ## Documents built in code
 
@@ -375,7 +375,7 @@ Ok(pdf.inline("invoice-42.pdf"))     // shown, saved under that name
 
 Both return a `Download`, which also takes any bytes: `Download::new(bytes, "text/csv", "deals.csv")`. The file name is sent as plain ASCII and as UTF-8 (`filename*`), so `شهادة.pdf` keeps its name; path separators, quotes and control characters are removed. Document responses carry `Cache-Control: private, no-store`, because documents usually hold personal data, and `X-Content-Type-Options: nosniff`.
 
-A `DocumentsError` returned with `?` is a 500 response, or 503 when an engine is unavailable or timed out. The response carries only the status's standard message; the template's file, line and message stay in your logs. The two errors that are the client's fault answer with their message: `Pdf` is a 400 (the bytes are not a PDF this crate can read, such as an upload in a handler that calls `Pdf::from_bytes(..)?`), and `TooLarge` is a 413 (an input is over one of the limits below).
+A `DocumentsError` returned with `?` is a 500 response, or 503 when an engine is unavailable or timed out. The response carries only the status's standard message; the template's file, line and message stay in your logs. The two errors that are the client's fault answer with their message: `Pdf` is a 400 (the bytes are not a PDF this crate can read, such as an upload in a handler that calls `Pdf::from_bytes(..)?`), and `TooLarge` is a 413 (an input is over one of the limits below). An edit your code should not have asked for, such as merging no documents, is `Edit`, a 500 like the rest.
 
 ## Merging, stamping and overlays
 
@@ -409,7 +409,13 @@ let stamped = invoice.overlay(&seal, Pages::All)?;
 
 `pdf.text()` returns what the pages show, pages separated by a form feed (`\u{c}`), and `pdf.page_texts()` one string per page. Strings on one baseline form a line, in reading order: right-to-left lines come back right to left, run by run, so Arabic reads naturally next to Latin text and numbers. It is meant for tests and checks (`assert!(pdf.text()?.contains("Ada Lovelace"))`); columns and tables are not reconstructed.
 
-A PDF is untrusted input, so reading one has limits, fixed in the code like the other limits of `Pdf` (they are not configuration keys). Loading a PDF inflates each object stream and cross-reference stream up to 64 MiB; a stream that would inflate further is skipped with the objects in it, as a damaged one is, so a PDF whose page tree sits in one has no pages and `Pdf::from_bytes` refuses it. Reading text, a page may take 128 MiB of content, counting a form again every time it is drawn plus 1 KiB for each draw, and the whole document 1 GiB; a page may show 1,000,000 glyphs and spend 50,000,000 comparisons attaching marks (accents, dots, vowel signs drawn apart) to the letters they sit on; a font's `ToUnicode` map may inflate to 8 MiB. Over any of them, `text()` and `page_texts()` return `DocumentsError::TooLarge`. Documents below the limits read exactly as before: a form drawn ten thousand times, or a line of sixty thousand glyphs, is well within them.
+A PDF is untrusted input, so reading one has limits, fixed in the code like the other limits of `Pdf` (they are not configuration keys).
+
+Reading text, a page may take 128 MiB of work and the whole document 1 GiB. Work is the content decoded, counting a form again every time it is drawn plus 1 KiB for each draw; the first time the document uses a font, its `ToUnicode` map (inflated, up to 8 MiB, plus 128 bytes for each code it covers) and its character widths (16 bytes each); and the actual text of marked content, each time it is decoded. A font is read once for the whole document, however many names and pages use it. A page may also show 1,000,000 glyphs, produce 8 MiB of text (the whole document 64 MiB), nest saved graphics states (`q`) and marked content 256 deep each, and spend 50,000,000 comparisons attaching marks (accents, dots, vowel signs drawn apart) to the letters they sit on, each byte of text compared counting as one. Over any of them, `text()` and `page_texts()` return `DocumentsError::TooLarge`. Documents below the limits read exactly as before. For scale: a form drawn ten thousand times on a page fits in its work if the form's content is at most 12 KiB, and in its glyphs if the form shows at most 100; a line of sixty thousand glyphs is well within the comparisons.
+
+Loading a PDF inflates each object stream and cross-reference stream up to 8 MiB; a stream that would inflate further is skipped with the objects in it, as a damaged one is, so a PDF whose page tree sits in one has no pages and `Pdf::from_bytes` refuses it. That bounds one stream, not the file. Every object stream is parsed while the file loads, and the objects a stream lists may all point at the same bytes, so a PDF of a kilobyte can load as tens of megabytes of objects, and a larger one as far more: the memory that loading takes (for `page_count()`, `text()`, `merge`, `stamp`, `overlay` alike) is not bounded by the size of the file. Cap the size of the PDFs you accept (uploads are held to `http.body_limit_bytes`, 2 MiB by default, or a route's `body_limit`), and read PDFs from people you do not trust where running out of memory costs only that read, such as a queued job on a worker whose memory is limited.
+
+`stamp`, `overlay` and `merge` move what pages inherit from the page tree onto each page. Resources that many pages share or inherit stay one object that the pages refer to, so stamping a document grows it by its resources once, not once per page; a page object the page tree lists twice is stamped once.
 
 ## Word documents
 
@@ -642,7 +648,7 @@ Every engine implements `PdfEngine` and passes the same conformance suite: the n
 | `documents.native.bundled_fonts` | `true` | Load the bundled Noto fonts |
 | `documents.native.font_dirs` | `[]` | More font directories |
 | `documents.native.timeout_secs` | `60` | Limit per native render |
-| `documents.native.max_image_pixels` | `25000000` | The most pixels one image may have; more is `TooLarge` |
+| `documents.native.max_image_pixels` | `25000000` | The most pixels one PNG, GIF or WebP may have; more is `TooLarge`; JPEGs are not counted |
 | `documents.native.print` | A4, 10 mm margins | Default `PrintOptions` of the native engine |
 | `documents.chrome.path` | `NAVREE_BROWSER_CHROME`, then the usual paths | The Chrome executable |
 | `documents.chrome.endpoint` | none | A running Chrome: `ws://..` or `http://host:9222` |
@@ -673,7 +679,8 @@ Every engine implements `PdfEngine` and passes the same conformance suite: the n
 | `EngineUnavailable { engine, reason }` | 503 | The engine is not compiled in, Chrome can't start, or there are no fonts |
 | `Engine { engine, message }` | 500 | The engine failed while rendering, or writing an edited PDF failed (`engine` is `pdf`) |
 | `Timeout { engine, secs }` | 503 | The render took longer than its limit |
-| `Pdf(..)` | 400 | The bytes are not a PDF that can be read, or the edit asked for cannot be done |
+| `Pdf(..)` | 400 | The bytes are not a PDF that can be read |
+| `Edit(..)` | 500 | The app asked for an edit that cannot be done: merging nothing, a stamp Helvetica cannot show |
 | `TooLarge(..)` | 413 | An image has more pixels than `max_image_pixels`, or a PDF is over a reading limit |
 | `Docx(..)` | 500 | Writing a DOCX failed |
 | `Storage(..)`, `Queue(..)` | 500 | The disk or the queue failed |

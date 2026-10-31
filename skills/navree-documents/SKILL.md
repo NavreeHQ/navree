@@ -139,9 +139,11 @@ line breaking, krilla PDF). It reads this subset and skips everything else:
   outline, title/author/lang metadata, creation date from the `dyn Clock`.
 - Over `documents.native.timeout_secs` (60): `DocumentsError::Timeout` (503).
   A template-tree image that doesn't decode: `Template { file: "images/x.png" }`.
-- `documents.native.max_image_pixels` (25,000,000, at least 1): an image whose
-  header (PNG, JPEG, GIF screen and frame, WebP) declares more pixels is
-  `DocumentsError::TooLarge` (413) naming the file, before it is decoded.
+- `documents.native.max_image_pixels` (25,000,000; 0 fails the boot): a PNG,
+  GIF (screen and first frame) or WebP whose header declares more pixels is
+  `DocumentsError::TooLarge` (413) before it is decoded; the message names the
+  limit, the file goes to the log. JPEGs are embedded undecoded and not counted.
+  The GIF decoder's own 50 MB frame limit (about 12.5 M pixels) still applies.
 
 ## Building a PDF in code
 
@@ -200,7 +202,8 @@ renders templates (`render`, `render_html`) and documents (`render_document`).
   never contains the template's details. `Pdf(..)` (bytes that are not a
   readable PDF) is a 400 and `TooLarge(..)` (an image or PDF over a limit) a
   413; both send their message. Writing an edited PDF failing is
-  `Engine { engine: "pdf" }`, a 500.
+  `Engine { engine: "pdf" }`, and an edit the app should not ask for (merging
+  nothing, a stamp Helvetica can't show) is `Edit(..)`: both 500.
 
 ## Editing PDFs and reading them
 
@@ -216,12 +219,22 @@ let text = sealed.text()?;        // pages joined by '\u{c}', RTL in reading ord
 let pages = sealed.page_texts()?; // one string per page
 ```
 
-Loading a PDF inflates each object stream up to 64 MiB (a bigger one is skipped
-with its objects, so `Pdf::from_bytes` refuses a PDF whose page tree is in
-it). `text()` and `page_texts()` allow a page 128 MiB of content (a form counts
-again each time it is drawn, plus 1 KiB per draw) and the document 1 GiB, a
-page 1,000,000 glyphs and 50,000,000 mark comparisons, a `ToUnicode` map 8 MiB;
-over any, `DocumentsError::TooLarge` (413). These are fixed, not config keys.
+`text()` and `page_texts()` allow a page 128 MiB of work and the document
+1 GiB: content decoded (a form again each time it is drawn, plus 1 KiB per
+draw), each font once per document (`ToUnicode` inflated, up to 8 MiB, plus 128
+bytes per code it covers; 16 bytes per width), and marked content's actual text
+each time it is decoded. A page may show 1,000,000 glyphs, produce 8 MiB of
+text (the document 64 MiB), nest `q` and marked content 256 deep, and spend
+50,000,000 mark comparisons (a byte of text compared is one). Over any:
+`DocumentsError::TooLarge` (413). These are fixed, not config keys.
+
+Loading inflates each object stream up to 8 MiB (a bigger one is skipped with
+its objects, so `Pdf::from_bytes` refuses a PDF whose page tree is in it). That
+bounds one stream, not the file: loading memory is not bounded by file size
+(objects in a stream can share bytes; a 1 KB file can load tens of MB). Cap
+upload size (`http.body_limit_bytes`, 2 MiB) and read untrusted PDFs where
+running out of memory costs only that read (a queued job on a limited worker).
+`stamp`, `overlay` and `merge` keep shared or inherited resources one object.
 
 ## Word documents
 
