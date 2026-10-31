@@ -225,10 +225,11 @@ let pages = sealed.page_texts()?; // one string per page
 draw), fonts read (`ToUnicode` inflated, up to 8 MiB, plus 1/16 of the memory
 reading it builds; 16 bytes per width; 8 per `Differences` entry; 1 KiB per
 re-read of a dropped font), and marked content's actual text each time it is
-decoded. A `ToUnicode` map is refused past 64 codespace ranges, 131,072 lines,
+decoded. Reading text here (not elsewhere, such as navree-media), a `ToUnicode`
+map is refused past 64 codespace ranges, 131,072 lines,
 256 texts in one list or 65,792 in all lists, whichever way lopdf reaches it
 (any chain of encoding references). Fonts and maps are kept per document in 256
-MiB as lopdf holds them (~256 B per code, twice the largest text per line, 128 B
+MiB as lopdf holds them (~256 B per code, two copies of a range's text per split it can have, 128 B
 per `Differences` entry, 24 B per width; 17 MB for a full two-byte map, fifteen
 fit), plus at most one font's widths; a map is read once for the fonts sharing
 it; past 256 MiB the least recently used is dropped and read again; one map or
