@@ -658,6 +658,7 @@ impl Imports {
                 max_columns: self.options.imports.max_columns,
                 max_cells: self.options.imports.max_cells,
                 max_inflated_bytes: self.options.imports.max_inflated_bytes,
+                max_text_bytes: self.options.imports.max_text_bytes,
                 stop: None,
             },
         )

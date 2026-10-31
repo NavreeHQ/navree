@@ -30,6 +30,7 @@ use crate::CsvOptions;
 /// max_columns = 16384            # the most columns one file may have
 /// max_cells = 10000000           # the most cells (rows times columns) one file may hold
 /// max_inflated_bytes = 1073741824  # the most a part of a workbook may unpack to (1 GiB)
+/// max_text_bytes = 268435456     # the most text the cells of one file may hold (256 MiB)
 /// chunk_size = 500               # rows per staging step and per apply job
 /// keep_days = 7                  # sheets:prune deletes imports older than this
 /// routes = true                  # the /api/imports routes
@@ -106,6 +107,10 @@ pub struct ImportOptions {
     /// to, as the zip file declares it, in bytes (default 1 GiB: twice the
     /// sheet XML of a workbook that holds `max_cells` cells).
     pub max_inflated_bytes: u64,
+    /// The most text the cells of a file may hold, in bytes, counting the
+    /// text of every cell the table keeps, the same text again for each cell
+    /// it is in (default 256 MiB: 10,000,000 cells of 26 bytes).
+    pub max_text_bytes: u64,
     /// Rows checked per staging step and saved per apply job (default 500).
     pub chunk_size: u64,
     /// `sheets:prune` deletes imports (their rows, upload and error file)
@@ -125,6 +130,7 @@ impl Default for ImportOptions {
             max_columns: 16_384,
             max_cells: 10_000_000,
             max_inflated_bytes: 1024 * 1024 * 1024,
+            max_text_bytes: 256 * 1024 * 1024,
             chunk_size: 500,
             keep_days: 7,
             routes: true,
@@ -160,6 +166,9 @@ impl ConfigSection for SheetsOptions {
         }
         if self.imports.max_inflated_bytes == 0 {
             return Err("`imports.max_inflated_bytes` must be at least 1".to_owned());
+        }
+        if self.imports.max_text_bytes == 0 {
+            return Err("`imports.max_text_bytes` must be at least 1".to_owned());
         }
         if self.imports.chunk_size == 0 {
             return Err("`imports.chunk_size` must be at least 1".to_owned());
@@ -222,12 +231,18 @@ mod tests {
 
     #[test]
     fn the_import_size_limits_are_at_least_one() {
-        for key in ["max_columns", "max_cells", "max_inflated_bytes"] {
+        for key in [
+            "max_columns",
+            "max_cells",
+            "max_inflated_bytes",
+            "max_text_bytes",
+        ] {
             let mut options = SheetsOptions::default();
             match key {
                 "max_columns" => options.imports.max_columns = 0,
                 "max_cells" => options.imports.max_cells = 0,
-                _ => options.imports.max_inflated_bytes = 0,
+                "max_inflated_bytes" => options.imports.max_inflated_bytes = 0,
+                _ => options.imports.max_text_bytes = 0,
             }
             let message = options.validate().unwrap_err();
             assert!(message.contains(&format!("imports.{key}")), "{message}");

@@ -730,6 +730,26 @@ async fn a_workbook_that_unpacks_past_the_limit_fails_the_import() {
 }
 
 #[tokio::test]
+async fn a_file_with_more_text_than_the_limit_fails_the_import() {
+    let app = support::builder()
+        .config("sheets.imports.max_text_bytes", 11)
+        .build()
+        .await;
+    let admin = app.acting_as(principal(ADMIN));
+
+    // Email, Name, a@x.io and A are 16 bytes of text.
+    let record = staged(&app, &admin, "text.csv", b"Email,Name\na@x.io,A\n", &[]).await;
+    assert_eq!(record["status"], "failed");
+    assert_eq!(
+        record["error"],
+        "The file holds more than 11 bytes of text."
+    );
+
+    let record = staged(&app, &admin, "short.csv", b"Email,Name\na\n", &[]).await;
+    assert_eq!(record["status"], "staged");
+}
+
+#[tokio::test]
 async fn imports_are_listed_shown_to_permitted_users_and_deleted() {
     let app = support::app().await;
     let admin = app.acting_as(principal(ADMIN));

@@ -1168,3 +1168,186 @@ fn a_part_that_declares_less_than_it_unpacks_to_cannot_be_read() {
     let result = read_table(&bytes, "book.xlsx", &limits(10));
     assert!(refused_for(&result, "cannot be read"), "{result:?}");
 }
+
+/// `bytes` behind a 512-byte OLE header whose sector shift is invalid: the
+/// XLS reader refuses it at once, and detection goes on to the zip formats,
+/// which find the archive after the prefix.
+fn behind_an_ole_header(bytes: &[u8]) -> Vec<u8> {
+    let mut prefixed = OLE.to_vec();
+    prefixed.resize(512, 0);
+    prefixed.extend_from_slice(bytes);
+    prefixed
+}
+
+#[test]
+fn a_zip_workbook_behind_an_ole_header_is_held_to_the_unpacked_size_limit() {
+    let bytes = book_with_shared_text(2 * 1024 * 1024);
+    let options = ReadOptions {
+        max_inflated_bytes: 1024 * 1024,
+        ..limits(10)
+    };
+    for file in [bytes.clone(), behind_an_ole_header(&bytes)] {
+        let result = read_table(&file, "book.xlsx", &options);
+        assert!(
+            refused_for(&result, "unpacks to more than 1048576 bytes"),
+            "{result:?}"
+        );
+    }
+    // Within the limit the prefixed file is the workbook it holds.
+    let table = read_table(
+        &behind_an_ole_header(&bytes),
+        "book.xlsx",
+        &ReadOptions {
+            max_inflated_bytes: 4 * 1024 * 1024,
+            ..limits(10)
+        },
+    )
+    .unwrap();
+    assert_eq!(table.kind, FileKind::Xlsx);
+    assert_eq!(table.headers[0].len(), 2 * 1024 * 1024);
+}
+
+/// The default limits, but for the text a file may hold.
+fn text_limit(max_text_bytes: u64) -> ReadOptions<'static> {
+    ReadOptions {
+        max_text_bytes,
+        ..limits(1_000)
+    }
+}
+
+/// Headers `alpha` and `beta` (9 bytes) over three rows of `xx` and ` yyy `
+/// (15 bytes once trimmed): 24 bytes of text in the table.
+const TEXT_IN_THE_TABLE: u64 = 24;
+
+fn assert_text_limit(label: &str, file: &[u8], name: &str) {
+    let table = read_table(file, name, &text_limit(TEXT_IN_THE_TABLE)).unwrap();
+    assert_eq!(table.rows.len(), 3, "{label}");
+    let result = read_table(file, name, &text_limit(TEXT_IN_THE_TABLE - 1));
+    assert!(
+        refused_for(&result, "The file holds more than 23 bytes of text."),
+        "{label}: {result:?}"
+    );
+}
+
+#[test]
+fn the_text_a_table_keeps_is_counted_up_to_the_byte() {
+    assert_text_limit(
+        "csv",
+        b"alpha,beta\nxx, yyy \nxx, yyy \nxx, yyy \n",
+        "x.csv",
+    );
+    let mut rows = row(1, &[text_at("A1", "alpha"), text_at("B1", "beta")]);
+    for r in 2..=4 {
+        rows.push_str(&row(
+            r,
+            &[
+                text_at(&format!("A{r}"), "xx"),
+                text_at(&format!("B{r}"), " yyy "),
+            ],
+        ));
+    }
+    assert_text_limit("xlsx in order", &book(&rows, "", &[]), "x.xlsx");
+    // The same cells, the first row's the other way round.
+    let mut rows = row(1, &[text_at("B1", "beta"), text_at("A1", "alpha")]);
+    for r in 2..=4 {
+        rows.push_str(&row(
+            r,
+            &[
+                text_at(&format!("A{r}"), "xx"),
+                text_at(&format!("B{r}"), " yyy "),
+            ],
+        ));
+    }
+    assert_text_limit("xlsx out of order", &book(&rows, "", &[]), "x.xlsx");
+}
+
+#[test]
+fn text_from_shared_strings_counts_for_every_cell_it_is_in() {
+    // One text of 10 bytes, in the header and three rows.
+    let mut rows = row(1, &[r#"<c r="A1" t="s"><v>0</v></c>"#.into()]);
+    for r in 2..=4 {
+        rows.push_str(&row(r, &[format!(r#"<c r="A{r}" t="s"><v>0</v></c>"#)]));
+    }
+    let bytes = book(&rows, "", &["0123456789"]);
+    assert!(read_table(&bytes, "x.xlsx", &text_limit(40)).is_ok());
+    let result = read_table(&bytes, "x.xlsx", &text_limit(39));
+    assert!(
+        refused_for(&result, "more than 39 bytes of text"),
+        "{result:?}"
+    );
+}
+
+#[test]
+fn text_past_the_last_header_or_in_numbers_is_not_counted() {
+    // Beyond the header's width the cells are cut, and numbers hold no text.
+    let rows = [
+        row(1, &[text_at("A1", "ab")]),
+        row(
+            2,
+            &[
+                number_at("A2", "5"),
+                text_at("B2", "a very long text indeed"),
+            ],
+        ),
+    ]
+    .concat();
+    let bytes = book(&rows, "", &[]);
+    assert!(read_table(&bytes, "x.xlsx", &text_limit(2)).is_ok());
+}
+
+/// One 64 KiB shared string, referenced by 1,499 rows; each cell would hold
+/// its own copy. With `swap`, the header lists its cells the other way round.
+#[cfg(target_os = "linux")]
+fn shared_text_book(swap: bool) -> Vec<u8> {
+    let text = "x".repeat(64 * 1024);
+    let mut rows = if swap {
+        row(1, &[text_at("B1", "h2"), text_at("A1", "h")])
+    } else {
+        row(1, &[text_at("A1", "h")])
+    };
+    for r in 2..=1500u32 {
+        rows.push_str(&row(r, &[format!(r#"<c r="A{r}" t="s"><v>0</v></c>"#)]));
+    }
+    book(&rows, "", &[&text])
+}
+
+#[cfg(target_os = "linux")]
+fn peak_of_shared_text(swap: bool) {
+    let bytes = shared_text_book(swap);
+    assert!(bytes.len() < 100_000, "{} bytes", bytes.len());
+    let options = ReadOptions {
+        max_text_bytes: 1024 * 1024,
+        ..limits(100_000)
+    };
+    let (result, used) = read_measured(&bytes, &options);
+    assert!(
+        refused_for(&result, "bytes of text"),
+        "{:?} after {used} KiB",
+        result.as_ref().map(|table| table.rows.len())
+    );
+    assert!(
+        used < 24 * 1024,
+        "reading held {used} KiB at most, over a bound of 24 MiB; the copies are 96,000"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "runs in a process of its own, from the test below"]
+fn the_peak_memory_of_reading_one_shared_string_in_many_cells() {
+    peak_of_shared_text(false);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "runs in a process of its own, from the test below"]
+fn the_peak_memory_of_reading_one_shared_string_in_many_cells_out_of_order() {
+    peak_of_shared_text(true);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_shared_string_in_many_cells_is_not_copied_past_the_text_limit() {
+    run_alone("the_peak_memory_of_reading_one_shared_string_in_many_cells");
+    run_alone("the_peak_memory_of_reading_one_shared_string_in_many_cells_out_of_order");
+}

@@ -84,6 +84,8 @@ pub(crate) struct ReadOptions<'a> {
     pub(crate) max_cells: u64,
     /// The most a part of a zipped workbook may unpack to.
     pub(crate) max_inflated_bytes: u64,
+    /// The most text the cells the table keeps may hold, in bytes.
+    pub(crate) max_text_bytes: u64,
     /// Raised when nobody waits for the reading any more; the reading then
     /// stops at the next record.
     pub(crate) stop: Option<&'a AtomicBool>,
@@ -114,6 +116,7 @@ impl Default for ReadOptions<'_> {
             max_columns: limits.max_columns,
             max_cells: limits.max_cells,
             max_inflated_bytes: limits.max_inflated_bytes,
+            max_text_bytes: limits.max_text_bytes,
             stop: None,
         }
     }
@@ -179,11 +182,12 @@ pub(crate) async fn read_table_blocking(
 ) -> Result<Table, SheetsError> {
     let encoding = options.encoding.map(str::to_owned);
     let sheet = options.sheet.map(str::to_owned);
-    let (max_rows, max_columns, max_cells, max_inflated_bytes) = (
+    let (max_rows, max_columns, max_cells, max_inflated_bytes, max_text_bytes) = (
         options.max_rows,
         options.max_columns,
         options.max_cells,
         options.max_inflated_bytes,
+        options.max_text_bytes,
     );
     let read = blocking(move |stop| {
         read_table(
@@ -196,6 +200,7 @@ pub(crate) async fn read_table_blocking(
                 max_columns,
                 max_cells,
                 max_inflated_bytes,
+                max_text_bytes,
                 stop: Some(stop),
             },
         )
@@ -334,9 +339,10 @@ fn read_workbook(bytes: &[u8], options: &ReadOptions<'_>) -> Result<Table, Sheet
     let unreadable = |error: calamine::Error| {
         SheetsError::UnsupportedFile(format!("The workbook cannot be read: {error}"))
     };
-    if bytes.starts_with(ZIP) {
-        check_unpacked_sizes(bytes, options.max_inflated_bytes)?;
-    }
+    // Whatever the file starts with: detection tries the zip formats on a
+    // file the XLS reader refuses, and a zip reader finds an archive that
+    // comes after a prefix.
+    check_unpacked_sizes(bytes, options.max_inflated_bytes)?;
     let mut workbook = open_workbook_auto_from_rs(Cursor::new(bytes)).map_err(unreadable)?;
     let kind = match &workbook {
         calamine::Sheets::Xls(_) => FileKind::Xls,
@@ -523,8 +529,10 @@ fn stream_rows<RS: Read + std::io::Seek>(
         if refused.is_some() {
             continue;
         }
-        let cell = data_cell(&Data::from(cell.get_value().clone()));
-        if cell.is_empty() {
+        // Text is measured where it is, and counted, before it is copied:
+        // a shared string is one text for any number of cells.
+        let text = text_of(cell.get_value());
+        if text.is_some_and(str::is_empty) {
             continue;
         }
         if open.as_ref().is_some_and(|open| open.row != row) {
@@ -544,17 +552,35 @@ fn stream_rows<RS: Read + std::io::Seek>(
         open.used = column + 1;
         // Cells past the header's width are cut, so they are not kept.
         if column < tabulator.width() {
-            open.cells.push((column, cell));
+            if let Err(error) = text.map_or(Ok(()), |text| tabulator.charge(text.len())) {
+                refused = Some(error);
+                continue;
+            }
+            open.cells
+                .push((column, data_cell(&Data::from(cell.get_value().clone()))));
         }
     }
-    if let Some(finished) = open.take() {
+    if let Some(finished) = open.take().filter(|_| refused.is_none()) {
         refused = push_row(tabulator, finished).err();
     }
     refused.map_or(Ok(Order::Kept), Err)
 }
 
 fn push_row(tabulator: &mut Tabulator, row: OpenRow) -> Result<(), SheetsError> {
-    tabulator.push(u64::from(row.row) + 1, row.used, dense(row.cells, row.used))
+    tabulator.push_counted(u64::from(row.row) + 1, row.used, dense(row.cells, row.used))
+}
+
+/// The text of a cell value that is text, trimmed, as it is kept; none for
+/// the values that are not.
+fn text_of<'a>(value: &'a calamine::DataRef<'_>) -> Option<&'a str> {
+    use calamine::DataRef;
+    match value {
+        DataRef::String(text) | DataRef::DateTimeIso(text) | DataRef::DurationIso(text) => {
+            Some(text.trim())
+        }
+        DataRef::SharedString(text) => Some(text.trim()),
+        _ => None,
+    }
 }
 
 /// The rows of a sheet whose cells are not in order, by row and column.
@@ -586,10 +612,18 @@ fn tabulate_unordered<RS: Read + std::io::Seek>(
             continue;
         }
         let (row, column) = cell.get_position();
-        let mut cell = data_cell(&Data::from(cell.get_value().clone()));
-        if u64::from(column) >= options.max_columns && !cell.is_empty() {
-            cell = Cell::Bool(true);
-        }
+        let text = text_of(cell.get_value());
+        let cell = if text.is_some_and(str::is_empty) {
+            Cell::Empty
+        } else if u64::from(column) >= options.max_columns {
+            Cell::Bool(true)
+        } else if let Err(error) = text.map_or(Ok(()), |text| tabulator.charge(text.len())) {
+            refused = Some(error);
+            sheet = BTreeMap::new();
+            continue;
+        } else {
+            data_cell(&Data::from(cell.get_value().clone()))
+        };
         match sheet.get_mut(&row).and_then(|cells| cells.get_mut(&column)) {
             Some(kept) => *kept = cell,
             // Nothing and an empty cell are the same.
@@ -624,7 +658,7 @@ fn tabulate_unordered<RS: Read + std::io::Seek>(
         let cells = cells
             .into_iter()
             .map(|(column, cell)| (column as usize, cell));
-        tabulator.push(u64::from(row) + 1, used, dense(cells, used))?;
+        tabulator.push_counted(u64::from(row) + 1, used, dense(cells, used))?;
     }
     Ok(())
 }
@@ -656,6 +690,9 @@ struct Tabulator {
     max_rows: u64,
     max_columns: u64,
     max_cells: u64,
+    max_text_bytes: u64,
+    /// The text of the cells taken so far.
+    text_bytes: u64,
     headers: Option<Vec<String>>,
     rows: Vec<TableRow>,
 }
@@ -666,6 +703,8 @@ impl Tabulator {
             max_rows: options.max_rows,
             max_columns: options.max_columns,
             max_cells: options.max_cells,
+            max_text_bytes: options.max_text_bytes,
+            text_bytes: 0,
             headers: None,
             rows: Vec::new(),
         }
@@ -681,14 +720,49 @@ impl Tabulator {
         usize::try_from(width).unwrap_or(usize::MAX)
     }
 
+    /// Counts `bytes` of text that the table is about to keep, and refuses
+    /// the file when that makes more than the limit.
+    fn charge(&mut self, bytes: usize) -> Result<(), SheetsError> {
+        self.text_bytes = self.text_bytes.saturating_add(bytes as u64);
+        if self.text_bytes > self.max_text_bytes {
+            return Err(SheetsError::UnsupportedFile(format!(
+                "The file holds more than {} bytes of text.",
+                self.max_text_bytes
+            )));
+        }
+        Ok(())
+    }
+
     /// Adds the record on row `number`. `used` is how many of its cells
     /// come before the last one with a value (0 for an empty row), and
-    /// `cells` yields them all; only the ones the table keeps are taken.
+    /// `cells` yields them all; only the ones the table keeps are taken, and
+    /// their text is counted.
     fn push(
         &mut self,
         number: u64,
         used: usize,
         cells: impl IntoIterator<Item = Cell>,
+    ) -> Result<(), SheetsError> {
+        self.push_cells(number, used, cells, true)
+    }
+
+    /// [`Tabulator::push`] for cells whose text was counted before they were
+    /// made.
+    fn push_counted(
+        &mut self,
+        number: u64,
+        used: usize,
+        cells: impl IntoIterator<Item = Cell>,
+    ) -> Result<(), SheetsError> {
+        self.push_cells(number, used, cells, false)
+    }
+
+    fn push_cells(
+        &mut self,
+        number: u64,
+        used: usize,
+        cells: impl IntoIterator<Item = Cell>,
+        count_text: bool,
     ) -> Result<(), SheetsError> {
         if used == 0 {
             return Ok(());
@@ -702,6 +776,13 @@ impl Tabulator {
                 )));
             }
             let header_cells: Vec<Cell> = cells.take(used).collect();
+            if count_text {
+                for cell in &header_cells {
+                    if let Cell::Text(text) = cell {
+                        self.charge(text.len())?;
+                    }
+                }
+            }
             self.headers = Some(headers_of(&header_cells));
             return Ok(());
         };
@@ -718,7 +799,12 @@ impl Tabulator {
             return Err(too_many_cells(self.max_cells));
         }
         let mut row = Vec::with_capacity(width);
-        row.extend(cells.take(width));
+        for cell in cells.take(width) {
+            if let (true, Cell::Text(text)) = (count_text, &cell) {
+                self.charge(text.len())?;
+            }
+            row.push(cell);
+        }
         row.resize(width, Cell::Empty);
         self.rows.push(TableRow { number, cells: row });
         Ok(())

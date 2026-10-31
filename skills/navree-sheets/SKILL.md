@@ -261,9 +261,12 @@ assert_eq!(imports.find(import.id).await?.counts.created, 1);
   bounds the file, not what a workbook unpacks to (a zip can unpack a
   thousand-fold; calamine keeps `sharedStrings.xml` and a cell's text whole):
   `sheets.imports.max_inflated_bytes` (1 GiB) refuses a workbook (XLSX, XLSB,
-  ODS) with a part that declares more than that unpacked, before reading it;
+  ODS, however detected, even behind another header) with a part that declares more than that unpacked, before reading it; shared strings then cost about 1.5x their XML in
+  memory, up to about 3x for one-character strings;
   the zip reader stops a part at its declared size, so a lie in either
-  direction fails. Rows are padded to the header's width, so
+  direction fails. `sheets.imports.max_text_bytes` (256 MiB) bounds the text
+  the table keeps, counted per cell (a shared string counts again for each
+  cell it is in), before it is copied; a file past it fails the import. Rows are padded to the header's width, so
   `sheets.imports.max_columns` (16,384) and `sheets.imports.max_cells`
   (10,000,000, rows times columns) bound the table too; a file past either
   fails the import with a message, and `max_rows` is checked while reading.
