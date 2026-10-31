@@ -82,3 +82,8 @@ tracing-subscriber = { workspace = true }
 [[bench]]
 name = "routing"
 harness = false
+
+# What `serve` adds over bare hyper (`cargo bench -p navree-http --bench serve`).
+[[bench]]
+name = "serve"
+harness = false
