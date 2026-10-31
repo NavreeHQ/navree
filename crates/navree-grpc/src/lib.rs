@@ -53,6 +53,7 @@ mod frame;
 mod health;
 mod module;
 mod options;
+mod routes;
 mod server;
 mod service;
 mod status;
@@ -63,6 +64,7 @@ pub use call::{CallError, RecordKey};
 pub use channels::{GrpcChannel, GrpcChannels};
 pub use module::GrpcModule;
 pub use options::{ClientOptions, ClientTlsOptions, GrpcOptions};
+pub use routes::Routes;
 pub use server::{GrpcErrors, GrpcServer};
 pub use service::{GrpcMethod, GrpcService, ModuleBuilderGrpcExt, ServiceLimits};
 pub use status::{error_from_status, status_from_error};
@@ -84,8 +86,9 @@ pub mod __private {
     pub use http::request::Parts;
     pub use navree_http::Guard;
     pub use tonic::server::NamedService;
-    pub use tonic::service::Routes;
     pub use tonic::service::interceptor::InterceptedService;
+
+    pub use crate::routes::Routes;
 
     pub use crate::call::{
         CallError, RecordKey, RecordKeyFn, call, extract, finish, lift_body_limit, returns,

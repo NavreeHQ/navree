@@ -192,16 +192,15 @@ impl Router {
         pattern: &str,
         endpoint: Endpoint,
     ) -> Result<(), RouteError> {
-        self.try_route_service(method, pattern, |pattern| endpoint.mount(pattern, None))
+        self.try_route_service(method, pattern, || endpoint.into_service())
     }
 
-    /// Routes `method` on `pattern` to the service `mount` builds for the
-    /// parsed pattern.
+    /// Routes `method` on `pattern` to the service `mount` builds.
     pub(crate) fn try_route_service(
         &mut self,
         method: Method,
         pattern: &str,
-        mount: impl FnOnce(&str) -> BoxedService,
+        mount: impl FnOnce() -> BoxedService,
     ) -> Result<(), RouteError> {
         let parsed = PathPattern::parse(pattern).map_err(RouteError::Pattern)?;
         let tree = Arc::make_mut(&mut self.tree);
@@ -213,12 +212,12 @@ impl Router {
                     existing: existing.as_str().to_owned(),
                 });
             }
-            methods.endpoints.push((method, mount(pattern)));
+            methods.endpoints.push((method, mount()));
             methods.compute_allow();
             return Ok(());
         }
         let mut methods = Methods {
-            endpoints: vec![(method, mount(pattern))],
+            endpoints: vec![(method, mount())],
             allow: None,
         };
         methods.compute_allow();

@@ -9,7 +9,7 @@ error format and pagination.
 |---|---|
 | Framework | Navree 0.2.0 from this repository (`crates/navree`, a path dependency; features `auth`, `log`, `orm`, `postgres`) |
 | Runtime | Rust 1.99.1 (`rust:1-bookworm` build stage, `debian:bookworm-slim` runtime); release profile `opt-level = 3`, `lto = "thin"`, `codegen-units = 1` |
-| HTTP | navree-http on Axum 0.8.9, hyper 1.12.0, tower-http 0.7.1 |
+| HTTP | navree-http (its own router and server) on hyper 1.12.0, tower-http 0.7.1 |
 | Workers | One process. `AppBuilder::run` builds Tokio's (1.54.1) default multi-thread runtime: one worker per CPU, 8 under the benchmark's cpuset. The `serve` command runs `navree_http::serve` on `0.0.0.0:8080` |
 | Database | navree-db `DatabaseModule` on sqlx 0.9.0 (PostgreSQL), one pool of 64 connections (`database.max_connections = 64`, `migrate_on_boot = false`) |
 | JWT | navree-auth `AuthModule`: its `JwtStrategy` (HS256 on `navree_crypto::jose`, with HMAC from RustCrypto `hmac`/`sha2` in navree-crypto; the measured run predates that and used jsonwebtoken 11.1.0 with the same HMAC crates; HS256, signature, `exp`, `iss = navree`, token type `access`), then the `CurrentUser` extractor loads the `users` row (navree-auth's `user` entity) |

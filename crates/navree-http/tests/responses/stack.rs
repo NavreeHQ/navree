@@ -1,6 +1,5 @@
-//! The app stack: the same services in the same layers, on [`AppRouter`] and
-//! on the previous framework's router, which held Navree's router as its
-//! fallback.
+//! The app stack: services in layers on [`AppRouter`], and what comes out
+//! for every kind of response, method and header.
 
 use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
@@ -20,7 +19,7 @@ use navree_http::{AppError, AppRouter, CorsLayer, Json, Path};
 use tower::{Service, ServiceExt};
 use tower_http::compression::CompressionLayer;
 
-use crate::support::{Seen, ours, theirs};
+use crate::support::{Seen, golden, ours};
 
 /// The routes of every comparison: one of each kind of response.
 pub fn routes() -> Router {
@@ -79,47 +78,8 @@ pub fn routes() -> Router {
         })
 }
 
-/// The previous framework's app around `service`, as `build_router` made it.
-fn previous<S>(service: S) -> axum::Router
-where
-    S: Service<axum::extract::Request, Error = Infallible> + Clone + Send + Sync + 'static,
-    S::Response: axum::response::IntoResponse,
-    S::Future: Send + 'static,
-{
-    axum::Router::new().fallback_service(service)
-}
-
-/// `routes()` as the previous framework's fallback takes it.
-fn previous_routes() -> axum::Router {
-    previous(tower::service_fn(move |request: axum::extract::Request| {
-        let routes = routes();
-        async move { routes.oneshot(request.map(Body::new)).await }
-    }))
-}
-
-/// `name` in a header on the way in and out, on each side's middleware.
+/// `name` in a header on the way in and out.
 async fn stamp(name: &'static str, mut request: NavreeRequest, next: Next) -> Response {
-    let mut seen = request
-        .headers()
-        .get("x-order")
-        .map_or(String::new(), |value| value.to_str().unwrap().to_owned());
-    seen.push_str(name);
-    request
-        .headers_mut()
-        .insert("x-order", seen.parse().unwrap());
-    let mut response = next.run(request).await;
-    response
-        .headers_mut()
-        .append("x-out", name.parse().unwrap());
-    response.headers_mut().append("x-in", seen.parse().unwrap());
-    response
-}
-
-async fn previous_stamp(
-    name: &'static str,
-    mut request: axum::extract::Request,
-    next: axum::middleware::Next,
-) -> axum::response::Response {
     let mut seen = request
         .headers()
         .get("x-order")
@@ -146,9 +106,9 @@ fn cors() -> CorsLayer {
         .expect("an origin is allowed")
 }
 
-/// Both apps with the same layers.
-pub fn both() -> (AppRouter, axum::Router) {
-    let ours = AppRouter::new(routes())
+/// The app of every comparison: the routes behind four layers.
+pub fn app() -> AppRouter {
+    AppRouter::new(routes())
         .layer(middleware::from_fn(|request: NavreeRequest, next: Next| {
             stamp("a", request, next)
         }))
@@ -159,22 +119,7 @@ pub fn both() -> (AppRouter, axum::Router) {
                 stamp(name, request, next)
             },
         ))
-        .layer(cors());
-    let theirs = previous_routes()
-        .layer(axum::middleware::from_fn(
-            |request: axum::extract::Request, next: axum::middleware::Next| {
-                previous_stamp("a", request, next)
-            },
-        ))
-        .layer(CompressionLayer::new())
-        .layer(axum::middleware::from_fn_with_state(
-            "b",
-            |axum::extract::State(name): axum::extract::State<&'static str>,
-             request: axum::extract::Request,
-             next: axum::middleware::Next| { previous_stamp(name, request, next) },
-        ))
-        .layer(cors());
-    (ours, theirs)
+        .layer(cors())
 }
 
 fn request(
@@ -190,25 +135,23 @@ fn request(
     builder.body(Body::from(body)).unwrap()
 }
 
-/// Sends the request to both apps.
-async fn compare(method: Method, uri: &str, headers: &[(&str, &str)], body: &'static str) -> Seen {
-    let (app, previous) = both();
-    let a = app
-        .oneshot(request(method.clone(), uri, headers, body))
+/// Sends the request to the app.
+async fn call(method: Method, uri: &str, headers: &[(&str, &str)], body: &'static str) -> Seen {
+    let response = app()
+        .oneshot(request(method, uri, headers, body))
         .await
         .unwrap();
-    let b = previous
-        .oneshot(request(method.clone(), uri, headers, body))
-        .await
-        .unwrap();
-    let a = ours(a).await;
-    let b = theirs(b).await;
-    assert_eq!(a, b, "{method} {uri} {headers:?}");
-    a
+    ours(response).await.gunzipped()
 }
 
+/// A request: its method, headers and body.
+type Case<'a> = (Method, &'a [(&'a str, &'a str)], &'static str);
+
+/// Every kind of response, with and without compression and CORS, and every
+/// method: what each reads as is in `golden/stack.txt`.
 #[tokio::test]
-async fn every_response_comes_out_the_same() {
+async fn every_response_reads_as_it_did() {
+    let mut text = String::new();
     for uri in [
         "/text",
         "/json",
@@ -226,24 +169,30 @@ async fn every_response_comes_out_the_same() {
         "/nothing",
         "/a/../b",
     ] {
+        let mut requests: Vec<Case> = Vec::new();
         for headers in [
             &[][..],
             &[("accept-encoding", "gzip")][..],
             &[("origin", "http://localhost:3000")][..],
             &[("origin", "http://evil.example")][..],
         ] {
-            compare(Method::GET, uri, headers, "").await;
+            requests.push((Method::GET, headers, ""));
         }
-        compare(Method::HEAD, uri, &[], "").await;
-        compare(Method::POST, uri, &[], "body").await;
-        compare(Method::OPTIONS, uri, &[], "").await;
-        compare(Method::DELETE, uri, &[], "").await;
+        requests.push((Method::HEAD, &[], ""));
+        requests.push((Method::POST, &[], "body"));
+        requests.push((Method::OPTIONS, &[], ""));
+        requests.push((Method::DELETE, &[], ""));
+        for (method, headers, body) in requests {
+            let seen = call(method.clone(), uri, headers, body).await;
+            text.push_str(&format!("{method} {uri} {headers:?}\n{}\n\n", seen.line()));
+        }
     }
+    golden("stack.txt", &text);
 }
 
 #[tokio::test]
-async fn layers_run_in_the_same_order() {
-    let seen = compare(Method::GET, "/text", &[], "").await;
+async fn layers_run_in_order() {
+    let seen = call(Method::GET, "/text", &[], "").await;
     let value = |name: &str| {
         seen.headers
             .iter()
@@ -261,7 +210,7 @@ async fn layers_run_in_the_same_order() {
 
 #[tokio::test]
 async fn a_cors_preflight_is_answered_outside_the_rest() {
-    let seen = compare(
+    let seen = call(
         Method::OPTIONS,
         "/text",
         &[
@@ -276,13 +225,13 @@ async fn a_cors_preflight_is_answered_outside_the_rest() {
 
 #[tokio::test]
 async fn a_body_reaches_a_route_through_the_layers() {
-    let seen = compare(Method::POST, "/echo", &[], "sent").await;
+    let seen = call(Method::POST, "/echo", &[], "sent").await;
     assert_eq!(seen.frames, [Bytes::from_static(b"sent")]);
 }
 
 #[tokio::test]
 async fn compression_leaves_events_alone_and_keeps_a_stream_streaming() {
-    let events = compare(Method::GET, "/events", &[("accept-encoding", "gzip")], "").await;
+    let events = call(Method::GET, "/events", &[("accept-encoding", "gzip")], "").await;
     assert_eq!(events.frames.len(), 2, "{events:?}");
     assert!(
         !events
@@ -291,7 +240,7 @@ async fn compression_leaves_events_alone_and_keeps_a_stream_streaming() {
             .any(|(name, _)| name == "content-encoding")
     );
 
-    let large = compare(Method::GET, "/large", &[("accept-encoding", "gzip")], "").await;
+    let large = call(Method::GET, "/large", &[("accept-encoding", "gzip")], "").await;
     assert!(
         large
             .headers
@@ -301,11 +250,11 @@ async fn compression_leaves_events_alone_and_keeps_a_stream_streaming() {
 }
 
 #[tokio::test]
-async fn a_2xx_to_connect_loses_its_body_on_both_sides() {
-    let seen = compare(Method::CONNECT, "/tunnel", &[], "").await;
+async fn a_2xx_to_connect_loses_its_body() {
+    let seen = call(Method::CONNECT, "/tunnel", &[], "").await;
     assert_eq!(seen.status, StatusCode::OK);
     assert!(seen.frames.is_empty());
-    let seen = compare(Method::CONNECT, "/refused", &[], "").await;
+    let seen = call(Method::CONNECT, "/refused", &[], "").await;
     assert_eq!(seen.status, StatusCode::FORBIDDEN);
     assert_eq!(seen.frames, [Bytes::from_static(b"no")]);
 }
@@ -313,7 +262,7 @@ async fn a_2xx_to_connect_loses_its_body_on_both_sides() {
 #[tokio::test]
 async fn the_edge_of_the_stack_sees_a_response_of_any_body() {
     // A layer that hands the rest of the stack a request body of its own
-    // takes the app as it took the previous router.
+    // takes the app as it is.
     let app = AppRouter::new(routes()).layer(tower_http::limit::RequestBodyLimitLayer::new(2));
     let refused = app
         .clone()

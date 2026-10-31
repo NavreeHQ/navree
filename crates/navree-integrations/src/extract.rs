@@ -150,6 +150,6 @@ mod tests {
     #[test]
     fn handlers_on_the_integration_extractors_are_native() {
         async fn handler(_: IntegrationOwner, _: Connection<MicrosoftGraph, DefaultScopes>) {}
-        assert!(Endpoint::new(handler).is_native());
+        let _ = Endpoint::new(handler);
     }
 }

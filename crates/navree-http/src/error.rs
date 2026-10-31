@@ -292,10 +292,10 @@ impl AppError {
         response
     }
 
-    /// An Axum extractor rejection (or a plain-text error response) with
+    /// An extractor rejection (or a plain-text error response) with
     /// `status` and `text`: a client error shows `text` as its message, a
-    /// server error logs it. Axum's 422 (well-formed JSON of the wrong
-    /// shape) is a 400, like every other input error.
+    /// server error logs it. A 422 (well-formed JSON of the wrong shape) is a
+    /// 400, like every other input error.
     pub(crate) fn rejection(status: StatusCode, text: impl Into<String>) -> Self {
         let status = if status == StatusCode::UNPROCESSABLE_ENTITY {
             StatusCode::BAD_REQUEST

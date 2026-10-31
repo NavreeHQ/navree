@@ -400,12 +400,11 @@ fn mount(router: &mut routing::Router, route: Mounted, shared: &Shared) -> Resul
         .parse::<Method>()
         .map_err(|error| format!("route `{} {}`: {error}", meta.method, meta.full_path))?;
     let handler = route.handler;
-    let body_limit = runtime.body_limit;
     router
-        .try_route_service(method, &meta.full_path, |pattern| {
+        .try_route_service(method, &meta.full_path, || {
             BoxCloneSyncService::new(RouteService {
                 runtime,
-                inner: handler.mount(pattern, Some(body_limit)),
+                inner: handler.into_service(),
             })
         })
         .map_err(|error| {

@@ -110,6 +110,8 @@ async fn attach(&self, Path(deal_id): Path<Uuid>, body: Bytes) -> String {
 }
 ```
 
+`String` and `Bytes` read the body within the route's limit (413 past it, see [body limits](#body-limits)); a `String` that isn't UTF-8 is a 400.
+
 An extractor that reads the body must be the handler's **last** argument: there is only one body. Putting it anywhere else is a compile error (the handler doesn't implement `Handler`).
 
 ## Headers
@@ -129,7 +131,9 @@ async fn agent(&self, headers: HeaderMap) -> String {
 }
 ```
 
-For one header you need often, write a small extractor (see [writing your own](#writing-your-own-extractor)). `axum-extra`'s `TypedHeader` isn't re-exported; add `axum-extra` to your dependencies if you want it.
+`Method`, `Uri`, `Version` and `http::Extensions` are extractors too: each gives a copy of that part of the request.
+
+For one header you need often, write a small extractor (see [writing your own](#writing-your-own-extractor)).
 
 ## The request id
 

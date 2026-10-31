@@ -256,7 +256,7 @@ mod tests {
         use crate::{Payload, ReplyCodec};
 
         async fn handler(_: MessageContext, _: ReplyCodec, _: Payload<serde_json::Value>) {}
-        assert!(Endpoint::new(handler).is_native());
+        let _ = Endpoint::new(handler);
     }
 
     #[test]

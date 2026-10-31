@@ -9,7 +9,7 @@ use navree_contracts::{HealthCheck, HealthStatus};
 use navree_grpc::testing::TestChannel;
 use navree_grpc::{
     Code, GrpcMethod, GrpcModule, GrpcServer, GrpcService, ModuleBuilderGrpcExt, Request, Response,
-    ServiceLimits, Status,
+    Routes, ServiceLimits, Status,
 };
 use navree_http::{Authenticator, HttpModule, HttpServer};
 use navree_kernel::{BoxFuture, Factory, Module, ModuleBuilder, Navree};
@@ -18,7 +18,6 @@ use navree_testing::TestApp;
 use prost::Message as _;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
-use tonic::service::Routes;
 use tonic_health::pb::HealthCheckRequest;
 use tonic_health::pb::health_check_response::ServingStatus;
 use tonic_health::pb::health_client::HealthClient;

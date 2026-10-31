@@ -6,7 +6,8 @@ use std::sync::Arc;
 
 use navree_http::{Guard, RouteMeta};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ModuleBuilder, ModuleId, Resolver};
-use tonic::service::Routes;
+
+use crate::Routes;
 
 /// A tonic service served by [`GrpcModule`](crate::GrpcModule): what
 /// `#[grpc_service(server = DealsServer)]` implements for the struct behind

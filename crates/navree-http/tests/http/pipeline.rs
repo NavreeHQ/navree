@@ -4,7 +4,6 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use axum::routing::{get, post};
 use http::{Method, Request, StatusCode};
 use navree_http::body::{Body, Bytes};
 use navree_http::response::IntoResponse;
@@ -14,35 +13,23 @@ use crate::support::{ORIGIN, Setup, bytes, from_origin, options};
 
 fn error_routes() -> Vec<RouteDef> {
     vec![
-        RouteDef::new(
-            Method::GET,
-            "/panic",
-            get(|| async {
-                if true {
-                    panic!("handler exploded");
-                }
-                "unreachable"
-            }),
-        )
+        RouteDef::on(Method::GET, "/panic", || async {
+            if true {
+                panic!("handler exploded");
+            }
+            "unreachable"
+        })
         .public(),
-        RouteDef::new(
-            Method::GET,
-            "/slow-route",
-            get(|| async {
-                tokio::time::sleep(Duration::from_secs(5)).await;
-                "late"
-            }),
-        )
+        RouteDef::on(Method::GET, "/slow-route", || async {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            "late"
+        })
         .public()
         .timeout(Duration::from_millis(50)),
-        RouteDef::new(
-            Method::GET,
-            "/slow",
-            get(|| async {
-                tokio::time::sleep(Duration::from_secs(5)).await;
-                "late"
-            }),
-        )
+        RouteDef::on(Method::GET, "/slow", || async {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            "late"
+        })
         .public(),
         RouteDef::on(Method::GET, "/invalid", || async {
             let mut errors = BTreeMap::new();
@@ -193,12 +180,10 @@ async fn cors_wildcard_origin_fails_boot() {
 #[tokio::test]
 async fn security_headers_present() {
     let app = Setup::new(vec![
-        RouteDef::new(Method::GET, "/ok", get(|| async { "ok" })).public(),
-        RouteDef::new(
-            Method::GET,
-            "/docs",
-            get(|| async { ([("content-security-policy", "default-src 'self'")], "docs") }),
-        )
+        RouteDef::on(Method::GET, "/ok", || async { "ok" }).public(),
+        RouteDef::on(Method::GET, "/docs", || async {
+            ([("content-security-policy", "default-src 'self'")], "docs")
+        })
         .public(),
     ])
     .boot()
@@ -231,7 +216,7 @@ async fn security_headers_present() {
     );
 
     let off = Setup::new(vec![
-        RouteDef::new(Method::GET, "/ok", get(|| async { "ok" })).public(),
+        RouteDef::on(Method::GET, "/ok", || async { "ok" }).public(),
     ])
     .options(HttpOptions {
         security_headers: false,
@@ -247,23 +232,15 @@ async fn compression_skipped_for_event_stream() {
     let payload = "data: hello\n\n".repeat(200);
     let sse_payload = payload.clone();
     let app = Setup::new(vec![
-        RouteDef::new(
-            Method::GET,
-            "/events",
-            get(move || {
-                let body = sse_payload.clone();
-                async move { ([("content-type", "text/event-stream")], body).into_response() }
-            }),
-        )
+        RouteDef::on(Method::GET, "/events", move || {
+            let body = sse_payload.clone();
+            async move { ([("content-type", "text/event-stream")], body).into_response() }
+        })
         .public(),
-        RouteDef::new(
-            Method::GET,
-            "/big",
-            get(move || {
-                let body = payload.clone();
-                async move { axum::Json(serde_json::json!({ "data": body })) }
-            }),
-        )
+        RouteDef::on(Method::GET, "/big", move || {
+            let body = payload.clone();
+            async move { navree_http::Json(serde_json::json!({ "data": body })) }
+        })
         .public(),
     ])
     .boot()
@@ -314,7 +291,7 @@ async fn maintenance_mode_returns_503() {
     let file = dir.path().join("down");
     std::fs::write(&file, r#"{"retry": 120, "message": "Back soon."}"#).unwrap();
     let app = Setup::new(vec![
-        RouteDef::new(Method::GET, "/ok", get(|| async { "ok" })).public(),
+        RouteDef::on(Method::GET, "/ok", || async { "ok" }).public(),
     ])
     .options(HttpOptions {
         maintenance_file: file.clone(),
@@ -342,9 +319,9 @@ async fn maintenance_mode_skips_excepted_paths() {
     std::fs::write(&file, "{}").unwrap();
     let routes = || {
         vec![
-            RouteDef::new(Method::GET, "!/health/live", get(|| async { "live" })).public(),
-            RouteDef::new(Method::GET, "/ok", get(|| async { "ok" })).public(),
-            RouteDef::new(Method::GET, "/status", get(|| async { "status" })).public(),
+            RouteDef::on(Method::GET, "!/health/live", || async { "live" }).public(),
+            RouteDef::on(Method::GET, "/ok", || async { "ok" }).public(),
+            RouteDef::on(Method::GET, "/status", || async { "status" }).public(),
         ]
     };
 
@@ -395,7 +372,7 @@ async fn down_and_up_commands_toggle_maintenance() {
         .unwrap();
     let file = dir.path().join("framework").join("down");
     let app = Setup::new(vec![
-        RouteDef::new(Method::GET, "/ok", get(|| async { "ok" })).public(),
+        RouteDef::on(Method::GET, "/ok", || async { "ok" }).public(),
     ])
     .options(HttpOptions {
         maintenance_file: file.clone(),
@@ -422,7 +399,7 @@ async fn down_and_up_commands_toggle_maintenance() {
 #[tokio::test]
 async fn per_ip_rate_limit_returns_429_with_retry_after() {
     let app = Setup::new(vec![
-        RouteDef::new(Method::GET, "/ok", get(|| async { "ok" })).public(),
+        RouteDef::on(Method::GET, "/ok", || async { "ok" }).public(),
     ])
     .options(HttpOptions {
         per_ip_rate_limit: Some(2),
@@ -455,7 +432,7 @@ fn forwarded(ip: &str) -> Request<Body> {
 #[tokio::test]
 async fn per_ip_rate_limit_counts_ipv6_clients_by_network() {
     let app = Setup::new(vec![
-        RouteDef::new(Method::GET, "/ok", get(|| async { "ok" })).public(),
+        RouteDef::on(Method::GET, "/ok", || async { "ok" }).public(),
     ])
     .options(HttpOptions {
         per_ip_rate_limit: Some(2),
@@ -503,7 +480,7 @@ async fn per_ip_rate_limit_counts_ipv6_clients_by_network() {
 #[tokio::test]
 async fn per_ip_rate_limit_prefix_is_configurable() {
     let app = Setup::new(vec![
-        RouteDef::new(Method::GET, "/ok", get(|| async { "ok" })).public(),
+        RouteDef::on(Method::GET, "/ok", || async { "ok" }).public(),
     ])
     .options(HttpOptions {
         per_ip_rate_limit: Some(1),
@@ -531,23 +508,14 @@ async fn per_ip_rate_limit_prefix_is_configurable() {
 #[tokio::test]
 async fn body_limit_returns_413() {
     let app = Setup::new(vec![
-        RouteDef::new(
-            Method::POST,
-            "/echo",
-            post(|body: Bytes| async move { body.len().to_string() }),
-        )
+        RouteDef::on(Method::POST, "/echo", |body: Bytes| async move {
+            body.len().to_string()
+        })
         .public(),
-        RouteDef::new(
-            Method::POST,
-            "/ignore",
-            post(|| async { "ignored the body" }),
-        )
-        .public(),
-        RouteDef::new(
-            Method::POST,
-            "/upload",
-            post(|body: Bytes| async move { body.len().to_string() }),
-        )
+        RouteDef::on(Method::POST, "/ignore", || async { "ignored the body" }).public(),
+        RouteDef::on(Method::POST, "/upload", |body: Bytes| async move {
+            body.len().to_string()
+        })
         .public()
         .body_limit(1024),
     ])
@@ -630,7 +598,7 @@ async fn fixed_layers_keep_their_order_in_one_middleware() {
         .tempdir()
         .unwrap();
     let mut routes = error_routes();
-    routes.push(RouteDef::new(Method::GET, "/ok", get(|| async { "ok" })).public());
+    routes.push(RouteDef::on(Method::GET, "/ok", || async { "ok" }).public());
     let single = HttpOptions {
         compression: false,
         per_ip_rate_limit: Some(4),
@@ -767,7 +735,7 @@ mod recorded_metrics {
     #[tokio::test]
     async fn requests_are_counted_when_a_recorder_is_installed() {
         let app = Setup::new(vec![
-            RouteDef::new(Method::GET, "/deals/{id}", get(|| async { "deal" })).public(),
+            RouteDef::on(Method::GET, "/deals/{id}", || async { "deal" }).public(),
         ])
         .boot()
         .await;

@@ -19,36 +19,34 @@ fn hint(hint: SizeHint) -> (u64, Option<u64>) {
     (hint.lower(), hint.upper())
 }
 
-/// The same value through each side's `From`.
-macro_rules! same_from {
-    ($value:expr) => {{
-        let a = Body::from($value);
-        let b = axum::body::Body::from($value);
-        assert_eq!(hint(a.size_hint()), hint(b.size_hint()));
-        assert_eq!(a.is_end_stream(), b.is_end_stream());
-        let a = a.collect().await.unwrap().to_bytes();
-        let b = b.collect().await.unwrap().to_bytes();
-        assert_eq!(a, b);
+/// A body made `From` a value: its size is known and exact, and it reads as
+/// the bytes of the value.
+macro_rules! from_value {
+    ($value:expr, $bytes:expr) => {{
+        let bytes: &[u8] = $bytes;
+        let len = bytes.len() as u64;
+        let body = Body::from($value);
+        assert_eq!(hint(body.size_hint()), (len, Some(len)));
+        assert_eq!(body.is_end_stream(), len == 0);
+        assert_eq!(body.collect().await.unwrap().to_bytes(), bytes);
     }};
 }
 
 #[tokio::test]
-async fn sizes_and_contents_are_the_same() {
-    same_from!(());
-    same_from!("");
-    same_from!("text");
-    same_from!(String::from("text"));
-    same_from!(vec![1_u8, 2]);
-    same_from!(Bytes::from_static(b"bytes"));
-    same_from!(&b"bytes"[..]);
-    same_from!(std::borrow::Cow::<'static, str>::Borrowed("cow"));
-    same_from!(std::borrow::Cow::<'static, [u8]>::Owned(vec![1]));
+async fn sizes_and_contents_are_exact() {
+    from_value!((), b"");
+    from_value!("", b"");
+    from_value!("text", b"text");
+    from_value!(String::from("text"), b"text");
+    from_value!(vec![1_u8, 2], &[1, 2]);
+    from_value!(Bytes::from_static(b"bytes"), b"bytes");
+    from_value!(&b"bytes"[..], b"bytes");
+    from_value!(std::borrow::Cow::<'static, str>::Borrowed("cow"), b"cow");
+    from_value!(std::borrow::Cow::<'static, [u8]>::Owned(vec![1]), &[1]);
 
     assert_eq!(hint(Body::empty().size_hint()), (0, Some(0)));
     assert!(Body::empty().is_end_stream());
     assert!(Body::default().is_end_stream());
-    let empty = axum::body::Body::empty();
-    assert_eq!(hint(empty.size_hint()), (0, Some(0)));
 }
 
 fn chunks(
@@ -59,23 +57,16 @@ fn chunks(
 
 #[tokio::test]
 async fn a_stream_has_no_known_size_and_keeps_its_chunks() {
-    let a = Body::from_stream(chunks(&["a", "", "bc"]));
-    let b = axum::body::Body::from_stream(chunks(&["a", "", "bc"]));
-    assert_eq!(hint(a.size_hint()), hint(b.size_hint()));
-    assert_eq!(a.is_end_stream(), b.is_end_stream());
-    assert!(!a.is_end_stream());
+    let body = Body::from_stream(chunks(&["a", "", "bc"]));
+    assert_eq!(hint(body.size_hint()), (0, None));
+    assert!(!body.is_end_stream());
 
-    let frames = |body: Body| async move {
-        let mut body = body.into_data_stream();
-        let mut seen = Vec::new();
-        while let Some(chunk) = body.next().await {
-            seen.push(chunk.unwrap());
-        }
-        seen
-    };
-    let a = frames(a).await;
-    assert_eq!(a, ["a", "", "bc"], "chunks are neither joined nor split");
-    assert_eq!(a, frames(Body::new(b)).await);
+    let mut body = body.into_data_stream();
+    let mut seen = Vec::new();
+    while let Some(chunk) = body.next().await {
+        seen.push(chunk.unwrap());
+    }
+    assert_eq!(seen, ["a", "", "bc"], "chunks are neither joined nor split");
 }
 
 /// A body that says how often it was polled, and is pending after its first
@@ -164,29 +155,19 @@ fn failing() -> impl futures_util::Stream<Item = Result<&'static str, std::io::E
 }
 
 #[tokio::test]
-async fn errors_read_the_same() {
-    // Difference 1: a boxed error rather than a wrapper around one.
-    let frames = |body: Body| async move {
-        let mut body = body;
-        let first = body.frame().await.unwrap().unwrap();
-        (first.into_data().unwrap(), body.frame().await.unwrap())
-    };
-    let (data, failure) = frames(Body::from_stream(failing())).await;
-    assert_eq!(data, "start");
-    let ours = failure.unwrap_err();
-    let (data, failure) = frames(Body::new(axum::body::Body::from_stream(failing()))).await;
-    assert_eq!(data, "start");
-    let theirs = failure.unwrap_err();
-    assert_eq!(ours.to_string(), theirs.to_string());
-    assert_eq!(ours.to_string(), "the disk is gone");
-    assert!(ours.downcast_ref::<std::io::Error>().is_some());
+async fn errors_come_out_as_they_went_in() {
+    // A boxed error rather than a wrapper around one.
+    let mut body = Body::from_stream(failing());
+    let first = body.frame().await.unwrap().unwrap();
+    assert_eq!(first.into_data().unwrap(), "start");
+    let error = body.frame().await.unwrap().unwrap_err();
+    assert_eq!(error.to_string(), "the disk is gone");
+    assert!(error.downcast_ref::<std::io::Error>().is_some());
 
-    let ours = to_bytes(Body::from_stream(failing()), usize::MAX).await;
-    let theirs = axum::body::to_bytes(axum::body::Body::from_stream(failing()), usize::MAX).await;
-    assert_eq!(
-        ours.unwrap_err().to_string(),
-        theirs.unwrap_err().to_string()
-    );
+    let error = to_bytes(Body::from_stream(failing()), usize::MAX)
+        .await
+        .unwrap_err();
+    assert_eq!(error.to_string(), "the disk is gone");
 }
 
 #[tokio::test]
@@ -198,26 +179,30 @@ async fn an_error_is_not_swallowed_by_the_data_stream() {
 }
 
 #[tokio::test]
-async fn to_bytes_stops_at_the_limit_on_both_sides() {
+async fn to_bytes_stops_at_the_limit() {
     let long = "0123456789";
-    for limit in [0, 1, 9, 10, 11] {
-        let a = to_bytes(Body::from(long), limit).await;
-        let b = axum::body::to_bytes(axum::body::Body::from(long), limit).await;
+    for (limit, fits) in [(0, false), (1, false), (9, false), (10, true), (11, true)] {
+        let expected = if fits {
+            Ok(long)
+        } else {
+            Err("length limit exceeded")
+        };
+
+        let body = to_bytes(Body::from(long), limit).await;
         assert_eq!(
-            a.as_ref().map_err(ToString::to_string),
-            b.as_ref().map_err(ToString::to_string),
+            body.as_ref()
+                .map(|bytes| &bytes[..])
+                .map_err(ToString::to_string),
+            expected.map(str::as_bytes).map_err(str::to_owned),
             "{limit}"
         );
 
-        let a = to_bytes(Body::from_stream(chunks(&["01234", "56789"])), limit).await;
-        let b = axum::body::to_bytes(
-            axum::body::Body::from_stream(chunks(&["01234", "56789"])),
-            limit,
-        )
-        .await;
+        let body = to_bytes(Body::from_stream(chunks(&["01234", "56789"])), limit).await;
         assert_eq!(
-            a.as_ref().map_err(ToString::to_string),
-            b.as_ref().map_err(ToString::to_string),
+            body.as_ref()
+                .map(|bytes| &bytes[..])
+                .map_err(ToString::to_string),
+            expected.map(str::as_bytes).map_err(str::to_owned),
             "stream, {limit}"
         );
     }
@@ -229,9 +214,7 @@ async fn a_slow_body_is_told_from_a_broken_one_through_every_wrapper() {
     let wrapped = [
         Body::from_stream(slow()),
         Body::new(Body::from_stream(slow())),
-        // A bridged route's body: Navree's inside the previous framework's
-        // inside Navree's.
-        Body::new(axum::body::Body::new(Body::from_stream(slow()))),
+        Body::new(Body::new(Body::from_stream(slow()))),
     ];
     for body in wrapped {
         assert_eq!(read_body(body, 64).await.unwrap_err(), BodyError::TimedOut);
@@ -245,20 +228,21 @@ async fn a_slow_body_is_told_from_a_broken_one_through_every_wrapper() {
         error.to_string(),
         "Failed to buffer the request body: reset"
     );
-    let bridged = Body::new(axum::body::Body::new(Body::from_stream(broken())));
-    assert_eq!(read_body(bridged, 64).await.unwrap_err(), error);
+    let wrapped = Body::new(Body::new(Body::from_stream(broken())));
+    assert_eq!(read_body(wrapped, 64).await.unwrap_err(), error);
 
-    let long = Body::new(axum::body::Body::from("too long"));
+    let long = Body::new(Body::from("too long"));
     assert_eq!(read_body(long, 4).await.unwrap_err(), BodyError::TooLarge);
 }
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(512))]
 
-    /// Whatever the chunks and the limit, both sides read the same bytes and
-    /// fail at the same point.
+    /// Whatever the chunks and the limit, the bytes come out in order until
+    /// the limit is passed (then it fails, whatever follows) or the stream
+    /// fails (then it fails there).
     #[test]
-    fn generated_streams_read_the_same(
+    fn generated_streams_read_up_to_the_limit(
         parts in prop::collection::vec(prop::collection::vec(any::<u8>(), 0..32), 0..8),
         limit in 0_usize..128,
         fail in any::<bool>(),
@@ -271,15 +255,26 @@ proptest! {
             }
             stream::iter(items)
         };
-        let (a, b) = crate::support::runtime().block_on(async {
-            (
-                to_bytes(Body::from_stream(items()), limit).await,
-                axum::body::to_bytes(axum::body::Body::from_stream(items()), limit).await,
-            )
-        });
+        let read = crate::support::runtime().block_on(to_bytes(Body::from_stream(items()), limit));
+
+        let mut expected = Vec::new();
+        let mut outcome = None;
+        for part in &parts {
+            if expected.len() + part.len() > limit {
+                outcome = Some("length limit exceeded");
+                break;
+            }
+            expected.extend_from_slice(part);
+        }
+        if outcome.is_none() && fail {
+            outcome = Some("failed");
+        }
         prop_assert_eq!(
-            a.map_err(|error| error.to_string()),
-            b.map_err(|error| error.to_string())
+            read.map(|bytes| bytes.to_vec()).map_err(|error| error.to_string()),
+            match outcome {
+                Some(error) => Err(error.to_owned()),
+                None => Ok(expected),
+            }
         );
     }
 }

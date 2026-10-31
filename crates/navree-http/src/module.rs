@@ -4,7 +4,6 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::rejection::{FormRejection, JsonRejection, PathRejection, QueryRejection};
 use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, CommandSpec, Factory, Injectable, KernelError, Lifecycle,
@@ -109,11 +108,6 @@ fn register(m: &mut ModuleBuilder, options: Option<HttpOptions>) {
         .map_error::<rejection::MultipartError>(|r| Some(r.to_app_error()))
         .map_error::<rejection::WebSocketRejection>(|r| Some(r.to_app_error()))
         .map_error::<BodyError>(|r| Some(AppError::rejection(r.status(), r.to_string())))
-        // The previous framework's rejections, from the crates not yet moved.
-        .map_error::<JsonRejection>(|r| Some(AppError::rejection(r.status(), r.body_text())))
-        .map_error::<FormRejection>(|r| Some(AppError::rejection(r.status(), r.body_text())))
-        .map_error::<QueryRejection>(|r| Some(AppError::rejection(r.status(), r.body_text())))
-        .map_error::<PathRejection>(|r| Some(AppError::rejection(r.status(), r.body_text())))
         .command(CommandSpec::new(
             "serve",
             "Start the HTTP server ([--addr HOST:PORT])",

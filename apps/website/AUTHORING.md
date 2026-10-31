@@ -107,7 +107,7 @@ Don't write an `# h1` in the body: the title is the page's heading.
   `/performance/`. Link to Navree's measurements with
   `[performance](/performance/)`, never `/benchmarks/`: that URL only
   redirects to `/performance/`.
-- External links use full URLs: `[Axum](https://docs.rs/axum)`.
+- External links use full URLs: `[Hyper](https://docs.rs/hyper)`.
 
 ## Code blocks
 
@@ -345,7 +345,7 @@ to get something done.
   another framework or use one as a reference point: no "like X", "X-style",
   "the way you know from X" or "X calls these ...". Describe the feature,
   its behaviour and its limits. Naming the libraries Navree is built on is
-  good (Tokio, Axum, Hyper, Tower, sqlx, tonic, rustls,
+  good (Tokio, Hyper, Tower, sqlx, tonic, rustls,
   Argon2), and so are protocols and standards: "speaks the Pusher protocol,
   so pusher-js and any Pusher client connects", OpenAPI 3.1, OAuth 2.1,
   OpenTelemetry, MCP. The JSON error shape

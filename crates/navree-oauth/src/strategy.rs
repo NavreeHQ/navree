@@ -347,7 +347,7 @@ mod tests {
         use navree_http::handler::Endpoint;
 
         async fn handler(_: OAuthToken, _: Option<OAuthToken>) {}
-        assert!(Endpoint::new(handler).is_native());
+        let _ = Endpoint::new(handler);
     }
 
     #[test]

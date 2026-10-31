@@ -126,7 +126,7 @@ async fn a_field_check_without_the_argument_is_a_server_error() {
 }
 
 #[test]
-fn handlers_on_the_access_extractors_are_native() {
+fn handlers_take_the_access_extractors() {
     async fn handler(
         _: Abilities,
         _: CurrentAccess,
@@ -134,5 +134,5 @@ fn handlers_on_the_access_extractors_are_native() {
         _: Accessible<Post, Read>,
     ) {
     }
-    assert!(Endpoint::new(handler).is_native());
+    let _ = Endpoint::new(handler);
 }

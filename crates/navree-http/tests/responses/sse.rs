@@ -6,8 +6,6 @@ use std::fmt::Write as _;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::time::Duration;
 
-use axum::response::IntoResponse as _;
-use axum::response::sse as previous;
 use bytes::Bytes;
 use futures_util::{Stream, StreamExt as _, stream};
 use http_body_util::BodyExt;
@@ -17,9 +15,9 @@ use navree_http::response::sse::{Event, KeepAlive, Sse};
 use proptest::prelude::*;
 use tokio::time::{Instant, advance};
 
-use crate::support::{ours, theirs};
+use crate::support::ours;
 
-/// One thing done to an event, on both sides.
+/// One thing done to an event.
 #[derive(Clone, Debug)]
 enum Field {
     Data(String),
@@ -31,7 +29,7 @@ enum Field {
     Write(Vec<String>),
 }
 
-fn apply_ours(event: Event, field: &Field) -> Event {
+fn apply(event: Event, field: &Field) -> Event {
     match field {
         Field::Data(data) => event.data(data),
         Field::Json(value) => event.json_data(value).unwrap(),
@@ -49,44 +47,90 @@ fn apply_ours(event: Event, field: &Field) -> Event {
     }
 }
 
-fn apply_theirs(event: previous::Event, field: &Field) -> previous::Event {
-    match field {
-        Field::Data(data) => event.data(data),
-        Field::Json(value) => event.json_data(value).unwrap(),
-        Field::Comment(text) => event.comment(text),
-        Field::Event(name) => event.event(name),
-        Field::Id(id) => event.id(id),
-        Field::Retry(duration) => event.retry(*duration),
-        Field::Write(pieces) => {
-            let mut writer = event.into_data_writer();
-            for piece in pieces {
-                writer.write_str(piece).unwrap();
-            }
-            writer.into_event()
-        }
-    }
-}
-
-/// The bytes of an event on each side, or the panic's message.
-fn bytes_of(fields: &[Field]) -> (Result<Bytes, String>, Result<Bytes, String>) {
-    let ours = attempt(|| {
-        let event = fields.iter().fold(Event::default(), apply_ours);
+/// The bytes of an event, or the panic's message.
+fn bytes_of(fields: &[Field]) -> Result<Bytes, String> {
+    attempt(|| {
+        let event = fields.iter().fold(Event::default(), apply);
         let response = Sse::new(stream::iter([Ok::<_, Infallible>(event)])).into_response();
         futures_util::FutureExt::now_or_never(response.into_body().collect())
             .unwrap()
             .unwrap()
             .to_bytes()
-    });
-    let theirs = attempt(|| {
-        let event = fields.iter().fold(previous::Event::default(), apply_theirs);
-        let response =
-            previous::Sse::new(stream::iter([Ok::<_, Infallible>(event)])).into_response();
-        futures_util::FutureExt::now_or_never(response.into_body().collect())
-            .unwrap()
-            .unwrap()
-            .to_bytes()
-    });
-    (ours, theirs)
+    })
+}
+
+/// The bytes of an event, or the message of the panic, as the format
+/// (<https://html.spec.whatwg.org/multipage/server-sent-events.html>) and the
+/// rules in `Event`'s documentation give them: `data` (and a JSON value, and
+/// whatever a writer is given) is one `data:` line per line of text, and no
+/// line when the text is empty; a name, an id and a comment are one line each
+/// and may not hold a line break; an id may not hold a NUL; data, a name, a
+/// retry and an id are set once; a retry is in whole milliseconds; the event
+/// ends with a blank line.
+fn model(fields: &[Field]) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    let (mut has_data, mut has_event, mut has_retry, mut has_id) = (false, false, false, false);
+    fn line(
+        out: &mut Vec<u8>,
+        name: &str,
+        value: &str,
+        breaks_allowed: bool,
+    ) -> Result<(), String> {
+        if !breaks_allowed && value.contains(['\r', '\n']) {
+            return Err("SSE field value cannot contain newlines or carriage returns".to_owned());
+        }
+        out.extend_from_slice(format!("{name}: {value}\n").as_bytes());
+        Ok(())
+    }
+    fn data(out: &mut Vec<u8>, has_data: &mut bool, text: &str) -> Result<(), String> {
+        if text.is_empty() {
+            return Ok(());
+        }
+        if std::mem::replace(has_data, true) {
+            return Err("Called `Event::data*` multiple times".to_owned());
+        }
+        out.extend_from_slice(b"data: ");
+        let mut rest = text;
+        while let Some(at) = rest.find(['\r', '\n']) {
+            out.extend_from_slice(&rest.as_bytes()[..=at]);
+            out.extend_from_slice(b"data: ");
+            rest = &rest[at + 1..];
+        }
+        out.extend_from_slice(rest.as_bytes());
+        out.push(b'\n');
+        Ok(())
+    }
+    for field in fields {
+        match field {
+            Field::Data(text) => data(&mut out, &mut has_data, text)?,
+            Field::Write(pieces) => data(&mut out, &mut has_data, &pieces.concat())?,
+            Field::Json(value) => data(&mut out, &mut has_data, &value.to_string())?,
+            Field::Comment(text) => line(&mut out, "", text, false)?,
+            Field::Event(name) => {
+                if std::mem::replace(&mut has_event, true) {
+                    return Err("Called `Event::event` multiple times".to_owned());
+                }
+                line(&mut out, "event", name, false)?;
+            }
+            Field::Id(id) => {
+                if std::mem::replace(&mut has_id, true) {
+                    return Err("Called `Event::id` multiple times".to_owned());
+                }
+                if id.contains('\0') {
+                    return Err("Event ID cannot contain null characters".to_owned());
+                }
+                line(&mut out, "id", id, false)?;
+            }
+            Field::Retry(duration) => {
+                if std::mem::replace(&mut has_retry, true) {
+                    return Err("Called `Event::retry` multiple times".to_owned());
+                }
+                line(&mut out, "retry", &duration.as_millis().to_string(), false)?;
+            }
+        }
+    }
+    out.push(b'\n');
+    Ok(out)
 }
 
 fn attempt(run: impl FnOnce() -> Bytes) -> Result<Bytes, String> {
@@ -132,42 +176,49 @@ fn field() -> impl Strategy<Value = Field> {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(4096))]
 
-    /// Every sequence of fields gives the same bytes, or the same panic.
+    /// Every sequence of fields gives the bytes the format asks for, or the
+    /// panic that refuses it.
     #[test]
-    fn events_read_the_same(fields in prop::collection::vec(field(), 0..6)) {
-        let (a, b) = bytes_of(&fields);
-        prop_assert_eq!(a, b, "{:?}", fields);
+    fn events_follow_the_format(fields in prop::collection::vec(field(), 0..6)) {
+        prop_assert_eq!(
+            bytes_of(&fields),
+            model(&fields).map(Bytes::from),
+            "{:?}",
+            fields
+        );
     }
 }
 
 #[test]
 fn retries_at_every_scale() {
-    for duration in [
-        Duration::ZERO,
-        Duration::from_nanos(1),
-        Duration::from_micros(999),
-        Duration::from_millis(1),
-        Duration::from_millis(9),
-        Duration::from_millis(10),
-        Duration::from_millis(99),
-        Duration::from_millis(100),
-        Duration::from_millis(999),
-        Duration::from_secs(1),
-        Duration::from_millis(1_001),
-        Duration::from_millis(1_010),
-        Duration::from_millis(1_100),
-        Duration::from_secs(30),
-        Duration::from_secs(u64::MAX),
+    for (duration, millis) in [
+        (Duration::ZERO, "0"),
+        (Duration::from_nanos(1), "0"),
+        (Duration::from_micros(999), "0"),
+        (Duration::from_millis(1), "1"),
+        (Duration::from_millis(9), "9"),
+        (Duration::from_millis(10), "10"),
+        (Duration::from_millis(99), "99"),
+        (Duration::from_millis(100), "100"),
+        (Duration::from_millis(999), "999"),
+        (Duration::from_secs(1), "1000"),
+        (Duration::from_millis(1_001), "1001"),
+        (Duration::from_millis(1_010), "1010"),
+        (Duration::from_millis(1_100), "1100"),
+        (Duration::from_secs(30), "30000"),
+        (Duration::from_secs(u64::MAX), "18446744073709551615000"),
     ] {
-        let (a, b) = bytes_of(&[Field::Retry(duration)]);
-        assert_eq!(a, b, "{duration:?}");
+        assert_eq!(
+            bytes_of(&[Field::Retry(duration)]),
+            Ok(Bytes::from(format!("retry: {millis}\n\n"))),
+            "{duration:?}"
+        );
     }
 }
 
 #[test]
-fn the_default_keep_alive_is_an_empty_comment() {
-    let (a, b) = bytes_of(&[]);
-    assert_eq!(a, b);
+fn an_event_without_fields_is_a_blank_line() {
+    assert_eq!(bytes_of(&[]), Ok(Bytes::from_static(b"\n")));
 }
 
 /// A script: at each time, an event or the stream's end.
@@ -222,29 +273,19 @@ async fn timeline(body: Body) -> Vec<(u64, String)> {
     lines
 }
 
-async fn both_timelines(script: &[Step], interval: Duration) -> Vec<(u64, String)> {
-    let ours = Sse::new(stream_of(script.to_vec(), |data| {
+async fn timeline_of(script: &[Step], interval: Duration) -> Vec<(u64, String)> {
+    let response = Sse::new(stream_of(script.to_vec(), |data| {
         Event::default().data(data)
     }))
     .keep_alive(KeepAlive::new().interval(interval).text("alive"))
     .into_response();
-    let theirs = previous::Sse::new(stream_of(script.to_vec(), |data| {
-        previous::Event::default().data(data)
-    }))
-    .keep_alive(previous::KeepAlive::new().interval(interval).text("alive"))
-    .into_response();
-    let (a, b) = tokio::join!(
-        timeline(ours.into_body()),
-        timeline(Body::new(theirs.into_body()))
-    );
-    assert_eq!(a, b, "{script:?}");
-    a
+    timeline(response.into_body()).await
 }
 
 #[tokio::test(start_paused = true)]
-async fn keep_alives_go_out_at_the_same_times() {
+async fn keep_alives_go_out_when_the_stream_is_quiet() {
     let second = Duration::from_secs(1);
-    let line = both_timelines(
+    let line = timeline_of(
         &[
             Step::Wait(second * 25),
             Step::Send("one"),
@@ -269,9 +310,9 @@ async fn keep_alives_go_out_at_the_same_times() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_failing_stream_ends_with_its_error_on_both_sides() {
+async fn a_failing_stream_ends_with_its_error() {
     let second = Duration::from_secs(1);
-    let line = both_timelines(
+    let line = timeline_of(
         &[Step::Send("one"), Step::Wait(second * 3), Step::Fail],
         second * 2,
     )
@@ -299,26 +340,34 @@ async fn nothing_is_held_back_between_events() {
 }
 
 #[tokio::test]
-async fn headers_and_frames_are_the_same() {
-    let a = Sse::new(
+async fn headers_and_frames() {
+    let response = Sse::new(
         stream::iter(["1", "2"])
             .map(|data| Ok::<_, Infallible>(Event::default().id(data).data(data))),
     )
     .into_response();
-    let b = previous::Sse::new(
-        stream::iter(["1", "2"])
-            .map(|data| Ok::<_, Infallible>(previous::Event::default().id(data).data(data))),
-    )
-    .into_response();
-    let a = ours(a).await;
-    assert_eq!(a, theirs(b).await);
-    assert_eq!(a.frames.len(), 2, "one frame per event");
+    let seen = ours(response).await;
+    assert_eq!(
+        seen.line(),
+        r#"200 | content-type: text/event-stream / cache-control: no-cache | ["id: 1\ndata: 1\n\n", "id: 2\ndata: 2\n\n"] | 0.."#
+    );
+    assert_eq!(seen.frames.len(), 2, "one frame per event");
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_default_keep_alive_is_an_empty_comment() {
+    let events = stream::pending::<Result<Event, Infallible>>();
+    let mut body = Sse::new(events)
+        .keep_alive(KeepAlive::new().interval(Duration::from_secs(1)))
+        .into_response()
+        .into_body();
+    let start = Instant::now();
+    let frame = body.frame().await.unwrap().unwrap();
+    assert_eq!(frame.into_data().unwrap(), ":\n\n");
+    assert_eq!(start.elapsed(), Duration::from_secs(1));
 }
 
 #[test]
 fn a_keep_alive_is_checked_when_it_is_made() {
-    let a = catch_unwind(|| KeepAlive::new().text("a\nb"));
-    let b = catch_unwind(|| previous::KeepAlive::new().text("a\nb"));
-    assert_eq!(a.is_err(), b.is_err());
-    assert!(a.is_err());
+    assert!(catch_unwind(|| KeepAlive::new().text("a\nb")).is_err());
 }

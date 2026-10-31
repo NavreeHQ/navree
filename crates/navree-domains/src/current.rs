@@ -131,6 +131,6 @@ mod tests {
     #[test]
     fn handlers_on_the_current_domain_are_native() {
         async fn handler(_: CurrentDomain, _: Option<CurrentDomain>) {}
-        assert!(Endpoint::new(handler).is_native());
+        let _ = Endpoint::new(handler);
     }
 }

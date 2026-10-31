@@ -6,7 +6,6 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::routing::MethodRouter;
 use http::Method;
 use navree_kernel::ModuleId;
 
@@ -55,14 +54,6 @@ impl RouteDef {
         T: 'static,
     {
         Self::with_endpoint(method, path, Endpoint::new(handler))
-    }
-
-    /// A route answering `method` with the previous framework's method
-    /// router, run as is (during the move; prefer [`on`](RouteDef::on)).
-    /// Requests reach it only for `method`, whatever else the method router
-    /// answers.
-    pub fn new(method: Method, path: impl Into<String>, handler: MethodRouter) -> Self {
-        Self::with_endpoint(method, path, Endpoint::from_method_router(handler))
     }
 
     /// A route answering `method` with `endpoint`.
@@ -372,11 +363,10 @@ pub fn schema_fn<T: utoipa::ToSchema>() -> (String, serde_json::Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::routing::get;
 
     #[test]
     fn builders_fill_the_access_spec() {
-        let route = RouteDef::new(Method::POST, "/", get(|| async {}))
+        let route = RouteDef::on(Method::POST, "/", || async {})
             .roles(&["admin", "manager"])
             .permissions(&["deals.manage"])
             .can("update", "Deal", Some("id"));
@@ -396,7 +386,6 @@ mod tests {
         let route = RouteDef::on(Method::PATCH, "/x", || async { "patched" }).public();
         assert_eq!(route.method, Method::PATCH);
         assert_eq!(route.meta.method, "PATCH");
-        assert!(route.handler.is_native());
         let mut router = crate::routing::Router::new();
         router
             .try_route(route.method.clone(), "/x", route.handler.clone())
@@ -421,7 +410,7 @@ mod tests {
 
     #[test]
     fn extensions_are_collected_by_name() {
-        let route = RouteDef::new(Method::GET, "/", get(|| async {}))
+        let route = RouteDef::on(Method::GET, "/", || async {})
             .public()
             .extension("x-navree-flag", "new-pipeline")
             .extension("x-internal", serde_json::json!({"team": "deals"}))
@@ -440,7 +429,7 @@ mod tests {
 
     #[test]
     fn nothing_declared_is_not_declared() {
-        let route = RouteDef::new(Method::GET, "/", get(|| async {})).name("x");
+        let route = RouteDef::on(Method::GET, "/", || async {}).name("x");
         assert!(!route.meta.access.is_declared());
         assert_eq!(route.meta.access.describe(), "none");
         let route = route.authenticated();

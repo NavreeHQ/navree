@@ -114,7 +114,7 @@ impl ParamProblem {
     /// The client error's message for parameter `name`.
     pub fn message(self, name: &str) -> String {
         match self {
-            // The wording of the previous router's `Path` rejection, kept.
+            // The wording the docs show for a `Path` rejection.
             ParamProblem::InvalidUtf8 => format!("Invalid URL: Invalid UTF-8 in `{name}`"),
             ParamProblem::EncodedSlash => {
                 format!("Invalid URL: `{name}` holds an encoded slash")

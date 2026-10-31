@@ -1,0 +1,34 @@
+OPTIONS * HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 404 Not Found\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 79\r\n
+\r\n
+{"statusCode":404,"message":"Not Found","error":"Not Found","code":"not_found"}
+clean: true
+
+CONNECT example.com:443 HTTP/1.1\r\nHost: example.com\r\nConnection: close\r\n\r\n
+=>
+HTTP/1.1 404 Not Found\r\n
+content-type: application/json\r\n
+x-content-type-options: nosniff\r\n
+x-out: a\r\n
+x-out: b\r\n
+x-in: ba\r\n
+x-in: b\r\n
+vary: accept-encoding\r\n
+vary: Origin\r\n
+connection: close\r\n
+content-length: 79\r\n
+\r\n
+{"statusCode":404,"message":"Not Found","error":"Not Found","code":"not_found"}
+clean: true
+

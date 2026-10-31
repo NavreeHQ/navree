@@ -56,8 +56,7 @@ use navree_kernel::BoxFuture;
 use tower::{Layer, Service};
 
 use crate::AppRouter;
-use crate::extract::Request;
-use crate::handler::{FromPartsVia, FromRequestVia};
+use crate::extract::{FromRequest, FromRequestParts, Request};
 use crate::response::{IntoResponse, Response};
 
 /// A middleware from the async function `f`. See the [module
@@ -123,18 +122,17 @@ pub mod with {
 }
 
 macro_rules! middleware {
-    ($(($arg:ident, $via:ident)),* ; ($last:ident, $last_via:ident)) => {
+    ($($arg:ident),* ; $last:ident) => {
         #[allow(non_snake_case, unused_mut)]
-        impl<F, Fut, Out, $($via,)* $last_via, $($arg,)* $last>
-            Middleware<(), (with::NoState, $($via,)* $last_via, $($arg,)* $last,)> for F
+        impl<F, Fut, Out, M, $($arg,)* $last>
+            Middleware<(), (with::NoState, M, $($arg,)* $last,)> for F
         where
             F: FnMut($($arg,)* $last, Next) -> Fut + Clone + Send + 'static,
             Fut: Future<Output = Out> + Send + 'static,
             Out: IntoResponse + 'static,
-            $($arg: FromPartsVia<$via> + 'static,)*
-            $last: FromRequestVia<$last_via> + 'static,
-            $($via: 'static,)*
-            $last_via: 'static,
+            $($arg: FromRequestParts + 'static,)*
+            $last: FromRequest<M> + 'static,
+            M: 'static,
         {
             fn call(
                 mut self,
@@ -143,24 +141,23 @@ macro_rules! middleware {
                 next: Next,
             ) -> BoxFuture<'static, Response> {
                 Box::pin(async move {
-                    middleware!(@extract request; $(($arg, $via)),* ; ($last, $last_via));
+                    middleware!(@extract request; $($arg),* ; $last);
                     self($($arg,)* $last, next).await.into_response()
                 })
             }
         }
 
         #[allow(non_snake_case, unused_mut)]
-        impl<F, Fut, Out, S, $($via,)* $last_via, $($arg,)* $last>
-            Middleware<S, (with::State, $($via,)* $last_via, $($arg,)* $last,)> for F
+        impl<F, Fut, Out, S, M, $($arg,)* $last>
+            Middleware<S, (with::State, M, $($arg,)* $last,)> for F
         where
             F: FnMut(State<S>, $($arg,)* $last, Next) -> Fut + Clone + Send + 'static,
             Fut: Future<Output = Out> + Send + 'static,
             Out: IntoResponse + 'static,
             S: Send + 'static,
-            $($arg: FromPartsVia<$via> + 'static,)*
-            $last: FromRequestVia<$last_via> + 'static,
-            $($via: 'static,)*
-            $last_via: 'static,
+            $($arg: FromRequestParts + 'static,)*
+            $last: FromRequest<M> + 'static,
+            M: 'static,
         {
             fn call(
                 mut self,
@@ -169,39 +166,35 @@ macro_rules! middleware {
                 next: Next,
             ) -> BoxFuture<'static, Response> {
                 Box::pin(async move {
-                    middleware!(@extract request; $(($arg, $via)),* ; ($last, $last_via));
+                    middleware!(@extract request; $($arg),* ; $last);
                     self(State(state), $($arg,)* $last, next).await.into_response()
                 })
             }
         }
     };
-    (@extract $request:ident; $(($arg:ident, $via:ident)),* ; ($last:ident, $last_via:ident)) => {
+    (@extract $request:ident; $($arg:ident),* ; $last:ident) => {
         let (mut parts, body) = $request.into_parts();
         $(
-            let $arg = match <$arg as FromPartsVia<$via>>::extract(&mut parts).await {
+            let $arg = match $arg::from_request_parts(&mut parts).await {
                 Ok(value) => value,
-                Err(rejection) => return rejection,
+                Err(rejection) => return rejection.into_response(),
             };
         )*
-        let $last = match <$last as FromRequestVia<$last_via>>::extract(
-            Request::from_parts(parts, body),
-        )
-        .await
-        {
+        let $last = match $last::from_request(Request::from_parts(parts, body)).await {
             Ok(value) => value,
-            Err(rejection) => return rejection,
+            Err(rejection) => return rejection.into_response(),
         };
     };
 }
 
-middleware!(; (T1, M1));
-middleware!((T1, M1); (T2, M2));
-middleware!((T1, M1), (T2, M2); (T3, M3));
-middleware!((T1, M1), (T2, M2), (T3, M3); (T4, M4));
-middleware!((T1, M1), (T2, M2), (T3, M3), (T4, M4); (T5, M5));
-middleware!((T1, M1), (T2, M2), (T3, M3), (T4, M4), (T5, M5); (T6, M6));
-middleware!((T1, M1), (T2, M2), (T3, M3), (T4, M4), (T5, M5), (T6, M6); (T7, M7));
-middleware!((T1, M1), (T2, M2), (T3, M3), (T4, M4), (T5, M5), (T6, M6), (T7, M7); (T8, M8));
+middleware!(; T1);
+middleware!(T1; T2);
+middleware!(T1, T2; T3);
+middleware!(T1, T2, T3; T4);
+middleware!(T1, T2, T3, T4; T5);
+middleware!(T1, T2, T3, T4, T5; T6);
+middleware!(T1, T2, T3, T4, T5, T6; T7);
+middleware!(T1, T2, T3, T4, T5, T6, T7; T8);
 
 /// The [`tower::Layer`] of [`from_fn`] and [`from_fn_with_state`].
 #[must_use]

@@ -19,7 +19,9 @@
 //!
 //! It also checks the external side of the graph: `Cargo.lock` must not contain
 //! aws-lc, OpenSSL, native-tls or CMake (rustls with `ring` only), nor the
-//! crates the crypto policy forbids (`rsa`, `p256`, `p384`, `ed25519-dalek`).
+//! crates the crypto policy forbids (`rsa`, `p256`, `p384`, `ed25519-dalek`),
+//! nor another HTTP framework's router (`axum`, `axum-core`, `matchit`):
+//! navree-http routes requests itself.
 //!
 //! Adding a workspace crate? Give it a row in [`HIERARCHY`] first.
 
@@ -702,6 +704,10 @@ const FORBIDDEN_NATIVE_PACKAGES: &[&str] = &[
 /// signatures go through `ring`, wrapped in `navree_crypto::jose`.
 const FORBIDDEN_CRYPTO_PACKAGES: &[&str] = &["ed25519-dalek", "p256", "p384", "rsa"];
 
+/// Packages of another HTTP framework's request layer: Navree's router,
+/// extractors and responses are navree-http's own, on `hyper` and `tower`.
+const FORBIDDEN_ROUTER_PACKAGES: &[&str] = &["axum", "axum-core", "matchit"];
+
 /// Names of forbidden native packages listed in a `Cargo.lock`.
 fn forbidden_native_packages(lock: &str) -> Vec<String> {
     listed_packages(lock, FORBIDDEN_NATIVE_PACKAGES)
@@ -710,6 +716,11 @@ fn forbidden_native_packages(lock: &str) -> Vec<String> {
 /// Names of packages the crypto policy forbids, listed in a `Cargo.lock`.
 fn forbidden_crypto_packages(lock: &str) -> Vec<String> {
     listed_packages(lock, FORBIDDEN_CRYPTO_PACKAGES)
+}
+
+/// Names of other routers' packages listed in a `Cargo.lock`.
+fn forbidden_router_packages(lock: &str) -> Vec<String> {
+    listed_packages(lock, FORBIDDEN_ROUTER_PACKAGES)
 }
 
 /// Packages of another data layer listed in a `Cargo.lock`: any `sea-*`
@@ -858,6 +869,20 @@ fn lockfile_follows_the_crypto_policy() {
         "Cargo.lock contains packages the crypto policy forbids: {found:?}; \
          sign and verify with navree_crypto::jose (ring) instead, and check \
          `cargo tree -i <package>` for the crate that pulls them in"
+    );
+}
+
+/// Navree routes requests itself: neither `axum` (nor its core) nor `matchit`
+/// is in the resolved graph.
+#[test]
+fn lockfile_has_no_other_router() {
+    let lockfile = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.lock");
+    let lock = std::fs::read_to_string(&lockfile).expect("Cargo.lock is readable");
+    let found = forbidden_router_packages(&lock);
+    assert!(
+        found.is_empty(),
+        "Cargo.lock contains {found:?}; navree-http owns the router, the extractors and the \
+         responses. Find what pulls them in with `cargo tree -i <package>`"
     );
 }
 
@@ -1087,6 +1112,41 @@ version = "2.0.4"
     assert_eq!(
         other_data_layer_packages(lock),
         vec!["sea-query".to_owned(), "sea-orm-migration".to_owned()]
+    );
+}
+
+#[test]
+fn forbidden_router_packages_are_found_in_a_lockfile() {
+    let lock = r#"
+version = 4
+
+[[package]]
+name = "axum-core"
+version = "0.5.6"
+
+[[package]]
+name = "hyper"
+version = "1.12.0"
+
+[[package]]
+name = "matchit"
+version = "0.8.4"
+
+[[package]]
+name = "axum"
+version = "0.8.9"
+
+[[package]]
+name = "axum-extra-not-a-router"
+version = "1.0.0"
+"#;
+    assert_eq!(
+        forbidden_router_packages(lock),
+        vec![
+            "axum-core".to_owned(),
+            "matchit".to_owned(),
+            "axum".to_owned()
+        ]
     );
 }
 

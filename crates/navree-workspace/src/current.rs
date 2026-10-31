@@ -721,7 +721,7 @@ mod tests {
             _: PartitionScope,
         ) {
         }
-        assert!(Endpoint::new(handler).is_native());
+        let _ = Endpoint::new(handler);
     }
 
     #[test]

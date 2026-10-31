@@ -372,7 +372,7 @@ mod tests {
             _: OptionalBody<LogoutInput>,
         ) {
         }
-        assert!(Endpoint::new(handler).is_native());
+        let _ = Endpoint::new(handler);
     }
 
     fn logout_request(body: &'static str, limit: Option<usize>) -> Request {

@@ -1,5 +1,6 @@
-//! What a client reads: both apps behind Navree's server, compared byte by
-//! byte (the `date` header aside), over HTTP/1 and HTTP/2.
+//! What a client reads: the app behind Navree's server, byte by byte (the
+//! `date` header aside), over HTTP/1 and HTTP/2. Each is pinned in a file of
+//! `golden/`.
 
 use std::future::IntoFuture;
 use std::net::SocketAddr;
@@ -15,7 +16,8 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::task::JoinHandle;
 use tower::Service;
 
-use crate::stack::both;
+use crate::stack::app;
+use crate::support::golden;
 
 const PATIENCE: Duration = Duration::from_secs(20);
 
@@ -84,11 +86,24 @@ fn get(path: &str, headers: &str) -> String {
     format!("GET {path} HTTP/1.1\r\nHost: test\r\nConnection: close\r\n{headers}\r\n")
 }
 
+/// A response as the golden files show it: every line end visible, and a
+/// compressed body left out (what the compressor makes of it is its own
+/// business; `stack` reads it decompressed).
+fn readable((text, clean): (String, bool)) -> String {
+    let text = match text.split_once("\r\n\r\n") {
+        Some((head, body)) if head.to_ascii_lowercase().contains("content-encoding: gzip") => {
+            assert!(body.ends_with("0\r\n\r\n"), "the body ends: {text}");
+            format!("{head}\r\n\r\n<a gzip body, chunked>")
+        }
+        _ => text,
+    };
+    format!("{}\nclean: {clean}", text.replace("\r\n", "\\r\\n\n"))
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn http1_responses_are_the_same_on_the_wire() {
-    let (app, previous) = both();
-    let ours = start(app).await;
-    let theirs = start(previous).await;
+async fn http1_responses_on_the_wire() {
+    let server = start(app()).await;
+    let mut requests = Vec::new();
 
     for path in [
         "/text",
@@ -109,63 +124,55 @@ async fn http1_responses_are_the_same_on_the_wire() {
             "Accept-Encoding: gzip\r\n",
             "Origin: http://localhost:3000\r\n",
         ] {
-            let request = get(path, headers);
-            let a = raw(ours.addr, &request).await;
-            let b = raw(theirs.addr, &request).await;
-            assert_eq!(a.0, b.0, "{request}");
+            requests.push(get(path, headers));
         }
         for method in ["HEAD", "OPTIONS", "DELETE"] {
-            let request =
-                format!("{method} {path} HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n");
-            let a = raw(ours.addr, &request).await;
-            let b = raw(theirs.addr, &request).await;
-            assert_eq!(a.0, b.0, "{request}");
+            requests.push(format!(
+                "{method} {path} HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n"
+            ));
         }
     }
-    let request =
+    let post =
         "POST /echo HTTP/1.1\r\nHost: test\r\nConnection: close\r\nContent-Length: 5\r\n\r\nhello";
-    let a = raw(ours.addr, request).await;
-    assert_eq!(a.0, raw(theirs.addr, request).await.0);
-    assert!(a.0.ends_with("hello"), "{}", a.0);
+    requests.push(post.to_owned());
+    requests.push("CONNECT /tunnel HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n".to_owned());
 
-    let request = "CONNECT /tunnel HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n";
-    assert_eq!(
-        raw(ours.addr, request).await.0,
-        raw(theirs.addr, request).await.0
-    );
+    let mut text = String::new();
+    for request in &requests {
+        let response = raw(server.addr, request).await;
+        if request == post {
+            assert!(response.0.ends_with("hello"), "{}", response.0);
+        }
+        text.push_str(&format!(
+            "{}\n=>\n{}\n\n",
+            request.replace("\r\n", "\\r\\n"),
+            readable(response)
+        ));
+    }
+    golden("http1.txt", &text);
 }
 
-/// The lines of a response in order, the head's sorted after its first line.
-fn with_head_sorted(response: &str) -> Vec<String> {
-    let (head, body) = response.split_once("\r\n\r\n").unwrap_or((response, ""));
-    let mut lines: Vec<String> = head.split("\r\n").map(str::to_owned).collect();
-    lines[1..].sort();
-    lines.push(body.to_owned());
-    lines
-}
-
-/// Difference 3: a request without a path. The previous router wrote the
-/// length into the headers itself for these, ahead of `connection`; here the
-/// server writes it. The same fields with the same values.
+/// A request without a path: `OPTIONS *` and `CONNECT host:port`.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_request_without_a_path_differs_only_in_the_order_of_two_fields() {
-    let (app, previous) = both();
-    let ours = start(app).await;
-    let theirs = start(previous).await;
+async fn a_request_without_a_path() {
+    let server = start(app()).await;
+    let mut text = String::new();
     for request in [
         "OPTIONS * HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n",
         "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com\r\nConnection: close\r\n\r\n",
     ] {
-        let a = raw(ours.addr, request).await;
-        let b = raw(theirs.addr, request).await;
-        assert_eq!(with_head_sorted(&a.0), with_head_sorted(&b.0), "{request}");
+        text.push_str(&format!(
+            "{}\n=>\n{}\n\n",
+            request.replace("\r\n", "\\r\\n"),
+            readable(raw(server.addr, request).await)
+        ));
     }
+    golden("http1-no-path.txt", &text);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_stream_goes_out_chunked_with_a_length_unknown() {
-    let (app, _) = both();
-    let ours = start(app).await;
+    let ours = start(app()).await;
     let (text, _) = raw(ours.addr, &get("/stream", "")).await;
     assert!(text.contains("transfer-encoding: chunked"), "{text}");
     assert!(
@@ -178,8 +185,7 @@ async fn a_stream_goes_out_chunked_with_a_length_unknown() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn events_go_out_one_at_a_time() {
-    let (app, _) = both();
-    let ours = start(app).await;
+    let ours = start(app()).await;
     let (text, _) = raw(ours.addr, &get("/events", "Accept-Encoding: gzip\r\n")).await;
     assert!(text.contains("content-type: text/event-stream"), "{text}");
     assert!(text.contains("cache-control: no-cache"), "{text}");
@@ -188,13 +194,9 @@ async fn events_go_out_one_at_a_time() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_body_error_cuts_the_response_off_the_same_way() {
-    let (app, previous) = both();
-    let ours = start(app).await;
-    let theirs = start(previous).await;
+async fn a_body_error_cuts_the_response_off() {
+    let ours = start(app()).await;
     let a = raw(ours.addr, &get("/broken", "")).await;
-    let b = raw(theirs.addr, &get("/broken", "")).await;
-    assert_eq!(a, b);
     assert!(
         a.0.contains("5\r\nstart\r\n"),
         "what was ready was sent: {}",
@@ -205,6 +207,7 @@ async fn a_body_error_cuts_the_response_off_the_same_way() {
         "no final chunk: the client sees a broken response, not a short one: {}",
         a.0
     );
+    golden("http1-broken.txt", &readable(a));
 }
 
 /// One `GET` over HTTP/2, and how its body ended.
@@ -245,10 +248,9 @@ async fn http2(
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn http2_responses_are_the_same() {
-    let (app, previous) = both();
-    let ours = start(app).await;
-    let theirs = start(previous).await;
+async fn http2_responses() {
+    let ours = start(app()).await;
+    let mut text = String::new();
     for path in [
         "/text",
         "/json",
@@ -258,10 +260,14 @@ async fn http2_responses_are_the_same() {
         "/app-error",
         "/broken",
     ] {
-        let a = http2(ours.addr, path).await;
-        let b = http2(theirs.addr, path).await;
-        assert_eq!(a, b, "{path}");
+        let (status, headers, body, error) = http2(ours.addr, path).await;
+        text.push_str(&format!(
+            "GET {path}\n{status} | {} | \"{}\" | error: {error:?}\n\n",
+            headers.join(" / "),
+            body.escape_ascii()
+        ));
     }
+    golden("http2.txt", &text);
     let broken = http2(ours.addr, "/broken").await;
     assert!(broken.3.is_some(), "the stream is reset, not ended");
 }

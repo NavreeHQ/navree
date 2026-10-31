@@ -67,7 +67,7 @@ full = [
 ## Telemetry events, sinks and W3C trace context (every emitting module turns it on).
 telemetry = ["dep:navree-telemetry"]
 ## L2
-http = ["dep:navree-http", "dep:axum", "telemetry"]
+http = ["dep:navree-http", "telemetry"]
 log = ["dep:navree-log", "telemetry"]
 crypto = ["dep:navree-crypto"]
 events = ["dep:navree-events", "telemetry"]
@@ -667,10 +667,6 @@ navree-validation = { workspace = true, optional = true }
 navree-view = { workspace = true, optional = true }
 navree-webhooks = { workspace = true, optional = true }
 navree-workflows = { workspace = true, optional = true }
-
-# Re-exported as `navree::axum` (the router and what navree-http does not have yet), with
-# the `http` feature.
-axum = { workspace = true, optional = true }
 
 [dev-dependencies]
 # The `graphql` test's object derives name async-graphql directly, as an

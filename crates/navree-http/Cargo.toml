@@ -11,9 +11,6 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-# The previous framework: what still runs on its extractors, and the bridge
-# to them.
-axum = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 # A multipart text field's charset.
@@ -61,13 +58,14 @@ uuid = { workspace = true }
 [dev-dependencies]
 # The routing micro-benchmarks (`benches/routing.rs`).
 criterion = { workspace = true }
-# The references of the router's differential tests (tests/routing): the
-# previous matcher, the urlencoded parser and deserializer, percent-decoding.
+# Reads a gzip body in the response tests (tests/responses).
+flate2 = { workspace = true }
+# The references of the extractors' and decoders' tests (tests/routing): the
+# urlencoded parser and deserializer, percent-decoding.
 form_urlencoded = { workspace = true }
 http-body-util = { workspace = true }
 # The HTTP/2 client of the server's tests (tests/serve).
 hyper = { workspace = true, features = ["client", "http1", "http2"] }
-matchit = { workspace = true }
 percent-encoding = { workspace = true }
 proptest = { workspace = true }
 serde_json = { workspace = true }
@@ -80,7 +78,7 @@ tower = { workspace = true }
 tower-http = { workspace = true, features = ["cors"] }
 tracing-subscriber = { workspace = true }
 
-# Navree's router against the previous one (`cargo bench -p navree-http --bench routing`).
+# The router's micro-benchmarks (`cargo bench -p navree-http --bench routing`).
 [[bench]]
 name = "routing"
 harness = false

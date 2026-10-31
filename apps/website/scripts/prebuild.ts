@@ -477,7 +477,7 @@ function buildDocs(perf: PerfData): SearchDoc[] {
       ["results", "Results", "Requests per second, p50 and p99 latency, peak memory and CPU for each test: JSON, single query, 20 queries, auth + paginated list, auth + validated insert."],
       ["workload", "The workload", "The benchmark API: JWT authentication, validation, a paginated list with owners, inserts, single and multiple queries, plain JSON. The request pipeline every request goes through."],
       ["method", "The machine and the method", "Docker containers with fixed CPUs for the app, PostgreSQL and wrk; warm-up and measured runs; wrk on the monotonic clock; the conformance test; the repeat run."],
-      ["efficiency", "What makes it efficient", "One binary, Tokio, Axum and Hyper, pooled PostgreSQL connections, no garbage collector."],
+      ["efficiency", "What makes it efficient", "One binary, Tokio and Hyper, pooled PostgreSQL connections, no garbage collector."],
       ["next", "What we are optimizing next", "Per-request overhead in Navree: pool pings, set_config round trips, a task per request, locks, metrics labels, the user lookup, JSON parsing, change events."],
       ["reproduce", "Reproduce it", "The commands to run the benchmark yourself with Docker and Node.js, and the raw result files."],
     ];

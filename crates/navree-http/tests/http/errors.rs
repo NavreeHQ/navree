@@ -3,12 +3,10 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use axum::Json;
-use axum::routing::post;
 use http::{Method, Request};
 use navree_config::ConfigSources;
 use navree_http::body::Body;
-use navree_http::{AppError, ErrorOptions, HttpOptions, ModuleBuilderHttpExt, RouteDef};
+use navree_http::{AppError, ErrorOptions, HttpOptions, Json, ModuleBuilderHttpExt, RouteDef};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -194,17 +192,17 @@ struct NewThing {
 #[tokio::test]
 async fn framework_rejections_become_json_errors() {
     let app = Setup::new(vec![
-        RouteDef::new(
+        RouteDef::on(
             Method::POST,
             "/things",
-            post(|Json(_thing): Json<NewThing>| async { "created" }),
+            |Json(_thing): Json<NewThing>| async { "created" },
         )
         .public(),
     ])
     .boot()
     .await;
 
-    // Missing field: axum's JSON rejection (422, text/plain) becomes a 400.
+    // Missing field: a 400 naming it.
     let response = app
         .send(json_request(
             "POST",
@@ -282,8 +280,8 @@ async fn contributed_error_mapper_maps_typed_errors() {
 
 #[tokio::test]
 async fn rejections_propagated_with_question_mark_keep_their_status() {
-    use axum::extract::Path;
-    use axum::extract::rejection::{JsonRejection, PathRejection};
+    use navree_http::Path;
+    use navree_http::extract::rejection::{JsonRejection, PathRejection};
 
     let app = Setup::new(vec![
         RouteDef::on(
@@ -308,7 +306,7 @@ async fn rejections_propagated_with_question_mark_keep_their_status() {
     .boot()
     .await;
 
-    // axum's 422 JSON data rejection is a 400, like every input error.
+    // JSON of the wrong shape is a 400, like every input error.
     let response = app
         .send(json_request(
             "POST",
@@ -354,10 +352,10 @@ fn failing_routes() -> Vec<RouteDef> {
         })
         .public(),
         RouteDef::on(Method::GET, "/private", || async { "secret" }).authenticated(),
-        RouteDef::new(
+        RouteDef::on(
             Method::POST,
             "/things",
-            post(|Json(_thing): Json<NewThing>| async { "created" }),
+            |Json(_thing): Json<NewThing>| async { "created" },
         )
         .public(),
         RouteDef::on(Method::GET, "/panic", || async {

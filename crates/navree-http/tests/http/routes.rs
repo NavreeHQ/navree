@@ -2,15 +2,13 @@
 
 use std::sync::Arc;
 
-use axum::extract::Path;
-use axum::routing::get;
 use chrono::{TimeZone, Utc};
 use http::{Method, Request, StatusCode};
 use navree_config::ConfigSources;
 use navree_contracts::{Clock, FixedClock, Secret};
 use navree_http::body::Body;
 use navree_http::{
-    ClientIp, Created, HttpOptions, Json, NoContent, RouteDef, UrlSigner, ValidSignature,
+    ClientIp, Created, HttpOptions, Json, NoContent, Path, RouteDef, UrlSigner, ValidSignature,
     route_table,
 };
 
@@ -217,10 +215,10 @@ async fn signed_url_guard_in_the_pipeline() {
     let clock = Arc::new(FixedClock::new(now));
     let registered = clock.clone();
     let app = Setup::new(vec![
-        RouteDef::new(
+        RouteDef::on(
             Method::GET,
             "!/verify-email/{id}",
-            get(|Path(id): Path<u32>| async move { format!("verified {id}") }),
+            |Path(id): Path<u32>| async move { format!("verified {id}") },
         )
         .public()
         .guard(ValidSignature::guard()),

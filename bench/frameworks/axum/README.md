@@ -1,4 +1,4 @@
-# Axum (baseline for Rust: Navree's foundation with no framework on top)
+# Axum (baseline for Rust: the plain Rust stack with no framework on top)
 
 | | |
 |---|---|

@@ -857,9 +857,9 @@ export default async function PerformancePage() {
               proof: `${s.app.count} workers · ${s.connections} connections`,
             },
             {
-              key: "axum",
-              title: "Axum and Hyper",
-              text: `Hyper speaks HTTP, Axum routes, and ${site.name}'s request pipeline is a stack of Tower layers around your handlers.`,
+              key: "hyper",
+              title: "Hyper and Tower",
+              text: `Hyper speaks HTTP, ${site.name} routes, and its request pipeline is a stack of Tower layers around your handlers.`,
               proof: `${fmtInt(r.json.rps)} JSON responses a second`,
             },
             {

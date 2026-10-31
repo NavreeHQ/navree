@@ -3,14 +3,9 @@
 //! parameter before catch-all, segment by segment from the left), and the
 //! raw parameters put back into the pattern give the path again.
 //!
-//! Then against the previous router's matcher (`matchit`, behind the
-//! routes of crates not yet moved): with one route, every path Navree
-//! matches the previous matcher matches too, with the same parameters,
-//! which is what running those routes behind it relies on. The one
-//! difference: the previous matcher lets a `{name}` match an empty segment
-//! inside a path (`//a` for `/{a}/{b}`, with `a` empty); Navree never
-//! matches a parameter to nothing, so a `//` reaches no route. With several
-//! routes, they choose the same route whenever both match.
+//! A single route matches exactly the paths the reference says it does,
+//! with the reference's parameters. A parameter is never empty: an empty
+//! segment (`//a` for `/{a}/{b}`) reaches no route.
 
 use navree_http::routing::{PathTree, check_path};
 use proptest::prelude::*;
@@ -176,48 +171,47 @@ proptest! {
     }
 
     #[test]
-    fn one_route_matches_what_the_previous_matcher_matches(segs in route(), path in path()) {
+    fn one_route_matches_exactly_what_the_reference_matches(segs in route(), path in path()) {
         let pattern = pattern_of(&segs);
         let mut tree = PathTree::new();
         tree.insert(&pattern, ()).unwrap();
-        let mut previous = matchit::Router::new();
-        previous.insert(&pattern, ()).unwrap();
-        let ours = tree.at(&path).map(|found| found.params().into_iter().map(|(k, v)| (k.to_owned(), v.to_owned())).collect::<Vec<_>>());
-        let theirs = previous.at(&path).ok().map(|found| found.params.iter().map(|(k, v)| (k.to_owned(), v.to_owned())).collect::<Vec<_>>());
-        match (&ours, &theirs) {
-            (None, Some(params)) => prop_assert!(
-                params.iter().any(|(_, value)| value.is_empty()),
-                "only an empty parameter may differ: pattern {pattern:?} path {path:?} {theirs:?}"
-            ),
-            _ => prop_assert_eq!(&ours, &theirs, "pattern {:?} path {:?}", pattern, path),
+        let found = tree.at(&path).map(|found| {
+            found.raw_values().iter().map(|value| (*value).to_owned()).collect::<Vec<_>>()
+        });
+        let expected = reference(&segs, &path).map(|(_, params)| params);
+        prop_assert_eq!(found, expected, "pattern {:?} path {:?}", pattern, path);
+    }
+
+    #[test]
+    fn a_parameter_is_never_empty(
+        routes in prop::collection::vec(route(), 1..12),
+        path in path(),
+    ) {
+        let (_, tree) = build(&routes);
+        if let Some(found) = tree.at(&path) {
+            for value in found.raw_values() {
+                prop_assert!(!value.is_empty(), "path {path:?}");
+            }
         }
     }
 
     #[test]
-    fn several_routes_choose_like_the_previous_matcher_when_both_match(
-        routes in prop::collection::vec(route(), 1..10),
-        path in path(),
+    fn an_empty_segment_matches_no_parameter(
+        before in prop::sample::select(STATICS.to_vec()),
+        after in prop::sample::select(STATICS.to_vec()),
     ) {
-        let (kept, tree) = build(&routes);
-        let mut previous = matchit::Router::new();
-        let mut insertable = true;
-        for (id, segs) in kept.iter().enumerate() {
-            // The previous matcher refuses some sets ours accepts (two
-            // parameter names at one position); skip those.
-            insertable &= previous.insert(pattern_of(segs), id).is_ok();
-        }
-        prop_assume!(insertable);
-        // An empty segment is no parameter here, so the previous matcher may
-        // have taken a route this one passes over for the next best.
-        if let (Some(ours), Ok(theirs)) = (tree.at(&path), previous.at(&path))
-            && !theirs.params.iter().any(|(_, value)| value.is_empty())
-        {
-            prop_assert_eq!(*ours.value, *theirs.value, "path {:?}", path);
-        }
-        if let Ok(theirs) = previous.at(&path)
-            && !theirs.params.iter().any(|(_, value)| value.is_empty())
-        {
-            prop_assert!(tree.at(&path).is_some(), "the previous matcher matched {path:?}");
+        let mut tree = PathTree::new();
+        tree.insert("/{a}/{b}", ()).unwrap();
+        tree.insert("/{a}/x/{b}", ()).unwrap();
+        // Each of these holds an empty segment where `{a}` or `{b}` would
+        // take a value.
+        for path in [
+            format!("//{before}"),
+            format!("/{before}//{after}"),
+            format!("/{before}/"),
+            format!("/{before}//"),
+        ] {
+            prop_assert!(tree.at(&path).is_none(), "{}", path);
         }
     }
 

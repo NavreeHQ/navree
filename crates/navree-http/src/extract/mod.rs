@@ -19,6 +19,8 @@
 //! | [`Scoped<T>`](crate::Scoped) | a provider of the app, for this request | 500 |
 //! | [`ClientIp`](crate::ClientIp), [`CurrentPrincipal`](crate::CurrentPrincipal), [`PathParams`](crate::routing::PathParams) | what the pipeline found | 401 for a guest (`CurrentPrincipal`) |
 //! | [`Request`], [`Body`](crate::body::Body) | the whole request, or its body unread (only as the last argument) | never |
+//! | `HeaderMap`, `Method`, `Uri`, `Version`, `Extensions`, `Parts` (from `http`) | a copy of that part of the request | never |
+//! | `Bytes`, `String` | the body, whole, within the route's [`BodyLimit`](crate::body::BodyLimit) (only as the last argument) | 413, 408, 400; 400 for a `String` that is not UTF-8 |
 //! | `Option<T>` | `T`, or `None` when it is absent (for `T` implementing [`OptionalFromRequestParts`] / [`OptionalFromRequest`]) | `T`'s, when present but invalid |
 //! | `Result<T, T::Rejection>` | `T` or its rejection, for the handler to decide | never |
 
@@ -36,6 +38,7 @@ mod json;
 mod media;
 mod multipart;
 mod path;
+mod plain;
 mod query;
 pub mod rejection;
 mod scoped;

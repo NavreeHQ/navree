@@ -89,10 +89,10 @@
 //! navree-observe's OTLP span exporter. `validation-phone` and
 //! `validation-html` (both in `full`) add navree-validation's `Phone` and
 //! `SafeHtml`. `search-tantivy` adds search's embedded Tantivy engine.
-//! `axum` is re-exported with `http`. `dock` is a development tool
-//! (`navree dock`), for tools and tests that read `dock.toml`. `harbor` is a
-//! deployment tool: the `navree` CLI has Harbor built in, and an app turns it
-//! on only to read `harbor.toml` or drive deploys from its own code.
+//! `dock` is a development tool (`navree dock`), for tools and tests that
+//! read `dock.toml`. `harbor` is a deployment tool: the `navree` CLI has
+//! Harbor built in, and an app turns it on only to read `harbor.toml` or
+//! drive deploys from its own code.
 //! `navigator` is the library behind `navree mcp` and `navree skills:install`,
 //! for tools and tests. `browser` is for tests: turn it on in
 //! `[dev-dependencies]`.
@@ -343,11 +343,6 @@ pub use navree_dock as dock;
 pub use navree_harbor as harbor;
 #[cfg(feature = "navigator")]
 pub use navree_navigator as navigator;
-
-/// The previous router, for code still written against it. It goes once
-/// navree-http's extractors cover what it has.
-#[cfg(feature = "http")]
-pub use axum;
 
 /// The attribute macros: `#[module]`, `#[injectable]`, `#[controller]` and
 /// its route attributes.

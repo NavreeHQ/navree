@@ -102,8 +102,6 @@ bytes = "1.12.1"
 http = "1.5.0"
 http-body-util = "0.1.5"
 hyper = "1.12.0"
-axum = { version = "0.8.9", features = ["http2", "macros", "multipart", "ws"] }
-axum-extra = { version = "0.12.6", features = ["cookie", "typed-header"] }
 tower = { version = "0.5.3", features = ["limit", "timeout", "util"] }
 tower-http = { version = "0.6.11", features = [
     "add-extension",
@@ -145,7 +143,6 @@ backon = { version = "1.6.0", default-features = false, features = ["std", "toki
 tonic = { version = "0.14.6", default-features = false, features = [
     "channel",
     "codegen",
-    "router",
     "tls-native-roots",
     "tls-ring",
 ] }
@@ -259,7 +256,7 @@ opentelemetry-otlp = { version = "0.33.1", default-features = false, features = 
     "trace",
 ] }
 # Test receivers for the OTLP export (dev-dependencies only): the protobuf
-# messages, decoded by in-process OTLP/HTTP and OTLP/gRPC receivers on axum
+# messages, decoded by in-process OTLP/HTTP and OTLP/gRPC receivers on navree-http
 # (with `prost`, declared with the gRPC dependencies above).
 opentelemetry-proto = { version = "0.33.1", default-features = false, features = ["gen-tonic-messages", "trace"] }
 
@@ -344,7 +341,7 @@ hashbrown = { version = "0.17.1", default-features = false, features = ["inline-
 dashmap = "6.2.1"
 wildmatch = "2.7.0"
 utoipa = { version = "6.0.0", features = ["chrono", "preserve_order", "preserve_path_order", "uuid"] }
-utoipa-scalar = { version = "0.4.0", features = ["axum"] }
+utoipa-scalar = "0.4.0"
 object_store = { version = "0.14.2", default-features = false, features = ["fs"] }
 csv = "1.4.0"
 # Chrome for Testing archives (`navree browser:install`), and reading DOCX
@@ -437,9 +434,6 @@ insta = { version = "1.49.0", features = ["json"] }
 # TLS and navree-directory's LDAPS tests.
 rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "pem", "ring"] }
 proptest = "1.12.0"
-# The previous router's matcher, the reference of navree-http's routing
-# differential tests (already in the tree under axum).
-matchit = "0.8.4"
 # HTTP mock servers for provider integrations (navree-social, navree-billing)
 # and the search engines' REST clients (navree-search).
 wiremock = "0.6.5"

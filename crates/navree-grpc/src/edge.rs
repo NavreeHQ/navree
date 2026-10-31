@@ -24,12 +24,12 @@ use navree_kernel::{AppContext, RequestScope};
 use tokio::sync::OnceCell;
 use tokio::time::{Instant, Sleep};
 use tokio_util::sync::WaitForCancellationFutureOwned;
-use tonic::service::Routes;
 use tonic::{Code, Status};
 use tower::util::BoxCloneSyncService;
 use tower::{Service, ServiceBuilder, ServiceExt};
 use tracing::Instrument;
 
+use crate::Routes;
 use crate::call::{CallInfo, Runtime, ServiceRuntime};
 use crate::connect::{self, Codec, Connect};
 use crate::context::{TRACEPARENT, TRACESTATE, X_WORKSPACE};
@@ -132,7 +132,7 @@ impl GrpcCore {
             inner: Arc::new(CoreInner {
                 runtime,
                 services,
-                routes: routes.prepare(),
+                routes,
             }),
         }
     }

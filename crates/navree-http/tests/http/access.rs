@@ -5,7 +5,6 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use axum::routing::{get, post};
 use http::request::Parts;
 use http::{Method, StatusCode};
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState};
@@ -267,14 +266,10 @@ async fn authorizer_called_with_route_meta() {
     let calls = Arc::new(Counter::default());
     let handler_calls = calls.clone();
     let app = Setup::new(vec![
-        RouteDef::new(
-            Method::POST,
-            "/reports/{id}",
-            post(move || {
-                handler_calls.hit();
-                async { "done" }
-            }),
-        )
+        RouteDef::on(Method::POST, "/reports/{id}", move || {
+            handler_calls.hit();
+            async { "done" }
+        })
         .roles(&["admin"])
         .can("export", "Report", Some("id")),
         ok_route(Method::GET, "/mine").authenticated(),
@@ -346,14 +341,10 @@ async fn guard_runs_before_handler() {
     let calls = Arc::new(Counter::default());
     let handler_calls = calls.clone();
     let app = Setup::new(vec![
-        RouteDef::new(
-            Method::GET,
-            "/guarded",
-            get(move || {
-                handler_calls.hit();
-                async { "through" }
-            }),
-        )
+        RouteDef::on(Method::GET, "/guarded", move || {
+            handler_calls.hit();
+            async { "through" }
+        })
         .public()
         .guard(Arc::new(HeaderGuard)),
     ])
@@ -538,7 +529,7 @@ async fn authentication_precedes_the_slots_without_session_layers() {
                 .unwrap_or_default()
         })
         .public(),
-        RouteDef::new(Method::GET, "/private", get(|| async { "secret" })).authenticated(),
+        RouteDef::on(Method::GET, "/private", || async { "secret" }).authenticated(),
     ])
     .authenticated()
     .module(LayerModule::<1>(LayerSlot::Uow, "uow"))

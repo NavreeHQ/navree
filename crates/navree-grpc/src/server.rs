@@ -17,14 +17,13 @@ use navree_kernel::{
 use prost_reflect::DescriptorPool;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
-use tonic::service::Routes;
 
-use crate::GrpcOptions;
 use crate::call::{Runtime, ServiceRuntime};
 use crate::connect::Connect;
 use crate::edge::{Edge, EdgeParts, GrpcCore};
 use crate::health::ReadinessHealth;
 use crate::service::{DescriptorSet, ServiceLimits, ServiceRegistration};
+use crate::{GrpcOptions, Routes};
 
 /// The name of the health service.
 const HEALTH: &str = "grpc.health.v1.Health";

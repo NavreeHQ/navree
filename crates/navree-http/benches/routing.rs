@@ -1,22 +1,15 @@
-//! Routing micro-benchmarks: Navree's router against the previous one, on
-//! the same route table, handlers and per-route layer.
+//! Routing micro-benchmarks: Navree's router on a table of 240 routes shaped
+//! like a real app's (`/api/v1/<resource>`, `/{id}`, `/{id}/<sub>`, ...), each
+//! behind a boxing per-route layer, as `build_router` mounts them.
 //!
-//! - `match/*`: the matcher alone: `PathTree::at` against the previous
-//!   router's matcher (`matchit`) on a table of 240 routes shaped like a
-//!   real app's (`/api/v1/<resource>`, `/{id}`, `/{id}/<sub>`, ...).
-//! - `route/*`: a request through the router to its handler and back:
-//!   Navree's `routing::Router` against the previous `Router`, each route
-//!   behind a boxing per-route layer (as `build_router` mounts them), both
+//! - `match/navree`: the matcher alone: `PathTree::at`.
+//! - `route/navree/*`: a request through the router to its handler and back,
 //!   behind a minimal error stage (404 and 405 end as JSON errors, as the
-//!   pipeline renders them), the handlers reading their parameters with each
-//!   framework's `Path`. `static`, `one_param`, `two_params`, `not_found`,
+//!   pipeline renders them), the handlers reading their parameters with
+//!   `Path`. `static`, `one_param`, `two_params`, `not_found`,
 //!   `method_not_allowed`.
-//! - `previous_extractors/one_param`: a handler still on the previous
-//!   framework's extractors, mounted on Navree's router (it runs behind the
-//!   previous router's matching for its route, as during the move).
-//! - `stack/*`: a request through four `from_fn` layers around Navree's
-//!   router, on [`AppRouter`] against the previous framework's router and
-//!   middleware with Navree's router as its fallback.
+//! - `stack/navree`: a request through four `from_fn` layers around the
+//!   router, on [`AppRouter`].
 //!
 //! Run with `cargo bench -p navree-http --bench routing` (add `-- --quick`
 //! for a shorter run).
@@ -121,10 +114,9 @@ where
     }
 }
 
-/// The error stage of the pipeline, reduced to what both routers need: an
+/// The error stage of the pipeline, reduced to what the router needs: an
 /// `AppError` a response carries is rendered again (what the stage does to
-/// map and log it), and an empty error response (the previous router's 405)
-/// becomes one, keeping its `Allow`.
+/// map and log it).
 #[derive(Clone)]
 struct Errors<S>(S);
 
@@ -142,25 +134,13 @@ where
     }
 
     fn call(&mut self, request: Request<Body>) -> Self::Future {
-        use http_body_util::BodyExt;
-
         let inner = self.0.clone();
         Box::pin(async move {
             let mut response = inner.oneshot(request).await?;
             if let Some(error) = AppError::take_from(&mut response) {
                 return Ok(error.into_response());
             }
-            let status = response.status();
-            if !status.is_client_error() {
-                return Ok(response);
-            }
-            let (parts, body) = response.into_parts();
-            let _ = body.collect().await;
-            let mut error = AppError::from_status(status);
-            if let Some(allow) = parts.headers.get(http::header::ALLOW) {
-                error = error.with_header(http::header::ALLOW, allow.clone());
-            }
-            Ok(error.into_response())
+            Ok(response)
         })
     }
 }
@@ -177,26 +157,14 @@ async fn note(Path((id, note)): Path<(String, String)>) -> String {
     format!("{id}/{note}")
 }
 
-async fn previous_show(axum::extract::Path(id): axum::extract::Path<String>) -> String {
-    id
-}
-
-async fn previous_note(
-    axum::extract::Path((id, note)): axum::extract::Path<(String, String)>,
-) -> String {
-    format!("{id}/{note}")
-}
-
 /// Navree's router over the table, every route behind [`Boxing`].
-fn navree(previous_extractors: bool) -> Router {
+fn navree() -> Router {
     let mut router = Router::new();
     for (method, pattern) in table() {
-        let endpoint = match (pattern.matches('{').count(), previous_extractors) {
-            (0, _) => Endpoint::new(index),
-            (1, false) => Endpoint::new(show),
-            (1, true) => Endpoint::new(previous_show),
-            (_, false) => Endpoint::new(note),
-            (_, true) => Endpoint::new(previous_note),
+        let endpoint = match pattern.matches('{').count() {
+            0 => Endpoint::new(index),
+            1 => Endpoint::new(show),
+            _ => Endpoint::new(note),
         };
         router
             .try_route(method, &pattern, endpoint)
@@ -205,74 +173,17 @@ fn navree(previous_extractors: bool) -> Router {
     router.route_layer(Boxing)
 }
 
-/// The previous router over the table, every route behind [`Boxing`].
-fn previous() -> axum::Router {
-    let mut methods: Vec<(String, axum::routing::MethodRouter)> = Vec::new();
-    for (method, pattern) in table() {
-        let handler = match pattern.matches('{').count() {
-            0 => axum::routing::on(filter(&method), index),
-            1 => axum::routing::on(filter(&method), previous_show),
-            _ => axum::routing::on(filter(&method), previous_note),
-        }
-        .route_layer(Boxing);
-        match methods
-            .iter_mut()
-            .find(|(existing, _)| *existing == pattern)
-        {
-            Some((_, router)) => *router = std::mem::take(router).merge(handler),
-            None => methods.push((pattern, handler)),
-        }
-    }
-    let mut router = axum::Router::new();
-    for (pattern, handler) in methods {
-        router = router.route(&pattern, handler);
-    }
-    // The JSON 404 `build_router` mounted as the previous router's fallback,
-    // as Navree's router answers it.
-    router
-        .fallback_service(tower::service_fn(|_: axum::extract::Request| {
-            std::future::ready(Ok::<_, Infallible>(AppError::not_found().into_response()))
-        }))
-        .with_state(())
-}
-
-fn navree_response(response: axum::response::Response) -> Response {
-    response.map(Body::new)
-}
-
 async fn pass(request: navree_http::extract::Request, next: Next) -> Response {
-    next.run(request).await
-}
-
-async fn previous_pass(
-    request: axum::extract::Request,
-    next: axum::middleware::Next,
-) -> axum::response::Response {
     next.run(request).await
 }
 
 /// Navree's router behind four middlewares on [`AppRouter`].
 fn app_stack() -> AppRouter {
-    let mut app = AppRouter::new(navree(false));
+    let mut app = AppRouter::new(navree());
     for _ in 0..4 {
         app = app.layer(middleware::from_fn(pass));
     }
     app
-}
-
-/// Navree's router behind four middlewares on the previous router.
-fn previous_stack() -> axum::Router {
-    let routes =
-        navree(false).map_request(|request: axum::extract::Request| request.map(Body::new));
-    let mut app = axum::Router::new().fallback_service(routes);
-    for _ in 0..4 {
-        app = app.layer(axum::middleware::from_fn(previous_pass));
-    }
-    app
-}
-
-fn filter(method: &Method) -> axum::routing::MethodFilter {
-    axum::routing::MethodFilter::try_from(method.clone()).expect("a standard method")
 }
 
 async fn send<S>(service: S, method: Method, path: &str, expected: StatusCode)
@@ -295,11 +206,9 @@ fn routing(c: &mut Criterion) {
         .expect("runtime");
 
     let mut tree = PathTree::new();
-    let mut matcher = matchit::Router::new();
     for (index, (_, pattern)) in table().into_iter().enumerate() {
-        if tree.insert(&pattern, index).is_ok() {
-            matcher.insert(pattern, index).expect("the table inserts");
-        }
+        // A shape once: its methods share it.
+        let _ = tree.insert(&pattern, index);
     }
     let paths = [
         "/api/v1/deals",
@@ -317,22 +226,9 @@ fn routing(c: &mut Criterion) {
             }
         });
     });
-    group.bench_function("previous", |b| {
-        b.iter(|| {
-            for path in paths {
-                std::hint::black_box(
-                    matcher
-                        .at(std::hint::black_box(path))
-                        .ok()
-                        .map(|m| *m.value),
-                );
-            }
-        });
-    });
     group.finish();
 
-    let ours = Errors(navree(false));
-    let theirs = Errors(tower::util::MapResponseLayer::new(navree_response).layer(previous()));
+    let router = Errors(navree());
     let cases: [(&str, Method, &str, StatusCode); 5] = [
         ("static", Method::GET, "/api/v1/deals", StatusCode::OK),
         (
@@ -365,48 +261,18 @@ fn routing(c: &mut Criterion) {
     for (name, method, path, status) in &cases {
         group.bench_function(format!("navree/{name}"), |b| {
             b.to_async(&rt)
-                .iter(|| send(ours.clone(), method.clone(), path, *status));
-        });
-        group.bench_function(format!("previous/{name}"), |b| {
-            b.to_async(&rt)
-                .iter(|| send(theirs.clone(), method.clone(), path, *status));
+                .iter(|| send(router.clone(), method.clone(), path, *status));
         });
     }
     group.finish();
 
     let app = app_stack();
-    let previous_app = tower::util::MapResponseLayer::new(navree_response).layer(previous_stack());
     let mut group = c.benchmark_group("stack");
     group.measurement_time(Duration::from_secs(4));
     group.bench_function("navree", |b| {
         b.to_async(&rt).iter(|| {
             send(
                 app.clone(),
-                Method::GET,
-                "/api/v1/deals/123",
-                StatusCode::OK,
-            )
-        });
-    });
-    group.bench_function("previous", |b| {
-        b.to_async(&rt).iter(|| {
-            send(
-                previous_app.clone(),
-                Method::GET,
-                "/api/v1/deals/123",
-                StatusCode::OK,
-            )
-        });
-    });
-    group.finish();
-
-    let bridged = Errors(navree(true));
-    let mut group = c.benchmark_group("previous_extractors");
-    group.measurement_time(Duration::from_secs(4));
-    group.bench_function("one_param", |b| {
-        b.to_async(&rt).iter(|| {
-            send(
-                bridged.clone(),
                 Method::GET,
                 "/api/v1/deals/123",
                 StatusCode::OK,
