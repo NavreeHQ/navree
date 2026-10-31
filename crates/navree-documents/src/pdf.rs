@@ -33,8 +33,10 @@ const MAX_PAGE_CONTENT: usize = 64 * 1024 * 1024;
 /// It bounds the bytes one stream inflates to, not the memory loading
 /// takes: lopdf parses every object stream as the file loads, and the
 /// objects a stream lists may all point at the same bytes, each parsed
-/// again. A PDF of a kilobyte can load as tens of megabytes of objects.
-/// Callers cap the size of the PDFs they accept.
+/// again, and an encrypted file is read the same way. A PDF of a kilobyte
+/// can load as tens of megabytes of objects, and one of a few megabytes
+/// can exhaust memory and abort the process. No check of the bytes before
+/// loading can prevent it without reading the file as lopdf does.
 const MAX_LOADED_STREAM: usize = 8 * 1024 * 1024;
 
 /// A PDF document: the bytes an engine rendered, or any PDF loaded with
@@ -77,6 +79,10 @@ impl fmt::Debug for Pdf {
 impl Pdf {
     /// A PDF from its bytes, checked: an error unless the bytes parse as a
     /// PDF with at least one page.
+    ///
+    /// Loading a PDF is not bounded in memory (see the documents guide): a
+    /// hostile file of a few megabytes can make the process abort. Load PDFs
+    /// from people you do not trust in a process you can afford to lose.
     pub fn from_bytes(bytes: impl Into<Bytes>) -> Result<Pdf, DocumentsError> {
         let pdf = Pdf(bytes.into());
         if pdf.page_count()? == 0 {

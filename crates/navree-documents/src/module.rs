@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
-use navree_config::ModuleBuilderConfigExt;
+use navree_config::{ConfigSection, ModuleBuilderConfigExt};
 use navree_contracts::{Clock, Dispatcher, ModuleBuilderJobsExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
@@ -57,7 +57,8 @@ pub struct DocumentsModule;
 
 impl DocumentsModule {
     /// The module with explicit options (configure it once, in the app
-    /// root).
+    /// root). They are checked at boot as the `documents` section is: a
+    /// value it refuses fails the boot.
     pub fn for_root(options: DocumentsOptions) -> impl Module {
         ConfiguredDocumentsModule {
             options: Some(options),
@@ -117,9 +118,18 @@ impl Lifecycle for CloseEngines {
 fn register(m: &mut ModuleBuilder, options: Option<DocumentsOptions>) {
     m.global();
     match options {
+        // Options given in code are checked at boot, as configuration is.
         Some(options) => m.factory(Factory::<DocumentsOptions>::new(move |_| {
             let options = options.clone();
-            async move { Ok(Arc::new(options)) }
+            async move {
+                options
+                    .validate()
+                    .map_err(|message| navree_config::ConfigError::Validation {
+                        key: DocumentsOptions::KEY.to_owned(),
+                        message,
+                    })?;
+                Ok(Arc::new(options))
+            }
         })),
         None => m.config::<DocumentsOptions>(),
     };

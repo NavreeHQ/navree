@@ -294,6 +294,28 @@ async fn an_unknown_documents_disk_fails_the_boot() {
     assert!(error.to_string().contains("documents.disk"), "{error}");
 }
 
+#[tokio::test]
+async fn options_given_in_code_are_checked_at_boot() {
+    let options = DocumentsOptions {
+        native: navree_documents::NativeOptions {
+            max_image_pixels: 0,
+            ..navree_documents::NativeOptions::default()
+        },
+        ..DocumentsOptions::default()
+    };
+    let error = TestApp::builder()
+        .module(StorageModule::for_root(storage()))
+        .module(DocumentsModule::for_root(options))
+        .try_build()
+        .await
+        .map(|_| ())
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("native.max_image_pixels"),
+        "{error}"
+    );
+}
+
 #[test]
 fn for_root_takes_the_options() {
     let options = DocumentsOptions {

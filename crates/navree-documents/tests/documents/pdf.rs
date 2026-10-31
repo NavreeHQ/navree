@@ -576,6 +576,60 @@ fn a_page_listed_many_times_in_the_page_tree_is_stamped_once() {
 }
 
 #[test]
+fn a_stamp_on_some_pages_leaves_the_resources_of_the_others_as_they_were() {
+    // Three pages sharing one resources object; the stamp goes on the second.
+    let pdf = Pdf::from_bytes(pdf_with_many_fonts_on_many_pages(3, 2, true)).unwrap();
+    let second = Stamp::text("X").pages(Pages::Only(vec![2]));
+    let before = lopdf::Document::load_mem(&pdf).unwrap();
+    let stamped = pdf.stamp(&second).unwrap();
+    let after = lopdf::Document::load_mem(&stamped).unwrap();
+    let resources = |document: &lopdf::Document| -> Vec<lopdf::Object> {
+        document
+            .get_pages()
+            .into_values()
+            .map(|page| {
+                let page = document.get_dictionary(page).unwrap();
+                page.get(b"Resources").unwrap().clone()
+            })
+            .collect()
+    };
+    let (was, now) = (resources(&before), resources(&after));
+    let shared = was[0].as_reference().unwrap();
+    assert!(
+        was.iter().all(|r| r.as_reference().unwrap() == shared),
+        "{was:?}"
+    );
+    // The other pages still refer to the object they shared, unchanged.
+    assert_eq!(now[0], was[0]);
+    assert_eq!(now[2], was[2]);
+    assert_eq!(
+        after.get_object(shared).unwrap(),
+        before.get_object(shared).unwrap()
+    );
+    assert_ne!(now[1], was[1]);
+    let fonts = resource_names(&stamped, b"Font");
+    assert_eq!(
+        fonts,
+        [names(2, &[]), names(2, &["NavreeStamp"]), names(2, &[])]
+    );
+    let states = resource_names(&stamped, b"ExtGState");
+    assert_eq!(states[0], names(0, &[]));
+    assert_eq!(states[1], names(0, &["NavreeStampGs"]));
+    assert_eq!(states[2], names(0, &[]));
+
+    // The same when the pages inherit the resources from the page tree.
+    let pdf = Pdf::from_bytes(pdf_with_many_fonts_on_many_pages(3, 2, false)).unwrap();
+    let stamped = pdf.stamp(&second).unwrap();
+    let fonts = resource_names(&stamped, b"Font");
+    assert_eq!(
+        fonts,
+        [names(2, &[]), names(2, &["NavreeStamp"]), names(2, &[])]
+    );
+    let texts = stamped.page_texts().unwrap();
+    assert!(!texts[0].contains('X') && texts[1].contains('X') && !texts[2].contains('X'));
+}
+
+#[test]
 fn edits_the_app_cannot_ask_for_are_server_errors() {
     let nothing = Pdf::merge(Vec::<&Pdf>::new()).unwrap_err();
     assert_eq!(
