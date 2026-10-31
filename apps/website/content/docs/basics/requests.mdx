@@ -114,10 +114,10 @@ An extractor that reads the body must be the handler's **last** argument: there 
 
 ## Headers
 
-`HeaderMap` gives every header:
+`HeaderMap` gives every header. It comes from the `http` crate, which your app adds to its dependencies (`http = "1"`), like `StatusCode` and `Method`:
 
 ```rust
-use navree::axum::http::HeaderMap;
+use http::HeaderMap;
 
 #[get("/agent")]
 async fn agent(&self, headers: HeaderMap) -> String {
@@ -256,7 +256,7 @@ A route that needs a different limit, larger for an import or smaller for a webh
 An extractor is a type that implements `navree::http::extract::FromRequestParts` (or `FromRequest`, for one that reads the body). Use `AppError` as the rejection, so failures render in the error format:
 
 ```rust
-use navree::axum::http::request::Parts;
+use http::request::Parts;
 use navree::http::extract::FromRequestParts;
 use navree::prelude::*;
 

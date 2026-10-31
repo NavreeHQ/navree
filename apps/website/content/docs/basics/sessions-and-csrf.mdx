@@ -246,8 +246,8 @@ With `SameSite=Lax` (the default), browsers only send the cookies to the API whe
 `AuthModule` authenticates bearer tokens only; it doesn't read the session. To sign users in with a session, register your own `Authenticator`. The session layer runs before authentication, so the authenticator finds the `Session` in the request:
 
 ```rust title="src/session_auth/mod.rs"
+use http::request::Parts;
 use navree::BoxFuture;
-use navree::axum::http::request::Parts;
 use navree::contracts::{AuthVia, Principal};
 use navree::http::{Authenticator, CurrentPrincipal};
 use navree::prelude::*;

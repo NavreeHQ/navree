@@ -245,7 +245,7 @@ Each occurrence of an issue then links to its trace. Your own pages can build th
 `SpanRecorder` (from `navree::observe::testing`) collects finished spans in memory. Add its module to the app, then assert on the tree. This test sends a request with a `traceparent` to a route that calls another service through a faked `HttpClient`:
 
 ```rust title="tests/tracing.rs"
-use navree::axum::http::Method;
+use http::Method;
 use navree::http_client::{FakeResponse, HttpClient};
 use navree::observe::testing::SpanRecorder;
 use navree::prelude::*;

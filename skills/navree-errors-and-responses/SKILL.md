@@ -59,7 +59,7 @@ async fn show(&self, Path(id): Path<Uuid>) -> Result<Json<Value>> {
 Builders: `.with_detail("..")` sets the message, `.with_code("..")` sets
 the code, `.with_header(name, value)` adds a header, `.with_source(error)`
 records the cause (logged for 5xx, never sent). `StatusCode` is
-`navree::axum::http::StatusCode`.
+`http::StatusCode`.
 
 ## Error codes
 
@@ -98,7 +98,7 @@ compile**; map your error types instead.
 ```rust
 use std::fmt;
 
-use navree::axum::http::StatusCode;
+use http::StatusCode;
 use navree::prelude::*;
 
 #[derive(Debug)]
@@ -179,11 +179,11 @@ so a failed request leaves no partial writes.
 | `(StatusCode::ACCEPTED, Json(value))` | any status with a body |
 | `Page<T>` / `CursorPage<T>` | `{data, meta}` / `{data, next_cursor}` |
 | `String`, `&'static str` | 200 `text/plain` |
-| `navree::axum::response::Response` | anything, built with `.into_response()` |
+| `navree::http::response::Response` | anything, built with `.into_response()` |
 
 ```rust
-use navree::axum::http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
-use navree::axum::response::{IntoResponse, Response};
+use http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
+use navree::http::response::{IntoResponse, Response};
 
 #[get("/export")]
 async fn export(&self) -> Response {
@@ -199,7 +199,7 @@ async fn export(&self) -> Response {
 ```
 
 Return `Response` (not `impl IntoResponse`) from controller methods. Stream
-a large body with `navree::axum::body::Body::from_stream(stream)` (a storage
+a large body with `navree::http::body::Body::from_stream(stream)` (a storage
 disk's `get_stream` gives one). Navree adds `X-Request-Id`, the security
 headers to every response, and CORS headers when the request's `Origin` is in
 `http.cors.allowed_origins` (other origins get none); a header you set wins.

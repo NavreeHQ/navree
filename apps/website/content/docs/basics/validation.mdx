@@ -446,7 +446,7 @@ From the environment: `APP_VALIDATION__PHONE__DEFAULT_REGION=GB`. `ValidationMod
 When the region depends on the request (the workspace's country, the user's, the country your edge proxy detected), implement `RegionSource`. It gets the request head, `&mut Parts`, with its headers and its extensions (the principal and whatever earlier extractors cached), and returns `Option<Country>`. `None` falls back to the configured region.
 
 ```rust title="src/contacts/region.rs"
-use navree::axum::http::request::Parts;
+use http::request::Parts;
 use navree::validation::{Country, RegionSource};
 use navree::BoxFuture;
 use navree::prelude::*;

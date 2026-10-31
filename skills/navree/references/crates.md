@@ -16,7 +16,7 @@ MongoDB.
 | `navree::contracts` | navree-contracts | always | | | `Principal`, `Job`, `JobContext`, `Clock`, `SystemClock`, `FixedClock`, `Broadcaster`, `Dispatcher`, `Secret<T>`, `RequestId`, `CredentialRevoker` |
 | `navree::config` | navree-config | always | `ConfigModule::for_root(sources)` | | `ConfigSources`, `Config`, `ConfigSection` (`.env`, TOML and JSON files, `APP_*` variables) |
 | `navree::telemetry` | navree-telemetry | `telemetry` (turned on by the modules that emit events) | | | typed telemetry events, sinks, W3C trace context |
-| `navree::http` | navree-http | `http` | `HttpModule::from_config()` | `http` | controllers, `AppError`, `Json`, `Created`, `NoContent`, `CurrentPrincipal`, `ClientIp`, `Guard`, `RouteDef` |
+| `navree::http` | navree-http | `http` | `HttpModule::from_config()` | `http` | controllers, `AppError`, `Path`, `Query`, `Json`, `Form`, `Extension`, `Created`, `NoContent`, `CurrentPrincipal`, `ClientIp`, `Guard`, `RouteDef` |
 | `navree::log` | navree-log | `log` | `LoggerModule::from_config()` | `log` | tracing subscriber, JSON or pretty output |
 | `navree::crypto` | navree-crypto | `crypto` | `CryptoModule::from_config()` | `hashing` (+ `app.key`) | AES-256-GCM `Encrypter`, Argon2id hasher, `generate_key`, `random_token`, `sha256_hex`; `jose`: `SigningKey`, `VerifyingKey`, `Jws`, `Jwk`, `JwkSet`; `totp`: `Totp`, `Secret` (RFC 6238, `otpauth://` URLs); `qr`: `QrCode`, `EcLevel` (ISO/IEC 18004, SVG) |
 | `navree::events` | navree-events | `events` | `EventsModule::for_root()` | | `Event`, `Listener`, `EventBus` |
@@ -45,8 +45,8 @@ MongoDB.
 | `navree::billing` | navree-billing | `billing` (opt-in, not in `full`) | `BillingModule::from_config()` + `BillingModule::for_feature::<Workspace>()` | `billing` | `Billing`, `Billable`, `Subscribed`, `/api/billing/*`, `BillingFake`, `billing:*` commands |
 | `navree::dock` | navree-dock | `dock` (opt-in, not in `full`) | (a tool, not a module) | `dock.toml` | `DockFile`, `Dock`, `app_env`: the library behind `navree dock` |
 
-Also re-exported: `navree::axum` (for `navree::axum::http::StatusCode`,
-`navree::axum::extract::Multipart`, ...), the macros (`module`,
+Also re-exported: `navree::axum` (for `navree::axum::extract::Multipart`,
+`navree::axum::middleware::from_fn`, ...), the macros (`module`,
 `injectable`, `controller`, `get`, `post`, `put`, `patch`, `delete`) and,
 at the root, `BoxFuture`, `KernelError`, `ModuleId`, `ProviderKey` and
 `Scope`.

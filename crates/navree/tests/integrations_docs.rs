@@ -9,8 +9,8 @@
 // The page's examples are written as an app writes them, without doc comments.
 #![allow(missing_docs)]
 
+use http::Method;
 use navree::access::{AbilityCtx, AccessOptions, Rules};
-use navree::axum::http::Method;
 use navree::contracts::{AuthVia, Principal};
 use navree::db::Db;
 use navree::events::{Listener, ModuleBuilderEventsExt};

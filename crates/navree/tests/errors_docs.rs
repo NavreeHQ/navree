@@ -7,8 +7,8 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::time::Duration;
 
-use navree::axum::http::header::WWW_AUTHENTICATE;
-use navree::axum::http::{HeaderValue, StatusCode};
+use http::header::WWW_AUTHENTICATE;
+use http::{HeaderValue, StatusCode};
 use navree::http::{ErrorOptions, HttpOptions, codes};
 use navree::prelude::*;
 use navree::testing::{TestApp, principal};

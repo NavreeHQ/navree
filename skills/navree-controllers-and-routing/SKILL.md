@@ -141,7 +141,7 @@ authenticator (`AuthModule`), or the boot fails. Rules themselves:
 | `Authorized<E, A>`, `Accessible<E, A>`, `Abilities(ability)` | the checked record, the SQL list filter, the user's rules |
 | `ClientIp(ip)` (`navree::http`) | the client address (honours `http.trusted_proxies`) |
 | `Extension(id): Extension<RequestId>` | the request id (`navree::http::Extension`, `navree::contracts::RequestId`) |
-| `headers: HeaderMap` (`navree::axum::http::HeaderMap`) | every header |
+| `headers: HeaderMap` (`http::HeaderMap`) | every header |
 | `String`, `navree::http::body::Bytes`, `navree::axum::extract::Multipart` | raw bodies, uploads |
 | `Scoped<T>` | a request-scoped provider |
 
@@ -164,7 +164,7 @@ see `navree-openapi`). Durations: `"500ms"`, `"5s"`, `"1m"`, `"1h"`.
 - `Json(value)`: 200 JSON. `Created(location, value)`: 201 + `Location`.
   `NoContent`: 204. `(StatusCode::ACCEPTED, Json(v))`: any status.
 - `Page<T>` serializes as `{ "data": [..], "meta": { current_page, per_page, total, last_page } }`.
-- Headers or files: return `navree::axum::response::Response` built with
+- Headers or files: return `navree::http::response::Response` built with
   `([(CONTENT_TYPE, "text/csv"), (CONTENT_DISPOSITION, "attachment; filename=\"x.csv\"")], body).into_response()`.
   Don't return `impl IntoResponse` from a controller method (the `&self`
   borrow is captured); return `Response`.
@@ -173,7 +173,7 @@ see `navree-openapi`). Durations: `"500ms"`, `"5s"`, `"1m"`, `"1h"`.
 ## A custom extractor
 
 ```rust
-use navree::axum::http::request::Parts;
+use http::request::Parts;
 use navree::http::extract::FromRequestParts;
 use navree::prelude::*;
 
@@ -198,8 +198,8 @@ impl FromRequestParts for Tenant {
 To resolve a service inside an extractor, read the `AppContext` from
 `parts.extensions.get::<AppContext>()` and call `ctx.get::<T>().await`;
 the route's decoded path parameters are `parts.extensions.get::<PathParams>()`.
-A type implements either this trait or axum's `FromRequestParts<S>`, never
-both.
+The trait takes no state parameter: the app is in the request's extensions,
+as above.
 
 ## Hand-written routes
 

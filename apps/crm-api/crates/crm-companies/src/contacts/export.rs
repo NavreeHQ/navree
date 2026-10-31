@@ -1,8 +1,8 @@
 //! The contacts CSV export (`GET /api/v1/contacts/export`).
 
 use chrono::SecondsFormat;
-use navree::axum::http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
-use navree::axum::response::{IntoResponse, Response};
+use http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
+use navree::http::response::{IntoResponse, Response};
 use navree::prelude::*;
 
 use super::resource::ContactResource;

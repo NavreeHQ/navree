@@ -96,7 +96,7 @@ pub struct HeaderGate;
 impl Guard for HeaderGate {
     fn check<'a>(
         &'a self,
-        parts: &'a mut navree::axum::http::request::Parts,
+        parts: &'a mut http::request::Parts,
     ) -> BoxFuture<'a, Result<(), AppError>> {
         let open = parts
             .headers

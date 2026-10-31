@@ -668,7 +668,7 @@ navree-view = { workspace = true, optional = true }
 navree-webhooks = { workspace = true, optional = true }
 navree-workflows = { workspace = true, optional = true }
 
-# Re-exported as `navree::axum` (extractors such as `Path` and `Query`), with
+# Re-exported as `navree::axum` (the router and what navree-http does not have yet), with
 # the `http` feature.
 axum = { workspace = true, optional = true }
 
@@ -681,6 +681,7 @@ base64 = { workspace = true }
 chrono = { workspace = true }
 # The request-pipeline benchmarks (`benches/pipeline.rs`).
 criterion = { workspace = true }
+http = { workspace = true }
 http-body-util = { workspace = true }
 metrics = { workspace = true }
 serde = { workspace = true }

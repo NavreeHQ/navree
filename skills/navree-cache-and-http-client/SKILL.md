@@ -124,7 +124,7 @@ stored). There is no iteration and no eviction listener.
 ```rust
 use std::time::Duration;
 
-use navree::axum::http::StatusCode;
+use http::StatusCode;
 use navree::http_client::{HttpClient, HttpClientError};
 use navree::prelude::*;
 
@@ -189,7 +189,7 @@ endpoint) against the SSRF policy without sending anything.
 ## Test with the fake
 
 ```rust
-use navree::axum::http::Method;
+use http::Method;
 use navree::http_client::{FakeResponse, HttpClient};
 use navree::prelude::*;
 use navree::testing::TestApp;

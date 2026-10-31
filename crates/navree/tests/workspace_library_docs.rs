@@ -8,9 +8,9 @@
 // The page's examples are written as an app writes them, without doc comments.
 #![allow(missing_docs)]
 
+use http::Method;
 use navree::BoxFuture;
 use navree::access::AccessOptions;
-use navree::axum::http::Method;
 use navree::db::{Db, Seeder};
 use navree::helm::ModuleBuilderHelmExt;
 use navree::http::{Controller, RouteDef};

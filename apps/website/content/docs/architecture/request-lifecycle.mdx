@@ -59,6 +59,7 @@ Finally the command runs. `serve` builds the router, binds `http.addr` (`127.0.0
 ```text
 request
  │
+ ├─ Edge slot          protocols that share the port but not the pipeline (gRPC)
  ├─ request context    request id, client IP, tracing span; request log and metrics on the way out
  ├─ CORS               only when http.cors.allowed_origins is set
  ├─ panic catcher      a panicking handler becomes a 500
@@ -72,12 +73,13 @@ request
  ├─ Session slot       navree-session, when the app uses it
  ├─ AuthContext slot   the app's Authenticator first, then the slot's other layers
  ├─ Uow slot           navree-db's unit of work, then the slot's other layers
+ ├─ Context slot       request context for handlers (the locale), innermost
  ├─ router             404 or 405 when no route matches
  └─ route pipeline     body length, authentication, throttle, guards, authorization,
                        route timeout, handler, audit action
 ```
 
-The fixed layers always run in this order. Modules add their own layers only in the three slots; see [middleware](/docs/basics/middleware/).
+The fixed layers always run in this order. Modules add their own layers only in the five slots; see [middleware](/docs/basics/middleware/).
 
 ### Request context
 
@@ -119,11 +121,13 @@ Handlers, extractors, guards and inner layers return `AppError`s; this layer tur
 
 ### Session, authentication and the unit of work
 
-The three slots hold the layers that modules contribute, in this order:
+The five slots hold the layers that modules contribute. `Edge` is the outermost, ahead of the fixed layers; the other four follow the body limit, in this order:
 
-1. **`Session`.** With `SessionModule`, the session layer loads the session from its cookie and enforces CSRF, before authentication runs. Most API apps, the CRM included, don't use sessions, and this slot stays empty. See [sessions and CSRF](/docs/basics/sessions-and-csrf/).
-2. **`AuthContext`.** Navree's authentication layer runs first in this slot. It calls the app's `dyn Authenticator` (with `AuthModule`, the JWT strategy reads `Authorization: Bearer`) and stores the result in the request as an `AuthState`: a `Principal` or a guest. A guest isn't an error here; routes decide later whether they need a user. But credentials that are present and invalid, such as an expired token, are rejected right here with the authenticator's 401, even on public routes and unknown paths. Other `AuthContext` layers run after it and can read the `AuthState`. See [authentication](/docs/security/authentication/).
-3. **`Uow`.** With `DatabaseModule`, a unit of work is opened for the request, lazily, with the authenticated user as the actor and the request id. If the request is dropped before it finishes (the client disconnected, or it timed out), the rest of it moves to a task on the app's tracker, so it still finishes and commits. On the way back, the unit of work commits when the status is below 400 and rolls back otherwise. See [the unit of work](/docs/database/unit-of-work/).
+1. **`Edge`.** Around the whole app, before the request id, the app context and the client IP exist. It is for protocols that share the HTTP port but not the HTTP pipeline: with `GrpcModule`, the layer that hands gRPC calls to the gRPC server sits here, and a response an `Edge` layer returns itself gets none of the fixed layers' treatment. See [gRPC](/docs/microservices/grpc/).
+2. **`Session`.** With `SessionModule`, the session layer loads the session from its cookie and enforces CSRF, before authentication runs. Most API apps, the CRM included, don't use sessions, and this slot stays empty. See [sessions and CSRF](/docs/basics/sessions-and-csrf/).
+3. **`AuthContext`.** Navree's authentication layer runs first in this slot. It calls the app's `dyn Authenticator` (with `AuthModule`, the JWT strategy reads `Authorization: Bearer`) and stores the result in the request as an `AuthState`: a `Principal` or a guest. A guest isn't an error here; routes decide later whether they need a user. But credentials that are present and invalid, such as an expired token, are rejected right here with the authenticator's 401, even on public routes and unknown paths. Other `AuthContext` layers run after it and can read the `AuthState`. See [authentication](/docs/security/authentication/).
+4. **`Uow`.** With `DatabaseModule`, a unit of work is opened for the request, lazily, with the authenticated user as the actor and the request id. If the request is dropped before it finishes (the client disconnected, or it timed out), the rest of it moves to a task on the app's tracker, so it still finishes and commits. On the way back, the unit of work commits when the status is below 400 and rolls back otherwise. See [the unit of work](/docs/database/unit-of-work/).
+5. **`Context`.** The innermost slot, inside the unit of work, for request context that handlers read, such as the locale `I18nModule` negotiates. The unit of work runs the rest of the request in a task of its own, so a layer that sets a Tokio task-local for handlers belongs here.
 
 ### Routing
 

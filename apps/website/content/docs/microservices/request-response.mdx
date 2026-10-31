@@ -208,8 +208,8 @@ Jobs, scheduled tasks, event handlers and commands have no request to forward. T
 Guards are the same `navree::http::Guard` trait as on routes, attached with `#[guard(..)]` to a handler or to the impl block. This one lets a message through only with the key that every internal service is configured with:
 
 ```rust title="services/deals/src/internal.rs"
+use http::request::Parts;
 use navree::BoxFuture;
-use navree::axum::http::request::Parts;
 use navree::config::Config;
 use navree::crypto::constant_time_eq;
 use navree::http::Guard;
@@ -394,8 +394,8 @@ A 4xx passes through because it describes the user's request: a deal that doesn'
 Match on the error when a failure has a meaning for you. Here a deal that doesn't exist, or that the user may not read, isn't shown:
 
 ```rust
+use http::StatusCode;
 use navree::micro::MicroError;
-use navree::axum::http::StatusCode;
 
 let deal: Option<DealView> = match self.client.send("deals.get", &GetDeal { id }).await {
     Ok(deal) => Some(deal),

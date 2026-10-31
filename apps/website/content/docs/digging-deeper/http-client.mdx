@@ -156,7 +156,7 @@ impl ExchangeRates {
 
 <Callout type="note" title="Request ids are not forwarded automatically">
 
-The client can't see the incoming request, so call `with_request_id` yourself. In a handler, take the id with `Extension(request_id): Extension<RequestId>` (`navree::axum::Extension`, `navree::contracts::RequestId`).
+The client can't see the incoming request, so call `with_request_id` yourself. In a handler, take the id with `Extension(request_id): Extension<RequestId>` (`navree::http::Extension`, `navree::contracts::RequestId`).
 
 </Callout>
 
@@ -240,7 +240,7 @@ Every failure is an `HttpClientError`. URLs in its messages have no query string
 Propagated with `?` from a handler, an `HttpClientError` becomes a logged `500`. When the other service failing is not your server's fault, answer something more precise:
 
 ```rust
-use navree::axum::http::StatusCode;
+use http::StatusCode;
 
 let rates = self.rates.latest(&base).await.map_err(|error| {
     AppError::new(StatusCode::BAD_GATEWAY, "rates_unavailable", "Bad Gateway").with_source(error)
@@ -284,7 +284,7 @@ Each request is logged at `debug` level with its method, its URL without query s
 `HttpClient::fake()` returns a client that never touches the network and the `FakeServer` that answers it. Stub responses with `on`, swap the fake into your app with `override_value`, and assert on what was sent:
 
 ```rust title="src/modules/rates/tests/mod.rs"
-use navree::axum::http::Method;
+use http::Method;
 use navree::http_client::{FakeResponse, HttpClient};
 use navree::prelude::*;
 use navree::testing::TestApp;

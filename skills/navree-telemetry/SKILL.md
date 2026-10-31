@@ -184,7 +184,7 @@ context.
 Events, with `TelemetryRecorder` (from `navree::telemetry`):
 
 ```rust
-use navree::axum::http::Method;
+use http::Method;
 use navree::http_client::{FakeResponse, HttpClient};
 use navree::prelude::*;
 use navree::telemetry::{EventKind, TelemetryRecorder};

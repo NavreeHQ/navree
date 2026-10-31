@@ -230,9 +230,7 @@ impl Deals for DealsGrpc {
         &self,
         _request: Request<navree::grpc::Streaming<pb::Deal>>,
     ) -> Result<Response<pb::ImportDealsResponse>> {
-        Err(AppError::from_status(
-            navree::axum::http::StatusCode::NOT_IMPLEMENTED,
-        ))
+        Err(AppError::from_status(http::StatusCode::NOT_IMPLEMENTED))
     }
 
     type EchoStream = DealEvents;

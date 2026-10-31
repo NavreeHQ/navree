@@ -109,8 +109,8 @@ The content security policy is strict because an API answers with JSON, not page
 Navree only adds a header when the response doesn't have it yet, so a value you set yourself wins. A route that serves HTML can send its own policy:
 
 ```rust title="src/pages/controller.rs"
-use navree::axum::http::header::{CONTENT_SECURITY_POLICY, CONTENT_TYPE};
-use navree::axum::response::{IntoResponse, Response};
+use http::header::{CONTENT_SECURITY_POLICY, CONTENT_TYPE};
+use navree::http::response::{IntoResponse, Response};
 
 #[get("/status")]
 #[public]

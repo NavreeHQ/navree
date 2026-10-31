@@ -315,7 +315,7 @@ pub struct CrmClient {
 
 impl CrmClient {
     /// A request with `method` to `path`, with the bearer token.
-    pub fn request(&self, method: navree::axum::http::Method, path: &str) -> TestRequest {
+    pub fn request(&self, method: http::Method, path: &str) -> TestRequest {
         self.client.request(method, path).bearer(&self.access_token)
     }
 

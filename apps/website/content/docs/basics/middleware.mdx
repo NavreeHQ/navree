@@ -9,7 +9,7 @@ Middleware is code that runs around your handlers: it can read and change the re
 
 Navree installs a fixed pipeline of layers for you: request ids, logging, CORS, timeouts, security headers, compression, error rendering, maintenance mode, rate limiting and body limits. On top of that you can:
 
-- add **global layers** that run for every request, in one of three slots of the pipeline;
+- add **global layers** that run for every request, in one of five slots of the pipeline;
 - add **guards**, checks that run on chosen routes before the handler;
 - tune **per-route settings**: a throttle, a timeout, a body limit;
 - wrap **one route** in any Tower layer.
@@ -20,22 +20,24 @@ Every request passes through these layers, outermost first. The [request lifecyc
 
 | Order | Layer | What it does | Configured by |
 |---|---|---|---|
-| 1 | Request context | Request id, client IP, tracing span; request log and metrics on the way out | `http.trusted_proxies`, `http.trust_proxy` |
-| 2 | CORS | Preflights and CORS headers | `http.cors.allowed_origins` (none by default: no CORS layer) |
-| 3 | Panic catcher | A panic becomes a 500 | |
-| 4 | Timeout | 503 after `http.timeout_secs` | `http.timeout_secs` (30) |
-| 5 | Security headers | `nosniff`, `DENY` framing, `no-referrer`, HSTS and a strict CSP | `http.security_headers` (true) |
-| 6 | Compression | gzip | `http.compression` (true) |
-| 7 | Error rendering | The JSON error shape, error mappers, 5xx logs | |
-| 8 | Maintenance mode | 503 while the maintenance file exists | `http.maintenance_file`, `http.maintenance_except` |
-| 9 | Per-IP rate limit | 429 over the limit | `http.per_ip_rate_limit` (600 per minute) |
-| 10 | Body limit | 413 over the limit | `http.body_limit_bytes` (2 MiB) |
-| 11 | `Session` slot | navree-session's layer, then yours | |
-| 12 | `AuthContext` slot | Navree's authentication, then yours | |
-| 13 | `Uow` slot | navree-db's unit of work, then yours | |
-| 14 | Router and route pipeline | Per-route checks, then the handler | Route attributes |
+| 1 | `Edge` slot | Protocols that share the port but not the pipeline: navree-grpc's layer, then yours | |
+| 2 | Request context | Request id, client IP, tracing span; request log and metrics on the way out | `http.trusted_proxies`, `http.trust_proxy` |
+| 3 | CORS | Preflights and CORS headers | `http.cors.allowed_origins` (none by default: no CORS layer) |
+| 4 | Panic catcher | A panic becomes a 500 | |
+| 5 | Timeout | 503 after `http.timeout_secs` | `http.timeout_secs` (30) |
+| 6 | Security headers | `nosniff`, `DENY` framing, `no-referrer`, HSTS and a strict CSP | `http.security_headers` (true) |
+| 7 | Compression | gzip | `http.compression` (true) |
+| 8 | Error rendering | The JSON error shape, error mappers, 5xx logs | |
+| 9 | Maintenance mode | 503 while the maintenance file exists | `http.maintenance_file`, `http.maintenance_except` |
+| 10 | Per-IP rate limit | 429 over the limit | `http.per_ip_rate_limit` (600 per minute) |
+| 11 | Body limit | 413 over the limit | `http.body_limit_bytes` (2 MiB) |
+| 12 | `Session` slot | navree-session's layer, then yours | |
+| 13 | `AuthContext` slot | Navree's authentication, then yours | |
+| 14 | `Uow` slot | navree-db's unit of work, then yours | |
+| 15 | `Context` slot | navree-i18n's locale layer, then yours | |
+| 16 | Router and route pipeline | Per-route checks, then the handler | Route attributes |
 
-Layers 1 to 10 are fixed: you can configure them (and turn some off), but you can't remove them, reorder them or put a layer between them. Your global layers go in the slots.
+Layers 2 to 11 are fixed: you can configure them (and turn some off), but you can't remove them, reorder them or put a layer between them. Your global layers go in the slots.
 
 ```toml title="config/app.toml"
 [http]
@@ -54,10 +56,10 @@ allowed_origins = ["http://localhost:3000"]
 A module contributes a global layer with `m.http_layer(GlobalLayer::new(slot, name, apply))`. `apply` receives the `AppContext` and the router, and returns the router wrapped in your layer. This one adds an `X-Response-Time` header to every response:
 
 ```rust title="src/modules/timing.rs"
+use http::HeaderValue;
 use navree::axum::extract::Request;
-use navree::axum::http::HeaderValue;
 use navree::axum::middleware::{self, Next};
-use navree::axum::response::Response;
+use navree::http::response::Response;
 use navree::http::{GlobalLayer, LayerSlot};
 use navree::prelude::*;
 
@@ -94,9 +96,11 @@ The slot decides where the layer runs relative to authentication and the unit of
 
 | Slot | Runs | Use it for |
 |---|---|---|
+| `LayerSlot::Edge` | Around the whole app, before the request id, the app context and the client IP exist | Handing a protocol that shares the port but not the pipeline to its own server, as navree-grpc does; a response it returns itself gets none of the fixed layers' treatment |
 | `LayerSlot::Session` | Before authentication | Work that doesn't need the user: timing, request rewriting, your own sessions |
 | `LayerSlot::AuthContext` | After Navree's authentication, before the unit of work | Work that needs the principal: tenancy, impersonation, per-user headers |
 | `LayerSlot::Uow` | Inside the request's unit of work (after `DatabaseModule`'s layer) | Work that writes to the database and must commit or roll back with the request |
+| `LayerSlot::Context` | Innermost, inside the unit of work, right before routing | Request context for handlers, such as the locale. The unit of work runs the rest of the request in a task of its own, so a layer that sets a Tokio task-local for handlers belongs here |
 
 Within a slot, layers run in module dependency order: the layer of a module that comes first (because others import it, or because the root adds it first) is the outer one. In the `AuthContext` slot, Navree's authentication layer always runs first; in the `Uow` slot, your layer runs inside navree-db's when your module comes after `DatabaseModule`.
 
@@ -116,7 +120,7 @@ This layer uses the `AppContext` to resolve `Tenants`, an app service, and the `
 ```rust title="src/modules/tenancy.rs"
 use navree::axum::extract::Request;
 use navree::axum::middleware::{self, Next};
-use navree::axum::response::{IntoResponse, Response};
+use navree::http::response::{IntoResponse, Response};
 use navree::contracts::AuthState;
 use navree::http::{GlobalLayer, LayerSlot};
 use navree::prelude::*;
@@ -161,7 +165,7 @@ impl TenancyModule {
 
 ### Rules for global layers
 
-- **Answer errors with `AppError`.** An `AppError` turned into a response is rendered in the [error format](/docs/basics/errors/) by the error layer, which sits outside the slots, and 5xx errors are logged with the request id.
+- **Answer errors with `AppError`.** An `AppError` turned into a response is rendered in the [error format](/docs/basics/errors/) by the error layer, which sits outside every slot but `Edge`, and 5xx errors are logged with the request id.
 - **Only add layers.** `apply` must return the router it was given, wrapped. The router already has its routes and the single 404 fallback.
 - **No side effects in `apply`.** It may run more than once per app (at boot, to check the routes, and again for `serve`), so do setup work in a provider and read it from the layer.
 - **`apply` can fail.** Returning an error stops the boot with an error that names the layer and its module, such as ``global layer `broken` of module `ReportsModule` failed: no database configured``.
@@ -171,8 +175,8 @@ impl TenancyModule {
 A guard is a check on chosen routes. It runs in the route pipeline, after authentication and the route's throttle and before authorization and the handler, and it either lets the request through or ends it with an error. Implement `navree::http::Guard`:
 
 ```rust
+use http::request::Parts;
 use navree::BoxFuture;
-use navree::axum::http::request::Parts;
 use navree::http::Guard;
 use navree::prelude::*;
 
@@ -242,13 +246,14 @@ Some of the global layers have per-route settings:
 
 ## A layer on one route
 
-The route attributes have no way to attach an arbitrary Tower layer to one route. To do that, write the controller by hand ([writing controllers by hand](/docs/basics/routing/#writing-controllers-by-hand)) and wrap the route's Axum `MethodRouter` before giving it to `RouteDef`:
+The route attributes have no way to attach an arbitrary Tower layer to one route. To do that, write the controller by hand ([writing controllers by hand](/docs/basics/routing/#writing-controllers-by-hand)) and wrap the route's `Endpoint` (the handler, ready to mount) in the layer before giving it to `RouteDef::with_endpoint`:
 
 ```rust
+use http::{HeaderValue, Method};
 use navree::axum::extract::Request;
-use navree::axum::http::{HeaderValue, Method};
 use navree::axum::middleware::{self, Next};
-use navree::axum::response::Response;
+use navree::http::handler::Endpoint;
+use navree::http::response::Response;
 use navree::http::{Controller, RouteDef};
 use navree::prelude::*;
 
@@ -274,9 +279,9 @@ impl Controller for TokensController {
     }
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
-        let issue = navree::axum::routing::post(|| async { Json("a-new-token") })
-            .layer(middleware::from_fn(no_store));
-        vec![RouteDef::new(Method::POST, "/", issue).authenticated()]
+        let issue =
+            Endpoint::new(|| async { Json("a-new-token") }).layer(middleware::from_fn(no_store));
+        vec![RouteDef::with_endpoint(Method::POST, "/", issue).authenticated()]
     }
 }
 ```
@@ -290,6 +295,7 @@ global layers (request context ... body limit)
   Session slot      navree-session, then your Session layers
   AuthContext slot  Navree's authentication, then your AuthContext layers
   Uow slot          navree-db's unit of work, then your Uow layers
+  Context slot      navree-i18n's locale layer, then your Context layers
     router
       route pipeline: body length → authentication → throttle → guards → authorization → route timeout
         your per-route layers

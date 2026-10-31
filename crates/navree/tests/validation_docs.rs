@@ -3,8 +3,8 @@
 //! compiled and run.
 #![cfg(all(feature = "validation-phone", feature = "validation-html"))]
 
+use http::request::Parts;
 use navree::BoxFuture;
-use navree::axum::http::request::Parts;
 use navree::prelude::*;
 use navree::testing::TestApp;
 use navree::validation::Validate;

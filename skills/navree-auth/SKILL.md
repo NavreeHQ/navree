@@ -213,9 +213,9 @@ refreshes for a full token.
 Navree has no built-in API keys; add a `Strategy` (after the JWT one):
 
 ```rust
+use http::request::Parts;
 use navree::BoxFuture;
 use navree::auth::Strategy;
-use navree::axum::http::request::Parts;
 use navree::contracts::{AuthVia, Principal};
 use navree::crypto::sha256_hex;
 use navree::db::Db;

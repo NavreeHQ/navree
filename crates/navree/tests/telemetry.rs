@@ -4,7 +4,7 @@
 //! `m.telemetry_sink::<S>()`, `TelemetryRecorder` in a test, and
 //! `SpanRecorder` with an incoming `traceparent` and an outgoing call.
 
-use navree::axum::http::Method;
+use http::Method;
 use navree::http_client::{FakeResponse, FakeServer, HttpClient};
 use navree::observe::testing::SpanRecorder;
 use navree::prelude::*;

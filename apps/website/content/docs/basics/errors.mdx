@@ -122,8 +122,8 @@ And the builder methods:
 `AppError` also has public fields (`status`, `code`, `title`, `detail`, `errors`, `headers`, `source`). `code` is the rendered `code`, so error mappers and tests can match on it; an empty `code` leaves the member out.
 
 ```rust
-use navree::axum::http::header::WWW_AUTHENTICATE;
-use navree::axum::http::{HeaderValue, StatusCode};
+use http::header::WWW_AUTHENTICATE;
+use http::{HeaderValue, StatusCode};
 
 let error = AppError::new(StatusCode::UNAUTHORIZED, "invalid_signature", "Invalid signature.")
     .with_header(WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
@@ -414,7 +414,7 @@ To give your own error type a status, register a mapper in its module with `map_
 ```rust title="src/billing/mod.rs"
 use std::fmt;
 
-use navree::axum::http::StatusCode;
+use http::StatusCode;
 use navree::prelude::*;
 
 #[derive(Debug)]
@@ -508,10 +508,10 @@ An error raised while the unit of work commits, after your handler returned, goe
 
 ## Framework errors
 
-Errors from Axum and from Navree's own layers use the same format:
+Errors from the router, the extractors and Navree's own layers use the same format:
 
 - A path that matches no route is a 404 (`not_found`), and a path that exists for other methods is a 405 (`method_not_allowed`) with an `Allow` header.
-- Axum's extractor rejections become Navree errors, with the code of their status. Axum's 422 for well-formed JSON of the wrong shape becomes a 400 (`bad_request`), like every other input error; the message is Axum's explanation (it names the missing field).
+- The rejections of `Path`, `Query`, `Form`, `Json` and `Extension` are Navree errors, with the code of their status. Well-formed JSON of the wrong shape is a 400 (`bad_request`), like every other input error; the message explains what didn't fit (it names the missing field).
 - Any other error response with an empty or `text/plain` body (up to 16 KiB) is rewritten into the format, so layers you add keep the shape. A JSON body you build yourself with an error status is left as it is.
 
 ## Logging server errors

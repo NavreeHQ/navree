@@ -591,7 +591,7 @@ Each request is verified like any `VerifiedWebhook<S>` of its source, then appli
 Deliveries go through the app's `HttpClient`, so a fake client receives them. Run the queue, then assert on what was sent and check the signature with the verifier your customers would use:
 
 ```rust title="tests/webhooks.rs"
-use navree::axum::http::Method;
+use http::Method;
 use navree::db::Db;
 use navree::events::EventBus;
 use navree::http_client::{FakeResponse, HttpClient};

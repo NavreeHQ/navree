@@ -348,7 +348,7 @@ Outside one, resolve the registry once with `Telemetry::from_app(ctx).await` and
 `TelemetryRecorder` (from `navree::telemetry`) is a sink that keeps every record in memory. Add its module to a test app, then read what was emitted:
 
 ```rust title="tests/telemetry.rs"
-use navree::axum::http::Method;
+use http::Method;
 use navree::http_client::{FakeResponse, HttpClient};
 use navree::prelude::*;
 use navree::telemetry::{EventKind, TelemetryRecorder};

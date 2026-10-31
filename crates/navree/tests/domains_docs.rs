@@ -94,7 +94,7 @@ impl navree::http::Controller for LandingController {
     }
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
-        vec![RouteDef::on(navree::axum::http::Method::GET, "!/", landing).public()]
+        vec![RouteDef::on(http::Method::GET, "!/", landing).public()]
     }
 }
 

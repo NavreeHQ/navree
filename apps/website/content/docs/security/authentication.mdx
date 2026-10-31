@@ -490,9 +490,9 @@ Authentication is a chain of strategies, each one a way of recognising a request
 Navree has no built-in API keys or personal access tokens. A strategy is how you add them. This one accepts an `X-Api-Key` header and looks the key up in an `api_keys` table of your own (its [model](/docs/orm/models/), `ApiKey`, isn't shown):
 
 ```rust title="src/modules/api_keys/strategy.rs"
+use http::request::Parts;
 use navree::BoxFuture;
 use navree::auth::Strategy;
-use navree::axum::http::request::Parts;
 use navree::contracts::{AuthVia, Principal};
 use navree::crypto::sha256_hex;
 use navree::db::Db;

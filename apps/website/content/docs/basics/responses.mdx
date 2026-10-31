@@ -74,10 +74,10 @@ A `Location` that isn't a valid header value turns the response into a 500.
 
 ### Any other status
 
-Return a tuple of a `StatusCode` and the body:
+Return a tuple of a `StatusCode` (from the `http` crate, which your app adds to its dependencies) and the body:
 
 ```rust
-use navree::axum::http::StatusCode;
+use http::StatusCode;
 
 #[post("/import")]
 async fn import(&self) -> (StatusCode, Json<Value>) {
@@ -92,8 +92,8 @@ Error statuses come from `AppError`, so they share Navree's JSON error shape; se
 Put an array of header pairs before the body:
 
 ```rust
-use navree::axum::http::header::{CACHE_CONTROL, ETAG};
-use navree::axum::response::{IntoResponse, Response};
+use http::header::{CACHE_CONTROL, ETAG};
+use navree::http::response::{IntoResponse, Response};
 
 #[get("/{id}/summary")]
 async fn summary(&self, Path(id): Path<Uuid>) -> Response {
@@ -256,8 +256,8 @@ async fn index(&self, uow: Uow, page: PageQuery) -> Result<Page<CompanyResource>
 A download is a body with a `Content-Disposition` header. The CRM's contact export builds a CSV in memory:
 
 ```rust title="crm-companies/src/contacts/export.rs"
-use navree::axum::http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
-use navree::axum::response::{IntoResponse, Response};
+use http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
+use navree::http::response::{IntoResponse, Response};
 
 pub fn csv_response(contacts: &[ContactResource]) -> Result<Response> {
     let body = contacts_csv(contacts).map_err(AppError::internal)?;
@@ -279,9 +279,9 @@ The CORS configuration exposes `Content-Disposition`, so a browser front end on 
 For large files, stream the body instead of loading it. A storage disk hands you a stream that `Body::from_stream` sends chunk by chunk:
 
 ```rust title="src/invoices/controller.rs"
-use navree::axum::body::Body;
-use navree::axum::http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
-use navree::axum::response::{IntoResponse, Response};
+use http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
+use navree::http::body::Body;
+use navree::http::response::{IntoResponse, Response};
 use navree::storage::Disk;
 
 #[injectable]
@@ -314,7 +314,7 @@ With `StorageModule` in the app, a missing file is a 404 and an invalid path a 4
 `Body::from_stream` takes any stream of `Result<Bytes, E>`, so you can stream generated data the same way. Things to know:
 
 - The request timeout (`http.timeout_secs`, 30 seconds by default) covers the time until your handler returns the response, not the time spent sending a streamed body.
-- Server-sent events work with Axum's `Sse` type (`navree::axum::response::sse`). Navree doesn't compress `text/event-stream` responses, so events reach the client as they're sent. Navree has no SSE helpers of its own.
+- Server-sent events work with the `Sse` type (`navree::http::response::sse`). Navree doesn't compress `text/event-stream` responses, so events reach the client as they're sent. Navree has no SSE helpers of its own.
 - For pushing events to browsers, Navree's main tool is [broadcasting](/docs/digging-deeper/broadcasting/) over WebSockets.
 
 ## Testing

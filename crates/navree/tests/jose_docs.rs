@@ -10,7 +10,7 @@
     feature = "testing"
 ))]
 
-use navree::axum::http::Method;
+use http::Method;
 use navree::crypto::jose::{
     Algorithm, Header, JoseError, Jwk, JwkSet, Jws, SigningKey, VerifyingKey,
 };

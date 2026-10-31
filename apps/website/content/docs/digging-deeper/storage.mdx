@@ -294,11 +294,11 @@ pub async fn archive(&self, quarter: &str) -> Result<u64, StorageError> {
 
 `put_stream` uploads the file in parts (a multipart upload on cloud disks) and only makes it visible when the stream ends successfully. If the source stream fails, the upload is aborted, nothing is stored and the error is `StorageError::Stream`.
 
-To send a stored file in a response, wrap the stream in an Axum body:
+To send a stored file in a response, wrap the stream in a response body:
 
 ```rust title="src/modules/avatars/controller.rs"
-use navree::axum::body::Body;
-use navree::axum::response::{IntoResponse, Response};
+use navree::http::body::Body;
+use navree::http::response::{IntoResponse, Response};
 
 #[get("/{*path}")]
 #[authenticated]
@@ -312,7 +312,7 @@ Set the `Content-Type` yourself when you serve files this way; the [temporary UR
 
 ## File uploads
 
-`store_upload` streams one multipart file field through your app to a disk, checking it as it goes. Take Axum's `Multipart` extractor (it must be the last argument), get the field, and pass it with `UploadRules`:
+`store_upload` streams one multipart file field through your app to a disk, checking it as it goes. Take the `Multipart` extractor (it must be the last argument), get the field, and pass it with `UploadRules`:
 
 ```rust title="src/modules/avatars/controller.rs"
 use navree::axum::extract::Multipart;

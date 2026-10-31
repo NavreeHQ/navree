@@ -123,7 +123,7 @@ The facade's root also has:
 - **The macros:** `navree::module`, `navree::injectable` and `navree::controller`, with the route attributes `get`, `post`, `put`, `patch` and `delete` (which `#[controller]` consumes, so you don't import them). With `micro`, `navree::message_handlers` and the `message_pattern` and `event_pattern` attributes it consumes. With `orm` and `testing`, `#[navree::test]`, an `async fn` test on a runtime of its own that gets a database of its own when it takes a `TestDb` parameter.
 - **The kernel types** apps use most: `Navree`, `App`, `AppBuilder`, `AppContext`, `Module`, `ModuleBuilder`, `ModuleId`, `Injectable`, `Factory`, `Lazy`, `Resolver`, `ProviderKey`, `Scope`, `KernelError`, `BoxError` and `BoxFuture`.
 - **`navree::Result<T, E = AppError>`**, a handler's result type (with `http`).
-- **`navree::axum`**, Axum itself (with `http`), for the extractors and types navree-http doesn't re-export: `navree::axum::extract::Request`, `navree::axum::http::HeaderMap`, `navree::axum::middleware::from_fn` and so on.
+- **`navree::axum`**, Axum itself (with `http`), for what navree-http doesn't have yet: `navree::axum::extract::Request`, `navree::axum::extract::Multipart`, `navree::axum::middleware::from_fn` and so on. The `http` crate's types (`StatusCode`, `HeaderMap`, `Method`) come from `http`, which you add to your own dependencies.
 
 ## The prelude
 
@@ -305,13 +305,11 @@ navree-kernel = { git = "https://github.com/NavreeHQ/navree" }
 navree-config = { git = "https://github.com/NavreeHQ/navree" }
 navree-http = { git = "https://github.com/NavreeHQ/navree" }
 navree-macros = { git = "https://github.com/NavreeHQ/navree" }
-axum = "0.8"
 ```
 
 ```rust title="src/main.rs"
-use axum::extract::Path;
 use navree_config::{ConfigModule, ConfigSources};
-use navree_http::{HttpModule, Json};
+use navree_http::{HttpModule, Json, Path};
 use navree_kernel::{BoxError, Navree};
 use navree_macros::{controller, injectable, module};
 

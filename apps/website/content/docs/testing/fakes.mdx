@@ -226,7 +226,7 @@ Navree's own modules use the app's `dyn Clock` when there is one, so a fixed clo
 ```rust
 use std::sync::Arc;
 
-use navree::axum::http::Method;
+use http::Method;
 use navree::http_client::{FakeResponse, HttpClient, HttpClientModule};
 use navree::testing::TestApp;
 use serde_json::json;

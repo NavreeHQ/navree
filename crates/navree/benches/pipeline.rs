@@ -23,11 +23,11 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::time::Duration;
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use navree::App;
-use navree::axum::body::Body;
-use navree::axum::http::{Request, StatusCode};
 use navree::db::{Db, DbOptions, Executor as _, Statement};
+use navree::http::body::Body;
 use navree::http::{HttpOptions, build_router};
 use navree::prelude::*;
 use navree::validation::Validate;

@@ -2,8 +2,8 @@
 //! writes them (the facade, the prelude and the macros), compiled and run.
 #![cfg(feature = "sqlite")]
 
+use http::Method;
 use navree::BoxFuture;
-use navree::axum::http::Method;
 use navree::db::Db;
 use navree::events::{Event, EventBus};
 use navree::http_client::{FakeResponse, HttpClient};

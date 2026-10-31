@@ -1,7 +1,7 @@
 //! `/api/v1/contacts`.
 
 use crm_core::{Contact, Export};
-use navree::axum::response::Response;
+use navree::http::response::Response;
 use navree::prelude::*;
 
 use super::dto::{ContactFilters, CreateContact, UpdateContact};

@@ -183,8 +183,8 @@ async fn complete(&self, CurrentPrincipal(me): CurrentPrincipal, Json(done): Jso
 ## Serve files
 
 ```rust
-use navree::axum::body::Body;
-use navree::axum::response::{IntoResponse, Response};
+use navree::http::body::Body;
+use navree::http::response::{IntoResponse, Response};
 
 #[get("/{*path}")]
 async fn show(&self, Path(path): Path<String>) -> Result<Response> {

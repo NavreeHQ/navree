@@ -274,7 +274,7 @@ POST    /webhooks/stripe                                        public  DealsMod
 `#[controller]` implements the `Controller` trait, and you can implement it yourself. Each route is a `RouteDef`: a method, a path, a handler (an `async` function or closure whose arguments are extractors) and a builder for everything the attributes declare. Hand-written routes can do two things the attributes can't: set a per-route body limit with `body_limit(bytes)`, and wrap the handler in [Tower layers](/docs/basics/middleware/#a-layer-on-one-route).
 
 ```rust title="src/modules/imports/controller.rs"
-use navree::axum::http::Method;
+use http::Method;
 use navree::http::{Controller, RouteDef};
 use navree::prelude::*;
 

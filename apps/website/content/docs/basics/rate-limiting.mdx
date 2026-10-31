@@ -107,7 +107,7 @@ Hand-written routes use the builder method:
 ```rust
 use std::time::Duration;
 
-use navree::axum::http::Method;
+use http::Method;
 use navree::http::RouteDef;
 
 RouteDef::on(Method::POST, "/exports", || async { "queued" })

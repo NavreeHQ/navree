@@ -15,10 +15,10 @@
 
 use std::collections::HashMap;
 
-use axum::body::Body;
 use http::{Method, Request};
 use libfuzzer_sys::fuzz_target;
 use navree_fuzz::{block_on, split_nul};
+use navree_http::body::Body;
 use navree_http::extract::{FromRequest, urlencoded};
 use navree_http::{Form, Json, Query};
 use serde::Deserialize;

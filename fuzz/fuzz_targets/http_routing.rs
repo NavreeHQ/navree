@@ -148,7 +148,7 @@ fuzz_target!(|data: &[u8]| {
             let request = Request::builder()
                 .method(method.clone())
                 .uri(uri.clone())
-                .body(axum::body::Body::empty())
+                .body(navree_http::body::Body::empty())
                 .expect("a request");
             let response = block_on(router.clone().oneshot(request)).expect("infallible");
             let status = response.status();
