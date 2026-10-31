@@ -1753,7 +1753,6 @@ dependencies = [
 name = "navree-access"
 version = "0.2.0"
 dependencies = [
- "axum",
  "chrono",
  "http",
  "navree-bounded",
@@ -1772,7 +1771,7 @@ dependencies = [
 name = "navree-api"
 version = "0.2.0"
 dependencies = [
- "axum",
+ "http",
  "navree-config",
  "navree-contracts",
  "navree-http",
@@ -1790,7 +1789,6 @@ dependencies = [
 name = "navree-auth"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "chrono",
  "form_urlencoded",
@@ -2085,7 +2083,6 @@ name = "navree-orm"
 version = "0.2.0"
 dependencies = [
  "argon2",
- "axum",
  "base64 0.23.1",
  "chrono",
  "futures",

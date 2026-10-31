@@ -2214,7 +2214,6 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 name = "navree-access"
 version = "0.2.0"
 dependencies = [
- "axum",
  "chrono",
  "http",
  "navree-bounded",
@@ -2233,7 +2232,7 @@ dependencies = [
 name = "navree-api"
 version = "0.2.0"
 dependencies = [
- "axum",
+ "http",
  "navree-config",
  "navree-contracts",
  "navree-http",
@@ -2251,7 +2250,6 @@ dependencies = [
 name = "navree-auth"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "chrono",
  "form_urlencoded",
@@ -2388,7 +2386,6 @@ dependencies = [
 name = "navree-directory"
 version = "0.2.0"
 dependencies = [
- "axum",
  "bytes",
  "chrono",
  "hex",
@@ -2574,7 +2571,6 @@ dependencies = [
 name = "navree-integrations"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "bytes",
  "chrono",
@@ -2801,7 +2797,6 @@ name = "navree-orm"
 version = "0.2.0"
 dependencies = [
  "argon2",
- "axum",
  "base64 0.23.1",
  "chrono",
  "futures",
@@ -2846,7 +2841,6 @@ dependencies = [
 name = "navree-queue"
 version = "0.2.0"
 dependencies = [
- "axum",
  "chrono",
  "futures-util",
  "hex",
@@ -2961,7 +2955,6 @@ dependencies = [
 name = "navree-sso"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "chrono",
  "flate2",
@@ -3000,6 +2993,7 @@ dependencies = [
  "chrono",
  "futures-util",
  "hex",
+ "http",
  "infer",
  "mime_guess",
  "navree-config",
@@ -3052,7 +3046,6 @@ dependencies = [
 name = "navree-time"
 version = "0.2.0"
 dependencies = [
- "axum",
  "chrono",
  "chrono-tz",
  "http",
@@ -3124,7 +3117,6 @@ dependencies = [
 name = "navree-webhooks"
 version = "0.2.0"
 dependencies = [
- "axum",
  "base64 0.23.1",
  "bytes",
  "chrono",
