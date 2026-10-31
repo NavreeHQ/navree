@@ -223,12 +223,16 @@ let pages = sealed.page_texts()?; // one string per page
 `text()` and `page_texts()` allow a page 128 MiB of work and the document
 1 GiB: content decoded (a form again each time it is drawn, plus 1 KiB per
 draw), fonts read (`ToUnicode` inflated, up to 8 MiB, plus 1/16 of the memory
-reading it builds; 16 bytes per width), and marked content's actual text each
-time it is decoded. Fonts and maps are kept per document in 256 MiB, counted as
-lopdf holds them (~256 B per code a map covers, plus a copy of a range's text
-per line splitting it; 17 MB for a full two-byte map, fifteen fit); a map is
-read once for the fonts sharing it; past 256 MiB the least recently used is
-dropped and read again; a single map over 256 MiB is refused. A page may show 1,000,000 glyphs, produce 8 MiB of
+reading it builds; 16 bytes per width; 8 per `Differences` entry; 1 KiB per
+re-read of a dropped font), and marked content's actual text each time it is
+decoded. A `ToUnicode` map is refused past 64 codespace ranges, 131,072 lines,
+256 texts in one list or 65,792 in all lists, whichever way lopdf reaches it
+(any chain of encoding references). Fonts and maps are kept per document in 256
+MiB as lopdf holds them (~256 B per code, twice the largest text per line, 128 B
+per `Differences` entry, 24 B per width; 17 MB for a full two-byte map, fifteen
+fit), plus at most one font's widths; a map is read once for the fonts sharing
+it; past 256 MiB the least recently used is dropped and read again; one map or
+font over 256 MiB is refused. A page may show 1,000,000 glyphs, produce 8 MiB of
 text (the document 64 MiB), nest `q` and marked content 256 deep, and spend
 50,000,000 mark comparisons (a byte of text compared is one). Over any:
 `DocumentsError::TooLarge` (413). These are fixed, not config keys.

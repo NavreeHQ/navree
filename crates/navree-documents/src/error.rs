@@ -78,11 +78,12 @@ pub enum DocumentsError {
     /// overlay without pages. A bug in the app, so a 500.
     #[error("the PDF cannot be edited: {0}")]
     Edit(String),
-    /// An input is over a limit this crate sets so that a small file cannot
-    /// cost a server unbounded memory or time: a PDF that takes too much
-    /// work to read or holds too much text, or an image with more pixels
-    /// than `documents.native.max_image_pixels`. The message names the
-    /// limit, and no template file.
+    /// An input is over a limit this crate sets on what reading it may
+    /// take: a PDF whose text takes too much work or memory to read or holds
+    /// too much text, or an image with more pixels than
+    /// `documents.native.max_image_pixels`. Loading a PDF is not bounded by
+    /// these (see [`Pdf::from_bytes`](crate::Pdf::from_bytes)). The message
+    /// names the limit, and no template file.
     #[error("{0}")]
     TooLarge(String),
     /// Building the DOCX file failed.
