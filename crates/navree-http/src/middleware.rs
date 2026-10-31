@@ -367,6 +367,7 @@ mod tests {
     }
 
     async fn run(app: AppRouter, request: Request) -> (StatusCode, HeaderMap, String) {
+        // nosemgrep: navree-unwrap-on-request-data
         let response = app.oneshot(request).await.unwrap();
         let (parts, body) = response.into_parts();
         let body = body.collect().await.unwrap().to_bytes();
@@ -424,6 +425,7 @@ mod tests {
             next: Next,
         ) -> Response {
             let mut response = next.run(request).await;
+            // nosemgrep: navree-unwrap-on-request-data
             let value = query["a"].parse().unwrap();
             response.headers_mut().insert("x-a", value);
             response
