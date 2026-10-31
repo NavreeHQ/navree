@@ -1,0 +1,44 @@
+# The HTTP server's suites on Linux, the platform it runs on in production:
+# the attacks in crates/navree-http/tests/serve and
+# crates/navree-grpc/tests/grpc depend on how the kernel buffers a socket, so a
+# result on another platform doesn't stand in for this one.
+name: Server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/navree-http/**"
+      - "crates/navree-grpc/**"
+      - "crates/navree-kernel/**"
+      - "Cargo.lock"
+      - ".github/workflows/server.yml"
+  pull_request:
+    paths:
+      - "crates/navree-http/**"
+      - "crates/navree-grpc/**"
+      - "crates/navree-kernel/**"
+      - "Cargo.lock"
+      - ".github/workflows/server.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: Test navree-http and navree-grpc
+        run: cargo test -p navree-http -p navree-grpc --no-fail-fast
