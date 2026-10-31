@@ -6,16 +6,28 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use navree_grpc::GrpcServer;
-use navree_http::{Authenticator, HttpServer};
+use navree_grpc::{
+    GrpcModule, GrpcServer, ModuleBuilderGrpcExt, Request, Response, Streaming, grpc_service,
+};
+use navree_http::{AppError, Authenticator, HttpServer};
+use navree_kernel::{
+    BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
+};
+use navree_observe::{ObserveModule, ObserveOptions};
 use navree_testing::TestApp;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 
+use crate::support::pb::deals::deals_client::DealsClient;
+use crate::support::pb::deals::deals_server::{Deals, DealsServer};
+use crate::support::pb::deals::{
+    Deal, DealEvent, GetDealRequest, ImportDealsResponse, ListDealsRequest, ListDealsResponse,
+    MoveDealRequest, WatchDealsRequest,
+};
 use crate::support::pb::ping::PingRequest;
 use crate::support::pb::ping::ping_client::PingClient;
-use crate::support::{BearerAuthenticator, deals_app, ping_app};
+use crate::support::{BearerAuthenticator, DealEvents, deals_app, ping_app};
 
 /// Every limit that could end these calls, short.
 const LIMIT_MS: u64 = 200;
@@ -524,6 +536,267 @@ async fn a_connect_timeout_cannot_extend_the_servers_deadline() {
             .unwrap();
         assert!(answer.starts_with("HTTP/1.1 504"), "{answer}");
         assert!(started.elapsed() < Duration::from_millis(2000));
+    })
+    .await;
+}
+
+// Failing: every test below this line fails today, and passes once what it
+// shows is fixed.
+
+/// `Health.Watch` needs no credentials, is on in every app, and is a stream
+/// with nothing to say: its response is not held to `grpc.timeout_secs`, a
+/// body that has arrived has no pace to keep, a stream with nothing to send
+/// has no write stall, and with something in flight the connection is neither
+/// idle nor reclaimed. Every limit is on here, short, and one client takes the
+/// only slot for good.
+#[tokio::test]
+async fn a_health_watch_with_no_credentials_cannot_keep_a_slot() {
+    let app = limited(ping_app())
+        .config("http.server.max_connections", 1)
+        .config("http.server.write_stall_timeout_ms", LIMIT_MS)
+        .config("http.server.upgraded_idle_timeout_ms", LIMIT_MS)
+        .build()
+        .await;
+    serving(&app, async {
+        let addr = app.get::<HttpServer>().await.wait_bound().await;
+        let mut watcher = TcpStream::connect(addr).await.unwrap();
+        watcher
+            .write_all(
+                b"POST /grpc.health.v1.Health/Watch HTTP/1.1\r\n\
+                Host: test\r\n\
+                Content-Type: application/grpc\r\n\
+                Content-Length: 5\r\n\r\n\0\0\0\0\0",
+            )
+            .await
+            .unwrap();
+        let mut chunk = [0_u8; 4096];
+        let read = timeout(WELL_PAST_THE_LIMITS, watcher.read(&mut chunk))
+            .await
+            .expect("the first status arrives")
+            .unwrap();
+        assert!(chunk[..read].starts_with(b"HTTP/1.1 200"));
+        let mut honest = TcpStream::connect(addr).await.unwrap();
+        honest
+            .write_all(b"GET /health/live HTTP/1.1\r\nHost: test\r\n\r\n")
+            .await
+            .unwrap();
+        assert!(
+            ended(&mut honest).await.is_some(),
+            "an honest client got nothing in {WELL_PAST_THE_LIMITS:?}"
+        );
+    })
+    .await;
+}
+
+/// The service and method of a call are labels of its metrics, and the path
+/// is the client's to choose: with no credentials, each path nobody serves
+/// adds a series to the process, for good, and to every scrape.
+#[tokio::test]
+async fn a_path_nobody_serves_adds_no_metric() {
+    let app = limited(ping_app())
+        .module(ObserveModule::for_root(ObserveOptions::default()))
+        .build()
+        .await;
+    serving(&app, async {
+        let addr = app.get::<HttpServer>().await.wait_bound().await;
+        for call in 0..3 {
+            let mut client = TcpStream::connect(addr).await.unwrap();
+            let head = format!(
+                "POST /no.such.Service{call}/Method HTTP/1.1\r\nHost: test\r\n\
+                 Content-Type: application/grpc\r\nContent-Length: 0\r\n\
+                 Connection: close\r\n\r\n"
+            );
+            client.write_all(head.as_bytes()).await.unwrap();
+            let mut answer = Vec::new();
+            timeout(WELL_PAST_THE_LIMITS, client.read_to_end(&mut answer))
+                .await
+                .expect("the call is answered")
+                .unwrap();
+        }
+        let body = app
+            .client()
+            .get("/metrics")
+            .send()
+            .await
+            .assert_status(200)
+            .text();
+        let series = body
+            .lines()
+            .filter(|line| line.contains("no.such.Service"))
+            .count();
+        assert_eq!(series, 0, "{body}");
+    })
+    .await;
+}
+
+/// `grpc.timeout_secs` takes any number, and a number that large means never.
+/// The deadline is added to the time of each call, and the sum overflows.
+#[tokio::test]
+async fn a_server_deadline_of_any_length_answers_calls() {
+    let app = limited(ping_app())
+        .config("grpc.timeout_secs", u64::MAX)
+        .build()
+        .await;
+    serving(&app, async {
+        let addr = app.get::<HttpServer>().await.wait_bound().await;
+        let channel = tonic::transport::Endpoint::from_shared(format!("http://{addr}"))
+            .unwrap()
+            .connect()
+            .await
+            .unwrap();
+        let answered = PingClient::new(channel)
+            .ping(PingRequest {
+                message: "hello".to_owned(),
+                sleep_ms: 0,
+            })
+            .await;
+        assert_eq!(answered.expect("an answer").into_inner().message, "hello");
+    })
+    .await;
+}
+
+/// `http.timeout_secs` is `grpc.timeout_secs` when that is unset, and with
+/// the gRPC module in the app every plain HTTP request adds it to the time too.
+#[tokio::test]
+async fn a_server_deadline_of_any_length_answers_http_requests() {
+    let app = limited(ping_app())
+        .config("http.timeout_secs", u64::MAX)
+        .build()
+        .await;
+    serving(&app, async {
+        let addr = app.get::<HttpServer>().await.wait_bound().await;
+        let mut client = TcpStream::connect(addr).await.unwrap();
+        client
+            .write_all(b"GET /health/live HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n")
+            .await
+            .unwrap();
+        let mut answer = Vec::new();
+        timeout(WELL_PAST_THE_LIMITS, client.read_to_end(&mut answer))
+            .await
+            .expect("the server answers or closes")
+            .ok();
+        let answer = String::from_utf8_lossy(&answer);
+        assert!(answer.starts_with("HTTP/1.1 200"), "{answer:?}");
+    })
+    .await;
+}
+
+/// A service whose only method answers a stream that always has more.
+struct EndlessDeals;
+
+impl Injectable for EndlessDeals {
+    fn dependencies() -> Vec<ProviderKey> {
+        Vec::new()
+    }
+
+    fn construct(_resolver: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async { Ok(Self) })
+    }
+}
+
+#[grpc_service(server = DealsServer)]
+#[public]
+impl Deals for EndlessDeals {
+    async fn get_deal(
+        &self,
+        _request: Request<GetDealRequest>,
+    ) -> navree_http::Result<Response<Deal>> {
+        Err(AppError::not_found())
+    }
+
+    async fn list_deals(
+        &self,
+        _request: Request<ListDealsRequest>,
+    ) -> navree_http::Result<Response<ListDealsResponse>> {
+        Err(AppError::not_found())
+    }
+
+    async fn move_deal(
+        &self,
+        _request: Request<MoveDealRequest>,
+    ) -> navree_http::Result<Response<Deal>> {
+        Err(AppError::not_found())
+    }
+
+    type WatchDealsStream = DealEvents;
+
+    async fn watch_deals(
+        &self,
+        _request: Request<WatchDealsRequest>,
+    ) -> navree_http::Result<Response<Self::WatchDealsStream>> {
+        let event = DealEvent {
+            deal_id: "1".to_owned(),
+            stage: "lead".to_owned(),
+        };
+        let events = futures_util::stream::repeat_with(move || Ok(event.clone()));
+        Ok(Response::new(Box::pin(events) as DealEvents))
+    }
+
+    async fn import_deals(
+        &self,
+        _request: Request<Streaming<Deal>>,
+    ) -> navree_http::Result<Response<ImportDealsResponse>> {
+        Err(AppError::not_found())
+    }
+
+    type EchoStream = DealEvents;
+
+    async fn echo(
+        &self,
+        _request: Request<Streaming<DealEvent>>,
+    ) -> navree_http::Result<Response<Self::EchoStream>> {
+        Err(AppError::not_found())
+    }
+}
+
+struct EndlessDealsModule;
+
+impl Module for EndlessDealsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.grpc_service::<EndlessDeals>();
+    }
+}
+
+/// The client's deadline ends a response stream when the stream has nothing
+/// to give: one that always has more never gets as far as the check, and
+/// neither does a shutdown, which is looked at in the same place.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_stream_that_always_has_more_ends_at_the_clients_deadline() {
+    let app = TestApp::builder()
+        .config("http.addr", "127.0.0.1:0")
+        .config("http.shutdown_grace_secs", 1)
+        .module(GrpcModule::from_config())
+        .module(EndlessDealsModule)
+        .build()
+        .await;
+    serving(&app, async {
+        let addr = app.get::<HttpServer>().await.wait_bound().await;
+        let channel = tonic::transport::Endpoint::from_shared(format!("http://{addr}"))
+            .unwrap()
+            .connect()
+            .await
+            .unwrap();
+        let mut request = tonic::Request::new(WatchDealsRequest {});
+        request.set_timeout(Duration::from_secs(1));
+        let mut events = DealsClient::new(channel)
+            .watch_deals(request)
+            .await
+            .expect("the stream starts")
+            .into_inner();
+        let ended = timeout(WELL_PAST_THE_LIMITS, async {
+            loop {
+                match events.message().await {
+                    Ok(Some(_)) => {}
+                    Ok(None) => return None,
+                    Err(status) => return Some(status.code()),
+                }
+            }
+        })
+        .await;
+        assert_eq!(
+            ended.expect("the stream outlived its deadline of 1 s"),
+            Some(tonic::Code::DeadlineExceeded)
+        );
     })
     .await;
 }

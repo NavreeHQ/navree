@@ -2553,3 +2553,205 @@ async fn memory_of_requests(headers: usize) -> (u64, u64) {
     release.notify_waiters();
     (sent, held)
 }
+
+// Failing: every test below this line fails today, and passes once what it
+// shows is fixed.
+
+/// Told to go, stays: h2 takes new streams until a client acknowledges the
+/// PING that comes with a graceful GOAWAY, and this one never does. It opens
+/// a stream `every` so often, inside the linger, until the connection ends.
+/// `answered` counts the responses it gets after the GOAWAY.
+async fn stays_after_the_goaway(client: TcpStream, every: Duration, answered: Arc<AtomicU64>) {
+    let (mut reader, mut writer) = client.into_split();
+    let told = Arc::new(Notify::new());
+    let reading = {
+        let told = told.clone();
+        tokio::spawn(async move {
+            let mut gone = false;
+            loop {
+                let mut head = [0_u8; 9];
+                if reader.read_exact(&mut head).await.is_err() {
+                    return;
+                }
+                let length = u32::from_be_bytes([0, head[0], head[1], head[2]]) as usize;
+                let mut payload = vec![0_u8; length];
+                if reader.read_exact(&mut payload).await.is_err() {
+                    return;
+                }
+                if head[3] == GOAWAY {
+                    gone = true;
+                    told.notify_one();
+                }
+                if gone && head[3] == HEADERS {
+                    answered.fetch_add(1, Ordering::SeqCst);
+                }
+            }
+        })
+    };
+    told.notified().await;
+    let mut stream = 3_u32;
+    while !reading.is_finished() {
+        let opened = frame(HEADERS, END_STREAM | END_HEADERS, stream, GET_ROOT);
+        if writer.write_all(&opened).await.is_err() {
+            return;
+        }
+        stream += 2;
+        sleep(every).await;
+    }
+}
+
+/// An HTTP/2 connection with a finished request, the kind a reclaim closes.
+async fn finished_a_request(addr: SocketAddr) -> TcpStream {
+    let mut client = raw(addr).await;
+    client
+        .write_all(&frame(HEADERS, END_STREAM | END_HEADERS, 1, GET_ROOT))
+        .await
+        .unwrap();
+    loop {
+        let (kind, _, _) = timeout(PATIENCE, next_frame(&mut client))
+            .await
+            .expect("a frame")
+            .expect("the connection stays");
+        if kind == DATA {
+            return client;
+        }
+    }
+}
+
+/// The reclaim of an idle connection, on HTTP/2. Every limit is on, and none
+/// of them ends this client: a request every 100 ms is neither idle nor a dead
+/// peer, and each one takes the linger's deadline away. The slot was given to
+/// the honest client, and must reach it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_http2_client_ignoring_the_goaway_gives_a_reclaimed_slot_back() {
+    let server = start(
+        echo_app(),
+        ServerOptions {
+            header_read_timeout_ms: Some(LIMIT_MS),
+            idle_timeout_ms: Some(LIMIT_MS),
+            body_read_timeout_ms: Some(LIMIT_MS),
+            write_stall_timeout_ms: Some(LIMIT_MS),
+            http2_keep_alive_interval_ms: Some(LIMIT_MS),
+            http2_keep_alive_timeout_ms: LIMIT_MS,
+            max_connections: Some(1),
+            ..no_limits()
+        },
+    )
+    .await;
+    let client = finished_a_request(server.addr).await;
+    let answered = Arc::new(AtomicU64::new(0));
+    let staying = tokio::spawn(stays_after_the_goaway(
+        client,
+        LIMIT / 3,
+        answered.clone(),
+    ));
+    let mut honest = connect(server.addr).await;
+    honest.write_all(GET).await.unwrap();
+    let served = timeout(WELL_PAST, honest.read_u8()).await;
+    staying.abort();
+    assert!(
+        served.is_ok(),
+        "an honest client waited {WELL_PAST:?}, and the client told to go was answered \
+         {answered:?} more times"
+    );
+}
+
+/// The same with an idle connection right there. The honest client has had
+/// its one reclaim, spent on a connection that stays, so it waits on with a
+/// slot it could have had standing idle.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_http2_client_ignoring_the_goaway_leaves_nobody_waiting_behind_an_idle_slot() {
+    let server = start(echo_app(), capped(2)).await;
+    let oldest = finished_a_request(server.addr).await;
+    let answered = Arc::new(AtomicU64::new(0));
+    let staying = tokio::spawn(stays_after_the_goaway(
+        oldest,
+        LIMIT / 3,
+        answered.clone(),
+    ));
+    sleep(Duration::from_millis(20)).await;
+    let mut idle = finished_a_request(server.addr).await;
+    let mut honest = connect(server.addr).await;
+    honest.write_all(GET).await.unwrap();
+    let served = timeout(WELL_PAST, honest.read_u8()).await;
+    staying.abort();
+    let told_to_go = timeout(LIMIT, async {
+        while let Some((kind, _, _)) = next_frame(&mut idle).await {
+            if kind == GOAWAY {
+                return true;
+            }
+        }
+        true
+    });
+    let told_to_go = told_to_go.await.unwrap_or(false);
+    assert!(
+        served.is_ok(),
+        "an honest client waited {WELL_PAST:?}, the idle connection told to go: {told_to_go}, \
+         the client told to go answered {answered:?} more times"
+    );
+}
+
+/// Nor does a client with a reclaim still to come get it: none happens while
+/// the last connection reclaimed is lingering, and between two requests this
+/// one always is. One connection and two requests a second turn the reclaim
+/// off for the whole server. Requests this far apart leave it in flight for
+/// too little of the time for a look to land on one.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_http2_client_ignoring_the_goaway_holds_up_no_other_reclaim() {
+    let server = start(
+        echo_app(),
+        ServerOptions {
+            header_read_timeout_ms: Some(30_000),
+            ..capped(2)
+        },
+    )
+    .await;
+    let oldest = finished_a_request(server.addr).await;
+    let answered = Arc::new(AtomicU64::new(0));
+    let staying = tokio::spawn(stays_after_the_goaway(
+        oldest,
+        Duration::from_millis(500),
+        answered.clone(),
+    ));
+    sleep(Duration::from_millis(20)).await;
+    let _idle = finished_a_request(server.addr).await;
+    // Both at the door before either says anything, so the second is seen.
+    let mut first = connect(server.addr).await;
+    let mut second = connect(server.addr).await;
+    sleep(LIMIT).await;
+    first.write_all(GET).await.unwrap();
+    second.write_all(GET).await.unwrap();
+    let served = timeout(WELL_PAST, async {
+        tokio::select! {
+            _ = first.read_u8() => {}
+            _ = second.read_u8() => {}
+        }
+    })
+    .await;
+    staying.abort();
+    assert!(
+        served.is_ok(),
+        "two clients waited {WELL_PAST:?} with a connection idle all along, and the client \
+         told to go was answered {answered:?} more times"
+    );
+}
+
+/// Not committed: the control, a client that stops once told to go.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn control_a_client_that_leaves_gives_the_slot_back() {
+    let server = start(echo_app(), capped(1)).await;
+    let client = finished_a_request(server.addr).await;
+    let answered = Arc::new(AtomicU64::new(0));
+    let staying = tokio::spawn(stays_after_the_goaway(
+        client,
+        Duration::from_secs(60),
+        answered.clone(),
+    ));
+    let mut honest = connect(server.addr).await;
+    honest.write_all(GET).await.unwrap();
+    let started = Instant::now();
+    let served = timeout(WELL_PAST, honest.read_u8()).await;
+    staying.abort();
+    println!("control: {:?} after {:?}", served.is_ok(), started.elapsed());
+    assert!(served.is_ok());
+}
