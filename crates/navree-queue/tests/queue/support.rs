@@ -390,6 +390,33 @@ impl Job for HangLast {
     }
 }
 
+/// Hangs forever on every attempt, recording each start: a job whose
+/// worker dies every time it runs. Three attempts, timeout 5 s.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct HangAlways {
+    pub label: String,
+}
+
+impl Job for HangAlways {
+    const NAME: &'static str = "test.hang_always";
+
+    fn options() -> JobOptions {
+        JobOptions {
+            max_attempts: 3,
+            timeout_secs: 5,
+            ..JobOptions::default()
+        }
+    }
+
+    async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
+        let journal = journal(&ctx).await?;
+        journal.record(Self::NAME, &self.label, ctx.attempt);
+        journal.hanging.notify_one();
+        std::future::pending::<()>().await;
+        Ok(())
+    }
+}
+
 /// Fails while the journal is `failing`; one attempt.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Toggle {
@@ -632,6 +659,7 @@ impl Module for JobsModule {
             .job::<UniqueReport>()
             .job::<Hang>()
             .job::<HangLast>()
+            .job::<HangAlways>()
             .job::<Toggle>()
             .job::<Panics>()
             .job::<HideJobsTable>()

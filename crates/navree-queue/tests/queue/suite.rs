@@ -16,7 +16,7 @@ use serde_json::json;
 use tokio_util::sync::CancellationToken;
 
 use crate::support::{
-    AlwaysFails, Hang, HangLast, Harness, Panics, Record, Sleepy, Toggle, UniqueReport,
+    AlwaysFails, Hang, HangAlways, HangLast, Harness, Panics, Record, Sleepy, Toggle, UniqueReport,
     Unregistered, Urgent, harness, harness_with, options, start,
 };
 
@@ -378,6 +378,44 @@ pub async fn stale_job_on_its_last_attempt_fails(driver: QueueDriver) {
         failed[0].error
     );
     assert!(h.journal.runs().is_empty(), "the handler did not run again");
+}
+
+/// A job whose worker dies on every attempt (here a task aborted mid-job,
+/// as a crashed process would be) comes back only when its reservation is
+/// stale, a new attempt each time, and once the attempts are used up the
+/// next worker moves it to the failed jobs without running it.
+pub async fn crashing_job_is_attempted_no_more_than_its_attempts(driver: QueueDriver) {
+    let h = harness(driver).await;
+    let id = h
+        .queue
+        .dispatch(HangAlways { label: "h".into() })
+        .await
+        .unwrap();
+
+    for attempt in 1..=3 {
+        crash_worker_mid_job(&h).await;
+        let attempts: Vec<u32> = h.journal.runs().iter().map(|run| run.attempt).collect();
+        assert_eq!(attempts, (1..=attempt).collect::<Vec<_>>());
+        // The dead worker's reservation is not given back before it is
+        // stale: nothing else runs the job in between.
+        assert_eq!(h.drain().await.processed, 0);
+        h.advance(5 + STALE_RESERVATION_GRACE_SECS);
+    }
+
+    let stats = h.drain().await;
+
+    assert_eq!(stats.failed, 1);
+    assert_eq!(h.journal.runs().len(), 3, "the handler ran three times");
+    let failed = h.queue.failed().await.unwrap();
+    assert_eq!(failed.len(), 1);
+    assert_eq!(failed[0].id, id);
+    assert_eq!(failed[0].attempts, 4, "the fourth reservation was refused");
+    assert!(
+        failed[0].error.contains("attempted too many times"),
+        "{}",
+        failed[0].error
+    );
+    assert_eq!(h.queue.pending_count("default").await.unwrap(), 0);
 }
 
 /// Dispatches failing [`Toggle`] jobs `labels`, runs them into the failed
