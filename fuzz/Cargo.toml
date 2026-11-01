@@ -35,6 +35,7 @@ navree-config = { path = "../crates/navree-config" }
 navree-contracts = { path = "../crates/navree-contracts" }
 navree-crypto = { path = "../crates/navree-crypto" }
 navree-directory = { path = "../crates/navree-directory" }
+navree-documents = { path = "../crates/navree-documents", default-features = false, features = ["docx"] }
 navree-domains = { path = "../crates/navree-domains" }
 navree-http = { path = "../crates/navree-http" }
 navree-kernel = { path = "../crates/navree-kernel" }
@@ -60,6 +61,8 @@ tower = { version = "0.5.3", features = ["util"] }
 url = "2.5.8"
 utoipa = "6.0.0"
 uuid = { version = "1.29.0", features = ["serde", "v7"] }
+# The packages the `docx_read` target builds.
+zip = { version = "9.1.2", default-features = false }
 base64 = "0.23.1"
 
 [profile.release]
@@ -81,6 +84,13 @@ bench = false
 [[bin]]
 name = "config_sources"
 path = "fuzz_targets/config_sources.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "docx_read"
+path = "fuzz_targets/docx_read.rs"
 test = false
 doc = false
 bench = false
