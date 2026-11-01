@@ -44,6 +44,7 @@ navree-mail = { path = "../crates/navree-mail", features = ["inbound"] }
 navree-mcp = { path = "../crates/navree-mcp", features = ["fuzzing"] }
 navree-micro = { path = "../crates/navree-micro" }
 navree-oauth = { path = "../crates/navree-oauth" }
+navree-pdf = { path = "../crates/navree-pdf" }
 navree-schedule = { path = "../crates/navree-schedule" }
 navree-search = { path = "../crates/navree-search", features = ["fuzzing"] }
 navree-sso = { path = "../crates/navree-sso", features = ["fuzzing"] }
@@ -280,6 +281,20 @@ bench = false
 [[bin]]
 name = "ws_handshake"
 path = "fuzz_targets/ws_handshake.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pdf_read"
+path = "fuzz_targets/pdf_read.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pdf_content"
+path = "fuzz_targets/pdf_content.rs"
 test = false
 doc = false
 bench = false
