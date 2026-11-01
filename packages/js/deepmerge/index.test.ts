@@ -216,6 +216,16 @@ describe("work", () => {
     for (let round = 0; round < 50; round++) merge({}, shared(14));
   });
 
+  it("counts the elements of an array as work, however often it is shared", () => {
+    const elements = new Array(200_000).fill(0);
+    const shared: Record<string, number[]> = {};
+    for (let index = 0; index < 30; index++) shared[`k${index}`] = elements;
+    expect(() => merge({}, shared)).toThrow(/work/);
+    // One copy of each is nothing like the limit.
+    const once: Record<string, number[]> = { a: elements, b: elements };
+    expect(merge({}, once).b).toHaveLength(200_000);
+  });
+
   it("counts the keys of wide objects as work, and takes a million of them", () => {
     const wide: Record<string, number> = {};
     for (let key = 0; key < 200_000; key++) wide[`k${key}`] = key;

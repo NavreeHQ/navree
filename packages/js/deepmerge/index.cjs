@@ -47,6 +47,7 @@ function cloneUnlessOtherwiseSpecified(value, options) {
 }
 
 function defaultArrayMerge(target, source, options) {
+  spend(target.length + source.length);
   return target.concat(source).map((element) => cloneUnlessOtherwiseSpecified(element, options));
 }
 
