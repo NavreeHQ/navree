@@ -123,22 +123,21 @@ fn dedupe(types: Vec<Ty>) -> Vec<Ty> {
 }
 
 /// `A | B`, `A` for one member, `never` for none.
-pub(crate) fn union(types: Vec<Ty>) -> Ty {
-    let mut types = dedupe(types);
+pub(crate) fn union(mut types: Vec<Ty>) -> Ty {
     match types.len() {
         0 => NEVER,
         1 => types.remove(0),
-        _ => Ty::Union(types),
+        // Even when de-duplication leaves one member, it stays a union.
+        _ => Ty::Union(dedupe(types)),
     }
 }
 
 /// `A & B`, `A` for one member, `never` for none.
-pub(crate) fn intersection(types: Vec<Ty>) -> Ty {
-    let mut types = dedupe(types);
+pub(crate) fn intersection(mut types: Vec<Ty>) -> Ty {
     match types.len() {
         0 => NEVER,
         1 => types.remove(0),
-        _ => Ty::Intersection(types),
+        _ => Ty::Intersection(dedupe(types)),
     }
 }
 
@@ -476,6 +475,7 @@ fn print_type(out: &mut String, ty: &Ty, level: usize) {
         }
         Ty::Union(members) => print_joined(out, members, " | ", level),
         Ty::Intersection(members) => print_joined(out, members, " & ", level),
+        Ty::Literal(members) if members.is_empty() => out.push_str("{}"),
         Ty::Literal(members) => {
             out.push_str("{\n");
             print_members(out, members, level + 1);

@@ -128,6 +128,18 @@ fn check(document: &Value) -> Result<(), String> {
             None => "Unsupported schema format, expected `openapi: 3.x`".to_owned(),
         });
     }
+    if let Some(version) = version
+        && version.as_str().is_none()
+    {
+        let kind = match version {
+            Value::Num(_) => "number",
+            Value::Bool(_) => "boolean",
+            _ => "object",
+        };
+        return Err(format!(
+            "Invalid OpenAPI version: should be a string but got \"{kind}\""
+        ));
+    }
     check_refs(document, document)?;
     let mut seen: Vec<&str> = Vec::new();
     for section in ["paths", "webhooks"] {
@@ -165,11 +177,28 @@ fn check_refs(root: &Value, node: &Value) -> Result<(), String> {
                         "Can't resolve $ref \"{reference}\": only references inside the document are supported; bundle the document into one file first"
                     ));
                 }
-                let found = refs::parse_ref(reference)
-                    .iter()
-                    .try_fold(root, |at, key| at.get(key));
-                if found.is_none() {
-                    return Err(format!("Can't resolve $ref \"{reference}\""));
+                // Follow the reference, and any reference it leads to, to the end.
+                let mut seen = vec![reference];
+                let mut next = reference;
+                loop {
+                    let found = refs::parse_ref(next)
+                        .iter()
+                        .try_fold(root, |at, key| at.get(key));
+                    let Some(found) = found else {
+                        return Err(format!("Can't resolve $ref \"{next}\""));
+                    };
+                    match found.get("$ref").and_then(Value::as_str) {
+                        Some(again) if again.starts_with('#') => {
+                            if seen.contains(&again) {
+                                return Err(format!(
+                                    "Self-referencing circular pointer: \"{reference}\""
+                                ));
+                            }
+                            seen.push(again);
+                            next = again;
+                        }
+                        _ => break,
+                    }
                 }
             }
             object

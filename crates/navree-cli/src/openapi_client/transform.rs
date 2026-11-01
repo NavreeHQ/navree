@@ -2,7 +2,7 @@
 //! `webhooks`, `components`, `$defs` and `operations`.
 
 use super::discriminators::{self, Discriminators, resolve_keys, value_at};
-use super::json::{Object, Value};
+use super::json::{Object, Value, js_number};
 use super::refs::{create_ref, escape_pointer, oapi_ref, parse_ref};
 use super::ts::{
     BOOLEAN, Key, Member, NEVER, NUMBER, STRING, Statement, Ty, UNKNOWN, doc_comment, intersection,
@@ -44,11 +44,16 @@ pub(crate) fn declarations(mut doc: Value) -> Res<Declarations> {
         warnings,
     };
     let mut statements = Vec::new();
+    let no_sections = Value::object([]);
     for root in ["paths", "webhooks", "components", "$defs"] {
         let empty = Statement::Alias(root.to_owned(), record(STRING, NEVER));
-        let section = doc
-            .get(root)
-            .filter(|section| section.as_object().is_some());
+        // `components` is always there: a document without it, or with it
+        // empty of everything, still names every group.
+        let section = match doc.get(root) {
+            Some(section @ Value::Obj(_)) => Some(section),
+            None | Some(Value::Null | Value::Arr(_)) if root == "components" => Some(&no_sections),
+            _ => None,
+        };
         let Some(section) = section else {
             statements.push(empty);
             continue;
@@ -113,6 +118,25 @@ fn text<'a>(value: Option<&'a Value>, what: &str) -> Res<&'a str> {
 
 fn truthy(value: Option<&Value>) -> bool {
     value.is_some_and(Value::truthy)
+}
+
+/// Refuses what is not an object, where the document must have one.
+fn require_object(value: &Value, path: &str, name: &str) -> Res<()> {
+    if matches!(value, Value::Obj(_)) {
+        Ok(())
+    } else {
+        Err(format!("{name} must be an object at {path}"))
+    }
+}
+
+/// A `parameters` list: absent or null is empty, anything but an array is
+/// refused.
+fn parameter_list(value: Option<&Value>, path: &str) -> Res<Vec<Value>> {
+    match value {
+        None | Some(Value::Null) => Ok(Vec::new()),
+        Some(Value::Arr(items)) => Ok(items.to_vec()),
+        Some(_) => Err(format!("parameters must be an array at {path}")),
+    }
 }
 
 /// `String(value)` as a template literal prints it.
@@ -230,22 +254,21 @@ impl Generator<'_> {
     }
 
     fn path_item(&mut self, item: &Value, path: &str) -> Res<Ty> {
-        let shared: Vec<Value> = item
-            .get("parameters")
-            .and_then(Value::as_array)
-            .map(<[Value]>::to_vec)
-            .unwrap_or_default();
+        let shared = parameter_list(item.get("parameters"), path)?;
         let mut members = self.parameters(&shared, &create_ref(&[path, "parameters"]))?;
         for method in METHODS {
             let Some(operation) = item.get(method).filter(|op| op.truthy()) else {
                 members.push(Member::new(Key::Ident(method.to_owned()), NEVER).optional(true));
                 continue;
             };
+            if !matches!(operation, Value::Obj(_)) {
+                return Err(format!("{path}/{method} must be an object"));
+            }
             let ty = if operation.has("$ref") {
                 oapi_ref(text(operation.get("$ref"), "$ref")?, None)?
             } else {
-                let folded = self.fold_parameters(&shared, operation);
                 let operation_path = create_ref(&[path, method]);
+                let folded = self.fold_parameters(&shared, operation, &operation_path)?;
                 match operation.get("operationId").filter(|id| id.truthy()) {
                     Some(id) => {
                         let id = text(Some(id), "operationId")?.replace('#', "/");
@@ -265,13 +288,15 @@ impl Generator<'_> {
 
     /// The path item's parameters and the operation's, the operation's
     /// replacing a path item parameter with the same `in` and `name`.
-    fn fold_parameters(&mut self, shared: &[Value], operation: &Value) -> Vec<Value> {
-        let own = operation
-            .get("parameters")
-            .and_then(Value::as_array)
-            .unwrap_or_default();
+    fn fold_parameters(
+        &mut self,
+        shared: &[Value],
+        operation: &Value,
+        path: &str,
+    ) -> Res<Vec<Value>> {
+        let own = parameter_list(operation.get("parameters"), path)?;
         let mut keyed: Vec<(String, Value)> = Vec::new();
-        for parameter in shared.iter().chain(own) {
+        for parameter in shared.iter().chain(&own) {
             let described = if parameter.has("$ref") {
                 parameter
                     .get("$ref")
@@ -295,7 +320,7 @@ impl Generator<'_> {
                 None => keyed.push((key, parameter.clone())),
             }
         }
-        keyed.into_iter().map(|(_, parameter)| parameter).collect()
+        Ok(keyed.into_iter().map(|(_, parameter)| parameter).collect())
     }
 
     /// Adds an operation to the `operations` interface.
@@ -333,6 +358,7 @@ impl Generator<'_> {
         let mut members = self.parameters(parameters, path)?;
         match operation.get("requestBody").filter(|body| body.truthy()) {
             Some(body) => {
+                require_object(body, path, "requestBody")?;
                 let (ty, required) = if body.has("$ref") {
                     let reference = text(body.get("$ref"), "$ref")?;
                     let required = self
@@ -380,15 +406,20 @@ impl Generator<'_> {
                 if resolved.get("in").and_then(Value::as_str) != Some(place) {
                     continue;
                 }
-                let name = text(resolved.get("name"), "a parameter's name")?;
+                let name = js_text(resolved.get("name"));
+                let key = match resolved.get("name") {
+                    Some(Value::Num(number)) if *number >= 0.0 => Key::Number(js_number(*number)),
+                    Some(Value::Str(name)) => property_key(name),
+                    _ => Key::Quoted(name.clone()),
+                };
                 let optional = place != "path" && !truthy(resolved.get("required"));
                 let ty = match reference {
                     Some(reference) => oapi_ref(reference, Some(&resolved))?,
                     None => {
-                        self.parameter(&resolved, &create_ref(&[path, "parameters", place, name]))?
+                        self.parameter(&resolved, &create_ref(&[path, "parameters", place, &name]))?
                     }
                 };
-                let mut member = Member::new(property_key(name), ty).optional(optional);
+                let mut member = Member::new(key, ty).optional(optional);
                 member.comment = self.comment(&resolved);
                 located.push(member);
             }
@@ -416,6 +447,7 @@ impl Generator<'_> {
     fn request_body(&mut self, body: &Value, path: &str) -> Res<Ty> {
         let mut members = Vec::new();
         for (content_type, media) in entries(body.get("content")) {
+            require_object(media, path, content_type)?;
             let next = create_ref(&[path, "content", content_type]);
             let ty = if media.has("$ref") {
                 self.schema(media, &next)?
@@ -443,6 +475,7 @@ impl Generator<'_> {
     fn responses(&mut self, responses: Option<&Value>, path: &str) -> Res<Ty> {
         let mut members = Vec::new();
         for (code, response) in entries(responses) {
+            require_object(response, path, code)?;
             let ty = if response.has("$ref") {
                 oapi_ref(text(response.get("$ref"), "$ref")?, None)?
             } else {
@@ -461,6 +494,7 @@ impl Generator<'_> {
         let mut headers = Vec::new();
         if truthy(response.get("headers")) {
             for (name, header) in entries(response.get("headers")) {
+                require_object(header, path, name)?;
                 let optional = !(header.has("$ref") || truthy(header.get("required")));
                 let ty = if header.has("$ref") {
                     oapi_ref(text(header.get("$ref"), "$ref")?, None)?
@@ -908,13 +942,15 @@ impl Generator<'_> {
             }
         }
 
-        let explicit = additional
-            .and_then(Value::as_object)
-            .is_some_and(|value| value.len() > 0);
-        let implicit = matches!(additional, Some(Value::Bool(true)))
-            || additional
-                .and_then(Value::as_object)
-                .is_some_and(|value| value.len() == 0);
+        // `typeof x === "object"` and `Object.keys(x).length`.
+        let count = |value: Option<&Value>| match value {
+            Some(Value::Obj(object)) => Some(object.len()),
+            Some(Value::Arr(items)) => Some(items.len()),
+            _ => None,
+        };
+        let explicit = count(additional).is_some_and(|count| count > 0);
+        let implicit =
+            matches!(additional, Some(Value::Bool(true))) || count(additional) == Some(0);
         let mut index_types = Vec::new();
         if explicit && let Some(additional) = additional {
             index_types.push(self.schema(additional, path)?);
@@ -922,10 +958,10 @@ impl Generator<'_> {
         if implicit {
             index_types.push(UNKNOWN);
         }
-        if pattern
-            .and_then(Value::as_object)
-            .is_some_and(|value| value.len() > 0)
-        {
+        if count(pattern).is_some_and(|count| count > 0) {
+            if pattern.and_then(Value::as_object).is_none() {
+                return Err(format!("patternProperties must be an object at {path}"));
+            }
             for (_, value) in entries(pattern) {
                 index_types.push(self.schema(value, path)?);
             }
