@@ -13,8 +13,10 @@
 //! [`Budget`] of `max_part_bytes`, and what it unpacks to four times that, for
 //! all the readers it tries together. Each part is read in one pass, in time
 //! in proportion to its bytes; a sheet's part is not read until a sheet is
-//! asked for, and that reading can stop at any cell. An XLS workbook holds its
-//! stream and its shared strings, each with a limit of its own, and goes
+//! asked for, and that reading can be told to stop: it heeds that within
+//! 64 KiB of the part, or 1,024 records of an XLS sheet, whether or not what
+//! it reads gives a cell ([`Workbook::read_cells`]). An XLS workbook holds
+//! its stream and its shared strings, each with a limit of its own, and goes
 //! through the stream at most twice ([`super::xls`]).
 
 mod archive;

@@ -197,7 +197,7 @@ fn an_xls_sheet_of_records_without_cells_stops_when_told_to() {
     // test writer makes can hold.
     let records = record(0x007F, &[]).repeat(1_500_000);
     let file = xw::Book::new(vec![], vec![xw::Sheet::new("S", records)]).file();
-    let (result, took) = stopped(&file, opts(1 << 28), Duration::from_millis(1));
+    let (result, took) = stopped(&file, opts(1 << 28), Duration::ZERO);
     assert!(interrupted(&result), "{result:?} after {took:?}");
     assert!(took < PROMPT, "{took:?}");
 }
@@ -209,7 +209,7 @@ fn an_xls_sheet_of_continue_records_stops_when_told_to() {
     let mut records = record(0x007F, &[]);
     records.extend(record(0x003C, &[]).repeat(1_500_000));
     let file = xw::Book::new(vec![], vec![xw::Sheet::new("S", records)]).file();
-    let (result, took) = stopped(&file, opts(1 << 28), Duration::from_millis(1));
+    let (result, took) = stopped(&file, opts(1 << 28), Duration::ZERO);
     assert!(interrupted(&result), "{result:?} after {took:?}");
     assert!(took < PROMPT, "{took:?}");
 }
@@ -240,6 +240,7 @@ fn a_timeout_that_drops_a_reading_leaves_the_blocking_pool_free() {
     let at = Instant::now();
     drop(runtime);
     let waited = at.elapsed();
+    eprintln!("shutdown waited {waited:?} for the reading");
     assert!(
         waited < PROMPT,
         "shutdown waited {waited:?} for the reading"

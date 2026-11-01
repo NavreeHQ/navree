@@ -760,7 +760,8 @@ impl Content<'_, '_, '_> {
     /// Holds `more`, whitespace as text, after the whitespace held already.
     fn hold(&mut self, more: &str) -> Result<(), SheetsError> {
         // Spaces after text that is held cannot be kept apart from the
-        // spaces before it but by being made: they are, now.
+        // spaces before it but by being made: the held whitespace is made
+        // here.
         if self.tail > 0 {
             self.release(0)?;
         }
