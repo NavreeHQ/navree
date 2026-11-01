@@ -74,15 +74,15 @@
 //!   stream and cross-reference stream inflated, and each entry of the
 //!   cross-reference is counted against [`ReadLimits::memory`] (256 MiB) as
 //!   it is built, and [`Document::memory_used`] says how much. What the
-//!   process holds for them at its peak is at most twice what is counted,
-//!   over the shapes that bring the two furthest apart, so 256 MiB counted
-//!   is at most 512 MiB held. The bytes of a stream are the file's own, and
+//!   process holds for them at its peak is at most twice what is counted
+//!   (1.75 times, in the shapes that bring the two furthest apart), so 256
+//!   MiB counted is at most 512 MiB held. The bytes of a stream are the file's own, and
 //!   are not copied.
 //! - **Bytes out.** A stream ends before the next object starts, whatever its
 //!   `Length` says, so the streams a document holds add up to the file's
 //!   size (twice that when the cross-reference is wrong about some objects).
 //!   [`Objects::save`] writes at most the file's size plus
-//!   [`ReadLimits::memory`]. A filter has 8 steps at most.
+//!   [`ReadLimits::memory`]. A stream has 8 filters at most.
 //!
 //! A small file that would take more is refused with
 //! [`PdfError::TooLarge`], however it comes to take it. A request for an

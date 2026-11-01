@@ -437,8 +437,8 @@ fn an_encryption_length_given_in_bytes_is_read() {
         .position(|window| window == b"/Length 128")
         .unwrap();
     bytes[at..at + 11].copy_from_slice(b"/Length  16");
-    let text = text_of(bytes);
-    assert!(text.contains("Line 1") || !text.is_empty(), "{text:?}");
+    let plain = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/lines.pdf");
+    assert_eq!(text_of(bytes), text_of(std::fs::read(plain).unwrap()));
 }
 
 #[test]

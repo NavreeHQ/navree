@@ -149,7 +149,7 @@ fn streams_that_overlap_are_not_written_once_each() {
 }
 
 #[test]
-fn an_overlay_of_many_copies_of_a_document_grows_with_the_copies_and_no_faster() {
+fn a_merge_of_many_copies_of_a_document_grows_with_the_copies_and_no_faster() {
     let pdf = Pdf::from_lines(["x"]);
     let once = Pdf::merge([&pdf]).unwrap().len();
     let many = Pdf::merge(std::iter::repeat_n(&pdf, 100)).unwrap();
