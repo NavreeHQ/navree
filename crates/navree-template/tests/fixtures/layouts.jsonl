@@ -30,8 +30,8 @@
 {"i": true, "n": "bad.html", "v": {"e": "UndefinedError|bad.html|2"}, "p": {"e": "UndefinedError|bad.html|2"}}
 {"i": false, "n": "text.txt", "v": {"o": "text <N>"}, "p": {"o": "text <N>"}}
 {"i": true, "n": "text.txt", "v": {"o": "text <N>"}, "p": {"o": "text <N>"}}
-{"i": false, "n": "htmlinc.html", "v": {"o": "&lt;N&gt;text <N>&lt;N&gt;"}, "p": {"o": "<N>text <N><N>"}}
-{"i": true, "n": "htmlinc.html", "v": {"o": "&lt;N&gt;text <N>&lt;N&gt;"}, "p": {"o": "<N>text <N><N>"}}
+{"i": false, "n": "htmlinc.html", "v": {"o": "&lt;N&gt;text &lt;N&gt;&lt;N&gt;"}, "p": {"o": "<N>text <N><N>"}}
+{"i": true, "n": "htmlinc.html", "v": {"o": "&lt;N&gt;text &lt;N&gt;&lt;N&gt;"}, "p": {"o": "<N>text <N><N>"}}
 {"i": false, "n": "txtinc.txt", "v": {"o": "<N><p>&lt;N&gt;</p><N>"}, "p": {"o": "<N><p><N></p><N>"}}
 {"i": true, "n": "txtinc.txt", "v": {"o": "<N><p>&lt;N&gt;</p><N>"}, "p": {"o": "<N><p><N></p><N>"}}
 {"i": false, "n": "macros.html", "v": {"o": "top &lt;N&gt;"}, "p": {"o": "top <N>"}}
@@ -84,15 +84,15 @@
 {"i": true, "n": "superuse.html", "v": {"o": "<h>T</h>B<f>&lt;brand&gt;</f>"}, "p": {"o": "<h>T</h>B<f><brand></f>"}}
 {"i": false, "n": "jsonish.json", "v": {"o": "\"<N>\"{\"a\":1,\"b\":2,\"z<\":\"y>\"}"}, "p": {"o": "<N>{'a': 1, 'b': 2, 'z<': 'y>'}"}}
 {"i": true, "n": "jsonish.json", "v": {"o": "\"<N>\"{\"a\":1,\"b\":2,\"z<\":\"y>\"}"}, "p": {"o": "<N>{'a': 1, 'b': 2, 'z<': 'y>'}"}}
-{"i": false, "n": "macrojson.html", "v": {"o": "\"<N>\""}, "p": {"o": "\"<N>\""}}
-{"i": true, "n": "macrojson.html", "v": {"o": "\"<N>\""}, "p": {"o": "\"<N>\""}}
-{"i": false, "n": "esc1.html", "v": {"o": "<N>&lt;N&gt;&lt;N&gt;raw&lt;N&gt;"}, "p": {"o": "<N><N><N>raw<N>"}}
-{"i": true, "n": "esc1.html", "v": {"o": "<N>&lt;N&gt;&lt;N&gt;raw&lt;N&gt;"}, "p": {"o": "<N><N><N>raw<N>"}}
+{"i": false, "n": "macrojson.html", "v": {"o": "&quot;\\u0026lt;N\\u0026gt;&quot;"}, "p": {"o": "\"<N>\""}}
+{"i": true, "n": "macrojson.html", "v": {"o": "&quot;\\u0026lt;N\\u0026gt;&quot;"}, "p": {"o": "\"<N>\""}}
+{"i": false, "n": "esc1.html", "v": {"o": "&lt;N&gt;&lt;N&gt;&lt;N&gt;raw&lt;N&gt;"}, "p": {"o": "<N><N><N>raw<N>"}}
+{"i": true, "n": "esc1.html", "v": {"o": "&lt;N&gt;&lt;N&gt;&lt;N&gt;raw&lt;N&gt;"}, "p": {"o": "<N><N><N>raw<N>"}}
 {"i": false, "n": "esc2.txt", "v": {"o": "<N>"}, "p": {"o": "<N>"}}
 {"i": true, "n": "esc2.txt", "v": {"o": "<N>"}, "p": {"o": "<N>"}}
 {"i": false, "n": "esc3.txt", "v": {"o": "raw<N>"}, "p": {"o": "raw<N>"}}
 {"i": true, "n": "esc3.txt", "v": {"o": "raw<N>"}, "p": {"o": "raw<N>"}}
-{"i": false, "n": "esc4.txt", "v": {"o": "<N>raw&lt;N&gt;"}, "p": {"o": "<N>raw<N>"}}
-{"i": true, "n": "esc4.txt", "v": {"o": "<N>raw&lt;N&gt;"}, "p": {"o": "<N>raw<N>"}}
+{"i": false, "n": "esc4.txt", "v": {"o": "&lt;N&gt;raw&lt;N&gt;"}, "p": {"o": "<N>raw<N>"}}
+{"i": true, "n": "esc4.txt", "v": {"o": "&lt;N&gt;raw&lt;N&gt;"}, "p": {"o": "<N>raw<N>"}}
 {"i": false, "n": "esc5.html", "v": {"o": "raw&lt;N&gt;"}, "p": {"o": "raw<N>"}}
 {"i": true, "n": "esc5.html", "v": {"o": "raw&lt;N&gt;"}, "p": {"o": "raw<N>"}}

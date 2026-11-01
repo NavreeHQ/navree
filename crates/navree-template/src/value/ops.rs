@@ -220,7 +220,7 @@ pub(crate) fn contains(container: &Value, value: &Value) -> Result<bool, Error> 
             None => text.contains(&value.to_string()),
         },
         Repr::Seq(items, ..) => items.iter().any(|item| item == value),
-        Repr::Map(..) | Repr::Kwargs(_) | Repr::Module(_) => {
+        Repr::Map(..) | Repr::Kwargs(..) | Repr::Module(_) => {
             container.get_item_opt(value).is_some()
         }
         Repr::Function(_) | Repr::Macro(_) | Repr::Loop(_) => false,
@@ -356,6 +356,17 @@ pub(crate) fn compare_cost(a: &Value, b: &Value) -> u64 {
 /// The work of `value in container`.
 pub(crate) fn contains_cost(container: &Value, value: &Value) -> u64 {
     walk_cost(container).saturating_add(walk_cost(value))
+}
+
+/// The work of looking `key` up in `container` by value.
+pub(crate) fn lookup_cost(container: &Value, key: &Value) -> u64 {
+    match &container.0 {
+        Repr::Str(text, _) => (text.len() / 64) as u64,
+        _ => match container.as_map() {
+            Some(map) => map.lookup_steps().saturating_mul(1 + walk_cost(key)),
+            None => 0,
+        },
+    }
 }
 
 fn walk_cost(value: &Value) -> u64 {

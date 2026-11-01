@@ -166,11 +166,11 @@
 {"t": "{% autoescape true %}{{ s }}{% endautoescape %}", "v": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}, "p": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}}
 {"t": "{% autoescape false %}{{ s }}{% endautoescape %}", "v": {"o": "<b>&\"'/x</b>"}, "p": {"o": "<b>&\"'/x</b>"}}
 {"t": "{% autoescape \"html\" %}{{ s }}{% endautoescape %}", "v": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}, "p": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}}
-{"t": "{% autoescape \"json\" %}{{ s }}{{ map }}{% endautoescape %}", "v": {"o": "\"<b>&\\\"'/x</b>\"{\"a\":1,\"b\":2,\"z<\":\"y>\"}"}, "p": {"o": "\"<b>&\\\"'/x</b>\"{\"a\":1,\"b\":2,\"z<\":\"y>\"}"}}
+{"t": "{% autoescape \"json\" %}{{ s }}{{ map }}{% endautoescape %}", "v": {"o": "&quot;\\u003cb\\u003e\\u0026\\&quot;\\u0027/x\\u003c/b\\u003e&quot;{&quot;a&quot;:1,&quot;b&quot;:2,&quot;z\\u003c&quot;:&quot;y\\u003e&quot;}"}, "p": {"o": "\"<b>&\\\"'/x</b>\"{\"a\":1,\"b\":2,\"z<\":\"y>\"}"}}
 {"t": "{% autoescape \"none\" %}{{ s }}{% endautoescape %}", "v": {"o": "<b>&\"'/x</b>"}, "p": {"o": "<b>&\"'/x</b>"}}
-{"t": "{% autoescape \"bad\" %}{{ s }}{% endautoescape %}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
-{"t": "{% autoescape nil %}{{ s }}{% endautoescape %}", "v": {"o": "<b>&\"'/x</b>"}, "p": {"o": "<b>&\"'/x</b>"}}
-{"t": "{% autoescape 1 %}{{ s }}{% endautoescape %}", "v": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}, "p": {"o": "&lt;b&gt;&amp;&quot;&#x27;&#x2f;x&lt;&#x2f;b&gt;"}}
+{"t": "{% autoescape \"bad\" %}{{ s }}{% endautoescape %}", "v": {"e": "SyntaxError|t.html|1"}, "p": {"e": "SyntaxError|t.html|1"}}
+{"t": "{% autoescape nil %}{{ s }}{% endautoescape %}", "v": {"e": "SyntaxError|t.html|1"}, "p": {"e": "SyntaxError|t.html|1"}}
+{"t": "{% autoescape 1 %}{{ s }}{% endautoescape %}", "v": {"e": "SyntaxError|t.html|1"}, "p": {"e": "SyntaxError|t.html|1"}}
 {"t": "{% filter upper %}a{{ s }}{% endfilter %}", "v": {"o": "A&LT;B&GT;&AMP;&QUOT;&#X27;&#X2F;X&LT;&#X2F;B&GT;"}, "p": {"o": "A<B>&\"'/X</B>"}}
 {"t": "{% filter upper|lower %}aB{% endfilter %}", "v": {"o": "ab"}, "p": {"o": "ab"}}
 {"t": "{% filter replace(\"a\", \"b\") %}aa{% endfilter %}", "v": {"o": "bb"}, "p": {"o": "bb"}}

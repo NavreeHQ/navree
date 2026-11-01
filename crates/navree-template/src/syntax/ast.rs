@@ -19,11 +19,29 @@ pub(crate) struct Ast {
     pub(crate) blocks: BTreeMap<String, Arc<BlockDef>>,
 }
 
+/// The `{% autoescape %}` tag around a piece of a template, which is what a
+/// block or macro written there prints with, wherever it runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum EscapeTag {
+    /// No tag: the template's own mode.
+    #[default]
+    Inherit,
+    /// `true`: the template's own mode, or HTML if it has none.
+    On,
+    /// `false` or `"none"`.
+    Off,
+    /// `"html"`.
+    Html,
+    /// `"json"`.
+    Json,
+}
+
 /// The body of `{% block name %}`.
 #[derive(Debug)]
 pub(crate) struct BlockDef {
     pub(crate) body: Vec<Stmt>,
     pub(crate) required: bool,
+    pub(crate) escape: EscapeTag,
 }
 
 #[derive(Debug)]
@@ -43,7 +61,7 @@ pub(crate) enum StmtKind {
     With(Box<WithBlock>),
     Set(Box<(Assign, Expr)>),
     SetBlock(Box<SetBlock>),
-    AutoEscape(Box<(Expr, Vec<Stmt>)>),
+    AutoEscape(Box<(EscapeTag, Vec<Stmt>)>),
     FilterBlock(Box<(Expr, Vec<Stmt>)>),
     /// `{% block name %}`: renders the most derived body of the block.
     Block(String),
@@ -118,6 +136,7 @@ pub(crate) struct Macro {
     pub(crate) closure: Vec<String>,
     /// Whether the body refers to `caller`.
     pub(crate) uses_caller: bool,
+    pub(crate) escape: EscapeTag,
 }
 
 #[derive(Debug)]

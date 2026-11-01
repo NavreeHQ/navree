@@ -6083,6 +6083,15 @@ version = "1.0.0"
 dependencies = [
  "serde",
  "serde_json",
+ "stacker",
+]
+
+[[package]]
+name = "navree-template-peak"
+version = "1.0.0"
+dependencies = [
+ "navree-template",
+ "serde_json",
 ]
 
 [[package]]

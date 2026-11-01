@@ -89,8 +89,10 @@ impl CertificatesController {
 </html>
 ```
 
-- navree-view syntax (Jinja): escaped values, undefined variables are
-  errors, `money` and `date` filters, `{% extends "layouts/document.html" %}`
+- navree-view syntax (Jinja): values escaped by the template's mode (HTML for
+  `.html` and anything unknown, as-is for `.txt` and `.md`, JSON for `.json`,
+  `.js` and `.yaml`; nothing rendered inside another prints less strictly),
+  undefined variables are errors, `money` and `date` filters, `{% extends "layouts/document.html" %}`
   with full paths. A syntax error in any `.html` template fails every render
   until fixed (the error names the file and line).
 - Variables: the data's fields plus `locale` (default `en`) and `dir`

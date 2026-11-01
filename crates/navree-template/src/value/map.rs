@@ -46,6 +46,14 @@ impl ValueMap {
         }
     }
 
+    /// How many keys a lookup compares at most.
+    pub(crate) fn lookup_steps(&self) -> u64 {
+        match self {
+            ValueMap::Sorted(map) => u64::from(usize::BITS - map.len().leading_zeros()),
+            ValueMap::Fields(fields) => fields.len() as u64,
+        }
+    }
+
     pub(crate) fn len(&self) -> usize {
         match self {
             ValueMap::Sorted(map) => map.len(),

@@ -9,22 +9,31 @@
 //! Every render counts its work against [`Limits`]: nesting, loop
 //! iterations, operations and the size of everything it builds, so it ends
 //! with an error instead of exhausting the stack, memory or time.
+//!
+//! How a value prints is settled by where it is written: the mode of the
+//! template, or the `{% autoescape %}` tag, around that text. What lands in
+//! another template's output (an include, a block, a layout) also prints at
+//! least as strictly as the text it lands in. A macro's or capture's output
+//! is a string marked with the mode it was made in, and printing it anywhere
+//! else escapes it again.
 
 use std::collections::BTreeMap;
 use std::fmt;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use std::sync::{Arc, Mutex, PoisonError};
 
-use crate::environment::{AutoEscape, Compiled, Environment, Limits, UndefinedBehavior};
+use crate::environment::{Compiled, Environment, Limits, UndefinedBehavior};
 use crate::error::{Error, ErrorKind};
-use crate::escape::write_escaped;
+use crate::escape::{Mode, write_display, write_escaped};
+use crate::output::{Budget, Output};
+use crate::stack::StackBudget;
 use crate::syntax::ast::{
-    Assign, BinOp, BlockDef, CallArg, Expr, ExprKind, ForLoop, FromImport, IfCond, Macro, SetBlock,
-    Span, Stmt, StmtKind, WithBlock,
+    Assign, BinOp, BlockDef, CallArg, EscapeTag, Expr, ExprKind, ForLoop, FromImport, IfCond,
+    Macro, SetBlock, Span, Stmt, StmtKind, WithBlock,
 };
-use crate::syntax::stack_address;
 use crate::value::ops;
-use crate::value::{Kwargs, Module, Repr, Shape, Value, ValueMap};
+use crate::value::{Kwargs, Module, Repr, Safety, Shape, Value, ValueMap};
 
 /// Renders `template` with `ctx`.
 pub(crate) fn render(
@@ -32,29 +41,36 @@ pub(crate) fn render(
     template: &Arc<Compiled>,
     ctx: Value,
 ) -> Result<String, Error> {
+    let budget = Budget::new(env.limits.max_operations, env.limits.max_allocated_bytes);
     let mut state = State {
         env,
         limits: env.limits,
         root: ctx.clone(),
         frames: vec![Frame::with_ctx(ctx)],
         closures: Vec::new(),
-        auto_escape: env.initial_auto_escape(&template.name),
+        escaping: Escaping {
+            floor: Mode::None,
+            lexical: template.mode,
+        },
         template: template.clone(),
         blocks: blocks_of(template),
         loaded: Vec::new(),
         pending_parent: None,
         current_block: None,
-        stack_base: stack_address(),
+        stack: StackBudget::enter(env.limits.max_stack_bytes),
         depth: 0,
         include_depth: 0,
         loop_iterations: 0,
-        operations: std::cell::Cell::new(0),
-        allocated: std::cell::Cell::new(0),
+        budget: budget.clone(),
     };
-    let mut out = Output::new(env.limits.max_output_bytes);
+    let mut out = Output::new(
+        env.limits.max_output_bytes,
+        budget,
+        template.mode.has_html(),
+    );
     let body = template.clone();
     state.run_body(&body.ast.body, &mut out)?;
-    Ok(out.buf)
+    Ok(out.into_string())
 }
 
 fn blocks_of(template: &Arc<Compiled>) -> BTreeMap<String, Vec<BlockEntry>> {
@@ -81,64 +97,19 @@ struct BlockEntry {
     template: Arc<Compiled>,
 }
 
-/// Where rendered text goes: a buffer capped in size, or nowhere while
-/// discarding.
-pub(crate) struct Output {
-    pub(crate) buf: String,
-    discard: usize,
-    limit: usize,
+/// How values print at this point of a render.
+#[derive(Clone, Copy)]
+struct Escaping {
+    /// What the text around this template's output asks for.
+    floor: Mode,
+    /// What the text being run says: its template's mode, or the
+    /// `{% autoescape %}` tag around it.
+    lexical: Mode,
 }
 
-impl Output {
-    fn new(limit: usize) -> Output {
-        Output {
-            buf: String::new(),
-            discard: 0,
-            limit,
-        }
-    }
-
-    fn discarding(limit: usize) -> Output {
-        Output {
-            buf: String::new(),
-            discard: 1,
-            limit,
-        }
-    }
-
-    /// A buffer for what a filter builds.
-    pub(crate) fn for_filter(limit: usize) -> Output {
-        Output::new(limit)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn for_tests() -> Output {
-        Output::new(usize::MAX)
-    }
-
-    pub(crate) fn limit(&self) -> usize {
-        self.limit
-    }
-
-    fn is_discarding(&self) -> bool {
-        self.discard > 0
-    }
-
-    pub(crate) fn write_str(&mut self, text: &str) -> Result<(), Error> {
-        if self.discard > 0 {
-            return Ok(());
-        }
-        if self.buf.len().saturating_add(text.len()) > self.limit {
-            return Err(Error::limit("the output is too large"));
-        }
-        self.buf.push_str(text);
-        Ok(())
-    }
-}
-
-impl fmt::Write for Output {
-    fn write_str(&mut self, text: &str) -> fmt::Result {
-        Output::write_str(self, text).map_err(|_| fmt::Error)
+impl Escaping {
+    fn mode(self) -> Mode {
+        self.floor.and(self.lexical)
     }
 }
 
@@ -211,8 +182,7 @@ pub(crate) struct LoopObject {
 }
 
 impl LoopObject {
-    fn new(items: Arc<Vec<Value>>) -> LoopObject {
-        let shape = Value::iterable_shape(&items);
+    fn new(items: Arc<Vec<Value>>, shape: Shape) -> LoopObject {
         LoopObject {
             items,
             index: AtomicUsize::new(usize::MAX),
@@ -259,9 +229,12 @@ impl LoopObject {
         )
     }
 
-    fn call_method(&self, name: &str, args: &[Value]) -> Result<Value, Error> {
+    fn call_method(&self, state: &State<'_>, name: &str, args: &[Value]) -> Result<Value, Error> {
         match name {
             "changed" => {
+                // Comparing with the last arguments walks them.
+                state.charge_items(args.len())?;
+                state.charge(Value::iterable_shape(args).weight)?;
                 let mut last = self
                     .last_changed
                     .lock()
@@ -273,6 +246,9 @@ impl LoopObject {
                 Ok(Value::from(changed))
             }
             "cycle" => {
+                if args.iter().any(Value::is_kwargs) {
+                    return Err(Error::invalid("loop.cycle takes no keyword arguments"));
+                }
                 let index = self.index.load(AtomicOrdering::Relaxed);
                 Ok(match index.checked_rem(args.len()) {
                     Some(at) => args.get(at).cloned().unwrap_or_default(),
@@ -307,28 +283,35 @@ pub(crate) struct State<'env> {
     root: Value,
     frames: Vec<Frame>,
     closures: Vec<BTreeMap<String, Value>>,
-    auto_escape: AutoEscape,
+    escaping: Escaping,
     template: Arc<Compiled>,
     blocks: BTreeMap<String, Vec<BlockEntry>>,
     loaded: Vec<Arc<str>>,
     pending_parent: Option<Arc<Compiled>>,
     /// The block being rendered and which of its bodies, for `super()`.
     current_block: Option<(String, usize)>,
-    stack_base: usize,
+    stack: StackBudget,
     depth: usize,
     include_depth: usize,
     loop_iterations: u64,
-    operations: std::cell::Cell<u64>,
-    allocated: std::cell::Cell<u64>,
+    budget: Rc<Budget>,
 }
+
+/// What a string held as a value costs beyond its bytes.
+const STRING_OVERHEAD: u64 = 32;
+
+/// The most text one item of a container prints as, beyond its strings' bytes,
+/// each of which prints as at most 4: a number, or the punctuation around it.
+const PRINTED_ITEM_BYTES: u64 = 48 + 4 * 16;
 
 impl State<'_> {
     pub(crate) fn env(&self) -> &Environment {
         self.env
     }
 
-    pub(crate) fn auto_escape(&self) -> AutoEscape {
-        self.auto_escape
+    /// How a value prints here.
+    pub(crate) fn mode(&self) -> Mode {
+        self.escaping.mode()
     }
 
     pub(crate) fn max_output_bytes(&self) -> usize {
@@ -337,13 +320,11 @@ impl State<'_> {
 
     /// The escaping `|escape` uses: the current one, else the template's,
     /// else HTML.
-    pub(crate) fn escape_mode(&self) -> AutoEscape {
-        match self.auto_escape {
-            AutoEscape::None => match self.env.initial_auto_escape(&self.template.name) {
-                AutoEscape::None => AutoEscape::Html,
-                other => other,
-            },
-            other => other,
+    pub(crate) fn escape_mode(&self) -> Mode {
+        match (self.mode(), self.template.mode) {
+            (Mode::None, Mode::None) => Mode::Html,
+            (Mode::None, own) => own,
+            (mode, _) => mode,
         }
     }
 
@@ -381,15 +362,12 @@ impl State<'_> {
 
     /// Charges work against the budget.
     pub(crate) fn charge(&self, operations: u64) -> Result<(), Error> {
-        let total = self.operations.get().saturating_add(operations);
-        self.operations.set(total);
-        if total > self.limits.max_operations {
-            return Err(Error::limit(format!(
-                "the render did more than {} operations",
-                self.limits.max_operations
-            )));
-        }
-        Ok(())
+        self.budget.charge(operations)
+    }
+
+    /// Charges a scan of `bytes` of text.
+    pub(crate) fn charge_scan(&self, bytes: usize) -> Result<(), Error> {
+        self.charge((bytes / 64) as u64)
     }
 
     /// The most items a sequence a template builds may hold.
@@ -408,27 +386,38 @@ impl State<'_> {
         value.check_depth()
     }
 
-    /// Charges bytes the render allocates.
-    fn charge_allocation(&self, bytes: u64) -> Result<(), Error> {
-        let total = self.allocated.get().saturating_add(bytes);
-        self.allocated.set(total);
-        if total > self.limits.max_allocated_bytes {
-            return Err(Error::limit(format!(
-                "the render allocated more than {} bytes",
-                self.limits.max_allocated_bytes
-            )));
+    /// Charges bytes about to be allocated.
+    pub(crate) fn charge_allocation(&self, bytes: u64) -> Result<(), Error> {
+        self.budget.charge_allocation(bytes)
+    }
+
+    fn check_string_size(&self, bytes: usize) -> Result<(), Error> {
+        if bytes > self.limits.max_output_bytes {
+            return Err(Error::limit("a string is too large"));
         }
         Ok(())
     }
 
-    /// Fails when a string being built exceeds the output limit, and
-    /// charges it: copying bytes is work too, in cache lines.
-    pub(crate) fn check_size(&self, bytes: usize) -> Result<(), Error> {
-        if bytes > self.limits.max_output_bytes {
-            return Err(Error::limit("a string is too large"));
-        }
+    /// Charges one copy of `bytes` of text about to be made, and caps it.
+    /// Copying is work too, in cache lines.
+    pub(crate) fn charge_copy(&self, bytes: usize) -> Result<(), Error> {
+        self.check_string_size(bytes)?;
         self.charge_allocation(bytes as u64)?;
-        self.charge((bytes / 64) as u64)
+        self.charge_scan(bytes)
+    }
+
+    /// Charges a string about to be built at its full size and then copied
+    /// into a value.
+    pub(crate) fn check_size(&self, bytes: usize) -> Result<(), Error> {
+        self.charge_copy(bytes)?;
+        self.charge_allocation(bytes as u64)
+    }
+
+    /// Charges a string about to be built from `input` bytes by something
+    /// that grows its buffer as it goes (case mapping), ending at `output`.
+    pub(crate) fn check_growing_size(&self, input: usize, output: usize) -> Result<(), Error> {
+        self.check_size(output)?;
+        self.charge_allocation(input.max(output).saturating_mul(2) as u64)
     }
 
     /// Charges a sequence of `items` values the render builds.
@@ -436,6 +425,72 @@ impl State<'_> {
         let count = items as u64;
         self.charge(count)?;
         self.charge_allocation(count.saturating_mul(std::mem::size_of::<Value>() as u64))
+    }
+
+    /// Charges `count` strings of `bytes` in all, each its own value.
+    pub(crate) fn charge_strings(&self, count: usize, bytes: usize) -> Result<(), Error> {
+        self.charge_scan(bytes)?;
+        self.charge(count as u64)?;
+        self.charge_allocation(
+            (count as u64)
+                .saturating_mul(STRING_OVERHEAD)
+                .saturating_add(bytes as u64),
+        )
+    }
+
+    /// Charges for the arguments of a filter or test that takes text: a value
+    /// that is not a string converts to text before the function runs, and
+    /// this charges the most that can come to.
+    pub(crate) fn charge_text_args(&self, values: &[Value]) -> Result<(), Error> {
+        for value in values {
+            match &value.0 {
+                Repr::Str(..) => {}
+                Repr::Kwargs(..) => {
+                    if let Some(map) = value.as_map() {
+                        for (_, item) in map.iter() {
+                            self.charge_printed(item)?;
+                        }
+                    }
+                }
+                _ => self.charge_printed(value)?,
+            }
+        }
+        Ok(())
+    }
+
+    fn charge_printed(&self, value: &Value) -> Result<(), Error> {
+        let weight = value.shape().weight;
+        self.charge(weight)?;
+        self.charge_allocation(weight.saturating_mul(PRINTED_ITEM_BYTES))
+    }
+
+    /// The items iterating over `value` gives, charged before they are made.
+    pub(crate) fn iter_items(&self, value: &Value) -> Result<Vec<Value>, Error> {
+        if let Repr::Str(text, _) = &value.0 {
+            self.charge_scan(text.len())?;
+            let count = text.chars().count();
+            self.charge_strings(count, text.len())?;
+            self.charge_items(count)?;
+        } else if let Some(count) = value.iter_len() {
+            self.charge_items(count)?;
+        }
+        value.iter_items()
+    }
+
+    /// An empty buffer for a string, holding `capacity` bytes without growing.
+    pub(crate) fn string_builder(&self, capacity: usize) -> Result<Output, Error> {
+        let mut out = Output::for_string(self.limits.max_output_bytes, self.budget.clone());
+        out.reserve(capacity)?;
+        Ok(out)
+    }
+
+    /// A buffer for what the render captures in the current mode.
+    fn capture_buffer(&self) -> Output {
+        Output::new(
+            self.limits.max_output_bytes,
+            self.budget.clone(),
+            self.mode().has_html(),
+        )
     }
 
     fn lookup(&self, name: &str) -> Option<Value> {
@@ -477,7 +532,7 @@ impl State<'_> {
     /// Fails when the render has used up its share of the stack.
     #[inline]
     fn check_stack(&self) -> Result<(), Error> {
-        if stack_address().abs_diff(self.stack_base) > self.limits.max_stack_bytes {
+        if self.stack.exceeded() {
             return Err(Error::limit("the template nests too deeply"));
         }
         Ok(())
@@ -510,7 +565,16 @@ impl State<'_> {
     fn run_body(&mut self, body: &[Stmt], out: &mut Output) -> Result<Flow, Error> {
         let flow = self.run(body, out)?;
         while let Some(parent) = self.pending_parent.take() {
-            out.discard = out.discard.saturating_sub(1);
+            out.end_discarding();
+            // The layout prints in its own mode, and no less strictly than
+            // the template that extends it.
+            self.escaping = Escaping {
+                floor: self.mode(),
+                lexical: parent.mode,
+            };
+            if self.mode() == Mode::Html {
+                out.mark_html();
+            }
             self.template = parent.clone();
             self.run(&parent.ast.body, out)?;
         }
@@ -539,7 +603,7 @@ impl State<'_> {
             StmtKind::With(with) => return self.run_with(with, out),
             StmtKind::Set(set) => self.run_set(&set.0, &set.1)?,
             StmtKind::SetBlock(set) => self.run_set_block(set)?,
-            StmtKind::AutoEscape(inner) => return self.run_auto_escape(&inner.0, &inner.1, out),
+            StmtKind::AutoEscape(inner) => return self.run_auto_escape(inner.0, &inner.1, out),
             StmtKind::FilterBlock(inner) => self.run_filter_block(&inner.0, &inner.1, out)?,
             StmtKind::Block(name) => {
                 if self.pending_parent.is_none() && !out.is_discarding() {
@@ -603,7 +667,7 @@ impl State<'_> {
     fn write_value(&self, value: &Value, out: &mut Output) -> Result<(), Error> {
         self.assert_not_undefined(value)?;
         self.charge(value.shape().weight)?;
-        write_escaped(out, self.auto_escape, value)
+        write_escaped(out, self.mode(), value)
     }
 
     fn run_if(&mut self, cond: &IfCond, out: &mut Output) -> Result<Flow, Error> {
@@ -630,21 +694,11 @@ impl State<'_> {
         Ok(flow)
     }
 
-    /// Captures the output of `body`.
+    /// Captures the output of `body`, as a string safe for the mode it ran in.
     fn capture(&mut self, body: &[Stmt]) -> Result<Value, Error> {
-        let mut out = Output::new(self.limits.max_output_bytes);
+        let mut out = self.capture_buffer();
         self.run(body, &mut out)?;
-        self.captured_value(out.buf)
-    }
-
-    /// Captured output as a value: safe when the template escapes.
-    fn captured_value(&self, text: String) -> Result<Value, Error> {
-        self.check_size(text.len())?;
-        Ok(if self.auto_escape == AutoEscape::None {
-            Value::from(text)
-        } else {
-            Value::from_safe_string(text)
-        })
+        out.finish(self.mode().safety())
     }
 
     fn run_set_block(&mut self, set: &SetBlock) -> Result<(), Error> {
@@ -668,28 +722,14 @@ impl State<'_> {
 
     fn run_auto_escape(
         &mut self,
-        enabled: &Expr,
+        tag: EscapeTag,
         body: &[Stmt],
         out: &mut Output,
     ) -> Result<Flow, Error> {
-        let value = self.eval(enabled)?;
-        let initial = self.env.initial_auto_escape(&self.template.name);
-        let mode = match (value.as_str(), value == Value::from(true)) {
-            (Some("html"), _) => AutoEscape::Html,
-            (Some("json"), _) => AutoEscape::Json,
-            (Some("none"), _) | (None, false) => AutoEscape::None,
-            (None, true) => {
-                if initial == AutoEscape::None {
-                    AutoEscape::Html
-                } else {
-                    initial
-                }
-            }
-            _ => return Err(Error::invalid("invalid value to autoescape tag")),
-        };
-        let saved = std::mem::replace(&mut self.auto_escape, mode);
+        let lexical = self.template.mode.under(tag);
+        let saved = std::mem::replace(&mut self.escaping.lexical, lexical);
         let flow = self.run(body, out);
-        self.auto_escape = saved;
+        self.escaping.lexical = saved;
         flow
     }
 
@@ -698,11 +738,21 @@ impl State<'_> {
         let items = self
             .loop_items(&iterable)
             .map_err(|error| self.locate(error, for_loop.iter.span))?;
-        let items = match &for_loop.filter {
-            Some(filter) => self.filter_items(for_loop, filter, &items)?,
-            None => items,
+        // A sequence's shape is known; working out another's goes through
+        // items already charged.
+        let (items, shape) = match (&for_loop.filter, &iterable.0) {
+            (Some(filter), _) => {
+                let passing = self.filter_items(for_loop, filter, &items)?;
+                let shape = Value::iterable_shape(&passing);
+                (passing, shape)
+            }
+            (None, Repr::Seq(..)) => (items, iterable.shape()),
+            (None, _) => {
+                let shape = Value::iterable_shape(&items);
+                (items, shape)
+            }
         };
-        let object = Arc::new(LoopObject::new(items.clone()));
+        let object = Arc::new(LoopObject::new(items.clone(), shape));
         self.frames.push(Frame {
             current_loop: Some(object.clone()),
             ..Frame::default()
@@ -736,9 +786,7 @@ impl State<'_> {
         if let Repr::Seq(items, ..) = &iterable.0 {
             return Ok(items.clone());
         }
-        let items = iterable.iter_items()?;
-        self.charge_items(items.len())?;
-        Ok(Arc::new(items))
+        Ok(Arc::new(self.iter_items(iterable)?))
     }
 
     /// The items passing a loop's `if` filter, tested in a scope of their
@@ -790,9 +838,10 @@ impl State<'_> {
                 )))
             }
             Assign::Unpack(targets, span) => {
-                let items = match &value.0 {
-                    Repr::Seq(items, ..) => items.as_ref().clone(),
-                    Repr::Map(..) | Repr::Kwargs(_) | Repr::Module(_) => value.iter_items()?,
+                let count = match &value.0 {
+                    Repr::Seq(..) | Repr::Map(..) | Repr::Kwargs(..) | Repr::Module(_) => {
+                        value.iter_len().unwrap_or(0)
+                    }
                     _ => {
                         return Err(self.locate(
                             Error::new(ErrorKind::CannotUnpack, "value is not iterable"),
@@ -800,20 +849,19 @@ impl State<'_> {
                         ));
                     }
                 };
-                if items.len() != targets.len() {
+                if count != targets.len() {
                     return Err(self.locate(
                         Error::new(
                             ErrorKind::CannotUnpack,
                             format!(
-                                "sequence of wrong length (expected {}, got {})",
+                                "sequence of wrong length (expected {}, got {count})",
                                 targets.len(),
-                                items.len()
                             ),
                         ),
                         *span,
                     ));
                 }
-                for (target, item) in targets.iter().zip(items) {
+                for (target, item) in targets.iter().zip(value.iter_items()?) {
                     self.assign(target, item)?;
                 }
                 Ok(())
@@ -852,7 +900,15 @@ impl State<'_> {
         let saved_block = self.current_block.replace((name.to_owned(), index));
         let saved = std::mem::replace(&mut self.template, entry.template.clone());
         self.frames.push(Frame::default());
+        // A block prints as it was written, and no less strictly than the
+        // text it lands in.
+        let saved_escaping = self.escaping;
+        self.escaping = Escaping {
+            floor: self.mode(),
+            lexical: entry.template.mode.under(entry.def.escape),
+        };
         let result = self.run_body(&entry.def.body, out);
+        self.escaping = saved_escaping;
         self.frames.truncate(frames);
         self.template = saved;
         self.current_block = saved_block;
@@ -877,9 +933,12 @@ impl State<'_> {
         let Some(parent) = parent else {
             return Err(Error::invalid("no parent block exists"));
         };
-        let mut out = Output::new(self.limits.max_output_bytes);
+        let mode = self
+            .mode()
+            .and(parent.template.mode.under(parent.def.escape));
+        let mut out = self.capture_buffer();
         self.run_block_entry(&name, index + 1, &parent, &mut out)?;
-        self.captured_value(out.buf)
+        out.finish(mode.safety())
     }
 
     fn run_extends(&mut self, name: &Expr, out: &mut Output) -> Result<(), Error> {
@@ -915,7 +974,7 @@ impl State<'_> {
                 });
         }
         self.pending_parent = Some(parent);
-        out.discard += 1;
+        out.begin_discarding();
         Ok(())
     }
 
@@ -928,7 +987,7 @@ impl State<'_> {
         out: &mut Output,
     ) -> Result<(), Error> {
         let choices = match &name.0 {
-            Repr::Seq(..) | Repr::Map(..) | Repr::Module(_) => name.iter_items()?,
+            Repr::Seq(..) | Repr::Map(..) | Repr::Module(_) => self.iter_items(name)?,
             _ => vec![name.clone()],
         };
         let mut tried = Vec::new();
@@ -969,10 +1028,17 @@ impl State<'_> {
         self.include_depth += 1;
         let frames = self.frames.len();
         let saved_template = std::mem::replace(&mut self.template, template.clone());
-        let saved_escape = std::mem::replace(
-            &mut self.auto_escape,
-            self.env.initial_auto_escape(&template.name),
-        );
+        // An include prints in its own mode, and no less strictly than the
+        // text it lands in.
+        let saved_escaping = self.escaping;
+        self.escaping = Escaping {
+            floor: self.mode(),
+            lexical: template.mode,
+        };
+        if self.mode() == Mode::Html {
+            out.mark_html();
+        }
+        self.charge_items(template.ast.blocks.len())?;
         let saved_blocks = std::mem::replace(&mut self.blocks, blocks_of(template));
         let saved_loaded = self.loaded.clone();
         let saved_parent = self.pending_parent.take();
@@ -987,7 +1053,7 @@ impl State<'_> {
         self.pending_parent = saved_parent;
         self.loaded = saved_loaded;
         self.blocks = saved_blocks;
-        self.auto_escape = saved_escape;
+        self.escaping = saved_escaping;
         self.template = saved_template;
         self.include_depth -= 1;
         self.leave_depth();
@@ -1000,12 +1066,29 @@ impl State<'_> {
         })
     }
 
+    /// Runs a template for what it defines. Its output is not printed here: it
+    /// keeps its own mode, and printing the module escapes it like any value.
+    fn import_into(&mut self, name: &Value, out: &mut Output) -> Result<(), Error> {
+        let saved = std::mem::replace(
+            &mut self.escaping,
+            Escaping {
+                floor: Mode::None,
+                lexical: Mode::None,
+            },
+        );
+        let result = self.include(name, false, out);
+        self.escaping = saved;
+        result
+    }
+
     fn run_import(&mut self, template: &Expr, target: &Assign) -> Result<(), Error> {
-        let mut captured = Output::new(self.limits.max_output_bytes);
+        let mut captured = Output::new(self.limits.max_output_bytes, self.budget.clone(), false);
         let frames = self.frames.len();
         self.frames.push(Frame::default());
         let name = self.eval(template)?;
-        self.include(&name, false, &mut captured)?;
+        self.import_into(&name, &mut captured)?;
+        let held = self.frames.last().map_or(0, |frame| frame.locals.len());
+        self.charge_items(held.saturating_mul(3))?;
         let locals = self
             .frames
             .last()
@@ -1017,18 +1100,19 @@ impl State<'_> {
             .filter(|(name, _)| !name.starts_with('_'))
             .map(|(name, value)| (Value::from(name), value))
             .collect();
-        self.check_size(captured.buf.len())?;
-        self.charge_items(values.len())?;
-        let module = Value(Repr::Module(Arc::new(Module::new(values, captured.buf))));
-        self.assign(target, module)
+        let module = Value(Repr::Module(Arc::new(Module::new(
+            values,
+            captured.into_string(),
+        ))));
+        self.assign(target, module.check_depth()?)
     }
 
     fn run_from_import(&mut self, from: &FromImport) -> Result<(), Error> {
-        let mut discarded = Output::discarding(self.limits.max_output_bytes);
+        let mut discarded = Output::discarding(self.limits.max_output_bytes, self.budget.clone());
         let frames = self.frames.len();
         self.frames.push(Frame::default());
         let name = self.eval(&from.template)?;
-        self.include(&name, false, &mut discarded)?;
+        self.import_into(&name, &mut discarded)?;
         let values: Vec<Value> = from
             .names
             .iter()
@@ -1097,15 +1181,26 @@ impl State<'_> {
         let saved_template = std::mem::replace(&mut self.template, object.template.clone());
         let saved_parent = self.pending_parent.take();
         let saved_block = self.current_block.take();
-        let mut out = Output::new(self.limits.max_output_bytes);
+        // A macro prints as it was written, into its own output: where that
+        // output lands decides by the mark it carries.
+        let saved_escaping = std::mem::replace(
+            &mut self.escaping,
+            Escaping {
+                floor: Mode::None,
+                lexical: object.template.mode.under(object.decl.escape),
+            },
+        );
+        let safety = self.mode().safety();
+        let mut out = self.capture_buffer();
         let result = self.run_macro_body(&object.decl, values, &mut out);
+        self.escaping = saved_escaping;
         self.current_block = saved_block;
         self.pending_parent = saved_parent;
         self.template = saved_template;
         self.frames = saved_frames;
         self.leave_depth();
         result?;
-        self.captured_value(out.buf)
+        out.finish(safety)
     }
 
     fn run_macro_body(
@@ -1220,6 +1315,7 @@ impl State<'_> {
     fn eval_item(&mut self, inner: &Expr, subscript: &Expr) -> Result<Value, Error> {
         let value = self.eval(inner)?;
         let key = self.eval(subscript)?;
+        self.charge(ops::lookup_cost(&value, &key))?;
         match value.get_item_opt(&key) {
             Some(item) => Ok(item),
             None => self.undefined_lookup(&value),
@@ -1243,7 +1339,7 @@ impl State<'_> {
             let value = self.eval(value)?;
             // Inserting compares keys.
             self.charge(key.shape().weight)?;
-            self.charge_items(2)?;
+            self.charge_items(3)?;
             map.insert(key, value);
         }
         self.check_shape(Value::map(map))
@@ -1295,15 +1391,14 @@ impl State<'_> {
             BinOp::In => Ok(Value::from(self.compare(BinOp::In, lhs, rhs)?)),
             BinOp::NotIn => Ok(Value::from(self.compare(BinOp::NotIn, lhs, rhs)?)),
             BinOp::Add => {
-                self.charge_container_sum(lhs, rhs)?;
+                self.charge_sum(lhs, rhs)?;
                 let value = ops::add(lhs, rhs)?;
-                self.check_built(&value)?;
                 self.check_shape(value)
             }
             BinOp::Sub => ops::sub(lhs, rhs),
             BinOp::Mul => {
+                self.charge_repeat(lhs, rhs)?;
                 let value = ops::mul(lhs, rhs, self.limits.max_output_bytes, self.max_items())?;
-                self.check_built(&value)?;
                 self.check_shape(value)
             }
             BinOp::Div => ops::div(lhs, rhs),
@@ -1313,32 +1408,59 @@ impl State<'_> {
             BinOp::Concat => {
                 self.assert_not_undefined(lhs)?;
                 self.assert_not_undefined(rhs)?;
-                let mut text = lhs.to_string_capped(self.limits.max_output_bytes)?;
-                text.push_str(&rhs.to_string_capped(self.limits.max_output_bytes)?);
-                self.check_size(text.len())?;
-                Ok(Value::from(text))
+                let length = |value: &Value| value.as_str().map_or(0, str::len);
+                let mut text = self.string_builder(
+                    length(lhs)
+                        .saturating_add(length(rhs))
+                        .min(self.limits.max_output_bytes.saturating_add(1)),
+                )?;
+                for value in [lhs, rhs] {
+                    if value.as_str().is_none() {
+                        self.charge(value.shape().weight)?;
+                    }
+                    write_display(&mut text, value)?;
+                }
+                text.finish(Safety::Plain)
             }
             BinOp::And | BinOp::Or => Ok(Value::UNDEFINED),
         }
     }
 
-    /// Charges for copying the items of two sequences.
-    fn charge_container_sum(&self, lhs: &Value, rhs: &Value) -> Result<(), Error> {
-        if let (Repr::Seq(a, ..), Repr::Seq(b, ..)) = (&lhs.0, &rhs.0) {
-            let total = a.len().saturating_add(b.len());
-            if total > self.max_items() {
-                return Err(Error::limit("a sequence is too large"));
+    /// Charges for what `a + b` is about to build.
+    fn charge_sum(&self, lhs: &Value, rhs: &Value) -> Result<(), Error> {
+        match (&lhs.0, &rhs.0) {
+            (Repr::Seq(a, ..), Repr::Seq(b, ..)) => {
+                let total = a.len().saturating_add(b.len());
+                if total > self.max_items() {
+                    return Err(Error::limit("a sequence is too large"));
+                }
+                self.charge_items(total)
             }
-            self.charge_items(total)?;
+            (Repr::Str(a, _), Repr::Str(b, _)) => self.check_size(a.len().saturating_add(b.len())),
+            _ => Ok(()),
         }
-        Ok(())
     }
 
-    /// Charges for what an operator built, and caps its size.
-    fn check_built(&self, value: &Value) -> Result<(), Error> {
-        match &value.0 {
-            Repr::Str(text, _) => self.check_size(text.len()),
-            Repr::Seq(items, ..) => self.charge_items(items.len()),
+    /// Charges for what `a * b` is about to build, when it is within the caps
+    /// the operator itself checks.
+    fn charge_repeat(&self, lhs: &Value, rhs: &Value) -> Result<(), Error> {
+        let (repeated, count) = match (&lhs.0, &rhs.0) {
+            (Repr::Str(..) | Repr::Seq(..), _) => (lhs, rhs),
+            (_, Repr::Str(..) | Repr::Seq(..)) => (rhs, lhs),
+            _ => return Ok(()),
+        };
+        let Some(count) = count.as_usize() else {
+            return Ok(());
+        };
+        match &repeated.0 {
+            Repr::Str(text, _) => match text.len().checked_mul(count) {
+                Some(bytes) if bytes <= self.limits.max_output_bytes => self.check_size(bytes),
+                _ => Ok(()),
+            },
+            Repr::Seq(items, ..) => match items.len().checked_mul(count) {
+                Some(total) if total <= self.max_items() => self.charge_items(total),
+                _ => Ok(()),
+            },
             _ => Ok(()),
         }
     }
@@ -1349,6 +1471,9 @@ impl State<'_> {
                 self.assert_not_undefined(rhs)?;
                 self.assert_not_undefined(lhs)?;
                 self.charge(ops::contains_cost(rhs, lhs))?;
+                if rhs.as_str().is_some() {
+                    self.charge_text_args(std::slice::from_ref(lhs))?;
+                }
                 let found = ops::contains(rhs, lhs)?;
                 Ok(if op == BinOp::In { found } else { !found })
             }
@@ -1398,10 +1523,22 @@ impl State<'_> {
         if value.is_undefined() && self.env.undefined == UndefinedBehavior::Strict {
             return Err(Error::undefined());
         }
-        // A slice copies at most what it slices.
+        // A slice copies at most what it slices; going backwards it holds an
+        // index for each item, and for a string each character too.
+        let backwards = step.as_i64().is_some_and(|step| step < 0);
         match &value.0 {
-            Repr::Str(text, _) => self.check_size(text.len())?,
-            _ => self.charge_items(value.len().unwrap_or(0))?,
+            Repr::Str(text, _) => {
+                self.check_size(text.len())?;
+                let extra = if backwards { 12 } else { 1 };
+                self.charge_allocation((text.len() as u64).saturating_mul(extra))?;
+            }
+            _ => {
+                let items = value.len().unwrap_or(0);
+                self.charge_items(items)?;
+                if backwards {
+                    self.charge_allocation((items as u64).saturating_mul(8))?;
+                }
+            }
         }
         ops::slice(&value, &start, &stop, &step)
     }
@@ -1422,9 +1559,7 @@ impl State<'_> {
                 CallArg::Pos(expr) => values.push(self.eval(expr)?),
                 CallArg::PosSplat(expr) => {
                     let splat = self.eval(expr)?;
-                    let items = splat.iter_items()?;
-                    self.charge_items(items.len())?;
-                    values.extend(items);
+                    values.extend(self.iter_items(&splat)?);
                 }
                 CallArg::Kwarg(..) | CallArg::KwargSplat(_) => has_kwargs = true,
             }
@@ -1440,14 +1575,14 @@ impl State<'_> {
                     CallArg::KwargSplat(expr) => {
                         let splat = self.eval(expr)?;
                         self.assert_not_undefined(&splat)?;
-                        let Some(pairs) = splat.map_pairs() else {
+                        let Some(map) = splat.as_map() else {
                             return Err(Error::invalid(format!(
                                 "attempted to apply keyword arguments from non map (got {})",
                                 splat.kind()
                             )));
                         };
-                        self.charge_items(pairs.len())?;
-                        kwargs.extend(pairs);
+                        self.charge_items(map.len().saturating_mul(3))?;
+                        kwargs.extend(map.iter().map(|(k, v)| (k.clone(), v.clone())));
                     }
                     CallArg::Pos(_) | CallArg::PosSplat(_) => {}
                 }
@@ -1456,7 +1591,7 @@ impl State<'_> {
                 let caller = self.define_macro(caller)?;
                 kwargs.insert(Value::from("caller"), caller);
             }
-            values.push(Value::kwargs(kwargs));
+            values.push(Value::kwargs(kwargs).check_depth()?);
         }
         Ok(values)
     }
@@ -1510,10 +1645,10 @@ impl State<'_> {
 
     fn call_method(&mut self, object: &Value, name: &str, args: &[Value]) -> Result<Value, Error> {
         if let Repr::Loop(current) = &object.0 {
-            return current.call_method(name, args);
+            return current.call_method(self, name, args);
         }
         match &object.0 {
-            Repr::Map(..) | Repr::Kwargs(_) | Repr::Module(_) | Repr::Macro(_) => {
+            Repr::Map(..) | Repr::Kwargs(..) | Repr::Module(_) | Repr::Macro(_) => {
                 match object.get_attr_fast(name) {
                     Some(attr) => self.call_value(&attr, args),
                     None => Err(unknown_method(ValueKindName::Value(object), name)),

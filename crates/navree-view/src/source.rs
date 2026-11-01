@@ -121,17 +121,49 @@ pub(crate) fn is_template_name(name: &str) -> bool {
 }
 
 /// `dir` joined with the `/`-separated template `name`, or `None` when the
-/// name could leave `dir`: empty, hidden (`.`, `..`) or drive segments,
-/// backslashes, or an absolute path.
+/// name could leave `dir` or reach a file the walk would not list: empty,
+/// hidden (`.`, `..`) or drive segments, backslashes, an absolute path, or on
+/// Windows another name for a file.
 fn safe_join(dir: &Path, name: &str) -> Option<PathBuf> {
     let mut path = dir.to_path_buf();
     for segment in name.split('/') {
-        if segment.is_empty() || segment.starts_with('.') || segment.contains(['\\', ':']) {
+        if segment.is_empty()
+            || segment.starts_with('.')
+            || segment.contains(['\\', ':'])
+            || (cfg!(windows) && is_windows_alias(segment))
+        {
             return None;
         }
         path.push(segment);
     }
     Some(path)
+}
+
+/// Whether Windows could take this path segment for another name: an 8.3 short
+/// name (`~` and digits before the extension), a trailing dot or space (ignored
+/// when opening), a device name (with any extension), or an alternate stream.
+fn is_windows_alias(segment: &str) -> bool {
+    if segment.ends_with(['.', ' ']) || segment.contains(':') {
+        return true;
+    }
+    let stem = segment.split('.').next().unwrap_or(segment);
+    if let Some((before, digits)) = stem.rsplit_once('~')
+        && !before.is_empty()
+        && !digits.is_empty()
+        && digits.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return true;
+    }
+    let device = stem.to_ascii_uppercase();
+    match device.as_str() {
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$" => true,
+        _ => {
+            let (kind, number) = device.split_at(device.len().min(3));
+            matches!(kind, "COM" | "LPT")
+                && number.len() == 1
+                && number.bytes().all(|byte| (b'1'..=b'9').contains(&byte))
+        }
+    }
 }
 
 /// Modification time and size: what the up-to-date check compares.
@@ -166,6 +198,7 @@ fn walk(
         let Some(file_name) = file_name
             .to_str()
             .filter(|n| !n.starts_with('.') && !n.contains(['\\', ':']))
+            .filter(|n| !(cfg!(windows) && is_windows_alias(n)))
         else {
             continue;
         };
@@ -203,6 +236,40 @@ mod tests {
             "mail/C:secret.html",
         ] {
             assert_eq!(safe_join(dir, name), None, "{name}");
+        }
+    }
+
+    #[test]
+    fn names_windows_also_answers_to_are_recognized_everywhere() {
+        for segment in [
+            "HIDDEN~1",
+            "AVERYL~1.HTM",
+            "a~12.html",
+            "page.html.",
+            "page.html ",
+            "dir.",
+            "dir ",
+            "NUL",
+            "nul.html",
+            "CON.txt",
+            "com1.html",
+            "LPT9",
+            "CONIN$",
+            "page.html:$DATA",
+        ] {
+            assert!(is_windows_alias(segment), "{segment}");
+        }
+        for segment in [
+            "page.html",
+            "a~b.html",
+            "a~.html",
+            "~1a.html",
+            "console.html",
+            "nullable.html",
+            "com10.html",
+            "mail",
+        ] {
+            assert!(!is_windows_alias(segment), "{segment}");
         }
     }
 }

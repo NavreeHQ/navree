@@ -1,6 +1,6 @@
 //! # navree-template
 //!
-//! Navree's template engine: the Jinja syntax with HTML autoescaping, a
+//! Navree's template engine: the Jinja syntax with autoescaping by mode, a
 //! value model that gives templates data and nothing else, and caps on
 //! everything a render can use.
 //!
@@ -58,14 +58,28 @@
 //!
 //! ## Escaping
 //!
-//! The template's name decides: `.html`, `.htm` and `.xml` (also followed
-//! by `.j2`, `.jinja` or `.jinja2`) escape `&`, `<`, `>`, `"`, `'` and `/` in
-//! every printed value; `.json`, `.json5`, `.js`, `.yaml` and `.yml` print
-//! values as JSON; anything else prints values as they are.
-//! [`Environment::set_auto_escape_callback`] changes the rule. Text marked
-//! with `|safe` prints as it is, and so does what macros, call blocks and
-//! `{% set %}` blocks return in an escaping template: their parts were
-//! escaped when printed.
+//! A template's name decides its mode, in any case and also before a trailing
+//! `.j2`, `.jinja` or `.jinja2`: `.html`, `.htm`, `.xhtml`, `.xml` and `.svg`
+//! escape `&`, `<`, `>`, `"`, `'` and `/` in every printed value; `.json`,
+//! `.json5`, `.js`, `.mjs`, `.cjs`, `.yaml` and `.yml` print values as JSON;
+//! anything else prints values as they are ([`default_auto_escape`]).
+//! [`strict_auto_escape`] is the rule for names of unknown origin, with HTML
+//! for anything not known to be text or JSON, and
+//! [`Environment::set_auto_escape_callback`] sets a rule.
+//!
+//! The mode belongs to the text where it is written, and can only get stricter:
+//!
+//! - A template rendered inside another (`extends`, `include`, a block) prints
+//!   in its own mode and at least as strictly as the text it lands in. JSON
+//!   landing in HTML is fit for both: `<`, `>`, `&` and `'` in its strings are
+//!   `\u` escapes.
+//! - `{% autoescape %}` reaches only the text inside it, and takes `true`,
+//!   `false`, `"html"`, `"json"` or `"none"`, checked when it compiles.
+//! - What macros, call blocks, `super()` and `{% set %}` blocks return is safe
+//!   for the mode it was escaped in; printed in another, it is escaped again.
+//! - Text marked with `|safe` prints as it is in every mode.
+//! - `|tojson` is safe wherever it is printed: its quotes stay quotes inside a
+//!   `<script>` and print as `&quot;` anywhere else in HTML.
 //!
 //! ## The sandbox
 //!
@@ -84,6 +98,10 @@
 //! template's source is capped when it compiles, and values nest at most
 //! 200 deep. A template that exceeds a limit fails with
 //! [`ErrorKind::LimitExceeded`] naming the template and the line.
+//!
+//! Each allocation is charged before it happens, and each scan and copy by its
+//! size, so the caps hold whatever a template or its values are. The context,
+//! compiled templates and what registered functions do are not counted.
 #![forbid(unsafe_code)]
 
 mod builtins;
@@ -91,13 +109,15 @@ mod environment;
 mod error;
 mod escape;
 pub mod functions;
+mod output;
+mod stack;
 pub(crate) mod syntax;
 pub mod value;
 mod vm;
 
 pub use environment::{
     AutoEscape, Environment, Limits, Template, TemplateSource, UndefinedBehavior,
-    default_auto_escape,
+    default_auto_escape, strict_auto_escape,
 };
 pub use error::{Error, ErrorKind};
 pub use value::{Kwargs, Value, ValueKind};

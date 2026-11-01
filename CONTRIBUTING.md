@@ -74,6 +74,7 @@ L0  navree-kernel  navree-bounded  navree-pdf  navree-glob    navree-macros  nav
 | L2 | `navree-crypto` | AES-256-GCM encrypter with key rotation, Argon2id hasher, token helpers, JOSE helpers (JWS, JWK, PKCS#8 on `ring`), TOTP, QR codes, Web Push encryption |
 | L2 | `navree-events` | Typed event bus with sync and queued listeners |
 | L2 | `navree-view` | Templates for mail and other text, on navree-template |
+| Tests | `navree-template-peak` | Not published: measures the heap a navree-template render uses, with a counting allocator (the one crate allowed `unsafe`, since the rest forbid it) |
 | L2 | `navree-cache` | Cache stores (memory on navree-bounded; Redis with navree-redis), remember, tags, locks |
 | L2 | `navree-http-client` | Outgoing HTTP with retries, timeouts, an SSRF policy and fakes |
 | L2 | `navree-schema` | The schema builder: tables, columns, indexes, foreign keys and check constraints in Rust for PostgreSQL, MySQL/MariaDB and SQLite (SQLite alterations by table rebuild); TimescaleDB hypertables, compression, retention, reorder policies and continuous aggregates with fallbacks on other databases; introspection; schema dumps; migration files (`navree::schema`) |

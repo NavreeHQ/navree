@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
-use navree_template::{Environment, ErrorKind, Template, UndefinedBehavior};
+use navree_template::{Environment, ErrorKind, Template, UndefinedBehavior, strict_auto_escape};
 use serde::Serialize;
 
 use crate::source::{Sources, is_template_name};
@@ -23,6 +23,8 @@ use crate::{ViewError, ViewOptions, filters};
 /// have one of the extensions `html`, `htm`, `xml`, `txt`, `md`, `j2` or
 /// `jinja`; hidden files and directories are ignored, and a name cannot
 /// leave its directory (`..`, absolute paths and backslashes find nothing).
+/// On Windows, what names the same file another way finds nothing either: an
+/// 8.3 name (`HIDDEN~1`), a trailing dot or space, a device name.
 /// `{% extends %}`, `{% include %}` and `{% import %}` take full names
 /// (`"layouts/mail.html"`).
 ///
@@ -30,9 +32,14 @@ use crate::{ViewError, ViewOptions, filters};
 /// wins over an embedded template; among embedded templates the last one
 /// given wins.
 ///
-/// **Escaping**: `.html`, `.htm` and `.xml` templates (also with a trailing
-/// `.j2`) escape HTML in every printed value; mark trusted HTML with
-/// `|safe`. Other templates print values as they are.
+/// **Escaping**: a template's name picks its mode, in any case and also before
+/// a trailing `.j2`, `.jinja` or `.jinja2`. `.txt` and `.md` print values as they
+/// are; `.json`, `.json5`, `.js`, `.mjs`, `.cjs`, `.yaml` and `.yml` print them
+/// as JSON; every other name, a bare `.j2` or none at all included, escapes HTML.
+/// Mark trusted HTML with `|safe`. A template rendered inside another
+/// (`extends`, `include`, a block) keeps its own mode and prints at least as
+/// strictly as the text it lands in; what a macro or a `{% set %}` block returns
+/// is safe only for the mode it was escaped in, and escapes again anywhere else.
 ///
 /// **Undefined values**: printing, iterating or filtering an undefined
 /// variable fails the render; testing one (`{% if title %}`) is false.
@@ -127,8 +134,9 @@ impl Views {
 
     /// Renders `source`, a template kept as text (in a database, in
     /// settings) rather than in a file, with `ctx`. `name` stands for the
-    /// file it would be: its extension picks the escaping (`override.html`
-    /// escapes HTML, `subject.txt` does not) and errors name it. The
+    /// file it would be: its extension picks the escaping (`subject.txt` prints
+    /// values as they are, `override.html` or an unknown name escapes HTML)
+    /// and errors name it. The
     /// template sees the same environment as files: the filters, the strict
     /// undefined rule, and `{% extends %}` or `{% include %}` of the
     /// registered templates (`{% extends "layouts/mail.html" %}`).
@@ -222,6 +230,7 @@ impl fmt::Debug for Views {
 fn environment() -> Environment {
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::SemiStrict);
+    env.set_auto_escape_callback(strict_auto_escape);
     filters::register(&mut env);
     env
 }

@@ -94,8 +94,14 @@ fn safe_prints_as_it_is_and_only_safe_does() {
             "{% macro m() %}{{ caller() }}{% endmacro %}{% call m() %}<u>{{ v }}</u>{% endcall %}",
             "<u>&lt;b&gt;</u>",
         ),
-        // JSON for a script is safe in HTML.
-        ("{{ v|tojson }}", "\"\\u003cb\\u003e\""),
+        // JSON is safe in HTML: outside a script its quotes are entities,
+        // which read back as quotes in an attribute or in text.
+        ("{{ v|tojson }}", "&quot;\\u003cb\\u003e&quot;"),
+        // In a script it is JSON as it is.
+        (
+            "<script>{{ v|tojson }}</script>",
+            "<script>\"\\u003cb\\u003e\"</script>",
+        ),
     ] {
         assert_eq!(
             env.render_str("t.html", source, &ctx).expect("renders"),
@@ -130,9 +136,10 @@ fn autoescape_tags_change_the_mode_for_their_body() {
             "{% autoescape true %}{{ v }}{% endautoescape %}",
             "&lt;b&gt;",
         ),
+        // In an HTML template, JSON stays fit for HTML.
         (
             "{% autoescape \"json\" %}{{ v }}{% endautoescape %}",
-            "\"<b>\"",
+            "&quot;\\u003cb\\u003e&quot;",
         ),
     ] {
         assert_eq!(
@@ -153,7 +160,7 @@ fn autoescape_tags_change_the_mode_for_their_body() {
 }
 
 #[test]
-fn included_templates_escape_by_their_own_name() {
+fn included_templates_escape_by_their_own_name_and_never_less_than_their_includer() {
     let mut env = view_env();
     env.add_template("a.txt", "{{ v }}").expect("compiles");
     env.add_template("b.html", "{{ v }}").expect("compiles");
@@ -161,7 +168,7 @@ fn included_templates_escape_by_their_own_name() {
     assert_eq!(
         env.render_str("t.html", "{% include \"a.txt\" %}|{{ v }}", &ctx)
             .expect("renders"),
-        "<b>|&lt;b&gt;"
+        "&lt;b&gt;|&lt;b&gt;"
     );
     assert_eq!(
         env.render_str("t.txt", "{% include \"b.html\" %}|{{ v }}", &ctx)
@@ -195,8 +202,9 @@ fn xss_vectors_in_every_position() {
             .collect();
         compared += outputs.len();
         assert_eq!(row["c"], outputs.len(), "{name} {source}");
-        if fnv(&outputs.join("\n")) != row["h"].as_str().expect("a hash") {
-            failures.push(format!("{name}: {source}"));
+        let hash = fnv(&outputs.join("\n"));
+        if hash != row["h"].as_str().expect("a hash") {
+            failures.push(format!("{name}: {hash}: {source}"));
         }
     }
     assert!(compared > 10_000, "the corpus is there: {compared}");

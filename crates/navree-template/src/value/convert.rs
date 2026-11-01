@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-use super::{Repr, Value, ValueMap, cannot_convert};
+use super::{Repr, Safety, Value, ValueMap, cannot_convert};
 use crate::error::Error;
 
 impl From<bool> for Value {
@@ -64,7 +64,7 @@ impl From<f64> for Value {
 
 impl From<&str> for Value {
     fn from(value: &str) -> Value {
-        Value(Repr::Str(Arc::from(value), false))
+        Value(Repr::Str(Arc::from(value), Safety::Plain))
     }
 }
 
@@ -76,7 +76,7 @@ impl From<&String> for Value {
 
 impl From<String> for Value {
     fn from(value: String) -> Value {
-        Value(Repr::Str(Arc::from(value), false))
+        Value(Repr::Str(Arc::from(value), Safety::Plain))
     }
 }
 
@@ -88,7 +88,7 @@ impl From<Cow<'_, str>> for Value {
 
 impl From<Arc<str>> for Value {
     fn from(value: Arc<str>) -> Value {
-        Value(Repr::Str(value, false))
+        Value(Repr::Str(value, Safety::Plain))
     }
 }
 

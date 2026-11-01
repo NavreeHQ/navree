@@ -5,12 +5,13 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use crate::environment::{AutoEscape, Environment};
+use crate::environment::Environment;
 use crate::error::{Error, ErrorKind};
-use crate::escape::{JsonStyle, to_json, write_escaped};
+use crate::escape::{JsonStyle, Mode, Quote, write_display, write_escaped, write_json};
 use crate::functions::{ArgType, Callable, FunctionArgs, MAX_STRING_ARG};
-use crate::value::{Coerced, Kwargs, Repr, Value, ValueKind, ValueMap, coerce};
-use crate::vm::{Output, State};
+use crate::value::ops;
+use crate::value::{Coerced, Kwargs, Repr, Safety, Value, ValueKind, ValueMap, coerce};
+use crate::vm::State;
 
 /// A built-in: a plain function of the render state and the arguments.
 type Builtin = for<'s, 'v> fn(&'s State<'_>, &'v [Value]) -> Result<Value, Error>;
@@ -113,11 +114,11 @@ fn args<'a, T: FunctionArgs<'a>>(
 }
 
 /// A string argument: strings as they are, other values as they print,
-/// undefined values an error where those are. It remembers whether the
-/// value was safe.
+/// undefined values an error where those are. It remembers what the value
+/// was safe for.
 struct StringInput<'a> {
     text: Cow<'a, str>,
-    safe: bool,
+    safety: Safety,
 }
 
 impl<'a> ArgType<'a> for StringInput<'_> {
@@ -138,7 +139,7 @@ impl<'a> ArgType<'a> for StringInput<'_> {
                 Some(text) => Cow::Borrowed(text),
                 None => Cow::Owned(value.to_string_capped(MAX_STRING_ARG)?),
             },
-            safe: value.is_safe(),
+            safety: value.safety(),
         })
     }
 }
@@ -148,34 +149,45 @@ impl StringInput<'_> {
         &self.text
     }
 
-    /// `text` with the safety of this input.
-    fn keep_safety(&self, text: String) -> Value {
-        if self.safe {
-            Value::from_safe_string(text)
-        } else {
-            Value::from(text)
-        }
+    /// `text` with the mark of this input.
+    fn keep_safety(&self, text: &str) -> Value {
+        Value::marked(Arc::from(text), self.safety)
     }
 
-    /// The text, escaped unless it is safe.
+    /// Whether the input needs no more escaping in `mode`.
+    fn is_safe_for(&self, mode: Mode) -> bool {
+        self.safety != Safety::Plain && self.safety.fits(mode)
+    }
+
+    /// The text, escaped for the current mode unless it needs no escaping
+    /// there. `|tojson` text gets its quotes settled, as anywhere it is
+    /// combined with other text.
     fn formatted(&self, state: &State<'_>) -> Result<Cow<'_, str>, Error> {
-        if self.safe {
+        if self.safety == Safety::Trusted
+            || (self.is_safe_for(state.mode()) && self.safety != Safety::Tojson)
+        {
             return Ok(Cow::Borrowed(self.as_str()));
         }
-        let escaped = escape_value(state, &Value::from(self.as_str()))?;
-        Ok(Cow::Owned(escaped.to_string()))
+        let mode = state.mode();
+        state.charge_copy(self.as_str().len())?;
+        let value = Value::marked(Arc::from(self.as_str()), self.safety);
+        let mut out = state.string_builder(self.as_str().len())?;
+        write_escaped(&mut out, mode, &value)?;
+        Ok(Cow::Owned(out.into_string()))
     }
 }
 
 /// An item's attribute when `attribute` is given (`a.b.0`), else the item.
-fn map_attribute(item: Value, attribute: Option<&str>) -> Value {
-    match attribute {
-        Some(path) => get_path(&item, path)
-            .ok()
-            .filter(|value| !value.is_undefined())
-            .unwrap_or_default(),
-        None => item,
-    }
+/// Each step of the path looks a key up.
+fn map_attribute(state: &State<'_>, item: Value, attribute: Option<&str>) -> Result<Value, Error> {
+    let Some(path) = attribute else {
+        return Ok(item);
+    };
+    state.charge(1 + (path.len() / 8) as u64)?;
+    Ok(get_path(&item, path)
+        .ok()
+        .filter(|value| !value.is_undefined())
+        .unwrap_or_default())
 }
 
 /// Looks up a dotted path; numeric parts are indexes.
@@ -194,26 +206,40 @@ fn get_path(value: &Value, path: &str) -> Result<Value, Error> {
 /// an error where those are.
 fn checked_items(state: &State<'_>, value: &Value) -> Result<Vec<Value>, Error> {
     state.assert_not_undefined(value)?;
-    let items = value.iter_items()?;
-    state.charge_items(items.len())?;
-    Ok(items)
+    state.iter_items(value)
 }
 
 // Filters ---------------------------------------------------------------
 
 fn safe(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
+    // A string keeps its text: only the mark changes. `|tojson` output stays
+    // what it is, since its quotes depend on where it lands.
+    if let [Value(Repr::Str(text, safety))] = values {
+        let safety = match safety {
+            Safety::Tojson => Safety::Tojson,
+            _ => Safety::Trusted,
+        };
+        return Ok(Value::marked(text.clone(), safety));
+    }
+    state.charge_text_args(values)?;
     let (text,) = args::<(String,)>(state, values)?;
+    state.charge_copy(text.len())?;
     Ok(Value::from_safe_string(text))
 }
 
 fn escape_value(state: &State<'_>, value: &Value) -> Result<Value, Error> {
-    if value.is_safe() {
+    let mode = state.escape_mode();
+    if value.is_safe() && value.safety().fits(mode) {
         return Ok(value.clone());
     }
-    let mut out = Output::for_filter(state.max_output_bytes());
-    write_escaped(&mut out, state.escape_mode(), value)?;
-    state.check_size(out.buf.len())?;
-    Ok(Value::from_safe_string(out.buf))
+    state.charge(value.shape().weight)?;
+    let mut out = state.string_builder(0)?;
+    write_escaped(&mut out, mode, value)?;
+    // JSON that is also fit for HTML keeps its quotes until it lands.
+    out.finish(match mode {
+        Mode::Both => Safety::Tojson,
+        _ => mode.safety(),
+    })
 }
 
 fn escape(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
@@ -221,62 +247,96 @@ fn escape(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     escape_value(state, value)
 }
 
+/// What `text` comes to with `map` applied to each character.
+fn mapped_size<I: Iterator<Item = char>>(text: &str, map: impl Fn(char) -> I) -> usize {
+    text.chars()
+        .map(|ch| map(ch).map(char::len_utf8).sum::<usize>())
+        .sum()
+}
+
 fn lower(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
+    state.charge_text_args(values)?;
     let (input,) = args::<(StringInput<'_>,)>(state, values)?;
-    state.check_size(input.as_str().len())?;
-    Ok(input.keep_safety(input.as_str().to_lowercase()))
+    let text = input.as_str();
+    state.charge_scan(text.len())?;
+    // Case mapping can make text longer; the final sigma is no exception.
+    state.check_growing_size(text.len(), mapped_size(text, char::to_lowercase))?;
+    Ok(input.keep_safety(&text.to_lowercase()))
 }
 
 fn upper(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
+    state.charge_text_args(values)?;
     let (input,) = args::<(StringInput<'_>,)>(state, values)?;
-    state.check_size(input.as_str().len())?;
-    Ok(input.keep_safety(input.as_str().to_uppercase()))
+    let text = input.as_str();
+    state.charge_scan(text.len())?;
+    state.check_growing_size(text.len(), mapped_size(text, char::to_uppercase))?;
+    Ok(input.keep_safety(&text.to_uppercase()))
 }
 
 fn capitalize(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
+    state.charge_text_args(values)?;
     let (input,) = args::<(StringInput<'_>,)>(state, values)?;
-    state.check_size(input.as_str().len())?;
-    let mut chars = input.as_str().chars();
-    let output = match chars.next() {
-        None => String::new(),
-        Some(first) => first.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase(),
+    let text = input.as_str();
+    state.charge_scan(text.len())?;
+    let mut chars = text.chars();
+    let Some(first) = chars.next() else {
+        return Ok(input.keep_safety(""));
     };
-    Ok(input.keep_safety(output))
+    let rest = chars.as_str();
+    let size = first.to_uppercase().map(char::len_utf8).sum::<usize>()
+        + mapped_size(rest, char::to_lowercase);
+    state.check_growing_size(text.len(), size)?;
+    let output = first.to_uppercase().collect::<String>() + &rest.to_lowercase();
+    Ok(input.keep_safety(&output))
 }
 
 fn replace(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
+    state.charge_text_args(values)?;
     let (value, from, to) =
         args::<(StringInput<'_>, StringInput<'_>, StringInput<'_>)>(state, values)?;
-    let safety_aware =
-        state.auto_escape() != AutoEscape::None && (value.safe || from.safe || to.safe);
+    let mode = state.mode();
+    let safety_aware = mode != Mode::None
+        && (value.is_safe_for(mode) || from.is_safe_for(mode) || to.is_safe_for(mode));
     let (text, replacement) = if safety_aware {
         (value.formatted(state)?, to.formatted(state)?)
     } else {
         (Cow::Borrowed(value.as_str()), Cow::Borrowed(to.as_str()))
     };
-    let output = replace_capped(state, &text, from.as_str(), &replacement)?;
-    Ok(if safety_aware {
-        Value::from_safe_string(output)
+    let out = replace_capped(state, &text, from.as_str(), &replacement)?;
+    out.finish(if safety_aware {
+        mode.safety()
     } else {
-        Value::from(output)
+        Safety::Plain
     })
 }
 
 /// `str::replace`, stopping at the output limit: a short pattern and a long
 /// replacement can multiply a string's size.
-fn replace_capped(state: &State<'_>, text: &str, from: &str, to: &str) -> Result<String, Error> {
-    let matches = if from.is_empty() {
-        text.chars().count() + 1
-    } else {
-        text.matches(from).count()
-    };
+fn replace_capped(
+    state: &State<'_>,
+    text: &str,
+    from: &str,
+    to: &str,
+) -> Result<crate::output::Output, Error> {
+    state.charge_scan(text.len())?;
+    let matches = text.matches(from).count();
     let size = text.len().saturating_add(matches.saturating_mul(to.len()));
-    state.check_size(size)?;
-    Ok(text.replace(from, to))
+    let mut out = state.string_builder(size)?;
+    let mut last = 0;
+    for (start, found) in text.match_indices(from) {
+        out.write_str(text.get(last..start).unwrap_or(""))?;
+        out.write_str(to)?;
+        last = start + found.len();
+    }
+    out.write_str(text.get(last..).unwrap_or(""))?;
+    Ok(out)
 }
 
 fn length(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     let (value,) = args::<(&Value,)>(state, values)?;
+    if let Some(text) = value.as_str() {
+        state.charge_scan(text.len())?;
+    }
     value.len().map(Value::from).ok_or_else(|| {
         Error::invalid(format!(
             "cannot calculate length of value of type {}",
@@ -286,18 +346,27 @@ fn length(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
 }
 
 fn trim(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
+    state.charge_text_args(values)?;
     let (input, chars) = args::<(StringInput<'_>, Option<StringInput<'_>>)>(state, values)?;
-    let output = match chars {
+    let text = input.as_str();
+    state.charge_scan(text.len())?;
+    let output = match &chars {
         Some(chars) => {
-            let chars: Vec<char> = chars.as_str().chars().collect();
-            input.as_str().trim_matches(&chars[..]).to_owned()
+            state.charge_scan(chars.as_str().len())?;
+            state.charge_allocation((chars.as_str().len() as u64).saturating_mul(4))?;
+            let mut set: Vec<char> = chars.as_str().chars().collect();
+            set.sort_unstable();
+            set.dedup();
+            text.trim_matches(|ch: char| set.binary_search(&ch).is_ok())
         }
-        None => input.as_str().trim().to_owned(),
+        None => text.trim(),
     };
+    state.charge_copy(output.len())?;
     Ok(input.keep_safety(output))
 }
 
 fn join(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
+    state.charge_text_args(values.get(1..).unwrap_or(&[]))?;
     let (value, joiner, attribute, kwargs) =
         args::<(&Value, Option<StringInput<'_>>, Option<&str>, Kwargs)>(state, values)?;
     let joiner = match joiner {
@@ -318,70 +387,79 @@ fn join(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     }
     kwargs.assert_all_used()?;
     let joiner_text = joiner.as_ref().map(StringInput::as_str).unwrap_or_default();
-    let items = value
-        .iter_items()
-        .map_err(|_| Error::invalid(format!("cannot join value of type {}", value.kind())))?;
-    state.charge_items(items.len())?;
+    let items = state
+        .iter_items(value)
+        .map_err(|error| match error.kind() {
+            ErrorKind::LimitExceeded => error,
+            _ => Error::invalid(format!("cannot join value of type {}", value.kind())),
+        })?;
     let items: Vec<Value> = items
         .into_iter()
-        .map(|item| map_attribute(item, attribute.as_deref()))
-        .collect();
-    if state.auto_escape() == AutoEscape::None {
-        return join_plain(state, &items, joiner_text).map(Value::from);
+        .map(|item| map_attribute(state, item, attribute.as_deref()))
+        .collect::<Result<_, _>>()?;
+    let mode = state.mode();
+    if mode == Mode::None {
+        return join_plain(state, &items, joiner_text)?.finish(Safety::Plain);
     }
-    if joiner.as_ref().is_some_and(|joiner| joiner.safe) {
-        return join_safe(state, &items, joiner_text).map(Value::from_safe_string);
+    if joiner
+        .as_ref()
+        .is_some_and(|joiner| joiner.is_safe_for(mode))
+    {
+        return join_safe(state, &items, joiner_text)?.finish(mode.safety());
     }
     // A plain joiner only becomes safe if at least one item is safe.
-    if items.iter().any(Value::is_safe) {
+    if items
+        .iter()
+        .any(|item| item.is_safe() && item.safety().fits(mode))
+    {
         let joiner = match &joiner {
             Some(joiner) => joiner.formatted(state)?,
             None => Cow::Borrowed(""),
         };
-        join_safe(state, &items, &joiner).map(Value::from_safe_string)
+        join_safe(state, &items, &joiner)?.finish(mode.safety())
     } else {
-        join_plain(state, &items, joiner_text).map(Value::from)
+        join_plain(state, &items, joiner_text)?.finish(Safety::Plain)
     }
 }
 
 fn owned_input(input: StringInput<'_>) -> StringInput<'static> {
     StringInput {
         text: Cow::Owned(input.text.into_owned()),
-        safe: input.safe,
+        safety: input.safety,
     }
 }
 
-fn join_plain(state: &State<'_>, items: &[Value], joiner: &str) -> Result<String, Error> {
-    let limit = state.max_output_bytes();
-    let mut output = String::new();
+fn join_plain(
+    state: &State<'_>,
+    items: &[Value],
+    joiner: &str,
+) -> Result<crate::output::Output, Error> {
+    let mut out = state.string_builder(0)?;
     for (index, item) in items.iter().enumerate() {
         if index > 0 {
-            output.push_str(joiner);
+            out.write_str(joiner)?;
         }
-        match item.as_str() {
-            Some(text) => output.push_str(text),
-            None => output.push_str(&item.to_string_capped(limit)?),
-        }
-        if output.len() > limit {
-            return Err(Error::limit("a string is too large"));
-        }
+        state.charge(item.shape().weight)?;
+        write_display(&mut out, item)?;
     }
-    state.check_size(output.len())?;
-    Ok(output)
+    Ok(out)
 }
 
-fn join_safe(state: &State<'_>, items: &[Value], joiner: &str) -> Result<String, Error> {
-    let limit = state.max_output_bytes();
-    let mut out = Output::for_filter(limit);
+fn join_safe(
+    state: &State<'_>,
+    items: &[Value],
+    joiner: &str,
+) -> Result<crate::output::Output, Error> {
+    let mut out = state.string_builder(0)?;
     for (index, item) in items.iter().enumerate() {
         if index > 0 {
             out.write_str(joiner)?;
         }
         state.assert_not_undefined(item)?;
-        write_escaped(&mut out, state.auto_escape(), item)?;
+        state.charge(item.shape().weight)?;
+        write_escaped(&mut out, state.mode(), item)?;
     }
-    state.check_size(out.buf.len())?;
-    Ok(out.buf)
+    Ok(out)
 }
 
 fn split(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
@@ -393,14 +471,18 @@ fn split(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     let parts_limit = max_splits
         .and_then(|n| usize::try_from(n).ok())
         .map(|n| n.saturating_add(1));
-    let safe = value.is_safe();
-    let wrap = |part: &str| {
-        if safe {
-            Value::from_safe_string(part.to_owned())
-        } else {
-            Value::from(part)
-        }
+    // Counted first, so the whole result is charged before any of it exists.
+    state.charge_scan(text.len())?;
+    let count = match (separator, parts_limit) {
+        (None, None) => text.split_whitespace().count(),
+        (Some(separator), None) => text.split(separator).count(),
+        (None, Some(limit)) => text.split_whitespace().count().min(limit),
+        (Some(separator), Some(limit)) => text.splitn(limit, separator).count(),
     };
+    state.charge_strings(count, text.len())?;
+    state.charge_items(count)?;
+    let safety = value.safety();
+    let wrap = |part: &str| Value::marked(Arc::from(part), safety);
     let parts: Vec<Value> = match (separator, parts_limit) {
         (None, None) => text.split_whitespace().map(wrap).collect(),
         (Some(separator), None) => text.split(separator).map(wrap).collect(),
@@ -410,8 +492,6 @@ fn split(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
             .collect(),
         (Some(separator), Some(limit)) => text.splitn(limit, separator).map(wrap).collect(),
     };
-    state.check_size(text.len())?;
-    state.charge_items(parts.len())?;
     Ok(Value::list(parts))
 }
 
@@ -661,14 +741,17 @@ fn int(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
         Repr::Int(_) => return Ok(value.clone()),
         #[allow(clippy::cast_possible_truncation)]
         Repr::Float(float) => return Ok(Value::from(*float as i128)),
-        Repr::Str(text, _) => match parse_int(text, base) {
-            Some(integer) => return Ok(Value::from(integer)),
-            #[allow(clippy::cast_possible_truncation)]
-            None => text
-                .parse::<f64>()
-                .map(|float| Value::from(float as i128))
-                .map_err(|error| Error::invalid(error.to_string())),
-        },
+        Repr::Str(text, _) => {
+            state.charge_scan(text.len())?;
+            match parse_int(text, base) {
+                Some(integer) => return Ok(Value::from(integer)),
+                #[allow(clippy::cast_possible_truncation)]
+                None => text
+                    .parse::<f64>()
+                    .map(|float| Value::from(float as i128))
+                    .map_err(|error| Error::invalid(error.to_string())),
+            }
+        }
         _ => Err(Error::invalid(format!(
             "cannot convert {} to integer",
             value.kind()
@@ -711,9 +794,10 @@ fn first(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     match &value.0 {
         Repr::Str(text, _) => Ok(text.chars().next().map_or(Value::UNDEFINED, Value::from)),
         Repr::Seq(items, ..) => Ok(items.first().cloned().unwrap_or_default()),
-        Repr::Map(..) | Repr::Kwargs(_) | Repr::Module(_) => {
-            Ok(value.iter_items()?.into_iter().next().unwrap_or_default())
-        }
+        Repr::Map(..) | Repr::Kwargs(..) | Repr::Module(_) => Ok(value
+            .as_map()
+            .and_then(|map| map.keys().next().cloned())
+            .unwrap_or_default()),
         _ => Err(Error::invalid("cannot get first item from value")),
     }
 }
@@ -721,12 +805,8 @@ fn first(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
 fn last(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     let (value,) = args::<(&Value,)>(state, values)?;
     match &value.0 {
-        Repr::Str(text, safe) => Ok(text.chars().next_back().map_or(Value::UNDEFINED, |ch| {
-            if *safe {
-                Value::from_safe_string(ch.to_string())
-            } else {
-                Value::from(ch)
-            }
+        Repr::Str(text, safety) => Ok(text.chars().next_back().map_or(Value::UNDEFINED, |ch| {
+            Value::marked(Arc::from(ch.to_string()), *safety)
         })),
         Repr::Seq(items, ..) => Ok(items.last().cloned().unwrap_or_default()),
         _ => Err(Error::invalid("cannot get last item from value")),
@@ -736,23 +816,36 @@ fn last(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
 /// Compares two sort keys; strings ignore ASCII case unless `case_sensitive`.
 fn cmp_keys(a: &Value, b: &Value, case_sensitive: bool) -> Ordering {
     if !case_sensitive && let (Some(a), Some(b)) = (a.as_str(), b.as_str()) {
-        return a.to_ascii_lowercase().cmp(&b.to_ascii_lowercase());
+        return a
+            .bytes()
+            .map(|byte| byte.to_ascii_lowercase())
+            .cmp(b.bytes().map(|byte| byte.to_ascii_lowercase()));
     }
     a.cmp(b)
 }
 
+/// The error for what can't be gone through; a limit stays what it is.
+fn not_a_list(error: Error) -> Error {
+    match error.kind() {
+        ErrorKind::LimitExceeded => error,
+        _ => Error::invalid("cannot convert value to list"),
+    }
+}
+
 fn min(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     let (value, kwargs) = args::<(&Value, Kwargs)>(state, values)?;
-    let items =
-        checked_items(state, value).map_err(|_| Error::invalid("cannot convert value to list"))?;
+    let items = checked_items(state, value).map_err(not_a_list)?;
     let case_sensitive = kwargs
         .get::<Option<bool>>("case_sensitive")?
         .unwrap_or(false);
     let attribute = kwargs.get::<Option<&str>>("attribute")?;
     let mut best: Option<(Value, Value)> = None;
     for item in items {
-        let key = map_attribute(item.clone(), attribute);
+        let key = map_attribute(state, item.clone(), attribute)?;
         state.charge(key.shape().weight)?;
+        if let Some((best_key, _)) = &best {
+            state.charge(ops::compare_cost(&key, best_key))?;
+        }
         let replaces = best
             .as_ref()
             .is_none_or(|(best_key, _)| cmp_keys(&key, best_key, case_sensitive) == Ordering::Less);
@@ -766,9 +859,9 @@ fn min(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
 
 fn list(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     let (value,) = args::<(&Value,)>(state, values)?;
-    let items =
-        checked_items(state, value).map_err(|_| Error::invalid("cannot convert value to list"))?;
-    Ok(Value::list(items))
+    Ok(Value::list(
+        checked_items(state, value).map_err(not_a_list)?,
+    ))
 }
 
 fn string(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
@@ -777,21 +870,22 @@ fn string(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     if value.kind() == ValueKind::String {
         return Ok(value.clone());
     }
-    let text = value.to_string_capped(state.max_output_bytes())?;
-    state.check_size(text.len())?;
-    Ok(Value::from(text))
+    state.charge(value.shape().weight)?;
+    let mut out = state.string_builder(0)?;
+    write_display(&mut out, value)?;
+    out.finish(Safety::Plain)
 }
 
 fn items(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     let (value,) = args::<(&Value,)>(state, values)?;
-    let Some(pairs) = value.map_pairs() else {
+    let Some(map) = value.as_map() else {
         return Err(Error::invalid("cannot convert value into pairs"));
     };
-    state.charge_items(pairs.len().saturating_mul(3))?;
+    // Each pair is a tuple of its own.
+    state.charge_items(map.len().saturating_mul(6))?;
     Ok(Value::iterable(
-        pairs
-            .into_iter()
-            .map(|(key, item)| Value::tuple(vec![key, item]))
+        map.iter()
+            .map(|(key, item)| Value::tuple(vec![key.clone(), item.clone()]))
             .collect(),
     ))
 }
@@ -816,59 +910,64 @@ fn tojson(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
         None => JsonStyle::Spaced,
     };
     state.charge(value.shape().weight)?;
-    let text = to_json(value, style, true, state.max_output_bytes()).map_err(|error| {
+    let mut out = state.string_builder(0)?;
+    write_json(&mut out, value, style, true, Quote::Raw).map_err(|error| {
         if error.kind() == ErrorKind::LimitExceeded {
             error
         } else {
             Error::invalid("cannot serialize to JSON").with_source(error)
         }
     })?;
-    Ok(Value::from_safe_string(text))
+    out.finish(Safety::Tojson)
 }
 
-/// Percent-encodes every byte but ASCII letters, digits and `/._-`.
-fn percent_encode(text: &str) -> String {
-    use std::fmt::Write as _;
-    let mut out = String::with_capacity(text.len());
-    for byte in text.bytes() {
+/// Writes `text` with every byte percent-encoded but ASCII letters, digits and
+/// `/._-`.
+fn write_percent_encoded(out: &mut crate::output::Output, text: &str) -> Result<(), Error> {
+    let mut start = 0;
+    for (index, byte) in text.bytes().enumerate() {
         if byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'.' | b'-' | b'_') {
-            out.push(char::from(byte));
-        } else {
-            let _ = write!(out, "%{byte:02X}");
+            continue;
         }
+        out.write_str(text.get(start..index).unwrap_or(""))?;
+        out.write_str(&format!("%{byte:02X}"))?;
+        start = index + 1;
     }
-    out
+    out.write_str(text.get(start..).unwrap_or(""))
 }
 
 fn urlencode(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     let (value,) = args::<(&Value,)>(state, values)?;
     let limit = state.max_output_bytes();
-    let output = if value.kind() == ValueKind::Map {
-        let mut output = String::new();
-        for (key, item) in value.map_pairs().unwrap_or_default() {
+    let mut out = state.string_builder(0)?;
+    if value.kind() == ValueKind::Map {
+        let mut first = true;
+        for (key, item) in value.as_map().into_iter().flat_map(|map| map.iter()) {
             state.charge(1)?;
             if item.is_none() || item.is_undefined() {
                 continue;
             }
-            if !output.is_empty() {
-                output.push('&');
+            if !first {
+                out.write_str("&")?;
             }
-            output.push_str(&percent_encode(&key.to_string_capped(limit)?));
-            output.push('=');
-            output.push_str(&percent_encode(&item.to_string_capped(limit)?));
-            if output.len() > limit {
-                return Err(Error::limit("a string is too large"));
-            }
+            first = false;
+            state.charge_text_args(std::slice::from_ref(key))?;
+            state.charge_text_args(std::slice::from_ref(item))?;
+            write_percent_encoded(&mut out, &key.to_string_capped(limit)?)?;
+            out.write_str("=")?;
+            write_percent_encoded(&mut out, &item.to_string_capped(limit)?)?;
         }
-        output
     } else {
         match &value.0 {
-            Repr::None | Repr::Undefined(_) => String::new(),
-            _ => percent_encode(&value.to_string_capped(limit)?),
+            Repr::None | Repr::Undefined(_) => {}
+            Repr::Str(text, _) => write_percent_encoded(&mut out, text)?,
+            _ => {
+                state.charge_text_args(std::slice::from_ref(value))?;
+                write_percent_encoded(&mut out, &value.to_string_capped(limit)?)?;
+            }
         }
-    };
-    state.check_size(output.len())?;
-    Ok(Value::from(output))
+    }
+    out.finish(Safety::Plain)
 }
 
 // Tests -----------------------------------------------------------------
@@ -953,6 +1052,9 @@ fn is_sequence(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
 
 fn is_iterable(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     let (value,) = args::<(&Value,)>(state, values)?;
+    if let Some(text) = value.as_str() {
+        state.charge_scan(text.len())?;
+    }
     Ok(Value::from(value.iter_len().is_some()))
 }
 
@@ -962,12 +1064,16 @@ fn is_mapping(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
 }
 
 fn is_startingwith(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
+    state.charge_text_args(values)?;
     let (value, other) = args::<(StringInput<'_>, StringInput<'_>)>(state, values)?;
+    state.charge_scan(value.as_str().len().min(other.as_str().len()))?;
     Ok(Value::from(value.as_str().starts_with(other.as_str())))
 }
 
 fn is_endingwith(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
+    state.charge_text_args(values)?;
     let (value, other) = args::<(StringInput<'_>, StringInput<'_>)>(state, values)?;
+    state.charge_scan(value.as_str().len().min(other.as_str().len()))?;
     Ok(Value::from(value.as_str().ends_with(other.as_str())))
 }
 
@@ -981,6 +1087,7 @@ fn is_lower(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     let Some(text) = value.as_str() else {
         return Ok(Value::from(false));
     };
+    state.charge_scan(text.len())?;
     let mut has_cased = false;
     for ch in text.chars() {
         if ch.is_uppercase() || (!ch.is_lowercase() && has_case_mapping(ch)) {
@@ -996,6 +1103,7 @@ fn is_upper(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     let Some(text) = value.as_str() else {
         return Ok(Value::from(false));
     };
+    state.charge_scan(text.len())?;
     let mut has_cased = false;
     for ch in text.chars() {
         if ch.is_lowercase() || (!ch.is_uppercase() && has_case_mapping(ch)) {
@@ -1034,6 +1142,7 @@ fn is_sameas(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
             | Repr::Loop(_),
         ) => false,
         _ => {
+            state.charge(ops::compare_cost(value, other))?;
             value.kind() == other.kind()
                 && value.is_integer() == other.is_integer()
                 && value == other
@@ -1043,40 +1152,48 @@ fn is_sameas(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
 
 fn is_eq(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     let (value, other) = args::<(&Value, &Value)>(state, values)?;
+    state.charge(ops::compare_cost(value, other))?;
     Ok(Value::from(value == other))
 }
 
 fn is_ne(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     let (value, other) = args::<(&Value, &Value)>(state, values)?;
+    state.charge(ops::compare_cost(value, other))?;
     Ok(Value::from(value != other))
 }
 
 fn is_lt(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     let (value, other) = args::<(&Value, &Value)>(state, values)?;
+    state.charge(ops::compare_cost(value, other))?;
     Ok(Value::from(value < other))
 }
 
 fn is_le(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     let (value, other) = args::<(&Value, &Value)>(state, values)?;
+    state.charge(ops::compare_cost(value, other))?;
     Ok(Value::from(value <= other))
 }
 
 fn is_gt(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     let (value, other) = args::<(&Value, &Value)>(state, values)?;
+    state.charge(ops::compare_cost(value, other))?;
     Ok(Value::from(value > other))
 }
 
 fn is_ge(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     let (value, other) = args::<(&Value, &Value)>(state, values)?;
+    state.charge(ops::compare_cost(value, other))?;
     Ok(Value::from(value >= other))
 }
 
 fn is_in(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     let (value, other) = args::<(&Value, &Value)>(state, values)?;
     state.assert_not_undefined(other)?;
-    Ok(Value::from(
-        crate::value::ops::contains(other, value).unwrap_or(false),
-    ))
+    state.charge(ops::contains_cost(other, value))?;
+    if other.as_str().is_some() {
+        state.charge_text_args(std::slice::from_ref(value))?;
+    }
+    Ok(Value::from(ops::contains(other, value).unwrap_or(false)))
 }
 
 fn is_true(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
@@ -1142,15 +1259,18 @@ fn dict(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     let (value, kwargs) = args::<(Option<Value>, Kwargs)>(state, values)?;
     let mut map = match value {
         None => ValueMap::new(),
-        Some(value) => match value.map_pairs() {
+        Some(value) => match value.as_map() {
             Some(pairs) => {
-                state.charge_items(pairs.len().saturating_mul(2))?;
-                pairs.into_iter().collect()
+                state.charge_items(pairs.len().saturating_mul(3))?;
+                pairs
+                    .iter()
+                    .map(|(key, item)| (key.clone(), item.clone()))
+                    .collect()
             }
             None => return Err(Error::from(ErrorKind::InvalidOperation)),
         },
     };
-    state.charge_items(kwargs.values().len().saturating_mul(2))?;
+    state.charge_items(kwargs.values().len().saturating_mul(3))?;
     for (key, item) in kwargs.values().iter() {
         map.insert(key.clone(), item.clone());
     }

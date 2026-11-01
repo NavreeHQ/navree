@@ -196,6 +196,7 @@ lber = "0.5.1"
 # ---------------------------------------------------------------------------
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+stacker = "0.1.25"
 # MessagePack payloads (navree-micro's `msgpack` codec).
 rmp-serde = "1.3.1"
 serde_urlencoded = "0.7.1"

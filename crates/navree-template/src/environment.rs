@@ -9,6 +9,7 @@ use serde::Serialize;
 
 use crate::builtins;
 use crate::error::{Error, ErrorKind};
+use crate::escape::Mode;
 use crate::functions::{self, Callable, Function, FunctionResult};
 use crate::syntax::{Ast, Whitespace, parse};
 use crate::value::Value;
@@ -57,20 +58,28 @@ pub struct Limits {
     /// Loop iterations of one render, all loops together. Default
     /// 10,000,000.
     pub max_loop_iterations: u64,
-    /// Work of one render: every statement and expression evaluated, and
-    /// every item a filter or operator goes through. Default 100,000,000.
+    /// Work of one render: every statement and expression evaluated, every
+    /// item a filter or operator goes through, and every string it scans or
+    /// copies, a 64-byte stretch counting as one. Default 100,000,000.
     pub max_operations: u64,
     /// Bytes of the output, and of any string a template builds (captured
     /// output, joined or repeated strings). Default 64 MiB.
     pub max_output_bytes: usize,
-    /// Bytes a render may allocate over its life for the strings and
-    /// sequences it builds, so that what a render holds stays below this
-    /// however it holds it. Default 1 GiB.
+    /// Bytes a render may allocate over its life for its output and for the
+    /// strings, sequences and maps it builds. Each is charged before it is
+    /// allocated, freed or not, so what a render holds stays below this
+    /// however it holds it. The context, what registered functions allocate,
+    /// compiled templates and a little bookkeeping per scope are not counted.
+    /// Default 1 GiB.
     pub max_allocated_bytes: u64,
-    /// Stack a compile or render may use, measured from where it started,
-    /// whatever nests: it ends with an error before the thread's stack does.
-    /// How deep that is depends on the build: optimized code takes less per
-    /// level. Default 768 KiB, for threads of 1 MiB and up.
+    /// Stack the compiles and renders on one thread may use together, measured
+    /// from where the outermost one started, so a render inside a render and a
+    /// compile during a render share it. It also stops while 256 KiB of the
+    /// thread's stack are free, wherever the outermost one started, on
+    /// platforms where the end of the stack is known (Linux, macOS, Windows);
+    /// a thread with less than that left can't render. How deep this
+    /// reaches depends on the build: optimized code takes less per level.
+    /// Default 768 KiB.
     pub max_stack_bytes: usize,
 }
 
@@ -121,7 +130,9 @@ type AutoEscapeCallback = dyn Fn(&str) -> AutoEscape + Send + Sync;
 /// A compiled template.
 pub(crate) struct Compiled {
     pub(crate) name: Arc<str>,
-    pub(crate) ast: Ast,
+    pub(crate) ast: Arc<Ast>,
+    /// How its values print, from its name.
+    pub(crate) mode: Mode,
 }
 
 struct Loaded {
@@ -173,8 +184,8 @@ impl fmt::Debug for Environment {
 
 impl Environment {
     /// An environment with the built-in filters, tests and functions,
-    /// lenient undefined values, HTML escaping for `.html`, `.htm` and
-    /// `.xml` templates, and the default [`Limits`].
+    /// lenient undefined values, escaping by name as
+    /// [`default_auto_escape`] says, and the default [`Limits`].
     pub fn new() -> Environment {
         let mut env = Environment {
             templates: BTreeMap::new(),
@@ -218,19 +229,31 @@ impl Environment {
         self.undefined
     }
 
-    /// Sets how a template's name picks its escaping. The default:
-    /// `.html`, `.htm` and `.xml` (also followed by `.j2`, `.jinja` or
-    /// `.jinja2`) escape HTML, `.json`, `.json5`, `.js`, `.yaml` and `.yml`
-    /// print JSON, anything else prints values as they are.
+    /// Sets how a template's name picks its mode, for the templates there are
+    /// and those to come. The default is [`default_auto_escape`]. Nothing
+    /// rendered inside another template prints less strictly than where it
+    /// lands, whatever this returns for its name.
     pub fn set_auto_escape_callback(
         &mut self,
         callback: impl Fn(&str) -> AutoEscape + Send + Sync + 'static,
     ) {
         self.auto_escape = Arc::new(callback);
-    }
-
-    pub(crate) fn initial_auto_escape(&self, name: &str) -> AutoEscape {
-        (self.auto_escape)(name)
+        let templates = std::mem::take(&mut self.templates);
+        self.templates = templates
+            .into_iter()
+            .map(|(name, compiled)| {
+                let compiled = Arc::new(Compiled {
+                    name: compiled.name.clone(),
+                    ast: compiled.ast.clone(),
+                    mode: Mode::from((self.auto_escape)(&name)),
+                });
+                (name, compiled)
+            })
+            .collect();
+        self.loaded
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
     }
 
     /// Sets the rendering [`Limits`].
@@ -284,7 +307,8 @@ impl Environment {
         let ast = parse(source, name, self.whitespace, self.limits.max_stack_bytes)?;
         Ok(Compiled {
             name: Arc::from(name),
-            ast,
+            ast: Arc::new(ast),
+            mode: Mode::from((self.auto_escape)(name)),
         })
     }
 
@@ -406,20 +430,44 @@ impl Environment {
     }
 }
 
-/// The default autoescaping rule (see
-/// [`set_auto_escape_callback`](Environment::set_auto_escape_callback)).
-pub fn default_auto_escape(name: &str) -> AutoEscape {
-    let mut name = name;
+/// A template name's extension in lower case, past a trailing `.j2`, `.jinja`
+/// or `.jinja2`, and past the dots and spaces Windows ignores at the end of a
+/// file name.
+fn extension(name: &str) -> String {
+    let name = name.trim_end_matches(['.', ' ']).to_ascii_lowercase();
+    let mut name = name.as_str();
     for suffix in [".j2", ".jinja2", ".jinja"] {
         if let Some(stripped) = name.strip_suffix(suffix) {
             name = stripped;
             break;
         }
     }
-    match name.rsplit('.').next() {
-        Some("html" | "htm" | "xml") => AutoEscape::Html,
-        Some("json" | "json5" | "js" | "yaml" | "yml") => AutoEscape::Json,
+    name.rsplit('.').next().unwrap_or(name).to_owned()
+}
+
+/// The default rule for a template's mode (see
+/// [`set_auto_escape_callback`](Environment::set_auto_escape_callback)), in any
+/// case, also before a trailing `.j2`, `.jinja` or `.jinja2`: `.html`, `.htm`,
+/// `.xhtml`, `.xml` and `.svg` escape HTML; `.json`, `.json5`, `.js`, `.mjs`,
+/// `.cjs`, `.yaml` and `.yml` print JSON; anything else prints values as they
+/// are.
+pub fn default_auto_escape(name: &str) -> AutoEscape {
+    match extension(name).as_str() {
+        "html" | "htm" | "xhtml" | "xml" | "svg" => AutoEscape::Html,
+        "json" | "json5" | "js" | "mjs" | "cjs" | "yaml" | "yml" => AutoEscape::Json,
         _ => AutoEscape::None,
+    }
+}
+
+/// The rule for templates of unknown origin, the safe side of
+/// [`default_auto_escape`]: `.txt` and `.md` print values as they are, what
+/// that rule prints as JSON prints as JSON, and any other name, an unknown
+/// extension or none at all, escapes HTML.
+pub fn strict_auto_escape(name: &str) -> AutoEscape {
+    match default_auto_escape(name) {
+        AutoEscape::None if matches!(extension(name).as_str(), "txt" | "md") => AutoEscape::None,
+        AutoEscape::Json => AutoEscape::Json,
+        _ => AutoEscape::Html,
     }
 }
 

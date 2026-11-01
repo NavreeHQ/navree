@@ -400,23 +400,23 @@
 {"t": "{{ {\"b\": 1, \"a\": 2}|items|list }}", "v": {"o": "[(&#x27;a&#x27;, 2), (&#x27;b&#x27;, 1)]"}, "p": {"o": "[('a', 2), ('b', 1)]"}}
 {"t": "{{ n|items }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
 {"t": "{{ list|items }}", "v": {"e": "InvalidOperation|t.html|1"}, "p": {"e": "InvalidOperation|t.html|1"}}
-{"t": "{{ s|tojson }}", "v": {"o": "\"\\u003cb\\u003e\\u0026\\\"\\u0027/x\\u003c/b\\u003e\""}, "p": {"o": "\"\\u003cb\\u003e\\u0026\\\"\\u0027/x\\u003c/b\\u003e\""}}
+{"t": "{{ s|tojson }}", "v": {"o": "&quot;\\u003cb\\u003e\\u0026\\&quot;\\u0027/x\\u003c/b\\u003e&quot;"}, "p": {"o": "\"\\u003cb\\u003e\\u0026\\\"\\u0027/x\\u003c/b\\u003e\""}}
 {"t": "{{ n|tojson }}", "v": {"o": "42"}, "p": {"o": "42"}}
 {"t": "{{ f|tojson }}", "v": {"o": "1.5"}, "p": {"o": "1.5"}}
 {"t": "{{ nil|tojson }}", "v": {"o": "null"}, "p": {"o": "null"}}
 {"t": "{{ t|tojson }}", "v": {"o": "true"}, "p": {"o": "true"}}
-{"t": "{{ list|tojson }}", "v": {"o": "[1, \"two\", null, 3.5, [4, \"five\"], {\"k\": \"v\"}]"}, "p": {"o": "[1, \"two\", null, 3.5, [4, \"five\"], {\"k\": \"v\"}]"}}
-{"t": "{{ map|tojson }}", "v": {"o": "{\"a\": 1, \"b\": 2, \"z\\u003c\": \"y\\u003e\"}"}, "p": {"o": "{\"a\": 1, \"b\": 2, \"z\\u003c\": \"y\\u003e\"}"}}
-{"t": "{{ nested|tojson }}", "v": {"o": "{\"a\": {\"b\": {\"c\": [10, 20, {\"d\": \"deep\"}]}}}"}, "p": {"o": "{\"a\": {\"b\": {\"c\": [10, 20, {\"d\": \"deep\"}]}}}"}}
-{"t": "{{ rows|tojson }}", "v": {"o": "[{\"name\": \"x\", \"v\": 1}, {\"name\": \"y\", \"v\": 2}]"}, "p": {"o": "[{\"name\": \"x\", \"v\": 1}, {\"name\": \"y\", \"v\": 2}]"}}
-{"t": "{{ map|tojson(indent=2) }}", "v": {"o": "{\n  \"a\": 1,\n  \"b\": 2,\n  \"z\\u003c\": \"y\\u003e\"\n}"}, "p": {"o": "{\n  \"a\": 1,\n  \"b\": 2,\n  \"z\\u003c\": \"y\\u003e\"\n}"}}
-{"t": "{{ map|tojson(2) }}", "v": {"o": "{\n  \"a\": 1,\n  \"b\": 2,\n  \"z\\u003c\": \"y\\u003e\"\n}"}, "p": {"o": "{\n  \"a\": 1,\n  \"b\": 2,\n  \"z\\u003c\": \"y\\u003e\"\n}"}}
-{"t": "{{ map|tojson(true) }}", "v": {"o": "{\n  \"a\": 1,\n  \"b\": 2,\n  \"z\\u003c\": \"y\\u003e\"\n}"}, "p": {"o": "{\n  \"a\": 1,\n  \"b\": 2,\n  \"z\\u003c\": \"y\\u003e\"\n}"}}
-{"t": "{{ map|tojson(false) }}", "v": {"o": "{\"a\": 1, \"b\": 2, \"z\\u003c\": \"y\\u003e\"}"}, "p": {"o": "{\"a\": 1, \"b\": 2, \"z\\u003c\": \"y\\u003e\"}"}}
-{"t": "{{ list|tojson(indent=4) }}", "v": {"o": "[\n    1,\n    \"two\",\n    null,\n    3.5,\n    [\n        4,\n        \"five\"\n    ],\n    {\n        \"k\": \"v\"\n    }\n]"}, "p": {"o": "[\n    1,\n    \"two\",\n    null,\n    3.5,\n    [\n        4,\n        \"five\"\n    ],\n    {\n        \"k\": \"v\"\n    }\n]"}}
+{"t": "{{ list|tojson }}", "v": {"o": "[1, &quot;two&quot;, null, 3.5, [4, &quot;five&quot;], {&quot;k&quot;: &quot;v&quot;}]"}, "p": {"o": "[1, \"two\", null, 3.5, [4, \"five\"], {\"k\": \"v\"}]"}}
+{"t": "{{ map|tojson }}", "v": {"o": "{&quot;a&quot;: 1, &quot;b&quot;: 2, &quot;z\\u003c&quot;: &quot;y\\u003e&quot;}"}, "p": {"o": "{\"a\": 1, \"b\": 2, \"z\\u003c\": \"y\\u003e\"}"}}
+{"t": "{{ nested|tojson }}", "v": {"o": "{&quot;a&quot;: {&quot;b&quot;: {&quot;c&quot;: [10, 20, {&quot;d&quot;: &quot;deep&quot;}]}}}"}, "p": {"o": "{\"a\": {\"b\": {\"c\": [10, 20, {\"d\": \"deep\"}]}}}"}}
+{"t": "{{ rows|tojson }}", "v": {"o": "[{&quot;name&quot;: &quot;x&quot;, &quot;v&quot;: 1}, {&quot;name&quot;: &quot;y&quot;, &quot;v&quot;: 2}]"}, "p": {"o": "[{\"name\": \"x\", \"v\": 1}, {\"name\": \"y\", \"v\": 2}]"}}
+{"t": "{{ map|tojson(indent=2) }}", "v": {"o": "{\n  &quot;a&quot;: 1,\n  &quot;b&quot;: 2,\n  &quot;z\\u003c&quot;: &quot;y\\u003e&quot;\n}"}, "p": {"o": "{\n  \"a\": 1,\n  \"b\": 2,\n  \"z\\u003c\": \"y\\u003e\"\n}"}}
+{"t": "{{ map|tojson(2) }}", "v": {"o": "{\n  &quot;a&quot;: 1,\n  &quot;b&quot;: 2,\n  &quot;z\\u003c&quot;: &quot;y\\u003e&quot;\n}"}, "p": {"o": "{\n  \"a\": 1,\n  \"b\": 2,\n  \"z\\u003c\": \"y\\u003e\"\n}"}}
+{"t": "{{ map|tojson(true) }}", "v": {"o": "{\n  &quot;a&quot;: 1,\n  &quot;b&quot;: 2,\n  &quot;z\\u003c&quot;: &quot;y\\u003e&quot;\n}"}, "p": {"o": "{\n  \"a\": 1,\n  \"b\": 2,\n  \"z\\u003c\": \"y\\u003e\"\n}"}}
+{"t": "{{ map|tojson(false) }}", "v": {"o": "{&quot;a&quot;: 1, &quot;b&quot;: 2, &quot;z\\u003c&quot;: &quot;y\\u003e&quot;}"}, "p": {"o": "{\"a\": 1, \"b\": 2, \"z\\u003c\": \"y\\u003e\"}"}}
+{"t": "{{ list|tojson(indent=4) }}", "v": {"o": "[\n    1,\n    &quot;two&quot;,\n    null,\n    3.5,\n    [\n        4,\n        &quot;five&quot;\n    ],\n    {\n        &quot;k&quot;: &quot;v&quot;\n    }\n]"}, "p": {"o": "[\n    1,\n    \"two\",\n    null,\n    3.5,\n    [\n        4,\n        \"five\"\n    ],\n    {\n        \"k\": \"v\"\n    }\n]"}}
 {"t": "{{ []|tojson(indent=2) }}", "v": {"o": "[]"}, "p": {"o": "[]"}}
 {"t": "{{ {}|tojson(2) }}", "v": {"o": "{}"}, "p": {"o": "{}"}}
-{"t": "{{ {1: 2, true: 3}|tojson }}", "v": {"o": "{\"true\": 3, \"1\": 2}"}, "p": {"o": "{\"true\": 3, \"1\": 2}"}}
+{"t": "{{ {1: 2, true: 3}|tojson }}", "v": {"o": "{&quot;true&quot;: 3, &quot;1&quot;: 2}"}, "p": {"o": "{\"true\": 3, \"1\": 2}"}}
 {"t": "{{ 1.0|tojson }}", "v": {"o": "1.0"}, "p": {"o": "1.0"}}
 {"t": "{{ 1e20|tojson }}", "v": {"o": "1e+20"}, "p": {"o": "1e+20"}}
 {"t": "{{ 1e-7|tojson }}", "v": {"o": "1e-7"}, "p": {"o": "1e-7"}}

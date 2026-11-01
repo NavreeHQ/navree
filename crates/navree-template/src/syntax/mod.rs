@@ -6,4 +6,4 @@ mod parser;
 
 pub(crate) use ast::Ast;
 pub(crate) use lexer::Whitespace;
-pub(crate) use parser::{parse, stack_address};
+pub(crate) use parser::parse;

@@ -30,7 +30,7 @@ impl Kwargs {
     /// value of a call.
     pub(crate) fn extract(value: &Value) -> Option<Kwargs> {
         match &value.0 {
-            Repr::Kwargs(values) => Some(Kwargs::new(values.clone())),
+            Repr::Kwargs(values, _) => Some(Kwargs::new(values.clone())),
             _ => None,
         }
     }

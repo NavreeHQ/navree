@@ -8,12 +8,13 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
 use super::ast::{
-    Assign, Ast, BinOp, BlockDef, CallArg, Expr, ExprKind, ForLoop, FromImport, IfCond, Macro,
-    SetBlock, Span, Stmt, StmtKind, WithBlock,
+    Assign, Ast, BinOp, BlockDef, CallArg, EscapeTag, Expr, ExprKind, ForLoop, FromImport, IfCond,
+    Macro, SetBlock, Span, Stmt, StmtKind, WithBlock,
 };
 use super::lexer::{Lexer, Loc, Token, Whitespace};
 use crate::error::{Error, ErrorKind};
-use crate::value::Value;
+use crate::stack::StackBudget;
+use crate::value::{Value, ValueKind};
 
 /// How deep expressions and statements may nest.
 pub(crate) const MAX_NESTING: usize = 150;
@@ -67,8 +68,9 @@ struct Parser<'s> {
     in_loop: bool,
     in_macro: bool,
     depth: usize,
-    stack_base: usize,
-    max_stack_bytes: usize,
+    stack: StackBudget,
+    /// The `{% autoescape %}` tag around what is being parsed.
+    escape: EscapeTag,
 }
 
 impl<'s> Parser<'s> {
@@ -88,8 +90,8 @@ impl<'s> Parser<'s> {
             in_loop: false,
             in_macro: false,
             depth: 0,
-            stack_base: stack_address(),
-            max_stack_bytes,
+            stack: StackBudget::enter(max_stack_bytes),
+            escape: EscapeTag::Inherit,
         })
     }
 
@@ -182,9 +184,7 @@ impl<'s> Parser<'s> {
 
     fn enter(&mut self) -> Result<(), Error> {
         self.depth += 1;
-        if self.depth > MAX_NESTING
-            || stack_address().abs_diff(self.stack_base) > self.max_stack_bytes
-        {
+        if self.depth > MAX_NESTING || self.stack.exceeded() {
             return Err(syntax_error("template exceeds maximum recursion limits"));
         }
         Ok(())
@@ -263,11 +263,13 @@ impl<'s> Parser<'s> {
             "with" => StmtKind::With(Box::new(self.parse_with()?)),
             "set" => self.parse_set()?,
             "autoescape" => {
-                let enabled = self.parse_expr()?;
+                let tag = self.parse_escape_tag()?;
                 self.expect_block_end()?;
+                let outer = std::mem::replace(&mut self.escape, tag);
                 let body = self.subparse(&|t| matches!(t, Token::Ident("endautoescape")))?;
+                self.escape = outer;
                 self.next()?;
-                StmtKind::AutoEscape(Box::new((enabled, body)))
+                StmtKind::AutoEscape(Box::new((tag, body)))
             }
             "filter" => {
                 let filter = self.parse_filter_chain()?;
@@ -470,9 +472,38 @@ impl<'s> Parser<'s> {
             self.next()?;
         }
         self.in_loop = old_in_loop;
-        self.blocks
-            .insert(name.to_owned(), Arc::new(BlockDef { body, required }));
+        self.blocks.insert(
+            name.to_owned(),
+            Arc::new(BlockDef {
+                body,
+                required,
+                escape: self.escape,
+            }),
+        );
         Ok(StmtKind::Block(name.to_owned()))
+    }
+
+    /// The argument of `{% autoescape %}`: settled here, so it can't depend
+    /// on what a render is given.
+    fn parse_escape_tag(&mut self) -> Result<EscapeTag, Error> {
+        let argument = self.parse_expr()?;
+        let tag = match &argument.kind {
+            ExprKind::Const(value) => match (value.as_str(), value.kind()) {
+                (Some("html"), _) => Some(EscapeTag::Html),
+                (Some("json"), _) => Some(EscapeTag::Json),
+                (Some("none"), _) => Some(EscapeTag::Off),
+                (None, ValueKind::Bool) => Some(if value.is_true() {
+                    EscapeTag::On
+                } else {
+                    EscapeTag::Off
+                }),
+                _ => None,
+            },
+            _ => None,
+        };
+        tag.ok_or_else(|| {
+            syntax_error("autoescape takes true, false, \"html\", \"json\" or \"none\"")
+        })
     }
 
     fn parse_include(&mut self) -> Result<StmtKind, Error> {
@@ -590,6 +621,7 @@ impl<'s> Parser<'s> {
             body,
             closure: Vec::new(),
             uses_caller: false,
+            escape: self.escape,
         };
         let mut closure = closure::find(&decl);
         decl.uses_caller = closure.remove("caller");
@@ -1271,22 +1303,6 @@ impl<'s> Parser<'s> {
     }
 }
 
-/// Where the stack is now: comparing two of these tells how much is used
-/// between them.
-///
-/// Fuzz builds run under AddressSanitizer, where locals do not live on the
-/// stack, so there `Limits::max_stack_bytes` cannot measure it and does not
-/// apply.
-#[inline(always)]
-#[allow(unexpected_cfgs)]
-pub(crate) fn stack_address() -> usize {
-    if cfg!(fuzzing) {
-        return 0;
-    }
-    let marker = 0_u8;
-    std::ptr::addr_of!(marker) as usize
-}
-
 fn span_of(loc: Loc) -> Span {
     span(loc)
 }
@@ -1499,7 +1515,12 @@ mod closure {
                 assign(&set.0, tracker);
                 visit_expr(&set.1, tracker);
             }
-            StmtKind::AutoEscape(inner) | StmtKind::FilterBlock(inner) => {
+            StmtKind::AutoEscape(inner) => {
+                tracker.push();
+                inner.1.iter().for_each(|s| walk(s, tracker));
+                tracker.pop();
+            }
+            StmtKind::FilterBlock(inner) => {
                 tracker.push();
                 inner.1.iter().for_each(|s| walk(s, tracker));
                 tracker.pop();

@@ -1,54 +1,155 @@
-//! Printing values: HTML escaping and JSON.
+//! Printing values: the modes, HTML escaping and JSON.
 
 use std::fmt::{self, Write as _};
 
 use crate::environment::AutoEscape;
 use crate::error::{Error, ErrorKind};
-use crate::value::{Repr, Value};
-use crate::vm::Output;
+use crate::output::Output;
+use crate::syntax::ast::EscapeTag;
+use crate::value::{Repr, Safety, Value};
 
-/// Writes `value` the way `mode` prints it. A safe string prints as it is
-/// in every mode.
-pub(crate) fn write_escaped(
-    out: &mut Output,
-    mode: AutoEscape,
-    value: &Value,
-) -> Result<(), Error> {
-    if let Repr::Str(text, true) = &value.0 {
-        return out.write_str(text);
+/// How a value prints at some point of a render. Modes combine by asking for
+/// both, so the mode at a point can only be as strict as what surrounds it or
+/// stricter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Mode {
+    /// As it is.
+    None,
+    /// With HTML's special characters as entities.
+    Html,
+    /// As JSON.
+    Json,
+    /// As JSON that is also fit for HTML: `<`, `>`, `&` and `'` in strings are
+    /// `\u` escapes, and quotes suit where the text lands.
+    Both,
+}
+
+impl From<AutoEscape> for Mode {
+    fn from(mode: AutoEscape) -> Mode {
+        match mode {
+            AutoEscape::None => Mode::None,
+            AutoEscape::Html => Mode::Html,
+            AutoEscape::Json => Mode::Json,
+        }
+    }
+}
+
+impl Mode {
+    /// The mode that is at least as strict as both.
+    pub(crate) fn and(self, other: Mode) -> Mode {
+        match (self, other) {
+            (Mode::None, mode) | (mode, Mode::None) => mode,
+            (Mode::Html, Mode::Html) => Mode::Html,
+            (Mode::Json, Mode::Json) => Mode::Json,
+            _ => Mode::Both,
+        }
+    }
+
+    pub(crate) fn has_html(self) -> bool {
+        matches!(self, Mode::Html | Mode::Both)
+    }
+
+    /// The mode of text inside an `{% autoescape %}` tag in a template whose
+    /// own mode is `self`. In an HTML template the JSON stays fit for HTML.
+    pub(crate) fn under(self, tag: EscapeTag) -> Mode {
+        match tag {
+            EscapeTag::Inherit => self,
+            EscapeTag::On if self == Mode::None => Mode::Html,
+            EscapeTag::On => self,
+            EscapeTag::Off => Mode::None,
+            EscapeTag::Html => Mode::Html,
+            EscapeTag::Json if self.has_html() => Mode::Both,
+            EscapeTag::Json => Mode::Json,
+        }
+    }
+
+    /// What text captured in this mode is safe for.
+    pub(crate) fn safety(self) -> Safety {
+        match self {
+            Mode::None => Safety::Plain,
+            Mode::Html => Safety::Html,
+            Mode::Json => Safety::Json,
+            Mode::Both => Safety::Both,
+        }
+    }
+}
+
+impl Safety {
+    /// Whether a string with this mark needs no more escaping in `mode`. Only
+    /// the mode it was made in counts: JSON printed into HTML escapes again.
+    pub(crate) fn fits(self, mode: Mode) -> bool {
+        match self {
+            Safety::Plain => mode == Mode::None,
+            Safety::Trusted | Safety::Tojson => true,
+            Safety::Html => matches!(mode, Mode::None | Mode::Html),
+            Safety::Json => matches!(mode, Mode::None | Mode::Json),
+            Safety::Both => matches!(mode, Mode::None | Mode::Both),
+        }
+    }
+}
+
+/// Writes `value` the way `mode` prints it, for where `out` is now.
+pub(crate) fn write_escaped(out: &mut Output, mode: Mode, value: &Value) -> Result<(), Error> {
+    if let Repr::Str(text, safety) = &value.0 {
+        if *safety == Safety::Tojson && mode.has_html() {
+            return write_tojson(out, mode, text);
+        }
+        if safety.fits(mode) {
+            return out.write_str(text);
+        }
     }
     match mode {
-        AutoEscape::None => write_display(out, value),
-        AutoEscape::Html => match &value.0 {
+        Mode::None => write_display(out, value),
+        Mode::Html => match &value.0 {
             Repr::Str(text, _) => write_html(out, text),
             Repr::Undefined(_) | Repr::None | Repr::Bool(_) | Repr::Int(_) | Repr::Float(_) => {
                 write_display(out, value)
             }
             _ => {
                 let mut escaping = HtmlWriter { out };
-                write!(escaping, "{value}").map_err(|_| too_large())
+                write!(escaping, "{value}").map_err(|_| escaping.out.take_failure())
             }
         },
-        AutoEscape::Json => {
-            let text = to_json(value, JsonStyle::Compact, false, out_limit(out))?;
-            out.write_str(&text)
+        Mode::Json => write_json(out, value, JsonStyle::Compact, false, Quote::Raw),
+        Mode::Both => {
+            let quote = quote_for(out, mode);
+            write_json(out, value, JsonStyle::Compact, true, quote)
         }
     }
 }
 
-fn out_limit(out: &Output) -> usize {
-    out.limit()
+/// A JSON string's quotes, for where `out` is now: a `<script>`'s content
+/// takes them as they are and entities mean nothing there; anywhere else in
+/// HTML, attributes included, an entity reads back as a quote and a quote may
+/// end the attribute.
+fn quote_for(out: &Output, mode: Mode) -> Quote {
+    if out.in_script() || (mode == Mode::Both && !out.is_html()) {
+        Quote::Raw
+    } else {
+        Quote::Entity
+    }
 }
 
-fn too_large() -> Error {
-    Error::limit("the output is too large")
+/// Writes `|tojson` output into HTML.
+fn write_tojson(out: &mut Output, mode: Mode, text: &str) -> Result<(), Error> {
+    let quote = quote_for(out, mode).as_str();
+    let mut parts = text.split('"');
+    if let Some(first) = parts.next() {
+        out.write_str(first)?;
+    }
+    for part in parts {
+        out.write_str(quote)?;
+        out.write_str(part)?;
+    }
+    Ok(())
 }
 
-fn write_display(out: &mut Output, value: &Value) -> Result<(), Error> {
+/// Writes a value as it prints, for a string or anything else.
+pub(crate) fn write_display(out: &mut Output, value: &Value) -> Result<(), Error> {
     if let Repr::Str(text, _) = &value.0 {
         return out.write_str(text);
     }
-    write!(out, "{value}").map_err(|_| too_large())
+    write!(out, "{value}").map_err(|_| out.take_failure())
 }
 
 /// Writes text with `&`, `<`, `>`, `"`, `'` and `/` as HTML entities.
@@ -78,7 +179,10 @@ struct HtmlWriter<'a> {
 
 impl fmt::Write for HtmlWriter<'_> {
     fn write_str(&mut self, text: &str) -> fmt::Result {
-        write_html(self.out, text).map_err(|_| fmt::Error)
+        write_html(self.out, text).map_err(|error| {
+            self.out.set_failure(error);
+            fmt::Error
+        })
     }
 }
 
@@ -93,86 +197,98 @@ pub(crate) enum JsonStyle {
     Pretty(usize),
 }
 
-/// `value` as JSON, at most `max_bytes` long. With `html_safe`, `<`, `>`,
-/// `&` and `'` in strings are escaped too, so the output is safe inside
-/// HTML (script tags and single-quoted attributes included).
-pub(crate) fn to_json(
+/// How JSON's quotes are written.
+#[derive(Clone, Copy)]
+pub(crate) enum Quote {
+    /// `"`.
+    Raw,
+    /// `&quot;`, for HTML outside a script.
+    Entity,
+}
+
+impl Quote {
+    fn as_str(self) -> &'static str {
+        match self {
+            Quote::Raw => "\"",
+            Quote::Entity => "&quot;",
+        }
+    }
+}
+
+/// Writes `value` as JSON to `out`, within what `out` may hold. With
+/// `html_safe`, `<`, `>`, `&` and `'` in strings are `\u` escapes.
+pub(crate) fn write_json(
+    out: &mut Output,
     value: &Value,
     style: JsonStyle,
     html_safe: bool,
-    max_bytes: usize,
-) -> Result<String, Error> {
-    let mut writer = JsonWriter {
-        out: String::new(),
+    quote: Quote,
+) -> Result<(), Error> {
+    JsonWriter {
+        out,
         style,
         html_safe,
+        quote: quote.as_str(),
         depth: 0,
-        max_bytes,
-    };
-    writer.write_value(value)?;
-    Ok(writer.out)
+    }
+    .write_value(value)
 }
 
-struct JsonWriter {
-    out: String,
+struct JsonWriter<'a> {
+    out: &'a mut Output,
     style: JsonStyle,
     html_safe: bool,
+    quote: &'static str,
     depth: usize,
-    max_bytes: usize,
 }
 
-impl JsonWriter {
-    fn check_size(&self) -> Result<(), Error> {
-        if self.out.len() > self.max_bytes {
-            return Err(Error::limit("a string is too large"));
+impl JsonWriter<'_> {
+    fn write_value(&mut self, value: &Value) -> Result<(), Error> {
+        match &value.0 {
+            Repr::None | Repr::Undefined(_) => self.out.write_str("null")?,
+            Repr::Bool(flag) => self.out.write_str(if *flag { "true" } else { "false" })?,
+            Repr::Int(integer) => self.out.write_str(&integer.to_string())?,
+            Repr::Float(float) => self.write_float(*float)?,
+            Repr::Str(text, _) => self.write_str(text)?,
+            Repr::Seq(items, ..) => {
+                self.begin("[")?;
+                for (index, item) in items.iter().enumerate() {
+                    self.item(index == 0)?;
+                    self.write_value(item)?;
+                }
+                self.end("]", items.is_empty())?;
+            }
+            Repr::Map(..) | Repr::Kwargs(..) | Repr::Module(_) => {
+                let Some(map) = value.as_map() else {
+                    return Ok(());
+                };
+                self.begin("{")?;
+                for (index, (key, item)) in map.iter().enumerate() {
+                    self.item(index == 0)?;
+                    self.write_key(key)?;
+                    self.out.write_str(match self.style {
+                        JsonStyle::Compact => ":",
+                        JsonStyle::Spaced | JsonStyle::Pretty(_) => ": ",
+                    })?;
+                    self.write_value(item)?;
+                }
+                self.end("}", map.is_empty())?;
+            }
+            Repr::Function(_) | Repr::Macro(_) | Repr::Loop(_) => {
+                let text = value.to_string_capped(self.out.limit())?;
+                self.write_str(&text)?;
+            }
         }
         Ok(())
     }
 
-    fn write_value(&mut self, value: &Value) -> Result<(), Error> {
-        self.check_size()?;
-        match &value.0 {
-            Repr::None | Repr::Undefined(_) => self.out.push_str("null"),
-            Repr::Bool(flag) => self.out.push_str(if *flag { "true" } else { "false" }),
-            Repr::Int(integer) => {
-                let _ = write!(self.out, "{integer}");
-            }
-            Repr::Float(float) => {
-                if float.is_finite() {
-                    write_finite_f64(&mut self.out, *float);
-                } else {
-                    self.out.push_str("null");
-                }
-            }
-            Repr::Str(text, _) => self.write_str(text),
-            Repr::Seq(items, ..) => {
-                self.begin('[');
-                for (index, item) in items.iter().enumerate() {
-                    self.item(index == 0);
-                    self.write_value(item)?;
-                }
-                self.end(']', items.is_empty());
-            }
-            Repr::Map(..) | Repr::Kwargs(_) | Repr::Module(_) => {
-                let pairs = value.map_pairs().unwrap_or_default();
-                self.begin('{');
-                for (index, (key, item)) in pairs.iter().enumerate() {
-                    self.item(index == 0);
-                    self.write_key(key)?;
-                    self.out.push_str(match self.style {
-                        JsonStyle::Compact => ":",
-                        JsonStyle::Spaced | JsonStyle::Pretty(_) => ": ",
-                    });
-                    self.write_value(item)?;
-                }
-                self.end('}', pairs.is_empty());
-            }
-            Repr::Function(_) | Repr::Macro(_) | Repr::Loop(_) => {
-                let text = value.to_string_capped(self.max_bytes)?;
-                self.write_str(&text);
-            }
+    fn write_float(&mut self, float: f64) -> Result<(), Error> {
+        if !float.is_finite() {
+            return self.out.write_str("null");
         }
-        Ok(())
+        let mut text = String::new();
+        write_finite_f64(&mut text, float);
+        self.out.write_str(&text)
     }
 
     /// Keys must be strings: numbers and booleans become strings.
@@ -180,73 +296,75 @@ impl JsonWriter {
         match &key.0 {
             Repr::Str(text, _) => self.write_str(text),
             Repr::Function(_) | Repr::Macro(_) | Repr::Loop(_) => {
-                let text = key.to_string_capped(self.max_bytes)?;
-                self.write_str(&text);
+                let text = key.to_string_capped(self.out.limit())?;
+                self.write_str(&text)
             }
             Repr::Bool(_) | Repr::Int(_) => {
-                self.out.push('"');
+                self.out.write_str(self.quote)?;
                 self.write_value(key)?;
-                self.out.push('"');
+                self.out.write_str(self.quote)
             }
             Repr::Float(float) if float.is_finite() => {
-                self.out.push('"');
-                write_finite_f64(&mut self.out, *float);
-                self.out.push('"');
+                self.out.write_str(self.quote)?;
+                self.write_float(*float)?;
+                self.out.write_str(self.quote)
             }
-            _ => {
-                return Err(Error::new(
-                    ErrorKind::BadSerialization,
-                    format!("cannot use value of type {} as JSON key", key.kind()),
-                ));
+            _ => Err(Error::new(
+                ErrorKind::BadSerialization,
+                format!("cannot use value of type {} as JSON key", key.kind()),
+            )),
+        }
+    }
+
+    fn begin(&mut self, open: &str) -> Result<(), Error> {
+        self.depth += 1;
+        self.out.write_str(open)
+    }
+
+    fn item(&mut self, first: bool) -> Result<(), Error> {
+        match self.style {
+            JsonStyle::Compact => {
+                if !first {
+                    self.out.write_str(",")?;
+                }
+            }
+            JsonStyle::Spaced => {
+                if !first {
+                    self.out.write_str(", ")?;
+                }
+            }
+            JsonStyle::Pretty(indent) => {
+                self.out.write_str(if first { "\n" } else { ",\n" })?;
+                self.indent(indent)?;
             }
         }
         Ok(())
     }
 
-    fn begin(&mut self, open: char) {
-        self.depth += 1;
-        self.out.push(open);
-    }
-
-    fn item(&mut self, first: bool) {
-        match self.style {
-            JsonStyle::Compact => {
-                if !first {
-                    self.out.push(',');
-                }
-            }
-            JsonStyle::Spaced => {
-                if !first {
-                    self.out.push_str(", ");
-                }
-            }
-            JsonStyle::Pretty(indent) => {
-                self.out.push_str(if first { "\n" } else { ",\n" });
-                self.indent(indent);
-            }
-        }
-    }
-
-    fn end(&mut self, close: char, empty: bool) {
+    fn end(&mut self, close: &str, empty: bool) -> Result<(), Error> {
         self.depth -= 1;
         if let JsonStyle::Pretty(indent) = self.style
             && !empty
         {
-            self.out.push('\n');
-            self.indent(indent);
+            self.out.write_str("\n")?;
+            self.indent(indent)?;
         }
-        self.out.push(close);
+        self.out.write_str(close)
     }
 
-    fn indent(&mut self, indent: usize) {
-        for _ in 0..indent.saturating_mul(self.depth).min(self.max_bytes) {
-            self.out.push(' ');
+    fn indent(&mut self, indent: usize) -> Result<(), Error> {
+        const SPACES: &str = "                                                                ";
+        let mut left = indent.saturating_mul(self.depth);
+        while left > 0 {
+            let width = left.min(SPACES.len());
+            self.out.write_str(SPACES.get(..width).unwrap_or(""))?;
+            left -= width;
         }
+        Ok(())
     }
 
-    fn write_str(&mut self, text: &str) {
-        self.out.reserve(text.len().min(self.max_bytes) + 2);
-        self.out.push('"');
+    fn write_str(&mut self, text: &str) -> Result<(), Error> {
+        self.out.write_str(self.quote)?;
         let mut start = 0;
         for (index, byte) in text.bytes().enumerate() {
             let needs_escape = byte < 0x20
@@ -256,23 +374,24 @@ impl JsonWriter {
             if !needs_escape {
                 continue;
             }
-            self.out.push_str(text.get(start..index).unwrap_or(""));
+            self.out.write_str(text.get(start..index).unwrap_or(""))?;
             match byte {
-                b'"' => self.out.push_str("\\\""),
-                b'\\' => self.out.push_str("\\\\"),
-                0x08 => self.out.push_str("\\b"),
-                0x0c => self.out.push_str("\\f"),
-                b'\n' => self.out.push_str("\\n"),
-                b'\r' => self.out.push_str("\\r"),
-                b'\t' => self.out.push_str("\\t"),
-                _ => {
-                    let _ = write!(self.out, "\\u{byte:04x}");
+                b'"' => {
+                    self.out.write_str("\\")?;
+                    self.out.write_str(self.quote)?;
                 }
+                b'\\' => self.out.write_str("\\\\")?,
+                0x08 => self.out.write_str("\\b")?,
+                0x0c => self.out.write_str("\\f")?,
+                b'\n' => self.out.write_str("\\n")?,
+                b'\r' => self.out.write_str("\\r")?,
+                b'\t' => self.out.write_str("\\t")?,
+                _ => self.out.write_str(&format!("\\u{byte:04x}"))?,
             }
             start = index + 1;
         }
-        self.out.push_str(text.get(start..).unwrap_or(""));
-        self.out.push('"');
+        self.out.write_str(text.get(start..).unwrap_or(""))?;
+        self.out.write_str(self.quote)
     }
 }
 
@@ -392,7 +511,9 @@ mod tests {
     use super::*;
 
     fn json(value: Value, html_safe: bool) -> String {
-        to_json(&value, JsonStyle::Compact, html_safe, 1 << 20).expect("json")
+        let mut out = Output::for_tests();
+        write_json(&mut out, &value, JsonStyle::Compact, html_safe, Quote::Raw).expect("json");
+        out.into_string()
     }
 
     #[test]

@@ -332,3 +332,114 @@ fn directory_symlink_loops_are_not_followed_forever() {
         }
     }
 }
+
+#[test]
+fn every_name_has_a_mode_and_unknown_names_escape_html() {
+    let hostile = "<img src=x onerror=alert(1)>";
+    let ctx = json!({ "x": hostile });
+    let views = Views::from_templates([
+        (
+            "layouts/mail.html",
+            "<main>{{ x }}{% block body %}{% endblock %}</main>",
+        ),
+        ("note.txt", "NOTE {{ x }}"),
+        ("page.j2", "<p>{{ x }}</p>"),
+    ])
+    .expect("views");
+
+    // Whatever is not known to be text or JSON escapes HTML.
+    for name in [
+        "a.html",
+        "a.HTML",
+        "a.HTML.j2",
+        "a.htm",
+        "a.xml",
+        "a.xhtml",
+        "a.svg",
+        "a.j2",
+        "a.jinja",
+        "a.jinja2",
+        "a",
+        "a.html.",
+        "a.mjml",
+        "a.vue",
+        "a.unknown",
+        "Override.HTML",
+    ] {
+        assert_eq!(
+            views.render_source(name, "{{ x }}", &ctx).expect("renders"),
+            "&lt;img src=x onerror=alert(1)&gt;",
+            "{name}"
+        );
+    }
+    // Text prints as it is.
+    for name in ["a.txt", "a.TXT", "a.md", "a.txt.j2", "a.md.jinja"] {
+        assert_eq!(
+            views.render_source(name, "{{ x }}", &ctx).expect("renders"),
+            hostile,
+            "{name}"
+        );
+    }
+    // Data prints as JSON.
+    for name in [
+        "a.json", "a.JSON", "a.json5", "a.js", "a.yaml", "a.yml", "a.js.j2",
+    ] {
+        assert_eq!(
+            views.render_source(name, "{{ x }}", &ctx).expect("renders"),
+            format!("\"{hostile}\""),
+            "{name}"
+        );
+    }
+    // A name found by trying extensions escapes by the name it found.
+    assert!(
+        !views
+            .render("page", &ctx)
+            .expect("renders")
+            .contains("<img")
+    );
+    // Layouts and includes keep their own mode, and can't print less strictly.
+    for (name, source) in [
+        (
+            "subject.txt",
+            r#"{% extends "layouts/mail.html" %}{% block body %}{{ x }}{% endblock %}"#,
+        ),
+        ("override", r#"{% extends "layouts/mail.html" %}"#),
+        ("override.html", r#"<p>{% include "note.txt" %}</p>"#),
+    ] {
+        let out = views.render_source(name, source, &ctx).expect("renders");
+        assert!(!out.contains("<img"), "{name}: {out}");
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn another_name_for_a_file_finds_nothing() {
+    let dir = views_dir(&[
+        ("page.html", "PAGE"),
+        ("averylongtemplatename.html", "LONG"),
+        (".hiddendirectory/secret.html", "HIDDEN"),
+    ]);
+    let mut opts = options(&[dir.path()]);
+    opts.reload = true;
+    let views = Views::new(&opts).expect("views");
+    assert_eq!(views.render("page.html", json!({})).expect("page"), "PAGE");
+    for name in [
+        "HIDDEN~1/secret.html",
+        "AVERYL~1.html",
+        "AVERYL~1.htm",
+        "NUL.html",
+        "CON.html",
+    ] {
+        assert!(
+            matches!(
+                views.render(name, json!({})),
+                Err(ViewError::NotFound { .. })
+            ),
+            "{name}"
+        );
+    }
+    let error = views
+        .render_source("t.txt", "{% include 'HIDDEN~1/secret.html' %}", json!({}))
+        .expect_err("not found");
+    assert!(!error.to_string().contains("HIDDEN {{"), "{error}");
+}

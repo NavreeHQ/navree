@@ -6,7 +6,8 @@
 //! Invariants: nothing panics or overflows the stack; the output stays
 //! within the output limit; an error names where it happened; and in an HTML
 //! template a value prints with no raw `&`, `<`, `>`, `"`, `'` or `/`, whatever
-//! the value holds.
+//! the value holds, and however it got there: through an include, a layout, a
+//! macro, a call block or `|tojson`.
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
@@ -41,6 +42,15 @@ fn environment(settings: u8) -> Environment {
         "{% macro m(x, y=1) %}<{{ x }}{{ y }}{{ caller() if caller is defined }}>{% endmacro %}",
     )
     .expect("macros compile");
+    env.add_template("text.txt", "{{ v }}").expect("text compiles");
+    env.add_template("data.json", "{{ v }}").expect("data compiles");
+    env.add_template("plain.txt", "{% macro p(x) %}{{ x }}{% endmacro %}")
+        .expect("macros compile");
+    env.add_template(
+        "off.html",
+        "{% autoescape false %}{% block a %}{% endblock %}{% endautoescape %}",
+    )
+    .expect("layout compiles");
     env
 }
 
@@ -88,5 +98,38 @@ fuzz_target!(|data: &[u8]| {
                 .iter()
                 .any(|entity| rest.starts_with(entity))),
         "a bare ampersand: {printed:?}"
+    );
+
+    // The value can't open a tag or end an attribute by any route, in any
+    // template printing into HTML. These templates hold no quotes of their own
+    // but what the assertion strips.
+    for source in [
+        "{% include 'text.txt' %}",
+        "{% include 'data.json' %}",
+        "{% import 'plain.txt' as m %}{{ m.p(v) }}",
+        "{% import 'macros.html' as m %}{% autoescape false %}{{ m.m(v, 2) }}{% endautoescape %}",
+        "{% extends 'off.html' %}{% block a %}{{ v }}{% endblock %}",
+        "{% autoescape 'json' %}{% set y %}{{ v }}{% endset %}{% endautoescape %}{{ y }}",
+        "{{ v|tojson }}",
+        "{{ [v]|tojson|safe }}",
+        "{% set y = v|tojson %}{{ y }}",
+    ] {
+        let printed = env
+            .render_str("t.html", source, &ctx)
+            .expect("printing a string renders");
+        // `<` and `>` of a macro's own markup aside.
+        let printed = printed.replace("<&", "&").replace("<\\", "\\");
+        let printed = printed.trim_start_matches('<').trim_end_matches('>');
+        assert!(
+            !printed.contains(['"', '\'']),
+            "{source}: a raw quote: {printed:?}"
+        );
+    }
+    let in_script = env
+        .render_str("t.html", "<script>{{ v|tojson }}{% include 'data.json' %}", &ctx)
+        .expect("printing a string renders");
+    assert!(
+        !in_script.get(8..).unwrap_or("").contains(['<', '>', '&', '\'']),
+        "a script can end: {in_script:?}"
     );
 });

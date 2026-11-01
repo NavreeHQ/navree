@@ -33,15 +33,35 @@ pub(crate) enum Repr {
     Bool(bool),
     Int(i128),
     Float(f64),
-    /// The text and whether it is safe (printed without escaping).
-    Str(Arc<str>, bool),
+    /// The text and what it is safe for.
+    Str(Arc<str>, Safety),
     Seq(Arc<Vec<Value>>, SeqKind, Shape),
     Map(Arc<ValueMap>, Shape),
-    Kwargs(Arc<ValueMap>),
+    Kwargs(Arc<ValueMap>, Shape),
     Function(Arc<crate::functions::NativeFunction>),
     Macro(Arc<crate::vm::MacroValue>),
     Module(Arc<Module>),
     Loop(Arc<crate::vm::LoopObject>),
+}
+
+/// What a string has already been made safe for. A mark holds only for the
+/// mode it was made in: printed in another, the string is escaped again.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Safety {
+    /// Nothing: printing escapes it.
+    Plain,
+    /// The author's word (`|safe`, [`Value::from_safe_string`]): it prints as
+    /// it is in every mode.
+    Trusted,
+    /// Escaped for HTML.
+    Html,
+    /// Printed as JSON.
+    Json,
+    /// Printed in a mode that is both.
+    Both,
+    /// JSON with `<`, `>`, `&` and `'` in its strings escaped (`|tojson`):
+    /// fit for JSON, and for HTML once its quotes suit where it lands.
+    Tojson,
 }
 
 /// The flavour of a sequence.
@@ -133,7 +153,9 @@ pub(crate) struct Module {
 
 impl Module {
     pub(crate) fn new(values: ValueMap, captured: String) -> Module {
-        let shape = Shape::of(values.iter().flat_map(|(key, value)| [key, value]));
+        let mut shape = Shape::of(values.iter().flat_map(|(key, value)| [key, value]));
+        // Printing a module prints its output.
+        shape.weight = shape.weight.saturating_add((captured.len() / 16) as u64);
         Module {
             values,
             captured,
@@ -162,7 +184,12 @@ impl Value {
 
     /// A string printed as it is, even where printing escapes HTML.
     pub fn from_safe_string(value: String) -> Value {
-        Value(Repr::Str(Arc::from(value), true))
+        Value(Repr::Str(Arc::from(value), Safety::Trusted))
+    }
+
+    /// `text` with the mark `safety`. The string is shared, not copied.
+    pub(crate) fn marked(text: Arc<str>, safety: Safety) -> Value {
+        Value(Repr::Str(text, safety))
     }
 
     fn seq(values: Vec<Value>, kind: SeqKind) -> Value {
@@ -195,7 +222,7 @@ impl Value {
     /// How the value is built.
     pub(crate) fn shape(&self) -> Shape {
         match &self.0 {
-            Repr::Seq(_, _, shape) | Repr::Map(_, shape) => *shape,
+            Repr::Seq(_, _, shape) | Repr::Map(_, shape) | Repr::Kwargs(_, shape) => *shape,
             Repr::Module(module) => module.shape,
             Repr::Loop(object) => object.shape(),
             Repr::Str(text, _) => Shape {
@@ -235,7 +262,8 @@ impl Value {
     }
 
     pub(crate) fn kwargs(map: ValueMap) -> Value {
-        Value(Repr::Kwargs(Arc::new(map)))
+        let shape = Shape::of(map.iter().flat_map(|(key, value)| [key, value]));
+        Value(Repr::Kwargs(Arc::new(map), shape))
     }
 
     /// The kind of value.
@@ -248,7 +276,7 @@ impl Value {
             Repr::Str(..) => ValueKind::String,
             Repr::Seq(_, SeqKind::Iterable, _) => ValueKind::Iterable,
             Repr::Seq(..) => ValueKind::Seq,
-            Repr::Map(..) | Repr::Kwargs(_) | Repr::Module(_) => ValueKind::Map,
+            Repr::Map(..) | Repr::Kwargs(..) | Repr::Module(_) => ValueKind::Map,
             Repr::Function(_) | Repr::Macro(_) | Repr::Loop(_) => ValueKind::Plain,
         }
     }
@@ -269,7 +297,15 @@ impl Value {
 
     /// Whether the value is a safe string (printed without escaping).
     pub fn is_safe(&self) -> bool {
-        matches!(self.0, Repr::Str(_, true))
+        matches!(&self.0, Repr::Str(_, safety) if *safety != Safety::Plain)
+    }
+
+    /// What the value is safe for, for a string.
+    pub(crate) fn safety(&self) -> Safety {
+        match &self.0 {
+            Repr::Str(_, safety) => *safety,
+            _ => Safety::Plain,
+        }
     }
 
     /// Whether the value is an integer.
@@ -283,7 +319,7 @@ impl Value {
     }
 
     pub(crate) fn is_kwargs(&self) -> bool {
-        matches!(self.0, Repr::Kwargs(_))
+        matches!(self.0, Repr::Kwargs(..))
     }
 
     pub(crate) fn is_tuple(&self) -> bool {
@@ -300,7 +336,7 @@ impl Value {
             Repr::Str(value, _) => !value.is_empty(),
             Repr::None | Repr::Undefined(_) => false,
             Repr::Seq(values, ..) => !values.is_empty(),
-            Repr::Map(map, _) | Repr::Kwargs(map) => !map.is_empty(),
+            Repr::Map(map, _) | Repr::Kwargs(map, _) => !map.is_empty(),
             Repr::Module(module) => !module.values.is_empty(),
             Repr::Function(_) | Repr::Macro(_) | Repr::Loop(_) => true,
         }
@@ -335,7 +371,7 @@ impl Value {
         match &self.0 {
             Repr::Str(value, _) => Some(value.chars().count()),
             Repr::Seq(values, ..) => Some(values.len()),
-            Repr::Map(map, _) | Repr::Kwargs(map) => Some(map.len()),
+            Repr::Map(map, _) | Repr::Kwargs(map, _) => Some(map.len()),
             Repr::Module(module) => Some(module.values.len()),
             _ => None,
         }
@@ -368,7 +404,7 @@ impl Value {
 
     pub(crate) fn get_attr_fast(&self, key: &str) -> Option<Value> {
         match &self.0 {
-            Repr::Map(map, _) | Repr::Kwargs(map) => map.get(&Value::from(key)).cloned(),
+            Repr::Map(map, _) | Repr::Kwargs(map, _) => map.get(&Value::from(key)).cloned(),
             Repr::Module(module) => module.values.get(&Value::from(key)).cloned(),
             Repr::Loop(object) => object.attr(key),
             Repr::Macro(object) => object.attr(key),
@@ -386,7 +422,7 @@ impl Value {
             }
         }
         match &self.0 {
-            Repr::Map(map, _) | Repr::Kwargs(map) => map.get(key).cloned(),
+            Repr::Map(map, _) | Repr::Kwargs(map, _) => map.get(key).cloned(),
             Repr::Module(module) => module.values.get(key).cloned(),
             Repr::Seq(values, ..) => values.get(index(key, values.len())?).cloned(),
             Repr::Str(text, _) => {
@@ -411,7 +447,7 @@ impl Value {
             Repr::None | Repr::Undefined(_) => Vec::new(),
             Repr::Str(text, _) => text.chars().map(Value::from).collect(),
             Repr::Seq(values, ..) => values.to_vec(),
-            Repr::Map(map, _) | Repr::Kwargs(map) => map.keys().cloned().collect(),
+            Repr::Map(map, _) | Repr::Kwargs(map, _) => map.keys().cloned().collect(),
             Repr::Module(module) => module.values.keys().cloned().collect(),
             _ => {
                 return Err(Error::invalid(format!("{} is not iterable", self.kind())));
@@ -431,16 +467,10 @@ impl Value {
     /// The entries of a map.
     pub(crate) fn as_map(&self) -> Option<&ValueMap> {
         match &self.0 {
-            Repr::Map(map, _) | Repr::Kwargs(map) => Some(map),
+            Repr::Map(map, _) | Repr::Kwargs(map, _) => Some(map),
             Repr::Module(module) => Some(&module.values),
             _ => None,
         }
-    }
-
-    /// The `(key, value)` pairs of a map, in its order.
-    pub(crate) fn map_pairs(&self) -> Option<Vec<(Value, Value)>> {
-        self.as_map()
-            .map(|map| map.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
     }
 }
 
@@ -530,8 +560,8 @@ fn container_eq(a: &Value, b: &Value) -> bool {
         (Repr::Seq(a, a_kind, _), Repr::Seq(b, b_kind, _)) => {
             (*a_kind == SeqKind::Tuple) == (*b_kind == SeqKind::Tuple) && a == b
         }
-        (Repr::Map(..) | Repr::Kwargs(_) | Repr::Module(_), _)
-        | (_, Repr::Map(..) | Repr::Kwargs(_) | Repr::Module(_)) => {
+        (Repr::Map(..) | Repr::Kwargs(..) | Repr::Module(_), _)
+        | (_, Repr::Map(..) | Repr::Kwargs(..) | Repr::Module(_)) => {
             match (a.as_map(), b.as_map()) {
                 (Some(a), Some(b)) => {
                     a.len() == b.len() && a.iter().all(|(key, value)| b.get(key) == Some(value))
@@ -574,8 +604,8 @@ impl Ord for Value {
                         == SeqKind::Tuple)
                         .cmp(&(*b_kind == SeqKind::Tuple))
                         .then_with(|| a.iter().cmp(b.iter())),
-                    _ => match (self.map_pairs(), other.map_pairs()) {
-                        (Some(a), Some(b)) => a.cmp(&b),
+                    _ => match (self.as_map(), other.as_map()) {
+                        (Some(a), Some(b)) => a.iter().cmp(b.iter()),
                         _ => self.to_string().cmp(&other.to_string()),
                     },
                 },
@@ -662,7 +692,7 @@ impl fmt::Debug for Value {
                 f.write_str(")")
             }
             Repr::Seq(values, ..) => f.debug_list().entries(values.iter()).finish(),
-            Repr::Map(map, _) | Repr::Kwargs(map) => f.debug_map().entries(map.iter()).finish(),
+            Repr::Map(map, _) | Repr::Kwargs(map, _) => f.debug_map().entries(map.iter()).finish(),
             Repr::Module(module) => f.debug_map().entries(module.values.iter()).finish(),
             Repr::Function(function) => write!(f, "<function {}>", function.name),
             Repr::Macro(object) => write!(f, "<macro {}>", object.name()),
@@ -725,7 +755,7 @@ impl serde::Serialize for Value {
                 }
                 seq.end()
             }
-            Repr::Map(map, _) | Repr::Kwargs(map) => {
+            Repr::Map(map, _) | Repr::Kwargs(map, _) => {
                 let mut out = serializer.serialize_map(Some(map.len()))?;
                 for (key, value) in map.iter() {
                     out.serialize_entry(key, value)?;

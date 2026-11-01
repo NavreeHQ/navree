@@ -132,11 +132,30 @@ A name without a template extension tries `.html`, `.txt` and `.j2`, in that ord
 {% endblock %}
 ```
 
-A name can't leave its directory: `..`, absolute paths and backslashes find nothing.
+A name can't leave its directory: `..`, absolute paths and backslashes find nothing. On Windows, neither does another name for a file: an 8.3 name such as `HIDDEN~1`, a trailing dot or space, or a device name such as `NUL.html`.
 
 ### Escaping
 
-Templates whose name ends in `.html`, `.htm` or `.xml` (also followed by `.j2`) escape HTML in every printed value, so `Ada & Co` prints as `Ada &amp; Co`. Mark HTML you trust with `|safe`. Other templates, `.txt` included, print values as they are.
+A template's name picks its mode, in any case and also before a trailing `.j2`, `.jinja` or `.jinja2`:
+
+| Name | Mode | `Ada & <Co>` prints as |
+|---|---|---|
+| `.txt`, `.md` | as it is | `Ada & <Co>` |
+| `.json`, `.json5`, `.js`, `.mjs`, `.cjs`, `.yaml`, `.yml` | JSON | `"Ada & <Co>"` |
+| anything else: `.html`, `.htm`, `.xhtml`, `.xml`, `.svg`, a bare `.j2` or `.jinja`, an unknown extension, no extension | HTML | `Ada &amp; &lt;Co&gt;` |
+
+Mark text you trust with `|safe`: it prints as it is in every mode.
+
+The mode belongs to the text where it is written, and what lands in other text can only get stricter:
+
+- A template rendered inside another (`extends`, `include`, a block) prints in its own mode and at least as strictly as the text it lands in. A `.txt` file included into an HTML page escapes HTML; a `.txt` child of an HTML layout prints the layout's values escaped, and an HTML child of a `.txt` layout does too.
+- A `.js` or `.json` file included into HTML prints JSON that is also fit for HTML: `<`, `>`, `&` and `'` in strings print as `\u` escapes, so a value can't end a `<script>`.
+- What a macro, a call block, `super()` or a `{% set %}` block returns is safe only for the mode it was escaped in. Printed in that mode it prints as it is; printed in another it is escaped again, its markup included. An HTML macro's output printed in a `.txt` template stays as the macro escaped it.
+- `{% autoescape %}` reaches only the text inside it, not the macros it calls, the blocks of a child, `caller()` or a file it includes. It takes `true`, `false`, `"html"`, `"json"` or `"none"`, and anything else fails to compile. `true` means the template's own mode, or HTML if its own prints values as they are. Inside an HTML template, `"json"` prints JSON fit for HTML.
+
+`|tojson` is safe wherever it is printed. Its strings have `<`, `>`, `&` and `'` as `\u` escapes. Printed into HTML, its quotes depend on where it lands: inside a `<script>` they stay quotes, and anywhere else they print as `&quot;`, which a double-quoted attribute reads back as a quote. Text that was captured first (`{% set x %}{{ v|tojson }}{% endset %}`, or a macro) has settled its quotes as `&quot;`, which is safe but isn't JSON inside a `<script>`: print `|tojson` directly there, or `{% set x = v|tojson %}`.
+
+An `Environment` of your own, without `Views`, follows `default_auto_escape`: the same names, except that unknown extensions print values as they are. `strict_auto_escape` is the rule above, and `set_auto_escape_callback` sets another.
 
 ### Undefined variables
 
@@ -201,12 +220,19 @@ Every render is capped, whether the template comes from a file or from text in y
 | `max_depth` | 100 | how deep macro calls, call blocks, blocks, includes and imports nest |
 | `max_include_depth` | 32 | how deep includes, imports and `extends` chains nest |
 | `max_loop_iterations` | 10,000,000 | loop iterations of one render |
-| `max_operations` | 100,000,000 | work of one render: statements, expressions and the items filters go through |
+| `max_operations` | 100,000,000 | work of one render: statements, expressions, the items filters go through, and every string it scans or copies, each 64 bytes counting as one |
 | `max_output_bytes` | 64 MiB | the output, and any string a template builds; sequences hold at most 1/16 of this in items |
-| `max_allocated_bytes` | 1 GiB | what one render allocates for strings and sequences over its life |
-| `max_stack_bytes` | 768 KiB | the stack a compile or render uses, whatever nests |
+| `max_allocated_bytes` | 1 GiB | what one render allocates over its life for its output, its macro and `{% set %}` buffers, and the strings, sequences and maps it builds |
+| `max_stack_bytes` | 768 KiB | the stack the compiles and renders on one thread use together |
 
-Nesting in a template's source (150 levels, chains like `a + b + c` included) and in values (200 levels) is capped as well, and `range` gives at most 100,000 items.
+Nesting in a template's source (150 levels, chains like `a + b + c` included) and in values (200 levels, keyword arguments and imported modules counted) is capped as well, and `range` gives at most 100,000 items.
+
+What these guarantee:
+
+- **Memory.** Each allocation is charged before it happens, freed or not, so what a render holds stays below `max_allocated_bytes` however it holds it. Text costs about twice its size when built (the buffer and the string); one character of a string turned into a list costs about 100 bytes. Not counted: the context you pass in, compiled templates, what your registered functions allocate, and a little bookkeeping per scope, which `max_depth` and the source's size bound.
+- **Time.** Whatever scans or copies a string, or walks a value, is charged by its size, so a render ends within `max_operations` however large its values are. Your registered functions aren't counted.
+- **Output.** Nothing a template builds passes `max_output_bytes`, including text that grows while it is built: upper case, JSON, a replacement. Each buffer is capped on its own; `max_allocated_bytes` caps them together.
+- **Stack.** One budget per thread. It counts from where the thread's outermost compile or render started, so a render inside a function and a template compiled during a render share it, and comes back when the outermost one ends. A render also stops while 256 KiB of the thread's stack remain, wherever it started, where the end of the stack is known (Linux, macOS, Windows), which is what value walks need. So a thread with less than 256 KiB left fails with a limit error rather than overflowing; elsewhere only `max_stack_bytes` applies.
 
 ```rust
 views.configure(|env| {
