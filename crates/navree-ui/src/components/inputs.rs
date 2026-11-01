@@ -6,6 +6,7 @@ use crate::node::{Attr, AttrValue, Element, IntoNodes, Node, el, into_node};
 
 /// The kind of an [`Input`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum InputKind {
     /// Text.
     #[default]

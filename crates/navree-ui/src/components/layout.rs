@@ -34,6 +34,7 @@ pub(crate) const fn span_name(columns: u8) -> &'static str {
 
 /// Where items sit across a row or stack.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Align {
     /// At the start.
     Start,
@@ -58,6 +59,7 @@ impl Align {
 
 /// How leftover space is shared along a row.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Justify {
     /// At the start.
     Start,
@@ -192,6 +194,7 @@ impl Grid {
 
 /// A width for [`Container`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ContainerSize {
     /// 40rem: forms and reading.
     Sm,

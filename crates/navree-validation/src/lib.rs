@@ -107,6 +107,7 @@ mod messages;
 mod module;
 #[cfg(feature = "phone")]
 mod phone;
+mod rule_table;
 pub mod rules;
 #[cfg(feature = "time")]
 mod time;
@@ -132,6 +133,7 @@ pub use module::{
 };
 #[cfg(feature = "phone")]
 pub use phone::{InvalidPhone, Phone};
+pub use rule_table::{FieldRules, Rule, RuleTable};
 pub use rules::confirmed;
 pub use validate::{FieldPath, Validate, Violation, Violations};
 pub use value::validate_json;

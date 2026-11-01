@@ -23,7 +23,7 @@ pub use inputs::{
 };
 pub use layout::{Align, Container, ContainerSize, Grid, Justify, Row, Stack};
 pub use overlays::{
-    Accordion, AlertDialog, Collapsible, Dialog, Drawer, HoverCard, Popover, ScrollArea, Sheet, SheetSide, Side, Tooltip,
+    Accordion, AlertDialog, Collapsible, Dialog, Drawer, HoverCard, Popover, PopupAlign, ScrollArea, Sheet, SheetSide, Side, Tooltip,
 };
 
 use crate::icons::Icon;
@@ -31,6 +31,7 @@ use crate::node::{Node, el};
 
 /// A control's size.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Size {
     /// 24px.
     Xs,

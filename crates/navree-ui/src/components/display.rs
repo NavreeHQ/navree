@@ -7,6 +7,7 @@ use crate::node::{AttrValue, Element, IntoNodes, Node, el, into_node};
 
 /// What an [`Alert`] means.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum AlertTone {
     /// Plain information.
     #[default]
@@ -73,6 +74,7 @@ impl Alert {
 
 /// A shape for [`AspectRatio`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Ratio {
     /// 1:1.
     Square,
@@ -202,6 +204,7 @@ impl Avatar {
 
 /// How a [`Badge`] looks.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum BadgeVariant {
     /// Filled, neutral: the default.
     #[default]
@@ -293,6 +296,7 @@ impl Default for Breadcrumb {
 
 /// Which way a chat bubble leans.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum BubbleSide {
     /// Someone else's: the default.
     #[default]
@@ -470,6 +474,7 @@ impl Empty {
 
 /// How an [`Item`] looks.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ItemVariant {
     /// No border: the default.
     #[default]
@@ -570,6 +575,7 @@ impl Kbd {
 
 /// How a [`Marker`] looks.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum MarkerVariant {
     /// Just the text: the default.
     #[default]
@@ -754,6 +760,7 @@ impl Separator {
 
 /// The shape of a [`Skeleton`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SkeletonShape {
     /// A line of text: the default.
     #[default]
@@ -987,6 +994,7 @@ impl Heading {
 
 /// How a run of [`Text`] looks.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TextVariant {
     /// Body text: the default.
     #[default]

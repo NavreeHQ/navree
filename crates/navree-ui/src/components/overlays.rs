@@ -163,6 +163,7 @@ impl AlertDialog {
 
 /// Which edge a [`Sheet`] comes from.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SheetSide {
     /// The right: the default.
     #[default]
@@ -268,6 +269,7 @@ impl Drawer {
 
 /// Which side of what opens it a popup appears on.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Side {
     /// Above.
     Top,
@@ -291,6 +293,29 @@ impl Side {
     }
 }
 
+/// Where a popup lines up along the side it opens on.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PopupAlign {
+    /// With the start of what opens it.
+    Start,
+    /// Centred: the default.
+    #[default]
+    Center,
+    /// With the end.
+    End,
+}
+
+impl PopupAlign {
+    const fn as_str(self) -> Option<&'static str> {
+        match self {
+            Self::Start => Some("start"),
+            Self::Center => None,
+            Self::End => Some("end"),
+        }
+    }
+}
+
 /// A popup with a click-outside and Esc dismissal, from the browser's
 /// `popover`, opened by a button.
 #[derive(Clone, Debug)]
@@ -302,6 +327,7 @@ pub struct Popover {
     variant: ButtonVariant,
     size: Size,
     side: Side,
+    align: PopupAlign,
     label: Option<String>,
     body: Vec<Node>,
 }
@@ -316,6 +342,7 @@ impl Popover {
             variant: ButtonVariant::Outline,
             size: Size::Md,
             side: Side::Bottom,
+            align: PopupAlign::Center,
             label: None,
             body: Vec::new(),
         }
@@ -336,6 +363,12 @@ impl Popover {
     /// Sets the side it opens on.
     pub fn side(mut self, side: Side) -> Self {
         self.side = side;
+        self
+    }
+
+    /// Sets how it lines up along that side.
+    pub fn align(mut self, align: PopupAlign) -> Self {
+        self.align = align;
         self
     }
 
@@ -365,6 +398,7 @@ impl Popover {
             .attr_opt("aria-label", self.label)
             .flag("data-ui-place", true)
             .attr("data-side", self.side.as_str())
+            .attr_opt("data-align", self.align.as_str())
             .uses(Uses::OVERLAY)
             .child(self.body);
         Node::list((trigger, popup))

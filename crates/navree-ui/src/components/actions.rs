@@ -8,6 +8,7 @@ use crate::node::{Element, IntoNodes, Node, el, into_node};
 
 /// How a button looks.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ButtonVariant {
     /// The one main action: green.
     Primary,
@@ -26,6 +27,7 @@ pub enum ButtonVariant {
 
 /// What a `<button>` does in a form.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ButtonKind {
     /// Nothing by itself: the default.
     #[default]

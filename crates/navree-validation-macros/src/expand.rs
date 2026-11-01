@@ -22,9 +22,11 @@ pub(crate) fn derive(input: DeriveInput) -> syn::Result<TokenStream> {
     };
     let rename_all = serde_names::rename_all(&input.attrs);
 
+    let mut table = quote!();
     let body = match &input.data {
         Data::Struct(data) => {
             let fields = fields(&data.fields, &container, rename_all.as_deref())?;
+            table = rule_table(&nv, &fields);
             let checks = checks(&nv, &fields, |field| {
                 let member = &field.member;
                 quote!(&self.#member)
@@ -84,7 +86,87 @@ pub(crate) fn derive(input: DeriveInput) -> syn::Result<TokenStream> {
                 #body
             }
         }
+
+        #[automatically_derived]
+        impl #impl_generics #nv::RuleTable for #ident #ty_generics #where_clause {
+            const FIELDS: &'static [#nv::FieldRules] = &[#table];
+        }
     })
+}
+
+/// The fields with rules, as data for the `RuleTable` impl.
+fn rule_table(nv: &TokenStream, fields: &[Field]) -> TokenStream {
+    let entries = fields.iter().filter(|field| !field.skipped).filter_map(|field| {
+        let name = field.name.as_ref()?;
+        let rules = rule_list(nv, &field.rules.rules);
+        Some(quote!(#nv::FieldRules { name: #name, rules: &[#(#rules),*] },))
+    });
+    quote!(#(#entries)*)
+}
+
+fn rule_list(nv: &TokenStream, rules: &[Rule]) -> Vec<TokenStream> {
+    rules
+        .iter()
+        .map(|rule| match &rule.kind {
+            Kind::Required => quote!(#nv::Rule::Required),
+            Kind::Length { bytes, min, max } => {
+                let min = constant_usize(min.as_ref());
+                let max = constant_usize(max.as_ref());
+                quote!(#nv::Rule::Length { min: #min, max: #max, bytes: #bytes })
+            }
+            Kind::Range { min, max } => {
+                let min = literal_text(min.as_ref());
+                let max = literal_text(max.as_ref());
+                quote!(#nv::Rule::Range { min: #min, max: #max })
+            }
+            Kind::Text(name) => quote!(#nv::Rule::Format(#name)),
+            Kind::TextWith(name, text) => match *name {
+                "contains" => quote!(#nv::Rule::Contains(#text)),
+                "starts_with" => quote!(#nv::Rule::StartsWith(#text)),
+                _ => quote!(#nv::Rule::EndsWith(#text)),
+            },
+            Kind::Pattern(pattern) => quote!(#nv::Rule::Pattern(#pattern)),
+            Kind::SameAs(other) => {
+                let other = other.unraw().to_string();
+                quote!(#nv::Rule::SameAs(#other))
+            }
+            Kind::Custom(_) => quote!(#nv::Rule::Custom),
+            Kind::Nested => quote!(#nv::Rule::Nested),
+            Kind::Each(inner) => {
+                let inner = rule_list(nv, inner);
+                quote!(#nv::Rule::Each(&[#(#inner),*]))
+            }
+        })
+        .collect()
+}
+
+/// A `length` bound usable in a constant: a literal or a path to a constant.
+/// A bound computed at run time isn't stated.
+fn constant_usize(bound: Option<&syn::Expr>) -> TokenStream {
+    match bound {
+        Some(expr @ (syn::Expr::Lit(_) | syn::Expr::Path(_))) => quote!(::core::option::Option::Some(#expr)),
+        _ => quote!(::core::option::Option::None),
+    }
+}
+
+/// A `range` bound as written, when it is a literal: its type depends on the
+/// field, and text is all a reader of the table needs.
+fn literal_text(bound: Option<&syn::Expr>) -> TokenStream {
+    fn text(expr: &syn::Expr) -> Option<String> {
+        match expr {
+            syn::Expr::Lit(lit) => match &lit.lit {
+                syn::Lit::Int(int) => Some(int.base10_digits().to_owned()),
+                syn::Lit::Float(float) => Some(float.base10_digits().to_owned()),
+                _ => None,
+            },
+            syn::Expr::Unary(unary) if matches!(unary.op, syn::UnOp::Neg(_)) => text(&unary.expr).map(|digits| format!("-{digits}")),
+            _ => None,
+        }
+    }
+    match bound.and_then(text) {
+        Some(text) => quote!(::core::option::Option::Some(#text)),
+        None => quote!(::core::option::Option::None),
+    }
 }
 
 /// A field with rules.
