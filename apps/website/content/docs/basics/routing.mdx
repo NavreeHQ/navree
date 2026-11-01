@@ -234,6 +234,7 @@ More attributes sit next to the route attribute. Those marked "impl" may also go
 | `#[audit(action = "contacts.exported")]` | route | An audit entry after a successful response | [The audit log](/docs/security/audit-log/) |
 | `#[api(summary = "..", tag = "..", ..)]` | route | OpenAPI documentation | [OpenAPI](/docs/digging-deeper/openapi/) |
 | `#[transactional]` | route | Marks the route as transactional in `routes --json`; informational only, since every request already runs in a unit of work | [Unit of work](/docs/database/unit-of-work/) |
+| `#[no_compression]` | route | Sends the route's responses uncompressed | [Compression and secrets](/docs/basics/responses/#compression-and-secrets-breach) |
 | `#[name("..")]` | route | The route name | Above |
 
 Durations are a whole number followed by `ms`, `s`, `m` or `h`: `"500ms"`, `"5s"`, `"1m"`, `"1h"`. A route's `#[throttle]` replaces the impl block's.
@@ -306,7 +307,7 @@ impl Controller for ImportController {
 }
 ```
 
-`RouteDef::on(method, path, handler)` builds the handler for exactly that method. The builder methods match the attributes: `public()`, `authenticated()`, `roles(&[..])`, `permissions(&[..])`, `can(action, subject, from)`, `guard(..)`, `throttle(limit, per)`, `timeout(..)`, `transactional()`, `audit(..)`, `api(..)`, `name(..)` and `body_limit(..)`. Register the controller like any other, with `controllers = [ImportController]` or `m.controller::<ImportController>()`.
+`RouteDef::on(method, path, handler)` builds the handler for exactly that method. The builder methods match the attributes: `public()`, `authenticated()`, `roles(&[..])`, `permissions(&[..])`, `can(action, subject, from)`, `guard(..)`, `throttle(limit, per)`, `timeout(..)`, `transactional()`, `no_compression()`, `audit(..)`, `api(..)`, `name(..)` and `body_limit(..)`. Register the controller like any other, with `controllers = [ImportController]` or `m.controller::<ImportController>()`.
 
 ## Route checks at boot
 

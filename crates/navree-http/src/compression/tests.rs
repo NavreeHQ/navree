@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::Waker;
 
 use bytes::Bytes;
-use http::header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE};
-use http::{HeaderMap, Request, StatusCode};
+use http::Request;
+use http::header::{ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, ETAG};
 use http_body::{Body as HttpBody, Frame, SizeHint};
 use http_body_util::BodyExt;
 use tower::{ServiceBuilder, ServiceExt, service_fn};
@@ -233,8 +233,6 @@ async fn svg_grpc_web_and_unknown_sizes_are_compressed() {
         ("32 bytes", text("x".repeat(32))),
         ("svg", typed("image/svg+xml", &big)),
         ("gRPC-Web", typed("application/grpc-web+proto", &big)),
-        // Content types are compared as they are written.
-        ("an upper-case image type", typed("Image/png", &big)),
         ("no content type", Response::new(Body::from(big.clone()))),
         (
             "a stream of unknown size",
@@ -700,4 +698,152 @@ async fn a_body_that_has_ended_is_not_polled_again() {
         assert!(body.frame().await.is_none());
         assert_eq!(gunzip(&data), long("streamed ").as_bytes());
     }
+}
+
+/// Media types don't depend on case.
+#[tokio::test]
+async fn the_exclusions_are_compared_without_regard_to_case() {
+    for content_type in [
+        "image/png",
+        "Image/PNG",
+        "IMAGE/JPEG",
+        "Text/Event-Stream",
+        "TEXT/EVENT-STREAM; charset=utf-8",
+        "Application/GRPC",
+        "APPLICATION/grpc+proto",
+    ] {
+        let response = Response::builder()
+            .header(CONTENT_TYPE, content_type)
+            .body(Body::from(long("x")))
+            .unwrap();
+        let response = send(&["gzip"], response).await;
+        assert!(!gzipped(&response), "{content_type}");
+        assert!(!response.headers().contains_key(VARY), "{content_type}");
+    }
+    for content_type in ["Image/SVG+XML", "Application/GRPC-Web", "TEXT/HTML"] {
+        let response = Response::builder()
+            .header(CONTENT_TYPE, content_type)
+            .body(Body::from(long("x")))
+            .unwrap();
+        assert!(gzipped(&send(&["gzip"], response).await), "{content_type}");
+    }
+}
+
+#[tokio::test]
+async fn no_transform_is_honoured() {
+    for values in [
+        &["no-transform"][..],
+        &["No-Transform"],
+        &["public, max-age=60,no-transform"],
+        &["public", "NO-TRANSFORM , max-age=60"],
+    ] {
+        let mut builder = Response::builder().header(CONTENT_TYPE, "text/plain");
+        for value in values {
+            builder = builder.header(CACHE_CONTROL, *value);
+        }
+        let response = send(&["gzip"], builder.body(Body::from(long("x"))).unwrap()).await;
+        assert!(!gzipped(&response), "{values:?}");
+        assert!(!response.headers().contains_key(VARY), "{values:?}");
+    }
+    for value in ["no-store", "no-transforms", "x=\"no-transform\""] {
+        let response = Response::builder()
+            .header(CONTENT_TYPE, "text/plain")
+            .header(CACHE_CONTROL, value)
+            .body(Body::from(long("x")))
+            .unwrap();
+        assert!(gzipped(&send(&["gzip"], response).await), "{value}");
+    }
+}
+
+#[tokio::test]
+async fn a_route_can_opt_out() {
+    let route = |no_compression| {
+        Arc::new(crate::route::RouteMeta {
+            no_compression,
+            ..Default::default()
+        })
+    };
+    let mut response = text(long("x"));
+    response.extensions_mut().insert(route(true));
+    let response = send(&["gzip"], response).await;
+    assert!(!gzipped(&response));
+    assert!(!response.headers().contains_key(VARY));
+
+    let mut response = text(long("x"));
+    response.extensions_mut().insert(route(false));
+    assert!(gzipped(&send(&["gzip"], response).await));
+}
+
+/// The gzip variant is not byte for byte the same as the plain one, so a
+/// strong validator can't stay on it; a weak one says what is still true.
+#[tokio::test]
+async fn a_strong_etag_is_weakened_on_the_gzip_variant() {
+    let tagged = |etag: &'static str| {
+        Response::builder()
+            .header(CONTENT_TYPE, "text/plain")
+            .header(ETAG, etag)
+            .body(Body::from(long("x")))
+            .unwrap()
+    };
+    let response = send(&["gzip"], tagged("\"v1\"")).await;
+    assert!(gzipped(&response));
+    assert_eq!(response.headers()[ETAG], "W/\"v1\"");
+
+    let response = send(&["gzip"], tagged("W/\"v1\"")).await;
+    assert_eq!(response.headers()[ETAG], "W/\"v1\"");
+
+    // The plain variant keeps it.
+    let response = send(&["identity"], tagged("\"v1\"")).await;
+    assert!(!gzipped(&response));
+    assert_eq!(response.headers()[ETAG], "\"v1\"");
+}
+
+/// A status that has no body stays without one, whatever the body says of
+/// its size.
+#[tokio::test]
+async fn a_status_without_a_body_is_not_compressed() {
+    for status in [
+        StatusCode::NO_CONTENT,
+        StatusCode::RESET_CONTENT,
+        StatusCode::NOT_MODIFIED,
+    ] {
+        let stream = futures_util::stream::empty::<Result<Bytes, Infallible>>();
+        let response = Response::builder()
+            .status(status)
+            .header(CONTENT_TYPE, "text/plain")
+            .body(Body::from_stream(stream))
+            .unwrap();
+        let response = send(&["gzip"], response).await;
+        assert!(!gzipped(&response), "{status}");
+        let (frames, _) = collect(response).await;
+        assert!(frames.is_empty(), "{status}: {frames:?}");
+    }
+}
+
+/// BREACH: with a secret and reflected input in one compressed body, a guess
+/// that repeats the secret is shorter. A response that opts out doesn't say.
+#[tokio::test]
+async fn the_length_of_an_opted_out_response_says_nothing_of_a_guess() {
+    let page = |guess: &str| {
+        format!(
+            "<form><input type=hidden name=_csrf value=\"q7zk2mvb4xjt3nrc\"></form>\
+             <input name=q value=\"{guess}\"><p>Results for your search</p>"
+        )
+    };
+    let length = |body: String, no_transform: bool| async move {
+        let mut builder = Response::builder().header(CONTENT_TYPE, "text/html");
+        if no_transform {
+            builder = builder.header(CACHE_CONTROL, "no-transform");
+        }
+        let response = send(&["gzip"], builder.body(Body::from(body)).unwrap()).await;
+        let (frames, _) = collect(response).await;
+        frames.iter().map(Bytes::len).sum::<usize>()
+    };
+    let (right, wrong) = (
+        page("_csrf value=\"q7zk2mvb"),
+        page("_csrf value=\"zzzzzzzz"),
+    );
+    assert_eq!(right.len(), wrong.len());
+    assert!(length(right.clone(), false).await < length(wrong.clone(), false).await);
+    assert_eq!(length(right, true).await, length(wrong, true).await);
 }

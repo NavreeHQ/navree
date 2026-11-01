@@ -541,6 +541,9 @@ fn options(attrs: &RouteAttrs) -> TokenStream {
     if attrs.transactional {
         out.extend(quote!(.transactional()));
     }
+    if attrs.no_compression {
+        out.extend(quote!(.no_compression()));
+    }
     if let Some(action) = &attrs.audit {
         out.extend(quote!(.audit(#action)));
     }

@@ -33,6 +33,7 @@ enum Kind {
     Throttle,
     Timeout,
     Transactional,
+    NoCompression,
     Audit,
     Name,
     Api,
@@ -72,6 +73,7 @@ impl Kind {
             "throttle" => Kind::Throttle,
             "timeout" => Kind::Timeout,
             "transactional" => Kind::Transactional,
+            "no_compression" => Kind::NoCompression,
             "audit" => Kind::Audit,
             "name" => Kind::Name,
             "api" => Kind::Api,
@@ -518,6 +520,8 @@ pub(crate) struct RouteAttrs {
     pub(crate) throttle: Option<Throttle>,
     pub(crate) timeout_millis: Option<u64>,
     pub(crate) transactional: bool,
+    /// `#[no_compression]`.
+    pub(crate) no_compression: bool,
     /// `#[audit(action = "x")]`.
     pub(crate) audit: Option<LitStr>,
     /// `#[name("deals.show")]`.
@@ -630,6 +634,10 @@ impl RouteAttrs {
             Kind::Transactional => {
                 flag(attr)?;
                 self.transactional = true;
+            }
+            Kind::NoCompression => {
+                flag(attr)?;
+                self.no_compression = true;
             }
             Kind::Audit => {
                 let expected = || at.error("expected #[audit(action = \"invoice.sent\")]");

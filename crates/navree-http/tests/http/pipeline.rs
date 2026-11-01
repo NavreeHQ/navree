@@ -283,6 +283,39 @@ async fn compression_skipped_for_event_stream() {
 }
 
 #[tokio::test]
+async fn a_route_opts_out_of_compression() {
+    let body = "a page with a secret and reflected input ".repeat(20);
+    let page = body.clone();
+    let app = Setup::new(vec![
+        RouteDef::on(Method::GET, "/plain", move || {
+            let body = page.clone();
+            async move { body }
+        })
+        .public()
+        .no_compression(),
+        RouteDef::on(Method::GET, "/gzipped", move || {
+            let body = body.clone();
+            async move { body }
+        })
+        .public(),
+    ])
+    .boot()
+    .await;
+
+    let gzip = |path: &str| {
+        Request::get(path)
+            .header("accept-encoding", "gzip")
+            .body(Body::empty())
+            .unwrap()
+    };
+    let plain = app.send(gzip("/api/plain")).await;
+    assert_eq!(plain.header("content-encoding"), None);
+    assert!(plain.text().starts_with("a page with a secret"));
+    let gzipped = app.send(gzip("/api/gzipped")).await;
+    assert_eq!(gzipped.header("content-encoding"), Some("gzip"));
+}
+
+#[tokio::test]
 async fn maintenance_mode_returns_503() {
     let dir = tempfile::Builder::new()
         .prefix("navree-test-")

@@ -168,6 +168,14 @@ impl RouteDef {
         self
     }
 
+    /// Sends the route's responses uncompressed, whatever the client accepts:
+    /// for a page with a secret and reflected input in one body, which a
+    /// compressed length can give away (BREACH).
+    pub fn no_compression(mut self) -> Self {
+        self.meta.no_compression = true;
+        self
+    }
+
     /// Adds an OpenAPI specification extension to the route's operation
     /// (`name` should start with `x-`), such as navree-flags'
     /// `x-navree-flag`. navree-api renders it as a member of the operation
@@ -218,6 +226,8 @@ pub struct RouteMeta {
     pub audit_action: Option<String>,
     /// Request body limit override.
     pub body_limit: Option<usize>,
+    /// Responses go out uncompressed (see [`RouteDef::no_compression`]).
+    pub no_compression: bool,
     /// The module that registered the route (set when mounted).
     pub module: Option<&'static str>,
     /// The id of that module (set when mounted): [`Scoped`](crate::Scoped)

@@ -40,7 +40,28 @@ async fn stats(&self) -> Json<Value> {
 
 Other types work too: a `String` or `&'static str` is a `200` with `text/plain; charset=utf-8`, and a bare `StatusCode` is an empty response with that status (an error status gets the [error format](/docs/basics/errors/) body).
 
-Responses are compressed with gzip when the client accepts it (`Accept-Encoding`), except `text/event-stream`, images other than SVG, gRPC other than gRPC-Web, responses that already have a `Content-Encoding` or a `Content-Range`, and bodies under 32 bytes. A streamed body stays a stream: whatever the handler has sent reaches the client as soon as the handler waits. Turn compression off with `http.compression = false`.
+Responses are compressed with gzip when the client accepts it (`Accept-Encoding`), except `text/event-stream`, images other than SVG, gRPC other than gRPC-Web (media types in any case), responses that already have a `Content-Encoding` or a `Content-Range`, responses with `Cache-Control: no-transform`, routes that opt out, statuses without a body (204, 205, 304) and bodies under 32 bytes. A compressed response loses its `Content-Length` and `Accept-Ranges`, and a strong `ETag` becomes a weak one (`"v1"` becomes `W/"v1"`), because its bytes are not those the tag promised; `If-None-Match` still matches it. A streamed body stays a stream: whatever the handler has sent reaches the client as soon as the handler waits. Turn compression off with `http.compression = false`.
+
+### Compression and secrets (BREACH)
+
+Compression makes a body shorter when it repeats itself, so its length says something about its content. A page that holds a secret (a CSRF token, an API key) and also reflects something from the request (a search term) can give the secret away: an attacker who can make a signed-in user's browser send requests, and can see the length of the responses on the network, guesses the secret a character at a time and keeps the guesses that come back shorter. TLS hides the bytes, not their length.
+
+A response is exposed when all of these hold: it is compressed, it has a secret and reflected input in one body, the secret is the same from one response to the next, and the session cookie goes along on a cross-site request. Helm's session cookie is `SameSite=Strict`, which stops that last step. Your own cookies may not be, so for a route that fits, do one of these:
+
+```rust
+// On the route: its responses are never compressed.
+#[get("/search")]
+#[no_compression]
+async fn search(&self, query: Query<Search>) -> Html<String> { /* .. */ }
+
+// On a hand-written route.
+RouteDef::on(Method::GET, "/search", search).no_compression();
+
+// On one response, from anywhere.
+([(header::CACHE_CONTROL, "no-transform")], page)
+```
+
+Keeping the secret out of pages that reflect input, or masking it with fresh random bytes on each response, works too. JSON APIs that authenticate with a bearer token in a header aren't exposed: a cross-site request can't add the header.
 
 ## Status codes
 

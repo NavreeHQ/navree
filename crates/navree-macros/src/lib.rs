@@ -272,6 +272,7 @@ pub fn module(args: TokenStream, item: TokenStream) -> TokenStream {
 /// | `#[throttle(limit = 10, per = "1m")]` | fn, impl | `.throttle(10, 60s)`; a route's own replaces the impl's |
 /// | `#[timeout("5s")]` | fn | `.timeout(5s)` |
 /// | `#[transactional]` | fn | `.transactional()` |
+/// | `#[no_compression]` | fn | `.no_compression()`: responses go out uncompressed |
 /// | `#[audit(action = "deal.won")]` | fn | `.audit("deal.won")` |
 /// | `#[name("deals.show")]` | fn | `.name("deals.show")` |
 /// | `#[api(summary = "..", description = "..", tag = "Deals", tags("A", "B"), request = T, response = U, responses(400, 404), status = 201)]` | fn | `.api(ApiMeta { .. })`, schemas via `navree_http::schema_fn::<T>` |

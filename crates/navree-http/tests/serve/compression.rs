@@ -292,3 +292,37 @@ async fn a_client_that_stops_reading_holds_back_the_handler_of_a_gzipped_downloa
     );
     drop(client);
 }
+
+/// On the wire: a status without a body has no `Content-Encoding` and no
+/// bytes, over HTTP/1.1 and HTTP/2.
+#[tokio::test]
+async fn a_status_without_a_body_is_not_compressed_on_the_wire() {
+    for status in [StatusCode::NO_CONTENT, StatusCode::NOT_MODIFIED] {
+        let app =
+            CompressionLayer::new().layer(tower::service_fn(move |_: Request<Body>| async move {
+                let stream = futures_util::stream::empty::<Result<Bytes, Infallible>>();
+                Ok::<_, Infallible>(
+                    Response::builder()
+                        .status(status)
+                        .header("content-type", "text/plain")
+                        .body(Body::from_stream(stream))
+                        .unwrap(),
+                )
+            }));
+        let served = start(app, no_limits()).await;
+
+        let (mut one, _task) = http1(served.addr).await;
+        let response = one.send_request(gzip_get()).await.unwrap();
+        assert_eq!(response.status(), status);
+        let encoding = response.headers().get("content-encoding").cloned();
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!((encoding, body.len()), (None, 0), "HTTP/1.1 {status}");
+
+        let (mut two, _task) = http2(served.addr).await;
+        let response = two.send_request(gzip_get()).await.unwrap();
+        assert_eq!(response.status(), status);
+        let encoding = response.headers().get("content-encoding").cloned();
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!((encoding, body.len()), (None, 0), "HTTP/2 {status}");
+    }
+}

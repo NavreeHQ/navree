@@ -3,20 +3,22 @@
 
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use bytes::Bytes;
 use http::header::{
-    ACCEPT_ENCODING, ACCEPT_RANGES, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE,
-    VARY,
+    ACCEPT_ENCODING, ACCEPT_RANGES, CACHE_CONTROL, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_RANGE,
+    CONTENT_TYPE, ETAG, VARY,
 };
-use http::{HeaderMap, HeaderValue, Request, Response};
+use http::{HeaderMap, HeaderValue, Request, Response, StatusCode};
 use http_body::Body as HttpBody;
 use navree_kernel::BoxError;
 use pin_project_lite::pin_project;
 use tower::{Layer, Service};
 
 use crate::body::Body;
+use crate::route::RouteMeta;
 
 mod gzip;
 
@@ -35,16 +37,25 @@ const MIN_SIZE: u64 = 32;
 ///   is at least that of `identity`. A header value that is not visible
 ///   ASCII is skipped.
 /// - **Some responses are never compressed**: one that already has a
-///   `Content-Encoding` or a `Content-Range`, a body of fewer than 32 bytes
-///   (by its exact size, or else its `Content-Length`; a body of unknown
-///   size counts as large), and the content types `image/*` (but
-///   `image/svg+xml`), `application/grpc*` (but `application/grpc-web*`)
-///   and `text/event-stream`. Content types are compared as written.
+///   `Content-Encoding` or a `Content-Range`, one with
+///   `Cache-Control: no-transform`, one of a route with
+///   [`no_compression`](crate::RouteDef::no_compression), one with a status
+///   that has no body (1xx, 204, 205, 304), a body of fewer than 32 bytes (by
+///   its exact size, or else its `Content-Length`; a body of unknown size
+///   counts as large), and the content types `image/*` (but `image/svg+xml`),
+///   `application/grpc*` (but `application/grpc-web*`) and
+///   `text/event-stream`, in any case.
+/// - **BREACH**: a compressed length gives away how much of a body repeats.
+///   With a secret (a CSRF token) and reflected input in one response, and
+///   cookies that a cross-site request carries, an attacker who sees lengths
+///   on the network recovers the secret request by request. Opt such a
+///   response out with `no_compression` or `no-transform`.
 /// - **`Vary: accept-encoding`** is added to every response that could be
 ///   compressed, whatever the client accepts, unless a `Vary` value already
 ///   contains `accept-encoding` (in any case).
 /// - **A compressed response** loses its `Content-Length` and
-///   `Accept-Ranges` and gets `Content-Encoding: gzip`. Its body is a gzip
+///   `Accept-Ranges`, a strong `ETag` becomes a weak one, and it gets
+///   `Content-Encoding: gzip`. Its body is a gzip
 ///   stream at level 6 that keeps streaming, in frames of at most 4 KiB:
 ///   when the handler's body has nothing ready, what it sent so far is
 ///   flushed to the client, and the body is read no faster than the
@@ -154,16 +165,39 @@ where
     }
     parts.headers.remove(ACCEPT_RANGES);
     parts.headers.remove(CONTENT_LENGTH);
+    weaken_etag(&mut parts.headers);
     parts
         .headers
         .insert(CONTENT_ENCODING, HeaderValue::from_static("gzip"));
     Response::from_parts(parts, Body::new(GzipBody::new(body)))
 }
 
+/// A strong `ETag` promises the very bytes, which the gzip variant doesn't
+/// have: it stays as a weak one. A client's `If-None-Match` still matches it.
+fn weaken_etag(headers: &mut HeaderMap) {
+    let weak = headers.get(ETAG).and_then(|etag| {
+        let etag = etag.as_bytes();
+        let strong = etag.starts_with(b"\"");
+        strong.then(|| HeaderValue::from_bytes(&[b"W/", etag].concat()).ok())?
+    });
+    if let Some(weak) = weak {
+        headers.insert(ETAG, weak);
+    }
+}
+
 /// Whether the response may be compressed, whatever the client accepts.
 fn compressible<B: HttpBody>(response: &Response<B>) -> bool {
     let headers = response.headers();
-    if headers.contains_key(CONTENT_ENCODING) || headers.contains_key(CONTENT_RANGE) {
+    let opted_out = response
+        .extensions()
+        .get::<Arc<RouteMeta>>()
+        .is_some_and(|route| route.no_compression);
+    if opted_out
+        || !has_a_body(response.status())
+        || headers.contains_key(CONTENT_ENCODING)
+        || headers.contains_key(CONTENT_RANGE)
+        || no_transform(headers)
+    {
         return false;
     }
     let size = response.body().size_hint().exact().or_else(|| {
@@ -177,15 +211,38 @@ fn compressible<B: HttpBody>(response: &Response<B>) -> bool {
     }
     let content_type = headers
         .get(CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
+        .map(HeaderValue::as_bytes)
         .unwrap_or_default();
-    let excluded = |prefix: &str, except: Option<&str>| {
-        content_type.starts_with(prefix)
-            && !except.is_some_and(|except| content_type.starts_with(except))
+    // Media types are the same in any case.
+    let is = |prefix: &str| {
+        content_type
+            .get(..prefix.len())
+            .is_some_and(|start| start.eq_ignore_ascii_case(prefix.as_bytes()))
     };
+    let excluded = |prefix: &str, except: Option<&str>| is(prefix) && !except.is_some_and(is);
     !(excluded("application/grpc", Some("application/grpc-web"))
         || excluded("image/", Some("image/svg+xml"))
         || excluded("text/event-stream", None))
+}
+
+/// Whether a response with `status` can have a body at all. hyper sends none
+/// for these, but would send the headers of one.
+fn has_a_body(status: StatusCode) -> bool {
+    !(status.is_informational()
+        || matches!(
+            status,
+            StatusCode::NO_CONTENT | StatusCode::RESET_CONTENT | StatusCode::NOT_MODIFIED
+        ))
+}
+
+/// Whether a `Cache-Control` value of `headers` has the `no-transform`
+/// directive, in any case.
+fn no_transform(headers: &HeaderMap) -> bool {
+    headers
+        .get_all(CACHE_CONTROL)
+        .iter()
+        .flat_map(|value| value.as_bytes().split(|byte| *byte == b','))
+        .any(|directive| directive.trim_ascii().eq_ignore_ascii_case(b"no-transform"))
 }
 
 /// Whether a `Vary` value of `headers` contains `accept-encoding`, in any

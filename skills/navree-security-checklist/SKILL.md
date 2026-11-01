@@ -124,6 +124,10 @@ Go through it in order; each item says how to check.
 - [ ] Security headers stay on (`http.security_headers` not `false`, unless
   the proxy sets its own); HTML routes set their own CSP.
 - [ ] Served over HTTPS (HSTS is sent).
+- [ ] A compressed page with a secret and reflected input in one body, on cookie
+  auth that a cross-site request carries, can give the secret away through its
+  length (BREACH): put `#[no_compression]` (`.no_compression()`) on the route or
+  send `Cache-Control: no-transform`, or keep the secret off that page.
 - [ ] With `SessionModule` (cookie sessions): CSRF stays on; `session.csrf_except`
   only covers signed webhooks; `session.secure = true`; call
   `session.regenerate()` on sign-in and `invalidate()` on sign-out.

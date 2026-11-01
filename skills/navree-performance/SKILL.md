@@ -48,7 +48,7 @@ max_lifetime_secs = 1800      # 0: no limit
 transaction_settings = true   # false: no navree.actor / @navree_actor statement per transaction
 
 [http]
-compression = true            # one more middleware between the fixed stages
+compression = true            # one more middleware between the fixed stages; a route opts out with #[no_compression], a response with no-transform
 per_ip_rate_limit = 600       # sharded by IP; a single client IP shares one key
 ```
 
