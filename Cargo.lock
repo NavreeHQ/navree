@@ -98,18 +98,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
-name = "ammonia"
-version = "4.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f45dfa685e1ec33b1bf1a3b93b8047cbdbef41b6040deebbe6bea7720a45574"
-dependencies = [
- "cssparser",
- "html5ever",
- "maplit",
- "url",
-]
-
-[[package]]
 name = "amq-protocol"
 version = "10.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3932,12 +3920,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "maplit"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e2e65a1a2e43cfcb47a895c4c8b10d1f4a61097f9f254f183aee60cad9c651d"
-
-[[package]]
 name = "markup5ever"
 version = "0.40.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6215,10 +6197,10 @@ dependencies = [
 name = "navree-validation"
 version = "1.0.0"
 dependencies = [
- "ammonia",
  "chrono",
  "form_urlencoded",
  "futures-util",
+ "html5ever",
  "http",
  "icu_locale_core",
  "navree-config",

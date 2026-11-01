@@ -14,8 +14,9 @@ workspace = true
 ## `Phone`: E.164 phone numbers (rlibphonenumber, a port of libphonenumber) and
 ## `rules::phone`.
 phone = ["dep:rlibphonenumber"]
-## `SafeHtml`: rich text sanitized by the app's `HtmlPolicy` (ammonia).
-html = ["dep:ammonia"]
+## `SafeHtml`: rich text sanitized by the app's `HtmlPolicy` (parsed with
+## html5ever, URLs read with url).
+html = ["dep:html5ever", "dep:url"]
 ## `Validate` for navree-time's `Zone`, `LocalDay` and `DayRange`
 ## (`Valid<Query<DayRange>>`).
 time = ["dep:navree-time"]
@@ -25,9 +26,9 @@ postgres = ["navree-db/postgres"]
 mysql = ["navree-db/mysql"]
 
 [dependencies]
-ammonia = { workspace = true, optional = true }
 chrono = { workspace = true }
 form_urlencoded = { workspace = true }
+html5ever = { workspace = true, optional = true }
 http = { workspace = true }
 icu_locale_core = { workspace = true }
 navree-config = { workspace = true }
@@ -45,6 +46,7 @@ serde_urlencoded = { workspace = true }
 regex = { workspace = true }
 thiserror = { workspace = true }
 unicode-properties = { workspace = true }
+url = { workspace = true, optional = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

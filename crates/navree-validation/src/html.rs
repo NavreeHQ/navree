@@ -6,6 +6,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "html")]
+mod clean;
+#[cfg(feature = "html")]
+mod tree;
+
 /// Tags whose content goes with them, which a policy can never allow.
 const CONTENT_TAGS: [&str; 2] = ["script", "style"];
 
@@ -200,46 +205,18 @@ impl HtmlPolicy {
     /// ```
     #[cfg(feature = "html")]
     pub fn clean(&self, html: &str) -> String {
-        use std::collections::{HashMap, HashSet};
+        self.sanitizer().clean(html)
+    }
 
-        let rel = !self.link_rel.is_empty();
-        let allowed = |attribute: &String| !(rel && attribute == "rel");
-        let tags: HashSet<&str> = self
-            .tags
-            .iter()
-            .map(String::as_str)
-            .filter(|tag| !CONTENT_TAGS.contains(tag))
-            .collect();
-        let generic: HashSet<&str> = self
-            .generic_attributes
-            .iter()
-            .filter(|a| allowed(a))
-            .map(String::as_str)
-            .collect();
-        let per_tag: HashMap<&str, HashSet<&str>> = self
-            .tag_attributes
-            .iter()
-            .filter(|(tag, _)| !CONTENT_TAGS.contains(&tag.as_str()))
-            .map(|(tag, attributes)| {
-                let attributes = attributes
-                    .iter()
-                    .filter(|a| allowed(a))
-                    .map(String::as_str)
-                    .collect();
-                (tag.as_str(), attributes)
-            })
-            .collect();
-        let mut builder = ammonia::Builder::empty();
-        builder
-            .tags(tags)
-            .clean_content_tags(CONTENT_TAGS.into_iter().collect())
-            .generic_attributes(generic)
-            .tag_attributes(per_tag)
-            .url_schemes(self.url_schemes.iter().map(String::as_str).collect())
-            .url_relative(ammonia::UrlRelative::PassThrough)
-            .link_rel(rel.then_some(self.link_rel.as_str()))
-            .strip_comments(true);
-        builder.clean(html).to_string()
+    #[cfg(feature = "html")]
+    fn sanitizer(&self) -> clean::Sanitizer<'_> {
+        clean::Sanitizer {
+            tags: &self.tags,
+            generic_attributes: &self.generic_attributes,
+            tag_attributes: &self.tag_attributes,
+            url_schemes: &self.url_schemes,
+            link_rel: Some(self.link_rel.as_str()).filter(|rel| !rel.is_empty()),
+        }
     }
 }
 

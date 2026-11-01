@@ -8,7 +8,7 @@ use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_testing::TestApp;
 use navree_validation::Validate;
-use navree_validation::{SafeHtml, Valid, ValidationModule};
+use navree_validation::{HtmlPolicy, SafeHtml, Valid, ValidationModule};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -268,4 +268,118 @@ async fn an_unsafe_policy_fails_at_boot() {
         };
         assert!(error.to_string().contains(key), "{key}: {error}");
     }
+}
+
+/// What a browser builds from the output is what the sanitizer checked:
+/// markup the HTML parser would rearrange (a link in a link, a blank line
+/// it drops) comes out the way the parser reads it.
+#[test]
+fn the_output_parses_back_to_the_tree_that_was_checked() {
+    let policy = HtmlPolicy::default();
+    for (input, output) in [
+        (
+            "<a href=\"https://a.example\">1<table><a href=\"https://b.example\">2</a></table></a>",
+            "<a href=\"https://a.example\" rel=\"noopener noreferrer nofollow\">1</a>\
+             <a href=\"https://b.example\" rel=\"noopener noreferrer nofollow\">2</a><table></table>",
+        ),
+        ("<pre>\n\nx</pre>", "<pre>x</pre>"),
+        ("FOO&#x000D;ZOO", "FOO\nZOO"),
+        (
+            "<p><button><table></table></button>x</p>",
+            "<p></p><table></table>x<p></p>",
+        ),
+    ] {
+        let clean = policy.clean(input);
+        assert_eq!(clean, output, "{input}");
+        assert_eq!(policy.clean(&clean), clean, "{input}: stable");
+    }
+}
+
+/// SVG animation elements set another element's attributes, past the
+/// allow-list: they go even when a policy lists them.
+#[test]
+fn svg_animation_elements_are_never_kept() {
+    let policy = HtmlPolicy::default()
+        .allow_tags(["svg", "circle", "animate", "set", "animateTransform"])
+        .allow_attributes("a", ["href"])
+        .allow_attributes("animate", ["attributeName", "values", "to", "from"])
+        .allow_attributes("set", ["attributeName", "to"]);
+    assert_eq!(
+        policy.clean(
+            "<svg><a href=\"#\"><circle></circle><set attributeName=\"href\" to=\"https://a.example\"></set>\
+             <animate attributeName=\"href\" values=\"https://b.example\"></animate></a></svg>"
+        ),
+        "<svg><a href=\"#\" rel=\"noopener noreferrer nofollow\"><circle></circle></a></svg>"
+    );
+}
+
+/// A URL attribute keeps its scheme check on any element a policy allows it
+/// on.
+#[test]
+fn url_attributes_are_checked_on_every_element() {
+    let policy = HtmlPolicy::default()
+        .allow_tags(["div"])
+        .allow_attributes("div", ["action", "data", "cite", "title"]);
+    assert_eq!(
+        policy.clean(
+            "<div action=\"javascript:x()\" data=\"https://a.example\" cite=\"note:1\" title=\"note:1\">d</div>"
+        ),
+        "<div data=\"https://a.example\" title=\"note:1\">d</div>"
+    );
+}
+
+/// After `<plaintext>` a browser reads everything as text, closing tags
+/// too, so no output of it parses back the same: only the text is kept.
+#[test]
+fn markup_no_output_can_hold_keeps_only_its_text() {
+    let policy = HtmlPolicy::default().allow_tags(["plaintext"]);
+    assert_eq!(
+        policy.clean("<p>a</p><plaintext><b>x</b>"),
+        "a&lt;b&gt;x&lt;/b&gt;"
+    );
+}
+
+/// An element in a namespace it can't be in under its kept parent goes
+/// with its content: `<svg>` is gone, so its `<iframe>` (whose content HTML
+/// would read as text) isn't written as HTML.
+#[test]
+fn foreign_elements_out_of_place_go_with_their_content() {
+    let policy = HtmlPolicy::default().allow_tags(["iframe"]);
+    assert_eq!(
+        policy.clean(
+            "<svg><iframe><a title=\"</iframe><img src onerror=alert(1)>\">test</a></iframe></svg>x"
+        ),
+        "x"
+    );
+    assert_eq!(
+        policy.clean("<p><circle>hi</circle> there</p>"),
+        "<p> there</p>"
+    );
+}
+
+/// The content of a `<selectedcontent>` is the browser's copy of the chosen
+/// option, never the input's.
+#[test]
+fn selected_content_is_emptied() {
+    let policy = HtmlPolicy::default().allow_tags(["select", "option", "selectedcontent"]);
+    assert_eq!(
+        policy.clean(
+            "<select><selectedcontent><b>x</b></selectedcontent><option><b>y</b></option></select>"
+        ),
+        "<select><selectedcontent></selectedcontent><option><b>y</b></option></select>"
+    );
+}
+
+/// Each walk over the tree keeps its own stack: deep nesting can't overflow
+/// the thread's.
+#[test]
+fn deep_nesting_is_cleaned_without_recursion() {
+    let depth = 50_000;
+    let html = format!("{}x", "<span>".repeat(depth));
+    let clean = HtmlPolicy::default().clean(&html);
+    assert_eq!(
+        clean,
+        format!("{}x{}", "<span>".repeat(depth), "</span>".repeat(depth))
+    );
+    assert_eq!(HtmlPolicy::text_only().clean(&html), "x");
 }
