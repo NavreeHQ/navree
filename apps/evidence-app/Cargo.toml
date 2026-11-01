@@ -46,9 +46,7 @@ navree = { workspace = true, features = [
 ] }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tokio = { workspace = true }
 tracing = { workspace = true }
 utoipa = { workspace = true }
 uuid = { workspace = true }
-
-[dev-dependencies]
-tokio = { workspace = true }

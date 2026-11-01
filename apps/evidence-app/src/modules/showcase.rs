@@ -5,8 +5,9 @@
 //!   request's workspace (`X-Workspace`).
 //! - MCP (`/mcp`): the `workspace_summary` tool, for a workspace the user
 //!   is a member of.
-//! - Feature flags: `board-view` (exposed at `GET /api/flags`) and
-//!   `task-export` (on by default).
+//! - Feature flags: `board-view`, `inline-editing` (exposed at
+//!   `GET /api/flags`), `task-export` (on by default), `report-schedules`
+//!   and `legacy-import`; the seeder gives them states and rollouts.
 
 use async_graphql::{Context, SimpleObject};
 use navree::flags::flag;
@@ -170,9 +171,27 @@ pub struct BoardView;
 #[flag(default = true, expose)]
 pub struct TaskExport;
 
+/// Editing a task's title and status in the table.
+#[flag(expose)]
+pub struct InlineEditing;
+
+/// Schedules for reports; off until a workspace asks for it.
+#[flag]
+pub struct ReportSchedules;
+
+/// The old contacts importer, switched off for everyone.
+#[flag]
+pub struct LegacyImport;
+
 /// The showcase surfaces.
 #[module(
-    imports = [FlagsModule::for_feature::<BoardView>(), FlagsModule::for_feature::<TaskExport>()],
+    imports = [
+        FlagsModule::for_feature::<BoardView>(),
+        FlagsModule::for_feature::<TaskExport>(),
+        FlagsModule::for_feature::<InlineEditing>(),
+        FlagsModule::for_feature::<ReportSchedules>(),
+        FlagsModule::for_feature::<LegacyImport>(),
+    ],
     register = Self::wire,
 )]
 pub struct ShowcaseModule;

@@ -20,10 +20,22 @@ migrate_on_boot = false
 
 [mail]
 from = "Navree Evidence <evidence@navree.test>"
+# Queued mail (`Mailer::queue`) runs on its own queue.
+queue = "mail"
+
+# The app calls itself (the demo upstream, `web` from the other processes), the
+# mail catcher and the search engine through the HTTP client; the client
+# refuses private addresses unless they are listed here.
+[http_client.ssrf]
+allow_hosts = ["127.0.0.1", "web", "mailpit", "meilisearch"]
+
+# Webhook endpoints may point at this app's own demo routes over plain HTTP.
+[webhooks]
+require_https = false
 
 [queue]
 driver = "redis"
-queues = ["default", "search", "mail", "notifications"]
+queues = ["default", "search", "mail", "notifications", "exports"]
 workers = 8
 
 [cache]
@@ -141,6 +153,38 @@ locales = ["en", "fr"]
 consent_url = "http://localhost:47080/oauth/consent"
 device_url = "http://localhost:47080/oauth/device"
 
+[demo]
+# Where the demo routes call (`/api/demo/outgoing/*`): the app itself, the
+# mail catcher and the search engine, by their names in the compose network.
+# The web process calls itself on localhost; the worker and the scheduler
+# reach it as `web`, which is where alerts and seeded webhook endpoints post.
+stub_base_url = "http://127.0.0.1:8080"
+sink_base_url = "http://web:8080"
+mail_info_url = "http://mailpit:8025/api/v1/info"
+search_health_url = "http://meilisearch:7700/health"
+refused_url = "http://127.0.0.1:9/ledger/entries"
+unresolvable_url = "http://ledger.evidence.invalid/api/entries"
+call_timeout_ms = 3000
+
+[lighthouse.alerts]
+# At most one alert per issue and kind in this window, and a spike when an
+# issue occurs 20 times within 2 minutes.
+cooldown_minutes = 2
+spike = { occurrences = 20, minutes = 2 }
+
+[lighthouse.alerts.email]
+to = ["oncall@evidence.test"]
+on = ["new_issue", "regression", "spike", "failed_job"]
+
+[lighthouse.alerts.webhook]
+url = "http://web:8080/api/demo/sink/alerts"
+secret = "evidence-lighthouse-alert-webhook-secret" # gitleaks:allow
+on = ["new_issue", "regression", "spike"]
+
+[lighthouse.alerts.slack]
+webhook_url = "http://web:8080/api/demo/sink/slack"
+on = ["new_issue", "regression", "spike", "failed_job"]
+
 [logbook]
 # Off unless the run asks for it (APP_LOGBOOK__ENABLED=true): Logbook
 # records every request's bodies, which is development tooling, not
@@ -150,7 +194,7 @@ enabled = false
 # The worker process type runs Fleet's master (`evidence-app fleet`): it
 # supervises `fleet:work` children per queue, and `/_fleet` shows them.
 [fleet.supervisors.default]
-queues = ["default", "search", "mail", "notifications"]
+queues = ["default", "search", "mail", "notifications", "exports"]
 balance = "auto"
 min_processes = 1
 max_processes = 8
