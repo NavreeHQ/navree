@@ -49,6 +49,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
+      - run: cargo build --release -p ui-proof --features logbook
+      - run: cp target/release/ui-proof target/release/ui-proof-dev
       - run: cargo build --release -p ui-proof
       - run: npm ci
         working-directory: e2e/ui
@@ -57,5 +59,7 @@ jobs:
       - name: Run the suites against the proof app
         run: |
           target/release/ui-proof serve &
+          UI_PROOF_LOGBOOK=1 PORT=8092 target/release/ui-proof-dev serve &
           until curl -sf http://127.0.0.1:8090/plain >/dev/null; do sleep 0.2; done
-          cd e2e/ui && npm test
+          until curl -sf http://127.0.0.1:8092/plain >/dev/null; do sleep 0.2; done
+          cd e2e/ui && UI_LOGBOOK_URL=http://127.0.0.1:8092 npm test

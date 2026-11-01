@@ -107,7 +107,7 @@ for (const [name, path, prepare, viewport] of STATES) {
   });
 }
 
-// A real tool's page: run with `UI_PROOF_LOGBOOK=1 PORT=8092 ui-proof serve`.
+// A real tool's page: run with `UI_PROOF_LOGBOOK=1 PORT=8092 ui-proof serve`, a build with `--features logbook`.
 const LOGBOOK = process.env.UI_LOGBOOK_URL;
 
 test("Logbook's list: axe, new entries morph in, the filter keeps focus, Clear works", { skip: !LOGBOOK, timeout: 60000 }, async () => {

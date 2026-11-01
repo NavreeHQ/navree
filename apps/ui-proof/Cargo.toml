@@ -18,5 +18,10 @@ unsafe_code = "forbid"
 [dependencies]
 chrono = { workspace = true }
 http = { workspace = true }
-navree = { workspace = true, default-features = false, features = ["ui", "logbook"] }
+navree = { workspace = true, default-features = false, features = ["ui"] }
 serde = { workspace = true }
+
+[features]
+# A development build: Logbook at /_logbook when UI_PROOF_LOGBOOK is set. Off
+# in the release binary, so a speed measurement carries none of its code.
+logbook = ["navree/logbook"]

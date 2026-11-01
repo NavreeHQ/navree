@@ -4,7 +4,7 @@
 //! cargo run --release -p ui-proof -- serve          # http://127.0.0.1:8090
 //! PORT=9000 ui-proof serve                          # another port
 //! ui-proof bench                                    # render times, no server
-//! UI_PROOF_LOGBOOK=1 ui-proof serve                 # with Logbook at /_logbook
+//! UI_PROOF_LOGBOOK=1 ui-proof serve                 # with Logbook at /_logbook (build with --features logbook)
 //! ```
 //!
 //! | Page | Shows |
@@ -22,6 +22,7 @@ use navree::http::extract::Request;
 use navree::http::middleware::{self, Next};
 use navree::http::response::Response;
 use navree::http::{GlobalLayer, LayerSlot};
+#[cfg(feature = "logbook")]
 use navree::logbook::{LogbookOptions, StoreKind};
 use navree::prelude::*;
 use navree::ui::{NavGroup, NavItem, Shell, UiModule, UserMenu, icons};
@@ -90,7 +91,9 @@ fn main() -> Result<(), BoxError> {
         .module(HttpModule::from_config())
         .module(UiModule::from_config())
         .module(ProofModule);
-    // Off by default: it records every request, which a speed benchmark shouldn't pay for.
+    // A development build only (`--features logbook`), and then only when asked: it
+    // records every request, which a speed measurement shouldn't pay for.
+    #[cfg(feature = "logbook")]
     if std::env::var_os("UI_PROOF_LOGBOOK").is_some() {
         let options = LogbookOptions { enabled: Some(true), store: StoreKind::Memory, ..LogbookOptions::default() };
         return app.module(LogbookModule::for_root(options)).run();
