@@ -219,6 +219,9 @@ async fn hypertables_policies_and_continuous_aggregates() {
         db.drop().await;
         return;
     }
+    // A server whose template database has the extension gives every new
+    // database it already installed.
+    let installed = target.timescaledb().is_some();
     schema
         .create_hypertable("events", "occurred_at", |t| {
             t.uuid_primary();
@@ -241,11 +244,21 @@ async fn hypertables_policies_and_continuous_aggregates() {
         })
         .await
         .unwrap();
-    assert_eq!(
-        schema.statements()[0],
-        "CREATE EXTENSION IF NOT EXISTS timescaledb",
-        "the fresh database had TimescaleDB available, not installed"
-    );
+    if installed {
+        assert!(
+            !schema
+                .statements()
+                .iter()
+                .any(|statement| statement.starts_with("CREATE EXTENSION")),
+            "an installed TimescaleDB is not installed again"
+        );
+    } else {
+        assert_eq!(
+            schema.statements()[0],
+            "CREATE EXTENSION IF NOT EXISTS timescaledb",
+            "the fresh database had TimescaleDB available, not installed"
+        );
+    }
     assert_eq!(
         column(
             &conn,
