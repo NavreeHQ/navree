@@ -389,10 +389,14 @@ fn merge_within<'a>(
         document.share_limits();
         flatten_checked(&mut document).map_err(|error| shared_edit_error(error, limits))?;
         document.renumber(merged.max_number().saturating_add(1));
-        let page_ids: Vec<ObjectId> = document.pages();
+        let mut page_ids: Vec<ObjectId> = document.pages();
         // The work may have run out on the way: the pages after that point
         // are not listed, and are not lost without a word.
         document.check().map_err(shared)?;
+        // A page the page tree lists many times is one page, as it is when it
+        // is stamped: the output lists as many pages as it has objects for.
+        let mut listed = HashSet::new();
+        page_ids.retain(|id| listed.insert(*id));
         for &id in &page_ids {
             let Some(page) = document.dictionary_mut(id) else {
                 // No object is found once the work has run out.

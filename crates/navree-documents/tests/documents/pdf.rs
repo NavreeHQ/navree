@@ -677,6 +677,47 @@ fn a_page_listed_many_times_in_the_page_tree_is_stamped_once() {
 }
 
 #[test]
+fn a_merge_lists_a_page_the_tree_lists_many_times_once() {
+    use navree_pdf::{Object, Stream, dictionary};
+
+    // One page object listed 500 times, in a file with 500 objects besides:
+    // the objects of the output are the page and what it leads to, and a
+    // page tree that lists more pages than the file has objects reads short.
+    let mut document = Objects::new();
+    let pages_id = document.reserve();
+    let content = document.add(Stream::new(
+        dictionary! {},
+        b"BT /F1 12 Tf 50 700 Td (Again) Tj ET".to_vec(),
+    ));
+    let font = document.add(dictionary! {
+        "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica",
+    });
+    let page = document.add(dictionary! {
+        "Type" => "Page", "Parent" => pages_id, "Contents" => content,
+        "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
+        "Resources" => dictionary! { "Font" => dictionary! { "F1" => font } },
+    });
+    for i in 0..500 {
+        document.add(Object::Integer(i));
+    }
+    document.insert(
+        pages_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Pages", "Kids" => vec![Object::Reference(page); 500], "Count" => 500,
+        }),
+    );
+    let catalog = document.add(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    document.trailer.set("Root", catalog);
+    let pdf = Pdf::from_bytes(compact(document)).unwrap();
+    assert!(pdf.page_count().unwrap() >= 400);
+    let merged = Pdf::merge([&pdf, &Pdf::from_lines(["after"])]).unwrap();
+    // The page once, and the page after it.
+    assert_eq!(merged.page_count().unwrap(), 2);
+    let text = merged.page_texts().unwrap();
+    assert_eq!(text, ["Again", "after"]);
+}
+
+#[test]
 fn a_stamp_on_some_pages_leaves_the_resources_of_the_others_as_they_were() {
     // Three pages sharing one resources object; the stamp goes on the second.
     let pdf = Pdf::from_bytes(pdf_with_many_fonts_on_many_pages(3, 2, true)).unwrap();
