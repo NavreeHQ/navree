@@ -1,0 +1,46 @@
+/* The app shell: sidebar 16rem wide, 3rem collapsed to icons, top bar 48px. */
+[data-slot=sidebar-wrapper]{display:flex;min-height:100dvh}
+[data-slot=sidebar]{position:sticky;top:0;display:flex;flex:none;flex-direction:column;width:var(--sidebar-w);height:100dvh;border-inline-end:1px solid var(--line);background:var(--ink-1);overflow:hidden;transition:width .1s}
+[data-slot=sidebar-header]{padding:.5rem}
+[data-slot=sidebar-brand]{display:flex;align-items:center;gap:.5rem;padding:.25rem;border-radius:var(--radius);color:inherit;text-decoration:none;&:hover{background:var(--ink-2)}}
+[data-slot=sidebar-logo]{display:flex;align-items:center;justify-content:center;flex:none;width:2rem;height:2rem;border-radius:var(--radius);background:var(--ink-3);color:var(--fg);& svg{width:1.25rem;height:1.25rem}}
+[data-slot=sidebar-brand-text],[data-slot=sidebar-user-text]{display:flex;flex:1;flex-direction:column;min-width:0;line-height:1.25;text-align:start}
+[data-slot=sidebar-brand-name],[data-slot=sidebar-user-name]{overflow:hidden;color:var(--fg);font-weight:500;text-overflow:ellipsis;white-space:nowrap}
+[data-slot=sidebar-brand-context],[data-slot=sidebar-user-email]{overflow:hidden;color:var(--fg-3);font-size:12px;text-overflow:ellipsis;white-space:nowrap}
+[data-slot=sidebar-content]{flex:1;min-height:0;overflow:hidden auto;scrollbar-width:thin}
+[data-slot=sidebar-group]{padding:.25rem .5rem}
+[data-slot=sidebar-group-label]{display:flex;align-items:center;height:2rem;padding:0 .5rem;color:var(--fg-3);font-size:12px;white-space:nowrap}
+[data-slot=sidebar-menu]{display:flex;flex-direction:column;gap:.125rem}
+[data-slot=sidebar-item],[data-slot=sidebar-sub-item]{display:flex;align-items:center;gap:.5rem;height:2rem;padding:0 .5rem;border-radius:var(--radius);color:var(--fg-2);text-decoration:none;white-space:nowrap;
+  &:hover{background:var(--ink-2);color:var(--fg)}
+  &[aria-current=page]{background:var(--ink-3);color:var(--fg);font-weight:500}
+}
+[data-slot=sidebar-label]{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+[data-slot=sidebar-count]{color:var(--fg-3);font:400 12px var(--font-mono)}
+[data-slot=sidebar-sub]{display:flex;flex-direction:column;gap:.125rem;margin:.125rem 0 0 1rem;padding-inline-start:.5rem;border-inline-start:1px solid var(--line)}
+[data-slot=sidebar-footer]{padding:.5rem}
+[data-slot=sidebar-user]{display:flex;align-items:center;gap:.5rem;width:100%;padding:.25rem;border:0;border-radius:var(--radius);background:transparent;cursor:pointer;&:hover{background:var(--ink-2)}& > [data-slot=icon]{color:var(--fg-3)}}
+[data-slot=sidebar-inset]{display:flex;flex:1;flex-direction:column;min-width:0}
+[data-slot=sidebar-overlay]{display:none}
+[data-slot=topbar]{position:sticky;top:0;z-index:10;display:flex;flex:none;align-items:center;gap:.5rem;height:var(--topbar-h);padding:0 .75rem;border-bottom:1px solid var(--line);background:var(--ink-0)}
+[data-slot=topbar-spacer]{flex:1}
+[data-slot=page]{flex:1;min-width:0;padding:var(--page-pad);display:flex;flex-direction:column;gap:1rem}
+[data-slot=page-header]{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.75rem}
+[data-slot=page-title]{color:var(--fg);font-size:1.25rem;font-weight:600;line-height:1.25;letter-spacing:-.01em}
+[data-slot=page-actions]{display:flex;gap:.5rem}
+
+/* Collapsed to icons. */
+@media (min-width:768px){
+  [data-collapsed] > [data-slot=sidebar]{width:var(--sidebar-w-icon);
+    & [data-slot=sidebar-brand-text],& [data-slot=sidebar-user-text],& [data-slot=sidebar-label],& [data-slot=sidebar-count],& [data-slot=sidebar-sub],& [data-slot=sidebar-group-label],& [data-slot=sidebar-user] > [data-slot=icon]{display:none}
+    & [data-slot=sidebar-item]{justify-content:center;padding:0}
+    & [data-slot=sidebar-brand],& [data-slot=sidebar-user]{justify-content:center;padding:0}
+    & [data-slot=sidebar-group],& [data-slot=sidebar-header],& [data-slot=sidebar-footer]{padding-inline:.5rem}
+  }
+}
+/* An off-canvas sheet on phones. */
+@media (max-width:767px){
+  [data-slot=sidebar]{position:fixed;inset:0 auto 0 0;z-index:30;translate:-100%;width:18rem;visibility:hidden;transition:translate .1s,visibility .1s}
+  [data-mobile-open] > [data-slot=sidebar]{translate:0;visibility:visible}
+  [data-mobile-open] > [data-slot=sidebar-overlay]{display:block;position:fixed;inset:0;z-index:20;background:rgb(1 3 2/.72)}
+}

@@ -21,19 +21,23 @@
 pub mod assets;
 mod assets_gen;
 pub mod cmd;
+pub mod components;
 pub mod html;
+pub mod icons;
 mod module;
 pub mod node;
 pub mod op;
 pub mod render;
-pub(crate) mod shell;
+pub mod shell;
 pub mod tokens;
 pub mod view;
 
 pub use cmd::{Cmd, Commands, Trigger};
+pub use components::*;
 pub use html::{Href, HrefError, SafeHtml};
 pub use module::UiModule;
 pub use node::{Attr, AttrValue, Element, IntoNodes, Node, Uses, el};
 pub use op::{Envelope, Op, Reply, ToastTone, UrlMode};
 pub use render::{Measure, measure, render, render_into};
+pub use shell::{AppShell, NavGroup, NavItem, Page, Shell, UserMenu};
 pub use view::{PAGE_CSP, View};

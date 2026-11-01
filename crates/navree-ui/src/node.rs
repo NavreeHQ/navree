@@ -32,6 +32,8 @@ pub enum Node {
     Int(i64),
     /// Markup written as it is.
     Raw(SafeHtml),
+    /// Compile-time markup written as it is, such as an icon's shapes.
+    Static(&'static str),
     /// An element.
     Element(Element),
     /// Several nodes in a row.
@@ -60,7 +62,7 @@ impl Node {
 
     fn collect_text(&self, out: &mut String) {
         match self {
-            Self::Empty | Self::Raw(_) => {}
+            Self::Empty | Self::Raw(_) | Self::Static(_) => {}
             Self::Text(text) => out.push_str(text),
             Self::Int(value) => out.push_str(&value.to_string()),
             Self::Element(element) => {

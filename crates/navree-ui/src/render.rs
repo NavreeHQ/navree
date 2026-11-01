@@ -36,6 +36,7 @@ fn measure_into(node: &Node, found: &mut Measure, depth: u32) {
         Node::Text(text) => found.bytes += text.len(),
         Node::Int(_) => found.bytes += 20,
         Node::Raw(html) => found.bytes += html.as_str().len(),
+        Node::Static(html) => found.bytes += html.len(),
         Node::Element(element) => {
             found.uses = found.uses.with(element.uses);
             found.bytes += 2 * element.tag.len() + 5;
@@ -100,6 +101,7 @@ fn write_node(out: &mut String, node: &Node, depth: u32) {
             let _ = write!(out, "{value}");
         }
         Node::Raw(html) => out.push_str(html.as_str()),
+        Node::Static(html) => out.push_str(html),
         Node::Element(element) => write_element(out, element, depth),
         Node::Fragment(nodes) => {
             for child in nodes {

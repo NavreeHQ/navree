@@ -1,0 +1,43 @@
+/* Dialogs: the browser's <dialog>. Closed ones stay display:none by default. */
+[data-slot=dialog],[data-slot=alert-dialog],[data-slot=sheet],[data-slot=drawer]{padding:0;border:1px solid var(--line-2);background:var(--ink-1);color:var(--fg-1);overflow:auto;
+  &::backdrop{background:rgb(1 3 2/.72)}
+  &[open]{display:flex;flex-direction:column;animation:ui-in .1s ease-out}
+}
+[data-slot=dialog],[data-slot=alert-dialog]{width:calc(100% - 2rem);max-width:32rem;max-height:calc(100dvh - 2rem);margin:auto;border-radius:var(--radius-lg)}
+[data-slot=alert-dialog]{max-width:26rem}
+[data-slot=sheet]{position:fixed;margin:0;max-width:none;max-height:none;
+  &[data-side=right],&[data-side=left]{top:0;bottom:0;width:min(24rem,calc(100% - 3rem));height:100dvh}
+  &[data-side=right]{left:auto;right:0;border-width:0 0 0 1px}
+  &[data-side=left]{right:auto;left:0;border-width:0 1px 0 0}
+  &[data-side=top],&[data-side=bottom]{left:0;right:0;width:100%;max-height:80dvh}
+  &[data-side=top]{bottom:auto;top:0;border-width:0 0 1px}
+  &[data-side=bottom]{top:auto;bottom:0;border-width:1px 0 0}
+}
+[data-slot=drawer]{position:fixed;left:0;right:0;top:auto;bottom:0;margin:0;width:100%;max-width:none;max-height:85dvh;border-width:1px 0 0;border-radius:var(--radius-lg) var(--radius-lg) 0 0}
+[data-slot=dialog-header]{display:flex;flex-direction:column;gap:.25rem;padding:1rem 2.75rem .25rem 1rem}
+[data-slot=alert-dialog] [data-slot=dialog-header]{padding-inline-end:1rem}
+[data-slot=dialog-title]{color:var(--fg);font-size:1rem;font-weight:600;line-height:1.25}
+[data-slot=dialog-description]{color:var(--fg-2);font-size:13px}
+[data-slot=dialog-body]{flex:1;padding:.75rem 1rem;&:empty{display:none}}
+[data-slot=dialog-footer]{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:flex-end;padding:.25rem 1rem 1rem;& form{display:contents}}
+[data-slot=dialog-close]{position:absolute;top:.625rem;inset-inline-end:.625rem;display:flex;align-items:center;justify-content:center;width:1.75rem;height:1.75rem;border:0;border-radius:var(--radius);background:transparent;color:var(--fg-2);cursor:pointer;&:hover{background:var(--ink-2);color:var(--fg)}}
+
+/* Popups: the browser's popover. The overlay module places them. */
+[data-slot=popover-content],[data-slot=hover-card-content]{position:fixed;inset:auto;margin:0;padding:.75rem;width:max-content;max-width:min(20rem,calc(100vw - 1rem));border:1px solid var(--line-2);border-radius:var(--radius-lg);background:var(--ink-1);color:var(--fg-1);
+  &:popover-open{animation:ui-in .1s ease-out}
+  &:not([style]){margin:auto;inset:0;height:fit-content}
+}
+[data-slot=popover-content]:has(> [data-slot=menu-link]){padding:.25rem;min-width:11rem}
+[data-slot=menu-link]{display:flex;align-items:center;gap:.5rem;height:2rem;padding:0 .5rem;border-radius:var(--radius);color:var(--fg-1);text-decoration:none;&:hover,&:focus-visible{background:var(--ink-2);color:var(--fg)}}
+[data-slot=tooltip-content]{position:fixed;inset:auto;margin:0;padding:.25rem .5rem;width:max-content;max-width:18rem;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--ink-3);color:var(--fg);font-size:12px;pointer-events:none}
+[data-slot=tooltip-trigger],[data-slot=hover-card-trigger]{display:inline-flex}
+[data-slot=toaster]{position:fixed;inset:auto 1rem 1rem auto;margin:0;padding:0;border:0;background:transparent;display:none;flex-direction:column;gap:.5rem;width:min(22rem,calc(100vw - 2rem));overflow:visible;&:popover-open{display:flex}}
+[data-slot=toast]{padding:.625rem .75rem;border:1px solid var(--line-2);border-radius:var(--radius-lg);background:var(--ink-2);color:var(--fg);animation:ui-in .1s ease-out;&[data-tone=success]{border-color:color-mix(in oklab,var(--accent) 36%,transparent)}&[data-tone=warning]{border-color:color-mix(in oklab,var(--amber) 36%,transparent)}&[data-tone=danger]{border-color:color-mix(in oklab,var(--danger) 40%,transparent);color:var(--danger)}}
+
+/* Details */
+[data-slot=accordion]{display:flex;flex-direction:column}
+[data-slot=accordion-item]{border-bottom:1px solid var(--line)}
+[data-slot=accordion-trigger],[data-slot=collapsible-trigger]{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.625rem 0;color:var(--fg);font-weight:500;cursor:pointer;list-style:none;&::-webkit-details-marker{display:none}& [data-slot=icon]{color:var(--fg-3);transition:rotate .1s}}
+details[open] > summary > [data-slot=icon]{rotate:180deg}
+[data-slot=accordion-content],[data-slot=collapsible-content]{padding-bottom:.75rem;color:var(--fg-2)}
+[data-slot=scroll-area]{overflow:auto;scrollbar-width:thin}
