@@ -8,12 +8,12 @@ JavaScript. No per-tab server state, no WASM, no Node at run time or in
 ```rust
 use navree::ui::*;
 
-async fn index(shell: AppShell, query: TableQuery<DealRow, DealFilter>) -> Page {
-    let (rows, total) = load(&query).await;
-    shell
+async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<AppPage> {
+    let page = query.load(Deal::query(), &uow).await?;
+    Ok(shell
         .page("Deals")
         .actions(Button::primary("New deal").icon(icons::PLUS).href("/deals/new"))
-        .body(DataTable::new("deals", &query, &rows).total(total))
+        .body(DataTable::new("deals", &query, &page)))
 }
 ```
 
@@ -39,9 +39,8 @@ async fn index(shell: AppShell, query: TableQuery<DealRow, DealFilter>) -> Page 
   pick widgets, rules set `required`, `maxlength` and `min` in the browser and run
   again on the server. `FormView` draws it, `Submit<T>` reads it back and answers
   field errors under the inputs, or the page again with JavaScript off.
-- **Tables.** `#[derive(TableRow)]`, `#[derive(FilterBar)]`, `TableQuery` (sort,
-  filter and page in the URL) and `DataTable` (a region that morphs in place).
-  Rows write straight to the page rather than through the tree.
+- **Tables.** One definition, `#[derive(TableRow)]`, drives the URL, the query, the
+  drawing, the export and bulk actions. See [The data table](#the-data-table).
 - **The wire.** `Cmd` is the closed list of what an element does in the browser with
   no request. `Op` is the closed list of what a server action sends back, with
   rendered HTML as payload. `Reply` carries ops and a fallback for JavaScript off.
@@ -58,11 +57,86 @@ async fn index(shell: AppShell, query: TableQuery<DealRow, DealFilter>) -> Page 
 | Nothing interactive | None. Links are prefetched from a `Speculation-Rules` header. |
 | A dialog, an accordion, a switch | None: `<dialog>`, `command`, `<details>`, `<input>`. |
 | A popover, tooltip or hover card | `overlay`: placing and hover delay. |
-| A form, a table, a region, a command | `core`: delegation, commands, ops, morph, boosted links, pending states. |
+| A form, a region, a command | `core`: delegation, commands, ops, morph, boosted links, pending states. |
+| A data table | `core`, `table`, `overlay`. |
 | The app shell | `core`, `sidebar`. |
 
 Everything is delegated from `document`, so a morph or a swap needs no re-wiring.
 `tests/budgets.rs` holds the sizes, and a regression fails the build.
+
+## The data table
+
+```rust
+#[derive(Clone, Model, TableRow, serde::Serialize)]
+#[table(sort = "-closed_on,title", per = 25, per_pages(10, 25, 50, 100), version = "version")]
+struct Deal {
+    #[col(skip)]
+    id: i64,
+    #[col(sortable, search, sticky, filter = text, link = "/deals/{id}")]
+    title: String,
+    #[col(sortable, filter = multi, options = STAGES, badge = tone)]
+    stage: String,
+    #[col(sortable, numeric, filter = range)]
+    amount: Option<i64>,
+    #[col(sortable, filter = date)]
+    closed_on: Option<chrono::NaiveDate>,
+    #[col(filter = boolean)]
+    active: bool,
+    #[col(skip)]
+    version: i64,
+}
+
+async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<AppPage> {
+    let page = query.load(Deal::query(), &uow).await?;
+    Ok(shell.page("Deals").body(
+        DataTable::new("deals", &query, &page)
+            .caption("Deals")
+            .sticky_header()
+            .export("/deals/export")
+            .bulk("/deals/bulk", [
+                BulkAction::new("archive", "Archive"),
+                BulkAction::new("delete", "Delete").destructive().confirm("Delete {n} deals?"),
+            ]),
+    ))
+}
+
+async fn bulk(uow: Uow, request: BulkRequest<Deal>) -> Result<Reply> {
+    let target = match request.resolve(Deal::query(), &uow).await? {
+        Ok(target) => target,
+        Err(refusal) => return Ok(request.refused(StatusCode::CONFLICT, refusal.message())),
+    };
+    let count = target.delete(&uow).await?;
+    Ok(request.done(format!("Deleted {count}.")))
+}
+```
+
+| Column option | Means |
+|---|---|
+| `sortable`, `search`, `filter = text\|range\|date\|select\|multi\|boolean\|relation` | what can be done with it; `kind = int` when the cell shows something other than the column queried; `source = "companies.name"` when the column has another name |
+| `sticky`, `sticky_end`, `hidden`, `locked`, `hide_on_mobile`, `width = 240`, `group = "Address"` | where it sits |
+| `numeric`, `align = center`, `strong`, `truncate`, `wrap`, `link = "..."`, `badge = tone`, `options = LIST` | how it reads |
+
+| On the table | Means |
+|---|---|
+| `#[table(cursor)]` | keyset pages, for huge tables |
+| `#[table(capped = 10000)]`, `#[table(no_count)]` | count no further than this; or don't, with Previous and Next only |
+| `#[table(version = "col")]` | a column that changes with a row, compared before a bulk action |
+| `.filter_row()` | filters under the headers, not in a popover from each |
+| `.detail(fn)`, `.row_actions(fn)`, `.row_href(fn)`, `.sticky_rows(fn)`, `.selectable_if(fn)` | per row |
+| `.keyboard_grid()` | one tab stop, arrow keys, Home, End, Page Up and Down |
+| `.views(&views, url)`, `.export(url)`, `.foot(col, cell)`, `.labels(&labels)`, `.can_select(bool)`, `.failed(msg)`, `.loading()` | the rest |
+
+**The URL holds everything but the selection:** `q`, `sort=-amount,title`, `page`, `per`, `after`, `before`, `f.<col>`, `f.<col>.min`, `.max`, `.empty`, `cols`, `w`, `density`, `open`. Back, forward, reload and a shared link restore it, and it all works with JavaScript off. Bad values are ignored one at a time; sort and filter columns come only from the definition; values always bind, typed by the column.
+
+**Selection** is per tab, in `sessionStorage`. Ticked keys survive pages, sort and filter changes. "All that match" survives pages and sort, ends on any filter change, and takes exclusions. Actions post the state, the exclusions and the count the user saw; `resolve` runs the same definition on your scoped query and refuses if the count, or the version, differs. Nothing a hover can fire changes anything: whatever writes is a POST.
+
+**NULL is the smallest value on every store.** Ascending NULLs first, descending NULLs last, because that's what MySQL, SQLite and MongoDB do by themselves and one index serves both directions. On PostgreSQL write the index as `(col NULLS FIRST, id)`. Ties go by key, in the direction of the last term. Text sorts by the column's collation, so accents and punctuation order as the database says.
+
+**A huge table** wants an index per sort column, ending in the key. Deep numbered pages read from the nearer end of the index and find keys before rows; `#[table(cursor)]` costs the same at any depth. A search or text filter is `contains`, which reads every row unless the column has a trigram index on PostgreSQL. On numbered pages a row added or deleted between pages moves what follows by one: cursor pages don't.
+
+**Stored views** are SQL only (`SavedViewModel`, table `navree_ui_table_views`: `id, owner, table_id, name, query, is_default`; create it in a migration). Save through `save_view`, read through `list_views`, and open with `query.or_default_view(&views)`.
+
+**One table per URL.** State lives in plain parameters, so two tables on one page would share it: give the second its own route or region.
 
 ## The browser side
 
@@ -82,8 +156,9 @@ lucide-react.
 
 ## Proof pages
 
-`apps/ui-proof` is a form, a 1,000-row table, a dashboard and every component in
-its states, as one binary:
+`apps/ui-table-proof` is the data table against a real database, and `apps/ui-proof`
+is a form, a 1,000-row table, a dashboard and every component in its states, as one
+binary:
 
 ```sh
 cargo run --release -p ui-proof -- serve    # http://127.0.0.1:8090; PORT sets the port

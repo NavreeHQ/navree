@@ -272,7 +272,25 @@ async fn run_sql(db: &Db, label: &str) -> Results {
         assert_eq!(backward.as_slice(), &forward[..last], "{label} {order}: back the same way");
     }
     bulk_sql(db, label).await;
+    views_sql(db, label).await;
     results
+}
+
+async fn views_sql(db: &Db, label: &str) {
+    let _ = db.pool().execute_script("DROP TABLE IF EXISTS navree_ui_table_views").await;
+    db.pool().execute_script("CREATE TABLE navree_ui_table_views (id VARCHAR(64) PRIMARY KEY, owner VARCHAR(64) NOT NULL, table_id VARCHAR(64) NOT NULL, name VARCHAR(200) NOT NULL, query TEXT NOT NULL, is_default BOOLEAN NOT NULL)").await.unwrap();
+    let query = TableQuery::<SqlDeal, NoFilter>::parse("/d", "f.stage=won&sort=title&page=3&per=5");
+    let first = navree::ui::table::save_view(db, "me", "t", "Won", &query, true).await.unwrap();
+    assert!(!first.query.contains("page"), "{label}: a view holds no position: {}", first.query);
+    let second = navree::ui::table::save_view(db, "me", "t", "All", &TableQuery::<SqlDeal, NoFilter>::parse("/d", ""), true).await.unwrap();
+    navree::ui::table::save_view(db, "you", "t", "Theirs", &query, false).await.unwrap();
+    let views = navree::ui::table::list_views(db, "me", "t").await.unwrap();
+    assert_eq!(views.iter().map(|view| view.name.as_str()).collect::<Vec<_>>(), ["All", "Won"], "{label}");
+    assert_eq!(views.iter().filter(|view| view.is_default).map(|view| view.id.as_str()).collect::<Vec<_>>(), [second.id.as_str()], "{label}: one default");
+    let opened = TableQuery::<SqlDeal, NoFilter>::parse("/d", "").or_default_view(&views);
+    assert_eq!(opened.query_string(), second.query);
+    assert_eq!(navree::ui::table::delete_view(db, "you", &first.id).await.unwrap(), 0, "{label}: not theirs to delete");
+    assert_eq!(navree::ui::table::delete_view(db, "me", &first.id).await.unwrap(), 1, "{label}");
 }
 
 async fn bulk_sql(db: &Db, label: &str) {

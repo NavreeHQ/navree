@@ -238,7 +238,8 @@ function setupGrid(root) {
   const cells = /** @type {HTMLElement[]} */ ([...root.querySelectorAll("tbody td")]);
   let current = cells.find((cell) => cell.getAttribute("tabindex") === "0");
   for (const cell of cells) if (cell !== current) cell.setAttribute("tabindex", "-1");
-  if (!current) cells[0]?.setAttribute("tabindex", "0");
+  // The one tab stop starts on a cell with no control of its own.
+  if (!current) (cells.find((cell) => !cell.querySelector("input,button,a[href],select")) || cells[0])?.setAttribute("tabindex", "0");
 }
 
 /** @param {HTMLElement} from @param {HTMLElement | null | undefined} to */

@@ -20,13 +20,18 @@ fn the_core_runtime_is_at_most_12_kb_gzip() {
 }
 
 #[test]
+fn the_table_module_is_at_most_5_kb_gzip() {
+    assert!(size("table") <= 5 * 1024, "{}", size("table"));
+}
+
+#[test]
 fn the_stylesheet_is_at_most_25_kb_gzip() {
     assert!(size("navree-ui") <= 25 * 1024, "{}", size("navree-ui"));
 }
 
 #[test]
 fn a_typical_crud_page_loads_at_most_30_kb_gzip_of_script() {
-    let total: usize = ["core", "sidebar", "overlay"].iter().map(|name| size(name)).sum();
+    let total: usize = ["core", "sidebar", "overlay", "table"].iter().map(|name| size(name)).sum();
     assert!(total <= 30 * 1024, "{total}");
 }
 

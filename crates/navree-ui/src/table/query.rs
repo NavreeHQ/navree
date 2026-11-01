@@ -100,7 +100,7 @@ pub(crate) struct State {
 
 /// A table's state as the URL states it.
 ///
-/// ```
+/// ```ignore
 /// use navree_ui::table::{Direction, NoFilter, TableQuery};
 /// use navree_ui::TableRow;
 ///

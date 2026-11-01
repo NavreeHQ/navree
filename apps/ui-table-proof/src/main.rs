@@ -17,6 +17,8 @@
 //! | `/tasks` | a model as its own row, in the simplest form |
 //! | `/extras` | the rest: a card with bleed, sticky rows, a footer, row links, rows that can't be ticked, the grid keys, header groups |
 //! | `/rtl` | right to left, in another language |
+//! | `/simple` | no count: Previous and Next only |
+//! | `/skeleton`, `/failed` | a first load on its way, and rows that couldn't load |
 //!
 //! `/__t/...` are the controls the browser tests use: reset the data, delete or add
 //! rows behind the page's back, take a permission away.
@@ -350,12 +352,22 @@ async fn extras(shell: AppShell, uow: Uow, query: TableQuery<ExtraRow>) -> Resul
         .keyboard_grid()
         .bulk("/deals/bulk", [BulkAction::new("archive", "Archive").denied("Your role can't archive."), BulkAction::new("x", "Mark")])
         .selectable_if(|row| row.active)
-        .sticky_rows(|row| row.id == 10)
+        .sticky_rows(|row| row.id == 110)
         .row_href(|row| format!("/deal/{}", row.id))
         .foot("title", "On this page")
         .foot("amount", Money(total).display())
         .height(TableHeight::Md);
     Ok(shell.page("Extras").body(Card::titled("In a card").body(table)))
+}
+
+/// `/simple`: no count at all.
+#[derive(Clone, TableRow)]
+#[table(sort = "title", per = 10, per_pages(10), no_count)]
+pub struct SimpleRow {
+    #[col(skip)]
+    pub id: i64,
+    #[col(sortable, search, filter = text)]
+    pub title: String,
 }
 
 /// `/rtl`: the same table in Arabic, right to left.
@@ -455,6 +467,30 @@ impl Controller for Pages {
             })
             .public(),
             RouteDef::on(Method::GET, "!/extras", extras).public(),
+            RouteDef::on(Method::GET, "!/simple", |shell: AppShell, uow: Uow, query: TableQuery<SimpleRow>| async move {
+                let page = query
+                    .load_as(Deal::query(), &uow, |record| {
+                        let deal = record.into_inner();
+                        SimpleRow { id: deal.id, title: deal.title }
+                    })
+                    .await?;
+                Ok::<_, AppError>(shell.page("No count").body(DataTable::new("simple", &query, &page).caption("No count")))
+            })
+            .public(),
+            RouteDef::on(Method::GET, "!/skeleton", |shell: AppShell, query: TableQuery<DealRow>| async move {
+                let rows: Vec<DealRow> = Vec::new();
+                shell.page("Loading").body(DataTable::new("deals", &query, &rows).caption("Deals").loading())
+            })
+            .public(),
+            RouteDef::on(Method::GET, "!/failed", |shell: AppShell, query: TableQuery<DealRow>| async move {
+                let rows: Vec<DealRow> = Vec::new();
+                shell.page("Failed").body(DataTable::new("deals", &query, &rows).caption("Deals").failed("The deals couldn't load."))
+            })
+            .public(),
+            RouteDef::on(Method::GET, "!/big/export", |uow: Uow, query: TableQuery<Big>| async move {
+                Ok::<_, AppError>(query.export_csv(Big::query(), &uow, "big.csv", Record::into_inner).await?)
+            })
+            .public(),
             RouteDef::on(Method::GET, "!/rtl", rtl).public(),
             RouteDef::on(Method::GET, "!/deal/{id}", |shell: AppShell, uow: Uow, Path(id): Path<i64>| async move {
                 let deal = Deal::find_or_fail(&uow, id).await?;

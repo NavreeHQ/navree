@@ -68,7 +68,7 @@ pub async fn create(db: &Db) -> Result<(), navree::BoxError> {
     ] {
         db.pool().execute_script(&statement).await?;
     }
-    let names = ["Acme", "Globex", "Initech", "Umbrella", "شركة الخليج"];
+    let names = ["Acme", "Globex", "Initech", "Umbrella", "شركة الخليج", "Hooli", "Stark", "Wayne", "Tyrell", "Cyberdyne", "Soylent", "Massive"];
     let rows = names.iter().enumerate().map(|(at, name)| Company { id: at as i64 + 1, name: (*name).to_owned() });
     Company::query().insert(db, rows).await?;
     Deal::query().insert(db, (1..=DEALS).map(deal)).await?;

@@ -27,6 +27,7 @@ const reset = () => post("/__t/reset");
 
 /** Runs axe. Violations come back as short lines. */
 async function axe(page) {
+  page.axeRan = true;
   await page.evaluate(axeSource);
   return page.evaluate(async () => {
     const out = await window.axe.run(document, { runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] });
@@ -59,6 +60,8 @@ for (const browserName of browsers) {
       const page = await context.newPage();
       const problems = [];
       page.on("console", (message) => {
+        // Axe itself adds a style under a strict policy, which WebKit reports.
+        if (page.axeRan && /Refused to apply a stylesheet/.test(message.text())) return;
         if (message.type() === "error" && !/Failed to load resource/.test(message.text())) problems.push(message.text());
       });
       page.on("pageerror", (error) => problems.push(String(error)));
@@ -830,7 +833,7 @@ for (const browserName of browsers) {
         const cell = document.activeElement;
         return [cell.cellIndex, cell.parentElement.rowIndex];
       });
-      assert.equal(moved[0], 2);
+      assert.equal(moved[0], 3, "from the first cell with no control, two to the right");
       await page.keyboard.press("Home");
       assert.equal(await page.evaluate(() => document.activeElement.cellIndex), 0);
       await page.keyboard.press("Enter");
@@ -838,6 +841,30 @@ for (const browserName of browsers) {
       await page.keyboard.press("Escape");
       assert.equal(await page.evaluate(() => document.activeElement.nodeName), "TD");
       assert.equal(await page.locator("#extras tbody td[tabindex='0']").count(), 1, "still one tab stop");
+      // The sticky row stays under the headers as the table scrolls.
+      const box = page.locator("#extras [data-slot=table-container]");
+      await box.evaluate((el) => { el.scrollTop = el.scrollHeight; });
+      const stuck = await page.locator("#extras tr[data-sticky-row] td").first().boundingBox();
+      const head = await page.locator("#extras thead").boundingBox();
+      const area = await box.boundingBox();
+      assert.ok(stuck.y >= area.y && stuck.y < area.y + head.height + 90, `${stuck.y} in ${area.y}`);
+      await box.evaluate((el) => { el.scrollTop = 0; });
+      // A page change scrolls to where it was asked to.
+      await page.evaluate(() => {
+        window.scrolledTo = [];
+        const real = Element.prototype.scrollIntoView;
+        Element.prototype.scrollIntoView = function (...args) {
+          window.scrolledTo.push(this.id);
+          return real.apply(this, args);
+        };
+      });
+      await page.getByRole("link", { name: "Page 2", exact: true }).click();
+      await page.waitForURL(/page=2/);
+      await settled(page, "extras");
+      assert.deepEqual(await page.evaluate(() => window.scrolledTo), ["extras"]);
+      await page.getByRole("link", { name: "Page 1", exact: true }).click();
+      await page.waitForFunction(() => !location.search.includes("page="));
+      await settled(page, "extras");
       // A click on a row goes to it, a click on a control doesn't.
       const row = page.locator("#extras tbody tr[data-key]").nth(2);
       await row.locator("[data-ui-select-row]").click({ force: true });
@@ -868,6 +895,53 @@ for (const browserName of browsers) {
       const after = await page.locator("#rtl thead th[data-col=amount]").evaluate((cell) => cell.getBoundingClientRect().width);
       assert.ok(after > before, `ArrowLeft grows a column in RTL: ${before} ${after}`);
       assert.deepEqual(problems, []);
+      await close();
+    });
+
+    test("no count: Previous and Next only; loading and failed states keep the toolbar", async () => {
+      await reset();
+      const simple = await open("/simple");
+      assert.equal(await simple.page.locator("[data-slot=pagination-link]").count(), 0);
+      assert.match(await simple.page.locator("[data-slot=table-summary]").innerText(), /Showing 1 to 10/);
+      await simple.page.getByRole("link", { name: "Next" }).click();
+      await simple.page.waitForURL(/page=2/);
+      await settled(simple.page, "simple");
+      await simple.page.getByRole("link", { name: "Count all" }).click();
+      await simple.page.waitForURL(/count=1/);
+      await settled(simple.page, "simple");
+      assert.match(await simple.page.locator("[data-slot=table-summary]").innerText(), /of 137 results/);
+      await shot(simple.page, `${browserName}-simple`);
+      await simple.close();
+      const loading = await open("/skeleton");
+      assert.ok((await loading.page.locator("#deals tbody [data-slot=skeleton]").count()) > 10);
+      assert.equal(await loading.page.locator("#deals [name=q]").count(), 1);
+      await shot(loading.page, `${browserName}-loading`);
+      assert.deepEqual(await axe(loading.page), []);
+      await loading.close();
+      const failed = await open("/failed");
+      assert.match(await failed.page.locator("#deals tbody").innerText(), /couldn't load/);
+      assert.equal(await failed.page.locator("#deals tbody").getByRole("link", { name: "Try again" }).count(), 1);
+      assert.equal(await failed.page.locator("#deals [name=q]").count(), 1, "the toolbar stays, to change the query");
+      await shot(failed.page, `${browserName}-failed-server`);
+      assert.deepEqual(await axe(failed.page), []);
+      await failed.close();
+    });
+
+    test("a long list of filter choices narrows with no request", async () => {
+      await reset();
+      const { page, close } = await open("/deals");
+      await page.locator("[popovertarget=deals-m-company]").click({ force: true });
+      const options = page.locator("#deals-m-company [data-slot=filter-option]");
+      const count = await options.count();
+      assert.ok(count > 8, String(count));
+      const requests = [];
+      page.on("request", (request) => requests.push(request.url()));
+      await page.locator("#deals-m-company [data-ui-find-option]").fill("umb");
+      const shown = await options.evaluateAll((items) => items.filter((item) => !item.hidden).map((item) => item.innerText.trim()));
+      assert.deepEqual(shown, ["Umbrella"]);
+      await page.waitForTimeout(350);
+      assert.deepEqual(requests, [], "client-only");
+      await shot(page, `${browserName}-find-option`);
       await close();
     });
 
@@ -905,6 +979,8 @@ for (const browserName of browsers) {
       assert.equal(second.rows, 50);
       assert.ok(second.time < 300, `${second.time}`);
       assert.match(first.html, /10,000\+/, "a capped count");
+      const counted = await timed("/big?count=1");
+      assert.match(counted.html, /1,000,000 results/, "counted when asked");
       const { page, close } = await open("/big");
       await page.getByRole("link", { name: "Next" }).click();
       await page.waitForURL(/after=/);
