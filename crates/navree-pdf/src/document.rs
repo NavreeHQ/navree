@@ -359,10 +359,29 @@ impl Document {
     /// Every object that can be read, moved out of the document: what it
     /// holds is not copied. Also returns the ids of those the cross-reference
     /// lists that could not be read, and of those a later section marks free.
-    pub(crate) fn into_objects(self) -> Result<ReadObjects, PdfError> {
+    pub(crate) fn into_objects(mut self) -> Result<ReadObjects, PdfError> {
         let ids: Vec<ObjectId> = self.slots.iter().map(Slot::id).collect();
-        for &id in &ids {
+        // The objects each object stream holds that are not read yet: an
+        // object stream is let go of with the last of them, and not counted
+        // after it.
+        let mut unread: HashMap<u32, usize> = HashMap::new();
+        for slot in &self.slots {
+            if let Entry::Compressed { container, .. } = slot.entry {
+                *unread.entry(container).or_default() += 1;
+            }
+        }
+        for (index, &id) in ids.iter().enumerate() {
             self.object(id);
+            let Some(Entry::Compressed { container, .. }) = self.slots.get(index).map(|s| s.entry)
+            else {
+                continue;
+            };
+            if let Some(left) = unread.get_mut(&container) {
+                *left -= 1;
+                if *left == 0 {
+                    self.let_go_of(container);
+                }
+            }
         }
         self.check()?;
         let (memory, work) = (self.memory_used(), self.work_used());
@@ -389,6 +408,26 @@ impl Document {
             memory,
             work,
         })
+    }
+
+    /// Lets go of object stream `number`, once every object in it is read, and
+    /// of what it was counted as.
+    fn let_go_of(&mut self, number: u32) {
+        let Some(Some(container)) = self.containers.get_mut(&number).and_then(OnceCell::take)
+        else {
+            return;
+        };
+        let index = container
+            .by_number
+            .get()
+            .map_or(0, |found| found.len().saturating_mul(MEMBER_INDEX_MEMORY));
+        self.budget.release(
+            container
+                .data
+                .len()
+                .saturating_add(container.members.len().saturating_mul(MEMBER_MEMORY))
+                .saturating_add(index),
+        );
     }
 
     /// The number of bytes of the file, from its header on.

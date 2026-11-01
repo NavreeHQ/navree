@@ -14,20 +14,24 @@ use crate::error::{PdfError, size};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ReadLimits {
     /// Memory the objects read may hold (256 MiB), counted as the reader
-    /// builds them: each object, string, name and dictionary entry, each
-    /// object stream and cross-reference stream inflated, and each entry
-    /// of the cross-reference. The bytes of a stream are the file's own and
-    /// are not counted again. What the process holds is at most twice what
-    /// is counted. It is also what an edit may write past the file's own size
-    /// (see [`Objects::output_limit`](crate::Objects::output_limit)).
+    /// builds them: each object (32 bytes where it sits), each string and
+    /// dictionary entry (24 bytes for its key, which is kept inside the entry
+    /// when it has no more than 22), the room a list or a block of memory
+    /// rounds up to, each object stream and cross-reference stream inflated,
+    /// and each entry of the cross-reference. The bytes of a stream are the
+    /// file's own and are not counted again. What the process holds is at
+    /// most twice what is counted, and 1.15 times in the documents of an
+    /// office suite measured. It is also what an edit may write past the
+    /// file's own size (see
+    /// [`Objects::output_limit`](crate::Objects::output_limit)).
     pub memory: usize,
     /// Bytes the reader may look at (1 GiB), a byte counting again each time
     /// it is looked at: objects parsed, what a parse that failed reached
     /// before it moved back, what each filter reads and writes whether the
     /// next one works or not, a damaged file scanned for its objects. Each
-    /// object looked up costs 16 bytes, read already or not, and each entry of
-    /// the cross-reference and each object an object stream lists as much; each
-    /// step of a filter 1 KiB, and each string or stream decrypted 256 bytes.
+    /// object looked up costs 32 bytes, read already or not; each entry of the
+    /// cross-reference and each object an object stream lists 16; each step of
+    /// a filter 1 KiB, and each string or stream decrypted 256 bytes.
     pub work: usize,
     /// What one object stream or cross-reference stream may inflate to (8
     /// MiB). Writers put 100 to 200 objects in an object stream, tens of
@@ -100,6 +104,11 @@ impl Budget {
             )));
         }
         Ok(())
+    }
+
+    /// Takes `bytes` off the memory counted, for memory that is let go of.
+    pub(crate) fn release(&self, bytes: usize) {
+        self.memory.set(self.memory.get().saturating_sub(bytes));
     }
 
     /// Counts `bytes` scanned, or fails when the document has used all the

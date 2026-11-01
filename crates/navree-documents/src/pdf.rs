@@ -1292,7 +1292,7 @@ mod tests {
 
     #[test]
     fn an_overlay_is_held_with_its_document_to_the_limits_of_one() {
-        let base = pdf_with_an_array(150_000, true);
+        let base = pdf_with_an_array(170_000, true);
         let limits = ReadLimits {
             memory: 8 * 1024 * 1024,
             ..ReadLimits::default()
@@ -1304,7 +1304,7 @@ mod tests {
         };
         // Each is within 8 MiB, and together they are not.
         draw(&Pdf::from_lines(["SEAL"])).unwrap();
-        let error = draw(&pdf_with_an_array(100_000, true)).unwrap_err();
+        let error = draw(&pdf_with_an_array(110_000, true)).unwrap_err();
         assert!(matches!(error, DocumentsError::TooLarge(_)), "{error:?}");
         assert!(error.to_string().contains("8 MiB"), "{error}");
     }

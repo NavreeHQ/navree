@@ -114,7 +114,7 @@ pub struct TextLimits {
     /// page, [`OPERATION_COST`] for each operation of whatever kind, and more
     /// for those that do more: [`SHOW_COST`] for each that shows text,
     /// [`CODE_COST`] for each character code shown, [`DO_COST`] for each `Do`
-    /// and [`FORM_DRAW_COST`] when it draws a form; 16 bytes for each object
+    /// and [`FORM_DRAW_COST`] when it draws a form; 32 bytes for each object
     /// looked up on the way, through however many references; every byte a
     /// filter reads and writes, and 1 KiB for each filter, whether the content
     /// could be used or not; the fonts it reads ([`FONT_READ_COST`], a
@@ -138,13 +138,17 @@ pub struct TextLimits {
     /// (8 MiB). A dense page of text is tens of kilobytes; a million glyphs
     /// of Latin text is about 1 MB, of Chinese about 3 MB.
     pub page_text: usize,
-    /// The same, over all the pages (64 MiB): some fifteen thousand dense
-    /// pages. The text is returned whole, so this is memory as well.
+    /// The same, over all the pages (64 MiB): some fifteen thousand pages of
+    /// 4,000 characters, though the work of a document (1 GiB) runs out first,
+    /// at about nine thousand pages of that kind (a book of 3,211 pages used 35%
+    /// of it). The text is returned whole, so this is memory as well.
     pub document_text: usize,
     /// Memory the fonts and `ToUnicode` maps read for a document may hold
-    /// at once (256 MiB), as they are counted: [`cmap::MAP_CODE_MEMORY`] for each
-    /// code a map covers, 17 MB for a map of every two-byte code, of which
-    /// fifteen fit. Past the limit, what was used longest ago is dropped
+    /// at once (256 MiB), as they are counted: what reading a map builds (a
+    /// range of codes is one entry however many it covers, and the pieces a
+    /// later line splits it in share its text), 160 bytes for each code an
+    /// encoding's `Differences` names, and 4 bytes for each code a table of
+    /// widths has room for. Past the limit, what was used longest ago is dropped
     /// and read again when a page needs it; what the run of text being
     /// shown uses is not, so the total can pass the limit by one font's
     /// widths. One map or font that would take more on its own is refused,

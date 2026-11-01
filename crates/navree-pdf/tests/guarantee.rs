@@ -1071,23 +1071,47 @@ fn compressing_takes_about_what_it_is_charged() {
 #[ignore = "the figure of the documentation, in a release build"]
 fn the_whole_budget_of_the_slowest_shape() {
     let content = prefixed(b"BT /F 1 Tf (", b"A", 999_990, b") Tj ET");
-    let kids: String = (0..80).map(|page| format!("{} 0 R ", 100 + page)).collect();
+    let kids: String = (0..60).map(|page| format!("{} 0 R ", 100 + page)).collect();
     let mut pdf = Pdf::default();
     pdf.add(1, "<< /Type /Catalog /Pages 2 0 R >>");
     pdf.add(
         2,
         format!(
-            "<< /Type /Pages /Kids [{kids}] /Count 80 /Resources << /Font << /F 5 0 R >> >> >>"
+            "<< /Type /Pages /Kids [{kids}] /Count 60 /Resources << /Font << /F 5 0 R >> >> >>"
         ),
     );
     pdf.add(4, stream("/Filter /FlateDecode", &deflate(&content)));
     pdf.add(5, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-    for page in 0..80 {
+    for page in 0..60 {
         pdf.add(
             100 + page,
             "<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>",
         );
     }
+    let document = Document::load(pdf.table(), ReadLimits::default()).unwrap();
+    let limits = TextLimits {
+        document_text: usize::MAX,
+        ..TextLimits::default()
+    };
+    let start = Instant::now();
+    let (_, charged) = text::page_texts_counted(&document, limits).unwrap();
+    println!(
+        "{charged} bytes of work in {:.1} s",
+        start.elapsed().as_secs_f64()
+    );
+    assert!(charged > 900 * MIB, "{charged}");
+}
+
+/// The same for the shape that takes longest for a byte charged: 53 pages that
+/// each show a million random two-byte codes through a map of 16,000 lines and
+/// 65,000 widths, the whole 1 GiB spent on it.
+#[test]
+#[ignore = "the figure of the documentation, in a release build"]
+fn the_whole_budget_of_the_cold_map_shape() {
+    let content = scattered_glyphs(999_000, 2, 7);
+    let mut pdf = Pdf::default();
+    cold_composite_font(&mut pdf, &content);
+    pages_sharing(&mut pdf, &content, 53);
     let document = Document::load(pdf.table(), ReadLimits::default()).unwrap();
     let limits = TextLimits {
         document_text: usize::MAX,
@@ -1388,6 +1412,79 @@ fn saving_stops_at_the_work_an_edit_may_do() {
         let _ = objects.resolve(&object);
     }
     too_large(objects.save());
+}
+
+/// A page showing one glyph of each of `fonts` composite fonts in turn,
+/// `turns` times, each font with a map that is one line over `range`.
+fn fonts_with_one_line_maps(fonts: u32, turns: usize, codespace: &str, range: &str) -> Vec<u8> {
+    let mut pdf = Pdf::default();
+    let mut names = String::new();
+    let mut body = String::from("BT 72 700 Td ");
+    for font in 0..fonts {
+        names.push_str(&format!("/F{font} {} 0 R ", 100 + font));
+        pdf.add(
+            100 + font,
+            format!(
+                "<</Type/Font/Subtype/Type0/Encoding/Identity-H/DescendantFonts[99 0 R]\
+                 /ToUnicode {} 0 R>>",
+                200 + font
+            ),
+        );
+        pdf.add(
+            200 + font,
+            stream(
+                "",
+                format!(
+                    "1 begincodespacerange {codespace} endcodespacerange \
+                     1 beginbfrange {range} <0041> endbfrange"
+                )
+                .as_bytes(),
+            ),
+        );
+    }
+    pdf.add(99, "<</DW 500>>");
+    for _ in 0..turns {
+        for font in 0..fonts {
+            body.push_str(&format!("/F{font} 12 Tf <0041> Tj "));
+        }
+    }
+    body.push_str("ET");
+    one_page(
+        &mut pdf,
+        &format!("/Contents 4 0 R /Resources << /Font << {names}>> >>"),
+    );
+    pdf.add(4, stream("", body.as_bytes()));
+    pdf.table()
+}
+
+#[test]
+fn a_map_of_one_line_is_counted_for_the_line_whatever_codes_it_covers() {
+    // Every four-byte code in one line.
+    let mut pdf = Pdf::default();
+    font_page(
+        &mut pdf,
+        b"BT /F 12 Tf 72 700 Td (Hello) Tj ET",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /ToUnicode 6 0 R >>",
+    );
+    pdf.add(
+        6,
+        stream(
+            "",
+            b"1 beginbfrange <00000000> <0010FFFF> <0041> endbfrange",
+        ),
+    );
+    let document = Document::load(pdf.table(), ReadLimits::default()).unwrap();
+    // The map reads no code the page shows: the page is read, not refused.
+    text::page_texts(&document).unwrap();
+    // Twenty fonts, each with the map of every two-byte code in one line, used
+    // in turn 160 times: each is read once and kept.
+    let file = fonts_with_one_line_maps(20, 8, "<0000> <FFFF>", "<0000> <FFFF>");
+    let document = Document::load(file, ReadLimits::default()).unwrap();
+    let (texts, charged) = text::page_texts_counted(&document, TextLimits::default()).unwrap();
+    // Code 0041 is the 66th of a range that starts at U+0041: U+0082.
+    assert_eq!(texts[0], "\u{82}".repeat(160));
+    // 160 switches between fonts cost what reading twenty maps does.
+    assert!(charged < 2 * MIB, "{charged}");
 }
 
 /// `marks` marks left open, each with `bytes` of actual text in Latin-1 (twice

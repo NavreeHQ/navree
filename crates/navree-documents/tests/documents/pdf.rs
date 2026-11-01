@@ -943,3 +943,21 @@ fn an_edit_leaves_a_stream_with_parameters_and_no_filter_readable() {
         }
     }
 }
+
+#[test]
+fn a_pdf_is_send_and_sync_and_can_be_held_across_an_await() {
+    fn send_sync<T: Send + Sync + 'static>(_: &T) {}
+    fn sendable<T: Send>(_: &T) {}
+    let pdf = Pdf::from_lines(["a"]);
+    send_sync(&pdf);
+    send_sync(&std::sync::Arc::new(pdf.clone()));
+    // Objects can move between threads, between one edit and the next.
+    let objects = Objects::new();
+    sendable(&objects);
+    let future = async move {
+        let stamped = pdf.stamp(&Stamp::text("x")).unwrap();
+        std::future::ready(()).await;
+        stamped.text().unwrap()
+    };
+    sendable(&future);
+}

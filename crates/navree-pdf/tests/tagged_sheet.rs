@@ -47,6 +47,22 @@ fn a_tagged_sheet_is_read_for_an_edit_within_a_quarter_of_the_limits() {
     }
 }
 
+/// The object streams a document is laid out in are let go of as their objects
+/// are read, and not counted after: a file with them is counted as the same
+/// objects without.
+#[test]
+fn object_streams_are_not_counted_once_they_are_read() {
+    let limits = ReadLimits::default();
+    let (plain, _) = counted(file(2_500, false), limits);
+    let (streams, _) = counted(file(2_500, true), limits);
+    assert!(
+        streams < plain + plain / 20,
+        "{} MiB in object streams, {} MiB plain",
+        streams / MIB,
+        plain / MIB
+    );
+}
+
 /// A sheet of 10,000 rows has 250,000 objects: 31 MB written plain, 5 MB in
 /// object streams, either way well inside what an upload may be.
 #[test]
