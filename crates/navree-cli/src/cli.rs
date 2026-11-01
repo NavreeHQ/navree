@@ -467,10 +467,12 @@ pub struct BrowserInstallArgs {
 /// `navree openapi:client [--out web/src/lib/api] [--input openapi.json]`.
 #[derive(Debug, Args)]
 pub struct OpenapiClientArgs {
-    /// Where openapi.json and schema.d.ts go, relative to the app.
+    /// Where openapi.json and schema.d.ts go: relative to the app, or to the
+    /// current directory with `--input`.
     #[arg(long, default_value = crate::openapi_client::DEFAULT_OUT)]
     pub out: PathBuf,
-    /// Generate from this OpenAPI document instead of exporting the app's.
+    /// Generate from this OpenAPI document (JSON) instead of exporting the
+    /// app's; no app is needed.
     #[arg(long, value_name = "FILE")]
     pub input: Option<PathBuf>,
 }

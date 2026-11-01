@@ -139,20 +139,26 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Command::OpenapiClient(args) => {
-            let root = run_root_of(cwd)?;
+            // With `--input` the paths are the current directory's and no app
+            // is needed; without it they are the app's, and the app exports
+            // its document first.
+            let root = if args.input.is_some() {
+                cwd.to_path_buf()
+            } else {
+                run_root_of(cwd)?
+            };
             let plan = openapi_client::plan(&args.out, args.input.as_deref());
             std::fs::create_dir_all(root.join(&args.out))
                 .with_context(|| format!("cannot create {}", args.out.display()))?;
-            let env = dock::app_env(&root)?;
-            for step in &plan.steps {
-                println!("  run      {step}");
-                let status = step
-                    .clone()
-                    .with_env(env.clone())
-                    .run(&root)
-                    .with_context(|| {
-                        format!("cannot run {} (is it installed and on PATH?)", step.program)
-                    })?;
+            if let Some(export) = &plan.export {
+                let env = dock::app_env(&root)?;
+                println!("  run      {export}");
+                let status = export.clone().with_env(env).run(&root).with_context(|| {
+                    format!(
+                        "cannot run {} (is it installed and on PATH?)",
+                        export.program
+                    )
+                })?;
                 if !status.success() {
                     return Ok(status
                         .code()
@@ -160,10 +166,31 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
                         .map_or(ExitCode::FAILURE, ExitCode::from));
                 }
             }
+            let document = root.join(&plan.document);
+            let size = std::fs::metadata(&document)
+                .with_context(|| format!("cannot read {}", document.display()))?
+                .len();
+            anyhow::ensure!(
+                size <= openapi_client::MAX_DOCUMENT_BYTES,
+                "{} is larger than {} bytes",
+                document.display(),
+                openapi_client::MAX_DOCUMENT_BYTES
+            );
+            let text = std::fs::read_to_string(&document)
+                .with_context(|| format!("cannot read {}", document.display()))?;
+            let generated = openapi_client::generate(&text).with_context(|| {
+                format!("cannot generate the schema from {}", document.display())
+            })?;
+            for warning in &generated.warnings {
+                eprintln!("  warning  {warning}");
+            }
+            let schema = root.join(&plan.schema);
+            std::fs::write(&schema, &generated.schema)
+                .with_context(|| format!("cannot write {}", schema.display()))?;
             if args.input.is_none() {
                 println!("  wrote    {}", shown(&root, &root.join(&plan.document)));
             }
-            println!("  wrote    {}", shown(&root, &root.join(&plan.schema)));
+            println!("  wrote    {}", shown(&root, &schema));
             println!(
                 "  next     createNavreeClient<paths>() from @navree/client, with `import type {{ paths }} from \"./schema\"`"
             );
