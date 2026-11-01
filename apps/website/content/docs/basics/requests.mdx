@@ -278,7 +278,7 @@ async fn store(&self, mut form: Multipart) -> Result<String> {
 }
 ```
 
-`field.bytes()` and `field.text()` read a whole value, `name`, `file_name`, `content_type` and `headers` describe the part, and a part you don't read is skipped. A form is often read before anyone is signed in, so everything a client can make the parser hold has a limit:
+`field.bytes()` and `field.text()` read a whole value, `name`, `file_name`, `content_type` and `headers` describe the part, and a part you don't read is skipped. A value reaches you as it arrives: Navree's parser never holds a file whole, only the few bytes at the end of a chunk that may be the start of the next delimiter. A form is often read before anyone is signed in, so everything a client can make the parser hold has a limit:
 
 | Limit | Default | Past it |
 |---|---|---|
@@ -298,6 +298,8 @@ use navree::http::MultipartLimits;
 let limits = MultipartLimits { max_field_bytes: 8 * 1024 * 1024, ..form.limits() };
 let mut form = form.with_limits(limits);
 ```
+
+`name` and `file_name` come from the part's `Content-Disposition`, read parameter by parameter (RFC 7578): quoted or not, with parameter names in any case, and never from inside another parameter's value. When the part also has a `filename*` (RFC 8187, in UTF-8 or ISO-8859-1), `file_name` is its decoded value; a `filename*` that doesn't decode leaves `filename`. A part with two `Content-Disposition` or two `Content-Type` headers, or that gives `name`, `filename` or `filename*` twice, is a 400: a proxy or filter in front of the app may have read the other one.
 
 Names and file names are what the client sent. `field.file_name()` may hold a path, `..` or anything else: Navree doesn't read it as a path, and you shouldn't either. [`store_upload`](/docs/digging-deeper/storage/#file-uploads) keeps only its last component and stores the file under a random name. A file name is the client's own claim, so `max_file_bytes` is no way of keeping text small: that's what `max_field_bytes` and `field.text()` are for.
 

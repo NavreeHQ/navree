@@ -320,7 +320,7 @@ token's claims read back, a rendered query holds only the user's words.
 | `mcp_protocol`, `mcp_server` | JSON-RPC parsing and stdio framing; a booted MCP server over HTTP and stdio |
 | `http_client_ip`, `http_cors` | `X-Forwarded-For`, `X-Real-IP`, trusted proxies, the rate-limit key; CORS origins; signed URLs |
 | `http_routing`, `http_extract` | route patterns, path matching and precedence, path checks and parameter decoding; query strings, forms and JSON bodies through the extractors |
-| `http_multipart`, `ws_handshake` | `multipart/form-data` boundaries, delimiters, part heads and limits, split into chunks of every size; the headers of a WebSocket handshake |
+| `http_multipart`, `ws_handshake` | `multipart/form-data` boundaries, delimiters, part heads, `Content-Disposition` parameters and limits, split into chunks of every size and checked against a reference that reads the body whole; the headers of a WebSocket handshake |
 | `host_names` | email domains, custom-domain normalization, the `Host` header |
 | `sso_saml_response`, `sso_saml_metadata`, `sso_xml` | SAML responses, identity provider metadata, XML and Canonical XML |
 | `webhooks_signatures` | the signature headers and bodies of every incoming webhook verifier |
