@@ -42,7 +42,48 @@ pub enum Node {
     Fragment(Vec<Node>),
 }
 
+/// Dropping a tree takes no stack per level: however deep an app built it from its
+/// data, a free walks an explicit list and can't overflow. Shallow nodes, nearly all
+/// of them, are the first check.
+impl Drop for Node {
+    fn drop(&mut self) {
+        let kids = match self {
+            Self::Element(element) => &mut element.children,
+            Self::Fragment(nodes) => nodes,
+            _ => return,
+        };
+        if kids.iter().all(Self::is_leaf) {
+            return;
+        }
+        let mut stack = std::mem::take(kids);
+        while let Some(mut node) = stack.pop() {
+            match &mut node {
+                Self::Element(element) => stack.append(&mut element.children),
+                Self::Fragment(nodes) => stack.append(nodes),
+                _ => {}
+            }
+        }
+    }
+}
+
 impl Node {
+    /// Whether this holds no children, so dropping it can't recurse.
+    fn is_leaf(&self) -> bool {
+        match self {
+            Self::Element(element) => element.children.is_empty(),
+            Self::Fragment(nodes) => nodes.is_empty(),
+            _ => true,
+        }
+    }
+
+    /// The element this is, or nothing.
+    pub(crate) fn into_element(mut self) -> Option<Element> {
+        match &mut self {
+            Self::Element(element) => Some(std::mem::replace(element, el("div"))),
+            _ => None,
+        }
+    }
+
     /// A text node.
     pub fn text(text: impl Into<Cow<'static, str>>) -> Self {
         Self::Text(text.into())

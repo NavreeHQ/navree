@@ -337,3 +337,58 @@ fn the_elements_that_load_or_navigate_are_never_written() {
         assert!(!html.contains(&format!("<{tag}")), "{html}");
     }
 }
+
+#[test]
+fn a_textarea_keeps_a_first_newline() {
+    let html = render(&navree_ui::Textarea::new("a").value("\nfirst").into());
+    assert!(html.contains(">\n\nfirst</textarea>"), "the parser eats one newline: {html}");
+    let html = render(&navree_ui::Textarea::new("a").value("first").into());
+    assert!(html.contains(">first</textarea>"), "{html}");
+}
+
+#[test]
+fn a_page_with_no_flash_sets_no_cookie() {
+    let response = navree_ui::Shell::new("A").page("x", "/").to_view().into_response();
+    assert!(response.headers().get("set-cookie").is_none());
+}
+
+#[test]
+fn a_flash_keeps_its_tone() {
+    for (tone, slot) in [(ToastTone::Danger, "danger"), (ToastTone::Warning, "warning"), (ToastTone::Info, "info")] {
+        let response = Reply::redirect("/x").toast(tone, "Payment failed").into_response();
+        let cookie = response.headers()["set-cookie"].to_str().unwrap().to_owned();
+        assert!(cookie.starts_with(&format!("navree_ui_flash={slot}:Payment%20failed;")), "{cookie}");
+    }
+    let response = Reply::redirect("/x").toast(ToastTone::Success, "Done").into_response();
+    assert!(response.headers()["set-cookie"].to_str().unwrap().starts_with("navree_ui_flash=Done;"));
+}
+
+#[test]
+fn a_very_deep_tree_drops_on_a_small_stack() {
+    let worker = std::thread::Builder::new().stack_size(256 * 1024).spawn(|| {
+        let mut element = el("div");
+        for _ in 0..200_000 {
+            element = el("div").child(element);
+        }
+        let node = navree_ui::Node::from(element);
+        drop(node);
+        let mut list = navree_ui::Node::list("x");
+        for _ in 0..200_000 {
+            list = navree_ui::Node::list(("y", list));
+        }
+        drop(list);
+    });
+    worker.unwrap().join().expect("no overflow");
+}
+
+#[test]
+fn money_reads_back_what_it_writes_and_refuses_stray_commas() {
+    use navree_ui::Money;
+    assert_eq!(Money::parse(&Money(i64::MIN).display()), Some(Money(i64::MIN)));
+    assert_eq!(Money::parse(&Money(i64::MAX).display()), Some(Money(i64::MAX)));
+    for bad in ["1,,,,2", ",1", "1,", "1,2", "1,2345", "1.2,3", "-,5", "92233720368547758.08", "-92233720368547758.09"] {
+        assert_eq!(Money::parse(bad), None, "{bad}");
+    }
+    assert_eq!(Money::parse("12,34,567.50"), Some(Money(123_456_750)));
+    assert_eq!(Money::parse("1,000"), Some(Money(100_000)));
+}

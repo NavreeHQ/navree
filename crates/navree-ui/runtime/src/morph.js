@@ -86,7 +86,8 @@ function morphAttrs(a, b) {
     if (attr(a, name) !== value) set(a, name, value);
   }
   for (const { name } of [...attrsOf(a)]) {
-    if (has(b, name) || keep.includes(name) || (name === "open" && OPEN_STATE.has(nameOf(a)))) continue;
+    // The server never writes `style`: on a live element it is what the runtime placed.
+    if (has(b, name) || name === "style" || keep.includes(name) || (name === "open" && OPEN_STATE.has(nameOf(a)))) continue;
     unset(a, name);
   }
 }

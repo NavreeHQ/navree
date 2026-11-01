@@ -250,7 +250,7 @@ pub struct Reply {
     ops: Vec<Op>,
     status: StatusCode,
     fallback: Fallback,
-    flash: Option<String>,
+    flash: Option<(ToastTone, String)>,
     uses: crate::node::Uses,
 }
 
@@ -298,7 +298,7 @@ impl Reply {
     /// Adds a toast. With JavaScript off, the next page shows it.
     pub fn toast(mut self, tone: ToastTone, text: impl Into<String>) -> Self {
         let text = text.into();
-        self.flash = Some(text.clone());
+        self.flash = Some((tone, text.clone()));
         // A toast shows before a navigation that follows it.
         let at = self.ops.iter().position(|op| matches!(op, Op::Navigate { .. })).unwrap_or(self.ops.len());
         self.ops.insert(at, Op::Toast { tone, text });
@@ -326,8 +326,8 @@ impl Reply {
             Fallback::View(view) => view.into_response(),
             Fallback::Empty => StatusCode::NO_CONTENT.into_response(),
         };
-        if let Some(text) = self.flash
-            && let Ok(cookie) = crate::shell::flash_cookie(&text)
+        if let Some((tone, text)) = self.flash
+            && let Ok(cookie) = crate::shell::flash_cookie_toned(tone, &text)
         {
             response.headers_mut().append(header::SET_COOKIE, cookie);
         }

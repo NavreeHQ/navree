@@ -213,8 +213,8 @@ impl Button {
             ButtonVariant::Link => root.attr("data-variant", "link"),
         };
         root = root.attr_opt("data-size", self.size.as_str()).flag("data-block", self.block).flag("data-pending", self.pending);
-        if let Some(Node::Text(label)) = self.aria_label {
-            root = root.attr("aria-label", label);
+        if let Some(Node::Text(label)) = &self.aria_label {
+            root = root.attr("aria-label", label.clone());
         }
         root = match self.href {
             Some(href) => {

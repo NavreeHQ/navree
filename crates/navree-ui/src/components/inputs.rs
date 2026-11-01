@@ -212,7 +212,10 @@ impl Textarea {
     }
 
     fn into_node(self) -> Node {
-        self.el.child(self.value).into()
+        // The HTML parser drops a newline right after `<textarea>`: a value that
+        // starts with one needs a second to keep it.
+        let lead = self.value.as_deref().is_some_and(|value| value.starts_with('\n')).then_some("\n");
+        self.el.children((lead, self.value)).into()
     }
 }
 

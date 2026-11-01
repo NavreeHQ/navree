@@ -17,6 +17,7 @@ use crate::components::{Alert, AlertTone, Avatar, Breadcrumb, Button, ButtonVari
 use crate::html::Href;
 use crate::icons::{self, Icon};
 use crate::node::{Element, IntoNodes, Node, Uses, el};
+use crate::op::ToastTone;
 use crate::view::View;
 
 /// The cookie holding a toast for the next page.
@@ -27,21 +28,50 @@ pub const SIDEBAR_COOKIE: &str = "navree_ui_sidebar";
 
 /// A cookie that shows `text` on the next page, when JavaScript is off.
 pub(crate) fn flash_cookie(text: &str) -> Result<HeaderValue, InvalidHeaderValue> {
+    flash_cookie_toned(ToastTone::Success, text)
+}
+
+/// The tone a flash holds before its text, success being the plain case. The text
+/// is percent-encoded, so its first `:` is always this one.
+const fn tone_prefix(tone: ToastTone) -> &'static str {
+    match tone {
+        ToastTone::Success => "",
+        ToastTone::Info => "info:",
+        ToastTone::Warning => "warning:",
+        ToastTone::Danger => "danger:",
+    }
+}
+
+/// A cookie that shows `text` in `tone` on the next page, when JavaScript is off.
+pub(crate) fn flash_cookie_toned(tone: ToastTone, text: &str) -> Result<HeaderValue, InvalidHeaderValue> {
     let mut value = String::with_capacity(text.len() + 64);
     value.push_str(FLASH_COOKIE);
     value.push('=');
+    value.push_str(tone_prefix(tone));
     for byte in text.bytes().take(512) {
         match byte {
             b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => value.push(char::from(byte)),
             _ => {
                 value.push('%');
-                value.push(char::from_digit(u32::from(byte >> 4), 16).unwrap_or('0'));
-                value.push(char::from_digit(u32::from(byte & 15), 16).unwrap_or('0'));
+                value.push(char::from_digit(u32::from(byte >> 4), 16).unwrap_or('0').to_ascii_uppercase());
+                value.push(char::from_digit(u32::from(byte & 15), 16).unwrap_or('0').to_ascii_uppercase());
             }
         }
     }
     value.push_str("; Path=/; Max-Age=30; SameSite=Lax; HttpOnly");
     HeaderValue::from_str(&value)
+}
+
+/// A flash cookie's tone and text.
+fn read_flash(value: &str) -> Option<(AlertTone, String)> {
+    let (tone, text) = match value.split_once(':') {
+        Some(("info", text)) => (AlertTone::Neutral, text),
+        Some(("warning", text)) => (AlertTone::Warning, text),
+        Some(("danger", text)) => (AlertTone::Danger, text),
+        _ => (AlertTone::Success, value),
+    };
+    let (_, text) = urlencoded::parse(format!("x={text}").as_bytes()).next().map(|(name, text)| (name.into_owned(), text.into_owned()))?;
+    Some((tone, text))
 }
 
 /// One link in the sidebar.
@@ -307,14 +337,14 @@ pub struct AppPage {
     title: Cow<'static, str>,
     path: String,
     collapsed: bool,
-    flash: Option<String>,
+    flash: Option<(AlertTone, String)>,
     crumbs: Vec<(Cow<'static, str>, Href)>,
     actions: Vec<Node>,
     body: Vec<Node>,
 }
 
 impl AppPage {
-    fn new(shell: Arc<Shell>, title: Cow<'static, str>, path: String, collapsed: bool, flash: Option<String>) -> Self {
+    fn new(shell: Arc<Shell>, title: Cow<'static, str>, path: String, collapsed: bool, flash: Option<(AlertTone, String)>) -> Self {
         Self { shell, title, path, collapsed, flash, crumbs: Vec::new(), actions: Vec::new(), body: Vec::new() }
     }
 
@@ -356,13 +386,13 @@ impl AppPage {
             el("div").slot("topbar-spacer"),
             shell.search.clone(),
         ));
-        let flash = self.flash.map(|text| Alert::new(AlertTone::Success).title(text));
+        let had_flash = self.flash.is_some();
+        let flash = self.flash.map(|(tone, text)| Alert::new(tone).title(text));
         let heading = el("div").slot("page-header").children((
             el("h1").slot("page-title").child(self.title.clone()),
             (!self.actions.is_empty()).then(|| el("div").slot("page-actions").child(self.actions)),
         ));
         let main = el("main").slot("page").attr("id", "main").attr("tabindex", -1_i64).children((flash, heading, self.body));
-        let had_flash = main.child_nodes().first().is_some_and(|node| !matches!(node, Node::Empty));
         let wrapper = el("div")
             .slot("sidebar-wrapper")
             .attr("data-ui-keep-attrs", "data-collapsed data-mobile-open")
@@ -400,7 +430,7 @@ pub struct AppShell {
     shell: Arc<Shell>,
     path: String,
     collapsed: bool,
-    flash: Option<String>,
+    flash: Option<(AlertTone, String)>,
 }
 
 impl AppShell {
@@ -421,7 +451,7 @@ impl FromRequestParts for AppShell {
             for pair in value.split(';') {
                 match pair.trim().split_once('=') {
                     Some((SIDEBAR_COOKIE, "collapsed")) => collapsed = true,
-                    Some((FLASH_COOKIE, text)) => flash = urlencoded::parse(format!("x={text}").as_bytes()).next().map(|(_, text)| text.into_owned()),
+                    Some((FLASH_COOKIE, text)) => flash = read_flash(text),
                     _ => {}
                 }
             }
@@ -479,6 +509,27 @@ mod tests {
         let input = format!("x={value}");
         let (_, decoded) = urlencoded::parse(input.as_bytes()).next().unwrap();
         assert_eq!(decoded, "Deal \"Acme\" created; ok");
+    }
+
+    #[test]
+    fn a_flash_reads_back_with_its_tone() {
+        assert_eq!(read_flash("Done"), Some((AlertTone::Success, "Done".to_owned())));
+        assert_eq!(read_flash("danger:Payment%20failed"), Some((AlertTone::Danger, "Payment failed".to_owned())));
+        assert_eq!(read_flash("warning:a%3Ab"), Some((AlertTone::Warning, "a:b".to_owned())));
+        assert_eq!(read_flash("info:x"), Some((AlertTone::Neutral, "x".to_owned())));
+        assert_eq!(read_flash("forged:x"), Some((AlertTone::Success, "forged:x".to_owned())), "any other value is just text");
+    }
+
+    #[test]
+    fn a_page_shows_a_danger_flash_as_danger_and_clears_it() {
+        let shell = Arc::new(shell());
+        let page = AppPage::new(shell, "x".into(), "/".to_owned(), false, read_flash("danger:Payment%20failed"));
+        let view = page.to_view();
+        let html = view.to_html();
+        assert!(html.contains(r#"data-tone="danger""#), "{html}");
+        assert!(html.contains("Payment failed"), "{html}");
+        let response = view.into_response();
+        assert!(response.headers()["set-cookie"].to_str().unwrap().contains("Max-Age=0"));
     }
 
     #[test]

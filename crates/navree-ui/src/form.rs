@@ -141,29 +141,32 @@ impl FieldValue for chrono::NaiveDateTime {
 pub struct Money(pub i64);
 
 impl Money {
-    /// Reads `12,500.50`, `12500` or `-3.5`. More than two decimals, or too
-    /// large a number, is `None`.
+    /// Reads `12,500.50`, `12,34,567`, `12500` or `-3.5`. Commas separate groups:
+    /// the last of three digits, the others of two or three. More than two
+    /// decimals, or too large a number, is `None`.
     pub fn parse(text: &str) -> Option<Self> {
-        let text = text.trim().replace(',', "");
+        let text = text.trim();
         let (negative, text) = match text.strip_prefix('-') {
             Some(rest) => (true, rest),
-            None => (false, text.as_str()),
+            None => (false, text),
         };
         let (whole, fraction) = text.split_once('.').unwrap_or((text, ""));
-        if (whole.is_empty() && fraction.is_empty()) || fraction.len() > 2 {
+        if (whole.is_empty() && fraction.is_empty()) || fraction.len() > 2 || !grouped(whole) {
             return None;
         }
-        if !whole.bytes().chain(fraction.bytes()).all(|byte| byte.is_ascii_digit()) {
+        let digits = whole.replace(',', "");
+        if !digits.bytes().chain(fraction.bytes()).all(|byte| byte.is_ascii_digit()) {
             return None;
         }
-        let whole: i64 = if whole.is_empty() { 0 } else { whole.parse().ok()? };
-        let fraction: i64 = match fraction.len() {
+        // Wider than the result, so the most negative amount reads back.
+        let whole: i128 = if digits.is_empty() { 0 } else { digits.parse().ok()? };
+        let fraction: i128 = match fraction.len() {
             0 => 0,
-            1 => fraction.parse::<i64>().ok()? * 10,
+            1 => fraction.parse::<i128>().ok()? * 10,
             _ => fraction.parse().ok()?,
         };
         let cents = whole.checked_mul(100)?.checked_add(fraction)?;
-        Some(Self(if negative { -cents } else { cents }))
+        i64::try_from(if negative { -cents } else { cents }).ok().map(Self)
     }
 
     /// `1250050` as `12,500.50`.
@@ -183,6 +186,20 @@ impl Money {
         let _ = write!(out, ".{:02}", cents % 100);
         out
     }
+}
+
+/// Whether the commas in `whole`, if any, separate groups of digits.
+fn grouped(whole: &str) -> bool {
+    if !whole.contains(',') {
+        return true;
+    }
+    let groups: Vec<&str> = whole.split(',').collect();
+    let last = groups.len() - 1;
+    groups.iter().enumerate().all(|(at, group)| match at {
+        0 => (1..=3).contains(&group.len()),
+        _ if at == last => group.len() == 3,
+        _ => (2..=3).contains(&group.len()),
+    })
 }
 
 impl FieldValue for Money {
@@ -470,8 +487,7 @@ impl<T: Form> FormView<T> {
                     box_field = box_field.help(help);
                 }
                 let box_node: Node = box_field.into();
-                let Node::Element(element) = box_node else { return None };
-                element
+                box_node.into_element()?
             }
         };
         Some(holder.flag("data-wide", field.wide))
@@ -535,10 +551,7 @@ fn is_on(value: Option<&str>) -> bool {
 }
 
 fn input_only(control: Node) -> Element {
-    match control {
-        Node::Element(element) => element,
-        _ => el("div"),
-    }
+    control.into_element().unwrap_or_else(|| el("div"))
 }
 
 /// Sets the id of the input inside `node`, for a label that holds it.

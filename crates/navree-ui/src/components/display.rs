@@ -720,7 +720,7 @@ impl Pagination {
             let link = if number == page { link.attr("aria-current", "page") } else { link };
             items.push(el("li").child(link.child(i64::from(number))));
         }
-        items.push(edge(page + 1, page < pages, icons::CHEVRON_RIGHT, "Next page"));
+        items.push(edge(page.saturating_add(1), page < pages, icons::CHEVRON_RIGHT, "Next page"));
         Self { el: el("nav").slot("pagination").attr("aria-label", "Pagination").child(el("ul").child(items)) }
     }
 

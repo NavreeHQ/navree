@@ -164,5 +164,30 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       assert.deepEqual(errors, []);
       await context.close();
     });
+
+    test(`a morph keeps where an open popover was placed (${engine})`, async () => {
+      const name = key("placed");
+      const body = (n) => `<div id="r" data-ui-src="/${name}-frag"><button id="pop" popovertarget="p">open ${n}</button><div id="p" popover data-ui-place>menu</div></div>`;
+      route(`/${name}`, doc(`${body(1)}<form id="f" data-ui-form method="post" action="/${name}-inv"><button id="go">go</button></form>`, { head: `<script type="module" src="/_navree/ui/overlay.js"></script>` }));
+      route(`/${name}-frag`, doc(body(2)));
+      f.routes.set(`/${name}-inv`, (req, res) => f.ops(res, { ops: [{ op: "invalidate", target: "r" }] }));
+      const { context, page } = await fresh(`/${name}`);
+      await page.click("#pop");
+      await page.waitForFunction(() => document.getElementById("p").style.left !== "");
+      const placed = await page.evaluate(() => document.getElementById("p").style.left);
+      await page.evaluate(() => document.getElementById("f").requestSubmit());
+      await sleep(250);
+      assert.equal(await page.textContent("#pop"), "open 2");
+      assert.equal(await page.evaluate(() => document.getElementById("p").style.left), placed);
+      await context.close();
+    });
+
+    test(`a textarea from the server keeps its first newline (${engine})`, async () => {
+      const name = key("area");
+      route(`/${name}`, doc(`<textarea id="a" name="a">\n\nfirst line</textarea>`));
+      const { context, page } = await fresh(`/${name}`);
+      assert.equal(await page.inputValue("#a"), "\nfirst line");
+      await context.close();
+    });
   });
 }
