@@ -27,7 +27,6 @@ const reset = () => post("/__t/reset");
 
 /** Runs axe. Violations come back as short lines. */
 async function axe(page) {
-  page.axeRan = true;
   await page.evaluate(axeSource);
   return page.evaluate(async () => {
     const out = await window.axe.run(document, { runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] });
@@ -42,6 +41,7 @@ const settled = async (page, id = "deals") => page.waitForFunction((table) => !d
 async function shot(page, name) {
   if (!SHOTS) return;
   await mkdir(SHOTS, { recursive: true });
+  await page.waitForTimeout(220); // Past a popover's fade.
   await page.screenshot({ path: join(SHOTS, name + ".png") });
 }
 
@@ -60,8 +60,10 @@ for (const browserName of browsers) {
       const page = await context.newPage();
       const problems = [];
       page.on("console", (message) => {
-        // Axe itself adds a style under a strict policy, which WebKit reports.
-        if (page.axeRan && /Refused to apply a stylesheet/.test(message.text())) return;
+        // Playwright's WebKit reports this on every page, also a plain 404 with none of
+        // our markup. Chromium and Firefox still check the policy here, and the
+        // conformance suite in every state.
+        if (browserName === "webkit" && /Refused to apply a stylesheet/.test(message.text())) return;
         if (message.type() === "error" && !/Failed to load resource/.test(message.text())) problems.push(message.text());
       });
       page.on("pageerror", (error) => problems.push(String(error)));
@@ -392,6 +394,8 @@ for (const browserName of browsers) {
       assert.match(await hostile.innerText(), /<img src=x/);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
       assert.ok(overflow <= 1, `the page doesn't scroll sideways: ${overflow}`);
+      const tallest = await page.locator("#deals tbody td:not([data-wrap])").evaluateAll((cells) => Math.max(...cells.map((cell) => cell.getBoundingClientRect().width)));
+      assert.ok(tallest <= 450, `no text blows a column open: ${tallest}`);
       await page.locator("#deals [name=q]").fill("<img src=x onerror=alert(1)>");
       await page.waitForURL(/q=/);
       await settled(page);
@@ -415,8 +419,10 @@ for (const browserName of browsers) {
       await page.locator("#wide [data-slot=table-container]").evaluate((box) => { box.scrollLeft = 900; });
       const first = await page.locator("#wide tbody tr:first-child td[data-sticky='1']").boundingBox();
       const end = await page.locator("#wide tbody tr:first-child [data-sticky=e]").first().boundingBox();
+      const last = await page.locator("#wide tbody tr:first-child [data-sticky=e1]").first().boundingBox();
       assert.ok(first.x >= 0 && first.x < 80, `the first column stays: ${first.x}`);
       assert.ok(end.x + end.width <= 391, `the end column stays: ${end.x + end.width}`);
+      assert.ok(last.x + last.width <= end.x + 1, `two end columns sit side by side: ${last.x + last.width} ${end.x}`);
       await shot(page, `${browserName}-wide-390`);
       assert.deepEqual(await axe(page), []);
       await close();

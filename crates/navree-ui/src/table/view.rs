@@ -1184,6 +1184,9 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 .attr("id", form)
                 .attr("role", "search")
                 .attr("method", "get")
+                // The URL says what these hold: a browser restoring what they held
+                // before, after back or reload, would contradict it.
+                .attr("autocomplete", "off")
                 .attr("action", self.query.path.clone())
                 .attr("data-ui-target", self.id)
                 .children((
@@ -1651,7 +1654,8 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .iter()
             .map(|at| match TableQuery::<R, F>::column(*at).sticky {
                 Sticky::No => None,
-                Sticky::End => Some("e".to_owned()),
+                // The row's menu is the last sticky column; this one stays beside it.
+                Sticky::End => Some(if self.has_actions() { "e1".to_owned() } else { "e".to_owned() }),
                 Sticky::Start => {
                     starts += 1;
                     Some(starts.to_string())

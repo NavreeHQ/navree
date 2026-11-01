@@ -178,7 +178,7 @@ function measureSticky(root) {
   markScroll(root);
   for (const th of root.querySelectorAll("thead tr:not([data-slot=group-row]) th[data-sticky]")) {
     const name = th.getAttribute("data-sticky");
-    if (name === "s" || name === "e") continue;
+    if (name === "s" || name === "e" || name === "e1") continue;
     el.style.setProperty("--s" + name, at + "px");
     at += th.getBoundingClientRect().width;
   }
@@ -189,9 +189,14 @@ function measureSticky(root) {
 function resetControls(root) {
   const form = /** @type {HTMLFormElement | null} */ (root.querySelector("form[data-ui-target]"));
   if (!form) return;
+  const state = new URL(root.getAttribute("data-ui-src") || location.href, location.href).searchParams;
   for (const control of form.elements) {
-    if (control === document.activeElement) continue;
     const input = /** @type {HTMLInputElement} */ (control);
+    if (control === document.activeElement) {
+      // Back or forward: the state is the URL's, even in the box being typed in.
+      if (cameBack && input.nodeName === "INPUT" && input.type !== "hidden") input.value = state.get(input.name) || "";
+      continue;
+    }
     if (input.type === "checkbox") input.checked = input.defaultChecked;
     else if (input.nodeName === "INPUT" && input.type !== "hidden") input.value = input.defaultValue;
     else if (input.nodeName === "SELECT") {
@@ -216,6 +221,7 @@ function sync(root) {
     if (th) handle.setAttribute("aria-valuenow", String(Math.round(th.getBoundingClientRect().width)));
   }
   resetControls(root);
+  cameBack = false;
   measureSticky(root);
   drawSelection(root);
   if (root.hasAttribute("data-ui-grid")) setupGrid(root);
@@ -228,6 +234,9 @@ function sync(root) {
 function syncAll() {
   for (const root of document.querySelectorAll("[data-ui-table]")) sync(/** @type {HTMLElement} */ (root));
 }
+
+/** Whether the last change of state came from back or forward. */
+let cameBack = false;
 
 /* The grid keys */
 
@@ -509,11 +518,8 @@ document.addEventListener("input", (e) => {
   }
 });
 
-// Back or forward to a state whose box holds something else: a box that kept focus
-// would keep its text.
 addEventListener("popstate", () => {
-  const active = /** @type {HTMLElement | null} */ (document.activeElement);
-  if (active?.closest?.("[data-ui-table] [data-slot=table-toolbar]")) active.blur();
+  cameBack = true;
 });
 
 document.addEventListener("scroll", (e) => {
