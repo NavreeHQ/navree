@@ -59,8 +59,8 @@ error[E0277]: `length` measures text and collections, and `u32` is neither
 12 |     #[validate(length(max = 3))]
    |                ^^^^^^ `length` needs a string, a list, a set or a map (or an `Option` of one)
    |
-   = help: the trait `Length` is not implemented for `u32`
-   = help: the following other types implement trait `Length`:
+   = help: the trait `navree_validation::rules::Length` is not implemented for `u32`
+   = help: the following other types implement trait `navree_validation::rules::Length`:
              &T
              Arc<T>
              BTreeMap<K, V>
@@ -85,8 +85,8 @@ error[E0277]: `required` checks an `Option`, and `String` is not one
 14 |     #[validate(required)]
    |                ^^^^^^^^ make the field an `Option<_>`, or drop `required`
    |
-   = help: the trait `Required` is not implemented for `String`
-help: the following other types implement trait `Required`
+   = help: the trait `navree_validation::rules::Required` is not implemented for `String`
+help: the following other types implement trait `navree_validation::rules::Required`
   --> src/rules/measure.rs
    |
    | impl<T> Required for Option<T> {
@@ -109,8 +109,8 @@ error[E0277]: `each` checks the items of a collection, and `String` is not one
 16 |     #[validate(each(length(max = 3)))]
    |                ^^^^ `each` needs a list, a set or a map (or an `Option` of one)
    |
-   = help: the trait `Each` is not implemented for `String`
-   = help: the following other types implement trait `Each`:
+   = help: the trait `navree_validation::rules::Each` is not implemented for `String`
+   = help: the following other types implement trait `navree_validation::rules::Each`:
              &C
              BTreeMap<K, V>
              BTreeSet<T>
