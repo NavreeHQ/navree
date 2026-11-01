@@ -42,11 +42,11 @@ Navree::app()
    `tag:deal:<id prefix>` (every request or job that changed that record),
    `type:query slow`, `duration>200`, `batch:<request id>`,
    `trace:<trace id>` (a request and the jobs it queued).
-2. Open the request: tabs show the request and response (headers, bodies),
+2. Open the request: one card each for the request and response (headers, bodies),
    queries (repeated statements first), events, jobs in its trace, mail,
    cache calls, logs, exceptions, outgoing calls, data changes, dumps and a
    timeline waterfall.
-3. Fix the code, then **Replay** it from the Replay tab (or
+3. Fix the code, then **Replay** it from the Replay card (or
    `POST /_logbook/api/requests/{id}/replay`). Unsafe methods need a
    confirmation (`confirm: true`, otherwise 409).
 

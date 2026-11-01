@@ -5293,7 +5293,6 @@ dependencies = [
  "navree-telemetry",
  "navree-testing",
  "navree-ui",
- "navree-view",
  "percent-encoding",
  "proptest",
  "serde",

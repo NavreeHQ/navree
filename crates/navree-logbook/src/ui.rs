@@ -10,7 +10,6 @@ use http::{HeaderName, HeaderValue, Method, StatusCode};
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{AppError, ClientIp, Controller, Guard, Json, Path, Query, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
-use navree_view::Views;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -33,23 +32,14 @@ const MAIL_CSP: &str =
 /// Rows per page.
 const PAGE: usize = 50;
 
-const TEMPLATES: [(&str, &str); 4] = [
-    ("logbook/layout.html", include_str!("ui/layout.html")),
-    ("logbook/index.html", include_str!("ui/index.html")),
-    ("logbook/rows.html", include_str!("ui/rows.html")),
-    ("logbook/detail.html", include_str!("ui/detail.html")),
-];
-
+#[path = "ui/detail_page.rs"]
+mod detail_page;
 #[path = "ui/list_page.rs"]
 mod list_page;
-
-const STYLESHEET: &str = include_str!("ui/logbook.css");
-const SCRIPT: &str = include_str!("ui/logbook.js");
 
 /// Serves the UI and its API under `logbook.path` (only when Logbook is on).
 pub(crate) struct LogbookController {
     logbook: Arc<Logbook>,
-    views: Views,
 }
 
 impl Injectable for LogbookController {
@@ -60,12 +50,7 @@ impl Injectable for LogbookController {
     fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
         Box::pin(async move {
             let logbook = r.get::<Logbook>().await?;
-            let views =
-                Views::from_templates(TEMPLATES).map_err(|error| KernelError::Construction {
-                    provider: "navree_logbook::LogbookController".to_owned(),
-                    source: Box::new(error),
-                })?;
-            Ok(LogbookController { logbook, views })
+            Ok(LogbookController { logbook })
         })
     }
 }
@@ -88,6 +73,53 @@ impl Guard for LoopbackOnly {
             }
         })
     }
+}
+
+/// Refuses a write that a browser says came from another site.
+///
+/// A plain form can post to this app from any page the developer has open, and
+/// Logbook can clear itself and replay requests. Browsers name the origin of a
+/// request in `Sec-Fetch-Site`, or in `Origin` when they predate it; a client that
+/// sends neither (curl, a test) is not a browser acting for a page, and passes.
+#[derive(Debug)]
+pub(crate) struct SameOrigin;
+
+impl SameOrigin {
+    /// Whether a request with these headers may write.
+    pub(crate) fn allows(headers: &http::HeaderMap) -> bool {
+        if let Some(site) = headers.get("sec-fetch-site") {
+            return matches!(site.as_bytes(), b"same-origin" | b"none");
+        }
+        let Some(origin) = headers.get(http::header::ORIGIN) else {
+            return true;
+        };
+        let host = headers.get(http::header::HOST).and_then(|host| host.to_str().ok());
+        let authority = origin
+            .to_str()
+            .ok()
+            .and_then(|origin| origin.split_once("://"))
+            .map(|(_, authority)| authority);
+        matches!((host, authority), (Some(host), Some(authority)) if host.eq_ignore_ascii_case(authority))
+    }
+}
+
+impl Guard for SameOrigin {
+    fn check<'a>(&'a self, parts: &'a mut Parts) -> BoxFuture<'a, Result<(), AppError>> {
+        let allowed = Self::allows(&parts.headers);
+        Box::pin(async move { if allowed { Ok(()) } else { Err(AppError::forbidden()) } })
+    }
+}
+
+/// The replay form's fields.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub(crate) struct ReplayForm {
+    method: String,
+    path: String,
+    headers: String,
+    body: String,
+    as_user: Option<String>,
+    confirm: Option<String>,
 }
 
 /// The list's query parameters.
@@ -135,19 +167,17 @@ impl Controller for LogbookController {
         ));
         let this = self.clone();
         routes.push(RouteDef::on(
+            Method::POST,
+            path("/entries/{id}/replay"),
+            move |Path(id): Path<String>, navree_http::Form(form): navree_http::Form<ReplayForm>| async move {
+                this.replay_form(id, form).await
+            },
+        ));
+        let this = self.clone();
+        routes.push(RouteDef::on(
             Method::GET,
             path("/mail/{id}"),
             move |Path(id): Path<String>| async move { this.mail_html(id).await },
-        ));
-        routes.push(RouteDef::on(
-            Method::GET,
-            path("/assets/logbook.css"),
-            || async { asset("text/css; charset=utf-8", STYLESHEET) },
-        ));
-        routes.push(RouteDef::on(
-            Method::GET,
-            path("/assets/logbook.js"),
-            || async { asset("text/javascript; charset=utf-8", SCRIPT) },
         ));
         let this = self.clone();
         routes.push(RouteDef::on(
@@ -196,7 +226,10 @@ impl Controller for LogbookController {
         routes
             .into_iter()
             .map(|route| {
-                let route = route.name("logbook");
+                let mut route = route.name("logbook");
+                if route.method != Method::GET {
+                    route = route.guard(Arc::new(SameOrigin));
+                }
                 if remote {
                     route.permissions(&[VIEW_PERMISSION])
                 } else {
@@ -205,17 +238,6 @@ impl Controller for LogbookController {
             })
             .collect()
     }
-}
-
-fn asset(content_type: &'static str, body: &'static str) -> Response {
-    (
-        [
-            (CONTENT_TYPE, HeaderValue::from_static(content_type)),
-            (CACHE_CONTROL, HeaderValue::from_static("no-cache")),
-        ],
-        body,
-    )
-        .into_response()
 }
 
 fn html(body: String) -> Response {
@@ -432,10 +454,6 @@ impl LogbookController {
         &self.logbook.options().path
     }
 
-    fn render(&self, name: &str, context: Value) -> Result<String, AppError> {
-        self.views.render(name, context).map_err(AppError::internal)
-    }
-
     async fn index(&self, params: ListParams) -> Result<Response, AppError> {
         let base = self.base().to_owned();
         let q = params.q.clone().unwrap_or_default();
@@ -470,8 +488,9 @@ impl LogbookController {
         } else {
             String::new()
         };
+        let latest = rows.first().map_or(0, |entry| entry.seq);
         let live_href = if params.before.is_none() && error.is_empty() {
-            list_href(&base, &q, kind.as_deref())
+            list_href(&format!("{base}/rows"), &q, kind.as_deref())
         } else {
             String::new()
         };
@@ -487,6 +506,7 @@ impl LogbookController {
         Ok(list_page::page(list_page::List {
             all_href: list_href(&base, &q, None),
             live_href: (!live_href.is_empty()).then_some(live_href),
+            latest,
             next_href: (!next_href.is_empty()).then_some(next_href),
             base,
             q,
@@ -516,12 +536,11 @@ impl LogbookController {
         let latest = entries.first().map_or(after, |entry| entry.seq);
         let base = self.base().to_owned();
         let rows: Vec<Row> = entries.iter().map(|entry| row(&base, entry)).collect();
-        let body = self.render("logbook/rows.html", json!({ "rows": rows }))?;
-        let mut response = html(body);
+        let mut response = html(list_page::rows_fragment(rows));
         if let Ok(value) = HeaderValue::from_str(&latest.to_string()) {
             response
                 .headers_mut()
-                .insert(HeaderName::from_static("x-logbook-latest"), value);
+                .insert(HeaderName::from_static("x-ui-cursor"), value);
         }
         Ok(response)
     }
@@ -557,8 +576,8 @@ impl LogbookController {
             .and_then(Batch::head)
             .cloned()
             .unwrap_or_else(|| selected.clone());
-        let context = self.detail_context(&selected, &head, &entries).await?;
-        Ok(html(self.render("logbook/detail.html", context)?))
+        let detail = self.detail_context(&selected, &head, &entries).await?;
+        Ok(detail_page::page(detail).into_response())
     }
 
     async fn detail_context(
@@ -566,7 +585,7 @@ impl LogbookController {
         selected: &Entry,
         head: &Entry,
         entries: &[Entry],
-    ) -> Result<Value, AppError> {
+    ) -> Result<detail_page::Detail, AppError> {
         let base = self.base().to_owned();
         let filter = |q: String| list_href(&base, &q, None);
         let mut facts = Vec::new();
@@ -687,16 +706,11 @@ impl LogbookController {
                 }
             }
         }
-        let tags: Vec<Value> = head
+        let tags: Vec<(String, String)> = head
             .tags
             .iter()
-            .map(|tag| json!({ "tag": tag, "href": filter(format!("tag:{tag}")) }))
+            .map(|tag| (tag.clone(), filter(format!("tag:{tag}"))))
             .collect();
-
-        let mut tabs: Vec<Value> = Vec::new();
-        let mut tab = |id: &str, label: &str, count: usize| {
-            tabs.push(json!({ "id": id, "label": label, "count": count }));
-        };
 
         let (request, response) = match &head.content {
             Content::Request(request) => (
@@ -705,12 +719,6 @@ impl LogbookController {
             ),
             _ => (None, None),
         };
-        if request.is_some() {
-            tab("request", "Request", 0);
-        }
-        if response.is_some() {
-            tab("response", "Response", 0);
-        }
 
         let queries: Vec<&crate::QueryEntry> = entries
             .iter()
@@ -720,33 +728,26 @@ impl LogbookController {
             })
             .collect();
         let repeated = duplicates(queries.clone(), self.logbook.options().duplicate_queries);
-        let query_rows: Vec<Value> = queries
+        let statements: Vec<detail_page::Statement> = queries
             .iter()
-            .map(|q| {
-                json!({
-                    "sql": q.sql,
-                    "duration": format_ms(q.duration_ms),
-                    "slow": q.slow,
-                    "duplicate": repeated.iter().any(|d| d.sql == q.sql),
-                })
+            .map(|q| detail_page::Statement {
+                sql: q.sql.clone(),
+                duration: format_ms(q.duration_ms),
+                slow: q.slow,
+                duplicate: repeated.iter().any(|d| d.sql == q.sql),
             })
             .collect();
-        let duplicate_rows: Vec<Value> = repeated
+        let duplicate_rows: Vec<detail_page::Repeated> = repeated
             .iter()
-            .map(|d| json!({ "sql": d.sql, "count": d.count, "total": format_ms(d.total_ms) }))
+            .map(|d| detail_page::Repeated {
+                sql: d.sql.clone(),
+                count: u32::try_from(d.count).unwrap_or(u32::MAX),
+                total: format_ms(d.total_ms),
+            })
             .collect();
-        if !queries.is_empty() {
-            tab("queries", "Queries", queries.len());
-        }
 
         let sections = self.sections(&base, selected, head, entries, &jobs_in_trace);
-        for section in &sections {
-            tab(section.id, section.label, section.items.len());
-        }
         let timeline = timeline(head, entries);
-        if !timeline.is_empty() {
-            tab("timeline", "Timeline", 0);
-        }
         let replay = match &head.content {
             Content::Request(request) if self.logbook.options().replay => {
                 let message = request.request.as_ref();
@@ -766,47 +767,36 @@ impl LogbookController {
                     Some(query) if !query.is_empty() => format!("{}?{query}", request.path),
                     _ => request.path.clone(),
                 };
-                Some(json!({
-                    "action": format!("{base}/api/requests/{}/replay", head.id),
-                    "curl": format!("{base}/api/requests/{}/curl", head.id),
-                    "method": request.method,
-                    "path": path,
-                    "headers": headers,
-                    "body": message
+                Some(detail_page::Replay {
+                    action: format!("{base}/entries/{}/replay", head.id),
+                    curl: format!("{base}/api/requests/{}/curl", head.id),
+                    method: request.method.clone(),
+                    path,
+                    headers,
+                    body: message
                         .and_then(|m| m.body.as_ref())
                         .and_then(|b| b.text.clone())
                         .unwrap_or_default(),
-                    "user": head.user_id.clone().unwrap_or_default(),
-                }))
+                    user: head.user_id.clone().unwrap_or_default(),
+                })
             }
             _ => None,
         };
-        if replay.is_some() {
-            tab("replay", "Replay", 0);
-        }
-        let head_flags = flags(head);
-        Ok(json!({
-            "base": base,
-            "q": "",
-            "kind": "",
-            "head": {
-                "title": shorten(&head.title(), 300),
-                "kind": head.kind().as_str(),
-                "kind_label": row_label(head.kind()),
-                "rows": facts,
-                "tags": tags,
-                "amber": !head_flags.is_empty(),
-                "flags": head_flags,
-            },
-            "tabs": tabs,
-            "request": request,
-            "response": response,
-            "queries": query_rows,
-            "duplicates": duplicate_rows,
-            "sections": sections,
-            "timeline": timeline,
-            "replay": replay,
-        }))
+        Ok(detail_page::Detail {
+            title: shorten(&head.title(), 300),
+            kind_label: row_label(head.kind()),
+            flags: flags(head),
+            base,
+            facts,
+            tags,
+            request,
+            response,
+            statements,
+            repeated: duplicate_rows,
+            sections,
+            timeline,
+            replay,
+        })
     }
 
     /// Every section but the request, response and queries.
@@ -921,7 +911,10 @@ impl LogbookController {
         })))
     }
 
-    /// `POST /clear`: the list page's button.
+    /// `POST /clear`: the page's Clear button. A form can only post, so this stays
+    /// beside `DELETE /api/entries` (the API's way) to keep the button working with
+    /// JavaScript off. Like every write it refuses a request a browser says came
+    /// from another site ([`SameOrigin`]).
     async fn clear(&self) -> Result<Response, AppError> {
         let _ = self.api_clear().await?;
         Ok(navree_ui::Reply::redirect(self.base().to_owned()).into_response())
@@ -934,6 +927,39 @@ impl LogbookController {
             .await
             .map_err(LogbookError::into_app_error)?;
         Ok(Json(json!({ "deleted": deleted })))
+    }
+
+    /// `POST /entries/{id}/replay`: the replay form. It answers where the replay
+    /// was recorded, or the page again with what went wrong.
+    async fn replay_form(&self, id: String, form: ReplayForm) -> Result<Response, AppError> {
+        let base = self.base().to_owned();
+        let headers: Vec<(String, String)> = form
+            .headers
+            .lines()
+            .filter_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                let name = name.trim();
+                (!name.is_empty()).then(|| (name.to_owned(), value.trim().to_owned()))
+            })
+            .collect();
+        let edit = ReplayRequest {
+            method: Some(form.method.trim().to_ascii_uppercase()),
+            path: Some(form.path.trim().to_owned()),
+            headers: Some(headers),
+            body: Some(form.body),
+            as_guest: form.as_user.is_none(),
+            confirm: form.confirm.is_some(),
+        };
+        let reply = match self.logbook.replay(&id, edit).await {
+            Ok(replayed) => {
+                let at = replayed.entry_id.unwrap_or(replayed.batch_id);
+                navree_ui::Reply::redirect(format!("{base}/entries/{at}"))
+                    .toast(navree_ui::ToastTone::Success, format!("Replayed: {}", replayed.status))
+            }
+            Err(error) => navree_ui::Reply::redirect(format!("{base}/entries/{id}"))
+                .toast(navree_ui::ToastTone::Danger, error.to_string()),
+        };
+        Ok(reply.into_response())
     }
 
     async fn api_replay(&self, id: String, edit: ReplayRequest) -> Result<Response, AppError> {
@@ -963,7 +989,7 @@ impl LogbookController {
 }
 
 /// The view of a captured request or response.
-fn message_view(message: &crate::HttpMessage) -> Value {
+fn message_view(message: &crate::HttpMessage) -> detail_page::Message {
     let (body, body_meta) = match &message.body {
         Some(body) => {
             let mut meta = Vec::new();
@@ -988,12 +1014,12 @@ fn message_view(message: &crate::HttpMessage) -> Value {
         }
         None => (String::new(), String::new()),
     };
-    json!({
-        "headers": message.headers,
-        "query": message.query.clone().unwrap_or_default(),
-        "body": body,
-        "body_meta": body_meta,
-    })
+    detail_page::Message {
+        headers: message.headers.clone(),
+        query: message.query.clone().unwrap_or_default(),
+        body,
+        body_meta,
+    }
 }
 
 /// One entry in a section.
@@ -1193,11 +1219,5 @@ mod tests {
             list_href("/_logbook", "user:a b", Some("query")),
             "/_logbook?q=user%3Aa+b&type=query"
         );
-    }
-
-    #[test]
-    fn the_templates_compile() {
-        let views = Views::from_templates(TEMPLATES).unwrap();
-        assert!(views.exists("logbook/detail.html"));
     }
 }

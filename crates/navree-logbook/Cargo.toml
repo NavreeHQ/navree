@@ -38,7 +38,6 @@ navree-http = { workspace = true }
 navree-ui = { workspace = true }
 navree-kernel = { workspace = true }
 navree-telemetry = { workspace = true }
-navree-view = { workspace = true }
 percent-encoding = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

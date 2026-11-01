@@ -4,7 +4,7 @@
 use std::time::Duration;
 
 use navree_ui::{
-    Alert, AlertTone, Badge, BadgeVariant, Button, ButtonVariant, Empty, Input, Node, Region, Row as Layout, Size, Table, TableCell,
+    Uses, Alert, AlertTone, Badge, BadgeVariant, Button, ButtonVariant, Empty, Input, Node, Region, Row as Layout, Size, Table, TableCell,
     TableHead, TableRowEl, View, el, icons,
 };
 
@@ -29,12 +29,14 @@ pub(super) struct List {
     pub(super) buttons: Vec<TypeButton>,
     pub(super) error: String,
     pub(super) rows: Vec<Row>,
-    /// The URL to poll; `None` on older pages and after a bad filter.
+    /// The feed to poll for newer entries; `None` on older pages and after a bad filter.
     pub(super) live_href: Option<String>,
+    /// The newest entry shown: the feed asks for what is newer.
+    pub(super) latest: u64,
     pub(super) next_href: Option<String>,
 }
 
-fn row(row: Row) -> TableRowEl {
+pub(super) fn row(row: Row) -> TableRowEl {
     let mut title = vec![Node::from(el("a").href(row.href).child(row.title))];
     for flag in row.flags {
         title.push(" ".into());
@@ -62,8 +64,14 @@ fn row(row: Row) -> TableRowEl {
     .key(row.seq.to_string())
 }
 
+/// The rows of a feed answer, ready to go in at the top of the table.
+pub(super) fn rows_fragment(rows: Vec<Row>) -> String {
+    navree_ui::render(&Node::list(rows.into_iter().map(row).collect::<Vec<_>>()))
+}
+
 fn table(rows: Vec<Row>) -> Node {
     Table::new()
+        .body_id("rows-body")
         .caption("Recorded entries, newest first")
         .head((
             TableHead::new("Type"),
@@ -78,41 +86,50 @@ fn table(rows: Vec<Row>) -> Node {
         .into()
 }
 
-/// The page.
-pub(super) fn page(list: List) -> View {
-    let filtered = !list.q.is_empty() || list.kind.is_some();
+/// The bar every Logbook page has: the name, the filter and Clear.
+pub(super) fn topbar(base: &str, q: &str, kind: Option<&str>, live: bool) -> Node {
     let search = el("form")
         .attr("role", "search")
         .attr("method", "get")
-        .attr("action", list.base.clone())
-        .attr("data-ui-target", "rows")
+        .attr("action", base.to_owned())
+        .attr_opt("data-ui-target", live.then_some("rows"))
         .children((
-            list.kind.map(|kind| el("input").attr("type", "hidden").attr("name", "type").attr("value", kind)),
+            kind.map(|kind| el("input").attr("type", "hidden").attr("name", "type").attr("value", kind.to_owned())),
             Input::search("q")
-                .value(list.q)
+                .value(q)
                 .placeholder("Filter: user:… tag:… status:4xx route:… slow failed duration>200")
                 .attr("aria-label", "Filter")
                 .autocomplete("off"),
         ));
-    let top = el("header").slot("topbar").children((
-        el("a").href(list.base.clone()).child("Logbook"),
-        el("div").slot("topbar-spacer").child(search),
-        el("form").attr("method", "post").attr("action", format!("{}/clear", list.base)).flag("data-ui-form", true).child(Button::outline("Clear").size(Size::Sm).submit()),
-    ));
+    el("header")
+        .slot("topbar")
+        .children((
+            el("a").href(base.to_owned()).child("Logbook"),
+            el("div").slot("topbar-spacer").child(search),
+            el("form").attr("method", "post").attr("action", format!("{base}/clear")).flag("data-ui-form", true).uses(Uses::CORE).child(Button::outline("Clear").size(Size::Sm).submit()),
+        ))
+        .into()
+}
+
+/// The page.
+pub(super) fn page(list: List) -> View {
+    let filtered = !list.q.is_empty() || list.kind.is_some();
+    let top = topbar(&list.base, &list.q, list.kind.as_deref(), true);
     let mut types = vec![type_button("All", list.all_href, !filtered || list.buttons.iter().all(|button| !button.on))];
     types.extend(list.buttons.into_iter().map(|button| type_button(button.label, button.href, button.on)));
-    let content = if list.rows.is_empty() {
+    // The table is always there, so rows that arrive have somewhere to go; the
+    // message under an empty one goes when the first does.
+    let empty = list.rows.is_empty().then(|| {
         let message = if filtered { "Nothing recorded yet for this filter." } else { "Nothing recorded yet." };
-        Node::from(Empty::new(message).icon(icons::INBOX))
-    } else {
-        table(list.rows)
-    };
+        el("div").attr("id", "rows-empty").child(Empty::new(message).icon(icons::INBOX))
+    });
     let mut region = Region::new("rows").children((
         (!list.error.is_empty()).then(|| Alert::new(AlertTone::Danger).title(list.error)),
-        content,
+        table(list.rows),
+        empty,
     ));
     if let Some(live) = list.live_href {
-        region = region.src(live).poll(LIVE);
+        region = region.src(live).poll(LIVE).feed("rows-body", i64::try_from(list.latest).unwrap_or(i64::MAX), Some("rows-empty"));
     }
     View::new("Logbook").body((
         top,
