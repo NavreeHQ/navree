@@ -6156,15 +6156,31 @@ name = "navree-ui"
 version = "1.0.0"
 dependencies = [
  "bytes",
+ "chrono",
  "http",
  "http-body-util",
  "navree-http",
  "navree-kernel",
  "navree-testing",
+ "navree-ui-macros",
+ "navree-validation",
  "serde",
  "serde_json",
+ "serde_path_to_error",
  "tokio",
  "tower",
+ "uuid",
+]
+
+[[package]]
+name = "navree-ui-macros"
+version = "1.0.0"
+dependencies = [
+ "heck",
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
 ]
 
 [[package]]

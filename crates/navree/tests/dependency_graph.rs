@@ -68,6 +68,9 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-harbor", 0, &["navree-template"]),
     // `embed_locales!` for navree-i18n (proc-macro; no navree dependencies).
     rule("navree-i18n-macros", 0, &[]),
+    // The derives of navree-ui (re-exported by it; proc-macro, no navree
+    // dependencies).
+    rule("navree-ui-macros", 0, &[]),
     // `#[derive(Validate)]` (re-exported by navree-validation; proc-macro, no
     // navree dependencies).
     rule("navree-validation-macros", 0, &[]),
@@ -577,6 +580,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-schedule",
     "navree-notify",
     "navree-ui",
+    "navree-ui-macros",
     "navree-orm",
     "navree-browser",
     "navree-auth",

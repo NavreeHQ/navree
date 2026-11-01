@@ -47,6 +47,7 @@ navree-storage = { path = "crates/navree-storage", version = "1.0.0" }
 navree-session = { path = "crates/navree-session", version = "1.0.0" }
 navree-validation = { path = "crates/navree-validation", version = "1.0.0" }
 navree-validation-macros = { path = "crates/navree-validation-macros", version = "1.0.0" }
+navree-ui-macros = { path = "crates/navree-ui-macros", version = "1.0.0" }
 navree-queue = { path = "crates/navree-queue", version = "1.0.0" }
 navree-audit = { path = "crates/navree-audit", version = "1.0.0" }
 navree-access = { path = "crates/navree-access", version = "1.0.0" }

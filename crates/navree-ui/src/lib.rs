@@ -12,6 +12,9 @@
 //! - [`assets`]: one stylesheet and the runtime's modules, embedded with
 //!   brotli and gzip forms, at content-hash URLs.
 //! - [`tokens`]: the design tokens' one source.
+//! - [`form`]: `#[derive(Form)]`, [`FormView`], [`Submit`]. [`table`]:
+//!   `#[derive(TableRow)]`, [`DataTable`], [`TableQuery`], [`Region`].
+//! - [`TestView`]: drive a page in a plain test, with no browser.
 //! - [`UiModule`]: serves the files and picks ops or a page for each reply.
 //!
 //! The browser side lives in `runtime/`: plain ES modules with JSDoc types.
@@ -22,6 +25,7 @@ pub mod assets;
 mod assets_gen;
 pub mod cmd;
 pub mod components;
+pub mod form;
 pub mod html;
 pub mod icons;
 mod module;
@@ -29,15 +33,22 @@ pub mod node;
 pub mod op;
 pub mod render;
 pub mod shell;
+pub mod table;
+pub mod test_view;
 pub mod tokens;
 pub mod view;
 
 pub use cmd::{Cmd, Commands, Trigger};
 pub use components::*;
+pub use form::{FormView, Money, Submit};
+pub use navree_ui_macros::{FilterBar, Form, Options, TableRow};
+pub use navree_validation::Validate;
 pub use html::{Href, HrefError, SafeHtml};
 pub use module::UiModule;
 pub use node::{Attr, AttrValue, Element, IntoNodes, Node, Uses, el};
 pub use op::{Envelope, Op, Reply, ToastTone, UrlMode};
 pub use render::{Measure, measure, render, render_into};
 pub use shell::{AppShell, NavGroup, NavItem, Page, Shell, UserMenu};
+pub use table::{DataTable, Region, TableQuery};
+pub use test_view::TestView;
 pub use view::{PAGE_CSP, View};

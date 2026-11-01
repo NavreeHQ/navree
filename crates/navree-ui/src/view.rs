@@ -89,6 +89,11 @@ impl View {
         self
     }
 
+    /// The page's content.
+    pub fn body_node(&self) -> &Node {
+        &self.body
+    }
+
     /// What this page loads.
     pub fn uses(&self) -> Uses {
         measure(&self.body).uses
