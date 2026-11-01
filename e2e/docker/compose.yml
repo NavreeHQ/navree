@@ -18,6 +18,8 @@
 #             storage and nats: the app is configured against them)
 #   load      k6 (`docker compose run --rm k6 run /scripts/...`)
 #   browser   Playwright with Chromium (screenshots)
+#   ui        a second web process with Logbook on (development tooling,
+#             off in the release configuration) for the UI evidence run
 #
 # Every host port is overridable (E2E_*_PORT) so the stack can run next to a
 # development stack started by `navree dock`. The project name defaults to
@@ -210,6 +212,24 @@ services:
       <<: *healthcheck
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health/ready"]
 
+  # A second web process with Logbook turned on, for the UI evidence run
+  # (`e2e/run.sh ui`): Logbook records every request's bodies and is
+  # development tooling, so the main `web` keeps it off.
+  web-dev:
+    <<: *app
+    profiles: ["ui"]
+    command: ["serve"]
+    environment:
+      <<: *app-env
+      APP_LOGBOOK__ENABLED: "true"
+      # GraphiQL's explorer reads the schema by introspection, which is off
+      # in release builds unless asked for.
+      APP_GRAPHQL__INTROSPECTION: "true"
+    ports: ["${E2E_APP_DEV_PORT:-47081}:8080"]
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health/ready"]
+
   worker:
     <<: *app
     command: ["fleet"]
@@ -252,10 +272,26 @@ services:
     # the browser would drop them.
     network_mode: "service:web"
     volumes:
+      - ../browser:/runner/src:ro
       - ${E2E_OUT_DIR:-../../target/evidence/adhoc}:/out
     environment:
       BASE_URL: http://localhost:8080
       OUT_DIR: /out/screenshots
+      SERVICE: web
+
+  # The same runner in web-dev's namespace: Logbook answers loopback
+  # clients only.
+  browser-dev:
+    image: navree-evidence-browser:local
+    profiles: ["ui"]
+    network_mode: "service:web-dev"
+    volumes:
+      - ../browser:/runner/src:ro
+      - ${E2E_OUT_DIR:-../../target/evidence/adhoc}:/out
+    environment:
+      BASE_URL: http://localhost:8080
+      OUT_DIR: /out/screenshots
+      SERVICE: web-dev
 
 volumes:
   postgres:

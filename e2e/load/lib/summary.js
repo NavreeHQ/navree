@@ -52,12 +52,14 @@ export function digest(scenario, data) {
 
 /** `export const handleSummary = summaryFor('baseline');` in a scenario. */
 export function summaryFor(scenario) {
+  // SUMMARY_NAME names the files of a run that is not the scenario's only one.
+  const name = __ENV.SUMMARY_NAME || scenario;
   return (data) => {
     const out = { stdout: textSummary(data) };
     if (SUMMARY_DIR) {
-      const base = `${SUMMARY_DIR}/${scenario}-${PROFILE}`;
+      const base = `${SUMMARY_DIR}/${name}-${PROFILE}`;
       out[`${base}.json`] = JSON.stringify(data, null, 2);
-      out[`${base}.digest.json`] = JSON.stringify(digest(scenario, data), null, 2);
+      out[`${base}.digest.json`] = JSON.stringify(digest(name, data), null, 2);
       out[`${base}.txt`] = textSummary(data);
     }
     return out;

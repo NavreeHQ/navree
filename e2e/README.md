@@ -11,6 +11,7 @@ samples resource usage while k6 drives load, and writes the evidence to
 e2e/run.sh                                                    # smoke: every check, short k6 runs
 e2e/run.sh --load-profile load --duration 2m --vus 50         # sustained load
 e2e/run.sh --load-profile spike --scenarios checks,baseline   # a spike to 200 VUs
+e2e/run.sh ui                                                 # every UI tool's pages, with data, under load
 ```
 
 From PowerShell, `e2e/run.ps1` takes the same arguments (it runs `run.sh`
@@ -28,7 +29,10 @@ Compose v2 and bash.
 | `load/scenarios/` | One file per package: `auth.js`, `tasks.js` (ORM and workspaces), `reports.js` (queue), `search.js`, `realtime.js`, `lighthouse.js` (Lighthouse's counts against k6's), and `baseline.js`, which mixes them |
 | `load/checks/http.js` | Runs the rows of `checks/http.json` |
 | `checks/http.json` | HTTP smoke rows: method, path, expected status, per package |
-| `browser/` | Playwright screenshots of every UI tool in `browser/tools.json` at 1440 and 390 pixels wide |
+| `browser/` | The screenshot crawler (`crawl.mjs`, `states.mjs`, `lib.mjs`) and its list of tools (`tools.json`), and `website.mjs`, which photographs the website's product mock-ups |
+| `ui-evidence.sh` | The `ui` run: the whole environment, data, load, screenshots and gallery (see "UI evidence") |
+| `load/scenarios/ui.js`, `ui-load.js`, `lighthouse-lifecycle.js` | The traffic the UI tools need: failures with distinct causes, slow requests and queries, failing outgoing calls, queue jobs that fail and retry, mail, client mistakes; the baseline plus that traffic in one run; resolving and ignoring Lighthouse issues |
+| `sql/` | `lighthouse-reset.sql` clears what the migration and the seeder made Lighthouse record; `lighthouse-history.sql` adds back-dated copies of the recorded hours, so the 24-hour and 7-day charts have a shape (see "UI evidence") |
 | `tools/summarize.mjs` | Builds `summary.json` and `summary.md` from a run's files |
 | `run.sh`, `run.ps1` | The harness |
 | `mcp-sdk/` | Not part of the harness: the official MCP TypeScript SDK's client (pinned in `package.json`) against navree-mcp over stdio and Streamable HTTP. Run `npm ci --prefix e2e/mcp-sdk`, then `cargo test -p navree-mcp --test sdk_conformance -- --ignored --nocapture` |
@@ -156,18 +160,103 @@ A package proves itself with up to three things, all data or small files:
 3. **A UI tool** in `browser/tools.json`, when the package serves pages:
 
    ```json
-   { "name": "logbook", "package": "navree-logbook", "pages": ["/_logbook"], "expect": "Logbook" }
+   { "name": "logbook", "package": "navree-logbook", "service": "web-dev",
+     "scope": ["/_logbook"], "roots": ["/_logbook"], "expect": "Logbook" }
    ```
 
-   The runner signs in on any page that shows a password field (as the
-   operator), screenshots each page at each width and fails the row when
-   the status is 400 or more, the `expect` text is missing or the page
-   still asks for a password.
+   `roots` is where the walk starts, `scope` the paths it may follow links
+   into. The crawler signs in on any page that shows a password field (as
+   the operator), follows every same-origin link inside the scope, and
+   photographs each page at each width; a page whose status is 400 or
+   more, whose `expect` text is missing or that still asks for a password
+   is not ok (`expect_status` is for a page meant to answer, say, 400).
 
 The app side goes in `apps/evidence-app`: the module in `src/platform.rs`
 (configured in `config/app.toml`, hosts in `e2e/docker/evidence.env`), a
 domain module under `src/modules/` when the package needs one, and seed data
 in `src/seed.rs`.
+
+## UI evidence
+
+`e2e/run.sh ui` answers one question: does every page of every UI tool look
+finished, with data in it, while the app is busy? One command builds the
+release image, starts the stack as a deployment would (TimescaleDB, Redis,
+Mailpit, Meilisearch, MinIO, NATS; the app as web, worker and scheduler),
+fills the tools through the app's real paths, photographs every page and
+builds a gallery.
+
+```sh
+E2E_BUILD_JOBS=4 E2E_EVIDENCE_ROOT=/path/outside/the/repo e2e/run.sh ui
+e2e/run.sh ui --no-build --vus 50 --duration 10m --ui-vus 6    # reuse the image
+e2e/run.sh ui --no-build --keep                                # leave the stack up
+```
+
+What it does, in order (each step is recorded in `data/checks.jsonl`):
+
+1. Builds the image (`E2E_BUILD_JOBS` limits the compiler jobs; the
+   Dockerfile's default is 16), starts the services, runs
+   `migrate:fresh --seed` and starts `web`, `web-dev`, `worker` and
+   `scheduler`. `web-dev` is a second web process with Logbook on
+   (`APP_LOGBOOK__ENABLED=true`), because Logbook is development tooling,
+   off in the release configuration and loopback-only: its pages are
+   photographed from a browser in that container's own network namespace,
+   and it gets its own traffic. It also turns GraphQL introspection on, so
+   GraphiQL is photographed both with it off (the release default, as `web`
+   runs) and on.
+2. **Empty**: the first page of each tool before any traffic. Lighthouse
+   records the migration and the seeder like any other work, so
+   `sql/lighthouse-reset.sql` clears what they recorded first.
+3. **Fill**: `scenarios/ui.js` for 4 minutes (8 users): a burst of queue work
+   (600 newsletter mails, 300 quick jobs, jobs that fail on every attempt
+   and jobs that fail twice and then succeed) and mail, then a mix of reads
+   and writes with failures that have distinct causes, slow requests, slow
+   queries, outgoing calls that time out, are refused or answer 503, and
+   client mistakes. Then `scenarios/lighthouse-lifecycle.js` resolves,
+   resolves in the next release and ignores some issues through
+   Lighthouse's API, and `ui.js` runs again so that what was resolved
+   happens again and reopens as a regression.
+4. **Back-dated history**: `sql/lighthouse-history.sql` copies the minutes
+   Lighthouse recorded into earlier hours and days, scaled by the shape of a
+   working day, so the 24-hour and 7-day charts and the issue sparklines
+   have a shape. These rows are copies, not live traffic; the report says so.
+5. **Under load**: `scenarios/ui-load.js` runs the baseline mix at `--vus`
+   (50) next to the `ui` traffic at `--ui-vus` (6), and 45 s in, when the
+   ramp is complete, the crawler walks every tool.
+6. **After**: the queues drain, `lighthouse-lifecycle.js` resolves and
+   ignores more issues (nothing reopens them now), and the crawler walks
+   everything again. In both walks `browser/states.mjs` also does what a
+   person does: resolves and reopens an issue, retries a failed job, pauses
+   and continues the workers, queues a newsletter of 2,500 mails and
+   photographs Fleet while it drains, submits Helm's forms empty and filled,
+   ticks rows and runs a bulk action, and runs a GraphQL query.
+7. **Website**: `browser/website.mjs` photographs each tool's mock-up on
+   `E2E_SITE_URL` (default https://navree.com) at both widths.
+8. Collects the logs, tears the stack down (unless `--keep`), and
+   builds `index.html` (`tools/gallery.mjs`).
+
+The crawler (`browser/crawl.mjs`) starts at each tool's roots in
+`browser/tools.json`, signs in, follows every same-origin link in the
+tool's scope and photographs each page at 1440 and 390 pixels wide. Links
+are grouped by route template (`/admin/resources/tasks/{id}`) and query
+keys; a record page is opened once per list that links to it, up to
+`per_template` pages. For each page it records the URL, HTTP status,
+console errors, failed requests, load time, horizontal overflow, charts
+that drew nothing, and corners, pills, shadows and letter tiles (the app UI
+rules). `browser/states.mjs` adds the states that matter: signed out, wrong
+password, signed in without the ability (403), signed in with read-only
+abilities, a page that does not exist.
+
+The folder (`<E2E_EVIDENCE_ROOT>/ui-<date>-<commit>/`, default under
+`target/evidence/`) holds `index.html`, `shots/<phase>/<tool>/*.png` with
+`results.json` per phase, `shots/website/`, and `data/` (k6 digests,
+resource samples, container logs, versions, and the tools' own API
+snapshots in `data/facts/`). Do not commit it.
+
+The demo data is in `apps/evidence-app`: `modules/demo` (the routes under
+`/api/demo`, the jobs, mail and scheduled tasks), `modules/admin` (Helm
+resources, actions, filters, pages and settings), and the seeder, which
+back-dates accounts, projects and tasks over 30 days so trend charts have a
+shape.
 
 ## The evidence format
 

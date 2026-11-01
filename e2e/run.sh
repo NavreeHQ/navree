@@ -9,6 +9,8 @@
 #   e2e/run.sh --load-profile load --duration 2m --vus 50 --scenarios baseline
 #   e2e/run.sh --no-build --keep                # reuse the image, leave the stack up
 #   e2e/run.sh up | down                        # just the stack (for local runs)
+#   e2e/run.sh ui                               # the UI evidence: every tool's pages, photographed
+#                                               # with data in them, under load (see e2e/README.md)
 #
 # Exit status: 0 when every check passed, 1 otherwise.
 set -uo pipefail
@@ -33,10 +35,13 @@ KEEP=0
 BROWSER=1
 SERVICES_PROFILES="search storage nats"
 RUN_ID=""
+UI_VUS=""
+EVIDENCE_DIR=""
+WEBSITE=1
 COMMAND="run"
 
 usage() {
-  sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
   cat <<'EOF'
 
 Options:
@@ -49,12 +54,22 @@ Options:
   --no-browser                      skip the screenshots
   --keep                            leave the stack running afterwards
   --run-id ID                       name of the evidence folder (default: UTC time + profile)
+
+`ui` options (see e2e/README.md, "UI evidence"):
+  --vus 50 --duration 6m            the load the pages are photographed under
+  --ui-vus 6                        virtual users of the failing/slow/queue traffic next to it
+  --evidence-dir DIR                where the gallery goes (default: $E2E_EVIDENCE_ROOT or target/evidence,
+                                    then ui-<date>-<commit>)
+  --no-website                      skip the photographs of the website's mock-ups
 EOF
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    up|down) COMMAND="$1" ;;
+    up|down|ui) COMMAND="$1" ;;
+    --ui-vus) UI_VUS="$2"; shift ;;
+    --evidence-dir) EVIDENCE_DIR="$2"; shift ;;
+    --no-website) WEBSITE=0 ;;
     --load-profile) LOAD_PROFILE="$2"; shift ;;
     --duration) DURATION="$2"; shift ;;
     --vus) VUS="$2"; shift ;;
@@ -74,7 +89,7 @@ profile_args=()
 for p in $SERVICES_PROFILES; do profile_args+=(--profile "$p"); done
 
 compose() {
-  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" "${profile_args[@]}" --profile app --profile load --profile browser "$@"
+  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" "${profile_args[@]}" --profile app --profile load --profile browser --profile ui "$@"
 }
 
 SERVICES=(postgres redis mailpit)
@@ -103,12 +118,17 @@ if [ "$COMMAND" = "down" ]; then
   exit $?
 fi
 
-RUN_ID="${RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$LOAD_PROFILE}"
-OUT="$ROOT/target/evidence/$RUN_ID"
-mkdir -p "$OUT/logs" "$OUT/k6" "$OUT/screenshots" "$OUT/resources"
-# compose resolves this relative to e2e/docker/ (portable across Git Bash,
-# WSL and Linux path styles).
-export E2E_OUT_DIR="../../target/evidence/$RUN_ID"
+if [ "$COMMAND" = "ui" ]; then
+  . "$ROOT/e2e/ui-evidence.sh"
+  ui_paths
+else
+  RUN_ID="${RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$LOAD_PROFILE}"
+  OUT="$ROOT/target/evidence/$RUN_ID"
+  mkdir -p "$OUT/logs" "$OUT/k6" "$OUT/screenshots" "$OUT/resources"
+  # compose resolves this relative to e2e/docker/ (portable across Git Bash,
+  # WSL and Linux path styles).
+  export E2E_OUT_DIR="../../target/evidence/$RUN_ID"
+fi
 export E2E_APP_IMAGE="$IMAGE"
 
 CHECKS="$OUT/checks.jsonl"
@@ -198,14 +218,27 @@ teardown() {
 }
 trap 'teardown; exit 130' INT TERM
 
+if [ "$COMMAND" = "ui" ]; then
+  run_ui
+  exit $?
+fi
+
 log "run $RUN_ID: profile=$LOAD_PROFILE scenarios=$SCENARIOS services=($SERVICES_PROFILES) out=$OUT"
 git -C "$HOST_ROOT" rev-parse HEAD > "$OUT/commit.txt" 2>/dev/null
 docker version --format '{{.Server.Version}}' > "$OUT/docker-version.txt" 2>/dev/null
 docker info --format '{{.NCPU}} CPUs, {{.MemTotal}} bytes, kernel {{.KernelVersion}}' > "$OUT/host.txt" 2>/dev/null
 
+# E2E_BUILD_JOBS limits the image build's compiler jobs (the Dockerfile's
+# default is 16).
+build_image() {
+  local args=()
+  [ -n "${E2E_BUILD_JOBS:-}" ] && args+=(--build-arg "CARGO_BUILD_JOBS=$E2E_BUILD_JOBS")
+  docker build -f "$HOST_ROOT/e2e/docker/Dockerfile" ${args[@]+"${args[@]}"} -t "$IMAGE" "$HOST_ROOT"
+}
+
 # 1. The image.
 if [ "$BUILD" = 1 ]; then
-  step "image: build" docker build -f "$HOST_ROOT/e2e/docker/Dockerfile" -t "$IMAGE" "$HOST_ROOT" || { teardown; exit 1; }
+  step "image: build" build_image || { teardown; exit 1; }
 fi
 docker image inspect "$IMAGE" --format '{{.Size}}' > "$OUT/image-size.txt" 2>/dev/null \
   || { record "image: present" fail 0 "no image $IMAGE (run without --no-build)"; teardown; exit 1; }
@@ -245,7 +278,7 @@ done
 
 # 6. Screenshots of the UI tools at 1440 and 390.
 if [ "$BROWSER" = 1 ]; then
-  step "browser: screenshots" compose run --rm --no-deps --build browser
+  step "browser: screenshots" compose run --rm --no-deps --build -e MODE=roots -e PHASE= browser
 fi
 
 # 7. The app processes must have survived the run.

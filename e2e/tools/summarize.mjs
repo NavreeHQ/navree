@@ -79,7 +79,7 @@ for (const file of (await list('k6')).filter((f) => f.endsWith('.digest.json')).
 const shots = await readJson('screenshots/results.json', []);
 for (const shot of shots) {
   checks.push({
-    name: `screenshot: ${shot.tool} ${shot.path} @${shot.width}`,
+    name: `screenshot: ${shot.tool} ${shot.url || shot.path} @${shot.width}${shot.kind === 'state' ? ` [${shot.state}]` : ''}`,
     status: shot.ok ? 'pass' : 'fail',
     seconds: 0,
     detail: shot.ok ? shot.file : shot.error || `status ${shot.status}, expect_found ${shot.expect_found}`,
