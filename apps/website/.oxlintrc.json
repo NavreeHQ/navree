@@ -72,5 +72,5 @@
     "typescript/prefer-namespace-keyword": "error",
     "typescript/triple-slash-reference": "error"
   },
-  "ignorePatterns": [".next/**", "out/**", "build/**", "next-env.d.ts", "src/generated/**", "public/data/**", "screenshots/**"]
+  "ignorePatterns": ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "src/generated/**", "public/data/**", "screenshots/**"]
 }

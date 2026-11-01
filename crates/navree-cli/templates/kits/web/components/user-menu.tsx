@@ -68,7 +68,7 @@ export function UserMenu({ user, workspace }: { user: User; workspace: string })
             {global.can("manage", "all") ? (
               <DropdownMenuItem asChild>
                 {/* Helm, served by the API through the BFF: a full page load, not a Next.js page. */}
-                {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+                {/* oxlint-disable-next-line next/no-html-link-for-pages */}
                 <a href="/admin">
                   <WrenchIcon />
                   Admin panel

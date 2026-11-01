@@ -2,12 +2,3 @@
 # none is needed to build or test.
 allowBuilds:
   sharp: false
-  unrs-resolver: false
-
-# minimatch before 11.0.1 is open to a denial of service from a crafted pattern
-# (GHSA-g3hv-75wg-m249). typescript-estree (typescript-eslint) asks for
-# minimatch 10 and calls only its named `minimatch` function, which minimatch 11
-# keeps. ESLint 9 and its plugins use minimatch 3, whose default export 11 does
-# not have, so they stay; they match patterns from the app's own ESLint config.
-overrides:
-  "@typescript-eslint/typescript-estree>minimatch": ^11.0.1

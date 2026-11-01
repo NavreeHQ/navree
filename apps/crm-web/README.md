@@ -71,7 +71,7 @@ sessionStorage; run `__navreeMock.reset()` in the console (or open a new tab) to
 ## Check
 
 ```bash
-pnpm lint        # ESLint (next/core-web-vitals + TypeScript)
+pnpm lint        # oxlint (React, Next.js, accessibility, import and TypeScript rules)
 pnpm typecheck   # tsc --noEmit
 pnpm test        # Vitest: BFF route handlers, API client + error mapping, CASL, formatting, audit actions, mock API
 pnpm build

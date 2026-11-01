@@ -188,7 +188,7 @@ moderate when memory is tight.
 ```sh
 cd apps/crm-web
 pnpm install
-pnpm lint        # ESLint
+pnpm lint        # oxlint
 pnpm typecheck   # tsc --noEmit
 pnpm test        # Vitest: BFF route handlers, API client, CASL, audit actions, mock API
 pnpm build       # production build

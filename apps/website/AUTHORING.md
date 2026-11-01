@@ -387,7 +387,7 @@ to get something done.
 ## Building and deploying the site
 
 ```sh
-pnpm lint          # ESLint
+pnpm lint          # oxlint
 pnpm typecheck     # tsc (runs the prebuild first)
 pnpm build         # static export to out/
 pnpm check:links   # every internal link and #anchor in out/ resolves
