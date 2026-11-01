@@ -16,6 +16,12 @@
   );
   var sections = Array.prototype.slice.call(document.querySelectorAll("main .group"));
   var navLinks = Array.prototype.slice.call(nav.querySelectorAll("a[data-target]"));
+  var intro = document.querySelector(".intro");
+  var empty = document.createElement("p");
+  empty.className = "no-results";
+  empty.textContent = "Nothing matches this search.";
+  empty.hidden = true;
+  document.getElementById("content").appendChild(empty);
   var linkByTarget = {};
   navLinks.forEach(function (link) {
     linkByTarget[link.dataset.target] = link;
@@ -43,12 +49,17 @@
       section.hidden = !section.querySelector("article:not([hidden])");
     });
     Array.prototype.forEach.call(nav.querySelectorAll("details"), function (group) {
-      var visible = group.querySelector("li:not([hidden])");
-      group.hidden = !visible;
-      if (words.length > 0 && visible) {
+      var visible = group.querySelectorAll("li:not([hidden])").length;
+      group.hidden = visible === 0;
+      group.querySelector(".count").textContent = visible;
+      if (words.length > 0 && visible > 0) {
         group.open = true;
       }
     });
+    if (intro) {
+      intro.hidden = words.length > 0;
+    }
+    empty.hidden = shown > 0;
     count.textContent = words.length > 0 ? shown + " of " + articles.length : "";
   }
 

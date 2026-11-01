@@ -37,7 +37,7 @@ pub(crate) fn render(document: &Document, links: &Links<'_>) -> String {
     out.push_str("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
     out.push_str("<meta name=\"color-scheme\" content=\"light dark\">\n<title>");
     escape_into(title, out);
-    out.push_str("</title>\n<link rel=\"stylesheet\" href=\"");
+    out.push_str("</title>\n<link rel=\"icon\" href=\"data:,\">\n<link rel=\"stylesheet\" href=\"");
     escape_into(links.stylesheet, out);
     out.push_str("\">\n<script src=\"");
     escape_into(links.script, out);
@@ -469,7 +469,9 @@ fn write_type(schema: &Schema, depth: usize, out: &mut String) {
         },
         ty => {
             out.push_str(ty.as_str());
-            if let Some(format) = &schema.format {
+            if ty != Type::Null
+                && let Some(format) = &schema.format
+            {
                 out.push_str(" (");
                 escape_into(format, out);
                 out.push(')');

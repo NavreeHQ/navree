@@ -145,6 +145,7 @@ nav ul { margin: 0 0 0.5rem; padding: 0; list-style: none; }
 nav li a {
   display: grid;
   grid-template-columns: 3.4rem minmax(0, 1fr);
+  align-items: baseline;
   gap: 0.25rem;
   padding: 0.2rem 0.4rem;
   color: var(--text);
@@ -257,8 +258,4 @@ h4 { margin: 1rem 0 0.35rem; font-size: 0.9rem; font-weight: 650; }
 @media (max-width: 26rem) {
   .facts { grid-template-columns: minmax(0, 1fr); }
   .facts dd { margin-bottom: 0.25rem; }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  html { scroll-behavior: smooth; }
 }

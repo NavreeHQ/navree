@@ -63,7 +63,7 @@ fn references(html: &str) -> Vec<String> {
     for attribute in ["src=\"", "href=\""] {
         for part in html.split(attribute).skip(1) {
             let reference = part.split('"').next().unwrap();
-            if !reference.starts_with('#') {
+            if !reference.starts_with('#') && !reference.starts_with("data:") {
                 found.push(reference.to_owned());
             }
         }
