@@ -146,8 +146,12 @@ fn too_many_entries(limits: &DocxLimits) -> DocumentsError {
 fn declared_entries(bytes: &[u8]) -> u64 {
     /// The fixed part of the record.
     const RECORD: usize = 22;
-    /// As far back as the archive reader looks: a record and its comment.
-    const REACH: usize = RECORD + 4 + (1 << 16);
+    /// As far back as the archive reader looks: the size of its record type
+    /// (which depends on the platform), a signature and a comment of 64 KiB.
+    /// The margin is what the size can come to above the fixed part; a count
+    /// read from a record the reader would not reach only refuses a file it
+    /// might have opened.
+    const REACH: usize = RECORD + 4 + (1 << 16) + 64;
     let tail = bytes
         .get(bytes.len().saturating_sub(REACH)..)
         .unwrap_or_default();
@@ -1427,6 +1431,70 @@ mod tests {
             ..DocxLimits::default()
         };
         too_large(read_text(&bytes, &tight, true));
+    }
+
+    /// `bytes` with `padding` bytes after the end record: garbage after the
+    /// archive comment, which the archive reader accepts.
+    fn pad(mut bytes: Vec<u8>, padding: usize) -> Vec<u8> {
+        bytes.resize(bytes.len() + padding, 0);
+        bytes
+    }
+
+    /// The most padding after its end record that the archive reader opens a
+    /// good archive with: how far back from the end it looks.
+    fn archive_reach(good: &[u8]) -> usize {
+        (65_000..66_000)
+            .rev()
+            .find(|&padding| ZipArchive::new(Cursor::new(pad(good.to_vec(), padding))).is_ok())
+            .expect("the archive reader opens no padded archive")
+    }
+
+    #[test]
+    fn an_end_record_as_far_back_as_the_archive_reader_looks_is_counted() {
+        // The archive reader looks back from the end for a record and takes
+        // the last it can read, so the count has to be taken from every record
+        // it could reach, to the last byte. The directory is damaged: a reader
+        // that opened the archive would find that, not the count.
+        let good = docx(&para(&run("x")));
+        let reach = archive_reach(&good);
+        assert!(reach > 65_500, "{reach}");
+        let tight = DocxLimits {
+            max_entries: 2,
+            ..DocxLimits::default()
+        };
+        let damaged = damage_directory(good);
+        for padding in [0, 1, reach / 2, reach - 10, reach - 1, reach] {
+            let bytes = pad(damaged.clone(), padding);
+            let message = too_large(read_text(&bytes, &tight, true));
+            assert!(message.contains("2 entries"), "{padding}: {message}");
+        }
+        // Past it the archive reader does not find the record either.
+        let bytes = pad(damaged, reach + 1);
+        assert!(matches!(
+            read_text(&bytes, &DocxLimits::default(), true),
+            Err(DocumentsError::InvalidDocx(_))
+        ));
+    }
+
+    #[test]
+    fn a_zip64_record_as_far_back_as_the_archive_reader_looks_is_counted() {
+        // The same for a record that defers to a zip64 one.
+        let good = docx(&para(&run("x")));
+        let reach = archive_reach(&good);
+        let mut bytes = damage_directory(good);
+        for _ in 0..4 {
+            let at = end_record(&bytes);
+            bytes.splice(at..at, *b"PK\x01\x02");
+        }
+        let end = end_record(&bytes);
+        bytes[end + 8..end + 12].copy_from_slice(&[0xff; 4]);
+        let tight = DocxLimits {
+            max_entries: 3,
+            ..DocxLimits::default()
+        };
+        for padding in [0, reach - 1, reach] {
+            too_large(read_text(&pad(bytes.clone(), padding), &tight, true));
+        }
     }
 
     #[test]
