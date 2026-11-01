@@ -49,6 +49,6 @@ export function useFlipList(container: RefObject<HTMLElement | null>, deps: unkn
     }
     tops.current = next;
     // The caller lists what changes the items.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 }

@@ -1,7 +1,0 @@
-# Findings in apps/website/pnpm-lock.yaml that have no release its tools can
-# use. Reviewed 2026-10-31; each entry expires so it gets looked at again.
-
-[[IgnoredVulns]]
-id = "GHSA-g3hv-75wg-m249"
-ignoreUntil = 2027-01-31
-reason = "Fixed only in minimatch 11.0.1. minimatch 3.1.5 comes from ESLint 9.39.5 (the last 9.x; @eslint/config-array 0.21.2 and @eslint/eslintrc 3.3.7) and from eslint-plugin-import 2.32.0, eslint-plugin-jsx-a11y 6.10.2 and eslint-plugin-react 7.37.5 (all at their latest releases), which call its default export; minimatch 11 has none, so forcing it breaks them (run with minimatch 11, eslint-plugin-react's jsx-pascal-case rule stops with 'TypeError: minimatch is not a function'), and ESLint 10 asks for minimatch 10, which is also affected. The other line, minimatch 10.2.6 under typescript-estree, is already moved to 11 by an override in pnpm-workspace.yaml. Not reachable with attacker input: ESLint runs only on a developer machine and in CI, never in the built site, and the patterns it matches come from the project's own eslint.config.mjs, which is trusted. Drop this entry once ESLint and its plugins release versions that use minimatch 11."

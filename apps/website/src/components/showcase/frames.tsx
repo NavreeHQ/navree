@@ -26,7 +26,7 @@ export function ShotImage({
   alt?: string;
 }) {
   return (
-    // eslint-disable-next-line @next/next/no-img-element -- static export: srcset by hand
+    // oxlint-disable-next-line next/no-img-element -- static export: srcset by hand
     <img
       src={shot.srcset.find((v) => v.width * 2 === shot.width)?.src ?? shot.src}
       srcSet={srcSet(shot)}

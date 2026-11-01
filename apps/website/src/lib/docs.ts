@@ -93,7 +93,7 @@ export function neighbours(slug: string): { previous: DocMeta | null; next: DocM
 }
 
 export function meta(doc: Doc): DocMeta {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // oxlint-disable-next-line no-unused-vars
   const { source, ...rest } = doc;
   return rest;
 }
