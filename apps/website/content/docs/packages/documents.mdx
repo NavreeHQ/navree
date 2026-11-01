@@ -15,7 +15,7 @@ Ok(pdf.download("certificate.pdf"))
 - **Two PDF engines, one template.** Templates are `.html` files. The **native** engine lays them out inside your process, with no browser and no external program, and is the default. **Chrome** prints the same files in headless Chrome with full CSS, for layouts that need it. `documents.engine` or the render picks.
 - **Documents in code.** `PdfDocument` builds a PDF block by block: headings, formatted paragraphs, lists, tables whose header rows repeat on every page, images, and page-numbered headers and footers.
 - **Any script.** Noto Sans, Serif and Mono, Noto Sans Arabic, Hebrew and Devanagari are compiled in, so a certificate in Arabic or Hindi looks the same on your laptop, in CI and in a slim container. A render's locale sets the language and the text direction.
-- **Word files** with `Docx`: headings, formatted paragraphs, lists, tables, images and page numbers, right to left when the document's language is.
+- **Word files** with `Docx`: headings, formatted paragraphs, lists, tables, images and page numbers, right to left when the document's language is; and `DocxFile` reads a Word file back as text, within limits.
 - **PDF editing**: merge documents, write a stamp ("PAID", "DRAFT", a copy number) or draw another PDF over pages, a seal or a signature in any script.
 - **Responses, storage and the queue**: a `Pdf` is a response, `save` writes to a [storage](/docs/digging-deeper/storage/) disk, and `queue` renders on a [queue](/docs/digging-deeper/queues/) worker and tells you when the file is ready.
 - **Tests read documents.** `pdf.text()` returns what a PDF shows, right-to-left text in reading order, so a test asserts on words, and `DocumentsFake` renders without any engine.
@@ -455,7 +455,7 @@ async fn word(&self) -> Result<Download> {
 | `heading(level, text)` | A heading, levels 1 to 3 (Word's "Heading" styles, so it shows in the navigation pane) |
 | `paragraph(p)` | A string, or a `Paragraph` of runs: `.text`, `.bold`, `.italic`, `.run(Run::new(..).size(9.0).color("C00000").underline())`, `.align(Align::Center)` |
 | `bullets(items)`, `numbered(items)` | A bulleted or numbered list |
-| `table(Table)` | A table with an optional bold header row |
+| `table(Table)` | A table with an optional bold header row, repeated on every page |
 | `image(Image::new(bytes))` | A PNG or JPEG; `.width_mm(40.0)` scales it, keeping its proportions |
 | `page_break()` | A new page |
 | `header(text)`, `footer(text)`, `footer_page_numbers()` | Text on every page, or "Page N of M" |
@@ -464,6 +464,22 @@ async fn word(&self) -> Result<Download> {
 | `title(..)`, `author(..)` | The document's properties |
 
 `build()` returns a `DocxFile`: a response (`download(name)`), its bytes, and `text()`, one line per paragraph with table cells separated by tabs, for tests. Word substitutes a font the reader's computer has when `font` names one it lacks.
+
+### Reading Word files
+
+`DocxFile::from_bytes(bytes)` checks that the bytes are a Word document and `text()` reads it: one line per paragraph, a row of a table on a line with its cells separated by tabs (a table inside a cell is part of the cell), `[image]` for a drawing and a form feed for a page break. The text of a hyperlink, of an inserted run and of a content control is part of its paragraph. Deleted text, headers, footers, notes and the text of text boxes are not part of it.
+
+A Word file is untrusted input too, so reading one has limits. `DocxLimits` holds them with these defaults; `DocxFile::from_bytes_within(bytes, &limits)` and `text_within(&limits)` take your own:
+
+| Limit | Default | Over it |
+|---|---|---|
+| `max_entries` | 10,000 | The archive has more entries |
+| `max_part_bytes` | 128 MiB | A part declares more than this, or unpacks to more |
+| `max_inflated_bytes` | 256 MiB | The parts a read needs (content types, relationships, the document) unpack to more in all |
+| `max_text_bytes` | 64 MiB | The text is longer; it is held whole, so this is memory as well |
+| `max_depth` | 256 | Elements nest deeper |
+
+Each is a `DocumentsError::TooLarge`, a 413 whose message names the limit. The sizes an archive declares are checked before a part is read, and the bytes a part unpacks to are counted as they are produced, so a file whose headers are wrong is refused and not trusted. The document is read as a stream: a read holds the text it returns and the largest single element or text of the part, which is at most `max_part_bytes`, and no more of the file. Bytes that are not a Word document are `DocumentsError::Docx`: not a zip archive, a damaged archive or part, XML that is not well-formed or has a DTD, no main document, or a main part that is not a Word document's. That is a 500 like the rest of that error, so map it to a 4xx yourself when the bytes came from a client.
 
 ## Saving and queueing
 
@@ -685,8 +701,8 @@ Every engine implements `PdfEngine` and passes the same conformance suite: the n
 | `Timeout { engine, secs }` | 503 | The render took longer than its limit |
 | `Pdf(..)` | 400 | The bytes are not a PDF that can be read |
 | `Edit(..)` | 500 | The app asked for an edit that cannot be done: merging nothing, a stamp Helvetica cannot show |
-| `TooLarge(..)` | 413 | An image has more pixels than `max_image_pixels`, or a PDF is over a reading limit |
-| `Docx(..)` | 500 | Writing a DOCX failed |
+| `TooLarge(..)` | 413 | An image has more pixels than `max_image_pixels`, or a PDF or a DOCX is over a reading limit |
+| `Docx(..)` | 500 | Writing a DOCX failed, or the bytes given to `DocxFile::from_bytes` are not a Word document |
 | `Storage(..)`, `Queue(..)` | 500 | The disk or the queue failed |
 
 <LinkCards>

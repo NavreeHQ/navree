@@ -80,13 +80,15 @@ pub enum DocumentsError {
     Edit(String),
     /// An input is over a limit this crate sets on what reading it may
     /// take: a PDF whose text takes too much work or memory to read or holds
-    /// too much text, or an image with more pixels than
-    /// `documents.native.max_image_pixels`. Loading a PDF is not bounded by
-    /// these (see [`Pdf::from_bytes`](crate::Pdf::from_bytes)). The message
-    /// names the limit, and no template file.
+    /// too much text, a DOCX file over one of its `DocxLimits`, or an image
+    /// with more pixels than `documents.native.max_image_pixels`. Loading a
+    /// PDF is not bounded by these (see
+    /// [`Pdf::from_bytes`](crate::Pdf::from_bytes)). The message names the
+    /// limit, and no template file.
     #[error("{0}")]
     TooLarge(String),
-    /// Building the DOCX file failed.
+    /// Building the DOCX file failed, or the bytes given to
+    /// `DocxFile::from_bytes` are not a Word document.
     #[error("DOCX: {0}")]
     Docx(String),
     /// Reading or writing a storage disk failed.

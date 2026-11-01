@@ -1,6 +1,6 @@
 ---
 name: navree-documents
-description: "PDF and Word documents with navree-documents: the opt-in `documents` facade feature, `DocumentsModule` and the `documents` config section, `Documents::pdf(name, &data)` and `render(&Render)`, `.html` templates (navree-view syntax, `locale`/`dir` variables) for two engines: the native engine (default, in process: the HTML subset it reads, inline styles, `@page`, `header`/`footer` elements with `pageNumber`/`totalPages` spans, tables with repeating headers, images from the template tree, bundled Noto Sans/Serif/Mono, Arabic, Hebrew and Devanagari fonts, font dirs, tagged PDF) and headless Chrome (full CSS, assets from the template tree, `/_navree/fonts.css`, blocked network, the page pool, `documents.chrome.path`/`endpoint`, `NAVREE_BROWSER_CHROME`), `PrintOptions` for both, `PdfDocument` built in code and `render_document`, engine choice (`documents.engine`, `Render::engine`), right-to-left text, `Pdf` responses and `download`/`inline`, `Pdf::merge`, `stamp`, `overlay`, `text()` in tests, `Docx`, `save`, `queue` with `QueuedDocument` and `status`, `queue_operation` (a queued export behind a navree-queue operation users follow, `RENDER_FAILED_MESSAGE`), the `documents.render` job, its progress and its `.failed` record, `m.document_files`, the `documents:render` and `documents:fonts` commands, and `DocumentsFake`. Use when generating certificates, invoices, reports or exports as PDF or DOCX, adding a document template, building a PDF in code, rendering Arabic, Hebrew or other right-to-left documents, stamping or merging PDFs, queueing a long export, testing a document's text, or debugging TemplateNotFound, a template error, a 503 from an engine, CSS the native engine ignores, or tofu boxes instead of letters."
+description: "PDF and Word documents with navree-documents: the opt-in `documents` facade feature, `DocumentsModule` and the `documents` config section, `Documents::pdf(name, &data)` and `render(&Render)`, `.html` templates (navree-view syntax, `locale`/`dir` variables) for two engines: the native engine (default, in process: the HTML subset it reads, inline styles, `@page`, `header`/`footer` elements with `pageNumber`/`totalPages` spans, tables with repeating headers, images from the template tree, bundled Noto Sans/Serif/Mono, Arabic, Hebrew and Devanagari fonts, font dirs, tagged PDF) and headless Chrome (full CSS, assets from the template tree, `/_navree/fonts.css`, blocked network, the page pool, `documents.chrome.path`/`endpoint`, `NAVREE_BROWSER_CHROME`), `PrintOptions` for both, `PdfDocument` built in code and `render_document`, engine choice (`documents.engine`, `Render::engine`), right-to-left text, `Pdf` responses and `download`/`inline`, `Pdf::merge`, `stamp`, `overlay`, `text()` in tests, `Docx`, `DocxFile::from_bytes` and `DocxLimits`, `save`, `queue` with `QueuedDocument` and `status`, `queue_operation` (a queued export behind a navree-queue operation users follow, `RENDER_FAILED_MESSAGE`), the `documents.render` job, its progress and its `.failed` record, `m.document_files`, the `documents:render` and `documents:fonts` commands, and `DocumentsFake`. Use when generating certificates, invoices, reports or exports as PDF or DOCX, adding a document template, building a PDF in code, rendering Arabic, Hebrew or other right-to-left documents, stamping or merging PDFs, queueing a long export, testing a document's text, or debugging TemplateNotFound, a template error, a 503 from an engine, CSS the native engine ignores, or tofu boxes instead of letters."
 ---
 
 # Documents
@@ -268,7 +268,16 @@ Ok(file.download("audit.docx"))
 ```
 
 `file.text()` gives one line per paragraph, cells tab-separated, `[image]` for
-images; use it in tests.
+images; use it in tests. The text of hyperlinks, inserted runs and content
+controls is part of its paragraph; deleted text, headers, footers, notes and
+text boxes are not.
+
+`DocxFile::from_bytes(bytes)` reads a Word file within `DocxLimits`: 10,000
+entries, 128 MiB for a part, 256 MiB for all the parts read, 64 MiB of text,
+256 levels of elements. `from_bytes_within(bytes, &limits)` and
+`text_within(&limits)` take your own. Over a limit is `TooLarge` (413); bytes
+that are not a Word document are `Docx` (a 500: map it to a 4xx yourself when
+the bytes came from a client).
 
 ## Saving and queueing
 

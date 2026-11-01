@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use navree_documents::docx::{Align, Image, Paragraph, Run, Table};
+use navree_documents::docx::{Align, DocxLimits, Image, Paragraph, Run, Table};
 use navree_documents::native;
 use navree_documents::{
     CHROME_ENV, ChromeEngine, ChromeOptions, DOCUMENT_ORIGIN, DOCX_CONTENT_TYPE, DocumentStatus,
@@ -284,6 +284,25 @@ fn the_documented_api_exists() {
         .build()
         .unwrap();
     assert!(file.text().unwrap().contains("Report"));
+    let limits = DocxLimits {
+        max_entries: 10_000,
+        max_part_bytes: 128 * 1024 * 1024,
+        max_inflated_bytes: 256 * 1024 * 1024,
+        max_text_bytes: 64 * 1024 * 1024,
+        max_depth: 256,
+    };
+    assert_eq!(limits, DocxLimits::default());
+    assert!(file.text_within(&limits).unwrap().contains("Report"));
+    let checked = DocxFile::from_bytes_within(file.bytes().clone(), &limits).unwrap();
+    assert_eq!(checked, file);
+    let tight = DocxLimits {
+        max_text_bytes: 3,
+        ..limits
+    };
+    assert!(matches!(
+        file.text_within(&tight),
+        Err(DocumentsError::TooLarge(_))
+    ));
     let _: Download = file.download("report.docx");
     let _ = [Align::Start, Align::End, Align::Justify];
 

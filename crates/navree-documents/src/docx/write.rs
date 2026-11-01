@@ -1556,4 +1556,125 @@ mod tests {
         assert!(text.ends_with("paragraph 19999"));
         let _: DocxFile = DocxFile::from_bytes(file.into_bytes()).unwrap();
     }
+
+    /// A small deterministic generator (an LCG), so the test needs no crate.
+    struct Random(u64);
+
+    impl Random {
+        fn below(&mut self, n: usize) -> usize {
+            self.0 = self
+                .0
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            ((self.0 >> 33) as usize) % n
+        }
+
+        fn text(&mut self) -> String {
+            const PIECES: [&str; 20] = [
+                "a",
+                "word",
+                " ",
+                "  ",
+                "<",
+                ">",
+                "&",
+                "\"",
+                "'",
+                "\t",
+                "\n",
+                "\r",
+                "\u{1}",
+                "\u{fffe}",
+                "\u{e9}",
+                "\u{4e2d}",
+                "\u{1f600}",
+                "\u{627}\u{644}",
+                "&amp;",
+                "]]>",
+            ];
+            (0..self.below(6))
+                .map(|_| PIECES[self.below(PIECES.len())])
+                .collect()
+        }
+    }
+
+    /// What reading gives back for text that went in: carriage returns and
+    /// control characters are left out, tabs and new lines stay.
+    fn kept(text: &str) -> String {
+        text.chars()
+            .filter(|c| matches!(c, '\t' | '\n') || !(c.is_control() || *c == '\u{fffe}'))
+            .collect()
+    }
+
+    fn cells(random: &mut Random) -> Vec<String> {
+        (0..random.below(4)).map(|_| random.text()).collect()
+    }
+
+    fn row_line(cells: &[String]) -> String {
+        cells
+            .iter()
+            .map(|cell| kept(cell))
+            .collect::<Vec<_>>()
+            .join("\t")
+    }
+
+    #[test]
+    fn whatever_text_goes_in_comes_back_out() {
+        let mut random = Random(0x6e61_7672_6565);
+        for round in 0..300 {
+            let mut docx = Docx::new();
+            let mut lines: Vec<String> = Vec::new();
+            for _ in 0..random.below(8) {
+                match random.below(7) {
+                    0 | 1 => {
+                        let text = random.text();
+                        lines.push(kept(&text));
+                        docx = docx.paragraph(text);
+                    }
+                    2 => {
+                        let text = random.text();
+                        lines.push(kept(&text));
+                        docx = docx.heading(random.below(5) as u8, text);
+                    }
+                    3 => {
+                        let items: Vec<String> =
+                            (0..random.below(4)).map(|_| random.text()).collect();
+                        lines.extend(items.iter().map(|item| kept(item)));
+                        docx = if random.below(2) == 0 {
+                            docx.bullets(items)
+                        } else {
+                            docx.numbered(items)
+                        };
+                    }
+                    4 => {
+                        let mut table = Table::new();
+                        if random.below(2) == 0 {
+                            let header = cells(&mut random);
+                            lines.push(row_line(&header));
+                            table = table.header(header);
+                        }
+                        for _ in 0..random.below(4) {
+                            let row = cells(&mut random);
+                            lines.push(row_line(&row));
+                            table = table.row(row);
+                        }
+                        docx = docx.table(table);
+                    }
+                    5 => {
+                        lines.push("[image]".to_owned());
+                        docx = docx.image(Image::new(logo()));
+                    }
+                    _ => {
+                        lines.push("\u{c}".to_owned());
+                        docx = docx.page_break();
+                    }
+                }
+            }
+            let file = docx
+                .build()
+                .unwrap_or_else(|error| panic!("round {round}: {error:?}"));
+            assert_eq!(file.text().unwrap(), lines.join("\n"), "round {round}");
+            consistent(&docx);
+        }
+    }
 }

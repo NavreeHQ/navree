@@ -6,7 +6,8 @@
 //! declares, the bytes a part actually unpacks to (counted as they are
 //! produced), the depth of the XML and the length of the text. The document
 //! part is read as a stream of XML events, so what the reader holds does not
-//! grow with the file except for the text it returns.
+//! grow with the file except for the text it returns and the largest single
+//! element or text of the part.
 
 use std::cell::Cell;
 use std::io::{self, BufReader, Cursor, Read};
@@ -41,7 +42,9 @@ pub struct DocxLimits {
     pub max_entries: usize,
     /// The most bytes one part may unpack to (default 128 MiB). Checked
     /// against the size the archive declares for the part before it is read,
-    /// and against the bytes actually produced while it is read.
+    /// and against the bytes actually produced while it is read. The part is
+    /// read as a stream; the most it holds at once is its largest single
+    /// element or text, so this bounds that memory too.
     pub max_part_bytes: u64,
     /// The most bytes all the parts read for one call may unpack to together
     /// (default 256 MiB): the package's content types and relationships and
