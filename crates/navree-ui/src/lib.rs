@@ -21,6 +21,16 @@
 //! Its build output is committed, so `cargo build` never needs Node.
 #![forbid(unsafe_code)]
 
+/// What pages import: every component, the shell, forms, tables and the wire.
+pub mod prelude {
+    pub use crate::components::*;
+    pub use crate::form::{Form as FormFields, FormView, Money, Options as OptionList, Rejected, Submit};
+    pub use crate::icons;
+    pub use crate::op::{Op, Reply, ToastTone, UrlMode};
+    pub use crate::table::{DataTable, Region, TableQuery};
+    pub use crate::{AppPage, AppShell, Cmd, Element, FilterBar, Form, IntoNodes, NavGroup, NavItem, Node, Options, Shell, TableRow, TestView, UiModule, UserMenu, Validate, View, el};
+}
+
 pub mod assets;
 mod assets_gen;
 pub mod cmd;
@@ -49,7 +59,7 @@ pub use module::UiModule;
 pub use node::{Attr, AttrValue, Element, IntoNodes, Node, Uses, el};
 pub use op::{Envelope, Op, Reply, ToastTone, UrlMode};
 pub use render::{Measure, measure, render, render_into};
-pub use shell::{AppShell, NavGroup, NavItem, Page, Shell, UserMenu};
+pub use shell::{AppPage, AppShell, NavGroup, NavItem, Shell, UserMenu};
 pub use table::{DataTable, Region, TableQuery};
 pub use test_view::TestView;
 pub use view::{PAGE_CSP, View};

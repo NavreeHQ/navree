@@ -1,6 +1,6 @@
 //! The application shell: a collapsible sidebar (the `sidebar-07` layout), a
 //! top bar and the page. [`Shell`] is the app's one definition; [`AppShell`]
-//! is it applied to a request; [`Page`] is what a handler returns.
+//! is it applied to a request; [`AppPage`] is what a handler returns.
 //!
 //! Provenance: the anatomy follows shadcn/ui's Sidebar (MIT). See THIRD_PARTY.md.
 
@@ -189,6 +189,8 @@ impl UserMenu {
             .attr("id", "ui-user-menu")
             .attr("popover", "auto")
             .attr("role", "dialog")
+            .attr("tabindex", -1_i64)
+            .flag("autofocus", true)
             .attr("aria-label", "Account")
             .flag("data-ui-place", true)
             .attr("data-side", "right")
@@ -262,8 +264,8 @@ impl Shell {
     }
 
     /// A page of this shell at `path`, for use without the [`AppShell`] extractor.
-    pub fn page(&self, title: impl Into<Cow<'static, str>>, path: impl Into<String>) -> Page {
-        Page::new(Arc::new(self.clone()), title.into(), path.into(), false, None)
+    pub fn page(&self, title: impl Into<Cow<'static, str>>, path: impl Into<String>) -> AppPage {
+        AppPage::new(Arc::new(self.clone()), title.into(), path.into(), false, None)
     }
 
     fn sidebar(&self, path: &str) -> Element {
@@ -300,7 +302,7 @@ const LOGO: &str = r#"<svg viewBox="0 0 32 32" aria-hidden="true" fill="currentC
 /// A page in the shell: what a handler returns.
 #[derive(Clone, Debug)]
 #[must_use]
-pub struct Page {
+pub struct AppPage {
     shell: Arc<Shell>,
     title: Cow<'static, str>,
     path: String,
@@ -311,7 +313,7 @@ pub struct Page {
     body: Vec<Node>,
 }
 
-impl Page {
+impl AppPage {
     fn new(shell: Arc<Shell>, title: Cow<'static, str>, path: String, collapsed: bool, flash: Option<String>) -> Self {
         Self { shell, title, path, collapsed, flash, crumbs: Vec::new(), actions: Vec::new(), body: Vec::new() }
     }
@@ -379,7 +381,7 @@ impl Page {
     }
 }
 
-impl IntoResponse for Page {
+impl IntoResponse for AppPage {
     fn into_response(self) -> Response {
         self.to_view().into_response()
     }
@@ -389,7 +391,7 @@ impl IntoResponse for Page {
 /// the sidebar is collapsed, a toast left for this page.
 ///
 /// ```ignore
-/// async fn show(shell: AppShell) -> Page {
+/// async fn show(shell: AppShell) -> AppPage {
 ///     shell.page("Deals").body(Button::primary("New deal").href("/deals/new"))
 /// }
 /// ```
@@ -403,8 +405,8 @@ pub struct AppShell {
 
 impl AppShell {
     /// A page titled `title`.
-    pub fn page(&self, title: impl Into<Cow<'static, str>>) -> Page {
-        Page::new(self.shell.clone(), title.into(), self.path.clone(), self.collapsed, self.flash.clone())
+    pub fn page(&self, title: impl Into<Cow<'static, str>>) -> AppPage {
+        AppPage::new(self.shell.clone(), title.into(), self.path.clone(), self.collapsed, self.flash.clone())
     }
 }
 

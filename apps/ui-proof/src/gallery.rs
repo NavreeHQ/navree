@@ -146,7 +146,7 @@ fn overlays() -> Element {
 }
 
 /// `GET /gallery`.
-fn page(shell: &AppShell) -> Page {
+fn page(shell: &AppShell) -> AppPage {
     shell.page("Gallery").body(Stack::gap(8).children((
         buttons(),
         inputs(),

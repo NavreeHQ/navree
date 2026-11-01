@@ -164,8 +164,8 @@ notify = [
     "navree-integrations?/notify",
     "navree-settings?/notify",
 ]
-## The UI kit of the server-rendered tools: the app shell, components as
-## template macros, embedded CSS, JS and fonts (light: no new dependencies).
+## The UI toolkit: typed components rendered to HTML on the server, the app
+## shell, forms and tables from one struct, embedded CSS, JS and fonts.
 ui = ["dep:navree-ui", "http", "validation"]
 ## The ORM: `#[derive(Model)]` models, the query builder, records,
 ## collections and pagination on navree-db's pool and unit of work; model

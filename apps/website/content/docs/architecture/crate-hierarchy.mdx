@@ -65,7 +65,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 | L4 | `navree-access` | Roles, permissions and abilities, record checks, SQL list filters |
 | L4 | `navree-schedule` | Cron schedules in UTC, a zone or each workspace's local time, overlap prevention, single-node runs |
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
-| L4 | `navree-ui` | The UI kit of the server-rendered tools: the app shell, components as template macros, embedded CSS, JS and fonts |
+| L4 | `navree-ui` | The UI toolkit: typed components rendered to HTML on the server, the app shell, forms and tables from one struct, one stylesheet, and an owned runtime that loads only when a page needs it |
 | L4 | `navree-orm` | The [ORM](/docs/orm/getting-started/): models, a typed query builder, records with dirty tracking, relationships, casts, events, scopes, factories and testing helpers |
 | L4 | `navree-browser` | [Browser testing](/docs/packages/browser-testing/): Chrome or Chromium driven over the DevTools Protocol from Rust tests |
 | L5 | `navree-auth` | JWT access tokens, rotating refresh tokens, strategies, accounts, 2FA |
@@ -127,7 +127,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 | `navree-schedule` | kernel, contracts, config, telemetry, db, time |
 | `navree-access` | kernel, bounded, contracts, config, http, db, cache |
 | `navree-notify` | kernel, contracts, config, telemetry, http, db, mail, orm, crypto, http-client, validation, time, schedule, view, macros |
-| `navree-ui` | kernel, contracts, config, http, view |
+| `navree-ui` | kernel, contracts, config, http, validation, ui-macros |
 | `navree-orm` | kernel, contracts, config, telemetry, http, db, events, crypto, api, orm-macros; access, testing and validation behind features |
 | `navree-browser` | kernel, contracts, config, http, testing, glob |
 | `navree-auth` | kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access, http-client, orm |

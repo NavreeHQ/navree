@@ -189,9 +189,8 @@ const HIERARCHY: &[Rule] = &[
         "navree-db", "navree-mail", "navree-orm", "navree-crypto", "navree-http-client",
         "navree-validation", "navree-time", "navree-schedule", "navree-view", "navree-macros",
     ]),
-    // The UI kit of the server-rendered tools: templates through navree-view,
-    // embedded assets served by a navree-http controller. Layer 4 so that its
-    // tests can boot it with navree-testing (L3).
+    // The UI toolkit. Its forms read navree-validation's rules, and its derives
+    // come from navree-ui-macros.
     rule("navree-ui", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-validation", "navree-ui-macros"]),
     // The ORM: models on navree-db's pool and unit of work. Model events go
     // through navree-events, encrypted and hashed casts through

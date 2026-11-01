@@ -7,7 +7,7 @@ use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree::ui::form::Money;
 use navree::ui::table::Direction;
 use navree::ui::form::Rejected;
-use navree::ui::{AppShell, BadgeVariant, Button, DataTable, FilterBar, Options, Page, Submit, TableQuery, TableRow, icons};
+use navree::ui::{AppShell, BadgeVariant, Button, DataTable, FilterBar, Options, AppPage, Submit, TableQuery, TableRow, icons};
 use serde::Deserialize;
 
 use crate::deal_form::{self, NewDeal};
@@ -110,7 +110,7 @@ pub fn select(query: &TableQuery<DealRow, DealFilter>, deals: &[DealRow]) -> (Ve
 }
 
 /// `GET /deals`.
-fn index(shell: &AppShell, query: &TableQuery<DealRow, DealFilter>) -> Page {
+fn index(shell: &AppShell, query: &TableQuery<DealRow, DealFilter>) -> AppPage {
     let (rows, total) = select(query, &DEALS);
     shell
         .page("Deals")

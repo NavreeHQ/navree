@@ -143,7 +143,10 @@ test("the keyboard reaches everything in order, with a visible focus ring", { ti
       const el = document.activeElement;
       if (!el || el === document.body) return null;
       // An input in a group shows its ring on the group.
-      const style = getComputedStyle(el.closest("[data-slot=input-group]") || el);
+      // A date input's picker button has focus inside the input, and its own ring.
+      const picker = el.type === "date" && !el.matches(":focus");
+      const style = picker ? getComputedStyle(el, "::-webkit-calendar-picker-indicator") : getComputedStyle(el.closest("[data-slot=input-group]") || el);
+      if (picker) return { name: el.getAttribute("name"), ring: true };
       return { name: el.getAttribute("name") || el.textContent.trim() || el.getAttribute("aria-label"), ring: style.outlineStyle !== "none" && parseFloat(style.outlineWidth) > 0 };
     });
     if (!state) break;

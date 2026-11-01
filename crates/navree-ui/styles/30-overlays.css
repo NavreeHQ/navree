@@ -27,6 +27,7 @@
   &:popover-open{animation:ui-in .1s ease-out}
   &:not([style]){margin:auto;inset:0;height:fit-content}
 }
+[data-slot=popover-content]:focus{outline:0}
 [data-slot=popover-content]:has(> [data-slot=menu-link]){padding:.25rem;min-width:11rem}
 [data-slot=menu-link]{display:flex;align-items:center;gap:.5rem;height:2rem;padding:0 .5rem;border-radius:var(--radius);color:var(--fg-1);text-decoration:none;&:hover,&:focus-visible{background:var(--ink-2);color:var(--fg)}}
 [data-slot=tooltip-content]{position:fixed;inset:auto;margin:0;padding:.25rem .5rem;width:max-content;max-width:18rem;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--ink-3);color:var(--fg);font-size:12px;pointer-events:none}

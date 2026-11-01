@@ -3,7 +3,7 @@
 use navree::http::Response;
 use navree::http::response::IntoResponse;
 use navree::ui::form::{FormView, Money, Rejected};
-use navree::ui::{AppShell, Card, Form, Options, Page, Reply, Submit, ToastTone, Validate};
+use navree::ui::{AppShell, Card, Form, Options, AppPage, Reply, Submit, ToastTone, Validate};
 use serde::Deserialize;
 
 #[derive(Clone, Copy, Debug, Deserialize, Options)]
@@ -72,7 +72,7 @@ fn choices(names: &[&str]) -> Vec<(String, String)> {
 }
 
 /// The page around a form, new or sent back with errors.
-fn page_with(shell: &AppShell, form: FormView<NewDeal>) -> Page {
+fn page_with(shell: &AppShell, form: FormView<NewDeal>) -> AppPage {
     let form = form
         .post("/deals")
         .submit("Create deal")
@@ -84,7 +84,7 @@ fn page_with(shell: &AppShell, form: FormView<NewDeal>) -> Page {
 }
 
 /// `GET /deals/new`.
-pub fn page(shell: &AppShell) -> Page {
+pub fn page(shell: &AppShell) -> AppPage {
     page_with(shell, FormView::new())
 }
 

@@ -50,13 +50,10 @@ pub fn run() {
 
     let table = shell.page("Deals", "/deals").body(DataTable::new("deals", &query, &selected).total(total)).to_view().to_html();
     let form = shell.page("New deal", "/deals/new").body(Card::new().body(FormView::<NewDeal>::new().post("/deals").submit("Create deal"))).to_view().to_html();
-    for (name, html, rounds) in [("1,000-row page", &table, 100), ("form page", &form, 2000)] {
-        let start = Instant::now();
-        let mut size = 0;
-        for _ in 0..rounds {
-            size = black_box(navree::ui::compress::brotli(html.as_bytes())).len();
-        }
-        let each = start.elapsed().as_secs_f64() * 1e6 / f64::from(rounds);
-        println!("brotli q{} {name:<18} mean {each:>9.1} us   {size:>8} bytes, from {}", navree::ui::compress::QUALITY, html.len());
+    for (name, html, rounds) in [("1,000-row page", table, 300), ("form page", form, 2000)] {
+        time(&format!("brotli q{}, {name}", navree::ui::compress::QUALITY), rounds, || {
+            let packed = navree::ui::compress::brotli(html.as_bytes());
+            "x".repeat(packed.len())
+        });
     }
 }

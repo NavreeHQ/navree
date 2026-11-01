@@ -129,6 +129,9 @@ test("the form works with JavaScript off", async () => {
   await page.getByRole("button", { name: "Create deal" }).click();
   await page.waitForURL("**/deals?per=1000");
   assert.equal(await page.locator("tbody tr").count(), 1000);
+  assert.match(await page.locator("[data-slot=alert]").textContent(), /Acme created/, "the toast comes through the redirect");
+  await page.reload();
+  assert.equal(await page.locator("[data-slot=alert]").count(), 0, "and only once");
   // Sorting is a plain link.
   await page.getByRole("link", { name: "Amount" }).click();
   await page.waitForURL("**sort=amount**");
@@ -195,7 +198,7 @@ test("the sidebar collapses, remembers, and paints right the first time", async 
   assert.equal(await wrapper.getAttribute("data-collapsed"), null);
   await page.keyboard.press("Control+b");
   assert.equal(await wrapper.getAttribute("data-collapsed"), "");
-  assert.equal((await page.locator("[data-slot=sidebar]").boundingBox()).width <= 49, true);
+  await page.waitForFunction(() => document.querySelector("[data-slot=sidebar]").getBoundingClientRect().width <= 49);
   // A boosted navigation keeps it.
   await page.getByRole("link", { name: "Gallery" }).click();
   await page.waitForURL("**/gallery");
@@ -235,6 +238,37 @@ test("dialogs open natively, trap focus, close on Esc and give focus back", asyn
   await dialog.waitFor({ state: "hidden" });
   assert.equal(await opener.evaluate((el) => document.activeElement === el), true, "focus returned");
   assert.equal(requests.length, before, "no network");
+  await close();
+});
+
+test("a dialog's first field takes focus, not its close button", async () => {
+  const { page, close } = await open("/gallery");
+  await page.getByRole("button", { name: "Open dialog" }).click();
+  await page.locator("#g-dialog").waitFor();
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("name")), "name");
+  await close();
+});
+
+test("Esc cancels an alert dialog", async () => {
+  const { page, close } = await open("/gallery");
+  await page.getByRole("button", { name: "Open alert" }).click();
+  const alert = page.getByRole("alertdialog");
+  await alert.waitFor();
+  await page.keyboard.press("Escape");
+  await alert.waitFor({ state: "hidden" });
+  await close();
+});
+
+test("a popover takes focus and gives it back on Esc", async () => {
+  const { page, close } = await open("/gallery");
+  const button = page.getByRole("button", { name: "Open popover" });
+  await button.focus();
+  await page.keyboard.press("Enter");
+  await page.locator("#g-popover").waitFor();
+  assert.equal(await page.evaluate(() => document.activeElement?.id), "g-popover");
+  await page.keyboard.press("Escape");
+  await page.locator("#g-popover").waitFor({ state: "hidden" });
+  assert.equal(await button.evaluate((el) => document.activeElement === el), true);
   await close();
 });
 

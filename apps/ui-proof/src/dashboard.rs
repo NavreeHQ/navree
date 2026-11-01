@@ -6,10 +6,10 @@ use std::time::Duration;
 use http::Method;
 use navree::http::{Controller, RouteDef};
 use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
-use navree::ui::{AppShell, Bars, Card, Grid, Node, Page, Region, Stack, Stat, Text, View};
+use navree::ui::{AppShell, Bars, Card, Grid, Node, AppPage, Region, Stack, Stat, Text, View};
 
 /// `GET /`.
-pub fn page(shell: &AppShell) -> Page {
+pub fn page(shell: &AppShell) -> AppPage {
     shell.page("Overview").body(Stack::gap(4).children((
         Grid::cols(4).gap(4).children((
             Stat::new("Open deals", "312").trend("+12 this week", true),

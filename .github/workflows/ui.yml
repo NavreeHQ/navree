@@ -1,0 +1,61 @@
+name: UI toolkit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "crates/navree-ui/**"
+      - "crates/navree-ui-macros/**"
+      - "apps/ui-proof/**"
+      - "e2e/ui/**"
+      - ".github/workflows/ui.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  assets:
+    name: Committed assets are current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: npm ci
+        working-directory: crates/navree-ui/runtime
+      - run: node build.mjs --check
+        working-directory: crates/navree-ui/runtime
+
+  budgets:
+    name: Speed budgets, release build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - run: cargo test --release -p navree-ui
+
+  browsers:
+    name: Morph, proof pages and conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - run: cargo build --release -p ui-proof
+      - run: npm ci
+        working-directory: e2e/ui
+      - run: npx playwright install --with-deps chromium firefox
+        working-directory: e2e/ui
+      - name: Run the suites against the proof app
+        run: |
+          target/release/ui-proof serve &
+          until curl -sf http://127.0.0.1:8090/plain >/dev/null; do sleep 0.2; done
+          cd e2e/ui && npm test

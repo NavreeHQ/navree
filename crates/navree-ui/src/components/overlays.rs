@@ -93,17 +93,18 @@ impl Dialog {
         self.el
             .attr_opt("aria-describedby", described)
             .children((
-                close,
                 el("div").slot("dialog-header").children((title, description)),
                 el("div").slot("dialog-body").child(self.body),
                 (!self.footer.is_empty()).then(|| el("div").slot("dialog-footer").child(self.footer)),
+                // Last, so the first thing to focus is the dialog's own content.
+                close,
             ))
             .into()
     }
 }
 
 /// A dialog that must be answered: `alertdialog`, no close button, and a click
-/// outside doesn't dismiss it.
+/// outside doesn't dismiss it. Esc still cancels, as APG asks.
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct AlertDialog {
@@ -126,7 +127,7 @@ impl AlertDialog {
                 .attr("role", "alertdialog")
                 .attr("aria-labelledby", format!("{id}-title"))
                 .attr("aria-describedby", format!("{id}-description"))
-                .attr("closedby", "none"),
+                .attr("closedby", "closerequest"),
             title: title.into(),
             description: description.into(),
             cancel: Node::from("Cancel"),
@@ -395,6 +396,8 @@ impl Popover {
             .attr("id", self.pop_id)
             .attr("popover", "auto")
             .attr("role", "dialog")
+            .attr("tabindex", -1_i64)
+            .flag("autofocus", true)
             .attr_opt("aria-label", self.label)
             .flag("data-ui-place", true)
             .attr("data-side", self.side.as_str())

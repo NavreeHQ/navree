@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Real-browser tests of navree-ui: morph properties, axe in every state, keyboard and ARIA scripts. Run with the proof app serving, see README.md.",
   "scripts": {
-    "test": "node --test --test-concurrency=1 tests/"
+    "test": "node --test --test-concurrency=1 \"tests/*.test.mjs\""
   },
   "devDependencies": {
     "axe-core": "4.14.0",

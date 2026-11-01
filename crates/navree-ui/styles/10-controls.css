@@ -40,6 +40,7 @@
 [data-slot=textarea]{height:auto;min-height:4.5rem;padding:.375rem .625rem;line-height:1.5;resize:vertical;field-sizing:content}
 [data-slot=native-select]{appearance:none;padding-inline-end:1.75rem;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%238a968f' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right .375rem center;& option{background:var(--ink-1);color:var(--fg)}}
 input[type=date],input[type=time],input[type=datetime-local]{color-scheme:dark}
+[data-slot=input]::-webkit-calendar-picker-indicator:focus-visible{outline:2px solid var(--accent);border-radius:2px}
 [data-slot=checkbox],[data-slot=radio]{appearance:none;flex:none;width:1rem;height:1rem;margin:.125rem 0 0;border:1px solid var(--line-3);background:var(--ink-1) no-repeat center/12px;cursor:pointer;
   &:checked{background-color:var(--accent);border-color:var(--accent)}
   &:disabled{opacity:.5;cursor:not-allowed}

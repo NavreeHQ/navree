@@ -39,7 +39,7 @@
 //! | `access` | navree-access | `access` | `AccessModule`: roles, permissions, abilities |
 //! | `schedule` | navree-schedule | `schedule` | `ScheduleModule`: tasks on cron schedules |
 //! | `notify` | navree-notify (plus `#[notification]`) | `notify` | `NotifyModule`: notifications over mail, database, broadcast, Slack, Teams, SMS, WhatsApp and web push, with preferences, digests, quiet hours and send windows |
-//! | `ui` | navree-ui | `ui` | `UiModule`: the app shell and components for server-rendered tools, embedded assets |
+//! | `ui` | navree-ui | `ui` | `UiModule`: the UI toolkit: typed components, the app shell, forms and tables, embedded assets |
 //! | `orm` | navree-orm | `orm` | `#[derive(Model)]` models, the query builder, records, collections, pagination |
 //! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users, sessions, impersonation, passwordless, passkeys |
 //! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation, organizations, partitions, shared libraries, demo workspaces |
