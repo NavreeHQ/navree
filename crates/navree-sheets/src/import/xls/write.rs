@@ -30,8 +30,7 @@ pub(crate) struct Compound {
     pub(crate) mini: Vec<bool>,
     /// The directory's sectors.
     pub(crate) directory: Vec<u32>,
-    /// The sectors of the mini stream, and of the mini FAT.
-    pub(crate) mini_stream: Vec<u32>,
+    /// The sectors of the mini FAT.
     pub(crate) mini_fat: Vec<u32>,
 }
 
@@ -255,7 +254,6 @@ pub(crate) fn compound(streams: &[(&str, &[u8])]) -> Compound {
         chains,
         mini,
         directory,
-        mini_stream,
         mini_fat,
     }
 }
@@ -265,16 +263,6 @@ pub(crate) fn record(kind: u16, data: &[u8]) -> Vec<u8> {
     let mut out = kind.to_le_bytes().to_vec();
     out.extend_from_slice(&(data.len() as u16).to_le_bytes());
     out.extend_from_slice(data);
-    out
-}
-
-/// A record and the CONTINUE records that carry its data past `max` bytes
-/// a record.
-pub(crate) fn continued(kind: u16, data: &[u8], max: usize) -> Vec<u8> {
-    let mut out = Vec::new();
-    for (i, piece) in data.chunks(max).enumerate() {
-        out.extend(record(if i == 0 { kind } else { CONTINUE }, piece));
-    }
     out
 }
 

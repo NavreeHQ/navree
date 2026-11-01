@@ -7,7 +7,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use bytes::Bytes;
-use calamine::{Data, Reader};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -124,7 +123,7 @@ impl Default for ReadOptions<'_> {
 }
 
 const ZIP: &[u8] = b"PK\x03\x04";
-const OLE: &[u8] = b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1";
+pub(crate) const OLE: &[u8] = b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1";
 
 /// Formats that are certainly not spreadsheets.
 const NOT_SPREADSHEETS: &[(&[u8], &str)] = &[
@@ -340,11 +339,6 @@ fn read_workbook(bytes: &[u8], options: &ReadOptions<'_>) -> Result<Table, Sheet
     // Whatever the file starts with: a zip workbook may come after a
     // prefix, and a file the XLS reader refuses is read as a zip workbook.
     check_unpacked_sizes(bytes, options.max_inflated_bytes)?;
-    if bytes.starts_with(OLE)
-        && let Ok(xls) = calamine::open_workbook_from_rs(Cursor::new(bytes))
-    {
-        return read_xls(xls, options);
-    }
     let workbook = Workbook::open(
         bytes,
         Limits {
@@ -372,28 +366,6 @@ fn sheet_to_read(names: &[String], options: &ReadOptions<'_>) -> Result<usize, S
     }
 }
 
-/// An XLS workbook's sheet, read into a range, all of the sheet's used
-/// area, and tabulated from that.
-fn read_xls(
-    mut xls: calamine::Xls<Cursor<&[u8]>>,
-    options: &ReadOptions<'_>,
-) -> Result<Table, SheetsError> {
-    let names = xls.sheet_names();
-    let name = names
-        .get(sheet_to_read(&names, options)?)
-        .cloned()
-        .unwrap_or_default();
-    let range = xls.worksheet_range(&name).map_err(|error| {
-        SheetsError::UnsupportedFile(format!(
-            "The workbook cannot be read: {}",
-            calamine::Error::Xls(error)
-        ))
-    })?;
-    let mut table = tabulate_range(&range, options)?.finish()?;
-    table.kind = FileKind::Xls;
-    Ok(table)
-}
-
 /// Refuses a zipped workbook with a part that unpacks to more than `limit`
 /// bytes, by the size the zip file declares for it, before any part is read:
 /// the shared strings are held for the whole reading and the text of a cell
@@ -417,28 +389,6 @@ fn check_unpacked_sizes(bytes: &[u8], limit: u64) -> Result<(), SheetsError> {
         }
     }
     Ok(())
-}
-
-/// The rows of a range, the sheet's used area, as a table is made of them.
-fn tabulate_range(
-    range: &calamine::Range<Data>,
-    options: &ReadOptions<'_>,
-) -> Result<Tabulator, SheetsError> {
-    let first_row = range.start().map_or(0, |(row, _)| u64::from(row));
-    let first_col = range.start().map_or(0, |(_, col)| col as usize);
-    let mut tabulator = Tabulator::new(options);
-    for (index, row) in range.rows().enumerate() {
-        options.ensure_running()?;
-        // Cells left of the range's first column are empty.
-        let mut cells = vec![Cell::Empty; first_col];
-        cells.extend(row.iter().map(data_cell));
-        let used = cells
-            .iter()
-            .rposition(|cell| !cell.is_empty())
-            .map_or(0, |index| index + 1);
-        tabulator.push(first_row + index as u64 + 1, used, cells)?;
-    }
-    Ok(tabulator)
 }
 
 /// The cells of a worksheet row, given with their columns in increasing
@@ -679,25 +629,6 @@ fn tabulate_unordered(
         tabulator.push_counted(u64::from(row) + 1, used, dense(cells, used))?;
     }
     Ok(())
-}
-
-/// A workbook cell as a [`Cell`]: text trimmed, dates as dates (or
-/// date-times when they have a time), errors as their text.
-fn data_cell(data: &Data) -> Cell {
-    match data {
-        Data::Empty => Cell::Empty,
-        Data::String(text) => text_cell(text),
-        Data::Int(n) => Cell::Int(*n),
-        Data::Float(n) => Cell::Float(*n),
-        Data::Bool(b) => Cell::Bool(*b),
-        Data::DateTime(at) => match at.as_datetime() {
-            Some(at) if at.time() == chrono::NaiveTime::MIN => Cell::Date(at.date()),
-            Some(at) => Cell::DateTime(at),
-            None => Cell::Float(at.as_f64()),
-        },
-        Data::DateTimeIso(text) | Data::DurationIso(text) => text_cell(text),
-        Data::Error(error) => Cell::Text(format!("#{error:?}")),
-    }
 }
 
 /// Builds a [`Table`] from records as they are read, so that no limit is

@@ -7,9 +7,8 @@ use std::collections::BTreeMap;
 
 use encoding_rs::{Encoding, UTF_16BE, UTF_16LE};
 
-use super::{
-    Globals, NumberKind, XlsError, XlsValue, custom_format_kind, damaged, is_custom_format_id,
-};
+use super::super::workbook::dates::shows_date;
+use super::{Globals, XlsError, XlsValue, damaged, is_custom_format_id};
 
 const FORMULA: u16 = 0x0006;
 const EOF: u16 = 0x000A;
@@ -670,7 +669,7 @@ fn read_format(
     record: &Record<'_>,
     biff: Biff,
     codepage: &'static Encoding,
-) -> Option<(u16, NumberKind)> {
+) -> Option<(u16, bool)> {
     let id = u16_at(record.data, 0)?;
     if !is_custom_format_id(id) {
         return None;
@@ -683,7 +682,7 @@ fn read_format(
         }
         Biff::Bytes => short_string(record.data.get(2..)?, biff, codepage, "FORMAT").ok()?,
     };
-    Some((id, custom_format_kind(&code)))
+    Some((id, shows_date(&code)))
 }
 
 /// What reading a sheet's cells needs of the workbook.
@@ -692,7 +691,8 @@ pub(super) struct Context {
     pub(super) biff: Biff,
     pub(super) codepage: &'static Encoding,
     /// The number format of each XF, by index.
-    pub(super) formats: Vec<NumberKind>,
+    /// Whether the number format of each XF, by index, shows dates.
+    pub(super) formats: Vec<bool>,
     pub(super) shared: SharedStrings,
 }
 
@@ -733,9 +733,7 @@ impl Context {
     }
 
     fn is_date(&self, xf: u16) -> bool {
-        self.formats
-            .get(usize::from(xf))
-            .is_some_and(|kind| kind.is_date())
+        self.formats.get(usize::from(xf)).copied().unwrap_or(false)
     }
 
     /// The value of an RK: the XF (2 bytes), then a number in 30 bits, an

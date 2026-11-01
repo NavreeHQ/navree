@@ -352,11 +352,10 @@ csv = "1.4.0"
 # Rust; no bzip2, lzma or zstd (C).
 zip = { version = "9.1.2", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 # Spreadsheets (navree-sheets): XLSX writing (pure Rust; never the `zlib`
-# feature, which builds C), XLS reading (XLSX, XLSB and ODS are read by
-# navree-sheets itself, with zip and quick-xml), and encoding detection
-# for uploaded CSV files (encoding_rs decodes, chardetng guesses).
+# feature, which builds C), and encoding detection for uploaded CSV files
+# (encoding_rs decodes, chardetng guesses). XLSX, XLSB, ODS and XLS are read
+# by navree-sheets itself, with zip, quick-xml and encoding_rs.
 rust_xlsxwriter = { version = "0.101.0", default-features = false, features = ["chrono", "constant_memory"] }
-calamine = { version = "0.37.0", default-features = false, features = ["dates"] }
 encoding_rs = "0.8.42"
 chardetng = "1.0.0"
 # Embedded full-text index (navree-search, `search-tantivy`): no zstd (C), pure Rust.

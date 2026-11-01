@@ -12,7 +12,6 @@ pub(crate) mod registry;
 pub(crate) mod service;
 pub(crate) mod store;
 pub(crate) mod workbook;
-#[allow(dead_code)]
 pub(crate) mod xls;
 
 use std::borrow::Cow;

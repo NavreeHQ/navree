@@ -1,5 +1,6 @@
-//! Dates in a workbook: which number formats show a number as a date, a time
-//! or a duration, and the date or time a number stands for.
+//! Dates in a workbook, for every format (XLSX, XLSB, ODS and XLS): which
+//! number formats show a number as a date, a time or a duration, and the
+//! date or time a number stands for.
 
 use chrono::{NaiveDate, NaiveTime, TimeDelta};
 
@@ -8,7 +9,7 @@ use crate::Cell;
 /// Whether the built-in number format `id` shows a date, a time or a
 /// duration: the dates and times 14 to 22, 45 to 47, and the East Asian
 /// ones, 27 to 36 and 50 to 58.
-pub(super) fn builtin_shows_date(id: u16) -> bool {
+pub(crate) fn builtin_shows_date(id: u16) -> bool {
     matches!(id, 14..=22 | 27..=36 | 45..=47 | 50..=58)
 }
 
@@ -26,7 +27,7 @@ pub(super) fn builtin_id_shows_date(id: &str) -> bool {
 /// condition, a locale) are not date codes, except an elapsed time (`[h]`,
 /// `[mm]`, `[ss]`). After an `a` (`AM/PM`, `a/p`), only `m`, `p` and `/`
 /// still make it a date.
-pub(super) fn shows_date(code: &str) -> bool {
+pub(crate) fn shows_date(code: &str) -> bool {
     let mut escaped = false;
     let mut quoted = false;
     let mut brackets = 0u8;
@@ -134,6 +135,7 @@ mod tests {
             "ha/p\\\\m",
             "*-yyyy-mm-dd",
             "yyyy\\-mm\\-dd\\ hh:mm",
+            "AM/PM",
         ] {
             assert!(shows_date(code), "{code}");
         }
@@ -157,10 +159,14 @@ mod tests {
             "*-#,##0",
             "0.00E+00",
             "General",
+            "0.00%",
+            "a0d",
             "",
         ] {
             assert!(!shows_date(code), "{code}");
         }
+        // Brackets are counted modulo 256: 300 of them leave 44 open.
+        assert!(!shows_date(&format!("{}h]", "[".repeat(300))));
     }
 
     #[test]

@@ -406,63 +406,6 @@ fn the_1904_date_system_is_reported() {
 }
 
 #[test]
-fn custom_formats_are_dates_by_the_same_rules() {
-    use super::NumberKind::{Date, Duration, Plain};
-    for (code, kind) in [
-        ("DD/MM/YY", Date),
-        ("H:MM:SS;@", Date),
-        ("#,##0\\ [$\\u20bd-46D]", Plain),
-        ("m\"M\"d\"D\";@", Date),
-        ("[h]:mm:ss", Duration),
-        ("\"Y: \"0.00\"m\";\"Y: \"-0.00\"m\";\"Y: <num>m\";@", Plain),
-        ("#,##0\\ [$''u20bd-46D]", Plain),
-        ("\"$\"#,##0_);[Red](\"$\"#,##0)", Plain),
-        ("[$-404]e\"\\xfc\"m\"\\xfc\"d\"\\xfc\"", Date),
-        ("0_ ;[Red]\\-0\\ ", Plain),
-        ("\\Y000000", Plain),
-        ("#,##0.0####\" YMD\"", Plain),
-        ("[h]", Duration),
-        ("[ss]", Duration),
-        ("[s].000", Duration),
-        ("[m]", Duration),
-        ("[mm]", Duration),
-        ("[Blue]\\+[h]:mm;[Red]\\-[h]:mm;[Green][h]:mm", Duration),
-        ("[>=100][Magenta][s].00", Duration),
-        ("[h]:mm;[=0]\\-", Duration),
-        ("[>=100][Magenta].00", Plain),
-        ("[>=100][Magenta]General", Plain),
-        ("ha/p\\\\m", Date),
-        ("#,##0.00\\ _M\"H\"_);[Red]#,##0.00\\ _M\"S\"_)", Plain),
-        ("#,##0*y", Plain),
-        ("0\"x\"*d", Plain),
-        ("*-#,##0", Plain),
-        ("*-yyyy-mm-dd", Date),
-        ("AM/PM", Date),
-        ("a0d", Plain),
-        ("General", Plain),
-        ("0.00%", Plain),
-        ("", Plain),
-    ] {
-        assert_eq!(custom_format_kind(code), kind, "{code:?}");
-    }
-    let opening = "[".repeat(300);
-    assert_eq!(custom_format_kind(&format!("{opening}h]")), Plain);
-}
-
-#[test]
-fn built_in_formats_are_dates_by_their_ids() {
-    use super::NumberKind::{Date, Duration, Plain};
-    for id in 0..=400u16 {
-        let expected = match id {
-            14..=22 | 27..=36 | 45 | 47 | 50..=58 => Date,
-            46 => Duration,
-            _ => Plain,
-        };
-        assert_eq!(built_in_format_kind(id), expected, "{id}");
-    }
-}
-
-#[test]
 fn an_encrypted_workbook_is_refused_as_encrypted() {
     let mut globals = filepass();
     globals.extend(codepage(1200));

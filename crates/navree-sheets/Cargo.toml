@@ -28,8 +28,6 @@ fuzzing = []
 
 [dependencies]
 bytes = { workspace = true }
-# XLS reading.
-calamine = { workspace = true }
 # A guess at the encoding of a legacy CSV upload (Windows-1256, Shift_JIS, ...).
 chardetng = { workspace = true }
 chrono = { workspace = true }

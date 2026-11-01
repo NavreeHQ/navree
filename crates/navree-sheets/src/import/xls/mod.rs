@@ -54,10 +54,11 @@
 //!   in `""`): they are cells, and a later cell at the same position
 //!   replaces an earlier one. Blank cells (BLANK, MULBLANK) are skipped.
 //!
-//! Dates are found as the XLSX reader finds them: a number in a built-in
-//! date or time format (ids 14 to 22, 27 to 36, 45 to 47, 50 to 58) or in a
-//! custom format whose first section has a date or time token outside
-//! quotes, brackets and escapes ([`custom_format_kind`]).
+//! Dates are found as the XLSX and XLSB readers find them, by the same
+//! code: a number in a built-in date or time format (ids 14 to 22, 27 to
+//! 36, 45 to 47, 50 to 58) or in a custom format whose first section has a
+//! date or time token outside quotes, brackets and escapes
+//! ([`shows_date`](super::workbook::dates::shows_date)).
 #![deny(
     clippy::indexing_slicing,
     clippy::unwrap_used,
@@ -78,6 +79,8 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use biff::{Biff, Context, SharedStrings};
+
+use super::workbook::dates::builtin_shows_date;
 
 /// What reading an XLS workbook may hold.
 #[derive(Clone, Copy, Debug)]
@@ -137,84 +140,6 @@ fn damaged(what: impl Into<String>) -> XlsError {
     XlsError::Damaged(what.into())
 }
 
-/// Whether a number format shows dates.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum NumberKind {
-    /// A number.
-    Plain,
-    /// A date, a time or both.
-    Date,
-    /// A duration (`[h]:mm`), read as a date too.
-    Duration,
-}
-
-impl NumberKind {
-    fn is_date(self) -> bool {
-        self != NumberKind::Plain
-    }
-}
-
-/// What a built-in number format shows, by its id.
-pub(crate) fn built_in_format_kind(id: u16) -> NumberKind {
-    match id {
-        14..=22 | 27..=36 | 45 | 47 | 50..=58 => NumberKind::Date,
-        46 => NumberKind::Duration,
-        _ => NumberKind::Plain,
-    }
-}
-
-/// What a custom number format shows, from its code. Only the first
-/// section counts (up to a `;`). Text in quotes and the character after
-/// `\`, `_` or `*` are literals. Outside brackets, `d`, `m`, `h`, `y` and
-/// `s` make a date; after an `a` (`AM/PM`, `a/p`) it takes `m`, `p` or `/`.
-/// A bracket opened by `h`, `m` or `s` and closed after nothing but more of
-/// the same letter (`[h]`, `[mm]`, `[ss]`) makes a duration; other
-/// brackets (`[Red]`, `[$-409]`, `[>=100]`) are skipped.
-pub(crate) fn custom_format_kind(code: &str) -> NumberKind {
-    let mut escaped = false;
-    let mut quoted = false;
-    let mut am_pm = false;
-    let mut brackets = 0u8;
-    // Whether the bracket open now started with a duration letter, and has
-    // had only that letter since.
-    let mut elapsed = false;
-    let mut previous = ' ';
-    for c in code.chars() {
-        let in_brackets = brackets != 0;
-        if escaped {
-            escaped = false;
-        } else if matches!(c, '_' | '\\' | '*') {
-            escaped = true;
-        } else if quoted {
-            quoted = c != '"';
-        } else if c == '"' {
-            quoted = true;
-        } else if c == ';' {
-            return NumberKind::Plain;
-        } else if c == '[' {
-            brackets = brackets.wrapping_add(1);
-        } else if c == ']' && brackets == 1 && elapsed {
-            return NumberKind::Duration;
-        } else if c == ']' {
-            brackets = brackets.saturating_sub(1);
-        } else if !in_brackets && !am_pm && matches!(c, 'a' | 'A') {
-            am_pm = true;
-        } else if !in_brackets
-            && if am_pm {
-                matches!(c, 'p' | 'P' | 'm' | 'M' | '/')
-            } else {
-                matches!(c.to_ascii_lowercase(), 'd' | 'm' | 'h' | 'y' | 's')
-            }
-        {
-            return NumberKind::Date;
-        } else if !(elapsed && c.eq_ignore_ascii_case(&previous)) {
-            elapsed = previous == '[' && matches!(c.to_ascii_lowercase(), 'h' | 'm' | 's');
-        }
-        previous = c;
-    }
-    NumberKind::Plain
-}
-
 /// The ids a FORMAT record may give a number format of its own; a FORMAT
 /// record for another id is not used.
 fn is_custom_format_id(id: u16) -> bool {
@@ -255,7 +180,7 @@ impl Xls {
                     .custom_formats
                     .get(id)
                     .copied()
-                    .unwrap_or_else(|| built_in_format_kind(*id))
+                    .unwrap_or_else(|| builtin_shows_date(*id))
             })
             .collect();
         let context = Context {
@@ -327,7 +252,8 @@ struct Globals {
     date1904: bool,
     /// The number format of each XF, by index.
     formats: Vec<u16>,
-    custom_formats: BTreeMap<u16, NumberKind>,
+    /// Whether each custom number format shows dates, by its id.
+    custom_formats: BTreeMap<u16, bool>,
     sheets: Vec<biff::BoundSheet>,
     shared: SharedStrings,
 }

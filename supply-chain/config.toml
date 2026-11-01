@@ -282,10 +282,6 @@ criteria = "safe-to-deploy"
 version = "1.12.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.calamine]]
-version = "0.37.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.calendrical_calculations]]
 version = "0.2.4"
 criteria = "safe-to-deploy"

@@ -1,6 +1,7 @@
 //! Reading workbooks: XLSX, XLSB and ODS files, each opened from its zip
-//! file and read as a [`CellSource`], the cells of a sheet in the order the
-//! file stores them, for the table to be made of as they come.
+//! file, and XLS files, from their compound file; each read as a
+//! [`CellSource`], the cells of a sheet in the order the file stores them,
+//! for the table to be made of as they come.
 //!
 //! A reader holds what every sheet needs (the shared strings, which number
 //! formats are dates, the sheet names) and streams the sheet it is asked
@@ -20,20 +21,25 @@ mod parity_tests;
 #[cfg(test)]
 pub(crate) mod xlsb_writer;
 
+use std::borrow::Cow;
 use std::fmt;
+use std::marker::PhantomData;
 
 use self::archive::Archive;
-use super::read::FileKind;
+use super::read::{FileKind, OLE};
+use super::xls::{Xls, XlsError, XlsLimits, XlsValue};
 use crate::{Cell, SheetsError};
 
 /// What a workbook reader may hold.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Limits {
     /// The most a part of the zip file may unpack to, and the most the
-    /// shared strings, held for the whole reading, may take.
+    /// shared strings, held for the whole reading, may take; for XLS, the
+    /// most its workbook stream may hold.
     pub(crate) max_part_bytes: u64,
     /// The most text one cell may be made of, where a file can make more
-    /// text than it holds (ODS repeats a space as many times as it says).
+    /// text than it holds (ODS repeats a space as many times as it says);
+    /// for XLS, the most text its shared strings may hold.
     pub(crate) max_text_bytes: u64,
 }
 
@@ -131,19 +137,47 @@ impl From<std::io::Error> for Damaged {
     }
 }
 
-/// A workbook in a zip file.
+/// A workbook.
 pub(crate) enum Workbook<'a> {
     Xlsx(xlsx::Xlsx<'a>),
     Xlsb(xlsb::Xlsb<'a>),
     Ods(ods::Ods<'a>),
+    Xls(Xls),
+}
+
+/// Why an XLS workbook cannot be read, as the file's refusal.
+fn xls_error(error: XlsError) -> SheetsError {
+    match error {
+        XlsError::TooLarge(what) => SheetsError::UnsupportedFile(what),
+        other => damaged(other).into(),
+    }
 }
 
 impl<'a> Workbook<'a> {
-    /// Opens the workbook in the zip file `bytes`: an XLSX workbook, an XLSB
-    /// one, or an ODS spreadsheet, whichever of them it reads as, in that
-    /// order. When it reads as none, the reason given is that of the format
-    /// its parts name.
+    /// Opens the workbook in `bytes`. A file that starts as a compound file
+    /// does is read as XLS; when it does not read as one, or starts as
+    /// anything else, it is read as a zip file (which may come after a
+    /// prefix): an XLSX workbook, an XLSB one, or an ODS spreadsheet,
+    /// whichever of them it reads as, in that order. When it reads as none,
+    /// the reason given is that of the XLS reader for a compound file, and
+    /// of the format its parts name for a zip file.
     pub(crate) fn open(bytes: &'a [u8], limits: Limits) -> Result<Self, SheetsError> {
+        let xls = if bytes.starts_with(OLE) {
+            let xls_limits = XlsLimits {
+                max_stream_bytes: limits.max_part_bytes,
+                max_text_bytes: limits.max_text_bytes,
+            };
+            match Xls::open(bytes, xls_limits) {
+                Ok(xls) => return Ok(Workbook::Xls(xls)),
+                Err(error) => Some(error),
+            }
+        } else {
+            None
+        };
+        Self::open_zip(bytes, limits).map_err(|zip| xls.map_or(zip, xls_error))
+    }
+
+    fn open_zip(bytes: &'a [u8], limits: Limits) -> Result<Self, SheetsError> {
         let archive = Archive::open(bytes)?;
         let xlsx = match xlsx::Xlsx::open(&archive, limits) {
             Ok(xlsx) => return Ok(Workbook::Xlsx(xlsx)),
@@ -170,16 +204,19 @@ impl<'a> Workbook<'a> {
     pub(crate) fn kind(&self) -> FileKind {
         match self {
             Workbook::Ods(_) => FileKind::Ods,
+            Workbook::Xls(_) => FileKind::Xls,
             Workbook::Xlsx(_) | Workbook::Xlsb(_) => FileKind::Xlsx,
         }
     }
 
-    /// The names of the sheets, in the workbook's order, chart sheets too.
+    /// The names of the sheets, in the workbook's order: chart sheets too,
+    /// but for XLS, whose chart sheets are not listed.
     pub(crate) fn sheet_names(&self) -> &[String] {
         match self {
             Workbook::Xlsx(book) => book.sheet_names(),
             Workbook::Xlsb(book) => book.sheet_names(),
             Workbook::Ods(book) => book.sheet_names(),
+            Workbook::Xls(book) => book.sheet_names(),
         }
     }
 
@@ -194,7 +231,60 @@ impl<'a> Workbook<'a> {
             Workbook::Xlsx(book) => book.read_cells(sheet, read),
             Workbook::Xlsb(book) => book.read_cells(sheet, read),
             Workbook::Ods(book) => book.read_cells(sheet, read),
+            Workbook::Xls(book) => {
+                let mut cells = XlsCells {
+                    cells: book.cells(sheet).map_err(xls_error)?,
+                    date1904: book.date1904(),
+                    text: String::new(),
+                    lent: PhantomData,
+                };
+                read(Some(&mut cells))
+            }
         }
+    }
+}
+
+/// The cells of an XLS sheet, as the XLS reader gives them: their shared
+/// strings are lent for `'a`.
+struct XlsCells<'a, I> {
+    cells: I,
+    date1904: bool,
+    /// The text of the cell last read, when the reader gave it owned.
+    text: String,
+    lent: PhantomData<&'a str>,
+}
+
+impl<'a, I> CellSource for XlsCells<'a, I>
+where
+    I: Iterator<Item = Result<(u32, u32, XlsValue<'a>), XlsError>>,
+{
+    fn next_cell(&mut self) -> Result<Option<SourceCell<'_>>, SheetsError> {
+        let Some(next) = self.cells.next() else {
+            return Ok(None);
+        };
+        let (row, column, value) = next.map_err(xls_error)?;
+        let value = match value {
+            // A shared string is measured where it is, not copied.
+            XlsValue::Text(Cow::Borrowed(text)) => Value::Text(text.trim()),
+            XlsValue::Text(Cow::Owned(text)) => {
+                self.text = text;
+                Value::Text(self.text.trim())
+            }
+            XlsValue::Number(number) => Value::Typed(Cell::Float(number)),
+            XlsValue::Int(number) => Value::Typed(Cell::Int(number)),
+            XlsValue::DateTime(serial) => Value::Typed(dates::excel_date(serial, self.date1904)),
+            XlsValue::Bool(value) => Value::Typed(Cell::Bool(value)),
+            XlsValue::Error(name) => {
+                self.text = format!("#{name}");
+                Value::Text(&self.text)
+            }
+        };
+        Ok(Some(SourceCell {
+            row,
+            column,
+            columns: 1,
+            value,
+        }))
     }
 }
 
