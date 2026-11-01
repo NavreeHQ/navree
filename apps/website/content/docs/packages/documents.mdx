@@ -474,12 +474,12 @@ A Word file is untrusted input too, so reading one has limits. `DocxLimits` hold
 | Limit | Default | Over it |
 |---|---|---|
 | `max_entries` | 10,000 | The archive has more entries |
-| `max_part_bytes` | 128 MiB | A part declares more than this, or unpacks to more |
-| `max_inflated_bytes` | 256 MiB | The parts a read needs (content types, relationships, the document) unpack to more in all |
+| `max_part_bytes` | 64 MiB | A part declares more than this, or unpacks to more |
+| `max_inflated_bytes` | 128 MiB | The parts a read needs (content types, relationships, the document) unpack to more in all |
 | `max_text_bytes` | 64 MiB | The text is longer; it is held whole, so this is memory as well |
 | `max_depth` | 256 | Elements nest deeper |
 
-Each is a `DocumentsError::TooLarge`, a 413 whose message names the limit. The sizes an archive declares are checked before a part is read, and the bytes a part unpacks to are counted as they are produced, so a file whose headers are wrong is refused and not trusted. The document is read as a stream: a read holds the text it returns and the largest single element or text of the part, which is at most `max_part_bytes`, and no more of the file. Bytes that are not a Word document are `DocumentsError::Docx`: not a zip archive, a damaged archive or part, XML that is not well-formed or has a DTD, no main document, or a main part that is not a Word document's. That is a 500 like the rest of that error, so map it to a 4xx yourself when the bytes came from a client.
+Each is a `DocumentsError::TooLarge`, a 413 whose message names the limit. The sizes an archive declares are checked before a part is read, and the bytes a part unpacks to are counted as they are produced, so a file whose headers are wrong is refused and not trusted. The document is read as a stream: a read holds the text it returns and the largest single element or text of the part, which is at most `max_part_bytes`, and no more of the file. Reading is synchronous work for the CPU: in a release build a part of 64 MiB took about a second as ordinary paragraphs and a few seconds as the worst shape measured (millions of empty paragraphs under a hundred namespace declarations), so run a client's file on a blocking thread (`tokio::task::spawn_blocking`) and not on a request's executor thread. Bytes that are not a Word document are `DocumentsError::Docx`: not a zip archive, a damaged archive or part, XML that is not well-formed or has a DTD, no main document, or a main part that is not a Word document's. That is a 500 like the rest of that error, so map it to a 4xx yourself when the bytes came from a client.
 
 ## Saving and queueing
 

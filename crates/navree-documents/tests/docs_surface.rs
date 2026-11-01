@@ -286,8 +286,8 @@ fn the_documented_api_exists() {
     assert!(file.text().unwrap().contains("Report"));
     let limits = DocxLimits {
         max_entries: 10_000,
-        max_part_bytes: 128 * 1024 * 1024,
-        max_inflated_bytes: 256 * 1024 * 1024,
+        max_part_bytes: 64 * 1024 * 1024,
+        max_inflated_bytes: 128 * 1024 * 1024,
         max_text_bytes: 64 * 1024 * 1024,
         max_depth: 256,
     };

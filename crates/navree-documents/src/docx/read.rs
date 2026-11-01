@@ -40,14 +40,14 @@ pub struct DocxLimits {
     /// The most entries the archive may have, directories included (default
     /// 10,000).
     pub max_entries: usize,
-    /// The most bytes one part may unpack to (default 128 MiB). Checked
+    /// The most bytes one part may unpack to (default 64 MiB). Checked
     /// against the size the archive declares for the part before it is read,
     /// and against the bytes actually produced while it is read. The part is
     /// read as a stream; the most it holds at once is its largest single
     /// element or text, so this bounds that memory too.
     pub max_part_bytes: u64,
     /// The most bytes all the parts read for one call may unpack to together
-    /// (default 256 MiB): the package's content types and relationships and
+    /// (default 128 MiB): the package's content types and relationships and
     /// the main document.
     pub max_inflated_bytes: u64,
     /// The most bytes of text a call may return (default 64 MiB). The text is
@@ -63,8 +63,8 @@ impl Default for DocxLimits {
     fn default() -> Self {
         Self {
             max_entries: 10_000,
-            max_part_bytes: 128 * 1024 * 1024,
-            max_inflated_bytes: 256 * 1024 * 1024,
+            max_part_bytes: 64 * 1024 * 1024,
+            max_inflated_bytes: 128 * 1024 * 1024,
             max_text_bytes: 64 * 1024 * 1024,
             max_depth: 256,
         }
@@ -1306,7 +1306,7 @@ mod tests {
         // what it declares, quickly, without a buffer of that size.
         let forged = forge_declared_size(bytes.clone(), "word/document.xml", 300_000_000);
         let message = too_large(read_text(&forged, &DocxLimits::default(), true));
-        assert!(message.contains("134217728 bytes"), "{message}");
+        assert!(message.contains("67108864 bytes"), "{message}");
         // Under the limit, the reader goes by the bytes the part really has.
         let forged = forge_declared_size(bytes, "word/document.xml", 1_000_000);
         let _ = read_text(&forged, &DocxLimits::default(), true);
@@ -1475,8 +1475,8 @@ mod tests {
     fn the_limits_have_the_documented_defaults() {
         let limits = DocxLimits::default();
         assert_eq!(limits.max_entries, 10_000);
-        assert_eq!(limits.max_part_bytes, 128 * 1024 * 1024);
-        assert_eq!(limits.max_inflated_bytes, 256 * 1024 * 1024);
+        assert_eq!(limits.max_part_bytes, 64 * 1024 * 1024);
+        assert_eq!(limits.max_inflated_bytes, 128 * 1024 * 1024);
         assert_eq!(limits.max_text_bytes, 64 * 1024 * 1024);
         assert_eq!(limits.max_depth, 256);
         let read: DocxLimits = serde_json::from_str(r#"{"max_depth": 8}"#).unwrap();

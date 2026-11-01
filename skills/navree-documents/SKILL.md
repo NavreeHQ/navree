@@ -273,11 +273,12 @@ controls is part of its paragraph; deleted text, headers, footers, notes and
 text boxes are not.
 
 `DocxFile::from_bytes(bytes)` reads a Word file within `DocxLimits`: 10,000
-entries, 128 MiB for a part, 256 MiB for all the parts read, 64 MiB of text,
+entries, 64 MiB for a part, 128 MiB for all the parts read, 64 MiB of text,
 256 levels of elements. `from_bytes_within(bytes, &limits)` and
 `text_within(&limits)` take your own. Over a limit is `TooLarge` (413); bytes
 that are not a Word document are `Docx` (a 500: map it to a 4xx yourself when
-the bytes came from a client).
+the bytes came from a client). Reading is synchronous CPU work, seconds at the
+limits: run a client's file with `spawn_blocking`.
 
 ## Saving and queueing
 
