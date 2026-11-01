@@ -12,7 +12,8 @@ use crate::import::xls::write::{self as xw, compound, record};
 pub(super) const MIB: usize = 1 << 20;
 
 pub(super) const REL: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
-const WS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
+pub(super) const WS: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
 
 pub(super) fn zip_parts(parts: &[(&str, &[u8])], stored: bool) -> Vec<u8> {
     let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
@@ -244,7 +245,7 @@ fn a_row_cell_past_the_header_still_makes_a_row_a_row() {
 
 // What opening holds: one relationship is not copied per sheet.
 
-fn xlsx_with(workbook_rels: &str, workbook: &str, extra: &[(&str, &[u8])]) -> Vec<u8> {
+pub(super) fn xlsx_with(workbook_rels: &str, workbook: &str, extra: &[(&str, &[u8])]) -> Vec<u8> {
     let rels = format!(
         r#"<Relationships><Relationship Id="rId1" Type="{REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>"#
     );
@@ -257,16 +258,17 @@ fn xlsx_with(workbook_rels: &str, workbook: &str, extra: &[(&str, &[u8])]) -> Ve
     zip_parts(&parts, false)
 }
 
-const ONE_SHEET: &str = r#"<workbook><sheets><sheet name="s" r:id="r"/></sheets></workbook>"#;
+pub(super) const ONE_SHEET: &str =
+    r#"<workbook><sheets><sheet name="s" r:id="r"/></sheets></workbook>"#;
 const ONE: &str = r#"<row r="1"><c r="A1"><v>7</v></c></row>"#;
 
-fn sheet_rel(target: &str) -> String {
+pub(super) fn sheet_rel(target: &str) -> String {
     format!(
         r#"<Relationships><Relationship Id="r" Type="{WS}" Target="{target}"/></Relationships>"#
     )
 }
 
-fn xlsx_sheet(rel_target: &str, part: &str, cells: &str) -> Vec<u8> {
+pub(super) fn xlsx_sheet(rel_target: &str, part: &str, cells: &str) -> Vec<u8> {
     let sheet = format!("<worksheet><sheetData>{cells}</sheetData></worksheet>");
     xlsx_with(
         &sheet_rel(rel_target),
@@ -741,15 +743,19 @@ fn the_day_that_never_was_is_only_counted_in_the_1900_system() {
     assert_eq!(excel_date(-1.0, true), date(1903, 12, 31));
 }
 
+/// A number cell that is no number is no number: `NaN` makes the file
+/// unreadable, and the words for infinity, which parse, are text where the
+/// cell does not say it holds a number. (A number past the largest double is
+/// the largest double: see `values_tests`.)
 #[test]
-fn a_number_cell_that_is_not_finite_is_no_number() {
-    for word in ["NaN", "inf", "-inf", "infinity", "1e999"] {
+fn a_number_cell_that_is_nan_is_no_number() {
+    for word in ["NaN", "inf", "-inf", "infinity"] {
         let cells = format!(
             r#"<row r="1"><c r="A1" t="inlineStr"><is><t>h</t></is></c></row><row r="2"><c r="A2" t="n"><v>{word}</v></c></row>"#
         );
         let file = xlsx_sheet("s.xml", "xl/s.xml", &cells);
         let got = cells_of(&file, "x.xlsx");
-        assert!(got.is_err(), "{word}: {got:?}");
+        assert_eq!(got.is_err(), word == "NaN", "{word}: {got:?}");
         // Without a type it is the text it is written as.
         let cells = format!(r#"<row r="1"><c r="A1"><v>{word}</v></c></row>"#);
         let file = xlsx_sheet("s.xml", "xl/s.xml", &cells);
@@ -762,23 +768,24 @@ fn a_number_cell_that_is_not_finite_is_no_number() {
     assert!(got.is_err(), "{got:?}");
 }
 
+/// A binary `NaN` is refused. (A binary infinity is the largest double of its
+/// sign: see `values_tests`.)
 #[test]
-fn a_binary_number_that_is_not_finite_is_refused() {
+fn a_binary_nan_is_refused() {
     use xb::Value::*;
-    for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-        let records = vec![xb::row(0), xb::cell(0, 0, &Real(value))];
-        let file = xb::workbook(&[("S", Some(xb::sheet(&records)))], &[], &[], &[0], false);
-        let got = cells_of(&file, "x.xlsb");
-        assert!(got.is_err(), "XLSB {value}: {got:?}");
+    let value = f64::NAN;
+    let records = vec![xb::row(0), xb::cell(0, 0, &Real(value))];
+    let file = xb::workbook(&[("S", Some(xb::sheet(&records)))], &[], &[], &[0], false);
+    let got = cells_of(&file, "x.xlsb");
+    assert!(got.is_err(), "XLSB {value}: {got:?}");
 
-        let file = xw::Book::new(
-            vec![],
-            vec![xw::Sheet::new("S", xw::number(0, 0, 0, value))],
-        )
-        .file();
-        let got = cells_of(&file, "x.xls");
-        assert!(got.is_err(), "XLS {value}: {got:?}");
-    }
+    let file = xw::Book::new(
+        vec![],
+        vec![xw::Sheet::new("S", xw::number(0, 0, 0, value))],
+    )
+    .file();
+    let got = cells_of(&file, "x.xls");
+    assert!(got.is_err(), "XLS {value}: {got:?}");
     // In the 30 bits of an RK, one of many in a record.
     let nan = xw::mulrk(0, 0, &[(0, 0x7FF8_0000), (0, 0x7FF8_0000)]);
     let file = xw::Book::new(vec![], vec![xw::Sheet::new("S", nan)]).file();

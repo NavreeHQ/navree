@@ -1438,4 +1438,6 @@ mod opening_tests;
 #[cfg(test)]
 mod stop_tests;
 #[cfg(test)]
+mod values_tests;
+#[cfg(test)]
 mod workbook_tests;

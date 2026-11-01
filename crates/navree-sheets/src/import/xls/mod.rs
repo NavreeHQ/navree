@@ -65,6 +65,8 @@
 //!   every 1,024 records it goes through, whether or not they give a cell;
 //!   once it is raised the iterator gives [`XlsError::Interrupted`] and ends.
 //!   Opening goes through the stream without looking at it.
+//! - A number that is an infinity is the largest double of its sign, and a
+//!   `NaN` makes the sheet unreadable.
 //! - `cells` also gives cells whose text is empty (a formula that results
 //!   in `""`): they are cells, and a later cell at the same position
 //!   replaces an earlier one. Blank cells (BLANK, MULBLANK) are skipped.

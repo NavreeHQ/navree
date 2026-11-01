@@ -60,13 +60,7 @@ fn one_sheet(strings: &[&str], records: Vec<u8>) -> Vec<u8> {
 fn shared_strings_are_held_and_given_trimmed() {
     // The table keeps its text trimmed: a shared string is trimmed when it is
     // decoded, once, and counted trimmed against the text limit.
-    let strings = [
-        " 	 padded
- ",
-        "   ",
-        "inner  space",
-        "",
-    ];
+    let strings = [" \t padded\n ", "   ", "inner  space", ""];
     let mut records = Vec::new();
     for at in 0..4 {
         records.extend(label_sst(0, at, 0, u32::from(at)));

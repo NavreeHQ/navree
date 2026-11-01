@@ -27,7 +27,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use quick_xml::events::{BytesStart, Event};
 
-use super::dates::{finite_number, iso_date, iso_duration};
+use super::dates::{iso_date, iso_duration, number};
 use super::xlsx::error_text;
 use super::xml::{self, Xml, attribute, attributes, decode, push_entity};
 use super::{
@@ -579,8 +579,8 @@ fn cell_value(
         let (key, raw) = attribute?;
         match key {
             "office:value" if !set => {
-                let number = finite_number(raw)
-                    .ok_or_else(|| damaged(format_args!("`{raw}` is not a number")))?;
+                let number =
+                    number(raw).ok_or_else(|| damaged(format_args!("`{raw}` is not a number")))?;
                 value = Some(Held::Typed(Cell::Float(number)));
                 set = true;
             }
@@ -639,7 +639,12 @@ fn cell_value(
                 content.add(&character)?;
             }
             Event::End(e) if is_cell(e.name().as_ref()) => break,
-            Event::Start(e) if e.name().as_ref() == "office:annotation" => {
+            // A note, or a shape (a frame, a text box) anchored to the cell:
+            // what they say is not the cell's.
+            Event::Start(e)
+                if e.name().as_ref() == "office:annotation"
+                    || e.name().as_ref().starts_with("draw:") =>
+            {
                 xml.skip(e.name(), &mut Vec::new())?;
             }
             Event::Start(e) if e.name().as_ref() == "text:p" => {

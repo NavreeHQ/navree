@@ -931,15 +931,19 @@ fn row_col(data: &[u8]) -> Option<(u32, u32)> {
     Some((u32::from(u16_at(data, 0)?), u32::from(u16_at(data, 2)?)))
 }
 
-/// A cell, unless it holds a number that is not finite: no workbook does, and
-/// a table cannot keep one as a number.
+/// A cell, unless it holds a number that is not one (`NaN`); an infinity is
+/// the largest double of its sign, which is what a table can keep of it.
 fn finite(cell: Cell<'_>) -> Result<Cell<'_>, XlsError> {
-    match cell.2 {
-        XlsValue::Number(number) | XlsValue::DateTime(number) if !number.is_finite() => {
-            Err(damaged("a number is not finite"))
+    let (row, column, value) = cell;
+    let value = match value {
+        XlsValue::Number(number) | XlsValue::DateTime(number) if number.is_nan() => {
+            return Err(damaged("a cell holds NaN"));
         }
-        _ => Ok(cell),
-    }
+        XlsValue::Number(number) => XlsValue::Number(number.clamp(-f64::MAX, f64::MAX)),
+        XlsValue::DateTime(number) => XlsValue::DateTime(number.clamp(-f64::MAX, f64::MAX)),
+        other => other,
+    };
+    Ok((row, column, value))
 }
 
 impl<'a> Cells<'a> {

@@ -320,7 +320,8 @@ fn shared_strings(
 }
 
 /// Whether each cell format in the part `path` shows a number as a date: by
-/// its built-in number format, or by its custom one.
+/// its custom number format when it has one, by the built-in format's id when
+/// not.
 fn date_formats(archive: &Archive<'_>, path: &str, budget: &Budget) -> Result<Vec<bool>, Damaged> {
     let dates = archive.read_opening(archive.name_of(path), budget, |source| {
         let mut records = Records::new(source);
@@ -346,7 +347,12 @@ fn date_formats(archive: &Archive<'_>, path: &str, budget: &Budget) -> Result<Ve
                         let format = records.find(CELL_FORMAT, &[])?;
                         let id = u16_at(format, 2).ok_or_else(|| short("a cell format"))?;
                         budget.hold(1)?;
-                        dates.push(builtin_shows_date(id) || custom.get(&id) == Some(&true));
+                        dates.push(
+                            custom
+                                .get(&id)
+                                .copied()
+                                .unwrap_or_else(|| builtin_shows_date(id)),
+                        );
                         count -= 1;
                     }
                     return Ok::<_, Damaged>(dates);
@@ -466,9 +472,11 @@ impl CellSource for XlsbCells<'_, '_> {
                 self.dates.get(style).copied().unwrap_or(false)
             };
             let number = |value: f64| -> Result<Cell, Damaged> {
-                if !value.is_finite() {
-                    return Err(damaged("a number is not finite"));
+                if value.is_nan() {
+                    return Err(damaged("a cell holds NaN"));
                 }
+                // An infinity is the largest double of its sign.
+                let value = value.clamp(-f64::MAX, f64::MAX);
                 Ok(if date {
                     excel_date(value, self.is_1904)
                 } else {

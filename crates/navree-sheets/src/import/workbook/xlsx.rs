@@ -13,7 +13,7 @@ use quick_xml::events::{BytesStart, Event};
 use quick_xml::name::QName;
 
 use super::dates::{
-    builtin_id_shows_date, excel_date, finite_number, iso_date, iso_time, shows_date,
+    builtin_id_shows_date, excel_date, iso_date, iso_time, number, number_or_text, shows_date,
 };
 use super::package::{self, Kind as PartKind, Relationships};
 use super::xml::{
@@ -730,7 +730,7 @@ fn plain_value(
             }
         },
         _ if value.is_empty() => Found::Empty,
-        _ => match finite_number(value) {
+        _ => match number_of(kind, value) {
             Some(number) if date => Found::Typed(excel_date(number, is_1904)),
             Some(number) => Found::Typed(Cell::Float(number)),
             // A value without a type that is not a number is text.
@@ -742,6 +742,16 @@ fn plain_value(
             None => return Err(damaged(format_args!("`{value}` is not a number"))),
         },
     })
+}
+
+/// The number a value is, by the type of its cell: a cell that does not say
+/// what it holds keeps the words `inf` and `nan` as text.
+fn number_of(kind: &Kind, value: &str) -> Option<f64> {
+    if *kind == Kind::Unset {
+        number_or_text(value)
+    } else {
+        number(value)
+    }
 }
 
 /// The text an error cell is kept as, by the error a sheet writes (`#N/A`

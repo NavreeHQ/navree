@@ -2,7 +2,7 @@
 //! number formats show a number as a date, a time or a duration, and the
 //! date or time a number stands for.
 
-use chrono::{Datelike, NaiveDate, NaiveTime, TimeDelta};
+use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, TimeDelta, Timelike};
 
 use crate::Cell;
 
@@ -110,16 +110,31 @@ pub(crate) fn excel_date(serial: f64, is_1904: bool) -> Cell {
     }
 }
 
+/// `at` to the nearest millisecond (a half rounds up), as [`excel_date`] gives
+/// a time.
+fn to_millisecond(at: NaiveDateTime) -> NaiveDateTime {
+    let beyond = i64::from(at.nanosecond() % 1_000_000);
+    let Some(down) = at.checked_sub_signed(TimeDelta::nanoseconds(beyond)) else {
+        return at;
+    };
+    if beyond < 500_000 {
+        return down;
+    }
+    down.checked_add_signed(TimeDelta::milliseconds(1))
+        .unwrap_or(down)
+}
+
 /// The date or date and time a file writes in ISO 8601 (`2026-03-01`,
 /// `2026-03-01T13:45:10.25`, with `Z` or without), as [`excel_date`] gives
-/// it: a date and time at midnight is a [`Cell::Date`]. None for text of
-/// another form.
+/// it: to the millisecond, and a date and time at midnight is a
+/// [`Cell::Date`]. None for text of another form.
 pub(crate) fn iso_date(text: &str) -> Option<Cell> {
     let text = text.strip_suffix('Z').unwrap_or(text);
     if let Ok(day) = NaiveDate::parse_from_str(text, "%Y-%m-%d") {
         return Some(Cell::Date(day));
     }
-    let at = chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M:%S%.f").ok()?;
+    let at = NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M:%S%.f").ok()?;
+    let at = to_millisecond(at);
     Some(if at.time() == NaiveTime::MIN {
         Cell::Date(at.date())
     } else {
@@ -137,11 +152,27 @@ pub(crate) fn iso_time(text: &str, is_1904: bool) -> Option<Cell> {
     Some(excel_date(seconds / 86_400.0, is_1904))
 }
 
-/// A number as a file writes it. None for text that does not read as a
-/// finite one: `NaN`, `inf` and `1e999` all parse, and a cell holds none of
-/// them.
-pub(crate) fn finite_number(text: &str) -> Option<f64> {
-    text.parse::<f64>().ok().filter(|number| number.is_finite())
+/// The number a cell that says it holds one writes. A number past the largest
+/// double is the largest double of its sign: writers round the largest double
+/// up (`1.797693134862316e+308` is past it), and LibreOffice reads that as
+/// infinity and writes `INF`. The table keeps no infinity, and a spreadsheet
+/// holds none: what is written as one is the closest number it can hold. None
+/// for `NaN` and for text that is no number.
+pub(crate) fn number(text: &str) -> Option<f64> {
+    let number = text.parse::<f64>().ok()?;
+    if number.is_nan() {
+        return None;
+    }
+    Some(number.clamp(-f64::MAX, f64::MAX))
+}
+
+/// [`number`] for a cell that does not say what it holds: text that is no
+/// number, and the words `inf`, `infinity` and `nan`, are its text; digits are
+/// a number, past the largest double or not.
+pub(crate) fn number_or_text(text: &str) -> Option<f64> {
+    let number = number(text)?;
+    let word = number.abs() == f64::MAX && !text.bytes().any(|byte| byte.is_ascii_digit());
+    (!word).then_some(number)
 }
 
 /// The time an ODS file writes as a duration (`PT13H45M10S`, `PT30H15M`,

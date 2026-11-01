@@ -242,7 +242,10 @@ pub(super) fn unescape_excel(text: &str) -> Cow<'_, str> {
         let byte = escape
             .get(4..7)
             .filter(|tail| tail.ends_with('_'))
-            .and_then(|tail| u8::from_str_radix(&tail[..2], 16).ok());
+            .and_then(|tail| tail.get(..2))
+            // Two hex digits: `from_str_radix` takes a sign too.
+            .filter(|digits| digits.bytes().all(|byte| byte.is_ascii_hexdigit()))
+            .and_then(|digits| u8::from_str_radix(digits, 16).ok());
         match byte {
             Some(byte) => {
                 out.push(char::from(byte));
@@ -282,6 +285,18 @@ mod tests {
         assert_eq!(all(r#" r="A1"#), [Ok(("r", "A1"))]);
         // An error ends the attributes.
         assert_eq!(all(r#" r s="1""#).len(), 1);
+    }
+
+    #[test]
+    fn an_escape_is_four_hex_digits() {
+        // A sign is no digit, though `from_str_radix` takes one.
+        for text in [
+            "_x00+A_", "_x00-1_", "_x00 A_", "_x00G0_", "_x00+_", "_x00+a_",
+        ] {
+            assert_eq!(unescape_excel(text), text);
+        }
+        assert_eq!(unescape_excel("_x000d_"), "\r");
+        assert_eq!(unescape_excel("_x000D__x000a_"), "\r\n");
     }
 
     #[test]
