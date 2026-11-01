@@ -219,7 +219,8 @@ assert_eq!(imports.find(import.id).await?.counts.created, 1);
   `crates/navree/tests/sheets_docs.rs`); routes need an authenticator and
   the importer's permission (`AccessModule` abilities in tests).
 - CSV downloads start with `\u{FEFF}` and end lines with `\r\n`; assert on
-  the exact text. XLSX starts with `PK`; read it back with calamine.
+  the exact text. XLSX starts with `PK`; read it back with `zip` and
+  `quick-xml` (see `crates/navree-sheets/tests/sheets/xlsx.rs`).
 
 ## Checks before you finish
 
@@ -259,29 +260,32 @@ assert_eq!(imports.find(import.id).await?.counts.created, 1);
   error.
 - Staging holds the whole file in memory: `sheets.imports.max_upload_bytes`
   bounds the file, not what a workbook unpacks to (a zip can unpack a
-  thousand-fold; calamine keeps `sharedStrings.xml` and a cell's text whole):
+  thousand-fold; the XLSX and XLSB readers keep the shared strings and a
+  cell's text whole):
   `sheets.imports.max_inflated_bytes` (1 GiB) refuses a workbook (XLSX, XLSB,
-  ODS, however detected, even behind another header) with a part that declares more than that unpacked, before reading it; shared strings then cost about 1.5x their XML in
-  memory, up to about 3x for one-character strings;
+  ODS, however detected, even behind another header) with a part that declares more than that unpacked, before reading it; shared strings are kept
+  trimmed in one text (4 bytes per string besides it) and count against the
+  same limit; a declared count of strings reserves nothing;
   the zip reader stops a part at its declared size, so a lie in either
   direction fails. `sheets.imports.max_text_bytes` (256 MiB) bounds the text
   the table keeps, counted per cell (a shared string counts again for each
-  cell it is in); a file past it fails the import. For CSV, TSV and XLSX it
-  is counted before the text is copied; XLS, ODS and XLSB are read into a
-  range first that copies a shared string or a repeated row into every cell
-  (ODS: every repeated row or column), so they are counted after the copies
-  are in memory. Rows are padded to the header's width, so
+  cell it is in); a file past it fails the import. For CSV, TSV, XLSX, XLSB
+  and ODS it is counted before the text is copied (ODS: every copy of a
+  repeated row or cell; spaces of `text:s` before they are made); XLS is
+  read into a range first that copies a shared string into every cell, so
+  it is counted after the copies are in memory. Rows are padded to the header's width, so
   `sheets.imports.max_columns` (16,384) and `sheets.imports.max_cells`
   (10,000,000, rows times columns) bound the table too; a file past either
   fails the import with a message, and `max_rows` is checked while reading.
-  That holds for CSV, TSV and XLSX (read a record or cell at a time, in
-  order); XLS, ODS and XLSB are read into a range of the sheet's whole used
-  area first, so the limits apply to the table made from it, after it is in
-  memory. An XLSX sheet whose cells are not in row order (Excel never
-  writes one) is held only up to the limits (`max_rows` + 1 rows,
+  That holds for CSV, TSV, XLSX, XLSB and ODS (read a record or cell at a
+  time; a workbook's sheet takes memory for its cells, not its area, and an
+  ODS row or cell that repeats is read once); XLS is read into a range of
+  the sheet's whole used area first, so the limits apply to the table made
+  from it, after it is in memory. An XLSX or XLSB sheet whose cells are not
+  in row order (Excel never writes one) is held only up to the limits (`max_rows` + 1 rows,
   `max_cells` cells, cells past `max_columns` as marks): over that it is
   refused, even if the table would have fitted. After a refusal the rest of
-  an XLSX sheet is still read through, keeping nothing, until the job's
+  a workbook's sheet is still read through, keeping nothing, until the job's
   timeout stops it. The file is read on the blocking pool, and the reading
   stops at its next record when the job's timeout drops it.
 - The `/api/exports` and `/api/imports` routes mount only when the app has

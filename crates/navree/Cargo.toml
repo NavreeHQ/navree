@@ -268,7 +268,8 @@ sso = [
 ## Sheets: CSV and Excel exports (streamed downloads, queued files with
 ## signed links) and imports (encoding detection, header mapping, row
 ## validation, a staging preview, batched apply, error files); pure Rust
-## (rust_xlsxwriter, calamine); in `full`.
+## (rust_xlsxwriter; its own XLSX, XLSB and ODS readers; calamine for
+## XLS); in `full`.
 sheets = [
     "dep:navree-sheets",
     "http",
