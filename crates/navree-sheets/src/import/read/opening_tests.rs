@@ -1655,6 +1655,7 @@ fn a_relationship_target_is_resolved_up_to_the_longest_name_a_part_has() {
 }
 
 /// The name of the column `at` (from 0) as a sheet writes it.
+#[cfg(target_os = "linux")]
 fn column_name(mut at: usize) -> String {
     let mut name = Vec::new();
     loop {
