@@ -11,54 +11,95 @@ document.addEventListener("compositionend", () => { composing = null; }, true);
 
 const OPEN_STATE = new Set(["DIALOG", "DETAILS"]);
 
+// A form's named fields shadow its own properties and methods: in
+// `<form><input name="id"></form>`, `form.id` is the input. The morph reads
+// every property of a form through its prototype, so no field name can change
+// what the page keeps. Other elements are read directly.
+const NP = Node.prototype, EP = Element.prototype;
+/** @param {object} proto @param {string} name */
+const getter = (proto, name) => /** @type {(this: Node) => any} */ (Object.getOwnPropertyDescriptor(proto, name)?.get);
+const gId = getter(EP, "id"), gAttributes = getter(EP, "attributes");
+const gKids = getter(NP, "childNodes"), gFirst = getter(NP, "firstChild"), gNext = getter(NP, "nextSibling");
+const gParent = getter(NP, "parentNode"), gName = getter(NP, "nodeName"), gType = getter(NP, "nodeType");
+/** @param {any} n */
+const form = (n) => n instanceof HTMLFormElement;
+/** @param {Node} n */
+const idOf = (n) => (form(n) ? gId.call(n) : /** @type {Element} */ (n).id);
+/** @param {Node} n @returns {NamedNodeMap} */
+const attrsOf = (n) => (form(n) ? gAttributes.call(n) : /** @type {Element} */ (n).attributes);
+/** @param {Node} n @returns {NodeListOf<ChildNode>} */
+const kidsOf = (n) => (form(n) ? gKids.call(n) : n.childNodes);
+/** @param {Node} n @returns {ChildNode | null} */
+const firstOf = (n) => (form(n) ? gFirst.call(n) : n.firstChild);
+/** @param {Node} n @returns {ChildNode | null} */
+const nextOf = (n) => (form(n) ? gNext.call(n) : n.nextSibling);
+/** @param {Node} n @returns {ParentNode | null} */
+const parentOf = (n) => (form(n) ? gParent.call(n) : n.parentNode);
+/** @param {Node} n */
+const nameOf = (n) => (form(n) ? gName.call(n) : n.nodeName);
+/** @param {Node} n */
+const typeOf = (n) => (form(n) ? gType.call(n) : n.nodeType);
+/** @param {Element} n @param {string} name */
+const attr = (n, name) => EP.getAttribute.call(n, name);
+/** @param {Element} n @param {string} name */
+const has = (n, name) => EP.hasAttribute.call(n, name);
+/** @param {Element} n @param {string} name @param {string} value */
+const set = (n, name, value) => EP.setAttribute.call(n, name, value);
+/** @param {Element} n @param {string} name */
+const unset = (n, name) => EP.removeAttribute.call(n, name);
+/** @param {Node} n @param {Node} child @param {Node | null} before */
+const insert = (n, child, before) => NP.insertBefore.call(n, child, before);
+/** @param {Node} n @param {Node} other */
+const holds = (n, other) => NP.contains.call(n, other);
+
 /** @param {Node} node */
 function keyOf(node) {
-  return node.nodeType === 1 ? /** @type {Element} */ (node).id || /** @type {Element} */ (node).getAttribute("data-key") : null;
+  return typeOf(node) === 1 ? idOf(node) || attr(/** @type {Element} */ (node), "data-key") : null;
 }
 
 /** @param {Node} parent @param {Node} node @param {Node | null} before */
 function moveTo(parent, node, before) {
-  if (node.nextSibling === before && node.parentNode === parent) return;
+  if (nextOf(node) === before && parentOf(node) === parent) return;
   if (/** @type {any} */ (parent).moveBefore && parent.isConnected && node.isConnected) {
     try { /** @type {any} */ (parent).moveBefore(node, before); return; } catch {}
   }
-  parent.insertBefore(node, before);
+  insert(parent, node, before);
 }
 
 /** Whether two nodes can become one another without replacing. @param {Node} a @param {Node} b */
 function same(a, b) {
-  if (a.nodeType !== b.nodeType || a.nodeName !== b.nodeName) return false;
-  if (a.nodeType !== 1) return true;
-  if (a.nodeName === "INPUT" && /** @type {Element} */ (a).getAttribute("type") !== /** @type {Element} */ (b).getAttribute("type")) return false;
+  if (typeOf(a) !== typeOf(b) || nameOf(a) !== nameOf(b)) return false;
+  if (typeOf(a) !== 1) return true;
+  if (nameOf(a) === "INPUT" && attr(/** @type {Element} */ (a), "type") !== attr(/** @type {Element} */ (b), "type")) return false;
   const key = keyOf(a), other = keyOf(b);
   return (!key && !other) || key === other;
 }
 
 /** @param {Element} a @param {Element} b */
 function morphAttrs(a, b) {
-  const keep = (a.getAttribute("data-ui-keep-attrs") || "").split(" ");
+  const keep = (attr(a, "data-ui-keep-attrs") || "").split(" ");
   const focused = a === document.activeElement;
-  for (const { name, value } of b.attributes) {
-    if (keep.includes(name) || (focused && name === "value") || (name === "open" && OPEN_STATE.has(a.nodeName))) continue;
-    if (a.getAttribute(name) !== value) a.setAttribute(name, value);
+  for (const { name, value } of attrsOf(b)) {
+    if (keep.includes(name) || (focused && name === "value") || (name === "open" && OPEN_STATE.has(nameOf(a)))) continue;
+    if (attr(a, name) !== value) set(a, name, value);
   }
-  for (const { name } of [...a.attributes]) {
-    if (b.hasAttribute(name) || keep.includes(name) || (name === "open" && OPEN_STATE.has(a.nodeName))) continue;
-    a.removeAttribute(name);
+  for (const { name } of [...attrsOf(a)]) {
+    if (has(b, name) || keep.includes(name) || (name === "open" && OPEN_STATE.has(nameOf(a)))) continue;
+    unset(a, name);
   }
 }
 
 /** @param {Element} a @param {Element} b @param {Map<string, Element>} ids */
 function morphElement(a, b, ids) {
-  if (a === composing || a.hasAttribute("data-ui-keep")) return;
+  if (a === composing || has(a, "data-ui-keep")) return;
   morphAttrs(a, b);
-  if (a.nodeName === "TEXTAREA" && a === document.activeElement) return;
+  if (nameOf(a) === "TEXTAREA" && a === document.activeElement) return;
   morphChildren(a, b, ids);
 }
 
 /** @param {Node} a @param {Node} b @param {Map<string, Element>} ids */
 function morphNode(a, b, ids) {
-  if (a.nodeType === 1) morphElement(/** @type {Element} */ (a), /** @type {Element} */ (b), ids);
+  if (typeOf(a) === 1) morphElement(/** @type {Element} */ (a), /** @type {Element} */ (b), ids);
   else if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue;
 }
 
@@ -68,8 +109,9 @@ function morphNode(a, b, ids) {
  * @param {Node} node
  */
 function removeOld(node) {
-  if (node.nodeType === 1 && /** @type {Element} */ (node).hasAttribute("data-ui-persist")) return;
-  node.parentNode?.removeChild(node);
+  if (typeOf(node) === 1 && has(/** @type {Element} */ (node), "data-ui-persist")) return;
+  const parent = parentOf(node);
+  if (parent) NP.removeChild.call(parent, node);
 }
 
 /**
@@ -78,12 +120,12 @@ function removeOld(node) {
  * @returns {Node} what was added
  */
 function insertNew(a, next, before, ids) {
-  if (next.nodeType !== 1 || !ids.size || !/** @type {Element} */ (next).querySelector("[id],[data-key]")) {
-    a.insertBefore(next, before);
+  if (typeOf(next) !== 1 || !ids.size || !EP.querySelector.call(next, "[id],[data-key]")) {
+    insert(a, next, before);
     return next;
   }
-  const shell = /** @type {Element} */ (next.cloneNode(false));
-  a.insertBefore(shell, before);
+  const shell = /** @type {Element} */ (NP.cloneNode.call(next, false));
+  insert(a, shell, before);
   morphChildren(shell, /** @type {Element} */ (next), ids);
   return shell;
 }
@@ -92,20 +134,20 @@ function insertNew(a, next, before, ids) {
 function morphChildren(a, b, ids) {
   /** Keys still to come among the new children: an old child with one waits for it. */
   const wanted = new Set();
-  for (const child of b.childNodes) {
+  for (const child of kidsOf(b)) {
     const key = keyOf(child);
     if (key) wanted.add(key);
   }
   /** @type {Node | null} */
-  let cur = a.firstChild;
-  for (const next of [...b.childNodes]) {
+  let cur = firstOf(a);
+  for (const next of [...kidsOf(b)]) {
     const key = keyOf(next);
     /** The node that now stands for `next`. @type {Node} */
     let placed;
     if (key) {
       wanted.delete(key);
       const old = ids.get(key);
-      if (old && old.nodeName === next.nodeName && !old.contains(a)) {
+      if (old && nameOf(old) === nameOf(next) && !holds(old, a)) {
         ids.delete(key);
         if (old !== cur) moveTo(a, old, cur);
         morphElement(old, /** @type {Element} */ (next), ids);
@@ -120,12 +162,12 @@ function morphChildren(a, b, ids) {
           match = null;
           break;
         }
-        match = match.nextSibling;
+        match = nextOf(match);
       }
       if (match) {
         while (cur && cur !== match) {
           const gone = cur;
-          cur = gone.nextSibling;
+          cur = nextOf(gone);
           removeOld(gone);
         }
         morphNode(match, next, ids);
@@ -133,11 +175,11 @@ function morphChildren(a, b, ids) {
       } else placed = insertNew(a, next, cur, ids);
     }
     // A morph below may have taken nodes from here, so read this afresh.
-    cur = placed.nextSibling;
+    cur = nextOf(placed);
   }
   while (cur) {
     const gone = cur;
-    cur = gone.nextSibling;
+    cur = nextOf(gone);
     removeOld(gone);
   }
 }
@@ -156,7 +198,7 @@ export function morph(from, to) {
   }
   /** @type {Map<string, Element>} */
   const ids = new Map();
-  for (const element of from.querySelectorAll("[id],[data-key]")) {
+  for (const element of EP.querySelectorAll.call(from, "[id],[data-key]")) {
     const key = keyOf(element);
     if (key) ids.set(key, element);
   }

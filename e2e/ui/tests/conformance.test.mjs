@@ -138,6 +138,31 @@ test("Logbook's list: axe, new entries morph in, the filter keeps focus, Clear w
   assert.deepEqual(problems, []);
 });
 
+test("Logbook's detail: axe, the page's own sections, and the replay form works", { skip: !LOGBOOK, timeout: 60000 }, async () => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await context.newPage();
+  const problems = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") problems.push(message.text());
+  });
+  await fetch(`${LOGBOOK}/plain`);
+  await page.goto(`${LOGBOOK}/_logbook?type=request`);
+  await page.locator("#rows tbody tr a").first().click();
+  await page.waitForURL("**/entries/**");
+  const first = page.url();
+  for (const id of ["request", "response", "timeline", "replay"]) await page.locator(`section#${id}`).waitFor();
+  assert.equal(await page.locator("[style]").count(), 0, "no style attribute on the page");
+  assert.deepEqual(await axe(page), []);
+  await page.getByRole("link", { name: "Replay", exact: true }).click();
+  assert.ok(page.url().endsWith("#replay"), "a jump link stays on the page");
+  assert.equal(page.url().split("#")[0], first);
+  await page.getByRole("button", { name: "Replay", exact: true }).click();
+  await page.waitForURL((url) => url.href.split("#")[0] !== first && url.pathname.includes("/entries/"), { timeout: 15000 });
+  await page.locator("[data-slot=toast]").filter({ hasText: "Replayed" }).waitFor({ timeout: 5000 });
+  await context.close();
+  assert.deepEqual(problems, []);
+});
+
 test("the design rules hold on every page", { timeout: 60000 }, async () => {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const page = await context.newPage();

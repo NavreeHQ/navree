@@ -59,8 +59,8 @@ pub const TOKENS: &[Token] = &[
     ),
     t(
         "font-mono",
-        "\"Monaspace Neon\",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace",
-        "\"Monaspace Neon\",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace",
+        "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace",
+        "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace",
     ),
 ];
 

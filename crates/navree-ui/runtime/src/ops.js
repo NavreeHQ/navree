@@ -1,7 +1,7 @@
 // The op applier: the closed list the server sends. Nothing here runs code
 // from the wire; the HTML in an op is rendered by the server.
 import { morph, parse } from "./morph.js";
-import { announce, toast, openTarget, closeTarget } from "./ui.js";
+import { announce, toast, openTarget, closeTarget, all, field } from "./ui.js";
 import { go, setUrl, refresh } from "./nav.js";
 
 /** @param {string} id */
@@ -9,13 +9,13 @@ const byId = (id) => document.getElementById(id);
 
 /** @param {HTMLFormElement} form @param {Record<string, string[]>} fields */
 function showErrors(form, fields) {
-  for (const old of form.querySelectorAll("[data-slot=field-error]")) old.remove();
-  for (const old of form.querySelectorAll("[data-invalid]")) old.removeAttribute("data-invalid");
-  for (const old of form.querySelectorAll("[aria-invalid]")) old.removeAttribute("aria-invalid");
+  for (const old of all(form, "[data-slot=field-error]")) old.remove();
+  for (const old of all(form, "[data-invalid]")) old.removeAttribute("data-invalid");
+  for (const old of all(form, "[aria-invalid]")) old.removeAttribute("aria-invalid");
   let first = null;
   let count = 0;
   for (const name in fields) {
-    const input = /** @type {HTMLElement | undefined} */ (form.elements.namedItem(name));
+    const input = /** @type {HTMLElement | undefined} */ (field(form, name));
     const box = input?.closest?.("[data-slot=field]");
     const text = fields[name].join(" ");
     count++;

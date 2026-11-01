@@ -69,7 +69,6 @@ const speculation = Buffer.from(
 );
 
 const FONT = hash(readFileSync(join(crate, "assets/fonts/geist.woff2")));
-const MONO = hash(readFileSync(join(crate, "assets/fonts/monaspace-neon.woff2")));
 
 /** name, extension, content type, bytes */
 const FILES = [
@@ -77,14 +76,13 @@ const FILES = [
   ["sidebar", "js", "text/javascript; charset=utf-8", await js("sidebar.js")],
   ["overlay", "js", "text/javascript; charset=utf-8", await js("overlay.js")],
   ["table", "js", "text/javascript; charset=utf-8", await js("table.js")],
-  ["navree-ui", "css", "text/css; charset=utf-8", Buffer.from((await css()).toString().replaceAll("geist.woff2", `geist-${FONT}.woff2`).replaceAll("monaspace-neon.woff2", `monaspace-neon-${MONO}.woff2`))],
+  ["navree-ui", "css", "text/css; charset=utf-8", Buffer.from((await css()).toString().replaceAll("geist.woff2", `geist-${FONT}.woff2`))],
   ["speculation", "json", "application/speculationrules+json", speculation],
 ];
 
 /** Files kept byte for byte: no compression gain, or already compressed. */
 const STATIC = [
   ["geist", "woff2", "font/woff2", "assets/fonts/geist.woff2"],
-  ["monaspace-neon", "woff2", "font/woff2", "assets/fonts/monaspace-neon.woff2"],
   ["favicon", "svg", "image/svg+xml", "assets/favicon.svg"],
 ];
 

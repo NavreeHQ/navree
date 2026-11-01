@@ -1,5 +1,26 @@
 // What ops and commands share: opening things, toasts, the announcer.
 
+// A form's named fields shadow its own properties and methods (`form.method` is the
+// field called "method", `form.hasAttribute` the one called "hasAttribute"), whatever
+// the field's author meant. Everything the runtime reads off a form goes through the
+// prototype, so no field name can change what a form does.
+const E = Element.prototype;
+/** @param {Element} el @param {string} name */
+export const attr = (el, name) => E.getAttribute.call(el, name);
+/** @param {Element} el @param {string} name */
+export const has = (el, name) => E.hasAttribute.call(el, name);
+/** @param {Element} el @param {string} name @param {string} value */
+export const set = (el, name, value) => E.setAttribute.call(el, name, value);
+/** @param {Element} el @param {string} name */
+export const unset = (el, name) => E.removeAttribute.call(el, name);
+/** @param {Element} el @param {string} name @param {boolean} on */
+export const toggle = (el, name, on) => E.toggleAttribute.call(el, name, on);
+/** @param {Element} el @param {string} selector */
+export const all = (el, selector) => E.querySelectorAll.call(el, selector);
+const elements = /** @type {(this: HTMLFormElement) => HTMLFormControlsCollection} */ (Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, "elements")?.get);
+/** The field called `name` in `form`. @param {HTMLFormElement} form @param {string} name */
+export const field = (form, name) => elements.call(form).namedItem(name);
+
 /** @param {Element} el */
 export function openTarget(el) {
   if (el.nodeName === "DIALOG") {

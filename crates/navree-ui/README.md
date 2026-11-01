@@ -137,6 +137,13 @@ async fn bulk(uow: Uow, request: BulkRequest<Deal>) -> Result<Reply> {
 **Stored views** are SQL only (`SavedViewModel`, table `navree_ui_table_views`: `id, owner, table_id, name, query, is_default`; create it in a migration). Save through `save_view`, read through `list_views`, and open with `query.or_default_view(&views)`.
 
 **One table per URL.** State lives in plain parameters, so two tables on one page would share it: give the second its own route or region.
+## Fonts
+
+Geist is the one web font, with `font-display: optional` and a preload. Monospace text
+uses the system stack (`ui-monospace`, SF Mono, Menlo, Consolas), which costs no bytes.
+A second face (Monaspace Neon, 44 KB) was tried and left out: a page that shows any
+monospace text then waits on it before `load`, and that moved the first keyboard stop
+in the conformance run. Pages that want it can declare it in their own stylesheet.
 
 ## The browser side
 

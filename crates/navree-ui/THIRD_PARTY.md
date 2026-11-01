@@ -46,10 +46,3 @@ lists them.
 
 `assets/fonts/geist.woff2` is under the SIL Open Font License 1.1:
 `assets/fonts/LICENSE-geist.txt`.
-
-## Monaspace Neon
-
-`assets/fonts/monaspace-neon.woff2` is under the SIL Open Font License 1.1:
-`assets/fonts/LICENSE-monaspace-neon.txt`. It is the first face of `--font-mono`, loaded
-with `font-display: optional` and no preload, so a page with no monospace text never
-fetches it.

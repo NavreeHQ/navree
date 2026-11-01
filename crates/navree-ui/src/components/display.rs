@@ -934,12 +934,19 @@ pub struct Table {
     caption: Option<Node>,
     head: Vec<Node>,
     rows: Vec<Node>,
+    body_id: Option<AttrValue>,
 }
 
 impl Table {
     /// An empty table.
     pub fn new() -> Self {
-        Self { el: el("table").slot("table"), caption: None, head: Vec::new(), rows: Vec::new() }
+        Self { el: el("table").slot("table"), caption: None, head: Vec::new(), rows: Vec::new(), body_id: None }
+    }
+
+    /// Gives the body an id, so [`Region::feed`](crate::Region::feed) can add rows to it.
+    pub fn body_id(mut self, id: impl Into<AttrValue>) -> Self {
+        self.body_id = Some(id.into());
+        self
     }
 
     /// Sets the caption.
@@ -964,7 +971,7 @@ impl Table {
         let table = self.el.children((
             self.caption.map(|caption| el("caption").child(caption)),
             el("thead").child(el("tr").child(self.head)),
-            el("tbody").child(self.rows),
+            el("tbody").attr_opt("id", self.body_id).child(self.rows),
         ));
         el("div").slot("table-container").child(table).into()
     }

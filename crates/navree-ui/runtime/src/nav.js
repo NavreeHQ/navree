@@ -135,6 +135,28 @@ export function setUrl(href, mode) {
 /** The newest fetch of each region: an older answer is dropped. @type {Map<string, number>} */
 const regions = new Map();
 
+/**
+ * A feed region asks for what is newer than its cursor and adds it at the start
+ * of its container. The rows are the server's own markup, as in an `append` op.
+ * @param {Element} el @param {string} src @param {() => boolean} current
+ */
+async function feed(el, src, current) {
+  const into = document.getElementById(el.getAttribute("data-ui-feed") || "");
+  if (!into || !el.contains(into)) return;
+  const url = new URL(src, location.href);
+  url.searchParams.set("after", el.getAttribute("data-ui-after") || "0");
+  const response = await fetch(url, { headers: HEADER });
+  if (!current() || !response.ok) return;
+  const html = await response.text();
+  if (!current()) return;
+  if (html.trim()) {
+    into.insertAdjacentHTML("afterbegin", html);
+    document.getElementById(el.getAttribute("data-ui-feed-empty") || "")?.remove();
+  }
+  const cursor = response.headers.get("x-ui-cursor");
+  if (cursor) el.setAttribute("data-ui-after", cursor);
+}
+
 /** Refetches a region. @param {string} id */
 export async function refresh(id) {
   const el = document.getElementById(id);
@@ -144,6 +166,7 @@ export async function refresh(id) {
   regions.set(id, mine);
   const table = el.hasAttribute("data-ui-table") ? el : null;
   try {
+    if (el.hasAttribute("data-ui-feed")) return await feed(el, src, () => regions.get(id) === mine);
     const response = await fetch(src, { headers: HEADER });
     if (regions.get(id) !== mine) return;
     if (!response.ok) {

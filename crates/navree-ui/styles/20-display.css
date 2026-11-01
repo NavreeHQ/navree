@@ -107,3 +107,4 @@ h1[data-slot=heading]{font-size:1.5rem}h2[data-slot=heading]{font-size:1.25rem}h
 [data-slot=stat-label]{color:var(--fg-2);font-size:13px}
 [data-slot=stat-value]{color:var(--fg);font-size:1.5rem;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.2}
 [data-slot=stat-trend]{color:var(--fg-3);font-size:12px;&[data-tone=up]{color:var(--accent)}&[data-tone=down]{color:var(--danger)}}
+pre[data-slot=code]{display:block;margin:0;padding:.5rem .75rem;overflow:auto;max-height:28rem;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--line);border-radius:var(--radius)}

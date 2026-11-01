@@ -331,3 +331,46 @@ test("an IME composition survives a morph (chromium)", { timeout: 60000 }, async
   assert.equal(state.fresh, true);
   assert.equal(state.focused, "i");
 });
+
+// A form's named fields shadow its own properties (`form.id` is the field called
+// "id"). Every name below is one a real form might have, or an attacker might pick.
+for (const [name, engine] of [["chromium", chromium], ["firefox", firefox]]) {
+  test(`a form whose fields are named like its properties still morphs (${name})`, { timeout: 60000 }, async () => {
+    const browser = await engine.launch();
+    const page = await browser.newPage();
+    await page.goto(origin);
+    const out = await page.evaluate(async () => {
+      const { morph, parse } = await import("/morph.js");
+      const names = ["id", "name", "method", "action", "target", "elements", "children", "childNodes", "attributes", "firstChild", "nextSibling", "parentNode", "nodeName", "nodeType", "getAttribute", "hasAttribute", "setAttribute", "removeAttribute", "insertBefore", "removeChild", "contains", "querySelector", "querySelectorAll", "cloneNode", "moveBefore"];
+      const fields = (value) => names.map((n) => `<input name="${n}" value="${value}">`).join("");
+      const root = document.getElementById("root");
+      root.innerHTML = `<div id="w"><form id="f" method="post" action="/a" data-ui-form>${fields("old")}<p id="note">one</p><button>Go</button></form></div>`;
+      const form = document.getElementById("f");
+      const all = (el) => [...Element.prototype.querySelectorAll.call(el, "input")];
+      const inputs = all(form);
+      inputs[3].value = "typed";
+      const note = document.getElementById("note");
+      let error = null;
+      try {
+        morph(root.firstElementChild, parse(`<div id="w"><form id="f" method="post" action="/b" data-ui-form class="changed">${fields("new")}<p id="note">two</p><span id="added">x</span><button>Go</button></form></div>`));
+      } catch (e) {
+        error = String(e);
+      }
+      const now = document.getElementById("f");
+      return {
+        error,
+        sameForm: now === form,
+        sameInputs: all(now).every((input, at) => input === inputs[at]),
+        sameNote: document.getElementById("note") === note,
+        note: note.textContent,
+        added: !!document.getElementById("added"),
+        typed: inputs[3].value,
+        untouched: inputs[0].value,
+        action: Element.prototype.getAttribute.call(now, "action"),
+        cls: Element.prototype.getAttribute.call(now, "class"),
+      };
+    });
+    await browser.close();
+    assert.deepEqual(out, { error: null, sameForm: true, sameInputs: true, sameNote: true, note: "two", added: true, typed: "typed", untouched: "new", action: "/b", cls: "changed" });
+  });
+}
