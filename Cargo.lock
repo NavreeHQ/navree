@@ -9945,6 +9945,8 @@ dependencies = [
  "http",
  "navree",
  "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

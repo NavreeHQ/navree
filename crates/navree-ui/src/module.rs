@@ -5,7 +5,8 @@
 
 use std::sync::{Arc, OnceLock};
 
-use http::{HeaderMap, Method};
+use http::header::{self, HeaderName, HeaderValue};
+use http::{HeaderMap, Method, StatusCode};
 use navree_http::extract::Request;
 use navree_http::middleware::{self, Next};
 use navree_http::response::{IntoResponse, Response};
@@ -13,7 +14,8 @@ use navree_http::{Controller, GlobalLayer, LayerSlot, ModuleBuilderHttpExt, Path
 use navree_kernel::{AppContext, BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
 
 use crate::{assets, compress};
-use crate::op::{PendingOps, UI_HEADER};
+use crate::op::{Envelope, PendingOps, UI_HEADER};
+use crate::shell::FLASH_COOKIE;
 
 /// Registers the toolkit in an app: the routes of its files, and the layer
 /// that turns a [`Reply`](crate::Reply) into ops when the runtime asked.
@@ -133,12 +135,44 @@ async fn reply_layer(request: Request, next: Next) -> Response {
     let accept = compress::accept_of(request.headers());
     let method = request.method().clone();
     let mut response = next.run(request).await;
-    if let Some(PendingOps(envelope, status)) = response.extensions_mut().remove::<PendingOps>()
-        && from_runtime
-    {
-        response = (status, envelope).into_response();
+    if let Some(PendingOps(envelope, status)) = response.extensions_mut().remove::<PendingOps>() {
+        if from_runtime {
+            response = to_ops(response, envelope, status);
+        }
+        // The same URL answers ops or a page: a cache has to keep them apart.
+        response.headers_mut().append(header::VARY, HeaderValue::from_static(UI_HEADER));
     }
     compress::encode(&method, &accept, response).await
+}
+
+/// What only the fallback's own body or destination means: everything else on a
+/// response (a session's cookies, a layer's headers) belongs to the answer,
+/// whichever form it goes out in.
+fn fallback_only(name: &HeaderName) -> bool {
+    name == header::LOCATION
+        || name == header::CONTENT_TYPE
+        || name == header::CONTENT_LENGTH
+        || name == header::CONTENT_ENCODING
+        || name == header::CACHE_CONTROL
+        || name == header::CONTENT_SECURITY_POLICY
+        || name == "speculation-rules"
+}
+
+/// The reply's ops, in place of its fallback. Headers set on the fallback stay,
+/// so a cookie survives whichever side of this layer it was set on. A toast is
+/// on its way as an op, so the cookie that would show it on the next page isn't.
+fn to_ops(fallback: Response, envelope: Envelope, status: StatusCode) -> Response {
+    let (parts, _) = fallback.into_parts();
+    let mut response = (status, envelope).into_response();
+    let headers = response.headers_mut();
+    for (name, value) in &parts.headers {
+        let flash = *name == header::SET_COOKIE && value.as_bytes().strip_prefix(FLASH_COOKIE.as_bytes()).is_some_and(|rest| rest.first() == Some(&b'='));
+        if !flash && !fallback_only(name) {
+            headers.append(name, value.clone());
+        }
+    }
+    *response.extensions_mut() = parts.extensions;
+    response
 }
 
 /// The route of the files, there only while the toolkit is wanted.
