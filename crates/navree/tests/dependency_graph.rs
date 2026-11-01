@@ -63,7 +63,7 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-dock", 0, &[]),
     // Harbor: servers and deployments. A tool crate for the CLI (and the
     // facade's opt-in `harbor` feature) that builds on no navree crate.
-    rule("navree-harbor", 0, &[]),
+    rule("navree-harbor", 0, &["navree-template"]),
     // `embed_locales!` for navree-i18n (proc-macro; no navree dependencies).
     rule("navree-i18n-macros", 0, &[]),
     // `#[derive(Validate)]` (re-exported by navree-validation; proc-macro, no
@@ -84,6 +84,9 @@ const HIERARCHY: &[Rule] = &[
     // and fake stubs, the Logbook's ignored routes and the session layer's
     // CSRF exceptions. It depends on no navree crate.
     rule("navree-glob", 0, &[]),
+    // The template engine behind views, mail, translated messages and the
+    // files the CLI and Harbor generate. It depends on no navree crate.
+    rule("navree-template", 0, &[]),
     // L1
     rule("navree-contracts", 1, &["navree-kernel"]),
     rule("navree-config", 1, &["navree-kernel", "navree-contracts"]),
@@ -95,7 +98,7 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-crypto", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
     // Events report each emit to the telemetry sinks (`EventEmitted`).
     rule("navree-events", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry"]),
-    rule("navree-view", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
+    rule("navree-view", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-template"]),
     // The memory store is a navree-bounded cache.
     rule("navree-cache", 2, &["navree-kernel", "navree-bounded", "navree-contracts", "navree-config", "navree-telemetry"]),
     rule("navree-http-client", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-glob"]),
@@ -367,7 +370,7 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-i18n", 6, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-view",
         "navree-db", "navree-validation", "navree-notify", "navree-workspace",
-        "navree-i18n-macros",
+        "navree-i18n-macros", "navree-template",
     ]),
     // Documents: PDF from HTML templates (navree-view) laid out by the
     // native engine or printed by headless Chrome, DOCX, and PDF
@@ -500,7 +503,7 @@ const HIERARCHY: &[Rule] = &[
     // The CLI uses no runtime crate; navree-dock runs `navree dock`,
     // navree-harbor runs Harbor's commands and navree-navigator runs
     // `navree mcp` and `navree skills:install`.
-    rule("navree-cli", 8, &["navree-dock", "navree-harbor", "navree-navigator"]),
+    rule("navree-cli", 8, &["navree-dock", "navree-harbor", "navree-navigator", "navree-template"]),
     // L9 and up (apps): anything below, except the CLI binary.
     // The CRM: its crates use only the `navree` facade.
     // crm-core is shared; crm-testkit boots it for tests (a dev-dependency
@@ -536,6 +539,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-bounded",
     "navree-pdf",
     "navree-glob",
+    "navree-template",
     "navree-macros",
     "navree-dock",
     "navree-harbor",
