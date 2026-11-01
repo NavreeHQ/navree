@@ -3,7 +3,7 @@
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use navree_mail::inbound::{InboundStatus, StoredMail, Verdict};
+use navree_mail::inbound::{InboundStatus, StoredMail, Verdict, Verdicts};
 use navree_mail::{InboundError, Incoming};
 use navree_storage::Storage;
 use serde_json::{Value, json};
@@ -384,8 +384,11 @@ async fn a_mailgun_mime_route_delivers_the_whole_message() {
     let received = &mail.seen()[0].2;
     assert_eq!(received.source, "mailgun");
     assert_eq!(received.envelope.recipients, vec!["reply+abc@in.acme.test"]);
-    assert_eq!(received.verdicts.spam, Some(Verdict::Pass));
-    assert_eq!(received.verdicts.spf, Some(Verdict::Pass));
+    assert_eq!(
+        received.verdicts,
+        Verdicts::default(),
+        "Mailgun's spam flag and SPF result are not read: nothing tells them from the sender's"
+    );
     assert_eq!(received.raw().as_ref(), fixture("reply.eml").as_slice());
 }
 
@@ -531,7 +534,7 @@ async fn a_mailgun_route_with_parsed_fields_is_rebuilt() {
     );
     assert_eq!(received.attachments[0].filename.as_deref(), Some("q3.pdf"));
     assert_eq!(received.attachments[0].content.as_ref(), b"%PDF-1.4");
-    assert_eq!(received.verdicts.spam, Some(Verdict::Fail));
+    assert_eq!(received.verdicts, Verdicts::default());
 }
 
 #[tokio::test]
@@ -556,6 +559,189 @@ async fn mailgun_signatures_are_checked() {
         mail.app
             .client()
             .post("/api/mail/inbound/mailgun/mime")
+            .form(&form)
+            .send()
+            .await
+            .assert_error_code(401, "invalid_signature");
+    }
+    assert!(mail.seen().is_empty());
+}
+
+/// The fields Mailgun documents for a parsed route, signed.
+fn documented_fields(headers: Value) -> Vec<(String, String)> {
+    let mut form = signed_fields(chrono::Utc::now().timestamp());
+    form.extend([
+        ("recipient".to_owned(), "reply+abc@in.acme.test".to_owned()),
+        ("sender".to_owned(), "a@evil.test".to_owned()),
+        ("from".to_owned(), "a@evil.test".to_owned()),
+        ("subject".to_owned(), "s".to_owned()),
+        ("body-plain".to_owned(), "b".to_owned()),
+        ("message-headers".to_owned(), headers.to_string()),
+    ]);
+    form
+}
+
+/// Mailgun's documented fields hold no verdict, and its docs say nothing
+/// that tells its `X-Mailgun-*` headers from a sender's own copies, so a
+/// sender who writes them gets no verdict.
+#[tokio::test]
+async fn mailgun_reports_no_verdict_the_sender_could_have_written() {
+    let mail = inbound_app(MAILBOXES, |b| {
+        b.config("mail.inbound.mailgun.signing_key", MAILGUN_KEY)
+    })
+    .await;
+    let forged = [
+        ("X-Mailgun-Sflag", "No"),
+        ("X-Mailgun-Spf", "Pass"),
+        ("X-Mailgun-Dkim-Check-Result", "Pass"),
+    ];
+
+    // The parsed route: the sender's headers are in `message-headers`.
+    let headers: Vec<Value> = std::iter::once(json!(["From", "a@evil.test"]))
+        .chain(forged.iter().map(|(name, value)| json!([name, value])))
+        .collect();
+    mail.app
+        .client()
+        .post("/api/mail/inbound/mailgun")
+        .form(&documented_fields(Value::Array(headers)))
+        .send()
+        .await
+        .assert_status(200);
+
+    // Headers posted as form fields of their own, in any case.
+    let mut flat = documented_fields(json!([["From", "a@evil.test"]]));
+    flat.extend(forged.iter().map(|(n, v)| (n.to_string(), v.to_string())));
+    flat.extend(
+        forged
+            .iter()
+            .map(|(n, v)| (n.to_lowercase(), v.to_string())),
+    );
+    mail.app
+        .client()
+        .post("/api/mail/inbound/mailgun")
+        .form(&flat)
+        .send()
+        .await
+        .assert_status(200);
+
+    // The whole message: the sender's headers are in `body-mime`.
+    let raw = "From: a@evil.test\r\nTo: reply+abc@in.acme.test\r\n\
+               X-Mailgun-Sflag: No\r\nX-Mailgun-Spf: Pass\r\n\
+               X-Mailgun-Dkim-Check-Result: Pass\r\n\r\nb\r\n";
+    let mut mime = signed_fields(chrono::Utc::now().timestamp());
+    mime.extend([
+        ("recipient".to_owned(), "reply+abc@in.acme.test".to_owned()),
+        ("body-mime".to_owned(), raw.to_owned()),
+    ]);
+    mail.app
+        .client()
+        .post("/api/mail/inbound/mailgun/mime")
+        .form(&mime)
+        .send()
+        .await
+        .assert_status(200);
+
+    let seen = mail.seen();
+    assert_eq!(seen.len(), 3);
+    for (_, _, received) in &seen {
+        assert_eq!(
+            received.verdicts,
+            Verdicts::default(),
+            "PROVED if not default: a verdict came from what the sender wrote"
+        );
+    }
+}
+
+/// A form field is the one named exactly like a documented field. A name in
+/// another case is a header Mailgun may post for the sender, and never the
+/// envelope.
+#[tokio::test]
+async fn a_mailgun_field_in_another_case_is_not_the_envelope() {
+    let mail = inbound_app(MAILBOXES, |b| {
+        b.config("mail.inbound.mailgun.signing_key", MAILGUN_KEY)
+    })
+    .await;
+    let mut form = vec![
+        ("Recipient".to_owned(), "support@acme.test".to_owned()),
+        ("Sender".to_owned(), "ceo@acme.test".to_owned()),
+        ("From".to_owned(), "ceo@acme.test".to_owned()),
+        ("Subject".to_owned(), "forged".to_owned()),
+        ("Body-Plain".to_owned(), "forged".to_owned()),
+    ];
+    form.extend(documented_fields(json!([["From", "a@evil.test"]])));
+
+    mail.app
+        .client()
+        .post("/api/mail/inbound/mailgun")
+        .form(&form)
+        .send()
+        .await
+        .assert_status(200);
+
+    let seen = mail.seen();
+    assert_eq!(
+        seen[0].0, "reply+{token}@in.acme.test",
+        "routed by `recipient`"
+    );
+    let received = &seen[0].2;
+    assert_eq!(received.envelope.sender.as_deref(), Some("a@evil.test"));
+    assert_eq!(received.envelope.recipients, vec!["reply+abc@in.acme.test"]);
+    assert_eq!(received.subject.as_deref(), Some("s"));
+    assert_eq!(received.text.as_deref().map(str::trim), Some("b"));
+}
+
+/// The signature check reads `signature`, `timestamp` and `token` by exact
+/// name too: a header called `Token` can't change what is verified.
+#[tokio::test]
+async fn mailgun_signature_fields_are_found_by_exact_name() {
+    let mail = inbound_app(MAILBOXES, |b| {
+        b.config("mail.inbound.mailgun.signing_key", MAILGUN_KEY)
+    })
+    .await;
+    let mut form = vec![
+        ("Token".to_owned(), "x".repeat(50)),
+        ("Signature".to_owned(), "0".repeat(64)),
+        ("Timestamp".to_owned(), "1".to_owned()),
+    ];
+    form.extend(documented_fields(json!([["From", "a@evil.test"]])));
+
+    mail.app
+        .client()
+        .post("/api/mail/inbound/mailgun")
+        .form(&form)
+        .send()
+        .await
+        .assert_status(200);
+    assert_eq!(mail.seen().len(), 1);
+}
+
+/// A name the reader depends on that the form writes twice can't be told
+/// apart from a header posted under that name: the form is refused, and a
+/// repeated signature field finds no value.
+#[tokio::test]
+async fn a_mailgun_form_that_repeats_a_field_it_reads_is_refused() {
+    let mail = inbound_app(MAILBOXES, |b| {
+        b.config("mail.inbound.mailgun.signing_key", MAILGUN_KEY)
+    })
+    .await;
+    for name in ["recipient", "sender", "from", "subject", "body-plain"] {
+        let mut form = documented_fields(json!([["From", "a@evil.test"]]));
+        form.push((name.to_owned(), "support@acme.test".to_owned()));
+        mail.app
+            .client()
+            .post("/api/mail/inbound/mailgun")
+            .form(&form)
+            .send()
+            .await
+            .assert_error_code(400, "invalid_inbound_mail");
+    }
+    for name in ["timestamp", "token", "signature"] {
+        let mut form = documented_fields(json!([["From", "a@evil.test"]]));
+        let value = form.iter().find(|(n, _)| n == name).unwrap().1.clone();
+        form.push((name.to_owned(), value));
+        mail.app
+            .client()
+            .post("/api/mail/inbound/mailgun")
             .form(&form)
             .send()
             .await
@@ -644,8 +830,11 @@ async fn postmark_without_the_raw_email_is_rebuilt_from_its_fields() {
         Some("notes.txt")
     );
     assert_eq!(received.attachments[0].content.as_ref(), b"fire: out\n");
-    assert_eq!(received.verdicts.spam, Some(Verdict::Pass));
-    assert_eq!(received.verdicts.spf, Some(Verdict::Pass));
+    assert_eq!(
+        received.verdicts,
+        Verdicts::default(),
+        "the Headers list holds the sender's headers too: no verdict is read from it"
+    );
     assert_eq!(
         received.date.map(|d| d.to_rfc3339()).as_deref(),
         Some("2026-10-27T09:14:00+00:00")
@@ -674,4 +863,86 @@ async fn postmark_needs_the_password() {
         .send()
         .await
         .assert_error_code(400, "invalid_inbound_mail");
+}
+
+/// The sample payload with `change` applied to its top-level fields.
+fn postmark_payload(change: impl FnOnce(&mut serde_json::Map<String, Value>)) -> Value {
+    let mut payload: Value = serde_json::from_slice(&fixture("postmark.json")).unwrap();
+    change(payload.as_object_mut().unwrap());
+    payload
+}
+
+#[tokio::test]
+async fn postmark_reports_no_verdict_from_its_headers_list() {
+    let mail = inbound_app(MAILBOXES, |b| {
+        b.config("mail.inbound.postmark.token", "pm-secret")
+    })
+    .await;
+    // The list holds the message's own headers beside Postmark's, and the
+    // docs don't say how to tell them apart.
+    let payload = postmark_payload(|p| {
+        p["Headers"] = json!([
+            {"Name": "X-Spam-Status", "Value": "No"},
+            {"Name": "Received-SPF", "Value": "pass (the sender wrote this)"},
+        ]);
+    });
+
+    mail.app
+        .client()
+        .post("/api/mail/inbound/postmark?token=pm-secret")
+        .json(&payload)
+        .send()
+        .await
+        .assert_status(200);
+
+    assert_eq!(
+        mail.seen()[0].2.verdicts,
+        Verdicts::default(),
+        "PROVED if not default: a verdict came from a header list the sender writes"
+    );
+}
+
+/// Postmark reports the recipient the message was sent to and nothing about
+/// `MAIL FROM`: the envelope holds no `From` or `To` the sender wrote.
+#[tokio::test]
+async fn postmark_envelope_holds_only_what_postmark_reports() {
+    let mail = inbound_app(MAILBOXES, |b| {
+        b.config("mail.inbound.postmark.token", "pm-secret")
+    })
+    .await;
+
+    // Two `From` fields: `mail.from` is `None`, and so is the envelope sender.
+    let raw = "From: ceo@acme.test\r\nFrom: a@evil.test\r\nTo: support@acme.test\r\n\r\nb\r\n";
+    let two_from = postmark_payload(|p| {
+        p.insert("RawEmail".to_owned(), json!(raw));
+        p["From"] = json!("ceo@acme.test");
+        p["FromFull"] = json!({"Email": "ceo@acme.test", "Name": "", "MailboxHash": ""});
+    });
+    // No `OriginalRecipient`: no envelope recipients, whatever `ToFull` says.
+    let listed = json!([{"Email": "support@acme.test", "Name": "", "MailboxHash": ""}]);
+    let no_original = postmark_payload(|p| {
+        p.remove("OriginalRecipient");
+        p["ToFull"] = listed.clone();
+        p["CcFull"] = listed.clone();
+        p["BccFull"] = listed.clone();
+    });
+    for payload in [&two_from, &no_original] {
+        mail.app
+            .client()
+            .post("/api/mail/inbound/postmark?token=pm-secret")
+            .json(payload)
+            .send()
+            .await
+            .assert_status(200);
+    }
+
+    let seen = mail.seen();
+    assert_eq!(seen[0].2.from, None, "two From fields");
+    assert_eq!(seen[0].2.envelope.sender, None);
+    assert_eq!(
+        seen[0].2.envelope.recipients,
+        vec!["reply+abc@in.acme.test"]
+    );
+    assert_eq!(seen[1].2.envelope.sender, None);
+    assert!(seen[1].2.envelope.recipients.is_empty());
 }

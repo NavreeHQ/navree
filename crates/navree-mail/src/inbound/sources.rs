@@ -139,18 +139,62 @@ pub(crate) struct MailgunForm {
     pub(crate) files: Vec<FormFile>,
 }
 
+/// The form fields [`mailgun`] reads. A form that writes one twice is refused:
+/// a header the sender wrote may be posted under the same name.
+const READ_ONCE: [&str; 12] = [
+    "signature",
+    "timestamp",
+    "token",
+    "sender",
+    "recipient",
+    "from",
+    "subject",
+    "body-plain",
+    "body-html",
+    "body-mime",
+    "message-headers",
+    "content-id-map",
+];
+
 impl MailgunForm {
+    /// The value of the field called exactly `name`. Mailgun's fields are
+    /// lower case; a field in another case is a header the sender wrote, which
+    /// Mailgun may post under its own name, and a name written twice can't be
+    /// told from one: both find nothing.
     pub(crate) fn field(&self, name: &str) -> Option<&str> {
-        self.fields
-            .iter()
-            .find(|(field, _)| field.eq_ignore_ascii_case(name))
-            .map(|(_, value)| value.as_str())
+        let mut found = self.fields.iter().filter(|(field, _)| field == name);
+        match (found.next(), found.next()) {
+            (Some((_, value)), None) => Some(value.as_str()),
+            _ => None,
+        }
+    }
+
+    /// The first of the fields read by name that the form writes twice.
+    fn repeated(&self) -> Option<&'static str> {
+        READ_ONCE.into_iter().find(|name| {
+            self.fields
+                .iter()
+                .filter(|(field, _)| field == name)
+                .nth(1)
+                .is_some()
+        })
     }
 }
 
 /// Reads a Mailgun route's POST: the whole message (`body-mime`, a route
 /// URL ending in `mime`) or the parsed fields, rebuilt.
+///
+/// No verdict is read. Mailgun keeps its spam flag, SPF and DKIM results in
+/// the message's headers (`X-Mailgun-Sflag`, `X-Mailgun-Spf`,
+/// `X-Mailgun-Dkim-Check-Result`), which the sender writes too, and says
+/// nothing that tells its copy from the sender's.
 pub(crate) fn mailgun(form: &MailgunForm) -> Result<Incoming, InboundError> {
+    if let Some(name) = form.repeated() {
+        return Err(malformed(
+            "mailgun",
+            format!("the form has more than one `{name}` field"),
+        ));
+    }
     let headers: Vec<(String, String)> = form
         .field("message-headers")
         .and_then(|json| serde_json::from_str::<Vec<(String, String)>>(json).ok())
@@ -160,19 +204,6 @@ pub(crate) fn mailgun(form: &MailgunForm) -> Result<Incoming, InboundError> {
             .iter()
             .find(|(header, _)| header.eq_ignore_ascii_case(name))
             .map(|(_, value)| value.as_str())
-    };
-    let signal = |name: &str| form.field(name).or_else(|| header(name));
-    let verdicts = Verdicts {
-        spam: signal("X-Mailgun-Sflag").map(|flag| {
-            if flag.trim().eq_ignore_ascii_case("yes") {
-                Verdict::Fail
-            } else {
-                Verdict::Pass
-            }
-        }),
-        spf: signal("X-Mailgun-Spf").and_then(Verdict::parse),
-        dkim: signal("X-Mailgun-Dkim-Check-Result").and_then(Verdict::parse),
-        ..Verdicts::default()
     };
     let recipients: Vec<String> = form
         .field("recipient")
@@ -197,7 +228,6 @@ pub(crate) fn mailgun(form: &MailgunForm) -> Result<Incoming, InboundError> {
         return Ok(Incoming {
             provider_id,
             envelope,
-            verdicts,
             ..Incoming::new("mailgun", mime.to_owned())
         });
     }
@@ -258,7 +288,6 @@ pub(crate) fn mailgun(form: &MailgunForm) -> Result<Incoming, InboundError> {
     let mut incoming = compose.build();
     incoming.provider_id = provider_id;
     incoming.envelope = envelope;
-    incoming.verdicts = verdicts;
     Ok(incoming)
 }
 
@@ -266,7 +295,12 @@ impl Incoming {
     /// Reads a Postmark inbound webhook's JSON. The raw message is
     /// `RawEmail` when the stream includes it ("Include raw email content
     /// in JSON payload"); otherwise it is rebuilt from the fields, headers
-    /// and attachments. The envelope recipient is `OriginalRecipient`.
+    /// and attachments. The envelope recipient is `OriginalRecipient`, and
+    /// the payload reports no envelope sender.
+    ///
+    /// No verdict is read. Postmark keeps its spam status and score in the
+    /// `Headers` list beside the message's own headers, and says nothing that
+    /// tells its entries from the sender's.
     ///
     /// # Errors
     ///
@@ -292,51 +326,15 @@ impl Incoming {
                     .collect()
             })
             .unwrap_or_default();
-        let header = |name: &str| {
-            headers
-                .iter()
-                .find(|(header, _)| header.eq_ignore_ascii_case(name))
-                .map(|(_, value)| value.as_str())
-        };
-        let verdicts = Verdicts {
-            spam: header("X-Spam-Status").map(|status| {
-                if status.trim().to_ascii_lowercase().starts_with("yes") {
-                    Verdict::Fail
-                } else {
-                    Verdict::Pass
-                }
-            }),
-            spf: header("Received-SPF")
-                .and_then(|value| value.split_whitespace().next())
-                .and_then(Verdict::parse),
-            ..Verdicts::default()
-        };
-        let emails = |name: &str| -> Vec<String> {
-            payload[name]
-                .as_array()
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter_map(|item| item["Email"].as_str())
-                        .filter(|email| !email.is_empty())
-                        .map(str::to_owned)
-                        .collect()
-                })
-                .unwrap_or_default()
-        };
-        let recipients = match payload["OriginalRecipient"]
-            .as_str()
-            .filter(|r| !r.is_empty())
-        {
-            Some(original) => vec![original.to_owned()],
-            None => [emails("ToFull"), emails("CcFull"), emails("BccFull")].concat(),
-        };
+        // `FromFull` and `ToFull` are the message's own `From` and `To`, which
+        // the sender writes: the envelope holds only what Postmark reports.
         let envelope = Envelope {
-            sender: payload["FromFull"]["Email"]
+            sender: None,
+            recipients: payload["OriginalRecipient"]
                 .as_str()
-                .or_else(|| payload["From"].as_str())
-                .map(str::to_owned),
-            recipients,
+                .filter(|r| !r.is_empty())
+                .map(|original| vec![original.to_owned()])
+                .unwrap_or_default(),
         };
         let provider_id = payload["MessageID"].as_str().map(str::to_owned);
 
@@ -344,7 +342,6 @@ impl Incoming {
             return Ok(Incoming {
                 provider_id,
                 envelope,
-                verdicts,
                 ..Incoming::new("postmark", raw.to_owned())
             });
         }
@@ -426,7 +423,6 @@ impl Incoming {
         let mut incoming = compose.build();
         incoming.provider_id = provider_id;
         incoming.envelope = envelope;
-        incoming.verdicts = verdicts;
         Ok(incoming)
     }
 }

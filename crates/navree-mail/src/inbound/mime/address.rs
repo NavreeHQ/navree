@@ -77,40 +77,76 @@ pub(super) fn list(value: &[u8], max: usize) -> Option<Vec<Mailbox>> {
     (out.len() <= max).then_some(out)
 }
 
-/// Whether `value` is one mailbox that every reader takes for the same
-/// address: at most one `<...>`, and an address that is only an address, not
-/// spelled by an encoded word.
-pub(super) fn is_one_address(value: &[u8]) -> bool {
-    let mut angles = 0;
-    let mut encoded = false;
-    for (token, _) in Tokens::new(value) {
+/// Whether `value` is a mailbox every reader takes for the same address:
+/// `addr-spec` or `[phrase] <addr-spec>`, with comments between the tokens,
+/// and nothing else. A group, a separator, a bracket without its pair, an
+/// unclosed quote or comment, a second address, a route, a blank or comment
+/// inside the brackets, a quoted string beside the address, an address spelled
+/// by an encoded word and a display name that holds an unquoted `@` are each a
+/// form that some reader takes for another address.
+pub(super) fn is_clear_mailbox(value: &[u8]) -> bool {
+    let mut tokens = Tokens::new(value);
+    let mut angle: Option<String> = None;
+    let mut atoms = Vec::new();
+    let mut others = 0usize;
+    let mut word_after_angle = false;
+    for (token, _) in tokens.by_ref() {
         match token {
-            Token::Angle(_) => angles += 1,
-            Token::Encoded(_) => encoded = true,
-            _ => {}
+            Token::Comma | Token::Colon | Token::Semicolon => return false,
+            Token::Comment(_) => {}
+            Token::Angle(address) => {
+                if angle.replace(address).is_some() {
+                    return false;
+                }
+            }
+            Token::Atom(text) => {
+                word_after_angle |= angle.is_some();
+                atoms.push(text);
+            }
+            Token::Quoted(_) | Token::Encoded(_) => {
+                word_after_angle |= angle.is_some();
+                others += 1;
+            }
         }
     }
-    if angles > 1 || (angles == 0 && encoded) {
+    if !tokens.clean || word_after_angle {
         return false;
     }
-    match list(value, 2).as_deref() {
-        Some([mailbox]) => is_plain_address(&mailbox.email),
+    match (angle, atoms.as_slice(), others) {
+        (Some(address), phrase, _) => {
+            is_plain_address(&address) && phrase.iter().all(|word| is_phrase_atom(word))
+        }
+        // Without brackets the address is the only token, and an atom.
+        (None, [only], 0) => is_plain_address(only),
         _ => false,
     }
 }
 
-/// One `@` with something on each side, and nothing a reader splits a list or
-/// an address at.
+/// An address: a local part and a domain of dot-separated labels, one `@`
+/// between them, and nothing a reader splits a list or an address at.
 fn is_plain_address(email: &str) -> bool {
     let Some((local, domain)) = email.split_once('@') else {
         return false;
     };
-    !local.is_empty()
-        && !domain.is_empty()
+    let labels = |part: &str| part.split('.').all(|label| !label.is_empty());
+    labels(local)
+        && labels(domain)
         && !domain.contains('@')
-        && !email
-            .chars()
-            .any(|c| c.is_whitespace() || c.is_control() || ",;:<>()\"[]\\".contains(c))
+        // Some readers decode an encoded word wherever they find one.
+        && !email.contains("=?")
+        && !email.chars().any(|c| {
+            c.is_whitespace()
+                || c.is_control()
+                // A byte that was not UTF-8: readers disagree on the character.
+                || c == '\u{fffd}'
+                || ",;:<>()\"[]\\".contains(c)
+        })
+}
+
+/// A word of a display name that is not quoted: no `@`, bracket or backslash,
+/// which a reader may take for the start of an address or an escape.
+fn is_phrase_atom(word: &str) -> bool {
+    !word.chars().any(|c| c.is_control() || "@[]\\".contains(c))
 }
 
 /// A display name being put together: words joined by a space where the
@@ -187,6 +223,11 @@ struct Tokens<'a> {
     value: &'a [u8],
     words: EncodedWords<'a>,
     index: usize,
+    /// Whether everything read so far was closed and paired: no `>` or `)`
+    /// without its opener, no quote, comment or `<` without its closer,
+    /// nothing but the address between a `<` and its `>`, and only plain text
+    /// in a comment.
+    clean: bool,
 }
 
 impl<'a> Tokens<'a> {
@@ -195,6 +236,7 @@ impl<'a> Tokens<'a> {
             value,
             words: EncodedWords::new(value),
             index: 0,
+            clean: true,
         }
     }
 }
@@ -213,6 +255,7 @@ impl Iterator for Tokens<'_> {
                     continue;
                 }
                 b'>' | b')' => {
+                    self.clean = false;
                     self.index += 1;
                     continue;
                 }
@@ -229,18 +272,21 @@ impl Iterator for Tokens<'_> {
                     Token::Semicolon
                 }
                 b'"' => {
-                    let (text, end) = quoted(value, self.index + 1);
+                    let (text, end, closed) = quoted(value, self.index + 1);
                     self.index = end;
+                    self.clean &= closed;
                     Token::Quoted(words::decode_inline(&text))
                 }
                 b'(' => {
-                    let (text, end) = comment(value, self.index + 1);
+                    let (text, end, plain) = comment(value, self.index + 1);
                     self.index = end;
+                    self.clean &= plain;
                     Token::Comment(collapse(&words::decode_inline(&text)))
                 }
                 b'<' => {
-                    let (text, end) = angle(value, self.index + 1);
+                    let (text, end, plain) = angle(value, self.index + 1);
                     self.index = end;
+                    self.clean &= plain;
                     Token::Angle(String::from_utf8_lossy(&text).into_owned())
                 }
                 _ => match self.words.at(self.index) {
@@ -270,8 +316,9 @@ impl Iterator for Tokens<'_> {
 }
 
 /// A quoted string's bytes from `start` (after its `"`), without escapes
-/// and line breaks, and where it ends. An unclosed string runs to the end.
-fn quoted(value: &[u8], start: usize) -> (Vec<u8>, usize) {
+/// and line breaks, where it ends, and whether its `"` was there. An unclosed
+/// string runs to the end.
+fn quoted(value: &[u8], start: usize) -> (Vec<u8>, usize, bool) {
     let rest = value.get(start..).unwrap_or_default();
     let mut text = Vec::new();
     let mut escaped = false;
@@ -282,21 +329,24 @@ fn quoted(value: &[u8], start: usize) -> (Vec<u8>, usize) {
         } else if byte == b'\\' {
             escaped = true;
         } else if byte == b'"' {
-            return (text, start + offset + 1);
+            return (text, start + offset + 1, true);
         } else if byte != b'\r' && byte != b'\n' {
             text.push(byte);
         }
     }
-    (text, value.len())
+    (text, value.len(), false)
 }
 
 /// A comment's bytes from `start` (after its `(`), nested parentheses
-/// kept, and where it ends.
-fn comment(value: &[u8], start: usize) -> (Vec<u8>, usize) {
+/// kept, where it ends, and whether it was closed and plain: only text, with
+/// no escape, quote, separator, bracket, nested comment or line break, which
+/// readers that handle comments less well take for something else.
+fn comment(value: &[u8], start: usize) -> (Vec<u8>, usize, bool) {
     let rest = value.get(start..).unwrap_or_default();
     let mut text = Vec::new();
     let mut depth = 1usize;
     let mut escaped = false;
+    let mut plain = true;
     for (offset, &byte) in rest.iter().enumerate() {
         if escaped {
             text.push(byte);
@@ -304,41 +354,53 @@ fn comment(value: &[u8], start: usize) -> (Vec<u8>, usize) {
             continue;
         }
         match byte {
-            b'\\' => escaped = true,
+            b'\\' => {
+                escaped = true;
+                plain = false;
+            }
             b'(' => {
                 depth += 1;
+                plain = false;
                 text.push(byte);
             }
             b')' => {
                 depth -= 1;
                 if depth == 0 {
-                    return (text, start + offset + 1);
+                    return (text, start + offset + 1, plain);
                 }
+                text.push(byte);
+            }
+            b'"' | b',' | b';' | b':' | b'<' | b'>' | b'\r' | b'\n' => {
+                plain = false;
                 text.push(byte);
             }
             _ => text.push(byte),
         }
     }
-    (text, value.len())
+    (text, value.len(), false)
 }
 
 /// What `<...>` holds from `start` (after its `<`), without blanks and
-/// comments, and where it ends.
-fn angle(value: &[u8], start: usize) -> (Vec<u8>, usize) {
+/// comments, where it ends, and whether it held nothing else and was closed.
+fn angle(value: &[u8], start: usize) -> (Vec<u8>, usize, bool) {
     let rest = value.get(start..).unwrap_or_default();
     let mut text = Vec::new();
     let mut depth = 0usize;
+    let mut plain = true;
     for (offset, &byte) in rest.iter().enumerate() {
         match byte {
-            b'(' => depth += 1,
+            b'(' => {
+                depth += 1;
+                plain = false;
+            }
             b')' if depth > 0 => depth -= 1,
             _ if depth > 0 => {}
-            b'>' => return (text, start + offset + 1),
-            byte if is_blank(byte) => {}
+            b'>' => return (text, start + offset + 1, plain),
+            byte if is_blank(byte) => plain = false,
             byte => text.push(byte),
         }
     }
-    (text, value.len())
+    (text, value.len(), false)
 }
 
 /// Blanks collapsed to one space, and trimmed.
@@ -483,6 +545,84 @@ mod tests {
                 mailbox(Some("M\u{fffd}ller"), "m@x.de")
             ])
         );
+    }
+
+    #[test]
+    fn a_clear_mailbox_is_an_address_or_a_name_and_an_address_in_brackets() {
+        for clear in [
+            "ceo@acme.test",
+            " ceo@acme.test ",
+            "<ceo@acme.test>",
+            "Ada <ceo@acme.test>",
+            "Dr. Ada L. <ceo@acme.test>",
+            "\"Lovelace, Ada\" <ceo@acme.test>",
+            "\"ceo@acme.test\" <a@evil.test>",
+            "=?utf-8?Q?J=C3=BCrgen?= <ceo@acme.test>",
+            "ceo@acme.test (Ada)",
+            "(Ada) <ceo@acme.test>",
+            "Ada (Work) <ceo@acme.test> (Home)",
+            "J\u{fffd}rgen <ceo@acme.test>",
+        ] {
+            assert!(is_clear_mailbox(clear.as_bytes()), "{clear:?}");
+        }
+        for unclear in [
+            "",
+            "()",
+            "Ada",
+            "Ada ceo@acme.test",
+            "ceo@acme.test ceo@acme.test",
+            "ceo@acme.test, a@evil.test",
+            "ceo@acme.test,",
+            "a@evil.test:ceo@acme.test",
+            "a@evil.test:;ceo@acme.test",
+            "Team: ceo@acme.test;",
+            "ceo@acme.test>",
+            ">ceo@acme.test",
+            "ceo@acme.test)",
+            "\"x\"ceo@acme.test",
+            "ceo@acme.test\"x\"",
+            "\"x",
+            "(x",
+            "Ada <ceo@acme.test",
+            "Ada <ceo@acme.test> <a@evil.test>",
+            "Ada <ceo@acme.test> Lovelace",
+            "<@evil.test:ceo@acme.test>",
+            "<ceo@acme.test(x)>",
+            "< ceo@acme.test >",
+            "a@evil.test <ceo@acme.test>",
+            "Ada\\ <ceo@acme.test>",
+            "[Ada] <ceo@acme.test>",
+            "ceo@acme.test (a, b)",
+            "ceo@acme.test (\"x\")",
+            "ceo@acme.test (a (b))",
+            "ceo@acme.test (a\\)",
+            "ceo@acme.test (a\r\n b)",
+            "=?utf-8?Q?ceo=40acme.test?=",
+            "ceo@=?utf-8?Q?acme.test?=",
+            "ceo@acme.test.",
+            "ceo@@acme.test",
+            "ceo\u{1}@acme.test",
+            "ceo\u{fffd}@acme.test",
+        ] {
+            assert!(!is_clear_mailbox(unclear.as_bytes()), "{unclear:?}");
+        }
+    }
+
+    #[test]
+    fn a_clear_mailbox_is_read_as_the_one_mailbox_it_holds() {
+        for (value, name, email) in [
+            ("ceo@acme.test", None, "ceo@acme.test"),
+            ("Ada <ceo@acme.test>", Some("Ada"), "ceo@acme.test"),
+            ("ceo@acme.test (Ada)", Some("Ada"), "ceo@acme.test"),
+            (
+                "\"x@y.test\" <ceo@acme.test>",
+                Some("x@y.test"),
+                "ceo@acme.test",
+            ),
+        ] {
+            assert!(is_clear_mailbox(value.as_bytes()), "{value:?}");
+            assert_eq!(all(value), vec![mailbox(name, email)], "{value:?}");
+        }
     }
 
     #[test]

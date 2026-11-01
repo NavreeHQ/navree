@@ -85,7 +85,7 @@ A `{name}` capture never crosses the `@`. Read captures with `ctx.param("token")
 
 Mailboxes are tried most specific first: exact addresses, then patterns with captures, then patterns with `*`, each group in registration order. For each mailbox, the message's recipients are tried in the order of `mail.recipients()`.
 
-When the source reports envelope recipients, those are the recipients, and only those: the envelope is what the mail server accepted the message for, it includes `Bcc` and forwarding addresses the headers never show, and the sender can't write it. SES, Mailgun, Postmark, the Microsoft 365 and Gmail watchers report one, and so does the raw route when it is given `X-Envelope-To`. A message accepted for `anyone@in.acme.test` with `To: approvals@in.acme.test` goes to `*@in.acme.test`, or to no mailbox at all, never to `approvals@in.acme.test`.
+When the source reports envelope recipients, those are the recipients, and only those: the envelope is what the mail server accepted the message for, it includes `Bcc` and forwarding addresses the headers never show, and the sender can't write it. SES, Mailgun, Postmark, the Microsoft 365 and Gmail watchers report one, and so does the raw route when it is given `X-Envelope-To`. A Postmark payload without `OriginalRecipient` has none: its `ToFull`, `CcFull` and `BccFull` are the message's own headers, so they are not read as one. A message accepted for `anyone@in.acme.test` with `To: approvals@in.acme.test` goes to `*@in.acme.test`, or to no mailbox at all, never to `approvals@in.acme.test`.
 
 Only when there is no envelope are the headers used, in this order:
 
@@ -179,8 +179,8 @@ The text and HTML bodies are the parts a mail client would show: the text and HT
 | `id` | This receipt's id (a UUID v7). |
 | `source` | Who delivered it: `ses`, `mailgun`, `postmark`, `raw`, `graph`, `gmail`, or `test`. |
 | `provider_id` | The provider's id for the message (SES's `messageId`, Postmark's `MessageID`, the Graph or Gmail message id). |
-| `envelope` | `sender` and `recipients` of the SMTP envelope, when the provider reports them. |
-| `verdicts` | The provider's `spam`, `virus`, `spf`, `dkim` and `dmarc` verdicts, when it reports them. |
+| `envelope` | `sender` and `recipients` of the SMTP envelope, only where the provider reports them: see [What each source reports](#what-each-source-reports). |
+| `verdicts` | The provider's `spam`, `virus`, `spf`, `dkim` and `dmarc` verdicts. Amazon SES reports them; the other sources report none: see [Verdicts](#verdicts). |
 | `message_id`, `in_reply_to`, `references` | Message ids without angle brackets. |
 | `from`, `reply_to`, `to`, `cc` | `Address { name, email }` values; groups are flattened. `from` is what the sender claims, and `None` when the head can be read two ways: see [What to trust](#what-to-trust). |
 | `subject`, `date` | The decoded subject, on one line, and the date in UTC. |
@@ -238,15 +238,17 @@ Register it like any closure: `m.mailbox("phish@in.acme.test", reported_phish)`.
 
 ### Verdicts
 
-Amazon SES reports all five verdicts of its receipt rule; Mailgun its spam flag, SPF and DKIM results; Postmark its spam status and SPF result. Each is a `Verdict`: `Pass`, `Fail`, `Gray`, `ProcessingFailed` or `Disabled`. For `spam` and `virus`, `Fail` means the provider flagged the message; `verdicts.is_flagged()` is true when either did. Verdicts are only ever read from the provider's own payload, never from the message's headers, which the sender controls.
+Amazon SES reports all five verdicts of its receipt rule, in the `receipt` of its notification. Each is a `Verdict`: `Pass`, `Fail`, `Gray`, `ProcessingFailed` or `Disabled`. For `spam` and `virus`, `Fail` means the provider flagged the message; `verdicts.is_flagged()` is true when either did.
+
+Mailgun and Postmark report no verdict, and every field of `verdicts` is `None` for their messages and for raw MIME. Both keep their spam and authentication results in the message's headers (Mailgun's `X-Mailgun-Sflag`, `X-Mailgun-Spf` and `X-Mailgun-Dkim-Check-Result` in `message-headers`, Postmark's `X-Spam-Status` and `X-Spam-Score` in `Headers`), where the sender can write a header of the same name, and their documentation does not say how to tell their header from the sender's. A verdict is only read from a field the sender can't write, so a sender can't give its own message a `Pass`. `mail.header("X-Spam-Status")` still returns whatever the message holds, as the sender wrote it or the provider added it, and you can't tell which.
 
 ### What to trust
 
 A message is written by its sender, so treat everything in it as a stranger's input.
 
-**`from` is a claim.** The sender writes it. What vouches for it is the provider's verdict, so read `verdicts` before an address decides anything: `mail.verdicts.dmarc == Some(Verdict::Pass)` says the provider checked the domain of the `From` it read. A provider that reports no DMARC verdict (Mailgun, Postmark) leaves you with its SPF and DKIM results, which don't check the `From` domain alone, or with a [reply token](#reply-tokens), which only your app can make.
+**`from` is a claim.** The sender writes it. What vouches for it is the provider's verdict, so read `verdicts` before an address decides anything: `mail.verdicts.dmarc == Some(Verdict::Pass)` says the provider checked the domain of the `From` it read. A source that reports no verdict (Mailgun, Postmark, raw MIME) leaves you with a [reply token](#reply-tokens), which only your app can make, or a check of your own on the raw message.
 
-**`from` is `None` when the head can be read two ways**, since the provider may have vouched for another `From` than this reader sees: two `From` fields, more than one address, an address that isn't only an address (`<a@x.test> <b@y.test>`, `a@x.test b@y.test`, one spelled in an encoded word), or a head whose lines don't all end the same way (a bare LF among CRLFs, a bare CR). The fields stay in `mail.headers`. A display name is never checked by anyone: `ceo@acme.test <a@evil.test>` is the address `a@evil.test` with that name.
+**`from` is `None` when the head can be read two ways**, since the provider may have vouched for another `From` than this reader sees. A `From` is an address (`ceo@acme.test`) or an optional display name and an address in angle brackets (`Ada <ceo@acme.test>`), with comments between them, and nothing else. Two `From` fields, a group (`team: a@x.test;`), a list, a separator or bracket without its pair (`a@x.test:b@y.test`, `b@y.test>`), an unclosed quote or comment, a quoted string beside an address (`"x"ceo@acme.test`), a second pair of brackets or a route, a blank or comment inside the brackets, an address with an empty label (`ceo@acme.test.`), one spelled in an encoded word, a display name with an unquoted `@`, `[`, `]` or `\` in it (`ceo@acme.test <a@evil.test>`), a comment with a quote, separator, bracket, escape or line break in it, and a head whose lines don't all end the same way (a bare LF among CRLFs, a bare CR) all give `None`. The fields stay in `mail.headers`. A display name is never checked by anyone: `"ceo@acme.test" <a@evil.test>` is the address `a@evil.test` with that name.
 
 **Decoded values hold no control characters.** In `subject` and display names each one becomes a space; in addresses, attachment file names and content ids, and message ids, each one is removed. So `=?utf-8?Q?Hi=0D=0ABcc:_x?=` can't start a new line in a log. `mail.headers`, `mail.header(..)`, `text` and `html` keep what the message holds: a header's line breaks are unfolded, and anything else in it stays. Don't copy those into a header or a log line without cleaning them.
 
@@ -358,6 +360,22 @@ A secret that doesn't match is a 401 with code `invalid_signature`, a payload th
 
 A provider posts every message from a handful of addresses, so its requests count against the [per-IP rate limit](/docs/basics/rate-limiting/#the-per-ip-limit) (`http.per_ip_rate_limit`, 600 requests a minute by default). Over it, the route answers 429 and the provider delivers the message again later; raise the limit if your volume needs more.
 
+### What each source reports
+
+What is the provider's own report, and what is the message's, which the sender wrote:
+
+| Source | Envelope sender | Envelope recipients | Verdicts | The request is checked with |
+|---|---|---|---|---|
+| Amazon SES | the notification's `mail.source` | the receipt rule's `recipients` | all five, from `receipt` | the URL token and the topic; the SNS signature is not checked |
+| Mailgun | `sender` (`MAIL FROM`) | `recipient` | none | the HMAC of `timestamp` and `token` |
+| Postmark | none | `OriginalRecipient` | none | the token |
+| Raw MIME | `X-Envelope-From` | `X-Envelope-To` | none | the token |
+| Microsoft 365, Gmail | none | the watched mailbox | none | the `clientState` or the token |
+
+The Mailgun form's fields are found by their exact lower-case names (`recipient`, `sender`, `from`, `subject`, `body-plain`, `body-html`, `body-mime`, `message-headers`, `content-id-map` and the three signature fields): a field in another case is a header the sender wrote, which Mailgun may post under its own name, and is never the envelope. A form that writes one of those names twice is refused (a 400, or a 401 when it is a signature field). The provider's id for a Mailgun message is the message's own `Message-Id`.
+
+None of this has run against a live Mailgun or Postmark account: it follows the providers' documentation and their sample payloads. Before relying on it, send a real message through each route you use and check `envelope`, `verdicts` and `provider_id` in the handler.
+
 ### Amazon SES
 
 Verify your receiving domain in SES and point its MX record at SES, then create a receipt rule for the addresses you receive (`in.acme.test`, or single addresses). Give the rule one of two actions:
@@ -407,11 +425,11 @@ match_recipient(".*@in.acme.test")
 forward("https://api.acme.test/api/mail/inbound/mailgun/mime")
 ```
 
-A URL ending in `mime` makes Mailgun post the whole message as `body-mime`, which reaches your mailbox byte for byte. `/api/mail/inbound/mailgun` accepts Mailgun's parsed fields as well: the message is rebuilt from `message-headers`, the bodies and the attachment files (inline ones by `content-id-map`). The envelope recipient is the form's `recipient`; the spam flag, SPF and DKIM results become verdicts.
+A URL ending in `mime` makes Mailgun post the whole message as `body-mime`, which reaches your mailbox byte for byte. `/api/mail/inbound/mailgun` accepts Mailgun's parsed fields as well: the message is rebuilt from `message-headers`, the bodies and the attachment files (inline ones by `content-id-map`). The envelope recipient is the form's `recipient` and the envelope sender its `sender`; no verdict is read ([Verdicts](#verdicts)).
 
 ### Postmark
 
-Set the inbound stream's webhook URL to `https://postmark:TOKEN@api.acme.test/api/mail/inbound/postmark` and turn on **Include raw email content in JSON payload**: the message then arrives as it was sent. Without it, the message is rebuilt from Postmark's fields (`FromFull`, `ToFull`, `CcFull`, the headers, `TextBody`, `HtmlBody` and the attachments), which keeps everything but the original MIME structure. The envelope recipient is `OriginalRecipient`; Postmark's spam status and SPF result become verdicts.
+Set the inbound stream's webhook URL to `https://postmark:TOKEN@api.acme.test/api/mail/inbound/postmark` and turn on **Include raw email content in JSON payload**: the message then arrives as it was sent. Without it, the message is rebuilt from Postmark's fields (`FromFull`, `ToFull`, `CcFull`, the headers, `TextBody`, `HtmlBody` and the attachments), which keeps everything but the original MIME structure. The envelope recipient is `OriginalRecipient`; Postmark reports no envelope sender and no verdict ([Verdicts](#verdicts)), and `FromFull` and `ToFull` are the message's own headers.
 
 ### Raw MIME
 

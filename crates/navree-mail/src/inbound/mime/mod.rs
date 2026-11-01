@@ -619,10 +619,11 @@ pub(crate) fn addresses(value: &[u8], max: usize) -> Result<Vec<Mailbox>, MimeEr
     address::list(value, max).ok_or(MimeError::TooManyAddresses(max))
 }
 
-/// Whether an address header's value is one mailbox every reader takes for the
+/// Whether an address header's value is an address, or a name and an address
+/// in angle brackets, and nothing else: a mailbox every reader takes for the
 /// same address.
-pub(crate) fn is_one_address(value: &[u8]) -> bool {
-    address::is_one_address(value)
+pub(crate) fn is_clear_mailbox(value: &[u8]) -> bool {
+    address::is_clear_mailbox(value)
 }
 
 /// Whether every line of the message's head ends the same way.

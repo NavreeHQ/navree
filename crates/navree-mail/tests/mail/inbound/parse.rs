@@ -374,6 +374,150 @@ fn a_from_that_could_be_read_two_ways_is_no_from() {
     assert_eq!(mail.from.unwrap().email, "ada@acme.test");
 }
 
+/// A `From` is an address, or a name and an address in angle brackets, and
+/// nothing else: a group, a stray separator or bracket, a quoted string beside
+/// an address, a route. Another reader splits these differently (`a@evil.test`
+/// opens a group here, so the address is `ceo@acme.test`; a reader that checks
+/// the first address checks `evil.test`).
+#[test]
+fn a_from_that_is_not_an_address_or_a_named_address_is_no_from() {
+    for value in [
+        "a@evil.test:ceo@acme.test",
+        "a@evil.test:ceo@acme.test;",
+        "a@evil.test: ceo@acme.test;",
+        "a@evil.test:;ceo@acme.test",
+        "evil:;ceo@acme.test",
+        "<a@evil.test>:ceo@acme.test",
+        "\"a@evil.test\":ceo@acme.test",
+        "Team: ceo@acme.test;",
+        "undisclosed-recipients:;",
+        "ceo@acme.test\"@evil.test",
+        "ceo@acme.test\"x\"",
+        "\"x\"ceo@acme.test",
+        "\"ceo@acme.test\"",
+        "ceo@acme.test>",
+        ">ceo@acme.test",
+        "ceo@acme.test)",
+        ")ceo@acme.test",
+        "ceo@acme.test,",
+        ",ceo@acme.test",
+        "ceo@acme.test;",
+        ";ceo@acme.test",
+        "ceo@acme.test:",
+        ":ceo@acme.test",
+        "Ada <ceo@acme.test",
+        "Ada ceo@acme.test>",
+        "Ada <ceo@acme.test> x",
+        "Ada <ceo@acme.test>,",
+        "Ada, <ceo@acme.test>",
+        "Ada: <ceo@acme.test>",
+        "Ada; <ceo@acme.test>",
+        "Ada > <ceo@acme.test>",
+        "Ada ) <ceo@acme.test>",
+        "Ada (x <ceo@acme.test>",
+        "Ada \"x <ceo@acme.test>",
+        "ceo@acme.test (unclosed",
+        "<ceo@acme.test(x)>",
+        "<ceo@(x)acme.test>",
+        "<ceo@ acme.test>",
+        "< ceo@acme.test >",
+        "<@evil.test:ceo@acme.test>",
+        "<a@evil.test,ceo@acme.test>",
+        "x\\@evil.test@acme.test",
+        "=?utf-8?Q?ceo=40acme.test?=",
+        "ceo@=?utf-8?Q?acme.test?=",
+        "ceo@acme.test =?utf-8?Q?x?=",
+        // A display name with an address in it, unquoted: some readers take
+        // it for the address.
+        "a@evil.test <ceo@acme.test>",
+        "ceo@acme.test <a@evil.test>",
+        "ceo@acme.test<a@evil.test>",
+        "a@evil.test<ceo@acme.test>",
+        "@<ceo@acme.test>",
+        "\\<ceo@acme.test>",
+        "[x] <ceo@acme.test>",
+        // Labels that are empty, which no reader takes for the same address.
+        "ceo@acme.test.",
+        "ceo@.acme.test",
+        ".ceo@acme.test",
+        "ceo..x@acme.test",
+        "ceo@acme..test",
+        "ceo@",
+        "@acme.test",
+    ] {
+        let raw = format!("From: {value}\r\nSubject: s\r\n\r\nb\r\n");
+        let mail = InboundMail::parse(raw.into_bytes()).unwrap();
+        assert_eq!(mail.from, None, "{value:?}");
+    }
+}
+
+/// What is still a `From`: the two forms, with comments and blanks between
+/// their tokens.
+#[test]
+fn an_address_or_a_named_address_is_a_from() {
+    for (value, name, email) in [
+        ("ceo@acme.test", None, "ceo@acme.test"),
+        ("  ceo@acme.test  ", None, "ceo@acme.test"),
+        ("<ceo@acme.test>", None, "ceo@acme.test"),
+        ("Ada <ceo@acme.test>", Some("Ada"), "ceo@acme.test"),
+        (
+            "Ada Lovelace<ceo@acme.test>",
+            Some("Ada Lovelace"),
+            "ceo@acme.test",
+        ),
+        ("Dr. Ada <ceo@acme.test>", Some("Dr. Ada"), "ceo@acme.test"),
+        (
+            "\"Lovelace, Ada\" <ceo@acme.test>",
+            Some("Lovelace, Ada"),
+            "ceo@acme.test",
+        ),
+        (
+            "\"Ada \\\"The Countess\\\"\" <ceo@acme.test>",
+            Some("Ada \"The Countess\""),
+            "ceo@acme.test",
+        ),
+        (
+            "=?utf-8?Q?J=C3=BCrgen?= <ceo@acme.test>",
+            Some("Jürgen"),
+            "ceo@acme.test",
+        ),
+        ("ceo@acme.test (Ada)", Some("Ada"), "ceo@acme.test"),
+        ("(Ada) ceo@acme.test", Some("Ada"), "ceo@acme.test"),
+        (
+            "Ada (Work) <ceo@acme.test>",
+            Some("Ada (Work)"),
+            "ceo@acme.test",
+        ),
+        (
+            "Ada <ceo@acme.test> (Work)",
+            Some("Ada (Work)"),
+            "ceo@acme.test",
+        ),
+        // A name nobody checks, even when it looks like an address, once quoted.
+        (
+            "\"a@evil.test\" <ceo@acme.test>",
+            Some("a@evil.test"),
+            "ceo@acme.test",
+        ),
+        (
+            "\"ceo@acme.test\" <a@evil.test>",
+            Some("ceo@acme.test"),
+            "a@evil.test",
+        ),
+        (
+            "Ada\r\n Lovelace <ceo@acme.test>",
+            Some("Ada Lovelace"),
+            "ceo@acme.test",
+        ),
+    ] {
+        let raw = format!("From: {value}\r\nSubject: s\r\n\r\nb\r\n");
+        let mail = InboundMail::parse(raw.into_bytes()).unwrap();
+        let from = mail.from.unwrap_or_else(|| panic!("no From for {value:?}"));
+        assert_eq!(from.email, email, "{value:?}");
+        assert_eq!(from.name.as_deref(), name, "{value:?}");
+    }
+}
+
 /// Decoded values go into logs, file paths and raw headers: no line breaks or
 /// other control characters come out of the reader.
 #[test]

@@ -151,7 +151,7 @@ pub enum Verdict {
 
 impl Verdict {
     /// Reads a provider's status (`PASS`, `FAIL`, `GRAY`,
-    /// `PROCESSING_FAILED`, `DISABLED`, `yes`/`no` for spam flags).
+    /// `PROCESSING_FAILED`, `DISABLED`).
     pub fn parse(status: &str) -> Option<Self> {
         match status
             .trim()
@@ -170,7 +170,7 @@ impl Verdict {
 }
 
 /// What the receiving provider concluded about the message, when it says
-/// (Amazon SES reports all five; Mailgun and Postmark some).
+/// (Amazon SES reports all five; the other sources report none).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Verdicts {
     /// Spam: [`Verdict::Fail`] means the provider thinks it is spam.
@@ -703,8 +703,9 @@ fn is_control(c: char) -> bool {
     c.is_control() || matches!(c, '\u{2028}' | '\u{2029}')
 }
 
-/// Whether the head has a single `From`, one address that is only an address,
-/// and line ends no other reader could split differently. A provider's verdict
+/// Whether the head has a single `From`, an address or a name and an address
+/// in angle brackets and nothing else, and line ends no other reader could
+/// split differently. A provider's verdict
 /// vouches for the `From` it read: when it could have read another, this one
 /// must not be taken for it.
 fn from_is_clear(raw: &[u8], headers: &[(String, Bytes)]) -> bool {
@@ -715,7 +716,7 @@ fn from_is_clear(raw: &[u8], headers: &[(String, Bytes)]) -> bool {
     let (Some(value), None) = (fields.next(), fields.next()) else {
         return false;
     };
-    mime::is_one_address(value) && mime::head_lines_agree(raw)
+    mime::is_clear_mailbox(value) && mime::head_lines_agree(raw)
 }
 
 /// Joins continuation lines and trims.
