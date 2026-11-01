@@ -1643,6 +1643,7 @@ fn the_count_of_shared_strings_a_file_declares_reserves_nothing() {
 
 /// A cell of `a`, `spaces` spaces (one `text:s`) and `then`, under a
 /// header.
+#[cfg(target_os = "linux")]
 fn spaced_ods(spaces: u64, then: &str) -> Vec<u8> {
     let cell = format!(
         r#"<table:table-cell office:value-type="string"><text:p>a<text:s text:c="{spaces}"/>{then}</text:p></table:table-cell>"#
