@@ -51,7 +51,7 @@ fuzz_target!(|data: &[u8]| {
     if pattern.len() * text.len() <= 1 << 20 {
         assert_eq!(matched, reference(&pattern, &text), "{pattern:?} {text:?}");
     }
-    // A pattern matches the text it was made of, with any run replaced by `*`.
+    // A text matches itself as a pattern (a wildcard in it matches itself), and `*` matches any text.
     let own: String = text.iter().collect();
     assert!(Glob::new(&own).matches(&own));
     assert!(Glob::new("*").matches(&own));
