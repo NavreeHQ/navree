@@ -231,3 +231,81 @@ fn no_vector_survives_html_escaping() {
         }
     }
 }
+
+/// What a value printed in JSON-fit-for-HTML mode may not do, in a double-quoted
+/// attribute: end it.
+const BREAKOUT: &str = "\" onmouseover=alert(1) y=\"";
+
+#[test]
+fn join_and_replace_in_json_fit_for_html_keep_to_the_attribute() {
+    let mut env = view_env();
+    env.add_template("list.json", "{{ [x, 'a'|safe]|join(',') }}")
+        .unwrap();
+    env.add_template("swap.json", "{{ 'a'|e|replace('a', x) }}")
+        .unwrap();
+    let ctx = json!({ "x": BREAKOUT });
+    for source in [
+        "<a data-x=\"{% include 'list.json' %}\">",
+        "<a data-x=\"{% include 'swap.json' %}\">",
+        "<a data-x=\"{% autoescape 'json' %}{{ [x, 'a'|e]|join(',') }}{% endautoescape %}\">",
+        "<a data-x=\"{% autoescape 'json' %}{{ [x]|join('a'|e) }}{% endautoescape %}\">",
+        "<a data-x=\"{% autoescape 'json' %}{{ 'a'|e|replace('a', x) }}{% endautoescape %}\">",
+    ] {
+        let out = env.render_str("t.html", source, &ctx).expect("renders");
+        assert!(!out.contains("\" onmouseover"), "{source}: {out}");
+        assert!(out.contains("&quot;"), "{source}: {out}");
+    }
+    // In a script its quotes are the JSON's own.
+    let out = env
+        .render_str(
+            "t.html",
+            "<script>{% autoescape 'json' %}{{ [x, 'a'|e]|join(',') }}{% endautoescape %}</script>",
+            &ctx,
+        )
+        .expect("renders");
+    assert!(
+        out.contains("\"\\\" onmouseover=alert(1) y=\\\"\""),
+        "{out}"
+    );
+    assert!(!out.contains("&quot;"), "{out}");
+}
+
+#[test]
+fn a_value_in_json_escapes_its_quotes_where_the_tracker_cannot_be_sure_of_a_script() {
+    let mut env = view_env();
+    env.add_template(
+        "m.html",
+        "{% macro s(x) %}<script>{{ x|tojson }}</script>{% endmacro %}",
+    )
+    .unwrap();
+    env.add_template("attr.html", "<a data-x=\"{{ x|tojson }}\">")
+        .unwrap();
+    let ctx = json!({ "x": BREAKOUT });
+    for source in [
+        "<noscript><script></noscript><a data-x=\"{{ x|tojson }}\">",
+        "<svg><![CDATA[><script>]]><a data-x=\"{{ x|tojson }}\"></svg>",
+        "<svg><script><a data-x=\"{{ x|tojson }}\"></svg>",
+        "<math><script><a data-x=\"{{ x|tojson }}\"></math>",
+        "<a =b=\"><script>{{ x|tojson }}\">",
+        "<a b==' c=\"'><script>{{ x|tojson }}\">",
+        "{% import 'm.html' as m %}<a t=\"{{ m.s(x) }}\">",
+    ] {
+        let out = env.render_str("t.html", source, &ctx).expect("renders");
+        assert!(!out.contains("\" onmouseover"), "{source}: {out}");
+        assert!(out.contains("&quot;"), "{source}: {out}");
+    }
+    // An include from a root in JSON lands in the text around it.
+    let out = env
+        .render_str("p.json", "{% include 'attr.html' %}", &ctx)
+        .expect("renders");
+    assert!(!out.contains("\" onmouseover"), "{out}");
+    // A script after a plain inline icon is still a script.
+    let out = env
+        .render_str(
+            "t.html",
+            "<svg><title>i</title><path d=\"M0 0\"/></svg><script>{{ x|tojson }}</script>",
+            &ctx,
+        )
+        .expect("renders");
+    assert!(out.contains("<script>\"\\\" onmouseover"), "{out}");
+}

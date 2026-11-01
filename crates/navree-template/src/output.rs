@@ -131,6 +131,11 @@ impl Output {
         self.html = true;
     }
 
+    /// From here on this text is never taken to be in a `<script>`.
+    pub(crate) fn distrust_scripts(&mut self) {
+        self.position.unsure = true;
+    }
+
     /// Whether what is written next lands in the content of a `<script>`.
     pub(crate) fn in_script(&self) -> bool {
         self.position.in_script()
@@ -218,8 +223,36 @@ const RAW_TEXT: [&[u8]; 8] = [
     b"noframes",
 ];
 
-/// The longest of [`RAW_TEXT`].
-const MAX_RAW_NAME: usize = 8;
+/// The elements of a plain inline SVG, which the tracker follows through:
+/// nothing in them is raw text, and none changes how what follows is read.
+/// Any other element in an `<svg>`, and anything in a `<math>`, leaves it
+/// unsure of what a browser makes of the rest (see [`HtmlPosition`]).
+const PLAIN_SVG: [&[u8]; 21] = [
+    b"svg",
+    b"g",
+    b"path",
+    b"rect",
+    b"circle",
+    b"ellipse",
+    b"line",
+    b"polyline",
+    b"polygon",
+    b"defs",
+    b"use",
+    b"symbol",
+    b"lineargradient",
+    b"radialgradient",
+    b"stop",
+    b"clippath",
+    b"mask",
+    b"text",
+    b"tspan",
+    b"title",
+    b"desc",
+];
+
+/// The longest name the tracker compares.
+const MAX_NAME: usize = 14;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 enum Scan {
@@ -248,24 +281,43 @@ enum Scan {
 
 /// Follows HTML's tokenizing far enough to tell where the next byte lands.
 /// It errs on the side of "not in a script": a `tojson` value printed there
-/// escapes its quotes, which can't be unsafe.
+/// escapes its quotes, which can't be unsafe, and an odd script gets a `&quot;`
+/// for it.
+///
+/// What it can't follow leaves it [`unsure`](Self::unsure) for the rest of the
+/// text: `<noscript>` (raw text to a browser with scripting on), `<![` (CDATA
+/// in foreign content runs to `]]>`), `<math>` and any element in an `<svg>`
+/// that isn't in [`PLAIN_SVG`] (a script there is tokenized as markup, and
+/// which elements hold HTML depends on the tree a browser has built).
 #[derive(Default)]
 struct HtmlPosition {
     scan: Scan,
-    name: [u8; MAX_RAW_NAME],
+    name: [u8; MAX_NAME],
     name_len: usize,
     closing: bool,
     /// The [`RAW_TEXT`] element a tag being read opens, or the one it is in.
     raw: Option<usize>,
     self_closing: bool,
     after_equals: bool,
+    /// In a tag, an attribute's name has begun or ended without a value yet: an
+    /// `=` is that attribute's. Without one, an `=` starts a name.
+    named: bool,
     /// Dashes in a row in a comment, or bytes of an end tag matched.
     matched: usize,
+    /// The `<svg>`s open around this byte.
+    svg_depth: u32,
+    /// The tag being read opens an `<svg>`.
+    opens_svg: bool,
+    /// What the text does to a browser can't be followed from here on.
+    unsure: bool,
 }
 
 impl HtmlPosition {
     fn in_script(&self) -> bool {
-        matches!(self.scan, Scan::RawText | Scan::RawEnd) && self.raw == Some(0)
+        !self.unsure
+            && self.svg_depth == 0
+            && matches!(self.scan, Scan::RawText | Scan::RawEnd)
+            && self.raw == Some(0)
     }
 
     fn advance(&mut self, bytes: &[u8]) {
@@ -297,6 +349,7 @@ impl HtmlPosition {
                 b' ' | b'\t' | b'\n' | b'\r' | 0x0c => {
                     self.scan = Scan::Tag;
                     self.after_equals = false;
+                    self.named = false;
                 }
                 _ => {}
             },
@@ -309,6 +362,7 @@ impl HtmlPosition {
                 if byte == quote {
                     self.scan = Scan::Tag;
                     self.after_equals = false;
+                    self.named = false;
                 }
             }
             Scan::Markup => match byte {
@@ -318,6 +372,10 @@ impl HtmlPosition {
                 }
                 b'-' => self.matched = 1,
                 b'>' => self.scan = Scan::Data,
+                b'[' => {
+                    self.unsure = true;
+                    self.scan = Scan::Bogus;
+                }
                 _ => self.scan = Scan::Bogus,
             },
             Scan::Comment => match byte {
@@ -344,6 +402,8 @@ impl HtmlPosition {
         self.closing = false;
         self.self_closing = false;
         self.after_equals = false;
+        self.named = false;
+        self.opens_svg = false;
         self.raw = None;
         self.name_len = 0;
         self.matched = 0;
@@ -389,7 +449,21 @@ impl HtmlPosition {
 
     fn end_name(&mut self) {
         let name = self.name.get(..self.name_len).unwrap_or(&[]);
-        self.raw = if self.closing {
+        if self.svg_depth > 0 && !PLAIN_SVG.contains(&name) {
+            self.unsure = true;
+        }
+        if name == b"math" || name == b"noscript" {
+            self.unsure = true;
+        }
+        if name == b"svg" {
+            if self.closing {
+                self.svg_depth = self.svg_depth.saturating_sub(1);
+            } else {
+                self.opens_svg = true;
+            }
+        }
+        // In foreign content an element's text is tokenized as markup.
+        self.raw = if self.closing || self.svg_depth > 0 {
             None
         } else {
             RAW_TEXT.iter().position(|raw| *raw == name)
@@ -397,29 +471,44 @@ impl HtmlPosition {
     }
 
     fn in_tag(&mut self, byte: u8) {
+        if self.after_equals {
+            match byte {
+                b'>' => self.close_tag(),
+                b' ' | b'\t' | b'\n' | b'\r' | 0x0c => {}
+                b'"' => self.scan = Scan::DoubleQuoted,
+                b'\'' => self.scan = Scan::SingleQuoted,
+                // Whatever else comes first is the value's, `=` and `/` too.
+                _ => self.scan = Scan::Unquoted,
+            }
+            self.self_closing = false;
+            self.named = false;
+            return;
+        }
         match byte {
             b'>' => self.close_tag(),
-            b'=' => {
+            // The attribute a name has begun gets a value; with no name yet the
+            // `=` is the first byte of one.
+            b'=' if self.named => {
                 self.after_equals = true;
                 self.self_closing = false;
             }
             b' ' | b'\t' | b'\n' | b'\r' | 0x0c => self.self_closing = false,
             b'/' => {
                 self.self_closing = true;
-                self.after_equals = false;
+                self.named = false;
             }
-            b'"' if self.after_equals => self.scan = Scan::DoubleQuoted,
-            b'\'' if self.after_equals => self.scan = Scan::SingleQuoted,
             _ => {
                 self.self_closing = false;
-                if self.after_equals {
-                    self.scan = Scan::Unquoted;
-                }
+                self.named = true;
             }
         }
     }
 
     fn close_tag(&mut self) {
+        if self.opens_svg && !self.self_closing {
+            self.svg_depth = self.svg_depth.saturating_add(1);
+        }
+        self.opens_svg = false;
         // `<script/>` opens a script in HTML and ends at once in SVG: taken
         // as not a script, which is the safe way to be wrong.
         self.scan = if self.raw.is_some() && !self.self_closing {
@@ -453,6 +542,7 @@ impl HtmlPosition {
                 self.closing = true;
                 self.self_closing = false;
                 self.after_equals = false;
+                self.named = false;
                 self.scan = Scan::Tag;
                 self.in_tag(byte);
             }
@@ -517,6 +607,50 @@ mod tests {
             &["< script>"],
         ] {
             assert!(!in_script_after(pieces), "{pieces:?}");
+        }
+    }
+
+    #[test]
+    fn takes_the_safe_side_where_html_stops_being_html() {
+        for pieces in [
+            // Raw text to a browser with scripting on.
+            &["<noscript><script></noscript>"][..],
+            &["<noscript></noscript><script>"],
+            // The markup of a foreign element, or of what it may hold.
+            &["<svg><script>"],
+            &["<math><script>"],
+            &["<math></math><script>"],
+            &["<SVG><SCRIPT>"],
+            &["<svg></math><script>"],
+            &["<svg><svg></svg><script>"],
+            &["<svg><style><a title=\"</style></svg><script>"],
+            &["<svg><foreignObject><style></svg></style><script>"],
+            &["<svg><title><textarea></svg></textarea></title><script>"],
+            &["<svg></p></svg><script>"],
+            // CDATA in foreign content runs to `]]>`.
+            &["<svg><![CDATA[><script>]]>"],
+            &["<![CDATA[><script>"],
+            &["<![CDATA[></svg><script>"],
+            // A leading `=` starts a name, whose `"` opens nothing.
+            &["<a =b=\"><script>"],
+            &["<a = b=\"><script>"],
+            // A second `=` is the value's first byte: the quote after it opens
+            // nothing, and the one after that does.
+            &["<a b==' c=\"'><script>"],
+        ] {
+            assert!(!in_script_after(pieces), "{pieces:?}");
+        }
+        for pieces in [
+            // A plain icon closes, and what follows is HTML again.
+            &["<svg><path d=\"M0 0\"/></svg><script>"][..],
+            &["<svg/><script>"],
+            &["<svg viewBox=\"0 0 1 1\"><title>i</title><g><circle/></g></svg><script>"],
+            &["<a b = \">\"><script>"],
+            &["<a =b=c><script>"],
+            &["<a b=/><script>"],
+            &["<a b==c><script>"],
+        ] {
+            assert!(in_script_after(pieces), "{pieces:?}");
         }
     }
 

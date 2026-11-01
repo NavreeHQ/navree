@@ -484,13 +484,17 @@ impl State<'_> {
         Ok(out)
     }
 
-    /// A buffer for what the render captures in the current mode.
+    /// A buffer for what the render captures in the current mode. Nothing is
+    /// known of where the text will land, so a `<script>` it opens is not taken
+    /// for a script: `|tojson` in it writes its quotes as entities.
     fn capture_buffer(&self) -> Output {
-        Output::new(
+        let mut out = Output::new(
             self.limits.max_output_bytes,
             self.budget.clone(),
             self.mode().has_html(),
-        )
+        );
+        out.distrust_scripts();
+        out
     }
 
     fn lookup(&self, name: &str) -> Option<Value> {
@@ -572,7 +576,7 @@ impl State<'_> {
                 floor: self.mode(),
                 lexical: parent.mode,
             };
-            if self.mode() == Mode::Html {
+            if self.mode().has_html() {
                 out.mark_html();
             }
             self.template = parent.clone();
@@ -1035,7 +1039,7 @@ impl State<'_> {
             floor: self.mode(),
             lexical: template.mode,
         };
-        if self.mode() == Mode::Html {
+        if self.mode().has_html() {
             out.mark_html();
         }
         self.charge_items(template.ast.blocks.len())?;

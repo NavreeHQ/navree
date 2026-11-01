@@ -235,11 +235,17 @@ fn escape_value(state: &State<'_>, value: &Value) -> Result<Value, Error> {
     state.charge(value.shape().weight)?;
     let mut out = state.string_builder(0)?;
     write_escaped(&mut out, mode, value)?;
-    // JSON that is also fit for HTML keeps its quotes until it lands.
-    out.finish(match mode {
+    out.finish(built_safety(mode))
+}
+
+/// What text built in a string's own buffer in `mode` is marked: JSON that is
+/// also fit for HTML keeps its quotes until it lands, where they are written
+/// for the place they land in.
+fn built_safety(mode: Mode) -> Safety {
+    match mode {
         Mode::Both => Safety::Tojson,
         _ => mode.safety(),
-    })
+    }
 }
 
 fn escape(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
@@ -304,7 +310,7 @@ fn replace(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
     };
     let out = replace_capped(state, &text, from.as_str(), &replacement)?;
     out.finish(if safety_aware {
-        mode.safety()
+        built_safety(mode)
     } else {
         Safety::Plain
     })
@@ -405,7 +411,7 @@ fn join(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
         .as_ref()
         .is_some_and(|joiner| joiner.is_safe_for(mode))
     {
-        return join_safe(state, &items, joiner_text)?.finish(mode.safety());
+        return join_safe(state, &items, joiner_text)?.finish(built_safety(mode));
     }
     // A plain joiner only becomes safe if at least one item is safe.
     if items
@@ -416,7 +422,7 @@ fn join(state: &State<'_>, values: &[Value]) -> Result<Value, Error> {
             Some(joiner) => joiner.formatted(state)?,
             None => Cow::Borrowed(""),
         };
-        join_safe(state, &items, &joiner)?.finish(mode.safety())
+        join_safe(state, &items, &joiner)?.finish(built_safety(mode))
     } else {
         join_plain(state, &items, joiner_text)?.finish(Safety::Plain)
     }

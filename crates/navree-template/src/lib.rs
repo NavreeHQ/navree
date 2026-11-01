@@ -79,7 +79,10 @@
 //!   for the mode it was escaped in; printed in another, it is escaped again.
 //! - Text marked with `|safe` prints as it is in every mode.
 //! - `|tojson` is safe wherever it is printed: its quotes stay quotes inside a
-//!   `<script>` and print as `&quot;` anywhere else in HTML.
+//!   `<script>` and print as `&quot;` anywhere else in HTML, and wherever the
+//!   engine can't be sure a script is one: in captured text (a macro, a set
+//!   block), and after `<noscript>`, `<math>`, `<![CDATA[` or an `<svg>` holding
+//!   more than plain shapes.
 //!
 //! ## The sandbox
 //!

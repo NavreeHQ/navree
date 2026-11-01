@@ -44,6 +44,8 @@ fn environment(settings: u8) -> Environment {
     .expect("macros compile");
     env.add_template("text.txt", "{{ v }}").expect("text compiles");
     env.add_template("data.json", "{{ v }}").expect("data compiles");
+    env.add_template("list.json", "{{ [v, 'a'|safe]|join(',') }}").expect("data compiles");
+    env.add_template("swap.json", "{{ 'a'|e|replace('a', v) }}").expect("data compiles");
     env.add_template("plain.txt", "{% macro p(x) %}{{ x }}{% endmacro %}")
         .expect("macros compile");
     env.add_template(
@@ -112,6 +114,17 @@ fuzz_target!(|data: &[u8]| {
         "{% autoescape 'json' %}{% set y %}{{ v }}{% endset %}{% endautoescape %}{{ y }}",
         "{{ v|tojson }}",
         "{{ [v]|tojson|safe }}",
+        "{% include 'list.json' %}",
+        "{% include 'swap.json' %}",
+        "{% autoescape 'json' %}{{ [v, 'a'|e]|join(',') }}{% endautoescape %}",
+        "{% autoescape 'json' %}{{ [v]|join('a'|e) }}{% endautoescape %}",
+        "{% autoescape 'json' %}{{ 'a'|e|replace('a', v) }}{% endautoescape %}",
+        "<noscript><script></noscript>{{ v|tojson }}",
+        "<svg><![CDATA[><script>]]>{{ v|tojson }}",
+        "<svg><script>{{ v|tojson }}",
+        "<math><script>{{ v|tojson }}",
+        "<a =b=><script>{{ v|tojson }}",
+        "{% macro s(x) %}<script>{{ x|tojson }}{% endmacro %}{{ s(v) }}",
         "{% set y = v|tojson %}{{ y }}",
     ] {
         let printed = env
