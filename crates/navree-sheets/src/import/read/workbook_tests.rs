@@ -1460,3 +1460,222 @@ fn the_peak_memory_of_reading_a_sheet_that_turns_out_of_order() {
 fn a_first_reading_is_given_up_when_the_sheet_is_read_again() {
     run_alone("the_peak_memory_of_reading_a_sheet_that_turns_out_of_order");
 }
+
+/// An ODS spreadsheet whose `office:spreadsheet` holds `tables`.
+fn ods_of(tables: &str) -> Vec<u8> {
+    let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    let stored =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    zip.start_file("mimetype", stored).unwrap();
+    zip.write_all(b"application/vnd.oasis.opendocument.spreadsheet")
+        .unwrap();
+    let options = zip::write::SimpleFileOptions::default();
+    zip.start_file("META-INF/manifest.xml", options).unwrap();
+    zip.write_all(br#"<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.spreadsheet"/><manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/></manifest:manifest>"#).unwrap();
+    zip.start_file("content.xml", options).unwrap();
+    write!(
+        zip,
+        r#"<?xml version="1.0" encoding="UTF-8"?><office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" office:version="1.3"><office:body><office:spreadsheet>{tables}</office:spreadsheet></office:body></office:document-content>"#
+    )
+    .unwrap();
+    zip.finish().unwrap().into_inner()
+}
+
+/// An ODS text cell.
+fn ods_text(text: &str) -> String {
+    format!(
+        r#"<table:table-cell office:value-type="string"><text:p>{text}</text:p></table:table-cell>"#
+    )
+}
+
+/// An ODS number cell.
+fn ods_number(number: &str) -> String {
+    format!(r#"<table:table-cell office:value-type="float" office:value="{number}"/>"#)
+}
+
+/// `count` empty ODS cells.
+fn ods_gap(count: u64) -> String {
+    format!(r#"<table:table-cell table:number-columns-repeated="{count}"/>"#)
+}
+
+/// An ODS row of `cells`, repeated `times`.
+fn ods_row(times: u64, cells: &str) -> String {
+    format!(r#"<table:table-row table:number-rows-repeated="{times}">{cells}</table:table-row>"#)
+}
+
+fn ods_table(name: &str, rows: &str) -> String {
+    format!(r#"<table:table table:name="{name}">{rows}</table:table>"#)
+}
+
+/// An XLSB workbook of one sheet whose rows hold `cells`: row, column and
+/// value of each, rows in order.
+fn xlsb_of(cells: &[(u32, u32, crate::import::workbook::xlsb_writer::Value)]) -> Vec<u8> {
+    use crate::import::workbook::xlsb_writer::{cell, row, sheet, workbook};
+    let mut records = Vec::new();
+    let mut last = None;
+    for (r, c, value) in cells {
+        if last != Some(*r) {
+            records.push(row(*r));
+            last = Some(*r);
+        }
+        records.push(cell(*c, 0, value));
+    }
+    workbook(&[("Sheet1", Some(sheet(&records)))], &[], &[], &[0], false)
+}
+
+/// Cells at A1 and at row 20,001, column 161: a range of the area between
+/// them holds 3.2 million cells, about 100 MB. In the ODS file, the empty
+/// rows between them are one row element, repeated.
+#[cfg(target_os = "linux")]
+fn far_apart(ods: bool) -> (Vec<u8>, &'static str) {
+    if ods {
+        let rows = [
+            ods_row(1, &ods_text("h")),
+            ods_row(20_000, &ods_gap(161)),
+            ods_row(1, &format!("{}{}", ods_gap(160), ods_number("1"))),
+        ]
+        .concat();
+        (ods_of(&ods_table("Sheet1", &rows)), "far.ods")
+    } else {
+        use crate::import::workbook::xlsb_writer::Value;
+        let bytes = xlsb_of(&[
+            (0, 0, Value::Text("h".into())),
+            (20_001, 160, Value::RkInt(1, false)),
+        ]);
+        (bytes, "far.xlsb")
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn peak_of_cells_far_apart(ods: bool) {
+    let (bytes, name) = far_apart(ods);
+    assert!(bytes.len() < 20_000, "{} bytes", bytes.len());
+    std::fs::write("/proc/self/clear_refs", "5").expect("clear_refs");
+    let before = kib_of("VmHWM:");
+    let result = read_table(&bytes, name, &limits(100));
+    let used = kib_of("VmHWM:").saturating_sub(before);
+    let table = result.unwrap();
+    assert_eq!(table.headers, ["h"]);
+    // The far row is a row, empty in the header's one column.
+    assert_eq!(table.rows.len(), 1);
+    assert_eq!(table.rows[0].number, 20_002);
+    assert!(
+        used < 24 * 1024,
+        "reading held {used} KiB at most, over a bound of 24 MiB; the area is 100,000"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "runs in a process of its own, from the test below"]
+fn the_peak_memory_of_reading_xlsb_cells_far_apart() {
+    peak_of_cells_far_apart(false);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "runs in a process of its own, from the test below"]
+fn the_peak_memory_of_reading_ods_cells_far_apart() {
+    peak_of_cells_far_apart(true);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cells_far_apart_take_memory_for_the_cells_not_the_area() {
+    run_alone("the_peak_memory_of_reading_xlsb_cells_far_apart");
+    run_alone("the_peak_memory_of_reading_ods_cells_far_apart");
+}
+
+/// `bytes` with the part `name` holding `content` instead.
+fn replacing(bytes: &[u8], name: &str, content: &str) -> Vec<u8> {
+    let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    let options = zip::write::SimpleFileOptions::default();
+    for index in 0..archive.len() {
+        let mut part = archive.by_index(index).unwrap();
+        let part_name = part.name().unwrap().into_owned();
+        zip.start_file(part_name.as_str(), options).unwrap();
+        if part_name == name {
+            zip.write_all(content.as_bytes()).unwrap();
+        } else {
+            std::io::copy(&mut part, &mut zip).unwrap();
+        }
+    }
+    zip.finish().unwrap().into_inner()
+}
+
+/// One shared string that its part says is one of twenty million.
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "runs in a process of its own, from the test below"]
+fn the_peak_memory_of_reading_shared_strings_that_claim_millions() {
+    let bytes = replacing(
+        &book(&row(1, &[r#"<c r="A1" t="s"><v>0</v></c>"#.into()]), "", &["h"]),
+        "xl/sharedStrings.xml",
+        &format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?><sst xmlns="{NS}" count="20000000" uniqueCount="20000000"><si><t>h</t></si></sst>"#
+        ),
+    );
+    // Room reserved is not memory used until it is written: the measure is
+    // of the address space, whose peak the process cannot forget.
+    let before = kib_of("VmPeak:");
+    let result = read_table(&bytes, "book.xlsx", &limits(10));
+    let reserved = kib_of("VmPeak:").saturating_sub(before);
+    assert_eq!(result.unwrap().headers, ["h"]);
+    assert!(
+        reserved < 64 * 1024,
+        "reading took {reserved} KiB more address space, over a bound of 64 MiB; room for twenty million strings is 469,000"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_count_of_shared_strings_a_file_declares_reserves_nothing() {
+    run_alone("the_peak_memory_of_reading_shared_strings_that_claim_millions");
+}
+
+/// A cell of `a`, `spaces` spaces (one `text:s`) and `then`, under a
+/// header.
+fn spaced_ods(spaces: u64, then: &str) -> Vec<u8> {
+    let cell = format!(
+        r#"<table:table-cell office:value-type="string"><text:p>a<text:s text:c="{spaces}"/>{then}</text:p></table:table-cell>"#
+    );
+    ods_of(&ods_table(
+        "Sheet1",
+        &[ods_row(1, &ods_text("h")), ods_row(1, &cell)].concat(),
+    ))
+}
+
+/// Fifty million spaces between two letters: refused by the text limit
+/// before they are made.
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "runs in a process of its own, from the test below"]
+fn the_peak_memory_of_reading_an_ods_cell_of_many_spaces() {
+    let options = ReadOptions {
+        max_text_bytes: 1024 * 1024,
+        ..limits(10)
+    };
+    let (result, used) = read_measured(&spaced_ods(50_000_000, "b"), &options);
+    assert!(
+        refused_for(&result, "more than 1048576 bytes of text"),
+        "{result:?}"
+    );
+    assert!(
+        used < 24 * 1024,
+        "reading held {used} KiB at most, over a bound of 24 MiB; the spaces are 49,000"
+    );
+    // Spaces that end a cell are trimmed, so never made.
+    let (result, used) = read_measured(&spaced_ods(50_000_000, ""), &options);
+    assert_eq!(result.unwrap().rows[0].cells, [Cell::Text("a".into())]);
+    assert!(
+        used < 24 * 1024,
+        "reading held {used} KiB at most, over a bound of 24 MiB; the spaces are 49,000"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn an_ods_cell_that_repeats_a_space_makes_no_more_text_than_the_limit() {
+    run_alone("the_peak_memory_of_reading_an_ods_cell_of_many_spaces");
+}
