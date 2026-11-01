@@ -350,8 +350,11 @@ impl HttpBody for Scripted {
     }
 }
 
+/// What polling a body gives.
+type PolledFrame<B> = Poll<Option<Result<Frame<<B as HttpBody>::Data>, <B as HttpBody>::Error>>>;
+
 /// Polls `body` once, with a waker that does nothing.
-fn poll_once<B: HttpBody + Unpin>(body: &mut B) -> Poll<Option<Result<Frame<B::Data>, B::Error>>> {
+fn poll_once<B: HttpBody + Unpin>(body: &mut B) -> PolledFrame<B> {
     Pin::new(body).poll_frame(&mut Context::from_waker(Waker::noop()))
 }
 

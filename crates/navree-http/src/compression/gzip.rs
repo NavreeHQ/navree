@@ -354,7 +354,7 @@ impl Encoder {
                     // Nothing ready: flush what was read, so the client gets
                     // it now.
                     None => Step::Flushing,
-                    Some((input, _)) if input.is_empty() => Step::Finishing,
+                    Some(([], _)) => Step::Finishing,
                     Some((input, taken)) => match self.encode(input, out) {
                         Ok(n) => {
                             **taken += n;
