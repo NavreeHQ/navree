@@ -312,27 +312,22 @@ async fn directories_are_not_files() {
     let disk = sandbox.disk();
     disk.put("dir/file.txt", "x").await.unwrap();
 
-    // Looking at a directory as a file is a missing file where the
-    // filesystem lets a directory be opened, and a refusal of the backend
-    // where it does not.
+    // Looking at a directory as a file, or through a file as if it were a
+    // directory, finds no file, on every platform.
     let errors = [
         disk.get("dir").await.unwrap_err(),
         disk.get_stream("dir").await.err().unwrap(),
         disk.size("dir").await.unwrap_err(),
         disk.metadata("dir").await.unwrap_err(),
+        disk.get("dir/file.txt/inside").await.unwrap_err(),
+        disk.size("dir/file.txt/inside").await.unwrap_err(),
     ];
     for error in errors {
-        if cfg!(windows) {
-            assert!(matches!(error, StorageError::Backend { .. }), "{error:?}");
-        } else {
-            assert!(matches!(error, StorageError::NotFound { .. }), "{error:?}");
-        }
+        assert!(matches!(error, StorageError::NotFound { .. }), "{error:?}");
     }
-    if cfg!(windows) {
-        assert!(disk.exists("dir").await.is_err());
-    } else {
-        assert!(!disk.exists("dir").await.unwrap());
-    }
+    assert!(!disk.exists("dir").await.unwrap());
+    assert!(!disk.exists("dir/file.txt/inside").await.unwrap());
+    disk.delete("dir/file.txt/inside").await.unwrap();
     // Deleting a directory, writing over one, and writing under a file fail
     // and leave everything as it was.
     assert!(matches!(
@@ -356,11 +351,8 @@ async fn directories_are_not_files() {
         .unwrap_err(),
         StorageError::Backend { .. }
     ));
-    let published: Vec<String> = files_under(&sandbox.root())
-        .into_iter()
-        .filter(|name| !name.contains('#'))
-        .collect();
-    assert_eq!(published, ["dir/file.txt"]);
+    // Not even a staging file of the failed writes is left.
+    assert_eq!(files_under(&sandbox.root()), ["dir/file.txt"]);
     assert_eq!(disk.get("dir/file.txt").await.unwrap(), "x");
 }
 
@@ -379,8 +371,9 @@ async fn listing_covers_hidden_files_and_skips_empty_directories() {
         [".hidden", "dir/.dot/file", "dir/Alpha.txt", "dir/zeta.txt"]
     );
     assert!(disk.list("empty").await.unwrap().is_empty());
-    // A file is not a directory to list.
+    // A file is not a directory to list, nor is a path through one.
     assert!(disk.list("dir/zeta.txt").await.unwrap().is_empty());
+    assert!(disk.list("dir/zeta.txt/more").await.unwrap().is_empty());
 
     let files = disk.files("dir").await.unwrap();
     let paths: Vec<_> = files.iter().map(|file| file.path.as_str()).collect();
@@ -449,7 +442,7 @@ async fn large_files_stream_in_and_out_unchanged() {
         .unwrap();
     assert_eq!(read.len(), total);
     assert!(read == bytes, "the streamed file differs");
-    assert!(disk.get("big/data.bin").await.unwrap() == Bytes::from(bytes));
+    assert!(disk.get("big/data.bin").await.unwrap() == bytes);
 }
 
 #[tokio::test]

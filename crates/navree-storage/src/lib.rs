@@ -1,7 +1,7 @@
 //! # navree-storage
 //!
 //! `StorageModule`: named disks, streaming, signed links, direct uploads,
-//! upload checks and disk sync, on [object_store](https://docs.rs/object_store).
+//! upload checks and disk sync.
 //!
 //! - Drivers: `local` (a directory) and `memory` (tests) always; `s3` (AWS,
 //!   MinIO, Cloudflare R2, DigitalOcean Spaces), `gcs` and `azure` with the
@@ -70,6 +70,7 @@ mod provider;
 mod serve;
 mod signing;
 mod storage;
+mod store;
 mod sync;
 mod upload;
 

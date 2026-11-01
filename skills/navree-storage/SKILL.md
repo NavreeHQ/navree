@@ -5,7 +5,7 @@ description: "Stores and serves files in a Navree app with `StorageModule`: name
 
 # File storage
 
-`StorageModule` gives the app named **disks** on `object_store`: `local` (a
+`StorageModule` gives the app named **disks**: `local` (a
 directory), `memory` (tests), `s3` (AWS, MinIO, R2, Spaces; facade feature
 `storage-s3`, in `full`), `gcs` and `azure` (opt-in features `storage-gcs`,
 `storage-azure`). Inject `Arc<Disk>` (the default disk) or `Arc<Storage>`
@@ -90,6 +90,11 @@ impl ReportFiles {
 last_modified }`), `delete` (succeeds when missing), `list(dir)` (recursive,
 sorted), `url(path)` (needs `public_url`). No copy or move helper: stream
 `get_stream` into another disk's `put_stream`.
+
+On a `local` disk: a write goes through a staging file (`name#1`) and a rename,
+so a file name ending in `#` and digits is refused and never listed; symlinks
+are followed; on Windows a `:` in a name is stored as `%3A`; deleting a file
+removes the directories it leaves empty; a directory reads as a missing file.
 
 ## Uploads through the app (multipart)
 

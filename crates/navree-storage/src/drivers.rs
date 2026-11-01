@@ -2,18 +2,14 @@
 
 use std::sync::Arc;
 
-use object_store::ObjectStore;
-use object_store::local::LocalFileSystem;
-use object_store::memory::InMemory;
-use object_store::prefix::PrefixStore;
-
 use crate::path::normalize;
 use crate::provider::Provider;
+use crate::store::{Local, Memory, Prefixed, Store};
 use crate::{DiskConfig, StorageError};
 
 /// A disk's store, and the provider that signs its URLs (cloud disks).
 pub(crate) struct Backend {
-    pub(crate) store: Arc<dyn ObjectStore>,
+    pub(crate) store: Arc<dyn Store>,
     pub(crate) provider: Option<Provider>,
 }
 
@@ -29,16 +25,14 @@ pub(crate) fn build(name: &str, config: &DiskConfig) -> Result<Backend, StorageE
                     source,
                 };
             std::fs::create_dir_all(root).map_err(|e| local_root(e.into()))?;
-            let store = LocalFileSystem::new_with_prefix(root)
-                .map_err(|e| local_root(e.into()))?
-                .with_automatic_cleanup(true);
+            let store = Local::new(root).map_err(|e| local_root(e.into()))?;
             Backend {
                 store: Arc::new(store),
                 provider: None,
             }
         }
         DiskConfig::Memory => Backend {
-            store: Arc::new(InMemory::new()),
+            store: Arc::new(Memory::new()),
             provider: None,
         },
         #[cfg(feature = "s3")]
@@ -62,11 +56,13 @@ pub(crate) fn build(name: &str, config: &DiskConfig) -> Result<Backend, StorageE
     let prefix = normalize(prefix, false).map_err(|_| {
         StorageError::InvalidOptions(format!("disk `{name}`: invalid prefix `{prefix}`"))
     })?;
-    let store_prefix = object_store::path::Path::parse(&prefix).map_err(|_| {
-        StorageError::InvalidOptions(format!("disk `{name}`: invalid prefix `{prefix}`"))
-    })?;
+    if prefix.is_empty() {
+        return Err(StorageError::InvalidOptions(format!(
+            "disk `{name}`: invalid prefix `{prefix}`"
+        )));
+    }
     Ok(Backend {
-        store: Arc::new(PrefixStore::new(backend.store, store_prefix)),
+        store: Arc::new(Prefixed::new(backend.store, prefix.clone())),
         provider: backend
             .provider
             .map(|provider| provider.with_prefix(prefix)),
@@ -90,6 +86,7 @@ mod cloud {
     #[cfg(feature = "gcs")]
     use crate::options::GcsConfig;
     use crate::provider::{Provider, ProviderKind};
+    use crate::store::cloud::Cloud;
 
     /// The process environment, for the cloud drivers' fallbacks.
     #[cfg(any(feature = "s3", feature = "gcs"))]
@@ -108,7 +105,7 @@ mod cloud {
     fn build_error(name: &str, source: object_store::Error) -> StorageError {
         StorageError::Backend {
             disk: name.to_owned(),
-            source,
+            source: Box::new(source),
         }
     }
 
@@ -232,7 +229,7 @@ mod cloud {
         }
         let store = Arc::new(builder.build().map_err(|error| build_error(name, error))?);
         Ok(Backend {
-            store: store.clone(),
+            store: Arc::new(Cloud::new(store.clone())),
             provider: Some(Provider::new(ProviderKind::S3, store)),
         })
     }
@@ -275,7 +272,7 @@ mod cloud {
         }
         let store = Arc::new(builder.build().map_err(|error| build_error(name, error))?);
         Ok(Backend {
-            store: store.clone(),
+            store: Arc::new(Cloud::new(store.clone())),
             provider: Some(Provider::new(ProviderKind::Gcs, store)),
         })
     }
@@ -300,7 +297,7 @@ mod cloud {
         }
         let store = Arc::new(builder.build().map_err(|error| build_error(name, error))?);
         Ok(Backend {
-            store: store.clone(),
+            store: Arc::new(Cloud::new(store.clone())),
             provider: Some(Provider::new(ProviderKind::Azure, store)),
         })
     }

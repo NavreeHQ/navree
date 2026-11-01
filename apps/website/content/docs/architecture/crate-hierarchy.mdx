@@ -54,7 +54,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 | L3 | `navree-api` | OpenAPI 3.1 from route metadata, docs UI, API resources |
 | L3 | `navree-mail` | Mailables from templates with CSS inlined; SMTP (DKIM-signed), SES, Mailgun, Postmark, Resend, log, array and failover transports; queued sending; tenant transports, a delivery log fed by provider webhooks, suppressions, hold for approval, open and click tracking, SPF/DKIM/DMARC checks; [inbound mail](/docs/digging-deeper/inbound-mail/) parsed and routed to mailboxes by address, with signed reply addresses |
 | L3 | `navree-realtime` | Pusher-protocol WebSocket server and a signed relay for other processes |
-| L3 | `navree-storage` | Named disks on object_store, streaming, signed temporary URLs, upload checks |
+| L3 | `navree-storage` | Named disks (local and memory on Navree's own stores; S3, Google Cloud Storage and Azure through the provider's client), streaming, signed temporary URLs, upload checks |
 | L3 | `navree-time` | [Time zones](/docs/digging-deeper/time-zones/): the request's zone, local days, send windows, holidays, local-time SQL |
 | L4 | `navree-session` | Encrypted session cookies, memory and database stores, CSRF |
 | L4 | `navree-validation` | `#[derive(Validate)]` rules and `Valid<T>` extractors, field-level messages, async rules |

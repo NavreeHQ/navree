@@ -1,9 +1,9 @@
 ---
 title: "File storage"
-description: "Named disks on object_store (local, memory, S3, Google Cloud Storage, Azure): streaming, upload checks, signed links, direct browser uploads and disk sync."
+description: "Named disks (local, memory, S3, Google Cloud Storage, Azure): streaming, upload checks, signed links, direct browser uploads and disk sync."
 ---
 
-<Badge feature="storage" /> `navree-storage` gives your app named **disks**: places to keep files, each with its own root. You write and read files by path on a disk, stream large files without loading them into memory, accept uploads with a size limit and a content check, let browsers upload straight to a bucket, hand out links that expire, and copy a disk's files to another. It is built on [object_store](https://docs.rs/object_store), the storage layer of Apache Arrow.
+<Badge feature="storage" /> `navree-storage` gives your app named **disks**: places to keep files, each with its own root. You write and read files by path on a disk, stream large files without loading them into memory, accept uploads with a size limit and a content check, let browsers upload straight to a bucket, hand out links that expire, and copy a disk's files to another. Local and memory disks are Navree's own; the S3, Google Cloud Storage and Azure disks talk to the provider through the [object_store](https://docs.rs/object_store) crate, which is compiled in only with their features.
 
 A disk uses one of five drivers. Your code is the same on all of them:
 
@@ -274,6 +274,15 @@ let detailed = self.disk.files("reports").await?;          // Vec<FileMeta>
 - `get`, `size` and `metadata` fail with `StorageError::NotFound` for a missing file.
 
 There is no `copy` or `move` helper; stream the file to its new path (below), or [sync](#syncing-disks) a whole directory.
+
+### On a local disk
+
+- A write goes to a staging file next to its destination (`name#1`) and is renamed over it, so a failed or abandoned write leaves nothing behind. Because of that, a file name that ends in `#` and digits (`report#1`) is refused with a backend error, and listings never show such files.
+- Paths are joined to the root one segment at a time, and a segment that is not a plain name is refused again at that point. On Windows a `:` in a name is written as `%3A`, so `C:/Windows/x` is a directory called `C%3A` under the root, and a listing shows it with that name.
+- Symlinks are followed, in reads, writes and listings. A link to nowhere is a missing file, and a link to a directory that contains it fails the listing. Links are yours to place: a link out of the root leads out of it.
+- A directory is not a file: reading, sizing or checking one finds no file, and deleting one fails.
+- Deleting a file removes the directories it leaves empty, up to the root.
+- A listing fails if a file's name is not valid Unicode or has a control character in it, rather than leave the file out of what a sync compares.
 
 ### Errors in handlers
 

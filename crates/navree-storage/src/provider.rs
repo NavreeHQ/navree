@@ -12,6 +12,7 @@ mod cloud {
     use std::sync::Arc;
     use std::time::Duration;
 
+    use navree_kernel::BoxError;
     use object_store::path::Path as StorePath;
     use object_store::signer::{HeaderName, HeaderValue, Method, SignedUrlOptions, Signer};
 
@@ -77,11 +78,7 @@ mod cloud {
         }
 
         /// A link that downloads `path` for `ttl`.
-        pub(crate) async fn get_url(
-            &self,
-            path: &str,
-            ttl: Duration,
-        ) -> object_store::Result<String> {
+        pub(crate) async fn get_url(&self, path: &str, ttl: Duration) -> Result<String, BoxError> {
             let location = self.location(path)?;
             let url = self.signer.signed_url(Method::GET, &location, ttl).await?;
             Ok(url.into())
@@ -102,7 +99,7 @@ mod cloud {
             content_type: Option<&str>,
             max_bytes: u64,
             size: Option<u64>,
-        ) -> object_store::Result<(String, BTreeMap<String, String>)> {
+        ) -> Result<(String, BTreeMap<String, String>), BoxError> {
             let location = self.location(path)?;
             let mut headers = BTreeMap::new();
             if let Some(content_type) = content_type {
@@ -117,18 +114,10 @@ mod cloud {
                         };
                         headers.insert("x-goog-content-length-range".to_owned(), range);
                     }
-                    let invalid = |source: Box<dyn std::error::Error + Send + Sync>| {
-                        object_store::Error::Generic {
-                            store: "navree-storage",
-                            source,
-                        }
-                    };
                     let mut options = SignedUrlOptions::default();
                     for (name, value) in &headers {
-                        let name = HeaderName::from_bytes(name.as_bytes())
-                            .map_err(|error| invalid(error.into()))?;
-                        let value =
-                            HeaderValue::from_str(value).map_err(|error| invalid(error.into()))?;
+                        let name = HeaderName::from_bytes(name.as_bytes())?;
+                        let value = HeaderValue::from_str(value)?;
                         options = options.with_signed_header(name, value);
                     }
                     self.signer
@@ -153,6 +142,8 @@ mod none {
     use std::collections::BTreeMap;
     use std::time::Duration;
 
+    use navree_kernel::BoxError;
+
     /// No provider (no cloud driver is compiled in).
     #[derive(Clone)]
     pub(crate) enum Provider {}
@@ -170,7 +161,7 @@ mod none {
             &self,
             _path: &str,
             _ttl: Duration,
-        ) -> object_store::Result<String> {
+        ) -> Result<String, BoxError> {
             match *self {}
         }
 
@@ -181,7 +172,7 @@ mod none {
             _content_type: Option<&str>,
             _max_bytes: u64,
             _size: Option<u64>,
-        ) -> object_store::Result<(String, BTreeMap<String, String>)> {
+        ) -> Result<(String, BTreeMap<String, String>), BoxError> {
             match *self {}
         }
     }

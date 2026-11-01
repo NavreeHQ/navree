@@ -324,7 +324,7 @@ hashbrown = { version = "0.17.1", default-features = false, features = ["inline-
 dashmap = "6.2.1"
 utoipa = { version = "6.0.0", features = ["chrono", "preserve_order", "preserve_path_order", "uuid"] }
 utoipa-scalar = "0.4.0"
-object_store = { version = "0.14.2", default-features = false, features = ["fs"] }
+object_store = { version = "0.14.2", default-features = false }
 csv = "1.4.0"
 # Chrome for Testing archives (`navree browser:install`), and the packages of
 # DOCX files in navree-documents: deflate through flate2 on zlib-rs, pure

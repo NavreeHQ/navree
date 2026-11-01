@@ -100,7 +100,7 @@ pub enum StorageError {
         disk: String,
         /// The backend error.
         #[source]
-        source: object_store::Error,
+        source: BoxError,
     },
 }
 

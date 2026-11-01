@@ -11,8 +11,6 @@ use futures_util::{Stream, StreamExt, TryStreamExt};
 use navree_contracts::HealthStatus;
 use navree_crypto::random_token;
 use navree_kernel::BoxError;
-use object_store::path::Path as StorePath;
-use object_store::{ObjectMeta, ObjectStore, ObjectStoreExt, WriteMultipart};
 use serde::Serialize;
 
 use crate::StorageError;
@@ -20,12 +18,10 @@ use crate::drivers::Backend;
 use crate::path::normalize;
 use crate::provider::Provider;
 use crate::signing::{Signer, encode_path};
+use crate::store::{Meta, Store, StoreError, Upload};
 
 /// A stream of file contents, as returned by [`Disk::get_stream`].
 pub type ByteStream = BoxStream<'static, Result<Bytes, StorageError>>;
-
-/// Parts uploaded concurrently by [`Disk::put_stream`].
-const STREAM_CONCURRENCY: usize = 2;
 
 /// A file's path, size and last modification time, as returned by
 /// [`Disk::metadata`] and [`Disk::files`].
@@ -57,7 +53,7 @@ struct DiskInner {
     name: String,
     /// The driver name (`local`, `memory`, `s3`, `gcs`, `azure`).
     driver: &'static str,
-    store: Arc<dyn ObjectStore>,
+    store: Arc<dyn Store>,
     /// Signs links for cloud disks; local and memory disks have none and
     /// use the app's own routes.
     provider: Option<Provider>,
@@ -108,10 +104,9 @@ impl Disk {
         let location = self.location(path)?;
         self.inner
             .store
-            .put(&location, contents.into().into())
+            .put(&location, contents.into())
             .await
-            .map_err(|error| self.error(&location, error))?;
-        Ok(())
+            .map_err(|error| self.error(&location, error))
     }
 
     /// Writes a stream of chunks to `path` without buffering the whole file
@@ -124,33 +119,32 @@ impl Disk {
         E: Into<BoxError>,
     {
         let location = self.location(path)?;
-        let upload = self
+        let mut upload = self
             .inner
             .store
-            .put_multipart(&location)
+            .begin_upload(&location)
             .await
             .map_err(|error| self.error(&location, error))?;
-        let mut writer = WriteMultipart::new(upload);
         let mut stream = pin!(stream);
         let mut written = 0u64;
         while let Some(chunk) = stream.next().await {
             let chunk = match chunk {
                 Ok(chunk) => chunk,
                 Err(source) => {
-                    abort(writer, &self.inner.name).await;
+                    abort(upload, &self.inner.name).await;
                     return Err(StorageError::Stream {
                         source: source.into(),
                     });
                 }
             };
-            if let Err(error) = writer.wait_for_capacity(STREAM_CONCURRENCY).await {
-                abort(writer, &self.inner.name).await;
+            let length = chunk.len() as u64;
+            if let Err(error) = upload.write(chunk).await {
+                abort(upload, &self.inner.name).await;
                 return Err(self.error(&location, error));
             }
-            written += chunk.len() as u64;
-            writer.put(chunk);
+            written += length;
         }
-        writer
+        upload
             .finish()
             .await
             .map_err(|error| self.error(&location, error))?;
@@ -160,14 +154,9 @@ impl Disk {
     /// The contents of `path`.
     pub async fn get(&self, path: &str) -> Result<Bytes, StorageError> {
         let location = self.location(path)?;
-        let result = self
-            .inner
+        self.inner
             .store
-            .get(&location)
-            .await
-            .map_err(|error| self.error(&location, error))?;
-        result
-            .bytes()
+            .read(&location, None)
             .await
             .map_err(|error| self.error(&location, error))
     }
@@ -181,19 +170,18 @@ impl Disk {
     /// The size of `path` and a stream of its contents.
     pub(crate) async fn open(&self, path: &str) -> Result<(u64, ByteStream), StorageError> {
         let location = self.location(path)?;
-        let result = self
+        let object = self
             .inner
             .store
-            .get(&location)
+            .open(&location)
             .await
             .map_err(|error| self.error(&location, error))?;
-        let size = result.meta.size;
         let disk = self.clone();
-        let stream = result
-            .into_stream()
+        let stream = object
+            .stream
             .map_err(move |error| disk.error(&location, error))
             .boxed();
-        Ok((size, stream))
+        Ok((object.size, stream))
     }
 
     /// Whether `path` exists.
@@ -201,7 +189,7 @@ impl Disk {
         let location = self.location(path)?;
         match self.inner.store.head(&location).await {
             Ok(_) => Ok(true),
-            Err(object_store::Error::NotFound { .. }) => Ok(false),
+            Err(StoreError::NotFound) => Ok(false),
             Err(error) => Err(self.error(&location, error)),
         }
     }
@@ -210,7 +198,7 @@ impl Disk {
     pub async fn delete(&self, path: &str) -> Result<(), StorageError> {
         let location = self.location(path)?;
         match self.inner.store.delete(&location).await {
-            Ok(()) | Err(object_store::Error::NotFound { .. }) => Ok(()),
+            Ok(()) | Err(StoreError::NotFound) => Ok(()),
             Err(error) => Err(self.error(&location, error)),
         }
     }
@@ -244,15 +232,16 @@ impl Disk {
     /// Every file under the directory `prefix` (recursively) with its size
     /// and last modification time, sorted by path.
     pub async fn files(&self, prefix: &str) -> Result<Vec<FileMeta>, StorageError> {
-        let prefix = store_path(prefix, normalize(prefix, true)?)?;
+        let prefix = normalize(prefix, true)?;
         let mut files: Vec<FileMeta> = self
             .inner
             .store
-            .list(Some(&prefix))
-            .map_ok(file_meta)
-            .try_collect()
+            .list(&prefix)
             .await
-            .map_err(|error| self.error(&prefix, error))?;
+            .map_err(|error| self.error(&prefix, error))?
+            .into_iter()
+            .map(file_meta)
+            .collect();
         files.sort_by(|a, b| a.path.cmp(&b.path));
         Ok(files)
     }
@@ -360,7 +349,7 @@ impl Disk {
     }
 
     /// The store, for crate-internal operations.
-    pub(crate) fn store(&self) -> &Arc<dyn ObjectStore> {
+    pub(crate) fn store(&self) -> &Arc<dyn Store> {
         &self.inner.store
     }
 
@@ -369,13 +358,13 @@ impl Disk {
         &self.inner.signer
     }
 
-    /// The store location of `path`.
-    pub(crate) fn location(&self, path: &str) -> Result<StorePath, StorageError> {
-        store_path(path, normalize(path, false)?)
+    /// The store location of `path`: its normalised form.
+    pub(crate) fn location(&self, path: &str) -> Result<String, StorageError> {
+        normalize(path, false)
     }
 
     /// A backend error not tied to a path.
-    pub(crate) fn backend_error(&self, source: object_store::Error) -> StorageError {
+    pub(crate) fn backend_error(&self, source: BoxError) -> StorageError {
         StorageError::Backend {
             disk: self.inner.name.clone(),
             source,
@@ -383,13 +372,13 @@ impl Disk {
     }
 
     /// Maps a backend error on `location`.
-    pub(crate) fn error(&self, location: &StorePath, error: object_store::Error) -> StorageError {
+    pub(crate) fn error(&self, location: &str, error: StoreError) -> StorageError {
         match error {
-            object_store::Error::NotFound { .. } => StorageError::NotFound {
+            StoreError::NotFound => StorageError::NotFound {
                 disk: self.inner.name.clone(),
-                path: location.as_ref().to_owned(),
+                path: location.to_owned(),
             },
-            source => StorageError::Backend {
+            StoreError::Failed(source) => StorageError::Backend {
                 disk: self.inner.name.clone(),
                 source,
             },
@@ -398,25 +387,17 @@ impl Disk {
 }
 
 /// A listing or `head` result as a [`FileMeta`].
-fn file_meta(meta: ObjectMeta) -> FileMeta {
+fn file_meta(meta: Meta) -> FileMeta {
     FileMeta {
-        path: meta.location.as_ref().to_owned(),
+        path: meta.path,
         size: meta.size,
         last_modified: meta.last_modified,
     }
 }
 
-/// The store path of a normalised path (`given` is the path as given, for errors).
-fn store_path(given: &str, normalized: String) -> Result<StorePath, StorageError> {
-    StorePath::parse(normalized).map_err(|_| StorageError::InvalidPath {
-        path: given.to_owned(),
-        reason: "not a valid path",
-    })
-}
-
-/// Aborts a multipart upload, logging (not returning) a failure to clean up.
-async fn abort(writer: WriteMultipart, disk: &str) {
-    if let Err(error) = writer.abort().await {
+/// Aborts an upload, logging (not returning) a failure to clean up.
+async fn abort(upload: Box<dyn Upload>, disk: &str) {
+    if let Err(error) = upload.abort().await {
         tracing::warn!(disk, error = %error, "could not clean up an aborted upload");
     }
 }

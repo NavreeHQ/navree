@@ -8,7 +8,6 @@ use std::pin::Pin;
 
 use chrono::{DateTime, Duration, Utc};
 use navree_crypto::random_token;
-use object_store::{GetOptions, GetRange};
 use serde::{Deserialize, Serialize};
 
 use crate::path::normalize;
@@ -288,16 +287,9 @@ impl Disk {
         }
         let location = self.location(&path)?;
         let head_len = meta.size.min(SNIFF_BYTES as u64);
-        let options = GetOptions {
-            range: Some(GetRange::Bounded(0..head_len)),
-            ..GetOptions::default()
-        };
         let head = self
             .store()
-            .get_opts(&location, options)
-            .await
-            .map_err(|error| self.error(&location, error))?
-            .bytes()
+            .read(&location, Some(0..head_len))
             .await
             .map_err(|error| self.error(&location, error))?;
         let name = path.rsplit('/').next();
