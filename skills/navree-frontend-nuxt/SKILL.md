@@ -137,7 +137,7 @@ the session gate; the module provides them.
 Its steps:
 
 1. **Create the app** (Nuxt 4, `app/` source directory) and add the pieces:
-   `pnpm add @pinia/nuxt pinia @tanstack/vue-query openapi-fetch @casl/ability @casl/vue pusher-js vee-validate zod reka-ui @vueuse/core vue-sonner @lucide/vue class-variance-authority clsx tailwind-merge`
+   `pnpm add @pinia/nuxt pinia @tanstack/vue-query @casl/ability @casl/vue pusher-js vee-validate zod reka-ui @vueuse/core vue-sonner @lucide/vue class-variance-authority clsx tailwind-merge`
    and for development
    `pnpm add -D tailwindcss @tailwindcss/vite tw-animate-css msw vitest @nuxt/test-utils @vue/test-utils happy-dom @playwright/test vue-tsc typescript h3`.
 2. **Configure Nuxt** (`nuxt.config.ts`): `ssr: false` (every screen sits
@@ -154,7 +154,8 @@ Its steps:
    and `server/lib/http-errors.ts`, create the instance in
    `server/lib/instance.ts`, add the routes and the session gate (next
    section).
-5. **Add the API client and plugins**: `app/lib/api/client.ts`,
+5. **Add the API client and plugins**: `app/lib/api/client.ts` on
+   `fetch.ts` (the typed fetch core of `@navree/client`, copied),
    `errors.ts`, `form-errors.ts`, `keys.ts`, `types.ts`; plugins for TanStack
    Query, CASL and the 401/403 hooks (`app/plugins/02.vue-query.ts`,
    `03.casl.ts`, `04.api-events.ts`).

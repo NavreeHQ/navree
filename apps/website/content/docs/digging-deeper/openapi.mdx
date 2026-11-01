@@ -279,7 +279,7 @@ navree openapi:client                         # web/src/lib/api/openapi.json and
 navree openapi:client --out web/app/lib/api   # another folder
 ```
 
-The CRM's front end, `apps/crm-web`, generates its TypeScript types from the exported document with `navree openapi:client --input` and calls the API with [openapi-fetch](https://openapi-ts.dev/openapi-fetch/):
+The CRM's front end, `apps/crm-web`, generates its TypeScript types from the exported document with `navree openapi:client --input` and calls the API with the [typed fetch core](/docs/frontend/typed-client/#the-fetch-core) that `@navree/client` is built on:
 
 ```sh
 cd apps/crm-api

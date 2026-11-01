@@ -130,7 +130,7 @@ The front-end packages are npm packages in `packages/js/` (a pnpm workspace):
 
 | Package | What it does |
 |---|---|
-| `@navree/client` | A typed client on openapi-fetch and the schema `navree openapi:client` generates: cookie or bearer mode, `X-Workspace`, request ids, `NavreeError` with the error `code`, list queries, page helpers, query keys, operations over SSE, locale helpers; abilities (`@casl/ability`) and real time (`pusher-js`) as separate entry points |
+| `@navree/client` | A typed client with its own fetch core, on the schema `navree openapi:client` generates (no runtime dependencies): cookie or bearer mode, `X-Workspace`, request ids, `NavreeError` with the error `code`, list queries, page helpers, query keys, operations over SSE, locale helpers; abilities (`@casl/ability`) and real time (`pusher-js`) as separate entry points |
 | `@navree/bff` | The backend-for-frontend on web-standard `Request` and `Response`: httpOnly token cookies, single-flight refresh, two-factor sign-in, the Origin check, a streaming proxy, `ensureSession` for server rendering, test helpers (`fakeNavree`, `serveFakeNavree`) |
 | `@navree/next` | Next.js: route handlers, `auth()` and `client()` for server components, the proxy, `DataTable` and `useListQuery`, `useOperation`, workspaces, form errors; `AbilityProvider`/`Can`, `RealtimeProvider`/`useChannel` |
 | `@navree/nuxt` | A Nuxt module: the BFF as Nitro routes, a session gate, auto-imported composables (`useNavreeAuth`, `useWorkspace`, `useNavreeClient`, `useListQuery`, `useOperation`, `useChannel`, `useAbility`) and `<NavreeDataTable>` |

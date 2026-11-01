@@ -3,7 +3,7 @@ title: "The typed client"
 description: "`@navree/client`: a client typed from your API's OpenAPI document, `NavreeError` with Navree's error codes, list queries, pages, query keys and operations."
 ---
 
-`@navree/client` calls a Navree API with types generated from the API's own OpenAPI document, so a renamed field or a removed route is a compile error in the front end. It is [openapi-fetch](https://openapi-ts.dev/openapi-fetch/) with Navree's conventions built in: the error shape and its `code`, the workspace header, request ids, list queries and the page shapes.
+`@navree/client` calls a Navree API with types generated from the API's own OpenAPI document, so a renamed field or a removed route is a compile error in the front end. It is a typed fetch client with Navree's conventions built in: the error shape and its `code`, the workspace header, request ids, list queries and the page shapes. The fetch core under it is Navree's own, [described below](#the-fetch-core), and the package has no runtime dependencies.
 
 ## Generating the schema
 
@@ -109,6 +109,51 @@ export type paths = WithQuery<Generated, {
 
 export const api = createNavreeClient<paths>();
 ```
+
+### The fetch core
+
+`createNavreeClient` is a thin layer on `createClient`, which `@navree/client/fetch` exports for code that wants the typed calls without Navree's conventions:
+
+```ts
+import { createClient } from "@navree/client/fetch";
+import type { paths } from "./schema";
+
+const api = createClient<paths>({ baseUrl: "https://api.example.com" });
+const { data, error, response } = await api.GET("/api/v1/deals/{id}", { params: { path: { id } } });
+```
+
+A call resolves to `{ data, response }` for a success and `{ error, response }` for an error status, and rejects only when the request itself fails (no connection, an abort, a hook that throws). `data` is typed from the success status of the route in the document and `error` from its error statuses (4xx, 5xx, ranges and `default`); the path, query and header parameters and the body are typed from the operation. A parameter or a body the operation requires makes the options argument required. `readOnly` properties can't be sent and `writeOnly` ones never come back.
+
+| Part of a call | What it does |
+|---|---|
+| `params.path` | Fills `{name}` in the path, percent-encoded. `{.name}` (label), `{;name}` (matrix) and a trailing `*` (explode) follow the OpenAPI path styles. |
+| `params.query` | Written as the OpenAPI styles say: arrays as `a=1&a=2` and objects as `o[k]=v` by default; `undefined`, `null` and empty lists are left out. `querySerializer` takes a function, or `{ array, object, allowReserved }`. |
+| `params.header` | Merged over the client's `headers` and the call's `headers`; `null` removes a header. |
+| `body` | JSON with `Content-Type: application/json`; a form when the `Content-Type` header is `application/x-www-form-urlencoded`; `FormData` as it is, so the runtime sets the multipart boundary. `bodySerializer` writes it another way. |
+| `parseAs` | How a success is read: `json` (default), `text`, `blob`, `arrayBuffer` or `stream`. A 204, a `HEAD` and a body of length 0 have no `data`. An error body is parsed as JSON when it is JSON and kept as text otherwise. |
+| `signal` and the other `RequestInit` options | Sent with the request; an abort rejects the call. |
+| `baseUrl`, `fetch`, `pathSerializer` | The client's, replaced for one call. |
+| `middleware` | Hooks for this call, after the client's. |
+
+`request(method, path, options)` takes the method as an argument, and `OPTIONS`, `HEAD` and `TRACE` are there too.
+
+Middleware sees every request of a client (`api.use(...)`, `api.eject(...)`) or of one call:
+
+```ts
+api.use({
+  onRequest({ request }) {
+    request.headers.set("X-Trace", traceId());
+  },
+  onResponse({ response }) {
+    if (response.status === 503) return new Response(null, { status: 502 });
+  },
+  onError({ error }) {
+    return new Error(`request failed: ${String(error)}`);
+  },
+});
+```
+
+`onRequest` may return a new `Request`, or a `Response` to answer without calling fetch; `onResponse` may return a new `Response`; `onError` may return a `Response` (the failure is handled) or an `Error` (a different failure). Request hooks run in the order they were added and response and error hooks in reverse, with the client's before the call's. Each hook gets `request`, the `schemaPath` as the document writes it, the `params`, the `options` in force and an `id` shared by the hooks of one request.
 
 ## Errors
 

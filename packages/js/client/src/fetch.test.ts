@@ -423,7 +423,7 @@ describe("the front ends' copies", () => {
     (path) => new URL(path, import.meta.url),
   );
 
-  it.each(copies.map((url) => [url.pathname, url] as const))("%s is the same file", (_name, url) => {
+  it.each(copies.map((url) => [url.pathname.split("/apps/")[1], url] as const))("apps/%s is the same file", (_name, url) => {
     if (!existsSync(url)) return;
     expect(readFileSync(url, "utf8")).toBe(source);
   });
