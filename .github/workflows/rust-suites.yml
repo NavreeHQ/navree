@@ -24,16 +24,15 @@
 # SaaS and microservice kits) and runs their own tests and lints: the suites
 # marked `#[ignore]` in navree-cli, minutes each.
 #
-# The schedule is weekly, not on every push: a run takes about an hour and a
-# half on a two-core Linux runner, and Windows minutes count twice. Estimated
-# minutes (from the CPU time of a local build and test run of the workspace,
-# not yet measured on the runners): Linux about 100 a run, Windows about 80 a
-# run (160 billed), the generated projects about 75 a month; about 1,100
-# billed minutes a month for the weekly runs and 1,200 with the monthly job.
-# Compiling the workspace's own crates dominates, so the dependency cache
-# saves little. If the monthly allowance is short, move the Windows job to
-# the monthly cron (its `if`) or run it by hand. Run the workflow by hand
-# (workflow_dispatch) after changing a crate that nothing else covers.
+# The schedule is not on every push: a run takes about an hour and a half on
+# a two-core Linux runner, and Windows minutes count twice. Linux runs weekly;
+# Windows and the generated projects run monthly. Estimated minutes (from the
+# CPU time of a local build and test run of the workspace, not yet measured on
+# the runners): Linux about 100 a run, Windows about 80 a run (160 billed), the
+# generated projects about 75; about 670 billed minutes a month. Compiling the
+# workspace's own crates dominates, so the dependency cache saves little. Run
+# the workflow by hand (workflow_dispatch) after changing a crate that nothing
+# else covers, and before a release on both platforms.
 #
 # Not run here: the measurements marked `#[ignore]` in navree-http and
 # navree-db (timings printed for a person to read), the fixture rewriter in
@@ -43,9 +42,9 @@ name: Rust suites
 
 on:
   schedule:
-    # Sundays 03:47 UTC: Linux and Windows.
+    # Sundays 03:47 UTC: Linux.
     - cron: "47 3 * * 0"
-    # The first of the month, 04:47 UTC: the generated projects.
+    # The first of the month, 04:47 UTC: Windows and the generated projects.
     - cron: "47 4 1 * *"
   workflow_dispatch:
     inputs:
@@ -226,7 +225,7 @@ jobs:
 
   windows:
     if: >-
-      (github.event_name == 'schedule' && github.event.schedule == '47 3 * * 0') ||
+      (github.event_name == 'schedule' && github.event.schedule == '47 4 1 * *') ||
       (github.event_name == 'workflow_dispatch' && inputs.windows)
     runs-on: windows-latest
     timeout-minutes: 180

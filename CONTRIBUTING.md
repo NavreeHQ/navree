@@ -199,10 +199,11 @@ on `127.0.0.1` and prints the variables (`scripts/ci-services.sh stop` removes
 them). On Windows without Docker, `scripts/dev-databases.ps1 start` runs
 PostgreSQL with TimescaleDB, MySQL and MongoDB from portable archives.
 
-`.github/workflows/rust-suites.yml` runs every suite weekly (and on demand):
-on Linux against all of those servers, with each database-switchable crate on
-SQLite, PostgreSQL and MySQL, and on Windows against SQLite. It also builds the
-projects `navree new` generates once a month.
+`.github/workflows/rust-suites.yml` runs every suite on demand and on a
+schedule: weekly on Linux against all of those servers, with each
+database-switchable crate on SQLite, PostgreSQL and MySQL, and monthly on
+Windows against SQLite. It also builds the projects `navree new` generates once
+a month.
 
 ### Web (crm-web)
 
