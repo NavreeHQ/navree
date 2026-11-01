@@ -140,30 +140,54 @@ fn safe_join(dir: &Path, name: &str) -> Option<PathBuf> {
 }
 
 /// Whether Windows could take this path segment for another name: an 8.3 short
-/// name (`~` and digits before the extension), a trailing dot or space (ignored
-/// when opening), a device name (with any extension), or an alternate stream.
+/// name, a trailing dot or space (ignored when opening), a device name (with
+/// any extension), or an alternate stream.
 fn is_windows_alias(segment: &str) -> bool {
-    if segment.ends_with(['.', ' ']) || segment.contains(':') {
-        return true;
-    }
-    let stem = segment.split('.').next().unwrap_or(segment);
-    if let Some((before, digits)) = stem.rsplit_once('~')
-        && !before.is_empty()
+    segment.ends_with(['.', ' '])
+        || segment.contains(':')
+        || is_short_name(segment)
+        || is_device_name(segment)
+}
+
+/// Whether Windows could have made `segment` as the short name of another
+/// file: `~` and digits at the end of a base of at most 8 characters, with at
+/// most one extension of at most 3.
+fn is_short_name(segment: &str) -> bool {
+    let (base, extension) = segment.split_once('.').unwrap_or((segment, ""));
+    let Some((before, digits)) = base.rsplit_once('~') else {
+        return false;
+    };
+    !before.is_empty()
         && !digits.is_empty()
         && digits.bytes().all(|byte| byte.is_ascii_digit())
-    {
+        && base.chars().count() <= 8
+        && !extension.contains('.')
+        && extension.chars().count() <= 3
+}
+
+/// Whether `segment` is the name of a Windows device: `CON`, `PRN`, `AUX`,
+/// `NUL`, `CONIN$`, `CONOUT$`, `CLOCK$`, `COM` and `LPT` with a digit, in any
+/// case, followed by an extension or spaces or nothing.
+fn is_device_name(segment: &str) -> bool {
+    let base = segment
+        .split('.')
+        .next()
+        .unwrap_or(segment)
+        .trim_end_matches(' ');
+    let upper = base.to_uppercase();
+    if matches!(
+        upper.as_str(),
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$" | "CLOCK$"
+    ) {
         return true;
     }
-    let device = stem.to_ascii_uppercase();
-    match device.as_str() {
-        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$" => true,
-        _ => {
-            let (kind, number) = device.split_at(device.len().min(3));
-            matches!(kind, "COM" | "LPT")
-                && number.len() == 1
-                && number.bytes().all(|byte| (b'1'..=b'9').contains(&byte))
-        }
-    }
+    let mut letters = upper.chars();
+    let prefix: String = letters.by_ref().take(3).collect();
+    matches!(prefix.as_str(), "COM" | "LPT")
+        && matches!(
+            (letters.next(), letters.next()),
+            (Some('0'..='9' | '\u{b9}' | '\u{b2}' | '\u{b3}'), None)
+        )
 }
 
 /// Modification time and size: what the up-to-date check compares.
@@ -240,11 +264,44 @@ mod tests {
     }
 
     #[test]
+    fn a_name_with_a_character_across_its_third_byte_is_a_name() {
+        for segment in [
+            "ab\u{e9}.html",
+            "\u{e9}\u{65e5}.html",
+            "se\u{f1}or.html",
+            "na\u{ef}ve.html",
+        ] {
+            assert!(!is_windows_alias(segment), "{segment}");
+        }
+        for segment in [
+            "COM\u{b9}",
+            "com\u{b2}.html",
+            "LPT\u{b3}.txt",
+            "COM0",
+            "NUL .html",
+            "CLOCK$",
+            "clock$.html",
+        ] {
+            assert!(is_windows_alias(segment), "{segment}");
+        }
+    }
+
+    #[test]
+    fn only_what_a_short_name_can_be_is_taken_for_one() {
+        for segment in ["AVERYL~1.HTM", "a~12.htm", "HIDDEN~1"] {
+            assert!(is_windows_alias(segment), "{segment}");
+        }
+        for segment in ["notes~2024.html", "a~1.b.html", "page~1x.html", "a~.html"] {
+            assert!(!is_windows_alias(segment), "{segment}");
+        }
+    }
+
+    #[test]
     fn names_windows_also_answers_to_are_recognized_everywhere() {
         for segment in [
             "HIDDEN~1",
             "AVERYL~1.HTM",
-            "a~12.html",
+            "a~12.htm",
             "page.html.",
             "page.html ",
             "dir.",
