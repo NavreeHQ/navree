@@ -24,32 +24,51 @@ pub(crate) enum Value {
 }
 
 /// A JSON object: its entries in file order, a repeated key keeping the place
-/// of its first appearance and the value of its last.
+/// of its first appearance and the value of its last. An object with many
+/// keys finds them through an index.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub(crate) struct Object {
     entries: Vec<(Rc<str>, Value)>,
+    index: HashMap<Rc<str>, usize>,
 }
 
+/// Objects with more keys than this are searched through the index.
+const INDEXED_FROM: usize = 16;
+
 impl Object {
+    fn place(&self, key: &str) -> Option<usize> {
+        if self.entries.len() > INDEXED_FROM {
+            self.index.get(key).copied()
+        } else {
+            self.entries.iter().position(|(name, _)| &**name == key)
+        }
+    }
+
+    fn reindex(&mut self) {
+        self.index.clear();
+        if self.entries.len() > INDEXED_FROM {
+            for (place, (name, _)) in self.entries.iter().enumerate() {
+                self.index.insert(Rc::clone(name), place);
+            }
+        }
+    }
+
     /// The value under `key`.
     pub(crate) fn get(&self, key: &str) -> Option<&Value> {
-        self.entries
-            .iter()
-            .find(|(name, _)| &**name == key)
+        self.place(key)
+            .and_then(|place| self.entries.get(place))
             .map(|(_, value)| value)
     }
 
     /// The value under `key`, to change.
     pub(crate) fn get_mut(&mut self, key: &str) -> Option<&mut Value> {
-        self.entries
-            .iter_mut()
-            .find(|(name, _)| &**name == key)
-            .map(|(_, value)| value)
+        let place = self.place(key)?;
+        self.entries.get_mut(place).map(|(_, value)| value)
     }
 
     /// Whether `key` is present, whatever its value.
     pub(crate) fn contains(&self, key: &str) -> bool {
-        self.get(key).is_some()
+        self.place(key).is_some()
     }
 
     /// How many keys there are.
@@ -61,13 +80,23 @@ impl Object {
     pub(crate) fn set(&mut self, key: &str, value: Value) {
         match self.get_mut(key) {
             Some(slot) => *slot = value,
-            None => self.entries.push((Rc::from(key), value)),
+            None => {
+                let name: Rc<str> = Rc::from(key);
+                if self.entries.len() >= INDEXED_FROM {
+                    self.index.insert(Rc::clone(&name), self.entries.len());
+                }
+                self.entries.push((name, value));
+                if self.entries.len() == INDEXED_FROM + 1 {
+                    self.reindex();
+                }
+            }
         }
     }
 
     /// Removes `key`.
     pub(crate) fn remove(&mut self, key: &str) {
         self.entries.retain(|(name, _)| &**name != key);
+        self.reindex();
     }
 
     /// The entries as JavaScript's `Object.entries` lists them: keys that are
@@ -399,7 +428,6 @@ impl Reader<'_> {
         let depth = self.nested(depth)?;
         self.at += 1;
         let mut object = Object::default();
-        let mut places: HashMap<Rc<str>, usize> = HashMap::new();
         self.skip_space();
         if self.eat(b'}') {
             return Ok(Value::Obj(Rc::new(object)));
@@ -409,23 +437,13 @@ impl Reader<'_> {
             if self.peek() != Some(b'"') {
                 return Err(self.fail("expected a key"));
             }
-            let key: Rc<str> = Rc::from(self.string()?);
+            let key = self.string()?;
             self.skip_space();
             if !self.eat(b':') {
                 return Err(self.fail("expected ':'"));
             }
             let value = self.value(depth)?;
-            match places.get(&key) {
-                Some(place) => {
-                    if let Some(entry) = object.entries.get_mut(*place) {
-                        entry.1 = value;
-                    }
-                }
-                None => {
-                    places.insert(Rc::clone(&key), object.entries.len());
-                    object.entries.push((key, value));
-                }
-            }
+            object.set(&key, value);
             self.skip_space();
             if self.eat(b',') {
                 continue;

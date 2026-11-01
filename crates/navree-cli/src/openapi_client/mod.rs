@@ -15,6 +15,7 @@ mod refs;
 mod transform;
 mod ts;
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::forward::{Invocation, forward};
@@ -96,6 +97,26 @@ pub fn generate(document: &str) -> Result<Generated, GenerateError> {
     if u64::try_from(document.len()).map_or(true, |len| len > MAX_DOCUMENT_BYTES) {
         return Err(GenerateError::TooLarge);
     }
+    // The document nests no deeper than `json::MAX_DEPTH`, so the work below
+    // recurses a bounded number of times; it runs on a thread whose stack is
+    // sized for that, whatever stack the caller has.
+    std::thread::scope(|scope| {
+        std::thread::Builder::new()
+            .name("openapi-client".to_owned())
+            .stack_size(STACK_BYTES)
+            .spawn_scoped(scope, || generate_here(document))
+            .map_err(|e| GenerateError::Unsupported(format!("cannot start the generator: {e}")))?
+            .join()
+            .map_err(|_| {
+                GenerateError::Unsupported("the generator stopped unexpectedly".to_owned())
+            })?
+    })
+}
+
+/// The stack the generator's thread gets. It is address space until used.
+const STACK_BYTES: usize = 64 * 1024 * 1024;
+
+fn generate_here(document: &str) -> Result<Generated, GenerateError> {
     let document = json::parse(document).map_err(GenerateError::NotJson)?;
     check(&document).map_err(GenerateError::Unsupported)?;
     let declarations = transform::declarations(document).map_err(GenerateError::Unsupported)?;
@@ -141,7 +162,7 @@ fn check(document: &Value) -> Result<(), String> {
         ));
     }
     check_refs(document, document)?;
-    let mut seen: Vec<&str> = Vec::new();
+    let mut seen: HashSet<&str> = HashSet::new();
     for section in ["paths", "webhooks"] {
         let items = root.get(section).and_then(Value::as_object);
         for (_, item) in items.map(json::Object::js_entries).unwrap_or_default() {
@@ -154,12 +175,11 @@ fn check(document: &Value) -> Result<(), String> {
                 else {
                     continue;
                 };
-                if seen.contains(&id) {
+                if !seen.insert(id) {
                     return Err(format!(
                         "Every operation must have a unique `operationId`: `{id}` is used twice"
                     ));
                 }
-                seen.push(id);
             }
         }
     }
@@ -189,6 +209,12 @@ fn check_refs(root: &Value, node: &Value) -> Result<(), String> {
                     };
                     match found.get("$ref").and_then(Value::as_str) {
                         Some(again) if again.starts_with('#') => {
+                            if seen.len() > discriminators::MAX_HOPS {
+                                return Err(format!(
+                                    "Can't resolve $ref \"{reference}\": it leads through more than {} references",
+                                    discriminators::MAX_HOPS
+                                ));
+                            }
                             if seen.contains(&again) {
                                 return Err(format!(
                                     "Self-referencing circular pointer: \"{reference}\""

@@ -2,7 +2,7 @@
 //! mapped schema gets so that TypeScript can tell the variants of a union
 //! apart.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::json::Value;
 use super::refs::{create_ref, parse_ref};
@@ -13,8 +13,11 @@ pub(crate) struct Discriminators {
     /// Each schema's discriminator object, by the pointer of the schema.
     pub(crate) objects: HashMap<String, Value>,
     /// The references whose schema already has its discriminator property.
-    pub(crate) refs_handled: Vec<String>,
+    pub(crate) refs_handled: HashSet<String>,
 }
+
+/// How many references one reference may lead through.
+pub(crate) const MAX_HOPS: usize = 64;
 
 /// Where a reference leads: the keys from the root, following a chain of
 /// references to the end. `None` when it does not lead anywhere.
@@ -43,6 +46,15 @@ pub(crate) fn resolve_keys(
         .and_then(Value::as_str)
         .filter(|r| !r.is_empty())
     {
+        if visited.len() >= MAX_HOPS {
+            warn(
+                warnings,
+                format!(
+                    "Could not resolve $ref \"{reference}\": it leads through too many references"
+                ),
+            );
+            return None;
+        }
         if visited.iter().any(|seen| seen == next) {
             warn(
                 warnings,
@@ -78,10 +90,13 @@ fn value_at_mut<'a>(doc: &'a mut Value, keys: &[String]) -> Option<&'a mut Value
 
 /// Adds a warning once.
 pub(crate) fn warn(warnings: &mut Vec<String>, message: String) {
-    if !warnings.contains(&message) {
+    if warnings.len() < MAX_WARNINGS && !warnings.contains(&message) {
         warnings.push(message);
     }
 }
+
+/// How many warnings are kept.
+const MAX_WARNINGS: usize = 50;
 
 /// Every object of the document that `want` accepts, with the pointer of its
 /// place, in document order (keys that are numbers first, as JavaScript lists
@@ -163,6 +178,7 @@ pub(crate) fn scan(doc: &mut Value, warnings: &mut Vec<String>) -> Discriminator
         };
         // (reference, inferred value, defined values), in order of appearance.
         let mut mapped: Vec<(String, Option<String>, Option<Vec<String>>)> = Vec::new();
+        let mut places: HashMap<String, usize> = HashMap::new();
         for item in one_of {
             let Some(target) = item.get("$ref").and_then(Value::as_str) else {
                 continue;
@@ -171,24 +187,33 @@ pub(crate) fn scan(doc: &mut Value, warnings: &mut Vec<String>) -> Discriminator
             if value.is_empty() {
                 continue;
             }
-            match mapped.iter_mut().find(|(name, _, _)| name == target) {
+            match places.get(target).and_then(|place| mapped.get_mut(*place)) {
                 Some(entry) => entry.1 = Some(value.to_owned()),
-                None => mapped.push((target.to_owned(), Some(value.to_owned()), None)),
+                None => {
+                    places.insert(target.to_owned(), mapped.len());
+                    mapped.push((target.to_owned(), Some(value.to_owned()), None));
+                }
             }
         }
         for (value, target) in mapping(&discriminator) {
             if target.is_empty() {
                 continue;
             }
-            match mapped.iter_mut().find(|(name, _, _)| *name == target) {
-                Some(entry) if entry.2.is_some() => {}
-                Some(entry) => *entry = (target.clone(), None, Some(Vec::new())),
-                None => mapped.push((target.clone(), None, Some(Vec::new()))),
-            }
-            if let Some(entry) = mapped.iter_mut().find(|(name, _, _)| *name == target)
-                && let Some(defined) = entry.2.as_mut()
-            {
-                defined.push(value);
+            let place = match places.get(&target) {
+                Some(place) => *place,
+                None => {
+                    places.insert(target.clone(), mapped.len());
+                    mapped.push((target.clone(), None, None));
+                    mapped.len() - 1
+                }
+            };
+            if let Some(entry) = mapped.get_mut(place) {
+                if entry.2.is_none() {
+                    *entry = (target.clone(), None, Some(Vec::new()));
+                }
+                if let Some(defined) = entry.2.as_mut() {
+                    defined.push(value);
+                }
             }
         }
         for (target, inferred, defined) in mapped {
@@ -201,7 +226,7 @@ pub(crate) fn scan(doc: &mut Value, warnings: &mut Vec<String>) -> Discriminator
                 (None, None) => continue,
             };
             if patch(doc, &target, &values, &discriminator, &reference, warnings) {
-                found.refs_handled.push(target);
+                found.refs_handled.insert(target);
             }
         }
     }
@@ -241,7 +266,7 @@ pub(crate) fn scan(doc: &mut Value, warnings: &mut Vec<String>) -> Discriminator
             if !values.is_empty()
                 && patch(doc, &reference, &values, &discriminator, parent, warnings)
             {
-                found.refs_handled.push(reference.clone());
+                found.refs_handled.insert(reference.clone());
             }
             found.objects.insert(reference.clone(), discriminator);
         }

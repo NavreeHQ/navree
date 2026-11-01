@@ -2,6 +2,9 @@
 //! `webhooks`, `components`, `$defs` and `operations`.
 
 use super::discriminators::{self, Discriminators, resolve_keys, value_at};
+use std::cell::Cell;
+use std::collections::{HashMap, HashSet};
+
 use super::json::{Object, Value, js_number};
 use super::refs::{create_ref, escape_pointer, oapi_ref, parse_ref};
 use super::ts::{
@@ -10,6 +13,18 @@ use super::ts::{
 };
 
 type Res<T> = Result<T, String>;
+
+/// The most one document may ask the generator to write, counted in bytes of
+/// TypeScript or so. A schema that lists several types is written once for
+/// each, so what a document asks for can grow much faster than the document.
+const MAX_WORK: usize = 32 * 1024 * 1024;
+
+fn too_much_work() -> String {
+    format!(
+        "the document asks for more than {} MiB of TypeScript",
+        MAX_WORK / (1024 * 1024)
+    )
+}
 
 /// The methods of a path item, in the order they are written.
 const METHODS: [&str; 8] = [
@@ -42,6 +57,7 @@ pub(crate) fn declarations(mut doc: Value) -> Res<Declarations> {
         discriminators,
         footer: Vec::new(),
         warnings,
+        work: Cell::new(0),
     };
     let mut statements = Vec::new();
     let no_sections = Value::object([]);
@@ -71,6 +87,9 @@ pub(crate) fn declarations(mut doc: Value) -> Res<Declarations> {
             _ => statements.push(empty),
         }
     }
+    if generator.work.get() > MAX_WORK {
+        return Err(too_much_work());
+    }
     let mut has_operations = false;
     for item in generator.footer {
         match item {
@@ -98,6 +117,8 @@ struct Generator<'d> {
     discriminators: Discriminators,
     footer: Vec<Footer>,
     warnings: Vec<String>,
+    /// What the declarations have cost so far, in bytes of text or so.
+    work: Cell<usize>,
 }
 
 /// The entries of an object as JavaScript lists them (none for anything
@@ -216,11 +237,24 @@ impl Generator<'_> {
             };
             lines.push(format!("@enum {{{kind}{null}}}"));
         }
-        doc_comment(&lines)
+        let comment = doc_comment(&lines);
+        self.spend(comment.as_ref().map_or(0, String::len));
+        comment
+    }
+
+    /// How a property is named, counted against the work.
+    fn key(&self, name: &str) -> Key {
+        self.spend(name.len() + 16);
+        property_key(name)
+    }
+
+    /// Counts `units` against the work one document may ask for.
+    fn spend(&self, units: usize) {
+        self.work.set(self.work.get().saturating_add(units));
     }
 
     fn member(&self, key: &str, ty: Ty, node: &Value) -> Member {
-        let mut member = Member::new(property_key(key), ty);
+        let mut member = Member::new(self.key(key), ty);
         member.comment = self.comment(node);
         member
     }
@@ -238,7 +272,7 @@ impl Generator<'_> {
                 members.push(self.member(url, ty, item));
             } else {
                 let ty = self.path_item(item, &create_ref(&["paths", url]))?;
-                members.push(Member::new(property_key(url), ty));
+                members.push(Member::new(self.key(url), ty));
             }
         }
         Ok(Ty::Literal(members))
@@ -248,7 +282,7 @@ impl Generator<'_> {
         let mut members = Vec::new();
         for (name, item) in entries(Some(webhooks)) {
             let ty = self.path_item(item, &create_ref(&["webhooks", name]))?;
-            members.push(Member::new(property_key(name), ty));
+            members.push(Member::new(self.key(name), ty));
         }
         Ok(Ty::Literal(members))
     }
@@ -296,6 +330,7 @@ impl Generator<'_> {
     ) -> Res<Vec<Value>> {
         let own = parameter_list(operation.get("parameters"), path)?;
         let mut keyed: Vec<(String, Value)> = Vec::new();
+        let mut places: HashMap<String, usize> = HashMap::new();
         for parameter in shared.iter().chain(&own) {
             let described = if parameter.has("$ref") {
                 parameter
@@ -315,9 +350,12 @@ impl Generator<'_> {
                 }
                 None => "undefined-undefined".to_owned(),
             };
-            match keyed.iter_mut().find(|(name, _)| *name == key) {
+            match places.get(&key).and_then(|place| keyed.get_mut(*place)) {
                 Some(entry) => entry.1 = parameter.clone(),
-                None => keyed.push((key, parameter.clone())),
+                None => {
+                    places.insert(key.clone(), keyed.len());
+                    keyed.push((key, parameter.clone()));
+                }
             }
         }
         Ok(keyed.into_iter().map(|(_, parameter)| parameter).collect())
@@ -409,7 +447,7 @@ impl Generator<'_> {
                 let name = js_text(resolved.get("name"));
                 let key = match resolved.get("name") {
                     Some(Value::Num(number)) if *number >= 0.0 => Key::Number(js_number(*number)),
-                    Some(Value::Str(name)) => property_key(name),
+                    Some(Value::Str(name)) => self.key(name),
                     _ => Key::Quoted(name.clone()),
                 };
                 let optional = place != "path" && !truthy(resolved.get("required"));
@@ -583,6 +621,10 @@ impl Generator<'_> {
 
     /// The type of a schema.
     fn schema(&mut self, node: &Value, path: &str) -> Res<Ty> {
+        self.spend(64);
+        if self.work.get() > MAX_WORK {
+            return Err(too_much_work());
+        }
         if !node.truthy() {
             return Ok(NEVER);
         }
@@ -705,11 +747,7 @@ impl Generator<'_> {
                 ty = self.schema(item, path)?;
                 let resolved = self.resolve(reference);
                 if let Some(resolved) = resolved.filter(|resolved| resolved.has("properties"))
-                    && !self
-                        .discriminators
-                        .refs_handled
-                        .iter()
-                        .any(|r| r == reference)
+                    && !self.discriminators.refs_handled.contains(reference)
                 {
                     let properties = resolved.get("properties");
                     let valid: Vec<&str> = required
@@ -829,14 +867,18 @@ impl Generator<'_> {
         path: &str,
     ) -> Res<Ty> {
         let one_of = object.get("oneOf").and_then(Value::as_array);
+        let one_of_types: HashSet<&str> = one_of
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|member| member.get("type").and_then(Value::as_str))
+            .collect();
         let mut unique = Vec::with_capacity(types.len());
         for kind in types {
             let name = kind.as_str();
-            if let (Some(one_of), Some(name)) = (one_of, name)
+            if let Some(name) = name
+                && one_of.is_some()
                 && matches!(name, "boolean" | "string" | "number" | "integer" | "null")
-                && one_of
-                    .iter()
-                    .any(|member| member.get("type").and_then(Value::as_str) == Some(name))
+                && one_of_types.contains(name)
             {
                 continue;
             }
@@ -862,11 +904,7 @@ impl Generator<'_> {
 
         if ["allOf", "anyOf"].iter().any(|key| truthy(object.get(key)))
             && !truthy(object.get("discriminator"))
-            && !self
-                .discriminators
-                .refs_handled
-                .iter()
-                .any(|handled| handled == path)
+            && !self.discriminators.refs_handled.contains(path)
             && let Some(discriminator) = self.discriminators.objects.get(path)
         {
             members.insert(0, discriminator_property(discriminator, path));
@@ -915,7 +953,7 @@ impl Generator<'_> {
                     Some(reference) => oapi_ref(text(Some(reference), "$ref")?, None)?,
                     None => self.schema(property, &create_ref(&[path, name]))?,
                 };
-                let mut member = Member::new(property_key(name), ty).optional(!required);
+                let mut member = Member::new(self.key(name), ty).optional(!required);
                 member.readonly = read_only;
                 member.comment = self.comment(property);
                 members.push(member);
@@ -930,7 +968,7 @@ impl Generator<'_> {
                 let mut definitions = Vec::new();
                 for (name, definition) in defs {
                     let ty = self.schema(definition, &create_ref(&[path, "$defs", name]))?;
-                    let mut member = Member::new(property_key(name), ty);
+                    let mut member = Member::new(self.key(name), ty);
                     member.readonly = truthy(definition.get("readOnly"));
                     member.comment = self.comment(definition);
                     definitions.push(member);
