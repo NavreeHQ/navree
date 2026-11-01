@@ -653,6 +653,57 @@ fn an_edit_does_without_what_only_an_annotation_refers_to() {
     }
 }
 
+#[test]
+fn an_edit_follows_references_to_references_wherever_a_page_has_them() {
+    let body = |catalog: &str, tree: &str, page: &str, sixth: &str, seventh: &str| {
+        file(
+            &[
+                format!("<</Type/Catalog/Pages {catalog}>>").into_bytes(),
+                format!("<</Type/Pages/Kids[{tree}]/Count 1>>").into_bytes(),
+                format!("<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R{page}>>")
+                    .into_bytes(),
+                stream("", ORIGINAL),
+                FONT.to_vec(),
+                sixth.as_bytes().to_vec(),
+                seventh.as_bytes().to_vec(),
+            ],
+            "<</Root 1 0 R/Size 8>>",
+        )
+    };
+    let resources = "/Resources<</Font<</F 5 0 R>>>>";
+    for bytes in [
+        // A kid, the tree's root, the resources, the fonts.
+        body("2 0 R", "6 0 R", resources, "3 0 R", "0"),
+        body("6 0 R", "3 0 R", resources, "2 0 R", "0"),
+        body(
+            "2 0 R",
+            "3 0 R",
+            "/Resources 6 0 R",
+            "7 0 R",
+            "<</Font<</F 5 0 R>>>>",
+        ),
+        body(
+            "2 0 R",
+            "3 0 R",
+            "/Resources<</Font 6 0 R>>",
+            "7 0 R",
+            "<</F 5 0 R>>",
+        ),
+    ] {
+        let pdf = Pdf::from_bytes(bytes).unwrap();
+        assert!(pdf.text().unwrap().contains("Original page text"));
+        for edited in [
+            pdf.with_metadata("T", None).unwrap(),
+            pdf.stamp(&Stamp::text("PAID")).unwrap(),
+            pdf.overlay(&Pdf::from_lines(["SEAL"]), Pages::All).unwrap(),
+            Pdf::merge([&pdf]).unwrap(),
+        ] {
+            let text = edited.text().unwrap();
+            assert!(text.contains("Original page text"), "{text:?}");
+        }
+    }
+}
+
 /// `pages` pages that are `<<>>` at one place of an object stream.
 fn empty_pages(pages: u32) -> Vec<u8> {
     let kids: String = (0..pages).map(|i| format!("{} 0 R ", 100 + i)).collect();
@@ -818,8 +869,8 @@ mod peak {
 
     /// What a process holds past what is counted: its allocator's own.
     const SLACK: usize = 8 << 20;
-    /// What the documentation says an edit adds for a page, at the most.
-    const ADDED_FOR_A_PAGE: usize = 3 * 1024;
+    /// What the documentation says an edit holds for a page, at the most.
+    const ADDED_FOR_A_PAGE: usize = 4 * 1024;
 
     /// The objects `bytes` is counted as holding.
     fn counted(bytes: &[u8]) -> usize {

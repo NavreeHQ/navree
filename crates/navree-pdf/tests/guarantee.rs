@@ -1055,8 +1055,12 @@ mod peak {
         pdf.table()
     }
 
+    /// What the glyphs of a page hold, each, as the documentation adds it up.
+    const GLYPH_MEMORY: usize = 160;
+
     /// The peak of reading `file`'s text past the documented sum: twice what
-    /// its objects are counted as, the fonts' limit, twice the `content`.
+    /// its objects are counted as, the fonts' limit, twice the `content` and
+    /// what its glyphs hold.
     fn past_the_sum(file: Vec<u8>, content: usize) {
         std::fs::write("/proc/self/clear_refs", "5").unwrap();
         let before = status("VmRSS:");
@@ -1083,6 +1087,17 @@ mod peak {
         match case.as_str() {
             // 8 fonts of 256 texts of 3 x 16,384 bytes: 100 MB if each is built.
             "names" => past_the_sum(long_names(8, 16 * 1024), 0),
+            // 200,000 glyphs: 32 MB, counted as the content.
+            "a-line" => {
+                let content = prefixed(b"BT /F 1 Tf (", b"A", 200_000, b") Tj ET");
+                let allowed = content.len() + 200_000 * GLYPH_MEMORY / 2;
+                past_the_sum(with_font(&content), allowed);
+            }
+            "a-glyph-a-line" => {
+                let content = prefixed(b"BT /F 1 Tf 1000 TL ", b"(A)'", 800_000, b"");
+                let allowed = content.len() + 200_000 * GLYPH_MEMORY / 2;
+                past_the_sum(with_font(&content), allowed);
+            }
             "font-names" => {
                 let mut content = b"BT ".to_vec();
                 for index in 0..360_000 {
@@ -1103,6 +1118,14 @@ mod peak {
     fn glyph_names_hold_what_they_are_counted_as() {
         let past = in_child("names");
         assert!(past < SLACK, "{} MiB past the sum", past >> 20);
+    }
+
+    #[test]
+    fn glyphs_hold_what_the_documentation_says() {
+        for case in ["a-line", "a-glyph-a-line"] {
+            let past = in_child(case);
+            assert!(past < SLACK, "{case}: {} MiB past the sum", past >> 20);
+        }
     }
 
     #[test]

@@ -1215,7 +1215,7 @@ fn font_map<'a>(document: &'a Document, font: &'a Dictionary) -> Option<&'a Stre
 }
 
 /// The entries of the `Differences` read for `font`: those of the
-/// dictionary its `Encoding` leads to, through any number of references.
+/// dictionary its `Encoding` leads to, through references.
 fn differences(document: &Document, font: &Dictionary) -> usize {
     document
         .get(font, b"Encoding")

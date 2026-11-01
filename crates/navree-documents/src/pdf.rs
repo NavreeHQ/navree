@@ -127,8 +127,9 @@ impl Pdf {
     /// its contents, size and resources.
     ///
     /// Like every edit, this refuses a document it would lose part of (an
-    /// object it needs cannot be read: [`DocumentsError::Pdf`]), and one it
-    /// would write more than the file's size plus 256 MiB for
+    /// object its page tree, contents or resources lead to cannot be read:
+    /// [`DocumentsError::Pdf`]), and one it would write more than the file's
+    /// size plus 256 MiB for, or add more than is counted as 256 MiB to
     /// ([`DocumentsError::TooLarge`]).
     pub fn merge<'a>(pdfs: impl IntoIterator<Item = &'a Pdf>) -> Result<Pdf, DocumentsError> {
         let mut merged = Objects::new();
@@ -1124,6 +1125,10 @@ mod tests {
         held.set_added_limit(32 * 1024 * 1024);
         let stamp = Stamp::text("X");
         stamped(held, &stamp).unwrap();
+        let mut counted = read();
+        draw_stamp(&mut counted, &stamp).unwrap();
+        let page = counted.memory_added() / 4_000;
+        assert!((2 * 1024..3 * 1024).contains(&page), "{page} a page");
         let mut small = read();
         small.set_added_limit(1024 * 1024);
         let error = stamped(small, &stamp).unwrap_err();

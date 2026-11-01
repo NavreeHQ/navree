@@ -9,7 +9,7 @@
 //! as UTF-16; others decode nothing). A font without an `Encoding` reads the
 //! standard encoding. An encoding that cannot be read (a cycle of references,
 //! `Identity-H` with no map) falls back to the standard encoding. A glyph name
-//! that cannot be read loses that one code, and a bad item of `Differences`
+//! that cannot be read, or over 127 bytes, loses that one code, and a bad item of `Differences`
 //! that one item.
 
 use std::collections::HashMap;
@@ -176,7 +176,7 @@ pub(crate) fn is_font(document: &Document, font: &Dictionary) -> bool {
     }
 }
 
-/// The name an `Encoding` entry leads to, through any number of references.
+/// The name an `Encoding` entry leads to, through references.
 pub(crate) fn encoding_name<'a>(document: &'a Document, font: &'a Dictionary) -> Option<&'a [u8]> {
     document.get(font, b"Encoding")?.as_name()
 }

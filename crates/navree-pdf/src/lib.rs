@@ -65,11 +65,14 @@
 //! - **Work.** Every byte the reader looks at is charged to
 //!   [`ReadLimits::work`] (1 GiB), again each time it is looked at: what a
 //!   scan passes, what a parse reached before it failed and moved back, what
-//!   each filter reads and writes, whether the next filter works or not. No
-//!   loop looks through a table once for each entry: scans move forward,
-//!   and tables are looked up by key. The time a document takes is in
-//!   proportion to what is charged ([`Document::work_used`]), and is linear
-//!   in the file until the limit stops it.
+//!   each filter reads and writes, whether the next filter works or not. So
+//!   is every object looked up: [`Document::object`], the one way to an object,
+//!   charges 16 bytes, read before or not, so following a reference cannot be
+//!   free, and a chain of references stops at 8. No loop looks through a table
+//!   once for each entry: scans move forward, and tables are looked up by key.
+//!   The time a document takes is in proportion to what is charged
+//!   ([`Document::work_used`]), and is linear in the file until the limit stops
+//!   it.
 //! - **Memory.** Each object, string, name and dictionary entry, each object
 //!   stream and cross-reference stream inflated, and each entry of the
 //!   cross-reference is counted against [`ReadLimits::memory`] (256 MiB) as
@@ -83,6 +86,10 @@
 //!   size (twice that when the cross-reference is wrong about some objects).
 //!   [`Objects::save`] writes at most the file's size plus
 //!   [`ReadLimits::memory`]. A stream has 8 filters at most.
+//! - **Edits.** [`Objects`] from a document have budgets of their own, as large
+//!   as the document's: each lookup costs work as above, and what is added is
+//!   counted as it is added ([`Objects::add`], [`Objects::hold`]), before it is
+//!   held. [`Objects::check`] and saving return the first that ran out.
 //!
 //! A small file that would take more is refused with
 //! [`PdfError::TooLarge`], however it comes to take it. A request for an
@@ -94,10 +101,24 @@
 //!
 //! [`text::page_texts`] reads what each page shows, in reading order, held
 //! to its own [`TextLimits`]: work and text per page and per document, the
-//! glyphs of a page, the nesting of saved states and marked content, caps
-//! on `ToUnicode` maps, enforced by the one reader of a map as it reads, and
-//! the memory of the fonts read. A font's `ToUnicode` map comes before its
+//! character codes of a page, the nesting of saved states and marked content,
+//! caps on `ToUnicode` maps, enforced by the one reader of a map as it reads,
+//! and the memory of the fonts read. A font's `ToUnicode` map comes before its
 //! `Encoding`.
+//!
+//! The work of a page is charged by construction: every operation pays before
+//! its operator is looked at, every character code before it is decoded, and
+//! every charge also takes the objects the document looked up since the last.
+//! What is left out is therefore not free, only cheaper than it should be, and
+//! `tests/guarantee.rs` runs every shape known to come close against the time
+//! a byte of the densest content takes in the same run ([`text::page_texts_counted`]
+//! gives what was charged). No byte charged takes more than 3 of those. In a
+//! release build, where that byte took about 8.5 ns on one core, the slowest
+//! shape is pages showing a line of a million glyphs, 2.3 of them: the whole of
+//! [`TextLimits::document_work`] (1 GiB) spent on it took 22.3 s. A byte of
+//! [`ReadLimits::work`] takes about 10 ns at the most. Peak memory at the
+//! default limits is at most about 1.1 GiB for text, and about 1.4 GiB plus
+//! twice the file for an edit, as the documents guide adds up.
 //!
 //! ## Writing
 //!
