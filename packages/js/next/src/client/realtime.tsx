@@ -68,7 +68,7 @@ export function RealtimeProvider({ server, options, connect, enabled = true, chi
       setValue({ connection: null, state: "disconnected" });
     };
     // The connection is rebuilt only when the server or `enabled` changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, serverKey]);
 
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>;
@@ -104,6 +104,6 @@ export function useChannel<T = unknown>(channel: ChannelRef | null | undefined, 
     if (!connection || channel === null || channel === undefined) return;
     return connection.listen<T>(channel, event, (data) => handlerRef.current(data));
     // `channel` is captured through `key`, which changes exactly when it does.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [connection, key, event]);
 }
