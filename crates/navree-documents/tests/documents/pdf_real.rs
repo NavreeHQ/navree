@@ -67,6 +67,26 @@ fn percent(used: usize, limit: usize) -> f64 {
     used as f64 * 100.0 / limit as f64
 }
 
+/// Scanned documents, the images in them being the files' own: more copies
+/// merge than their bytes would fit in what one document may hold.
+#[test]
+fn a_document_of_images_merges_past_the_memory_of_one_document() {
+    let Some(dir) = corpus() else { return };
+    let pdf = Pdf::from_bytes(std::fs::read(dir.join("images.pdf")).unwrap()).unwrap();
+    let copies = (ReadLimits::default().memory / pdf.len().max(1) + 2).min(2_000);
+    let merged = Pdf::merge(std::iter::repeat_n(&pdf, copies)).unwrap();
+    assert!(
+        merged.len() > ReadLimits::default().memory,
+        "{}",
+        merged.len()
+    );
+    assert_eq!(
+        merged.page_count().unwrap(),
+        copies * pdf.page_count().unwrap()
+    );
+    checked_by_qpdf(&merged, "scanned-merge");
+}
+
 #[test]
 fn real_documents_are_read_and_edited_with_room_to_spare() {
     let Some(dir) = corpus() else { return };

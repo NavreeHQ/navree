@@ -431,6 +431,12 @@ impl Document {
     }
 
     /// The number of bytes of the file, from its header on.
+    /// Whether the file is encrypted: what is read of its streams is then a
+    /// copy of its own, and not the file's bytes.
+    pub(crate) fn is_encrypted(&self) -> bool {
+        self.crypt.is_some()
+    }
+
     pub(crate) fn file_len(&self) -> usize {
         self.data.len()
     }

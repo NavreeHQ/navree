@@ -924,3 +924,83 @@ mod peak {
         assert!(past < SLACK, "{} MiB past the sum", past >> 20);
     }
 }
+
+/// A one-page PDF holding one image of `bytes` of data that nothing compresses.
+fn scanned(bytes: usize) -> Pdf {
+    let mut image = vec![0u8; bytes];
+    let mut state = 0x2545_f491_4f6c_dd1du64;
+    for chunk in image.chunks_mut(8) {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        chunk.copy_from_slice(&state.to_le_bytes()[..chunk.len()]);
+    }
+    let content = b"q 612 0 0 792 0 0 cm /I Do Q".to_vec();
+    Pdf::from_bytes(file(
+        &[
+            b"<</Type/Catalog/Pages 2 0 R>>".to_vec(),
+            b"<</Type/Pages/Kids[3 0 R]/Count 1>>".to_vec(),
+            b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R\
+              /Resources<</XObject<</I 5 0 R>>>>>>"
+                .to_vec(),
+            stream("", &content),
+            stream(
+                "/Type/XObject/Subtype/Image/Width 1000/Height 1000/ColorSpace/DeviceGray\
+                 /BitsPerComponent 8/Filter/DCTDecode",
+                &image,
+            ),
+        ],
+        "<</Root 1 0 R/Size 6>>",
+    ))
+    .unwrap()
+}
+
+#[test]
+fn a_merge_of_scanned_documents_is_held_to_what_it_adds_not_to_the_files_bytes() {
+    // Each image is the file's own: 13 and more of them merge, past the 256 MiB
+    // a document may hold, because no copy of them is made.
+    let pdf = scanned(20 << 20);
+    for copies in [13, 16] {
+        let merged = Pdf::merge(std::iter::repeat_n(&pdf, copies)).unwrap();
+        assert!(
+            merged.len() >= copies * (20 << 20),
+            "{copies}: {} bytes",
+            merged.len()
+        );
+        assert_eq!(merged.page_count().unwrap(), copies);
+    }
+}
+
+#[test]
+fn an_overlay_with_a_scanned_page_counts_what_it_adds() {
+    let page = scanned(300 << 20);
+    let overlaid = page.overlay(&page, Pages::All).unwrap();
+    assert!(overlaid.len() >= 600 << 20, "{}", overlaid.len());
+}
+
+#[test]
+fn a_merge_past_the_limit_names_the_limit_and_not_what_was_left_of_it() {
+    // Objects that are counted as they are read, in numbers that take the
+    // whole of what the documents of one edit share.
+    let kids: String = (0..6_000).map(|i| format!("{} 0 R ", i + 3)).collect();
+    let mut objects = vec![
+        b"<</Type/Catalog/Pages 2 0 R>>".to_vec(),
+        format!("<</Type/Pages/Kids[{kids}]/Count 6000>>").into_bytes(),
+    ];
+    for _ in 0..6_000 {
+        objects.push(b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 9 9]>>".to_vec());
+    }
+    let pdf = Pdf::from_bytes(file(&objects, "<</Root 1 0 R/Size 6003>>")).unwrap();
+    let mut refused = None;
+    for copies in [1, 2, 4, 8, 16, 32, 64, 128, 256] {
+        if let Err(error) = Pdf::merge(std::iter::repeat_n(&pdf, copies)) {
+            refused = Some(error);
+            break;
+        }
+    }
+    let error = refused.expect("a merge that takes more than a document may hold");
+    let text = error.to_string();
+    assert!(matches!(error, DocumentsError::TooLarge(_)), "{text}");
+    assert!(!text.contains("of 0 bytes"), "{text}");
+    assert!(text.contains("256 MiB"), "{text}");
+}

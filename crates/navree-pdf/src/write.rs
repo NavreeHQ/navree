@@ -164,6 +164,8 @@ pub struct Objects {
     read_limits: ReadLimits,
     read_memory: usize,
     read_work: usize,
+    /// The streams hold bytes of their own, decrypted, and not the file's.
+    owns_stream_bytes: bool,
 }
 
 impl Objects {
@@ -202,6 +204,7 @@ impl Objects {
         let listed = document.max_number().min(MAX_KEPT_NUMBER);
         let limits = document.limits();
         let output_limit = document.file_len().saturating_add(limits.memory);
+        let owns_stream_bytes = document.is_encrypted();
         let ReadObjects {
             objects,
             lost,
@@ -224,6 +227,7 @@ impl Objects {
             read_limits: limits,
             read_memory: memory,
             read_work: work,
+            owns_stream_bytes,
         };
         read.name_tree_nodes();
         if let Some((number, generation)) = read.first_needed(&lost) {
@@ -503,14 +507,26 @@ impl Objects {
     }
 
     /// Puts at `id` an object already counted: one read by another
-    /// [`Objects`], or held with [`hold`](Self::hold). Returns what it and its
-    /// place in the table of objects are counted as, for the caller to take
-    /// from the limits it reads the rest within.
-    pub fn adopt(&mut self, id: ObjectId, object: Object) -> usize {
+    /// [`Objects`], or held with [`hold`](Self::hold).
+    pub fn adopt(&mut self, id: ObjectId, object: Object) {
         self.max_number = self.max_number.max(id.0);
-        let counted = memory_of(&object).saturating_add(TABLE_MEMORY);
         self.objects.insert(id, object);
-        counted
+    }
+
+    /// What `object`, one of these objects, holds when it moves to other
+    /// [`Objects`] with [`adopt`](Self::adopt), its place in their table
+    /// included, for the caller to take from the limits it reads the rest
+    /// within. The bytes of a stream are left out: they are the file's own,
+    /// which the caller is holding anyway, and moving the stream copies none of
+    /// them. A decrypted stream's are its own, and count.
+    pub fn memory_kept(&self, object: &Object) -> usize {
+        let counted = memory_of(object).saturating_add(TABLE_MEMORY);
+        match object {
+            Object::Stream(stream) if !self.owns_stream_bytes => {
+                counted.saturating_sub(stream.content.len())
+            }
+            _ => counted,
+        }
     }
 
     /// The ids of the objects `roots` lead to, themselves included.

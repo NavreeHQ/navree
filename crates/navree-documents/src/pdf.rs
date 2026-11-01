@@ -134,8 +134,10 @@ impl Pdf {
     /// one document, for all the inputs together: the memory an input is
     /// counted as is taken from the limit only for the pages it keeps and what
     /// they lead to (not its outlines, forms or tagged structure, which are
-    /// let go of before the next input is read), so many files of ordinary
-    /// size merge, and a few that are each near the limit do not.
+    /// let go of before the next input is read), and never for the bytes of a
+    /// stream, which are the inputs' own: so scanned documents merge whatever
+    /// their images come to, many files of ordinary size merge, and a few that
+    /// each hold objects near the limit do not.
     pub fn merge<'a>(pdfs: impl IntoIterator<Item = &'a Pdf>) -> Result<Pdf, DocumentsError> {
         merge_within(pdfs, ReadLimits::default())
     }
@@ -382,6 +384,9 @@ fn merge_within<'a>(
     // What the inputs after this one, and the pages list, may still take.
     let mut left = limits;
     for pdf in pdfs {
+        if left.memory == 0 || left.work == 0 {
+            return Err(limits_used_up(limits));
+        }
         input_bytes = input_bytes.saturating_add(pdf.0.len());
         let shared = |error| shared_error(error, limits);
         let mut document =
@@ -420,8 +425,10 @@ fn merge_within<'a>(
                     _ => true,
                 };
             if keep {
-                // Counted when its document was read, and now again as kept.
-                kept = kept.saturating_add(merged.adopt(id, object));
+                // Counted when its document was read, and now again as kept,
+                // but for the bytes of a stream: those are the input's.
+                kept = kept.saturating_add(document.memory_kept(&object));
+                merged.adopt(id, object);
             }
         }
         left = ReadLimits {
@@ -433,6 +440,9 @@ fn merge_within<'a>(
     }
     if kids.is_empty() {
         return Err(DocumentsError::Edit("nothing to merge".into()));
+    }
+    if left.memory == 0 || left.work == 0 {
+        return Err(limits_used_up(limits));
     }
     // What is left is for the pages list, and for compressing what is written.
     merged.set_work_limit(left.work);
@@ -454,19 +464,43 @@ fn merge_within<'a>(
     merged.trailer.set("Root", catalog_id);
     merged.prune();
     merged.set_output_limit(output_limit);
-    save(merged)
+    merged
+        .check()
+        .map_err(|error| shared_error(error, limits))?;
+    save(merged).map_err(|error| match error {
+        DocumentsError::TooLarge(message) => {
+            DocumentsError::TooLarge(format!("{message}; {}", shared_limits(limits)))
+        }
+        other => other,
+    })
+}
+
+/// That the PDFs of one edit share the limits of one document, and what those
+/// are.
+fn shared_limits(limits: ReadLimits) -> String {
+    format!(
+        "the PDFs of one edit share the limits of one document ({} MiB of memory, {} MiB of \
+         bytes scanned)",
+        limits.memory >> 20,
+        limits.work >> 20,
+    )
+}
+
+/// The inputs of an edit have used all of `limits`, with more to do.
+fn limits_used_up(limits: ReadLimits) -> DocumentsError {
+    DocumentsError::TooLarge(format!(
+        "{}, and the PDFs before this point have used them up",
+        shared_limits(limits)
+    ))
 }
 
 /// What an input read within what is left of `limits` ran out of: the
 /// limit named is what was left, so the error says what the whole is.
 fn shared_error(error: PdfError, limits: ReadLimits) -> DocumentsError {
     match error {
-        PdfError::TooLarge(message) => DocumentsError::TooLarge(format!(
-            "{message}; the PDFs of one edit share the limits of one document ({} MiB of memory, \
-             {} MiB of bytes scanned)",
-            limits.memory >> 20,
-            limits.work >> 20,
-        )),
+        PdfError::TooLarge(message) => {
+            DocumentsError::TooLarge(format!("{message}; {}", shared_limits(limits)))
+        }
         other => pdf_error(other),
     }
 }
@@ -543,7 +577,8 @@ fn overlaid(document: &mut Objects, overlay: &Pdf, pages: &Pages) -> Result<(), 
     let mut adopted = 0usize;
     for (id, object) in std::mem::take(&mut source.objects) {
         if !matches!(object.type_name(), Some(b"Catalog" | b"Pages" | b"Page")) {
-            adopted = adopted.saturating_add(document.adopt(id, object));
+            adopted = adopted.saturating_add(source.memory_kept(&object));
+            document.adopt(id, object);
         }
     }
     // Counted with the document's own from here on.
