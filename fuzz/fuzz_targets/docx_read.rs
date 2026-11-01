@@ -6,8 +6,8 @@
 //! document part of a well-formed package, so that a mutation reaches the XML
 //! reader instead of stopping at a checksum.
 //!
-//! Invariants: a file that is accepted reads as text; the text is no longer
-//! than the limit; a refusal is a `Docx` or a `TooLarge` error; and limits
+//! Invariants: a file that is accepted reads as text; the text is within
+//! the limit; a refusal is a `Docx` or a `TooLarge` error; and limits
 //! that are looser give the same text for a file the tight ones accepted.
 #![no_main]
 
