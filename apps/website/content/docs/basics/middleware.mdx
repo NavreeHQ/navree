@@ -5,7 +5,7 @@ description: "The global Tower layers Navree installs and their order, adding yo
 
 ## Introduction
 
-Middleware is code that runs around your handlers: it can read and change the request before the handler, refuse it, and read and change the response after. Navree is built on Tower, so its middleware is Tower layers: write one as an async function with `navree::http::middleware::from_fn`, or use any `tower-http` layer.
+Middleware is code that runs around your handlers: it can read and change the request before the handler, refuse it, and read and change the response after. Navree is built on Tower, so its middleware is Tower layers: write one as an async function with `navree::http::middleware::from_fn`, or use any Tower layer.
 
 Navree installs a fixed pipeline of layers for you: request ids, logging, CORS, timeouts, security headers, compression, error rendering, maintenance mode, rate limiting and body limits. On top of that you can:
 

@@ -101,7 +101,7 @@ On the way out, this layer writes one log line per request (target `navree::requ
 ### Security headers and compression
 
 - **Security headers** (`http.security_headers`, on by default) adds `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Strict-Transport-Security: max-age=31536000; includeSubDomains` and a `Content-Security-Policy` of `default-src 'none'; frame-ancestors 'none'; base-uri 'none'` to every response that doesn't set them itself.
-- **Compression** (`http.compression`, on by default) compresses responses with gzip when the client accepts them. Brotli isn't built in. Server-sent events (`text/event-stream`) aren't compressed.
+- **Compression** (`http.compression`, on by default) compresses responses with gzip when the client accepts them, through Navree's `CompressionLayer` on flate2 (level 6). Brotli isn't built in. Server-sent events (`text/event-stream`), images other than SVG, gRPC other than gRPC-Web, bodies under 32 bytes and responses that already have a `Content-Encoding` or a `Content-Range` aren't compressed; every response that could be gets `Vary: accept-encoding`. A compressed body streams in frames of at most 4 KiB, read no faster than the client takes them, and whatever the handler has sent is flushed to the client as soon as the handler's body waits.
 
 ### Error rendering
 
