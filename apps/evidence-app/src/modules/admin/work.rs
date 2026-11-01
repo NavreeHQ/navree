@@ -1,14 +1,16 @@
 //! Work in the panel: projects, tasks and reports.
 //!
 //! These models belong to workspaces, and the panel is not inside any one
-//! workspace, so each resource opens its query across every workspace
-//! (`without_workspace_scope`) and runs its writes inside the workspace of
-//! the record it changes.
+//! workspace, so each resource works across every workspace
+//! (`Workspaces::Every`) and runs its writes inside the workspace of the
+//! record it changes. The connection's role decides what it sees: the
+//! compose database's role is a superuser, so it sees every workspace.
 
 use chrono::Utc;
 use navree::BoxFuture;
 use navree::helm::{
     Action, ActionResult, Field, Filter, FormData, Metric, RecordOf, Resource, SaveContext,
+    Workspaces,
 };
 use navree::orm::prelude::*;
 use navree::prelude::*;
@@ -61,6 +63,7 @@ impl Resource for ProjectAdmin {
     const TITLE: &'static str = "name";
     const SEARCH: &'static [&'static str] = &["name", "description"];
     const ORDER: i32 = 1;
+    const WORKSPACES: Workspaces = Workspaces::Every;
 
     fn fields(&self) -> Vec<Field> {
         vec![
@@ -80,10 +83,6 @@ impl Resource for ProjectAdmin {
             Field::datetime("created_at").readonly().sortable(),
             Field::has_many::<TaskAdmin>("project_id").label("Tasks"),
         ]
-    }
-
-    fn query(&self, query: Builder<Project>) -> Builder<Project> {
-        query.without_workspace_scope()
     }
 
     fn filters(&self) -> Vec<Filter<Project>> {
@@ -265,6 +264,7 @@ impl Resource for TaskAdmin {
     const TITLE: &'static str = "title";
     const SEARCH: &'static [&'static str] = &["title"];
     const ORDER: i32 = 2;
+    const WORKSPACES: Workspaces = Workspaces::Every;
 
     fn fields(&self) -> Vec<Field> {
         vec![
@@ -290,10 +290,6 @@ impl Resource for TaskAdmin {
             Field::datetime("created_at").readonly().sortable(),
             Field::datetime("updated_at").readonly().hide_on_index(),
         ]
-    }
-
-    fn query(&self, query: Builder<Task>) -> Builder<Task> {
-        query.without_workspace_scope()
     }
 
     fn filters(&self) -> Vec<Filter<Task>> {
@@ -593,6 +589,7 @@ impl Resource for ReportAdmin {
     const ICON: &'static str = "chart-column";
     const SEARCH: &'static [&'static str] = &["kind"];
     const ORDER: i32 = 3;
+    const WORKSPACES: Workspaces = Workspaces::Every;
 
     fn fields(&self) -> Vec<Field> {
         vec![
@@ -633,10 +630,6 @@ impl Resource for ReportAdmin {
                 .readonly()
                 .sortable(),
         ]
-    }
-
-    fn query(&self, query: Builder<Report>) -> Builder<Report> {
-        query.without_workspace_scope()
     }
 
     fn filters(&self) -> Vec<Filter<Report>> {

@@ -672,7 +672,8 @@ pub(crate) async fn two_factor(request: Request) -> Response {
 }
 
 /// `POST {path}/workspace`: works in the workspace named by the form's
-/// `workspace` field from now on (a cookie), or in none when it is empty.
+/// `workspace` field for the rest of the session (a cookie), or in none when
+/// it is empty.
 pub(crate) async fn choose_workspace(
     panel: Panel,
     headers: HeaderMap,

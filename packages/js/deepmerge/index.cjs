@@ -20,7 +20,7 @@ const maxWork = 5000000;
 // counter serves every call, nested ones (from a custom merge) included.
 let depth = 0;
 
-// The steps the merge running now has done, counted from its outermost call.
+// The steps the merge in progress has done, counted from its outermost call.
 let work = 0;
 
 function spend(steps) {

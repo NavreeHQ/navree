@@ -294,6 +294,8 @@ mod windows_names {
         "AVERYL~1/inner.txt",
         "a/PROGRA~1",
         "secret~2.txt",
+        "up.pdf#1.",
+        "up.pdf#1 ",
     ];
 
     /// Names of devices, which open the device wherever they are.
