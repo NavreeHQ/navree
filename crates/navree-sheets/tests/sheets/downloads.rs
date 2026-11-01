@@ -1,8 +1,5 @@
 //! Downloads of rows a handler has: `Download` and `Exports`, CSV and XLSX.
 
-use std::io::Cursor;
-
-use calamine::{Data, Reader, open_workbook_auto_from_rs};
 use chrono::NaiveDate;
 use futures_util::stream;
 use navree_http::response::IntoResponse;
@@ -13,6 +10,7 @@ use navree_sheets::{
 };
 
 use crate::support::{self, csv_lines};
+use crate::xlsx::{Data, read_xlsx};
 
 #[derive(Exportable)]
 #[export(sheet = "Deals")]
@@ -51,14 +49,6 @@ async fn body(download: Download) -> (http::response::Parts, Vec<u8>) {
     let (parts, body) = download.into_response().into_parts();
     let bytes = navree_http::body::to_bytes(body, usize::MAX).await.unwrap();
     (parts, bytes.to_vec())
-}
-
-fn read_xlsx(bytes: &[u8]) -> (Vec<String>, Vec<Vec<Data>>) {
-    let mut workbook = open_workbook_auto_from_rs(Cursor::new(bytes.to_vec())).unwrap();
-    let names = workbook.sheet_names();
-    let range = workbook.worksheet_range_at(0).unwrap().unwrap();
-    let rows = range.rows().map(<[Data]>::to_vec).collect();
-    (names, rows)
 }
 
 #[tokio::test]
@@ -112,7 +102,7 @@ async fn an_xlsx_download_has_typed_cells_and_the_sheet_name() {
     match &rows[1][2] {
         Data::DateTime(at) => {
             assert_eq!(
-                at.as_datetime().unwrap().date(),
+                at.date(),
                 NaiveDate::from_ymd_opt(2026, 10, 1).unwrap()
             );
         }

@@ -11,3 +11,4 @@ mod i18n;
 mod imports;
 mod servers;
 mod support;
+mod xlsx;

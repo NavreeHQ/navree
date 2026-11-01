@@ -1,10 +1,8 @@
 //! Registered exports: `/api/exports`, at once and queued.
 
-use std::io::Cursor;
 use std::sync::Arc;
 use std::time::Duration;
 
-use calamine::{Data, Reader, open_workbook_auto_from_rs};
 use navree_contracts::{Clock, FixedClock};
 use navree_db::Db;
 use navree_http::response::IntoResponse;
@@ -20,6 +18,7 @@ use crate::support::{
     self, ADMIN, ContactFilter, ContactsExport, OTHER, csv_lines, file_on_disk, id_of, operation,
     principal, run_queue, seed,
 };
+use crate::xlsx::{Data, read_xlsx};
 
 /// Header texts for the export's translation keys.
 struct Headers;
@@ -136,10 +135,8 @@ async fn an_xlsx_export_is_built_page_by_page() {
             .unwrap()
             .contains("contacts.xlsx")
     );
-    let mut workbook = open_workbook_auto_from_rs(Cursor::new(response.bytes().to_vec())).unwrap();
-    assert_eq!(workbook.sheet_names(), ["Contacts"]);
-    let range = workbook.worksheet_range_at(0).unwrap().unwrap();
-    let rows: Vec<Vec<Data>> = range.rows().map(<[Data]>::to_vec).collect();
+    let (names, rows) = read_xlsx(&response.bytes());
+    assert_eq!(names, ["Contacts"]);
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[1][0], Data::String("alan@example.com".into()));
     assert_eq!(rows[1][2], Data::Float(41.0));
