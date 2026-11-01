@@ -11,9 +11,11 @@
 //!   `data-active`, `data-invalid`, `data-pending`: states, present or absent.
 //! - `data-ui-*`: the runtime's hooks.
 //!
-//! Attribute names are `&'static str`, so a request can't choose one. `style`
-//! and `on*` are refused (the content security policy would block them
-//! anyway), and URL attributes go through [`Href`].
+//! Attribute names are `&'static str`, so a request can't choose one. `style`,
+//! `srcdoc` and `on*` are refused in any case (the content security policy would
+//! block them anyway), URL attributes go through [`Href`], and elements that load
+//! or navigate (`script`, `style`, `link`, `meta`, `base`, `iframe`, `object`,
+//! `embed`) can't be built.
 
 use std::borrow::Cow;
 
@@ -209,9 +211,21 @@ pub struct Element {
     pub(crate) uses: Uses,
 }
 
-/// An element named `tag`.
+/// Elements a page never writes through the tree: each loads something, runs
+/// something or moves the page. The head has its own writer, in `view`.
+fn is_refused_tag(tag: &str) -> bool {
+    ["script", "style", "link", "meta", "base", "iframe", "object", "embed"].iter().any(|refused| refused.eq_ignore_ascii_case(tag))
+}
+
+/// An element named `tag`. A refused one comes out as a `div`.
 #[inline]
 pub fn el(tag: &'static str) -> Element {
+    let tag = if is_refused_tag(tag) {
+        debug_assert!(false, "`<{tag}>` is not allowed in a page's tree");
+        "div"
+    } else {
+        tag
+    };
     Element {
         tag,
         attrs: Vec::new(),
@@ -222,13 +236,13 @@ pub fn el(tag: &'static str) -> Element {
 
 /// Attributes that hold URLs: their values go through [`Href`].
 fn is_url_attr(name: &str) -> bool {
-    matches!(name, "href" | "src" | "action" | "formaction" | "poster" | "cite" | "ping")
+    ["href", "src", "action", "formaction", "poster", "cite", "ping", "data", "background", "xlink:href"].iter().any(|url| url.eq_ignore_ascii_case(name))
 }
 
 /// Attributes that are never written: inline style and handlers break the
 /// content security policy, and `srcdoc` is a document in an attribute.
 fn is_refused_attr(name: &str) -> bool {
-    name == "style" || name == "srcdoc" || name.starts_with("on")
+    name.eq_ignore_ascii_case("style") || name.eq_ignore_ascii_case("srcdoc") || name.as_bytes().get(..2).is_some_and(|start| start.eq_ignore_ascii_case(b"on"))
 }
 
 impl Element {

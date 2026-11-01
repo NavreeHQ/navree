@@ -279,3 +279,61 @@ fn a_password_field_never_writes_a_value() {
     let html = render(&navree_ui::Input::password("p").value("hunter2").into());
     assert!(!html.contains("hunter2"), "{html}");
 }
+
+fn html_of(element: navree_ui::Element) -> String {
+    render(&element.into())
+}
+
+#[test]
+fn url_attributes_are_checked_in_any_case_and_every_name() {
+    for name in ["href", "HREF", "Href", "src", "SRC", "action", "formaction", "poster", "cite", "ping", "data", "DATA", "xlink:href", "background"] {
+        let html = html_of(el("a").attr(name, "javascript:alert(1)"));
+        assert!(!html.contains("javascript"), "{name}: {html}");
+    }
+}
+
+#[test]
+#[cfg_attr(debug_assertions, should_panic(expected = "not allowed"))]
+fn inline_style_is_never_written() {
+    assert!(!html_of(el("a").attr("style", "color:red")).contains("color"));
+}
+
+#[test]
+#[cfg_attr(debug_assertions, should_panic(expected = "not allowed"))]
+fn a_handler_is_never_written() {
+    assert!(!html_of(el("a").attr("onclick", "alert(1)")).contains("alert"));
+}
+
+#[test]
+#[cfg_attr(debug_assertions, should_panic(expected = "not allowed"))]
+fn a_document_in_an_attribute_is_never_written() {
+    assert!(!html_of(el("iframe").attr("srcdoc", "<b>x</b>")).contains("<b>"));
+}
+
+#[test]
+#[cfg_attr(debug_assertions, should_panic(expected = "not allowed"))]
+fn a_handler_in_capitals_is_never_written() {
+    assert!(!html_of(el("a").attr("ONCLICK", "alert(1)")).contains("alert"));
+}
+
+#[test]
+#[cfg_attr(debug_assertions, should_panic(expected = "not allowed"))]
+fn inline_style_in_mixed_case_is_never_written() {
+    assert!(!html_of(el("a").attr("Style", "color:red")).contains("color"));
+}
+
+#[test]
+fn flags_refuse_the_same_names() {
+    for name in ["style", "Style", "onclick", "ONLOAD", "srcdoc", "SRCDOC"] {
+        assert_eq!(html_of(el("a").flag(name, true)), "<a></a>", "{name}");
+    }
+}
+
+#[test]
+#[cfg_attr(debug_assertions, should_panic(expected = "not allowed"))]
+fn the_elements_that_load_or_navigate_are_never_written() {
+    for tag in ["script", "style", "meta", "base", "link", "iframe", "object", "embed"] {
+        let html = html_of(el(tag).attr("data-x", "1"));
+        assert!(!html.contains(&format!("<{tag}")), "{html}");
+    }
+}
