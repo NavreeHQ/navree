@@ -230,7 +230,7 @@ KiB per filter, fonts read (1 KiB each, `ToUnicode` inflated, up to 8 MiB, plus
 1/16 of the memory reading it builds; 16 bytes per width looked at; 8 per
 `Differences` item and per byte of a glyph name), and marked content's actual
 text each time it is decoded. The time is in proportion: all of it takes about
-22 s on one core on the slowest shape found. Reading text (here and in navree-media's `text::extract`, which
+22 to 30 s on one core on the slowest shape found. Reading text (here and in navree-media's `text::extract`, which
 uses the same code), a font's `ToUnicode` map comes before its `Encoding`, and
 its one reader refuses it past 64 codespace ranges, 131,072 lines, 256 texts in
 one list or 65,792 in all lists. Glyph names may be `uniXXXX` or `uXXXXXX`; one

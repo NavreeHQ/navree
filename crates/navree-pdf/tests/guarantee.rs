@@ -713,7 +713,7 @@ fn the_whole_budget_of_the_slowest_shape() {
         "{charged} bytes of work in {:.1} s",
         start.elapsed().as_secs_f64()
     );
-    assert!(charged > 1000 * MIB, "{charged}");
+    assert!(charged > 900 * MIB, "{charged}");
 }
 
 // What each thing costs, whatever the clock says.

@@ -115,7 +115,7 @@
 //! gives what was charged). No byte charged takes more than 3 of those. In a
 //! release build, where that byte took about 8.5 ns on one core, the slowest
 //! shape is pages showing a line of a million glyphs, 2.3 of them: the whole of
-//! [`TextLimits::document_work`] (1 GiB) spent on it took 22.3 s. A byte of
+//! [`TextLimits::document_work`] (1 GiB) spent on it took 22 to 30 s. A byte of
 //! [`ReadLimits::work`] takes about 10 ns at the most. Peak memory at the
 //! default limits is at most about 1.1 GiB for text, and about 1.4 GiB plus
 //! twice the file for an edit, as the documents guide adds up.
