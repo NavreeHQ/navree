@@ -34,7 +34,7 @@
 //! }
 //! ```
 //!
-//! Where this differs from the interface first drawn up for it, and why:
+//! Why it is shaped as it is:
 //!
 //! - `XlsValue` has a lifetime, and `Text` is a `Cow<str>`: the text of a
 //!   shared string is lent from the table, so a string that a million
@@ -57,8 +57,7 @@
 //! Dates are found as the XLSX reader finds them: a number in a built-in
 //! date or time format (ids 14 to 22, 27 to 36, 45 to 47, 50 to 58) or in a
 //! custom format whose first section has a date or time token outside
-//! quotes, brackets and escapes ([`custom_format_kind`]). The copy here is
-//! private to the module.
+//! quotes, brackets and escapes ([`custom_format_kind`]).
 #![deny(
     clippy::indexing_slicing,
     clippy::unwrap_used,
