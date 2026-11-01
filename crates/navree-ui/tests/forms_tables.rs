@@ -133,6 +133,33 @@ fn a_value_of_the_wrong_type_is_a_field_error_not_a_crash() {
 }
 
 #[test]
+fn every_value_of_the_wrong_type_is_named_at_once() {
+    let mut pairs = good();
+    pairs[1].1 = "lots".to_owned();
+    pairs[3].1 = "<script>".to_owned();
+    pairs.push(("close_date".to_owned(), "someday".to_owned()));
+    pairs.push(("probability".to_owned(), "high".to_owned()));
+    let errors = decode::<NewDeal>(&pairs).unwrap_err();
+    let names: Vec<&str> = errors.keys().map(String::as_str).collect();
+    assert_eq!(names, ["amount", "close_date", "probability", "stage"], "{errors:?}");
+    assert!(errors["amount"][0].contains("enter an amount"), "{errors:?}");
+    assert!(errors["close_date"][0].contains("enter a date"), "{errors:?}");
+    assert!(errors["probability"][0].contains("enter a number"), "{errors:?}");
+    assert!(errors["stage"][0].contains("choose one"), "{errors:?}");
+    // One bad value alone still reports one field, and a second pass is the same.
+    let mut one = good();
+    one[1].1 = "lots".to_owned();
+    assert_eq!(decode::<NewDeal>(&one).unwrap_err().len(), 1);
+    // Repeating a field cannot loop or hide the others.
+    let mut twice = good();
+    twice[1].1 = "lots".to_owned();
+    twice.push(("amount".to_owned(), "more".to_owned()));
+    twice[3].1 = "x".to_owned();
+    let errors = decode::<NewDeal>(&twice).unwrap_err();
+    assert_eq!(errors.len(), 2, "{errors:?}");
+}
+
+#[test]
 fn a_rejected_form_keeps_what_was_typed_and_escapes_it() {
     let view = FormView::<NewDeal>::new()
         .post("/deals")

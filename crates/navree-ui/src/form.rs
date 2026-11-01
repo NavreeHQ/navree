@@ -593,10 +593,36 @@ where
             Widget::Input(_) | Widget::Textarea { .. } | Widget::Select | Widget::Radio | Widget::Money => kept.push((field.name, "")),
         }
     }
-    let encoded = encode(&kept);
-    let value: T = match serde_path_to_error::deserialize(urlencoded::Deserializer::new(encoded.as_bytes())) {
-        Ok(value) => value,
-        Err(error) => return Err(type_error::<T>(&error)),
+    // Serde stops at the first value of the wrong type. To name every such field,
+    // take the one it names out and read again: a field that is gone reports
+    // only at the end, as missing, which ends the loop.
+    let mut wrong = FieldErrors::new();
+    let value: T = loop {
+        let encoded = encode(&kept);
+        match serde_path_to_error::deserialize(urlencoded::Deserializer::new(encoded.as_bytes())) {
+            Ok(value) if wrong.is_empty() => break value,
+            Ok(_) => return Err(wrong),
+            Err(error) => {
+                let more = type_error::<T>(&error);
+                let before = kept.len();
+                let mut known = false;
+                for name in more.keys() {
+                    known |= T::FIELDS.iter().any(|field| field.name == name);
+                    kept.retain(|(kept_name, _)| kept_name != name);
+                }
+                let progressed = kept.len() < before;
+                if !known && !wrong.is_empty() {
+                    // Only a field taken out above can be missing now.
+                    return Err(wrong);
+                }
+                for (name, texts) in more {
+                    wrong.entry(name).or_insert(texts);
+                }
+                if !known || !progressed {
+                    return Err(wrong);
+                }
+            }
+        }
     };
     match value.validate() {
         Ok(()) => Ok(value),

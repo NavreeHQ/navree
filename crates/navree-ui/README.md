@@ -171,8 +171,8 @@ cargo run --release -p ui-proof -- bench    # render times, no server
   `FormView::csrf(session.csrf_token())`, or `form::csrf_field` in any other form.
   The session layer reads that field from a urlencoded body of at most 256 KiB;
   a multipart form or a larger body has to send the header, which the runtime does.
-- A wrong-typed value reports only the first such field per submit; rules report
-  every field once the form deserializes.
+- Rules run only once every field has the right type, so a form with a wrong-typed
+  value reports the type errors (all of them) first and the rules after the fix.
 - `Toggle` is a checkbox underneath rather than a button with `aria-pressed`, so that
   it posts and keeps state with no script.
 
