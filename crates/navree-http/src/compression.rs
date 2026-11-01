@@ -42,7 +42,7 @@ const MIN_SIZE: u64 = 32;
 ///   and `text/event-stream`. Content types are compared as written.
 /// - **`Vary: accept-encoding`** is added to every response that could be
 ///   compressed, whatever the client accepts, unless a `Vary` value already
-///   names it.
+///   contains `accept-encoding` (in any case).
 /// - **A compressed response** loses its `Content-Length` and
 ///   `Accept-Ranges` and gets `Content-Encoding: gzip`. Its body is a gzip
 ///   stream at level 6 that keeps streaming, in frames of at most 4 KiB:

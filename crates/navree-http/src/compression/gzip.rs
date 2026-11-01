@@ -358,7 +358,9 @@ impl Encoder {
                     Some((input, taken)) => match self.encode(input, out) {
                         Ok(n) => {
                             **taken += n;
-                            self.step = Step::Encoding { read: read + n };
+                            self.step = Step::Encoding {
+                                read: read.saturating_add(n),
+                            };
                             break;
                         }
                         Err(error) => Step::Failed(error),
