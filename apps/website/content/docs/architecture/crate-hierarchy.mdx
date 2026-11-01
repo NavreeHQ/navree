@@ -30,6 +30,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 | L0 | `navree-bounded` | The bounded in-process cache: sharded locks, a strict capacity, SIEVE eviction, TTL and TTI, single-flight loading. It holds the memory cache store, abilities, token lookups and verified domains, and is re-exported as `navree::bounded` |
 | L0 | `navree-pdf` | The PDF object layer under navree-documents and navree-media: a lazy reader held to a memory and work budget (cross-reference tables and streams, object streams, incremental updates, repair of a broken cross-reference, the standard filters, files encrypted without a password to open them), a writer, and text in reading order |
 | L0 | `navree-glob` | The glob matcher for patterns configured as strings (`*` any run of characters, `?` one character, everything else literal, case-sensitive), matched in time bounded by the pattern times the input: the browser's URL waits, the HTTP client's host allow-list and fake stubs, the Logbook's ignored routes and the CSRF exceptions |
+| L0 | `navree-template` | The template engine under navree-view, navree-cli and navree-harbor: the Jinja syntax, HTML autoescaping, a sandboxed value model, caps on depth, loops, work and output |
 | L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, route and access attributes, `#[mcp_server]` |
 | L0 | `navree-i18n-macros` | `embed_locales!`: Fluent files embedded in the binary, checked at compile time (through navree-i18n) |
 | L0 | `navree-validation-macros` | `#[derive(Validate)]` and its `#[validate(...)]` field rules (re-exported by navree-validation) |
@@ -43,7 +44,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 | L2 | `navree-log` | tracing subscriber, JSON or pretty output, redaction, rotating files |
 | L2 | `navree-crypto` | AES-256-GCM encrypter with key rotation, Argon2id hasher, token helpers, JOSE helpers (JWS, JWK, PKCS#8 on `ring`), one-time passwords (TOTP) and QR codes, Web Push encryption |
 | L2 | `navree-events` | Typed event bus with sync and queued listeners |
-| L2 | `navree-view` | MiniJinja templates (mail and other text) |
+| L2 | `navree-view` | Templates for mail and other text, on navree-template |
 | L2 | `navree-cache` | Cache stores (memory on navree-bounded), remember, tags, locks |
 | L2 | `navree-http-client` | Outgoing HTTP with retries, timeouts, an SSRF policy and fakes |
 | L2 | `navree-schema` | The schema builder for PostgreSQL (with TimescaleDB), MySQL/MariaDB and SQLite; hypertables and continuous aggregates; introspection; schema dumps; migration files |
@@ -63,7 +64,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 | L4 | `navree-access` | Roles, permissions and abilities, record checks, SQL list filters |
 | L4 | `navree-schedule` | Cron schedules in UTC, a zone or each workspace's local time, overlap prevention, single-node runs |
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
-| L4 | `navree-ui` | The UI kit of the server-rendered tools: the app shell, components as MiniJinja macros, embedded CSS, JS and fonts |
+| L4 | `navree-ui` | The UI kit of the server-rendered tools: the app shell, components as template macros, embedded CSS, JS and fonts |
 | L4 | `navree-orm` | The [ORM](/docs/orm/getting-started/): models, a typed query builder, records with dirty tracking, relationships, casts, events, scopes, factories and testing helpers |
 | L4 | `navree-browser` | [Browser testing](/docs/packages/browser-testing/): Chrome or Chromium driven over the DevTools Protocol from Rust tests |
 | L5 | `navree-auth` | JWT access tokens, rotating refresh tokens, strategies, accounts, 2FA |

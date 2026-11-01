@@ -59,6 +59,7 @@ L0  navree-kernel  navree-bounded  navree-pdf  navree-glob    navree-macros  nav
 | L0 | `navree-bounded` | The bounded in-process cache: sharded locks, a strict capacity, SIEVE eviction, TTL and TTI, single-flight loading (re-exported as `navree::bounded`) |
 | L0 | `navree-pdf` | PDF object layer under navree-documents and navree-media: a lazy reader held to a memory and work budget (cross-reference tables and streams, object streams, incremental updates, repair of a broken cross-reference, the standard filters, files encrypted without a password to open them), a writer, and text in reading order |
 | L0 | `navree-glob` | The glob matcher for patterns configured as strings (`*` any run of characters, `?` one character, everything else literal, case-sensitive), matched in time bounded by the pattern times the input: the browser's URL waits, the HTTP client's host allow-list and fake stubs, the Logbook's ignored routes and the CSRF exceptions |
+| L0 | `navree-template` | The template engine under navree-view, navree-cli and navree-harbor: the Jinja syntax, HTML autoescaping, a sandboxed value model, caps on depth, loops, work and output |
 | L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, `#[resolver]`, route and access attributes |
 | L0 | `navree-orm-macros` | `#[derive(Model)]` and `#[scopes]` (re-exported by `navree-orm`) |
 | L0 | `navree-validation-macros` | `#[derive(Validate)]` and `#[validate(...)]` (re-exported by `navree-validation`) |
@@ -72,7 +73,7 @@ L0  navree-kernel  navree-bounded  navree-pdf  navree-glob    navree-macros  nav
 | L2 | `navree-log` | tracing subscriber, JSON or pretty output, redaction, rotating files |
 | L2 | `navree-crypto` | AES-256-GCM encrypter with key rotation, Argon2id hasher, token helpers, JOSE helpers (JWS, JWK, PKCS#8 on `ring`), TOTP, QR codes, Web Push encryption |
 | L2 | `navree-events` | Typed event bus with sync and queued listeners |
-| L2 | `navree-view` | MiniJinja templates (mail and other text) |
+| L2 | `navree-view` | Templates for mail and other text, on navree-template |
 | L2 | `navree-cache` | Cache stores (memory on navree-bounded; Redis with navree-redis), remember, tags, locks |
 | L2 | `navree-http-client` | Outgoing HTTP with retries, timeouts, an SSRF policy and fakes |
 | L2 | `navree-schema` | The schema builder: tables, columns, indexes, foreign keys and check constraints in Rust for PostgreSQL, MySQL/MariaDB and SQLite (SQLite alterations by table rebuild); TimescaleDB hypertables, compression, retention, reorder policies and continuous aggregates with fallbacks on other databases; introspection; schema dumps; migration files (`navree::schema`) |
@@ -92,7 +93,7 @@ L0  navree-kernel  navree-bounded  navree-pdf  navree-glob    navree-macros  nav
 | L4 | `navree-access` | Roles, permissions and abilities (shared with front ends as CASL JSON), record checks, SQL list filters |
 | L4 | `navree-schedule` | Cron schedules in UTC, a zone or each workspace's local time, overlap prevention, single-node runs |
 | L4 | `navree-notify` | Notifications over mail, database, broadcast, Slack (webhooks, bot tokens), Microsoft Teams (webhooks, proactive bot messages), SMS (Twilio, Vonage, Amazon SNS; E.164 numbers, STOP opt-outs), WhatsApp (Twilio, the Cloud API) and web push (VAPID ES256 on `ring`, RFC 8291 encryption), with read state, a delivery log updated from provider callbacks, push subscriptions and a fake per channel; preferences per category and channel (people and workspaces), digests, quiet hours and send windows on the recipient's clock, held deliveries released by `notify:release`, per-workspace template overrides and `#[notification]` |
-| L4 | `navree-ui` | The UI kit of the server-rendered tools: the app shell (collapsible sidebar, top bar, command palette), components as MiniJinja macros, embedded and versioned CSS, JS and fonts (facade feature `ui`) |
+| L4 | `navree-ui` | The UI kit of the server-rendered tools: the app shell (collapsible sidebar, top bar, command palette), components as template macros, embedded and versioned CSS, JS and fonts (facade feature `ui`) |
 | L4 | `navree-orm` | The ORM: `#[derive(Model)]` models with typed columns and keys (integers, UUID v7, ULID), a query builder with every where variant, joins, groups, subqueries, unions, locks and TimescaleDB's `time_bucket`/`first`/`last`, records with dirty tracking, casts, scopes, lifecycle hooks, collections and offset, simple and cursor pagination, on PostgreSQL/TimescaleDB, MySQL and SQLite through the unit of work, and a document-driver interface (facade feature `orm`) |
 | L4 | `navree-browser` | Browser testing: Chrome, Chromium or Edge over the DevTools Protocol, actions and assertions that wait, failure screenshots, `TestServer` on a real port and `FrontEnd` sessions (a dev-dependency; opt-in facade feature `browser`; `navree browser:install` downloads Chrome for Testing) |
 | L5 | `navree-auth` | JWT auth: rotating refresh tokens, strategies, accounts, 2FA and two-factor policy, sessions, step-up, impersonation, magic links and email codes, platform sign-in, token exchange, passkeys |

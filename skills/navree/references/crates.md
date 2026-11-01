@@ -21,7 +21,7 @@ MongoDB.
 | `navree::log` | navree-log | `log` | `LoggerModule::from_config()` | `log` | tracing subscriber, JSON or pretty output |
 | `navree::crypto` | navree-crypto | `crypto` | `CryptoModule::from_config()` | `hashing` (+ `app.key`) | AES-256-GCM `Encrypter`, Argon2id hasher, `generate_key`, `random_token`, `sha256_hex`; `jose`: `SigningKey`, `VerifyingKey`, `Jws`, `Jwk`, `JwkSet`; `totp`: `Totp`, `Secret` (RFC 6238, `otpauth://` URLs); `qr`: `QrCode`, `EcLevel` (ISO/IEC 18004, SVG) |
 | `navree::events` | navree-events | `events` | `EventsModule::for_root()` | | `Event`, `Listener`, `EventBus` |
-| `navree::view` | navree-view | `view` | `ViewModule::from_config()` | `view` | MiniJinja templates, `Views` |
+| `navree::view` | navree-view | `view` | `ViewModule::from_config()` | `view` | Templates (the Jinja syntax on navree-template), `Views` |
 | `navree::cache` | navree-cache | `cache` | `CacheModule::from_config()` | `cache` | `Cache`, `Locks` |
 | `navree::http_client` | navree-http-client | `http-client` | `HttpClientModule::from_config()` | `http_client` | `HttpClient`, `HttpClient::fake()` |
 | `navree::schema` | navree-schema | `schema` | (used by migrations) | `schema` | `Schema`, `Blueprint`, `Migration`, `migration!`, `Target`, `Dialect` |

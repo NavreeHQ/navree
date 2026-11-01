@@ -1,11 +1,11 @@
 ---
 name: navree-mail-and-notifications
-description: "Sends email and notifications from a Navree app: mail transports (SMTP, SES, Mailgun, Postmark, Resend, log, array, failover), MiniJinja mail templates with CSS inlined and a generated text body, `TemplateMail`, `Mailable` and queued mail, and notifications over the database, mail and broadcast channels with `/api/notifications`. Use when sending an email, adding or editing a mail template, configuring SMTP, notifying users in-app, by mail or live, or asserting on sent mail in tests."
+description: "Sends email and notifications from a Navree app: mail transports (SMTP, SES, Mailgun, Postmark, Resend, log, array, failover), mail templates with CSS inlined and a generated text body, `TemplateMail`, `Mailable` and queued mail, and notifications over the database, mail and broadcast channels with `/api/notifications`. Use when sending an email, adding or editing a mail template, configuring SMTP, notifying users in-app, by mail or live, or asserting on sent mail in tests."
 ---
 
 # Mail and notifications
 
-`MailModule` renders mail from MiniJinja templates (`ViewModule`) and hands it
+`MailModule` renders mail from templates (`ViewModule`) and hands it
 to a transport. `NotifyModule` sends one notification over several channels:
 a database row users list at `/api/notifications`, a mail, and a broadcast
 on the user's private channel. A new app has `ViewModule` and `MailModule`

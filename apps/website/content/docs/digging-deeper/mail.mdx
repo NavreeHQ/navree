@@ -1,11 +1,11 @@
 ---
 title: "Mail"
-description: "Mailables rendered from MiniJinja templates, with CSS inlined and a text body generated; the SMTP, SES, Mailgun, Postmark, Resend, log, array and failover transports; queued sending; configuration, previewing and testing."
+description: "Mailables rendered from templates, with CSS inlined and a text body generated; the SMTP, SES, Mailgun, Postmark, Resend, log, array and failover transports; queued sending; configuration, previewing and testing."
 ---
 
 ## Introduction
 
-<Badge feature="mail" /> `MailModule` sends email. You describe a message as a **mailable**, usually a pair of [MiniJinja templates](/docs/digging-deeper/views/), one HTML and one plain text, plus the data they need. The `Mailer` renders it, fills in the default sender, checks the message, inlines its CSS and hands it to a **transport**:
+<Badge feature="mail" /> `MailModule` sends email. You describe a message as a **mailable**, usually a pair of [templates](/docs/digging-deeper/views/), one HTML and one plain text, plus the data they need. The `Mailer` renders it, fills in the default sender, checks the message, inlines its CSS and hands it to a **transport**:
 
 | Transport | What it does |
 |---|---|

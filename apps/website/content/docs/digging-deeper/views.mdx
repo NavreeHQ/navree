@@ -1,9 +1,9 @@
 ---
 title: "Views and templates"
-description: "MiniJinja templates for mail and other text: where they live, how modules embed them, escaping, filters and reloading."
+description: "Templates for mail and other text: where they live, how modules embed them, the syntax, escaping, filters, limits and reloading."
 ---
 
-<Badge feature="view" /> Navree apps are JSON APIs, so they render no web pages. They still need templates: the HTML and plain-text bodies of emails, CSV headers, the text of a notification. `navree-view` provides them with [MiniJinja](https://docs.rs/minijinja), a Rust implementation of the Jinja2 template language. If you know Jinja2, you already know the syntax.
+<Badge feature="view" /> Navree apps are JSON APIs, so they render no web pages. They still need templates: the HTML and plain-text bodies of emails, CSV headers, the text of a notification. `navree-view` provides them on Navree's own template engine, `navree-template`, in the Jinja syntax.
 
 ```jinja title="resources/views/mail/invoice.html"
 <p>Hello {{ name }},</p>
@@ -153,14 +153,74 @@ Define every printed field in the context, using `null` for "no value" (`none` i
 `render` returns a `ViewError`:
 
 - `NotFound` lists every name it tried;
-- `Template` names the template that failed to compile or render, with MiniJinja's message;
+- `Template` names the template that failed to compile or render, with the engine's error: its kind, message, template name, line and column (`source.line()`, `source.column()`);
 - `Io` names a template directory or file that can't be read.
 
 Messages never contain context values, since a context may hold tokens or other secrets.
 
+## Syntax
+
+`{{ expression }}` prints, `{% statement %}` runs a statement and `{# ... #}` is a comment. A `-` just inside a delimiter removes the whitespace on that side (`{%- if x -%}`).
+
+| | |
+|---|---|
+| Statements | `if`, `elif`, `else`; `for` with `else`, a filter (`for x in xs if x.ok`), `loop`, `break` and `continue`; `set` (also as a block); `with`; `block` with `super()`; `extends`; `include` (with `ignore missing`); `import ... as`; `from ... import`; `macro`; `call` (with arguments); `filter`; `autoescape`; `do`; `raw` |
+| Expressions | strings, numbers, `true`, `false`, `none`, lists, tuples and dicts; `a.b`, `a[b]`, `a[1:2]`; calls with keyword arguments; `and`, `or`, `not`; comparisons, `in`, `not in`; `+`, `-`, `*`, `/`, `//`, `%`, `**`, `~` (joins as text); `a if b else c` |
+| `loop` | `index`, `index0`, `revindex`, `revindex0`, `first`, `last`, `length`, `previtem`, `nextitem`, `cycle(...)`, `changed(...)` |
+| Filters | `abs`, `capitalize`, `count`, `d`, `date`, `default`, `e`, `escape`, `first`, `int`, `items`, `join`, `last`, `length`, `list`, `lower`, `min`, `money`, `replace`, `round`, `safe`, `split`, `string`, `tojson`, `trim`, `upper`, `urlencode` |
+| Tests | `boolean`, `defined`, `divisibleby`, `endingwith`, `eq`, `equalto`, `escaped`, `even`, `false`, `filter`, `float`, `ge`, `gt`, `greaterthan`, `in`, `int`, `integer`, `iterable`, `le`, `lessthan`, `lower`, `lt`, `mapping`, `ne`, `none`, `number`, `odd`, `safe`, `sameas`, `sequence`, `startingwith`, `string`, `test`, `true`, `undefined`, `upper` |
+| Functions | `range`, `dict` |
+
+A template reaches its context, the environment's globals and its own variables, and nothing else: attributes are the keys of maps, values have no methods, and only templates can be included, by name. A file name in a template can't leave its directory.
+
+### Your own filters and functions
+
+A module adds them with `m.view_environment(..)`, and code holding `Views` with `views.configure(..)`. Parameters convert from `Value`, `&Value`, `&str`, `String`, `bool`, integers, floats and `Option<T>`; a last `Kwargs` parameter takes keyword arguments. The return value is anything that converts into a value, or a `Result` of one.
+
+```rust
+use navree::prelude::*;
+use navree::view::ModuleBuilderViewExt;
+
+impl BrandModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.view_environment(|env| {
+            env.add_global("brand", "Acme");
+            env.add_filter("shout", |text: &str| text.to_uppercase());
+            env.add_function("greet", |name: &str| format!("Hello, {name}"));
+        });
+    }
+}
+```
+
+### Limits
+
+Every render is capped, whether the template comes from a file or from text in your database. A template that goes over a limit fails with an error naming the template and the line.
+
+| Limit | Default | What it caps |
+|---|---|---|
+| `max_depth` | 100 | how deep macro calls, call blocks, blocks, includes and imports nest |
+| `max_include_depth` | 32 | how deep includes, imports and `extends` chains nest |
+| `max_loop_iterations` | 10,000,000 | loop iterations of one render |
+| `max_operations` | 100,000,000 | work of one render: statements, expressions and the items filters go through |
+| `max_output_bytes` | 64 MiB | the output, and any string a template builds; sequences hold at most 1/16 of this in items |
+| `max_allocated_bytes` | 1 GiB | what one render allocates for strings and sequences over its life |
+| `max_stack_bytes` | 768 KiB | the stack a compile or render uses, whatever nests |
+
+Nesting in a template's source (150 levels, chains like `a + b + c` included) and in values (200 levels) is capped as well, and `range` gives at most 100,000 items.
+
+```rust
+views.configure(|env| {
+    let mut limits = env.limits();
+    limits.max_output_bytes = 8 << 20;
+    env.set_limits(limits);
+});
+```
+
+The engine's types are at `navree::view::template`.
+
 ## Filters
 
-Every [MiniJinja built-in filter](https://docs.rs/minijinja/latest/minijinja/filters/index.html) is available (`upper`, `default`, `join`, `tojson`, `urlencode`, ...), as are `{% break %}` and `{% continue %}` in loops. Navree adds two filters.
+Navree adds two filters to the built-in ones.
 
 ### money
 

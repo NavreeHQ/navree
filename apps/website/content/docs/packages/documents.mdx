@@ -165,7 +165,7 @@ images/
   logo.png
 `}</FileTree>
 
-They are [navree-view](/docs/digging-deeper/views/) templates, MiniJinja with Navree's settings: values are HTML-escaped, printing an undefined variable is an error, and the `money` and `date` filters work. The render's data are the template's variables, plus `locale` (`en` when the render has none) and `dir` (`rtl` or `ltr`) unless your data has keys of those names:
+They are [navree-view](/docs/digging-deeper/views/) templates with Navree's settings: values are HTML-escaped, printing an undefined variable is an error, and the `money` and `date` filters work. The render's data are the template's variables, plus `locale` (`en` when the render has none) and `dir` (`rtl` or `ltr`) unless your data has keys of those names:
 
 ```html title="resources/documents/invoices/show.html"
 <!doctype html>
