@@ -279,14 +279,14 @@ navree openapi:client                         # web/src/lib/api/openapi.json and
 navree openapi:client --out web/app/lib/api   # another folder
 ```
 
-The CRM's front end, `apps/crm-web`, generates its TypeScript types from the exported document with [openapi-typescript](https://openapi-ts.dev) and calls the API with [openapi-fetch](https://openapi-ts.dev/openapi-fetch/):
+The CRM's front end, `apps/crm-web`, generates its TypeScript types from the exported document with `navree openapi:client --input` and calls the API with [openapi-fetch](https://openapi-ts.dev/openapi-fetch/):
 
 ```sh
 cd apps/crm-api
 cargo run -p crm-api -- openapi:export ../crm-web/openapi.json
 
 cd ../crm-web
-pnpm gen:api   # openapi-typescript ./openapi.json -o src/lib/api/schema.d.ts
+pnpm gen:api   # navree openapi:client --input ./openapi.json --out src/lib/api
 ```
 
 The app never imports `schema.d.ts` directly. `src/lib/api/types.ts` gives the schemas friendly names, so a renamed schema only needs that file to change, and adds the list endpoints' query parameters that the document can't describe yet:

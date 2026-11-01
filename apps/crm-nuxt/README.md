@@ -120,7 +120,7 @@ The specs run one at a time against that shared database in a UTC browser (the A
 - The browser's `X-Forwarded-For` never reaches Navree; behind N trusted proxies set `NAVREE_TRUSTED_PROXY_HOPS=N`.
 
 In the browser, `app/lib/api/client.ts` is an openapi-fetch client typed from `openapi.json` (generated into
-`schema.d.ts` by openapi-typescript), same-origin, with hooks for 401 (back to `/login?next=`) and 403 (a toast).
+`schema.d.ts` by `navree openapi:client`), same-origin, with hooks for 401 (back to `/login?next=`) and 403 (a toast).
 `unwrap()` turns Navree's error body (`{statusCode, message, error, errors?}`) into an `ApiError`; forms put 400
 `errors` next to their fields.
 

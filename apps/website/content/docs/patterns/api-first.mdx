@@ -342,14 +342,14 @@ See [OpenAPI](/docs/digging-deeper/openapi/) for every key and schema option.
 
 ## Typed clients
 
-Export the document and generate a client from it. The CRM's front end uses openapi-typescript and openapi-fetch:
+Export the document and generate a client from it. The CRM's front end uses `navree openapi:client` and openapi-fetch:
 
 ```sh
 cd apps/crm-api
 cargo run -p crm-api -- openapi:export ../crm-web/openapi.json
 
 cd ../crm-web
-pnpm gen:api   # openapi-typescript ./openapi.json -o src/lib/api/schema.d.ts
+pnpm gen:api   # navree openapi:client --input ./openapi.json --out src/lib/api
 ```
 
 The front end then gets the path, the parameters and the body types checked by the TypeScript compiler. A renamed field in `DealResource` becomes a type error in the component that reads it, before anyone opens a browser. `src/lib/api/types.ts` gives the generated schemas the names the app imports, so a renamed schema only changes that one file:

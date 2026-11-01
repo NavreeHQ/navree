@@ -1,6 +1,6 @@
 /**
- * The typed client: openapi-fetch on the `paths` type that `openapi-typescript`
- * generates from the app's OpenAPI document (`navree openapi:client`).
+ * The typed client: openapi-fetch on the `paths` type that `navree openapi:client`
+ * generates from the app's OpenAPI document.
  */
 import createClient, { type Client } from "openapi-fetch";
 import { NavreeError } from "./errors.js";

@@ -297,7 +297,7 @@ The browser's pusher-js client uses a custom authorizer that posts `{socket_id, 
 
 ## Calling the API from the browser
 
-The browser's API client is generated from the API's OpenAPI document and points at the BFF, so it needs no token handling at all: same-origin credentials, `Accept: application/json`, and hooks for 401 and 403. Both front ends use openapi-fetch with types from openapi-typescript; the Nuxt app's client is `app/lib/api/client.ts`.
+The browser's API client is generated from the API's OpenAPI document and points at the BFF, so it needs no token handling at all: same-origin credentials, `Accept: application/json`, and hooks for 401 and 403. Both front ends use openapi-fetch with the types `navree openapi:client` writes; the Nuxt app's client is `app/lib/api/client.ts`.
 
 ```ts title="apps/crm-web/src/lib/api/client.ts"
 const client = createClient<paths>({

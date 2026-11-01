@@ -145,7 +145,7 @@ navree openapi:client                        # both steps: web/src/lib/api/opena
 navree openapi:client --out web/app/lib/api  # another folder (a Nuxt app)
 
 navree openapi:export web/openapi.json       # only the document: exactly what /api/openapi.json serves
-npx openapi-typescript web/openapi.json -o web/lib/api/schema.d.ts
+navree openapi:client --input web/openapi.json --out web/lib/api   # only the schema, from a document you have
 ```
 
 Re-export after changing routes or types; commit the files if the front end

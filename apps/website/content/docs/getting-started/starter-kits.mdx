@@ -151,7 +151,7 @@ The `InWorkspace` guard resolves the workspace from the request and checks that 
 
 The front end is a Next.js app in `web/` with shadcn/ui components, TanStack Query and react-hook-form. Its server is a [backend-for-frontend](/docs/patterns/backend-for-frontend/): the browser calls only same-origin routes, and the BFF keeps the access token and the rotating refresh token in httpOnly cookies, refreshes them single-flight, checks the `Origin` of every write and forwards requests to the API with `Authorization: Bearer`. It also forwards the `X-Workspace` header the browser client sets from the `/w/<slug>/` URL, and `/admin`, so Helm opens on the web app's origin with the same session.
 
-The browser's API types are generated from the API's OpenAPI document: `web/lib/api/schema.d.ts` comes from the committed `openapi.json`. `pnpm gen:api` in `web/` exports the document again and regenerates the types, so a changed DTO is a TypeScript error before it is a bug.
+The browser's API types are generated from the API's OpenAPI document: `web/lib/api/schema.d.ts` comes from the committed `openapi.json`. `pnpm gen:api` in `web/` exports the document again and regenerates the types with `navree openapi:client`, so a changed DTO is a TypeScript error before it is a bug.
 
 ### The generated layout
 

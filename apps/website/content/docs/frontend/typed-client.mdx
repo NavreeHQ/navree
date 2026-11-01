@@ -7,7 +7,17 @@ description: "`@navree/client`: a client typed from your API's OpenAPI document,
 
 ## Generating the schema
 
-`navree openapi:client` exports the app's document and runs [openapi-typescript](https://openapi-ts.dev) on it:
+`navree openapi:client` exports the app's document and writes `schema.d.ts` from it. The generator is part of the `navree` binary: it runs no other program and needs no network.
+
+```text title="What schema.d.ts declares"
+export interface paths { ... }        // each path, with its methods, parameters, body and responses
+export interface webhooks { ... }
+export interface components { ... }   // schemas, responses, parameters, requestBodies, headers, pathItems
+export type $defs = ...
+export interface operations { ... }   // the operations that have an operationId
+```
+
+Run it from the app:
 
 ```sh
 navree openapi:client                         # web/src/lib/api/openapi.json and schema.d.ts
@@ -17,10 +27,14 @@ navree openapi:client --input openapi.json    # from a document you already have
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--out DIR` | `web/src/lib/api` | Where `openapi.json` and `schema.d.ts` go, relative to the app. |
-| `--input FILE` | none | Generate from this document instead of running `openapi:export`. |
+| `--out DIR` | `web/src/lib/api` | Where `openapi.json` and `schema.d.ts` go, relative to the app (to the current directory with `--input`). |
+| `--input FILE` | none | Generate from this document instead of running `openapi:export`. It is JSON, relative to the current directory, and no app is needed, so a front end's `gen:api` script can call it. |
 
-The command runs `cargo run --quiet -- openapi:export <out>/openapi.json`, then `npx --yes openapi-typescript@7 <out>/openapi.json --output <out>/schema.d.ts`. Commit both files and run the command again after changing routes or types; a CI step that runs it and fails on a diff keeps the front end and the API in step.
+The command runs `cargo run --quiet -- openapi:export <out>/openapi.json`, then writes `<out>/schema.d.ts`. Commit both files and run the command again after changing routes or types; a CI step that runs it and fails on a diff keeps the front end and the API in step.
+
+The generator reads OpenAPI 3.0 and 3.1 documents in one JSON file, with every `$ref` pointing inside it. It writes `$ref`, `allOf`, `oneOf`, `anyOf`, `nullable` and 3.1 type lists, enums, `const`, tuples, `additionalProperties`, `readOnly` (as `readonly`), discriminators and descriptions (as JSDoc). It refuses a document that is not OpenAPI 3, has a `$ref` that leads nowhere or outside the file, or uses an `operationId` twice, and it says which. A reference to something it cannot follow is a warning on standard error, and the schema is written without it.
+
+It works within limits: the document is at most 64 MiB and nests at most 128 levels deep, a reference may lead through at most 64 other references, and the TypeScript written for one document is bounded (about 32 MiB), so a document cannot ask for more than that.
 
 ## Creating the client
 

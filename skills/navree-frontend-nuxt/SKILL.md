@@ -139,7 +139,7 @@ Its steps:
 1. **Create the app** (Nuxt 4, `app/` source directory) and add the pieces:
    `pnpm add @pinia/nuxt pinia @tanstack/vue-query openapi-fetch @casl/ability @casl/vue pusher-js vee-validate zod reka-ui @vueuse/core vue-sonner @lucide/vue class-variance-authority clsx tailwind-merge`
    and for development
-   `pnpm add -D tailwindcss @tailwindcss/vite tw-animate-css openapi-typescript msw vitest @nuxt/test-utils @vue/test-utils happy-dom @playwright/test vue-tsc typescript h3`.
+   `pnpm add -D tailwindcss @tailwindcss/vite tw-animate-css msw vitest @nuxt/test-utils @vue/test-utils happy-dom @playwright/test vue-tsc typescript h3`.
 2. **Configure Nuxt** (`nuxt.config.ts`): `ssr: false` (every screen sits
    behind sign-in; Nitro still serves the BFF), `modules: ["@pinia/nuxt"]`,
    `vite.plugins: [tailwindcss()]`, `typescript.strict: true`, and the
@@ -148,7 +148,7 @@ Its steps:
 3. **Export the API contract.** From the Navree app:
    `navree openapi:export web/openapi.json` (the CRM:
    `cargo run -p crm-api -- openapi:export ../crm-nuxt/openapi.json`). Add
-   `"gen:api": "openapi-typescript ./openapi.json -o app/lib/api/schema.d.ts"`
+   `"gen:api": "navree openapi:client --input ./openapi.json --out app/lib/api"`
    and run `pnpm gen:api` whenever the API changes.
 4. **Add the BFF.** Copy `server/lib/bff.ts` (framework-free, unit-tested)
    and `server/lib/http-errors.ts`, create the instance in

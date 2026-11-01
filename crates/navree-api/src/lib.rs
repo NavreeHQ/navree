@@ -11,7 +11,7 @@
 //!   `{api_prefix}/docs/assets/`, so the page loads nothing from a third
 //!   party and its policy allows scripts from the app's own origin only. The
 //!   command `openapi:export [path]` writes the document to a file (default
-//!   `openapi.json`), for typed client generators such as openapi-typescript.
+//!   `openapi.json`), for typed client generators such as `navree openapi:client`.
 //! - Routes describe themselves with [`ApiMeta`](navree_http::ApiMeta)
 //!   (`#[api(...)]` in controllers): request and response schemas come from
 //!   [`navree_http::schema_fn`], and the schemas they reference become

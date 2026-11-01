@@ -1,8 +1,4 @@
 # Findings in this app's pnpm-lock.yaml that have no release its tools can
 # use. OSV-Scanner reads this file for the lockfile in the same folder only.
-# Reviewed 2026-10-31; each entry expires so it gets looked at again.
-
-[[IgnoredVulns]]
-id = "GHSA-g3hv-75wg-m249"
-ignoreUntil = 2027-01-31
-reason = "Fixed only in minimatch 11.0.1. The one line left is minimatch 5.1.9, pinned exactly by @redocly/openapi-core 1.34.22 (the last 1.x), which openapi-typescript 7.13.0 (the latest) needs, and it calls the default export, which minimatch 11 does not have. Not reachable with attacker input: openapi-typescript (pnpm gen:api) runs only on a developer machine, never in the built app, and the patterns Redocly matches come from the app's own Redocly settings, which are trusted. Drop this entry once openapi-typescript moves to a Redocly release that no longer uses minimatch 5."
+# Reviewed 2026-11-01; each entry expires so it gets looked at again.
+# There are none at present.

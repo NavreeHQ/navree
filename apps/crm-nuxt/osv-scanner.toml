@@ -6,8 +6,3 @@
 id = "GHSA-vjh5-4x84-xrqp"
 ignoreUntil = 2027-01-31
 reason = "nuxt and @nuxt/nitro-server 4.6.3 are patched (the advisory: fixed in nuxt@4.6.2). Its OSV record also lists Nuxt 3, which gets no fix, as a range with only an 'introduced: 3.0.0' event (the '< 4.0.0' bound is only in database_specific), so the scanner matches every version from 3.0.0 on, the fixed ones included. Drop this entry once the record closes that range."
-
-[[IgnoredVulns]]
-id = "GHSA-g3hv-75wg-m249"
-ignoreUntil = 2027-01-31
-reason = "Fixed only in minimatch 11.0.1. The one line left is minimatch 5.1.9, pinned exactly by @redocly/openapi-core 1.34.22 (the last 1.x), which openapi-typescript 7.13.0 (the latest) needs; it calls minimatch's default export, which minimatch 11 does not have, so forcing 11 breaks it. The lines under Nitro's bundler tooling (glob 10 and 13, minimatch 9 and 10) are moved to glob 14 and minimatch 11 by the overrides in pnpm-workspace.yaml. Not reachable with attacker input: openapi-typescript runs only on a developer machine (pnpm gen:api) and never in the built app, and the only patterns Redocly matches with minimatch come from the project's own Redocly settings, which are trusted. Drop this entry once openapi-typescript moves to a Redocly release that no longer uses minimatch 5."
