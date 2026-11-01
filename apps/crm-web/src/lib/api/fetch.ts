@@ -387,7 +387,10 @@ type ParamValue = string | number | boolean | null | undefined;
 const encode = (value: unknown, allowReserved: boolean | undefined): string =>
   allowReserved === true ? String(value) : encodeURIComponent(value as string);
 
-/** `name=value` for one value; nothing for `null` and `undefined`. */
+/** A name or an object key that came with the data: always percent-encoded, whatever `allowReserved` says. */
+const encodeName = (name: string): string => encodeURIComponent(name);
+
+/** `name=value` for one value; nothing for `null` and `undefined`. The name is written as it is given. */
 export function serializePrimitiveParam(name: string, value: string, options?: { allowReserved?: boolean }): string {
   const v: unknown = value;
   if (v === undefined || v === null) return "";
@@ -410,7 +413,7 @@ export function serializeObjectParam(
 
   if (options.style !== "deepObject" && options.explode === false) {
     const flat: string[] = [];
-    for (const key in value) flat.push(key, encode(value[key], options.allowReserved));
+    for (const key in value) flat.push(encodeName(key), encode(value[key], options.allowReserved));
     const joined = flat.join(",");
     switch (options.style) {
       case "form":
@@ -427,7 +430,7 @@ export function serializeObjectParam(
   const parts: string[] = [];
   for (const key in value) {
     const part = serializePrimitiveParam(
-      options.style === "deepObject" ? `${name}[${key}]` : key,
+      options.style === "deepObject" ? `${name}[${encodeName(key)}]` : encodeName(key),
       value[key] as string,
       options,
     );
@@ -482,9 +485,10 @@ export function createQuerySerializer<T = unknown>(options?: QuerySerializerOpti
     const search: string[] = [];
     if (queryParams && typeof queryParams === "object") {
       const params = queryParams as Record<string, unknown>;
-      for (const name in params) {
-        const value = params[name] as ParamValue | object;
+      for (const key in params) {
+        const value = params[key] as ParamValue | object;
         if (value === undefined || value === null) continue;
+        const name = encodeName(key);
         let part: string;
         if (Array.isArray(value)) {
           if (value.length === 0) continue;
@@ -513,14 +517,22 @@ export function createQuerySerializer<T = unknown>(options?: QuerySerializerOpti
 
 const PLACEHOLDER = /\{[^{}]+\}/g;
 
+/** A segment a URL reads as the one before it or the same one: `.`, `..` and their `%2e` spellings. */
+const DOT_SEGMENT = /^(\.|%2e){1,2}$/i;
+
 /**
  * Fills the `{name}` placeholders of a path from `pathParams`, in the OpenAPI path styles:
  * `{id}` simple, `{.id}` label, `{;id}` matrix, and a trailing `*` to explode a list or an object.
- * A placeholder without a value stays as it is.
+ * A placeholder without a value stays as it is. Values and object keys are percent-encoded, and a
+ * value that leaves `.` or `..` as a whole segment is refused, as a URL would read it as a step
+ * up or no step at all.
  */
 export function defaultPathSerializer(pathname: string, pathParams: Record<string, unknown>): string {
-  let url = pathname;
-  for (const match of pathname.match(PLACEHOLDER) ?? []) {
+  let url = "";
+  let copied = 0;
+  const filled: { name: string; start: number; end: number }[] = [];
+  for (const found of pathname.matchAll(PLACEHOLDER)) {
+    const match = found[0];
     let name = match.slice(1, -1);
     let explode = false;
     let style: "simple" | "label" | "matrix" = "simple";
@@ -547,8 +559,19 @@ export function defaultPathSerializer(pathname: string, pathParams: Record<strin
     } else {
       text = style === "label" ? `.${encodeURIComponent(value as string)}` : encodeURIComponent(value as string);
     }
-    // A function, so `$` in a value is not read as a replacement pattern.
-    url = url.replace(match, () => text);
+    url += pathname.slice(copied, found.index);
+    filled.push({ name, start: url.length, end: url.length + text.length });
+    url += text;
+    copied = found.index + match.length;
+  }
+  url += pathname.slice(copied);
+  for (const { name, start, end } of filled) {
+    const from = start === 0 ? 0 : url.lastIndexOf("/", start - 1) + 1;
+    let to = end;
+    while (to < url.length && url[to] !== "/" && url[to] !== "?" && url[to] !== "#") to++;
+    if (DOT_SEGMENT.test(url.slice(from, to))) {
+      throw new Error(`The path parameter "${name}" would make "." or ".." a segment of the path (a dot segment).`);
+    }
   }
   return url;
 }
@@ -576,8 +599,13 @@ export function createFinalURL<O>(
     pathSerializer: PathSerializer;
   },
 ): string {
-  let url = `${options.baseUrl}${pathname}`;
+  const template = `${options.baseUrl}${pathname}`;
+  let url = template;
   if (options.params?.path) url = options.pathSerializer(url, options.params.path);
+  // An empty first segment makes `//host/...`, which a URL reads as another host.
+  if (url.startsWith("//") && !template.startsWith("//")) {
+    throw new Error("The path parameters make the URL start with `//`, which names another host.");
+  }
   let search = (options.querySerializer as (query: unknown) => string)(options.params.query ?? {});
   if (search.startsWith("?")) search = search.slice(1);
   return search ? `${url}?${search}` : url;

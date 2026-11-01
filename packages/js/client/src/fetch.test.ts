@@ -100,7 +100,8 @@ describe("query serialization", () => {
     expect(serialize({ a: 1, b: "x y", c: true, d: false, e: undefined, f: null, g: [], h: 0, i: "" })).toBe(
       "a=1&b=x%20y&c=true&d=false&h=0&i=",
     );
-    expect(serialize({ "a&b": "c=d" })).toBe("a&b=c%3Dd");
+    // A name is encoded like a value: `&` and `=` in it cannot start another parameter.
+    expect(serialize({ "a&b": "c=d" })).toBe("a%26b=c%3Dd");
     expect(serialize(undefined)).toBe("");
     expect(serialize({})).toBe("");
   });
