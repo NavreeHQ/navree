@@ -154,6 +154,34 @@ node build.mjs            # --check fails when the committed output is stale
 `styles/tokens.css` differs from it. `runtime/icons.mjs` generates `src/icons.rs` from
 lucide-react.
 
+## Editing fast
+
+Changing a label means compiling and relinking, so the loop is worth setting up. Time
+from saving a file to the new page being served, on a generated app of 100 pages and
+20,000 lines, median of six rebuilds on one machine (a Windows 11 laptop, 8 cores, with
+other builds running, so read the order and not the decimals):
+
+| Where the build runs | One crate | Pages in 10 crates |
+|---|---|---|
+| Windows, `rust-lld` | 6.0 s | 4.1 s |
+| Windows, `link.exe` | 7.1 s | |
+| WSL, sources on WSL's own disk | 2.3 s | |
+| WSL, sources under `/mnt/c` | | 8.7 s |
+
+- **Windows:** the repository's `.cargo/config.toml` links with `rust-lld`, which ships
+  with rustc. It saves about a second on a large app; on a small one the two linkers are
+  within noise of each other.
+- **Split the pages into crates.** Rebuilding one small crate and relinking is cheaper
+  than rebuilding one big one. Give each area of the app (deals, contacts, reports) its
+  own crate holding its pages, and keep the binary crate to routing and start-up.
+- **WSL:** keep the sources on WSL's own disk (`~/src`, not `/mnt/c/...`) and the target
+  directory there too. Compiling across the `/mnt/c` mount is two to four times slower
+  and is not a supported way to work.
+- `CARGO_PROFILE_DEV_DEBUG=line-tables-only` (the workspace profile sets it) and
+  incremental builds stay on.
+
+The stylesheet and the runtime rebuild on their own: `node build.mjs` in `runtime/`.
+
 ## Proof pages
 
 `apps/ui-table-proof` is the data table against a real database, and `apps/ui-proof`

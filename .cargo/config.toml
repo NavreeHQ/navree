@@ -1,0 +1,5 @@
+# Windows: link with the rust-lld that ships with rustc instead of link.exe.
+# The relink after a one-line edit is the largest part of a rebuild; the
+# measurements are in crates/navree-ui/README.md ("Editing fast").
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld"
