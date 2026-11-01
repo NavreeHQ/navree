@@ -426,7 +426,7 @@ let report = media
 
 | Limit | Default | Refused with |
 |---|---|---|
-| `max_entries` | 10 000 | `TooManyEntries` |
+| `max_entries` | 10 000 | `TooManyEntries`; the count the end of the archive declares is read before any entry is held |
 | `max_entry_bytes` | 512 MiB | `EntryTooLarge` |
 | `max_total_bytes` | 2 GiB | `TooLarge` |
 | `max_ratio` | 200 to 1, for entries over 1 MiB | `Ratio` (a zip bomb) |

@@ -149,6 +149,98 @@ fn too_many_entries_are_refused() {
     assert_eq!(err, ArchiveError::TooManyEntries { max: 10 });
 }
 
+/// `bytes` with the first central directory header damaged: an archive that
+/// can only be told from a good one by reading the directory.
+fn damage_directory(mut bytes: Vec<u8>) -> Vec<u8> {
+    let at = bytes.windows(4).position(|w| w == b"PK\x01\x02").unwrap();
+    bytes[at] = b'X';
+    bytes
+}
+
+/// Where the end-of-central-directory record of `bytes` is.
+fn end_record(bytes: &[u8]) -> usize {
+    bytes.windows(4).rposition(|w| w == b"PK\x05\x06").unwrap()
+}
+
+fn two_entries() -> Vec<u8> {
+    zip_of(&[("a.txt", b"a"), ("b.txt", b"b")])
+}
+
+fn at_most(max_entries: usize) -> ArchiveLimits {
+    ArchiveLimits {
+        max_entries,
+        ..limits()
+    }
+}
+
+#[test]
+fn the_entry_count_is_checked_before_the_directory_is_read() {
+    // Refused for the count the end record declares; a reader that held the
+    // entries first would have found the damaged directory instead.
+    let bytes = damage_directory(two_entries());
+    let err = Archive::open(bytes.clone(), &at_most(1)).unwrap_err();
+    assert_eq!(err, ArchiveError::TooManyEntries { max: 1 });
+    // Under the limit the damage is what's reported.
+    let err = Archive::open(bytes, &limits()).unwrap_err();
+    assert!(matches!(err, ArchiveError::Invalid { .. }), "{err:?}");
+}
+
+#[test]
+fn a_stray_end_record_does_not_hide_the_entry_count() {
+    // A record in the archive comment that declares one entry and points
+    // nowhere: the archive reader falls back to the real one before it.
+    let mut bytes = damage_directory(two_entries());
+    let mut stray = b"PK\x05\x06".to_vec();
+    stray.extend_from_slice(&[0, 0, 0, 0, 1, 0, 1, 0]);
+    stray.extend_from_slice(&[0; 8]);
+    stray.extend_from_slice(&[0, 0]);
+    let end = end_record(&bytes);
+    bytes[end + 20..end + 22].copy_from_slice(&(stray.len() as u16).to_le_bytes());
+    bytes.extend_from_slice(&stray);
+    let err = Archive::open(bytes, &at_most(1)).unwrap_err();
+    assert_eq!(err, ArchiveError::TooManyEntries { max: 1 });
+}
+
+#[test]
+fn a_zip64_count_is_read_from_the_headers_that_exist() {
+    // The record defers to a zip64 one, which can declare anything: what the
+    // file can hold is its central headers, counted without being kept.
+    let mut bytes = damage_directory(two_entries());
+    for _ in 0..4 {
+        let at = end_record(&bytes);
+        bytes.splice(at..at, *b"PK\x01\x02");
+    }
+    let end = end_record(&bytes);
+    bytes[end + 8..end + 12].copy_from_slice(&[0xff; 4]);
+    let err = Archive::open(bytes, &at_most(3)).unwrap_err();
+    assert_eq!(err, ArchiveError::TooManyEntries { max: 3 });
+}
+
+#[test]
+fn a_limit_of_zero_does_not_count_entries() {
+    let bytes = damage_directory(two_entries());
+    let err = Archive::open(bytes, &at_most(0)).unwrap_err();
+    assert!(matches!(err, ArchiveError::Invalid { .. }), "{err:?}");
+}
+
+#[test]
+fn many_small_entries_are_refused_by_their_count() {
+    // The shape of the attack, at a size a test can build: thousands of
+    // empty entries in a few hundred kilobytes.
+    let names: Vec<String> = (0..3_000).map(|i| format!("{i}")).collect();
+    let entries: Vec<(&str, &[u8])> = names.iter().map(|n| (n.as_str(), &b""[..])).collect();
+    let bytes = zip_of(&entries);
+    let err = Archive::open(bytes.clone(), &at_most(2_999)).unwrap_err();
+    assert_eq!(err, ArchiveError::TooManyEntries { max: 2_999 });
+    assert_eq!(
+        Archive::open(bytes, &at_most(3_000))
+            .unwrap()
+            .entries()
+            .len(),
+        3_000
+    );
+}
+
 #[test]
 fn other_files_are_invalid_archives() {
     let err = Archive::open(b"plain text".to_vec(), &limits()).unwrap_err();

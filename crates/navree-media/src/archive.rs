@@ -42,7 +42,8 @@ const RATIO_FLOOR: u64 = 1024 * 1024;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ArchiveLimits {
-    /// The most entries, directories included (default 10 000).
+    /// The most entries, directories included (default 10 000). The count is
+    /// read from the end of the archive before any entry is held.
     pub max_entries: usize,
     /// The largest unpacked entry in bytes (default 512 MiB).
     pub max_entry_bytes: u64,
@@ -61,6 +62,50 @@ impl Default for ArchiveLimits {
             max_ratio: 200,
         }
     }
+}
+
+/// How many entries reading the archive can hold, from the end of the file
+/// and without keeping anything: the most that any end-of-central-directory
+/// record in reach declares (the archive reader tries them from the last one
+/// back, so a stray one must not hide another). A record that defers to a
+/// zip64 one can declare anything, so then the count is the central headers
+/// the file actually has.
+fn declared_entries(bytes: &[u8]) -> u64 {
+    /// The fixed part of the record.
+    const RECORD: usize = 22;
+    /// As far back as the archive reader looks: a record and its comment.
+    const REACH: usize = RECORD + 4 + (1 << 16);
+    let tail = bytes
+        .get(bytes.len().saturating_sub(REACH)..)
+        .unwrap_or_default();
+    let mut most = 0;
+    let mut zip64 = false;
+    for record in tail
+        .windows(RECORD)
+        .filter(|window| window.starts_with(b"PK\x05\x06"))
+    {
+        let field = |at: usize| record.get(at..at + 2).unwrap_or_default();
+        for count in [field(8), field(10)] {
+            let count = count
+                .iter()
+                .rev()
+                .fold(0, |sum, byte| sum << 8 | u64::from(*byte));
+            most = most.max(count);
+            zip64 |= count == u64::from(u16::MAX);
+        }
+        // The directory's size and offset defer to a zip64 record as well.
+        zip64 |= [12, 16]
+            .iter()
+            .any(|&at| record.get(at..at + 4) == Some([0xff; 4].as_slice()));
+    }
+    if zip64 {
+        let headers = bytes
+            .windows(4)
+            .filter(|window| *window == b"PK\x01\x02")
+            .count();
+        return u64::try_from(headers).unwrap_or(u64::MAX);
+    }
+    most
 }
 
 /// One entry of an [`Archive`].
@@ -109,7 +154,17 @@ impl std::fmt::Debug for Archive {
 impl Archive {
     /// Opens and checks a zip archive.
     pub fn open(bytes: impl Into<Bytes>, limits: &ArchiveLimits) -> Result<Archive, ArchiveError> {
-        let mut zip = ZipArchive::new(Cursor::new(bytes.into())).map_err(invalid)?;
+        let bytes = bytes.into();
+        // The count comes first: opening the archive holds every entry it
+        // lists, and a few megabytes can list a hundred thousand.
+        if limits.max_entries > 0
+            && declared_entries(&bytes) > u64::try_from(limits.max_entries).unwrap_or(u64::MAX)
+        {
+            return Err(ArchiveError::TooManyEntries {
+                max: limits.max_entries,
+            });
+        }
+        let mut zip = ZipArchive::new(Cursor::new(bytes)).map_err(invalid)?;
         if limits.max_entries > 0 && zip.len() > limits.max_entries {
             return Err(ArchiveError::TooManyEntries {
                 max: limits.max_entries,
