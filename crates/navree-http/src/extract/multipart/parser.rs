@@ -55,6 +55,8 @@ pub(super) struct Head {
 }
 
 /// What comes after a part, or before the first.
+// Made once per part and moved once, into the part's `Field`.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub(super) enum Next {
     Part(Head),
@@ -319,7 +321,7 @@ fn read_head(bytes: &[u8]) -> Result<Head, Failure> {
         Ok(httparse::Status::Partial) => {
             return Err(Failure::malformed("failed to read field complete headers"));
         }
-        // Too many headers among them.
+        // Not header lines, or more of them than `MAX_HEADERS`.
         Err(_) => return Err(Failure::malformed(BAD_HEAD)),
     };
     let mut headers = HeaderMap::with_capacity(raw.len());
@@ -413,7 +415,7 @@ mod tests {
                     }
                     Some(Next::Closed) => {
                         seen.push(Seen::Closed);
-                        return false;
+                        false
                     }
                     None => false,
                 }),
