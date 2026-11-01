@@ -53,6 +53,7 @@ navree-schedule = { path = "../crates/navree-schedule" }
 navree-search = { path = "../crates/navree-search", features = ["fuzzing"] }
 navree-sheets = { path = "../crates/navree-sheets", features = ["fuzzing"] }
 navree-sso = { path = "../crates/navree-sso", features = ["fuzzing"] }
+navree-template = { path = "../crates/navree-template" }
 navree-testing = { path = "../crates/navree-testing" }
 navree-time = { path = "../crates/navree-time" }
 navree-validation = { path = "../crates/navree-validation", features = ["phone", "html", "fuzzing"] }
@@ -210,6 +211,13 @@ bench = false
 [[bin]]
 name = "qr_roundtrip"
 path = "fuzz_targets/qr_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "template_render"
+path = "fuzz_targets/template_render.rs"
 test = false
 doc = false
 bench = false

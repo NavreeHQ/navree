@@ -1,0 +1,1 @@
+ {% import "macros.html" as m %}{% for x in list if x %}{{ loop.index }}{{ m.m(x, y=loop.first) }}{% else %}none{% endfor %}
