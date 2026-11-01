@@ -165,7 +165,10 @@ async fn concurrent_senders_lose_no_counts() {
 
 #[tokio::test]
 async fn by_default_errors_and_slow_requests_keep_their_traces_and_a_tenth_of_the_rest() {
-    let app = builder().build().await;
+    let app = builder()
+        .config("lighthouse.thresholds.slow_request_ms", 1_000)
+        .build()
+        .await;
     let lighthouse = lighthouse(&app).await;
     assert!((lighthouse.options().sample.requests - 0.1).abs() < f64::EPSILON);
     assert!((lighthouse.options().sample.jobs - 0.1).abs() < f64::EPSILON);

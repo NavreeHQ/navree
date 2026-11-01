@@ -146,6 +146,10 @@ pub fn builder() -> TestAppBuilder {
         .config("hashing.iterations", 1)
         .config("lighthouse.release", "r1")
         .config("lighthouse.environment", "test")
+        // A busy machine must not open slow-query or slow-request issues the
+        // test doesn't expect. Tests of slowness set their own.
+        .config("lighthouse.thresholds.slow_query_ms", 60_000)
+        .config("lighthouse.thresholds.slow_request_ms", 60_000)
         .module(CryptoModule::from_config())
         .module(DatabaseModule::from_config())
         .module(AuthModule::from_config())
