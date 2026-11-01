@@ -2005,7 +2005,10 @@ fn xlsb_errors_of_unknown_codes_are_text() {
     let table = read_table(&bytes, "book.xlsb", &limits(10)).unwrap();
     assert_eq!(
         table.rows[0].cells,
-        [Cell::Text("#Div0".into()), Cell::Text("#Error(0x99)".into())]
+        [
+            Cell::Text("#Div0".into()),
+            Cell::Text("#Error(0x99)".into())
+        ]
     );
 }
 
@@ -2044,7 +2047,9 @@ fn ods_dates_and_times_are_dates_and_times() {
         ),
         ("time", "P1Y", Cell::Text("P1Y".into())),
     ];
-    let header: String = (0..cases.len()).map(|i| ods_text(&format!("h{i}"))).collect();
+    let header: String = (0..cases.len())
+        .map(|i| ods_text(&format!("h{i}")))
+        .collect();
     let cells: String = cases
         .iter()
         .map(|(kind, value, _)| {
@@ -2054,7 +2059,12 @@ fn ods_dates_and_times_are_dates_and_times() {
         })
         .collect();
     let rows = [ods_row(1, &header), ods_row(1, &cells)].concat();
-    let table = read_table(&ods_of(&ods_table("Sheet1", &rows)), "book.ods", &limits(10)).unwrap();
+    let table = read_table(
+        &ods_of(&ods_table("Sheet1", &rows)),
+        "book.ods",
+        &limits(10),
+    )
+    .unwrap();
     let expected: Vec<Cell> = cases.iter().map(|(_, _, cell)| cell.clone()).collect();
     assert_eq!(table.rows[0].cells, expected);
 }
@@ -2063,6 +2073,11 @@ fn ods_dates_and_times_are_dates_and_times() {
 fn ods_tabs_and_line_breaks_are_text() {
     let cell = r#"<table:table-cell office:value-type="string"><text:p>a<text:tab/>b<text:line-break/>c<text:s text:c="2"/>d</text:p></table:table-cell>"#;
     let rows = [ods_row(1, &ods_text("h")), ods_row(1, cell)].concat();
-    let table = read_table(&ods_of(&ods_table("Sheet1", &rows)), "book.ods", &limits(10)).unwrap();
+    let table = read_table(
+        &ods_of(&ods_table("Sheet1", &rows)),
+        "book.ods",
+        &limits(10),
+    )
+    .unwrap();
     assert_eq!(table.rows[0].cells, [Cell::Text("a\tb\nc  d".into())]);
 }
