@@ -52,7 +52,6 @@ tokio-tungstenite = { workspace = true }
 tokio-util = { workspace = true }
 # The per-route pipeline is a Tower layer of its own.
 tower = { workspace = true }
-tower-http = { workspace = true }
 tracing = { workspace = true }
 utoipa = { workspace = true }
 uuid = { workspace = true }
@@ -73,9 +72,6 @@ serde_urlencoded = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 tower = { workspace = true }
-# Only the CORS differential test compares against tower-http's CorsLayer;
-# dev-dependency features do not reach normal builds.
-tower-http = { workspace = true, features = ["cors"] }
 tracing-subscriber = { workspace = true }
 
 # The router's micro-benchmarks (`cargo bench -p navree-http --bench routing`).

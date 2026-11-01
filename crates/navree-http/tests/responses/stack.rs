@@ -3,21 +3,22 @@
 
 use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use bytes::Bytes;
+use futures_util::future::BoxFuture;
 use futures_util::stream;
 use http::{Method, Request, StatusCode};
-use http_body_util::BodyExt;
+use http_body_util::{BodyExt, Either, Full, Limited};
 use navree_http::body::Body;
 use navree_http::extract::Request as NavreeRequest;
 use navree_http::middleware::{self, Next, State};
 use navree_http::response::sse::{Event, Sse};
 use navree_http::response::{IntoResponse, Redirect, Response};
 use navree_http::routing::Router;
-use navree_http::{AppError, AppRouter, CorsLayer, Json, Path};
+use navree_http::{AppError, AppRouter, CompressionLayer, CorsLayer, Json, Path};
 use tower::{Service, ServiceExt};
-use tower_http::compression::CompressionLayer;
 
 use crate::support::{Seen, golden, ours};
 
@@ -263,7 +264,7 @@ async fn a_2xx_to_connect_loses_its_body() {
 async fn the_edge_of_the_stack_sees_a_response_of_any_body() {
     // A layer that hands the rest of the stack a request body of its own
     // takes the app as it is.
-    let app = AppRouter::new(routes()).layer(tower_http::limit::RequestBodyLimitLayer::new(2));
+    let app = AppRouter::new(routes()).layer(LimitLayer(2));
     let refused = app
         .clone()
         .oneshot(request(
@@ -281,6 +282,62 @@ async fn the_edge_of_the_stack_sees_a_response_of_any_body() {
         .unwrap();
     let body = passed.into_body().collect().await.unwrap().to_bytes();
     assert_eq!(body, "ok");
+}
+
+/// A layer of the kind other crates bring: the request goes on with a body
+/// of its own (cut off at the limit), and a declared length over the limit
+/// is refused with a response body of its own.
+#[derive(Clone, Copy)]
+struct LimitLayer(usize);
+
+impl<S> tower::Layer<S> for LimitLayer {
+    type Service = Limit<S>;
+
+    fn layer(&self, inner: S) -> Limit<S> {
+        Limit {
+            inner,
+            limit: self.0,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct Limit<S> {
+    inner: S,
+    limit: usize,
+}
+
+impl<S, B> Service<Request<B>> for Limit<S>
+where
+    S: Service<Request<Limited<B>>, Response = Response>,
+    S::Future: Send + 'static,
+{
+    type Response = http::Response<Either<Full<Bytes>, Body>>;
+    type Error = S::Error;
+    type Future = BoxFuture<'static, Result<Self::Response, S::Error>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), S::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, request: Request<B>) -> Self::Future {
+        let declared = request
+            .headers()
+            .get(http::header::CONTENT_LENGTH)
+            .and_then(|value| value.to_str().ok()?.parse::<usize>().ok());
+        if declared.is_some_and(|length| length > self.limit) {
+            let refused = http::Response::builder()
+                .status(StatusCode::PAYLOAD_TOO_LARGE)
+                .body(Either::Left(Full::from("length limit exceeded")))
+                .unwrap();
+            return Box::pin(async move { Ok(refused) });
+        }
+        let limit = self.limit;
+        let response = self
+            .inner
+            .call(request.map(|body| Limited::new(body, limit)));
+        Box::pin(async move { Ok(response.await?.map(Either::Right)) })
+    }
 }
 
 /// A service that is ready only after being polled, as Tower's contract

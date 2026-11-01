@@ -1,5 +1,7 @@
 //! Our `CorsLayer` against tower-http's, on a matrix of configurations and
-//! requests.
+//! requests. tower-http 0.6's answers to the matrix are recorded in
+//! `cors_reference.txt`: status and headers, as [`summary`] writes them,
+//! for each configuration, request and method asked for below.
 //!
 //! The two must produce the same status and headers, except where
 //! tower-http is less strict than the Fetch standard. Those differences are
@@ -14,7 +16,7 @@
 //! 2. **A preflight is `OPTIONS` with `Origin` and
 //!    `Access-Control-Request-Method`.** tower-http answers every `OPTIONS`
 //!    request itself. We pass the others to the handler.
-//! 3. **`Vary`.** tower-http 0.6 (the version in the tree) varies every
+//! 3. **`Vary`.** tower-http 0.6 (the recorded version) varies every
 //!    response with `Origin`, `Access-Control-Request-Method` and
 //!    `Access-Control-Request-Headers`. We vary ordinary responses with
 //!    `Origin` and preflight responses with all three.
@@ -29,7 +31,6 @@ use http::{HeaderName, HeaderValue, Method, Request, Response, StatusCode};
 use navree_http::CorsLayer;
 use navree_http::body::Body;
 use tower::{ServiceBuilder, ServiceExt, service_fn};
-use tower_http::cors::{AllowOrigin, CorsLayer as TowerCors};
 
 const APP: &str = "https://app.example.com";
 const ADMIN: &str = "https://admin.example.com";
@@ -87,18 +88,6 @@ const CONFIGS: &[Config] = &[
 
 fn ours(config: &Config) -> CorsLayer {
     CorsLayer::new(config.origins.iter().map(|o| HeaderValue::from_static(o)))
-        .allow_credentials(config.credentials)
-        .allow_methods(METHODS)
-        .allow_headers(REQUEST_HEADERS.map(HeaderName::from_static))
-        .expose_headers(EXPOSED.map(HeaderName::from_static))
-        .max_age(Duration::from_secs(600))
-}
-
-fn theirs(config: &Config) -> TowerCors {
-    TowerCors::new()
-        .allow_origin(AllowOrigin::list(
-            config.origins.iter().map(|o| HeaderValue::from_static(o)),
-        ))
         .allow_credentials(config.credentials)
         .allow_methods(METHODS)
         .allow_headers(REQUEST_HEADERS.map(HeaderName::from_static))
@@ -284,14 +273,16 @@ async fn run_ours(config: &Config, method: &Method, headers: &[(&str, &str)]) ->
     summary(&response)
 }
 
-async fn run_theirs(config: &Config, method: &Method, headers: &[(&str, &str)]) -> Vec<String> {
-    let response = ServiceBuilder::new()
-        .layer(theirs(config))
-        .service(service_fn(inner))
-        .oneshot(request(method, headers))
-        .await
-        .unwrap();
-    summary(&response)
+/// tower-http's answer to `case` sent with `method`, from the recording.
+fn run_theirs(config: &Config, case: &Case, method: &Method) -> Vec<String> {
+    let key = format!("{} / {} / {method}", config.name, case.name);
+    // Git may check the file out with CRLF line ends.
+    let reference = include_str!("cors_reference.txt").replace("\r\n", "\n");
+    let block = reference
+        .split("\n\n")
+        .find(|block| block.lines().next() == Some(key.as_str()))
+        .unwrap_or_else(|| panic!("`{key}` is in cors_reference.txt"));
+    block.lines().skip(1).map(str::to_owned).collect()
 }
 
 fn header_values<'a>(headers: &'a [(&str, &str)], name: &str) -> Vec<&'a str> {
@@ -318,7 +309,7 @@ async fn standard(config: &Config, case: &Case) -> Vec<String> {
     } else {
         case.method.clone()
     };
-    let mut lines = run_theirs(config, &method, case.headers).await;
+    let mut lines = run_theirs(config, case, &method);
 
     // Rule 1: CORS headers only for an allowed origin.
     if !allowed {
@@ -355,7 +346,7 @@ async fn our_layer_equals_tower_http_apart_from_the_standard_rules() {
                 config.name, case.name
             );
             compared += 1;
-            let raw = run_theirs(config, &case.method, case.headers).await;
+            let raw = run_theirs(config, case, &case.method);
             if raw == ours {
                 identical += 1;
             } else {
@@ -380,7 +371,7 @@ async fn an_allowed_simple_request_and_preflight_are_identical_to_tower_http() {
     let config = &CONFIGS[2];
     for case in [&CASES[0], &CASES[8]] {
         let mut ours = run_ours(config, &case.method, case.headers).await;
-        let mut theirs = run_theirs(config, &case.method, case.headers).await;
+        let mut theirs = run_theirs(config, case, &case.method);
         ours.retain(|line| !line.starts_with("vary: origin"));
         theirs.retain(|line| !line.starts_with("vary: origin"));
         assert_eq!(ours, theirs, "{}", case.name);

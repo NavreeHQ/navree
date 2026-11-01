@@ -18,7 +18,6 @@ use navree_kernel::{AppContext, BoxError, BoxFuture};
 use navree_telemetry::{EventKind, Telemetry, TracePolicy};
 use tower::Service;
 use tower::util::BoxCloneSyncService;
-use tower_http::compression::CompressionLayer;
 use uuid::Uuid;
 
 use crate::body::BodyLimit;
@@ -35,8 +34,9 @@ use crate::pipeline::{
 use crate::response::{IntoResponse, Response};
 use crate::routing::PathPattern;
 use crate::{
-    AppError, AppRouter, Authenticator, ClientIp, CorsLayer, CorsOptions, ErrorMapper, GlobalLayer,
-    HttpOptions, HttpServer, LayerSlot, RouteAuthorizer, RouteDef, RouteMeta, routing,
+    AppError, AppRouter, Authenticator, ClientIp, CompressionLayer, CorsLayer, CorsOptions,
+    ErrorMapper, GlobalLayer, HttpOptions, HttpServer, LayerSlot, RouteAuthorizer, RouteDef,
+    RouteMeta, routing,
 };
 
 /// Builds the app's full router: every controller route on Navree's
