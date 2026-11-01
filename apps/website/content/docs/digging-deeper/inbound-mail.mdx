@@ -584,7 +584,7 @@ async fn a_reply_lands_on_its_ticket() {
 }
 ```
 
-- `Incoming::compose()` has `from`, `to`, `cc`, `reply_to`, `envelope_to` (a recipient the headers don't show), `subject`, `text`, `html`, `message_id`, `in_reply_to`, `reference`, `date`, `header`, `attach`, `inline`, `forward` (a whole message as an attachment), `provider_id`, `verdicts` and `source`; `build()` gives the `Incoming` and `to_bytes()` the MIME. Non-ASCII names and subjects are encoded as the real thing would be.
+- `Incoming::compose()` has `from`, `to`, `cc`, `reply_to`, `envelope_to` (the envelope, which then replaces `to` and `cc` for routing), `subject`, `text`, `html`, `message_id`, `in_reply_to`, `reference`, `date`, `header`, `attach`, `inline`, `forward` (a whole message as an attachment), `provider_id`, `verdicts` and `source`; `build()` gives the `Incoming` and `to_bytes()` the MIME. Non-ASCII names and subjects are encoded as the real thing would be.
 - Real messages work as well: save a provider's `.eml` under `tests/fixtures/` and receive `Incoming::new("raw", std::fs::read(path)?)`.
 - `fake.received()` lists what became of every message the fake delivered; `Inbound::mailbox_for(&mail)` tells which mailbox would take a message without running it.
 - The source routes take the same payloads in tests as in production: post a fixture with the test client and the configured secret.

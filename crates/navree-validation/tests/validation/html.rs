@@ -793,9 +793,9 @@ async fn a_long_field_is_sanitized_on_a_runtime_of_one_thread() {
 #[test]
 fn a_long_text_of_ampersands_is_written_in_linear_time() {
     let policy = HtmlPolicy::default();
-    let size = 128 * 1024;
-    // At this length the square took over half a second in a release build,
-    // and far longer in a test build.
+    let size = 512 * 1024;
+    // At this length the square took 14 s in a release build, and much longer
+    // in a test build.
     let started = std::time::Instant::now();
     let clean = policy.try_clean(&"&".repeat(size)).unwrap();
     assert_eq!(clean, "&amp;".repeat(size));
@@ -804,7 +804,7 @@ fn a_long_text_of_ampersands_is_written_in_linear_time() {
     assert!(started.elapsed().as_secs() < 20, "{:?}", started.elapsed());
 
     // An attribute is charged for it instead.
-    let html = format!("<a href=\"/{}\">x</a>", "&".repeat(size));
+    let html = format!("<a href=\"/{}\">x</a>", "&".repeat(size / 2));
     assert_eq!(
         policy.try_clean(&html),
         Err(HtmlError::TooManyNodes { max: 128 * 1024 })

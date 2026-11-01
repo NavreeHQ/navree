@@ -45,7 +45,9 @@ const MOST_DEPTH: usize = 256;
 ///   (`onclick`, `onerror`) and `style` go;
 /// - a URL attribute (`href`, `src`, `action`, `formaction`, `data`,
 ///   `poster`, `cite` and the like, on any tag) with a scheme that is not
-///   allowed (`javascript:`, `data:`) is removed; relative URLs stay;
+///   allowed (`javascript:`, `data:`) is removed; relative URLs stay, but one
+///   with a host of its own (`//evil.test`) only when `http` and `https` are
+///   both allowed, since it leaves with the page's scheme;
 /// - an SVG or MathML element where the HTML parser would not put it, and
 ///   SVG animation elements (`animate`, `set`), are removed;
 /// - comments are removed, and text is escaped (`<` becomes `&lt;`).
@@ -76,9 +78,14 @@ const MOST_DEPTH: usize = 256;
 /// img = ["src", "alt"]
 /// ```
 ///
-/// `script` and `style` can't be allowed, and `rel` can't be allowed while
-/// `link_rel` is set; `ValidationModule` refuses to boot with such a policy
-/// ([`check`](HtmlPolicy::check)).
+/// `script` and `style` can't be allowed, nor `on*`, `srcdoc` or `http-equiv`,
+/// and `rel` can't be allowed while `link_rel` is set; `ValidationModule`
+/// refuses to boot with such a policy ([`check`](HtmlPolicy::check)).
+///
+/// An input over a limit (`max_input_bytes`, `max_nodes`, `max_depth`, or 256
+/// attributes on one tag) is refused rather than parsed further:
+/// [`try_clean`](HtmlPolicy::try_clean) says so, and `SafeHtml` in the
+/// extractors is a 400 on the field.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HtmlPolicy {
