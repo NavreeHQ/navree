@@ -1,0 +1,22 @@
+[package]
+name = "ui-proof"
+description = "Proof pages for navree-ui: a form, a 1,000-row table, a dashboard and every component in its states."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "ui-proof"
+path = "src/main.rs"
+
+# Application code: unsafe stays forbidden, but undocumented items are fine.
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+chrono = { workspace = true }
+http = { workspace = true }
+navree = { workspace = true, default-features = false, features = ["ui"] }
+serde = { workspace = true }

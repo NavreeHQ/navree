@@ -85,6 +85,7 @@ impl NavItem {
     /// How well this item's link matches `path`: longer is better.
     fn score(&self, path: &str, home: &str) -> usize {
         let href = self.href.as_str();
+        let href = href.split(['?', '#']).next().unwrap_or(href);
         if href == path {
             return href.len() + 1;
         }

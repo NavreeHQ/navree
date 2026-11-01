@@ -1052,6 +1052,79 @@ impl Text {
     }
 }
 
+/// One figure and what it is.
+#[derive(Clone, Debug)]
+#[must_use]
+pub struct Stat {
+    el: Element,
+    label: Node,
+    value: Node,
+    trend: Option<(Node, bool)>,
+}
+
+impl Stat {
+    /// The figure `value`, called `label`.
+    pub fn new(label: impl Into<Node>, value: impl Into<Node>) -> Self {
+        Self { el: el("div").slot("stat"), label: label.into(), value: value.into(), trend: None }
+    }
+
+    /// Adds how it's moving; `good` colours it.
+    pub fn trend(mut self, text: impl Into<Node>, good: bool) -> Self {
+        self.trend = Some((text.into(), good));
+        self
+    }
+
+    fn into_node(self) -> Node {
+        self.el
+            .children((
+                el("span").slot("stat-label").child(self.label),
+                el("span").slot("stat-value").child(self.value),
+                self.trend.map(|(text, good)| el("span").slot("stat-trend").attr("data-tone", if good { "up" } else { "down" }).child(text)),
+            ))
+            .into()
+    }
+}
+
+/// A small bar chart, drawn on the server as SVG: no script and no style
+/// attribute. The description is what assistive technology gets.
+#[derive(Clone, Debug)]
+#[must_use]
+pub struct Bars {
+    el: Element,
+}
+
+impl Bars {
+    /// `values` as bars, described by `description`.
+    pub fn new(description: impl Into<String>, values: &[u32]) -> Self {
+        let top = values.iter().copied().max().unwrap_or(0).max(1);
+        let bars: Vec<Element> = values
+            .iter()
+            .enumerate()
+            .map(|(at, value)| {
+                let height = i64::from(value.saturating_mul(100) / top);
+                el("rect").attr("x", i64::try_from(at * 10).unwrap_or(0) + 1).attr("y", 100 - height).attr("width", 8_i64).attr("height", height)
+            })
+            .collect();
+        let width = i64::try_from(values.len() * 10).unwrap_or(0);
+        Self {
+            el: el("svg")
+                .slot("bars")
+                .attr("viewBox", format!("0 0 {width} 100"))
+                .attr("preserveAspectRatio", "none")
+                .attr("role", "img")
+                .attr("aria-label", description.into())
+                .child(bars),
+        }
+    }
+
+    fn into_node(self) -> Node {
+        self.el.into()
+    }
+}
+
+root_methods!(Stat, Bars);
+into_node!(Stat, Bars);
+
 root_methods!(
     Alert, AspectRatio, Attachment, Avatar, Badge, Breadcrumb, Bubble, Card, Direction, Empty, Item, Kbd, Marker, Message, Pagination,
     Progress, Separator, Skeleton, Spinner, Table, TableHead, TableCell, TableRowEl, Heading, Text,

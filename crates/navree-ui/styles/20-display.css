@@ -96,6 +96,7 @@ h1[data-slot=heading]{font-size:1.5rem}h2[data-slot=heading]{font-size:1.25rem}h
 [data-slot=data-table]{display:flex;flex-direction:column;gap:.75rem}
 [data-slot=table-toolbar]{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;& [data-slot=input]{width:16rem;max-width:100%}& [data-slot=native-select]{width:auto}}
 [data-slot=table-footer]{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;justify-content:space-between;color:var(--fg-2);font-size:13px}
+[data-slot=bars]{display:block;width:100%;height:10rem;& rect{fill:var(--bar)}& rect:hover{fill:var(--fg-2)}}
 [data-slot=stat]{display:flex;flex-direction:column;gap:.25rem;padding:1rem;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--ink-1)}
 [data-slot=stat-label]{color:var(--fg-2);font-size:13px}
 [data-slot=stat-value]{color:var(--fg);font-size:1.5rem;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.2}

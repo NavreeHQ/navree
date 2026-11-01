@@ -14,9 +14,9 @@ mod overlays;
 
 pub use actions::{Button, ButtonGroup, ButtonKind, ButtonVariant, Toggle};
 pub use display::{
-    Alert, AlertTone, AspectRatio, Attachment, Avatar, Badge, BadgeVariant, Breadcrumb, Bubble, BubbleSide, Card, Direction, Empty,
+    Alert, AlertTone, AspectRatio, Attachment, Avatar, Badge, BadgeVariant, Bars, Breadcrumb, Bubble, BubbleSide, Card, Direction, Empty,
     Heading, Item, ItemVariant, Kbd, Marker, MarkerVariant, Message, Pagination, Progress, Ratio, Separator, Skeleton, SkeletonShape,
-    Spinner, Table, TableCell, TableHead, TableRowEl, Text, TextVariant,
+    Spinner, Stat, Table, TableCell, TableHead, TableRowEl, Text, TextVariant,
 };
 pub use inputs::{
     Checkbox, Field, FieldSet, Input, InputGroup, InputKind, Label, NativeSelect, OptionItem, RadioGroup, Switch, Textarea,
