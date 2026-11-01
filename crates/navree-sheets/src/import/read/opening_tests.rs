@@ -215,6 +215,23 @@ alone!(
 );
 
 #[test]
+fn the_spaces_of_a_row_count_together_against_the_limit() {
+    // Each cell is within the limit, and the two together are not.
+    let row = |cells: usize| {
+        ods(&format!(
+            r#"<table:table table:name="S"><table:table-row>{}</table:table-row></table:table>"#,
+            spaced_cell(600).repeat(cells)
+        ))
+    };
+    assert!(read_table(&row(1), "x.ods", &opts(1024)).is_ok());
+    let result = read_table(&row(2), "x.ods", &opts(1024));
+    assert!(
+        refused_with(&result, "more than 1024 bytes of text"),
+        "{result:?}"
+    );
+}
+
+#[test]
 fn a_row_cell_past_the_header_still_makes_a_row_a_row() {
     let file = ods(&format!(
         r#"<table:table table:name="S"><table:table-row>{}</table:table-row><table:table-row><table:table-cell table:number-columns-repeated="3"/>{}</table:table-row></table:table>"#,
