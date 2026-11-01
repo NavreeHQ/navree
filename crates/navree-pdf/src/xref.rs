@@ -181,7 +181,7 @@ pub(crate) fn indirect(
         after.eat_eol();
         if after.starts_with(b"endstream") {
             let content = data.slice(start..stop);
-            return Ok(Some((id, Object::Stream(Stream::new(dict, content)))));
+            return Ok(Some((id, Stream::new(dict, content).into())));
         }
     }
     // The length is missing or wrong: the data ends at the `endstream` that
@@ -194,7 +194,7 @@ pub(crate) fn indirect(
         return Ok(None);
     };
     let content = data.slice(start..start + stop);
-    Ok(Some((id, Object::Stream(Stream::new(dict, content)))))
+    Ok(Some((id, Stream::new(dict, content).into())))
 }
 
 /// Where the data of a stream whose length is unknown ends in `window`

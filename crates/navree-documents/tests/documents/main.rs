@@ -17,5 +17,7 @@ mod native;
 mod operations;
 mod pdf;
 mod pdf_hostile;
+mod pdf_real;
+mod pdf_tagged;
 mod service;
 mod support;

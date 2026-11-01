@@ -10,7 +10,10 @@ use crate::document::{Document, MAX_HOPS, NodeKind, ReadObjects, node_kind};
 use crate::error::{PdfError, size};
 use crate::filters;
 use crate::object::{Dictionary, Object, ObjectId, Stream, StringFormat};
-use crate::parse::{MAX_DEPTH, is_regular};
+use crate::parse::{
+    ENTRY_MEMORY, MAX_DEPTH, OBJECT_MEMORY, TABLE_MEMORY, block, dictionary_extra, is_regular,
+    items_block,
+};
 
 /// Objects a writer puts in one object stream (100).
 const OBJECTS_PER_STREAM: usize = 100;
@@ -24,11 +27,20 @@ const MAX_TREE_DEPTH: usize = 256;
 /// The shortest stream [`Objects::compress`] compresses (64 bytes): making a
 /// compressor costs more than a shorter one could give back.
 const SHORTEST_COMPRESSED: usize = 64;
+/// The keys of a stream's dictionary that say how its bytes are read, or where:
+/// a stream with one of them is left as it is, since a filter added to it would
+/// be read with parameters meant for no filter, or for another.
+const DESCRIBES_BYTES: [&[u8]; 6] = [
+    b"Filter",
+    b"DecodeParms",
+    b"DP",
+    b"F",
+    b"FFilter",
+    b"FDecodeParms",
+];
 /// What compressing one stream costs in work, besides four bytes for each of
 /// its own (4 KiB): the compressor's tables.
 const COMPRESS_COST: usize = 4096;
-/// What an object holds in the map of objects, besides itself.
-const HELD_ENTRY_MEMORY: usize = 32;
 /// The keys of a page tree node that lead to what a page needs, besides its
 /// `Kids`.
 const NEEDED_KEYS: [&[u8]; 5] = [
@@ -94,30 +106,38 @@ impl EditBudget {
     }
 }
 
-/// What `object` holds, counted as a read counts it, and besides that the
-/// room a map keeps for its entries.
+/// What `object` holds, counted as a read counts it: the object where it
+/// sits, and what it owns (the bytes of a stream too, which an object made for
+/// an edit owns).
 pub fn memory_of(object: &Object) -> usize {
-    fn inner(object: &Object, depth: usize) -> usize {
-        let own = std::mem::size_of::<Object>();
+    fn held(object: &Object, depth: usize) -> usize {
         if depth > MAX_DEPTH {
-            return own;
+            return 0;
         }
-        let entries = |dict: &Dictionary, depth: usize| -> usize {
+        let entries = |dict: &Dictionary| -> usize {
             dict.iter()
                 .map(|(key, value)| {
-                    key.len() + crate::parse::ENTRY_MEMORY + 32 + inner(value, depth + 1)
+                    ENTRY_MEMORY + block(key.heap_len()) + OBJECT_MEMORY + held(value, depth + 1)
                 })
-                .sum()
+                .sum::<usize>()
+                .saturating_add(dictionary_extra(dict.len()))
         };
-        own + match object {
-            Object::Name(bytes) | Object::String(bytes, _) => bytes.len(),
-            Object::Array(items) => items.iter().map(|item| inner(item, depth + 1)).sum(),
-            Object::Dictionary(dict) => entries(dict, depth),
-            Object::Stream(stream) => stream.content.len() + entries(&stream.dict, depth),
+        match object {
+            Object::Name(name) => block(name.heap_len()),
+            Object::String(bytes, _) => block(bytes.len()),
+            Object::Array(items) => items
+                .iter()
+                .map(|item| OBJECT_MEMORY + held(item, depth + 1))
+                .sum::<usize>()
+                .saturating_add(items_block(items.len())),
+            Object::Dictionary(dict) => entries(dict),
+            Object::Stream(stream) => block(std::mem::size_of::<Stream>())
+                .saturating_add(stream.content.len())
+                .saturating_add(entries(&stream.dict)),
             _ => 0,
         }
     }
-    inner(object, 0)
+    OBJECT_MEMORY + held(object, 0)
 }
 
 /// A document's objects and trailer, held in memory to be changed and
@@ -135,6 +155,9 @@ pub struct Objects {
     /// The most saving may write, when it is held to a limit.
     output_limit: Option<usize>,
     budget: EditBudget,
+    /// The memory and the work reading the objects was counted as.
+    read_memory: usize,
+    read_work: usize,
 }
 
 impl Objects {
@@ -177,6 +200,8 @@ impl Objects {
             objects,
             lost,
             freed,
+            memory,
+            work,
         } = document.into_objects()?;
         let highest = objects.keys().map(|id| id.0).max().unwrap_or(0);
         let mut read = Objects {
@@ -190,6 +215,8 @@ impl Objects {
                 added_limit: limits.memory,
                 ..EditBudget::default()
             },
+            read_memory: memory,
+            read_work: work,
         };
         read.name_tree_nodes();
         if let Some((number, generation)) = read.first_needed(&lost) {
@@ -377,6 +404,19 @@ impl Objects {
         self.budget.added.get()
     }
 
+    /// The memory counted for these objects: what reading them was counted as
+    /// ([`Document::memory_used`] when all of them were read), and what has
+    /// been added since.
+    pub fn memory_counted(&self) -> usize {
+        self.read_memory.saturating_add(self.budget.added.get())
+    }
+
+    /// The work counted for these objects: what reading them was counted as
+    /// ([`Document::work_used`]), and what looking them up has taken since.
+    pub fn work_counted(&self) -> usize {
+        self.read_work.saturating_add(self.budget.work.get())
+    }
+
     /// Sets the most memory an edit may add.
     pub fn set_added_limit(&mut self, limit: usize) {
         self.budget.added_limit = limit;
@@ -411,7 +451,7 @@ impl Objects {
     pub fn insert(&mut self, id: ObjectId, object: impl Into<Object>) {
         let object = object.into();
         // The error is kept for `check` and for saving.
-        let _ = self.budget.hold(memory_of(&object) + HELD_ENTRY_MEMORY);
+        let _ = self.budget.hold(memory_of(&object) + TABLE_MEMORY);
         self.adopt(id, object);
     }
 
@@ -568,16 +608,16 @@ impl Objects {
         self.objects.retain(|id, _| reached.contains(id));
     }
 
-    /// Compresses (Flate) every stream of 64 bytes or more that has no filter,
-    /// when that makes it smaller, as long as there is work left for it: it
-    /// takes 4 KiB and 4 bytes for each byte. A stream past that stays as it
-    /// is.
+    /// Compresses (Flate) every stream of 64 bytes or more that has no filter
+    /// (and no parameters for one, nor a file its bytes are in), when that makes
+    /// it smaller, as long as there is work left for it: it takes 4 KiB and 4
+    /// bytes for each byte. A stream past that stays as it is.
     pub fn compress(&mut self) {
         let budget = &self.budget;
         for object in self.objects.values_mut() {
             if let Object::Stream(stream) = object
                 && stream.content.len() >= SHORTEST_COMPRESSED
-                && !stream.dict.has(b"Filter")
+                && !DESCRIBES_BYTES.iter().any(|key| stream.dict.has(key))
             {
                 let cost = stream.content.len().saturating_mul(4) + COMPRESS_COST;
                 if budget.work.get().saturating_add(cost) > budget.work_limit {
@@ -673,7 +713,7 @@ impl Objects {
             dict.set("Filter", "FlateDecode");
             let stream = Stream::new(dict, filters::deflate(&header));
             entries.insert(next, (1, out.len() as u64, 0));
-            write_indirect(&mut out, (next, 0), &Object::Stream(stream));
+            write_indirect(&mut out, (next, 0), &Object::from(stream));
         }
         let mut trailer = self.trailer.clone();
         for key in [&b"Prev"[..], b"XRefStm", b"Encrypt"] {
@@ -704,7 +744,7 @@ impl Objects {
             trailer.set("Index", runs(entries.keys()));
             trailer.set("Filter", "FlateDecode");
             let stream = Stream::new(trailer, filters::deflate(&rows));
-            write_indirect(&mut out, (own, 0), &Object::Stream(stream));
+            write_indirect(&mut out, (own, 0), &Object::from(stream));
             over(out.len())?;
         } else {
             entries.insert(0, (0, 0, 65535));
@@ -996,5 +1036,31 @@ mod tests {
         objects.trailer.set("Root", root);
         objects.prune();
         assert_eq!(objects.objects.len(), 2);
+    }
+
+    #[test]
+    fn compressing_leaves_a_stream_alone_when_its_dictionary_describes_its_bytes() {
+        for key in ["DecodeParms", "DP", "F", "FFilter", "FDecodeParms"] {
+            let mut objects = Objects::new();
+            let mut dict = Dictionary::new();
+            dict.set(key, dictionary! { "Predictor" => 12, "Columns" => 4 });
+            let data = b"BT /F1 12 Tf 72 700 Td (padded, padded, padded, padded, padded) Tj ET";
+            let id = objects.add(Stream::new(dict.clone(), data.to_vec()));
+            objects.compress();
+            let stream = objects.get(id).and_then(Object::as_stream).unwrap();
+            assert_eq!(&stream.content[..], &data[..], "{key}");
+            assert_eq!(stream.dict, dict, "{key}");
+        }
+        // Without them, the same stream is compressed.
+        let mut objects = Objects::new();
+        let id = objects.add(Stream::new(
+            Dictionary::new(),
+            b"BT /F1 12 Tf 72 700 Td (padded, padded, padded, padded, padded) Tj ET
+"
+            .repeat(8),
+        ));
+        objects.compress();
+        let stream = objects.get(id).and_then(Object::as_stream).unwrap();
+        assert_eq!(stream.filters(), [&b"FlateDecode"[..]]);
     }
 }

@@ -476,10 +476,8 @@ mod tests {
             metadata: true,
         };
         let stream = |identity| {
-            let mut object = Object::Stream(crate::object::Stream::new(
-                Dictionary::new(),
-                b"plain".to_vec(),
-            ));
+            let mut object: Object =
+                crate::object::Stream::new(Dictionary::new(), b"plain".to_vec()).into();
             crypt.decrypt((4, 0), &mut object, identity);
             object.as_stream().unwrap().content.to_vec()
         };

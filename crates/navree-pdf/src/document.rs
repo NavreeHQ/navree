@@ -11,7 +11,7 @@ use crate::crypt::Crypt;
 use crate::error::PdfError;
 use crate::filters::{self, DecodeError};
 use crate::object::{Dictionary, Object, ObjectId, Stream};
-use crate::parse::{Fail, Lexer, MAX_DEPTH};
+use crate::parse::{Fail, Lexer, MAX_DEPTH, TABLE_MEMORY, block};
 use crate::xref::{self, Entry};
 
 /// How many references are followed to reach an object (8). Writers refer to
@@ -24,12 +24,19 @@ pub(crate) const MAX_HOPS: usize = 8;
 const MAX_LOADING: usize = 32;
 /// How deep the page tree may nest (256).
 const MAX_TREE_DEPTH: usize = 256;
-/// What reading a stream object holds besides its dictionary: the shared
-/// handle on its bytes.
-const STREAM_MEMORY: usize = 32;
+/// What reading a stream object holds besides its dictionary: the stream
+/// itself, with the shared handle on its bytes.
+const STREAM_MEMORY: usize = block(std::mem::size_of::<Stream>());
 /// What an object stream's list holds for each object in it, with room to
-/// grow: a number and offset, in the list and in its index by number.
-const MEMBER_MEMORY: usize = 72;
+/// grow: a number and offset.
+const MEMBER_MEMORY: usize = 24;
+/// What the index by number of an object stream holds for each object in it:
+/// an entry of a hash map, with room to grow.
+const MEMBER_INDEX_MEMORY: usize = 48;
+/// What each object of the cross-reference holds besides the object itself,
+/// which is counted as it is read: its slot, and the row of the table of
+/// objects an edit moves it to.
+const SLOT_MEMORY: usize = std::mem::size_of::<Slot>() + TABLE_MEMORY;
 /// What reading one object of an object stream's list costs, in bytes of work.
 const MEMBER_COST: usize = 16;
 /// What decrypting one string or stream costs besides its bytes, in bytes of
@@ -46,8 +53,9 @@ struct Container {
     /// The object numbers and offsets the stream lists, in order.
     members: Vec<(u32, usize)>,
     /// Where each number is, for an entry whose index is wrong; the last one
-    /// listed when a number is listed twice.
-    by_number: HashMap<u32, usize>,
+    /// listed when a number is listed twice. Made the first time one is wrong:
+    /// in a file whose indexes are right, never.
+    by_number: OnceCell<HashMap<u32, usize>>,
 }
 
 /// What a scan of the file found: where each object is, and where objects
@@ -162,7 +170,7 @@ impl Document {
             .iter()
             .filter(|(number, entry)| **number != 0 && **entry != Entry::Free)
             .count();
-        budget.memory(in_use.saturating_mul(std::mem::size_of::<Slot>()))?;
+        budget.memory(in_use.saturating_mul(SLOT_MEMORY))?;
         // An object ends where the next one that is really there starts:
         // not at an entry that points at bytes that are not its object.
         let mut offsets: Vec<usize> = xref
@@ -316,6 +324,7 @@ impl Document {
             self.object(id);
         }
         self.check()?;
+        let (memory, work) = (self.memory_used(), self.work_used());
         let mut objects = BTreeMap::new();
         let mut lost = HashSet::new();
         let mut freed = HashSet::new();
@@ -336,6 +345,8 @@ impl Document {
             objects,
             lost,
             freed,
+            memory,
+            work,
         })
     }
 
@@ -494,10 +505,18 @@ impl Document {
         };
         let offset = match stream.members.get(index as usize) {
             Some(&(number, offset)) if number == id.0 => offset,
-            _ => match stream.by_number.get(&id.0) {
-                Some(&offset) => offset,
-                None => return Ok(None),
-            },
+            _ => {
+                if stream.by_number.get().is_none() {
+                    self.budget
+                        .memory(stream.members.len().saturating_mul(MEMBER_INDEX_MEMORY))?;
+                    let by_number = stream.members.iter().copied().collect();
+                    let _ = stream.by_number.set(by_number);
+                }
+                match stream.by_number.get().and_then(|found| found.get(&id.0)) {
+                    Some(&offset) => offset,
+                    None => return Ok(None),
+                }
+            }
         };
         let Some(start) = stream
             .first
@@ -556,7 +575,6 @@ impl Document {
             .split(|byte| byte.is_ascii_whitespace())
             .filter(|word| !word.is_empty());
         let mut members = Vec::new();
-        let mut by_number = HashMap::new();
         while let (Some(member), Some(offset)) = (words.next(), words.next()) {
             self.budget.memory(MEMBER_MEMORY)?;
             self.budget.work(MEMBER_COST)?;
@@ -564,14 +582,14 @@ impl Document {
             let offset = number(offset).and_then(|offset| usize::try_from(offset).ok());
             if let (Some(member), Some(offset)) = (member, offset) {
                 members.push((member, offset));
-                by_number.insert(member, offset);
             }
         }
+        members.shrink_to_fit();
         Ok(Some(Container {
             data,
             first,
             members,
-            by_number,
+            by_number: OnceCell::new(),
         }))
     }
 
@@ -814,6 +832,9 @@ pub(crate) struct ReadObjects {
     pub(crate) lost: HashSet<ObjectId>,
     /// What a later section of the cross-reference marks free.
     pub(crate) freed: HashSet<ObjectId>,
+    /// The memory and the work reading all of it was counted as.
+    pub(crate) memory: usize,
+    pub(crate) work: usize,
 }
 
 /// What a kid of the page tree is.

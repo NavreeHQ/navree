@@ -18,7 +18,7 @@ fn operand() -> impl Strategy<Value = Object> {
         any::<bool>().prop_map(Object::Boolean),
         any::<i32>().prop_map(|v| Object::Integer(i64::from(v))),
         (-1.0e6f32..1.0e6f32).prop_map(Object::Real),
-        proptest::collection::vec(any::<u8>(), 0..12).prop_map(Object::Name),
+        proptest::collection::vec(any::<u8>(), 0..12).prop_map(|bytes| Object::Name(bytes.into())),
         proptest::collection::vec(any::<u8>(), 0..24)
             .prop_map(|bytes| Object::String(bytes, StringFormat::Literal)),
         proptest::collection::vec(any::<u8>(), 0..24)

@@ -5,6 +5,8 @@ use std::fmt;
 use bytes::Bytes;
 use indexmap::IndexMap;
 
+pub use crate::name::Name;
+
 /// An object's number and generation, as an indirect reference names it.
 pub type ObjectId = (u32, u16);
 
@@ -30,7 +32,7 @@ pub enum Object {
     /// A real number.
     Real(f32),
     /// A name, without its slash and with `#xx` escapes decoded.
-    Name(Vec<u8>),
+    Name(Name),
     /// A string's bytes, with escapes decoded.
     String(Vec<u8>, StringFormat),
     /// An array.
@@ -38,8 +40,9 @@ pub enum Object {
     /// A dictionary.
     Dictionary(Dictionary),
     /// A stream: a dictionary and the bytes after it, as stored (still
-    /// filtered).
-    Stream(Stream),
+    /// filtered). Boxed, so that the many objects that are not streams do
+    /// not each hold room for one.
+    Stream(Box<Stream>),
     /// An indirect reference (`12 0 R`).
     Reference(ObjectId),
 }
@@ -47,7 +50,7 @@ pub enum Object {
 impl Object {
     /// A name from its text.
     pub fn name(name: impl AsRef<[u8]>) -> Object {
-        Object::Name(name.as_ref().to_vec())
+        Object::Name(Name::new(name.as_ref()))
     }
 
     /// A literal string of `text`'s bytes.
@@ -83,7 +86,7 @@ impl Object {
     /// The name's bytes.
     pub fn as_name(&self) -> Option<&[u8]> {
         match self {
-            Object::Name(name) => Some(name),
+            Object::Name(name) => Some(name.as_slice()),
             _ => None,
         }
     }
@@ -212,7 +215,7 @@ impl From<f32> for Object {
 /// A name.
 impl From<&str> for Object {
     fn from(name: &str) -> Object {
-        Object::Name(name.as_bytes().to_vec())
+        Object::Name(Name::from(name))
     }
 }
 
@@ -230,7 +233,7 @@ impl From<Dictionary> for Object {
 
 impl From<Stream> for Object {
     fn from(stream: Stream) -> Object {
-        Object::Stream(stream)
+        Object::Stream(Box::new(stream))
     }
 }
 
@@ -240,66 +243,202 @@ impl From<ObjectId> for Object {
     }
 }
 
+/// The entries a dictionary keeps in a list (16): real dictionaries have a
+/// handful, and a list searched from its start is smaller and quicker than a
+/// map for so few. One with more is kept in a map.
+pub(crate) const LIST_MOST: usize = 16;
+
+#[derive(Clone)]
+enum Entries {
+    List(Vec<(Name, Object)>),
+    Map(Box<IndexMap<Name, Object>>),
+}
+
 /// A dictionary: its entries in the order they were read or set. Two
 /// dictionaries are equal when they hold the same entries, in any order.
-#[derive(Clone, Default, PartialEq)]
-pub struct Dictionary(IndexMap<Vec<u8>, Object>);
+#[derive(Clone)]
+pub struct Dictionary(Entries);
+
+impl Default for Dictionary {
+    fn default() -> Dictionary {
+        Dictionary::new()
+    }
+}
+
+impl PartialEq for Dictionary {
+    fn eq(&self, other: &Dictionary) -> bool {
+        self.len() == other.len()
+            && self
+                .iter()
+                .all(|(key, value)| other.get(key).is_some_and(|found| found == value))
+    }
+}
+
+/// The entries of a [`Dictionary`], in order.
+pub struct Iter<'a>(IterRepr<'a>);
+
+enum IterRepr<'a> {
+    List(std::slice::Iter<'a, (Name, Object)>),
+    Map(indexmap::map::Iter<'a, Name, Object>),
+}
+
+impl<'a> Iterator for Iter<'a> {
+    type Item = (&'a Name, &'a Object);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match &mut self.0 {
+            IterRepr::List(entries) => entries.next().map(|(key, value)| (key, value)),
+            IterRepr::Map(entries) => entries.next(),
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match &self.0 {
+            IterRepr::List(entries) => entries.size_hint(),
+            IterRepr::Map(entries) => entries.size_hint(),
+        }
+    }
+}
+
+/// The entries of a [`Dictionary`], in order, to change.
+pub struct IterMut<'a>(IterMutRepr<'a>);
+
+enum IterMutRepr<'a> {
+    List(std::slice::IterMut<'a, (Name, Object)>),
+    Map(indexmap::map::IterMut<'a, Name, Object>),
+}
+
+impl<'a> Iterator for IterMut<'a> {
+    type Item = (&'a Name, &'a mut Object);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match &mut self.0 {
+            IterMutRepr::List(entries) => entries.next().map(|(key, value)| (&*key, value)),
+            IterMutRepr::Map(entries) => entries.next(),
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match &self.0 {
+            IterMutRepr::List(entries) => entries.size_hint(),
+            IterMutRepr::Map(entries) => entries.size_hint(),
+        }
+    }
+}
 
 impl Dictionary {
     /// An empty dictionary.
     pub fn new() -> Dictionary {
-        Dictionary(IndexMap::new())
+        Dictionary(Entries::List(Vec::new()))
     }
 
     /// The value of `key`.
     pub fn get(&self, key: &[u8]) -> Option<&Object> {
-        self.0.get(key)
+        match &self.0 {
+            Entries::List(entries) => entries
+                .iter()
+                .find(|(name, _)| name.as_slice() == key)
+                .map(|(_, value)| value),
+            Entries::Map(entries) => entries.get(key),
+        }
     }
 
     /// The value of `key`, to change.
     pub fn get_mut(&mut self, key: &[u8]) -> Option<&mut Object> {
-        self.0.get_mut(key)
+        match &mut self.0 {
+            Entries::List(entries) => entries
+                .iter_mut()
+                .find(|(name, _)| name.as_slice() == key)
+                .map(|(_, value)| value),
+            Entries::Map(entries) => entries.get_mut(key),
+        }
     }
 
     /// Whether the dictionary has `key`.
     pub fn has(&self, key: &[u8]) -> bool {
-        self.0.contains_key(key)
+        self.get(key).is_some()
     }
 
     /// Sets `key` to `value`: a new key goes last, a key already there keeps
     /// its place.
-    pub fn set(&mut self, key: impl Into<Vec<u8>>, value: impl Into<Object>) {
-        self.0.insert(key.into(), value.into());
+    pub fn set(&mut self, key: impl Into<Name>, value: impl Into<Object>) {
+        self.set_name(key.into(), value.into());
+    }
+
+    pub(crate) fn set_name(&mut self, key: Name, value: Object) {
+        match &mut self.0 {
+            Entries::Map(entries) => {
+                entries.insert(key, value);
+            }
+            Entries::List(entries) => {
+                if let Some(entry) = entries.iter_mut().find(|(name, _)| *name == key) {
+                    entry.1 = value;
+                } else if entries.len() < LIST_MOST {
+                    entries.push((key, value));
+                } else {
+                    let mut map: IndexMap<Name, Object> =
+                        IndexMap::with_capacity(entries.len() + 1);
+                    map.extend(std::mem::take(entries));
+                    map.insert(key, value);
+                    self.0 = Entries::Map(Box::new(map));
+                }
+            }
+        }
     }
 
     /// Removes `key`, keeping the order of the others.
     pub fn remove(&mut self, key: &[u8]) -> Option<Object> {
-        self.0.shift_remove(key)
+        match &mut self.0 {
+            Entries::List(entries) => {
+                let at = entries
+                    .iter()
+                    .position(|(name, _)| name.as_slice() == key)?;
+                Some(entries.remove(at).1)
+            }
+            Entries::Map(entries) => entries.shift_remove(key),
+        }
     }
 
     /// The entries, in order.
-    pub fn iter(&self) -> impl Iterator<Item = (&Vec<u8>, &Object)> {
-        self.0.iter()
+    pub fn iter(&self) -> Iter<'_> {
+        Iter(match &self.0 {
+            Entries::List(entries) => IterRepr::List(entries.iter()),
+            Entries::Map(entries) => IterRepr::Map(entries.iter()),
+        })
     }
 
     /// The entries, in order, to change.
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&Vec<u8>, &mut Object)> {
-        self.0.iter_mut()
+    pub fn iter_mut(&mut self) -> IterMut<'_> {
+        IterMut(match &mut self.0 {
+            Entries::List(entries) => IterMutRepr::List(entries.iter_mut()),
+            Entries::Map(entries) => IterMutRepr::Map(entries.iter_mut()),
+        })
     }
 
     /// The number of entries.
     pub fn len(&self) -> usize {
-        self.0.len()
+        match &self.0 {
+            Entries::List(entries) => entries.len(),
+            Entries::Map(entries) => entries.len(),
+        }
     }
 
     /// Whether there are no entries.
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.len() == 0
+    }
+
+    /// Whether the entries are kept in a map: more than [`LIST_MOST`] of them.
+    pub(crate) fn is_map(&self) -> bool {
+        matches!(self.0, Entries::Map(_))
     }
 
     /// Lets go of the room kept for entries to come.
     pub(crate) fn shrink_to_fit(&mut self) {
-        self.0.shrink_to_fit();
+        match &mut self.0 {
+            Entries::List(entries) => entries.shrink_to_fit(),
+            Entries::Map(entries) => entries.shrink_to_fit(),
+        }
     }
 
     /// The name in `Type`.
@@ -317,15 +456,14 @@ impl fmt::Debug for Dictionary {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map()
             .entries(
-                self.0
-                    .iter()
+                self.iter()
                     .map(|(key, value)| (format!("/{}", String::from_utf8_lossy(key)), value)),
             )
             .finish()
     }
 }
 
-impl<K: Into<Vec<u8>>, V: Into<Object>> FromIterator<(K, V)> for Dictionary {
+impl<K: Into<Name>, V: Into<Object>> FromIterator<(K, V)> for Dictionary {
     fn from_iter<I: IntoIterator<Item = (K, V)>>(entries: I) -> Dictionary {
         let mut dictionary = Dictionary::new();
         for (key, value) in entries {
@@ -403,6 +541,60 @@ mod tests {
         let dict = dictionary! { "Type" => "Page", "Count" => 2 };
         assert!(dict.has_type(b"Page"));
         assert_eq!(Object::from(dict).type_name(), Some(&b"Page"[..]));
+    }
+
+    #[test]
+    fn an_object_is_small() {
+        // The table of a document's objects holds one of these for each; a
+        // dictionary or a stream inside it is a few words.
+        assert_eq!(std::mem::size_of::<Object>(), 32);
+        assert_eq!(std::mem::size_of::<Dictionary>(), 24);
+    }
+
+    #[test]
+    fn a_dictionary_keeps_its_order_when_it_moves_to_a_map() {
+        let mut dict = Dictionary::new();
+        for i in 0..40 {
+            dict.set(format!("K{i}"), i);
+            assert_eq!(dict.is_map(), i >= LIST_MOST as i32, "{i}");
+        }
+        let keys: Vec<String> = dict
+            .iter()
+            .map(|(key, _)| String::from_utf8_lossy(key).into_owned())
+            .collect();
+        let expected: Vec<String> = (0..40).map(|i| format!("K{i}")).collect();
+        assert_eq!(keys, expected);
+        // A key set again keeps its place, and one removed leaves the rest in order.
+        dict.set("K3", "Three");
+        assert_eq!(
+            dict.iter().nth(3).map(|(_, value)| value),
+            Some(&Object::name("Three"))
+        );
+        assert_eq!(dict.remove(b"K1"), Some(Object::Integer(1)));
+        assert_eq!(
+            dict.iter().nth(1).map(|(key, _)| key.as_slice()),
+            Some(&b"K2"[..])
+        );
+        assert_eq!(dict.len(), 39);
+        for (_, value) in dict.iter_mut() {
+            if let Object::Integer(number) = value {
+                *number += 1;
+            }
+        }
+        assert_eq!(dict.get(b"K39"), Some(&Object::Integer(40)));
+        // The same entries in another order are the same dictionary, in a
+        // list or in a map.
+        let small = dictionary! { "A" => 1, "B" => 2 };
+        let reversed = dictionary! { "B" => 2, "A" => 1 };
+        assert_eq!(small, reversed);
+        let mut big = dict.clone();
+        let mut other = Dictionary::new();
+        for (key, value) in big.iter().collect::<Vec<_>>().into_iter().rev() {
+            other.set(key.clone(), value.clone());
+        }
+        assert_eq!(big, other);
+        big.set("K0", 99);
+        assert_ne!(big, other);
     }
 
     #[test]

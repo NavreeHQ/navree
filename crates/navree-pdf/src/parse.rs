@@ -6,18 +6,68 @@
 //! [`MAX_DEPTH`].
 
 use crate::error::PdfError;
-use crate::object::{Dictionary, Object, StringFormat};
+use crate::name::Name;
+use crate::object::{Dictionary, LIST_MOST, Object, StringFormat};
 
 /// How deep arrays and dictionaries may nest (100).
 pub(crate) const MAX_DEPTH: usize = 100;
 /// How deep parentheses may nest inside a literal string (100).
 const MAX_PARENS: usize = 100;
 
-/// What an object holds besides its own heap bytes.
+// What an object is counted as holding. The model is one allocator's: a block
+// of memory is a multiple of 16 bytes, with 8 of them its own (and 32 at the
+// least), and `tests/guarantee.rs` holds what a document is counted as to
+// what the process holds. An object is counted where it sits, in a list, a
+// dictionary or the table of objects, and whatever it owns beyond that.
+
+/// What an object holds where it sits (32 bytes): the object itself.
 pub(crate) const OBJECT_MEMORY: usize = std::mem::size_of::<Object>();
-/// What a dictionary entry holds besides its key's bytes and its value:
-/// the key's vector and the map's index.
-pub(crate) const ENTRY_MEMORY: usize = std::mem::size_of::<Vec<u8>>() + 16;
+/// What a dictionary entry holds besides its value: the key (24 bytes).
+pub(crate) const ENTRY_MEMORY: usize =
+    std::mem::size_of::<(Name, Object)>() - std::mem::size_of::<Object>();
+/// What an entry of a dictionary kept in a map holds besides that: its hash and
+/// its place in the index (24 bytes).
+pub(crate) const MAP_ENTRY_MEMORY: usize = 24;
+/// What a dictionary kept in a map holds besides its entries: the map itself
+/// (128 bytes).
+pub(crate) const MAP_MEMORY: usize = 128;
+/// What an object holds in a table of objects besides itself: its number and
+/// the table's own (16 bytes).
+pub(crate) const TABLE_MEMORY: usize = 16;
+
+/// What a block of `len` bytes holds: the bytes, the allocator's own, and the
+/// room it rounds up to; nothing for none.
+pub(crate) const fn block(len: usize) -> usize {
+    if len == 0 {
+        0
+    } else {
+        let size = (len.saturating_add(8 + 15)) & !15;
+        if size < 32 { 32 } else { size }
+    }
+}
+
+/// What the entries of a dictionary of `len` entries hold in the block that
+/// holds them, besides the entries themselves.
+pub(crate) const fn entries_block(len: usize) -> usize {
+    block(len.saturating_mul(ENTRY_MEMORY + OBJECT_MEMORY))
+        .saturating_sub(len.saturating_mul(ENTRY_MEMORY + OBJECT_MEMORY))
+}
+
+/// What an array of `len` items holds in the block that holds them, besides
+/// the items themselves.
+pub(crate) const fn items_block(len: usize) -> usize {
+    block(len.saturating_mul(OBJECT_MEMORY)).saturating_sub(len.saturating_mul(OBJECT_MEMORY))
+}
+
+/// What a dictionary of `len` entries holds besides its entries: the room
+/// their block rounds up to, or the map that holds more than a list does.
+pub(crate) fn dictionary_extra(len: usize) -> usize {
+    if len > LIST_MOST {
+        MAP_MEMORY.saturating_add(len.saturating_mul(MAP_ENTRY_MEMORY))
+    } else {
+        entries_block(len)
+    }
+}
 
 /// Counts the memory a parse builds.
 pub(crate) trait Meter {
@@ -212,7 +262,7 @@ impl<'a> Lexer<'a> {
             b'0'..=b'9' | b'+' | b'-' | b'.' => self.number()?,
             b'/' => {
                 let name = self.name().ok_or(Fail::Syntax)?;
-                meter.charge(name.len())?;
+                meter.charge(block(name.heap_len()))?;
                 Object::Name(name)
             }
             b'(' => {
@@ -333,7 +383,7 @@ impl<'a> Lexer<'a> {
 
     /// A name, without its slash: `#` and two hex digits stand for a byte;
     /// another `#` ends the name.
-    pub(crate) fn name(&mut self) -> Option<Vec<u8>> {
+    pub(crate) fn name(&mut self) -> Option<Name> {
         if !self.eat(b"/") {
             return None;
         }
@@ -346,7 +396,7 @@ impl<'a> Lexer<'a> {
         }
         let plain = self.buf.get(first..self.pos).unwrap_or_default();
         if self.peek() != Some(b'#') {
-            return Some(plain.to_vec());
+            return Some(Name::new(plain));
         }
         let mut name = plain.to_vec();
         loop {
@@ -372,8 +422,7 @@ impl<'a> Lexer<'a> {
                 _ => break,
             }
         }
-        name.shrink_to_fit();
-        Some(name)
+        Some(Name::from(name))
     }
 
     /// A literal string, escapes decoded, ends of line as `\n`.
@@ -445,7 +494,7 @@ impl<'a> Lexer<'a> {
             }
         }
         out.shrink_to_fit();
-        meter.charge(out.len())?;
+        meter.charge(block(out.len()))?;
         Ok(out)
     }
 
@@ -488,7 +537,7 @@ impl<'a> Lexer<'a> {
             out.push(high << 4);
         }
         out.shrink_to_fit();
-        meter.charge(out.len())?;
+        meter.charge(block(out.len()))?;
         Ok(out)
     }
 
@@ -505,6 +554,7 @@ impl<'a> Lexer<'a> {
         }
         self.inside -= 1;
         items.shrink_to_fit();
+        meter.charge(items_block(items.len()))?;
         Ok(items)
     }
 
@@ -525,20 +575,38 @@ impl<'a> Lexer<'a> {
                 break;
             }
             let key = self.name().ok_or(Fail::Syntax)?;
-            meter.charge(ENTRY_MEMORY + key.len())?;
+            meter.charge(ENTRY_MEMORY + block(key.heap_len()))?;
             self.skip_space();
             // A key the dictionary ends after has no value: `null`, as a
             // reader would take a value it could not read.
-            if self.eat(b">>") {
+            let ended = self.eat(b">>");
+            let value = if ended {
                 meter.charge(OBJECT_MEMORY)?;
-                dictionary.set(key, Object::Null);
+                Object::Null
+            } else {
+                self.object(depth, meter)?
+            };
+            let was_map = dictionary.is_map();
+            let before = dictionary.len();
+            dictionary.set_name(key, value);
+            // Entries kept in a map hold more than in a list: what the list
+            // held is counted again when they move.
+            if dictionary.is_map() && dictionary.len() > before {
+                meter.charge(if was_map {
+                    MAP_ENTRY_MEMORY
+                } else {
+                    MAP_MEMORY + dictionary.len() * MAP_ENTRY_MEMORY
+                })?;
+            }
+            if ended {
                 break;
             }
-            let value = self.object(depth, meter)?;
-            dictionary.set(key, value);
         }
         self.inside -= 1;
         dictionary.shrink_to_fit();
+        if !dictionary.is_map() {
+            meter.charge(entries_block(dictionary.len()))?;
+        }
         Ok(dictionary)
     }
 }
@@ -594,7 +662,7 @@ mod tests {
         assert_eq!(parse("/A#20B"), Object::name("A B"));
         assert_eq!(parse("/"), Object::name(""));
         let mut lexer = Lexer::new(b"/A#zz", 0);
-        assert_eq!(lexer.name(), Some(b"A".to_vec()));
+        assert_eq!(lexer.name(), Some(Name::from("A")));
         assert_eq!(lexer.rest(), b"#zz");
     }
 
@@ -666,6 +734,38 @@ mod tests {
         }
     }
 
+    /// Everything a parse charges, added up.
+    struct Sum(Cell<usize>);
+
+    impl Meter for Sum {
+        fn charge(&self, bytes: usize) -> Result<(), PdfError> {
+            self.0.set(self.0.get() + bytes);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_parse_charges_what_memory_of_counts() {
+        let many: String = (0..40).map(|i| format!("/Key{i} {i} ")).collect();
+        let long = "/".to_owned() + &"N".repeat(40);
+        let objects = [
+            "<</Type/StructElem/S/P/P 123 0 R/Pg 9 0 R/K[0]>>".to_owned(),
+            "[1 2 3 (abc) /Name <</A 1>> [] <<>> ()]".to_owned(),
+            "(a string longer than sixteen bytes, and then some)".to_owned(),
+            format!("<</{} 1 /{}Y 2>>", "K".repeat(30), "K".repeat(23)),
+            long,
+            format!("<<{many}>>"),
+            format!("[<<{many}>> <<{many}>>]"),
+            "<</A/B/C>>".to_owned(),
+        ];
+        for text in objects {
+            let sum = Sum(Cell::new(0));
+            let mut lexer = Lexer::new(text.as_bytes(), 0);
+            let object = lexer.object(MAX_DEPTH, &sum).unwrap();
+            assert_eq!(sum.0.get(), crate::write::memory_of(&object), "{text}");
+        }
+    }
+
     #[test]
     fn parses_are_charged_as_they_build() {
         // An array of 1,000 zeros: 2,000 bytes of text, about 1,000 objects.
@@ -677,7 +777,7 @@ mod tests {
             Err(Fail::Over(_))
         ));
         let mut lexer = Lexer::new(text.as_bytes(), 0);
-        let room = Limit(Cell::new(1001 * OBJECT_MEMORY));
+        let room = Limit(Cell::new(1001 * OBJECT_MEMORY + items_block(1000)));
         assert!(lexer.object(MAX_DEPTH, &room).is_ok());
     }
 }

@@ -2667,9 +2667,7 @@ mod tests {
         let document = pages_with(
             |document| {
                 let mut differences: Vec<Object> = vec![0.into()];
-                differences.extend(
-                    (0..256).map(|c| Object::Name(names[c % names.len()].clone().into_bytes())),
-                );
+                differences.extend((0..256).map(|c| Object::name(&names[c % names.len()])));
                 let encoding = document.add(dictionary! {
                     "Type" => "Encoding", "Differences" => differences,
                 });

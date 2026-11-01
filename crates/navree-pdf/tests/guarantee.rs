@@ -746,10 +746,7 @@ fn a_reference_costs_work_each_time_it_is_followed() {
     let first = chain(&mut pdf, 100, 1, 8, "/End");
     let document = Document::load(pdf.table(), ReadLimits::default()).unwrap();
     let object = Object::Reference((first, 0));
-    assert_eq!(
-        document.resolve(&object),
-        Some(&Object::Name(b"End".to_vec()))
-    );
+    assert_eq!(document.resolve(&object), Some(&Object::name("End")));
     // Read already: looking again costs all the same.
     let before = document.work_used();
     document.resolve(&object).unwrap();

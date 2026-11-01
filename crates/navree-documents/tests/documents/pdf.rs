@@ -169,10 +169,10 @@ fn pdf_with_members_sharing_one_array(members: u32, zeros: usize) -> Vec<u8> {
 
 #[test]
 fn objects_that_amplify_past_the_reading_budget_are_a_client_error() {
-    // 280 objects that are the same array of 10,000 zeros: 20 KB of text
-    // that, read as 280 objects, would hold about 300 MiB, over the 256
+    // 1,100 objects that are the same array of 8,000 zeros: 16 KB of text
+    // that, read as 1,100 objects, would hold about 270 MiB, over the 256
     // MiB a document's objects may hold.
-    let bomb = pdf_with_members_sharing_one_array(280, 10_000);
+    let bomb = pdf_with_members_sharing_one_array(1_100, 8_000);
     assert!(bomb.len() < 32 * 1024, "{} bytes", bomb.len());
     // Reading the pages reads none of them.
     let pdf = Pdf::from_bytes(bomb).unwrap();
@@ -510,7 +510,7 @@ fn resource_names(pdf: &Pdf, category: &[u8]) -> Vec<std::collections::BTreeSet<
                         .as_dict()
                         .unwrap()
                         .iter()
-                        .map(|(k, _)| k.clone())
+                        .map(|(k, _)| k.to_vec())
                         .collect()
                 })
                 .unwrap_or_default()
@@ -890,4 +890,53 @@ fn metadata_and_conversions() {
     assert_eq!(vec.len(), pdf.len());
     assert_eq!(Pdf::from_bytes(vec).unwrap(), pdf);
     assert_eq!(format!("{pdf:?}"), format!("Pdf({} bytes)", pdf.len()));
+}
+
+/// A page whose content stream has `DecodeParms` and no `Filter`: its bytes
+/// are read as they are, whatever the parameters say.
+fn pdf_with_parameters_and_no_filter(parameters: &str) -> Vec<u8> {
+    let mut objects = Objects::new();
+    let pages = objects.reserve();
+    let font = objects.add(navree_pdf::dictionary! {
+        "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica",
+    });
+    let mut dict = navree_pdf::Dictionary::new();
+    dict.set(
+        parameters,
+        navree_pdf::dictionary! { "Predictor" => 12, "Columns" => 4 },
+    );
+    let text = "BT /F1 12 Tf 72 700 Td (A stream with parameters and no filter, padded so                 that compressing it helps, padded, padded, padded, padded) Tj ET";
+    let content = objects.add(navree_pdf::Stream::new(dict, text.as_bytes().to_vec()));
+    let page = objects.add(navree_pdf::dictionary! {
+        "Type" => "Page", "Parent" => pages, "Contents" => content,
+        "MediaBox" => vec![0.into(), 0.into(), 600.into(), 800.into()],
+        "Resources" => navree_pdf::dictionary! { "Font" => navree_pdf::dictionary! { "F1" => font } },
+    });
+    objects.insert(
+        pages,
+        navree_pdf::dictionary! { "Type" => "Pages", "Kids" => vec![page.into()], "Count" => 1 },
+    );
+    let catalog = objects.add(navree_pdf::dictionary! { "Type" => "Catalog", "Pages" => pages });
+    objects.trailer.set("Root", catalog);
+    objects.save().unwrap()
+}
+
+#[test]
+fn an_edit_leaves_a_stream_with_parameters_and_no_filter_readable() {
+    for parameters in ["DecodeParms", "DP"] {
+        let pdf = Pdf::from_bytes(pdf_with_parameters_and_no_filter(parameters)).unwrap();
+        let before = pdf.text().unwrap();
+        assert!(before.contains("A stream with parameters"), "{before:?}");
+        for edited in [
+            pdf.with_metadata("Title", None).unwrap(),
+            pdf.stamp(&Stamp::text("PAID")).unwrap(),
+            Pdf::merge([&pdf, &pdf]).unwrap(),
+        ] {
+            let after = edited.text().unwrap();
+            assert!(
+                after.contains("A stream with parameters"),
+                "{parameters}: the text after an edit is {after:?}"
+            );
+        }
+    }
 }
