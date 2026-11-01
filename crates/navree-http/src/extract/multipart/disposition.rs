@@ -1,23 +1,24 @@
 //! A part's `Content-Disposition` (RFC 7578, section 4.2): its `name`, and
-//! its file name from `filename`, or from `filename*` (RFC 8187) when that
-//! one can be read.
+//! its file name from `filename` or `filename*` (RFC 8187).
 //!
-//! The header is a disposition type, then parameters separated by `;`, each
-//! `name=value` with the value a token or a quoted string. A parameter is
-//! only ever read where a parameter starts: never inside another one's value.
-//! Whatever two readers could take differently is refused rather than guessed
-//! at, so that a reader in front of the app and the app see the same form:
-//! something that is not a parameter where one should be, a value that runs on
-//! past its quotes or its token, a quote that may not close where it seems to.
-//! A `name` that is not UTF-8 reads as absent; a `filename` that is not UTF-8
-//! is refused, since a part without a file name is a field and not a file.
+//! The header is the disposition type `form-data`, then parameters separated
+//! by `;`, each `name=value` with the value a token or a quoted string. A
+//! parameter is only ever read where a parameter starts: never inside another
+//! one's value. Whatever two readers could take differently is refused rather
+//! than guessed at, so that a reader in front of the app and the app see the
+//! same form: another type, or anything after the type but a `;`, something
+//! that is not a parameter where one should be, a value that runs on past its
+//! quotes or its token, a quote that may not close where it seems to, a file
+//! name given as `filename` and as `filename*` that is not the same name. A
+//! `name` that is not UTF-8 reads as absent; a `filename` that is not UTF-8 is
+//! refused, since a part without a file name is a field and not a file.
 
 /// What a part's `Content-Disposition` says.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct Disposition {
     /// `name`.
     pub(super) name: Option<String>,
-    /// `filename*` when it decodes, else `filename`.
+    /// `filename` or `filename*`: the same name when both are given.
     pub(super) file_name: Option<String>,
 }
 
@@ -32,9 +33,11 @@ pub(super) enum Refused {
     /// A `filename` that is not UTF-8: reading it as absent would turn the
     /// file into a field.
     NotUtf8,
+    /// The disposition type is not `form-data`.
+    NotFormData,
 }
 
-use Refused::{Ambiguous, NotUtf8, Repeated};
+use Refused::{Ambiguous, NotFormData, NotUtf8, Repeated};
 
 /// The parameters this reads, each at most once.
 #[derive(Default)]
@@ -75,10 +78,16 @@ impl<'a> Value<'a> {
 pub(super) fn parse(header: &[u8]) -> Result<Disposition, Refused> {
     let mut found = Found::default();
     // The disposition type comes first, and is not a parameter.
-    let Some(start) = header.iter().position(|byte| *byte == b';') else {
+    let (kind, parameters) = match header.iter().position(|byte| *byte == b';') {
+        Some(at) => (header.get(..at), header.get(at + 1..)),
+        None => (Some(header), None),
+    };
+    if !trim_end(trim_start(kind.unwrap_or_default())).eq_ignore_ascii_case(b"form-data") {
+        return Err(NotFormData);
+    }
+    let Some(mut rest) = parameters else {
         return Ok(Disposition::default());
     };
-    let mut rest = header.get(start + 1..).unwrap_or_default();
     loop {
         rest = trim_start(rest);
         if rest.is_empty() {
@@ -147,10 +156,16 @@ pub(super) fn parse(header: &[u8]) -> Result<Disposition, Refused> {
         Some(value) => Some(value.text().ok_or(NotUtf8)?),
         None => None,
     };
-    let file_name = found
-        .extended
-        .and_then(|value| extended(value.bytes()))
-        .or(plain);
+    // A reader that prefers `filename*` and one that doesn't would take two
+    // files, so both are given only when they are the same name.
+    let file_name = match (plain, found.extended) {
+        (Some(plain), Some(encoded)) => match extended(encoded.bytes()) {
+            Some(encoded) if plain == encoded => Some(encoded),
+            _ => return Err(Ambiguous),
+        },
+        (None, Some(encoded)) => extended(encoded.bytes()),
+        (plain, None) => plain,
+    };
     Ok(Disposition {
         name: found.name.and_then(Value::text),
         file_name,
@@ -335,8 +350,8 @@ mod tests {
             names(r#"form-data; x="; name=evil"; filename="a""#),
             (None, Some("a".into()))
         );
-        assert_eq!(names("form-data name=evil"), (None, None));
-        assert_eq!(names(r#"name="evil""#), (None, None));
+        assert_eq!(parse(b"form-data name=evil"), Err(NotFormData));
+        assert_eq!(parse(br#"name="evil""#), Err(NotFormData));
         assert_eq!(names(r#"form-data; username="x""#), (None, None));
         assert_eq!(
             names(r#"form-data; xname="x"; xfilename="y""#),
@@ -376,6 +391,69 @@ mod tests {
         assert!(parse(br#"form-data; name="a"; filename="a"; filename*=UTF-8''a"#).is_ok());
     }
 
+    /// The type is `form-data` and nothing else: what stands where a type
+    /// should is no parameter, and a reader may take a name or a file from it.
+    #[test]
+    fn the_disposition_type_must_be_form_data() {
+        for header in [
+            r#"form-data name="smuggled"; name="real""#,
+            r#"form-data filename="evil.php"; name="real""#,
+            r#"form-data name="a" filename="b""#,
+            r#"form-data"; filename="evil.php"; x="; name="real""#,
+            r#"; name="real""#,
+            r#"attachment; name="real"; filename="a""#,
+            r#"inline; name="real""#,
+            r#"form-data2; name="real""#,
+            r#"x-form-data; name="real""#,
+            r#"form_data; name="real""#,
+            r#"form-data,; name="real""#,
+            r#"form-data, attachment; name="real""#,
+            r#""form-data"; name="real""#,
+            "name=\"real\"",
+            "",
+            "attachment",
+            ";;;",
+        ] {
+            assert_eq!(parse(header.as_bytes()), Err(NotFormData), "{header}");
+        }
+        for header in [
+            "form-data; name=a",
+            "FORM-DATA; name=a",
+            "Form-Data; name=a",
+            "form-data ; name=a",
+            "form-data\t; name=a",
+        ] {
+            assert_eq!(names(header), (Some("a".into()), None), "{header}");
+        }
+    }
+
+    /// A file name given twice is one name or none: a reader that prefers
+    /// `filename*` and one that doesn't would take two files.
+    #[test]
+    fn a_file_name_given_both_ways_is_refused_unless_it_is_the_same() {
+        for header in [
+            r#"form-data; name="a"; filename="safe.txt"; filename*=UTF-8''evil.php"#,
+            r#"form-data; name="a"; filename*=UTF-8''evil.php; filename="safe.txt""#,
+            r#"form-data; name="a"; filename="cafe.txt"; filename*=UTF-8''caf%C3%A9.txt"#,
+            r#"form-data; name="a"; filename="safe.txt"; filename*=bogus"#,
+            r#"form-data; name="a"; filename="safe.txt"; filename*=UTF-8''%FF.txt"#,
+            r#"form-data; name="a"; filename="safe.txt"; filename*=KOI8-R''safe.txt"#,
+            "form-data; name=\"a\"; filename=\"\u{ff}.txt\"; filename*=UTF-8''a.txt",
+        ] {
+            assert_eq!(parse(header.as_bytes()), Err(Ambiguous), "{header}");
+        }
+        for header in [
+            "form-data; name=\"a\"; filename=\"caf\u{e9}.txt\"; filename*=UTF-8''caf%C3%A9.txt",
+            "form-data; name=\"a\"; filename*=ISO-8859-1''caf%E9.txt; filename=\"caf\u{e9}.txt\"",
+            r#"form-data; name="a"; filename="a.txt"; filename*=UTF-8''a.txt"#,
+        ] {
+            assert!(
+                parse(header.as_bytes()).unwrap().file_name.is_some(),
+                "{header}"
+            );
+        }
+    }
+
     #[test]
     fn a_name_that_is_not_utf8_reads_as_absent() {
         let read = parse(b"form-data; name=\"\xff\"").unwrap();
@@ -405,15 +483,21 @@ mod tests {
     }
 
     #[test]
-    fn an_extended_file_name_is_preferred_when_it_decodes() {
+    fn an_extended_file_name_is_read_when_it_decodes() {
         assert_eq!(
             names(
-                r#"form-data; name="f"; filename*=UTF-8''na%C3%AFve%20file.txt; filename="naive file.txt""#
+                "form-data; name=\"f\"; filename*=UTF-8''na%C3%AFve%20file.txt; filename=\"na\u{ef}ve file.txt\""
             ),
             both("f", "na\u{ef}ve file.txt")
         );
         assert_eq!(
-            names(r#"form-data; name="f"; filename="naive.txt"; filename*=utf-8'en'%E2%82%AC.txt"#),
+            names(
+                "form-data; name=\"f\"; filename=\"\u{20ac}.txt\"; filename*=utf-8'en'%E2%82%AC.txt"
+            ),
+            both("f", "\u{20ac}.txt")
+        );
+        assert_eq!(
+            names("form-data; name=f; filename*=UTF-8''%E2%82%AC.txt"),
             both("f", "\u{20ac}.txt")
         );
         assert_eq!(
@@ -431,7 +515,7 @@ mod tests {
     }
 
     #[test]
-    fn an_extended_file_name_that_does_not_decode_gives_way() {
+    fn an_extended_file_name_that_does_not_decode_is_no_file_name() {
         for extended in [
             "UTF-8''%FF.txt",
             "UTF-8''%4",
@@ -443,7 +527,7 @@ mod tests {
             "a",
         ] {
             let header = format!("form-data; name=f; filename*={extended}; filename=\"plain.txt\"");
-            assert_eq!(names(&header), both("f", "plain.txt"), "{extended}");
+            assert_eq!(parse(header.as_bytes()), Err(Ambiguous), "{extended}");
             let header = format!("form-data; name=f; filename*={extended}");
             assert_eq!(names(&header), (Some("f".into()), None), "{extended}");
         }
@@ -451,7 +535,7 @@ mod tests {
 
     #[test]
     fn a_header_with_no_parameters_names_nothing() {
-        for header in ["", "form-data", "form-data;", "form-data; ;", ";;;"] {
+        for header in ["form-data", "form-data;", "form-data; ;", "form-data;;;"] {
             assert_eq!(read(header), Disposition::default(), "{header:?}");
         }
     }

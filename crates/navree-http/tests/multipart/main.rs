@@ -3,6 +3,7 @@
 //! chunks.
 
 mod attacks;
+mod clients;
 mod forms;
 mod properties;
 mod reference;

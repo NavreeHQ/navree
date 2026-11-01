@@ -822,6 +822,12 @@ async fn a_disposition_that_can_be_read_two_ways_is_refused() {
         // A quote that never closes holds the rest of the header.
         r#"form-data; name="a"; filename="C:\temp\""#,
         "form-data; name=\"a; filename=x.php",
+        // A file name two ways: one reader prefers `filename*`, another does not.
+        "form-data; name=\"a\"; filename=\"safe.txt\"; filename*=UTF-8''evil.php",
+        "form-data; name=\"a\"; filename*=UTF-8''evil.php; filename=\"safe.txt\"",
+        "form-data; name=\"a\"; filename=\"cafe.txt\"; filename*=UTF-8''caf%C3%A9.txt",
+        "form-data; name=\"a\"; filename=\"safe.txt\"; filename*=bogus",
+        "form-data; name=\"a\"; filename=\"safe.txt\"; filename*=UTF-8''%FF.txt",
     ] {
         let mut part = head(&format!("Content-Disposition: {disposition}"));
         part.extend_from_slice(b"1\r\n");
@@ -830,6 +836,42 @@ async fn a_disposition_that_can_be_read_two_ways_is_refused() {
             matches!(&error, Err(MultipartError::Malformed(message)) if message.contains("Content-Disposition")),
             "{disposition}: {error:?}"
         );
+    }
+}
+
+/// RFC 7578: a part of a form says `form-data` before its parameters. What
+/// stands there instead is no parameter for one reader, and a name or a file
+/// for another.
+#[tokio::test]
+async fn a_part_that_is_not_form_data_is_refused() {
+    for disposition in [
+        "form-data name=\"smuggled\"; name=\"real\"",
+        "form-data filename=\"evil.php\"; name=\"real\"",
+        "form-data name=\"a\" filename=\"b\"",
+        "form-data\"; filename=\"evil.php\"; x=\"; name=\"real\"",
+        "; name=\"real\"",
+        "attachment; name=\"real\"; filename=\"a\"",
+        "file; name=\"real\"",
+        "name=\"real\"",
+        "",
+    ] {
+        let mut part = head(&format!("Content-Disposition: {disposition}"));
+        part.extend_from_slice(b"1\r\n");
+        let error = read(request(&form(&[part])), wide()).await;
+        assert!(
+            matches!(&error, Err(MultipartError::Malformed(message)) if message.contains("form-data")),
+            "{disposition}: {error:?}"
+        );
+    }
+    for disposition in [
+        "FORM-DATA; name=\"a\"",
+        "Form-Data;name=a",
+        "form-data ; name=a",
+    ] {
+        let mut part = head(&format!("Content-Disposition: {disposition}"));
+        part.extend_from_slice(b"1\r\n");
+        let parts = read(request(&form(&[part])), wide()).await.unwrap();
+        assert_eq!(parts[0].name.as_deref(), Some("a"), "{disposition}");
     }
 }
 

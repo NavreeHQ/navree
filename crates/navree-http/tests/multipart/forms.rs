@@ -176,13 +176,13 @@ fn the_default_limits_are_the_documented_ones() {
     );
 }
 
-/// RFC 8187's `filename*` carries a name `filename` cannot: it is preferred
-/// when it decodes, and `filename` stands in when it does not.
+/// RFC 8187's `filename*` carries a name `filename` cannot. Given alone it is
+/// read when it decodes; given with `filename` the two must be the same name.
 #[tokio::test]
 async fn a_file_name_may_come_encoded() {
     for (disposition, expected) in [
         (
-            "form-data; name=\"a\"; filename=\"cafe.txt\"; filename*=UTF-8''caf%C3%A9.txt",
+            "form-data; name=\"a\"; filename=\"caf\u{e9}.txt\"; filename*=UTF-8''caf%C3%A9.txt",
             Some("caf\u{e9}.txt"),
         ),
         (
@@ -193,10 +193,7 @@ async fn a_file_name_may_come_encoded() {
             "form-data; name=\"a\"; filename*=ISO-8859-1''caf%E9.txt",
             Some("caf\u{e9}.txt"),
         ),
-        (
-            "form-data; name=\"a\"; filename*=UTF-8''%FF.txt; filename=\"plain.txt\"",
-            Some("plain.txt"),
-        ),
+        ("form-data; name=\"a\"; filename*=UTF-8''%FF.txt", None),
         ("form-data; name=\"a\"; filename*=KOI8-R''a.txt", None),
     ] {
         let mut part = head(&format!("Content-Disposition: {disposition}"));

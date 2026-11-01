@@ -1,8 +1,8 @@
 //! A form read whole, straight from its grammar: the reference the streaming
 //! extractor is held to when no limit applies. RFC 2046 (section 5.1.1) for
 //! the delimiters, RFC 7578 for the parts, the parameters of
-//! `Content-Disposition` read where a parameter starts, `filename*` as in
-//! RFC 8187.
+//! `Content-Disposition` read where a parameter starts after the type
+//! `form-data`, `filename*` as in RFC 8187.
 //!
 //! Written to be plainly right on any input, not to be fast or bounded. The
 //! fuzz target `http_multipart` uses it too.
@@ -85,12 +85,20 @@ fn names(head: &[u8]) -> Option<(Option<String>, Option<String>)> {
 /// was quoted.
 type Parameter = (Vec<u8>, Vec<u8>, bool);
 
-/// The parameters of a `Content-Disposition`; `None` when two readers could
-/// find different ones: something else where a parameter should be, a value
-/// that runs on, a quote another reader would close elsewhere.
+/// The parameters of a `Content-Disposition`; `None` when its type is not
+/// `form-data`, or when two readers could find different parameters: something
+/// else where a parameter should be, a value that runs on, a quote another
+/// reader would close elsewhere.
 fn parameters(value: &[u8]) -> Option<Vec<Parameter>> {
     let mut parameters = Vec::new();
-    let Some(semicolon) = value.iter().position(|byte| *byte == b';') else {
+    let semicolon = value.iter().position(|byte| *byte == b';');
+    if !value[..semicolon.unwrap_or(value.len())]
+        .trim_ascii()
+        .eq_ignore_ascii_case(b"form-data")
+    {
+        return None;
+    }
+    let Some(semicolon) = semicolon else {
         return Some(parameters);
     };
     let at_end = |at: usize| at >= value.len();
@@ -192,9 +200,19 @@ fn disposition(value: &[u8]) -> Option<(Option<String>, Option<String>)> {
         })
     };
     let name = one(b"name")?.and_then(text);
-    let plain = one(b"filename")?.and_then(text);
-    let extended = one(b"filename*")?.and_then(|(_, raw, _)| extended(raw));
-    Some((name, extended.or(plain)))
+    let plain_parameter = one(b"filename")?;
+    let plain = plain_parameter.and_then(text);
+    let encoded = one(b"filename*")?.map(|(_, raw, _)| extended(raw));
+    // Both given: the same name, or the head can be read two ways.
+    let file_name = match (plain_parameter.is_some(), encoded) {
+        (true, Some(encoded)) => match (plain, encoded) {
+            (Some(plain), Some(encoded)) if plain == encoded => Some(encoded),
+            _ => return None,
+        },
+        (false, Some(encoded)) => encoded,
+        (_, None) => plain,
+    };
+    Some((name, file_name))
 }
 
 /// `charset'language'value`, the value percent-encoded.

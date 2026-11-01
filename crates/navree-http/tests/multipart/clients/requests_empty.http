@@ -1,0 +1,24 @@
+multipart/form-data; boundary=982a5afd547e62e2313d6c3e56d88e60
+--982a5afd547e62e2313d6c3e56d88e60
+Content-Disposition: form-data; name="a"
+
+1
+--982a5afd547e62e2313d6c3e56d88e60
+Content-Disposition: form-data; name="b"
+
+two
+lines
+--982a5afd547e62e2313d6c3e56d88e60
+Content-Disposition: form-data; name="e"
+
+
+--982a5afd547e62e2313d6c3e56d88e60
+Content-Disposition: form-data; name="f"; filename=""
+Content-Type: text/plain
+
+
+--x
+file with a near miss
+--
+
+--982a5afd547e62e2313d6c3e56d88e60--

@@ -1,0 +1,26 @@
+multipart/form-data; boundary=------------------------JRoceNeW3bGZxKW3MaXKeg
+--------------------------JRoceNeW3bGZxKW3MaXKeg
+Content-Disposition: form-data; name="f"
+Content-Type: multipart/mixed; boundary=------------------------4YGTfZxDApoXUAiGthPnwO
+
+--------------------------4YGTfZxDApoXUAiGthPnwO
+Content-Disposition: attachment; filename="src.bin"
+Content-Type: application/octet-stream
+
+
+--x
+file with a near miss
+--
+
+--------------------------4YGTfZxDApoXUAiGthPnwO
+Content-Disposition: attachment; filename="src.bin"
+Content-Type: application/octet-stream
+
+
+--x
+file with a near miss
+--
+
+--------------------------4YGTfZxDApoXUAiGthPnwO--
+
+--------------------------JRoceNeW3bGZxKW3MaXKeg--

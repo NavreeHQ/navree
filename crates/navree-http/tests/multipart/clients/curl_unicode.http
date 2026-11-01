@@ -1,0 +1,11 @@
+multipart/form-data; boundary=------------------------eMvrGNpbvtBrYtAVr99pYL
+--------------------------eMvrGNpbvtBrYtAVr99pYL
+Content-Disposition: form-data; name="f"; filename="résumé.txt"
+Content-Type: text/plain
+
+
+--x
+file with a near miss
+--
+
+--------------------------eMvrGNpbvtBrYtAVr99pYL--

@@ -393,6 +393,7 @@ fn read_head(bytes: &[u8]) -> Result<Head, Failure> {
                 }
                 Refused::Ambiguous => "A form part's Content-Disposition may be read one way only",
                 Refused::NotUtf8 => "A form part's file name must be UTF-8",
+                Refused::NotFormData => "A form part's Content-Disposition must be form-data",
             })
         })?,
         None => Disposition::default(),

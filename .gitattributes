@@ -10,3 +10,6 @@ crates/navree-pdf/tests/fixtures/** -text
 
 # Workbook fixtures, and the cells read from them, byte for byte.
 crates/navree-sheets/tests/fixtures/workbooks/* -text
+
+# Bodies written by real clients are compared byte for byte.
+crates/navree-http/tests/multipart/clients/** -text

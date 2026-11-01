@@ -1,0 +1,24 @@
+multipart/form-data; boundary=2e23703f72b6f3623b2655b05839fba3
+--2e23703f72b6f3623b2655b05839fba3
+Content-Disposition: form-data; name="a"
+
+1
+--2e23703f72b6f3623b2655b05839fba3
+Content-Disposition: form-data; name="b"
+
+two
+lines
+--2e23703f72b6f3623b2655b05839fba3
+Content-Disposition: form-data; name="e"
+
+
+--2e23703f72b6f3623b2655b05839fba3
+Content-Disposition: form-data; name="f"; filename="two words.txt"
+Content-Type: text/plain
+
+
+--x
+file with a near miss
+--
+
+--2e23703f72b6f3623b2655b05839fba3--

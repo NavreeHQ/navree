@@ -1,0 +1,11 @@
+multipart/form-data; boundary=------------------------qTx2RGAWHyzfxGLFPDlY1d
+--------------------------qTx2RGAWHyzfxGLFPDlY1d
+Content-Disposition: form-data; name="f"; filename="dir\"
+Content-Type: application/octet-stream
+
+
+--x
+file with a near miss
+--
+
+--------------------------qTx2RGAWHyzfxGLFPDlY1d--
