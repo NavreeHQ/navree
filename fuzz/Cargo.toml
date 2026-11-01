@@ -47,6 +47,7 @@ navree-oauth = { path = "../crates/navree-oauth" }
 navree-pdf = { path = "../crates/navree-pdf" }
 navree-schedule = { path = "../crates/navree-schedule" }
 navree-search = { path = "../crates/navree-search", features = ["fuzzing"] }
+navree-sheets = { path = "../crates/navree-sheets", features = ["fuzzing"] }
 navree-sso = { path = "../crates/navree-sso", features = ["fuzzing"] }
 navree-testing = { path = "../crates/navree-testing" }
 navree-time = { path = "../crates/navree-time" }
@@ -211,6 +212,13 @@ bench = false
 [[bin]]
 name = "search_query"
 path = "fuzz_targets/search_query.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sheets_workbook"
+path = "fuzz_targets/sheets_workbook.rs"
 test = false
 doc = false
 bench = false

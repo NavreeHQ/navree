@@ -56,6 +56,9 @@ mod download;
 mod error;
 mod export;
 mod exportable;
+#[cfg(feature = "fuzzing")]
+#[doc(hidden)]
+pub mod fuzzing;
 mod headers;
 mod http;
 mod import;

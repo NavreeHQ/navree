@@ -22,6 +22,9 @@ postgres = ["navree-db/postgres", "navree-queue/postgres"]
 ## MySQL for the tests: with `NAVREE_TEST_MYSQL_URL` set, the import
 ## tests run on their own fresh MySQL database.
 mysql = ["navree-db/mysql"]
+## Entry points for the fuzz targets in `fuzz/` (`navree_sheets::fuzzing`). Not
+## part of the API.
+fuzzing = []
 
 [dependencies]
 bytes = { workspace = true }
