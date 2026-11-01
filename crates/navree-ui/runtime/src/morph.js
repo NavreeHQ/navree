@@ -62,12 +62,30 @@ function morphNode(a, b, ids) {
   else if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue;
 }
 
-/** @param {Node} node @param {Map<string, Element>} ids */
-function removeOld(node, ids) {
+/**
+ * Takes an old node out. A keyed node in it may still be wanted by a parent not
+ * reached yet: it waits, detached, in `ids`.
+ * @param {Node} node
+ */
+function removeOld(node) {
   if (node.nodeType === 1 && /** @type {Element} */ (node).hasAttribute("data-ui-persist")) return;
-  const key = keyOf(node);
-  if (key) ids.delete(key);
   node.parentNode?.removeChild(node);
+}
+
+/**
+ * Adds a new node. If old keyed nodes belong inside it, they come along.
+ * @param {Element} a @param {ChildNode} next @param {Node | null} before @param {Map<string, Element>} ids
+ * @returns {Node} what was added
+ */
+function insertNew(a, next, before, ids) {
+  if (next.nodeType !== 1 || !ids.size || !/** @type {Element} */ (next).querySelector("[id],[data-key]")) {
+    a.insertBefore(next, before);
+    return next;
+  }
+  const shell = /** @type {Element} */ (next.cloneNode(false));
+  a.insertBefore(shell, before);
+  morphChildren(shell, /** @type {Element} */ (next), ids);
+  return shell;
 }
 
 /** @param {Element} a @param {Element} b @param {Map<string, Element>} ids */
@@ -82,59 +100,46 @@ function morphChildren(a, b, ids) {
   let cur = a.firstChild;
   for (const next of [...b.childNodes]) {
     const key = keyOf(next);
+    /** The node that now stands for `next`. @type {Node} */
+    let placed;
     if (key) {
       wanted.delete(key);
       const old = ids.get(key);
       if (old && old.nodeName === next.nodeName && !old.contains(a)) {
         ids.delete(key);
-        if (old === cur) cur = cur.nextSibling;
-        else moveTo(a, old, cur);
+        if (old !== cur) moveTo(a, old, cur);
         morphElement(old, /** @type {Element} */ (next), ids);
-        continue;
-      }
-      a.insertBefore(next, cur);
-      continue;
-    }
-    /** @type {Node | null} */
-    let match = cur;
-    while (match && !same(match, next)) {
-      const k = keyOf(match);
-      if (k && wanted.has(k)) { match = null; break; }
-      match = match.nextSibling;
-    }
-    if (match) {
-      while (cur !== match) {
-        const gone = /** @type {Node} */ (cur);
-        cur = gone.nextSibling;
-        // A keyed node wanted elsewhere stays where it is until its turn;
-        // anything else that was skipped is gone.
-        const k = keyOf(gone);
-        if (!(k && ids.has(k) && wantedLater(k, wanted))) removeOld(gone, ids);
-      }
-      cur = match.nextSibling;
-      morphNode(match, next, ids);
+        placed = old;
+      } else placed = insertNew(a, next, cur, ids);
     } else {
-      a.insertBefore(next, cur);
+      /** @type {Node | null} */
+      let match = cur;
+      while (match && !same(match, next)) {
+        const k = keyOf(match);
+        if (k && wanted.has(k)) {
+          match = null;
+          break;
+        }
+        match = match.nextSibling;
+      }
+      if (match) {
+        while (cur && cur !== match) {
+          const gone = cur;
+          cur = gone.nextSibling;
+          removeOld(gone);
+        }
+        morphNode(match, next, ids);
+        placed = match;
+      } else placed = insertNew(a, next, cur, ids);
     }
+    // A morph below may have taken nodes from here, so read this afresh.
+    cur = placed.nextSibling;
   }
   while (cur) {
     const gone = cur;
     cur = gone.nextSibling;
-    removeLeftover(gone, ids);
+    removeOld(gone);
   }
-}
-
-/** @param {string} key @param {Set<string>} wanted */
-const wantedLater = (key, wanted) => wanted.has(key);
-
-/**
- * What's left after the last new child. A keyed node may still be wanted by a
- * parent not reached yet: it waits, detached, in `ids`.
- * @param {Node} node @param {Map<string, Element>} ids
- */
-function removeLeftover(node, ids) {
-  if (node.nodeType === 1 && /** @type {Element} */ (node).hasAttribute("data-ui-persist")) return;
-  node.parentNode?.removeChild(node);
 }
 
 /**
