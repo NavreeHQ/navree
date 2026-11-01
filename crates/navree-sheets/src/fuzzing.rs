@@ -1,12 +1,13 @@
 //! Entry points for the fuzz targets in `fuzz/` (feature `fuzzing`): an
-//! uploaded file read into a table, and workbooks built around one part, so
-//! that a target reaches each reader's parsing past the zip file. Not part
-//! of the API.
+//! uploaded file read into a table, workbooks built around one part, so
+//! that a target reaches each reader's parsing past the zip file, and the
+//! XLS reader on its own. Not part of the API.
 
 use std::io::{Cursor, Write};
 
 use crate::Cell;
 use crate::import::read::{ReadOptions, read_table};
+use crate::import::xls::{Xls, XlsLimits, write};
 
 /// The limits files are read with: small, so that a run stays fast.
 fn limits() -> ReadOptions<'static> {
@@ -169,4 +170,44 @@ pub fn xlsb_with(which: u8, content: &[u8]) -> Vec<u8> {
         ("xl/styles.bin", &pick(2, &styles)),
         ("xl/worksheets/sheet1.bin", &sheet),
     ])
+}
+
+/// The most a workbook stream handed to [`xls_stream`] may have.
+const MAX_STREAM: usize = 1 << 20;
+
+/// Reads `bytes` as an XLS file, under limits of 1 MiB of workbook stream
+/// and 1 MiB of shared text, and reads every worksheet's cells.
+///
+/// # Panics
+///
+/// When an invariant breaks: a workbook that opens had every sheet read
+/// as it opened, so each worksheet's cells read to the end without an
+/// error, and its shared text is within the limit.
+pub fn xls(bytes: &[u8]) {
+    let limits = XlsLimits {
+        max_stream_bytes: 1 << 20,
+        max_text_bytes: 1 << 20,
+    };
+    let Ok(xls) = Xls::open(bytes, limits) else {
+        return;
+    };
+    let _ = xls.date1904();
+    for (index, name) in xls.sheet_names().iter().enumerate() {
+        let cells = xls
+            .cells(index)
+            .unwrap_or_else(|error| panic!("worksheet {name:?} is listed but not there: {error}"));
+        for cell in cells {
+            if let Err(error) = cell {
+                panic!("worksheet {name:?} read as the workbook opened, not after: {error}");
+            }
+        }
+    }
+    assert!(xls.cells(xls.sheet_names().len()).is_err());
+}
+
+/// [`xls`] on `stream` as the workbook stream of a compound file, so that
+/// the records are fuzzed without the file around them.
+pub fn xls_stream(stream: &[u8]) {
+    let stream = stream.get(..MAX_STREAM).unwrap_or(stream);
+    xls(&write::compound(&[("Workbook", stream)]).bytes);
 }

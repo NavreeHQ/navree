@@ -5,6 +5,7 @@
 //! files out: version 3 compound files with 512-byte sectors, streams under
 //! 4,096 bytes in the mini stream, a directory whose entries hang off the
 //! root as a chain of right siblings.
+#![cfg_attr(not(test), allow(dead_code))]
 #![allow(
     clippy::indexing_slicing,
     clippy::unwrap_used,

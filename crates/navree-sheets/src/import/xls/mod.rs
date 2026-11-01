@@ -71,7 +71,7 @@ mod biff;
 mod cfb;
 #[cfg(test)]
 mod tests;
-#[cfg(test)]
+#[cfg(any(test, feature = "fuzzing"))]
 pub(crate) mod write;
 
 use std::borrow::Cow;

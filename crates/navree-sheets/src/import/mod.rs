@@ -12,7 +12,6 @@ pub(crate) mod registry;
 pub(crate) mod service;
 pub(crate) mod store;
 pub(crate) mod workbook;
-// Not read from yet: `read` tabulates XLS files through it once wired.
 #[allow(dead_code)]
 pub(crate) mod xls;
 

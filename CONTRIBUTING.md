@@ -349,6 +349,7 @@ token's claims read back, a rendered query holds only the user's words.
 | `validation_international` | E.164 phone numbers, names, countries, locales, sanitized HTML |
 | `search_query` | query text and filter values rendered for each search engine |
 | `sheets_workbook` | uploaded spreadsheets read into a table: whole files, and XLSX, XLSB and ODS workbooks built around one fuzzed part |
+| `sheets_xls` | XLS workbooks: the compound file, and the BIFF5 and BIFF8 records of the workbook stream |
 | `schedule_cron` | cron expressions: `parse`, `next_after`, `is_due` |
 | `config_sources` | the `.env` parser, TOML and JSON files, environment merging |
 | `qr_roundtrip`, `totp_uri` | QR encode then decode with `rqrr`; `otpauth://` URIs and base32 secrets |

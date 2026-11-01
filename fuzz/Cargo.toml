@@ -224,6 +224,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "sheets_xls"
+path = "fuzz_targets/sheets_xls.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "small_parsers"
 path = "fuzz_targets/small_parsers.rs"
 test = false
