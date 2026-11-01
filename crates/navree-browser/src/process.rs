@@ -74,6 +74,9 @@ pub(crate) fn chrome_args(
         format!("--user-data-dir={}", profile.display()),
         "--no-first-run".to_owned(),
         "--no-default-browser-check".to_owned(),
+        // A viewport says whether the page has touch: a touch screen on the
+        // machine doesn't count.
+        "--touch-events=disabled".to_owned(),
         "--disable-background-networking".to_owned(),
         "--disable-background-timer-throttling".to_owned(),
         "--disable-backgrounding-occluded-windows".to_owned(),

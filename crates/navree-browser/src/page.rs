@@ -157,6 +157,16 @@ pub(crate) async fn open(
     core.apply_viewport(&viewport)
         .await
         .map_err(|e| refused("Emulation", e))?;
+    // Without emulation a page sees the machine's touch screen, if it has one,
+    // whatever the viewport says.
+    if !viewport.has_touch() {
+        const NO_TOUCH: &str =
+            "Object.defineProperty(Navigator.prototype, 'maxTouchPoints', { get: () => 0 });";
+        let method = "Page.addScriptToEvaluateOnNewDocument";
+        core.call(method, json!({ "source": NO_TOUCH }))
+            .await
+            .map_err(|e| refused(method, e))?;
+    }
     Ok(Page {
         scope: Scope {
             core,
