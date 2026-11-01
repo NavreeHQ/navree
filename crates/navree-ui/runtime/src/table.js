@@ -175,7 +175,7 @@ function measureSticky(root) {
 /** Puts controls back to what the server drew: a tick the user made stays ticked by
  * the browser's rule even when the server's answer took it away. @param {Element} root */
 function resetControls(root) {
-  const form = /** @type {HTMLFormElement | null} */ (root.querySelector("[data-slot=table-toolbar]"));
+  const form = /** @type {HTMLFormElement | null} */ (root.querySelector("form[data-ui-target]"));
   if (!form) return;
   for (const control of form.elements) {
     if (control === document.activeElement) continue;
@@ -395,7 +395,10 @@ document.addEventListener("click", (e) => {
 document.addEventListener("ui:sent", (e) => {
   const { form, ok } = /** @type {CustomEvent} */ (e).detail;
   const root = form.closest?.("[data-ui-table]");
-  if (root && ok && form.hasAttribute("data-ui-bulk")) save(root, { mode: "ids", ids: [], ex: [], key: "" });
+  if (root && ok && form.hasAttribute("data-ui-bulk")) {
+    save(root, { mode: "ids", ids: [], ex: [], key: "" });
+    drawSelection(root);
+  }
 });
 
 document.addEventListener("ui:swap", syncAll);
@@ -487,6 +490,13 @@ document.addEventListener("input", (e) => {
   for (const option of find.parentElement?.querySelectorAll("[data-slot=filter-option]") || []) {
     /** @type {HTMLElement} */ (option).hidden = !(option.textContent || "").toLowerCase().includes(needle);
   }
+});
+
+// Back or forward to a state whose box holds something else: a box that kept focus
+// would keep its text.
+addEventListener("popstate", () => {
+  const active = /** @type {HTMLElement | null} */ (document.activeElement);
+  if (active?.closest?.("[data-ui-table] [data-slot=table-toolbar]")) active.blur();
 });
 
 addEventListener("resize", () => {

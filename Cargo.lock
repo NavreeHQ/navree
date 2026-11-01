@@ -9949,6 +9949,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ui-table-proof"
+version = "1.0.0"
+dependencies = [
+ "chrono",
+ "http",
+ "navree",
+ "serde",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "unarray"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

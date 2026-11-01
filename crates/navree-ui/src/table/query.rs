@@ -308,7 +308,7 @@ impl State {
         (state, rest)
     }
 
-    fn is_default_sort<R: TableRow>(&self) -> bool {
+    pub(crate) fn is_default_sort<R: TableRow>(&self) -> bool {
         let config = R::CONFIG.sort;
         self.sort.len() == config.len() && self.sort.iter().zip(config).all(|(term, (name, direction))| R::COLUMNS[term.column].name == *name && term.direction == *direction)
     }

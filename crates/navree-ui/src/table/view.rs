@@ -354,7 +354,7 @@ impl Default for TableLabels {
             apply: "Apply".into(),
             clear_filters: "Clear filters".into(),
             remove_filter: "Remove filter {label}".into(),
-            remove_sort: "Stop sorting by {label}".into(),
+            remove_sort: "Remove {label}".into(),
             sorted_by: "Sorted by".into(),
             rows_per_page: "Rows per page".into(),
             showing: "Showing {from} to {to} of {total} results".into(),
@@ -1176,29 +1176,35 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             let href = if query.is_empty() { url.as_str().to_owned() } else { format!("{}?{query}", url.as_str()) };
             el("a").slot("button").attr("data-variant", "outline").attr("data-size", "sm").href(href).flag("data-ui-noboost", true).flag("download", true).children((icon(icons::DOWNLOAD), labels.export.to_string()))
         });
-        el("form")
-            .slot("table-toolbar")
-            .attr("id", form)
-            .attr("role", "search")
-            .attr("method", "get")
-            .attr("action", self.query.path.clone())
-            .attr("data-ui-target", self.id)
-            .children((
-                search,
-                controls,
-                self.toolbar.clone(),
-                el("div").slot("toolbar-end").children((views, columns, view, export)),
-                self.state_inputs(),
-                // With JavaScript off, a select or a tick needs a button.
-                el("noscript").child(Button::outline(labels.apply.to_string()).size(Size::Sm).submit()),
-            ))
+        // The saved-view forms sit outside the toolbar's form, since forms can't nest.
+        // Every control reaches the form by its `form` attribute.
+        el("div").slot("table-toolbar").children((
+            el("form")
+                .slot("toolbar-form")
+                .attr("id", form)
+                .attr("role", "search")
+                .attr("method", "get")
+                .attr("action", self.query.path.clone())
+                .attr("data-ui-target", self.id)
+                .children((
+                    search,
+                    controls,
+                    self.toolbar.clone(),
+                    self.state_inputs(),
+                    // With JavaScript off, a select or a tick needs a button.
+                    el("noscript").child(Button::outline(labels.apply.to_string()).size(Size::Sm).submit()),
+                )),
+            el("div").slot("toolbar-end").children((views, columns, view, export)),
+        ))
     }
 
     /// Active filters and sort terms, each with a way off, and Clear filters.
     fn chips(&self) -> Option<Element> {
         let labels = &self.labels;
         let state = &self.query.state;
-        let many_sorts = state.sort.len() > 1;
+        // A sort the user asked for, of more than one column, needs a way off; the
+        // table's own default doesn't.
+        let many_sorts = state.sort.len() > 1 && !state.is_default_sort::<R>();
         if !self.query.is_filtered() && !many_sorts {
             return None;
         }
@@ -1234,7 +1240,8 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                     state.after = None;
                     state.before = None;
                 });
-                chips.push(self.chip(format!("{}: {} {arrow}", labels.sorted_by, column.label), href, labels.remove_sort.replace("{label}", column.label)));
+                let text = format!("{}: {} {arrow}", labels.sorted_by, column.label);
+                chips.push(self.chip(text.clone(), href, labels.remove_sort.replace("{label}", &text)));
             }
         }
         let clear = (!state.filters.is_empty() || state.q.is_some()).then(|| self.region_link(self.clear_href()).slot("chips-clear").child(labels.clear_filters.to_string()));
@@ -1499,7 +1506,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
 
     fn colgroup(&self) -> Option<Element> {
         let state = &self.query.state;
-        let any = !state.widths.is_empty() || state.cols.iter().any(|at| TableQuery::<R, F>::column(*at).width.is_some());
+        let any = self.can_resize || !state.widths.is_empty() || state.cols.iter().any(|at| TableQuery::<R, F>::column(*at).width.is_some());
         if !any {
             return None;
         }

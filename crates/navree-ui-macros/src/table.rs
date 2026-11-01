@@ -262,16 +262,21 @@ pub(crate) fn table_row(input: DeriveInput) -> syn::Result<TokenStream> {
                 options: #options,
             },
         });
+        // A field with its own list of options shows the option's label.
+        let shown = match &hint.options {
+            Some(path) => quote!(#ui::table::OptionCell { value: &self.#ident, options: #path }),
+            None => quote!(self.#ident),
+        };
         let content = match (&hint.link, &hint.badge) {
             (Some(link), _) => {
                 let href = link_expr(link, &ui)?;
-                quote!(#ui::table::write_link(out, #href, &self.#ident);)
+                quote!(#ui::table::write_link(out, #href, &#shown);)
             }
-            (None, Some(tone)) => quote!(#ui::table::write_badge(out, &self.#ident, #tone(&self.#ident));),
-            (None, None) => quote!(#ui::table::CellValue::write_cell(&self.#ident, out);),
+            (None, Some(tone)) => quote!(#ui::table::write_badge(out, &#shown, #tone(&self.#ident));),
+            (None, None) => quote!(#ui::table::CellValue::write_cell(&#shown, out);),
         };
         cells.push(quote!(#index => { #content }));
-        texts.push(quote!(#index => #ui::table::CellValue::write_text(&self.#ident, out),));
+        texts.push(quote!(#index => #ui::table::CellValue::write_text(&#shown, out),));
     }
     let sort = match &table.sort {
         Some(sort) => sort_terms(sort, &ui, &names)?,

@@ -43,7 +43,7 @@ pub struct BulkRequest<R, F = NoFilter> {
 
 impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> BulkRequest<R, F> {
     /// Reads a posted form.
-    fn parse(body: &[u8]) -> Result<Self, StatusCode> {
+    pub fn parse(body: &[u8]) -> Result<Self, StatusCode> {
         let mut action = String::new();
         let mut mode = BulkMode::Ids;
         let mut ids = Vec::new();

@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "2572576b7b58";
+pub const BUILD: &str = "df5bfb0f8350";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-4261d5d66eea.js";
@@ -15,10 +15,10 @@ pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-59f5dd043f15.js";
 pub const OVERLAY_URL: &str = "/_navree/ui/overlay-b47fdfefb282.js";
 
 /// The URL of `table.js`.
-pub const TABLE_URL: &str = "/_navree/ui/table-afd60a0a775e.js";
+pub const TABLE_URL: &str = "/_navree/ui/table-66063c2fb831.js";
 
 /// The URL of `navree-ui.css`.
-pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-7034102412e1.css";
+pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-2452bbb4973f.css";
 
 /// The URL of `speculation.json`.
 pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8fb550221f7f.json";
@@ -64,7 +64,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "table",
         ext: "js",
-        hash: "afd60a0a775e",
+        hash: "66063c2fb831",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/table.js"),
         gzip: Some(include_bytes!("../dist/table.js.gz")),
@@ -73,7 +73,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "navree-ui",
         ext: "css",
-        hash: "7034102412e1",
+        hash: "2452bbb4973f",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/navree-ui.css"),
         gzip: Some(include_bytes!("../dist/navree-ui.css.gz")),

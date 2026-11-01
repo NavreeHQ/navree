@@ -36,6 +36,9 @@ const EXPORT_CHUNK: u32 = 2_000;
 /// Bytes an export keeps in memory before it spills to a temporary file.
 const EXPORT_MEMORY: usize = 8 * 1024 * 1024;
 
+/// How deep a page has to be before its keys are found first.
+const DEFERRED_FROM: u64 = 5_000;
+
 /// A value from a URL, bound as what the column holds.
 fn bind(kind: ValueKind, text: &str) -> Option<Value> {
     match kind {
@@ -384,11 +387,11 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
                 let flipped: Vec<Term> = terms.iter().map(|term| term.flipped()).collect();
                 let take = per.min(total - offset);
                 let skip = total - offset - take;
-                let mut rows = Self::ordered(&flipped, dialect, filtered).offset(skip).limit(take).get(exec).await?.into_vec();
+                let mut rows = Self::read_at(filtered, exec, dialect, &flipped, skip, take).await?;
                 rows.reverse();
                 rows
             } else {
-                Self::ordered(terms, dialect, filtered).offset(offset).limit(per).get(exec).await?.into_vec()
+                Self::read_at(filtered, exec, dialect, terms, offset, per).await?
             };
             let has_more = offset + (rows.len() as u64) < total;
             return Ok(TablePage { rows: rows.into_iter().map(map).collect(), total: Total::Exact(total), page, has_more, next: None, prev: None, version: None });
@@ -405,6 +408,19 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         let has_more = rows.len() as u64 > per;
         rows.truncate(self.state.per as usize);
         Ok(TablePage { rows: rows.into_iter().map(map).collect(), total, page, has_more, next: None, prev: None, version: None })
+    }
+
+    /// `take` records after skipping `skip`. A deep page finds its keys first, where
+    /// the database can stay in the index, and only then reads those rows. MySQL has
+    /// no `LIMIT` in an `IN` subquery, and MongoDB no cheap equivalent.
+    async fn read_at<M: Model, E: Executor + ?Sized>(filtered: Builder<M>, exec: &E, dialect: Option<Dialect>, terms: &[Term], skip: u64, take: u64) -> Result<Vec<Record<M>>> {
+        let ordered = Self::ordered(terms, dialect, filtered.clone());
+        if skip > DEFERRED_FROM && matches!(dialect, Some(Dialect::Postgres | Dialect::Sqlite)) && terms.iter().all(|term| !term.source.contains('.')) {
+            let key = M::meta().key_column();
+            let keys = ordered.clone().select([key]).offset(skip).limit(take);
+            return Ok(Self::ordered(terms, dialect, filtered).where_(col(key).in_subquery(keys)).get(exec).await?.into_vec());
+        }
+        Ok(ordered.offset(skip).limit(take).get(exec).await?.into_vec())
     }
 
     /// Up to `want` records past `position`, in `terms`' order.
@@ -687,6 +703,7 @@ where
     let mut name = name.trim().to_owned();
     name.truncate(name.char_indices().nth(80).map_or(name.len(), |(at, _)| at));
     let mut state = query.state.clone();
+    // Whatever the page owns isn't this table's to store.
     // A view is how to look, not where one was.
     state.page = 1;
     state.after = None;

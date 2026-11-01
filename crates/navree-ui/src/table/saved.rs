@@ -4,11 +4,17 @@
 
 use std::borrow::Cow;
 
-use super::TableLabels;
+use http::StatusCode;
+use navree_http::body::{BodyLimit, read_body};
+use navree_http::extract::{FromRequest, Request, urlencoded};
+use serde::de::DeserializeOwned;
+
+use super::{FilterBar, NoFilter, TableLabels, TableQuery, TableRow};
 use crate::form::csrf_field;
 use crate::html::Href;
 use crate::icons;
 use crate::node::{Element, Node, el};
+use crate::op::{Op, Reply, ToastTone};
 
 /// One saved view.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -21,6 +27,95 @@ pub struct SavedView {
     pub query: String,
     /// Whether the table opens with it when the URL names no state.
     pub is_default: bool,
+}
+
+/// What a saved-view form asks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ViewOp {
+    /// Save the state as a view.
+    Save,
+    /// Delete the view.
+    Delete,
+}
+
+/// A saved-view form's post, read through the table's definition.
+#[derive(Clone, Debug)]
+pub struct ViewPost<R, F = NoFilter> {
+    op: ViewOp,
+    name: String,
+    view: String,
+    is_default: bool,
+    table: String,
+    query: TableQuery<R, F>,
+}
+
+impl<R: TableRow, F: FilterBar> ViewPost<R, F> {
+    /// What's asked.
+    pub fn op(&self) -> ViewOp {
+        self.op
+    }
+
+    /// The name given.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// The view named.
+    pub fn view(&self) -> &str {
+        &self.view
+    }
+
+    /// Whether the table should open with this view.
+    pub fn is_default(&self) -> bool {
+        self.is_default
+    }
+
+    /// The state to save.
+    pub fn query(&self) -> &TableQuery<R, F> {
+        &self.query
+    }
+
+    /// Says so, and redraws the table.
+    pub fn done(&self, text: impl Into<String>) -> Reply {
+        Reply::ops_or_redirect(self.query.href()).toast(ToastTone::Success, text).op(Op::Invalidate { target: self.table.clone() })
+    }
+}
+
+impl<R, F> FromRequest for ViewPost<R, F>
+where
+    R: TableRow + Send + 'static,
+    F: FilterBar + Default + DeserializeOwned + Send + 'static,
+{
+    type Rejection = StatusCode;
+
+    async fn from_request(request: Request) -> Result<Self, Self::Rejection> {
+        let (parts, body) = request.into_parts();
+        let limit = BodyLimit::of(&parts.extensions);
+        let bytes = read_body(body, limit).await.map_err(|_| StatusCode::PAYLOAD_TOO_LARGE)?;
+        let (mut op, mut name, mut view, mut is_default, mut table, mut path, mut state) = (ViewOp::Save, String::new(), String::new(), false, String::new(), String::new(), String::new());
+        for (key, value) in urlencoded::parse(&bytes) {
+            match key.as_ref() {
+                "_op" if value == "delete" => op = ViewOp::Delete,
+                "_name" => name = value.into_owned(),
+                "_view" => view = value.into_owned(),
+                "_default" => is_default = value == "1",
+                "_table" => table = value.into_owned(),
+                "_path" => path = value.into_owned(),
+                "_q" => state = value.into_owned(),
+                _ => {}
+            }
+        }
+        if !path.starts_with('/') || path.starts_with("//") || path.contains(['\\', '\r', '\n']) {
+            path = "/".to_owned();
+        }
+        if !table.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_')) {
+            table.clear();
+        }
+        if op == ViewOp::Save && name.trim().is_empty() {
+            return Err(StatusCode::UNPROCESSABLE_ENTITY);
+        }
+        Ok(Self { op, name, view, is_default, table, query: TableQuery::parse(path, &state) })
+    }
 }
 
 /// The Views popover: a link for each view, a form to save this one.

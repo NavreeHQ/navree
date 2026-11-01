@@ -54,7 +54,7 @@ mod view;
 pub use csv::write_csv_field;
 pub use query::{ActiveFilter, FilterValue, MAX_OPEN_ROWS, MAX_TEXT, MAX_VALUES, SortTerm, TableQuery};
 pub use region::Region;
-pub use saved::SavedView;
+pub use saved::{SavedView, ViewOp, ViewPost};
 pub use selection::{BulkMode, BulkRefusal, BulkRequest, MAX_SELECTED_IDS};
 pub use view::{BulkAction, DataTable, FilterMode, FilterOption, RowAction, TableData, TableDensity, TableHeight, TableLabels, TablePage, Total};
 
@@ -434,6 +434,57 @@ impl<T: CellValue> CellValue for Option<T> {
 
 /// The label of an option's value. The derive calls this.
 pub fn option_label<'a>(options: &[(&'a str, &'a str)], value: &'a str) -> &'a str {
+    options.iter().find(|(option, _)| *option == value).map_or(value, |(_, label)| *label)
+}
+
+/// A stored value shown as its option's label: the derive wraps a field with
+/// `options = ...` in this.
+pub struct OptionCell<'a, T> {
+    /// The stored value.
+    pub value: &'a T,
+    /// `(value, label)` for each choice.
+    pub options: &'static [(&'static str, &'static str)],
+}
+
+/// A stored text value, present or not.
+pub trait OptionText {
+    /// The text, when there is one.
+    fn option_text(&self) -> Option<&str>;
+}
+
+impl OptionText for String {
+    fn option_text(&self) -> Option<&str> {
+        Some(self)
+    }
+}
+
+impl OptionText for &str {
+    fn option_text(&self) -> Option<&str> {
+        Some(self)
+    }
+}
+
+impl<T: OptionText> OptionText for Option<T> {
+    fn option_text(&self) -> Option<&str> {
+        self.as_ref().and_then(OptionText::option_text)
+    }
+}
+
+impl<T: OptionText> CellValue for OptionCell<'_, T> {
+    fn write_cell(&self, out: &mut CellWriter<'_>) {
+        if let Some(value) = self.value.option_text() {
+            out.plain(option_label_of(self.options, value));
+        }
+    }
+
+    fn write_text(&self, out: &mut String) {
+        if let Some(value) = self.value.option_text() {
+            out.push_str(option_label_of(self.options, value));
+        }
+    }
+}
+
+fn option_label_of<'a>(options: &'a [(&'a str, &'a str)], value: &'a str) -> &'a str {
     options.iter().find(|(option, _)| *option == value).map_or(value, |(_, label)| *label)
 }
 
