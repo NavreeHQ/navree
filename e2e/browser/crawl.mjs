@@ -158,7 +158,11 @@ async function discover(context, tool, width, dir, rel) {
 
   // Sign in once (the tool's own screen), then walk.
   await page.goto(BASE_URL + tool.roots[0], { waitUntil: 'load', timeout: 30000 }).catch(() => {});
-  await signInIfAsked(page);
+  if (await signInIfAsked(page)) {
+    // The session is set once the sign-in's own redirect is done: open the root again.
+    await page.goto(BASE_URL + tool.roots[0], { waitUntil: 'load', timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(1000);
+  }
 
   let n = 0;
   while (queue.length && n < cap) {
@@ -218,7 +222,11 @@ async function replay(context, tool, width, urls, dir, rel) {
   const records = [];
   const { page, bag } = await openTool(context, tool);
   await page.goto(BASE_URL + tool.roots[0], { waitUntil: 'load', timeout: 30000 }).catch(() => {});
-  await signInIfAsked(page);
+  if (await signInIfAsked(page)) {
+    // The session is set once the sign-in's own redirect is done: open the root again.
+    await page.goto(BASE_URL + tool.roots[0], { waitUntil: 'load', timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(1000);
+  }
   let n = 0;
   for (const u of urls) {
     const parsed = new URL(BASE_URL + u);

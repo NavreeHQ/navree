@@ -42,7 +42,7 @@ if (existsSync(k6dir)) {
     if (d) digests[d.scenario] = d;
   }
 }
-const k6line = (d) => (d ? `${d.requests?.toLocaleString('en')} requests, ${Math.round(d.rps)} req/s, p95 ${d.latency_ms?.p95?.toFixed(0)} ms, p99 ${d.latency_ms?.p99?.toFixed(0)} ms, ${(d.error_rate * 100).toFixed(2)}% non-2xx/3xx by k6's count, ${(d.checks_rate * 100).toFixed(1)}% checks passed` : 'not run');
+const k6line = (d) => (d ? `${d.requests?.toLocaleString('en')} requests, ${Math.round(d.rps)} req/s, p95 ${d.latency_ms?.p95?.toFixed(0)} ms, p99 ${d.latency_ms?.p99?.toFixed(0)} ms, ${(d.checks_rate * 100).toFixed(2)}% of checks passed (each route's own expected status)` : 'not run');
 
 const filled = await json(path.join(facts, 'filled.json'), null);
 const after = await json(path.join(facts, 'after.json'), null);

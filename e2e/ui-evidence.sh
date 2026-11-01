@@ -71,6 +71,30 @@ ui_cli() {
   compose run --rm --no-deps -T -e IN_DIR=/out/shots/cli -e OUT_DIR=/out/shots/cli browser /runner/src/terminal.mjs
 }
 
+# ui_crm: the example CRM (crm-api on SQLite, crm-web), seeded with its demo
+# data and walked with the demo administrator's account. Its two images are
+# built when missing.
+ui_crm() {
+  local args=()
+  [ -n "${E2E_BUILD_JOBS:-}" ] && args+=(--build-arg "CARGO_BUILD_JOBS=$E2E_BUILD_JOBS")
+  if ! docker image inspect navree-crm-api:local > /dev/null 2>&1; then
+    docker build -f "$HOST_ROOT/e2e/docker/Dockerfile.crm-api" ${args[@]+"${args[@]}"} -t navree-crm-api:local "$HOST_ROOT" || return 1
+  fi
+  if ! docker image inspect navree-crm-web:local > /dev/null 2>&1; then
+    docker build -f "$HOST_ROOT/e2e/docker/Dockerfile.crm-web" -t navree-crm-web:local "$HOST_ROOT/apps/crm-web" || return 1
+  fi
+  compose up -d crm-web || return 1
+  compose run --rm --no-deps crm-api migrate:fresh --seed --force || return 1
+  compose up -d crm-api || return 1
+  local i
+  for i in $(seq 1 60); do
+    curl -fsS -o /dev/null "http://localhost:${E2E_CRM_PORT:-47030}/login" && break
+    sleep 2
+  done
+  compose run --rm --no-deps -T -e OUT_DIR=/out/shots -e PHASE=after -e MODE=crawl -e SERVICE=crm \
+    -e BASE_URL=http://localhost:3000 -e EMAIL=admin@navree.test -e PASSWORD=password123 browser-crm
+}
+
 # background <name> <command...>: runs a step in the background and
 # remembers it, so wait_background can collect it.
 BG_PIDS=()
@@ -210,7 +234,12 @@ run_ui() {
     step "browser: website mock-ups" ui_website
   fi
 
-  # 8. The command line tools, as terminals.
+  # 8. The example CRM, when asked for (--crm).
+  if [ "$CRM" = 1 ]; then
+    step "crm: every screen of the example CRM" ui_crm
+  fi
+
+  # 8b. The command line tools, as terminals.
   step "cli: Harbor and Navigator terminal captures" ui_cli
 
   # 9. The app processes must have survived.

@@ -1,0 +1,17 @@
+# syntax=docker/dockerfile:1
+# The CRM's Next.js front end (apps/crm-web) as a production build, for the
+# UI evidence run (`e2e/run.sh ui --crm`). The build context is apps/crm-web.
+#
+#   docker build -f e2e/docker/Dockerfile.crm-web -t navree-crm-web:local apps/crm-web
+FROM node:24-bookworm-slim
+ENV NEXT_TELEMETRY_DISABLED=1 CI=1
+RUN corepack enable
+WORKDIR /app
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN --mount=type=cache,id=navree-e2e-pnpm,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
+COPY . .
+RUN pnpm build
+ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0
+EXPOSE 3000
+CMD ["pnpm", "start"]

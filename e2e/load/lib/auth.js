@@ -65,7 +65,16 @@ export function freshToken(email, token) {
   const now = Date.now();
   let entry = issued[email];
   if (!entry) entry = issued[email] = { token, at: now };
-  if (now - entry.at > refreshAfter) entry = issued[email] = { token: signIn(email).token, at: now };
+  if (now - entry.at > refreshAfter) {
+    // The sign-in can be refused (the login throttle): keep the token and try
+    // again in 30 seconds, instead of failing every iteration meanwhile.
+    const res = http.post(`${API}/auth/login`, JSON.stringify({ email, password: PASSWORD }), {
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      tags: { name: 'POST /api/auth/login (token refresh)' },
+    });
+    const fresh = res.status === 200 ? res.json('access_token') : null;
+    entry = issued[email] = fresh ? { token: fresh, at: now } : { token: entry.token, at: now - refreshAfter + 30 * 1000 };
+  }
   return entry.token;
 }
 

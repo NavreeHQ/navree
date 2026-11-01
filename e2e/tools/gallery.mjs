@@ -53,7 +53,9 @@ function flags(rec, width) {
   if (rec.failed_requests?.length) out.push(['bad', `${rec.failed_requests.length} failed request(s)`]);
   if (rec.horizontalOverflow) out.push(['bad', `horizontal overflow at ${width}px`]);
   if (rec.still_signing_in) out.push(['bad', 'still asks to sign in']);
-  if (rec.wideTables?.length) out.push(['warn', `table wider than its box at ${width}px (${rec.wideTables.map((t) => `${t.table}>${t.box}, overflow-x ${t.overflowX}`).join('; ')})`]);
+  // A table that scrolls inside its card on a phone is fine; on a desktop, or cut off with no scroll, it is a finding.
+  const wide = (rec.wideTables || []).filter((t) => width >= 1000 || t.overflowX !== 'auto');
+  if (wide.length) out.push(['warn', `table wider than its box at ${width}px (${wide.map((t) => `${t.table}>${t.box}, overflow-x ${t.overflowX}`).join('; ')})`]);
   if (rec.brokenImages?.length) out.push(['bad', 'broken image']);
   if (rec.truncated) out.push(['warn', 'screenshot cut at 14000px']);
   const flat = (rec.charts || []).filter((c) => c.shapes !== null && (c.shapes === 0 || (c.w >= 400 && c.shapes <= 2)));
@@ -133,6 +135,10 @@ function card(p, tool, phase) {
 function websiteBlock(tool) {
   const site = website.tools?.[tool];
   if (!site) return '';
+  const crm = (site.shots || []).filter((x) => x.kind === 'crm-image');
+  if (crm.length) {
+    return `<div class="compare"><h3>The website's screens of the CRM (static images on /showcase/crm)</h3><div class="crmgrid">${crm.map((x) => `<figure><figcaption>${esc(x.name)}</figcaption>${img(x.file)}</figure>`).join('')}</div></div>`;
+  }
   const shot = (kind, n, width) => site.shots?.find((s) => s.kind === kind && s.width === width && (n ? s.n === n : true));
   const real = pairs(results.after.length ? results.after : results.load, tool).find((p) => p.kind === 'page');
   return `<div class="compare">
@@ -182,6 +188,14 @@ const cliSections = [
   await cliSection('harbor', 'Harbor', 'harbor-', 'Harbor provisions and deploys over SSH. No server was available here, so these are the commands that run on their own (init, secrets, the CI workflow) and the error a deploy command gives without a provisioned server. The website shows a full `navree deploy`; that was not run.'),
   await cliSection('navigator', 'Navigator', 'navigator-', 'Navigator is an MCP server for coding agents, started as `navree mcp`. This is a real session over stdio against the source of the evidence app: the handshake, the tool list and four calls. The tools that ask the running app (routes, modules) answer with the error they give when the app is not built.'),
 ].join('\n');
+
+// Screenshots that do not come from the crawl: shots/extra/<file>.png, described in shots/extra/notes.txt (file|text).
+const extraDir = path.join(dir, 'shots', 'extra');
+let extraSection = '';
+if (existsSync(path.join(extraDir, 'notes.txt'))) {
+  const rows = (await readFile(path.join(extraDir, 'notes.txt'), 'utf8')).split(/\r?\n/).filter(Boolean).map((l) => l.split('|'));
+  extraSection = `<section id="extra"><h2>Extra</h2><div class="cards">${rows.map(([f, text]) => `<article class="card"><header><h4><code>${esc(f)}</code></h4><p class="note">${esc(text)}</p></header><div class="shots one"><div class="desk">${img(`extra/${f}`, 'desk')}</div></div></article>`).join('')}</div></section>`;
+}
 
 const sections = toolNames.map((tool) => {
   const s = stats(tool);
@@ -240,6 +254,7 @@ const html = `<!doctype html>
   .desk, .phone { max-height: 460px; overflow: hidden; border: 1px solid var(--line); position: relative; } .desk img { width: 100%; display: block; } .phone img { width: 100%; display: block; }
   .none { padding: 30px 8px; color: var(--mute); text-align: center; font-size: 12px; }
   .compare { background: #fff; border: 1px solid var(--line); padding: 12px; margin: 12px 0; } .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px; } figure { margin: 0; } figcaption { font-size: 12.5px; color: var(--mute); margin-bottom: 4px; }
+  .crmgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; } .crmgrid img { width: 100%; border: 1px solid var(--line); display: block; }
   .compare img { width: 100%; border: 1px solid var(--line); display: block; } .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .pair img { max-height: 420px; object-fit: cover; object-position: top; }
   .note { background: #fff7e0; border-left: 3px solid var(--warn); padding: 6px 10px; margin: 4px 0; font-size: 13px; }
   summary { cursor: pointer; font-weight: 600; margin: 8px 0; }
@@ -251,9 +266,10 @@ const html = `<!doctype html>
 <h2 style="border:0;margin-top:20px">Overview</h2>
 <table><tr><th>Tool</th><th>Pages</th><th>States</th><th>Also at 390 px</th><th>With a finding</th><th>Console errors</th><th>Failed requests</th><th>Overflow at 390</th><th>Slowest</th></tr>${overview}</table>
 <p class="filter"><label><input type="checkbox" id="only-bad"> Show only the pages with a finding (red)</label></p>
-<nav>${toolNames.map((t) => `<a href="#${esc(t)}">${esc(titleOf(t))}</a>`).join('')}${cliFiles.some((f) => f.startsWith('harbor-')) ? '<a href="#harbor">Harbor</a>' : ''}${cliFiles.some((f) => f.startsWith('navigator-')) ? '<a href="#navigator">Navigator</a>' : ''}</nav>
+<nav>${toolNames.map((t) => `<a href="#${esc(t)}">${esc(titleOf(t))}</a>`).join('')}${cliFiles.some((f) => f.startsWith('harbor-')) ? '<a href="#harbor">Harbor</a>' : ''}${cliFiles.some((f) => f.startsWith('navigator-')) ? '<a href="#navigator">Navigator</a>' : ''}${extraSection ? '<a href="#extra">Extra</a>' : ''}</nav>
 ${sections}
 ${cliSections}
+${extraSection}
 <script>document.getElementById('only-bad').addEventListener('change', e => { document.querySelectorAll('.card').forEach(c => { c.style.display = e.target.checked && c.dataset.bad !== '1' ? 'none' : ''; }); });</script>
 </main></body></html>`;
 

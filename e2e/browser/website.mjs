@@ -6,19 +6,29 @@
 //   SITE_URL=https://navree.com OUT_DIR=./shots node website.mjs
 
 import { chromium } from 'playwright';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { contextOptions } from './lib.mjs';
 
 const SITE_URL = (process.env.SITE_URL || 'https://navree.com').replace(/\/$/, '');
 const OUT_DIR = process.env.OUT_DIR || './shots';
 const WIDTHS = (process.env.WIDTHS || '1440,390').split(',').map(Number);
-const TOOLS = ['lighthouse', 'fleet', 'helm', 'logbook', 'harbor', 'navigator'];
+const ALL = (process.env.TOOLS || 'lighthouse,fleet,helm,logbook,harbor,navigator,crm').split(',');
+const TOOLS = ALL.filter((t) => t !== 'crm');
+// The screens the CRM page of the website shows: static images of crm-web.
+const CRM_IMAGES = ['dashboard-1440', 'pipeline-1440', 'deal-1440', 'contacts-1440', 'companies-1440', 'palette-1440', 'phone-dashboard-390', 'phone-deal-390'];
 
 const dir = path.join(OUT_DIR, 'website');
 await mkdir(dir, { recursive: true });
 const browser = await chromium.launch();
-const out = { site: SITE_URL, taken_at: new Date().toISOString(), tools: {} };
+let out = { site: SITE_URL, taken_at: new Date().toISOString(), tools: {} };
+// A run of a few tools adds to what the file already holds.
+try {
+  const before = JSON.parse(await readFile(path.join(OUT_DIR, 'website.json'), 'utf8'));
+  if (before.tools) out = { ...before, taken_at: out.taken_at };
+} catch {
+  // no earlier file
+}
 
 for (const width of WIDTHS) {
   const context = await browser.newContext({ ...contextOptions(width), reducedMotion: 'no-preference' });
@@ -60,6 +70,22 @@ for (const width of WIDTHS) {
       entry.error = String(err).slice(0, 300);
       console.log(`FAIL ${width} ${tool} ${entry.error}`);
     }
+  }
+  await context.close();
+}
+if (ALL.includes('crm')) {
+  const context = await browser.newContext();
+  const entry = (out.tools.crm = { shots: [] });
+  for (const name of CRM_IMAGES) {
+    const res = await context.request.get(`${SITE_URL}/images/crm/next/${name}.webp`);
+    if (!res.ok()) {
+      console.log(`FAIL crm ${name} ${res.status()}`);
+      continue;
+    }
+    const file = `crm--${name}.webp`;
+    await writeFile(path.join(dir, file), await res.body());
+    entry.shots.push({ kind: 'crm-image', name, file: `website/${file}` });
+    console.log(`ok   crm ${name}`);
   }
   await context.close();
 }

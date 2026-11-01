@@ -20,6 +20,7 @@
 #   browser   Playwright with Chromium (screenshots)
 #   ui        a second web process with Logbook on (development tooling,
 #             off in the release configuration) for the UI evidence run
+#   crm       the example CRM (apps/crm-api and apps/crm-web) for the same run
 #
 # Every host port is overridable (E2E_*_PORT) so the stack can run next to a
 # development stack started by `navree dock`. The project name defaults to
@@ -261,6 +262,39 @@ services:
       K6_SUMMARY_DIR: /out/k6
     entrypoint: ["k6"]
 
+  # The example CRM: the Next.js front end (crm-web) and its API (crm-api, SQLite)
+  # in one network namespace, so crm-web reaches the API on 127.0.0.1:8080 as
+  # it does in development, and a browser can join it too.
+  crm-web:
+    image: navree-crm-web:local
+    profiles: ["crm"]
+    environment:
+      NAVREE_API_URL: http://127.0.0.1:8080
+    ports: ["${E2E_CRM_PORT:-47030}:3000"]
+
+  crm-api:
+    image: navree-crm-api:local
+    profiles: ["crm"]
+    network_mode: "service:crm-web"
+    environment:
+      APP_KEY: ${E2E_APP_KEY:-base64:ZXZpZGVuY2UtYXBwLWtleS0zMi1ieXRlcy1sb25nISE=}
+      APP_APP__URL: http://localhost:3000
+    volumes: [crm-data:/app/storage]
+    depends_on:
+      crm-web: { condition: service_started }
+
+  browser-crm:
+    image: navree-evidence-browser:local
+    profiles: ["crm"]
+    network_mode: "service:crm-web"
+    volumes:
+      - ../browser:/runner/src:ro
+      - ${E2E_OUT_DIR:-../../target/evidence/adhoc}:/out
+    environment:
+      BASE_URL: http://localhost:3000
+      OUT_DIR: /out/shots
+      SERVICE: crm
+
   browser:
     build:
       context: ../browser
@@ -301,3 +335,4 @@ volumes:
   nats:
   mysql:
   mongo:
+  crm-data:

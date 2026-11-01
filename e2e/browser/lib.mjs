@@ -57,6 +57,9 @@ export function fileFor(url, width, prefix = '') {
  */
 export async function signInIfAsked(page, email = EMAIL, password = PASSWORD) {
   const field = page.locator('input[type="password"]').first();
+  // A screen drawn by script shows its sign-in form once the session check is
+  // answered: let the page go quiet before looking for it.
+  await page.waitForLoadState('networkidle', { timeout: 2500 }).catch(() => {});
   if (!(await field.isVisible().catch(() => false))) return false;
   const who = page.locator('input[type="email"], input[name="email"], input[type="text"]').first();
   await who.fill(email);
@@ -65,8 +68,11 @@ export async function signInIfAsked(page, email = EMAIL, password = PASSWORD) {
     page.waitForLoadState('load').catch(() => {}),
     field.press('Enter'),
   ]);
+  // Some sign-in screens answer from script (a slow password check first):
+  // wait until the form is gone, not for a fixed time.
+  await field.waitFor({ state: 'hidden', timeout: 8000 }).catch(() => {});
   await page.waitForLoadState('networkidle', { timeout: 4000 }).catch(() => {});
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(800);
   return true;
 }
 

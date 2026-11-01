@@ -1,0 +1,33 @@
+# syntax=docker/dockerfile:1
+# The CRM's API (apps/crm-api) as a release image, for the UI evidence run's
+# look at the CRM's screens (`e2e/run.sh ui --crm`). SQLite, as in
+# development; the working directory holds config/ and storage/.
+#
+#   docker build -f e2e/docker/Dockerfile.crm-api -t navree-crm-api:local .
+ARG RUST_IMAGE=lukemathwalker/cargo-chef:0.1.78-rust-1.99.1-bookworm
+
+FROM ${RUST_IMAGE} AS builder
+ARG CARGO_BUILD_JOBS=4
+ENV CARGO_TERM_COLOR=never CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
+WORKDIR /src
+COPY . .
+RUN --mount=type=cache,id=navree-e2e-cargo-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=navree-e2e-cargo-git,target=/usr/local/cargo/git \
+    cargo build --release --locked -p crm-api \
+ && cp target/release/crm-api /usr/local/bin/crm-api \
+ && strip /usr/local/bin/crm-api
+
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl tini \
+ && rm -rf /var/lib/apt/lists/* \
+ && groupadd --system --gid 10001 navree \
+ && useradd --system --uid 10001 --gid navree --home-dir /app --shell /usr/sbin/nologin navree
+WORKDIR /app
+COPY --from=builder /usr/local/bin/crm-api /usr/local/bin/crm-api
+COPY apps/crm-api/config ./config
+RUN mkdir -p storage && chown -R navree:navree /app
+USER navree:navree
+ENV APP_ENV=production
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/crm-api"]
+CMD ["serve"]

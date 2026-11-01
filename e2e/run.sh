@@ -38,6 +38,7 @@ RUN_ID=""
 UI_VUS=""
 EVIDENCE_DIR=""
 WEBSITE=1
+CRM=0
 COMMAND="run"
 
 usage() {
@@ -61,6 +62,7 @@ Options:
   --evidence-dir DIR                where the gallery goes (default: $E2E_EVIDENCE_ROOT or target/evidence,
                                     then ui-<date>-<commit>)
   --no-website                      skip the photographs of the website's mock-ups
+  --crm                             also run the example CRM (crm-api and crm-web) and photograph its screens
 EOF
 }
 
@@ -70,6 +72,7 @@ while [ $# -gt 0 ]; do
     --ui-vus) UI_VUS="$2"; shift ;;
     --evidence-dir) EVIDENCE_DIR="$2"; shift ;;
     --no-website) WEBSITE=0 ;;
+    --crm) CRM=1 ;;
     --load-profile) LOAD_PROFILE="$2"; shift ;;
     --duration) DURATION="$2"; shift ;;
     --vus) VUS="$2"; shift ;;
@@ -89,7 +92,7 @@ profile_args=()
 for p in $SERVICES_PROFILES; do profile_args+=(--profile "$p"); done
 
 compose() {
-  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" "${profile_args[@]}" --profile app --profile load --profile browser --profile ui "$@"
+  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" "${profile_args[@]}" --profile app --profile load --profile browser --profile ui --profile crm "$@"
 }
 
 SERVICES=(postgres redis mailpit)

@@ -291,6 +291,35 @@
       "custom": [
         "mailpit-alert"
       ]
+    },
+    {
+      "name": "crm",
+      "title": "Example CRM (crm-web on crm-api)",
+      "package": "apps/crm-web, apps/crm-api",
+      "service": "crm",
+      "scope": [
+        "/"
+      ],
+      "roots": [
+        "/"
+      ],
+      "variants": [],
+      "avoid": [
+        "^/api/",
+        "^/broadcasting",
+        "/logout",
+        "^/_next"
+      ],
+      "per_template": 3,
+      "max_pages": 40,
+      "expect": "Dashboard",
+      "not_found": "/no-such-page",
+      "states": [
+        "signed-out",
+        "wrong-password",
+        "not-found"
+      ],
+      "custom": []
     }
   ]
 }

@@ -189,6 +189,7 @@ builds a gallery.
 E2E_BUILD_JOBS=4 E2E_EVIDENCE_ROOT=/path/outside/the/repo e2e/run.sh ui
 e2e/run.sh ui --no-build --vus 50 --duration 10m --ui-vus 6    # reuse the image
 e2e/run.sh ui --no-build --keep                                # leave the stack up
+e2e/run.sh ui --no-build --crm                                 # also run the example CRM
 ```
 
 What it does, in order (each step is recorded in `data/checks.jsonl`):
@@ -231,8 +232,19 @@ What it does, in order (each step is recorded in `data/checks.jsonl`):
    ticks rows and runs a bulk action, and runs a GraphQL query.
 7. **Website**: `browser/website.mjs` photographs each tool's mock-up on
    `E2E_SITE_URL` (default https://navree.com) at both widths.
-8. Collects the logs, tears the stack down (unless `--keep`), and
-   builds `index.html` (`tools/gallery.mjs`).
+8. **Command line tools**: `tools/cli-captures.sh` records what Harbor and
+   Navigator print (a `navree` binary built from `docker/Dockerfile.cli`,
+   once) and `browser/terminal.mjs` draws the text for the gallery. Harbor's
+   `deploy` needs a server over SSH, so what is shown is what runs without one.
+9. **Example CRM** (`--crm`): `docker/Dockerfile.crm-api` and
+   `docker/Dockerfile.crm-web` build the CRM's API (SQLite) and its Next.js
+   front end; they run in one network namespace (the `crm` profile), the demo
+   data is seeded and the crawler walks every screen as the demo
+   administrator. The website's CRM page shows static images of the same
+   screens (`browser/website.mjs` fetches them for the gallery).
+10. Collects the logs, tears the stack down (unless `--keep`), and
+   builds `index.html` (`tools/gallery.mjs`; reviewer's notes in `notes.json`
+   and extra images in `shots/extra/` are included when present).
 
 The crawler (`browser/crawl.mjs`) starts at each tool's roots in
 `browser/tools.json`, signs in, follows every same-origin link in the
