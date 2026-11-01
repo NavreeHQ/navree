@@ -4,6 +4,7 @@
 //! down but cannot fail them.
 
 mod attacks;
+mod compression;
 mod connections;
 mod http2;
 mod multipart;
