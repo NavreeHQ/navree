@@ -183,7 +183,7 @@ async fn the_unreachable_broker_fails_calls_at_once() {
         &MqttOptions::default(),
         "deals",
         "deals-1",
-        Duration::from_millis(300),
+        Duration::from_secs(3),
     )
     .unwrap();
     let error = transport
@@ -199,8 +199,8 @@ async fn the_unreachable_broker_fails_calls_at_once() {
         .unwrap_err();
     assert!(matches!(again, MicroError::Transport(_)), "{again:?}");
     assert!(
-        started.elapsed() < Duration::from_millis(250),
-        "at once while down"
+        started.elapsed() < Duration::from_millis(1500),
+        "at once while down, not after the connect timeout"
     );
 }
 

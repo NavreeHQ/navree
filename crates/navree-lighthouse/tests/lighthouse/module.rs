@@ -17,8 +17,11 @@ async fn for_root_takes_options_in_code() {
         .module(DemoModule)
         .module(LighthouseModule::for_root(LighthouseOptions {
             retention_days: 30,
+            // Far past what a busy machine takes, so that no slow-request or
+            // slow-query issue joins the one this test counts.
             thresholds: Thresholds {
-                slow_request_ms: 500,
+                slow_request_ms: 60_000,
+                slow_query_ms: 60_000,
                 ..Thresholds::default()
             },
             dashboard: false,
@@ -28,7 +31,7 @@ async fn for_root_takes_options_in_code() {
         .await;
     let lighthouse = app.get::<Lighthouse>().await;
     assert_eq!(lighthouse.options().retention_days, 30);
-    assert_eq!(lighthouse.options().thresholds.slow_request_ms, 500);
+    assert_eq!(lighthouse.options().thresholds.slow_request_ms, 60_000);
     app.client()
         .get("/api/demo/boom/1")
         .send()

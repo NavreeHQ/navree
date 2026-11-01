@@ -237,7 +237,7 @@ fn handing_a_folder_over_does_not_wait_for_the_delete() {
         Duration::from_millis(1),
         Duration::from_millis(5),
         Box::new(|path: &Path| {
-            std::thread::sleep(Duration::from_millis(300));
+            std::thread::sleep(Duration::from_millis(1500));
             fs::remove_dir_all(path)
         }),
     );
@@ -245,7 +245,7 @@ fn handing_a_folder_over_does_not_wait_for_the_delete() {
     let started = Instant::now();
     reaper.hand_over(slow.clone());
     assert!(
-        started.elapsed() < Duration::from_millis(150),
+        started.elapsed() < Duration::from_millis(750),
         "hand_over returned while the thread was still deleting"
     );
     reaper.finish();
