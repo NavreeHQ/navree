@@ -42,14 +42,14 @@
 //!   limit) before it is copied, never copied a million times first.
 //!   Labels and formula results are owned.
 //! - `XlsValue::Int(i64)`: an RK value stored as an integer is one, as an
-//!   integer cell (`Cell::Int`), the way the table has always read it; an
+//!   integer cell (`Cell::Int`), as XLSB's are; an
 //!   integer in a date format is a `DateTime`.
 //! - `Xls::date1904()`: `DateTime` holds the serial number the file stores,
 //!   counted from 1900-01-00 or, when this is true, from 1904-01-01 (1,462
 //!   days later), the same two systems the XLSX reader converts.
 //! - `XlsValue::Error` holds the name the table writes after `#`: `Null`,
 //!   `Div0`, `Value`, `Ref`, `Name`, `Num`, `NA`, `GettingData` (so a cell
-//!   reads `#Div0`, as it always has).
+//!   reads `#Div0`); an error of another code is the text `#Error(0x..)`.
 //! - `cells` also gives cells whose text is empty (a formula that results
 //!   in `""`): they are cells, and a later cell at the same position
 //!   replaces an earlier one. Blank cells (BLANK, MULBLANK) are skipped.

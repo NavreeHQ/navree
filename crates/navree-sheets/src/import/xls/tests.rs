@@ -124,7 +124,7 @@ fn rk_values_are_integers_or_floats_as_their_flags_say() {
 }
 
 #[test]
-fn every_error_code_has_its_name_and_an_unknown_one_is_damage() {
+fn every_error_code_has_its_name_and_an_unknown_one_its_code() {
     for (code, name) in [
         (0x00, "Null"),
         (0x07, "Div0"),
@@ -138,7 +138,11 @@ fn every_error_code_has_its_name_and_an_unknown_one_is_damage() {
         let xls = open(&one_sheet(&[], boolerr(0, 0, 0, code, true)));
         assert_eq!(cells_of(&xls, 0), [(0, 0, XlsValue::Error(name))]);
     }
-    damaged(&one_sheet(&[], boolerr(0, 0, 0, 0x55, true)), "error");
+    let xls = open(&one_sheet(&[], boolerr(0, 0, 0, 0x55, true)));
+    assert_eq!(
+        cells_of(&xls, 0),
+        [(0, 0, XlsValue::Text("#Error(0x55)".into()))]
+    );
 }
 
 #[test]
@@ -669,12 +673,12 @@ fn written_workbook(bytes: &[u8]) -> String {
 }
 
 #[test]
-fn workbooks_are_read_as_the_table_has_always_read_them() {
+fn workbooks_are_read_cell_for_cell_as_recorded() {
     // Files LibreOffice wrote (types, its 1904 twin, many rows; a chart
     // sheet, an embedded chart, long shared strings over CONTINUE records,
     // dates, errors, formulas), and two written here: a BIFF5 book and a
     // BIFF8 one with the records LibreOffice does not write. Each `.txt` is
-    // the cells the table has always read from the file.
+    // the cells recorded for the file.
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/xls/");
     for name in ["types", "types1904", "many", "biff5", "biff8"] {
         let bytes = std::fs::read(format!("{dir}{name}.xls")).unwrap();

@@ -781,10 +781,13 @@ fn error_name(code: u8) -> Option<&'static str> {
     })
 }
 
+/// An error cell: by its name, or, for an error of another code, the text
+/// `#Error(0x..)`.
 fn error(code: u8) -> Result<XlsValue<'static>, XlsError> {
-    error_name(code)
-        .map(XlsValue::Error)
-        .ok_or_else(|| damaged(format!("a cell has an unknown error code {code:#x}")))
+    Ok(match error_name(code) {
+        Some(name) => XlsValue::Error(name),
+        None => XlsValue::Text(Cow::Owned(format!("#Error({code:#04x})"))),
+    })
 }
 
 /// The cells of a MULRK record still to come.
