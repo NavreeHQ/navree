@@ -9,7 +9,8 @@
 //! at, so that a reader in front of the app and the app see the same form:
 //! something that is not a parameter where one should be, a value that runs on
 //! past its quotes or its token, a quote that may not close where it seems to.
-//! A value that is not UTF-8 reads as absent.
+//! A `name` that is not UTF-8 reads as absent; a `filename` that is not UTF-8
+//! is refused, since a part without a file name is a field and not a file.
 
 /// What a part's `Content-Disposition` says.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -28,9 +29,12 @@ pub(super) enum Refused {
     Repeated,
     /// Two readers may find different parameters in it.
     Ambiguous,
+    /// A `filename` that is not UTF-8: reading it as absent would turn the
+    /// file into a field.
+    NotUtf8,
 }
 
-use Refused::{Ambiguous, Repeated};
+use Refused::{Ambiguous, NotUtf8, Repeated};
 
 /// The parameters this reads, each at most once.
 #[derive(Default)]
@@ -137,10 +141,16 @@ pub(super) fn parse(header: &[u8]) -> Result<Disposition, Refused> {
             None => break,
         }
     }
+    // A file name that is not UTF-8 is no file name, and a part without one
+    // is a field: refused, so that a file cannot be hidden from the handler.
+    let plain = match found.file_name {
+        Some(value) => Some(value.text().ok_or(NotUtf8)?),
+        None => None,
+    };
     let file_name = found
         .extended
         .and_then(|value| extended(value.bytes()))
-        .or_else(|| found.file_name.and_then(Value::text));
+        .or(plain);
     Ok(Disposition {
         name: found.name.and_then(Value::text),
         file_name,
@@ -367,9 +377,31 @@ mod tests {
     }
 
     #[test]
-    fn a_value_that_is_not_utf8_reads_as_absent() {
-        let read = parse(b"form-data; name=\"\xff\"; filename=\"\xfe.txt\"").unwrap();
+    fn a_name_that_is_not_utf8_reads_as_absent() {
+        let read = parse(b"form-data; name=\"\xff\"").unwrap();
         assert_eq!(read, Disposition::default());
+        let read = parse(b"form-data; name=\xff; filename=\"a.txt\"").unwrap();
+        assert_eq!(read.name, None);
+        assert_eq!(read.file_name.as_deref(), Some("a.txt"));
+    }
+
+    /// A file name that reads as absent would turn a file into a field, while
+    /// a reader in front of the app may have seen the file.
+    #[test]
+    fn a_file_name_that_is_not_utf8_is_refused() {
+        for header in [
+            &b"form-data; name=\"a\"; filename=\"\xfe.txt\""[..],
+            b"form-data; name=\"a\"; filename=\xfe.txt",
+            b"form-data; name=\"\xff\"; filename=\"\xfe.txt\"",
+            b"form-data; filename=\"\xe9\"; filename*=UTF-8''a.txt",
+        ] {
+            assert_eq!(
+                parse(header),
+                Err(Refused::NotUtf8),
+                "{}",
+                String::from_utf8_lossy(header)
+            );
+        }
     }
 
     #[test]

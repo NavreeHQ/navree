@@ -392,6 +392,7 @@ fn read_head(bytes: &[u8]) -> Result<Head, Failure> {
                     "A form part may name each parameter of its Content-Disposition once"
                 }
                 Refused::Ambiguous => "A form part's Content-Disposition may be read one way only",
+                Refused::NotUtf8 => "A form part's file name must be UTF-8",
             })
         })?,
         None => Disposition::default(),
@@ -613,6 +614,19 @@ mod tests {
         let enough: Vec<String> = (0..32).map(|at| format!("X-{at}: 1")).collect();
         let body = format!("--b\r\n{}\r\n\r\nv\r\n--b--", enough.join("\r\n"));
         assert!(!malformed(body.as_bytes()));
+    }
+
+    #[test]
+    fn a_file_name_that_is_not_utf8_is_refused() {
+        let body = b"--b\r\nContent-Disposition: form-data; name=\"a\"; filename=\"\xfe.txt\"\r\n\r\nv\r\n--b--";
+        assert_eq!(
+            run(&[&body[..]], usize::MAX).last(),
+            Some(&Seen::Failed(Failure::malformed(
+                "A form part's file name must be UTF-8"
+            )))
+        );
+        let body = b"--b\r\nContent-Disposition: form-data; name=\"\xff\"\r\n\r\nv\r\n--b--";
+        assert!(!malformed(body));
     }
 
     #[test]

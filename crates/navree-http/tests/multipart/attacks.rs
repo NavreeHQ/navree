@@ -471,13 +471,27 @@ async fn a_file_name_with_a_path_comes_back_as_sent() {
     }
 }
 
+/// A part without a file name is a field: a file name that is not UTF-8
+/// would turn the file into one, so the form is refused.
 #[tokio::test]
-async fn a_file_name_that_is_not_text_reads_as_none() {
-    let mut part =
-        format!("--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"a\"; filename=\"")
-            .into_bytes();
+async fn a_file_name_that_is_not_text_is_a_bad_request() {
+    for file_name in [&b"\xff\xfe"[..], b"a\xe9.txt"] {
+        let mut part =
+            format!("--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"a\"; filename=\"")
+                .into_bytes();
+        part.extend_from_slice(file_name);
+        part.extend_from_slice(b"\"\r\n\r\n1\r\n");
+        let error = read(request(&form(&[part])), wide()).await.unwrap_err();
+        assert_eq!(error.status(), StatusCode::BAD_REQUEST, "{file_name:?}");
+    }
+}
+
+#[tokio::test]
+async fn a_name_that_is_not_text_reads_as_none() {
+    let mut part = format!("--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"").into_bytes();
     part.extend_from_slice(b"\xff\xfe\"\r\n\r\n1\r\n");
     let parts = read(request(&form(&[part])), wide()).await.unwrap();
+    assert_eq!(parts[0].name, None);
     assert_eq!(parts[0].file_name, None);
 }
 
