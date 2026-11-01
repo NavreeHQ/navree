@@ -106,7 +106,7 @@ fn a_body_of_small_fields_does_not_hold_the_worker() {
     assert_eq!(read, Ok(count));
     assert!(
         gap < cost / 3,
-        "PROVED: a body of {count} small fields holds the worker {gap:?} of the {cost:?} it takes"
+        "a body of {count} small fields held the worker for {gap:?} of the {cost:?} it takes"
     );
 }
 
@@ -133,7 +133,7 @@ fn a_body_that_is_read_twice_does_not_hold_the_worker_either() {
     assert_eq!(read, Err(StatusCode::BAD_REQUEST));
     assert!(
         gap < cost / 3,
-        "PROVED: a body read twice holds the worker {gap:?} of {cost:?}"
+        "a body read twice held the worker for {gap:?} of {cost:?}"
     );
 }
 

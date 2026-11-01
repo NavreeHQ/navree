@@ -647,7 +647,7 @@ async fn mailgun_reports_no_verdict_the_sender_could_have_written() {
         assert_eq!(
             received.verdicts,
             Verdicts::default(),
-            "PROVED if not default: a verdict came from what the sender wrote"
+            "a verdict was read from what the sender wrote"
         );
     }
 }
@@ -898,7 +898,7 @@ async fn postmark_reports_no_verdict_from_its_headers_list() {
     assert_eq!(
         mail.seen()[0].2.verdicts,
         Verdicts::default(),
-        "PROVED if not default: a verdict came from a header list the sender writes"
+        "a verdict was read from a header list the sender writes"
     );
 }
 
