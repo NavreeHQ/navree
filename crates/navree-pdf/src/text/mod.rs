@@ -12,9 +12,10 @@
 //! by run. Form XObjects are followed, so overlays are included.
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
+use crate::budget::LOOKUP_COST;
 use crate::document::{ContentError, Document};
 use crate::error::{PdfError, size};
 use crate::object::{Dictionary, Object, ObjectId, Stream};
@@ -56,12 +57,41 @@ const WIDTH_COST: usize = 16;
 const WIDTH_MEMORY: usize = 24;
 /// What a font holds besides its widths and maps (256 bytes).
 const FONT_INFO_MEMORY: usize = 256;
-/// What reading a font again, after it was dropped to make room, costs
-/// in work besides its widths and maps (1 KiB, as drawing a form does).
+/// What reading a font costs in work besides its widths, maps and encoding, the
+/// first time or again after it was dropped to make room (1 KiB, as drawing a
+/// form does).
 const FONT_READ_COST: usize = 1024;
-/// What each entry of an encoding's `Differences` is counted as holding
-/// (128 bytes).
-const DIFFERENCE_MEMORY: usize = 128;
+/// What each code an encoding's `Differences` names is counted as holding (160
+/// bytes: an entry of a hash map, and the text of a glyph name, 93 bytes at
+/// most).
+const DIFFERENCE_MEMORY: usize = 160;
+/// The codes `Differences` can name: however long the array, it builds no more.
+const DIFFERENCE_CODES: usize = 256;
+/// What every operation of a content stream costs besides its bytes, in bytes
+/// of work (4), whatever the operator: it is charged before the operator is
+/// looked at.
+const OPERATION_COST: usize = 4;
+/// What each operation that shows text costs besides that (16): finding the
+/// font, and marking it used.
+const SHOW_COST: usize = 16;
+/// What each `Do` costs besides that (32), before it is known to be a form;
+/// the references it follows cost what each reference costs.
+const DO_COST: usize = 32;
+/// What each character code shown costs (12), whether it shows anything or not.
+const CODE_COST: usize = 12;
+/// What each line a page's glyphs form costs when they are put together (32).
+const LINE_COST: usize = 32;
+/// What the operands of one operation may hold before they cost anything
+/// themselves (eight of them: real operations have few). Past that, a byte of
+/// work for each [`OPERANDS_MEMORY_PER_WORK`].
+const OPERANDS_FREE: usize = 8 * std::mem::size_of::<Object>();
+/// The memory of operands that costs a byte of work (32).
+const OPERANDS_MEMORY_PER_WORK: usize = 32;
+/// What each page costs (256), even with nothing on it.
+const PAGE_COST: usize = 256;
+/// The font names a page remembers the font of (4,096); past that it starts
+/// again, and looks each name up again when it is used.
+const MAX_FONT_NAMES: usize = 4096;
 /// The longest name of a font in a content stream (127 bytes, the limit the
 /// PDF reference gives on a name); one longer names no font.
 const MAX_FONT_NAME: usize = 127;
@@ -75,28 +105,32 @@ const MAX_SIMPLE_CODE: u64 = 0xFF;
 
 /// How much work reading the text of a PDF may take, so that a small file
 /// cannot make a call take more than a bounded time or memory. The time is in
-/// proportion to [`document_work`](Self::document_work): about 8 seconds for
-/// the default 1 GiB on a recent machine, on the slowest content tried (one
-/// operator every two bytes), and about as long again for the marks of a
-/// document that spends all of its work on them. Every figure is per call
-/// unless it says otherwise.
+/// proportion to [`document_work`](Self::document_work) (see the crate's
+/// documentation for the figures measured). Every figure is per call unless it
+/// says otherwise.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TextLimits {
     /// Bytes of work one page may take (128 MiB): its content decoded,
-    /// counting a form again every time it is drawn, and
-    /// [`FORM_DRAW_COST`] for each draw; every byte a filter reads and writes
-    /// on the way, whether the content could be used or not; the fonts it
-    /// reads (a `ToUnicode` map's bytes, inflating them counted the same way,
-    /// and one byte for every [`MEMORY_PER_WORK`] of
-    /// the memory reading it builds, as for an encoding's `Differences`;
-    /// [`WIDTH_COST`] for each width looked at; [`FONT_READ_COST`] for
-    /// reading a dropped font again); the actual text of marked content
-    /// each time it is decoded; and one byte for every [`STEPS_PER_WORK`]
-    /// comparisons attaching marks.
+    /// counting a form again every time it is drawn; [`PAGE_COST`] for the
+    /// page, [`OPERATION_COST`] for each operation of whatever kind, and more
+    /// for those that do more: [`SHOW_COST`] for each that shows text,
+    /// [`CODE_COST`] for each character code shown, [`DO_COST`] for each `Do`
+    /// and [`FORM_DRAW_COST`] when it draws a form; 16 bytes for each object
+    /// looked up on the way, through however many references; every byte a
+    /// filter reads and writes, and 1 KiB for each filter, whether the content
+    /// could be used or not; the fonts it reads ([`FONT_READ_COST`], a
+    /// `ToUnicode` map's bytes, inflating them counted the same way, and one
+    /// byte for every [`MEMORY_PER_WORK`] of the memory reading it builds; for
+    /// an encoding's `Differences` 8 bytes for each item and 8 for each byte of
+    /// a glyph name; [`WIDTH_COST`] for each width looked at); the actual text
+    /// of marked content each time it is decoded; [`LINE_COST`] for each line
+    /// the glyphs form, and one byte for every [`STEPS_PER_WORK`] comparisons
+    /// attaching marks.
     pub page_work: usize,
     /// The same, over all the pages (1 GiB).
     pub document_work: usize,
-    /// Glyphs one page may show (1,000,000).
+    /// Character codes one page may show (1,000,000), including those that
+    /// read as nothing.
     pub page_glyphs: usize,
     /// Comparisons one page may spend attaching marks to the glyphs they
     /// sit on, counting the bytes of text compared (50,000,000).
@@ -143,6 +177,15 @@ pub fn page_texts(document: &Document) -> Result<Vec<String>, PdfError> {
 /// [`page_texts`] under `limits`. An error when one of them runs out, or
 /// one of the document's [`ReadLimits`](crate::ReadLimits) does.
 pub fn page_texts_within(document: &Document, limits: TextLimits) -> Result<Vec<String>, PdfError> {
+    page_texts_counted(document, limits).map(|(texts, _)| texts)
+}
+
+/// [`page_texts_within`], with the work it charged: what the time it took is in
+/// proportion to.
+pub fn page_texts_counted(
+    document: &Document,
+    limits: TextLimits,
+) -> Result<(Vec<String>, usize), PdfError> {
     let mut texts = Vec::new();
     let (mut work, mut text) = (0usize, 0usize);
     // Fonts and their maps are kept for the whole document, within
@@ -154,14 +197,17 @@ pub fn page_texts_within(document: &Document, limits: TextLimits) -> Result<Vec<
             chunks: Vec::new(),
             fonts,
             font_names: HashMap::new(),
-            budget: Budget::new(limits, work, text),
+            budget: Budget::new(document, limits, work, text),
         };
+        walker.budget.charge(PAGE_COST)?;
         let content = page_content(document, page_id, &mut walker.budget)?;
         let resources = page_resources(document, page_id);
         walker.walk(&content, resources, IDENTITY, 0)?;
         let chunks = std::mem::take(&mut walker.chunks);
-        let (page_text, steps) = assemble_counted(chunks, limits.page_steps)?;
-        walker.budget.charge(steps / STEPS_PER_WORK)?;
+        let (page_text, steps, lines) = assemble_counted(chunks, limits.page_steps)?;
+        walker
+            .budget
+            .charge((steps / STEPS_PER_WORK).saturating_add(lines.saturating_mul(LINE_COST)))?;
         work += walker.budget.work;
         text += walker.budget.text;
         fonts = walker.fonts;
@@ -169,12 +215,18 @@ pub fn page_texts_within(document: &Document, limits: TextLimits) -> Result<Vec<
         document.check()?;
     }
     document.check()?;
-    Ok(texts)
+    Ok((texts, work))
 }
 
 /// What a page may still spend: work and text, each held to the page's
-/// limit and to what is left of the document's.
-struct Budget {
+/// limit and to what is left of the document's. Every charge also counts the
+/// objects the document looked up since the last one, and stops when the
+/// document has run out of a limit of its own: what follows a reference pays
+/// for it without saying so.
+struct Budget<'d> {
+    document: &'d Document,
+    /// The objects the document had looked up at the last charge.
+    looked_up: usize,
     limits: TextLimits,
     /// The work done on this page so far, and the most it may take.
     work: usize,
@@ -186,15 +238,19 @@ struct Budget {
     text_allowed: usize,
     /// Whether the document runs out of text before the page does.
     text_by_document: bool,
+    /// The character codes this page showed so far.
+    codes: usize,
 }
 
-impl Budget {
+impl<'d> Budget<'d> {
     /// A page's budget, after the pages before it did `work` and produced
     /// `text`.
-    fn new(limits: TextLimits, work: usize, text: usize) -> Self {
+    fn new(document: &'d Document, limits: TextLimits, work: usize, text: usize) -> Self {
         let work_left = limits.document_work.saturating_sub(work);
         let text_left = limits.document_text.saturating_sub(text);
         Self {
+            document,
+            looked_up: document.lookups(),
             limits,
             work: 0,
             work_allowed: limits.page_work.min(work_left),
@@ -202,6 +258,7 @@ impl Budget {
             text: 0,
             text_allowed: limits.page_text.min(text_left),
             text_by_document: text_left < limits.page_text,
+            codes: 0,
         }
     }
 
@@ -210,14 +267,29 @@ impl Budget {
         self.work_allowed.saturating_sub(self.work)
     }
 
-    /// Counts `amount` bytes of work, or fails when the page (or the
-    /// document) has used all it may.
+    /// Counts `amount` bytes of work and the objects looked up since the last
+    /// charge, or fails when the page (or the document) has used all it may.
     fn charge(&mut self, amount: usize) -> Result<(), PdfError> {
-        self.work = self.work.saturating_add(amount);
+        let lookups = self.document.lookups();
+        let looked_up = lookups.saturating_sub(self.looked_up);
+        self.looked_up = lookups;
+        self.work = self
+            .work
+            .saturating_add(amount)
+            .saturating_add(looked_up.saturating_mul(LOOKUP_COST));
         if self.work > self.work_allowed {
             return Err(self.out_of_work());
         }
-        Ok(())
+        self.document.check()
+    }
+
+    /// Counts one character code shown, whatever it shows.
+    fn code(&mut self) -> Result<(), PdfError> {
+        self.codes += 1;
+        if self.codes > self.limits.page_glyphs {
+            return Err(too_many_glyphs(self.limits.page_glyphs));
+        }
+        self.charge(CODE_COST)
     }
 
     fn out_of_work(&self) -> PdfError {
@@ -267,7 +339,7 @@ impl Budget {
 fn decode_charged<'a>(
     document: &'a Document,
     stream: &'a Stream,
-    budget: &mut Budget,
+    budget: &mut Budget<'_>,
     room: usize,
     held: usize,
 ) -> Result<Result<Vec<u8>, ContentError>, PdfError> {
@@ -296,7 +368,7 @@ fn decode_charged<'a>(
 fn page_content(
     document: &Document,
     page: ObjectId,
-    budget: &mut Budget,
+    budget: &mut Budget<'_>,
 ) -> Result<Vec<u8>, PdfError> {
     let mut content = Vec::new();
     for id in document.page_contents(page) {
@@ -450,8 +522,6 @@ struct FontCache<'a> {
     /// The first use of the run of text being shown: what the run uses is
     /// not dropped.
     run: u64,
-    /// Every font read so far, held or dropped.
-    seen: HashSet<usize>,
 }
 
 fn address<T>(value: &T) -> usize {
@@ -478,7 +548,7 @@ impl<'a> FontCache<'a> {
         &mut self,
         document: &'a Document,
         font: &'a Dictionary,
-        budget: &mut Budget,
+        budget: &mut Budget<'_>,
     ) -> Result<(), PdfError> {
         let limit = budget.limits.font_memory;
         let key = address(font);
@@ -487,10 +557,8 @@ impl<'a> FontCache<'a> {
             self.order.remove(&held.used);
             held.used = now;
         } else {
-            if !self.seen.insert(key) {
-                budget.charge(FONT_READ_COST)?;
-            }
-            let before = font_before(document, font, budget)?;
+            budget.charge(FONT_READ_COST)?;
+            let before = font_before(document, font);
             self.make_room(before, limit)?;
             let (value, widths) = font_info(document, font, budget)?;
             let memory = before.saturating_add(widths);
@@ -537,7 +605,7 @@ impl<'a> FontCache<'a> {
         &mut self,
         document: &'a Document,
         stream: &'a Stream,
-        budget: &mut Budget,
+        budget: &mut Budget<'_>,
     ) -> Result<(Option<ToUnicode>, usize), PdfError> {
         let limit = budget.limits.font_memory;
         let room = budget.work_left();
@@ -550,6 +618,7 @@ impl<'a> FontCache<'a> {
             Err(ContentError::Over) => return Err(to_unicode_too_large()),
             Err(_) => return Ok((None, 0)),
         };
+        budget.charge(map.len())?;
         self.make_room(map.len().saturating_mul(MAP_READ_MEMORY).min(limit), limit)?;
         let (read, memory) = ToUnicode::read_within(&map, limit)?;
         let memory = usize::try_from(memory).unwrap_or(usize::MAX);
@@ -593,7 +662,7 @@ struct Walker<'a> {
     /// The font dictionary a font name stands for, by the address of the
     /// resources it is looked up in.
     font_names: HashMap<(Option<usize>, Vec<u8>), Option<&'a Dictionary>>,
-    budget: Budget,
+    budget: Budget<'a>,
 }
 
 fn too_deep(what: &str) -> PdfError {
@@ -618,8 +687,12 @@ impl<'a> Walker<'a> {
         let mut marks: Vec<Mark> = Vec::new();
         // One operation at a time: a stream of millions of operations is
         // never held decoded at once.
-        for op in crate::content::operations(content) {
+        let mut operations = crate::content::operations(content);
+        while let Some(op) = operations.next() {
             let op = op?;
+            let held = operations.operands_memory().saturating_sub(OPERANDS_FREE);
+            self.budget
+                .charge(OPERATION_COST + held / OPERANDS_MEMORY_PER_WORK)?;
             let operands = &op.operands;
             let number = |i: usize| operands.get(i).and_then(Object::as_float).unwrap_or(0.0);
             match op.operator.as_str() {
@@ -688,6 +761,7 @@ impl<'a> Walker<'a> {
                     tm = tlm;
                 }
                 "Tj" | "'" | "\"" | "TJ" => {
+                    self.budget.charge(SHOW_COST)?;
                     if op.operator == "'" || op.operator == "\"" {
                         tlm = multiply(translate(0.0, -state.leading), tlm);
                         tm = tlm;
@@ -726,13 +800,12 @@ impl<'a> Walker<'a> {
                         .and_then(|o| self.properties(o, resources))
                         .and_then(|p| p.get(b"ActualText"))
                         .and_then(|o| self.document.resolve(o))
-                        .and_then(Object::as_str)
-                        .map(decode_text_string);
-                    if let Some(text) = &actual_text {
+                        .and_then(Object::as_str);
+                    if let Some(text) = actual_text {
                         self.budget.charge(text.len())?;
                     }
                     marks.push(Mark {
-                        actual_text,
+                        actual_text: actual_text.map(decode_text_string),
                         chunk: None,
                     });
                 }
@@ -740,6 +813,7 @@ impl<'a> Walker<'a> {
                     marks.pop();
                 }
                 "Do" if depth < MAX_FORM_DEPTH => {
+                    self.budget.charge(DO_COST)?;
                     let Some(name) = operands.first().and_then(Object::as_name) else {
                         continue;
                     };
@@ -822,6 +896,7 @@ impl<'a> Walker<'a> {
             match item {
                 Object::String(bytes, _) => {
                     for code in bytes.chunks(font.code_len) {
+                        self.budget.code()?;
                         let start = frame(apply(multiply(*tm, ctm), 0.0, state.rise));
                         let value = code.iter().fold(0u32, |acc, b| acc * 256 + u32::from(*b));
                         let width = font.width(value);
@@ -844,11 +919,6 @@ impl<'a> Walker<'a> {
                                     chunk.x1 = chunk.x1.max(x1);
                                 }
                                 None => {
-                                    if self.chunks.len() >= self.budget.limits.page_glyphs {
-                                        return Err(too_many_glyphs(
-                                            self.budget.limits.page_glyphs,
-                                        ));
-                                    }
                                     let text = mark.actual_text.clone().unwrap_or_default();
                                     self.budget.produce(text.len())?;
                                     mark.chunk = Some(self.chunks.len());
@@ -867,9 +937,6 @@ impl<'a> Walker<'a> {
                         let text = font.text(map, code);
                         if text.is_empty() || text == "\u{fffd}" {
                             continue;
-                        }
-                        if self.chunks.len() >= self.budget.limits.page_glyphs {
-                            return Err(too_many_glyphs(self.budget.limits.page_glyphs));
                         }
                         self.budget.produce(text.len())?;
                         self.chunks.push(Chunk {
@@ -907,6 +974,9 @@ impl<'a> Walker<'a> {
             Some(found) => *found,
             None => {
                 let found = resources.and_then(|r| self.font_dictionary(r, name));
+                if self.font_names.len() >= MAX_FONT_NAMES {
+                    self.font_names.clear();
+                }
                 self.font_names.insert(key, found);
                 found
             }
@@ -979,10 +1049,10 @@ fn to_unicode_too_large() -> PdfError {
 fn font_info<'a>(
     doc: &'a Document,
     font: &'a Dictionary,
-    budget: &mut Budget,
+    budget: &mut Budget<'_>,
 ) -> Result<(FontInfo<'a>, usize), PdfError> {
     let map = font_map(doc, font);
-    let encoding = encoding::font_encoding(doc, font);
+    let encoding = encoding::font_encoding(doc, font, budget)?;
     let composite = doc
         .get(font, b"Subtype")
         .and_then(Object::as_name)
@@ -1088,7 +1158,7 @@ fn parse_cid_widths(
     doc: &Document,
     w: &[Object],
     widths: &mut HashMap<u32, f32>,
-    budget: &mut Budget,
+    budget: &mut Budget<'_>,
 ) -> Result<(), PdfError> {
     let value = |o: &Object| doc.resolve(o).and_then(Object::as_float);
     let mut i = 0;
@@ -1156,16 +1226,11 @@ fn differences(document: &Document, font: &Dictionary) -> usize {
 }
 
 /// What reading `font` builds, counted before it is read: the font itself
-/// and the maps built of the `Differences`. Its `ToUnicode` map is left to the
-/// cache.
-fn font_before(
-    document: &Document,
-    font: &Dictionary,
-    budget: &mut Budget,
-) -> Result<usize, PdfError> {
-    let differences = differences(document, font).saturating_mul(DIFFERENCE_MEMORY);
-    budget.charge(differences / MEMORY_PER_WORK)?;
-    Ok(FONT_INFO_MEMORY.saturating_add(differences))
+/// and the maps built of the `Differences`, one entry for each code they can
+/// name. Its `ToUnicode` map is left to the cache.
+fn font_before(document: &Document, font: &Dictionary) -> usize {
+    let codes = differences(document, font).min(DIFFERENCE_CODES);
+    FONT_INFO_MEMORY.saturating_add(codes.saturating_mul(DIFFERENCE_MEMORY))
 }
 
 fn font_too_large(limit: usize) -> PdfError {
@@ -1181,8 +1246,7 @@ fn page_resources(document: &Document, page_id: ObjectId) -> Option<&Dictionary>
         if let Some(resources) = node.get(b"Resources") {
             return document.resolve(resources).and_then(Object::as_dict);
         }
-        let parent = node.get(b"Parent").and_then(Object::as_reference)?;
-        node = document.dictionary(parent)?;
+        node = document.resolve(node.get(b"Parent")?)?.as_dict()?;
     }
     None
 }
@@ -1308,11 +1372,15 @@ impl Steps {
 /// comparisons.
 #[cfg(test)]
 fn assemble(chunks: Vec<Chunk>, steps: usize) -> Result<String, PdfError> {
-    assemble_counted(chunks, steps).map(|(text, _)| text)
+    assemble_counted(chunks, steps).map(|(text, ..)| text)
 }
 
-/// [`assemble`], with how many of `allowed` steps it spent.
-fn assemble_counted(mut chunks: Vec<Chunk>, allowed: usize) -> Result<(String, usize), PdfError> {
+/// [`assemble`], with how many of `allowed` steps it spent, and the lines it
+/// made.
+fn assemble_counted(
+    mut chunks: Vec<Chunk>,
+    allowed: usize,
+) -> Result<(String, usize, usize), PdfError> {
     let mut steps = Steps(allowed);
     // Horizontal text first, top to bottom; then each other direction.
     chunks.sort_by(|a, b| {
@@ -1355,7 +1423,8 @@ fn assemble_counted(mut chunks: Vec<Chunk>, allowed: usize) -> Result<(String, u
         }
         out.push(reading_order(visual).concat().trim().to_owned());
     }
-    Ok((out.join("\n"), allowed - steps.0))
+    let lines = out.len();
+    Ok((out.join("\n"), allowed - steps.0, lines))
 }
 
 /// Which glyphs of a line repeat another one: `duplicate[i]` is true when
@@ -1666,10 +1735,13 @@ mod tests {
     #[test]
     fn a_page_that_takes_too_much_work_is_refused() {
         let document = document_of(&["Hello, world"]);
-        let page_length = document
+        // At least its content, and what its operations and codes cost.
+        let (_, page_length) = page_texts_counted(&document, TextLimits::default()).unwrap();
+        let content = document
             .page_content(document.pages()[0], usize::MAX)
             .unwrap()
             .len();
+        assert!(page_length > content, "{page_length} for {content}");
         let tight = TextLimits {
             page_work: page_length - 1,
             ..TextLimits::default()
@@ -2652,8 +2724,9 @@ mod tests {
         let document = fonts_in_turn(fonts, rounds);
         let page = document.pages()[0];
         let content = document.page_content(page, usize::MAX).unwrap().len();
-        // Each font read once: its widths.
-        let budget = content + fonts * 256 * WIDTH_COST;
+        // Each font read once: at least its widths.
+        let (_, budget) = page_texts_counted(&document, TextLimits::default()).unwrap();
+        assert!(budget > content + fonts * 256 * WIDTH_COST, "{budget}");
         let held = TextLimits {
             page_work: budget,
             ..TextLimits::default()

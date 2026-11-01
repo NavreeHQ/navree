@@ -133,42 +133,55 @@ impl Crypt {
     }
 
     /// Decrypts the strings and stream of object `id` in place; `identity`
-    /// says the stream opts out (see [`opts_out`]).
-    pub(crate) fn decrypt(&self, id: ObjectId, object: &mut Object, identity: bool) {
+    /// says the stream opts out (see [`opts_out`]). Returns how many it
+    /// decrypted: each makes a key.
+    pub(crate) fn decrypt(&self, id: ObjectId, object: &mut Object, identity: bool) -> usize {
+        let mut count = 0;
         match object {
             Object::Stream(stream) => {
-                self.decrypt_strings(id, &mut stream.dict);
+                self.decrypt_strings(id, &mut stream.dict, &mut count);
                 let skip = identity
                     || stream.dict.has_type(b"XRef")
                     || (!self.metadata && stream.dict.has_type(b"Metadata"));
                 if !skip {
+                    count += 1;
                     stream.content = self.apply(self.streams, id, &stream.content).into();
                 }
             }
-            other => self.decrypt_object_strings(id, other, 0),
+            other => self.decrypt_object_strings(id, other, 0, &mut count),
         }
+        count
     }
 
-    fn decrypt_strings(&self, id: ObjectId, dict: &mut Dictionary) {
+    fn decrypt_strings(&self, id: ObjectId, dict: &mut Dictionary, count: &mut usize) {
         for (_, value) in dict.iter_mut() {
-            self.decrypt_object_strings(id, value, 1);
+            self.decrypt_object_strings(id, value, 1, count);
         }
     }
 
-    fn decrypt_object_strings(&self, id: ObjectId, object: &mut Object, depth: usize) {
+    fn decrypt_object_strings(
+        &self,
+        id: ObjectId,
+        object: &mut Object,
+        depth: usize,
+        count: &mut usize,
+    ) {
         if depth > crate::parse::MAX_DEPTH {
             return;
         }
         match object {
-            Object::String(bytes, _) => *bytes = self.apply(self.strings, id, bytes),
+            Object::String(bytes, _) => {
+                *count += 1;
+                *bytes = self.apply(self.strings, id, bytes);
+            }
             Object::Array(items) => {
                 for item in items {
-                    self.decrypt_object_strings(id, item, depth + 1);
+                    self.decrypt_object_strings(id, item, depth + 1, count);
                 }
             }
             Object::Dictionary(dict) => {
                 for (_, value) in dict.iter_mut() {
-                    self.decrypt_object_strings(id, value, depth + 1);
+                    self.decrypt_object_strings(id, value, depth + 1, count);
                 }
             }
             _ => {}

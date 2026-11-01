@@ -130,9 +130,14 @@ fn code(bytes: &[u8]) -> Option<(u32, u8)> {
     Some((value, bytes.len() as u8))
 }
 
-/// A text of UTF-16 units; a text with an odd byte is not one.
+/// The longest text one code maps to, in bytes (512, the limit the CMap format
+/// gives on a destination string); a line with a longer one is skipped.
+const MAX_TEXT: usize = 512;
+
+/// A text of UTF-16 units; a text with an odd byte is not one, nor one over
+/// [`MAX_TEXT`].
 fn units(bytes: &[u8]) -> Option<Rc<[u16]>> {
-    if bytes.is_empty() || !bytes.len().is_multiple_of(2) {
+    if bytes.is_empty() || !bytes.len().is_multiple_of(2) || bytes.len() > MAX_TEXT {
         return None;
     }
     Some(

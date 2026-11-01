@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use bytes::Bytes;
 
 use crate::budget::{Budget, ReadLimits};
+
 use crate::crypt::Crypt;
 use crate::error::PdfError;
 use crate::filters::{self, DecodeError};
@@ -13,8 +14,11 @@ use crate::object::{Dictionary, Object, ObjectId, Stream};
 use crate::parse::{Fail, Lexer, MAX_DEPTH};
 use crate::xref::{self, Entry};
 
-/// How many references are followed to reach an object (128).
-pub(crate) const MAX_HOPS: usize = 128;
+/// How many references are followed to reach an object (8). Writers refer to
+/// an object directly, and the format gives no reason to do otherwise: a
+/// reference to a reference is rare and one to that rarer, so 8 is room for any
+/// file a writer made, and a longer chain reads as a missing object.
+pub(crate) const MAX_HOPS: usize = 8;
 /// How deep reading one object may lead to reading others (a stream's
 /// `Length` in another object, an object stream): 32.
 const MAX_LOADING: usize = 32;
@@ -26,6 +30,11 @@ const STREAM_MEMORY: usize = 32;
 /// What an object stream's list holds for each object in it, with room to
 /// grow: a number and offset, in the list and in its index by number.
 const MEMBER_MEMORY: usize = 72;
+/// What reading one object of an object stream's list costs, in bytes of work.
+const MEMBER_COST: usize = 16;
+/// What decrypting one string or stream costs besides its bytes, in bytes of
+/// work: making its key.
+const DECRYPT_COST: usize = 256;
 /// What each entry of a page's `Contents` costs to look at, in bytes of work.
 pub(crate) const CONTENTS_ENTRY_COST: usize = 16;
 
@@ -52,7 +61,19 @@ struct Scanned {
 struct Slot {
     number: u32,
     entry: Entry,
+    /// A later section of the cross-reference marks it free. It stays
+    /// readable, as a reference to it may remain, but is not listed.
+    freed: bool,
     object: OnceCell<Option<Object>>,
+}
+
+impl Slot {
+    fn id(&self) -> ObjectId {
+        match self.entry {
+            Entry::Normal { generation, .. } => (self.number, generation),
+            _ => (self.number, 0),
+        }
+    }
 }
 
 /// A PDF document read lazily: the cross-reference when it is loaded, each
@@ -173,6 +194,7 @@ impl Document {
             .map(|(number, entry)| Slot {
                 number,
                 entry,
+                freed: xref.freed.contains(&number),
                 object: OnceCell::new(),
             })
             .collect();
@@ -258,12 +280,10 @@ impl Document {
         self.failure.borrow().is_some()
     }
 
-    /// The ids of the objects in the cross-reference, in order.
+    /// The ids of the objects in the cross-reference, in order, but for those
+    /// a later section marks free.
     pub fn ids(&self) -> impl Iterator<Item = ObjectId> + '_ {
-        self.slots.iter().map(|slot| match slot.entry {
-            Entry::Normal { generation, .. } => (slot.number, generation),
-            _ => (slot.number, 0),
-        })
+        self.slots.iter().filter(|slot| !slot.freed).map(Slot::id)
     }
 
     /// The number of objects in the cross-reference.
@@ -289,18 +309,20 @@ impl Document {
 
     /// Every object that can be read, moved out of the document: what it
     /// holds is not copied. Also returns the ids of those the cross-reference
-    /// lists that could not be read.
-    pub(crate) fn into_objects(
-        self,
-    ) -> Result<(BTreeMap<ObjectId, Object>, HashSet<ObjectId>), PdfError> {
-        let ids: Vec<ObjectId> = self.ids().collect();
+    /// lists that could not be read, and of those a later section marks free.
+    pub(crate) fn into_objects(self) -> Result<ReadObjects, PdfError> {
+        let ids: Vec<ObjectId> = self.slots.iter().map(Slot::id).collect();
         for &id in &ids {
             self.object(id);
         }
         self.check()?;
         let mut objects = BTreeMap::new();
         let mut lost = HashSet::new();
+        let mut freed = HashSet::new();
         for (id, slot) in ids.into_iter().zip(self.slots) {
+            if slot.freed {
+                freed.insert(id);
+            }
             match slot.object.into_inner().flatten() {
                 Some(object) => {
                     objects.insert(id, object);
@@ -310,7 +332,11 @@ impl Document {
                 }
             }
         }
-        Ok((objects, lost))
+        Ok(ReadObjects {
+            objects,
+            lost,
+            freed,
+        })
     }
 
     /// The number of bytes of the file, from its header on.
@@ -321,6 +347,10 @@ impl Document {
     /// Object `id`, read the first time it is asked for: `None` when it is
     /// missing or damaged (or a limit ran out: see [`check`](Self::check)).
     pub fn object(&self, id: ObjectId) -> Option<&Object> {
+        if let Err(error) = self.budget.lookup() {
+            self.fail(error);
+            return None;
+        }
         let index = self
             .slots
             .binary_search_by_key(&id.0, |slot| slot.number)
@@ -385,7 +415,8 @@ impl Document {
                 self.budget.memory(stream.content.len())?;
                 self.budget.work(stream.content.len())?;
             }
-            crypt.decrypt(id, &mut object, identity);
+            let decrypted = crypt.decrypt(id, &mut object, identity);
+            self.budget.work(decrypted.saturating_mul(DECRYPT_COST))?;
         }
         Ok(Some(object))
     }
@@ -528,6 +559,7 @@ impl Document {
         let mut by_number = HashMap::new();
         while let (Some(member), Some(offset)) = (words.next(), words.next()) {
             self.budget.memory(MEMBER_MEMORY)?;
+            self.budget.work(MEMBER_COST)?;
             let member = number(member).and_then(|member| u32::try_from(member).ok());
             let offset = number(offset).and_then(|offset| usize::try_from(offset).ok());
             if let (Some(member), Some(offset)) = (member, offset) {
@@ -544,13 +576,31 @@ impl Document {
     }
 
     /// `object`, or the object it refers to (through references to
-    /// references, up to 128): `None` when that is missing.
+    /// references, up to 8): `None` when that is missing. Each reference
+    /// followed costs work (see [`ReadLimits::work`]).
     pub fn resolve<'a>(&'a self, object: &'a Object) -> Option<&'a Object> {
         let mut object = object;
         for _ in 0..MAX_HOPS {
             match object {
                 Object::Reference(id) => object = self.object(*id)?,
                 other => return Some(other),
+            }
+        }
+        match object {
+            Object::Reference(_) => None,
+            other => Some(other),
+        }
+    }
+
+    /// Where the reference `object` leads, through references to references:
+    /// the id, and the object when there is one. `None` for what is no
+    /// reference, or a chain over the limit.
+    fn followed(&self, object: &Object) -> Option<(ObjectId, Option<&Object>)> {
+        let mut id = object.as_reference()?;
+        for _ in 0..MAX_HOPS {
+            match self.object(id) {
+                Some(Object::Reference(next)) => id = *next,
+                other => return Some((id, other)),
             }
         }
         None
@@ -588,10 +638,10 @@ impl Document {
     /// per object in the file, and 256 levels deep.
     pub fn pages(&self) -> Vec<ObjectId> {
         let mut pages = Vec::new();
-        let Some(root) = self
+        let Some((root, _)) = self
             .catalog()
             .and_then(|catalog| catalog.get(b"Pages"))
-            .and_then(Object::as_reference)
+            .and_then(|pages| self.followed(pages))
         else {
             return pages;
         };
@@ -605,11 +655,11 @@ impl Document {
                 }
                 steps -= 1;
                 kids = rest;
-                let Some(id) = kid.as_reference() else {
+                let Some((id, node)) = self.followed(kid) else {
                     continue;
                 };
-                match self
-                    .dictionary(id)
+                match node
+                    .and_then(Object::as_dict)
                     .map(|node| node_kind(node, &|value| self.resolve(value)))
                 {
                     Some(NodeKind::Page) => pages.push(id),
@@ -652,31 +702,27 @@ impl Document {
     }
 
     fn contents_of(&self, page: ObjectId) -> Vec<ObjectId> {
-        let mut streams = Vec::new();
-        let Some(mut contents) = self.dictionary(page).and_then(|page| page.get(b"Contents"))
-        else {
-            return streams;
+        let Some(contents) = self.dictionary(page).and_then(|page| page.get(b"Contents")) else {
+            return Vec::new();
         };
-        let mut hops = 0;
-        loop {
-            match contents {
-                Object::Reference(id) => match self.object(*id) {
-                    None | Some(Object::Stream(_)) => streams.push(*id),
-                    Some(other) => {
-                        hops += 1;
-                        if hops < MAX_HOPS {
-                            contents = other;
-                            continue;
-                        }
-                    }
-                },
-                Object::Array(items) => {
-                    streams.extend(items.iter().filter_map(Object::as_reference))
-                }
-                _ => {}
-            }
-            return streams;
-        }
+        let contents = match contents {
+            Object::Reference(_) => match self.followed(contents) {
+                Some((id, Some(Object::Stream(_)))) => return vec![id],
+                Some((_, Some(array @ Object::Array(_)))) => array,
+                _ => return Vec::new(),
+            },
+            other => other,
+        };
+        let Some(items) = contents.as_array() else {
+            return Vec::new();
+        };
+        items
+            .iter()
+            .filter_map(|item| match self.followed(item)? {
+                (id, Some(Object::Stream(_))) => Some(id),
+                _ => None,
+            })
+            .collect()
     }
 
     /// A page's content: its streams decoded and joined, each followed by a
@@ -749,10 +795,25 @@ impl Document {
         self.budget.work_used()
     }
 
+    /// The objects looked up so far: what the text of a page is charged for
+    /// the references it follows.
+    pub(crate) fn lookups(&self) -> usize {
+        self.budget.lookups()
+    }
+
     /// The limits the document is read within.
     pub fn limits(&self) -> ReadLimits {
         self.budget.limits
     }
+}
+
+/// What [`Document::into_objects`] moves out of a document.
+pub(crate) struct ReadObjects {
+    pub(crate) objects: BTreeMap<ObjectId, Object>,
+    /// What the cross-reference lists that could not be read.
+    pub(crate) lost: HashSet<ObjectId>,
+    /// What a later section of the cross-reference marks free.
+    pub(crate) freed: HashSet<ObjectId>,
 }
 
 /// What a kid of the page tree is.

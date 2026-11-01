@@ -75,6 +75,7 @@ pub fn operations(content: &[u8]) -> Operations<'_> {
     Operations {
         lexer: Lexer::content(content),
         done: false,
+        meter: OperandMeter(Cell::new(0)),
     }
 }
 
@@ -82,9 +83,17 @@ pub fn operations(content: &[u8]) -> Operations<'_> {
 pub struct Operations<'a> {
     lexer: Lexer<'a>,
     done: bool,
+    /// What the operands of the operation read last hold.
+    meter: OperandMeter,
 }
 
 impl Operations<'_> {
+    /// What the operands of the operation read last hold in memory, as they
+    /// are counted against [`MAX_OPERANDS_MEMORY`].
+    pub fn operands_memory(&self) -> usize {
+        self.meter.0.get()
+    }
+
     /// Moves past an inline image's data, from just after `ID`: to the
     /// `EI` that follows white space and is followed by white space or the
     /// end.
@@ -115,7 +124,8 @@ impl Iterator for Operations<'_> {
         if self.done {
             return None;
         }
-        let meter = OperandMeter(Cell::new(0));
+        self.meter.0.set(0);
+        let meter = &self.meter;
         let mut operands = Vec::new();
         loop {
             self.lexer.skip_space();
@@ -138,7 +148,7 @@ impl Iterator for Operations<'_> {
                 }
                 let word = self.lexer.buf.get(start..end).unwrap_or_default();
                 if matches!(word, b"true" | b"false" | b"null") {
-                    match self.lexer.object(MAX_DEPTH, &meter) {
+                    match self.lexer.object(MAX_DEPTH, meter) {
                         Ok(object) => operands.push(object),
                         Err(Fail::Over(error)) => return Some(Err(error)),
                         Err(_) => {
@@ -162,7 +172,7 @@ impl Iterator for Operations<'_> {
                             self.done = true;
                             return None;
                         }
-                        match self.lexer.object(MAX_DEPTH, &meter) {
+                        match self.lexer.object(MAX_DEPTH, meter) {
                             Ok(_) => {}
                             Err(Fail::Over(error)) => return Some(Err(error)),
                             Err(_) => {
@@ -179,7 +189,7 @@ impl Iterator for Operations<'_> {
                 }
                 return Some(Ok(Operation { operator, operands }));
             }
-            match self.lexer.object(MAX_DEPTH, &meter) {
+            match self.lexer.object(MAX_DEPTH, meter) {
                 Ok(object) => operands.push(object),
                 Err(Fail::Over(error)) => {
                     self.done = true;

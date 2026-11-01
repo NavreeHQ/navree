@@ -1,10 +1,12 @@
 //! [`Objects`]: a document's objects held to be changed, and the writer
 //! that saves them as a PDF.
 
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write as _;
 
-use crate::document::{Document, MAX_HOPS, NodeKind, node_kind};
+use crate::budget::LOOKUP_COST;
+use crate::document::{Document, MAX_HOPS, NodeKind, ReadObjects, node_kind};
 use crate::error::{PdfError, size};
 use crate::filters;
 use crate::object::{Dictionary, Object, ObjectId, Stream, StringFormat};
@@ -19,6 +21,104 @@ const OBJECTS_PER_STREAM: usize = 100;
 const MAX_KEPT_NUMBER: u32 = (1 << 23) - 1;
 /// How deep the page tree may nest (256).
 const MAX_TREE_DEPTH: usize = 256;
+/// The shortest stream [`Objects::compress`] compresses (64 bytes): making a
+/// compressor costs more than a shorter one could give back.
+const SHORTEST_COMPRESSED: usize = 64;
+/// What compressing one stream costs in work, besides four bytes for each of
+/// its own (4 KiB): the compressor's tables.
+const COMPRESS_COST: usize = 4096;
+/// What an object holds in the map of objects, besides itself.
+const HELD_ENTRY_MEMORY: usize = 32;
+/// The keys of a page tree node that lead to what a page needs, besides its
+/// `Kids`.
+const NEEDED_KEYS: [&[u8]; 5] = [
+    b"Contents",
+    b"Resources",
+    b"MediaBox",
+    b"CropBox",
+    b"Rotate",
+];
+
+/// What a document's objects may still take, once read: the work of looking
+/// objects up, and the memory an edit adds. The first limit that ran out is
+/// kept: [`Objects::check`] and saving return it.
+#[derive(Clone, Debug)]
+struct EditBudget {
+    work: Cell<usize>,
+    work_limit: usize,
+    added: Cell<usize>,
+    added_limit: usize,
+    failure: RefCell<Option<PdfError>>,
+}
+
+impl Default for EditBudget {
+    fn default() -> Self {
+        Self {
+            work: Cell::new(0),
+            work_limit: usize::MAX,
+            added: Cell::new(0),
+            added_limit: usize::MAX,
+            failure: RefCell::new(None),
+        }
+    }
+}
+
+impl EditBudget {
+    /// Keeps `error`, if it is the first.
+    fn fail(&self, error: PdfError) -> PdfError {
+        self.failure.borrow_mut().get_or_insert(error).clone()
+    }
+
+    fn work(&self, bytes: usize) -> Result<(), PdfError> {
+        let used = self.work.get().saturating_add(bytes);
+        self.work.set(used);
+        if used > self.work_limit {
+            return Err(self.fail(PdfError::TooLarge(format!(
+                "an edit of a PDF takes more work than the limit of {}",
+                size(self.work_limit)
+            ))));
+        }
+        Ok(())
+    }
+
+    fn hold(&self, bytes: usize) -> Result<(), PdfError> {
+        let used = self.added.get().saturating_add(bytes);
+        self.added.set(used);
+        if used > self.added_limit {
+            return Err(self.fail(PdfError::TooLarge(format!(
+                "an edit of a PDF would add more than the limit of {} of memory",
+                size(self.added_limit)
+            ))));
+        }
+        Ok(())
+    }
+}
+
+/// What `object` holds, counted as a read counts it, and besides that the
+/// room a map keeps for its entries.
+pub fn memory_of(object: &Object) -> usize {
+    fn inner(object: &Object, depth: usize) -> usize {
+        let own = std::mem::size_of::<Object>();
+        if depth > MAX_DEPTH {
+            return own;
+        }
+        let entries = |dict: &Dictionary, depth: usize| -> usize {
+            dict.iter()
+                .map(|(key, value)| {
+                    key.len() + crate::parse::ENTRY_MEMORY + 32 + inner(value, depth + 1)
+                })
+                .sum()
+        };
+        own + match object {
+            Object::Name(bytes) | Object::String(bytes, _) => bytes.len(),
+            Object::Array(items) => items.iter().map(|item| inner(item, depth + 1)).sum(),
+            Object::Dictionary(dict) => entries(dict, depth),
+            Object::Stream(stream) => stream.content.len() + entries(&stream.dict, depth),
+            _ => 0,
+        }
+    }
+    inner(object, 0)
+}
 
 /// A document's objects and trailer, held in memory to be changed and
 /// saved: what merging, stamping and other edits work on.
@@ -34,6 +134,7 @@ pub struct Objects {
     max_number: u32,
     /// The most saving may write, when it is held to a limit.
     output_limit: Option<usize>,
+    budget: EditBudget,
 }
 
 impl Objects {
@@ -47,14 +148,18 @@ impl Objects {
 
     /// Every object `document` can read, and its trailer, moved out of it:
     /// an error when a limit runs out while reading them, or when an object
-    /// that cannot be read is one the document needs (one reachable from the
-    /// trailer): what is saved would lose it without a word. One nothing
-    /// refers to is left out. The objects keep their numbers, unless one is
-    /// over 8,388,607: then they are numbered again from 1.
+    /// that cannot be read is one the document needs (one its page tree,
+    /// contents or resources lead to): what is saved would lose it without a
+    /// word. Any other that cannot be read is left out, and so is one a later
+    /// section of the cross-reference marks free, unless the trailer leads to
+    /// it. The objects keep their numbers, unless one is over 8,388,607: then
+    /// they are numbered again from 1.
     ///
     /// Saving them is held to the bytes of the file plus
     /// [`ReadLimits::memory`](crate::ReadLimits::memory) (see
-    /// [`output_limit`](Self::output_limit)).
+    /// [`output_limit`](Self::output_limit)). What is done to them is held to
+    /// budgets of its own, as much again as the document's: the work of the
+    /// lookups, and the memory added (see [`check`](Self::check)).
     pub fn read(document: Document) -> Result<Objects, PdfError> {
         let mut trailer = document.trailer().clone();
         for key in [&b"Size"[..], b"Prev", b"XRefStm", b"Encrypt"] {
@@ -66,8 +171,13 @@ impl Objects {
             document.version().to_owned()
         };
         let listed = document.max_number().min(MAX_KEPT_NUMBER);
-        let output_limit = document.file_len().saturating_add(document.limits().memory);
-        let (objects, lost) = document.into_objects()?;
+        let limits = document.limits();
+        let output_limit = document.file_len().saturating_add(limits.memory);
+        let ReadObjects {
+            objects,
+            lost,
+            freed,
+        } = document.into_objects()?;
         let highest = objects.keys().map(|id| id.0).max().unwrap_or(0);
         let mut read = Objects {
             objects,
@@ -75,12 +185,22 @@ impl Objects {
             version,
             max_number: highest.max(listed),
             output_limit: Some(output_limit),
+            budget: EditBudget {
+                work_limit: limits.work,
+                added_limit: limits.memory,
+                ..EditBudget::default()
+            },
         };
         read.name_tree_nodes();
-        if let Some((number, generation)) = read.first_reached(&lost) {
+        if let Some((number, generation)) = read.first_needed(&lost) {
             return Err(PdfError::damaged(format!(
                 "object {number} {generation} cannot be read, and the document needs it"
             )));
+        }
+        if !freed.is_empty() {
+            let reached = read.reached();
+            read.objects
+                .retain(|id, _| !freed.contains(id) || reached.contains(id));
         }
         if highest > MAX_KEPT_NUMBER {
             read.renumber(1);
@@ -88,26 +208,25 @@ impl Objects {
         Ok(read)
     }
 
+    /// The id the page tree's root is at, through references to references.
+    fn tree_root(&self) -> Option<ObjectId> {
+        let catalog = self.followed(self.trailer.get(b"Root")?)?.1?.as_dict()?;
+        Some(self.followed(catalog.get(b"Pages")?)?.0)
+    }
+
     /// Gives the `Type` the format requires to the nodes of the page tree that
-    /// have none: what is saved is valid where the file was not.
+    /// have none: what is saved is valid where the file was not. Each node is
+    /// put on the stack once, and the kids looked at are held to what
+    /// [`pages`](Self::pages) looks at.
     fn name_tree_nodes(&mut self) {
-        let Some(root) = self
-            .trailer
-            .get(b"Root")
-            .and_then(Object::as_reference)
-            .and_then(|id| self.dictionary(id))
-            .and_then(|catalog| catalog.get(b"Pages"))
-            .and_then(Object::as_reference)
-        else {
+        let Some(root) = self.tree_root() else {
             return;
         };
-        let mut seen = HashSet::new();
+        let mut steps = self.objects.len();
+        let mut seen = HashSet::from([root]);
         let mut stack = vec![root];
         let mut unnamed: Vec<(ObjectId, &str)> = Vec::new();
-        while let Some(node) = stack.pop() {
-            if !seen.insert(node) {
-                continue;
-            }
+        'walk: while let Some(node) = stack.pop() {
             let Some(dictionary) = self.dictionary(node) else {
                 continue;
             };
@@ -119,15 +238,23 @@ impl Objects {
                 .and_then(|kids| self.resolve(kids))
                 .and_then(Object::as_array)
                 .map_or(&[][..], Vec::as_slice);
-            for id in kids.iter().filter_map(Object::as_reference) {
-                let Some(kid) = self.dictionary(id) else {
+            for kid in kids {
+                if steps == 0 {
+                    break 'walk;
+                }
+                steps -= 1;
+                let Some((id, kid)) = self.followed(kid) else {
                     continue;
                 };
+                let Some(kid) = kid.and_then(Object::as_dict) else {
+                    continue;
+                };
+                if !seen.insert(id) {
+                    continue;
+                }
                 match node_kind(kid, &|value| self.resolve(value)) {
                     NodeKind::Tree => stack.push(id),
-                    NodeKind::Page if !kid.has(b"Type") && seen.insert(id) => {
-                        unnamed.push((id, "Page"));
-                    }
+                    NodeKind::Page if !kid.has(b"Type") => unnamed.push((id, "Page")),
                     _ => {}
                 }
             }
@@ -139,27 +266,125 @@ impl Objects {
         }
     }
 
-    /// One of `ids` that the trailer leads to, if any.
-    fn first_reached(&self, ids: &HashSet<ObjectId>) -> Option<ObjectId> {
+    /// One of `ids` that a document's pages need, if any: a node of the page
+    /// tree, or what the nodes' contents, resources and boxes lead to. What
+    /// else a page refers to (`Annots`, `Thumb`) can go without.
+    fn first_needed(&self, ids: &HashSet<ObjectId>) -> Option<ObjectId> {
         if ids.is_empty() {
             return None;
         }
-        let mut reached: HashSet<ObjectId> = HashSet::new();
-        let mut queue: Vec<ObjectId> = Vec::new();
-        for (_, value) in self.trailer.iter() {
-            references(value, &mut queue, 0);
+        let root = self.trailer.get(b"Root").and_then(Object::as_reference)?;
+        if ids.contains(&root) {
+            return Some(root);
         }
-        while let Some(id) = queue.pop() {
+        let catalog = self.followed(&Object::Reference(root))?.1?.as_dict()?;
+        let mut nodes: Vec<ObjectId> = Vec::new();
+        let mut needed: Vec<ObjectId> = Vec::new();
+        let (mut seen_nodes, mut seen) = (HashSet::new(), HashSet::new());
+        let mut node_of = |value: &Object, nodes: &mut Vec<ObjectId>| {
+            references(value, 0, &mut |id| {
+                if seen_nodes.insert(id) {
+                    nodes.push(id);
+                }
+            });
+        };
+        node_of(catalog.get(b"Pages")?, &mut nodes);
+        while let Some(id) = nodes.pop() {
             if ids.contains(&id) {
                 return Some(id);
             }
-            if reached.insert(id)
-                && let Some(object) = self.objects.get(&id)
-            {
-                references(object, &mut queue, 0);
+            let Some(node) = self.objects.get(&id) else {
+                continue;
+            };
+            let Object::Dictionary(node) = node else {
+                // A reference to a list of kids, or to a node.
+                node_of(node, &mut nodes);
+                continue;
+            };
+            if let Some(kids) = node.get(b"Kids") {
+                node_of(kids, &mut nodes);
+            }
+            for key in NEEDED_KEYS {
+                if let Some(value) = node.get(key) {
+                    references(value, 0, &mut |id| {
+                        if seen.insert(id) {
+                            needed.push(id);
+                        }
+                    });
+                }
+            }
+        }
+        while let Some(id) = needed.pop() {
+            if ids.contains(&id) {
+                return Some(id);
+            }
+            if let Some(object) = self.objects.get(&id) {
+                references(object, 0, &mut |id| {
+                    if seen.insert(id) {
+                        needed.push(id);
+                    }
+                });
             }
         }
         None
+    }
+
+    /// What the trailer leads to.
+    fn reached(&self) -> HashSet<ObjectId> {
+        let mut reached: HashSet<ObjectId> = HashSet::new();
+        let mut queue: Vec<ObjectId> = Vec::new();
+        for (_, value) in self.trailer.iter() {
+            references(value, 0, &mut |id| {
+                if reached.insert(id) {
+                    queue.push(id);
+                }
+            });
+        }
+        while let Some(id) = queue.pop() {
+            if let Some(object) = self.objects.get(&id) {
+                references(object, 0, &mut |id| {
+                    if reached.insert(id) {
+                        queue.push(id);
+                    }
+                });
+            }
+        }
+        reached
+    }
+
+    /// The first limit that ran out on what was done to these objects, if one
+    /// did: [`save`](Self::save) returns it too. Objects from
+    /// [`read`](Self::read) may take as much work to look up, and add as much
+    /// memory, as the document could take to read
+    /// ([`ReadLimits::work`](crate::ReadLimits::work) and
+    /// [`ReadLimits::memory`](crate::ReadLimits::memory)); objects from
+    /// [`new`](Self::new) are the app's own to size.
+    pub fn check(&self) -> Result<(), PdfError> {
+        match self.budget.failure.borrow().as_ref() {
+            Some(error) => Err(error.clone()),
+            None => Ok(()),
+        }
+    }
+
+    /// Counts `bytes` of memory about to be added, before it is: an error when
+    /// that passes the limit.
+    pub fn hold(&self, bytes: usize) -> Result<(), PdfError> {
+        self.budget.hold(bytes)
+    }
+
+    /// The memory counted as added so far.
+    pub fn memory_added(&self) -> usize {
+        self.budget.added.get()
+    }
+
+    /// Sets the most memory an edit may add.
+    pub fn set_added_limit(&mut self, limit: usize) {
+        self.budget.added_limit = limit;
+    }
+
+    /// The work counted so far: what looking objects up took.
+    pub fn work_used(&self) -> usize {
+        self.budget.work.get()
     }
 
     /// The highest object number given out.
@@ -173,26 +398,49 @@ impl Objects {
         (self.max_number, 0)
     }
 
-    /// Adds `object` with a new id.
+    /// Adds `object` with a new id, counted as memory added (see
+    /// [`check`](Self::check)).
     pub fn add(&mut self, object: impl Into<Object>) -> ObjectId {
         let id = self.reserve();
-        self.objects.insert(id, object.into());
+        self.insert(id, object);
         id
     }
 
-    /// Puts `object` at `id`.
+    /// Puts `object` at `id`, counted as memory added (see
+    /// [`check`](Self::check)).
     pub fn insert(&mut self, id: ObjectId, object: impl Into<Object>) {
-        self.max_number = self.max_number.max(id.0);
-        self.objects.insert(id, object.into());
+        let object = object.into();
+        // The error is kept for `check` and for saving.
+        let _ = self.budget.hold(memory_of(&object) + HELD_ENTRY_MEMORY);
+        self.adopt(id, object);
     }
 
-    /// Object `id`.
+    /// Puts at `id` an object already counted: one read by another
+    /// [`Objects`], or held with [`hold`](Self::hold).
+    pub fn adopt(&mut self, id: ObjectId, object: Object) {
+        self.max_number = self.max_number.max(id.0);
+        self.objects.insert(id, object);
+    }
+
+    /// Counts one lookup; `false` once the work has run out.
+    fn looked_up(&self) -> bool {
+        self.budget.work(LOOKUP_COST).is_ok()
+    }
+
+    /// Object `id`. Each lookup is counted (see [`check`](Self::check)), and
+    /// once the work has run out there is no object.
     pub fn get(&self, id: ObjectId) -> Option<&Object> {
+        if !self.looked_up() {
+            return None;
+        }
         self.objects.get(&id)
     }
 
     /// Object `id`, to change.
     pub fn get_mut(&mut self, id: ObjectId) -> Option<&mut Object> {
+        if !self.looked_up() {
+            return None;
+        }
         self.objects.get_mut(&id)
     }
 
@@ -206,7 +454,7 @@ impl Objects {
         self.get_mut(id).and_then(Object::as_dict_mut)
     }
 
-    /// `object`, or the object it refers to (through up to 128 references).
+    /// `object`, or the object it refers to (through up to 8 references).
     pub fn resolve<'a>(&'a self, object: &'a Object) -> Option<&'a Object> {
         let mut object = object;
         for _ in 0..MAX_HOPS {
@@ -215,20 +463,30 @@ impl Objects {
                 other => return Some(other),
             }
         }
+        match object {
+            Object::Reference(_) => None,
+            other => Some(other),
+        }
+    }
+
+    /// Where the reference `object` leads, through references to references:
+    /// the id, and the object when there is one. `None` for what is no
+    /// reference, or a chain over the limit.
+    pub fn followed(&self, object: &Object) -> Option<(ObjectId, Option<&Object>)> {
+        let mut id = object.as_reference()?;
+        for _ in 0..MAX_HOPS {
+            match self.get(id) {
+                Some(Object::Reference(next)) => id = *next,
+                other => return Some((id, other)),
+            }
+        }
         None
     }
 
     /// The pages, in order, read as [`Document::pages`] reads them.
     pub fn pages(&self) -> Vec<ObjectId> {
         let mut pages = Vec::new();
-        let Some(root) = self
-            .trailer
-            .get(b"Root")
-            .and_then(Object::as_reference)
-            .and_then(|id| self.dictionary(id))
-            .and_then(|catalog| catalog.get(b"Pages"))
-            .and_then(Object::as_reference)
-        else {
+        let Some(root) = self.tree_root() else {
             return pages;
         };
         let kids = |node: ObjectId| -> &[Object] {
@@ -247,11 +505,11 @@ impl Objects {
                 }
                 steps -= 1;
                 current = rest;
-                let Some(id) = kid.as_reference() else {
+                let Some((id, node)) = self.followed(kid) else {
                     continue;
                 };
-                match self
-                    .dictionary(id)
+                match node
+                    .and_then(Object::as_dict)
                     .map(|node| node_kind(node, &|value| self.resolve(value)))
                 {
                     Some(NodeKind::Page) => pages.push(id),
@@ -306,29 +564,26 @@ impl Objects {
 
     /// Drops the objects nothing reachable from the trailer refers to.
     pub fn prune(&mut self) {
-        let mut reached: HashSet<ObjectId> = HashSet::new();
-        let mut queue: Vec<ObjectId> = Vec::new();
-        for (_, value) in self.trailer.iter() {
-            references(value, &mut queue, 0);
-        }
-        while let Some(id) = queue.pop() {
-            if !reached.insert(id) {
-                continue;
-            }
-            if let Some(object) = self.objects.get(&id) {
-                references(object, &mut queue, 0);
-            }
-        }
+        let reached = self.reached();
         self.objects.retain(|id, _| reached.contains(id));
     }
 
-    /// Compresses (Flate) every stream that has no filter, when that makes
-    /// it smaller.
+    /// Compresses (Flate) every stream of 64 bytes or more that has no filter,
+    /// when that makes it smaller, as long as there is work left for it: it
+    /// takes 4 KiB and 4 bytes for each byte. A stream past that stays as it
+    /// is.
     pub fn compress(&mut self) {
+        let budget = &self.budget;
         for object in self.objects.values_mut() {
             if let Object::Stream(stream) = object
+                && stream.content.len() >= SHORTEST_COMPRESSED
                 && !stream.dict.has(b"Filter")
             {
+                let cost = stream.content.len().saturating_mul(4) + COMPRESS_COST;
+                if budget.work.get().saturating_add(cost) > budget.work_limit {
+                    continue;
+                }
+                budget.work.set(budget.work.get() + cost);
                 let packed = filters::deflate(&stream.content);
                 if packed.len() + 19 < stream.content.len() {
                     stream.dict.set("Filter", "FlateDecode");
@@ -367,6 +622,7 @@ impl Objects {
     /// is a stream. Held to the [`output_limit`](Self::output_limit), checked
     /// before each object is written.
     pub fn save_with(&self, object_streams: bool) -> Result<Vec<u8>, PdfError> {
+        self.check()?;
         let limit = self.output_limit();
         let over = |written: usize| -> Result<(), PdfError> {
             if written > limit {
@@ -516,26 +772,26 @@ fn renumber_in(object: &mut Object, map: &HashMap<ObjectId, ObjectId>, depth: us
     }
 }
 
-/// Pushes every reference in `object` onto `queue`.
-fn references(object: &Object, queue: &mut Vec<ObjectId>, depth: usize) {
+/// Calls `found` with every reference in `object`.
+fn references(object: &Object, depth: usize, found: &mut dyn FnMut(ObjectId)) {
     if depth > MAX_DEPTH {
         return;
     }
     match object {
-        Object::Reference(id) => queue.push(*id),
+        Object::Reference(id) => found(*id),
         Object::Array(items) => {
             for item in items {
-                references(item, queue, depth + 1);
+                references(item, depth + 1, found);
             }
         }
         Object::Dictionary(dict) => {
             for (_, value) in dict.iter() {
-                references(value, queue, depth + 1);
+                references(value, depth + 1, found);
             }
         }
         Object::Stream(stream) => {
             for (_, value) in stream.dict.iter() {
-                references(value, queue, depth + 1);
+                references(value, depth + 1, found);
             }
         }
         _ => {}

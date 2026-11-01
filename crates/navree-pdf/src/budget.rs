@@ -24,7 +24,10 @@ pub struct ReadLimits {
     /// Bytes the reader may look at (1 GiB), a byte counting again each time
     /// it is looked at: objects parsed, what a parse that failed reached
     /// before it moved back, what each filter reads and writes whether the
-    /// next one works or not, a damaged file scanned for its objects.
+    /// next one works or not, a damaged file scanned for its objects. Each
+    /// object looked up costs 16 bytes, read already or not, and each entry of
+    /// the cross-reference and each object an object stream lists as much; each
+    /// step of a filter 1 KiB, and each string or stream decrypted 256 bytes.
     pub work: usize,
     /// What one object stream or cross-reference stream may inflate to (8
     /// MiB). Writers put 100 to 200 objects in an object stream, tens of
@@ -47,12 +50,19 @@ impl Default for ReadLimits {
     }
 }
 
+/// What looking up one object costs, in bytes of work (16): a search of the
+/// table of objects, whether the object was read already or not. Every lookup
+/// a [`Document`](crate::Document) makes goes through
+/// [`Budget::lookup`], so a walk over references cannot be free.
+pub(crate) const LOOKUP_COST: usize = 16;
+
 /// What reading a document has spent of its [`ReadLimits`].
 #[derive(Debug)]
 pub(crate) struct Budget {
     pub(crate) limits: ReadLimits,
     memory: Cell<usize>,
     work: Cell<usize>,
+    lookups: Cell<usize>,
 }
 
 impl Budget {
@@ -61,7 +71,20 @@ impl Budget {
             limits,
             memory: Cell::new(0),
             work: Cell::new(0),
+            lookups: Cell::new(0),
         }
+    }
+
+    /// Counts one object looked up, or fails when the document has used all
+    /// the work it may.
+    pub(crate) fn lookup(&self) -> Result<(), PdfError> {
+        self.lookups.set(self.lookups.get().saturating_add(1));
+        self.work(LOOKUP_COST)
+    }
+
+    /// The objects looked up so far.
+    pub(crate) fn lookups(&self) -> usize {
+        self.lookups.get()
     }
 
     /// Counts `bytes` of memory, or fails when the document has used all it

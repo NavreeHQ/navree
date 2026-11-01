@@ -337,7 +337,18 @@ impl<'a> Lexer<'a> {
         if !self.eat(b"/") {
             return None;
         }
-        let mut name = Vec::new();
+        let first = self.pos;
+        while self
+            .peek()
+            .is_some_and(|byte| byte != b'#' && is_regular(byte))
+        {
+            self.pos += 1;
+        }
+        let plain = self.buf.get(first..self.pos).unwrap_or_default();
+        if self.peek() != Some(b'#') {
+            return Some(plain.to_vec());
+        }
+        let mut name = plain.to_vec();
         loop {
             let start = self.pos;
             while self

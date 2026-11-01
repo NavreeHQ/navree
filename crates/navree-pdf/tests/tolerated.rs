@@ -6,7 +6,7 @@
 use std::io::Write as _;
 
 use navree_pdf::content::operations;
-use navree_pdf::{Document, Objects, PdfError, ReadLimits, text};
+use navree_pdf::{Document, Object, Objects, PdfError, ReadLimits, text};
 
 fn deflate(data: &[u8]) -> Vec<u8> {
     let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::best());
@@ -474,4 +474,170 @@ fn a_number_too_large_for_an_integer_does_not_end_a_page() {
         vec![],
     );
     assert_eq!(text_of(file), "Hi there");
+}
+
+// What an edit needs of a file, and what it can do without.
+
+/// One page, 3, drawing 4 with the font 5, with `page` in its dictionary: 6 is
+/// `other`.
+fn with_other(page: &str, other: Vec<u8>) -> Vec<u8> {
+    let objects = vec![
+        b"<</Type/Catalog/Pages 2 0 R>>".to_vec(),
+        b"<</Type/Pages/Kids[3 0 R]/Count 1>>".to_vec(),
+        format!(
+            "<</Type/Page/Parent 2 0 R/MediaBox[0 0 600 800]/Contents 4 0 R\
+             /Resources<</Font<</F 5 0 R>>>>{page}>>"
+        )
+        .into_bytes(),
+        stream("", SHOW),
+        HELVETICA.as_bytes().to_vec(),
+        other,
+    ];
+    file(&objects, "<</Root 1 0 R/Size 7>>")
+}
+
+#[test]
+fn an_empty_object_reads_as_null() {
+    let file = with_other("/Thumb 6 0 R", Vec::new());
+    let document = Document::load(file, ReadLimits::default()).unwrap();
+    assert_eq!(document.object((6, 0)), Some(&Object::Null));
+    let objects = Objects::read(document).unwrap();
+    assert_eq!(objects.get((6, 0)), Some(&Object::Null));
+    assert_eq!(text_of(objects.save().unwrap()), "Hi there");
+}
+
+#[test]
+fn an_edit_does_without_an_object_only_an_annotation_refers_to() {
+    let file = with_other("/Annots[6 0 R]", b"<< /A 1 ".to_vec());
+    let document = Document::load(file, ReadLimits::default()).unwrap();
+    let objects = Objects::read(document).unwrap();
+    assert!(objects.get((6, 0)).is_none());
+    assert_eq!(text_of(objects.save().unwrap()), "Hi there");
+}
+
+#[test]
+fn an_edit_refuses_what_the_contents_or_a_form_need() {
+    // Contents that cannot be read.
+    let broken = file(
+        &[
+            b"<</Type/Catalog/Pages 2 0 R>>".to_vec(),
+            b"<</Type/Pages/Kids[3 0 R]/Count 1>>".to_vec(),
+            b"<</Type/Page/Parent 2 0 R/Contents[4 0 R]>>".to_vec(),
+            b"<</Bad ( >>".to_vec(),
+        ],
+        "<</Root 1 0 R/Size 5>>",
+    );
+    let document = Document::load(broken, ReadLimits::default()).unwrap();
+    assert!(matches!(
+        Objects::read(document),
+        Err(PdfError::Damaged(message)) if message.contains("object 4")
+    ));
+    // A font of a form the resources lead to.
+    let broken = file(
+        &[
+            b"<</Type/Catalog/Pages 2 0 R>>".to_vec(),
+            b"<</Type/Pages/Kids[3 0 R]/Count 1/Resources<</XObject<</X 4 0 R>>>>>>".to_vec(),
+            b"<</Type/Page/Parent 2 0 R>>".to_vec(),
+            stream("/Subtype/Form/Resources<</Font<</F 5 0 R>>>>", SHOW),
+            b"<</Bad ( >>".to_vec(),
+        ],
+        "<</Root 1 0 R/Size 6>>",
+    );
+    let document = Document::load(broken, ReadLimits::default()).unwrap();
+    assert!(matches!(
+        Objects::read(document),
+        Err(PdfError::Damaged(message)) if message.contains("object 5")
+    ));
+    // A kid of the tree.
+    let broken = file(
+        &[
+            b"<</Type/Catalog/Pages 2 0 R>>".to_vec(),
+            b"<</Type/Pages/Kids[3 0 R 4 0 R]/Count 2>>".to_vec(),
+            b"<</Type/Page/Parent 2 0 R>>".to_vec(),
+            b"<</Bad ( >>".to_vec(),
+        ],
+        "<</Root 1 0 R/Size 5>>",
+    );
+    let document = Document::load(broken, ReadLimits::default()).unwrap();
+    assert!(matches!(
+        Objects::read(document),
+        Err(PdfError::Damaged(message)) if message.contains("object 4")
+    ));
+}
+
+#[test]
+fn a_parent_given_through_a_reference_to_a_reference_is_followed() {
+    let objects = vec![
+        b"<</Type/Catalog/Pages 2 0 R>>".to_vec(),
+        b"<</Type/Pages/Kids[3 0 R]/Count 1/MediaBox[0 0 600 800]/Resources<</Font<</F 5 0 R>>>>>>"
+            .to_vec(),
+        b"<</Type/Page/Parent 6 0 R/Contents 4 0 R>>".to_vec(),
+        stream("", SHOW),
+        HELVETICA.as_bytes().to_vec(),
+        b"2 0 R".to_vec(),
+    ];
+    assert_eq!(
+        text_of(file(&objects, "<</Root 1 0 R/Size 7>>")),
+        "Hi there"
+    );
+}
+
+#[test]
+fn an_item_of_contents_may_be_a_reference_to_a_reference() {
+    let objects = vec![
+        b"<</Type/Catalog/Pages 2 0 R>>".to_vec(),
+        b"<</Type/Pages/Kids[3 0 R]/Count 1>>".to_vec(),
+        b"<</Type/Page/Parent 2 0 R/Contents[6 0 R]/Resources<</Font<</F 5 0 R>>>>>>".to_vec(),
+        stream("", SHOW),
+        HELVETICA.as_bytes().to_vec(),
+        b"4 0 R".to_vec(),
+    ];
+    assert_eq!(
+        text_of(file(&objects, "<</Root 1 0 R/Size 7>>")),
+        "Hi there"
+    );
+}
+
+/// `base` with a section after it that frees object `number`.
+fn freed(base: Vec<u8>, number: usize) -> Vec<u8> {
+    let xref = base
+        .windows(6)
+        .rposition(|window| window == b"\nxref\n")
+        .unwrap()
+        + 1;
+    let start = base.len();
+    let mut out = base;
+    out.extend(
+        format!(
+            "xref\n{number} 1\n0000000000 00001 f \ntrailer\n<</Root 1 0 R/Size 6/Prev {xref}>>\n\
+             startxref\n{start}\n%%EOF\n"
+        )
+        .bytes(),
+    );
+    out
+}
+
+#[test]
+fn a_font_a_later_section_frees_is_still_read() {
+    // Its encoding too: `H` is shown as `Z`.
+    let base = doc(
+        stream("", b"BT /F 12 Tf (H) Tj ET"),
+        "<</Type/Font/Subtype/Type1/BaseFont/Helvetica/Encoding<</Differences[72/Z]>>>>",
+        vec![],
+    );
+    let file = freed(base, 5);
+    assert_eq!(text_of(file.clone()), "Z");
+    // What an edit writes keeps it, as the page refers to it.
+    let document = Document::load(file, ReadLimits::default()).unwrap();
+    assert!(document.ids().all(|id| id.0 != 5));
+    let objects = Objects::read(document).unwrap();
+    assert_eq!(text_of(objects.save().unwrap()), "Z");
+}
+
+#[test]
+fn an_object_a_later_section_frees_is_dropped_when_nothing_refers_to_it() {
+    let base = doc(stream("", SHOW), HELVETICA, vec![b"(old)".to_vec()]);
+    let document = Document::load(freed(base, 6), ReadLimits::default()).unwrap();
+    let objects = Objects::read(document).unwrap();
+    assert!(objects.get((6, 0)).is_none());
 }

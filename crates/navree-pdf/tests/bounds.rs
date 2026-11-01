@@ -733,7 +733,8 @@ fn the_work_charged_grows_with_the_file_and_no_faster() {
             Err(PdfError::Damaged(_))
         ));
     }
-    // Plain files, read whole: about what they weigh.
+    // Plain files, read whole: a few times what they weigh, each object costing
+    // its lookups and the entry that finds it as well as its bytes.
     let mut last = 0usize;
     for pages in [100, 400, 1_600] {
         let kids: String = (0..pages).map(|i| format!("{} 0 R ", i + 3)).collect();
@@ -754,7 +755,7 @@ fn the_work_charged_grows_with_the_file_and_no_faster() {
         let _ = document.objects().count();
         document.check().unwrap();
         let spent = document.work_used();
-        assert!(spent <= 2 * len, "{len} bytes in, {spent} of work");
+        assert!(spent <= 3 * len, "{len} bytes in, {spent} of work");
         assert!(spent > last, "{spent} after {last}");
         last = spent;
     }

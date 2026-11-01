@@ -28,6 +28,10 @@ const CHUNK: usize = 64 * 1024;
 /// Filters one stream may have (8). Real streams have one or two: an image
 /// behind ASCII85 and Flate is about the most a writer does.
 pub(crate) const MAX_FILTERS: usize = 8;
+/// What setting up one filter costs besides what it reads and writes, in bytes
+/// of work (1 KiB): an inflater takes memory of its own, however little it
+/// reads.
+const FILTER_COST: usize = 1024;
 
 /// What a filter reads its data with.
 #[derive(Clone, Copy, Debug)]
@@ -66,8 +70,8 @@ impl Params {
 /// too. Values in `dict` that are references go through `resolve`.
 ///
 /// `spent` grows by what each step reads and writes (a step that goes over
-/// `limit` counts it all), before the next step can fail: the caller charges
-/// it, whatever comes back.
+/// `limit` counts it all) and [`FILTER_COST`], before the next step can fail:
+/// the caller charges it, whatever comes back.
 pub(crate) fn decode<'a>(
     dict: &'a Dictionary,
     data: &'a [u8],
@@ -98,6 +102,10 @@ pub(crate) fn decode<'a>(
         let params = Params::of(params, resolve);
         let input = output.as_deref().unwrap_or(data);
         *spent = spent.saturating_add(input.len());
+        *spent = spent.saturating_add(FILTER_COST);
+        // What an inflater wrote is written again only by a predictor.
+        let inflates = matches!(filter, b"FlateDecode" | b"Fl" | b"LZWDecode" | b"LZW");
+        let written_once = inflates && params.predictor <= 1;
         let decoded = match filter {
             b"FlateDecode" | b"Fl" => inflate(input, limit).and_then(|inflated| {
                 *spent = spent.saturating_add(inflated.len());
@@ -123,7 +131,9 @@ pub(crate) fn decode<'a>(
             *spent = spent.saturating_add(limit);
             return Err(DecodeError::Over);
         }
-        *spent = spent.saturating_add(decoded.len());
+        if !written_once {
+            *spent = spent.saturating_add(decoded.len());
+        }
         output = Some(decoded);
     }
     match output {

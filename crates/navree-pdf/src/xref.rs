@@ -3,6 +3,7 @@
 //! broken. Also the reading of one indirect object, which the
 //! cross-reference streams need before there is a cross-reference.
 
+use std::collections::btree_map::Entry as Place;
 use std::collections::{BTreeMap, HashSet};
 
 use bytes::Bytes;
@@ -28,6 +29,8 @@ pub(crate) enum Entry {
 pub(crate) const ENTRY_MEMORY: usize = 48;
 /// What each known start of an object holds in memory, with room to grow.
 pub(crate) const OFFSET_MEMORY: usize = 16;
+/// What keeping an entry of the cross-reference costs, in bytes of work.
+const ENTRY_COST: usize = 16;
 /// Object numbers a damaged file's scan accepts (up to 8,388,607): a
 /// forged header cannot make the table larger than objects a file can
 /// hold.
@@ -48,11 +51,18 @@ pub(crate) struct Xref {
     /// Where entries find their own object, in no order: where an object
     /// starts, and so where the one before it ends.
     pub(crate) located: Vec<usize>,
+    /// Objects a section marks free that an older section has an entry for.
+    pub(crate) freed: HashSet<u32>,
 }
+
+/// The memory a parse builds for each byte of work it is charged (32): small
+/// objects take longer to build than to look at.
+const MEMORY_PER_WORK: usize = 32;
 
 impl Meter for Budget {
     fn charge(&self, bytes: usize) -> Result<(), PdfError> {
-        self.memory(bytes)
+        self.memory(bytes)?;
+        self.work(bytes / MEMORY_PER_WORK)
     }
 }
 
@@ -117,9 +127,9 @@ pub(crate) fn header(lexer: &mut Lexer<'_>) -> Option<ObjectId> {
 /// the dictionary or, through `length`, from the object it refers to; a
 /// stream whose length is wrong or missing, or runs past `end`, ends at the
 /// `endstream` before `end`: no stream holds the bytes of the object after
-/// it. Returns `None` for bytes that are not an object; fails only when a
-/// limit runs out. What it looks at is charged, whether it finds an object
-/// or not.
+/// it. Returns `None` for bytes that are not an object; an object with nothing
+/// in it reads as null. Fails only when a limit runs out. What it looks at is
+/// charged, whether it finds an object or not.
 pub(crate) fn indirect(
     data: &Bytes,
     offset: usize,
@@ -134,6 +144,10 @@ pub(crate) fn indirect(
         return Ok(None);
     };
     lexer.skip_space();
+    if lexer.starts_with(b"endobj") {
+        budget.work(lexer.reached().saturating_sub(offset))?;
+        return Ok(Some((id, Object::Null)));
+    }
     let parsed = lexer.object(MAX_DEPTH, budget);
     budget.work(lexer.reached().saturating_sub(offset))?;
     let object = match parsed {
@@ -241,6 +255,7 @@ fn chain(data: &Bytes, budget: &Budget) -> Result<Xref, PdfError> {
     let mut entries = BTreeMap::new();
     let mut trailer: Option<Dictionary> = None;
     let mut starts = Vec::new();
+    let mut freed = HashSet::new();
     let mut seen = HashSet::new();
     let mut next = Some(first);
     while let Some(offset) = next.take() {
@@ -253,14 +268,14 @@ fn chain(data: &Bytes, budget: &Budget) -> Result<Xref, PdfError> {
                 budget.limits.sections
             )));
         }
-        let (offset, mut section_trailer) = section(data, offset, budget, &mut entries)
+        let (offset, mut section_trailer) = section(data, offset, budget, &mut entries, &mut freed)
             .ok_or_else(|| PdfError::damaged("the cross-reference cannot be read"))??;
         starts.push(offset);
         // A hybrid file's stream comes after its table, before older ones.
         if let Some(stream) = section_trailer.remove(b"XRefStm").and_then(|o| o.as_i64())
             && let Ok(stream) = usize::try_from(stream)
             && seen.insert(stream)
-            && let Some(Ok((at, _))) = section(data, stream, budget, &mut entries)
+            && let Some(Ok((at, _))) = section(data, stream, budget, &mut entries, &mut freed)
         {
             starts.push(at);
         }
@@ -292,18 +307,22 @@ fn chain(data: &Bytes, budget: &Budget) -> Result<Xref, PdfError> {
         starts,
         rebuilt: false,
         located: Vec::new(),
+        freed,
     })
 }
 
 /// Reads one section at `offset` (or within 64 bytes of it, for a writer
 /// that got it slightly wrong) into `entries`, keeping entries already
-/// there: they are newer. Returns where it started and its trailer;
-/// `None` when there is no section there.
+/// there: they are newer. An object a newer section marks free stays readable
+/// where this one says it is, and goes in `freed`: a file can still refer to
+/// it. Returns where it started and its trailer; `None` when there is no
+/// section there.
 fn section(
     data: &Bytes,
     offset: usize,
     budget: &Budget,
     entries: &mut BTreeMap<u32, Entry>,
+    freed: &mut HashSet<u32>,
 ) -> Option<Result<(usize, Dictionary), PdfError>> {
     let mut candidates = vec![offset];
     let window = offset.saturating_sub(64)..offset.saturating_add(64).min(data.len());
@@ -322,7 +341,18 @@ fn section(
         match result {
             Ok(Some(trailer)) => {
                 for (number, entry) in found {
-                    entries.entry(number).or_insert(entry);
+                    match entries.entry(number) {
+                        Place::Vacant(place) => {
+                            place.insert(entry);
+                        }
+                        Place::Occupied(mut place)
+                            if *place.get() == Entry::Free && entry != Entry::Free =>
+                        {
+                            place.insert(entry);
+                            freed.insert(number);
+                        }
+                        Place::Occupied(_) => {}
+                    }
                 }
                 return Some(Ok((at, trailer)));
             }
@@ -376,6 +406,7 @@ fn table(
         let left = data.len().saturating_sub(lexer.pos) / 6;
         let count = usize::try_from(count).unwrap_or(usize::MAX).min(left);
         budget.memory(count.saturating_mul(ENTRY_MEMORY))?;
+        budget.work(count.saturating_mul(ENTRY_COST))?;
         for index in 0..count {
             let line = lexer.pos;
             let (Some(offset), Some(generation)) = ({
@@ -494,6 +525,7 @@ fn stream(
         return Ok(None);
     };
     budget.memory(total.saturating_mul(ENTRY_MEMORY))?;
+    budget.work(total.saturating_mul(ENTRY_COST))?;
     let field = |at: &mut usize, width: usize| -> u64 {
         let value = content
             .get(*at..*at + width)
@@ -728,6 +760,7 @@ fn rebuild(data: &Bytes, budget: &Budget) -> Result<Option<Xref>, PdfError> {
         starts: Vec::new(),
         rebuilt: true,
         located,
+        freed: HashSet::new(),
     }))
 }
 

@@ -155,3 +155,44 @@ fn pdf_text_is_held_to_the_caps_on_to_unicode_maps() {
     assert!(matches!(err, MediaError::Text { .. }), "{err:?}");
     assert!(err.to_string().contains("codespace"), "{err}");
 }
+
+/// A PDF whose one font's `Differences` give code 65 the name `name`, by
+/// reference.
+fn pdf_with_glyph_name(name: &str) -> Vec<u8> {
+    use navree_pdf::{Object, Objects, Stream, dictionary};
+
+    let mut doc = Objects::new();
+    let pages_id = doc.reserve();
+    let glyph = doc.add(Object::name(name));
+    let font = doc.add(dictionary! {
+        "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica",
+        "Encoding" => dictionary! { "Differences" => vec![65.into(), glyph.into()] },
+    });
+    let content = doc.add(Stream::new(
+        dictionary! {},
+        b"BT /F1 12 Tf 72 720 Td (A) Tj ET".to_vec(),
+    ));
+    let page = doc.add(dictionary! {
+        "Type" => "Page", "Parent" => pages_id, "Contents" => content,
+        "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
+        "Resources" => dictionary! { "Font" => dictionary! { "F1" => font } },
+    });
+    doc.insert(
+        pages_id,
+        dictionary! { "Type" => "Pages", "Kids" => vec![page.into()], "Count" => 1 },
+    );
+    let catalog = doc.add(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    doc.trailer.set("Root", catalog);
+    doc.save().unwrap()
+}
+
+#[test]
+fn pdf_text_reads_a_glyph_name_no_longer_than_a_name_may_be() {
+    let name = format!("uni{}", "0042".repeat(31));
+    let out = text::extract(&pdf_with_glyph_name(&name), "application/pdf").unwrap();
+    assert_eq!(out.text, "B".repeat(31));
+    // 16 MiB of text from each code of each font, were it read.
+    let name = format!("uni{}", "0800".repeat(1024 * 1024));
+    let out = text::extract(&pdf_with_glyph_name(&name), "application/pdf").unwrap();
+    assert_eq!(out.text, "");
+}

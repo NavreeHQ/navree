@@ -15,10 +15,21 @@
 use std::collections::HashMap;
 
 use crate::document::Document;
+use crate::error::PdfError;
 use crate::object::{Dictionary, Object};
 
 use super::cmap::utf16_bytes_with_bom;
-use super::tables;
+use super::{Budget, tables};
+
+/// The longest glyph name that is read (127 bytes, the limit the PDF reference
+/// gives on a name); a longer one reads as nothing. So the text of a code is
+/// at most 93 bytes: three for each four of a name of `uniXXXX` groups.
+const MAX_GLYPH_NAME: usize = 127;
+/// What each item of `Differences` costs, in bytes of work (8).
+const DIFFERENCE_COST: usize = 8;
+/// What each byte of a glyph name costs, in bytes of work (8): a name of parts
+/// is looked up in a table part by part.
+const GLYPH_NAME_COST: usize = 8;
 
 /// A font's encoding.
 pub(crate) enum Encoding<'a> {
@@ -46,8 +57,12 @@ pub(crate) fn glyph(name: &[u8]) -> Option<u16> {
 /// The text of the glyph called `name`: a name the tables know; `uni`
 /// and four hex digits for each UTF-16 unit; `u` and four to six hex digits for
 /// a code point; or, as the Adobe Glyph List reads names, the part before a
-/// `.`, and the parts between `_` each read so.
+/// `.`, and the parts between `_` each read so. A name over
+/// [`MAX_GLYPH_NAME`] bytes reads as nothing.
 pub(crate) fn glyph_text(name: &[u8]) -> Option<String> {
+    if name.len() > MAX_GLYPH_NAME {
+        return None;
+    }
     let name = name.split(|&byte| byte == b'.').next()?;
     if name.is_empty() {
         return None;
@@ -133,19 +148,23 @@ impl Encoding<'_> {
 }
 
 /// The encoding of `font`, when it is one (see [`is_font`]):
-/// what its codes read as where no `ToUnicode` map says otherwise.
+/// what its codes read as where no `ToUnicode` map says otherwise. What
+/// reading its `Differences` takes is charged to `budget`.
 pub(crate) fn font_encoding<'a>(
     document: &'a Document,
     font: &'a Dictionary,
-) -> Option<Encoding<'a>> {
+    budget: &mut Budget<'_>,
+) -> Result<Option<Encoding<'a>>, PdfError> {
     if !is_font(document, font) {
-        return None;
+        return Ok(None);
     }
     let encoding = match font.get(b"Encoding") {
-        Some(encoding) => base_of(document, encoding),
+        Some(encoding) => base_of(document, encoding, budget)?,
         None => None,
     };
-    Some(encoding.unwrap_or(Encoding::Table(&tables::STANDARD_ENCODING)))
+    Ok(Some(
+        encoding.unwrap_or(Encoding::Table(&tables::STANDARD_ENCODING)),
+    ))
 }
 
 /// Whether `font` can be a font: its `Type` is `Font`, or it has none and
@@ -163,35 +182,51 @@ pub(crate) fn encoding_name<'a>(document: &'a Document, font: &'a Dictionary) ->
 }
 
 /// The encoding an `Encoding` entry stands for.
-fn base_of<'a>(document: &'a Document, encoding: &'a Object) -> Option<Encoding<'a>> {
-    match document.resolve(encoding)? {
+fn base_of<'a>(
+    document: &'a Document,
+    encoding: &'a Object,
+    budget: &mut Budget<'_>,
+) -> Result<Option<Encoding<'a>>, PdfError> {
+    let Some(encoding) = document.resolve(encoding) else {
+        return Ok(None);
+    };
+    Ok(match encoding {
         Object::Name(name) => named(name),
         Object::Dictionary(dict) => {
             if !matches!(
                 document.get(dict, b"Type").and_then(Object::as_name),
                 None | Some(b"Encoding")
             ) {
-                return None;
+                return Ok(None);
             }
             let base = match document
                 .get(dict, b"BaseEncoding")
                 .and_then(Object::as_name)
             {
-                Some(name) => named(name)?,
+                Some(name) => match named(name) {
+                    Some(base) => base,
+                    None => return Ok(None),
+                },
                 None => Encoding::Table(&tables::STANDARD_ENCODING),
             };
             let Some(differences) = dict.get(b"Differences") else {
-                return Some(base);
+                return Ok(Some(base));
             };
-            let items = document.resolve(differences)?.as_array()?;
+            let Some(items) = document.resolve(differences).and_then(Object::as_array) else {
+                return Ok(None);
+            };
             let mut map = HashMap::new();
             // The code the next name is for; outside a byte, a name is for
             // no code.
             let mut code = 0i64;
             for item in items {
+                budget.charge(DIFFERENCE_COST)?;
                 match document.resolve(item) {
                     Some(Object::Integer(value)) => code = *value,
                     Some(Object::Name(name)) => {
+                        if name.len() <= MAX_GLYPH_NAME {
+                            budget.charge(name.len().saturating_mul(GLYPH_NAME_COST))?;
+                        }
                         if let Ok(byte) = u8::try_from(code) {
                             map.insert(byte, glyph_text(name).unwrap_or_default().into());
                         }
@@ -206,7 +241,7 @@ fn base_of<'a>(document: &'a Document, encoding: &'a Object) -> Option<Encoding<
             })
         }
         _ => None,
-    }
+    })
 }
 
 /// The encoding `name` stands for; `Identity-H` and `Identity-V` have none of

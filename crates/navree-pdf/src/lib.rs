@@ -126,4 +126,4 @@ pub use document::{ContentError, Document};
 pub use error::PdfError;
 pub use object::{Dictionary, Object, ObjectId, Stream, StringFormat};
 pub use text::TextLimits;
-pub use write::Objects;
+pub use write::{Objects, memory_of};
