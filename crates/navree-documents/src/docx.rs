@@ -15,6 +15,10 @@ use crate::download::{DOCX_CONTENT_TYPE, Download};
 use crate::print::{Margins, Paper};
 use crate::render::is_rtl;
 
+mod read;
+
+pub use read::DocxLimits;
+
 /// Twips (1/20 of a point) per millimeter.
 const TWIPS_PER_MM: f64 = 1440.0 / 25.4;
 /// EMUs per millimeter (images are sized in EMUs).
@@ -783,10 +787,22 @@ impl std::fmt::Debug for DocxFile {
 
 impl DocxFile {
     /// A DOCX file from its bytes, checked: an error unless they read as a
-    /// Word document.
+    /// Word document within the default [`DocxLimits`].
     pub fn from_bytes(bytes: impl Into<Bytes>) -> Result<DocxFile, DocumentsError> {
+        Self::from_bytes_within(bytes, &DocxLimits::default())
+    }
+
+    /// A DOCX file from its bytes, checked within `limits`: the same as
+    /// [`from_bytes`](Self::from_bytes) with limits of your own.
+    ///
+    /// Bytes that are not a Word document are [`DocumentsError::Docx`], and
+    /// a file that is over a limit is [`DocumentsError::TooLarge`].
+    pub fn from_bytes_within(
+        bytes: impl Into<Bytes>,
+        limits: &DocxLimits,
+    ) -> Result<DocxFile, DocumentsError> {
         let file = DocxFile(bytes.into());
-        file.read()?;
+        read::read_text(&file.0, limits, false)?;
         Ok(file)
     }
 
@@ -803,28 +819,22 @@ impl DocxFile {
     /// The text of the document body: one line per paragraph, table cells
     /// separated by tabs, a row per line, `[image]` for an image and a form
     /// feed (`\u{c}`) for a page break. For tests and checks.
+    ///
+    /// The text of a hyperlink, of an inserted run and of a content control
+    /// is part of its paragraph; deleted text, headers, footers and notes
+    /// are not. The file is read within the default [`DocxLimits`].
     pub fn text(&self) -> Result<String, DocumentsError> {
-        let docx = self.read()?;
-        let mut lines = Vec::new();
-        for child in &docx.document.children {
-            match child {
-                docx_rs::DocumentChild::Paragraph(paragraph) => {
-                    lines.push(paragraph_text(paragraph));
-                }
-                docx_rs::DocumentChild::Table(table) => table_lines(table, &mut lines),
-                _ => {}
-            }
-        }
-        Ok(lines.join("\n"))
+        self.text_within(&DocxLimits::default())
+    }
+
+    /// [`text`](Self::text) within `limits`.
+    pub fn text_within(&self, limits: &DocxLimits) -> Result<String, DocumentsError> {
+        read::read_text(&self.0, limits, true)
     }
 
     /// The file as a response the browser saves as `filename`.
     pub fn download(self, filename: impl Into<String>) -> Download {
         Download::new(self.0, DOCX_CONTENT_TYPE, filename)
-    }
-
-    fn read(&self) -> Result<docx_rs::Docx, DocumentsError> {
-        docx_rs::read_docx(&self.0).map_err(|error| DocumentsError::Docx(error.to_string()))
     }
 }
 
@@ -838,48 +848,6 @@ impl IntoResponse for DocxFile {
 impl From<DocxFile> for Bytes {
     fn from(file: DocxFile) -> Bytes {
         file.0
-    }
-}
-
-fn paragraph_text(paragraph: &docx_rs::Paragraph) -> String {
-    let mut text = String::new();
-    for child in &paragraph.children {
-        if let docx_rs::ParagraphChild::Run(run) = child {
-            for run_child in &run.children {
-                match run_child {
-                    docx_rs::RunChild::Text(t) => text.push_str(&t.text),
-                    docx_rs::RunChild::Tab(_) => text.push('\t'),
-                    // The break type is private; its debug form names it.
-                    docx_rs::RunChild::Break(br) if format!("{br:?}").contains("Page") => {
-                        text.push('\u{c}');
-                    }
-                    docx_rs::RunChild::Break(_) => text.push('\n'),
-                    docx_rs::RunChild::Drawing(_) => text.push_str("[image]"),
-                    _ => {}
-                }
-            }
-        }
-    }
-    text
-}
-
-fn table_lines(table: &docx_rs::Table, lines: &mut Vec<String>) {
-    for docx_rs::TableChild::TableRow(row) in &table.rows {
-        let cells: Vec<String> = row
-            .cells
-            .iter()
-            .map(|docx_rs::TableRowChild::TableCell(cell)| {
-                cell.children
-                    .iter()
-                    .filter_map(|content| match content {
-                        docx_rs::TableCellContent::Paragraph(p) => Some(paragraph_text(p)),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            })
-            .collect();
-        lines.push(cells.join("\t"));
     }
 }
 

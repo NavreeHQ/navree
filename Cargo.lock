@@ -4909,6 +4909,7 @@ dependencies = [
  "navree-storage",
  "navree-testing",
  "navree-view",
+ "quick-xml 0.42.0",
  "serde",
  "serde_json",
  "skrifa 0.49.0",

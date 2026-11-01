@@ -1,7 +1,7 @@
 //! DOCX: building, reading back, right-to-left documents, images and the
 //! response.
 
-use navree_documents::docx::{Align, Image, Paragraph, Run, Table};
+use navree_documents::docx::{Align, DocxLimits, Image, Paragraph, Run, Table};
 use navree_documents::{DOCX_CONTENT_TYPE, DocumentsError, Docx, DocxFile, Margins, Paper};
 use navree_http::IntoResponse;
 
@@ -121,6 +121,65 @@ fn an_image_that_is_not_png_or_jpeg_is_an_error() {
         matches!(&error, DocumentsError::Docx(message) if message.contains("PNG")),
         "{error:?}"
     );
+}
+
+/// A file saved by an office suite, in either of its Word formats.
+fn office_file(flavour: &str, name: &str) -> Vec<u8> {
+    std::fs::read(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/docx")
+            .join(flavour)
+            .join(format!("{name}.docx")),
+    )
+    .unwrap()
+}
+
+#[test]
+fn files_saved_by_an_office_suite_read_as_the_text_they_show() {
+    // Paragraphs, runs, tabs, breaks, scripts, lists and a page break; a
+    // table with merged cells, a table in a cell and cells of several
+    // paragraphs; hyperlinks, notes, fields and tracked changes; images and
+    // a text box.
+    for name in ["basic", "table", "links", "image"] {
+        for flavour in ["word", "ooxml"] {
+            let file = DocxFile::from_bytes(office_file(flavour, name)).unwrap();
+            assert_golden(&format!("docx-office-{name}.txt"), &file.text().unwrap());
+        }
+    }
+}
+
+#[test]
+fn what_the_limits_refuse_is_too_large_and_a_broken_file_is_a_docx_error() {
+    let bytes = office_file("word", "basic");
+    let text_limit = DocxLimits {
+        max_text_bytes: 100,
+        ..DocxLimits::default()
+    };
+    let file = DocxFile::from_bytes(bytes.clone()).unwrap();
+    assert!(matches!(
+        file.text_within(&text_limit),
+        Err(DocumentsError::TooLarge(message)) if message.contains("100 bytes")
+    ));
+    assert!(matches!(
+        DocxFile::from_bytes_within(bytes.clone(), &text_limit),
+        Err(DocumentsError::TooLarge(_))
+    ));
+    let entries = DocxLimits {
+        max_entries: 3,
+        ..DocxLimits::default()
+    };
+    assert!(matches!(
+        DocxFile::from_bytes_within(bytes.clone(), &entries),
+        Err(DocumentsError::TooLarge(_))
+    ));
+    // A file cut short is an error; none of the cuts panics.
+    for end in (0..bytes.len()).step_by(7) {
+        let _ = DocxFile::from_bytes(bytes[..end].to_vec());
+    }
+    assert!(matches!(
+        DocxFile::from_bytes(bytes[..bytes.len() - 100].to_vec()),
+        Err(DocumentsError::Docx(_))
+    ));
 }
 
 #[test]

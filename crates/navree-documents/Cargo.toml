@@ -18,7 +18,7 @@ native = ["dep:krilla", "dep:harfrust", "dep:skrifa", "dep:unicode-bidi", "dep:i
 ## HTML to PDF in headless Chrome over the DevTools protocol.
 chrome = ["dep:tokio-tungstenite", "dep:futures-util", "dep:tempfile", "dep:mime_guess"]
 ## The DOCX writer.
-docx = ["dep:docx-rs"]
+docx = ["dep:docx-rs", "dep:quick-xml", "dep:zip"]
 ## Queued renders behind an operation of navree-queue
 ## (`Documents::queue_operation`). Off by default: the `navree` facade
 ## turns it on when its `queue` feature is on too.
@@ -44,6 +44,7 @@ navree-kernel = { workspace = true }
 navree-queue = { workspace = true, optional = true }
 navree-storage = { workspace = true }
 navree-view = { workspace = true }
+quick-xml = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 skrifa = { workspace = true, optional = true }
@@ -54,6 +55,7 @@ tokio-tungstenite = { workspace = true, optional = true }
 tracing = { workspace = true }
 unicode-bidi = { workspace = true, optional = true }
 uuid = { workspace = true }
+zip = { workspace = true, optional = true }
 
 [dev-dependencies]
 # The tests run on SQLite files (the driver is opt-in).

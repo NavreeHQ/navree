@@ -1,0 +1,9 @@
+Before the table
+Control	Status	Notes
+Multi-factor sign-in	Passed	First line Second paragraph  Fourth
+Spans two columns	Tab	in cell
+Spans two rows		After an empty cell
+	Nested: in1 in2 in3 in4 after nested	Last
+After the table
+Second table	Right
+The end
