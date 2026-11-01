@@ -72,8 +72,7 @@ fn multipart(field: &str, file_name: &str, content_type: &str, contents: &[u8]) 
     .into_bytes();
     body.extend_from_slice(contents);
     body.extend_from_slice(format!("\r\n--{BOUNDARY}--\r\n").as_bytes());
-    // Sent in 1 KiB chunks that arrive one at a time, like a network upload
-    // (multer reads everything that is ready at once).
+    // Sent in 1 KiB chunks that arrive one at a time, like a network upload.
     let chunks: Vec<Bytes> = body.chunks(1024).map(Bytes::copy_from_slice).collect();
     let slow = futures_util::stream::iter(chunks)
         .enumerate()

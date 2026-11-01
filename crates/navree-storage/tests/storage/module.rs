@@ -410,7 +410,7 @@ async fn multipart_errors_in_handlers_keep_their_status() {
     let ok = app.send(multipart_request(&png)).await;
     assert_eq!(ok.status, 200, "{}", ok.text());
 
-    // Over the route's body limit: multer fails in `next_field()?`.
+    // Over the route's body limit: reading fails in `next_field()?`.
     png.resize(64 * 1024, 0);
     let body = app.send(multipart_request(&png)).await.error(413);
     assert_eq!(body["error"], "Payload Too Large");

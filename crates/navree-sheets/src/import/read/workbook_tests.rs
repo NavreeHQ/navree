@@ -833,8 +833,8 @@ fn kib_of(key: &str) -> u64 {
         .unwrap_or_else(|| panic!("{key} is in /proc/self/status"))
 }
 
-/// Eight cells in each of 100,000 rows, a number to a cell. Calamine's range
-/// of this sheet holds 800,000 cells: about 80 MB; one row is 8 cells. With
+/// Eight cells in each of 100,000 rows, a number to a cell. A range of the
+/// whole sheet would hold 800,000 cells: about 80 MB; one row is 8 cells. With
 /// `swap`, the first row lists its first two cells the other way round, so
 /// that the sheet is not in order.
 #[cfg(target_os = "linux")]
