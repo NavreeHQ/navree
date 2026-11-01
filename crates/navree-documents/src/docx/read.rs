@@ -2,11 +2,12 @@
 //! of its main document part.
 //!
 //! Every figure that comes from the file is checked against a limit before
-//! anything is sized from it: the archive's entry count, the size each part
-//! declares, the bytes a part actually unpacks to (counted as they are
-//! produced), the depth of the XML and the length of the text. The document
-//! part is read as a stream of XML events, so what the reader holds does not
-//! grow with the file except for the text it returns and the largest single
+//! anything is sized from it: the entry count the end of the archive declares
+//! (read before any entry is held), the size each part declares, the bytes a
+//! part actually unpacks to (counted as they are produced), the depth of the
+//! XML and the length of the text. The document part is read as a stream of
+//! XML events, so what the reader holds does not grow with the file except for
+//! the text it returns and the largest single
 //! element or text of the part.
 
 use std::cell::Cell;
@@ -106,15 +107,16 @@ pub(super) fn read_text(
     limits: &DocxLimits,
     keep_text: bool,
 ) -> Result<String, DocumentsError> {
+    // The count comes first: opening the archive holds every entry it lists.
+    if declared_entries(bytes) > u64::try_from(limits.max_entries).unwrap_or(u64::MAX) {
+        return Err(too_many_entries(limits));
+    }
     let archive = ZipArchive::new(Cursor::new(bytes)).map_err(damaged)?;
     if archive.has_duplicate_names() {
         return Err(damaged("two entries have the same name"));
     }
     if archive.len() > limits.max_entries {
-        return Err(DocumentsError::TooLarge(format!(
-            "the DOCX file has more than {} entries",
-            limits.max_entries
-        )));
+        return Err(too_many_entries(limits));
     }
     let mut package = Package {
         archive,
@@ -126,6 +128,54 @@ pub(super) fn read_text(
         .find(&document)?
         .ok_or_else(|| damaged("the package has no main document"))?;
     package.part(index, |xml| document_text(xml, limits, keep_text))
+}
+
+fn too_many_entries(limits: &DocxLimits) -> DocumentsError {
+    DocumentsError::TooLarge(format!(
+        "the DOCX file has more than {} entries",
+        limits.max_entries
+    ))
+}
+
+/// How many entries reading the archive can hold, from the end of the file
+/// and without keeping anything: the most that any end-of-central-directory
+/// record in reach declares (the archive reader tries them from the last one
+/// back, so a stray one must not hide another). A record that defers to a
+/// zip64 one can declare anything, so then the count is the central headers
+/// the file actually has.
+fn declared_entries(bytes: &[u8]) -> u64 {
+    /// The fixed part of the record.
+    const RECORD: usize = 22;
+    /// As far back as the archive reader looks: a record and its comment.
+    const REACH: usize = RECORD + 4 + (1 << 16);
+    let tail = bytes
+        .get(bytes.len().saturating_sub(REACH)..)
+        .unwrap_or_default();
+    let mut most = 0;
+    let mut zip64 = false;
+    for record in tail
+        .windows(RECORD)
+        .filter(|w| w.starts_with(b"PK\x05\x06"))
+    {
+        let field = |at: usize| record.get(at..at + 2).unwrap_or_default();
+        for count in [field(8), field(10)] {
+            let count = count
+                .iter()
+                .rev()
+                .fold(0, |sum, byte| sum << 8 | u64::from(*byte));
+            most = most.max(count);
+            zip64 |= count == u64::from(u16::MAX);
+        }
+        // The directory's size and offset defer to a zip64 record as well.
+        zip64 |= [12, 16]
+            .iter()
+            .any(|&at| record.get(at..at + 4) == Some([0xff; 4].as_slice()));
+    }
+    if zip64 {
+        let headers = bytes.windows(4).filter(|w| *w == b"PK\x01\x02").count();
+        return u64::try_from(headers).unwrap_or(u64::MAX);
+    }
+    most
 }
 
 /// The error for a file that is not a Word document that can be read: the
@@ -1327,6 +1377,74 @@ mod tests {
         };
         let message = too_large(read_text(&bytes, &tight, true));
         assert!(message.contains("2 entries"), "{message}");
+    }
+
+    /// `bytes` with the central directory's first header damaged: an archive
+    /// that can only be told from a good one by reading the directory.
+    fn damage_directory(mut bytes: Vec<u8>) -> Vec<u8> {
+        let at = bytes.windows(4).position(|w| w == b"PK\x01\x02").unwrap();
+        bytes[at] = b'X';
+        bytes
+    }
+
+    /// Where the end-of-central-directory record of `bytes` is.
+    fn end_record(bytes: &[u8]) -> usize {
+        bytes.windows(4).rposition(|w| w == b"PK\x05\x06").unwrap()
+    }
+
+    #[test]
+    fn the_entry_count_is_checked_before_the_directory_is_read() {
+        // Refused for the count the end record declares; a reader that held
+        // the entries first would have found the damaged directory instead.
+        let bytes = damage_directory(docx(&para(&run("x"))));
+        let tight = DocxLimits {
+            max_entries: 2,
+            ..DocxLimits::default()
+        };
+        let message = too_large(read_text(&bytes, &tight, true));
+        assert!(message.contains("2 entries"), "{message}");
+        // Under the limit the damage is what's reported.
+        assert!(matches!(
+            read_text(&bytes, &DocxLimits::default(), true),
+            Err(DocumentsError::InvalidDocx(_))
+        ));
+    }
+
+    #[test]
+    fn a_stray_end_record_does_not_hide_the_entry_count() {
+        // A record in the archive comment that declares one entry and points
+        // nowhere: the archive reader falls back to the real one before it.
+        let mut bytes = damage_directory(docx(&para(&run("x"))));
+        let mut stray = b"PK\x05\x06".to_vec();
+        stray.extend_from_slice(&[0, 0, 0, 0, 1, 0, 1, 0]);
+        stray.extend_from_slice(&[0; 8]);
+        stray.extend_from_slice(&[0, 0]);
+        let end = end_record(&bytes);
+        bytes[end + 20..end + 22].copy_from_slice(&(stray.len() as u16).to_le_bytes());
+        bytes.extend_from_slice(&stray);
+        let tight = DocxLimits {
+            max_entries: 2,
+            ..DocxLimits::default()
+        };
+        too_large(read_text(&bytes, &tight, true));
+    }
+
+    #[test]
+    fn a_zip64_count_is_read_from_the_headers_that_exist() {
+        // The record defers to a zip64 one: what the file can hold is its
+        // central headers, counted without being kept.
+        let mut bytes = damage_directory(docx(&para(&run("x"))));
+        for _ in 0..4 {
+            let at = end_record(&bytes);
+            bytes.splice(at..at, *b"PK\x01\x02");
+        }
+        let end = end_record(&bytes);
+        bytes[end + 8..end + 12].copy_from_slice(&[0xff; 4]);
+        let tight = DocxLimits {
+            max_entries: 3,
+            ..DocxLimits::default()
+        };
+        too_large(read_text(&bytes, &tight, true));
     }
 
     #[test]
