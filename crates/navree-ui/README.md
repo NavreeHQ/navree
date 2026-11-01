@@ -4,7 +4,7 @@ The UI kit of Navree's server-rendered tools: Helm (the admin panel),
 Lighthouse, Fleet, Logbook and Navigator's pages. One look for all of them,
 with no Node in the build:
 
-- **The app shell** as MiniJinja templates for [navree-view]: a sidebar in
+- **The app shell** as templates for [navree-view]: a sidebar in
   the shadcn/ui `sidebar-07` layout (app switcher, groups of 32px items with
   lucide icons, sub-items, counts, the user menu; collapsible to icons with
   `Ctrl/Cmd+B`, remembered; an off-canvas sheet on phones), a 48px top bar

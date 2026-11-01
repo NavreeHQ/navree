@@ -21,7 +21,7 @@
 //! an [`exec::Executor`]; tests use [`exec::FakeExecutor`]. The release
 //! state machine runs against the [`host::Host`] trait, implemented over SSH
 //! by [`host::SshHost`] and in memory by [`fake::FakeHost`]. Every file and
-//! script Harbor writes is a MiniJinja template in `templates/`
+//! script Harbor writes is a template in `templates/`
 //! ([`render`]).
 //!
 //! ```

@@ -10,7 +10,7 @@
 //! | `web/` | `saas` | the Next.js and shadcn/ui front end with its backend-for-frontend |
 //! | `micro/` | `micro` | a Cargo workspace: a service crate and its contracts crate |
 //!
-//! A file ending in `.j2` is a MiniJinja template rendered with the kit's
+//! A file ending in `.j2` is a template rendered with the kit's
 //! context ([`KitContext`]); every other file is copied as it is. In paths,
 //! a component starting with `dot.` becomes a dotfile (`dot.gitignore` is
 //! `.gitignore`, so the templates never act as git or tool configuration in

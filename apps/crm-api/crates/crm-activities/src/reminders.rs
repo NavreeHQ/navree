@@ -355,7 +355,7 @@ mod tests {
             .render("mail/crm/tasks-due-today.html", &mail.context)
             .expect("html renders");
         assert!(html.contains("Call &lt;Acme&gt;"), "{html}");
-        // minijinja escapes `/` as `&#x2f;` in HTML, which browsers decode.
+        // HTML escaping writes `/` as `&#x2f;` in HTML, which browsers decode.
         assert!(
             html.replace("&#x2f;", "/")
                 .contains(r#"href="http://localhost:3000/tasks?tab=today""#),

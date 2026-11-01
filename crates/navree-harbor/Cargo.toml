@@ -17,7 +17,7 @@ base64 = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
 flate2 = { workspace = true }
-minijinja = { workspace = true }
+navree-template = { workspace = true }
 rand = { workspace = true }
 rpassword = { workspace = true }
 serde = { workspace = true }

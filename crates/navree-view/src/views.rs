@@ -4,8 +4,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
-use minijinja::value::{Serde, Value};
-use minijinja::{Environment, ErrorKind, Template, UndefinedBehavior};
+use navree_template::{Environment, ErrorKind, Template, UndefinedBehavior};
 use serde::Serialize;
 
 use crate::source::{Sources, is_template_name};
@@ -45,7 +44,7 @@ use crate::{ViewError, ViewOptions, filters};
 /// picking up changed, new and deleted files; that is blocking file-system
 /// I/O, meant for development.
 pub struct Views {
-    env: Environment<'static>,
+    env: Environment,
     sources: Arc<Sources>,
     reload: bool,
 }
@@ -78,7 +77,6 @@ impl Views {
         if options.reload {
             let loader = sources.clone();
             env.set_loader(move |name| loader.load(name));
-            env.set_auto_reload(true);
             // Compile everything now anyway, so syntax errors fail early.
             for name in sources.names()? {
                 env.get_template(&name)
@@ -86,7 +84,7 @@ impl Views {
             }
         } else {
             for (name, source) in sources.read_all()? {
-                env.add_template_owned(name.clone(), source)
+                env.add_template(name.clone(), source)
                     .map_err(|source| ViewError::Template { name, source })?;
             }
         }
@@ -121,12 +119,10 @@ impl Views {
     /// render. Neither includes context values.
     pub fn render(&self, name: &str, ctx: impl Serialize) -> Result<String, ViewError> {
         let (resolved, template) = self.find(name)?;
-        template
-            .render(Value::from(Serde(ctx)))
-            .map_err(|source| ViewError::Template {
-                name: resolved,
-                source,
-            })
+        template.render(ctx).map_err(|source| ViewError::Template {
+            name: resolved,
+            source,
+        })
     }
 
     /// Renders `source`, a template kept as text (in a database, in
@@ -158,7 +154,7 @@ impl Views {
         ctx: impl Serialize,
     ) -> Result<String, ViewError> {
         self.env
-            .render_named_str(name, source, Value::from(Serde(ctx)))
+            .render_str(name, source, ctx)
             .map_err(|source| ViewError::Template {
                 name: name.to_owned(),
                 source,
@@ -186,12 +182,12 @@ impl Views {
     /// views.configure(|env| env.add_function("shout", |name: &str| name.to_uppercase()));
     /// assert_eq!(views.render("hi", json!({ "name": "ada" })).unwrap(), "ADA");
     /// ```
-    pub fn configure(&mut self, configure: impl FnOnce(&mut Environment<'static>)) {
+    pub fn configure(&mut self, configure: impl FnOnce(&mut Environment)) {
         configure(&mut self.env);
     }
 
     /// The first candidate for `name` that exists, with its full name.
-    fn find(&self, name: &str) -> Result<(String, Template<'_, '_>), ViewError> {
+    fn find(&self, name: &str) -> Result<(String, Template<'_>), ViewError> {
         let candidates = candidates(name);
         for candidate in &candidates {
             match self.env.get_template(candidate) {
@@ -222,12 +218,10 @@ impl fmt::Debug for Views {
 }
 
 /// An environment with Navree's settings: printing an undefined value is an
-/// error (a typo in a variable name must not send a blank email), and errors
-/// carry no debug snapshot of the context (it may hold secrets).
-fn environment() -> Environment<'static> {
+/// error (a typo in a variable name must not send a blank email).
+fn environment() -> Environment {
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::SemiStrict);
-    env.set_debug(false);
     filters::register(&mut env);
     env
 }

@@ -33,6 +33,7 @@ navree-crypto = { path = "crates/navree-crypto", version = "1.0.0" }
 navree-http = { path = "crates/navree-http", version = "1.0.0" }
 navree-events = { path = "crates/navree-events", version = "1.0.0" }
 navree-view = { path = "crates/navree-view", version = "1.0.0" }
+navree-template = { path = "crates/navree-template", version = "1.0.0" }
 navree-cache = { path = "crates/navree-cache", version = "1.0.0" }
 navree-http-client = { path = "crates/navree-http-client", version = "1.0.0" }
 navree-db = { path = "crates/navree-db", version = "1.0.0" }
@@ -293,7 +294,6 @@ rqrr = { version = "0.11.0", default-features = false }
 rlibphonenumber = "2.2.14"
 unicode-properties = { version = "0.1.4", default-features = false, features = ["general-category"] }
 icu_locale_core = { version = "2.4.0", features = ["alloc"] }
-minijinja = { version = "3.0.3", features = ["json", "loop_controls", "serde", "urlencode"] }
 lettre = { version = "0.11.23", default-features = false, features = [
     "builder",
     "hostname",

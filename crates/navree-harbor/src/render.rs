@@ -1,4 +1,4 @@
-//! The embedded MiniJinja templates of every file and script Harbor writes,
+//! The embedded templates of every file and script Harbor writes,
 //! and the context they render with.
 //!
 //! Templates live in `crates/navree-harbor/templates/<name>.j2`. Blocks trim
@@ -8,8 +8,7 @@
 use std::path::Path;
 use std::sync::OnceLock;
 
-use minijinja::syntax::SyntaxConfig;
-use minijinja::{AutoEscape, Environment, UndefinedBehavior};
+use navree_template::{AutoEscape, Environment, UndefinedBehavior};
 use serde::Serialize;
 use serde_json::{Value, json};
 
@@ -70,18 +69,13 @@ const TEMPLATES: &[(&str, &str)] = templates![
 /// The heredoc delimiter scripts use; no embedded file may hold it as a line.
 pub const HEREDOC: &str = "HARBOR_EOF";
 
-fn environment() -> &'static Environment<'static> {
-    static ENV: OnceLock<Environment<'static>> = OnceLock::new();
+fn environment() -> &'static Environment {
+    static ENV: OnceLock<Environment> = OnceLock::new();
     ENV.get_or_init(|| {
         let mut env = Environment::new();
-        env.set_syntax(
-            SyntaxConfig::builder()
-                .trim_blocks(true)
-                .lstrip_blocks(true)
-                .keep_trailing_newline(true)
-                .build()
-                .expect("the default delimiters are valid"),
-        );
+        env.set_trim_blocks(true);
+        env.set_lstrip_blocks(true);
+        env.set_keep_trailing_newline(true);
         env.set_undefined_behavior(UndefinedBehavior::Strict);
         env.set_auto_escape_callback(|_| AutoEscape::None);
         for (name, source) in TEMPLATES {
@@ -94,11 +88,12 @@ fn environment() -> &'static Environment<'static> {
 
 /// Renders template `name` with `context`.
 pub fn render(name: &str, context: impl Serialize) -> Result<String> {
-    let error = |e: minijinja::Error| HarborError::msg(format!("cannot render `{name}`: {e:#}"));
+    let error =
+        |e: navree_template::Error| HarborError::msg(format!("cannot render `{name}`: {e}"));
     environment()
         .get_template(name)
         .map_err(error)?
-        .render(minijinja::value::Serde(&context))
+        .render(&context)
         .map_err(error)
 }
 

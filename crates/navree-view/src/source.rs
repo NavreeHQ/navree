@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use minijinja::{ErrorKind, TemplateSource};
+use navree_template::{Error, ErrorKind, TemplateSource};
 
 use crate::ViewError;
 
@@ -88,14 +88,11 @@ impl Sources {
     /// The loader used when reloading: reads `name` from disk (or the
     /// embedded templates) with an up-to-date check, so a changed, added or
     /// removed file is picked up on the next lookup.
-    pub(crate) fn load(
-        self: &Arc<Self>,
-        name: &str,
-    ) -> Result<Option<TemplateSource>, minijinja::Error> {
+    pub(crate) fn load(self: &Arc<Self>, name: &str) -> Result<Option<TemplateSource>, Error> {
         if let Some(path) = self.file(name) {
             let stamp = stamp(&path);
             let source = fs::read_to_string(&path).map_err(|error| {
-                minijinja::Error::new(ErrorKind::InvalidOperation, "cannot read template file")
+                Error::new(ErrorKind::InvalidOperation, "cannot read template file")
                     .with_source(error)
             })?;
             let sources = self.clone();

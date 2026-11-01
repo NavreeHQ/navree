@@ -163,7 +163,7 @@ notify = [
     "navree-settings?/notify",
 ]
 ## The UI kit of the server-rendered tools: the app shell, components as
-## MiniJinja macros, embedded CSS, JS and fonts (light: no new dependencies).
+## template macros, embedded CSS, JS and fonts (light: no new dependencies).
 ui = ["dep:navree-ui", "http", "view"]
 ## The ORM: `#[derive(Model)]` models, the query builder, records,
 ## collections and pagination on navree-db's pool and unit of work; model

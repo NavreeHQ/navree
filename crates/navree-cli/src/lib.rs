@@ -31,7 +31,7 @@
 //! When the app has a `dock.toml`, `navree dev` and forwarded commands pass
 //! its services' settings to the app as environment variables.
 //!
-//! Generators render MiniJinja templates embedded in the binary
+//! Generators render templates embedded in the binary
 //! ([`templates`]) into a [`scaffold::FileSet`] that is written without
 //! overwriting anything; existing files are only edited at `// navree:<name>`
 //! markers or module declarations ([`edit`]), and anything that cannot be

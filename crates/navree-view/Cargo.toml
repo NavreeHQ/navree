@@ -1,6 +1,6 @@
 [package]
 name = "navree-view"
-description = "Navree ViewModule: MiniJinja templates for mail and other text rendering."
+description = "Navree ViewModule: templates for mail and other text rendering."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,7 +14,7 @@ workspace = true
 chrono = { workspace = true }
 navree-config = { workspace = true }
 navree-kernel = { workspace = true }
-minijinja = { workspace = true }
+navree-template = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

@@ -7,11 +7,10 @@ use std::fmt::Write as _;
 
 use chrono::format::StrftimeItems;
 use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime};
-use minijinja::value::{Value, ValueKind};
-use minijinja::{Environment, Error, ErrorKind};
+use navree_template::{Environment, Error, ErrorKind, Value, ValueKind};
 
 /// Registers every Navree filter on `env`.
-pub(crate) fn register(env: &mut Environment<'_>) {
+pub(crate) fn register(env: &mut Environment) {
     env.add_filter("money", money);
     env.add_filter("date", date);
 }

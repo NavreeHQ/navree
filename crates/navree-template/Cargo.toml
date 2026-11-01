@@ -1,0 +1,18 @@
+[package]
+name = "navree-template"
+description = "Navree's template engine: Jinja syntax, HTML autoescaping, a sandboxed value model and caps on depth, loops, work and output."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+
+[dev-dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

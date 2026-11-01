@@ -3,7 +3,7 @@
 ## PDF engines
 
 Two engines sit behind `Documents`, both reading the same `.html`
-templates (rendered with navree-view's MiniJinja):
+templates (rendered with navree-view):
 
 - **native** (feature `native`, on by default): lays the document out in
   process and writes the PDF itself. No external program, no network.

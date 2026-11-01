@@ -1,4 +1,4 @@
-//! The embedded MiniJinja templates of every generated file.
+//! The embedded templates of every generated file.
 //!
 //! Templates live in `crates/navree-cli/templates/<name>.j2` and are compiled
 //! into the binary with `include_str!`. Blocks trim their own line
@@ -7,8 +7,7 @@
 
 use std::sync::OnceLock;
 
-use minijinja::syntax::SyntaxConfig;
-use minijinja::{AutoEscape, Environment, UndefinedBehavior};
+use navree_template::{AutoEscape, Environment, UndefinedBehavior};
 use serde::Serialize;
 
 macro_rules! templates {
@@ -92,23 +91,18 @@ const TEMPLATES: &[(&str, &str)] = templates![
 pub struct TemplateError {
     /// The template name.
     pub name: String,
-    /// The MiniJinja error.
+    /// The template engine's error.
     #[source]
-    pub source: minijinja::Error,
+    pub source: navree_template::Error,
 }
 
-fn environment() -> &'static Environment<'static> {
-    static ENV: OnceLock<Environment<'static>> = OnceLock::new();
+fn environment() -> &'static Environment {
+    static ENV: OnceLock<Environment> = OnceLock::new();
     ENV.get_or_init(|| {
         let mut env = Environment::new();
-        env.set_syntax(
-            SyntaxConfig::builder()
-                .trim_blocks(true)
-                .lstrip_blocks(true)
-                .keep_trailing_newline(true)
-                .build()
-                .expect("the default delimiters are valid"),
-        );
+        env.set_trim_blocks(true);
+        env.set_lstrip_blocks(true);
+        env.set_keep_trailing_newline(true);
         env.set_undefined_behavior(UndefinedBehavior::Strict);
         env.set_auto_escape_callback(|_| AutoEscape::None);
         for (name, source) in TEMPLATES.iter().copied().chain(crate::kits::templates()) {
@@ -128,7 +122,7 @@ pub fn render(name: &str, context: impl Serialize) -> Result<String, TemplateErr
     environment()
         .get_template(name)
         .map_err(error)?
-        .render(minijinja::value::Serde(&context))
+        .render(&context)
         .map_err(error)
 }
 

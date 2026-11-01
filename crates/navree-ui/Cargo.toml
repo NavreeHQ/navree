@@ -1,6 +1,6 @@
 [package]
 name = "navree-ui"
-description = "Navree's UI kit for server-rendered tools: the app shell, components as MiniJinja macros, and embedded, versioned CSS, JS and fonts."
+description = "Navree's UI kit for server-rendered tools: the app shell, components as template macros, and embedded, versioned CSS, JS and fonts."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

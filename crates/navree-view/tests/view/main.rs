@@ -2,6 +2,7 @@
 //! filters, and the `ViewModule`.
 
 mod filters;
+mod limits;
 mod module;
 mod reload;
 mod render;

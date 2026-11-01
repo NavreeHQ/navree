@@ -26,7 +26,7 @@ workspace = true
 anyhow = { workspace = true }
 clap = { workspace = true }
 heck = { workspace = true }
-minijinja = { workspace = true }
+navree-template = { workspace = true }
 # `navree dock`, Harbor's commands, and `navree mcp` / `navree skills:install`:
 # tool crates, no runtime crates (Navigator reads configuration with
 # navree-config).

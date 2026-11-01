@@ -3,11 +3,12 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use minijinja::Environment;
 use navree_config::Config;
 use navree_kernel::{
     AppContext, BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
 };
+
+use navree_template::Environment;
 
 use crate::{ViewOptions, Views};
 
@@ -164,7 +165,7 @@ struct EmbeddedTemplates(Vec<(&'static str, &'static str)>);
 
 /// A change to the template environment (contributed by
 /// [`ModuleBuilderViewExt::view_environment`]).
-type ConfigureEnvironment = dyn Fn(&mut Environment<'static>) + Send + Sync;
+type ConfigureEnvironment = dyn Fn(&mut Environment) + Send + Sync;
 
 /// Environment changes a module contributes.
 struct EnvironmentHook(Arc<ConfigureEnvironment>);
@@ -226,7 +227,7 @@ pub trait ModuleBuilderViewExt {
     /// ```
     fn view_environment(
         &mut self,
-        configure: impl Fn(&mut Environment<'static>) + Send + Sync + 'static,
+        configure: impl Fn(&mut Environment) + Send + Sync + 'static,
     ) -> &mut Self;
 }
 
@@ -237,7 +238,7 @@ impl ModuleBuilderViewExt for ModuleBuilder {
 
     fn view_environment(
         &mut self,
-        configure: impl Fn(&mut Environment<'static>) + Send + Sync + 'static,
+        configure: impl Fn(&mut Environment) + Send + Sync + 'static,
     ) -> &mut Self {
         self.contribute(EnvironmentHook(Arc::new(configure)))
     }

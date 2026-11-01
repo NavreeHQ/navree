@@ -25,7 +25,7 @@ pub enum ViewError {
         name: String,
         /// The template engine's error.
         #[source]
-        source: minijinja::Error,
+        source: navree_template::Error,
     },
     /// A template directory or file cannot be read.
     #[error("cannot read `{}`: {source}", .path.display())]

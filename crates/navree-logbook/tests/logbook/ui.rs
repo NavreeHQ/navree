@@ -18,7 +18,7 @@ use uuid::Uuid;
 
 use crate::app::{FixturesModule, app, builder};
 
-/// The page's text with minijinja's HTML escapes undone (`/` is printed as
+/// The page's text with the HTML escapes undone (`/` is printed as
 /// `&#x2f;`).
 pub fn unescape(html: &str) -> String {
     html.replace("&#x2f;", "/")

@@ -30,7 +30,6 @@ icu_decimal = { workspace = true }
 icu_locale_core = { workspace = true }
 icu_provider = { workspace = true }
 intl-memoizer = { workspace = true }
-minijinja = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-db = { workspace = true }
@@ -38,6 +37,7 @@ navree-http = { workspace = true }
 navree-i18n-macros = { workspace = true }
 navree-kernel = { workspace = true }
 navree-notify = { workspace = true }
+navree-template = { workspace = true }
 navree-validation = { workspace = true }
 navree-view = { workspace = true }
 navree-workspace = { workspace = true }

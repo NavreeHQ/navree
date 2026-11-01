@@ -15,7 +15,7 @@ use navree_ui::{
 use navree_view::{ModuleBuilderViewExt, ViewModule, ViewOptions, Views};
 use serde_json::json;
 
-/// The page with `/` unescaped (MiniJinja writes `&#x2f;` in attributes).
+/// The page with `/` unescaped (HTML escaping writes `&#x2f;` in attributes).
 fn decoded(html: String) -> String {
     html.replace("&#x2f;", "/")
 }

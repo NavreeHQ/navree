@@ -6,8 +6,7 @@ use std::sync::{Arc, OnceLock};
 
 use chrono::format::StrftimeItems;
 use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime};
-use minijinja::value::{Kwargs, Value, ValueKind};
-use minijinja::{Environment, Error, ErrorKind};
+use navree_template::{Environment, Error, ErrorKind, Kwargs, Value, ValueKind};
 
 use crate::locale::Locale;
 use crate::{Args, I18n};
@@ -34,7 +33,7 @@ pub(crate) fn current(slot: &Slot) -> Locale {
 /// - `date(format?)`: a date, a date-time, an RFC 3339 string or a Unix
 ///   timestamp in the locale's medium style (`26 oct. 2026`), or with a
 ///   chrono `strftime` format.
-pub(crate) fn configure(env: &mut Environment<'static>, slot: &Slot) {
+pub(crate) fn configure(env: &mut Environment, slot: &Slot) {
     let for_t = slot.clone();
     env.add_function(
         "t",

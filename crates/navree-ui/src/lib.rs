@@ -2,8 +2,7 @@
 //!
 //! The UI kit of Navree's server-rendered tools (Helm, Lighthouse, Fleet,
 //! Logbook and Navigator's pages): an app shell and components as
-//! [MiniJinja](https://docs.rs/minijinja) templates for
-//! [navree-view](navree_view), and embedded, versioned CSS, JS and fonts.
+//! templates for [navree-view](navree_view), and embedded, versioned CSS, JS and fonts.
 //!
 //! - [`UiModule`] contributes the `ui/*` templates to the app's
 //!   [`Views`](navree_view::Views), serves the [`assets`] at

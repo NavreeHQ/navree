@@ -17,7 +17,7 @@
 //! | `log` | navree-log | `log` | `LoggerModule` (tracing) |
 //! | `crypto` | navree-crypto | `crypto` | `CryptoModule`: encryption, Argon2id hashing, app key; `jose`: JWS and JWK |
 //! | `events` | navree-events | `events` | `EventsModule`: events and (queued) listeners |
-//! | `view` | navree-view | `view` | `ViewModule`: minijinja templates |
+//! | `view` | navree-view | `view` | `ViewModule`: templates |
 //! | `cache` | navree-cache | `cache` | `CacheModule`: cache stores and locks |
 //! | `http_client` | navree-http-client | `http-client` | `HttpClientModule`: outgoing HTTP with fakes |
 //! | `schema` | navree-schema | `schema` | `Schema`, `Blueprint`, `Migration`: the schema builder, TimescaleDB hypertables, schema dumps |

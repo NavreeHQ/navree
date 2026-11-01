@@ -4012,16 +4012,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "minijinja"
-version = "3.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00f5a04892e86ddb4fc254e9160835370b63a0d44042d3ab4725bc2dbcbab136"
-dependencies = [
- "percent-encoding",
- "serde",
-]
-
-[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4535,10 +4525,10 @@ dependencies = [
  "clap",
  "heck",
  "insta",
- "minijinja",
  "navree-dock",
  "navree-harbor",
  "navree-navigator",
+ "navree-template",
  "notify",
  "notify-debouncer-mini",
  "reqwest",
@@ -4955,7 +4945,7 @@ dependencies = [
  "clap",
  "flate2",
  "insta",
- "minijinja",
+ "navree-template",
  "rand 0.10.3",
  "rpassword",
  "serde",
@@ -5091,7 +5081,6 @@ dependencies = [
  "icu_locale_core",
  "icu_provider",
  "intl-memoizer",
- "minijinja",
  "navree-access",
  "navree-config",
  "navree-contracts",
@@ -5102,6 +5091,7 @@ dependencies = [
  "navree-macros",
  "navree-mail",
  "navree-notify",
+ "navree-template",
  "navree-testing",
  "navree-validation",
  "navree-view",
@@ -6088,6 +6078,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "navree-template"
+version = "1.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "navree-testing"
 version = "1.0.0"
 dependencies = [
@@ -6202,9 +6200,9 @@ name = "navree-view"
 version = "1.0.0"
 dependencies = [
  "chrono",
- "minijinja",
  "navree-config",
  "navree-kernel",
+ "navree-template",
  "serde",
  "serde_json",
  "tempfile",

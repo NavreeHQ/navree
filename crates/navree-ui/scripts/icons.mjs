@@ -1,5 +1,5 @@
 // Generates templates/ui/icons.html: the lucide icons the kit ships, as a
-// MiniJinja macro (`{{ icon("users") }}`), plus src/icons.rs (the names).
+// template macro (`{{ icon("users") }}`), plus src/icons.rs (the names).
 //
 //   node crates/navree-ui/scripts/icons.mjs <path to node_modules/lucide-react>
 //
