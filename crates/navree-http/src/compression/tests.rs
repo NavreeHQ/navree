@@ -650,3 +650,51 @@ impl HttpBody for Waiting {
         }
     }
 }
+
+/// A body that panics when it is polled after its end, as a stream may.
+struct Strict {
+    frames: VecDeque<Frame<Bytes>>,
+    ended: bool,
+}
+
+impl HttpBody for Strict {
+    type Data = Bytes;
+    type Error = Infallible;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Bytes>, Infallible>>> {
+        assert!(!self.ended, "polled after its end");
+        let next = self.frames.pop_front();
+        self.ended = next.is_none();
+        Poll::Ready(next.map(Ok))
+    }
+}
+
+#[tokio::test]
+async fn a_body_that_has_ended_is_not_polled_again() {
+    let mut trailers = HeaderMap::new();
+    trailers.insert("x-checksum", HeaderValue::from_static("abc"));
+    for with_trailers in [false, true] {
+        let mut frames = VecDeque::from([Frame::data(Bytes::from(long("streamed ")))]);
+        if with_trailers {
+            frames.push_back(Frame::trailers(trailers.clone()));
+        }
+        let body = Strict {
+            frames,
+            ended: false,
+        };
+        let response = send(&["gzip"], Response::new(Body::new(body))).await;
+        let mut body = response.into_body();
+        let mut data = Vec::new();
+        while let Some(frame) = body.frame().await {
+            if let Ok(chunk) = frame.unwrap().into_data() {
+                data.extend_from_slice(&chunk);
+            }
+        }
+        // Polled again after its end, it stays ended.
+        assert!(body.frame().await.is_none());
+        assert_eq!(gunzip(&data), long("streamed ").as_bytes());
+    }
+}

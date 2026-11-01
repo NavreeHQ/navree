@@ -39,6 +39,8 @@ pin_project! {
     ///   compressor for more than one frame.
     /// - **Trailers** of the inner body follow the gzip stream. An error of
     ///   the inner body ends this one with that error.
+    /// - **The end**: once the inner body has ended, it is never polled
+    ///   again (a stream may panic if it is).
     /// - **Size**: unknown until the end.
     pub(crate) struct GzipBody<B> {
         #[pin]
@@ -47,6 +49,9 @@ pin_project! {
         chunk: Bytes,
         // The body has handed over all its data (its end or its trailers).
         drained: bool,
+        // The body has ended, or this one has after its trailers: the body
+        // is not polled again.
+        ended: bool,
         trailers: Option<HeaderMap>,
         encoder: Encoder,
         // The room left in the current buffer.
@@ -63,6 +68,7 @@ impl<B> GzipBody<B> {
             body,
             chunk: Bytes::new(),
             drained: false,
+            ended: false,
             trailers: None,
             encoder: Encoder::new(),
             room: BUFFER,
@@ -93,6 +99,7 @@ where
                 body: this.body.as_mut(),
                 chunk: this.chunk,
                 drained: this.drained,
+                ended: this.ended,
                 trailers: this.trailers,
             };
             match ready!(this.encoder.poll(&mut source, cx, &mut out)) {
@@ -108,19 +115,24 @@ where
         if let Some(trailers) = this.trailers.take() {
             return Poll::Ready(Some(Ok(Frame::trailers(trailers))));
         }
+        if *this.ended {
+            return Poll::Ready(None);
+        }
         // Whatever the body sends after its trailers: more trailers pass,
         // data cannot be added to a finished gzip stream.
-        match ready!(this.body.poll_frame(cx)) {
+        let next = match ready!(this.body.poll_frame(cx)) {
             Some(Ok(frame)) => match frame.into_data() {
-                Ok(data) if data.has_remaining() => Poll::Ready(Some(Err(
+                Ok(data) if data.has_remaining() => Some(Err(
                     "the body sent data after the end of its gzip stream".into(),
-                ))),
-                Ok(_) => Poll::Ready(None),
-                Err(frame) => Poll::Ready(Some(Ok(frame))),
+                )),
+                Ok(_) => None,
+                Err(frame) => Some(Ok(frame)),
             },
-            Some(Err(error)) => Poll::Ready(Some(Err(error.into()))),
-            None => Poll::Ready(None),
-        }
+            Some(Err(error)) => Some(Err(error.into())),
+            None => None,
+        };
+        *this.ended = next.is_none();
+        Poll::Ready(next)
     }
 
     fn size_hint(&self) -> SizeHint {
@@ -146,6 +158,7 @@ struct Source<'a, B> {
     body: Pin<&'a mut B>,
     chunk: &'a mut Bytes,
     drained: &'a mut bool,
+    ended: &'a mut bool,
     trailers: &'a mut Option<HeaderMap>,
 }
 
@@ -167,7 +180,10 @@ where
                     }
                 },
                 Some(Err(error)) => return Poll::Ready(Err(error.into())),
-                None => *self.drained = true,
+                None => {
+                    *self.drained = true;
+                    *self.ended = true;
+                }
             }
         }
         Poll::Ready(Ok(()))
