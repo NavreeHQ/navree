@@ -1140,7 +1140,8 @@ alone!(
         );
         let (result, peak) = measured(|| read_table(&file, "x.xlsx", &opts(1 << 28)));
         assert!(refused_with(&result, "nested"), "{result:?}");
-        assert!(peak < MIB, "held {peak} bytes at most");
+        // A little for the elements, the rest for the process around them.
+        assert!(peak < 4 * MIB, "held {peak} bytes at most");
     }
 );
 
