@@ -705,13 +705,11 @@ impl Pagination {
             el("li").child(link)
         };
         items.push(edge(page.saturating_sub(1), page > 1, icons::CHEVRON_LEFT, "Previous page"));
+        // Only the pages shown are ever looked at, however many there are.
+        let near = [Some(1), page.checked_sub(1), Some(page), page.checked_add(1), Some(pages)];
         let mut shown = 0;
-        for number in 1..=pages {
-            let near = number == 1 || number == pages || number.abs_diff(page) <= 1;
-            if !near {
-                if number > shown + 1 && shown != 0 {
-                    continue;
-                }
+        for number in near.into_iter().flatten().filter(|number| (1..=pages).contains(number)) {
+            if number <= shown {
                 continue;
             }
             if shown != 0 && number > shown + 1 {

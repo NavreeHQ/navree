@@ -35,6 +35,7 @@ fn tone(stage: &&'static str) -> BadgeVariant {
 }
 
 #[derive(Clone, TableRow)]
+#[table(per = 50, per_pages(25, 50, 100, 1000))]
 pub struct DealRow {
     #[col(skip)]
     pub id: i64,

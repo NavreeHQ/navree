@@ -6193,14 +6193,17 @@ dependencies = [
 name = "navree-ui"
 version = "1.0.0"
 dependencies = [
+ "base64 0.23.1",
  "brotli",
  "bytes",
  "chrono",
+ "futures-util",
  "http",
  "http-body",
  "http-body-util",
  "navree-http",
  "navree-kernel",
+ "navree-orm",
  "navree-testing",
  "navree-ui-macros",
  "navree-validation",

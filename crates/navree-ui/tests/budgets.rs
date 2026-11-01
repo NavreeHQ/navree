@@ -70,6 +70,7 @@ mod times {
     use serde::Deserialize;
 
     #[derive(Clone, TableRow)]
+    #[table(per = 50, per_pages(50, 1000))]
     struct Row {
         #[col(skip)]
         id: i64,

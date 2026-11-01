@@ -171,6 +171,8 @@ impl Uses {
     pub const SIDEBAR: Self = Self(1 << 1);
     /// The overlay module: tooltip and hover card, placement where CSS can't.
     pub const OVERLAY: Self = Self(1 << 2);
+    /// The table module: selection, resizing and reordering columns.
+    pub const TABLE: Self = Self(1 << 3);
 
     /// Both sets together.
     #[must_use]

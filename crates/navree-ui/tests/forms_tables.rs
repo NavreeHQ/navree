@@ -168,6 +168,7 @@ fn tone_of(stage: &&'static str) -> BadgeVariant {
 }
 
 #[derive(TableRow)]
+#[table(per = 50, per_pages(25, 50, 1000))]
 struct DealRow {
     #[col(skip)]
     id: i64,
@@ -195,7 +196,7 @@ fn rows() -> Vec<DealRow> {
 
 #[test]
 fn a_query_reads_sort_filter_and_page_and_forgives_bad_values() {
-    let query = TableQuery::<DealRow, DealFilter>::parse("/deals", "sort=amount&dir=desc&page=3&per=25&q=ac&stage=closed_won");
+    let query = TableQuery::<DealRow, DealFilter>::parse("/deals", "sort=-amount&page=3&per=25&q=ac&stage=closed_won");
     assert_eq!(query.sort(), Some(("amount", Direction::Desc)));
     assert_eq!(query.page(), 3);
     assert_eq!(query.per_page(), 25);
@@ -206,7 +207,7 @@ fn a_query_reads_sort_filter_and_page_and_forgives_bad_values() {
     let query = TableQuery::<DealRow, DealFilter>::parse("/deals", "sort=owner_name&page=-1&per=999999&stage=");
     assert_eq!(query.sort(), None, "only sortable columns sort");
     assert_eq!(query.page(), 1);
-    assert_eq!(query.per_page(), 1000);
+    assert_eq!(query.per_page(), 50, "a page size not on offer is ignored");
     let query = TableQuery::<DealRow, DealFilter>::parse("/deals", "stage=%3Cnope%3E");
     assert_eq!(query.filter().stage, None);
 }
@@ -218,15 +219,15 @@ fn a_table_is_a_region_with_links_that_keep_the_state() {
     let html = render(&DataTable::new("deals", &query, &rows).total(500).into());
     assert!(html.contains(r#"id="deals" data-ui-region"#), "{html}");
     assert!(html.contains(r#"<tr data-key="7">"#), "{html}");
-    assert!(html.contains(r#"<a href="/deals/7">A&lt;cme</a>"#), "{html}");
+    assert!(html.contains(r#"<a href="/deals/7"><bdi>A&lt;cme</bdi></a>"#), "{html}");
     assert!(html.contains(r#"aria-sort="ascending""#), "{html}");
-    assert!(html.contains(r#"href="/deals?sort=amount&amp;dir=desc&amp;q=a%20b""#), "the next click sorts down, from page 1: {html}");
-    assert!(html.contains(r#"href="/deals?sort=amount&amp;q=a%20b&amp;page=3""#), "{html}");
+    assert!(html.contains(r#"href="/deals?q=a%20b&amp;sort=-amount""#), "the next click sorts down, from page 1: {html}");
+    assert!(html.contains(r#"href="/deals?q=a%20b&amp;sort=amount&amp;page=3""#), "{html}");
     assert!(html.contains(r#"data-ui-target="deals""#), "{html}");
     assert!(html.contains(r#"data-numeric>12.34</td>"#), "{html}");
     assert!(html.contains(r#"data-variant="success""#), "{html}");
     assert!(html.contains("data-hide-mobile"), "{html}");
-    assert!(html.contains("51–51 of 500"), "{html}");
+    assert!(html.contains("Showing 51 to 51 of 500 results"), "{html}");
 }
 
 #[test]
@@ -243,7 +244,7 @@ fn an_empty_table_says_so() {
     let query = TableQuery::<DealRow, DealFilter>::parse("/deals", "");
     let html = render(&DataTable::new("deals", &query, &[]).into());
     assert!(html.contains(r#"data-slot="empty""#), "{html}");
-    assert!(!html.contains("<table"), "{html}");
+    assert!(html.contains("<thead"), "the headers stay, so nothing jumps: {html}");
 }
 
 #[test]

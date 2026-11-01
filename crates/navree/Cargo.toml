@@ -174,6 +174,7 @@ ui = ["dep:navree-ui", "http", "validation"]
 ## (api).
 orm = [
     "dep:navree-orm",
+    "navree-ui?/orm",
     "db",
     "events",
     "http",

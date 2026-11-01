@@ -48,8 +48,17 @@ pub fn derive_options(input: TokenStream) -> TokenStream {
 /// Implements `TableRow` for a struct: each field is a column.
 ///
 /// On a field: `#[col(skip)]`, `key`, `sortable`, `numeric`, `hide_on_mobile`,
-/// `label = "..."`, `link = "/deals/{id}"`, `badge = path::to::tone`.
-#[proc_macro_derive(TableRow, attributes(col))]
+/// `search` (in the global search), `strong`, `sticky`, `sticky_end`, `hidden`
+/// (off until shown), `truncate`, `wrap`, `locked` (can't be hidden), `width =
+/// 240`, `align = start | center | end`, `kind = int` (how filter values bind, when
+/// the cell shows something other than the column queried), `filter = text | range | date | select |
+/// multi | boolean | relation`, `options = PATH`, `source = "companies.name"` (the
+/// column queried when it isn't the field's name), `group = "Address"`, `label =
+/// "..."`, `link = "/deals/{id}"`, `badge = path::to::tone`.
+///
+/// On the struct: `#[table(sort = "-updated_at,title", per = 25, per_pages(10, 25,
+/// 50, 100), cursor, version = "updated_at", no_count, capped = 10000)]`.
+#[proc_macro_derive(TableRow, attributes(col, table))]
 pub fn derive_table_row(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);
     table::table_row(input).unwrap_or_else(syn::Error::into_compile_error).into()

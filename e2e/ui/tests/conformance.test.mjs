@@ -43,7 +43,7 @@ const STATES = [
   }],
   ["form, on a phone", "/deals/new", null, { width: 390, height: 800 }],
   ["table, 1,000 rows", "/deals?per=1000"],
-  ["table, sorted", "/deals?per=50&sort=amount&dir=desc"],
+  ["table, sorted", "/deals?per=50&sort=-amount"],
   ["table, paged", "/deals?per=50&page=3"],
   ["table, empty after a filter", "/deals?q=nothing-matches-this"],
   ["table, on a phone", "/deals?per=50", null, { width: 390, height: 800 }],

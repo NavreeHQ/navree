@@ -267,6 +267,11 @@ impl Reply {
         }
     }
 
+    /// Applies ops; with JavaScript off, goes to `href`.
+    pub fn ops_or_redirect(href: impl Into<Href>) -> Self {
+        Self { ops: Vec::new(), status: StatusCode::OK, fallback: Fallback::Redirect(href.into()), flash: None, uses: crate::node::Uses::NONE }
+    }
+
     /// Applies ops; with JavaScript off, shows `view`.
     pub fn view(view: View) -> Self {
         Self { ops: Vec::new(), status: StatusCode::OK, fallback: Fallback::View(Box::new(view)), flash: None, uses: crate::node::Uses::NONE }

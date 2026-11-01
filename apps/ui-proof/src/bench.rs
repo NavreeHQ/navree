@@ -42,7 +42,7 @@ pub fn run() {
         shell.page("Deals", "/deals").body(DataTable::new("deals", &query, &selected).total(total)).to_view().to_html()
     });
     time("1,000-row page, sort and all", 300, || {
-        let sorted = TableQuery::<DealRow, DealFilter>::parse("/deals", "per=1000&sort=amount&dir=desc");
+        let sorted = TableQuery::<DealRow, DealFilter>::parse("/deals", "per=1000&sort=-amount");
         let (found, count) = select(&sorted, &deals);
         shell.page("Deals", "/deals").body(DataTable::new("deals", &sorted, &found).total(count)).to_view().to_html()
     });

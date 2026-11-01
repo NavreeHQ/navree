@@ -244,5 +244,21 @@ pub(crate) fn options(input: DeriveInput) -> syn::Result<TokenStream> {
                 ::core::option::Option::Some(::std::string::ToString::to_string(#ui::form::Options::option_value(self)))
             }
         }
+
+        #[automatically_derived]
+        impl #impl_generics #ui::table::CellValue for #ident #ty_generics #where_clause {
+            fn write_cell(&self, out: &mut #ui::table::CellWriter<'_>) {
+                out.plain(#ui::table::option_label(<Self as #ui::form::Options>::OPTIONS, #ui::form::Options::option_value(self)));
+            }
+
+            fn write_text(&self, out: &mut ::std::string::String) {
+                out.push_str(#ui::table::option_label(<Self as #ui::form::Options>::OPTIONS, #ui::form::Options::option_value(self)));
+            }
+        }
+
+        #[automatically_derived]
+        impl #impl_generics #ui::table::ColumnValue for #ident #ty_generics #where_clause {
+            const KIND: #ui::table::ValueKind = #ui::table::ValueKind::Text;
+        }
     })
 }

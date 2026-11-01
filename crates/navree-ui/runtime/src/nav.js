@@ -68,23 +68,61 @@ export async function showPage(response, how = {}) {
   announce(doc.title);
 }
 
+/** Forgets prefetched pages: something changed, and they may be stale. */
+export function forgetPrefetched() {
+  prefetched.clear();
+}
+
+/** A table whose fetch failed keeps its rows and says so. @param {Element} table @param {string} url @param {number} status */
+function tableFailed(table, url, status) {
+  const alert = table.querySelector("[data-slot=table-alert]");
+  if (!alert) return;
+  let words = {};
+  try {
+    words = JSON.parse(table.getAttribute("data-l") || "{}");
+  } catch {}
+  const text = alert.querySelector("[data-slot=alert-text]");
+  if (text) text.textContent = (status === 401 || status === 403 ? /** @type {any} */ (words).lost : /** @type {any} */ (words).failed) || "";
+  alert.querySelector("[data-ui-retry]")?.setAttribute("href", url);
+  alert.removeAttribute("hidden");
+}
+
+/** Marks a table busy, within the frame of the request. @param {Element | null} table @param {boolean} on */
+function tablePending(table, on) {
+  table?.toggleAttribute("data-pending", on);
+  if (on) table?.setAttribute("aria-busy", "true");
+  else table?.removeAttribute("aria-busy");
+}
+
 /** Goes to `url` like a boosted link. @param {string} url @param {{region?: string, push?: boolean}} [how] */
 export async function go(url, how = {}) {
   const mine = ++generation;
   const root = document.documentElement;
   root.setAttribute("data-ui-loading", "");
+  const region = how.region ? document.getElementById(how.region) : null;
+  const table = region?.hasAttribute("data-ui-table") ? region : null;
+  tablePending(table, true);
   try {
     const response = await fetchPage(url);
     if (mine !== generation) return;
+    if (table && !response.ok) {
+      tableFailed(table, url, response.status);
+      return;
+    }
     if (!(response.headers.get("content-type") || "").startsWith("text/html")) {
       location.assign(url);
       return;
     }
     await showPage(response, { ...how, url: response.url || url });
   } catch {
-    location.assign(url);
+    if (mine !== generation) return;
+    if (table) tableFailed(table, url, 0);
+    else location.assign(url);
   } finally {
-    if (mine === generation) root.removeAttribute("data-ui-loading");
+    if (mine === generation) {
+      root.removeAttribute("data-ui-loading");
+      tablePending(table, false);
+    }
   }
 }
 
@@ -104,9 +142,19 @@ export async function refresh(id) {
   if (!el || !src) return;
   const mine = (regions.get(id) || 0) + 1;
   regions.set(id, mine);
+  const table = el.hasAttribute("data-ui-table") ? el : null;
   try {
     const response = await fetch(src, { headers: HEADER });
-    if (regions.get(id) !== mine || !response.ok) return;
+    if (regions.get(id) !== mine) return;
+    if (!response.ok) {
+      if (table) tableFailed(table, src, response.status);
+      return;
+    }
+    // A sign-in page has no business inside a table: go there for real.
+    if (table && (response.redirected || !(response.headers.get("content-type") || "").startsWith("text/html"))) {
+      location.assign(response.url);
+      return;
+    }
     const doc = new DOMParser().parseFromString(await response.text(), "text/html");
     let to = doc.getElementById(id);
     if (!to) {
@@ -116,7 +164,9 @@ export async function refresh(id) {
     to.removeAttribute("data-ui-lazy");
     to.removeAttribute("aria-busy");
     morph(el, to);
-  } catch {}
+  } catch {
+    if (table && regions.get(id) === mine) tableFailed(table, src, 0);
+  }
 }
 
 /** Starts lazy and polling regions, on load and after each swap. */
@@ -168,6 +218,9 @@ export function startNav() {
     if (a) prefetch(a.href);
   }, { passive: true });
   addEventListener("popstate", () => {
-    go(location.href, { push: false }).then(startRegions);
+    // Back within a table's own states changes the table, not the page.
+    const table = document.querySelector("[data-ui-table]");
+    const same = table && new URL(table.getAttribute("data-ui-src") || "", location.href).pathname === location.pathname;
+    go(location.href, same ? { push: false, region: table.id } : { push: false }).then(startRegions);
   });
 }

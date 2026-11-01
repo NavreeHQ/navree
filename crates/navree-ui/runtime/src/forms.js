@@ -1,7 +1,7 @@
 // Forms: the pending state within the frame of the submit, then, on
 // `data-ui-form`, a fetch whose answer is ops or a page.
 import { applyEnvelope } from "./ops.js";
-import { go, showPage, startRegions } from "./nav.js";
+import { forgetPrefetched, go, showPage, startRegions } from "./nav.js";
 import { toast } from "./ui.js";
 
 const OPS = "application/vnd.navree.ops+json";
@@ -46,6 +46,8 @@ async function send(form, submitter) {
     const response = await fetch(url, init);
     const type = response.headers.get("content-type") || "";
     pending(form, submitter, false);
+    if (method !== "GET") forgetPrefetched();
+    document.dispatchEvent(new CustomEvent("ui:sent", { detail: { form, ok: response.ok } }));
     if (type.startsWith(OPS)) applyEnvelope(await response.json());
     else if (type.startsWith("text/html")) await showPage(response, { url: response.url });
     else if (!response.ok) toast("danger", "That didn't work. Try again.");
@@ -60,7 +62,10 @@ async function send(form, submitter) {
 /** A GET form with a region: filters that morph the region in place. @param {HTMLFormElement} form */
 function filter(form) {
   const url = new URL(form.getAttribute("action") || location.href, location.href);
-  url.search = new URLSearchParams(/** @type {any} */ (new FormData(form))).toString();
+  const params = new URLSearchParams();
+  // An empty control says nothing: it stays out of the URL.
+  for (const [name, value] of new FormData(form)) if (value !== "" || name === "sort") params.append(name, /** @type {string} */ (value));
+  url.search = params.toString();
   go(url.href, { region: form.getAttribute("data-ui-target") || undefined }).then(startRegions);
 }
 

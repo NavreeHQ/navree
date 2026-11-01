@@ -167,6 +167,7 @@ export function morph(from, to) {
       try { active.setSelectionRange(start, end, direction || undefined); } catch {}
     }
   }
+  document.dispatchEvent(new Event("ui:swap"));
 }
 
 /** Parses `html` into its first element. @param {string} html */

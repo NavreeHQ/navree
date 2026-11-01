@@ -10,7 +10,18 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+## The table's backend: `TableQuery::load`, `export_csv`, `BulkRequest::resolve`
+## and stored views, through navree-orm. The facade turns it on when both `ui`
+## and `orm` are on.
+orm = ["dep:navree-orm", "dep:futures-util", "dep:tokio", "dep:base64"]
+
 [dependencies]
+base64 = { workspace = true, optional = true }
+futures-util = { workspace = true, optional = true }
+navree-orm = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
 brotli = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }

@@ -1,0 +1,23 @@
+[package]
+name = "ui-table-proof"
+description = "Proof of the data table: pages and tests against real databases, with no effect on the other proof pages' size or speed."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "ui-table-proof"
+path = "src/main.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+chrono = { workspace = true }
+http = { workspace = true }
+navree = { workspace = true, default-features = false, features = ["ui", "orm", "db", "postgres", "mysql", "sqlite", "mongo", "http"] }
+serde = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
