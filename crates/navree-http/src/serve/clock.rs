@@ -105,6 +105,10 @@ struct State {
     upgraded: bool,
     /// Shutting down: nothing extends the deadline any more.
     closing: bool,
+    /// The deadline of a closing connection with nothing in flight is its
+    /// [`LINGER`], counted from the first time it was idle: a client that
+    /// goes on sending requests meanwhile does not get it again.
+    farewell: bool,
     /// A client that waits took this connection's slot and it has not heard
     /// yet: a request that arrives first does not undo that.
     reclaimed: bool,
@@ -140,6 +144,7 @@ impl Clock {
                 multiplexed: false,
                 upgraded: false,
                 closing: false,
+                farewell: false,
                 reclaimed: false,
                 waker: None,
             }),
@@ -244,7 +249,12 @@ impl Clock {
             .store(!state.multiplexed && !head_started, Ordering::Relaxed);
         state.reclaimable_since = (!state.closing).then_some(now);
         state.deadline = if state.closing {
-            Some(now + LINGER)
+            let linger = now + LINGER;
+            let first = !std::mem::replace(&mut state.farewell, true);
+            Some(match state.deadline {
+                Some(due) if !first => due.min(linger),
+                _ => linger,
+            })
         } else if head_started {
             self.header_read.or(self.idle).map(|limit| now + limit)
         } else {
@@ -261,6 +271,7 @@ impl Clock {
         if state.in_flight == 0 && !state.upgraded {
             let linger = Instant::now() + LINGER;
             state.deadline = Some(state.deadline.map_or(linger, |at| at.min(linger)));
+            state.farewell = true;
         }
     }
 
@@ -273,6 +284,7 @@ impl Clock {
         state.reclaimed = false;
         state.reclaimable_since = None;
         state.deadline = (state.in_flight == 0).then(|| Instant::now() + LINGER);
+        state.farewell = true;
     }
 
     /// Since when a client that waits may have this connection's slot, if it
@@ -1021,6 +1033,31 @@ mod tests {
         clock.flushed();
         assert_eq!(clock.reclaimable_since(), None, "it was reclaimed");
         assert_eq!(runs_for(&clock).await, LINGER);
+    }
+
+    /// A client that keeps sending requests while its connection is closing
+    /// gets the linger once: a request that is answered before the connection
+    /// has heard of the reclaim (a busy machine) must not push the deadline
+    /// out again, or the connection never hands the slot over.
+    #[tokio::test(start_paused = true)]
+    async fn requests_on_a_reclaimed_connection_do_not_extend_the_linger() {
+        let clock = clock();
+        served(&clock, Version::HTTP_11);
+        assert!(clock.reclaim());
+        // Answered before the connection task looked at the clock again.
+        served(&clock, Version::HTTP_11);
+        let farewell = Instant::now() + LINGER;
+        for _ in 0..4 {
+            tokio::time::advance(LINGER / 4).await;
+            if Instant::now() < farewell {
+                assert!(pending(&clock), "the linger is not over");
+                served(&clock, Version::HTTP_11);
+            }
+        }
+        assert!(
+            !pending(&clock),
+            "a client that keeps asking cannot keep the slot"
+        );
     }
 
     fn watched<I>(
