@@ -12,7 +12,7 @@ use super::*;
 /// The cells of every sheet of `bytes`: `sheet <i> <name>`, then a line
 /// `<row> <column> <cell>` for each position with a value (a position given
 /// twice keeps its last cell), or `error` when the sheet cannot be read.
-pub(super) fn dump(bytes: &[u8]) -> String {
+pub(crate) fn dump(bytes: &[u8]) -> String {
     let limits = Limits {
         max_part_bytes: 1 << 30,
         max_text_bytes: 1 << 28,

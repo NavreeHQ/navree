@@ -8,7 +8,8 @@ use std::collections::BTreeMap;
 use encoding_rs::{Encoding, UTF_16BE, UTF_16LE};
 
 use super::super::workbook::dates::shows_date;
-use super::{Globals, XlsError, XlsValue, damaged, is_custom_format_id};
+use super::super::workbook::{MAX_SHEETS, make_room, too_many_sheets};
+use super::{Globals, MAX_CELL_FORMATS, XlsError, XlsValue, damaged, is_custom_format_id};
 
 const FORMULA: u16 = 0x0006;
 const EOF: u16 = 0x000A;
@@ -191,6 +192,42 @@ fn push_chars(bytes: &[u8], wide: bool, out: &mut String) {
     }
 }
 
+/// Appends `bytes`, UTF-16, to `out`. A pair of surrogates may be split
+/// between two records: a high surrogate that ends `bytes` waits in `pending`
+/// for what comes next.
+fn push_wide(mut bytes: &[u8], pending: &mut Option<u16>, out: &mut String) {
+    if bytes.is_empty() {
+        return;
+    }
+    if let Some(high) = pending.take() {
+        match u16_at(bytes, 0) {
+            Some(low) if (0xDC00..=0xDFFF).contains(&low) => {
+                out.extend(
+                    char::decode_utf16([high, low])
+                        .map(|c| c.unwrap_or(char::REPLACEMENT_CHARACTER)),
+                );
+                bytes = bytes.get(2..).unwrap_or_default();
+            }
+            _ => out.push(char::REPLACEMENT_CHARACTER),
+        }
+    }
+    let last = bytes.len().checked_sub(2).and_then(|at| u16_at(bytes, at));
+    if let Some(high @ 0xD800..=0xDBFF) = last {
+        *pending = Some(high);
+        bytes = bytes
+            .get(..bytes.len().saturating_sub(2))
+            .unwrap_or_default();
+    }
+    out.push_str(&UTF_16LE.decode_without_bom_handling(bytes).0);
+}
+
+/// Half a pair of surrogates that nothing completes is a replacement.
+fn flush_surrogate(pending: &mut Option<u16>, out: &mut String) {
+    if pending.take().is_some() {
+        out.push(char::REPLACEMENT_CHARACTER);
+    }
+}
+
 /// Appends `bytes`, a BIFF5 string in `codepage`, to `out`. A UTF-16 code
 /// page (the default when the workbook names none) reads one byte a
 /// character.
@@ -213,7 +250,8 @@ enum AtTheEnd {
 
 /// Reads `count` UTF-16 characters (one byte each unless `wide`) from
 /// `pieces` into `out`, on into CONTINUE records, where each part starts
-/// with a flags byte of its own.
+/// with a flags byte of its own. A pair of surrogates split between two parts
+/// is one character.
 fn read_chars(
     pieces: &mut Pieces<'_>,
     mut count: usize,
@@ -229,17 +267,26 @@ fn read_chars(
         pieces.data = rest;
         count = count.saturating_sub(1);
     }
+    let mut pending = None;
     loop {
         let width = if wide { 2 } else { 1 };
         let here = count.min(pieces.data.len().checked_div(width).unwrap_or(0));
         let bytes = here.saturating_mul(width);
-        push_chars(pieces.data.get(..bytes).unwrap_or_default(), wide, out);
+        let piece = pieces.data.get(..bytes).unwrap_or_default();
+        if wide {
+            push_wide(piece, &mut pending, out);
+        } else if !piece.is_empty() {
+            flush_surrogate(&mut pending, out);
+            push_chars(piece, false, out);
+        }
         count = count.saturating_sub(here);
         pieces.data = pieces.data.get(bytes..).unwrap_or_default();
         if count == 0 {
+            flush_surrogate(&mut pending, out);
             return Ok(());
         }
         if !pieces.next_piece() {
+            flush_surrogate(&mut pending, out);
             return match at_the_end {
                 AtTheEnd::Cut => Ok(()),
                 AtTheEnd::Refuse => {
@@ -252,7 +299,10 @@ fn read_chars(
                 wide = flags & 1 != 0;
                 pieces.data = data;
             }
-            None if at_the_end == AtTheEnd::Cut => return Ok(()),
+            None if at_the_end == AtTheEnd::Cut => {
+                flush_surrogate(&mut pending, out);
+                return Ok(());
+            }
             None => {
                 return Err(damaged(
                     "a shared string goes on in an empty CONTINUE record",
@@ -396,9 +446,12 @@ fn read_shared_strings(
             return Err(too_large());
         }
         let end = u32::try_from(len).map_err(|_| too_large())?;
+        make_room(&mut shared.text, piece.len(), max_text_bytes).map_err(|_| too_large())?;
         shared.text.push_str(&piece);
         shared.ends.push(end);
     }
+    shared.text.shrink_to_fit();
+    shared.ends.shrink_to_fit();
     Ok(shared)
 }
 
@@ -642,10 +695,16 @@ pub(super) fn read_globals(stream: &[u8], max_text_bytes: u64) -> Result<Globals
                     globals.custom_formats.insert(id, kind);
                 }
             }
-            XF => globals
-                .formats
-                .push(u16_at(data, 2).ok_or_else(|| short("XF"))?),
+            XF => {
+                let format = u16_at(data, 2).ok_or_else(|| short("XF"))?;
+                if globals.formats.len() < MAX_CELL_FORMATS {
+                    globals.formats.push(format);
+                }
+            }
             BOUNDSHEET => {
+                if globals.sheets.len() >= MAX_SHEETS {
+                    return Err(XlsError::TooLarge(too_many_sheets()));
+                }
                 globals
                     .sheets
                     .push(read_boundsheet(data, globals.biff, globals.codepage)?)
@@ -697,11 +756,12 @@ pub(super) struct Context {
 }
 
 impl Context {
-    /// The cells of the sheet whose BOF is at `offset` in the stream.
-    pub(super) fn cells_at(&self, offset: usize) -> Result<Cells<'_>, XlsError> {
+    /// The cells of the sheet whose BOF is at `offset` in the stream, with
+    /// the records before `end` to read.
+    pub(super) fn cells_at(&self, offset: usize, end: usize) -> Result<Cells<'_>, XlsError> {
         let records = self
             .stream
-            .get(offset..)
+            .get(offset..end.min(self.stream.len()))
             .ok_or_else(|| damaged("a sheet starts past the end of the workbook stream"))?;
         Ok(Cells {
             context: self,
@@ -711,6 +771,7 @@ impl Context {
             formula_at: (0, 0),
             multiple: None,
             done: false,
+            ended: false,
         })
     }
 
@@ -809,6 +870,8 @@ pub(super) struct Cells<'a> {
     formula_at: (u32, u32),
     multiple: Option<Multiple<'a>>,
     done: bool,
+    /// Whether the sheet's own EOF has been read.
+    ended: bool,
 }
 
 type Cell<'a> = (u32, u32, XlsValue<'a>);
@@ -817,7 +880,23 @@ fn row_col(data: &[u8]) -> Option<(u32, u32)> {
     Some((u32::from(u16_at(data, 0)?), u32::from(u16_at(data, 2)?)))
 }
 
+/// A cell, unless it holds a number that is not finite: no workbook does, and
+/// a table cannot keep one as a number.
+fn finite(cell: Cell<'_>) -> Result<Cell<'_>, XlsError> {
+    match cell.2 {
+        XlsValue::Number(number) | XlsValue::DateTime(number) if !number.is_finite() => {
+            Err(damaged("a number is not finite"))
+        }
+        _ => Ok(cell),
+    }
+}
+
 impl<'a> Cells<'a> {
+    /// Whether the sheet's own EOF has been read.
+    pub(super) fn ended(&self) -> bool {
+        self.ended
+    }
+
     /// The cell a record gives, if any.
     fn cell(&mut self, record: Record<'a>) -> Result<Option<Cell<'a>>, XlsError> {
         let context = self.context;
@@ -981,7 +1060,7 @@ impl<'a> Iterator for Cells<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(cell) = self.next_of_multiple() {
-            return Some(Ok(cell));
+            return Some(finite(cell));
         }
         while !self.done {
             let record = match self.records.next() {
@@ -1003,9 +1082,12 @@ impl<'a> Iterator for Cells<'a> {
             match record.kind {
                 BOF if self.seen_bof => self.depth = 1,
                 BOF => self.seen_bof = true,
-                EOF => break,
+                EOF => {
+                    self.ended = true;
+                    break;
+                }
                 _ => match self.cell(record) {
-                    Ok(Some(cell)) => return Some(Ok(cell)),
+                    Ok(Some(cell)) => return Some(finite(cell)),
                     Ok(None) => {}
                     Err(error) => {
                         self.done = true;

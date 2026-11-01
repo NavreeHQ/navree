@@ -105,7 +105,9 @@ pub struct ImportOptions {
     pub max_cells: u64,
     /// The most a part of a workbook (a sheet, the shared strings) may unpack
     /// to, as the zip file declares it, in bytes (default 1 GiB: twice the
-    /// sheet XML of a workbook that holds `max_cells` cells).
+    /// sheet XML of a workbook that holds `max_cells` cells). It also bounds
+    /// opening: all that a workbook keeps while it opens counts against this,
+    /// and it unpacks at most four times this to open.
     pub max_inflated_bytes: u64,
     /// The most text the cells of a file may hold, in bytes, counting the
     /// text of every cell the table keeps, the same text again for each cell

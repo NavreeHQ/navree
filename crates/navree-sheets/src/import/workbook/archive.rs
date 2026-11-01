@@ -2,12 +2,12 @@
 //! read as a stream that stops at the size the file declares for it.
 
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Cursor};
+use std::io::{self, BufRead, BufReader, Cursor, Read};
 
 use zip::ZipArchive;
 use zip::result::ZipError;
 
-use super::{Damaged, damaged};
+use super::{Budget, Damaged, damaged};
 
 /// A workbook's zip file.
 #[derive(Clone)]
@@ -62,6 +62,39 @@ impl<'a> Archive<'a> {
             Err(error) => return Err(zip_error(error).into()),
         };
         read(&mut BufReader::new(part)).map(Some)
+    }
+
+    /// [`Archive::read`] while the workbook is opened: what is unpacked counts
+    /// against what opening may read, and the part stops when that runs out.
+    pub(super) fn read_opening<T, E: From<Damaged>>(
+        &self,
+        name: &str,
+        budget: &Budget,
+        read: impl FnOnce(&mut dyn BufRead) -> Result<T, E>,
+    ) -> Result<Option<T>, E> {
+        let mut zip = self.zip.clone();
+        let part = match zip.by_name(name) {
+            Ok(part) => part,
+            Err(ZipError::FileNotFound) => return Ok(None),
+            Err(error) => return Err(zip_error(error).into()),
+        };
+        read(&mut BufReader::new(Charged { part, budget })).map(Some)
+    }
+}
+
+/// A part whose bytes are charged to what opening may read.
+struct Charged<'b, R> {
+    part: R,
+    budget: &'b Budget,
+}
+
+impl<R: Read> Read for Charged<'_, R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let read = self.part.read(buf)?;
+        if !self.budget.charge_read(read) {
+            return Err(io::Error::other("opening has read all it may"));
+        }
+        Ok(read)
     }
 }
 

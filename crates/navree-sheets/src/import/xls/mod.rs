@@ -11,12 +11,22 @@
 //! the stream, the shared strings and one record, never the area its
 //! cells span.
 //!
+//! A sheet's records are the stream's from where the workbook lists it up to
+//! the next sheet listed, so the check goes through the stream at most once
+//! whatever the listing says: two sheets listed at one place, or a sheet that
+//! has not ended where the next starts, make the workbook damaged. Opening
+//! therefore goes through the stream twice at most, once for the globals and
+//! once for the sheets.
+//!
 //! What the reader holds is bounded by [`XlsLimits`]: the workbook stream
 //! by `max_stream_bytes` (measured on the sectors that hold it, before it
 //! is copied) and the shared strings' text by `max_text_bytes` (charged as
 //! each string is decoded; the count the table declares reserves nothing).
-//! Every chain of sectors is followed at most as many steps as the file has
-//! sectors, so a chain that loops is refused.
+//! Its other lists are bounded too: 65,535 sheets of up to 765 bytes of name,
+//! 65,536 cell formats (the most a cell can name), 65,536 number formats, and
+//! four bytes for each shared string, of which a stream of `n` bytes holds
+//! `n / 3`. Every chain of sectors is followed at most as many steps as the
+//! file has sectors, so a chain that loops is refused.
 //!
 //! # The interface
 //!
@@ -146,12 +156,15 @@ fn is_custom_format_id(id: u16) -> bool {
     matches!(id, 5..=8 | 23..=26 | 41..=44 | 63..=66 | 164..=382)
 }
 
-/// A worksheet: its name and where its records start in the stream.
-#[derive(Clone, Debug)]
+/// A worksheet: where its records are in the stream.
+#[derive(Clone, Copy, Debug)]
 struct SheetAt {
-    name: String,
     offset: usize,
+    end: usize,
 }
+
+/// The most cell formats a workbook keeps: a cell names one in 16 bits.
+const MAX_CELL_FORMATS: usize = 65_536;
 
 /// An XLS workbook, open.
 pub(crate) struct Xls {
@@ -190,24 +203,41 @@ impl Xls {
             formats,
             shared: globals.shared,
         };
+        // Where each sheet's records end: where the next one listed starts.
+        let mut starts: Vec<usize> = globals.sheets.iter().map(|sheet| sheet.offset).collect();
+        starts.sort_unstable();
+        if starts.windows(2).any(|pair| pair.first() == pair.last()) {
+            return Err(damaged("two sheets start at the same record"));
+        }
+        let length = context.stream.len();
+        let end_of = |offset: usize| {
+            let next = starts.partition_point(|start| *start <= offset);
+            starts.get(next).copied().unwrap_or(length)
+        };
         // Every sheet is read once, so that a damaged one is found now.
         for sheet in &globals.sheets {
-            let cells = context.cells_at(sheet.offset)?;
-            for cell in cells {
+            let end = end_of(sheet.offset);
+            let mut cells = context.cells_at(sheet.offset, end)?;
+            for cell in &mut cells {
                 cell?;
             }
+            if end < length && !cells.ended() {
+                return Err(damaged("a sheet runs into the sheet after it"));
+            }
         }
-        let sheets: Vec<SheetAt> = globals
-            .sheets
-            .into_iter()
-            .filter(|sheet| sheet.kind == biff::SheetKind::Worksheet)
-            .map(|sheet| SheetAt {
-                name: sheet.name,
-                offset: sheet.offset,
-            })
-            .collect();
+        let mut names = Vec::new();
+        let mut sheets = Vec::new();
+        for sheet in globals.sheets {
+            if sheet.kind == biff::SheetKind::Worksheet {
+                sheets.push(SheetAt {
+                    offset: sheet.offset,
+                    end: end_of(sheet.offset),
+                });
+                names.push(sheet.name);
+            }
+        }
         Ok(Xls {
-            names: sheets.iter().map(|sheet| sheet.name.clone()).collect(),
+            names,
             context,
             sheets,
             date1904: globals.date1904,
@@ -241,7 +271,7 @@ impl Xls {
             .sheets
             .get(sheet)
             .ok_or_else(|| damaged(format!("the workbook has no worksheet {sheet}")))?;
-        self.context.cells_at(sheet.offset)
+        self.context.cells_at(sheet.offset, sheet.end)
     }
 }
 

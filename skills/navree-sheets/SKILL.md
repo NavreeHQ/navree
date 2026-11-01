@@ -266,7 +266,7 @@ assert_eq!(imports.find(import.id).await?.counts.created, 1);
   thousand-fold; the XLSX and XLSB readers keep the shared strings and a
   cell's text whole; an XLS file's workbook stream is copied and held):
   `sheets.imports.max_inflated_bytes` (1 GiB) refuses a workbook (XLSX, XLSB,
-  ODS, however detected, even behind another header) with a part that declares more than that unpacked, before reading it, and an XLS file whose workbook stream is larger; shared strings are kept
+  ODS, however detected, even behind another header) with a part that declares more than that unpacked, before reading it, and an XLS file whose workbook stream is larger. Opening can't be interrupted, so it is bounded: everything it keeps counts against one budget of that size, at most 65,535 sheets, 16 MiB for one element, string or XLSB record, 256 levels of nesting, and at most four times the limit unpacked in all; an XLS stream is gone through at most twice, and sheets listed at one place or overlapping make the file unreadable. Shared strings are kept
   trimmed in one text (4 bytes per string besides it) and count against the
   same limit; a declared count of strings reserves nothing;
   the zip reader stops a part at its declared size, so a lie in either

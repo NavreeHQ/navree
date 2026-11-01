@@ -5,23 +5,34 @@
 //!
 //! A reader holds what every sheet needs (the shared strings, which number
 //! formats are dates, the sheet names) and streams the sheet it is asked
-//! for: no reader holds a sheet. What a reader keeps is bounded by
-//! [`Limits`], and a part of the zip file stops at the size the file
-//! declares for it.
+//! for: no reader holds a sheet. A part of the zip file stops at the size the
+//! file declares for it.
+//!
+//! Opening a workbook cannot be interrupted, so it is bounded in memory and
+//! in work. Everything a zip workbook keeps while it opens is charged to one
+//! [`Budget`] of `max_part_bytes`, and what it unpacks to four times that, for
+//! all the readers it tries together. Each part is read in one pass, in time
+//! in proportion to its bytes; a sheet's part is not read until a sheet is
+//! asked for, and that reading can stop at any cell. An XLS workbook holds its
+//! stream and its shared strings, each with a limit of its own, and goes
+//! through the stream at most twice ([`super::xls`]).
 
 mod archive;
 pub(crate) mod dates;
 mod ods;
+mod package;
 mod xlsb;
 mod xlsx;
 mod xml;
 
 #[cfg(test)]
-mod parity_tests;
+pub(crate) mod parity_tests;
 #[cfg(test)]
 pub(crate) mod xlsb_writer;
 
 use std::borrow::Cow;
+use std::cell::Cell as Counter;
+use std::collections::TryReserveError;
 use std::fmt;
 use std::marker::PhantomData;
 
@@ -33,14 +44,98 @@ use crate::{Cell, SheetsError};
 /// What a workbook reader may hold.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Limits {
-    /// The most a part of the zip file may unpack to, and the most the
-    /// shared strings, held for the whole reading, may take; for XLS, the
-    /// most its workbook stream may hold.
+    /// The most a part of the zip file may unpack to, and the most all that
+    /// a zip workbook keeps while it opens may take (the shared strings,
+    /// held for the whole reading, the sheet names, the relationships and
+    /// the formats); for XLS, the most its workbook stream may hold.
     pub(crate) max_part_bytes: u64,
-    /// The most text one cell may be made of, where a file can make more
-    /// text than it holds (ODS repeats a space as many times as it says);
-    /// for XLS, the most text its shared strings may hold.
+    /// The most text one row of an ODS sheet may be made of, where a file
+    /// can make more text than it holds (ODS repeats a space as many times as
+    /// it says); for XLS, the most text its shared strings may hold.
     pub(crate) max_text_bytes: u64,
+}
+
+/// The most sheets a workbook may have, in every format: the most Excel can
+/// number. A sheet costs a place in several lists, and no workbook needs more.
+pub(crate) const MAX_SHEETS: usize = 65_535;
+
+/// That a workbook has more sheets than one may have.
+pub(crate) fn too_many_sheets() -> String {
+    format!("The workbook has more than {MAX_SHEETS} sheets.")
+}
+
+/// What opening a zip workbook may cost: what it keeps and what it reads,
+/// counted across every list it builds and every part it unpacks.
+#[derive(Debug)]
+pub(crate) struct Budget {
+    limit: u64,
+    held: Counter<u64>,
+    max_read: u64,
+    read: Counter<u64>,
+}
+
+impl Budget {
+    fn new(limits: Limits) -> Self {
+        Budget {
+            limit: limits.max_part_bytes,
+            held: Counter::new(0),
+            // However a valid workbook shares out its bytes, it is read well
+            // within this; a limit that small still reads a small file.
+            max_read: limits.max_part_bytes.saturating_mul(4).max(1 << 20),
+            read: Counter::new(0),
+        }
+    }
+
+    /// Counts `bytes` that opening keeps, and refuses the file when that
+    /// makes more than the limit.
+    fn hold(&self, bytes: usize) -> Result<(), Damaged> {
+        let held = self.held.get().saturating_add(bytes as u64);
+        self.held.set(held);
+        if held > self.limit {
+            return Err(damaged(format_args!(
+                "what it holds to be opened takes more than {} bytes",
+                self.limit
+            )));
+        }
+        Ok(())
+    }
+
+    /// Counts `bytes` that opening unpacks; false when that makes more than
+    /// it may read.
+    fn charge_read(&self, bytes: usize) -> bool {
+        let read = self.read.get().saturating_add(bytes as u64);
+        self.read.set(read);
+        read <= self.max_read
+    }
+
+    /// Whether opening has read all it may, so that no reader can read the
+    /// file.
+    fn read_out(&self) -> bool {
+        self.read.get() > self.max_read
+    }
+
+    /// The reader that held these has given up, and they are gone with it.
+    fn release(&self) {
+        self.held.set(0);
+    }
+}
+
+/// The room a list of `capacity` should grow to, to hold `needed`: double, as
+/// a list does, but never past `limit` unless the list itself must be.
+fn room_for(capacity: usize, needed: usize, limit: u64) -> usize {
+    capacity
+        .saturating_mul(2)
+        .min(usize::try_from(limit).unwrap_or(usize::MAX))
+        .max(needed)
+}
+
+/// Makes room in `text` for `more` bytes, within `limit`.
+pub(crate) fn make_room(text: &mut String, more: usize, limit: u64) -> Result<(), TryReserveError> {
+    let needed = text.len().saturating_add(more);
+    if needed <= text.capacity() {
+        return Ok(());
+    }
+    text.try_reserve_exact(room_for(text.capacity(), needed, limit) - text.len())
 }
 
 /// A value of a cell.
@@ -179,21 +274,31 @@ impl<'a> Workbook<'a> {
 
     fn open_zip(bytes: &'a [u8], limits: Limits) -> Result<Self, SheetsError> {
         let archive = Archive::open(bytes)?;
-        let xlsx = match xlsx::Xlsx::open(&archive, limits) {
+        let budget = Budget::new(limits);
+        let xlsx = match xlsx::Xlsx::open(&archive, &budget) {
             Ok(xlsx) => return Ok(Workbook::Xlsx(xlsx)),
             Err(error) => error,
         };
-        let xlsb = match xlsb::Xlsb::open(&archive, limits) {
+        budget.release();
+        let xlsb = match xlsb::Xlsb::open(&archive, &budget) {
             Ok(xlsb) => return Ok(Workbook::Xlsb(xlsb)),
             Err(error) => error,
         };
-        let ods = match ods::Ods::open(&archive, limits) {
+        budget.release();
+        let ods = match ods::Ods::open(&archive, limits, &budget) {
             Ok(ods) => return Ok(Workbook::Ods(ods)),
             Err(error) => error,
         };
+        if budget.read_out() {
+            return Err(SheetsError::UnsupportedFile(format!(
+                "The workbook takes more than {} bytes of reading to open.",
+                budget.max_read
+            )));
+        }
         Err(if archive.has("mimetype") {
             ods
-        } else if archive.has("xl/workbook.bin") {
+        } else if archive.has("xl/workbook.bin") || xlsb::names_a_binary_workbook(&archive, &budget)
+        {
             xlsb
         } else {
             xlsx
@@ -209,8 +314,8 @@ impl<'a> Workbook<'a> {
         }
     }
 
-    /// The names of the sheets, in the workbook's order: chart sheets too,
-    /// but for XLS, whose chart sheets are not listed.
+    /// The names of the sheets, in the workbook's order: chart and macro
+    /// sheets too, but for XLS, whose chart and macro sheets are not listed.
     pub(crate) fn sheet_names(&self) -> &[String] {
         match self {
             Workbook::Xlsx(book) => book.sheet_names(),
@@ -221,7 +326,7 @@ impl<'a> Workbook<'a> {
     }
 
     /// Reads the cells of the sheet at `sheet` with `read`, given none when
-    /// the sheet holds no cells to read (a chart sheet).
+    /// the sheet holds no cells to read (a chart or a macro sheet).
     pub(crate) fn read_cells<T>(
         &self,
         sheet: usize,
@@ -311,13 +416,25 @@ impl SharedStrings {
         }
     }
 
+    /// No strings yet, in what `budget` has left.
+    fn within(budget: &Budget) -> Self {
+        SharedStrings {
+            taken: budget.held.get(),
+            ..Self::new(budget.limit)
+        }
+    }
+
     /// Adds `text`, trimmed, after counting what it takes.
     fn push(&mut self, text: &str) -> Result<(), SheetsError> {
         let text = text.trim();
         self.taken = self.taken.saturating_add(text.len() as u64 + 4);
         let end = u32::try_from(self.text.len() + text.len());
         let Ok(end) = end.map_err(drop).and_then(|end| {
-            if self.taken > self.limit {
+            let ends = room_for(self.ends.capacity(), self.ends.len() + 1, self.limit / 4);
+            if self.taken > self.limit
+                || make_room(&mut self.text, text.len(), self.limit).is_err()
+                || self.ends.try_reserve_exact(ends - self.ends.len()).is_err()
+            {
                 Err(())
             } else {
                 Ok(end)
@@ -331,6 +448,14 @@ impl SharedStrings {
         self.text.push_str(text);
         self.ends.push(end);
         Ok(())
+    }
+
+    /// The strings are all in: they keep no room to grow, and `budget` has
+    /// counted what they take.
+    fn finish(&mut self, budget: &Budget) {
+        self.text.shrink_to_fit();
+        self.ends.shrink_to_fit();
+        budget.held.set(self.taken);
     }
 
     fn get(&self, index: usize) -> Option<&str> {

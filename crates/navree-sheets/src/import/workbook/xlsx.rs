@@ -1,22 +1,29 @@
 //! XLSX workbooks (and XLSM): SpreadsheetML parts in a zip file.
 //!
 //! Opening reads the package's relationships (where the workbook is), the
-//! shared strings, the cell formats (which show dates), the workbook's
-//! relationships and the workbook (its sheets and date system). A sheet is
-//! then read as a stream of its cells.
+//! workbook's relationships (where its parts are), the shared strings, the
+//! cell formats (which show dates) and the workbook (its sheets and date
+//! system). A sheet is then read as a stream of its cells.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
-use std::io::BufRead;
 
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::name::QName;
 
-use super::dates::{builtin_id_shows_date, excel_date, shows_date};
-use super::xml::{self, attribute, attributes, attributes_of, decode, push_entity, unescape_excel};
-use super::{Archive, CellSource, Damaged, Limits, SharedStrings, SourceCell, Value, damaged};
+use super::dates::{
+    builtin_id_shows_date, excel_date, finite_number, iso_date, iso_time, shows_date,
+};
+use super::package::{self, Kind as PartKind, Relationships};
+use super::xml::{
+    self, MAX_LENGTH, Xml, attribute, attributes, attributes_of, decode, push_entity, too_long,
+    unescape_excel,
+};
+use super::{
+    Archive, Budget, CellSource, Damaged, MAX_SHEETS, SharedStrings, SourceCell, Value, damaged,
+    too_many_sheets,
+};
 use crate::{Cell, SheetsError};
-
-type Xml<'r> = quick_xml::Reader<&'r mut dyn BufRead>;
 
 /// An XLSX workbook, opened.
 pub(crate) struct Xlsx<'a> {
@@ -27,24 +34,41 @@ pub(crate) struct Xlsx<'a> {
     /// Whether dates count from 1904.
     is_1904: bool,
     names: Vec<String>,
-    /// The part of each sheet.
-    paths: Vec<String>,
+    /// The workbook's relationships.
+    relationships: Relationships,
+    /// The relationship of each sheet, by its place.
+    sheets: Vec<usize>,
 }
 
 impl<'a> Xlsx<'a> {
-    pub(super) fn open(archive: &Archive<'a>, limits: Limits) -> Result<Self, SheetsError> {
-        let folder = workbook_folder(archive)?;
-        let strings = shared_strings(archive, &folder, limits)?;
-        let dates = date_formats(archive, &folder)?;
-        let relationships = relationships(archive, &folder)?;
-        let (names, paths, is_1904) = sheets(archive, &folder, &relationships)?;
+    pub(super) fn open(archive: &Archive<'a>, budget: &Budget) -> Result<Self, SheetsError> {
+        let workbook = workbook_part(archive, budget)?;
+        let folder = package::folder_of(&workbook);
+        let rels = package::relationships_of(&workbook);
+        let relationships = Relationships::read(archive, budget, &rels, folder)?
+            .ok_or_else(|| damaged(format_args!("the file has no {rels} part")))?;
+        // Parts the relationships do not name are looked for where they
+        // usually are.
+        let named = |kind, name: &str| {
+            relationships
+                .part_of(kind)
+                .map_or_else(|| format!("{folder}{name}"), str::to_owned)
+        };
+        let strings = shared_strings(
+            archive,
+            &named(PartKind::SharedStrings, "sharedStrings.xml"),
+            budget,
+        )?;
+        let dates = date_formats(archive, &named(PartKind::Styles, "styles.xml"), budget)?;
+        let (names, sheets, is_1904) = sheets(archive, &workbook, &relationships, budget)?;
         Ok(Xlsx {
             archive: archive.clone(),
             strings,
             dates,
             is_1904,
             names,
-            paths,
+            relationships,
+            sheets,
         })
     }
 
@@ -57,10 +81,15 @@ impl<'a> Xlsx<'a> {
         sheet: usize,
         read: impl FnOnce(Option<&mut dyn CellSource>) -> Result<T, SheetsError>,
     ) -> Result<T, SheetsError> {
-        let path = self
-            .paths
+        let sheet = self
+            .sheets
             .get(sheet)
+            .and_then(|place| self.relationships.get(*place))
             .ok_or_else(|| damaged("the workbook has no such sheet"))?;
+        if sheet.kind == PartKind::Macrosheet {
+            return read(None);
+        }
+        let path = &sheet.part;
         let read = self.archive.read(self.archive.name_of(path), |source| {
             let mut xml = xml::reader(source);
             if !find_sheet_data(&mut xml)? {
@@ -87,12 +116,6 @@ impl<'a> Xlsx<'a> {
     }
 }
 
-/// The next event of `xml`, read into `buf`.
-fn next<'b>(xml: &mut Xml<'_>, buf: &'b mut Vec<u8>) -> Result<Event<'b>, Damaged> {
-    buf.clear();
-    Ok(xml.read_event_into(buf)?)
-}
-
 fn is(element: &BytesStart<'_>, name: &str) -> bool {
     element.local_name().as_ref() == name
 }
@@ -105,63 +128,34 @@ fn missing(what: &str) -> Damaged {
     damaged(format_args!("{what} ends before it is complete"))
 }
 
-/// The folder of the workbook part, which the package's relationships name
-/// (`xl/`).
-fn workbook_folder(archive: &Archive<'_>) -> Result<String, Damaged> {
-    let target = archive.read(archive.name_of("_rels/.rels"), |source| {
-        let mut xml = xml::reader(source);
-        let mut buf = Vec::new();
-        loop {
-            match next(&mut xml, &mut buf)? {
-                Event::Start(e) if is(&e, "Relationships") => break,
-                Event::Eof => return Err(missing("_rels/.rels")),
-                _ => {}
-            }
-        }
-        let mut target = None;
-        loop {
-            match next(&mut xml, &mut buf)? {
-                Event::Start(e) if is(&e, "Relationship") => {
-                    let [kind, to] = attributes_of(&e, ["Type", "Target"])?;
-                    if let (true, Some(to)) = (
-                        kind.is_some_and(|kind| kind.ends_with("/relationships/officeDocument")),
-                        to,
-                    ) {
-                        target = Some(decode(to)?.into_owned());
-                    }
-                }
-                Event::End(e) if ends(&e, "Relationships") => break,
-                Event::Eof => return Err(missing("_rels/.rels")),
-                _ => {}
-            }
-        }
-        Ok(target)
-    })?;
-    let target = target
-        .ok_or_else(|| damaged("the file has no _rels/.rels part"))?
+/// The workbook part, which the package's relationships name. A binary one
+/// is an XLSB workbook's.
+fn workbook_part(archive: &Archive<'_>, budget: &Budget) -> Result<String, Damaged> {
+    let relationships = Relationships::read(archive, budget, package::PACKAGE, "")?
+        .ok_or_else(|| damaged("the file has no _rels/.rels part"))?;
+    let part = relationships
+        .part_of(PartKind::Workbook)
         .ok_or_else(|| damaged("the file names no workbook part"))?;
-    let folder = match target.rfind('/') {
-        Some(at) => &target[..=at],
-        None => "",
-    };
-    Ok(folder.strip_prefix('/').unwrap_or(folder).to_owned())
+    if package::is_binary(part) {
+        return Err(damaged("the workbook part is a binary one"));
+    }
+    Ok(part.to_owned())
 }
 
-/// The shared strings, rich text joined; none when the workbook has no
-/// part for them. The count the part declares is not used: the strings are
-/// counted as they come.
+/// The shared strings in the part `path`, rich text joined; none when the
+/// workbook has no such part. The count the part declares is not used: the
+/// strings are counted as they come.
 fn shared_strings(
     archive: &Archive<'_>,
-    folder: &str,
-    limits: Limits,
+    path: &str,
+    budget: &Budget,
 ) -> Result<SharedStrings, SheetsError> {
-    let path = format!("{folder}sharedStrings.xml");
-    let strings = archive.read(archive.name_of(&path), |source| {
-        let mut strings = SharedStrings::new(limits.max_part_bytes);
+    let strings = archive.read_opening(archive.name_of(path), budget, |source| {
+        let mut strings = SharedStrings::within(budget);
         let mut xml = xml::reader(source);
         let (mut buf, mut inner, mut text_buf) = (Vec::new(), Vec::new(), Vec::new());
         loop {
-            match next(&mut xml, &mut buf)? {
+            match xml.next(&mut buf)? {
                 Event::Start(e) if is(&e, "sst") => {
                     attribute(&e, "uniqueCount")?;
                     break;
@@ -171,7 +165,7 @@ fn shared_strings(
             }
         }
         loop {
-            match next(&mut xml, &mut buf)? {
+            match xml.next(&mut buf)? {
                 Event::Start(e) if is(&e, "si") => {
                     let text = read_string(&mut xml, e.name(), &mut inner, &mut text_buf)?;
                     strings.push(&text)?;
@@ -181,15 +175,16 @@ fn shared_strings(
                 _ => {}
             }
         }
+        strings.finish(budget);
         Ok::<_, SheetsError>(strings)
     })?;
-    Ok(strings.unwrap_or_else(|| SharedStrings::new(limits.max_part_bytes)))
+    Ok(strings.unwrap_or_else(|| SharedStrings::within(budget)))
 }
 
 /// The text of a string element (`<si>`, `<is>`) up to its end `closing`:
 /// its `<t>` texts joined, without the phonetic runs (`<rPh>`). A `<t>`
 /// that does not preserve its spaces loses the spaces, tabs and line breaks
-/// round it.
+/// round it. Made in place, so one string is never held twice over here.
 fn read_string(
     xml: &mut Xml<'_>,
     closing: QName<'_>,
@@ -199,29 +194,38 @@ fn read_string(
     let mut text = String::new();
     let mut phonetic = false;
     loop {
-        match next(xml, buf)? {
+        match xml.next(buf)? {
             Event::Start(e) if is(&e, "rPh") => phonetic = true,
             Event::End(e) if e.name() == closing => return Ok(text),
             Event::End(e) if ends(&e, "rPh") => phonetic = false,
             Event::Start(e) if is(&e, "t") && !phonetic => {
                 let preserve = attribute(&e, "xml:space")? == Some("preserve");
-                let mut value = String::new();
+                let start = text.len();
                 loop {
-                    match next(xml, text_buf)? {
-                        Event::Text(t) => value.push_str(&t.xml10_content()),
-                        Event::CData(t) => value.push_str(&t.xml10_content()),
-                        Event::GeneralRef(entity) => push_entity(&entity, &mut value)?,
+                    match xml.next(text_buf)? {
+                        Event::Text(t) => text.push_str(&t.xml10_content()),
+                        Event::CData(t) => text.push_str(&t.xml10_content()),
+                        Event::GeneralRef(entity) => push_entity(&entity, &mut text)?,
                         Event::End(end) if end.name() == e.name() => break,
                         Event::Eof => return Err(missing("a string")),
                         _ => {}
                     }
+                    if text.len() > MAX_LENGTH {
+                        return Err(too_long());
+                    }
                 }
-                let value = if preserve {
-                    &value
-                } else {
-                    value.trim_matches([' ', '\t', '\r', '\n'])
-                };
-                text.push_str(&unescape_excel(value));
+                if !preserve {
+                    let spaces = [' ', '\t', '\r', '\n'];
+                    let value = &text[start..];
+                    let kept = value.trim_end_matches(spaces).len();
+                    let before = kept - value[..kept].trim_start_matches(spaces).len();
+                    text.truncate(start + kept);
+                    text.drain(start..start + before);
+                }
+                if let Cow::Owned(unescaped) = unescape_excel(&text[start..]) {
+                    text.truncate(start);
+                    text.push_str(&unescaped);
+                }
             }
             Event::Eof => return Err(missing("a string")),
             _ => {}
@@ -229,24 +233,27 @@ fn read_string(
     }
 }
 
-/// Whether each cell format shows a number as a date: by its custom number
-/// format (`numFmts`) when it has one, by the built-in format's id when not.
-fn date_formats(archive: &Archive<'_>, folder: &str) -> Result<Vec<bool>, Damaged> {
-    let path = format!("{folder}styles.xml");
-    let dates = archive.read(archive.name_of(&path), |source| {
+/// Whether each cell format in the part `path` shows a number as a date: by
+/// its custom number format (`numFmts`) when it has one, by the built-in
+/// format's id when not. A custom format is looked at once, when it is read,
+/// however many cell formats use it.
+fn date_formats(archive: &Archive<'_>, path: &str, budget: &Budget) -> Result<Vec<bool>, Damaged> {
+    let dates = archive.read_opening(archive.name_of(path), budget, |source| {
         let mut xml = xml::reader(source);
         let (mut buf, mut inner) = (Vec::new(), Vec::new());
-        let mut custom: HashMap<String, String> = HashMap::new();
+        let mut custom: HashMap<String, bool> = HashMap::new();
         let mut dates = Vec::new();
         loop {
-            match next(&mut xml, &mut buf)? {
+            match xml.next(&mut buf)? {
                 Event::Start(e) if is(&e, "numFmts") => loop {
-                    match next(&mut xml, &mut inner)? {
+                    match xml.next(&mut inner)? {
                         Event::Start(e) if is(&e, "numFmt") => {
                             if let [Some(id), Some(code)] =
                                 attributes_of(&e, ["numFmtId", "formatCode"])?
                             {
-                                custom.insert(id.to_owned(), decode(code)?.into_owned());
+                                // The entry in the table, besides the id.
+                                budget.hold(id.len() + 32)?;
+                                custom.insert(id.to_owned(), shows_date(&decode(code)?));
                             }
                         }
                         Event::End(e) if ends(&e, "numFmts") => break,
@@ -255,13 +262,14 @@ fn date_formats(archive: &Archive<'_>, folder: &str) -> Result<Vec<bool>, Damage
                     }
                 },
                 Event::Start(e) if is(&e, "cellXfs") => loop {
-                    match next(&mut xml, &mut inner)? {
+                    match xml.next(&mut inner)? {
                         Event::Start(e) if is(&e, "xf") => {
+                            budget.hold(1)?;
                             dates.push(attribute(&e, "numFmtId")?.is_some_and(|id| {
-                                custom.get(id).map_or_else(
-                                    || builtin_id_shows_date(id),
-                                    |code| shows_date(code),
-                                )
+                                custom
+                                    .get(id)
+                                    .copied()
+                                    .unwrap_or_else(|| builtin_id_shows_date(id))
                             }));
                         }
                         Event::End(e) if ends(&e, "cellXfs") => break,
@@ -279,52 +287,21 @@ fn date_formats(archive: &Archive<'_>, folder: &str) -> Result<Vec<bool>, Damage
     Ok(dates.unwrap_or_default())
 }
 
-/// The workbook's relationships: target and type by id.
-fn relationships(
-    archive: &Archive<'_>,
-    folder: &str,
-) -> Result<HashMap<String, (String, String)>, Damaged> {
-    let path = format!("{folder}_rels/workbook.xml.rels");
-    let found = archive.read(archive.name_of(&path), |source| {
-        let mut xml = xml::reader(source);
-        let mut buf = Vec::new();
-        let mut relationships = HashMap::new();
-        loop {
-            match next(&mut xml, &mut buf)? {
-                Event::Start(e) if is(&e, "Relationship") => {
-                    if let [Some(id), kind, target] = attributes_of(&e, ["Id", "Type", "Target"])? {
-                        relationships.insert(
-                            id.to_owned(),
-                            (
-                                target.unwrap_or_default().to_owned(),
-                                kind.unwrap_or_default().to_owned(),
-                            ),
-                        );
-                    }
-                }
-                Event::End(e) if ends(&e, "Relationships") => break,
-                Event::Eof => return Err(missing("the workbook's relationships")),
-                _ => {}
-            }
-        }
-        Ok(relationships)
-    })?;
-    found.ok_or_else(|| damaged(format_args!("the file has no {path} part")))
-}
-
-/// The sheets' names and parts, and whether dates count from 1904.
+/// The sheets of the workbook part `path`: their names, the place of the
+/// relationship of each, and whether dates count from 1904.
 fn sheets(
     archive: &Archive<'_>,
-    folder: &str,
-    relationships: &HashMap<String, (String, String)>,
-) -> Result<(Vec<String>, Vec<String>, bool), Damaged> {
-    let path = format!("{folder}workbook.xml");
-    let found = archive.read(archive.name_of(&path), |source| {
+    path: &str,
+    relationships: &Relationships,
+    budget: &Budget,
+) -> Result<(Vec<String>, Vec<usize>, bool), Damaged> {
+    let found = archive.read_opening(archive.name_of(path), budget, |source| {
         let mut xml = xml::reader(source);
         let (mut buf, mut inner) = (Vec::new(), Vec::new());
-        let (mut names, mut paths, mut is_1904) = (Vec::new(), Vec::new(), false);
+        let (mut names, mut sheets, mut is_1904) = (Vec::new(), Vec::new(), false);
+        let mut entity = String::new();
         loop {
-            match next(&mut xml, &mut buf)? {
+            match xml.next(&mut buf)? {
                 Event::Start(e) if is(&e, "sheet") => {
                     let mut name = String::new();
                     let mut id = "";
@@ -345,21 +322,29 @@ fn sheets(
                             _ => {}
                         }
                     }
-                    let (target, kind) = relationships
-                        .get(id)
+                    let place = relationships
+                        .place_of(id)
                         .ok_or_else(|| damaged(format_args!("the sheet `{name}` has no part")))?;
+                    let kind = relationships.get(place).map(|sheet| sheet.kind);
                     if !matches!(
-                        kind.rsplit('/').next(),
-                        Some("worksheet" | "chartsheet" | "dialogsheet")
+                        kind,
+                        Some(
+                            PartKind::Worksheet
+                                | PartKind::Chartsheet
+                                | PartKind::Dialogsheet
+                                | PartKind::Macrosheet
+                        )
                     ) {
                         return Err(damaged(format_args!(
                             "the sheet `{name}` is of an unknown type"
                         )));
                     }
-                    paths.push(match target.strip_prefix('/') {
-                        Some(absolute) => absolute.to_owned(),
-                        None => format!("{folder}{target}"),
-                    });
+                    if names.len() >= MAX_SHEETS {
+                        return Err(Damaged(too_many_sheets()));
+                    }
+                    // A name, and its place in two lists.
+                    budget.hold(name.len() + 32)?;
+                    sheets.push(place);
                     names.push(name);
                 }
                 Event::Start(e) if is(&e, "workbookPr") => {
@@ -370,10 +355,13 @@ fn sheets(
                 Event::Start(e) if is(&e, "definedName") => {
                     if let Some(name) = attribute(&e, "name")? {
                         decode(name)?;
-                        let mut value = String::new();
+                        // Checked as it is read, and not kept.
                         loop {
-                            match next(&mut xml, &mut inner)? {
-                                Event::GeneralRef(entity) => push_entity(&entity, &mut value)?,
+                            entity.clear();
+                            match xml.next(&mut inner)? {
+                                Event::GeneralRef(reference) => {
+                                    push_entity(&reference, &mut entity)?;
+                                }
                                 Event::End(end) if end.name() == e.name() => break,
                                 Event::Eof => return Err(missing("the workbook")),
                                 _ => {}
@@ -386,7 +374,7 @@ fn sheets(
                 _ => {}
             }
         }
-        Ok((names, paths, is_1904))
+        Ok((names, sheets, is_1904))
     })?;
     Ok(found.unwrap_or_default())
 }
@@ -397,7 +385,7 @@ fn find_sheet_data(xml: &mut Xml<'_>) -> Result<bool, Damaged> {
     let mut buf = Vec::new();
     let mut other = false;
     loop {
-        match next(xml, &mut buf)? {
+        match xml.next(&mut buf)? {
             Event::Start(e) if is(&e, "dimension") => {
                 let range = attribute(&e, "ref")?
                     .ok_or_else(|| damaged("the sheet's dimension has no range"))?;
@@ -521,7 +509,7 @@ impl CellSource for XlsxCells<'_, '_> {
             return Ok(None);
         }
         loop {
-            match next(&mut self.xml, &mut self.buf)? {
+            match self.xml.next(&mut self.buf)? {
                 Event::Start(e) if is(&e, "row") => {
                     if let Some(at) = attribute(&e, "r")? {
                         self.row = position(at)?.0;
@@ -557,9 +545,9 @@ impl CellSource for XlsxCells<'_, '_> {
                     let kind = Kind::of(kind);
                     let mut found = Found::Empty;
                     loop {
-                        match next(&mut self.xml, &mut self.cell_buf)? {
+                        match self.xml.next(&mut self.cell_buf)? {
                             Event::Start(value) => {
-                                found = read_value(
+                                let read = read_value(
                                     &mut self.xml,
                                     &value,
                                     &kind,
@@ -569,6 +557,9 @@ impl CellSource for XlsxCells<'_, '_> {
                                     [&mut self.value_buf, &mut self.text_buf],
                                     &mut self.text,
                                 )?;
+                                if let Some(read) = read {
+                                    found = read;
+                                }
                             }
                             Event::End(end) if ends(&end, "c") => break,
                             Event::Eof => return Err(missing("a cell").into()),
@@ -607,7 +598,8 @@ impl CellSource for XlsxCells<'_, '_> {
 }
 
 /// The value of an element of a cell: its value (`<v>`), its inline string
-/// (`<is>`) or its formula (`<f>`, which holds no value).
+/// (`<is>`) or its formula (`<f>`, which holds no value). Any other element
+/// (`<extLst>`) says nothing about the value: none.
 #[allow(clippy::too_many_arguments)]
 fn read_value(
     xml: &mut Xml<'_>,
@@ -618,16 +610,16 @@ fn read_value(
     strings: &SharedStrings,
     [buf, text_buf]: [&mut Vec<u8>; 2],
     text: &mut String,
-) -> Result<Found, Damaged> {
+) -> Result<Option<Found>, Damaged> {
     let name = element.name();
-    match element.local_name().as_ref() {
+    Ok(Some(match element.local_name().as_ref() {
         "is" => {
             *text = read_string(xml, name, buf, text_buf)?;
-            Ok(Found::Text)
+            Found::Text
         }
         "v" if *kind == Kind::Inline => {
-            xml.read_to_end_into(name, buf)?;
-            Ok(Found::Empty)
+            xml.skip(name, buf)?;
+            Found::Empty
         }
         "v" if matches!(
             kind,
@@ -635,45 +627,59 @@ fn read_value(
         ) =>
         {
             // These values are numbers or names: the first text is the value.
-            let found = match next(xml, buf)? {
+            let found = match xml.next(buf)? {
                 Event::Text(value) => plain_value(&value, kind, date, is_1904, strings, text)?,
-                Event::End(end) if end.name() == name => return Ok(Found::Empty),
+                Event::End(end) if end.name() == name => return Ok(Some(Found::Empty)),
                 Event::Eof => return Err(missing("a value")),
                 _ => Found::Empty,
             };
-            xml.read_to_end_into(name, buf)?;
-            Ok(found)
+            xml.skip(name, buf)?;
+            found
         }
         "v" => {
             text.clear();
             loop {
-                match next(xml, buf)? {
+                match xml.next(buf)? {
                     Event::Text(value) => text.push_str(&value.xml10_content()),
                     Event::GeneralRef(entity) => push_entity(&entity, text)?,
                     Event::End(end) if end.name() == name => break,
                     Event::Eof => return Err(missing("a value")),
                     _ => {}
                 }
+                if text.len() > MAX_LENGTH {
+                    return Err(too_long());
+                }
             }
             match kind {
-                Kind::Date => Ok(Found::Text),
+                // A date in ISO 8601; text that is not one stays text.
+                Kind::Date => {
+                    match iso_date(text.trim()).or_else(|| iso_time(text.trim(), is_1904)) {
+                        Some(cell) => Found::Typed(cell),
+                        None => Found::Text,
+                    }
+                }
                 Kind::Formula => {
-                    if let std::borrow::Cow::Owned(unescaped) = unescape_excel(text) {
+                    if let Cow::Owned(unescaped) = unescape_excel(text) {
                         *text = unescaped;
                     }
-                    Ok(Found::Text)
+                    Found::Text
                 }
-                _ => Err(damaged(format_args!(
-                    "a cell has the unknown type {kind:?}"
-                ))),
+                _ => {
+                    return Err(damaged(format_args!(
+                        "a cell has the unknown type {kind:?}"
+                    )));
+                }
             }
         }
         "f" => {
-            xml.read_to_end_into(name, buf)?;
-            Ok(Found::Empty)
+            xml.skip(name, buf)?;
+            Found::Empty
         }
-        _ => Err(damaged("a cell holds an element that is not a value")),
-    }
+        _ => {
+            xml.skip(name, buf)?;
+            return Ok(None);
+        }
+    }))
 }
 
 /// A value written as a number, a shared string's index, a boolean or an
@@ -717,16 +723,16 @@ fn plain_value(
             }
         },
         _ if value.is_empty() => Found::Empty,
-        _ => match value.parse::<f64>() {
-            Ok(number) if date => Found::Typed(excel_date(number, is_1904)),
-            Ok(number) => Found::Typed(Cell::Float(number)),
+        _ => match finite_number(value) {
+            Some(number) if date => Found::Typed(excel_date(number, is_1904)),
+            Some(number) => Found::Typed(Cell::Float(number)),
             // A value without a type that is not a number is text.
-            Err(_) if *kind == Kind::Unset => {
+            None if *kind == Kind::Unset => {
                 text.clear();
                 text.push_str(value);
                 Found::Text
             }
-            Err(_) => return Err(damaged(format_args!("`{value}` is not a number"))),
+            None => return Err(damaged(format_args!("`{value}` is not a number"))),
         },
     })
 }

@@ -342,7 +342,7 @@ pub(crate) fn samples() -> Vec<(&'static str, Vec<u8>)> {
         (4, Real(1.25)),
         (5, Real(0.256)),
         (6, RkFloat(0.25, false)),
-        // An integer stays one whatever its format.
+        // A whole number in a date format is a date, as a float is.
         (1, RkInt(46082, false)),
         (1, RkInt(4608200, true)),
     ]

@@ -2,7 +2,7 @@
 //! number formats show a number as a date, a time or a duration, and the
 //! date or time a number stands for.
 
-use chrono::{NaiveDate, NaiveTime, TimeDelta};
+use chrono::{Datelike, NaiveDate, NaiveTime, TimeDelta};
 
 use crate::Cell;
 
@@ -73,27 +73,36 @@ pub(crate) fn shows_date(code: &str) -> bool {
 /// The days between 1900 and 1904, the two dates a workbook counts from.
 const DAYS_1900_TO_1904: f64 = 1462.0;
 
+/// The year of the last day a workbook can show.
+const LAST_YEAR: i32 = 9999;
+
 /// The cell a number shown as a date stands for: the days since the
 /// workbook's epoch (1899-12-30, or 1904-01-01 when `is_1904`), with the
 /// time as the fraction, to the millisecond. A date at midnight is a
-/// [`Cell::Date`]; one out of range stays the number.
+/// [`Cell::Date`]; a number that is not finite, or one past the last day a
+/// workbook can show (9999-12-31), stays the number.
 ///
-/// The days before 1900-03-01 are counted with the day Excel puts on
-/// 1900-02-29, which never was.
+/// In the 1900 system the days before 1900-03-01 are counted with the day
+/// Excel puts on 1900-02-29, which never was. The 1904 system has no such
+/// day.
 pub(crate) fn excel_date(serial: f64, is_1904: bool) -> Cell {
+    if !serial.is_finite() {
+        return Cell::Float(serial);
+    }
     let days = if is_1904 {
         serial + DAYS_1900_TO_1904
-    } else {
+    } else if serial >= 60.0 {
         serial
+    } else {
+        serial + 1.0
     };
-    let days = if days >= 60.0 { days } else { days + 1.0 };
-    // A cast saturates (NaN is 0), as the milliseconds of a date in range
-    // never do.
+    // A cast saturates, as the milliseconds of a date in range never do.
     let milliseconds = (days * 86_400_000.0).round() as i64;
     let at = NaiveDate::from_ymd_opt(1899, 12, 30)
         .map(|day| day.and_time(NaiveTime::MIN))
         .zip(TimeDelta::try_milliseconds(milliseconds))
-        .and_then(|(epoch, since)| epoch.checked_add_signed(since));
+        .and_then(|(epoch, since)| epoch.checked_add_signed(since))
+        .filter(|at| at.date().year() <= LAST_YEAR);
     match at {
         Some(at) if at.time() == NaiveTime::MIN => Cell::Date(at.date()),
         Some(at) => Cell::DateTime(at),
@@ -101,10 +110,12 @@ pub(crate) fn excel_date(serial: f64, is_1904: bool) -> Cell {
     }
 }
 
-/// The date or date and time an ODS file writes (`2026-03-01`,
-/// `2026-03-01T13:45:10.25`), as [`excel_date`] gives it: a date and time at
-/// midnight is a [`Cell::Date`]. None for text of another form.
+/// The date or date and time a file writes in ISO 8601 (`2026-03-01`,
+/// `2026-03-01T13:45:10.25`, with `Z` or without), as [`excel_date`] gives
+/// it: a date and time at midnight is a [`Cell::Date`]. None for text of
+/// another form.
 pub(crate) fn iso_date(text: &str) -> Option<Cell> {
+    let text = text.strip_suffix('Z').unwrap_or(text);
     if let Ok(day) = NaiveDate::parse_from_str(text, "%Y-%m-%d") {
         return Some(Cell::Date(day));
     }
@@ -114,6 +125,23 @@ pub(crate) fn iso_date(text: &str) -> Option<Cell> {
     } else {
         Cell::DateTime(at)
     })
+}
+
+/// The time alone a file writes in ISO 8601 (`13:45:10`), as [`excel_date`]
+/// gives the same fraction of a day: a time on the first day of the date
+/// system. None for text of another form.
+pub(crate) fn iso_time(text: &str, is_1904: bool) -> Option<Cell> {
+    let text = text.strip_suffix('Z').unwrap_or(text);
+    let time = NaiveTime::parse_from_str(text, "%H:%M:%S%.f").ok()?;
+    let seconds = time.signed_duration_since(NaiveTime::MIN).as_seconds_f64();
+    Some(excel_date(seconds / 86_400.0, is_1904))
+}
+
+/// A number as a file writes it. None for text that does not read as a
+/// finite one: `NaN`, `inf` and `1e999` all parse, and a cell holds none of
+/// them.
+pub(crate) fn finite_number(text: &str) -> Option<f64> {
+    text.parse::<f64>().ok().filter(|number| number.is_finite())
 }
 
 /// The time an ODS file writes as a duration (`PT13H45M10S`, `PT30H15M`,

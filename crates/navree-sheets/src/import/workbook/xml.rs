@@ -1,23 +1,126 @@
-//! What the XML readers of XLSX and ODS share: a reader over a part,
-//! attributes as they are written, entities and Excel's `_xHHHH_` escapes.
+//! What the XML readers of XLSX and ODS share: a reader over a part that
+//! holds a bounded amount for any part, attributes as they are written,
+//! entities and Excel's `_xHHHH_` escapes.
+//!
+//! An event is read whole into a buffer, so what a buffer may take is the
+//! longest event. [`MAX_LENGTH`] bounds an event and a string made of several.
+//! Elements still open are remembered by the XML parser, so `MAX_DEPTH` and
+//! `MAX_NAME` bound those to 256 KiB.
 
 use std::borrow::Cow;
-use std::io::BufRead;
+use std::io::{self, BufRead, Read};
 
-use quick_xml::events::{BytesRef, BytesStart};
+use quick_xml::events::{BytesRef, BytesStart, Event};
+use quick_xml::name::QName;
 
 use super::{Damaged, damaged};
 
+/// The most bytes an element's tag or a run of text may take, and the most a
+/// string made of several may take: far over the 98,301 bytes of the longest
+/// text a cell has in Excel, and small beside what a part may hold.
+pub(super) const MAX_LENGTH: usize = 16 * 1024 * 1024;
+
+/// How deep elements may be nested, and how long an element's name may be.
+const MAX_DEPTH: u32 = 256;
+const MAX_NAME: usize = 1024;
+
+/// That an event or a string is longer than one may be.
+pub(super) fn too_long() -> Damaged {
+    damaged(format_args!(
+        "an element or a text is longer than {MAX_LENGTH} bytes"
+    ))
+}
+
+/// A part's bytes, which stop when one event has taken too many.
+struct Capped<'r> {
+    source: &'r mut dyn BufRead,
+    /// What the event being read has taken.
+    used: usize,
+}
+
+impl Read for Capped<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let read = self.source.read(buf)?;
+        self.used = self.used.saturating_add(read);
+        Ok(read)
+    }
+}
+
+impl BufRead for Capped<'_> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        if self.used > MAX_LENGTH {
+            return Err(io::Error::other(too_long().0));
+        }
+        self.source.fill_buf()
+    }
+
+    fn consume(&mut self, amount: usize) {
+        self.used = self.used.saturating_add(amount);
+        self.source.consume(amount);
+    }
+}
+
 /// A reader of a part's XML that turns `<a/>` into a start and an end, keeps
 /// text as it is and does not check that end tags match their start.
-pub(super) fn reader<R: BufRead>(source: R) -> quick_xml::Reader<R> {
-    let mut reader = quick_xml::Reader::from_reader(source);
+pub(super) struct Xml<'r> {
+    reader: quick_xml::Reader<Capped<'r>>,
+    depth: u32,
+}
+
+pub(super) fn reader(source: &mut dyn BufRead) -> Xml<'_> {
+    let mut reader = quick_xml::Reader::from_reader(Capped { source, used: 0 });
     let config = reader.config_mut();
     config.check_end_names = false;
     config.trim_text(false);
     config.check_comments = false;
     config.expand_empty_elements = true;
-    reader
+    Xml { reader, depth: 0 }
+}
+
+impl Xml<'_> {
+    /// The next event, read into `buf`.
+    pub(super) fn next<'b>(&mut self, buf: &'b mut Vec<u8>) -> Result<Event<'b>, Damaged> {
+        buf.clear();
+        self.reader.get_mut().used = 0;
+        let event = self.reader.read_event_into(buf)?;
+        match &event {
+            Event::Start(element) => {
+                if element.name().as_ref().len() > MAX_NAME {
+                    return Err(damaged(format_args!(
+                        "an element's name is longer than {MAX_NAME} bytes"
+                    )));
+                }
+                if self.depth >= MAX_DEPTH {
+                    return Err(damaged(format_args!(
+                        "its elements are nested more than {MAX_DEPTH} deep"
+                    )));
+                }
+                self.depth += 1;
+            }
+            Event::End(_) => self.depth = self.depth.saturating_sub(1),
+            _ => {}
+        }
+        Ok(event)
+    }
+
+    /// Reads up to the end of the element named `name`, just started,
+    /// keeping nothing.
+    pub(super) fn skip(&mut self, name: QName<'_>, buf: &mut Vec<u8>) -> Result<(), Damaged> {
+        let mut depth = 0u32;
+        loop {
+            match self.next(buf)? {
+                Event::Start(element) if element.name() == name => depth += 1,
+                Event::End(end) if end.name() == name => {
+                    if depth == 0 {
+                        return Ok(());
+                    }
+                    depth -= 1;
+                }
+                Event::Eof => return Err(damaged("an element is not closed")),
+                _ => {}
+            }
+        }
+    }
 }
 
 /// The attributes of `element` as they are written: keys with their prefix,

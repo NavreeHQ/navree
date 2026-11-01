@@ -1418,4 +1418,6 @@ mod tests {
 }
 
 #[cfg(test)]
+mod opening_tests;
+#[cfg(test)]
 mod workbook_tests;
