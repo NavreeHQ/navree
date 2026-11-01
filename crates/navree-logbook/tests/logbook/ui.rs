@@ -406,3 +406,124 @@ async fn remote_access_without_an_authorizer_fails_the_boot() {
         .unwrap_err();
     assert!(error.to_string().contains("logbook"), "{error}");
 }
+
+/// A route whose answer shows whether the toolkit's reply layer is in the app.
+struct ReplyRoute;
+
+impl navree_kernel::Injectable for ReplyRoute {
+    fn dependencies() -> Vec<navree_kernel::ProviderKey> {
+        Vec::new()
+    }
+
+    fn construct(
+        _: navree_kernel::Resolver,
+    ) -> navree_kernel::BoxFuture<'static, Result<Self, navree_kernel::KernelError>> {
+        Box::pin(async { Ok(Self) })
+    }
+}
+
+impl navree_http::Controller for ReplyRoute {
+    fn prefix(&self) -> &'static str {
+        ""
+    }
+
+    fn routes(self: Arc<Self>) -> Vec<navree_http::RouteDef> {
+        vec![
+            navree_http::RouteDef::on(http::Method::POST, "!/ui-reply", || async {
+                navree_ui::Reply::redirect("/next")
+            })
+            .public(),
+        ]
+    }
+}
+
+struct ReplyModule;
+
+impl Module for ReplyModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        use navree_http::ModuleBuilderHttpExt;
+        m.controller::<ReplyRoute>();
+    }
+}
+
+async fn ui_routes(app: &navree_testing::TestApp) -> Vec<String> {
+    navree_http::route_table(app.ctx())
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|route| route.full_path.contains("/_navree/ui"))
+        .map(|route| route.full_path)
+        .collect()
+}
+
+#[tokio::test]
+async fn a_logbook_that_is_off_adds_no_toolkit_route_and_no_layer() {
+    let app = navree_testing::TestApp::builder()
+        .module(LogbookModule::from_config())
+        .module(ReplyModule)
+        .build()
+        .await;
+    assert!(!app.get::<Logbook>().await.is_enabled());
+    assert!(ui_routes(&app).await.is_empty(), "{:?}", ui_routes(&app).await);
+    app.client()
+        .get(navree_ui::assets::CORE_URL)
+        .send()
+        .await
+        .assert_status(404);
+    // With the layer in place the runtime would get ops; without it, a redirect.
+    let response = app
+        .client()
+        .post("/ui-reply")
+        .header("x-navree-ui", "1")
+        .send()
+        .await;
+    assert_eq!(response.status(), http::StatusCode::SEE_OTHER);
+}
+
+#[tokio::test]
+async fn a_logbook_that_is_on_serves_the_toolkit() {
+    let app = builder()
+        .module(LogbookModule::from_config())
+        .module(ReplyModule)
+        .build()
+        .await;
+    assert_eq!(ui_routes(&app).await.len(), 1);
+    app.client()
+        .get(navree_ui::assets::CORE_URL)
+        .send()
+        .await
+        .assert_status(200);
+    let response = app
+        .client()
+        .post("/ui-reply")
+        .header("x-navree-ui", "1")
+        .send()
+        .await;
+    assert_eq!(response.status(), http::StatusCode::OK);
+    assert_eq!(
+        response.header("content-type"),
+        Some("application/vnd.navree.ops+json")
+    );
+}
+
+#[tokio::test]
+async fn an_app_that_names_the_toolkit_keeps_it_whatever_logbook_does() {
+    for named_first in [true, false] {
+        let mut app = navree_testing::TestApp::builder();
+        if named_first {
+            app = app.module(navree_ui::UiModule);
+        }
+        app = app.module(LogbookModule::from_config()).module(ReplyModule);
+        if !named_first {
+            app = app.module(navree_ui::UiModule);
+        }
+        let app = app.build().await;
+        assert!(!app.get::<Logbook>().await.is_enabled());
+        assert_eq!(ui_routes(&app).await.len(), 1, "named_first {named_first}");
+        app.client()
+            .get(navree_ui::assets::CORE_URL)
+            .send()
+            .await
+            .assert_status(200);
+    }
+}

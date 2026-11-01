@@ -3,14 +3,14 @@
 //!
 //! [`Reply`]: crate::Reply
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use http::{HeaderMap, Method};
 use navree_http::extract::Request;
 use navree_http::middleware::{self, Next};
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{Controller, GlobalLayer, LayerSlot, ModuleBuilderHttpExt, Path, RouteDef};
-use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{AppContext, BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
 
 use crate::{assets, compress};
 use crate::op::{PendingOps, UI_HEADER};
@@ -21,6 +21,11 @@ use crate::op::{PendingOps, UI_HEADER};
 /// ```ignore
 /// App::builder().module(HttpModule::from_config()).module(UiModule::from_config())
 /// ```
+///
+/// An app that names `UiModule` always has the files and the layer. A module
+/// that only sometimes serves pages imports [`UiOnDemand`] instead and says
+/// when with a [`UiNeed`]; with no need standing, the app gets no route and
+/// no layer from the toolkit.
 pub struct UiModule;
 
 impl UiModule {
@@ -36,13 +41,89 @@ impl Module for UiModule {
         ModuleId::of::<UiModule>()
     }
 
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.global();
-        m.http_layer(GlobalLayer::new(LayerSlot::Session, "ui.reply", |_, router| {
-            Ok(router.layer(middleware::from_fn(reply_layer)))
-        }));
-        m.controller::<Assets>();
+    /// Named by the app, it outranks the same module imported on demand.
+    fn is_configured(&self) -> bool {
+        true
     }
+
+    fn register(&self, m: &mut ModuleBuilder) {
+        register(m, true);
+    }
+}
+
+/// The toolkit for a module that serves pages only some of the time (a
+/// debugging tool that is off in a release build). It has `UiModule`'s id, so
+/// an app that names `UiModule` gets the whole of it whatever the order; alone,
+/// it adds a route and a layer only while a [`UiNeed`] says so.
+pub struct UiOnDemand;
+
+impl Module for UiOnDemand {
+    fn id(&self) -> ModuleId {
+        ModuleId::of::<UiModule>()
+    }
+
+    fn register(&self, m: &mut ModuleBuilder) {
+        register(m, false);
+    }
+}
+
+/// What a module contributes (`ModuleBuilder::contribute`) to say that it
+/// needs the toolkit's files and layer now. [`UiOnDemand`] asks every one once,
+/// at boot, after providers can be resolved.
+pub struct UiNeed(Arc<dyn Fn(AppContext) -> BoxFuture<'static, bool> + Send + Sync>);
+
+impl UiNeed {
+    /// A need that stands when `wanted` answers true.
+    pub fn when<F, Fut>(wanted: F) -> Self
+    where
+        F: Fn(AppContext) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = bool> + Send + 'static,
+    {
+        Self(Arc::new(move |ctx| Box::pin(wanted(ctx))))
+    }
+}
+
+/// Marks an app that named `UiModule` itself.
+struct UiAlways;
+
+/// The answer to "does anything need the toolkit", settled before the first
+/// request and read by the layer.
+struct UiGate(Arc<OnceLock<bool>>);
+
+fn register(m: &mut ModuleBuilder, always: bool) {
+    m.global();
+    if always {
+        m.contribute(UiAlways);
+    }
+    let slot: Arc<OnceLock<bool>> = Arc::new(OnceLock::new());
+    let for_gate = slot.clone();
+    m.factory(
+        Factory::<UiGate>::new(move |r: Resolver| {
+            let slot = for_gate.clone();
+            async move {
+                let ctx = r.app();
+                let mut wanted = !ctx.contributions::<UiAlways>().is_empty();
+                if !wanted {
+                    for need in ctx.contributions::<UiNeed>() {
+                        if (need.value.0)(ctx.clone()).await {
+                            wanted = true;
+                            break;
+                        }
+                    }
+                }
+                let _ = slot.set(wanted);
+                Ok(Arc::new(UiGate(slot)))
+            }
+        }),
+    );
+    m.http_layer(GlobalLayer::new(LayerSlot::Session, "ui.reply", move |_, router| {
+        if slot.get().copied().unwrap_or(false) {
+            Ok(router.layer(middleware::from_fn(reply_layer)))
+        } else {
+            Ok(router)
+        }
+    }));
+    m.controller::<Assets>();
 }
 
 /// Swaps a reply's fallback for its ops when the request came from the runtime,
@@ -60,16 +141,21 @@ async fn reply_layer(request: Request, next: Next) -> Response {
     compress::encode(&method, &accept, response).await
 }
 
-/// The route of the files.
-struct Assets;
+/// The route of the files, there only while the toolkit is wanted.
+struct Assets {
+    wanted: bool,
+}
 
 impl Injectable for Assets {
     fn dependencies() -> Vec<ProviderKey> {
-        Vec::new()
+        vec![ProviderKey::of::<UiGate>()]
     }
 
-    fn construct(_: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
-        Box::pin(async { Ok(Self) })
+    fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async move {
+            let gate = r.get::<UiGate>().await?;
+            Ok(Self { wanted: gate.0.get().copied().unwrap_or(false) })
+        })
     }
 }
 
@@ -79,6 +165,9 @@ impl Controller for Assets {
     }
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
+        if !self.wanted {
+            return Vec::new();
+        }
         vec![
             RouteDef::on(
                 Method::GET,

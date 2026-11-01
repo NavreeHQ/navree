@@ -139,7 +139,10 @@ fn register(m: &mut ModuleBuilder, options: Option<LogbookOptions>) {
             .deps(vec![ProviderKey::of::<Logbook>()]),
         )
         .http_layer(capture::layer(built))
-        .import(navree_ui::UiModule)
+        .import(navree_ui::UiOnDemand)
+        .contribute(navree_ui::UiNeed::when(|ctx: AppContext| async move {
+            ctx.get::<Logbook>().await.is_ok_and(|logbook| logbook.is_enabled())
+        }))
         .controller::<LogbookController>()
         .factory(
             Factory::<Announce>::new(|r: Resolver| async move {
