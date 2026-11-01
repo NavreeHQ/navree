@@ -368,6 +368,14 @@ impl Element {
         self
     }
 
+    /// Says this link may be fetched ahead of a click, on hover or focus. Only mark
+    /// a link whose `GET` changes nothing: a request goes out with no click at all.
+    #[inline]
+    #[must_use]
+    pub fn prefetch(self) -> Self {
+        self.flag("data-ui-prefetch", true)
+    }
+
     /// Runs `commands` in the browser when this element is clicked, with no
     /// request to the server.
     #[must_use]

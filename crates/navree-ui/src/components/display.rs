@@ -280,7 +280,7 @@ impl Breadcrumb {
 
     /// Adds a link.
     pub fn link(mut self, label: impl Into<Node>, href: impl Into<Href>) -> Self {
-        self.items.push(el("li").child(el("a").href(href).child(label.into())));
+        self.items.push(el("li").child(el("a").href(href).prefetch().child(label.into())));
         self
     }
 

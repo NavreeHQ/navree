@@ -5,6 +5,8 @@ import { morph } from "./morph.js";
 import { announce } from "./ui.js";
 
 const HEADER = { "x-navree-ui": "1" };
+// `Sec-Purpose` can't be set from `fetch`, so a prefetch says so itself.
+const PREFETCH = { ...HEADER, "x-navree-prefetch": "1" };
 const PREFETCH_MS = 65;
 const PREFETCH_TTL = 10000;
 
@@ -24,7 +26,7 @@ function fetchPage(url) {
 function prefetch(url) {
   if (prefetched.has(url) || /** @type {any} */ (navigator).connection?.saveData) return;
   if (prefetched.size > 8) prefetched.clear();
-  const page = fetch(url, { headers: HEADER, priority: "low" });
+  const page = fetch(url, { headers: PREFETCH, priority: "low" });
   page.catch(() => prefetched.delete(url));
   prefetched.set(url, { at: performance.now(), page });
 }
@@ -216,10 +218,21 @@ function linkOf(target) {
   return a;
 }
 
+/**
+ * The link to fetch ahead of a click. A GET can change state (a sign-out written
+ * as a link, a delete), and hovering past one must do nothing, so only links marked
+ * safe qualify: what the toolkit knows is navigation, and `data-ui-prefetch`.
+ * @param {EventTarget | null} target
+ */
+function safeLinkOf(target) {
+  const a = linkOf(target);
+  return a && (a.hasAttribute("data-ui-prefetch") || a.hasAttribute("data-ui-in-region")) ? a : null;
+}
+
 let intent = 0;
 /** @param {Event} e */
 function onIntent(e) {
-  const a = linkOf(e.target);
+  const a = safeLinkOf(e.target);
   if (!a) return;
   clearTimeout(intent);
   intent = setTimeout(() => prefetch(a.href), PREFETCH_MS);
@@ -232,13 +245,15 @@ export function startNav() {
     const a = linkOf(e.target);
     if (!a) return;
     e.preventDefault();
+    // The press focused the link: its intent is spent, not a reason to fetch again.
+    clearTimeout(intent);
     const region = a.closest("[data-ui-region]");
     go(a.href, region && a.hasAttribute("data-ui-in-region") ? { region: region.id } : {}).then(startRegions);
   });
   on(document, "mouseover", onIntent, { passive: true });
   on(document, "focusin", onIntent, { passive: true });
   on(document, "touchstart", (e) => {
-    const a = linkOf(e.target);
+    const a = safeLinkOf(e.target);
     if (a) prefetch(a.href);
   }, { passive: true });
   on(window, "popstate", () => {

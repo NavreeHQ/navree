@@ -339,6 +339,47 @@ fn the_elements_that_load_or_navigate_are_never_written() {
 }
 
 #[test]
+fn the_speculation_rules_only_name_links_marked_safe() {
+    let rules = navree_ui::assets::get("speculation").expect("the rule file");
+    let text = std::str::from_utf8(rules.bytes).unwrap();
+    assert!(text.contains("[data-ui-prefetch]"), "{text}");
+}
+
+#[test]
+fn only_navigation_is_marked_for_prefetch() {
+    use navree_ui::{Breadcrumb, Button, NavGroup, NavItem, Shell, UserMenu};
+    let shell = Shell::new("A")
+        .group(NavGroup::plain().item(NavItem::new("Deals", "/deals")).item(NavItem::new("Odd", "/odd").no_prefetch()))
+        .user(UserMenu::new("Ada", "a@b").link("Settings", "/settings").action("Sign out", "/sign-out"));
+    let html = shell.page("Other", "/other").to_view().to_html();
+    assert!(html.contains(r#"href="/deals" title="Deals" data-ui-prefetch"#), "{html}");
+    assert!(html.contains(r#"href="/odd" title="Odd">"#), "{html}");
+    assert!(html.contains(r#"href="/settings">Settings"#), "a menu link is not marked: {html}");
+    assert!(!html.contains(r#"<a data-slot="menu-link" href="/sign-out""#), "{html}");
+    assert!(html.contains(r#"<form method="post" action="/sign-out" data-ui-form>"#), "{html}");
+    assert!(html.contains(r#"<button data-slot="menu-link" type="submit">Sign out</button>"#), "{html}");
+    let html = render(&Button::primary("Open").href("/x").into());
+    assert!(!html.contains("data-ui-prefetch"), "{html}");
+    let html = render(&Button::primary("Open").href("/x").prefetch().into());
+    assert!(html.contains("data-ui-prefetch"), "{html}");
+    let html = render(&Breadcrumb::new().link("Deals", "/deals").into());
+    assert!(html.contains("data-ui-prefetch"), "{html}");
+}
+
+#[test]
+fn a_request_says_when_it_is_a_prefetch() {
+    let mut headers = http::HeaderMap::new();
+    assert!(!navree_ui::is_prefetch(&headers));
+    headers.insert("x-navree-ui", HeaderValue::from_static("1"));
+    assert!(!navree_ui::is_prefetch(&headers), "a real boosted navigation");
+    headers.insert("x-navree-prefetch", HeaderValue::from_static("1"));
+    assert!(navree_ui::is_prefetch(&headers));
+    let mut headers = http::HeaderMap::new();
+    headers.insert("sec-purpose", HeaderValue::from_static("prefetch;anonymous-client-ip"));
+    assert!(navree_ui::is_prefetch(&headers));
+}
+
+#[test]
 fn a_textarea_keeps_a_first_newline() {
     let html = render(&navree_ui::Textarea::new("a").value("\nfirst").into());
     assert!(html.contains(">\n\nfirst</textarea>"), "the parser eats one newline: {html}");

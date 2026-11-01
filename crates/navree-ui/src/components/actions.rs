@@ -143,6 +143,14 @@ impl Button {
         self
     }
 
+    /// Says this link may be fetched ahead of a click (see
+    /// [`Element::prefetch`](crate::Element::prefetch)). Only for a link whose `GET`
+    /// changes nothing.
+    pub fn prefetch(mut self) -> Self {
+        self.el = self.el.prefetch();
+        self
+    }
+
     /// Makes this submit its form.
     pub fn submit(mut self) -> Self {
         self.kind = ButtonKind::Submit;

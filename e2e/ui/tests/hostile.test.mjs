@@ -129,6 +129,54 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       await context.close();
     });
 
+    test(`hover and focus fetch nothing unless a link is marked (${engine})`, async () => {
+      const name = key("prefetch");
+      let ran = 0;
+      route(`/${name}`, doc(`<a id="out" href="/${name}-out">Sign out</a><a id="del" href="/${name}-del">Delete</a><a id="off" data-ui-prefetch data-ui-noboost href="/${name}-off">off</a>`));
+      f.routes.set(`/${name}-out`, (req, res) => { ran++; f.html(res, doc("bye")); });
+      f.routes.set(`/${name}-del`, (req, res) => { ran++; f.html(res, doc("gone")); });
+      f.routes.set(`/${name}-off`, (req, res) => { ran++; f.html(res, doc("off")); });
+      const { context, page } = await fresh(`/${name}`);
+      await page.hover("#out");
+      await sleep(200);
+      await page.focus("#del");
+      await sleep(200);
+      await page.hover("#off");
+      await sleep(200);
+      assert.equal(ran, 0);
+      await context.close();
+    });
+
+    test(`a marked link's prefetch says so, and the click reuses it (${engine})`, async () => {
+      const name = key("marked");
+      route(`/${name}`, doc(`<a id="link" data-ui-prefetch href="/${name}-next#top">next</a>`));
+      route(`/${name}-next`, doc(`<h1 id="n">next</h1>`));
+      const { context, page } = await fresh(`/${name}`);
+      await page.hover("#link");
+      await sleep(200);
+      const sent = hits(`/${name}-next`);
+      assert.equal(sent.length, 1);
+      assert.equal(sent[0].headers["x-navree-prefetch"], "1");
+      assert.equal(sent[0].headers["x-navree-ui"], "1");
+      await page.click("#link");
+      await page.waitForSelector("#n");
+      assert.equal(hits(`/${name}-next`).length, 1, "the click used the prefetch");
+      await context.close();
+    });
+
+    test(`a click with no hover carries no prefetch mark (${engine})`, async () => {
+      const name = key("noprefetch");
+      route(`/${name}`, doc(`<a id="link" href="/${name}-next">next</a>`));
+      route(`/${name}-next`, doc(`<h1 id="n">next</h1>`));
+      const { context, page } = await fresh(`/${name}`);
+      await page.click("#link");
+      await page.waitForSelector("#n");
+      const sent = hits(`/${name}-next`);
+      assert.equal(sent.length, 1);
+      assert.equal(sent[0].headers["x-navree-prefetch"], undefined);
+      await context.close();
+    });
+
     test(`named elements can't switch the runtime off (${engine})`, async () => {
       for (const name of ["cookie", "getElementById", "querySelector", "querySelectorAll", "body", "head", "documentElement", "activeElement", "title", "createElement", "addEventListener"]) {
         const path = key("document");

@@ -6,7 +6,7 @@ use std::time::Duration;
 use http::Method;
 use navree::http::{Controller, RouteDef};
 use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
-use navree::ui::{AppShell, Bars, Card, Grid, Node, AppPage, Region, Stack, Stat, Text, View};
+use navree::ui::{AppShell, Bars, Card, Grid, Node, AppPage, Region, Reply, Stack, Stat, Text, View};
 
 /// `GET /`.
 pub fn page(shell: &AppShell) -> AppPage {
@@ -37,7 +37,7 @@ pub fn plain() -> View {
     View::new("Plain page").body(navree::ui::el("main").slot("page").children((
         navree::ui::Heading::h1("Nothing interactive here"),
         Text::new("This page ships no JavaScript. Its links are prefetched by the browser, from a header."),
-        navree::ui::Button::primary("Back to the app").href("/"),
+        navree::ui::Button::primary("Back to the app").href("/").prefetch(),
     )))
 }
 
@@ -62,6 +62,7 @@ impl Controller for DashboardPages {
         vec![
             RouteDef::on(Method::GET, "!/", |shell: AppShell| async move { page(&shell) }).public(),
             RouteDef::on(Method::GET, "!/plain", || async { plain() }).public(),
+            RouteDef::on(Method::POST, "!/sign-out", || async { Reply::redirect("/plain") }).public(),
             RouteDef::on(Method::GET, "!/fragments/revenue", || async { View::new("Revenue").body(revenue()) }).public(),
             RouteDef::on(Method::GET, "!/fragments/activity", || async { View::new("Activity").body(activity()) }).public(),
         ]

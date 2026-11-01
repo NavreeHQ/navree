@@ -13,6 +13,7 @@ use navree_http::extract::{FromRequestParts, Scoped};
 use navree_http::extract::urlencoded;
 use navree_http::response::{IntoResponse, Response};
 
+use crate::form::csrf_field;
 use crate::components::{Alert, AlertTone, Avatar, Breadcrumb, Button, ButtonVariant, Separator, Size, icon};
 use crate::html::Href;
 use crate::icons::{self, Icon};
@@ -22,6 +23,9 @@ use crate::view::View;
 
 /// The cookie holding a toast for the next page.
 pub(crate) const FLASH_COOKIE: &str = "navree_ui_flash";
+
+/// The cookie holding the session's CSRF token, when there is a session.
+const CSRF_COOKIE: &str = "XSRF-TOKEN";
 
 /// The cookie the runtime sets when the sidebar collapses or expands.
 pub const SIDEBAR_COOKIE: &str = "navree_ui_sidebar";
@@ -82,13 +86,23 @@ pub struct NavItem {
     glyph: Option<Icon>,
     count: Option<Cow<'static, str>>,
     sub: Vec<NavItem>,
+    prefetch: bool,
 }
 
 impl NavItem {
     /// A link. Every top-level item should have an [`icon`](Self::icon): the
     /// collapsed sidebar shows only that.
     pub fn new(label: impl Into<Cow<'static, str>>, href: impl Into<Href>) -> Self {
-        Self { label: label.into(), href: href.into(), glyph: None, count: None, sub: Vec::new() }
+        Self { label: label.into(), href: href.into(), glyph: None, count: None, sub: Vec::new(), prefetch: true }
+    }
+
+    /// Keeps this link from being fetched ahead of a click. A sidebar item is
+    /// navigation and is fetched on hover or focus, so an item whose `GET` isn't
+    /// safe to repeat needs this.
+    #[must_use]
+    pub fn no_prefetch(mut self) -> Self {
+        self.prefetch = false;
+        self
     }
 
     /// Sets the icon.
@@ -136,6 +150,7 @@ impl NavItem {
             .href(self.href.clone())
             .attr("title", self.label.clone())
             .attr_opt("aria-current", active.then_some("page"))
+            .flag("data-ui-prefetch", self.prefetch)
             .children((
                 self.glyph.map(icon),
                 el("span").slot("sidebar-label").child(self.label.clone()),
@@ -181,7 +196,14 @@ impl NavGroup {
 pub struct UserMenu {
     name: Cow<'static, str>,
     email: Cow<'static, str>,
-    links: Vec<(Cow<'static, str>, Href)>,
+    links: Vec<MenuEntry>,
+}
+
+/// One line of a [`UserMenu`].
+#[derive(Clone, Debug)]
+enum MenuEntry {
+    Link(Cow<'static, str>, Href),
+    Action(Cow<'static, str>, Href),
 }
 
 impl UserMenu {
@@ -190,14 +212,23 @@ impl UserMenu {
         Self { name: name.into(), email: email.into(), links: Vec::new() }
     }
 
-    /// Adds a link to the menu.
+    /// Adds a link to the menu, for a page to read. It isn't fetched ahead of a click.
+    /// Something that changes state, such as signing out, is an [`action`](Self::action).
     #[must_use]
     pub fn link(mut self, label: impl Into<Cow<'static, str>>, href: impl Into<Href>) -> Self {
-        self.links.push((label.into(), href.into()));
+        self.links.push(MenuEntry::Link(label.into(), href.into()));
         self
     }
 
-    fn to_node(&self) -> Node {
+    /// Adds a button that posts to `href`: signing out, switching workspace. It works
+    /// with JavaScript off, carrying the session's token as a field when there is one.
+    #[must_use]
+    pub fn action(mut self, label: impl Into<Cow<'static, str>>, href: impl Into<Href>) -> Self {
+        self.links.push(MenuEntry::Action(label.into(), href.into()));
+        self
+    }
+
+    fn to_node(&self, csrf: Option<&str>) -> Node {
         let trigger = el("button")
             .slot("sidebar-user")
             .attr("type", "button")
@@ -212,8 +243,19 @@ impl UserMenu {
                 )),
                 icon(icons::CHEVRONS_UP_DOWN),
             ));
-        let links: Vec<Element> =
-            self.links.iter().map(|(label, href)| el("a").slot("menu-link").href(href.clone()).child(label.clone())).collect();
+        let links: Vec<Element> = self
+            .links
+            .iter()
+            .map(|entry| match entry {
+                MenuEntry::Link(label, href) => el("a").slot("menu-link").href(href.clone()).child(label.clone()),
+                MenuEntry::Action(label, href) => el("form")
+                    .attr("method", "post")
+                    .attr("action", href.clone())
+                    .flag("data-ui-form", true)
+                    .uses(Uses::CORE)
+                    .children((csrf.map(|token| csrf_field(token.to_owned())), el("button").slot("menu-link").attr("type", "submit").child(label.clone()))),
+            })
+            .collect();
         let menu = el("div")
             .slot("popover-content")
             .attr("id", "ui-user-menu")
@@ -295,12 +337,12 @@ impl Shell {
 
     /// A page of this shell at `path`, for use without the [`AppShell`] extractor.
     pub fn page(&self, title: impl Into<Cow<'static, str>>, path: impl Into<String>) -> AppPage {
-        AppPage::new(Arc::new(self.clone()), title.into(), path.into(), false, None)
+        AppPage::new(Arc::new(self.clone()), title.into(), path.into(), false, None, None)
     }
 
-    fn sidebar(&self, path: &str) -> Element {
+    fn sidebar(&self, path: &str, csrf: Option<&str>) -> Element {
         let home = self.home.as_str();
-        let header = el("a").slot("sidebar-brand").href(self.home.clone()).attr("title", self.name.clone()).children((
+        let header = el("a").slot("sidebar-brand").href(self.home.clone()).attr("title", self.name.clone()).prefetch().children((
             el("span").slot("sidebar-logo").child(Node::Static(LOGO)),
             el("span").slot("sidebar-brand-text").children((
                 el("span").slot("sidebar-brand-name").child(self.name.clone()),
@@ -321,7 +363,7 @@ impl Shell {
         el("aside").slot("sidebar").attr("aria-label", "Sidebar").children((
             el("div").slot("sidebar-header").child(header),
             el("nav").slot("sidebar-content").attr("aria-label", "Main").child(groups),
-            self.user.as_ref().map(|user| el("div").slot("sidebar-footer").child(user.to_node())),
+            self.user.as_ref().map(|user| el("div").slot("sidebar-footer").child(user.to_node(csrf))),
         ))
     }
 }
@@ -338,14 +380,15 @@ pub struct AppPage {
     path: String,
     collapsed: bool,
     flash: Option<(AlertTone, String)>,
+    csrf: Option<String>,
     crumbs: Vec<(Cow<'static, str>, Href)>,
     actions: Vec<Node>,
     body: Vec<Node>,
 }
 
 impl AppPage {
-    fn new(shell: Arc<Shell>, title: Cow<'static, str>, path: String, collapsed: bool, flash: Option<(AlertTone, String)>) -> Self {
-        Self { shell, title, path, collapsed, flash, crumbs: Vec::new(), actions: Vec::new(), body: Vec::new() }
+    fn new(shell: Arc<Shell>, title: Cow<'static, str>, path: String, collapsed: bool, flash: Option<(AlertTone, String)>, csrf: Option<String>) -> Self {
+        Self { shell, title, path, collapsed, flash, csrf, crumbs: Vec::new(), actions: Vec::new(), body: Vec::new() }
     }
 
     /// Adds a step to the breadcrumb, before this page.
@@ -399,7 +442,7 @@ impl AppPage {
             .flag("data-collapsed", self.collapsed)
             .uses(Uses::SIDEBAR.with(Uses::CORE))
             .children((
-                shell.sidebar(&self.path),
+                shell.sidebar(&self.path, self.csrf.as_deref()),
                 el("div").slot("sidebar-overlay"),
                 el("div").slot("sidebar-inset").children((topbar, main)),
             ));
@@ -431,12 +474,13 @@ pub struct AppShell {
     path: String,
     collapsed: bool,
     flash: Option<(AlertTone, String)>,
+    csrf: Option<String>,
 }
 
 impl AppShell {
     /// A page titled `title`.
     pub fn page(&self, title: impl Into<Cow<'static, str>>) -> AppPage {
-        AppPage::new(self.shell.clone(), title.into(), self.path.clone(), self.collapsed, self.flash.clone())
+        AppPage::new(self.shell.clone(), title.into(), self.path.clone(), self.collapsed, self.flash.clone(), self.csrf.clone())
     }
 }
 
@@ -447,16 +491,20 @@ impl FromRequestParts for AppShell {
         let Scoped(shell) = Scoped::<Shell>::from_request_parts(parts).await?;
         let mut collapsed = false;
         let mut flash = None;
+        let mut csrf = None;
+        // A page fetched ahead of a click may never be seen: its toast stays for the next.
+        let prefetch = crate::op::is_prefetch(&parts.headers);
         for value in parts.headers.get_all(COOKIE).iter().filter_map(|value| value.to_str().ok()) {
             for pair in value.split(';') {
                 match pair.trim().split_once('=') {
                     Some((SIDEBAR_COOKIE, "collapsed")) => collapsed = true,
-                    Some((FLASH_COOKIE, text)) => flash = read_flash(text),
+                    Some((FLASH_COOKIE, text)) if !prefetch => flash = read_flash(text),
+                    Some((CSRF_COOKIE, token)) => csrf = urlencoded::parse(format!("x={token}").as_bytes()).next().map(|(_, token)| token.into_owned()),
                     _ => {}
                 }
             }
         }
-        Ok(Self { shell, path: parts.uri.path().to_owned(), collapsed, flash })
+        Ok(Self { shell, path: parts.uri.path().to_owned(), collapsed, flash, csrf })
     }
 }
 
@@ -479,7 +527,7 @@ mod tests {
     fn the_longest_match_is_the_active_link() {
         let html = shell().page("x", "/deals/won").to_view().to_html();
         assert_eq!(html.matches("aria-current=\"page\"").count(), 2, "the sub-item and the breadcrumb: {html}");
-        assert!(html.contains(r#"<a data-slot="sidebar-sub-item" href="/deals/won" title="Won" aria-current="page">"#), "{html}");
+        assert!(html.contains(r#"<a data-slot="sidebar-sub-item" href="/deals/won" title="Won" aria-current="page" data-ui-prefetch>"#), "{html}");
         let html = shell().page("x", "/deals/12").to_view().to_html();
         assert!(html.contains(r#"href="/deals" title="Deals" aria-current="page""#), "{html}");
         let html = shell().page("x", "/").to_view().to_html();
@@ -523,7 +571,7 @@ mod tests {
     #[test]
     fn a_page_shows_a_danger_flash_as_danger_and_clears_it() {
         let shell = Arc::new(shell());
-        let page = AppPage::new(shell, "x".into(), "/".to_owned(), false, read_flash("danger:Payment%20failed"));
+        let page = AppPage::new(shell, "x".into(), "/".to_owned(), false, read_flash("danger:Payment%20failed"), None);
         let view = page.to_view();
         let html = view.to_html();
         assert!(html.contains(r#"data-tone="danger""#), "{html}");

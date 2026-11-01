@@ -57,7 +57,7 @@ pub use navree_validation::Validate;
 pub use html::{Href, HrefError, SafeHtml};
 pub use module::{UiModule, UiNeed, UiOnDemand};
 pub use node::{Attr, AttrValue, Element, IntoNodes, Node, Uses, el};
-pub use op::{Envelope, Op, Reply, ToastTone, UrlMode};
+pub use op::{Envelope, Op, Reply, ToastTone, UrlMode, is_prefetch};
 pub use render::{Measure, measure, render, render_into};
 pub use shell::{AppPage, AppShell, NavGroup, NavItem, Shell, UserMenu};
 pub use table::{BulkAction, BulkRequest, DataTable, FilterOption, Region, RowAction, TableDensity, TableHeight, TableLabels, TablePage, TableQuery};

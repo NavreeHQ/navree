@@ -61,7 +61,7 @@ const speculation = Buffer.from(
     prefetch: [
       {
         source: "document",
-        where: { and: [{ href_matches: "/*" }, { not: { selector_matches: "[data-ui-noboost],[download]" } }] },
+        where: { and: [{ href_matches: "/*" }, { selector_matches: "[data-ui-prefetch]" }, { not: { selector_matches: "[data-ui-noboost],[download]" } }] },
         eagerness: "moderate",
       },
     ],

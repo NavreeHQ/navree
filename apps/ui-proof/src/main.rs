@@ -48,7 +48,7 @@ fn shell() -> Shell {
                 .item(NavItem::new("Plain page", "/plain").icon(icons::FILE))
                 .item(NavItem::new("Gallery", "/gallery").icon(icons::LAYOUT_GRID)),
         )
-        .user(UserMenu::new("Ada Lovelace", "ada@navree.test").link("Settings", "/plain").link("Sign out", "/plain"))
+        .user(UserMenu::new("Ada Lovelace", "ada@navree.test").link("Settings", "/plain").action("Sign out", "/sign-out"))
 }
 
 struct ProofModule;

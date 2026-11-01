@@ -3,10 +3,10 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "95fea65d88ff";
+pub const BUILD: &str = "cf567ae740eb";
 
 /// The URL of `core.js`.
-pub const CORE_URL: &str = "/_navree/ui/core-bda23c6bebde.js";
+pub const CORE_URL: &str = "/_navree/ui/core-cf12df3b47a0.js";
 
 /// The URL of `sidebar.js`.
 pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-bcc57ac67106.js";
@@ -15,10 +15,10 @@ pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-bcc57ac67106.js";
 pub const OVERLAY_URL: &str = "/_navree/ui/overlay-00c184a374d6.js";
 
 /// The URL of `navree-ui.css`.
-pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-2bae988e5f8d.css";
+pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-6461227811d0.css";
 
 /// The URL of `speculation.json`.
-pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8fb550221f7f.json";
+pub const SPECULATION_URL: &str = "/_navree/ui/speculation-d140a28d7b63.json";
 
 /// The URL of `geist.woff2`.
 pub const GEIST_URL: &str = "/_navree/ui/geist-685b571ab077.woff2";
@@ -27,14 +27,14 @@ pub const GEIST_URL: &str = "/_navree/ui/geist-685b571ab077.woff2";
 pub const FAVICON_URL: &str = "/_navree/ui/favicon-63eac8f67097.svg";
 
 /// The `Speculation-Rules` header's value: the rule file's URL, quoted.
-pub const SPECULATION_HEADER: &str = "\"/_navree/ui/speculation-8fb550221f7f.json\"";
+pub const SPECULATION_HEADER: &str = "\"/_navree/ui/speculation-d140a28d7b63.json\"";
 
 /// Every file.
 pub static FILES: &[Asset] = &[
     Asset {
         name: "core",
         ext: "js",
-        hash: "bda23c6bebde",
+        hash: "cf12df3b47a0",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/core.js"),
         gzip: Some(include_bytes!("../dist/core.js.gz")),
@@ -61,7 +61,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "navree-ui",
         ext: "css",
-        hash: "2bae988e5f8d",
+        hash: "6461227811d0",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/navree-ui.css"),
         gzip: Some(include_bytes!("../dist/navree-ui.css.gz")),
@@ -70,7 +70,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "speculation",
         ext: "json",
-        hash: "8fb550221f7f",
+        hash: "d140a28d7b63",
         content_type: "application/speculationrules+json",
         bytes: include_bytes!("../dist/speculation.json"),
         gzip: Some(include_bytes!("../dist/speculation.json.gz")),

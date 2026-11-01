@@ -17,7 +17,7 @@
 
 use std::collections::BTreeMap;
 
-use http::{HeaderValue, StatusCode, header};
+use http::{HeaderMap, HeaderValue, StatusCode, header};
 use navree_http::response::{IntoResponse, Response};
 use serde::Serialize;
 
@@ -29,6 +29,16 @@ use crate::view::View;
 
 /// The request header the runtime sends on every action and fragment fetch.
 pub const UI_HEADER: &str = "x-navree-ui";
+
+/// The request header the runtime adds when it fetches a link ahead of a click.
+pub const PREFETCH_HEADER: &str = "x-navree-prefetch";
+
+/// Whether this request is a fetch ahead of a click: the user hasn't asked for
+/// the page yet, and may never. The runtime says so in [`PREFETCH_HEADER`], and a
+/// browser following Speculation Rules in `Sec-Purpose`.
+pub fn is_prefetch(headers: &HeaderMap) -> bool {
+    headers.contains_key(PREFETCH_HEADER) || headers.get("sec-purpose").is_some_and(|purpose| purpose.as_bytes().windows(8).any(|part| part == b"prefetch"))
+}
 
 /// The media type of an [`Envelope`].
 pub const OPS_CONTENT_TYPE: &str = "application/vnd.navree.ops+json";

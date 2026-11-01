@@ -137,6 +137,25 @@ async fn bulk(uow: Uow, request: BulkRequest<Deal>) -> Result<Reply> {
 **Stored views** are SQL only (`SavedViewModel`, table `navree_ui_table_views`: `id, owner, table_id, name, query, is_default`; create it in a migration). Save through `save_view`, read through `list_views`, and open with `query.or_default_view(&views)`.
 
 **One table per URL.** State lives in plain parameters, so two tables on one page would share it: give the second its own route or region.
+
+## Fetching ahead of a click
+
+A `GET` can change state: a sign-out written as a link, a delete. Hovering past one must
+do nothing, so only links marked safe are fetched ahead of a click: sidebar items,
+breadcrumbs, the app's name, sort and page links, and any link you mark with
+`Element::prefetch` or `Button::prefetch`. `NavItem::no_prefetch` turns it off for one
+item, and `data-ui-noboost` keeps a link out of boosting altogether: it loads for real.
+
+- Pages with the runtime fetch on hover, focus or touch, and send `x-navree-prefetch: 1`.
+  Pages with no script use Speculation Rules, where the browser sends `Sec-Purpose: prefetch`
+  and Firefox and Safari do nothing. `navree_ui::is_prefetch(&headers)` is true for both.
+- Something that changes state is a form: `UserMenu::action` is a button that posts.
+- An answer stands in for the click only while it is still true. Any write in any tab,
+  a form's post, or a change in the cookies scripts can see drops it. A redirect, an
+  error or an answer that isn't HTML is never used. `Cache-Control` sets how long it
+  lasts: `no-store` (the default) gives 3 s as a head start on that click, `max-age` that
+  long up to 10 s, and `no-cache` never: `View::cache("no-store, no-cache")` opts a page out.
+
 ## Fonts
 
 Geist is the one web font, with `font-display: optional` and a preload. Monospace text
