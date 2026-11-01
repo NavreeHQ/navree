@@ -803,6 +803,74 @@ for (const browserName of browsers) {
       await close();
     });
 
+    test("extras: groups, footer, bleed, sticky row, row link, rows that can't be ticked, denied action, grid keys", async () => {
+      await reset();
+      const { page, close, problems } = await open("/extras");
+      assert.equal(await page.locator("#extras thead [data-slot=group-row] th[colspan='2']").count(), 2, "two header groups");
+      assert.match(await page.locator("#extras tfoot").innerText(), /On this page/);
+      assert.ok(await page.locator("#extras").getAttribute("data-bleed") !== null);
+      assert.equal(await page.locator("#extras [data-ui-select-row][disabled]").count() > 0, true);
+      await page.locator("#extras [data-ui-select-page]").check();
+      const enabled = await page.locator("#extras [data-ui-select-row]:not([disabled])").count();
+      assert.equal(await page.locator("#extras [data-ui-select-row]:checked").count(), enabled, "only rows that can be ticked");
+      assert.equal(await page.locator("#extras [data-ui-select-all]").isVisible(), false, "no select-all with a condition");
+      const denied = page.getByRole("button", { name: "Archive", exact: true });
+      assert.equal(await denied.isDisabled(), true);
+      assert.match(await denied.getAttribute("title"), /role/);
+      await shot(page, `${browserName}-extras`);
+      assert.deepEqual(await axe(page), []);
+      // Grid keys: one tab stop, arrows and Home move it, Enter goes in.
+      const start = page.locator("#extras tbody td[tabindex='0']");
+      assert.equal(await start.count(), 1);
+      await start.focus();
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("ArrowRight");
+      await page.keyboard.press("ArrowRight");
+      const moved = await page.evaluate(() => {
+        const cell = document.activeElement;
+        return [cell.cellIndex, cell.parentElement.rowIndex];
+      });
+      assert.equal(moved[0], 2);
+      await page.keyboard.press("Home");
+      assert.equal(await page.evaluate(() => document.activeElement.cellIndex), 0);
+      await page.keyboard.press("Enter");
+      assert.equal(await page.evaluate(() => document.activeElement.nodeName), "INPUT");
+      await page.keyboard.press("Escape");
+      assert.equal(await page.evaluate(() => document.activeElement.nodeName), "TD");
+      assert.equal(await page.locator("#extras tbody td[tabindex='0']").count(), 1, "still one tab stop");
+      // A click on a row goes to it, a click on a control doesn't.
+      const row = page.locator("#extras tbody tr[data-key]").nth(2);
+      await row.locator("[data-ui-select-row]").click({ force: true });
+      assert.match(page.url(), /extras/);
+      await row.locator("td").nth(1).click();
+      await page.waitForURL(/\/deal\//);
+      assert.deepEqual(problems, []);
+      await close();
+    });
+
+    test("right to left: the sticky column, handles and arrow keys flip, numbers stay readable", async () => {
+      await reset();
+      const { page, close, problems } = await open("/rtl");
+      const th = await page.locator("#rtl thead th[data-col=title]").boundingBox();
+      const amount = await page.locator("#rtl thead th[data-col=amount]").boundingBox();
+      assert.ok(th.x > amount.x, "the first column is on the right");
+      assert.match(await page.locator("#rtl [data-slot=table-summary]").innerText(), /عرض/);
+      assert.equal(await page.locator("#rtl td[data-numeric]").first().evaluate((cell) => getComputedStyle(cell).direction), "ltr");
+      assert.equal(await page.locator("#rtl tr[data-key='1'] bdi").first().count(), 1);
+      await shot(page, `${browserName}-rtl`);
+      assert.deepEqual(await axe(page), []);
+      const handle = page.locator("#rtl thead th[data-col=amount] [data-slot=col-resize]");
+      const before = await page.locator("#rtl thead th[data-col=amount]").evaluate((cell) => cell.getBoundingClientRect().width);
+      await handle.focus();
+      await page.keyboard.press("ArrowLeft");
+      await page.waitForURL(/w=/);
+      await settled(page, "rtl");
+      const after = await page.locator("#rtl thead th[data-col=amount]").evaluate((cell) => cell.getBoundingClientRect().width);
+      assert.ok(after > before, `ArrowLeft grows a column in RTL: ${before} ${after}`);
+      assert.deepEqual(problems, []);
+      await close();
+    });
+
     test("allow-list in the browser: injected parameters change nothing", async () => {
       await reset();
       const clean = await get("/deals");

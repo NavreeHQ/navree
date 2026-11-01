@@ -15,6 +15,8 @@
 //! | `/big-pages` | 1,000,000 rows by page number, with an exact count |
 //! | `/wide` | 30 columns |
 //! | `/tasks` | a model as its own row, in the simplest form |
+//! | `/extras` | the rest: a card with bleed, sticky rows, a footer, row links, rows that can't be ticked, the grid keys, header groups |
+//! | `/rtl` | right to left, in another language |
 //!
 //! `/__t/...` are the controls the browser tests use: reset the data, delete or add
 //! rows behind the page's back, take a permission away.
@@ -34,7 +36,7 @@ use navree::prelude::*;
 use navree::ui::form::Money;
 use navree::ui::table::{BulkMode, NoFilter, ViewOp, ViewPost, delete_view, list_views, save_view};
 use navree::ui::{
-    AppPage, AppShell, BadgeVariant, BulkAction, BulkRequest, Button, Card, DataTable, Empty, FilterOption, NavGroup, NavItem, Node, Reply, RowAction, Shell, TableHeight, TableQuery, TableRow, ToastTone, UiModule, el, icons,
+    AppPage, AppShell, BadgeVariant, BulkAction, BulkRequest, Button, Card, DataTable, Empty, FilterOption, NavGroup, NavItem, Node, Reply, RowAction, Shell, TableHeight, TableLabels, TableQuery, TableRow, ToastTone, UiModule, el, icons,
 };
 
 mod seed;
@@ -122,7 +124,9 @@ fn shell() -> Shell {
             NavGroup::new("Deals")
                 .item(NavItem::new("All features", "/deals").icon(icons::TABLE))
                 .item(NavItem::new("Filter row", "/deals-row").icon(icons::LIST_FILTER))
-                .item(NavItem::new("Read-only", "/viewer").icon(icons::EYE)),
+                .item(NavItem::new("Read-only", "/viewer").icon(icons::EYE))
+                .item(NavItem::new("Extras", "/extras").icon(icons::SPARKLES))
+                .item(NavItem::new("Right to left", "/rtl").icon(icons::GLOBE)),
         )
         .group(
             NavGroup::new("Sizes")
@@ -313,6 +317,89 @@ pub struct Task {
     pub done: bool,
 }
 
+/// `/extras`: a row with grouped headings.
+#[derive(Clone, TableRow)]
+#[table(sort = "title", per = 25, per_pages(25))]
+pub struct ExtraRow {
+    #[col(skip)]
+    pub id: i64,
+    #[col(sortable, sticky, strong, label = "Deal")]
+    pub title: String,
+    #[col(group = "Money", numeric, label = "Amount")]
+    pub amount: Option<Money>,
+    #[col(group = "Money", align = end, label = "Cents")]
+    pub cents: Option<i64>,
+    #[col(group = "State", align = center, label = "Stage", options = STAGES)]
+    pub stage: String,
+    #[col(group = "State", label = "Active")]
+    pub active: bool,
+}
+
+async fn extras(shell: AppShell, uow: Uow, query: TableQuery<ExtraRow>) -> Result<AppPage, AppError> {
+    let page = query
+        .load_as(Deal::query().where_(col("id").gt(Value::I64(8))), &uow, |record| {
+            let deal = record.into_inner();
+            ExtraRow { id: deal.id, title: deal.title, amount: deal.amount.map(Money), cents: deal.amount, stage: deal.stage, active: deal.active }
+        })
+        .await?;
+    let total: i64 = page.rows.iter().filter_map(|row| row.cents).sum();
+    let table = DataTable::new("extras", &query, &page)
+        .caption("Everything else")
+        .bleed()
+        .scroll_to("extras")
+        .keyboard_grid()
+        .bulk("/deals/bulk", [BulkAction::new("archive", "Archive").denied("Your role can't archive."), BulkAction::new("x", "Mark")])
+        .selectable_if(|row| row.active)
+        .sticky_rows(|row| row.id == 10)
+        .row_href(|row| format!("/deal/{}", row.id))
+        .foot("title", "On this page")
+        .foot("amount", Money(total).display())
+        .height(TableHeight::Md);
+    Ok(shell.page("Extras").body(Card::titled("In a card").body(table)))
+}
+
+/// `/rtl`: the same table in Arabic, right to left.
+#[derive(Clone, TableRow)]
+#[table(sort = "title", per = 10, per_pages(10, 25))]
+pub struct RtlRow {
+    #[col(skip)]
+    pub id: i64,
+    #[col(sortable, sticky, search, filter = text, label = "الصفقة")]
+    pub title: String,
+    #[col(sortable, numeric, filter = range, label = "المبلغ", kind = money)]
+    pub amount: Option<Money>,
+    #[col(filter = multi, options = STAGES, label = "المرحلة")]
+    pub stage: String,
+    #[col(label = "ملاحظات", wrap)]
+    pub notes: Option<String>,
+}
+
+fn arabic() -> TableLabels {
+    TableLabels {
+        search: "بحث".into(),
+        columns: "الأعمدة".into(),
+        apply: "تطبيق".into(),
+        rows_per_page: "عدد الصفوف".into(),
+        showing: "عرض {from} إلى {to} من {total}".into(),
+        selected: "تم اختيار {n}".into(),
+        clear_selection: "إلغاء الاختيار".into(),
+        select_row: "اختيار {label}".into(),
+        select_page: "اختيار الصفحة".into(),
+        ..TableLabels::default()
+    }
+}
+
+async fn rtl(shell: AppShell, uow: Uow, query: TableQuery<RtlRow>) -> Result<AppPage, AppError> {
+    let labels = arabic();
+    let page = query
+        .load_as(Deal::query(), &uow, |record| {
+            let deal = record.into_inner();
+            RtlRow { id: deal.id, title: deal.title, amount: deal.amount.map(Money), stage: deal.stage, notes: deal.notes }
+        })
+        .await?;
+    Ok(shell.page("بالعربية").body(el("div").attr("dir", "rtl").child(DataTable::new("rtl", &query, &page).caption("الصفقات").labels(&labels).bulk("/deals/bulk", [BulkAction::new("archive", "أرشفة")]))))
+}
+
 pub struct Pages;
 
 impl Injectable for Pages {
@@ -367,6 +454,8 @@ impl Controller for Pages {
                 Ok::<_, AppError>(shell.page("Tasks").body(DataTable::new("tasks", &query, &page).caption("Tasks")))
             })
             .public(),
+            RouteDef::on(Method::GET, "!/extras", extras).public(),
+            RouteDef::on(Method::GET, "!/rtl", rtl).public(),
             RouteDef::on(Method::GET, "!/deal/{id}", |shell: AppShell, uow: Uow, Path(id): Path<i64>| async move {
                 let deal = Deal::find_or_fail(&uow, id).await?;
                 Ok::<_, AppError>(shell.page("Deal").body(Card::titled(deal.title.clone()).body(el("p").child(deal.notes.clone().unwrap_or_default()))))

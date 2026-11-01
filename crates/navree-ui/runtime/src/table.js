@@ -159,11 +159,23 @@ function setWidth(root, handle, width) {
   measureSticky(root);
 }
 
+/** Sticky columns show an edge only once something has gone under them. @param {Element} root */
+function markScroll(root) {
+  const box = root.querySelector("[data-slot=table-container]");
+  if (!box) return;
+  const gone = Math.abs(box.scrollLeft);
+  root.toggleAttribute("data-scrolled-start", gone > 0);
+  root.toggleAttribute("data-scrolled-end", gone + box.clientWidth < box.scrollWidth - 1);
+}
+
 /** Places sticky columns: each starts where those before it end. @param {Element} root */
 function measureSticky(root) {
   const el = /** @type {HTMLElement} */ (root);
   let at = root.querySelector(`thead ${STICKY_SELECT}`)?.getBoundingClientRect().width || 0;
   el.style.setProperty("--s0", at + "px");
+  const head = root.querySelector("thead");
+  if (head) el.style.setProperty("--head-h", head.getBoundingClientRect().height + "px");
+  markScroll(root);
   for (const th of root.querySelectorAll("thead tr:not([data-slot=group-row]) th[data-sticky]")) {
     const name = th.getAttribute("data-sticky");
     if (name === "s" || name === "e") continue;
@@ -196,9 +208,13 @@ function sync(root) {
     // The server's spelling: a page past the end, an order of parameters.
     if (url.pathname === location.pathname && url.search !== location.search) history.replaceState(history.state, "", url.href);
   }
-  root.setAttribute("data-ui-keep-attrs", "style data-ui-ready data-has-selection");
+  root.setAttribute("data-ui-keep-attrs", "style data-ui-ready data-has-selection data-scrolled-start data-scrolled-end");
   root.setAttribute("data-ui-ready", "");
   for (const box of root.querySelectorAll("[data-ui-col-drag]")) box.setAttribute("draggable", "true");
+  for (const handle of root.querySelectorAll("[data-slot=col-resize]")) {
+    const th = handle.closest("th");
+    if (th) handle.setAttribute("aria-valuenow", String(Math.round(th.getBoundingClientRect().width)));
+  }
   resetControls(root);
   measureSticky(root);
   drawSelection(root);
@@ -498,6 +514,14 @@ addEventListener("popstate", () => {
   const active = /** @type {HTMLElement | null} */ (document.activeElement);
   if (active?.closest?.("[data-ui-table] [data-slot=table-toolbar]")) active.blur();
 });
+
+document.addEventListener("scroll", (e) => {
+  const box = /** @type {Element} */ (e.target);
+  if (box.matches?.("[data-slot=table-container]")) {
+    const root = box.closest("[data-ui-table]");
+    if (root) markScroll(root);
+  }
+}, { capture: true, passive: true });
 
 addEventListener("resize", () => {
   for (const root of document.querySelectorAll("[data-ui-table]")) measureSticky(root);
