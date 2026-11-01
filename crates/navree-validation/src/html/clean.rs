@@ -128,7 +128,8 @@ pub(crate) struct Sanitizer<'a> {
     pub(crate) link_rel: Option<&'a str>,
 }
 
-/// What an output parses to.
+/// What an output parses to (read by the fuzz targets).
+#[cfg_attr(not(feature = "fuzzing"), allow(dead_code))]
 pub(crate) enum Checked {
     /// The tree that was kept (without the table parts
     /// [`Sanitizer::implied_by_parser`] allows).
