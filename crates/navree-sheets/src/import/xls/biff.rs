@@ -433,7 +433,8 @@ fn short_string(
     Ok(out)
 }
 
-/// The shared strings: their text, one after another, and where each ends.
+/// The shared strings, each trimmed: their text, one after another, and where
+/// each ends.
 #[derive(Clone, Debug, Default)]
 pub(super) struct SharedStrings {
     text: String,
@@ -479,17 +480,20 @@ fn read_shared_strings(
     while !pieces.data.is_empty() || pieces.next_piece() {
         piece.clear();
         read_rich_string(&mut pieces, &mut piece)?;
+        // The table keeps its text trimmed: a string is trimmed here, once,
+        // however many cells use it.
+        let kept = piece.trim();
         let len = shared
             .text
             .len()
-            .checked_add(piece.len())
+            .checked_add(kept.len())
             .ok_or_else(too_large)?;
         if len as u64 > max_text_bytes {
             return Err(too_large());
         }
         let end = u32::try_from(len).map_err(|_| too_large())?;
-        make_room(&mut shared.text, piece.len(), max_text_bytes).map_err(|_| too_large())?;
-        shared.text.push_str(&piece);
+        make_room(&mut shared.text, kept.len(), max_text_bytes).map_err(|_| too_large())?;
+        shared.text.push_str(kept);
         shared.ends.push(end);
     }
     shared.text.shrink_to_fit();

@@ -431,8 +431,9 @@ where
         };
         let (row, column, value) = next.map_err(xls_error)?;
         let value = match value {
-            // A shared string is measured where it is, not copied.
-            XlsValue::Text(Cow::Borrowed(text)) => Value::Text(text.trim()),
+            // A shared string is measured where it is, not copied, and it is
+            // trimmed already.
+            XlsValue::Text(Cow::Borrowed(text)) => Value::Text(text),
             XlsValue::Text(Cow::Owned(text)) => {
                 self.text = text;
                 Value::Text(self.text.trim())

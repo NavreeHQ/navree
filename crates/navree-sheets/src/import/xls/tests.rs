@@ -57,6 +57,45 @@ fn one_sheet(strings: &[&str], records: Vec<u8>) -> Vec<u8> {
 }
 
 #[test]
+fn shared_strings_are_held_and_given_trimmed() {
+    // The table keeps its text trimmed: a shared string is trimmed when it is
+    // decoded, once, and counted trimmed against the text limit.
+    let strings = [
+        " 	 padded
+ ",
+        "   ",
+        "inner  space",
+        "",
+    ];
+    let mut records = Vec::new();
+    for at in 0..4 {
+        records.extend(label_sst(0, at, 0, u32::from(at)));
+    }
+    let bytes = one_sheet(&strings, records);
+    let xls = open(&bytes);
+    let cells = cells_of(&xls, 0);
+    let read: Vec<&XlsValue<'_>> = cells.iter().map(|cell| &cell.2).collect();
+    assert_eq!(
+        read,
+        [&text("padded"), &text(""), &text("inner  space"), &text("")]
+    );
+    // 6 + 0 + 12 + 0 bytes of text: a limit of that is enough.
+    let enough = XlsLimits {
+        max_text_bytes: 18,
+        ..limits()
+    };
+    assert!(Xls::open(&bytes, enough).is_ok());
+    let short = XlsLimits {
+        max_text_bytes: 17,
+        ..limits()
+    };
+    assert!(matches!(
+        Xls::open(&bytes, short),
+        Err(XlsError::TooLarge(_))
+    ));
+}
+
+#[test]
 fn a_workbook_is_read_cell_by_cell_in_the_order_of_the_file() {
     let mut records = label_sst(0, 0, 0, 0);
     records.extend(label_sst(0, 1, 0, 1));

@@ -47,9 +47,10 @@
 //! Why it is shaped as it is:
 //!
 //! - `XlsValue` has a lifetime, and `Text` is a `Cow<str>`: the text of a
-//!   shared string is lent from the table, so a string that a million
-//!   cells use is measured (and trimmed, and counted against the text
-//!   limit) before it is copied, never copied a million times first.
+//!   shared string is lent from the table, where it is held trimmed (once,
+//!   when it is decoded, and counted against the text limit trimmed), so a
+//!   string that a million cells use is measured before it is copied, never
+//!   trimmed or copied a million times first.
 //!   Labels and formula results are owned.
 //! - `XlsValue::Int(i64)`: an RK value stored as an integer is one, as an
 //!   integer cell (`Cell::Int`), as XLSB's are; an

@@ -1419,6 +1419,8 @@ mod tests {
 }
 
 #[cfg(test)]
+mod amplification_tests;
+#[cfg(test)]
 mod ods_text_tests;
 #[cfg(test)]
 mod opening_tests;
