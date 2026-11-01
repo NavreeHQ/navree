@@ -235,7 +235,7 @@ function syncAll() {
   for (const root of document.querySelectorAll("[data-ui-table]")) sync(/** @type {HTMLElement} */ (root));
 }
 
-/** Whether the last change of state came from back or forward. */
+/** Whether back or forward is on its way. */
 let cameBack = false;
 
 /* The grid keys */
@@ -518,9 +518,11 @@ document.addEventListener("input", (e) => {
   }
 });
 
+// In capture, ahead of the runtime's own listener: a prefetched page can morph in
+// before the next listener runs.
 addEventListener("popstate", () => {
   cameBack = true;
-});
+}, true);
 
 document.addEventListener("scroll", (e) => {
   const box = /** @type {Element} */ (e.target);

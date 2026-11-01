@@ -559,9 +559,9 @@ for (const browserName of browsers) {
       const key = (await keys(page))[0];
       await page.locator(`[data-ui-select-row][value="${key}"]`).check();
       await page.getByRole("button", { name: "Archive", exact: true }).click();
-      await page.waitForFunction(async () => (await (await fetch("/__t/archived")).text()) !== "").catch(() => {});
-      await page.waitForURL(/density=compact/);
+      for (let tries = 0; tries < 50 && (await get("/__t/archived")) === ""; tries++) await new Promise((resolve) => setTimeout(resolve, 100));
       assert.equal(await get("/__t/archived"), key);
+      await page.waitForURL(/density=compact/);
       await close();
     });
 
