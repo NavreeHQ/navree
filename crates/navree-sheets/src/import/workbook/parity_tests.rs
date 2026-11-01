@@ -23,7 +23,7 @@ pub(crate) fn dump(bytes: &[u8]) -> String {
     let mut out = String::new();
     for (index, name) in workbook.sheet_names().iter().enumerate() {
         let _ = writeln!(out, "sheet {index} {name}");
-        let cells = workbook.read_cells(index, |cells| {
+        let cells = workbook.read_cells(index, None, |cells| {
             let mut all = BTreeMap::new();
             if let Some(cells) = cells {
                 while let Some(cell) = cells.next_cell()? {

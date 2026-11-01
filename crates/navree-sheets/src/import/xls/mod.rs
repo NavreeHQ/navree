@@ -34,13 +34,13 @@
 //! pub(crate) struct XlsLimits { pub max_stream_bytes: u64, pub max_text_bytes: u64 }
 //! pub(crate) enum XlsValue<'a> { Text(Cow<'a, str>), Number(f64), Int(i64),
 //!                                DateTime(f64), Bool(bool), Error(&'static str) }
-//! pub(crate) enum XlsError { NotXls, Encrypted, Damaged(String), TooLarge(String) }
+//! pub(crate) enum XlsError { NotXls, Encrypted, Damaged(String), TooLarge(String), Interrupted }
 //! impl Xls {
 //!     pub(crate) fn open(bytes: &[u8], limits: XlsLimits) -> Result<Xls, XlsError>;
 //!     pub(crate) fn sheet_names(&self) -> &[String];
 //!     pub(crate) fn date1904(&self) -> bool;
-//!     pub(crate) fn cells(&self, sheet: usize)
-//!         -> Result<impl Iterator<Item = Result<(u32, u32, XlsValue<'_>), XlsError>> + '_, XlsError>;
+//!     pub(crate) fn cells<'a>(&'a self, sheet: usize, stop: Option<&'a AtomicBool>)
+//!         -> Result<impl Iterator<Item = Result<(u32, u32, XlsValue<'a>), XlsError>> + 'a, XlsError>;
 //! }
 //! ```
 //!
@@ -60,6 +60,10 @@
 //! - `XlsValue::Error` holds the name the table writes after `#`: `Null`,
 //!   `Div0`, `Value`, `Ref`, `Name`, `Num`, `NA`, `GettingData` (so a cell
 //!   reads `#Div0`); an error of another code is the text `#Error(0x..)`.
+//! - `cells` takes the flag that tells the reading to stop, and looks at it
+//!   every 1,024 records it goes through, whether or not they give a cell;
+//!   once it is raised the iterator gives [`XlsError::Interrupted`] and ends.
+//!   Opening goes through the stream without looking at it.
 //! - `cells` also gives cells whose text is empty (a formula that results
 //!   in `""`): they are cells, and a later cell at the same position
 //!   replaces an earlier one. Blank cells (BLANK, MULBLANK) are skipped.
@@ -87,6 +91,7 @@ pub(crate) mod write;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt;
+use std::sync::atomic::AtomicBool;
 
 use biff::{Biff, Context, SharedStrings};
 
@@ -131,6 +136,8 @@ pub(crate) enum XlsError {
     Damaged(String),
     /// The file holds more than a limit allows: which.
     TooLarge(String),
+    /// The reading was told to stop: nobody waits for it any more.
+    Interrupted,
 }
 
 impl fmt::Display for XlsError {
@@ -140,6 +147,7 @@ impl fmt::Display for XlsError {
             XlsError::Encrypted => f.write_str("the workbook is encrypted"),
             XlsError::Damaged(what) => write!(f, "the workbook is damaged: {what}"),
             XlsError::TooLarge(what) => f.write_str(what),
+            XlsError::Interrupted => f.write_str("the reading was told to stop"),
         }
     }
 }
@@ -165,6 +173,14 @@ struct SheetAt {
 
 /// The most cell formats a workbook keeps: a cell names one in 16 bits.
 const MAX_CELL_FORMATS: usize = 65_536;
+
+/// How many records a sheet's reading goes through between two looks at the
+/// flag that tells it to stop. A record's data is at most 65,535 bytes (a
+/// 16-bit length), and what the reader does with one is a decoded string at
+/// worst, tens of microseconds; the flag is one load. So 1,024 records are a
+/// few tens of milliseconds at the most, and microseconds when each is a
+/// header of four bytes.
+const STOP_EVERY: u32 = 1024;
 
 /// An XLS workbook, open.
 pub(crate) struct Xls {
@@ -217,7 +233,7 @@ impl Xls {
         // Every sheet is read once, so that a damaged one is found now.
         for sheet in &globals.sheets {
             let end = end_of(sheet.offset);
-            let mut cells = context.cells_at(sheet.offset, end)?;
+            let mut cells = context.cells_at(sheet.offset, end, None)?;
             for cell in &mut cells {
                 cell?;
             }
@@ -261,17 +277,20 @@ impl Xls {
     }
 
     /// The cells of worksheet `sheet` (an index into [`Xls::sheet_names`])
-    /// in the order the file stores them, blank cells skipped.
-    pub(crate) fn cells(
-        &self,
+    /// in the order the file stores them, blank cells skipped. The records
+    /// are gone through until `stop` is raised, which is looked at every
+    /// [`STOP_EVERY`] records.
+    pub(crate) fn cells<'a>(
+        &'a self,
         sheet: usize,
-    ) -> Result<impl Iterator<Item = Result<(u32, u32, XlsValue<'_>), XlsError>> + '_, XlsError>
+        stop: Option<&'a AtomicBool>,
+    ) -> Result<impl Iterator<Item = Result<(u32, u32, XlsValue<'a>), XlsError>> + 'a, XlsError>
     {
         let sheet = self
             .sheets
             .get(sheet)
             .ok_or_else(|| damaged(format!("the workbook has no worksheet {sheet}")))?;
-        self.context.cells_at(sheet.offset, sheet.end)
+        self.context.cells_at(sheet.offset, sheet.end, stop)
     }
 }
 

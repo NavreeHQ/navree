@@ -12,6 +12,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::{BufRead, Read};
+use std::sync::atomic::AtomicBool;
 
 use encoding_rs::UTF_16LE;
 
@@ -20,7 +21,7 @@ use super::package::{self, Kind as PartKind, Relationships};
 use super::xml::{MAX_LENGTH, too_long};
 use super::{
     Archive, Budget, CellSource, Damaged, MAX_SHEETS, SharedStrings, SourceCell, Value, damaged,
-    too_many_sheets,
+    is_stop, too_many_sheets,
 };
 use crate::{Cell, SheetsError};
 
@@ -126,6 +127,7 @@ impl<'a> Xlsb<'a> {
     pub(super) fn read_cells<T>(
         &self,
         sheet: usize,
+        stop: Option<&AtomicBool>,
         read: impl FnOnce(Option<&mut dyn CellSource>) -> Result<T, SheetsError>,
     ) -> Result<T, SheetsError> {
         let sheet = self
@@ -138,29 +140,31 @@ impl<'a> Xlsb<'a> {
             return read(None);
         }
         let path = &sheet.part;
-        let read = self.archive.read(self.archive.name_of(path), |source| {
-            let mut records = Records::new(source);
-            // The sheet's dimension, then its cells, past the views and
-            // the column widths.
-            let dimension = records.find(SHEET_DIMENSION, &[])?;
-            if dimension.len() < 16 {
-                return Err(short("the sheet's dimension").into());
-            }
-            records.find(
-                BEGIN_SHEET_DATA,
-                &[(0x0085, 0x0086), (0x0025, 0x0026), (0x0186, 0x0187)],
-            )?;
-            let mut cells = XlsbCells {
-                records,
-                strings: &self.strings,
-                dates: &self.dates,
-                is_1904: self.is_1904,
-                row: 0,
-                done: false,
-                text: String::new(),
-            };
-            read(Some(&mut cells))
-        })?;
+        let read = self
+            .archive
+            .read(self.archive.name_of(path), stop, |source| {
+                let mut records = Records::new(source);
+                // The sheet's dimension, then its cells, past the views and
+                // the column widths.
+                let dimension = records.find(SHEET_DIMENSION, &[])?;
+                if dimension.len() < 16 {
+                    return Err(short("the sheet's dimension").into());
+                }
+                records.find(
+                    BEGIN_SHEET_DATA,
+                    &[(0x0085, 0x0086), (0x0025, 0x0026), (0x0186, 0x0187)],
+                )?;
+                let mut cells = XlsbCells {
+                    records,
+                    strings: &self.strings,
+                    dates: &self.dates,
+                    is_1904: self.is_1904,
+                    row: 0,
+                    done: false,
+                    text: String::new(),
+                };
+                read(Some(&mut cells))
+            })?;
         read.ok_or_else(|| damaged(format_args!("the sheet part {path} is missing")).into())
     }
 }
@@ -209,9 +213,14 @@ impl<'r> Records<'r> {
 
     fn byte(&mut self) -> Result<u8, Damaged> {
         let mut byte = [0u8];
-        self.source
-            .read_exact(&mut byte)
-            .map_err(|_| damaged("a part ends before its last record"))?;
+        self.source.read_exact(&mut byte).map_err(|error| {
+            // A part that ends is damaged; one that was told to stop is not.
+            if is_stop(&error) {
+                Damaged::from(error)
+            } else {
+                damaged("a part ends before its last record")
+            }
+        })?;
         Ok(byte[0])
     }
 
@@ -400,7 +409,7 @@ fn sheets(
                         )));
                     }
                     if names.len() >= MAX_SHEETS {
-                        return Err(Damaged(too_many_sheets()));
+                        return Err(damaged(too_many_sheets()));
                     }
                     let (name, _) = wide_string(body.get(8 + used..).unwrap_or_default())?;
                     // A name, and its place in two lists.

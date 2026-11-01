@@ -163,7 +163,7 @@ fn all_cells(
 ) -> Result<Vec<(u32, u32, Cell)>, SheetsError> {
     let workbook = Workbook::open(bytes, reader_limits(options))?;
     let sheet = sheet_to_read(workbook.sheet_names(), options)?;
-    workbook.read_cells(sheet, |cells| {
+    workbook.read_cells(sheet, None, |cells| {
         let mut all = Vec::new();
         if let Some(cells) = cells {
             while let Some(cell) = cells.next_cell()? {

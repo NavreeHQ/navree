@@ -14,11 +14,16 @@
 //!
 //! A row's text is made as its cells are read, spaces and all: the text of
 //! the whole row counts against `max_text_bytes` before it is made, and the
-//! text of a cell in a column the table does not keep is only counted.
+//! text of a cell in a column the table does not keep is only counted. A
+//! row or a cell that gives nothing (it repeats no time, or it is past the
+//! last row or column) is read through without making any text, and the
+//! spaces `text:s` makes count against `max_text_bytes` across the sheet,
+//! not just in a row. Spaces that end a cell are never made.
 
 use std::collections::HashMap;
 use std::io::BufRead;
 use std::ops::Range;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use quick_xml::events::{BytesStart, Event};
 
@@ -27,7 +32,7 @@ use super::xlsx::error_text;
 use super::xml::{self, Xml, attribute, attributes, decode, push_entity};
 use super::{
     Archive, Budget, CellSource, Damaged, Limits, MAX_SHEETS, SourceCell, Value, damaged,
-    too_many_sheets,
+    interrupted, too_many_sheets,
 };
 use crate::{Cell, SheetsError};
 
@@ -73,7 +78,7 @@ impl<'a> Ods<'a> {
             Some(false) => {}
         }
         let content = archive.read_opening("content.xml", budget, |source| {
-            let mut content = OdsCells::new(source, None, limits, false, Some(budget));
+            let mut content = OdsCells::new(source, None, limits, false, Some(budget), None);
             content.rest_in_order(None, &|| Ok(()))?;
             Ok::<_, SheetsError>((content.names, content.is_1904))
         })?;
@@ -104,14 +109,16 @@ impl<'a> Ods<'a> {
     pub(super) fn read_cells<T>(
         &self,
         sheet: usize,
+        stop: Option<&AtomicBool>,
         read: impl FnOnce(Option<&mut dyn CellSource>) -> Result<T, SheetsError>,
     ) -> Result<T, SheetsError> {
         let table = *self
             .tables
             .get(sheet)
             .ok_or_else(|| damaged("the workbook has no such sheet"))?;
-        let read = self.archive.read("content.xml", |source| {
-            let mut cells = OdsCells::new(source, Some(table), self.limits, self.is_1904, None);
+        let read = self.archive.read("content.xml", stop, |source| {
+            let mut cells =
+                OdsCells::new(source, Some(table), self.limits, self.is_1904, None, stop);
             read(Some(&mut cells))
         })?;
         read.ok_or_else(|| damaged("the file has no content.xml part").into())
@@ -172,6 +179,15 @@ enum Place {
     Done,
 }
 
+/// What a reading of a sheet has made so far that its rows do not tell.
+struct Made<'s> {
+    /// Raised when nobody waits for the reading any more.
+    stop: Option<&'s AtomicBool>,
+    /// The spaces `text:s` may still make in this sheet: at most
+    /// `max_text_bytes` in all, whatever the shape of its rows.
+    spaces_left: u64,
+}
+
 /// The cells of a table of `content.xml`; with no table to give, a reading
 /// of every table that gives no cell and keeps their names.
 struct OdsCells<'r> {
@@ -184,6 +200,7 @@ struct OdsCells<'r> {
     tables: usize,
     names: Vec<String>,
     budget: Option<&'r Budget>,
+    made: Made<'r>,
     place: Place,
     /// Whether times count from 1904, by the null date the file states.
     is_1904: bool,
@@ -217,6 +234,7 @@ impl<'r> OdsCells<'r> {
         limits: Limits,
         is_1904: bool,
         budget: Option<&'r Budget>,
+        stop: Option<&'r AtomicBool>,
     ) -> Self {
         OdsCells {
             xml: xml::reader(source),
@@ -226,6 +244,10 @@ impl<'r> OdsCells<'r> {
             tables: 0,
             names: Vec::new(),
             budget,
+            made: Made {
+                stop,
+                spaces_left: limits.max_text_bytes,
+            },
             place: Place::Outside,
             named_style: false,
             next_row: 0,
@@ -314,28 +336,36 @@ impl<'r> OdsCells<'r> {
                             Some(repeats) => count(&decode(repeats)?)?,
                             None => 1,
                         };
+                        // The rows are counted before the row is read: one that
+                        // repeats no time, or starts past the last row of a
+                        // sheet, is a row of no sheet. It is read through, and
+                        // makes nothing.
+                        let first = self.next_row;
+                        let rows = repeats.min(MAX_ROWS.saturating_sub(first));
+                        self.next_row = first + rows;
+                        let give = given && rows > 0;
                         let kept = self.kept_columns();
                         read_row(
                             &mut self.xml,
-                            given.then_some((&mut self.row, &mut self.row_text)),
+                            give.then_some((&mut self.row, &mut self.row_text)),
                             [&mut self.row_buf, &mut self.cell_buf],
+                            &mut self.made,
                             self.limits,
                             self.is_1904,
                             kept,
                         )?;
-                        if given && self.header_end.is_none() {
-                            self.header_end = self.row.last().map(|cell| {
-                                (cell.column as usize).saturating_add(cell.columns as usize)
-                            });
-                        }
-                        let first = self.next_row;
-                        let rows = repeats.min(MAX_ROWS.saturating_sub(first));
-                        self.next_row = first + rows;
-                        if given && rows > 0 && !self.row.is_empty() {
-                            self.row_number = u32::try_from(first).unwrap_or(u32::MAX);
-                            self.rows_left = rows;
-                            self.at = 0;
-                            return Ok(());
+                        if give {
+                            if self.header_end.is_none() {
+                                self.header_end = self.row.last().map(|cell| {
+                                    (cell.column as usize).saturating_add(cell.columns as usize)
+                                });
+                            }
+                            if !self.row.is_empty() {
+                                self.row_number = u32::try_from(first).unwrap_or(u32::MAX);
+                                self.rows_left = rows;
+                                self.at = 0;
+                                return Ok(());
+                            }
                         }
                     }
                     Event::End(e) if e.name().as_ref() == "table:table" => {
@@ -473,6 +503,7 @@ fn read_row(
     xml: &mut Xml<'_>,
     mut held: Option<(&mut Vec<HeldCell>, &mut String)>,
     [buf, cell_buf]: [&mut Vec<u8>; 2],
+    made: &mut Made<'_>,
     limits: Limits,
     is_1904: bool,
     cut: usize,
@@ -493,12 +524,15 @@ fn read_row(
                 let start = column;
                 column = column.saturating_add(repeats);
                 let end = column.min(MAX_COLUMNS);
+                // A cell of no column (it repeats no time, or starts past the
+                // last column) is read through and makes nothing.
                 let keep = match held.as_mut() {
                     None => Keep::Nothing,
+                    Some(_) if start >= end => Keep::Nothing,
                     Some(_) if start >= kept => Keep::Count,
                     Some((_, text)) => Keep::Text(text),
                 };
-                let (value, closed) = cell_value(xml, &e, keep, cell_buf, limits, is_1904)?;
+                let (value, closed) = cell_value(xml, &e, keep, cell_buf, made, limits, is_1904)?;
                 if !closed {
                     xml.skip(e.name(), cell_buf)?;
                 }
@@ -529,6 +563,7 @@ fn cell_value(
     cell: &BytesStart<'_>,
     mut keep: Keep<'_>,
     buf: &mut Vec<u8>,
+    made: &mut Made<'_>,
     limits: Limits,
     is_1904: bool,
 ) -> Result<(Option<Held>, bool), SheetsError> {
@@ -585,7 +620,11 @@ fn cell_value(
     let mut content = Content {
         start,
         keep,
-        spaces: 0,
+        made,
+        lead: 0,
+        held: String::new(),
+        held_len: 0,
+        tail: 0,
         started: false,
         paragraphs: 0,
         counted: 0,
@@ -605,10 +644,7 @@ fn cell_value(
             }
             Event::Start(e) if e.name().as_ref() == "text:p" => {
                 if content.paragraphs > 0 {
-                    content.add(
-                        "
-",
-                    )?;
+                    content.add("\n")?;
                 }
                 content.paragraphs += 1;
             }
@@ -619,7 +655,7 @@ fn cell_value(
                     Some(repeats) => count(&decode(repeats)?)?,
                     None => 1,
                 };
-                content.spaces = content.spaces.saturating_add(repeats);
+                content.spaces(repeats);
             }
             Event::Eof => return Err(damaged("a cell is not closed").into()),
             _ => {}
@@ -634,14 +670,25 @@ fn too_much_text(limit: u64) -> SheetsError {
 }
 
 /// The text of a cell's paragraphs, while it is read.
-struct Content<'t> {
+///
+/// Whitespace that comes after the text so far is not made when it comes:
+/// it is held until text follows it, so whitespace that ends a cell, which
+/// the table trims, is never made, however many spaces `text:s` says.
+struct Content<'t, 'm, 's> {
     keep: Keep<'t>,
+    /// What the sheet's reading has made so far.
+    made: &'m mut Made<'s>,
     /// Where the cell's text starts in its row's text, when it is kept.
     start: usize,
-    /// Spaces of `text:s` not yet added: they are added when text follows
-    /// them, so spaces that end the cell are never made.
-    spaces: u64,
-    /// Whether the cell has text other than spaces.
+    /// The whitespace held, in the order it came: `lead` spaces of
+    /// `text:s`, the whitespace `held` as text (`held_len` bytes of it, kept
+    /// as text only when the cell's text is made), and `tail` spaces more.
+    /// Spaces before any text, which the table trims too, are dropped.
+    lead: u64,
+    held: String,
+    held_len: u64,
+    tail: u64,
+    /// Whether the cell has text other than whitespace.
     started: bool,
     paragraphs: usize,
     /// The text of a cell that is not made, so far.
@@ -650,36 +697,117 @@ struct Content<'t> {
     limit: u64,
 }
 
-impl Content<'_> {
+/// The most spaces made between two looks at the flag that tells the reading
+/// to stop.
+const SPACES_AT_A_TIME: u64 = 1 << 20;
+
+/// Adds `count` spaces to `text`, a piece at a time, so that the reading can
+/// be told to stop between pieces.
+fn fill(text: &mut String, mut count: u64, stop: Option<&AtomicBool>) -> Result<(), SheetsError> {
+    while count > 0 {
+        if stop.is_some_and(|stop| stop.load(Ordering::Relaxed)) {
+            return Err(interrupted());
+        }
+        let piece = count.min(SPACES_AT_A_TIME);
+        // At most 1 MiB, so a number that fits.
+        text.extend(std::iter::repeat_n(' ', piece as usize));
+        count -= piece;
+    }
+    Ok(())
+}
+
+impl Content<'_, '_, '_> {
+    /// Adds `more`, text of the cell.
     fn add(&mut self, more: &str) -> Result<(), SheetsError> {
-        // Spaces at the start are trimmed with the rest, so not made.
-        let spaces = if self.started { self.spaces } else { 0 };
+        if more.is_empty() || matches!(self.keep, Keep::Nothing) {
+            return Ok(());
+        }
+        if whitespace(more) {
+            // Before any text it is trimmed; after, it is held until text
+            // follows it.
+            return if self.started {
+                self.hold(more)
+            } else {
+                Ok(())
+            };
+        }
+        self.release(more.len())?;
+        if let Keep::Text(text) = &mut self.keep {
+            // Room was made for it with the whitespace released before it.
+            text.push_str(more);
+        }
+        self.started = true;
+        Ok(())
+    }
+
+    /// Adds `count` spaces (`text:s`).
+    fn spaces(&mut self, count: u64) {
+        if !self.started || matches!(self.keep, Keep::Nothing) {
+            return;
+        }
+        if self.held_len == 0 {
+            self.lead = self.lead.saturating_add(count);
+        } else {
+            self.tail = self.tail.saturating_add(count);
+        }
+    }
+
+    /// Holds `more`, whitespace as text, after the whitespace held already.
+    fn hold(&mut self, more: &str) -> Result<(), SheetsError> {
+        // Spaces after text that is held cannot be kept apart from the
+        // spaces before it but by being made: they are, now.
+        if self.tail > 0 {
+            self.release(0)?;
+        }
+        if let Keep::Text(text) = &mut self.keep {
+            let length = (text.len() as u64)
+                .saturating_add(self.held_len)
+                .saturating_add(more.len() as u64);
+            if length > self.limit {
+                return Err(too_much_text(self.limit));
+            }
+            self.held.push_str(more);
+        }
+        self.held_len = self.held_len.saturating_add(more.len() as u64);
+        Ok(())
+    }
+
+    /// Makes the whitespace held, before `next` bytes of text.
+    fn release(&mut self, next: usize) -> Result<(), SheetsError> {
+        let spaces = self.lead.saturating_add(self.tail);
         match &mut self.keep {
-            Keep::Nothing => return Ok(()),
+            Keep::Nothing => {}
             Keep::Count => {
-                self.counted = self.counted.saturating_add(spaces);
+                self.counted = self
+                    .counted
+                    .saturating_add(spaces)
+                    .saturating_add(self.held_len);
                 if spaces > 0 && self.counted > self.limit {
                     return Err(too_much_text(self.limit));
                 }
-                self.counted = self.counted.saturating_add(more.len() as u64);
+                self.counted = self.counted.saturating_add(next as u64);
             }
             Keep::Text(text) => {
                 let length = (text.len() as u64)
                     .saturating_add(spaces)
-                    .saturating_add(more.len() as u64);
-                if length > self.limit {
+                    .saturating_add(self.held_len)
+                    .saturating_add(next as u64);
+                if length > self.limit || spaces > self.made.spaces_left {
                     return Err(too_much_text(self.limit));
                 }
+                self.made.spaces_left -= spaces;
                 // Within the limit, so a number that fits.
-                let spaces = spaces as usize;
-                text.try_reserve(spaces + more.len())
+                text.try_reserve((length - text.len() as u64) as usize)
                     .map_err(|_| too_much_text(self.limit))?;
-                text.extend(std::iter::repeat_n(' ', spaces));
-                text.push_str(more);
+                fill(text, self.lead, self.made.stop)?;
+                text.push_str(&self.held);
+                fill(text, self.tail, self.made.stop)?;
             }
         }
-        self.spaces = 0;
-        self.started |= !whitespace(more);
+        self.lead = 0;
+        self.held.clear();
+        self.held_len = 0;
+        self.tail = 0;
         Ok(())
     }
 

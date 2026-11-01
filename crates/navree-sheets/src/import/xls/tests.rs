@@ -17,7 +17,7 @@ fn limits() -> XlsLimits {
 
 /// The cells of sheet `index`, as the file gives them.
 fn cells_of(xls: &Xls, index: usize) -> Vec<(u32, u32, XlsValue<'_>)> {
-    xls.cells(index)
+    xls.cells(index, None)
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
         .unwrap()
@@ -334,7 +334,7 @@ fn sheets_are_worksheets_in_workbook_order() {
     assert_eq!(xls.sheet_names(), ["First", "Hidden"]);
     assert_eq!(cells_of(&xls, 0), [(0, 0, text("one"))]);
     assert_eq!(cells_of(&xls, 1), [(0, 0, text("two"))]);
-    assert!(xls.cells(2).is_err());
+    assert!(xls.cells(2, None).is_err());
 }
 
 #[test]

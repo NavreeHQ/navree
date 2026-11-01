@@ -9,12 +9,12 @@ use crate::import::workbook::dates::excel_date;
 use crate::import::workbook::xlsb_writer as xb;
 use crate::import::xls::write::{self as xw, compound, record};
 
-const MIB: usize = 1 << 20;
+pub(super) const MIB: usize = 1 << 20;
 
-const REL: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+pub(super) const REL: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const WS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
 
-fn zip_parts(parts: &[(&str, &[u8])], stored: bool) -> Vec<u8> {
+pub(super) fn zip_parts(parts: &[(&str, &[u8])], stored: bool) -> Vec<u8> {
     let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
     let mut options = zip::write::SimpleFileOptions::default();
     if stored {
@@ -27,7 +27,7 @@ fn zip_parts(parts: &[(&str, &[u8])], stored: bool) -> Vec<u8> {
     zip.finish().unwrap().into_inner()
 }
 
-fn opts(max_text: u64) -> ReadOptions<'static> {
+pub(super) fn opts(max_text: u64) -> ReadOptions<'static> {
     ReadOptions {
         max_rows: 100_000,
         max_text_bytes: max_text,
@@ -36,7 +36,7 @@ fn opts(max_text: u64) -> ReadOptions<'static> {
 }
 
 /// The table of the first sheet, its header first.
-fn cells_of(file: &[u8], name: &str) -> Result<Vec<Vec<Cell>>, String> {
+pub(super) fn cells_of(file: &[u8], name: &str) -> Result<Vec<Vec<Cell>>, String> {
     read_table(file, name, &opts(1 << 28))
         .map(|table| {
             let mut all = vec![
@@ -52,7 +52,7 @@ fn cells_of(file: &[u8], name: &str) -> Result<Vec<Vec<Cell>>, String> {
         .map_err(|error| error.to_string())
 }
 
-fn text(value: &str) -> Cell {
+pub(super) fn text(value: &str) -> Cell {
     Cell::Text(value.into())
 }
 
@@ -60,7 +60,7 @@ fn date(year: i32, month: u32, day: u32) -> Cell {
     Cell::Date(chrono::NaiveDate::from_ymd_opt(year, month, day).unwrap())
 }
 
-fn refused_with(result: &Result<Table, SheetsError>, what: &str) -> bool {
+pub(super) fn refused_with(result: &Result<Table, SheetsError>, what: &str) -> bool {
     matches!(result, Err(error) if error.to_string().contains(what))
 }
 
@@ -134,7 +134,7 @@ macro_rules! alone {
 
 // What an ODS row may make.
 
-fn ods(content: &str) -> Vec<u8> {
+pub(super) fn ods(content: &str) -> Vec<u8> {
     let manifest = r#"<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0"><manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.spreadsheet"/></manifest:manifest>"#;
     let doc = format!(
         r#"<office:document-content xmlns:office="o" xmlns:table="t" xmlns:text="x"><office:body><office:spreadsheet>{content}</office:spreadsheet></office:body></office:document-content>"#
@@ -158,7 +158,7 @@ fn spaced_cell(spaces: usize) -> String {
     )
 }
 
-fn ods_text_cell(value: &str) -> String {
+pub(super) fn ods_text_cell(value: &str) -> String {
     format!(
         r#"<table:table-cell office:value-type="string"><text:p>{value}</text:p></table:table-cell>"#
     )
@@ -1548,3 +1548,36 @@ fn mutated_files_are_read_within_the_limits_or_refused() {
         }
     }
 }
+
+// What a reading holds for work that gives nothing.
+
+alone!(
+    the_spaces_of_an_ods_row_that_repeats_zero_times_are_not_made,
+    peak_of_ods_spaces_of_a_row_that_repeats_zero_times,
+    {
+        // 32 MiB of spaces in a row that gives no cell, under a limit that
+        // lets them through.
+        let file = ods(&format!(
+            r#"<table:table table:name="S"><table:table-row table:number-rows-repeated="0">{}</table:table-row></table:table>"#,
+            spaced_cell(32 * MIB)
+        ));
+        let (result, peak) = measured(|| read_table(&file, "x.ods", &opts(64 * MIB as u64)));
+        assert!(refused_with(&result, "no header row"), "{result:?}");
+        assert!(peak < 8 * MIB, "held {peak} bytes at most");
+    }
+);
+
+alone!(
+    the_spaces_that_end_an_ods_cell_are_not_made_before_more_whitespace,
+    peak_of_ods_spaces_that_end_a_cell,
+    {
+        let file = ods(&format!(
+            r#"<table:table table:name="S"><table:table-row>{}</table:table-row><table:table-row><table:table-cell office:value-type="string"><text:p>a<text:s text:c="{}"/> </text:p></table:table-cell></table:table-row></table:table>"#,
+            ods_text_cell("h"),
+            32 * MIB
+        ));
+        let (result, peak) = measured(|| read_table(&file, "x.ods", &opts(64 * MIB as u64)));
+        assert_eq!(result.unwrap().rows[0].cells, [text("a")]);
+        assert!(peak < 8 * MIB, "held {peak} bytes at most");
+    }
+);

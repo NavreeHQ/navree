@@ -194,7 +194,7 @@ pub fn xls(bytes: &[u8]) {
     let _ = xls.date1904();
     for (index, name) in xls.sheet_names().iter().enumerate() {
         let cells = xls
-            .cells(index)
+            .cells(index, None)
             .unwrap_or_else(|error| panic!("worksheet {name:?} is listed but not there: {error}"));
         for cell in cells {
             if let Err(error) = cell {
@@ -202,7 +202,7 @@ pub fn xls(bytes: &[u8]) {
             }
         }
     }
-    assert!(xls.cells(xls.sheet_names().len()).is_err());
+    assert!(xls.cells(xls.sheet_names().len(), None).is_err());
 }
 
 /// [`xls`] on `stream` as the workbook stream of a compound file, so that

@@ -35,6 +35,7 @@ use std::cell::Cell as Counter;
 use std::collections::TryReserveError;
 use std::fmt;
 use std::marker::PhantomData;
+use std::sync::atomic::AtomicBool;
 
 use self::archive::Archive;
 use super::read::{FileKind, OLE};
@@ -200,23 +201,74 @@ pub(crate) trait CellSource {
     }
 }
 
-/// What is wrong with a workbook that cannot be read.
+/// What is wrong with a workbook that cannot be read, or that the reading
+/// was told to stop (nobody waits for it any more), which is nothing wrong
+/// with the workbook.
 #[derive(Debug)]
-pub(crate) struct Damaged(pub(crate) String);
+pub(crate) struct Damaged {
+    pub(crate) detail: String,
+    stopped: bool,
+}
 
 pub(crate) fn damaged(detail: impl fmt::Display) -> Damaged {
-    Damaged(detail.to_string())
+    Damaged {
+        detail: detail.to_string(),
+        stopped: false,
+    }
+}
+
+impl Damaged {
+    /// The reading was told to stop.
+    fn stopped() -> Self {
+        Damaged {
+            detail: Stopped.to_string(),
+            stopped: true,
+        }
+    }
 }
 
 impl From<Damaged> for SheetsError {
     fn from(damaged: Damaged) -> Self {
-        SheetsError::UnsupportedFile(format!("The workbook cannot be read: {}.", damaged.0))
+        if damaged.stopped {
+            return interrupted();
+        }
+        SheetsError::UnsupportedFile(format!("The workbook cannot be read: {}.", damaged.detail))
     }
+}
+
+/// The error of a reading that was told to stop, because nobody waits for the
+/// file to be read any more.
+pub(crate) fn interrupted() -> SheetsError {
+    SheetsError::Io(std::io::Error::new(
+        std::io::ErrorKind::Interrupted,
+        "nobody is waiting for the file to be read",
+    ))
+}
+
+/// What a part of the zip file fails with, in the middle of a read, once the
+/// reading is told to stop.
+#[derive(Debug)]
+struct Stopped;
+
+impl fmt::Display for Stopped {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("the reading was told to stop")
+    }
+}
+
+impl std::error::Error for Stopped {}
+
+/// Whether `error` is the one a part gives when the reading is told to stop.
+fn is_stop(error: &std::io::Error) -> bool {
+    error.get_ref().is_some_and(|inner| inner.is::<Stopped>())
 }
 
 impl From<quick_xml::Error> for Damaged {
     fn from(error: quick_xml::Error) -> Self {
-        damaged(format_args!("its XML: {error}"))
+        match &error {
+            quick_xml::Error::Io(io) if is_stop(io) => Damaged::stopped(),
+            _ => damaged(format_args!("its XML: {error}")),
+        }
     }
 }
 
@@ -228,6 +280,9 @@ impl From<quick_xml::events::attributes::AttrError> for Damaged {
 
 impl From<std::io::Error> for Damaged {
     fn from(error: std::io::Error) -> Self {
+        if is_stop(&error) {
+            return Damaged::stopped();
+        }
         damaged(error)
     }
 }
@@ -244,6 +299,7 @@ pub(crate) enum Workbook<'a> {
 fn xls_error(error: XlsError) -> SheetsError {
     match error {
         XlsError::TooLarge(what) => SheetsError::UnsupportedFile(what),
+        XlsError::Interrupted => interrupted(),
         other => damaged(other).into(),
     }
 }
@@ -326,19 +382,25 @@ impl<'a> Workbook<'a> {
     }
 
     /// Reads the cells of the sheet at `sheet` with `read`, given none when
-    /// the sheet holds no cells to read (a chart or a macro sheet).
+    /// the sheet holds no cells to read (a chart or a macro sheet). `stop`
+    /// is raised when nobody waits for the reading any more: the sources
+    /// look at it as they read, whether or not a cell comes of what they
+    /// read, and end the reading with [`interrupted`]. A zip part's bytes
+    /// are looked at every 64 KiB it unpacks, and an XLS sheet's records
+    /// every 1,024 records.
     pub(crate) fn read_cells<T>(
         &self,
         sheet: usize,
+        stop: Option<&AtomicBool>,
         read: impl FnOnce(Option<&mut dyn CellSource>) -> Result<T, SheetsError>,
     ) -> Result<T, SheetsError> {
         match self {
-            Workbook::Xlsx(book) => book.read_cells(sheet, read),
-            Workbook::Xlsb(book) => book.read_cells(sheet, read),
-            Workbook::Ods(book) => book.read_cells(sheet, read),
+            Workbook::Xlsx(book) => book.read_cells(sheet, stop, read),
+            Workbook::Xlsb(book) => book.read_cells(sheet, stop, read),
+            Workbook::Ods(book) => book.read_cells(sheet, stop, read),
             Workbook::Xls(book) => {
                 let mut cells = XlsCells {
-                    cells: book.cells(sheet).map_err(xls_error)?,
+                    cells: book.cells(sheet, stop).map_err(xls_error)?,
                     date1904: book.date1904(),
                     text: String::new(),
                     lent: PhantomData,

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use super::decode::decode;
-use super::workbook::{CellSource, Limits, Value, Workbook};
+use super::workbook::{CellSource, Limits, Value, Workbook, interrupted};
 use crate::{Cell, ImportOptions, SheetsError};
 
 /// The kind of an uploaded file.
@@ -87,7 +87,9 @@ pub(crate) struct ReadOptions<'a> {
     /// The most text the cells the table keeps may hold, in bytes.
     pub(crate) max_text_bytes: u64,
     /// Raised when nobody waits for the reading any more; the reading then
-    /// stops at the next record.
+    /// stops: a workbook's sheet within a few hundred microseconds of
+    /// reading, and a text file at its next record. Opening a workbook is not
+    /// interrupted.
     pub(crate) stop: Option<&'a AtomicBool>,
 }
 
@@ -95,10 +97,7 @@ impl ReadOptions<'_> {
     /// An error once the reading has been told to stop.
     fn ensure_running(&self) -> Result<(), SheetsError> {
         if self.stop.is_some_and(|stop| stop.load(Ordering::Relaxed)) {
-            return Err(SheetsError::Io(std::io::Error::new(
-                std::io::ErrorKind::Interrupted,
-                "nobody is waiting for the file to be read",
-            )));
+            return Err(interrupted());
         }
         Ok(())
     }
@@ -428,14 +427,16 @@ fn tabulate_cells(
     options: &ReadOptions<'_>,
 ) -> Result<Tabulator, SheetsError> {
     let mut tabulator = Tabulator::new(options);
-    let order = workbook.read_cells(sheet, |cells| stream_rows(cells, &mut tabulator, options))?;
+    let order = workbook.read_cells(sheet, options.stop, |cells| {
+        stream_rows(cells, &mut tabulator, options)
+    })?;
     if order == Order::Kept {
         return Ok(tabulator);
     }
     // The rows of the first reading are dropped, not held while the sheet
     // is read again.
     tabulator = Tabulator::new(options);
-    workbook.read_cells(sheet, |cells| {
+    workbook.read_cells(sheet, options.stop, |cells| {
         tabulate_unordered(cells, &mut tabulator, options)
     })?;
     Ok(tabulator)
@@ -1418,6 +1419,10 @@ mod tests {
 }
 
 #[cfg(test)]
+mod ods_text_tests;
+#[cfg(test)]
 mod opening_tests;
+#[cfg(test)]
+mod stop_tests;
 #[cfg(test)]
 mod workbook_tests;

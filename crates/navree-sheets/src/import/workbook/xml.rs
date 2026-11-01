@@ -49,7 +49,7 @@ impl Read for Capped<'_> {
 impl BufRead for Capped<'_> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         if self.used > MAX_LENGTH {
-            return Err(io::Error::other(too_long().0));
+            return Err(io::Error::other(too_long().detail));
         }
         self.source.fill_buf()
     }
@@ -264,7 +264,7 @@ mod tests {
 
     fn all(raw: &str) -> Vec<Result<(&str, &str), String>> {
         Attributes { raw, at: 0 }
-            .map(|attribute| attribute.map_err(|error| error.0))
+            .map(|attribute| attribute.map_err(|error| error.detail))
             .collect()
     }
 

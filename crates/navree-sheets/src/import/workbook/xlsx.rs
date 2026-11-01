@@ -7,6 +7,7 @@
 
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
 
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::name::QName;
@@ -79,6 +80,7 @@ impl<'a> Xlsx<'a> {
     pub(super) fn read_cells<T>(
         &self,
         sheet: usize,
+        stop: Option<&AtomicBool>,
         read: impl FnOnce(Option<&mut dyn CellSource>) -> Result<T, SheetsError>,
     ) -> Result<T, SheetsError> {
         let sheet = self
@@ -90,28 +92,30 @@ impl<'a> Xlsx<'a> {
             return read(None);
         }
         let path = &sheet.part;
-        let read = self.archive.read(self.archive.name_of(path), |source| {
-            let mut xml = xml::reader(source);
-            if !find_sheet_data(&mut xml)? {
-                // A chart sheet: its part has no cells.
-                return read(None);
-            }
-            let mut cells = XlsxCells {
-                xml,
-                strings: &self.strings,
-                dates: &self.dates,
-                is_1904: self.is_1904,
-                row: 0,
-                column: 0,
-                done: false,
-                buf: Vec::new(),
-                cell_buf: Vec::new(),
-                value_buf: Vec::new(),
-                text_buf: Vec::new(),
-                text: String::new(),
-            };
-            read(Some(&mut cells))
-        })?;
+        let read = self
+            .archive
+            .read(self.archive.name_of(path), stop, |source| {
+                let mut xml = xml::reader(source);
+                if !find_sheet_data(&mut xml)? {
+                    // A chart sheet: its part has no cells.
+                    return read(None);
+                }
+                let mut cells = XlsxCells {
+                    xml,
+                    strings: &self.strings,
+                    dates: &self.dates,
+                    is_1904: self.is_1904,
+                    row: 0,
+                    column: 0,
+                    done: false,
+                    buf: Vec::new(),
+                    cell_buf: Vec::new(),
+                    value_buf: Vec::new(),
+                    text_buf: Vec::new(),
+                    text: String::new(),
+                };
+                read(Some(&mut cells))
+            })?;
         read.ok_or_else(|| damaged(format_args!("the sheet part {path} is missing")).into())
     }
 }
@@ -340,7 +344,7 @@ fn sheets(
                         )));
                     }
                     if names.len() >= MAX_SHEETS {
-                        return Err(Damaged(too_many_sheets()));
+                        return Err(damaged(too_many_sheets()));
                     }
                     // A name, and its place in two lists.
                     budget.hold(name.len() + 32)?;

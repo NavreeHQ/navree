@@ -4,12 +4,15 @@
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use encoding_rs::{Encoding, UTF_16BE, UTF_16LE};
 
 use super::super::workbook::dates::shows_date;
 use super::super::workbook::{MAX_SHEETS, make_room, too_many_sheets};
-use super::{Globals, MAX_CELL_FORMATS, XlsError, XlsValue, damaged, is_custom_format_id};
+use super::{
+    Globals, MAX_CELL_FORMATS, STOP_EVERY, XlsError, XlsValue, damaged, is_custom_format_id,
+};
 
 const FORMULA: u16 = 0x0006;
 const EOF: u16 = 0x000A;
@@ -91,16 +94,49 @@ impl<'a> Record<'a> {
 #[derive(Clone, Debug)]
 pub(super) struct Records<'a> {
     rest: &'a [u8],
+    /// The flag that tells the reading to stop, when there is one, and how
+    /// many records may go by before it is looked at again.
+    stop: Option<&'a AtomicBool>,
+    until_look: u32,
 }
 
 impl<'a> Records<'a> {
     pub(super) fn new(stream: &'a [u8]) -> Self {
-        Records { rest: stream }
+        Records::watched(stream, None)
+    }
+
+    /// The records of `stream`, until `stop` is raised.
+    pub(super) fn watched(stream: &'a [u8], stop: Option<&'a AtomicBool>) -> Self {
+        Records {
+            rest: stream,
+            stop,
+            // The first record looks.
+            until_look: 1,
+        }
     }
 
     fn fail(&mut self, what: &str) -> Option<Result<Record<'a>, XlsError>> {
         self.rest = &[];
         Some(Err(damaged(what)))
+    }
+
+    /// Counts a record (a CONTINUE record too), and every [`STOP_EVERY`]th
+    /// time looks at the flag: whether the reading has been told to stop.
+    fn told_to_stop(&mut self) -> bool {
+        let Some(stop) = self.stop else {
+            return false;
+        };
+        self.until_look = self.until_look.saturating_sub(1);
+        if self.until_look > 0 {
+            return false;
+        }
+        self.until_look = STOP_EVERY;
+        stop.load(Ordering::Relaxed)
+    }
+
+    fn interrupt(&mut self) -> Option<Result<Record<'a>, XlsError>> {
+        self.rest = &[];
+        Some(Err(XlsError::Interrupted))
     }
 }
 
@@ -120,6 +156,9 @@ impl<'a> Iterator for Records<'a> {
         if self.rest.is_empty() {
             return None;
         }
+        if self.told_to_stop() {
+            return self.interrupt();
+        }
         if self.rest.len() < 4 {
             return self.fail("a record is cut short by the end of the stream");
         }
@@ -131,6 +170,9 @@ impl<'a> Iterator for Records<'a> {
         // own).
         let continues = rest;
         while rest.len() > 4 && u16_at(rest, 0) == Some(CONTINUE) {
+            if self.told_to_stop() {
+                return self.interrupt();
+            }
             match split_record(rest) {
                 Some((_, _, after)) => rest = after,
                 None => return self.fail("a CONTINUE record runs past the end of the stream"),
@@ -758,14 +800,19 @@ pub(super) struct Context {
 impl Context {
     /// The cells of the sheet whose BOF is at `offset` in the stream, with
     /// the records before `end` to read.
-    pub(super) fn cells_at(&self, offset: usize, end: usize) -> Result<Cells<'_>, XlsError> {
+    pub(super) fn cells_at<'a>(
+        &'a self,
+        offset: usize,
+        end: usize,
+        stop: Option<&'a AtomicBool>,
+    ) -> Result<Cells<'a>, XlsError> {
         let records = self
             .stream
             .get(offset..end.min(self.stream.len()))
             .ok_or_else(|| damaged("a sheet starts past the end of the workbook stream"))?;
         Ok(Cells {
             context: self,
-            records: Records::new(records),
+            records: Records::watched(records, stop),
             seen_bof: false,
             depth: 0usize,
             formula_at: (0, 0),

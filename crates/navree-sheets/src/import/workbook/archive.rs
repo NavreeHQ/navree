@@ -3,11 +3,12 @@
 
 use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, Cursor, Read};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use zip::ZipArchive;
 use zip::result::ZipError;
 
-use super::{Budget, Damaged, damaged};
+use super::{Budget, Damaged, Stopped, damaged};
 
 /// A workbook's zip file.
 #[derive(Clone)]
@@ -47,10 +48,12 @@ impl<'a> Archive<'a> {
     }
 
     /// Reads the part named exactly `name` with `read`; none when the file
-    /// has no such part.
+    /// has no such part. The part's reads end with an error that says so
+    /// once `stop` is raised (see [`PIECE`]).
     pub(super) fn read<T, E: From<Damaged>>(
         &self,
         name: &str,
+        stop: Option<&AtomicBool>,
         read: impl FnOnce(&mut dyn BufRead) -> Result<T, E>,
     ) -> Result<Option<T>, E> {
         // A copy shares the file and its directory: it only has a cursor of
@@ -61,7 +64,7 @@ impl<'a> Archive<'a> {
             Err(ZipError::FileNotFound) => return Ok(None),
             Err(error) => return Err(zip_error(error).into()),
         };
-        read(&mut BufReader::new(part)).map(Some)
+        read(&mut BufReader::new(Watched { part, stop })).map(Some)
     }
 
     /// [`Archive::read`] while the workbook is opened: what is unpacked counts
@@ -79,6 +82,29 @@ impl<'a> Archive<'a> {
             Err(error) => return Err(zip_error(error).into()),
         };
         read(&mut BufReader::new(Charged { part, budget })).map(Some)
+    }
+}
+
+/// The most a part gives in one read, and so the most it unpacks between two
+/// looks at the flag that tells the reading to stop. Whatever the part holds,
+/// that is a few hundred microseconds of work, and a reader asks for more
+/// again and again, so a reading ends within that of being told to, whether
+/// what it reads gives cells or not, and though one event may be 16 MiB.
+const PIECE: usize = 64 * 1024;
+
+/// A part whose reads end with [`Stopped`] once the reading is told to stop.
+struct Watched<'s, R> {
+    part: R,
+    stop: Option<&'s AtomicBool>,
+}
+
+impl<R: Read> Read for Watched<'_, R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.stop.is_some_and(|stop| stop.load(Ordering::Relaxed)) {
+            return Err(io::Error::other(Stopped));
+        }
+        let piece = buf.len().min(PIECE);
+        self.part.read(buf.split_at_mut(piece).0)
     }
 }
 
