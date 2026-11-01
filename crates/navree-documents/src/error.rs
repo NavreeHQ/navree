@@ -79,12 +79,12 @@ pub enum DocumentsError {
     #[error("the PDF cannot be edited: {0}")]
     Edit(String),
     /// An input is over a limit this crate sets on what reading it may
-    /// take: a PDF whose text takes too much work or memory to read or holds
-    /// too much text, a DOCX file over one of its `DocxLimits`, or an image
-    /// with more pixels than `documents.native.max_image_pixels`. Loading a
-    /// PDF is not bounded by these (see
-    /// [`Pdf::from_bytes`](crate::Pdf::from_bytes)). The message names the
-    /// limit, and no template file.
+    /// take: a PDF whose objects take too much memory or work to read (see
+    /// [`Pdf::from_bytes`](crate::Pdf::from_bytes)), whose text takes too
+    /// much work or memory to read or holds too much text, a DOCX file over
+    /// one of its `DocxLimits`, or an image with more pixels than
+    /// `documents.native.max_image_pixels`. The message names the limit, and
+    /// no template file.
     #[error("{0}")]
     TooLarge(String),
     /// Building the DOCX file failed: a fault of the server or of the app.

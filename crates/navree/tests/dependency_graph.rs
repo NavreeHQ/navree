@@ -75,6 +75,10 @@ const HIERARCHY: &[Rule] = &[
     // navree-domains, navree-helm) and re-exported by the facade. It depends
     // on no navree crate.
     rule("navree-bounded", 0, &[]),
+    // The PDF object layer (reader, writer, text) under navree-documents and
+    // navree-media, so both read PDFs with one reader and one set of
+    // limits. It depends on no navree crate.
+    rule("navree-pdf", 0, &[]),
     // L1
     rule("navree-contracts", 1, &["navree-kernel"]),
     rule("navree-config", 1, &["navree-kernel", "navree-contracts"]),
@@ -367,7 +371,7 @@ const HIERARCHY: &[Rule] = &[
     // started in a navree-db unit of work.
     rule("navree-documents", 6, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-view",
-        "navree-storage", "navree-db", "navree-queue",
+        "navree-storage", "navree-db", "navree-queue", "navree-pdf",
     ]),
     // Sheets: CSV and Excel exports (streamed `Download`s, queued exports
     // written to a navree-storage disk and handed back through a
@@ -436,7 +440,7 @@ const HIERARCHY: &[Rule] = &[
     // regenerated in navree-queue batches.
     rule("navree-media", 7, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-http-client",
-        "navree-db", "navree-orm", "navree-storage", "navree-queue",
+        "navree-db", "navree-orm", "navree-storage", "navree-queue", "navree-pdf",
     ]),
     // Helm: the admin panel over navree-orm models (their queries, access
     // filters and subjects). navree-crypto seals its session cookie; with
@@ -524,6 +528,7 @@ const CRM_API_DEPENDENCIES: &[&str] = &[
 const RUNTIME_CRATES: &[&str] = &[
     "navree-kernel",
     "navree-bounded",
+    "navree-pdf",
     "navree-macros",
     "navree-dock",
     "navree-harbor",

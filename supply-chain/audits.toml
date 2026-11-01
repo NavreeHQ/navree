@@ -1,4 +1,8 @@
 
 # cargo-vet audits file
 
-[audits]
+[[audits.rc4]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.2.0"
+notes = "Read in full: RC4 in safe Rust (forbid(unsafe_code)), no build script, no I/O; depends only on cipher."

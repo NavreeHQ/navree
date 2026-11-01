@@ -84,3 +84,74 @@ fn unsupported_and_broken_documents_are_errors() {
     let err = text::extract(&not_word, DOCX).unwrap_err();
     assert!(matches!(err, MediaError::Text { .. }), "{err:?}");
 }
+
+#[test]
+fn pdf_text_reads_right_to_left_scripts_in_reading_order() {
+    // The native engine's certificate in Arabic, Hebrew and Hindi.
+    let bytes = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../navree-pdf/tests/fixtures/multilingual.pdf"
+    ))
+    .unwrap();
+    let out = text::extract(&bytes, "application/pdf").unwrap();
+    assert!(out.text.contains("شهادة إتمام"), "{}", out.text);
+    assert!(out.text.contains("תעודת סיום"), "{}", out.text);
+    assert!(out.text.contains("प्रमाण पत्र"), "{}", out.text);
+    assert_eq!(out.title.as_deref(), Some("شهادات إتمام"));
+}
+
+/// A PDF whose one font's `ToUnicode` map has `ranges` codespace ranges.
+fn pdf_with_codespace_ranges(ranges: usize) -> Vec<u8> {
+    use navree_pdf::{Objects, Stream, dictionary};
+
+    let mut cmap = format!(
+        "/CIDInit /ProcSet findresource begin 12 dict begin begincmap
+{ranges} begincodespacerange
+"
+    );
+    cmap.push_str(
+        &"<00> <FF>
+"
+        .repeat(ranges),
+    );
+    cmap.push_str(
+        "endcodespacerange
+1 beginbfchar
+<41> <0041>
+endbfchar
+endcmap
+",
+    );
+    let mut doc = Objects::new();
+    let pages_id = doc.reserve();
+    let map = doc.add(Stream::new(dictionary! {}, cmap.into_bytes()));
+    let font = doc.add(dictionary! {
+        "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica", "ToUnicode" => map,
+    });
+    let content = doc.add(Stream::new(
+        dictionary! {},
+        b"BT /F1 12 Tf 72 720 Td (A) Tj ET".to_vec(),
+    ));
+    let page = doc.add(dictionary! {
+        "Type" => "Page", "Parent" => pages_id, "Contents" => content,
+        "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
+        "Resources" => dictionary! { "Font" => dictionary! { "F1" => font } },
+    });
+    doc.insert(
+        pages_id,
+        dictionary! { "Type" => "Pages", "Kids" => vec![page.into()], "Count" => 1 },
+    );
+    let catalog = doc.add(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    doc.trailer.set("Root", catalog);
+    doc.save().unwrap()
+}
+
+#[test]
+fn pdf_text_is_held_to_the_caps_on_to_unicode_maps() {
+    let out = text::extract(&pdf_with_codespace_ranges(64), "application/pdf").unwrap();
+    assert_eq!(out.text, "A");
+    // Every code is checked against each range: more than 64 are refused.
+    let err = text::extract(&pdf_with_codespace_ranges(65), "application/pdf").unwrap_err();
+    assert!(matches!(err, MediaError::Text { .. }), "{err:?}");
+    assert!(err.to_string().contains("codespace"), "{err}");
+}

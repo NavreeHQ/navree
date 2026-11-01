@@ -8,13 +8,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{TimeZone, Utc};
-use lopdf::{Dictionary, Document, Object};
 use navree_contracts::FixedClock;
 use navree_documents::native::{Align, Cell, Image, List, Paragraph, Run, Table};
 use navree_documents::{
     Documents, DocumentsError, EngineKind, Margins, NativeEngine, Paper, Pdf, PdfDocument,
     PrintOptions, Render, Templates,
 };
+use navree_pdf::{Dictionary, Document, Object, ReadLimits};
 use serde_json::{Value, json};
 
 use crate::support::{assert_golden, fixture_templates, fixtures_dir};
@@ -24,32 +24,21 @@ fn engine() -> NativeEngine {
 }
 
 fn load(pdf: &Pdf) -> Document {
-    Document::load_mem(pdf).unwrap()
+    Document::load(pdf.bytes().clone(), ReadLimits::default()).unwrap()
 }
 
 fn catalog(document: &Document) -> &Dictionary {
-    let root = document
-        .trailer
-        .get(b"Root")
-        .unwrap()
-        .as_reference()
-        .unwrap();
-    document.get_dictionary(root).unwrap()
+    document.catalog().unwrap()
 }
 
 fn resolve<'a>(document: &'a Document, object: &'a Object) -> &'a Object {
-    document
-        .dereference(object)
-        .map(|(_, o)| o)
-        .unwrap_or(object)
+    document.resolve(object).unwrap_or(object)
 }
 
 /// A string of the Info dictionary.
 fn info(document: &Document, key: &[u8]) -> Option<String> {
-    let info = resolve(document, document.trailer.get(b"Info").ok()?)
-        .as_dict()
-        .ok()?;
-    let bytes = info.get(key).ok()?.as_str().ok()?;
+    let info = resolve(document, document.trailer().get(b"Info")?).as_dict()?;
+    let bytes = info.get(key)?.as_str()?;
     Some(match bytes.strip_prefix(&[0xfe, 0xff]) {
         Some(utf16) => String::from_utf16_lossy(
             &utf16
@@ -64,10 +53,12 @@ fn info(document: &Document, key: &[u8]) -> Option<String> {
 /// Every font the document uses: (base font, embedded font file).
 fn fonts(document: &Document) -> Vec<(String, bool)> {
     let mut fonts = Vec::new();
-    for object in document.objects.values() {
-        let Ok(dict) = object.as_dict() else { continue };
-        if dict.get(b"Type").and_then(Object::as_name).ok() != Some(b"Font".as_slice())
-            || dict.get(b"Subtype").and_then(Object::as_name).ok() != Some(b"Type0".as_slice())
+    for (_, object) in document.objects() {
+        let Some(dict) = object.as_dict() else {
+            continue;
+        };
+        if dict.get(b"Type").and_then(Object::as_name) != Some(b"Font".as_slice())
+            || dict.get(b"Subtype").and_then(Object::as_name) != Some(b"Type0".as_slice())
         {
             continue;
         }
@@ -93,8 +84,8 @@ fn fonts(document: &Document) -> Vec<(String, bool)> {
 
 /// (width, height) of page `index` (from 0).
 fn page_size(document: &Document, index: usize) -> (f32, f32) {
-    let id = document.get_pages()[&(index as u32 + 1)];
-    let page = document.get_dictionary(id).unwrap();
+    let id = document.pages()[index];
+    let page = document.dictionary(id).unwrap();
     let media = resolve(document, page.get(b"MediaBox").unwrap())
         .as_array()
         .unwrap();
@@ -107,16 +98,15 @@ fn page_size(document: &Document, index: usize) -> (f32, f32) {
 fn images(document: &Document) -> usize {
     let streams = || {
         document
-            .objects
-            .iter()
-            .filter_map(|(id, o)| Some((*id, o.as_stream().ok()?)))
+            .objects()
+            .filter_map(|(id, o)| Some((id, o.as_stream()?)))
     };
-    let masks: std::collections::HashSet<lopdf::ObjectId> = streams()
-        .filter_map(|(_, s)| s.dict.get(b"SMask").and_then(Object::as_reference).ok())
+    let masks: std::collections::HashSet<navree_pdf::ObjectId> = streams()
+        .filter_map(|(_, s)| s.dict.get(b"SMask").and_then(Object::as_reference))
         .collect();
     streams()
         .filter(|(id, s)| {
-            s.dict.get(b"Subtype").and_then(Object::as_name).ok() == Some(b"Image".as_slice())
+            s.dict.get(b"Subtype").and_then(Object::as_name) == Some(b"Image".as_slice())
                 && !masks.contains(id)
         })
         .count()
@@ -125,14 +115,16 @@ fn images(document: &Document) -> usize {
 /// The URIs of every link annotation.
 fn links(document: &Document) -> Vec<String> {
     let mut uris = Vec::new();
-    for object in document.objects.values() {
-        let Ok(dict) = object.as_dict() else { continue };
-        if dict.get(b"Subtype").and_then(Object::as_name).ok() != Some(b"Link".as_slice()) {
+    for (_, object) in document.objects() {
+        let Some(dict) = object.as_dict() else {
+            continue;
+        };
+        if dict.get(b"Subtype").and_then(Object::as_name) != Some(b"Link".as_slice()) {
             continue;
         }
-        if let Ok(action) = dict.get(b"A")
-            && let Ok(action) = resolve(document, action).as_dict()
-            && let Ok(uri) = action.get(b"URI").and_then(Object::as_str)
+        if let Some(action) = dict.get(b"A")
+            && let Some(action) = resolve(document, action).as_dict()
+            && let Some(uri) = action.get(b"URI").and_then(Object::as_str)
         {
             uris.push(String::from_utf8_lossy(uri).into_owned());
         }
@@ -355,10 +347,9 @@ async fn the_pdf_is_tagged_and_carries_its_metadata() {
     assert!(catalog.has(b"Outlines"), "headings make the outline");
     // The structure: every kind the HTML used.
     let mut roles: Vec<String> = document
-        .objects
-        .values()
-        .filter_map(|o| o.as_dict().ok())
-        .filter(|d| d.get(b"Type").and_then(Object::as_name).ok() == Some(b"StructElem".as_slice()))
+        .objects()
+        .filter_map(|(_, o)| o.as_dict())
+        .filter(|d| d.get(b"Type").and_then(Object::as_name) == Some(b"StructElem".as_slice()))
         .map(|d| String::from_utf8_lossy(d.get(b"S").unwrap().as_name().unwrap()).into_owned())
         .collect();
     roles.sort();
@@ -657,11 +648,13 @@ fn png(width: u32, height: u32) -> Vec<u8> {
     header.extend(height.to_be_bytes());
     header.extend([8, 0, 0, 0, 0]);
     // Each row is a filter byte (none) and one byte per pixel.
-    let mut rows = lopdf::Stream::new(
-        lopdf::Dictionary::new(),
+    let mut objects = navree_pdf::Objects::new();
+    let id = objects.add(navree_pdf::Stream::new(
+        Dictionary::new(),
         vec![0u8; (width as usize + 1) * height as usize],
-    );
-    rows.compress().unwrap();
+    ));
+    objects.compress();
+    let rows = objects.get(id).unwrap().as_stream().unwrap().clone();
     let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
     chunk(&mut out, b"IHDR", &header);
     chunk(&mut out, b"IDAT", &rows.content);

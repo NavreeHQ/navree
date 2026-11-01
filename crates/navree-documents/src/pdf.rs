@@ -1,43 +1,26 @@
 //! [`Pdf`]: a rendered PDF, with page count, text extraction, merge,
-//! stamps and overlays (on [lopdf](https://docs.rs/lopdf)).
+//! stamps and overlays (on navree-pdf).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
 
 use bytes::Bytes;
 use http::header::{CONTENT_DISPOSITION, HeaderValue};
-use lopdf::content::{Content, Operation};
-use lopdf::{
-    Dictionary, Document, LoadOptions, Object, ObjectId, Stream, StringFormat, dictionary,
-};
 use navree_http::{IntoResponse, Response};
+use navree_pdf::content::{self, Operation};
+use navree_pdf::text::decode_text_string;
+use navree_pdf::{
+    ContentError, Dictionary, Document, Object, ObjectId, Objects, PdfError, ReadLimits, Stream,
+    StringFormat, dictionary,
+};
 
 use crate::DocumentsError;
 use crate::download::{Download, PDF_CONTENT_TYPE};
 use crate::stamp::{Pages, Position, Stamp};
-use crate::text::decode_text_string;
 
 /// Decompressed content allowed per page while reading a PDF (64 MiB), so
 /// a small file cannot inflate without bound.
 const MAX_PAGE_CONTENT: usize = 64 * 1024 * 1024;
-
-/// What one object stream or cross-reference stream may inflate to while a
-/// PDF loads (8 MiB). The objects inside are parsed as the stream is read,
-/// before any page is looked at. A stream over the limit is skipped, with
-/// the objects it holds, as a damaged one is.
-///
-/// Writers commonly put 100 to 200 objects in an object stream, tens of
-/// kilobytes; 8 MiB holds tens of thousands of objects, and a
-/// cross-reference stream of 8 MiB lists more than a million.
-///
-/// It bounds the bytes one stream inflates to, not the memory loading
-/// takes: lopdf parses every object stream as the file loads, and the
-/// objects a stream lists may all point at the same bytes, each parsed
-/// again, and an encrypted file is read the same way. A PDF of a kilobyte
-/// can load as tens of megabytes of objects, and one of a few megabytes
-/// can exhaust memory and abort the process. No check of the bytes before
-/// loading can prevent it without reading the file as lopdf does.
-const MAX_LOADED_STREAM: usize = 8 * 1024 * 1024;
 
 /// A PDF document: the bytes an engine rendered, or any PDF loaded with
 /// [`Pdf::from_bytes`].
@@ -80,9 +63,10 @@ impl Pdf {
     /// A PDF from its bytes, checked: an error unless the bytes parse as a
     /// PDF with at least one page.
     ///
-    /// Loading a PDF is not bounded in memory (see the documents guide): a
-    /// hostile file of a few megabytes can make the process abort. Load PDFs
-    /// from people you do not trust in a process you can afford to lose.
+    /// Reading a PDF is held to a budget (see the documents guide): the
+    /// objects it reads may hold 256 MiB and its reader may scan 1 GiB, and
+    /// a file that needs more is refused with
+    /// [`DocumentsError::TooLarge`], however small it is.
     pub fn from_bytes(bytes: impl Into<Bytes>) -> Result<Pdf, DocumentsError> {
         let pdf = Pdf(bytes.into());
         if pdf.page_count()? == 0 {
@@ -109,7 +93,10 @@ impl Pdf {
 
     /// The number of pages.
     pub fn page_count(&self) -> Result<usize, DocumentsError> {
-        Ok(self.load()?.get_pages().len())
+        let document = self.load()?;
+        let count = document.pages().len();
+        document.check().map_err(pdf_error)?;
+        Ok(count)
     }
 
     /// The text of every page, pages separated by a form feed (`\u{c}`):
@@ -119,43 +106,41 @@ impl Pdf {
     /// tables) is not reconstructed. Right-to-left text comes back in
     /// reading order.
     pub fn text(&self) -> Result<String, DocumentsError> {
-        Ok(crate::text::page_texts(&self.load()?)?.join("\u{c}"))
+        Ok(self.page_texts()?.join("\u{c}"))
     }
 
     /// The text of each page (see [`text`](Pdf::text)).
     pub fn page_texts(&self) -> Result<Vec<String>, DocumentsError> {
-        crate::text::page_texts(&self.load()?)
+        navree_pdf::text::page_texts(&self.load()?).map_err(pdf_error)
     }
 
     /// One document with the pages of every PDF in `pdfs`, in order.
     /// Outlines, forms and tagged structure are dropped; each page keeps
     /// its contents, size and resources.
     pub fn merge<'a>(pdfs: impl IntoIterator<Item = &'a Pdf>) -> Result<Pdf, DocumentsError> {
-        let mut merged = Document::with_version("1.7");
-        let pages_id = merged.new_object_id();
+        let mut merged = Objects::new();
+        let pages_id = merged.reserve();
         let mut kids = Vec::new();
         for pdf in pdfs {
-            let mut document = pdf.load()?;
+            let mut document = pdf.objects()?;
             flatten_inherited(&mut document)?;
-            document.renumber_objects_with(merged.max_id + 1);
-            let page_ids: Vec<ObjectId> = document.get_pages().into_values().collect();
-            let page_set: std::collections::BTreeSet<ObjectId> = page_ids.iter().copied().collect();
-            for (id, object) in document.objects {
+            document.renumber(merged.max_number().saturating_add(1));
+            let page_ids: Vec<ObjectId> = document.pages();
+            let page_set: BTreeSet<ObjectId> = page_ids.iter().copied().collect();
+            for (id, object) in std::mem::take(&mut document.objects) {
                 let keep = match object.type_name() {
-                    Ok(b"Catalog" | b"Pages") => false,
-                    Ok(b"Page") => page_set.contains(&id),
+                    Some(b"Catalog" | b"Pages") => false,
+                    Some(b"Page") => page_set.contains(&id),
                     _ => true,
                 };
                 if keep {
-                    merged.objects.insert(id, object);
+                    merged.insert(id, object);
                 }
             }
-            merged.max_id = merged.max_id.max(document.max_id);
             for id in page_ids {
                 let page = merged
-                    .get_object_mut(id)
-                    .and_then(Object::as_dict_mut)
-                    .map_err(pdf_error)?;
+                    .dictionary_mut(id)
+                    .ok_or_else(|| missing("a page of the document"))?;
                 page.set("Parent", pages_id);
                 page.remove(b"StructParents");
                 kids.push(Object::Reference(id));
@@ -165,20 +150,20 @@ impl Pdf {
             return Err(DocumentsError::Edit("nothing to merge".into()));
         }
         let count = kids.len() as i64;
-        merged.objects.insert(
+        merged.insert(
             pages_id,
-            Object::Dictionary(dictionary! {
+            dictionary! {
                 "Type" => "Pages",
                 "Kids" => kids,
                 "Count" => count,
-            }),
+            },
         );
-        let catalog_id = merged.add_object(dictionary! {
+        let catalog_id = merged.add(dictionary! {
             "Type" => "Catalog",
             "Pages" => pages_id,
         });
         merged.trailer.set("Root", catalog_id);
-        merged.prune_objects();
+        merged.prune();
         save(merged)
     }
 
@@ -190,16 +175,16 @@ impl Pdf {
     /// The document with `stamp` written on the pages it selects.
     pub fn stamp(&self, stamp: &Stamp) -> Result<Pdf, DocumentsError> {
         let encoded = stamp.encoded_text()?;
-        let mut document = self.load()?;
+        let mut document = self.objects()?;
         flatten_inherited(&mut document)?;
-        let font_id = document.add_object(dictionary! {
+        let font_id = document.add(dictionary! {
             "Type" => "Font",
             "Subtype" => "Type1",
             "BaseFont" => "Helvetica-Bold",
             "Encoding" => "WinAnsiEncoding",
         });
         let opacity = stamp.opacity.clamp(0.0, 1.0);
-        let gs_id = document.add_object(dictionary! {
+        let gs_id = document.add(dictionary! {
             "Type" => "ExtGState",
             "ca" => opacity,
             "CA" => opacity,
@@ -215,13 +200,10 @@ impl Pdf {
             let (r, g, b) = stamp.color;
             let operations = vec![
                 Operation::new("q", vec![]),
-                Operation::new("gs", vec![Object::Name(b"NavreeStampGs".to_vec())]),
+                Operation::new("gs", vec![Object::name("NavreeStampGs")]),
                 Operation::new("rg", vec![r.into(), g.into(), b.into()]),
                 Operation::new("BT", vec![]),
-                Operation::new(
-                    "Tf",
-                    vec![Object::Name(b"NavreeStamp".to_vec()), stamp.size.into()],
-                ),
+                Operation::new("Tf", vec![Object::name("NavreeStamp"), stamp.size.into()]),
                 Operation::new("Tm", matrix.iter().map(|&v| Object::Real(v)).collect()),
                 Operation::new(
                     "Tj",
@@ -230,7 +212,7 @@ impl Pdf {
                 Operation::new("ET", vec![]),
                 Operation::new("Q", vec![]),
             ];
-            draw_over(&mut document, page_id, operations)?;
+            draw_over(&mut document, page_id, &operations)?;
         }
         save(document)
     }
@@ -239,35 +221,50 @@ impl Pdf {
     /// `pages` selects. An overlay of another size is scaled to fit and
     /// centered.
     pub fn overlay(&self, overlay: &Pdf, pages: Pages) -> Result<Pdf, DocumentsError> {
-        let mut document = self.load()?;
+        let mut document = self.objects()?;
         flatten_inherited(&mut document)?;
-        let mut source = overlay.load()?;
-        flatten_inherited(&mut source)?;
-        source.renumber_objects_with(document.max_id + 1);
-        let source_page = *source
-            .get_pages()
-            .get(&1)
+        let loaded = overlay.load()?;
+        let first = loaded
+            .pages()
+            .first()
+            .copied()
             .ok_or_else(|| DocumentsError::Edit("the overlay has no pages".into()))?;
+        let content =
+            loaded
+                .page_content(first, MAX_PAGE_CONTENT)
+                .map_err(|error| match error {
+                    ContentError::Over => DocumentsError::Pdf(format!(
+                        "the overlay's page content inflates to more than {} MiB",
+                        MAX_PAGE_CONTENT >> 20
+                    )),
+                    _ => DocumentsError::Pdf("the overlay's page content cannot be read".into()),
+                })?;
+        let mut source = Objects::read(loaded).map_err(pdf_error)?;
+        flatten_inherited(&mut source)?;
+        let numbers = source.renumber(document.max_number().saturating_add(1));
+        let source_page = *numbers
+            .get(&first)
+            .ok_or_else(|| missing("the overlay's page"))?;
         let (overlay_width, overlay_height) = page_size(&source, source_page)?;
-        let content = source
-            .get_page_content_with_limit(source_page, MAX_PAGE_CONTENT)
-            .map_err(pdf_error)?;
-        let page = source.get_dictionary(source_page).map_err(pdf_error)?;
+        let page = source
+            .dictionary(source_page)
+            .ok_or_else(|| missing("the overlay's page"))?;
         let resources = page
             .get(b"Resources")
             .cloned()
-            .unwrap_or_else(|_| Object::Dictionary(Dictionary::new()));
-        let media_box = page.get(b"MediaBox").cloned().map_err(pdf_error)?;
+            .unwrap_or_else(|| Object::Dictionary(Dictionary::new()));
+        let media_box = page
+            .get(b"MediaBox")
+            .cloned()
+            .ok_or_else(|| missing("the overlay's MediaBox"))?;
         let (left, bottom) = box_origin(&source, &media_box);
         // Everything the overlay page refers to moves into the document;
         // what nothing references is pruned when saving.
-        let source_max = source.max_id;
-        for (id, object) in source.objects {
-            if !matches!(object.type_name(), Ok(b"Catalog" | b"Pages" | b"Page")) {
-                document.objects.insert(id, object);
+        for (id, object) in std::mem::take(&mut source.objects) {
+            if !matches!(object.type_name(), Some(b"Catalog" | b"Pages" | b"Page")) {
+                document.insert(id, object);
             }
         }
-        document.max_id = document.max_id.max(source_max);
         let form = Stream::new(
             dictionary! {
                 "Type" => "XObject",
@@ -277,7 +274,7 @@ impl Pdf {
             },
             content,
         );
-        let form_id = document.add_object(form);
+        let form_id = document.add(form);
         let mut additions =
             ResourceAdditions::new(vec![(b"XObject", b"NavreeOverlay", form_id.into())]);
         for page_id in selected_pages(&document, &pages) {
@@ -299,10 +296,10 @@ impl Pdf {
                         dy.into(),
                     ],
                 ),
-                Operation::new("Do", vec![Object::Name(b"NavreeOverlay".to_vec())]),
+                Operation::new("Do", vec![Object::name("NavreeOverlay")]),
                 Operation::new("Q", vec![]),
             ];
-            draw_over(&mut document, page_id, operations)?;
+            draw_over(&mut document, page_id, &operations)?;
         }
         save(document)
     }
@@ -310,10 +307,10 @@ impl Pdf {
     /// The document with `title` (and, when given, `author`) in its
     /// metadata.
     pub fn with_metadata(&self, title: &str, author: Option<&str>) -> Result<Pdf, DocumentsError> {
-        let mut document = self.load()?;
+        let mut document = self.objects()?;
         let mut info = match document.trailer.get(b"Info").and_then(Object::as_reference) {
-            Ok(id) => document.get_dictionary(id).cloned().unwrap_or_default(),
-            Err(_) => Dictionary::new(),
+            Some(id) => document.dictionary(id).cloned().unwrap_or_default(),
+            None => Dictionary::new(),
         };
         info.set(
             "Title",
@@ -325,7 +322,7 @@ impl Pdf {
                 Object::String(utf16_text(author), StringFormat::Hexadecimal),
             );
         }
-        let info_id = document.add_object(info);
+        let info_id = document.add(info);
         document.trailer.set("Info", info_id);
         save(document)
     }
@@ -333,19 +330,13 @@ impl Pdf {
     /// The title in the document's metadata, if any.
     pub fn title(&self) -> Result<Option<String>, DocumentsError> {
         let document = self.load()?;
-        let Ok(info) = document
-            .trailer
-            .get(b"Info")
-            .and_then(|info| document.dereference(info))
-            .and_then(|(_, info)| info.as_dict())
-        else {
-            return Ok(None);
-        };
-        Ok(info
-            .get(b"Title")
+        let title = document
+            .info()
+            .and_then(|info| info.get(b"Title"))
             .and_then(Object::as_str)
-            .ok()
-            .map(decode_text_string))
+            .map(decode_text_string);
+        document.check().map_err(pdf_error)?;
+        Ok(title)
     }
 
     /// A plain document: `lines` of 11-point Helvetica on A4 pages, 60
@@ -367,15 +358,15 @@ impl Pdf {
                     .collect::<Vec<_>>()
             })
             .collect();
-        let mut document = Document::with_version("1.7");
-        let pages_id = document.new_object_id();
-        let font_id = document.add_object(dictionary! {
+        let mut document = Objects::new();
+        let pages_id = document.reserve();
+        let font_id = document.add(dictionary! {
             "Type" => "Font",
             "Subtype" => "Type1",
             "BaseFont" => "Helvetica",
             "Encoding" => "WinAnsiEncoding",
         });
-        let resources_id = document.add_object(dictionary! {
+        let resources_id = document.add(dictionary! {
             "Font" => dictionary! { "F1" => font_id },
         });
         let chunks: Vec<&[Vec<u8>]> = if lines.is_empty() {
@@ -401,9 +392,9 @@ impl Pdf {
                 ));
             }
             operations.push(Operation::new("ET", vec![]));
-            let content = Content { operations }.encode().unwrap_or_default();
-            let content_id = document.add_object(Stream::new(Dictionary::new(), content));
-            let page_id = document.add_object(dictionary! {
+            let content_id =
+                document.add(Stream::new(Dictionary::new(), content::encode(&operations)));
+            let page_id = document.add(dictionary! {
                 "Type" => "Page",
                 "Parent" => pages_id,
                 "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
@@ -413,15 +404,15 @@ impl Pdf {
             kids.push(Object::Reference(page_id));
         }
         let count = kids.len() as i64;
-        document.objects.insert(
+        document.insert(
             pages_id,
-            Object::Dictionary(dictionary! {
+            dictionary! {
                 "Type" => "Pages",
                 "Kids" => kids,
                 "Count" => count,
-            }),
+            },
         );
-        let catalog_id = document.add_object(dictionary! {
+        let catalog_id = document.add(dictionary! {
             "Type" => "Catalog",
             "Pages" => pages_id,
         });
@@ -429,12 +420,14 @@ impl Pdf {
         save(document).expect("a generated document saves")
     }
 
+    /// The document, read within the default [`ReadLimits`].
     fn load(&self) -> Result<Document, DocumentsError> {
-        let options = LoadOptions {
-            max_decompressed_size: Some(MAX_LOADED_STREAM),
-            ..LoadOptions::default()
-        };
-        Document::load_mem_with_options(&self.0, options).map_err(pdf_error)
+        Document::load(self.0.clone(), ReadLimits::default()).map_err(pdf_error)
+    }
+
+    /// Every object of the document, to edit.
+    fn objects(&self) -> Result<Objects, DocumentsError> {
+        Objects::read(self.load()?).map_err(pdf_error)
     }
 }
 
@@ -489,9 +482,18 @@ impl From<Pdf> for Vec<u8> {
     }
 }
 
-/// The input cannot be read: the client's error.
-fn pdf_error(error: lopdf::Error) -> DocumentsError {
-    DocumentsError::Pdf(error.to_string())
+/// The input cannot be read, or reading it would go over a limit: the
+/// client's error.
+fn pdf_error(error: PdfError) -> DocumentsError {
+    match error {
+        PdfError::TooLarge(message) => DocumentsError::TooLarge(message),
+        other => DocumentsError::Pdf(other.to_string()),
+    }
+}
+
+/// An object the input should have and does not: the client's error.
+fn missing(what: &str) -> DocumentsError {
+    DocumentsError::Pdf(format!("{what} is missing"))
 }
 
 /// Writing what this crate made failed: the server's error.
@@ -502,11 +504,10 @@ fn write_error(what: &str, error: impl fmt::Display) -> DocumentsError {
     }
 }
 
-fn save(mut document: Document) -> Result<Pdf, DocumentsError> {
+fn save(mut document: Objects) -> Result<Pdf, DocumentsError> {
     document.compress();
-    let mut out = Vec::new();
-    document
-        .save_to(&mut out)
+    let out = document
+        .save()
         .map_err(|error| write_error("the document could not be written", error))?;
     Ok(Pdf(Bytes::from(out)))
 }
@@ -518,35 +519,37 @@ fn save(mut document: Document) -> Result<Pdf, DocumentsError> {
 /// A dictionary or a long array is not copied onto each page: it becomes
 /// one object that every page inheriting it refers to, so a tree of many
 /// pages and large resources does not grow by their product.
-fn flatten_inherited(document: &mut Document) -> Result<(), DocumentsError> {
+fn flatten_inherited(document: &mut Objects) -> Result<(), DocumentsError> {
     const INHERITED: [&[u8]; 4] = [b"Resources", b"MediaBox", b"CropBox", b"Rotate"];
     // The value each page gets, by the ancestor and key it comes from.
     let mut shared: HashMap<(ObjectId, &[u8]), Object> = HashMap::new();
-    let page_ids: Vec<ObjectId> = document.get_pages().into_values().collect();
+    let page_ids: Vec<ObjectId> = document.pages();
     for page_id in page_ids {
         // The key, and the ancestor that holds it.
         let mut found: Vec<(&[u8], ObjectId)> = Vec::new();
         {
-            let page = document.get_dictionary(page_id).map_err(pdf_error)?;
+            let page = document
+                .dictionary(page_id)
+                .ok_or_else(|| missing("a page of the document"))?;
             for key in INHERITED {
                 if page.has(key) {
                     continue;
                 }
-                let mut parent = page.get(b"Parent").and_then(Object::as_reference).ok();
+                let mut parent = page.get(b"Parent").and_then(Object::as_reference);
                 let mut depth = 0;
                 while let Some(id) = parent {
                     depth += 1;
                     if depth > 64 {
                         break;
                     }
-                    let Ok(node) = document.get_dictionary(id) else {
+                    let Some(node) = document.dictionary(id) else {
                         break;
                     };
                     if node.has(key) {
                         found.push((key, id));
                         break;
                     }
-                    parent = node.get(b"Parent").and_then(Object::as_reference).ok();
+                    parent = node.get(b"Parent").and_then(Object::as_reference);
                 }
             }
         }
@@ -556,14 +559,14 @@ fn flatten_inherited(document: &mut Document) -> Result<(), DocumentsError> {
                 Some(value) => value.clone(),
                 None => {
                     let value = document
-                        .get_dictionary(holder)
+                        .dictionary(holder)
                         .and_then(|node| node.get(key))
                         .cloned()
-                        .map_err(pdf_error)?;
+                        .ok_or_else(|| missing("an inherited page attribute"))?;
                     let value = match value {
-                        Object::Dictionary(_) => Object::Reference(document.add_object(value)),
+                        Object::Dictionary(_) => Object::Reference(document.add(value)),
                         Object::Array(ref items) if items.len() > 4 => {
-                            Object::Reference(document.add_object(value))
+                            Object::Reference(document.add(value))
                         }
                         value => value,
                     };
@@ -574,9 +577,8 @@ fn flatten_inherited(document: &mut Document) -> Result<(), DocumentsError> {
             values.push((key, value));
         }
         let page = document
-            .get_object_mut(page_id)
-            .and_then(Object::as_dict_mut)
-            .map_err(pdf_error)?;
+            .dictionary_mut(page_id)
+            .ok_or_else(|| missing("a page of the document"))?;
         for (key, value) in values {
             page.set(key, value);
         }
@@ -588,22 +590,20 @@ fn flatten_inherited(document: &mut Document) -> Result<(), DocumentsError> {
 }
 
 /// The lower-left corner of a box (`[llx lly urx ury]`).
-fn box_origin(document: &Document, media_box: &Object) -> (f32, f32) {
+fn box_origin(document: &Objects, media_box: &Object) -> (f32, f32) {
     let values = box_values(document, media_box);
     (values[0], values[1])
 }
 
-fn box_values(document: &Document, media_box: &Object) -> [f32; 4] {
+fn box_values(document: &Objects, media_box: &Object) -> [f32; 4] {
     let array = document
-        .dereference(media_box)
-        .and_then(|(_, object)| object.as_array().cloned())
+        .resolve(media_box)
+        .and_then(Object::as_array)
+        .cloned()
         .unwrap_or_default();
     let mut values = [0.0, 0.0, 612.0, 792.0];
     for (slot, value) in values.iter_mut().zip(array.iter()) {
-        if let Ok(number) = document
-            .dereference(value)
-            .and_then(|(_, object)| object.as_float())
-        {
+        if let Some(number) = document.resolve(value).and_then(Object::as_float) {
             *slot = number;
         }
     }
@@ -611,9 +611,13 @@ fn box_values(document: &Document, media_box: &Object) -> [f32; 4] {
 }
 
 /// Width and height of a page (its `MediaBox`, after `flatten_inherited`).
-fn page_size(document: &Document, page_id: ObjectId) -> Result<(f32, f32), DocumentsError> {
-    let page = document.get_dictionary(page_id).map_err(pdf_error)?;
-    let media_box = page.get(b"MediaBox").map_err(pdf_error)?;
+fn page_size(document: &Objects, page_id: ObjectId) -> Result<(f32, f32), DocumentsError> {
+    let page = document
+        .dictionary(page_id)
+        .ok_or_else(|| missing("a page of the document"))?;
+    let media_box = page
+        .get(b"MediaBox")
+        .ok_or_else(|| missing("a page's MediaBox"))?;
     let [llx, lly, urx, ury] = box_values(document, media_box);
     Ok(((urx - llx).abs(), (ury - lly).abs()))
 }
@@ -647,22 +651,25 @@ impl ResourceAdditions {
     /// Adds the entries to the resources of `page_id`.
     fn add_to_page(
         &mut self,
-        document: &mut Document,
+        document: &mut Objects,
         page_id: ObjectId,
     ) -> Result<(), DocumentsError> {
         let current = document
-            .get_dictionary(page_id)
-            .map_err(pdf_error)?
+            .dictionary(page_id)
+            .ok_or_else(|| missing("a page of the document"))?
             .get(b"Resources")
             .cloned()
-            .unwrap_or_else(|_| Object::Dictionary(Dictionary::new()));
+            .unwrap_or_else(|| Object::Dictionary(Dictionary::new()));
         let resources = match current {
             Object::Reference(id) => match self.resources.get(&id) {
                 Some(copy) => Object::Reference(*copy),
                 None => {
-                    let mut resources = document.get_dictionary(id).cloned().map_err(pdf_error)?;
+                    let mut resources = document
+                        .dictionary(id)
+                        .cloned()
+                        .ok_or_else(|| missing("a page's resources"))?;
                     self.add_to(document, &mut resources)?;
-                    let copy = document.add_object(resources);
+                    let copy = document.add(resources);
                     self.resources.insert(id, copy);
                     Object::Reference(copy)
                 }
@@ -678,9 +685,8 @@ impl ResourceAdditions {
             }
         };
         document
-            .get_object_mut(page_id)
-            .and_then(Object::as_dict_mut)
-            .map_err(pdf_error)?
+            .dictionary_mut(page_id)
+            .ok_or_else(|| missing("a page of the document"))?
             .set("Resources", resources);
         Ok(())
     }
@@ -688,7 +694,7 @@ impl ResourceAdditions {
     /// Adds the entries to `resources`, a dictionary of its own.
     fn add_to(
         &mut self,
-        document: &mut Document,
+        document: &mut Objects,
         resources: &mut Dictionary,
     ) -> Result<(), DocumentsError> {
         for index in 0..self.entries.len() {
@@ -698,19 +704,18 @@ impl ResourceAdditions {
             }
             let entries = self.entries.iter().filter(|(k, ..)| *k == kind);
             match resources.get(kind) {
-                Ok(Object::Reference(id)) => {
+                Some(Object::Reference(id)) => {
                     let id = *id;
                     let copy = match self.kinds.get(&(kind, id)) {
                         Some(copy) => *copy,
                         None => {
                             // One that is not a dictionary is replaced, as
                             // a missing one is.
-                            let mut names =
-                                document.get_dictionary(id).cloned().unwrap_or_default();
+                            let mut names = document.dictionary(id).cloned().unwrap_or_default();
                             for (_, name, value) in entries {
                                 names.set(*name, value.clone());
                             }
-                            let copy = document.add_object(names);
+                            let copy = document.add(names);
                             self.kinds.insert((kind, id), copy);
                             copy
                         }
@@ -731,12 +736,13 @@ impl ResourceAdditions {
 
 /// The page objects of `document` that `pages` selects, each once: a page
 /// object listed twice in the page tree is drawn on once.
-fn selected_pages(document: &Document, pages: &Pages) -> Vec<ObjectId> {
-    let all = document.get_pages();
+fn selected_pages(document: &Objects, pages: &Pages) -> Vec<ObjectId> {
+    let all = document.pages();
     let total = all.len();
     let mut seen = HashSet::new();
     all.into_iter()
-        .filter(|&(number, page_id)| pages.includes(number as usize, total) && seen.insert(page_id))
+        .enumerate()
+        .filter(|&(index, page_id)| pages.includes(index + 1, total) && seen.insert(page_id))
         .map(|(_, page_id)| page_id)
         .collect()
 }
@@ -746,46 +752,41 @@ fn sub_dict_mut<'a>(
     resources: &'a mut Dictionary,
     key: &[u8],
 ) -> Result<&'a mut Dictionary, DocumentsError> {
-    if !matches!(resources.get(key), Ok(Object::Dictionary(_))) {
+    if !matches!(resources.get(key), Some(Object::Dictionary(_))) {
         resources.set(key.to_vec(), Object::Dictionary(Dictionary::new()));
     }
     resources
         .get_mut(key)
         .and_then(Object::as_dict_mut)
-        .map_err(pdf_error)
+        .ok_or_else(|| missing("a resource dictionary"))
 }
 
 /// Appends `operations` to a page after wrapping its existing contents in
 /// `q`/`Q`, so whatever state the page leaves does not move the drawing.
 fn draw_over(
-    document: &mut Document,
+    document: &mut Objects,
     page_id: ObjectId,
-    operations: Vec<Operation>,
+    operations: &[Operation],
 ) -> Result<(), DocumentsError> {
     let existing: Vec<Object> = match document
-        .get_dictionary(page_id)
-        .map_err(pdf_error)?
+        .dictionary(page_id)
+        .ok_or_else(|| missing("a page of the document"))?
         .get(b"Contents")
     {
-        Ok(Object::Reference(id)) => vec![Object::Reference(*id)],
-        Ok(Object::Array(items)) => items.clone(),
+        Some(Object::Reference(id)) => vec![Object::Reference(*id)],
+        Some(Object::Array(items)) => items.clone(),
         _ => Vec::new(),
     };
-    let open = document.add_object(Stream::new(Dictionary::new(), b"q\n".to_vec()));
+    let open = document.add(Stream::new(Dictionary::new(), b"q\n".to_vec()));
     let mut close = b"\nQ\n".to_vec();
-    close.extend(
-        Content { operations }
-            .encode()
-            .map_err(|error| write_error("the drawing could not be encoded", error))?,
-    );
-    let close = document.add_object(Stream::new(Dictionary::new(), close));
+    close.extend(content::encode(operations));
+    let close = document.add(Stream::new(Dictionary::new(), close));
     let mut contents = vec![Object::Reference(open)];
     contents.extend(existing);
     contents.push(Object::Reference(close));
     document
-        .get_object_mut(page_id)
-        .and_then(Object::as_dict_mut)
-        .map_err(pdf_error)?
+        .dictionary_mut(page_id)
+        .ok_or_else(|| missing("a page of the document"))?
         .set("Contents", contents);
     Ok(())
 }
@@ -885,8 +886,11 @@ mod tests {
         );
         assert_eq!(fault.status(), http::StatusCode::INTERNAL_SERVER_ERROR);
         // Input that cannot be read is the client's.
-        let unreadable = pdf_error(lopdf::Error::ObjectNotFound((1, 0)));
+        let unreadable = pdf_error(PdfError::Damaged("object 1 0 is missing".into()));
         assert_eq!(unreadable.status(), http::StatusCode::BAD_REQUEST);
+        // So is input that would take more than the limits to read.
+        let over = pdf_error(PdfError::TooLarge("over the limit".into()));
+        assert_eq!(over.status(), http::StatusCode::PAYLOAD_TOO_LARGE);
     }
 
     #[test]

@@ -33,13 +33,13 @@ harfrust = { workspace = true, optional = true }
 http = { workspace = true }
 icu_segmenter = { workspace = true, optional = true }
 krilla = { workspace = true, optional = true }
-lopdf = { workspace = true }
 mime_guess = { workspace = true, optional = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-db = { workspace = true, optional = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+navree-pdf = { workspace = true }
 navree-queue = { workspace = true, optional = true }
 navree-storage = { workspace = true }
 navree-view = { workspace = true }

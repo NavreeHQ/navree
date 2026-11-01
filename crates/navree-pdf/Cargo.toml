@@ -1,0 +1,26 @@
+[package]
+name = "navree-pdf"
+description = "Navree's PDF object layer: a lazy reader held to a memory and work budget (cross-reference tables and streams, object streams, incremental updates, repair of a broken cross-reference, the standard filters, files encrypted without a password to open them), a writer, and text extraction in reading order."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+aes = { workspace = true }
+bytes = { workspace = true }
+cbc = { workspace = true }
+flate2 = { workspace = true }
+indexmap = { workspace = true }
+md-5 = { workspace = true }
+rc4 = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+weezl = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

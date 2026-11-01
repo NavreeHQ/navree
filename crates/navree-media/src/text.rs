@@ -19,6 +19,7 @@ use html5ever::tokenizer::states::RawKind;
 use html5ever::tokenizer::{
     BufferQueue, Tag, TagKind, Token, TokenSink, TokenSinkResult, Tokenizer, TokenizerOpts,
 };
+use navree_pdf::{Document, Object, PdfError, ReadLimits};
 use quick_xml::Reader;
 use quick_xml::events::Event;
 use serde::Serialize;
@@ -29,9 +30,6 @@ use crate::mime;
 
 /// The MIME type of Word documents (DOCX).
 pub const DOCX: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-
-/// The most bytes a PDF page's content may inflate to.
-const PDF_PAGE_LIMIT: usize = 64 * 1024 * 1024;
 
 /// The text of a document.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
@@ -104,25 +102,21 @@ pub fn extract(bytes: &[u8], mime_type: &str) -> Result<ExtractedText, MediaErro
     }
 }
 
-/// PDF text through lopdf, page by page, each page's content inflated no
-/// further than 64 MiB.
+/// PDF text through navree-pdf, page by page, in reading order, with the
+/// limits of its reader (`ReadLimits`) and of its text (`TextLimits`):
+/// among them, a page's content inflates no further than 64 MiB, and the
+/// fonts' `ToUnicode` maps are capped and counted.
 fn pdf(bytes: &[u8]) -> Result<ExtractedText, MediaError> {
-    let options = lopdf::LoadOptions {
-        max_decompressed_size: Some(PDF_PAGE_LIMIT),
-        ..lopdf::LoadOptions::default()
-    };
-    let document = lopdf::Document::load_mem_with_options(bytes, options)
-        .map_err(|error| MediaError::text(format!("PDF: {error}")))?;
-    if document.is_encrypted() {
-        return Err(MediaError::text("PDF: the document is encrypted"));
-    }
-    let mut pages = Vec::new();
-    for number in document.get_pages().keys() {
-        let page = document
-            .extract_text_with_limit(&[*number], PDF_PAGE_LIMIT)
-            .map_err(|error| MediaError::text(format!("PDF page {number}: {error}")))?;
-        pages.push(tidy(&page));
-    }
+    let document =
+        Document::load(bytes.to_vec(), ReadLimits::default()).map_err(|error| match error {
+            PdfError::Encrypted => MediaError::text("PDF: the document is encrypted"),
+            other => MediaError::text(format!("PDF: {other}")),
+        })?;
+    let pages: Vec<String> = navree_pdf::text::page_texts(&document)
+        .map_err(|error| MediaError::text(format!("PDF: {error}")))?
+        .iter()
+        .map(|page| tidy(page))
+        .collect();
     let title = pdf_title(&document);
     let text = pages
         .iter()
@@ -139,15 +133,14 @@ fn pdf(bytes: &[u8]) -> Result<ExtractedText, MediaError> {
 }
 
 /// The `Title` of the PDF information dictionary.
-fn pdf_title(document: &lopdf::Document) -> Option<String> {
-    let info = document.trailer.get(b"Info").ok()?;
-    let info = match info {
-        lopdf::Object::Reference(id) => document.get_dictionary(*id).ok()?,
-        lopdf::Object::Dictionary(dictionary) => dictionary,
+fn pdf_title(document: &Document) -> Option<String> {
+    let info = match document.trailer().get(b"Info")? {
+        Object::Reference(id) => document.dictionary(*id)?,
+        Object::Dictionary(dictionary) => dictionary,
         _ => return None,
     };
-    let title = info.get(b"Title").ok()?;
-    let title = lopdf::decode_text_string(title).ok()?;
+    let title = info.get(b"Title")?.as_str()?;
+    let title = navree_pdf::text::strict_text_string(title)?;
     let title = title.trim();
     (!title.is_empty()).then(|| title.to_owned())
 }

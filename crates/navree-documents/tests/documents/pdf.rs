@@ -1,6 +1,18 @@
 //! `Pdf`: merge, stamps, overlays, metadata and text.
 
 use navree_documents::{DocumentsError, Pages, Pdf, Position, Stamp};
+use navree_pdf::{Document, Objects, ReadLimits};
+
+/// The objects of `pdf`, to build an input from.
+fn objects_of(pdf: &Pdf) -> Objects {
+    let document = Document::load(pdf.bytes().clone(), ReadLimits::default()).unwrap();
+    Objects::read(document).unwrap()
+}
+
+/// `pdf` read within the default limits.
+fn read(pdf: &[u8]) -> Document {
+    Document::load(pdf.to_vec(), ReadLimits::default()).unwrap()
+}
 
 #[test]
 fn merge_keeps_every_page_in_order() {
@@ -39,19 +51,12 @@ fn bytes_that_are_not_a_readable_pdf_are_a_client_error() {
 /// `inflated` bytes from a few kilobytes.
 fn pdf_with_an_inflating_object_stream(inflated: usize) -> Vec<u8> {
     let plain = Pdf::from_lines(["x"]);
-    let mut document = lopdf::Document::load_mem(&plain).unwrap();
-    document.add_object(lopdf::Object::String(
+    let mut document = objects_of(&plain);
+    document.add(navree_pdf::Object::String(
         vec![b' '; inflated],
-        lopdf::StringFormat::Literal,
+        navree_pdf::StringFormat::Literal,
     ));
-    let options = lopdf::SaveOptions::builder()
-        .use_object_streams(true)
-        .use_xref_streams(true)
-        .compression_level(6)
-        .build();
-    let mut bytes = Vec::new();
-    document.save_with_options(&mut bytes, options).unwrap();
-    bytes
+    document.save_with(true).unwrap()
 }
 
 #[test]
@@ -65,8 +70,15 @@ fn a_pdf_whose_object_stream_inflates_past_the_limit_is_refused() {
         bomb.len()
     );
     // Without a limit it is a perfectly good document.
+    let unlimited = ReadLimits {
+        object_stream: usize::MAX,
+        ..ReadLimits::default()
+    };
     assert_eq!(
-        lopdf::Document::load_mem(&bomb).unwrap().get_pages().len(),
+        Document::load(bomb.clone(), unlimited)
+            .unwrap()
+            .pages()
+            .len(),
         1
     );
     let error = Pdf::from_bytes(bomb).unwrap_err();
@@ -81,20 +93,120 @@ fn an_object_stream_under_the_limit_loads() {
     assert!(pdf.text().unwrap().contains('x'));
 }
 
+/// A one-page PDF showing `x`, with an object stream that lists `members`
+/// objects all at the same offset: one array of `zeros` zeros. Nothing is
+/// compressed; the file is a few tens of kilobytes.
+fn pdf_with_members_sharing_one_array(members: u32, zeros: usize) -> Vec<u8> {
+    let mut out = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+    let mut object = |out: &mut Vec<u8>, body: &str| {
+        offsets.push(out.len());
+        out.extend_from_slice(body.as_bytes());
+    };
+    object(
+        &mut out,
+        "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+    );
+    object(
+        &mut out,
+        "2 0 obj\n<< /Type /Pages /Kids [5 0 R] /Count 1 >>\nendobj\n",
+    );
+    let header: String = (10..10 + members).map(|n| format!("{n} 0 ")).collect();
+    let body = format!("{header}[{}]", "0 ".repeat(zeros));
+    object(
+        &mut out,
+        &format!(
+            "3 0 obj\n<< /Type /ObjStm /N {members} /First {} /Length {} >>\nstream\n{body}\nendstream\nendobj\n",
+            header.len(),
+            body.len()
+        ),
+    );
+    object(
+        &mut out,
+        "5 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 6 0 R \
+         /Resources << /Font << /F1 7 0 R >> >> >>\nendobj\n",
+    );
+    object(
+        &mut out,
+        "6 0 obj\n<< /Length 32 >>\nstream\nBT /F1 12 Tf 50 700 Td (x) Tj ET\nendstream\nendobj\n",
+    );
+    object(
+        &mut out,
+        "7 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+    );
+    let at = out.len();
+    let row = |kind: u8, second: usize, third: u16| {
+        let mut row = vec![kind];
+        row.extend_from_slice(&(second as u32).to_be_bytes());
+        row.extend_from_slice(&third.to_be_bytes());
+        row
+    };
+    // Objects 0 to 7 (4 is this cross-reference stream), then the members.
+    let mut rows = row(0, 0, 65535);
+    for offset in &offsets[..3] {
+        rows.extend(row(1, *offset, 0));
+    }
+    rows.extend(row(1, at, 0));
+    for offset in &offsets[3..] {
+        rows.extend(row(1, *offset, 0));
+    }
+    for index in 0..members {
+        rows.extend(row(2, 3, index as u16));
+    }
+    out.extend_from_slice(
+        format!(
+            "4 0 obj\n<< /Type /XRef /Size {} /Root 1 0 R /W [1 4 2] /Index [0 8 10 {members}] \
+             /Length {} >>\nstream\n",
+            10 + members,
+            rows.len()
+        )
+        .as_bytes(),
+    );
+    out.extend_from_slice(&rows);
+    out.extend_from_slice(format!("\nendstream\nendobj\nstartxref\n{at}\n%%EOF\n").as_bytes());
+    out
+}
+
+#[test]
+fn objects_that_amplify_past_the_reading_budget_are_a_client_error() {
+    // 280 objects that are the same array of 10,000 zeros: 20 KB of text
+    // that, read as 280 objects, would hold about 300 MiB, over the 256
+    // MiB a document's objects may hold.
+    let bomb = pdf_with_members_sharing_one_array(280, 10_000);
+    assert!(bomb.len() < 32 * 1024, "{} bytes", bomb.len());
+    // Reading the pages reads none of them.
+    let pdf = Pdf::from_bytes(bomb).unwrap();
+    assert_eq!(pdf.page_count().unwrap(), 1);
+    assert_eq!(pdf.text().unwrap(), "x");
+    // Editing reads every object: refused once the budget runs out.
+    let error = pdf.stamp(&Stamp::text("PAID")).unwrap_err();
+    assert!(matches!(error, DocumentsError::TooLarge(_)), "{error:?}");
+    assert_eq!(error.status(), http::StatusCode::PAYLOAD_TOO_LARGE);
+    // A few such objects are a document like any other.
+    let few = Pdf::from_bytes(pdf_with_members_sharing_one_array(3, 10_000)).unwrap();
+    assert!(
+        few.stamp(&Stamp::text("PAID"))
+            .unwrap()
+            .text()
+            .unwrap()
+            .contains("PAID")
+    );
+}
+
 /// A one-page PDF whose page draws a form `fan_out` times, which draws the
 /// next `fan_out` times, and so on for `levels` forms. The last one holds
 /// `last`, a content stream.
 fn pdf_with_forms_drawing_forms(fan_out: usize, levels: usize, last: &str) -> Vec<u8> {
-    use lopdf::{Object, Stream, dictionary};
+    use navree_pdf::{Object, Stream, dictionary};
 
-    let mut document = lopdf::Document::with_version("1.7");
-    let pages_id = document.new_object_id();
-    let font_id = document.add_object(dictionary! {
+    let mut document = Objects::new();
+    let pages_id = document.reserve();
+    let font_id = document.add(dictionary! {
         "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica",
         "Encoding" => "WinAnsiEncoding",
     });
     let draws = "/Next Do ".repeat(fan_out);
-    let mut inner: Option<lopdf::ObjectId> = None;
+    let mut inner: Option<navree_pdf::ObjectId> = None;
     for _ in 0..levels {
         let mut dict = dictionary! {
             "Type" => "XObject", "Subtype" => "Form",
@@ -116,27 +228,25 @@ fn pdf_with_forms_drawing_forms(fan_out: usize, levels: usize, last: &str) -> Ve
                 last.to_owned()
             }
         };
-        inner = Some(document.add_object(Stream::new(dict, content.into_bytes())));
+        inner = Some(document.add(Stream::new(dict, content.into_bytes())));
     }
     let first = inner.expect("at least one form");
-    let content_id = document.add_object(Stream::new(dictionary! {}, draws.into_bytes()));
-    let page_id = document.add_object(dictionary! {
+    let content_id = document.add(Stream::new(dictionary! {}, draws.into_bytes()));
+    let page_id = document.add(dictionary! {
         "Type" => "Page", "Parent" => pages_id,
         "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
         "Contents" => content_id,
         "Resources" => dictionary! { "XObject" => dictionary! { "Next" => first } },
     });
-    document.objects.insert(
+    document.insert(
         pages_id,
         Object::Dictionary(dictionary! {
             "Type" => "Pages", "Kids" => vec![page_id.into()], "Count" => 1,
         }),
     );
-    let catalog_id = document.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    let catalog_id = document.add(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
     document.trailer.set("Root", catalog_id);
-    let mut bytes = Vec::new();
-    document.save_to(&mut bytes).unwrap();
-    bytes
+    document.save().unwrap()
 }
 
 #[test]
@@ -183,10 +293,10 @@ fn forms_within_the_work_limit_still_show_their_text() {
 /// A one-page PDF with `content` as its page, and font `/F1`: Helvetica, or
 /// (with `zero_width`) a font whose `a` has no width.
 fn pdf_with_page_content(content: &str, zero_width: bool) -> Vec<u8> {
-    use lopdf::{Object, Stream, dictionary};
+    use navree_pdf::{Object, Stream, dictionary};
 
-    let mut document = lopdf::Document::with_version("1.7");
-    let pages_id = document.new_object_id();
+    let mut document = Objects::new();
+    let pages_id = document.reserve();
     let mut font = dictionary! {
         "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica",
         "Encoding" => "WinAnsiEncoding",
@@ -196,25 +306,23 @@ fn pdf_with_page_content(content: &str, zero_width: bool) -> Vec<u8> {
         font.set("LastChar", 97);
         font.set("Widths", vec![0.into()]);
     }
-    let font_id = document.add_object(font);
-    let content_id = document.add_object(Stream::new(dictionary! {}, content.as_bytes().to_vec()));
-    let page_id = document.add_object(dictionary! {
+    let font_id = document.add(font);
+    let content_id = document.add(Stream::new(dictionary! {}, content.as_bytes().to_vec()));
+    let page_id = document.add(dictionary! {
         "Type" => "Page", "Parent" => pages_id,
         "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
         "Contents" => content_id,
         "Resources" => dictionary! { "Font" => dictionary! { "F1" => font_id } },
     });
-    document.objects.insert(
+    document.insert(
         pages_id,
         Object::Dictionary(dictionary! {
             "Type" => "Pages", "Kids" => vec![page_id.into()], "Count" => 1,
         }),
     );
-    let catalog_id = document.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    let catalog_id = document.add(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
     document.trailer.set("Root", catalog_id);
-    let mut bytes = Vec::new();
-    document.save_to(&mut bytes).unwrap();
-    bytes
+    document.save().unwrap()
 }
 
 #[test]
@@ -254,14 +362,12 @@ fn marks_that_sit_on_nothing_are_refused_past_a_budget() {
 /// A one-page PDF showing one glyph of a composite font whose `ToUnicode`
 /// map inflates to `inflated` bytes from a few kilobytes.
 fn pdf_with_an_inflating_to_unicode_map(inflated: usize) -> Vec<u8> {
-    use lopdf::{Object, Stream, dictionary};
+    use navree_pdf::{Object, Stream, dictionary};
 
-    let mut document = lopdf::Document::with_version("1.7");
-    let pages_id = document.new_object_id();
-    let mut map = Stream::new(dictionary! {}, vec![b' '; inflated]);
-    map.compress().unwrap();
-    let map_id = document.add_object(map);
-    let descendant_id = document.add_object(dictionary! {
+    let mut document = Objects::new();
+    let pages_id = document.reserve();
+    let map_id = document.add(Stream::new(dictionary! {}, vec![b' '; inflated]));
+    let descendant_id = document.add(dictionary! {
         "Type" => "Font", "Subtype" => "CIDFontType2", "BaseFont" => "Sample",
         "CIDSystemInfo" => dictionary! {
             "Registry" => Object::string_literal("Adobe"),
@@ -269,33 +375,32 @@ fn pdf_with_an_inflating_to_unicode_map(inflated: usize) -> Vec<u8> {
             "Supplement" => 0,
         },
     });
-    let font_id = document.add_object(dictionary! {
+    let font_id = document.add(dictionary! {
         "Type" => "Font", "Subtype" => "Type0", "BaseFont" => "Sample",
         "Encoding" => "Identity-H",
         "DescendantFonts" => vec![descendant_id.into()],
         "ToUnicode" => map_id,
     });
-    let content_id = document.add_object(Stream::new(
+    let content_id = document.add(Stream::new(
         dictionary! {},
         b"BT /F1 12 Tf 1 0 0 1 10 700 Tm <0041> Tj ET".to_vec(),
     ));
-    let page_id = document.add_object(dictionary! {
+    let page_id = document.add(dictionary! {
         "Type" => "Page", "Parent" => pages_id,
         "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
         "Contents" => content_id,
         "Resources" => dictionary! { "Font" => dictionary! { "F1" => font_id } },
     });
-    document.objects.insert(
+    document.insert(
         pages_id,
         Object::Dictionary(dictionary! {
             "Type" => "Pages", "Kids" => vec![page_id.into()], "Count" => 1,
         }),
     );
-    let catalog_id = document.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    let catalog_id = document.add(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
     document.trailer.set("Root", catalog_id);
-    let mut bytes = Vec::new();
-    document.save_to(&mut bytes).unwrap();
-    bytes
+    document.compress();
+    document.save().unwrap()
 }
 
 #[test]
@@ -320,27 +425,21 @@ fn an_object_stream_over_the_load_limit_is_refused() {
     assert_eq!(under.page_count().unwrap(), 1);
 }
 
-/// Saves `document` with object streams, as compact as lopdf writes it.
-fn compact(mut document: lopdf::Document) -> Vec<u8> {
-    let options = lopdf::SaveOptions::builder()
-        .use_object_streams(true)
-        .use_xref_streams(true)
-        .compression_level(9)
-        .build();
-    let mut bytes = Vec::new();
-    document.save_with_options(&mut bytes, options).unwrap();
-    bytes
+/// Saves `document` with object streams and its streams compressed.
+fn compact(mut document: Objects) -> Vec<u8> {
+    document.compress();
+    document.save_with(true).unwrap()
 }
 
 /// `pages` pages showing their number, with `fonts` font names for one
 /// font: in resources the page tree passes down to every page, or (with
 /// `shared`) in one resources object each page refers to.
 fn pdf_with_many_fonts_on_many_pages(pages: usize, fonts: usize, shared: bool) -> Vec<u8> {
-    use lopdf::{Dictionary, Object, Stream, dictionary};
+    use navree_pdf::{Dictionary, Object, Stream, dictionary};
 
-    let mut document = lopdf::Document::with_version("1.7");
-    let pages_id = document.new_object_id();
-    let font = document.add_object(dictionary! {
+    let mut document = Objects::new();
+    let pages_id = document.reserve();
+    let font = document.add(dictionary! {
         "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica",
         "Encoding" => "WinAnsiEncoding",
     });
@@ -349,18 +448,18 @@ fn pdf_with_many_fonts_on_many_pages(pages: usize, fonts: usize, shared: bool) -
         names.set(format!("F{i}"), font);
     }
     let resources = dictionary! { "Font" => names };
-    let shared_id = shared.then(|| document.add_object(resources.clone()));
+    let shared_id = shared.then(|| document.add(resources.clone()));
     let kids: Vec<Object> = (0..pages)
         .map(|i| {
             let content = format!("BT /F0 12 Tf 50 700 Td (Page {i}) Tj ET");
-            let content_id = document.add_object(Stream::new(dictionary! {}, content.into_bytes()));
+            let content_id = document.add(Stream::new(dictionary! {}, content.into_bytes()));
             let mut page = dictionary! {
                 "Type" => "Page", "Parent" => pages_id, "Contents" => content_id,
             };
             if let Some(id) = shared_id {
                 page.set("Resources", id);
             }
-            document.add_object(page).into()
+            document.add(page).into()
         })
         .collect();
     let mut tree = dictionary! {
@@ -370,8 +469,8 @@ fn pdf_with_many_fonts_on_many_pages(pages: usize, fonts: usize, shared: bool) -
     if !shared {
         tree.set("Resources", resources);
     }
-    document.objects.insert(pages_id, Object::Dictionary(tree));
-    let catalog = document.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    document.insert(pages_id, Object::Dictionary(tree));
+    let catalog = document.add(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
     document.trailer.set("Root", catalog);
     compact(document)
 }
@@ -379,34 +478,33 @@ fn pdf_with_many_fonts_on_many_pages(pages: usize, fonts: usize, shared: bool) -
 /// The names in each page's `category` resources (`Font`, `XObject`), as
 /// a viewer finds them: following references and the page tree.
 fn resource_names(pdf: &Pdf, category: &[u8]) -> Vec<std::collections::BTreeSet<Vec<u8>>> {
-    use lopdf::Object;
+    use navree_pdf::Object;
 
-    let document = lopdf::Document::load_mem(pdf).unwrap();
+    let document = read(pdf);
     let resolve = |object: &Object| -> Object {
         let mut object = object.clone();
         while let Object::Reference(id) = object {
-            object = document.get_object(id).unwrap().clone();
+            object = document.object(id).unwrap().clone();
         }
         object
     };
     document
-        .get_pages()
-        .into_values()
+        .pages()
+        .into_iter()
         .map(|page_id| {
-            let mut node = document.get_dictionary(page_id).unwrap();
+            let mut node = document.dictionary(page_id).unwrap();
             let resources = loop {
-                if let Ok(resources) = node.get(b"Resources") {
+                if let Some(resources) = node.get(b"Resources") {
                     break resolve(resources);
                 }
                 let parent = node.get(b"Parent").unwrap().as_reference().unwrap();
-                node = document.get_dictionary(parent).unwrap();
+                node = document.dictionary(parent).unwrap();
             };
             resources
                 .as_dict()
                 .unwrap()
                 .get(category)
                 .map(resolve)
-                .ok()
                 .map(|names| {
                     names
                         .as_dict()
@@ -523,44 +621,44 @@ fn an_overlay_on_pages_that_inherit_resources_adds_them_once() {
 
 #[test]
 fn a_page_listed_many_times_in_the_page_tree_is_stamped_once() {
-    use lopdf::{Object, Stream, dictionary};
+    use navree_pdf::{Object, Stream, dictionary};
 
     // One page object listed 2,000 times. Wrapping its contents again for
     // each listing makes its list of contents grow by two every time.
-    let mut document = lopdf::Document::with_version("1.7");
-    let pages_id = document.new_object_id();
-    let font = document.add_object(dictionary! {
+    let mut document = Objects::new();
+    let pages_id = document.reserve();
+    let font = document.add(dictionary! {
         "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica",
     });
-    let content = document.add_object(Stream::new(
+    let content = document.add(Stream::new(
         dictionary! {},
         b"BT /F1 12 Tf 50 700 Td (Again) Tj ET".to_vec(),
     ));
-    let page = document.add_object(dictionary! {
+    let page = document.add(dictionary! {
         "Type" => "Page", "Parent" => pages_id, "Contents" => content,
         "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
         "Resources" => dictionary! { "Font" => dictionary! { "F1" => font } },
     });
     // The page tree is read up to one listing per object in the file.
     for i in 0..2000 {
-        document.add_object(Object::Integer(i));
+        document.add(Object::Integer(i));
     }
-    document.objects.insert(
+    document.insert(
         pages_id,
         Object::Dictionary(dictionary! {
             "Type" => "Pages", "Kids" => vec![Object::Reference(page); 2000], "Count" => 2000,
         }),
     );
-    let catalog = document.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    let catalog = document.add(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
     document.trailer.set("Root", catalog);
     let pdf = Pdf::from_bytes(compact(document)).unwrap();
     assert!(pdf.page_count().unwrap() >= 1000);
 
     let stamped = pdf.stamp(&Stamp::text("DRAFT")).unwrap();
-    let document = lopdf::Document::load_mem(&stamped).unwrap();
-    let page_id = *document.get_pages().values().next().unwrap();
+    let document = read(&stamped);
+    let page_id = document.pages()[0];
     let contents = document
-        .get_dictionary(page_id)
+        .dictionary(page_id)
         .unwrap()
         .get(b"Contents")
         .unwrap()
@@ -580,15 +678,15 @@ fn a_stamp_on_some_pages_leaves_the_resources_of_the_others_as_they_were() {
     // Three pages sharing one resources object; the stamp goes on the second.
     let pdf = Pdf::from_bytes(pdf_with_many_fonts_on_many_pages(3, 2, true)).unwrap();
     let second = Stamp::text("X").pages(Pages::Only(vec![2]));
-    let before = lopdf::Document::load_mem(&pdf).unwrap();
+    let before = read(&pdf);
     let stamped = pdf.stamp(&second).unwrap();
-    let after = lopdf::Document::load_mem(&stamped).unwrap();
-    let resources = |document: &lopdf::Document| -> Vec<lopdf::Object> {
+    let after = read(&stamped);
+    let resources = |document: &Document| -> Vec<navree_pdf::Object> {
         document
-            .get_pages()
-            .into_values()
+            .pages()
+            .into_iter()
             .map(|page| {
-                let page = document.get_dictionary(page).unwrap();
+                let page = document.dictionary(page).unwrap();
                 page.get(b"Resources").unwrap().clone()
             })
             .collect()
@@ -603,8 +701,8 @@ fn a_stamp_on_some_pages_leaves_the_resources_of_the_others_as_they_were() {
     assert_eq!(now[0], was[0]);
     assert_eq!(now[2], was[2]);
     assert_eq!(
-        after.get_object(shared).unwrap(),
-        before.get_object(shared).unwrap()
+        after.object(shared).unwrap(),
+        before.object(shared).unwrap()
     );
     assert_ne!(now[1], was[1]);
     let fonts = resource_names(&stamped, b"Font");

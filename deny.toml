@@ -104,7 +104,6 @@ skip = [
     { crate = "thiserror@1.0.69", reason = "Pulled in only by rlibphonenumber@2.2.14 (build dep); the rest of the tree is on 2.0.21." },
     { crate = "thiserror-impl@1.0.69", reason = "Pulled in only by thiserror@1.0.69; the rest of the tree is on 2.0.21." },
     { crate = "unicode-width@0.1.14", reason = "Pulled in only by miette@7.6.0; the rest of the tree is on 0.2.2." },
-    { crate = "weezl@0.1.12", reason = "Pulled in only by gif@0.14.2; the rest of the tree is on 0.2.1." },
     { crate = "windows-sys@0.52.0", reason = "Pulled in only by memory-stats@1.2.0, ring@0.17.14; the rest of the tree is on 0.61.2." },
     { crate = "windows-sys@0.59.0", reason = "Pulled in only by fs4@0.13.1; the rest of the tree is on 0.61.2." },
 ]

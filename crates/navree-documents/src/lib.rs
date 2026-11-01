@@ -83,7 +83,6 @@ mod queue;
 mod render;
 mod stamp;
 mod templates;
-mod text;
 #[cfg(any(feature = "native", feature = "chrome"))]
 mod views;
 

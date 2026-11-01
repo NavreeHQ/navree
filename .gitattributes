@@ -4,3 +4,6 @@ crates/navree-graphql/assets/* -text
 
 # Fuzzing seeds are fed to the parsers byte for byte.
 fuzz/seeds/** -text
+
+# PDF fixtures and the text recorded from them are compared byte for byte.
+crates/navree-pdf/tests/fixtures/** -text

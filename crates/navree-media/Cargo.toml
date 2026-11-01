@@ -29,7 +29,6 @@ html5ever = { workspace = true }
 http = { workspace = true }
 image = { workspace = true }
 infer = { workspace = true }
-lopdf = { workspace = true }
 mime_guess = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
@@ -39,6 +38,7 @@ navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
 # `media` is a navree-orm model.
 navree-orm = { workspace = true }
+navree-pdf = { workspace = true }
 # Batches of `media.conversions` jobs (`media:regenerate --queue`).
 navree-queue = { workspace = true }
 navree-storage = { workspace = true }

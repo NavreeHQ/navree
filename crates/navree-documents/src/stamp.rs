@@ -167,29 +167,12 @@ impl Stamp {
 
     /// The width of the text in points.
     pub(crate) fn text_width(&self) -> f32 {
-        let units: u32 = self.text.chars().map(|c| standard_width(c as u32)).sum();
+        let units: u32 = self
+            .text
+            .chars()
+            .map(|c| navree_pdf::text::standard_width(c as u32))
+            .sum();
         units as f32 * self.size / 1000.0
-    }
-}
-
-/// Glyph widths of Helvetica Bold (per 1000 units) for printable ASCII,
-/// from its font metrics; Latin-1 letters use 611, an average.
-pub(crate) fn standard_width(code: u32) -> u32 {
-    const ASCII: [u16; 95] = [
-        278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278, 333, 278,
-        278, // ' '..'/'
-        556, 556, 556, 556, 556, 556, 556, 556, 556, 556, // 0..9
-        333, 333, 584, 584, 584, 611, 975, // ':'..'@'
-        722, 722, 722, 722, 667, 611, 778, 722, 278, 556, 722, 611, 833, 722, 778, 667, 778, 722,
-        667, 611, 722, 667, 944, 667, 667, 611, // A..Z
-        333, 278, 333, 584, 556, 333, // '['..'`'
-        556, 611, 556, 611, 556, 333, 611, 611, 278, 278, 556, 278, 889, 611, 611, 611, 611, 389,
-        556, 333, 611, 556, 778, 556, 556, 500, // a..z
-        389, 280, 389, 584, // '{'..'~'
-    ];
-    match code {
-        0x20..=0x7e => u32::from(ASCII[(code - 0x20) as usize]),
-        _ => 611,
     }
 }
 
