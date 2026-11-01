@@ -1,30 +1,34 @@
-//! [`Multipart`]: a `multipart/form-data` body, one part at a time, on
-//! [`multer`] with Navree's limits.
+//! [`Multipart`]: a `multipart/form-data` body, one part at a time, read by
+//! Navree's own streaming parser within Navree's limits.
 //!
-//! A form is often read before anyone has been authenticated, and its parser
-//! buffers what it has not understood yet, so every way of making it hold or
-//! search bytes has a bound: see [`MultipartLimits`].
+//! A form is often read before anyone has been authenticated, so every way
+//! of making the parser hold or search bytes has a bound: see
+//! [`MultipartLimits`]. A value is handed on as it arrives, never held whole.
 
+use std::fmt;
+use std::future::poll_fn;
 use std::pin::Pin;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, PoisonError};
 use std::task::{Context, Poll, ready};
 
 use encoding_rs::{Encoding, UTF_8};
 use futures_util::{Stream, StreamExt};
 use http::HeaderMap;
 use http::header::CONTENT_TYPE;
-use navree_kernel::AppContext;
+use http_body_util::{BodyDataStream, BodyExt, LengthLimitError, Limited};
+use navree_kernel::{AppContext, BoxError};
 use serde::Deserialize;
 
 use super::rejection::{MultipartError, MultipartRejection};
 use super::{FromRequest, OptionalFromRequest, Request};
 use crate::HttpOptions;
-use crate::body::{BodyError, BodyLimit, Bytes};
+use crate::body::{Body, BodyError, BodyLimit, Bytes};
+use crate::serve::BodyReadTimeout;
 
-mod guard;
+mod disposition;
+mod parser;
 
-use guard::Guarded;
+use parser::{Failure, Head, Next, Parser, Piece};
 
 /// The longest boundary: RFC 2046's 70 characters.
 const MAX_BOUNDARY_BYTES: usize = 70;
@@ -125,14 +129,33 @@ impl MultipartLimits {
 /// file name may hold a path, `..`, or anything else: nothing here reads it
 /// as one, and neither should a handler (`store_upload` in navree-storage
 /// keeps only its last component, and stores under a random name).
-#[derive(Debug)]
+///
+/// A part's `name` and `filename` are the parameters of its
+/// `Content-Disposition`, read in order (a parameter is never found inside
+/// another one's value); `filename*` (RFC 8187, UTF-8 or ISO-8859-1) is
+/// preferred to `filename` when it decodes. A part with two
+/// `Content-Disposition` or two `Content-Type` headers, or that names a
+/// parameter twice, is a 400: whoever is in front of the app may have read
+/// the other one.
 pub struct Multipart {
-    parser: multer::Multipart<'static>,
+    // Only ever reached through `&mut self`, with `get_mut`: the lock makes
+    // the form `Sync` and is never taken.
+    body: Mutex<BodyDataStream<Limited<Body>>>,
+    parser: Parser,
     limits: MultipartLimits,
-    // What the guard in front of the parser reads `max_header_bytes` from.
-    head_limit: Arc<AtomicUsize>,
     parts: usize,
     failed: Option<MultipartError>,
+}
+
+impl fmt::Debug for Multipart {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Multipart")
+            .field("parser", &self.parser)
+            .field("limits", &self.limits)
+            .field("parts", &self.parts)
+            .field("failed", &self.failed)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Multipart {
@@ -140,8 +163,6 @@ impl Multipart {
     /// been read so far counts.
     #[must_use]
     pub fn with_limits(self, limits: MultipartLimits) -> Self {
-        self.head_limit
-            .store(limits.max_header_bytes, Ordering::Relaxed);
         Self { limits, ..self }
     }
 
@@ -152,13 +173,10 @@ impl Multipart {
 
     /// The next part, `None` after the last. A part left unread is skipped.
     pub async fn next_field(&mut self) -> Result<Option<Field<'_>>, MultipartError> {
-        if let Some(error) = &self.failed {
-            return Err(error.clone());
-        }
-        let inner = match self.parser.next_field().await {
-            Ok(Some(inner)) => inner,
-            Ok(None) => return Ok(None),
-            Err(error) => return Err(self.fail(from_parser(error))),
+        let limit = self.limits.max_header_bytes;
+        let next = poll_fn(|cx| self.poll_read(cx, |parser| parser.next(limit))).await?;
+        let Next::Part(head) = next else {
+            return Ok(None);
         };
         if self.parts >= self.limits.max_parts {
             return Err(self.fail(MultipartError::TooManyParts {
@@ -166,7 +184,41 @@ impl Multipart {
             }));
         }
         self.parts += 1;
-        Ok(Some(Field::new(inner, self)))
+        Ok(Some(Field::new(head, self)))
+    }
+
+    /// What `read` finds in the body, reading more of the body while `read`
+    /// wants more. A failure stays.
+    fn poll_read<T>(
+        &mut self,
+        cx: &mut Context<'_>,
+        mut read: impl FnMut(&mut Parser) -> Result<Option<T>, Failure>,
+    ) -> Poll<Result<T, MultipartError>> {
+        loop {
+            if let Some(error) = &self.failed {
+                return Poll::Ready(Err(error.clone()));
+            }
+            let failure = match read(&mut self.parser) {
+                Ok(Some(found)) => return Poll::Ready(Ok(found)),
+                Ok(None) => None,
+                Err(Failure::HeadTooLarge) => Some(MultipartError::HeadTooLarge {
+                    limit: self.limits.max_header_bytes,
+                }),
+                Err(Failure::Malformed(message)) => Some(MultipartError::Malformed(message)),
+            };
+            if let Some(failure) = failure {
+                return Poll::Ready(Err(self.fail(failure)));
+            }
+            let body = self.body.get_mut().unwrap_or_else(PoisonError::into_inner);
+            match ready!(body.poll_next_unpin(cx)) {
+                Some(Ok(chunk)) => self.parser.push(&chunk),
+                Some(Err(error)) => {
+                    let failure = MultipartError::Body(body_error(&error));
+                    return Poll::Ready(Err(self.fail(failure)));
+                }
+                None => self.parser.end(),
+            }
+        }
     }
 
     fn fail(&mut self, error: MultipartError) -> MultipartError {
@@ -177,20 +229,31 @@ impl Multipart {
     async fn start(request: Request, boundary: String) -> Self {
         let limits = MultipartLimits::of(request.extensions()).await;
         let body_limit = BodyLimit::of(request.extensions());
-        let head_limit = Arc::new(AtomicUsize::new(limits.max_header_bytes));
-        let guarded = Guarded::new(
-            request.into_body(),
-            body_limit,
-            &boundary,
-            head_limit.clone(),
-        );
+        let body = Limited::new(request.into_body(), body_limit).into_data_stream();
         Self {
-            parser: multer::Multipart::new(guarded, boundary),
+            body: Mutex::new(body),
+            parser: Parser::new(&boundary),
             limits,
-            head_limit,
             parts: 0,
             failed: None,
         }
+    }
+}
+
+/// How a body failed.
+fn body_error(error: &BoxError) -> BodyError {
+    let chain = || {
+        std::iter::successors(
+            Some(&**error as &(dyn std::error::Error + 'static)),
+            |error| error.source(),
+        )
+    };
+    if chain().any(|error| error.is::<LengthLimitError>()) {
+        BodyError::TooLarge
+    } else if chain().any(|error| error.is::<BodyReadTimeout>()) {
+        BodyError::TimedOut
+    } else {
+        BodyError::Read(error.to_string())
     }
 }
 
@@ -265,30 +328,33 @@ fn form_boundary(headers: &HeaderMap) -> FormBoundary {
 /// reporting a failure.
 #[derive(Debug)]
 pub struct Field<'a> {
-    inner: multer::Field<'static>,
+    head: Head,
     limit: u64,
     read: u64,
     file: bool,
     // The stream has reported the form's failure.
     ended: bool,
-    // The parser allows one part at a time, and this makes that a borrow.
+    // The value has been read to its end.
+    done: bool,
+    // The parser reads one part at a time, and this makes that a borrow.
     form: &'a mut Multipart,
 }
 
 impl<'a> Field<'a> {
-    fn new(inner: multer::Field<'static>, form: &'a mut Multipart) -> Self {
-        let file = inner.file_name().is_some();
+    fn new(head: Head, form: &'a mut Multipart) -> Self {
+        let file = head.file_name.is_some();
         let limit = if file {
             form.limits.max_file_bytes.unwrap_or(u64::MAX)
         } else {
             form.limits.max_field_bytes
         };
         Self {
-            inner,
+            head,
             limit,
             read: 0,
             file,
             ended: false,
+            done: false,
             form,
         }
     }
@@ -296,26 +362,27 @@ impl<'a> Field<'a> {
     /// The `name` of its `Content-Disposition`, as the client sent it.
     #[must_use]
     pub fn name(&self) -> Option<&str> {
-        self.inner.name()
+        self.head.name.as_deref()
     }
 
-    /// The `filename` of its `Content-Disposition`, as the client sent it:
-    /// a label, not a path. See [`Multipart`].
+    /// The file name of its `Content-Disposition` (`filename*` when it
+    /// decodes, else `filename`), as the client sent it: a label, not a
+    /// path. See [`Multipart`].
     #[must_use]
     pub fn file_name(&self) -> Option<&str> {
-        self.inner.file_name()
+        self.head.file_name.as_deref()
     }
 
     /// Its `Content-Type`, as the client sent it.
     #[must_use]
     pub fn content_type(&self) -> Option<&str> {
-        self.inner.content_type().map(AsRef::as_ref)
+        self.head.content_type.as_ref().map(AsRef::as_ref)
     }
 
     /// Its headers.
     #[must_use]
     pub fn headers(&self) -> &HeaderMap {
-        self.inner.headers()
+        &self.head.headers
     }
 
     /// The next piece of its value, `None` after the last. A failure stays:
@@ -341,8 +408,9 @@ impl<'a> Field<'a> {
     /// `max_field_bytes` even for a part with a file name.
     pub async fn text(mut self) -> Result<String, MultipartError> {
         let charset = self
-            .inner
-            .content_type()
+            .head
+            .content_type
+            .as_ref()
             .and_then(|media_type| media_type.get_param(mime::CHARSET))
             .and_then(|charset| Encoding::for_label(charset.as_str().as_bytes()));
         if self.file && self.limit > self.form.limits.max_field_bytes {
@@ -369,33 +437,25 @@ impl Stream for Field<'_> {
         let this = self.get_mut();
         // One failure, then the end: a stream that fails for ever is a spin
         // for a loop that does not stop at an error.
-        if this.ended {
+        if this.ended || this.done {
             return Poll::Ready(None);
         }
-        let failure = match ready!(Pin::new(&mut this.inner).poll_next(cx)) {
-            None => return Poll::Ready(None),
-            Some(Err(error)) => from_parser(error),
-            Some(Ok(chunk)) => {
+        let failure = match ready!(this.form.poll_read(cx, Parser::piece)) {
+            Ok(Piece::End) => {
+                this.done = true;
+                return Poll::Ready(None);
+            }
+            Ok(Piece::Bytes(chunk)) => {
                 this.read = this.read.saturating_add(chunk.len() as u64);
                 if this.read <= this.limit {
                     return Poll::Ready(Some(Ok(chunk)));
                 }
-                this.too_large()
+                let failure = this.too_large();
+                this.form.fail(failure)
             }
+            Err(error) => error,
         };
         this.ended = true;
-        Poll::Ready(Some(Err(this.form.fail(failure))))
-    }
-}
-
-/// A failure of the parser: the guard's or the body's when it read one, else
-/// a form that is not well formed.
-fn from_parser(error: multer::Error) -> MultipartError {
-    match error {
-        multer::Error::StreamReadFailed(source) => match source.downcast::<MultipartError>() {
-            Ok(error) => *error,
-            Err(source) => MultipartError::Body(BodyError::Read(source.to_string())),
-        },
-        error => MultipartError::Malformed(error.to_string()),
+        Poll::Ready(Some(Err(failure)))
     }
 }

@@ -102,6 +102,9 @@ bytes = "1.12.1"
 http = "1.5.0"
 http-body-util = "0.1.5"
 hyper = "1.12.0"
+# The header lines of a multipart form's parts (navree-http): hyper's own
+# header parser.
+httparse = "1.10.1"
 tower = { version = "0.5.3", features = ["limit", "timeout", "util"] }
 tower-http = { version = "0.6.11", features = [
     "add-extension",
@@ -124,7 +127,6 @@ url = "2.5.8"
 mime = "0.3.17"
 mime_guess = "2.0.5"
 memchr = "2.8.3"
-multer = "3.1.0"
 infer = "0.22.0"
 # TLS: rustls with the ring provider only (no aws-lc, no OpenSSL).
 rustls = { version = "0.23.46", default-features = false, features = ["logging", "ring", "std", "tls12"] }

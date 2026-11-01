@@ -175,3 +175,100 @@ fn the_default_limits_are_the_documented_ones() {
         }
     );
 }
+
+/// RFC 8187's `filename*` carries a name `filename` cannot: it is preferred
+/// when it decodes, and `filename` stands in when it does not.
+#[tokio::test]
+async fn a_file_name_may_come_encoded() {
+    for (disposition, expected) in [
+        (
+            "form-data; name=\"a\"; filename=\"cafe.txt\"; filename*=UTF-8''caf%C3%A9.txt",
+            Some("caf\u{e9}.txt"),
+        ),
+        (
+            "form-data; name=\"a\"; filename*=utf-8'fr'caf%C3%A9.txt",
+            Some("caf\u{e9}.txt"),
+        ),
+        (
+            "form-data; name=\"a\"; filename*=ISO-8859-1''caf%E9.txt",
+            Some("caf\u{e9}.txt"),
+        ),
+        (
+            "form-data; name=\"a\"; filename*=UTF-8''%FF.txt; filename=\"plain.txt\"",
+            Some("plain.txt"),
+        ),
+        ("form-data; name=\"a\"; filename*=KOI8-R''a.txt", None),
+    ] {
+        let mut part = head(&format!("Content-Disposition: {disposition}"));
+        part.extend_from_slice(b"1\r\n");
+        let parts = read(request(&form(&[part])), wide()).await.unwrap();
+        assert_eq!(parts[0].name.as_deref(), Some("a"), "{disposition}");
+        assert_eq!(parts[0].file_name.as_deref(), expected, "{disposition}");
+    }
+}
+
+/// Browsers send parameters quoted and in lower case; other clients may
+/// not. Names of parameters are read without regard to case.
+#[tokio::test]
+async fn parameters_may_be_unquoted_and_in_any_case() {
+    for disposition in [
+        "form-data; name=a; filename=b.txt",
+        "form-data; NAME=\"a\"; FileName=\"b.txt\"",
+        "form-data;name=a;filename=\"b.txt\"",
+        "form-data; name = \"a\" ; filename = b.txt",
+    ] {
+        let mut part = head(&format!("Content-Disposition: {disposition}"));
+        part.extend_from_slice(b"1\r\n");
+        let parts = read(request(&form(&[part])), wide()).await.unwrap();
+        assert_eq!(parts[0].name.as_deref(), Some("a"), "{disposition}");
+        assert_eq!(
+            parts[0].file_name.as_deref(),
+            Some("b.txt"),
+            "{disposition}"
+        );
+    }
+}
+
+/// An escaped quote is part of the name, as some clients send it.
+#[tokio::test]
+async fn a_quoted_name_may_hold_escaped_quotes() {
+    let mut part = head(r#"Content-Disposition: form-data; name="a"; filename="say \"hi\".txt""#);
+    part.extend_from_slice(b"1\r\n");
+    let parts = read(request(&form(&[part])), wide()).await.unwrap();
+    assert_eq!(parts[0].file_name.as_deref(), Some(r#"say "hi".txt"#));
+}
+
+/// A preamble before the first delimiter and an epilogue after the last are
+/// not part of the form, and the epilogue is not even read.
+#[tokio::test]
+async fn an_epilogue_is_not_read() {
+    use futures_util::StreamExt;
+
+    let mut body = b"preamble\r\n".to_vec();
+    body.extend_from_slice(&form(&[text_part("a", b"1")]));
+    body.extend_from_slice(b"epilogue");
+    let chunks = vec![body, b"never read".to_vec()];
+    let polled = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counter = polled.clone();
+    let stream = futures_util::stream::iter(chunks).map(move |chunk| {
+        counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Ok::<_, std::io::Error>(bytes::Bytes::from(chunk))
+    });
+    let request = http::Request::builder()
+        .header("content-type", form_type())
+        .body(navree_http::body::Body::from_stream(stream))
+        .unwrap();
+    let parts = read(request, wide()).await.unwrap();
+    assert_eq!(parts.len(), 1);
+    assert_eq!(parts[0].bytes, b"1");
+    assert_eq!(polled.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+/// A handler may hold the form or a part across an `.await` in a `Send`
+/// future, and share a reference to either.
+#[test]
+fn the_form_and_its_parts_are_send_and_sync() {
+    fn send_and_sync<T: Send + Sync>() {}
+    send_and_sync::<Multipart>();
+    send_and_sync::<navree_http::extract::Field<'static>>();
+}

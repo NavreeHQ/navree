@@ -673,3 +673,93 @@ async fn rejections_render_in_the_error_format() {
     assert_eq!(error.status, StatusCode::BAD_REQUEST);
     assert_eq!(error.body()["message"], "incomplete multipart stream");
 }
+
+/// Two readers of a part that each take a different `Content-Disposition`,
+/// `Content-Type` or parameter see different forms: a check in front of the
+/// app must not be fooled into reading the wrong one.
+#[tokio::test]
+async fn a_part_that_says_the_same_thing_twice_is_refused() {
+    for headers in [
+        "Content-Disposition: form-data; name=\"a\"\r\nContent-Disposition: form-data; name=\"b\"",
+        "Content-Disposition: form-data; name=\"a\"\r\ncontent-disposition: form-data; name=\"a\"",
+        "Content-Disposition: form-data; name=\"a\"\r\nContent-Type: text/plain\r\nContent-Type: text/html",
+        "Content-Disposition: form-data; name=\"a\"; name=\"b\"",
+        "Content-Disposition: form-data; name=\"a\"; filename=\"a.txt\"; FILENAME=\"b.php\"",
+        "Content-Disposition: form-data; name=\"a\"; filename*=UTF-8''a; filename*=UTF-8''b",
+    ] {
+        let mut part = head(headers);
+        part.extend_from_slice(b"1\r\n");
+        let error = read(request(&form(&[part])), wide()).await.unwrap_err();
+        assert!(matches!(error, MultipartError::Malformed(_)), "{headers}");
+        assert_eq!(error.status(), StatusCode::BAD_REQUEST, "{headers}");
+    }
+}
+
+/// A parameter is read where a parameter starts, never inside the value of
+/// another: a file name that holds `name=` does not rename the field, and a
+/// field name that holds `filename=` does not make it a file.
+#[tokio::test]
+async fn a_parameter_inside_a_value_is_not_read() {
+    for (disposition, name, file_name) in [
+        (
+            "form-data; filename=\"x name=admin\"",
+            None,
+            Some("x name=admin"),
+        ),
+        (
+            "form-data; name=\"a; filename=evil.php\"",
+            Some("a; filename=evil.php"),
+            None,
+        ),
+        (
+            "form-data; name=\"a\"; x=\"; filename=evil.php\"",
+            Some("a"),
+            None,
+        ),
+        (
+            "form-data; name=\"a\" filename=\"evil.php\"",
+            Some("a"),
+            None,
+        ),
+        ("form-data; username=\"admin\"; name=\"a\"", Some("a"), None),
+    ] {
+        let mut part = head(&format!("Content-Disposition: {disposition}"));
+        part.extend_from_slice(b"1\r\n");
+        let parts = read(request(&form(&[part])), wide()).await.unwrap();
+        assert_eq!(parts[0].name.as_deref(), name, "{disposition}");
+        assert_eq!(parts[0].file_name.as_deref(), file_name, "{disposition}");
+    }
+}
+
+/// A file goes to the handler as it arrives: reading its first piece reads
+/// a chunk or so of the body, not everything the client has already sent.
+#[tokio::test]
+async fn a_file_is_streamed_not_buffered() {
+    let served = Arc::new(AtomicUsize::new(0));
+    let counter = served.clone();
+    let start = head("Content-Disposition: form-data; name=\"a\"; filename=\"a.bin\"");
+    let head_length = start.len();
+    let chunks = std::iter::once(start)
+        .chain(std::iter::repeat_n(vec![7; 1024], 1024))
+        .chain(std::iter::once(format!("\r\n--{BOUNDARY}--").into_bytes()));
+    let stream = futures_util::stream::iter(chunks).map(move |chunk| {
+        counter.fetch_add(chunk.len(), Ordering::SeqCst);
+        Ok::<_, std::io::Error>(Bytes::from(chunk))
+    });
+    let request = Request::builder()
+        .header("content-type", form_type())
+        .body(Body::from_stream(stream))
+        .unwrap();
+    let mut form = Multipart::from_request(request).await.unwrap();
+    let mut field = form.next_field().await.unwrap().unwrap();
+    let first = field.chunk().await.unwrap().unwrap();
+    assert_eq!(first.len(), 1024);
+    let read = served.load(Ordering::SeqCst);
+    assert!(read <= head_length + 2 * 1024, "{read} bytes read");
+
+    let mut total = first.len();
+    while let Some(chunk) = field.chunk().await.unwrap() {
+        total += chunk.len();
+    }
+    assert_eq!(total, 1024 * 1024);
+}

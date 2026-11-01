@@ -23,16 +23,16 @@ hmac = { workspace = true }
 http = { workspace = true }
 http-body = { workspace = true }
 http-body-util = { workspace = true }
+# The header lines of a multipart part.
+httparse = { workspace = true }
 # The server: the HTTP/1 and HTTP/2 wire protocols, and the protocol detection
 # and connection builder on top of them.
 hyper = { workspace = true, features = ["http1", "http2", "server"] }
 hyper-util = { workspace = true }
-# Finds what the limits of a multipart body are counted between.
+# Finds the delimiters and head ends of a multipart body.
 memchr = { workspace = true }
 metrics = { workspace = true }
 mime = { workspace = true }
-# multipart/form-data, behind `extract::Multipart`'s limits.
-multer = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-kernel = { workspace = true }

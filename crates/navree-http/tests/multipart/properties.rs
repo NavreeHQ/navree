@@ -1,6 +1,5 @@
 //! Properties over generated forms and over bytes shaped like forms.
 
-use bytes::Bytes;
 use http::StatusCode;
 use navree_http::extract::{FromRequest, Multipart, MultipartError, MultipartLimits};
 use proptest::prelude::*;
@@ -66,6 +65,10 @@ fn shaped() -> impl Strategy<Value = Vec<u8>> {
             Just(b"Content-Disposition: form-data; name=\"a\"".to_vec()),
             Just(b"Content-Disposition: form-data; name=\"a\"; filename=\"../b\"".to_vec()),
             Just(b"Content-Type: text/plain; charset=utf-16".to_vec()),
+            Just(
+                b"Content-Disposition: form-data; NAME=a; filename*=UTF-8''%C3%A9%2F.txt".to_vec()
+            ),
+            Just(b"; name=\"b\"; filename=\"c\\\"d\"".to_vec()),
             Just(b": no name".to_vec()),
             prop::collection::vec(any::<u8>(), 0..32),
         ],
@@ -79,26 +82,19 @@ fn outcome(read: Result<Vec<Read>, MultipartError>) -> Option<Vec<Read>> {
     read.ok()
 }
 
-/// The parser on its own, as the reference for what the limits leave alone.
-async fn plain_multer(body: &[u8]) -> Option<Vec<Read>> {
-    let bytes = Bytes::copy_from_slice(body);
-    let stream = futures_util::stream::iter([Ok::<_, std::io::Error>(bytes)]);
-    let mut form = multer::Multipart::new(stream, BOUNDARY);
-    let mut parts = Vec::new();
-    while let Some(mut field) = form.next_field().await.ok()? {
-        let name = field.name().map(str::to_owned);
-        let file_name = field.file_name().map(str::to_owned);
-        let mut bytes = Vec::new();
-        while let Some(chunk) = field.chunk().await.ok()? {
-            bytes.extend_from_slice(&chunk);
-        }
-        parts.push(Read {
-            name,
-            file_name,
-            bytes,
-        });
-    }
-    Some(parts)
+/// The form read whole by the reference, as a handler would have read it.
+fn reference(body: &[u8]) -> Option<Vec<Read>> {
+    let parts = crate::reference::parts(body, BOUNDARY)?;
+    Some(
+        parts
+            .into_iter()
+            .map(|(name, file_name, bytes)| Read {
+                name,
+                file_name,
+                bytes,
+            })
+            .collect(),
+    )
 }
 
 proptest! {
@@ -146,13 +142,16 @@ proptest! {
         prop_assert_eq!(&whole, &outcome(dripped));
     }
 
-    /// With limits that cannot apply, the extractor reads what the parser
-    /// under it reads: the watch on its bytes changes nothing.
+    /// With limits that cannot apply, the extractor reads what the grammar
+    /// reads: the reference, reading the body whole, finds the same form.
     #[test]
-    fn with_no_limit_reached_the_parser_decides(body in shaped()) {
+    fn with_no_limit_reached_the_parser_decides(
+        body in shaped(),
+        cuts in prop::collection::vec(any::<usize>(), 0..16),
+    ) {
         let runtime = runtime();
-        let read = runtime.block_on(read(request(&body), wide()));
-        prop_assert_eq!(outcome(read), runtime.block_on(plain_multer(&body)));
+        let read = runtime.block_on(read(request_of(&form_type(), split(&body, &cuts)), wide()));
+        prop_assert_eq!(outcome(read), reference(&body));
     }
 
     /// The head limit is exact for any head: the same form passes at its
