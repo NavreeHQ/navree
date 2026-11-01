@@ -24,7 +24,7 @@ struct Lines<T>(T);
 
 impl<T> ValidInput for Lines<T>
 where
-    T: DeserializeOwned + Validate + Send,
+    T: DeserializeOwned + Validate + Send + 'static,
 {
     type Target = T;
 

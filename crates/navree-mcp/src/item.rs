@@ -424,7 +424,9 @@ impl Call {
 
     /// The arguments as a `T`, deserialized and validated like a request
     /// body: a 400 with field errors when they are invalid.
-    pub async fn args<T: DeserializeOwned + Validate>(&self) -> Result<T, AppError> {
+    pub async fn args<T: DeserializeOwned + Validate + Send + 'static>(
+        &self,
+    ) -> Result<T, AppError> {
         navree_validation::validate_value(self.arguments.clone(), Some(self.cx.app())).await
     }
 

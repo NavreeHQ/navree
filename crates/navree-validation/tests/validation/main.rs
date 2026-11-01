@@ -18,3 +18,5 @@ mod rules;
 mod support;
 mod value;
 mod values;
+#[cfg(feature = "html")]
+mod worker;

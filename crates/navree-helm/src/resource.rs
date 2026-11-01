@@ -207,7 +207,7 @@ impl FormData {
     /// ```
     pub async fn parse<T>(&self) -> Result<T, AppError>
     where
-        T: DeserializeOwned + navree_validation::Validate + Send,
+        T: DeserializeOwned + navree_validation::Validate + Send + 'static,
     {
         let body = serde_json::to_vec(&self.values).map_err(AppError::internal)?;
         let mut request = http::Request::builder()

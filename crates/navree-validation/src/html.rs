@@ -54,9 +54,10 @@ const MOST_DEPTH: usize = 256;
 ///
 /// The output is parsed again before it is returned, and returned only when
 /// that parse is the tree that was checked: a browser builds from it exactly
-/// what the policy kept. Markup the parser rearranges (a link inside a
-/// link) comes out the way the parser reads it, and markup no output can
-/// hold (an allowed `plaintext`) leaves only its text.
+/// what the policy kept. Markup that cleaning leaves for the parser to
+/// rearrange (a `<p>` that ends up inside a `<p>`, a blank line a `<pre>`
+/// drops) and markup no output can hold (an allowed `plaintext`) leave only
+/// their text.
 ///
 /// The default keeps what a rich-text editor produces: paragraphs,
 /// headings, emphasis, lists, quotes, code, tables and links (`href`,
@@ -109,8 +110,10 @@ pub struct HtmlPolicy {
     /// block it meets, so this bounds what a short input can multiply into;
     /// it also pays for the parser's scans of its own stacks (64 per node).
     pub max_nodes: usize,
-    /// How deep elements may nest (default 128, at most 256). Rich text stays
-    /// far below it, and it keeps the parser's scans short.
+    /// How deep elements may nest (default 128, at most 256; text inside the
+    /// deepest element is not another level). Rich text stays far below it,
+    /// and it keeps the parser's scans short. `check` refuses more than 256,
+    /// and `clean` holds to 256 whatever the policy says.
     pub max_depth: usize,
 }
 
@@ -223,9 +226,21 @@ impl HtmlPolicy {
     /// Whether the policy is safe to use: `Err` names the key at fault
     /// (`validation.html.tags: ...`) when it allows `script` or `style`, an
     /// `on*` handler, `srcdoc` or `http-equiv`, `rel` while
-    /// [`link_rel`](HtmlPolicy::link_rel) is set, or a
-    /// [`max_depth`](HtmlPolicy::max_depth) over 256.
+    /// [`link_rel`](HtmlPolicy::link_rel) is set, a limit of 0 (it would
+    /// refuse every field), or a [`max_depth`](HtmlPolicy::max_depth) over
+    /// 256.
     pub fn check(&self) -> Result<(), String> {
+        for (key, limit) in [
+            ("max_input_bytes", self.max_input_bytes),
+            ("max_nodes", self.max_nodes),
+            ("max_depth", self.max_depth),
+        ] {
+            if limit == 0 {
+                return Err(format!(
+                    "validation.html.{key}: 0 would refuse every field (use a limit of 1 or more)"
+                ));
+            }
+        }
         if self.max_depth > MOST_DEPTH {
             return Err(format!(
                 "validation.html.max_depth: {} is over {MOST_DEPTH} (browsers read deeper markup flat, so they would build another tree than the one checked)",
@@ -278,11 +293,14 @@ impl HtmlPolicy {
     }
 
     /// `html` sanitized by this policy. Parts of the policy that
-    /// [`check`](HtmlPolicy::check) refuses are ignored here.
+    /// [`check`](HtmlPolicy::check) refuses are ignored here: it never keeps
+    /// more than 256 levels, whatever `max_depth` says.
     ///
-    /// It can't fail: an input over one of the limits comes back whole as
-    /// escaped text, tags and all, so nothing in it is parsed, kept or lost.
-    /// [`try_clean`](HtmlPolicy::try_clean) says so instead.
+    /// It can't fail, and it works on the thread that calls it: an input over
+    /// one of the limits comes back whole as escaped text, tags and all, so
+    /// nothing in it is parsed, kept or lost. [`try_clean`](HtmlPolicy::try_clean)
+    /// says so instead. A long input takes a while (see `validation.html` in
+    /// the docs): in async code, call it from `tokio::task::spawn_blocking`.
     ///
     /// ```
     /// use navree_validation::HtmlPolicy;
@@ -296,7 +314,7 @@ impl HtmlPolicy {
     /// ```
     #[cfg(feature = "html")]
     pub fn clean(&self, html: &str) -> String {
-        off_the_worker(html, || self.sanitizer().clean(html))
+        self.sanitizer().clean(html)
     }
 
     /// `html` sanitized by this policy, or the limit it passes.
@@ -321,7 +339,7 @@ impl HtmlPolicy {
     /// [`HtmlError`]: the input is over one of the policy's limits.
     #[cfg(feature = "html")]
     pub fn try_clean(&self, html: &str) -> Result<String, HtmlError> {
-        off_the_worker(html, || self.sanitizer().sanitize(html).map(|(out, _)| out))
+        self.sanitizer().sanitize(html).map(|(out, _)| out)
     }
 
     #[cfg(feature = "html")]
@@ -335,31 +353,11 @@ impl HtmlPolicy {
             limits: tree::Limits {
                 max_input_bytes: self.max_input_bytes,
                 max_nodes: self.max_nodes,
-                max_depth: self.max_depth,
+                // Browsers read markup past 512 levels flat: never keep more
+                // than `check` allows, whatever the policy says.
+                max_depth: self.max_depth.min(MOST_DEPTH),
             },
         }
-    }
-}
-
-/// Inputs of this many bytes or more give up the async worker while they are
-/// sanitized; shorter ones take less time than that costs.
-#[cfg(feature = "html")]
-const OFF_THE_WORKER_BYTES: usize = 16 * 1024;
-
-/// Runs `sanitize` on `html`, on a multi-threaded Tokio runtime handing the
-/// worker's other tasks to another thread first when `html` is long, so that
-/// a hostile field holds up one request and not all those on its worker.
-#[cfg(feature = "html")]
-fn off_the_worker<R>(html: &str, sanitize: impl FnOnce() -> R) -> R {
-    use tokio::runtime::{Handle, RuntimeFlavor};
-
-    let multi_threaded = html.len() >= OFF_THE_WORKER_BYTES
-        && Handle::try_current()
-            .is_ok_and(|runtime| runtime.runtime_flavor() == RuntimeFlavor::MultiThread);
-    if multi_threaded {
-        tokio::task::block_in_place(sanitize)
-    } else {
-        sanitize()
     }
 }
 
@@ -438,10 +436,10 @@ mod safe {
     ///   `length(chars, max = 10000)` measures what is stored, and a body over
     ///   the limit never gets as far as the parser.
     /// - Sanitizing a long field takes a while (tens of milliseconds for a
-    ///   long article, see `validation.html` in the docs). On a multi-threaded
-    ///   runtime a field of 16 KiB or more gives up its async worker
-    ///   (`block_in_place`), so other requests go on. On a current-thread
-    ///   runtime there is no other thread, and they wait.
+    ///   long article, see `validation.html` in the docs). The extractors read
+    ///   a body of 16 KiB or more on Tokio's blocking pool, so other requests
+    ///   go on; code that deserializes a `SafeHtml` itself does it on its own
+    ///   thread, and in async code belongs in `tokio::task::spawn_blocking`.
     /// - It serializes as the sanitized string; [`as_str`](SafeHtml::as_str)
     ///   and [`into_inner`](SafeHtml::into_inner) give it back.
     ///

@@ -20,20 +20,62 @@ use crate::context;
 use crate::failure::{self, Failure};
 use crate::{AsyncRule, AsyncRules, InputContext, MessageTranslator, Messages};
 
-/// Runs `$f` (deserializing or validating) in `$context` (a [`Context`]):
-/// first as is, and again with the resolved context when a value asked for
-/// it. A macro, so no closure (and no borrow it holds) lives across the
-/// `await`.
-macro_rules! in_context {
-    ($context:expr, $parts:expr, $f:expr) => {
-        match $context.attempt($f) {
-            Some(result) => result,
-            None => {
-                $context.resolve(Some(&mut *$parts)).await;
-                $context.resolved($f)
+/// Bodies of this many bytes or more are deserialized, sanitized and checked
+/// on Tokio's blocking pool, not on the async worker that reads the request:
+/// what a body costs follows its length, so the length of the whole body, not
+/// of a field, is what says whether a hostile one can hold the worker for long.
+/// Under it the most a body can ask of the worker is some milliseconds, and an
+/// ordinary one takes microseconds: less than the hop to another thread costs.
+const OFF_THE_WORKER_BYTES: usize = 16 * 1024;
+
+/// Whether a body of `bytes` is read off the async worker.
+fn is_long(bytes: usize) -> bool {
+    bytes >= OFF_THE_WORKER_BYTES
+}
+
+/// Whether a JSON value holds [`OFF_THE_WORKER_BYTES`] of text, counted until
+/// it does.
+fn is_long_value(value: &Value) -> bool {
+    let mut bytes = 0usize;
+    let mut pending = vec![value];
+    while let Some(value) = pending.pop() {
+        match value {
+            Value::String(text) => bytes = bytes.saturating_add(text.len()),
+            Value::Array(items) => pending.extend(items),
+            Value::Object(fields) => {
+                for (key, value) in fields {
+                    bytes = bytes.saturating_add(key.len());
+                    pending.push(value);
+                }
             }
+            _ => {}
         }
-    };
+        if is_long(bytes) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Runs `work` on Tokio's blocking pool when `long` and there is a runtime to
+/// run it on, and here otherwise. A panic in `work` is a panic here.
+async fn off_the_worker<R>(
+    long: bool,
+    work: impl FnOnce() -> R + Send + 'static,
+) -> Result<R, Invalid>
+where
+    R: Send + 'static,
+{
+    if !long || tokio::runtime::Handle::try_current().is_err() {
+        return Ok(work());
+    }
+    match tokio::task::spawn_blocking(work).await {
+        Ok(result) => Ok(result),
+        Err(error) => match error.try_into_panic() {
+            Ok(panic) => std::panic::resume_unwind(panic),
+            Err(_) => Err(Invalid::unavailable()),
+        },
+    }
 }
 
 /// Validated input: `Valid<Json<T>>`, `Valid<Query<T>>` or `Valid<Form<T>>`
@@ -102,23 +144,39 @@ impl<E> DerefMut for Valid<E> {
 
 impl<T> FromRequest for Valid<Json<T>>
 where
-    T: DeserializeOwned + Validate + Send,
+    T: DeserializeOwned + Validate + Send + 'static,
 {
     type Rejection = AppError;
 
     async fn from_request(req: Request) -> Result<Self, Self::Rejection> {
         let ctx = req.extensions().get::<AppContext>().cloned();
         let (mut parts, body) = json_body(req).await?;
+        let long = is_long(body.len());
         let mut context = Context::new(ctx.as_ref());
-        let (value, input) = match in_context!(context, &mut parts, || from_json_bytes::<T>(&body))
-        {
-            Ok(read) => read,
+        let read = context
+            .run(Some(&mut parts), long, body, |body| {
+                from_json_bytes::<T>(body)
+            })
+            .await;
+        let (value, input) = match read.map(|(_, read)| read) {
+            Ok(Ok(read)) => read,
+            Ok(Err(invalid)) | Err(invalid) => return Err(invalid.reject(ctx.as_ref()).await),
+        };
+        let checked = context
+            .run(Some(&mut parts), long, value, |value| check(value))
+            .await;
+        let (value, checked) = match checked {
+            Ok(checked) => checked,
             Err(invalid) => return Err(invalid.reject(ctx.as_ref()).await),
         };
-        if let Err(failures) = in_context!(context, &mut parts, || check(&value)) {
-            return Err(Invalid::new(failures, input.into_value(), "body")
-                .reject(ctx.as_ref())
-                .await);
+        if let Err(failures) = checked {
+            let input = off_the_worker(long, move || input.into_value()).await;
+            return Err(match input {
+                Ok(input) => Invalid::new(failures, input, "body"),
+                Err(invalid) => invalid,
+            }
+            .reject(ctx.as_ref())
+            .await);
         }
         Ok(Valid(Json(value)))
     }
@@ -126,7 +184,7 @@ where
 
 impl<T> FromRequestParts for Valid<Query<T>>
 where
-    T: DeserializeOwned + Validate + Send,
+    T: DeserializeOwned + Validate + Send + 'static,
 {
     type Rejection = AppError;
 
@@ -142,7 +200,7 @@ where
 
 impl<T> FromRequest for Valid<Form<T>>
 where
-    T: DeserializeOwned + Validate + Send,
+    T: DeserializeOwned + Validate + Send + 'static,
 {
     type Rejection = AppError;
 
@@ -152,7 +210,7 @@ where
         // `GET` form comes from the query string.
         let result = match form_body(req).await? {
             (mut parts, Some(body)) => {
-                validate_urlencoded::<T>(ctx.as_ref(), &mut parts, Some(&body), ["body", "body"])
+                validate_urlencoded::<T>(ctx.as_ref(), &mut parts, Some(body), ["body", "body"])
                     .await
             }
             (mut parts, None) => {
@@ -185,7 +243,7 @@ where
 ///
 /// impl<T> ValidInput for Input<T>
 /// where
-///     T: serde::de::DeserializeOwned + Validate + Send,
+///     T: serde::de::DeserializeOwned + Validate + Send + 'static,
 /// {
 ///     type Target = T;
 ///
@@ -214,7 +272,7 @@ where
 /// ```
 pub trait ValidInput: Sized + Send {
     /// The type the input deserializes into.
-    type Target: DeserializeOwned + Validate + Send;
+    type Target: DeserializeOwned + Validate + Send + 'static;
 
     /// Reads the request's input as a JSON value. `Ok(None)` means the
     /// input is malformed and becomes the field error malformed JSON gets
@@ -323,6 +381,48 @@ impl<'a> Context<'a> {
             None => f(),
         }
     }
+
+    /// Runs `work` on `state` (deserializing or validating) in the context:
+    /// first as is, and again with the resolved context when a value asked for
+    /// it. On the blocking pool when `long`, which is why `state` goes there
+    /// and back.
+    async fn run<S, R>(
+        &mut self,
+        parts: Option<&mut Parts>,
+        long: bool,
+        state: S,
+        work: fn(&S) -> R,
+    ) -> Result<(S, R), Invalid>
+    where
+        S: Send + 'static,
+        R: Send + 'static,
+    {
+        let state = match self.resolved.clone() {
+            Some(context) => {
+                return off_the_worker(long, move || {
+                    let result = context.scope(|| work(&state));
+                    (state, result)
+                })
+                .await;
+            }
+            None => state,
+        };
+        let (state, (result, asked)) = off_the_worker(long, move || {
+            let result = context::lazily(|| work(&state));
+            (state, result)
+        })
+        .await?;
+        if !asked {
+            return Ok((state, result));
+        }
+        self.resolve(parts).await;
+        let context = self.resolved.clone().unwrap_or_default();
+        off_the_worker(long, move || {
+            let result = context.scope(|| work(&state));
+            (state, result)
+        })
+        .await
+    }
 }
 
 /// Deserializes and validates URL-encoded pairs: `body`, or the query
@@ -331,28 +431,27 @@ impl<'a> Context<'a> {
 async fn validate_urlencoded<T>(
     app: Option<&AppContext>,
     parts: &mut Parts,
-    body: Option<&[u8]>,
+    body: Option<Bytes>,
     [root, rules_root]: [&'static str; 2],
 ) -> Result<T, Invalid>
 where
-    T: DeserializeOwned + Validate,
+    T: DeserializeOwned + Validate + Send + 'static,
 {
     let mut context = Context::new(app);
-    let query = parts.uri.query().unwrap_or_default();
-    let input = body.unwrap_or(query.as_bytes());
-    let value = match context.attempt(|| urlencoded::<T>(input)) {
-        Some(value) => value,
-        None => {
-            // Resolving the context needs the request head, so the input is
-            // copied, only in this case.
-            let input = input.to_owned();
-            context.resolve(Some(&mut *parts)).await;
-            context.resolved(|| urlencoded::<T>(&input))
-        }
-    };
+    let input = body.unwrap_or_else(|| {
+        Bytes::copy_from_slice(parts.uri.query().unwrap_or_default().as_bytes())
+    });
+    let long = is_long(input.len());
+    let (_, value) = context
+        .run(Some(&mut *parts), long, input, |input| {
+            urlencoded::<T>(input)
+        })
+        .await?;
     let value = value.map_err(|failure| Invalid::new(vec![failure], None, root))?;
-    in_context!(context, parts, || check(&value))
-        .map_err(|failures| Invalid::new(failures, None, rules_root))?;
+    let (value, checked) = context
+        .run(Some(parts), long, value, |value| check(value))
+        .await?;
+    checked.map_err(|failures| Invalid::new(failures, None, rules_root))?;
     Ok(value)
 }
 
@@ -391,7 +490,7 @@ impl<E> DerefMut for ValidAsync<E> {
 
 impl<T> FromRequest for ValidAsync<Json<T>>
 where
-    T: DeserializeOwned + Validate + AsyncRules + Send,
+    T: DeserializeOwned + Validate + AsyncRules + Send + 'static,
 {
     type Rejection = AppError;
 
@@ -407,7 +506,7 @@ where
 
 impl<T> FromRequestParts for ValidAsync<Query<T>>
 where
-    T: DeserializeOwned + Validate + AsyncRules + Send,
+    T: DeserializeOwned + Validate + AsyncRules + Send + 'static,
 {
     type Rejection = AppError;
 
@@ -422,7 +521,7 @@ where
 
 impl<T> FromRequest for ValidAsync<Form<T>>
 where
-    T: DeserializeOwned + Validate + AsyncRules + Send,
+    T: DeserializeOwned + Validate + AsyncRules + Send + 'static,
 {
     type Rejection = AppError;
 
@@ -501,6 +600,9 @@ pub(crate) struct Invalid {
     failures: Vec<Failure>,
     input: Option<Value>,
     root: &'static str,
+    /// The work was cut off by the runtime shutting down: a 503, not a
+    /// verdict on the input.
+    unavailable: bool,
 }
 
 impl Invalid {
@@ -509,6 +611,15 @@ impl Invalid {
             failures,
             input,
             root,
+            unavailable: false,
+        }
+    }
+
+    /// The runtime shut down under the work.
+    fn unavailable() -> Self {
+        Self {
+            unavailable: true,
+            ..Self::new(Vec::new(), None, "body")
         }
     }
 
@@ -519,6 +630,10 @@ impl Invalid {
     /// The 400 error, with the app's messages (through its
     /// [`MessageTranslator`], when it has one).
     pub(crate) async fn reject(self, ctx: Option<&AppContext>) -> AppError {
+        if self.unavailable {
+            return AppError::from_status(StatusCode::SERVICE_UNAVAILABLE)
+                .with_detail("The server is shutting down");
+        }
         let messages = messages(ctx).await;
         let translator = translator(ctx).await;
         failure::render(
@@ -651,7 +766,7 @@ pub async fn validate_in<T: Validate>(
 /// ```
 pub async fn validate_value<T>(input: Value, ctx: Option<&AppContext>) -> Result<T, AppError>
 where
-    T: DeserializeOwned + Validate,
+    T: DeserializeOwned + Validate + Send + 'static,
 {
     match validate_detached::<T>(input, ctx).await {
         Ok(value) => Ok(value),
@@ -666,27 +781,18 @@ where
 /// whole are on `body`.
 async fn validate_detached<T>(input: Value, app: Option<&AppContext>) -> Result<T, Invalid>
 where
-    T: DeserializeOwned + Validate,
+    T: DeserializeOwned + Validate + Send + 'static,
 {
     let mut context = Context::new(app);
-    let value = match context.attempt(|| from_json::<T>(&input)) {
-        Some(value) => value,
-        None => {
-            context.resolve(None).await;
-            context.resolved(|| from_json::<T>(&input))
-        }
-    };
+    let long = is_long_value(&input);
+    let (input, value) = context
+        .run(None, long, input, |input| from_json::<T>(input))
+        .await?;
     let value = match value {
         Ok(value) => value,
         Err(failure) => return Err(Invalid::new(vec![failure], Some(input), "body")),
     };
-    let checked = match context.attempt(|| check(&value)) {
-        Some(checked) => checked,
-        None => {
-            context.resolve(None).await;
-            context.resolved(|| check(&value))
-        }
-    };
+    let (value, checked) = context.run(None, long, value, |value| check(value)).await?;
     match checked {
         Ok(()) => Ok(value),
         Err(failures) => Err(Invalid::new(failures, Some(input), "body")),

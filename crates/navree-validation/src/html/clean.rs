@@ -13,8 +13,9 @@
 //!    when that parse is the tree that was kept (apart from the `tbody`,
 //!    `tr` and `colgroup` the parser adds to a table by itself), so what a
 //!    browser builds from it is what was checked. When it isn't (`<p>` in a
-//!    `<p>`, which the parser splits), the new parse is cleaned again, a few
-//!    times at most, and after that only the text is kept.
+//!    `<p>`, which the parser splits, or a blank line a `<pre>` drops), only
+//!    the text is kept. So an input is parsed twice at most, whatever it
+//!    holds, and costs no more than markup that reads back the same.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -22,11 +23,6 @@ use html5ever::{Attribute, QualName, local_name, ns};
 
 use super::tree::{Data, Id, Limits, Tree, escape_text};
 use super::{CONTENT_TAGS, HtmlError, NEVER_ATTRIBUTES};
-
-/// How many times the output is cleaned and parsed again before only the
-/// text is kept. An output a browser splits differently is stable after one
-/// more round.
-const ROUNDS: usize = 4;
 
 /// SVG elements that change another element's attributes, which an
 /// allow-list of attributes can't vet: never kept.
@@ -178,21 +174,17 @@ impl Sanitizer<'_> {
             max_input_bytes: usize::MAX,
             ..self.limits
         };
-        // The text of the input's own tree, for when no output is stable.
-        let mut text = None;
-        for _ in 0..ROUNDS {
-            self.clean_tree(&mut tree);
-            let out = tree.to_html();
-            let again = Tree::parse(&out, output)?;
-            let same = tree.events(|_, _| false)
-                == again.events(|name, attrs| self.implied_by_parser(name, attrs));
-            if same {
-                return Ok((out, Checked::Tree(tree)));
-            }
-            text.get_or_insert_with(|| tree.text());
-            tree = again;
+        self.clean_tree(&mut tree);
+        let out = tree.to_html();
+        let again = Tree::parse(&out, output)?;
+        let same = tree.events(|_, _| false)
+            == again.events(|name, attrs| self.implied_by_parser(name, attrs));
+        if same {
+            return Ok((out, Checked::Tree(tree)));
         }
-        let text = text.unwrap_or_default();
+        // A browser would build another tree from this output, so it is not
+        // returned: the text of the tree that was kept is, as a parser reads it.
+        let text = as_text(&tree.text());
         Ok((escape_text(&text), Checked::Text(text)))
     }
 
@@ -402,6 +394,63 @@ impl Sanitizer<'_> {
             is_html_tag(local)
         } else {
             parent.ns == child.ns
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::HtmlPolicy;
+    use super::super::tree::{Limits, PARSES};
+
+    fn parses(html: &str) -> usize {
+        let before = PARSES.with(|parses| parses.get());
+        let _ = HtmlPolicy::default().try_clean(html);
+        PARSES.with(|parses| parses.get()) - before
+    }
+
+    /// Each walk over the tree keeps its own stack: deep nesting can't
+    /// overflow the thread's. A policy never gets this deep (`clean` keeps 256
+    /// levels at most), so the sanitizer is given limits no policy can set.
+    #[test]
+    fn deep_nesting_is_cleaned_without_recursion() {
+        let depth = 50_000;
+        let limits = Limits {
+            max_input_bytes: 1 << 20,
+            max_nodes: 1 << 20,
+            max_depth: depth + 1,
+        };
+        let html = format!("{}x", "<span>".repeat(depth));
+        let policy = HtmlPolicy::default();
+        let mut sanitizer = policy.sanitizer();
+        sanitizer.limits = limits;
+        assert_eq!(
+            sanitizer.clean(&html),
+            format!("{}x{}", "<span>".repeat(depth), "</span>".repeat(depth))
+        );
+        let policy = HtmlPolicy::text_only();
+        let mut sanitizer = policy.sanitizer();
+        sanitizer.limits = limits;
+        assert_eq!(sanitizer.clean(&html), "x");
+    }
+
+    /// An input is parsed, and its output once: whatever the output reads back
+    /// as, no input takes the parser more times than a clean one. A `<pre>`
+    /// drops one newline at its start each time it is read, so this one would
+    /// be read again for every newline.
+    #[test]
+    fn no_input_is_parsed_more_than_twice() {
+        let newlines = "\n".repeat(8);
+        for html in [
+            "x".to_owned(),
+            "<p>x</p>".to_owned(),
+            "&".repeat(100),
+            format!("<pre>{newlines}x</pre>"),
+            format!("<pre>{newlines}{}</pre>", "&".repeat(1000)),
+            "<pre>\n\nx</pre>".to_owned(),
+            "<p><button><table></table></button>x</p>".to_owned(),
+        ] {
+            assert!(parses(&html) <= 2, "{}", &html[..html.len().min(40)]);
         }
     }
 }

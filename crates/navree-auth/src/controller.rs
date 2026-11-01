@@ -331,7 +331,7 @@ pub(crate) struct OptionalBody<T>(pub(crate) T);
 
 impl<T> FromRequest for OptionalBody<T>
 where
-    T: DeserializeOwned + Validate + Default + Send,
+    T: DeserializeOwned + Validate + Default + Send + 'static,
 {
     type Rejection = AppError;
 

@@ -94,7 +94,7 @@ where
 /// `Valid<Payload<T>>` and `ValidAsync<Payload<T>>`.
 impl<T> ValidInput for Payload<T>
 where
-    T: DeserializeOwned + Validate + Send,
+    T: DeserializeOwned + Validate + Send + 'static,
 {
     type Target = T;
 

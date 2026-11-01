@@ -250,11 +250,19 @@ pub(crate) enum Event<'a> {
     Other,
 }
 
+// How many parses this thread has begun: the tests count what an input costs.
+#[cfg(test)]
+thread_local! {
+    pub(crate) static PARSES: Cell<usize> = const { Cell::new(0) };
+}
+
 impl Tree {
     /// `html` parsed as the content of a `<div>`, the way a browser parses
     /// it when it is inserted into one, within `limits`. The input goes in
     /// pieces, so a parse over a limit stops soon after it passes it.
     pub(crate) fn parse(html: &str, limits: Limits) -> Result<Tree, HtmlError> {
+        #[cfg(test)]
+        PARSES.with(|parses| parses.set(parses.get() + 1));
         check_input(html, limits)?;
         let mut parser = parse_fragment(
             Sink::new(limits),
@@ -549,14 +557,18 @@ impl Sink {
         }
     }
 
-    /// Notes that `child` is now under `parent`: the depth it has there.
+    /// Notes that `child` is now under `parent`: the depth it has there. Only
+    /// an element is a level of nesting: the text or comment inside the
+    /// deepest element is not another.
     fn place(&self, nodes: &mut [Node], parent: Id, child: Id) {
         let depth = nodes.get(parent).map_or(0, |parent| parent.depth) + 1;
+        let mut element = false;
         if let Some(child) = nodes.get_mut(child) {
             child.depth = depth;
             child.parent = Some(parent);
+            element = matches!(child.data, Data::Element { .. });
         }
-        if depth > self.limits.max_depth.saturating_add(TOP_DEPTH - 1) {
+        if element && depth > self.limits.max_depth.saturating_add(TOP_DEPTH - 1) {
             self.exceeded.set(Some(HtmlError::TooDeep {
                 max: self.limits.max_depth,
             }));

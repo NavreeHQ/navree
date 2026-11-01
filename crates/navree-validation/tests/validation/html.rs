@@ -270,24 +270,23 @@ async fn an_unsafe_policy_fails_at_boot() {
     }
 }
 
-/// What a browser builds from the output is what the sanitizer checked:
-/// markup the HTML parser would rearrange (a link in a link, a blank line
-/// it drops) comes out the way the parser reads it.
+/// What a browser builds from the output is what the sanitizer checked: when
+/// the parser would rearrange the output (a link in a link in a table, a blank
+/// line a `<pre>` drops), only the text of what was kept comes out.
 #[test]
 fn the_output_parses_back_to_the_tree_that_was_checked() {
     let policy = HtmlPolicy::default();
     for (input, output) in [
         (
             "<a href=\"https://a.example\">1<table><a href=\"https://b.example\">2</a></table></a>",
-            "<a href=\"https://a.example\" rel=\"noopener noreferrer nofollow\">1</a>\
-             <a href=\"https://b.example\" rel=\"noopener noreferrer nofollow\">2</a><table></table>",
+            "12",
         ),
-        ("<pre>\n\nx</pre>", "<pre>x</pre>"),
+        ("<pre>\n\nx</pre>", "\nx"),
         ("FOO&#x000D;ZOO", "FOO\nZOO"),
-        (
-            "<p><button><table></table></button>x</p>",
-            "<p></p><table></table>x<p></p>",
-        ),
+        ("<p><button><table></table></button>x</p>", "x"),
+        // Markup the parser reads the same way twice is kept as it is.
+        ("<pre>\nx</pre>", "<pre>x</pre>"),
+        ("<p>a<p>b", "<p>a</p><p>b</p>"),
     ] {
         let clean = policy.clean(input);
         assert_eq!(clean, output, "{input}");
@@ -371,13 +370,13 @@ fn selected_content_is_emptied() {
 }
 
 /// Each walk over the tree keeps its own stack: deep nesting can't overflow
-/// the thread's.
+/// the thread's. (The walks at depths no policy allows are in the sanitizer's
+/// own tests.)
 #[test]
 fn deep_nesting_is_cleaned_without_recursion() {
-    let depth = 50_000;
+    let depth = 256;
     let html = format!("{}x", "<span>".repeat(depth));
-    // Far past what a policy may allow: this is about the walks.
-    let roomy = |policy: HtmlPolicy| policy.limits(1 << 20, 1 << 20, depth + 1);
+    let roomy = |policy: HtmlPolicy| policy.limits(1 << 20, 1 << 20, depth);
     let clean = roomy(HtmlPolicy::default()).clean(&html);
     assert_eq!(
         clean,
@@ -585,6 +584,82 @@ fn what_a_policy_can_never_allow_is_removed_and_refused() {
     );
 }
 
+/// Browsers read markup past 512 levels flat, and `check` keeps a policy to
+/// 256. A policy that isn't checked is held to the same: `clean` keeps no
+/// more levels than that, whatever `limits` says.
+#[test]
+fn clean_keeps_no_more_than_256_levels_whatever_the_policy_says() {
+    let unchecked = HtmlPolicy::default().limits(1 << 20, 1 << 22, 2000);
+    assert!(unchecked.check().is_err());
+    let levels = |html: &str| html.matches("<ul>").count();
+
+    let at_the_limit = "<ul>".repeat(256);
+    let clean = unchecked.clean(&at_the_limit);
+    assert_eq!(levels(&clean), 256);
+    assert_eq!(unchecked.try_clean(&at_the_limit).unwrap(), clean);
+
+    let past_it = "<ul>".repeat(257);
+    assert_eq!(
+        unchecked.try_clean(&past_it),
+        Err(HtmlError::TooDeep { max: 256 })
+    );
+    // `clean` can't fail: the input comes back as text.
+    let clean = unchecked.clean(&past_it);
+    assert_eq!(levels(&clean), 0, "{}", &clean[..40]);
+    assert!(clean.starts_with("&lt;ul&gt;"));
+
+    let wide = HtmlPolicy::default().limits(1 << 20, 1 << 22, usize::MAX);
+    assert_eq!(levels(&wide.clean(&"<ul>".repeat(600))), 0);
+    assert_eq!(
+        SafeHtml::try_with_policy(&past_it, &wide),
+        Err(HtmlError::TooDeep { max: 256 })
+    );
+}
+
+/// Depth is how deep elements nest. Text inside the deepest element is not
+/// another level: the limit is the same with text in it and without.
+#[test]
+fn text_is_not_a_level() {
+    let policy = HtmlPolicy::default();
+    for inside in ["", "x", "<!-- c -->", "x<!-- c -->y"] {
+        let html = format!("{}{inside}", "<span>".repeat(128));
+        assert!(policy.try_clean(&html).is_ok(), "{inside:?}");
+        let html = format!("{}{inside}", "<span>".repeat(129));
+        assert_eq!(
+            policy.try_clean(&html),
+            Err(HtmlError::TooDeep { max: 128 }),
+            "{inside:?}"
+        );
+    }
+    let text_only = HtmlPolicy::text_only();
+    assert_eq!(
+        text_only.try_clean(&format!("{}x", "<span>".repeat(128))),
+        Ok("x".to_owned())
+    );
+}
+
+/// A limit of nothing would refuse every field, so a policy that sets one is
+/// refused when it is checked, naming the key.
+#[test]
+fn check_refuses_a_limit_of_zero() {
+    for (policy, key) in [
+        (
+            HtmlPolicy::default().limits(0, 1024, 128),
+            "max_input_bytes",
+        ),
+        (HtmlPolicy::default().limits(1024, 0, 128), "max_nodes"),
+        (HtmlPolicy::default().limits(1024, 1024, 0), "max_depth"),
+        (HtmlPolicy::default().limits(0, 0, 0), "max_input_bytes"),
+    ] {
+        let error = policy.check().unwrap_err();
+        assert!(
+            error.starts_with(&format!("validation.html.{key}: 0")),
+            "{key}: {error}"
+        );
+    }
+    assert_eq!(HtmlPolicy::default().limits(1, 1, 1).check(), Ok(()));
+}
+
 #[test]
 fn every_link_gets_its_rel() {
     let policy = HtmlPolicy::default()
@@ -767,7 +842,7 @@ fn a_hostile_field_does_not_stop_the_worker() {
     assert!(gap.as_millis() < 1000, "the worker stopped for {gap:?}");
 }
 
-/// A long field within every limit goes on off the worker as well.
+/// A long field within every limit is read off the worker as well.
 #[test]
 fn a_long_field_gives_up_its_worker() {
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -780,7 +855,7 @@ fn a_long_field_gives_up_its_worker() {
     assert!(ticks >= 3, "the ticker ran {ticks} times");
 }
 
-/// Without another thread there is nowhere to go, and nothing to panic about.
+/// `clean` works on the thread that calls it, a runtime of one thread included.
 #[tokio::test(flavor = "current_thread")]
 async fn a_long_field_is_sanitized_on_a_runtime_of_one_thread() {
     let html = "<p>x</p>".repeat(4000);
