@@ -98,6 +98,7 @@ mod app;
 mod auth;
 pub mod body;
 pub mod codes;
+mod compression;
 mod controller;
 mod cors;
 mod error;
@@ -120,6 +121,7 @@ pub mod ws;
 
 pub use app::AppRouter;
 pub use auth::{Authenticator, CurrentPrincipal, Guard, RouteAuthorizer};
+pub use compression::{Compression, CompressionLayer};
 pub use controller::{ApplyLayer, Controller, GlobalLayer, LayerSlot, ModuleBuilderHttpExt};
 pub use cors::{Cors, CorsLayer};
 pub use error::{AppError, ERROR_CONTENT_TYPE, ErrorMapper, Result};

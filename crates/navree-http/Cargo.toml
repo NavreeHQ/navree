@@ -17,6 +17,8 @@ chrono = { workspace = true }
 encoding_rs = { workspace = true }
 # The per-IP limit and route throttles: keys sharded across locks.
 dashmap = { workspace = true }
+# Gzip for responses (`CompressionLayer`): raw deflate and CRC-32.
+flate2 = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
 hmac = { workspace = true }
@@ -58,8 +60,6 @@ uuid = { workspace = true }
 [dev-dependencies]
 # The routing micro-benchmarks (`benches/routing.rs`).
 criterion = { workspace = true }
-# Reads a gzip body in the response tests (tests/responses).
-flate2 = { workspace = true }
 # The references of the extractors' and decoders' tests (tests/routing): the
 # urlencoded parser and deserializer, percent-decoding.
 form_urlencoded = { workspace = true }
