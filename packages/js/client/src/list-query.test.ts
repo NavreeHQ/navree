@@ -130,7 +130,7 @@ describe("listQuery builder", () => {
   });
 });
 
-describe("listQuerySerializer (openapi-fetch's querySerializer)", () => {
+describe("listQuerySerializer (the client's querySerializer)", () => {
   it("writes nested filters in brackets, lists in `in` and the rest as plain parameters", () => {
     expect(
       decodeURIComponent(

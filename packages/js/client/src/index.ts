@@ -1,7 +1,7 @@
 /**
  * `@navree/client`: a typed client for Navree APIs.
  *
- * - `createNavreeClient<paths>()`: openapi-fetch on the schema generated
+ * - `createNavreeClient<paths>()`: the typed fetch core on the schema generated
  *   from the app's OpenAPI document, in cookie mode (behind a
  *   backend-for-frontend) or bearer mode, with `X-Workspace` and request ids;
  * - `NavreeError`: Navree's error shape with its `code`, `unwrap`;

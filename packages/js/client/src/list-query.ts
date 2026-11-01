@@ -240,7 +240,7 @@ export class ListQueryBuilder {
     return new ListQueryBuilder({ ...rest, limit });
   }
 
-  /** The query as data, for openapi-fetch's `params.query` and query keys. */
+  /** The query as data, for the client's `params.query` and query keys. */
   toQuery(): ListQuery {
     return structuredClone(this.query);
   }
@@ -273,7 +273,7 @@ function appendParam(params: URLSearchParams, key: string, value: unknown): void
 }
 
 /**
- * A `querySerializer` for openapi-fetch: `filter` and `sort` in list-query
+ * A `querySerializer` for the typed client: `filter` and `sort` in list-query
  * format, other objects in brackets (`a[b]=c`), other lists repeated
  * (`ids=a&ids=b`).
  */

@@ -1,7 +1,7 @@
 {
   "name": "@navree/client",
   "version": "1.0.0",
-  "description": "A typed client for Navree APIs: openapi-fetch on the app's OpenAPI document, Navree's error shape with codes, list queries, pagination, operations and real time.",
+  "description": "A typed client for Navree APIs on the app's OpenAPI document, Navree's error shape with codes, list queries, pagination, operations and real time.",
   "license": "MIT OR Apache-2.0",
   "type": "module",
   "sideEffects": false,
@@ -15,6 +15,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./fetch": {
+      "types": "./dist/fetch.d.ts",
+      "import": "./dist/fetch.js"
     },
     "./abilities": {
       "types": "./dist/abilities.d.ts",
@@ -30,9 +34,6 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
-  },
-  "dependencies": {
-    "openapi-fetch": "^0.17.0"
   },
   "peerDependencies": {
     "@casl/ability": "^6.0.0 || ^7.0.0",

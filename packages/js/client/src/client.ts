@@ -1,9 +1,10 @@
 /**
- * The typed client: openapi-fetch on the `paths` type that `navree openapi:client`
- * generates from the app's OpenAPI document.
+ * The typed client: the typed fetch core (`fetch.ts`) on the `paths` type that
+ * `navree openapi:client` generates from the app's OpenAPI document, with Navree's
+ * conventions: cookie or bearer mode, workspace and request id headers, the error shape.
  */
-import createClient, { type Client } from "openapi-fetch";
 import { NavreeError } from "./errors.js";
+import { createClient, type Client } from "./fetch.js";
 import { listQuerySerializer } from "./list-query.js";
 
 type MaybePromise<T> = T | Promise<T>;
@@ -54,7 +55,7 @@ export function newRequestId(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-/** The client: openapi-fetch's `GET`, `POST`, ... plus `raw` for responses that aren't JSON. */
+/** The client: `GET`, `POST`, ... on the typed fetch core, plus `raw` for responses that aren't JSON. */
 export type NavreeClient<Paths extends object> = Client<Paths> & {
   /**
    * A plain request with the client's headers and hooks: CSV exports, event
@@ -132,7 +133,7 @@ export function createNavreeClient<Paths extends object>(options: NavreeClientOp
 type FetchResult<T> = { data?: T; error?: unknown; response: Response };
 
 /**
- * The data of an openapi-fetch result, or a thrown {@link NavreeError}
+ * The data of a typed fetch result, or a thrown {@link NavreeError}
  * (with `network_error` when the request got no answer).
  */
 export async function unwrap<T>(result: Promise<FetchResult<T>>): Promise<T> {

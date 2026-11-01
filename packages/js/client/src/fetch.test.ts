@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { BASE, json, recording } from "../test/fetch-helpers.js";
 import type { paths } from "../test/fixtures/typed.js";
@@ -391,5 +392,25 @@ describe("request options", () => {
       throw new TypeError("fetch failed");
     });
     await expect(client.GET("/pets")).rejects.toThrow("fetch failed");
+  });
+});
+
+describe("serialization of empty members", () => {
+  it("leaves no empty segments where a member is skipped", () => {
+    const serialize = createQuerySerializer();
+    expect(serialize({ filter: { name: "Rex", tag: undefined, other: null } })).toBe("filter[name]=Rex");
+    expect(serialize({ tags: ["a", null, undefined, "b"] })).toBe("tags=a&tags=b");
+    expect(serialize({ tags: [null], q: "x" })).toBe("q=x");
+    expect(serialize({ o: { a: undefined } })).toBe("");
+    expect(createQuerySerializer({ array: { style: "form", explode: false } })({ t: ["a", null, "b"] })).toBe("t=a,b");
+  });
+});
+
+describe("the core stands alone", () => {
+  it("imports nothing and the package has no runtime dependencies", () => {
+    const source = readFileSync(new URL("./fetch.ts", import.meta.url), "utf8");
+    expect(source).not.toMatch(/^s*(import|export)[^;]*from/m);
+    const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as Record<string, unknown>;
+    expect(manifest.dependencies).toBeUndefined();
   });
 });
