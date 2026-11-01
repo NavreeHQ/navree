@@ -226,25 +226,31 @@ let pages = sealed.page_texts()?; // one string per page
 draw), fonts read (`ToUnicode` inflated, up to 8 MiB, plus 1/16 of the memory
 reading it builds; 16 bytes per width; 8 per `Differences` entry; 1 KiB per
 re-read of a dropped font), and marked content's actual text each time it is
-decoded. Reading text here (not elsewhere, such as navree-media), a `ToUnicode`
-map is refused past 64 codespace ranges, 131,072 lines,
-256 texts in one list or 65,792 in all lists, whichever way lopdf reaches it
-(any chain of encoding references). Fonts and maps are kept per document in 256
-MiB as lopdf holds them (~256 B per code, two copies of a range's text per split it can have, 128 B
-per `Differences` entry, 24 B per width; 17 MB for a full two-byte map, fifteen
-fit), plus at most one font's widths; a map is read once for the fonts sharing
-it; past 256 MiB the least recently used is dropped and read again; one map or
-font over 256 MiB is refused. A page may show 1,000,000 glyphs, produce 8 MiB of
-text (the document 64 MiB), nest `q` and marked content 256 deep, and spend
-50,000,000 mark comparisons (a byte of text compared is one). Over any:
+decoded. Reading text (here and in navree-media's `text::extract`, which uses
+the same code), a `ToUnicode` map is refused past 64 codespace ranges, 131,072
+lines, 256 texts in one list or 65,792 in all lists, whichever way the font's
+encoding reaches it (any chain of references). Fonts and maps are kept per
+document in 256 MiB, counted before they are read (~256 B per code, two copies
+of a range's text per split it can have, 128 B per `Differences` entry, 24 B per
+width; 17 MB for a full two-byte map, fifteen fit), plus at most one font's
+widths; a map is read once for the fonts sharing it; past 256 MiB the least
+recently used is dropped and read again; one map or font over 256 MiB is
+refused. A page may show 1,000,000 glyphs, produce 8 MiB of text (the document
+64 MiB), nest `q` and marked content 256 deep, and spend 50,000,000 mark
+comparisons (a byte of text compared is one). Over any:
 `DocumentsError::TooLarge` (413). These are fixed, not config keys.
 
-Loading inflates each object stream up to 8 MiB (a bigger one is skipped with
-its objects, so `Pdf::from_bytes` refuses a PDF whose page tree is in it).
-Nothing bounds loading memory in total (objects in a stream can share bytes,
-encrypted files too; a 1 KB file loads tens of MB, a 2 MiB upload can exhaust
-memory and abort the process). Never load untrusted PDFs in the web process: use
-a process you can lose (a queue worker with a memory limit), and cap the size.
+Reading a PDF (navree-pdf, under every `Pdf` method) is lazy and budgeted per
+document: 256 MiB of objects as they are built (object and cross-reference
+streams inflate to 8 MiB each; a bigger one is skipped with its objects, so
+`Pdf::from_bytes` refuses a PDF whose page tree is in it) and 1 GiB of bytes
+scanned. Objects sharing their bytes, deep or wide nesting (100 levels) and
+cross-references that rescan the same bytes are all counted: a small file that
+would take gigabytes is `TooLarge` (413). `page_count`, `text`, `title` read
+what they need; `merge`, `stamp`, `overlay`, `with_metadata` read everything.
+Broken cross-references are rebuilt; files encrypted without a password to open
+(RC4, AES 40 to 256 bits) are read and edited unencrypted; one needing a
+password is `DocumentsError::Pdf`.
 `stamp`, `overlay` and `merge` keep shared or inherited resources one object.
 
 ## Word documents

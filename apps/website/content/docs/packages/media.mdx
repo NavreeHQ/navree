@@ -448,12 +448,12 @@ for (number, page) in document.pages.iter().enumerate() {
 
 | Type | What comes out |
 |---|---|
-| PDF | The text of each page, in content order; the title from the document information |
+| PDF | The text of each page in reading order (strings on one baseline form a line; right-to-left lines read from the right); the title from the document information |
 | DOCX | Paragraphs on their own lines, tabs and breaks kept; the title from the core properties |
 | HTML, XHTML | The visible text, blocks on their own lines, scripts and styles skipped; the `<title>` |
 | `text/*` | The text, byte-order mark and `\r\n` removed |
 
-`ExtractedText` has `text` (the whole document, whitespace collapsed, PDF pages separated by a blank line), `pages`, `title` and the `mime_type` it was read as. A type it doesn't read is sniffed from the content first; one that is still unsupported is `unsupported_media_type` (415), and a damaged document `invalid_document`. `text::supports(mime_type)` tells you in advance. Scanned PDFs have no text to extract: they need OCR, which this module doesn't do.
+`ExtractedText` has `text` (the whole document, whitespace collapsed, PDF pages separated by a blank line), `pages`, `title` and the `mime_type` it was read as. A type it doesn't read is sniffed from the content first; one that is still unsupported is `unsupported_media_type` (415), and a damaged document `invalid_document`. `text::supports(mime_type)` tells you in advance. Scanned PDFs have no text to extract: they need OCR, which this module doesn't do. PDFs are read with navree-documents' reader and held to the same limits (see [Reading text back](/docs/packages/documents/#reading-text-back)): the document's objects in 256 MiB, a page's content in 64 MiB and 128 MiB of work, the fonts' `ToUnicode` maps capped and counted; a PDF over one is `invalid_document`, and so is one that needs a password to open.
 
 ## Video and audio
 

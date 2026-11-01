@@ -176,8 +176,11 @@ below its width), `nonqueued()` / `queued()`, and with `media-ffmpeg`
   `media.unpack(&item, disk, prefix)` (SCORM), `media.zip(&items)`,
   `archive::ZipBuilder`.
 - `text::extract(bytes, mime)` / `media.extract_text(&item)` →
-  `ExtractedText { text, pages, title, mime_type }` for PDF (per page),
-  DOCX, HTML/XHTML, `text/*`; `unsupported_media_type` (415) otherwise. No OCR.
+  `ExtractedText { text, pages, title, mime_type }` for PDF (per page, in
+  reading order, with navree-documents' reader and limits: 256 MiB of objects,
+  64 MiB of content a page, capped `ToUnicode` maps), DOCX, HTML/XHTML,
+  `text/*`; `unsupported_media_type` (415) otherwise. A PDF over a limit or
+  needing a password is `invalid_document` (400). No OCR.
 - `media-ffmpeg`: `media.ffmpeg()` / `video::Ffmpeg::new(FfmpegOptions)` with
   `probe`, `frame`, `transcode`, `version`; `media.ffmpeg.{ffmpeg, ffprobe,
   timeout_secs, threads}`. Keep transcodes queued. The tools run with an

@@ -21,13 +21,14 @@ L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage  navree-time
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-schema  navree-navigator (tool)
 L1  navree-contracts  navree-config  navree-telemetry
-L0  navree-kernel  navree-bounded (the bounded in-process cache)   navree-macros, navree-i18n-macros, navree-orm-macros, navree-validation-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (dev and deploy tools; no navree deps)
+L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PDF reading, writing and text)   navree-macros, navree-i18n-macros, navree-orm-macros, navree-validation-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (dev and deploy tools; no navree deps)
 ```
 
 | Layer | Crate | What it provides |
 |---|---|---|
 | L0 | `navree-kernel` | Module graph, type-keyed DI container, lifecycle, command runner |
 | L0 | `navree-bounded` | The bounded in-process cache: sharded locks, a strict capacity, SIEVE eviction, TTL and TTI, single-flight loading. It holds the memory cache store, abilities, token lookups and verified domains, and is re-exported as `navree::bounded` |
+| L0 | `navree-pdf` | The PDF object layer under navree-documents and navree-media: a lazy reader held to a memory and work budget (cross-reference tables and streams, object streams, incremental updates, repair of a broken cross-reference, the standard filters, files encrypted without a password to open them), a writer, and text in reading order |
 | L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, route and access attributes, `#[mcp_server]` |
 | L0 | `navree-i18n-macros` | `embed_locales!`: Fluent files embedded in the binary, checked at compile time (through navree-i18n) |
 | L0 | `navree-validation-macros` | `#[derive(Validate)]` and its `#[validate(...)]` field rules (re-exported by navree-validation) |
@@ -102,7 +103,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)   navree-macros
 
 | Crate | May depend on |
 |---|---|
-| `navree-kernel`, `navree-bounded`, `navree-macros`, `navree-orm-macros`, `navree-i18n-macros`, `navree-validation-macros`, `navree-dock`, `navree-harbor` | No Navree crate |
+| `navree-kernel`, `navree-bounded`, `navree-pdf`, `navree-macros`, `navree-orm-macros`, `navree-i18n-macros`, `navree-validation-macros`, `navree-dock`, `navree-harbor` | No Navree crate |
 | `navree-contracts` | kernel |
 | `navree-config`, `navree-telemetry` | kernel, contracts |
 | `navree-crypto`, `navree-view`, `navree-schema` | kernel, contracts, config |
@@ -140,7 +141,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)   navree-macros
 | `navree-grpc` | kernel, contracts, config, macros, http, db, validation; testing (feature `testing`) |
 | `navree-mcp` | kernel, contracts, config, http, cache, db, testing, validation, access, auth |
 | `navree-search` | kernel, contracts, config, macros, http, http-client, db, orm, queue, access, workspace |
-| `navree-documents` | kernel, contracts, config, http, view, storage, db and queue (with its `operations` feature) |
+| `navree-documents` | kernel, contracts, config, http, view, storage, pdf, db and queue (with its `operations` feature) |
 | `navree-sheets` | kernel, contracts, config, macros, http, db, storage, validation, queue, workspace; i18n with its `i18n` feature |
 | `navree-billing` | kernel, contracts, config, http, cache, events, http-client, db, queue, schedule, access, auth, workspace, orm |
 | `navree-ai` | kernel, contracts, config, macros, http, http-client, cache, db, storage, validation, access, auth |
@@ -151,7 +152,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)   navree-macros
 | `navree-fleet` | kernel, contracts, config, telemetry, http, events, view, db, observe, queue, access |
 | `navree-helm` | kernel, bounded, contracts, config, http, view, cache, crypto, db, storage, queue, validation, audit, access, auth, workspace, orm; settings (with its `settings` feature) |
 | `navree-workflows` | kernel, contracts, config, macros, http, events, db, schedule, workspace |
-| `navree-media` | kernel, contracts, config, http, http-client, db, orm, storage, queue |
+| `navree-media` | kernel, contracts, config, http, http-client, db, orm, storage, queue, pdf |
 | `navree-directory` | kernel, contracts, config, http, crypto, events, db, orm, queue, schedule, workspace, integrations |
 | `navree-domains` | kernel, bounded, contracts, config, http, crypto, events, db, orm, schedule, workspace; lighthouse (feature `lighthouse`) |
 | `navree` | Every runtime crate, the macros and the tool crates |

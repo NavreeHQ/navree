@@ -50,13 +50,14 @@ L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage  navree-time
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-schema  navree-navigator (dev tool)
 L1  navree-contracts  navree-config  navree-telemetry
-L0  navree-kernel  navree-bounded                navree-macros  navree-orm-macros  navree-i18n-macros  navree-validation-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (tools; no navree deps)
+L0  navree-kernel  navree-bounded  navree-pdf    navree-macros  navree-orm-macros  navree-i18n-macros  navree-validation-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (tools; no navree deps)
 ```
 
 | Layer | Crate | What it provides |
 |---|---|---|
 | L0 | `navree-kernel` | Module graph, type-keyed DI container, lifecycle, command runner |
 | L0 | `navree-bounded` | The bounded in-process cache: sharded locks, a strict capacity, SIEVE eviction, TTL and TTI, single-flight loading (re-exported as `navree::bounded`) |
+| L0 | `navree-pdf` | PDF object layer under navree-documents and navree-media: a lazy reader held to a memory and work budget (cross-reference tables and streams, object streams, incremental updates, repair of a broken cross-reference, the standard filters, files encrypted without a password to open them), a writer, and text in reading order |
 | L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, `#[resolver]`, route and access attributes |
 | L0 | `navree-orm-macros` | `#[derive(Model)]` and `#[scopes]` (re-exported by `navree-orm`) |
 | L0 | `navree-validation-macros` | `#[derive(Validate)]` and `#[validate(...)]` (re-exported by `navree-validation`) |
@@ -332,6 +333,7 @@ token's claims read back, a rendered query holds only the user's words.
 | `scim_filter`, `mail_inbound`, `micro_envelope`, `time_parse` | SCIM filters and paths; raw MIME messages; broker envelopes; zone names, days and send windows |
 | `openapi_client` | OpenAPI documents (JSON, deep nesting, `$ref` chains, lists of types, odd descriptions) through the generator behind `navree openapi:client`; the file it writes has matching braces and its five declarations |
 | `small_parsers` | the logbook search box, OAuth `scope`, `X-Request-ID`, the app key, Web Push keys |
+| `pdf_read`, `pdf_content` | whole PDF files read as navree-documents and navree-media read them (cross-reference, repair, object streams, filters, encryption, page tree, text), and saved again; the operations of a content stream |
 
 Run them in Docker, so the nightly toolchain and cargo-fuzz are the pinned
 ones (`fuzz/Dockerfile`) and nothing is built inside the checkout. The script
