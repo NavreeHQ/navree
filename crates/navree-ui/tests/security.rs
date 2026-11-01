@@ -164,3 +164,39 @@ async fn a_reply_varies_on_the_runtime_header() {
         assert!(vary.iter().any(|value| value.to_ascii_lowercase().contains("x-navree-ui")), "{vary:?}");
     }
 }
+
+#[test]
+fn a_field_marked_skip_cannot_be_set_by_the_client() {
+    let login: Login = decode(&pairs(&[("password", "longenough"), ("email", "a@b"), ("is_admin", "true")])).unwrap();
+    assert!(!login.is_admin);
+}
+
+#[tokio::test]
+async fn a_submit_ignores_fields_the_form_does_not_have() {
+    let app = app().await;
+    let response = app.client().post("/store").header("content-type", FORM).body("password=longenough&email=a&is_admin=true").send().await;
+    assert_eq!(response.text(), "ok admin=false");
+}
+
+#[tokio::test]
+async fn a_submit_stops_at_a_count_of_fields_and_keeps_only_its_own() {
+    let app = app().await;
+    let junk = "a&".repeat(200);
+    let response = app.client().post("/inspect").header("content-type", FORM).body(junk).send().await;
+    assert!(!response.text().contains("\"a\""), "names the form lacks are not kept: {}", response.text());
+    let flood = "a&".repeat(100_000);
+    let response = app.client().post("/store").header("content-type", FORM).body(flood).send().await;
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    let own = "email=x&".repeat(100_000);
+    let response = app.client().post("/store").header("content-type", FORM).body(own).send().await;
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+}
+
+#[tokio::test]
+async fn a_rejected_page_echoes_a_bounded_amount() {
+    let app = app().await;
+    let body = format!("email={}", "%27".repeat(600_000));
+    let response = app.client().post("/store").header("content-type", FORM).body(body).send().await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(response.text().len() < 512 * 1024, "{}", response.text().len());
+}

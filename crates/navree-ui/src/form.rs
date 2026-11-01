@@ -569,17 +569,60 @@ impl<T: Form> From<FormView<T>> for Node {
 /// Field errors by name.
 pub type FieldErrors = BTreeMap<String, Vec<String>>;
 
+/// The most name-and-value pairs read from one body. A form has far fewer: a body
+/// with more is refused before anything is decoded.
+const MAX_PAIRS: usize = 1000;
+
+/// The most text a rejected form sends back, over all its fields. Past this a
+/// field comes back empty, so a body can't be reflected at five times its size.
+const MAX_ECHO: usize = 256 * 1024;
+
+/// Reads a form body, keeping only the pairs whose name is one of `T`'s fields:
+/// nothing is allocated for any other name. `None` when the body holds more than
+/// [`MAX_PAIRS`] pairs.
+fn read_pairs<T: Form>(bytes: &[u8]) -> Option<Vec<(String, String)>> {
+    let mut kept = Vec::with_capacity(T::FIELDS.len());
+    for (count, (name, value)) in urlencoded::parse(bytes).enumerate() {
+        if count >= MAX_PAIRS {
+            return None;
+        }
+        if T::FIELDS.iter().any(|field| field.name == name) {
+            kept.push((name.into_owned(), value.into_owned()));
+        }
+    }
+    Some(kept)
+}
+
+/// What a rejected form may show again: never a password, and a bounded amount.
+fn echo<T: Form>(values: Vec<(String, String)>) -> Vec<(String, String)> {
+    let mut left = MAX_ECHO;
+    values
+        .into_iter()
+        .filter(|(name, value)| {
+            let secret = T::FIELDS.iter().any(|field| field.name == name && field.widget == Widget::Input(InputKind::Password));
+            if secret || value.len() > left {
+                return false;
+            }
+            left -= value.len();
+            true
+        })
+        .collect()
+}
+
 /// Decodes submitted pairs into `T` and runs its rules: what [`Submit`] and
 /// tests share. Empty values of optional fields are absent, an unchecked box
-/// is `false`, and a missing text field is empty.
+/// is `false`, and a missing text field is empty. A pair that isn't one of `T`'s
+/// fields is dropped, so a field marked `#[form(skip)]` can't be set by the client.
 pub fn decode<T>(pairs: &[(String, String)]) -> Result<T, FieldErrors>
 where
     T: Form + DeserializeOwned + Validate,
 {
     let mut kept: Vec<(&str, &str)> = Vec::with_capacity(pairs.len() + T::FIELDS.len());
     for (name, value) in pairs {
-        let field = T::FIELDS.iter().find(|field| field.name == name);
-        if value.is_empty() && field.is_some_and(|field| field.optional) {
+        let Some(field) = T::FIELDS.iter().find(|field| field.name == name) else {
+            continue;
+        };
+        if value.is_empty() && field.optional {
             continue;
         }
         kept.push((name, value));
@@ -773,10 +816,12 @@ where
                 }
             }
         };
-        let values: Vec<(String, String)> = urlencoded::parse(&bytes).map(|(name, value)| (name.into_owned(), value.into_owned())).collect();
+        let Some(values) = read_pairs::<T>(&bytes) else {
+            return Err(Rejected { values: Vec::new(), errors: FieldErrors::new(), from_runtime, action, too_large: true, marker: PhantomData });
+        };
         match decode::<T>(&values) {
             Ok(value) => Ok(Self(value)),
-            Err(errors) => Err(Rejected { values, errors, from_runtime, action, too_large: false, marker: PhantomData }),
+            Err(errors) => Err(Rejected { values: echo::<T>(values), errors, from_runtime, action, too_large: false, marker: PhantomData }),
         }
     }
 }
