@@ -38,6 +38,7 @@ navree-config = { path = "../crates/navree-config" }
 navree-contracts = { path = "../crates/navree-contracts" }
 navree-crypto = { path = "../crates/navree-crypto" }
 navree-directory = { path = "../crates/navree-directory" }
+navree-glob = { path = "../crates/navree-glob" }
 navree-documents = { path = "../crates/navree-documents", default-features = false, features = ["docx"] }
 navree-domains = { path = "../crates/navree-domains" }
 navree-http = { path = "../crates/navree-http" }
@@ -97,6 +98,13 @@ bench = false
 [[bin]]
 name = "docx_read"
 path = "fuzz_targets/docx_read.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "glob_match"
+path = "fuzz_targets/glob_match.rs"
 test = false
 doc = false
 bench = false
