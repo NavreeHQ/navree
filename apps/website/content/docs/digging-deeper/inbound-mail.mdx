@@ -21,7 +21,7 @@ Every source hands its message to the same pipeline, so a mailbox handler doesn'
 
 ## Installation
 
-Turn on the `mail-inbound` feature of the `navree` facade. It is part of the default `full` feature, and turns on `mail` and `storage`. Parsing runs on [mail-parser](https://docs.rs/mail-parser), in pure Rust.
+Turn on the `mail-inbound` feature of the `navree` facade. It is part of the default `full` feature, and turns on `mail` and `storage`. Messages are read by Navree's own MIME reader, in pure Rust, with limits for mail from strangers ([Size limits](#size-limits)).
 
 ```toml title="Cargo.toml"
 [dependencies]
@@ -159,7 +159,9 @@ Because a failure makes the provider retry, a handler may see the same message t
 
 ## The message
 
-`InboundMail` is a parsed message. Encoded words in headers (`=?UTF-8?B?...?=`), quoted-printable and base64 bodies and legacy charsets (ISO-8859-1, Windows-1252, ISO-2022-JP and the rest) are decoded to UTF-8.
+`InboundMail` is a parsed message. Encoded words in headers (`=?UTF-8?B?...?=`), RFC 2231 parameters (`filename*=utf-8''...`), quoted-printable and base64 bodies and legacy charsets (ISO-8859-1, Windows-1252, ISO-2022-JP, UTF-7 and the rest) are decoded to UTF-8.
+
+The text and HTML bodies are the parts a mail client would show: the text and HTML versions of a `multipart/alternative`, the inline text of a `multipart/mixed`, the first part of a `multipart/related` (the images it refers to are attachments). When a header field appears twice, the last one counts.
 
 | Field | Holds |
 |---|---|
@@ -197,7 +199,7 @@ let reply = mail.reply_text();                          // the text above the qu
 
 ### Attachments and forwarded messages
 
-Each `Attachment` has a `filename`, a lower-case `content_type`, a `content_id` (without angle brackets, for inline images an HTML body references as `cid:...`), `inline`, and the decoded `content` as `Bytes`.
+Each `Attachment` has a `filename`, a lower-case `content_type`, a `content_id` (without angle brackets, for inline images an HTML body references as `cid:...`), `inline`, and the decoded `content` as `Bytes`. A text attachment (`text/csv`, `text/calendar`) is decoded from its charset to UTF-8; a file sent without a transfer encoding shares the raw message's buffer, without a copy.
 
 A message forwarded as an attachment (`message/rfc822`, what "Forward as attachment" and most "Report phishing" buttons send) is an attachment too. `is_message()` tells it apart and `as_mail()` parses it, headers and all:
 
@@ -280,7 +282,18 @@ The file is written before the mailbox runs, so a message whose handler fails is
 
 `mail.inbound.max_size` (default 25 MiB) is the largest raw message accepted. A larger one is refused before it is parsed: `InboundError::TooLarge`, a 413 with code `mail_too_large`. The source routes accept request bodies up to twice the limit, since providers that post JSON or forms encode the message in base64.
 
-`Inbound::receive` and `Inbound::read` parse on Tokio's blocking pool, so a large or deeply nested message doesn't hold one of the app's async threads while it is read. A parser that panics on a message is `InboundError::Unparseable` (a 400), not a failed request. `InboundMail::parse`, `Incoming::parse` and `Attachment::as_mail` are plain functions that parse on the thread that calls them; in async code, call them from `tokio::task::spawn_blocking` when the bytes come from outside.
+A message is also refused while it is read, as `InboundError::Unparseable` (a 400), when it has more than `mail.inbound.max_parts` parts (default 1,000, the message and every multipart counting), nests multiparts more than `mail.inbound.max_depth` deep (default 32), has more than `mail.inbound.max_headers` header fields (default 1,000), or lists more than `mail.inbound.max_addresses` addresses in one address field (`From`, `To`, `Cc`, `Reply-To`) or ids in `References` (default 1,000). A few bytes of MIME can declare a part, a header field or an address that would cost far more to hold, so these limits bound the memory a message takes, not just its size. Everything else the reader does is linear in the message: it reads each level of nesting once, and every buffer it fills is sized by bytes it has read.
+
+```toml title="config/app.toml"
+[mail.inbound]
+max_size = 26214400   # bytes
+max_parts = 1000
+max_depth = 32
+max_headers = 1000
+max_addresses = 1000
+```
+
+`Inbound::receive` and `Inbound::read` parse on Tokio's blocking pool, with these limits, so a large or deeply nested message doesn't hold one of the app's async threads while it is read. A parser that panics on a message is `InboundError::Unparseable` (a 400), not a failed request. `InboundMail::parse`, `Incoming::parse` and `Attachment::as_mail` are plain functions that parse on the thread that calls them, with the default limits; in async code, call them from `tokio::task::spawn_blocking` when the bytes come from outside.
 
 ## Sources
 
@@ -561,7 +574,7 @@ async fn a_reply_lands_on_its_ticket() {
 | Variant | When | In a route |
 |---|---|---|
 | `TooLarge` | The message is over `mail.inbound.max_size`. | 413 `mail_too_large` |
-| `Unparseable` | The bytes hold no message headers. | 400 `invalid_inbound_mail` |
+| `Unparseable` | The bytes hold no message headers, or the message is over `max_parts`, `max_depth`, `max_headers` or `max_addresses`. | 400 `invalid_inbound_mail` |
 | `Malformed` | A provider's payload isn't what that provider sends. | 400 `invalid_inbound_mail` |
 | `InvalidToken`, `ExpiredToken` | A reply token is forged, damaged or too old. | 400 `invalid_reply_token` |
 | `AddressTooLong` | A reply address would pass 64 characters before the `@`. | 500 |
@@ -579,6 +592,10 @@ Watched mailboxes add `IntegrationsError::MailboxWatchNotFound` (404 `mailbox_wa
 | Key | Default | Meaning |
 |---|---|---|
 | `mail.inbound.max_size` | `26214400` | The largest message accepted, in bytes. |
+| `mail.inbound.max_parts` | `1000` | The most parts a message may have, multiparts and the message included. |
+| `mail.inbound.max_depth` | `32` | The most multiparts a message may nest in one another. |
+| `mail.inbound.max_headers` | `1000` | The most fields a message's header may have. |
+| `mail.inbound.max_addresses` | `1000` | The most addresses one address field may list, and the most ids `References` may. |
 | `mail.inbound.disk` | none | The disk that keeps raw messages. |
 | `mail.inbound.path` | `inbound` | The folder on that disk. |
 | `mail.inbound.reply_token_ttl_days` | `0` | Reply tokens older than this are refused; 0 never expires them. |

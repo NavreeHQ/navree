@@ -77,7 +77,14 @@ let ticket = ctx.verified_uuid("token")?;
 `Inbound::read` parse on the blocking pool (a panicking parser is
 `Unparseable`, a 400); `InboundMail::parse`, `Incoming::parse` and
 `as_mail` are sync and parse on the caller's thread, so wrap them in
-`spawn_blocking` in async code when the bytes are untrusted.
+`spawn_blocking` in async code when the bytes are untrusted. The reader is
+Navree's own: `mail.inbound.max_parts` (1000), `max_depth` (32 nested
+multiparts), `max_headers` (1000 fields) and `max_addresses` (1000 per
+address field or `References`) refuse a message as
+`Unparseable` while it is read; `Inbound::receive` and `Inbound::read`
+apply them, `InboundMail::parse` the defaults. Text attachments are decoded
+to UTF-8; unencoded attachments and forwarded messages share the raw
+message's buffer.
 
 ## Microsoft 365 and Gmail mailboxes
 
