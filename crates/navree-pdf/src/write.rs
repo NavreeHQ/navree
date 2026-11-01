@@ -5,7 +5,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write as _;
 
-use crate::budget::LOOKUP_COST;
+use crate::budget::{LOOKUP_COST, ReadLimits};
 use crate::document::{Document, MAX_HOPS, NodeKind, ReadObjects, node_kind};
 use crate::error::{PdfError, size};
 use crate::filters;
@@ -155,7 +155,9 @@ pub struct Objects {
     /// The most saving may write, when it is held to a limit.
     output_limit: Option<usize>,
     budget: EditBudget,
-    /// The memory and the work reading the objects was counted as.
+    /// The limits the objects were read within, and the memory and the work
+    /// reading them was counted as.
+    read_limits: ReadLimits,
     read_memory: usize,
     read_work: usize,
 }
@@ -215,6 +217,7 @@ impl Objects {
                 added_limit: limits.memory,
                 ..EditBudget::default()
             },
+            read_limits: limits,
             read_memory: memory,
             read_work: work,
         };
@@ -422,6 +425,46 @@ impl Objects {
         self.budget.added_limit = limit;
     }
 
+    /// Sets the most work looking objects up, compressing and the like may
+    /// take.
+    pub fn set_work_limit(&mut self, limit: usize) {
+        self.budget.work_limit = limit;
+    }
+
+    /// Holds what is done to these objects to what is left of the limits they
+    /// were read within after reading them, instead of to as much again: the
+    /// memory added and the work done count with what reading them counted, so
+    /// that the whole is within one document's limits.
+    pub fn share_limits(&mut self) {
+        self.budget.added_limit = self.read_limits.memory.saturating_sub(self.read_memory);
+        self.budget.work_limit = self.read_limits.work.saturating_sub(self.read_work);
+    }
+
+    /// The limits these objects were read within.
+    pub fn limits(&self) -> ReadLimits {
+        self.read_limits
+    }
+
+    /// What is left of the limits these objects were read within, after what
+    /// reading and editing them counted: the limits to read another document
+    /// within along with them.
+    pub fn limits_left(&self) -> ReadLimits {
+        ReadLimits {
+            memory: self
+                .read_limits
+                .memory
+                .saturating_sub(self.memory_counted()),
+            work: self.read_limits.work.saturating_sub(self.work_counted()),
+            ..self.read_limits
+        }
+    }
+
+    /// Counts `bytes` of work done for these objects, such as reading another
+    /// document along with them: an error when that passes the limit.
+    pub fn spend_work(&self, bytes: usize) -> Result<(), PdfError> {
+        self.budget.work(bytes)
+    }
+
     /// The work counted so far: what looking objects up took.
     pub fn work_used(&self) -> usize {
         self.budget.work.get()
@@ -456,10 +499,35 @@ impl Objects {
     }
 
     /// Puts at `id` an object already counted: one read by another
-    /// [`Objects`], or held with [`hold`](Self::hold).
-    pub fn adopt(&mut self, id: ObjectId, object: Object) {
+    /// [`Objects`], or held with [`hold`](Self::hold). Returns what it and its
+    /// place in the table of objects are counted as, for the caller to take
+    /// from the limits it reads the rest within.
+    pub fn adopt(&mut self, id: ObjectId, object: Object) -> usize {
         self.max_number = self.max_number.max(id.0);
+        let counted = memory_of(&object).saturating_add(TABLE_MEMORY);
         self.objects.insert(id, object);
+        counted
+    }
+
+    /// The ids of the objects `roots` lead to, themselves included.
+    pub fn reachable_from(&self, roots: impl IntoIterator<Item = ObjectId>) -> HashSet<ObjectId> {
+        let mut reached: HashSet<ObjectId> = HashSet::new();
+        let mut queue: Vec<ObjectId> = Vec::new();
+        for id in roots {
+            if reached.insert(id) {
+                queue.push(id);
+            }
+        }
+        while let Some(id) = queue.pop() {
+            if let Some(object) = self.objects.get(&id) {
+                references(object, 0, &mut |id| {
+                    if reached.insert(id) {
+                        queue.push(id);
+                    }
+                });
+            }
+        }
+        reached
     }
 
     /// Counts one lookup; `false` once the work has run out.

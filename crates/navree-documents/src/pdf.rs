@@ -128,62 +128,16 @@ impl Pdf {
     ///
     /// Like every edit, this refuses a document it would lose part of (an
     /// object its page tree, contents or resources lead to cannot be read:
-    /// [`DocumentsError::Pdf`]), and one it would write more than the file's
-    /// size plus 256 MiB for, or add more than is counted as 256 MiB to
-    /// ([`DocumentsError::TooLarge`]).
+    /// [`DocumentsError::Pdf`]), and one it would write more than the sizes of
+    /// the files plus 256 MiB for, or take more than 256 MiB of memory and 1
+    /// GiB of work for ([`DocumentsError::TooLarge`]). The limits are those of
+    /// one document, for all the inputs together: the memory an input is
+    /// counted as is taken from the limit only for the pages it keeps and what
+    /// they lead to (not its outlines, forms or tagged structure, which are
+    /// let go of before the next input is read), so many files of ordinary
+    /// size merge, and a few that are each near the limit do not.
     pub fn merge<'a>(pdfs: impl IntoIterator<Item = &'a Pdf>) -> Result<Pdf, DocumentsError> {
-        let mut merged = Objects::new();
-        let pages_id = merged.reserve();
-        let mut kids = Vec::new();
-        // What is written is held to what each document may write.
-        let mut output_limit = 0usize;
-        for pdf in pdfs {
-            let mut document = pdf.objects()?;
-            flatten_checked(&mut document)?;
-            output_limit = output_limit.saturating_add(document.output_limit());
-            document.renumber(merged.max_number().saturating_add(1));
-            let page_ids: Vec<ObjectId> = document.pages();
-            let page_set: BTreeSet<ObjectId> = page_ids.iter().copied().collect();
-            for (id, object) in std::mem::take(&mut document.objects) {
-                let keep = match object.type_name() {
-                    Some(b"Catalog" | b"Pages") => false,
-                    Some(b"Page") => page_set.contains(&id),
-                    _ => true,
-                };
-                if keep {
-                    // Counted when its document was read.
-                    merged.adopt(id, object);
-                }
-            }
-            for id in page_ids {
-                let page = merged
-                    .dictionary_mut(id)
-                    .ok_or_else(|| missing("a page of the document"))?;
-                page.set("Parent", pages_id);
-                page.remove(b"StructParents");
-                kids.push(Object::Reference(id));
-            }
-        }
-        if kids.is_empty() {
-            return Err(DocumentsError::Edit("nothing to merge".into()));
-        }
-        let count = kids.len() as i64;
-        merged.insert(
-            pages_id,
-            dictionary! {
-                "Type" => "Pages",
-                "Kids" => kids,
-                "Count" => count,
-            },
-        );
-        let catalog_id = merged.add(dictionary! {
-            "Type" => "Catalog",
-            "Pages" => pages_id,
-        });
-        merged.trailer.set("Root", catalog_id);
-        merged.prune();
-        merged.set_output_limit(output_limit);
-        save(merged)
+        merge_within(pdfs, ReadLimits::default())
     }
 
     /// This document followed by the pages of `other`.
@@ -200,7 +154,8 @@ impl Pdf {
     }
     /// The document with the first page of `overlay` drawn over the pages
     /// `pages` selects. An overlay of another size is scaled to fit and
-    /// centered on what the page shows.
+    /// centered on what the page shows. The document and the overlay are held
+    /// together to the limits of one document.
     pub fn overlay(&self, overlay: &Pdf, pages: Pages) -> Result<Pdf, DocumentsError> {
         let mut document = self.objects()?;
         let drawn = overlaid(&mut document, overlay, &pages);
@@ -407,11 +362,126 @@ fn write_error(what: &str, error: impl fmt::Display) -> DocumentsError {
     }
 }
 
+/// One document with the pages of every PDF in `pdfs`, all read within
+/// `limits` together: what the pages and what they lead to are counted as, taken
+/// off the memory left for the inputs after them, and the work of reading and
+/// editing each, taken off the work. An input is read with what is left, so
+/// that many documents together are held to what one may be; what is not kept
+/// of an input (its outlines, its forms, its tagged structure) is counted only
+/// while it is read.
+fn merge_within<'a>(
+    pdfs: impl IntoIterator<Item = &'a Pdf>,
+    limits: ReadLimits,
+) -> Result<Pdf, DocumentsError> {
+    let mut merged = Objects::new();
+    let pages_id = merged.reserve();
+    let mut kids = Vec::new();
+    // What is written is held to what one document may write past the size
+    // of the inputs.
+    let mut input_bytes = 0usize;
+    // What the inputs after this one, and the pages list, may still take.
+    let mut left = limits;
+    for pdf in pdfs {
+        input_bytes = input_bytes.saturating_add(pdf.0.len());
+        let shared = |error| shared_error(error, limits);
+        let mut document =
+            Objects::read(Document::load(pdf.0.clone(), left).map_err(shared)?).map_err(shared)?;
+        document.share_limits();
+        flatten_checked(&mut document).map_err(|error| shared_edit_error(error, limits))?;
+        document.renumber(merged.max_number().saturating_add(1));
+        let page_ids: Vec<ObjectId> = document.pages();
+        // The work may have run out on the way: the pages after that point
+        // are not listed, and are not lost without a word.
+        document.check().map_err(shared)?;
+        for &id in &page_ids {
+            let page = document
+                .dictionary_mut(id)
+                .ok_or_else(|| missing("a page of the document"))?;
+            page.set("Parent", pages_id);
+            page.remove(b"StructParents");
+        }
+        document.check().map_err(shared)?;
+        // The pages and what they lead to are kept; the rest of the input is
+        // let go of here.
+        let reached = document.reachable_from(page_ids.iter().copied());
+        let page_set: BTreeSet<ObjectId> = page_ids.iter().copied().collect();
+        let mut kept = 0usize;
+        for (id, object) in std::mem::take(&mut document.objects) {
+            let keep = reached.contains(&id)
+                && match object.type_name() {
+                    Some(b"Catalog" | b"Pages") => false,
+                    Some(b"Page") => page_set.contains(&id),
+                    _ => true,
+                };
+            if keep {
+                // Counted when its document was read, and now again as kept.
+                kept = kept.saturating_add(merged.adopt(id, object));
+            }
+        }
+        left = ReadLimits {
+            memory: left.memory.saturating_sub(kept),
+            work: left.work.saturating_sub(document.work_counted()),
+            ..left
+        };
+        kids.extend(page_ids.into_iter().map(Object::Reference));
+    }
+    if kids.is_empty() {
+        return Err(DocumentsError::Edit("nothing to merge".into()));
+    }
+    // What is left is for the pages list, and for compressing what is written.
+    merged.set_work_limit(left.work);
+    merged.set_added_limit(left.memory);
+    let output_limit = input_bytes.saturating_add(limits.memory);
+    let count = kids.len() as i64;
+    merged.insert(
+        pages_id,
+        dictionary! {
+            "Type" => "Pages",
+            "Kids" => kids,
+            "Count" => count,
+        },
+    );
+    let catalog_id = merged.add(dictionary! {
+        "Type" => "Catalog",
+        "Pages" => pages_id,
+    });
+    merged.trailer.set("Root", catalog_id);
+    merged.prune();
+    merged.set_output_limit(output_limit);
+    save(merged)
+}
+
+/// What an input read within what is left of `limits` ran out of: the
+/// limit named is what was left, so the error says what the whole is.
+fn shared_error(error: PdfError, limits: ReadLimits) -> DocumentsError {
+    match error {
+        PdfError::TooLarge(message) => DocumentsError::TooLarge(format!(
+            "{message}; the PDFs of one edit share the limits of one document ({} MiB of memory, \
+             {} MiB of bytes scanned)",
+            limits.memory >> 20,
+            limits.work >> 20,
+        )),
+        other => pdf_error(other),
+    }
+}
+
+/// [`shared_error`] for an error that may be one of another kind.
+fn shared_edit_error(error: DocumentsError, limits: ReadLimits) -> DocumentsError {
+    match error {
+        DocumentsError::TooLarge(message) => shared_error(PdfError::TooLarge(message), limits),
+        other => other,
+    }
+}
+
 /// `document` with the first page of `overlay` drawn over the pages `pages`
 /// selects.
 fn overlaid(document: &mut Objects, overlay: &Pdf, pages: &Pages) -> Result<(), DocumentsError> {
     flatten_checked(document)?;
-    let loaded = overlay.load()?;
+    // The overlay is read within what is left of the limits the document was
+    // read within, so that the two together are held to those of one.
+    let limits = document.limits();
+    let loaded = Document::load(overlay.0.clone(), document.limits_left())
+        .map_err(|error| shared_error(error, limits))?;
     let first = loaded
         .pages()
         .first()
@@ -419,7 +489,9 @@ fn overlaid(document: &mut Objects, overlay: &Pdf, pages: &Pages) -> Result<(), 
         .ok_or_else(|| DocumentsError::Edit("the overlay has no pages".into()))?;
     let content = loaded.page_content(first, MAX_PAGE_CONTENT);
     // A limit of the document, when one ran out on the way.
-    loaded.check().map_err(pdf_error)?;
+    loaded
+        .check()
+        .map_err(|error| shared_error(error, limits))?;
     let content = content.map_err(|error| match error {
         ContentError::Over => DocumentsError::TooLarge(format!(
             "the overlay's page content inflates to more than {} MiB",
@@ -427,14 +499,14 @@ fn overlaid(document: &mut Objects, overlay: &Pdf, pages: &Pages) -> Result<(), 
         )),
         _ => DocumentsError::Pdf("the overlay's page content cannot be read".into()),
     })?;
-    let mut source = Objects::read(loaded).map_err(pdf_error)?;
-    flatten_checked(&mut source)?;
+    let mut source = Objects::read(loaded).map_err(|error| shared_error(error, limits))?;
+    source.share_limits();
+    flatten_checked(&mut source).map_err(|error| shared_edit_error(error, limits))?;
+    document
+        .spend_work(source.work_counted())
+        .map_err(|error| shared_error(error, limits))?;
     let numbers = source.renumber(document.max_number().saturating_add(1));
-    document.set_output_limit(
-        document
-            .output_limit()
-            .saturating_add(source.output_limit()),
-    );
+    document.set_output_limit(document.output_limit().saturating_add(overlay.0.len()));
     let source_page = *numbers
         .get(&first)
         .ok_or_else(|| missing("the overlay's page"))?;
@@ -462,12 +534,16 @@ fn overlaid(document: &mut Objects, overlay: &Pdf, pages: &Pages) -> Result<(), 
     );
     // Everything the overlay page refers to moves into the document;
     // what nothing refers to is pruned below, before saving.
+    let mut adopted = 0usize;
     for (id, object) in std::mem::take(&mut source.objects) {
         if !matches!(object.type_name(), Some(b"Catalog" | b"Pages" | b"Page")) {
-            // Counted when the overlay was read.
-            document.adopt(id, object);
+            adopted = adopted.saturating_add(document.adopt(id, object));
         }
     }
+    // Counted with the document's own from here on.
+    document
+        .hold(adopted)
+        .map_err(|error| shared_error(error, limits))?;
     let form = Stream::new(
         dictionary! {
             "Type" => "XObject",
@@ -1145,6 +1221,116 @@ mod tests {
         flatten_inherited(&mut document).unwrap();
         let after_flatten = document.memory_added();
         assert!(after_flatten >= 1_000 * PAGE_EDIT_MEMORY, "{after_flatten}");
+    }
+
+    /// A file of a few kilobytes whose page refers to an array of `items`
+    /// zeros (in an object stream, which inflates to a few hundred kilobytes):
+    /// with `kept`, from the page, which a merge keeps; without, from the
+    /// document's information, which it does not.
+    fn pdf_with_an_array(items: usize, kept: bool) -> Pdf {
+        let mut objects = Objects::new();
+        let pages = objects.reserve();
+        let array = Object::Array(vec![Object::Integer(0); items]);
+        let mut page = dictionary! { "Type" => "Page", "Parent" => pages };
+        if kept {
+            page.set("Thing", array.clone());
+        } else {
+            let info = objects.add(dictionary! { "Junk" => array });
+            objects.trailer.set("Info", info);
+        }
+        let page = objects.add(page);
+        objects.insert(
+            pages,
+            dictionary! { "Type" => "Pages", "Kids" => vec![page.into()], "Count" => 1 },
+        );
+        let catalog = objects.add(dictionary! { "Type" => "Catalog", "Pages" => pages });
+        objects.trailer.set("Root", catalog);
+        objects.compress();
+        let bytes = objects.save_with(true).unwrap();
+        assert!(bytes.len() < 16 * 1024, "{} bytes", bytes.len());
+        Pdf::from_bytes(bytes).unwrap()
+    }
+
+    #[test]
+    fn a_merge_is_held_to_the_memory_of_one_document_for_all_its_inputs() {
+        // About 3 MiB each: two fit in 8 MiB, three do not.
+        let pdf = pdf_with_an_array(100_000, true);
+        let limits = ReadLimits {
+            memory: 8 * 1024 * 1024,
+            ..ReadLimits::default()
+        };
+        let merged = merge_within([&pdf, &pdf], limits).unwrap();
+        assert_eq!(merged.page_count().unwrap(), 2);
+        let error = merge_within([&pdf, &pdf, &pdf], limits).unwrap_err();
+        assert!(matches!(error, DocumentsError::TooLarge(_)), "{error:?}");
+        assert!(error.to_string().contains("8 MiB"), "{error}");
+    }
+
+    #[test]
+    fn a_merge_is_held_to_the_work_of_one_document_for_all_its_inputs() {
+        let pdf = pdf_with_an_array(100_000, true);
+        let one = Objects::read(Document::load(pdf.0.clone(), ReadLimits::default()).unwrap())
+            .unwrap()
+            .work_counted();
+        // Room for two inputs and half of a third.
+        let limits = ReadLimits {
+            work: one * 5 / 2,
+            ..ReadLimits::default()
+        };
+        merge_within([&pdf, &pdf], limits).unwrap();
+        let error = merge_within([&pdf, &pdf, &pdf], limits).unwrap_err();
+        assert!(matches!(error, DocumentsError::TooLarge(_)), "{error:?}");
+    }
+
+    #[test]
+    fn an_overlay_is_held_with_its_document_to_the_limits_of_one() {
+        let base = pdf_with_an_array(150_000, true);
+        let limits = ReadLimits {
+            memory: 8 * 1024 * 1024,
+            ..ReadLimits::default()
+        };
+        let draw = |overlay: &Pdf| {
+            let mut document =
+                Objects::read(Document::load(base.0.clone(), limits).unwrap()).unwrap();
+            overlaid(&mut document, overlay, &Pages::All)
+        };
+        // Each is within 8 MiB, and together they are not.
+        draw(&Pdf::from_lines(["SEAL"])).unwrap();
+        let error = draw(&pdf_with_an_array(100_000, true)).unwrap_err();
+        assert!(matches!(error, DocumentsError::TooLarge(_)), "{error:?}");
+        assert!(error.to_string().contains("8 MiB"), "{error}");
+    }
+
+    #[test]
+    fn what_a_merge_does_not_keep_of_an_input_is_counted_only_while_it_is_read() {
+        // Ten inputs of 3 MiB each, none of which is kept, in 8 MiB.
+        let pdf = pdf_with_an_array(100_000, false);
+        let limits = ReadLimits {
+            memory: 8 * 1024 * 1024,
+            ..ReadLimits::default()
+        };
+        let merged = merge_within(std::iter::repeat_n(&pdf, 10), limits).unwrap();
+        assert_eq!(merged.page_count().unwrap(), 10);
+        assert!(merged.len() < 16 * 1024, "{} bytes", merged.len());
+    }
+
+    #[test]
+    fn a_merge_whose_work_runs_out_is_an_error_and_never_loses_pages() {
+        let pdf = Pdf::from_lines((0..130).map(|i| format!("line {i}")));
+        assert_eq!(pdf.page_count().unwrap(), 3);
+        let mut refused = 0;
+        for work in (1024..96 * 1024).step_by(512) {
+            let limits = ReadLimits {
+                work,
+                ..ReadLimits::default()
+            };
+            match merge_within([&pdf, &pdf], limits) {
+                Ok(merged) => assert_eq!(merged.page_count().unwrap(), 6, "work {work}"),
+                Err(DocumentsError::TooLarge(_)) => refused += 1,
+                Err(other) => panic!("work {work}: {other:?}"),
+            }
+        }
+        assert!(refused > 0);
     }
 
     #[test]
