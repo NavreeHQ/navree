@@ -6155,17 +6155,16 @@ dependencies = [
 name = "navree-ui"
 version = "1.0.0"
 dependencies = [
+ "bytes",
  "http",
- "insta",
- "navree-config",
+ "http-body-util",
  "navree-http",
  "navree-kernel",
  "navree-testing",
- "navree-view",
  "serde",
  "serde_json",
  "tokio",
- "tracing",
+ "tower",
 ]
 
 [[package]]

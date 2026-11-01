@@ -1,0 +1,1 @@
+{"prefetch":[{"source":"document","where":{"and":[{"href_matches":"/*"},{"not":{"selector_matches":"[data-ui-noboost],[download]"}}]},"eagerness":"moderate"}]}

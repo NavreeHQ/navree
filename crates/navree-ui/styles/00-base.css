@@ -1,0 +1,7 @@
+/* Base: reset, type, focus. */
+@font-face{font-family:Geist;src:url(geist.woff2) format("woff2");font-weight:100 900;font-display:optional}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{margin:0;background:var(--ink-0);color:var(--fg-1);font:400 14px/1.5 var(--font-sans);-webkit-font-smoothing:antialiased}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}

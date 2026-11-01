@@ -189,7 +189,7 @@ const HIERARCHY: &[Rule] = &[
     // The UI kit of the server-rendered tools: templates through navree-view,
     // embedded assets served by a navree-http controller. Layer 4 so that its
     // tests can boot it with navree-testing (L3).
-    rule("navree-ui", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-view"]),
+    rule("navree-ui", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-validation", "navree-ui-macros"]),
     // The ORM: models on navree-db's pool and unit of work. Model events go
     // through navree-events, encrypted and hashed casts through
     // navree-crypto, records as API resources (`__type`, field masks)
