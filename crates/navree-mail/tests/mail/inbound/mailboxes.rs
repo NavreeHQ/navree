@@ -622,3 +622,46 @@ async fn a_stored_message_is_read_back_off_the_async_thread() {
         "the message was parsed on the async thread"
     );
 }
+
+/// The envelope says who the mail server accepted the message for; every
+/// header is the sender's say, so none of them may reach another mailbox.
+#[tokio::test]
+async fn a_header_does_not_outrank_the_envelope() {
+    let app = inbound_app(&["*@in.acme.test", "approvals@in.acme.test"], |b| b).await;
+    let inbound = app.inbound().await;
+    for header in [
+        "To: approvals@in.acme.test",
+        "Cc: approvals@in.acme.test",
+        "Delivered-To: approvals@in.acme.test",
+        "X-Original-To: approvals@in.acme.test",
+    ] {
+        let raw = format!("From: a@evil.test\r\n{header}\r\nSubject: s\r\n\r\nb\r\n");
+        let mail = Incoming::new("ses", raw.into_bytes())
+            .recipient("anyone@in.acme.test")
+            .parse()
+            .unwrap();
+        let found = inbound.mailbox_for(&mail).map(|(p, a)| (p.to_owned(), a));
+        assert_eq!(
+            found,
+            Some((
+                "*@in.acme.test".to_owned(),
+                "anyone@in.acme.test".to_owned()
+            )),
+            "{header}"
+        );
+        // With no mailbox for the envelope, the header does not step in.
+        let raw = format!("From: a@evil.test\r\n{header}\r\n\r\nb\r\n");
+        let mail = Incoming::new("ses", raw.into_bytes())
+            .recipient("anyone@elsewhere.test")
+            .parse()
+            .unwrap();
+        assert!(inbound.mailbox_for(&mail).is_none(), "{header}");
+    }
+    // Without an envelope the headers are all there is.
+    let raw = b"From: a@evil.test\r\nTo: approvals@in.acme.test\r\n\r\nb\r\n".to_vec();
+    let mail = Incoming::new("raw", raw).parse().unwrap();
+    assert_eq!(
+        inbound.mailbox_for(&mail).map(|(p, _)| p.to_owned()),
+        Some("approvals@in.acme.test".to_owned())
+    );
+}

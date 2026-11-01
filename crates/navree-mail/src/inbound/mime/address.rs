@@ -77,6 +77,42 @@ pub(super) fn list(value: &[u8], max: usize) -> Option<Vec<Mailbox>> {
     (out.len() <= max).then_some(out)
 }
 
+/// Whether `value` is one mailbox that every reader takes for the same
+/// address: at most one `<...>`, and an address that is only an address, not
+/// spelled by an encoded word.
+pub(super) fn is_one_address(value: &[u8]) -> bool {
+    let mut angles = 0;
+    let mut encoded = false;
+    for (token, _) in Tokens::new(value) {
+        match token {
+            Token::Angle(_) => angles += 1,
+            Token::Encoded(_) => encoded = true,
+            _ => {}
+        }
+    }
+    if angles > 1 || (angles == 0 && encoded) {
+        return false;
+    }
+    match list(value, 2).as_deref() {
+        Some([mailbox]) => is_plain_address(&mailbox.email),
+        _ => false,
+    }
+}
+
+/// One `@` with something on each side, and nothing a reader splits a list or
+/// an address at.
+fn is_plain_address(email: &str) -> bool {
+    let Some((local, domain)) = email.split_once('@') else {
+        return false;
+    };
+    !local.is_empty()
+        && !domain.is_empty()
+        && !domain.contains('@')
+        && !email
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control() || ",;:<>()\"[]\\".contains(c))
+}
+
 /// A display name being put together: words joined by a space where the
 /// header has blanks, adjacent encoded words without one.
 #[derive(Default)]

@@ -84,10 +84,7 @@ fn envelope_recipients_override_the_headers() {
 
     assert_eq!(incoming.envelope.recipients, vec!["hidden@in.acme.test"]);
     let mail = incoming.parse().unwrap();
-    assert_eq!(
-        mail.recipients(),
-        vec!["hidden@in.acme.test", "all@acme.test"]
-    );
+    assert_eq!(mail.recipients(), vec!["hidden@in.acme.test"]);
 }
 
 #[test]

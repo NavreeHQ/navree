@@ -619,6 +619,20 @@ pub(crate) fn addresses(value: &[u8], max: usize) -> Result<Vec<Mailbox>, MimeEr
     address::list(value, max).ok_or(MimeError::TooManyAddresses(max))
 }
 
+/// Whether an address header's value is one mailbox every reader takes for the
+/// same address.
+pub(crate) fn is_one_address(value: &[u8]) -> bool {
+    address::is_one_address(value)
+}
+
+/// Whether every line of the message's head ends the same way.
+pub(crate) fn head_lines_agree(raw: &[u8]) -> bool {
+    let mut fields = Fields::new(raw);
+    fields.by_ref().for_each(drop);
+    let head = raw.get(..fields.body_start().unwrap_or(raw.len()));
+    header::line_ends_agree(head.unwrap_or_default())
+}
+
 /// A `Date` value in UTC.
 pub(crate) fn date(value: &[u8]) -> Option<DateTime<Utc>> {
     date::parse(&header::unfold(value))

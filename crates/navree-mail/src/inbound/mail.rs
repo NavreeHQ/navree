@@ -357,7 +357,10 @@ pub struct InboundMail {
     pub in_reply_to: Option<String>,
     /// `References`, oldest first, without angle brackets.
     pub references: Vec<String>,
-    /// `From`.
+    /// `From`: what the sender claims, which only [`verdicts`](Self::verdicts)
+    /// vouch for. `None` when another reader could take a different `From`
+    /// from the head: two such fields, more than one address, an address that
+    /// is not only an address, or lines that end in different ways.
     pub from: Option<Address>,
     /// `Reply-To`.
     pub reply_to: Vec<Address>,
@@ -365,7 +368,7 @@ pub struct InboundMail {
     pub to: Vec<Address>,
     /// `Cc`.
     pub cc: Vec<Address>,
-    /// `Subject`, decoded.
+    /// `Subject`, decoded, on one line: a control character is a space.
     pub subject: Option<String>,
     /// `Date`, in UTC.
     pub date: Option<DateTime<Utc>>,
@@ -420,7 +423,7 @@ impl InboundMail {
                 .map(|(_, value)| value.as_ref())
         };
         // Ids are ASCII: read them from the value as text, unfolded.
-        let text = |name: &str| last(name).map(mime::unfold);
+        let text = |name: &str| last(name).map(|value| without_controls(&mime::unfold(value)));
         let addresses = |name: &str| -> Result<Vec<Address>, InboundError> {
             let Some(value) = last(name) else {
                 return Ok(Vec::new());
@@ -456,11 +459,16 @@ impl InboundMail {
                 .filter(|id| !id.is_empty()),
             in_reply_to: text("In-Reply-To").and_then(|value| ids(&value).next()),
             references,
-            from: addresses("From")?.into_iter().next(),
+            from: addresses("From")?
+                .into_iter()
+                .next()
+                .filter(|_| from_is_clear(&raw, &parsed.headers)),
             reply_to: addresses("Reply-To")?,
             to: addresses("To")?,
             cc: addresses("Cc")?,
-            subject: last("Subject").and_then(mime::text),
+            subject: last("Subject")
+                .and_then(mime::text)
+                .map(|subject| on_one_line(&subject)),
             date: last("Date").and_then(mime::date),
             text: parsed.text,
             html: parsed.html,
@@ -476,9 +484,11 @@ impl InboundMail {
                 .attachments
                 .into_iter()
                 .map(|part| Attachment {
-                    filename: part.filename,
-                    content_type: part.content_type,
-                    content_id: part.content_id.map(|id| strip_angles(&id).to_owned()),
+                    filename: part.filename.map(|name| without_controls(&name)),
+                    content_type: without_controls(&part.content_type),
+                    content_id: part
+                        .content_id
+                        .map(|id| without_controls(strip_angles(&id))),
                     inline: part.inline,
                     content: part.content,
                 })
@@ -516,7 +526,9 @@ impl InboundMail {
 
     /// The addresses the message was delivered for, in lower case and
     /// without duplicates, in the order mailboxes try them: the envelope
-    /// recipients, then `Delivered-To`, `X-Original-To`, `To` and `Cc`.
+    /// recipients when the source reports any, and only those, because every
+    /// header is what the sender wrote. Without an envelope, `Delivered-To`,
+    /// `X-Original-To`, `To` and `Cc`.
     pub fn recipients(&self) -> Vec<String> {
         let mut all: Vec<String> = Vec::new();
         let mut push = |address: &str| {
@@ -527,6 +539,9 @@ impl InboundMail {
         };
         for recipient in &self.envelope.recipients {
             push(recipient);
+        }
+        if !self.envelope.recipients.is_empty() {
+            return all;
         }
         for name in ["Delivered-To", "X-Original-To"] {
             for value in self.header_all(name) {
@@ -664,9 +679,43 @@ fn ids(value: &str) -> impl Iterator<Item = String> + '_ {
 
 fn address(mailbox: Mailbox) -> Address {
     Address {
-        name: mailbox.name,
-        email: mailbox.email,
+        name: mailbox.name.map(|name| on_one_line(&name)),
+        email: without_controls(&mailbox.email),
     }
+}
+
+/// `text` with each control character a space: a decoded subject or name goes
+/// into logs and headers, where a line break would start a new line.
+fn on_one_line(text: &str) -> String {
+    text.chars()
+        .map(|c| if is_control(c) { ' ' } else { c })
+        .collect()
+}
+
+/// `text` without control characters: a name, an address or a file name, where
+/// a NUL or a line break is never meant and a space would be a new character.
+fn without_controls(text: &str) -> String {
+    text.chars().filter(|c| !is_control(*c)).collect()
+}
+
+/// C0 and C1 controls, and the line and paragraph separators.
+fn is_control(c: char) -> bool {
+    c.is_control() || matches!(c, '\u{2028}' | '\u{2029}')
+}
+
+/// Whether the head has a single `From`, one address that is only an address,
+/// and line ends no other reader could split differently. A provider's verdict
+/// vouches for the `From` it read: when it could have read another, this one
+/// must not be taken for it.
+fn from_is_clear(raw: &[u8], headers: &[(String, Bytes)]) -> bool {
+    let mut fields = headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("From"))
+        .map(|(_, value)| value.as_ref());
+    let (Some(value), None) = (fields.next(), fields.next()) else {
+        return false;
+    };
+    mime::is_one_address(value) && mime::head_lines_agree(raw)
 }
 
 /// Joins continuation lines and trims.

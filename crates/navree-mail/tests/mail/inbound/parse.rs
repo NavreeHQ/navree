@@ -78,17 +78,14 @@ fn recipients_list_the_envelope_then_the_delivery_headers() {
     assert_eq!(
         mail.recipients(),
         vec!["reply+abc@in.acme.test", "grace@example.com"],
-        "Delivered-To, then To and Cc, without duplicates"
+        "without an envelope: Delivered-To, then To and Cc, without duplicates"
     );
 
     mail.envelope.recipients = vec!["Hidden@In.Acme.Test".into()];
     assert_eq!(
         mail.recipients(),
-        vec![
-            "hidden@in.acme.test",
-            "reply+abc@in.acme.test",
-            "grace@example.com"
-        ]
+        vec!["hidden@in.acme.test"],
+        "the envelope alone, when there is one"
     );
 }
 
@@ -339,4 +336,78 @@ fn messages_that_declare_too_much_are_unparseable() {
     ))
     .unwrap();
     assert_eq!((mail.to.len(), mail.references.len()), (1000, 1000));
+}
+
+/// Who a message is from is the sender's say, and a provider's verdict vouches
+/// for one `From` only: whatever another reader could take for a different
+/// one leaves `mail.from` empty, so a handler can't trust the wrong address.
+#[test]
+fn a_from_that_could_be_read_two_ways_is_no_from() {
+    for raw in [
+        &b"From: a@evil.test\r\nFrom: ceo@acme.test\r\n\r\nb"[..],
+        b"From: ceo@acme.test\r\nFrom: a@evil.test\r\n\r\nb",
+        b"From: <ceo@acme.test> <a@evil.test>\r\n\r\nb",
+        b"From: <ceo@acme.test,a@evil.test>\r\n\r\nb",
+        b"From: ceo@acme.test, a@evil.test\r\n\r\nb",
+        b"From: ceo@acme.test a@evil.test\r\n\r\nb",
+        b"From: <@a.test,@b.test:ceo@acme.test>\r\n\r\nb",
+        b"From: \"ceo@acme.test\"@evil.test\r\n\r\nb",
+        // A field behind a line end another reader may not see, or may see
+        // where this reader does not: the provider may have read another.
+        b"X-A: 1\nFrom: ceo@acme.test\r\nSubject: s\r\n\r\nb",
+        b"X-A: 1\rFrom: a@evil.test\r\nFrom: ceo@acme.test\r\n\r\nb",
+        b"From: ceo@acme.test\r\n\r\r\nFrom: a@evil.test\r\n\r\nb",
+        // A form feed is not a blank line: both fields are read.
+        b"From: ceo@acme.test\r\n\x0c\r\nFrom: a@evil.test\r\n\r\nb",
+    ] {
+        let mail = InboundMail::parse(raw.to_vec()).unwrap();
+        assert_eq!(mail.from, None, "{:?}", String::from_utf8_lossy(raw));
+    }
+    let mail =
+        InboundMail::parse(b"X-A: 1\nFrom: ada@acme.test\nSubject: s\n\nb".to_vec()).unwrap();
+    assert_eq!(
+        mail.from.unwrap().email,
+        "ada@acme.test",
+        "bare LFs throughout"
+    );
+    let mail = InboundMail::parse(b"From: Ada <ada@acme.test>\r\n\r\nb".to_vec()).unwrap();
+    assert_eq!(mail.from.unwrap().email, "ada@acme.test");
+}
+
+/// Decoded values go into logs, file paths and raw headers: no line breaks or
+/// other control characters come out of the reader.
+#[test]
+fn decoded_values_hold_no_control_characters() {
+    let mail = InboundMail::parse(
+        b"From: =?utf-8?Q?Hi=0D=0ABcc:_v@x.test?= <a@b.test>\r\n\
+          Subject: =?utf-8?Q?Hi=0D=0ABcc:_victim@x.test=00?=\r\n\r\nb"
+            .to_vec(),
+    )
+    .unwrap();
+    assert_eq!(mail.subject.as_deref(), Some("Hi  Bcc: victim@x.test "));
+    let from = mail.from.unwrap();
+    assert_eq!(from.name.as_deref(), Some("Hi  Bcc: v@x.test"));
+    assert_eq!(from.email, "a@b.test");
+
+    let mail =
+        InboundMail::parse(b"To: =?utf-8?Q?a=0D=0Ab=40acme.test?= (x)\r\n\r\nb".to_vec()).unwrap();
+    assert!(
+        !mail.to.iter().any(|to| to.email.contains(['\r', '\n'])),
+        "{:?}",
+        mail.to
+    );
+
+    for (raw, name) in [
+        (
+            &b"From: a@b.test\r\nContent-Type: application/pdf; name=\"=?utf-8?Q?..=2F..=2Fetc=2Fpasswd=00.pdf?=\"\r\n\r\nb"[..],
+            "../../etc/passwd.pdf",
+        ),
+        (
+            b"From: a@b.test\r\nContent-Type: application/pdf\r\nContent-Disposition: attachment; filename*=utf-8''..%2F..%0D%0Ax\r\n\r\nb",
+            "../..x",
+        ),
+    ] {
+        let mail = InboundMail::parse(raw.to_vec()).unwrap();
+        assert_eq!(mail.attachments[0].filename.as_deref(), Some(name));
+    }
 }

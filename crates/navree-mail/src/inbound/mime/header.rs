@@ -65,7 +65,10 @@ impl<'a> Iterator for Fields<'a> {
             }
             let start = self.at;
             let (line, next) = self.line(start);
-            if line.iter().all(|&byte| is_space(byte)) {
+            if line
+                .iter()
+                .all(|&byte| matches!(byte, b' ' | b'\t' | b'\r'))
+            {
                 // A blank line (here, never a continuation) ends the block.
                 self.done = true;
                 self.body = Some(next);
@@ -100,6 +103,27 @@ impl<'a> Iterator for Fields<'a> {
 
 fn is_space(byte: u8) -> bool {
     matches!(byte, b' ' | b'\t' | b'\r' | b'\x0c')
+}
+
+/// Whether every line of a head ends the same way: all with CRLF or all with a
+/// bare LF, and no bare CR. Otherwise a reader that keeps to one of them sees
+/// other fields than this one does.
+pub(super) fn line_ends_agree(head: &[u8]) -> bool {
+    let (mut crlf, mut lf) = (false, false);
+    for at in memchr::memchr2_iter(b'\r', b'\n', head) {
+        let at_cr = head.get(at) == Some(&b'\r');
+        if at_cr && head.get(at + 1) != Some(&b'\n') {
+            return false;
+        }
+        if !at_cr {
+            if at > 0 && head.get(at - 1) == Some(&b'\r') {
+                crlf = true;
+            } else {
+                lf = true;
+            }
+        }
+    }
+    !(crlf && lf)
 }
 
 /// The bytes without the blanks around them.

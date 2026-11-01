@@ -44,8 +44,15 @@ mail is in `navree-mail-and-notifications` and `navree-mail-delivery`.
 - `support@acme.test` exact (any case); `reply+{token}@...` captures
   (`ctx.param("token")`, never across `@`); `*@in.acme.test`; `*` catch-all.
 - Order: exact, then `{name}` patterns, then `*`, each in registration order.
-  Recipients tried: envelope, `Delivered-To`, `X-Original-To`, `To`, `Cc`
-  (`mail.recipients()`). One mailbox per message.
+  Recipients tried (`mail.recipients()`): the envelope when the source reports
+  one, and only it; without one, `Delivered-To`, `X-Original-To`, `To`, `Cc`,
+  which the sender wrote. One mailbox per message.
+- Trust: `mail.from` is a claim; `mail.verdicts` (`dmarc == Some(Verdict::Pass)`)
+  or a reply token vouches. It is `None` for two `From` fields, more than one
+  address, an address another reader splits differently, or mixed line ends.
+  Decoded `subject`, names, addresses, file names and ids hold no control
+  characters; `headers`, `text` and `html` do keep them. A `filename` may hold
+  `../`: use its last component.
 - Outcomes: `Ok(())` handled; `Err(ctx.reject("why"))` or a bad token from
   `ctx.verified("token")?` → `rejected` (provider gets 200, no retry); any
   other error → 500, the provider retries; no match → `unrouted`.

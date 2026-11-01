@@ -67,12 +67,9 @@ pub(crate) fn ses(notification: &Value) -> Result<SesReceipt, InboundError> {
             })
             .unwrap_or_default()
     };
-    // The rule's recipients first: `mail.destination` also lists the
-    // message's other recipients, outside your domains.
-    let mut recipients = strings(&receipt["recipients"]);
-    if recipients.is_empty() {
-        recipients = strings(&mail["destination"]);
-    }
+    // The envelope is the rule's recipients. `mail.destination` is read from
+    // the message's headers, so it is what the sender wrote.
+    let recipients = strings(&receipt["recipients"]);
     let verdict = |name: &str| receipt[name]["status"].as_str().and_then(Verdict::parse);
     let verdicts = Verdicts {
         spam: verdict("spamVerdict"),

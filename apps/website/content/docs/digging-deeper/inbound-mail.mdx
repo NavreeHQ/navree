@@ -83,11 +83,16 @@ A handler is any closure that takes the `InboundMail` and a `MailboxContext` and
 
 A `{name}` capture never crosses the `@`. Read captures with `ctx.param("token")`. An invalid pattern (no `@`, an unclosed `{`, a name used twice) fails the boot, naming the module and the pattern.
 
-Mailboxes are tried most specific first: exact addresses, then patterns with captures, then patterns with `*`, each group in registration order. For each mailbox, the message's recipients are tried in the order of `mail.recipients()`:
+Mailboxes are tried most specific first: exact addresses, then patterns with captures, then patterns with `*`, each group in registration order. For each mailbox, the message's recipients are tried in the order of `mail.recipients()`.
 
-1. the envelope recipients the provider reports (they include `Bcc` and forwarding addresses the headers never show);
-2. `Delivered-To` and `X-Original-To`;
-3. `To`, then `Cc`.
+When the source reports envelope recipients, those are the recipients, and only those: the envelope is what the mail server accepted the message for, it includes `Bcc` and forwarding addresses the headers never show, and the sender can't write it. SES, Mailgun, Postmark, the Microsoft 365 and Gmail watchers report one, and so does the raw route when it is given `X-Envelope-To`. A message accepted for `anyone@in.acme.test` with `To: approvals@in.acme.test` goes to `*@in.acme.test`, or to no mailbox at all, never to `approvals@in.acme.test`.
+
+Only when there is no envelope are the headers used, in this order:
+
+1. `Delivered-To` and `X-Original-To`;
+2. `To`, then `Cc`.
+
+Every one of those is what the sender wrote, so without an envelope anyone can reach any mailbox by writing its address. Give the raw route the envelope, and keep a mailbox that matters behind a [reply token](#reply-tokens) or a check of its own.
 
 The first mailbox that matches one of them takes the message. It is handled once, by one mailbox.
 
@@ -96,7 +101,7 @@ The first mailbox that matches one of them takes the message. It is handled once
 A mailbox that needs services is an `#[injectable]` type that implements `MailboxHandler`. Register it with `mailbox_with`, which also registers it as a provider of the module:
 
 ```rust title="src/modules/tickets/mailbox.rs"
-use navree::mail::{InboundMail, MailboxContext, MailboxHandler};
+use navree::mail::{InboundMail, MailboxContext, MailboxHandler, Verdict};
 use navree::prelude::*;
 use navree::BoxFuture;
 
@@ -115,8 +120,14 @@ impl MailboxHandler for TicketReplies {
             let Some(text) = mail.reply_text().filter(|text| !text.is_empty()) else {
                 return Err(ctx.reject("the reply is empty"));
             };
-            let from = mail.from.as_ref().map(|from| from.email.clone()).unwrap_or_default();
-            self.tickets.add_reply(ticket, &from, &text, mail.message_id.as_deref()).await?;
+            // The token says which ticket. The address is what the sender
+            // claims, until the provider's verdict vouches for it.
+            let from = mail
+                .from
+                .as_ref()
+                .filter(|_| mail.verdicts.dmarc == Some(Verdict::Pass))
+                .map(|from| from.email.as_str());
+            self.tickets.add_reply(ticket, from, &text, mail.message_id.as_deref()).await?;
             Ok(())
         })
     }
@@ -161,7 +172,7 @@ Because a failure makes the provider retry, a handler may see the same message t
 
 `InboundMail` is a parsed message. Encoded words in headers (`=?UTF-8?B?...?=`), RFC 2231 parameters (`filename*=utf-8''...`), quoted-printable and base64 bodies and legacy charsets (ISO-8859-1, Windows-1252, ISO-2022-JP, UTF-7 and the rest) are decoded to UTF-8.
 
-The text and HTML bodies are the parts a mail client would show: the text and HTML versions of a `multipart/alternative`, the inline text of a `multipart/mixed`, the first part of a `multipart/related` (the images it refers to are attachments). When a header field appears twice, the last one counts.
+The text and HTML bodies are the parts a mail client would show: the text and HTML versions of a `multipart/alternative`, the inline text of a `multipart/mixed`, the first part of a `multipart/related` (the images it refers to are attachments). When a header field appears twice, the last one counts, except `From`: see [What to trust](#what-to-trust).
 
 | Field | Holds |
 |---|---|
@@ -171,10 +182,10 @@ The text and HTML bodies are the parts a mail client would show: the text and HT
 | `envelope` | `sender` and `recipients` of the SMTP envelope, when the provider reports them. |
 | `verdicts` | The provider's `spam`, `virus`, `spf`, `dkim` and `dmarc` verdicts, when it reports them. |
 | `message_id`, `in_reply_to`, `references` | Message ids without angle brackets. |
-| `from`, `reply_to`, `to`, `cc` | `Address { name, email }` values; groups are flattened. |
-| `subject`, `date` | The decoded subject and the date in UTC. |
+| `from`, `reply_to`, `to`, `cc` | `Address { name, email }` values; groups are flattened. `from` is what the sender claims, and `None` when the head can be read two ways: see [What to trust](#what-to-trust). |
+| `subject`, `date` | The decoded subject, on one line, and the date in UTC. |
 | `text`, `html` | The plain-text body (converted from the HTML when the message has no text part) and the HTML body. |
-| `headers` | Every header in order: `Header { name, value }`, unfolded but not decoded. |
+| `headers` | Every header in order: `Header { name, value }`, unfolded but not decoded, control characters and all. |
 | `attachments` | Files, inline parts and forwarded messages. |
 | `size`, `fingerprint` | The raw size in bytes and its SHA-256 in hex. |
 | `stored` | Where the raw message is kept (`StoredMail { disk, path }`), once it is. |
@@ -185,7 +196,7 @@ And these methods:
 ```rust
 let tool = mail.header("X-Mailer");                     // the first one, any case
 let hops = mail.header_all("Received");                 // all of them, in order
-let recipients = mail.recipients();                     // the order mailboxes try them
+let recipients = mail.recipients();                     // the envelope, or without one the headers
 let raw: &bytes::Bytes = mail.raw();                    // the bytes as received
 
 if mail.is_auto_reply() {
@@ -228,6 +239,18 @@ Register it like any closure: `m.mailbox("phish@in.acme.test", reported_phish)`.
 ### Verdicts
 
 Amazon SES reports all five verdicts of its receipt rule; Mailgun its spam flag, SPF and DKIM results; Postmark its spam status and SPF result. Each is a `Verdict`: `Pass`, `Fail`, `Gray`, `ProcessingFailed` or `Disabled`. For `spam` and `virus`, `Fail` means the provider flagged the message; `verdicts.is_flagged()` is true when either did. Verdicts are only ever read from the provider's own payload, never from the message's headers, which the sender controls.
+
+### What to trust
+
+A message is written by its sender, so treat everything in it as a stranger's input.
+
+**`from` is a claim.** The sender writes it. What vouches for it is the provider's verdict, so read `verdicts` before an address decides anything: `mail.verdicts.dmarc == Some(Verdict::Pass)` says the provider checked the domain of the `From` it read. A provider that reports no DMARC verdict (Mailgun, Postmark) leaves you with its SPF and DKIM results, which don't check the `From` domain alone, or with a [reply token](#reply-tokens), which only your app can make.
+
+**`from` is `None` when the head can be read two ways**, since the provider may have vouched for another `From` than this reader sees: two `From` fields, more than one address, an address that isn't only an address (`<a@x.test> <b@y.test>`, `a@x.test b@y.test`, one spelled in an encoded word), or a head whose lines don't all end the same way (a bare LF among CRLFs, a bare CR). The fields stay in `mail.headers`. A display name is never checked by anyone: `ceo@acme.test <a@evil.test>` is the address `a@evil.test` with that name.
+
+**Decoded values hold no control characters.** In `subject` and display names each one becomes a space; in addresses, attachment file names and content ids, and message ids, each one is removed. So `=?utf-8?Q?Hi=0D=0ABcc:_x?=` can't start a new line in a log. `mail.headers`, `mail.header(..)`, `text` and `html` keep what the message holds: a header's line breaks are unfolded, and anything else in it stays. Don't copy those into a header or a log line without cleaning them.
+
+**A file name is not a path.** `filename` can be `../../etc/passwd.pdf`. Don't join it to a directory: keep its last component, or store under a name of your own, as [`store_upload`](/docs/digging-deeper/storage/) does.
 
 ## Reply tokens
 
@@ -406,7 +429,7 @@ curl --fail --silent --show-error \
   https://api.acme.test/api/mail/inbound/raw || exit 75
 ```
 
-`X-Envelope-From` and `X-Envelope-To` (comma-separated) give the envelope; without them, mailboxes match the message's own headers. When the route doesn't answer 2xx, `curl --fail` fails and the script exits with 75 (`EX_TEMPFAIL`), so Postfix keeps the message and tries again.
+`X-Envelope-From` and `X-Envelope-To` (comma-separated) give the envelope; without them, mailboxes match the message's own headers, which the sender wrote, so set them. When the route doesn't answer 2xx, `curl --fail` fails and the script exits with 75 (`EX_TEMPFAIL`), so Postfix keeps the message and tries again.
 
 ### Your own sources
 
