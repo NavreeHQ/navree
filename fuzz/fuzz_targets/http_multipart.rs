@@ -9,8 +9,9 @@
 //!   a 500);
 //! - whether a form is accepted, and what it holds, does not depend on how
 //!   the body was split into chunks;
-//! - with limits that cannot apply, the extractor reads what `multer` reads
-//!   alone;
+//! - with limits that cannot apply, the extractor reads what the reference
+//!   reads: the form's grammar, applied to the whole body at once (the same
+//!   reference navree-http's property tests use);
 //! - accepted values keep to their limits, and no more parts come back than
 //!   `max_parts`.
 #![no_main]
@@ -21,6 +22,9 @@ use libfuzzer_sys::fuzz_target;
 use navree_fuzz::{block_on, split_nul};
 use navree_http::body::{Body, BodyLimit};
 use navree_http::extract::{FromRequest, Multipart, MultipartError, MultipartLimits};
+
+#[path = "../../crates/navree-http/tests/multipart/reference.rs"]
+mod reference;
 
 const WIDE: MultipartLimits = MultipartLimits {
     max_parts: usize::MAX,
@@ -95,27 +99,19 @@ fn read(
     })
 }
 
-/// `multer` on its own, with the first boundary of `content_type`.
+/// The reference, with the boundary of `content_type`.
 fn plain(boundary: &str, body: &[u8]) -> Option<Vec<Part>> {
-    let stream = futures::stream::iter([Ok::<_, std::io::Error>(Bytes::copy_from_slice(body))]);
-    let mut form = multer::Multipart::new(stream, boundary);
-    block_on(async {
-        let mut parts = Vec::new();
-        while let Some(mut field) = form.next_field().await.ok()? {
-            let name = field.name().map(str::to_owned);
-            let file_name = field.file_name().map(str::to_owned);
-            let mut value = Vec::new();
-            while let Some(chunk) = field.chunk().await.ok()? {
-                value.extend_from_slice(&chunk);
-            }
-            parts.push(Part {
+    let parts = reference::parts(body, boundary)?;
+    Some(
+        parts
+            .into_iter()
+            .map(|(name, file_name, value)| Part {
                 name,
                 file_name,
                 value,
-            });
-        }
-        Some(parts)
-    })
+            })
+            .collect(),
+    )
 }
 
 fn accepted(read: Option<Result<Vec<Part>, MultipartError>>) -> Option<Option<Vec<Part>>> {
@@ -155,8 +151,9 @@ fuzz_target!(|data: &[u8]| {
         }
     }
 
-    // The form's boundary is whatever the extractor took.
-    if let Some(Some(parts)) = accepted(read(&content_type, body, body.len(), WIDE))
+    // The form's boundary is whatever the extractor took, and the reference
+    // accepts what the extractor accepts, and nothing else.
+    if let Some(parts) = accepted(read(&content_type, body, body.len(), WIDE))
         && let Some(boundary) = content_type
             .parse::<mime::Mime>()
             .ok()
@@ -166,6 +163,6 @@ fuzz_target!(|data: &[u8]| {
                     .map(|name| name.as_str().to_owned())
             })
     {
-        assert_eq!(Some(parts), plain(&boundary, body));
+        assert_eq!(parts, plain(&boundary, body));
     }
 });
