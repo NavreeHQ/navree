@@ -184,6 +184,26 @@ For example `CARGO_TARGET_DIR=target/builds/http cargo test -p navree-http`.
 Use `-p <crate>` while working on one crate, and keep `CARGO_BUILD_JOBS`
 moderate when memory is tight.
 
+### Rust, against real servers
+
+A suite that needs a server reads its address from a `NAVREE_TEST_*` variable
+(`NAVREE_TEST_POSTGRES_URL`, `NAVREE_TEST_MYSQL_URL`, `NAVREE_TEST_MONGODB_URL`,
+`NAVREE_TEST_REDIS_URL`, `NAVREE_TEST_S3_URL`, and so on; the module comment of
+each suite names its own) and prints `SKIPPED` and passes without it. Crates that
+take their database from `NAVREE_TEST_DATABASE` (`sqlite`, the default,
+`postgres` or `mysql`) run once per value. Set `NAVREE_TEST_REQUIRE_SERVICES=1`
+to make a missing server, Chrome, Node.js or FFmpeg a failure.
+
+With Docker, `scripts/ci-services.sh start` starts every server the suites use
+on `127.0.0.1` and prints the variables (`scripts/ci-services.sh stop` removes
+them). On Windows without Docker, `scripts/dev-databases.ps1 start` runs
+PostgreSQL with TimescaleDB, MySQL and MongoDB from portable archives.
+
+`.github/workflows/rust-suites.yml` runs every suite weekly (and on demand):
+on Linux against all of those servers, with each database-switchable crate on
+SQLite, PostgreSQL and MySQL, and on Windows against SQLite. It also builds the
+projects `navree new` generates once a month.
+
 ### Web (crm-web)
 
 ```sh
