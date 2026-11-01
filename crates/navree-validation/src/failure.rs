@@ -80,8 +80,17 @@ pub(crate) fn encoding<R>(f: impl FnOnce() -> R) -> R {
 /// key, so the failure renders from the app's message table at the field's
 /// path; elsewhere it is `plain`.
 pub(crate) fn serde_error<E: serde::de::Error>(rule: &str, plain: impl Display) -> E {
+    serde_error_with(rule, &[], plain)
+}
+
+/// [`serde_error`] for a rule with parameters.
+pub(crate) fn serde_error_with<E: serde::de::Error>(
+    rule: &str,
+    params: &[(&str, &dyn Display)],
+    plain: impl Display,
+) -> E {
     if ACTIVE.with(Cell::get) {
-        E::custom(format_args!("{}{END}", encode(rule, &[])))
+        E::custom(format_args!("{}{END}", encode(rule, params)))
     } else {
         E::custom(plain)
     }

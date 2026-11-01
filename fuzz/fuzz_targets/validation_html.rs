@@ -11,8 +11,9 @@
 //! (apart from the `tbody`, `tr` and `colgroup` the parser adds to a table
 //! itself); that parse holds no element, attribute or URL scheme the policy
 //! doesn't allow, no `script` or `style`, no SVG animation and no comment;
-//! sanitizing the output again changes nothing; and text-only output has no
-//! raw `<`.
+//! sanitizing the output again changes nothing; what was kept nests within
+//! the policy's limit; text-only output has no raw `<`; and all of that holds
+//! for an input over a limit too, which comes back escaped.
 #![no_main]
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -140,7 +141,10 @@ impl Allowed<'_> {
 
     fn attribute(&self, tag: &str, name: &str, value: &str) -> bool {
         if name == "rel" && !self.rel.is_empty() {
-            return tag == "a" && value == self.rel;
+            return matches!(tag, "a" | "area") && value == self.rel;
+        }
+        if matches!(name, "srcdoc" | "http-equiv") || name.starts_with("on") {
+            return false;
         }
         let listed = self.generic.contains(name)
             || self
@@ -153,7 +157,14 @@ impl Allowed<'_> {
     fn url(&self, value: &str) -> bool {
         let scheme_ok = match url::Url::parse(value) {
             Ok(url) => self.schemes.contains(url.scheme()),
-            Err(url::ParseError::RelativeUrlWithoutBase) => true,
+            // With a host of its own, a relative URL leaves with the page's
+            // scheme.
+            Err(url::ParseError::RelativeUrlWithoutBase) => {
+                let site = url::Url::parse("https://site.invalid/").ok();
+                let host = site.as_ref().and_then(|site| site.join(value).ok());
+                host.is_some_and(|url| url.host_str() == Some("site.invalid"))
+                    || (self.schemes.contains("http") && self.schemes.contains("https"))
+            }
             Err(_) => false,
         };
         // Independently of the URL parser: the scheme a browser reads,
@@ -255,17 +266,35 @@ fn check(policy: &HtmlPolicy, html: &str) {
         }
     }
 
-    assert_eq!(
-        policy.clean(&out),
-        out,
-        "sanitizing {out:?} again changes it"
-    );
+    // An output over a limit is the escaped input, or is longer than the input.
+    if policy.try_clean(&out).is_ok() {
+        assert_eq!(
+            policy.clean(&out),
+            out,
+            "sanitizing {out:?} again changes it"
+        );
+    }
+
+    // What was kept nests within the limit.
+    let mut depth = 0usize;
+    for node in &checked {
+        match node {
+            Node::Open { .. } => {
+                depth += 1;
+                assert!(depth <= policy.max_depth, "{out:?} nests too deep");
+            }
+            Node::Close => depth -= 1,
+            _ => {}
+        }
+    }
 }
 
 fuzz_target!(|data: &[u8]| {
     let Some((policy, html)) = read(data) else {
         return;
     };
+    // The same with limits an input of this size can reach.
+    check(&policy.clone().limits(1024, 64, 8), html);
     let text_only = HtmlPolicy::text_only().clean(html);
     assert!(!text_only.contains('<'), "raw `<` in {text_only:?}");
     check(&policy, html);

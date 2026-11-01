@@ -6,7 +6,7 @@
 //! can't overflow the call stack.
 
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::io;
 use std::rc::Rc;
 
@@ -14,6 +14,168 @@ use html5ever::serialize::{HtmlSerializer, Serialize, SerializeOpts, Serializer,
 use html5ever::tendril::{StrTendril, TendrilSink};
 use html5ever::tree_builder::{ElementFlags, NodeOrText, QuirksMode, TreeSink};
 use html5ever::{Attribute, ParseOpts, QualName, local_name, ns, parse_fragment};
+
+use super::HtmlError;
+
+/// How much of the input goes to the parser between looks at the budget.
+const PIECE: usize = 4096;
+
+/// How much text goes to the serializer at a time (see [`write_text`]).
+const TEXT_PIECE: usize = 1024;
+
+/// How many bytes the serializer scans for the price of one step of the parser
+/// (it scans them with `memchr`).
+const BYTES_PER_STEP: u64 = 64;
+
+/// An attribute's bytes that cost as much to hold and write out as a node: its
+/// value is shared between the copies the parser makes of a formatting
+/// element, but each copy is written out whole.
+const BYTES_PER_NODE: usize = 32;
+
+/// The stack and list scans the parser may do per node of the budget: more
+/// than any document within the depth limit needs.
+const STEPS_PER_NODE: u64 = 64;
+
+/// The most attributes a tag may have. The tokenizer compares each attribute
+/// with the tag's earlier ones, so this is what bounds that work; nothing
+/// written by hand or by an editor comes near it.
+const MAX_TAG_ATTRIBUTES: usize = 256;
+
+/// What a parse may take: [`HtmlPolicy`](super::HtmlPolicy)'s limits.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Limits {
+    pub(crate) max_input_bytes: usize,
+    pub(crate) max_nodes: usize,
+    pub(crate) max_depth: usize,
+}
+
+/// `html`, checked before the parser sees any of it.
+fn check_input(html: &str, limits: Limits) -> Result<(), HtmlError> {
+    if html.len() > limits.max_input_bytes {
+        return Err(HtmlError::InputTooLarge {
+            max: limits.max_input_bytes,
+        });
+    }
+    if most_attributes(html.as_bytes()) > MAX_TAG_ATTRIBUTES {
+        return Err(HtmlError::TooManyAttributes {
+            max: MAX_TAG_ATTRIBUTES,
+        });
+    }
+    Ok(())
+}
+
+/// Where the HTML tokenizer can be in a tag.
+#[derive(Clone, Copy)]
+enum InTag {
+    Name,
+    BeforeAttribute,
+    Attribute,
+    AfterAttribute,
+    BeforeValue,
+    DoubleQuoted,
+    SingleQuoted,
+    Unquoted,
+    AfterQuoted,
+}
+
+const IN_TAG_STATES: usize = 9;
+
+impl InTag {
+    /// The state after `byte`, and whether it starts an attribute; `None`
+    /// when it ends the tag.
+    fn next(self, byte: u8) -> Option<(InTag, bool)> {
+        use InTag::*;
+        let blank = matches!(byte, b' ' | b'\t' | b'\n' | b'\r' | b'\x0c');
+        Some(match (self, byte) {
+            (DoubleQuoted, b'"') | (SingleQuoted, b'\'') => (AfterQuoted, false),
+            (DoubleQuoted | SingleQuoted, _) => (self, false),
+            (_, b'>') => return None,
+            (Name, _) if blank || byte == b'/' => (BeforeAttribute, false),
+            (Name, _) => (Name, false),
+            (BeforeAttribute | AfterQuoted, _) if blank || byte == b'/' => (BeforeAttribute, false),
+            (BeforeAttribute | AfterQuoted, _) => (Attribute, true),
+            (Attribute, b'=') => (BeforeValue, false),
+            (Attribute, b'/') => (BeforeAttribute, false),
+            (Attribute, _) if blank => (AfterAttribute, false),
+            (Attribute, _) => (Attribute, false),
+            (AfterAttribute, b'=') => (BeforeValue, false),
+            (AfterAttribute, b'/') => (BeforeAttribute, false),
+            (AfterAttribute, _) if blank => (AfterAttribute, false),
+            (AfterAttribute, _) => (Attribute, true),
+            (BeforeValue, b'"') => (DoubleQuoted, false),
+            (BeforeValue, b'\'') => (SingleQuoted, false),
+            (BeforeValue, _) if blank => (BeforeValue, false),
+            (BeforeValue, _) => (Unquoted, false),
+            (Unquoted, _) if blank => (BeforeAttribute, false),
+            (Unquoted, _) => (Unquoted, false),
+        })
+    }
+}
+
+/// An upper bound on the attributes of any one tag in `html`, in one pass.
+///
+/// What counts as a tag depends on the parser's state (`<a` in a comment is
+/// not one), so every `<` that could open a tag is followed at once: each
+/// state holds the most attributes of any tag that could be in it here. The
+/// tag the tokenizer really reads is among them, whatever came before it.
+fn most_attributes(html: &[u8]) -> usize {
+    // Too few bytes that can end an attribute: nothing to look for.
+    let splits = html
+        .iter()
+        .filter(|byte| {
+            matches!(
+                byte,
+                b' ' | b'\t' | b'\n' | b'\r' | b'\x0c' | b'/' | b'"' | b'\''
+            )
+        })
+        .count();
+    if splits <= MAX_TAG_ATTRIBUTES {
+        return 0;
+    }
+    use InTag::*;
+    const ALL: [InTag; IN_TAG_STATES] = [
+        Name,
+        BeforeAttribute,
+        Attribute,
+        AfterAttribute,
+        BeforeValue,
+        DoubleQuoted,
+        SingleQuoted,
+        Unquoted,
+        AfterQuoted,
+    ];
+    let mut most = 0;
+    let mut counts: [Option<usize>; IN_TAG_STATES] = [None; IN_TAG_STATES];
+    let mut bytes = html.iter().copied().peekable();
+    while let Some(byte) = bytes.next() {
+        let mut after = [None; IN_TAG_STATES];
+        for state in ALL {
+            let Some(count) = counts.get(state as usize).copied().flatten() else {
+                continue;
+            };
+            let Some((next, starts)) = state.next(byte) else {
+                continue;
+            };
+            let count = count + usize::from(starts);
+            most = most.max(count);
+            if let Some(slot) = after.get_mut(next as usize) {
+                *slot = Some(slot.unwrap_or(0).max(count));
+            }
+        }
+        // `<x` and `</x`: `</` is followed for its letter by the next round.
+        if byte == b'<' {
+            let at_letter = bytes.peek().is_some_and(u8::is_ascii_alphabetic);
+            let at_slash = bytes.peek() == Some(&b'/');
+            if (at_letter || at_slash)
+                && let Some(slot) = after.get_mut(Name as usize)
+            {
+                *slot = Some(slot.unwrap_or(0));
+            }
+        }
+        counts = after;
+    }
+    most
+}
 
 /// A node's index in [`Tree::nodes`].
 pub(crate) type Id = usize;
@@ -41,6 +203,8 @@ pub(crate) struct Node {
     pub(crate) parent: Option<Id>,
     pub(crate) children: Vec<Id>,
     pub(crate) data: Data,
+    /// How far below the document it was when last attached.
+    depth: usize,
 }
 
 impl Node {
@@ -49,6 +213,7 @@ impl Node {
             parent: None,
             children: Vec::new(),
             data,
+            depth: 0,
         }
     }
 
@@ -87,20 +252,58 @@ pub(crate) enum Event<'a> {
 
 impl Tree {
     /// `html` parsed as the content of a `<div>`, the way a browser parses
-    /// it when it is inserted into one.
-    pub(crate) fn parse(html: &str) -> Tree {
-        let parser = parse_fragment(
-            Sink::default(),
+    /// it when it is inserted into one, within `limits`. The input goes in
+    /// pieces, so a parse over a limit stops soon after it passes it.
+    pub(crate) fn parse(html: &str, limits: Limits) -> Result<Tree, HtmlError> {
+        check_input(html, limits)?;
+        let mut parser = parse_fragment(
+            Sink::new(limits),
             ParseOpts::default(),
             QualName::new(None, ns!(html), local_name!("div")),
             Vec::new(),
             false,
         );
-        let nodes = parser.one(html).nodes.into_inner();
+        let mut rest = html;
+        while !rest.is_empty() {
+            let (piece, after) = rest.split_at(rest.floor_char_boundary(PIECE).max(1));
+            parser.process(StrTendril::from_slice(piece));
+            if let Some(error) = parser.tokenizer.sink.sink.exceeded.get() {
+                return Err(error);
+            }
+            rest = after;
+        }
+        let sink = parser.finish();
+        if let Some(error) = sink.exceeded.get() {
+            return Err(error);
+        }
+        let nodes = sink.nodes.into_inner();
         let root = nodes
             .first()
             .and_then(|document| document.children.first().copied());
-        Tree { nodes, root }
+        let tree = Tree { nodes, root };
+        // What moved after it was attached has the depth of where it was.
+        if tree.depth() > limits.max_depth {
+            return Err(HtmlError::TooDeep {
+                max: limits.max_depth,
+            });
+        }
+        Ok(tree)
+    }
+
+    /// How deep the elements under the root nest.
+    fn depth(&self) -> usize {
+        let mut deepest = 0;
+        let mut stack: Vec<(Id, usize)> = self.root.map(|root| (root, 0)).into_iter().collect();
+        while let Some((id, depth)) = stack.pop() {
+            let Some(node) = self.nodes.get(id) else {
+                continue;
+            };
+            if matches!(node.data, Data::Element { .. }) {
+                deepest = deepest.max(depth);
+            }
+            stack.extend(node.children.iter().map(|&child| (child, depth + 1)));
+        }
+        deepest
     }
 
     /// The root's children, written as HTML.
@@ -180,8 +383,20 @@ pub(crate) fn escape_text(text: &str) -> String {
     let mut out = Vec::new();
     let mut serializer = HtmlSerializer::new(&mut out, SerializeOpts::default());
     // Writing to a `Vec` can't fail.
-    let _ = serializer.write_text(text);
+    let _ = write_text(&mut serializer, text);
     String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Writes `text` a little at a time. For each `&` the serializer looks for the
+/// next `<` or `>` to the end of what it was given: given a long text of `&`,
+/// that would be quadratic.
+fn write_text<S: Serializer>(serializer: &mut S, mut text: &str) -> io::Result<()> {
+    while !text.is_empty() {
+        let (piece, rest) = text.split_at(text.floor_char_boundary(TEXT_PIECE).max(1));
+        serializer.write_text(piece)?;
+        text = rest;
+    }
+    Ok(())
 }
 
 impl Serialize for Tree {
@@ -219,7 +434,7 @@ impl Serialize for Tree {
                     stack.push(Step::Close(name));
                     stack.extend(node.children.iter().rev().map(|&id| Step::Open(id)));
                 }
-                Data::Text(text) => serializer.write_text(text)?,
+                Data::Text(text) => write_text(serializer, text)?,
                 // Comments, doctypes and processing instructions are never
                 // written.
                 Data::Document | Data::Comment | Data::Other => {}
@@ -237,26 +452,121 @@ struct Handle {
     name: Rc<QualName>,
 }
 
-/// Builds a [`Tree`] as html5ever parses. The tree builder only ever calls
-/// one method at a time, so each method borrows the arena for its own
-/// duration.
+/// Builds a [`Tree`] as html5ever parses, within a budget. The tree builder
+/// only ever calls one method at a time, so each method borrows the arena for
+/// its own duration.
+///
+/// The budget counts what the input can multiply: the parser makes a new copy
+/// of every open formatting element for each block it meets, so nodes, the
+/// attributes they carry and the scans over the parser's stacks grow faster
+/// than the input does. Once the budget is gone the sink holds nothing more,
+/// and [`Tree::parse`] stops at the next piece of the input.
 struct Sink {
     nodes: RefCell<Vec<Node>>,
     /// The name of handles that aren't elements (never read).
     unnamed: Rc<QualName>,
+    limits: Limits,
+    /// What is left of the budget for nodes.
+    nodes_left: Cell<usize>,
+    /// What is left of the budget for scans.
+    steps_left: Cell<u64>,
+    /// The limit that was passed.
+    exceeded: Cell<Option<HtmlError>>,
 }
 
-impl Default for Sink {
-    fn default() -> Self {
-        Sink {
-            nodes: RefCell::new(vec![Node::new(Data::Document)]),
-            unnamed: Rc::new(QualName::new(None, ns!(), local_name!(""))),
-        }
-    }
-}
+/// The node every handle points to once the budget is gone. Never attached.
+const SPENT: Id = 1;
+
+/// How deep the root's children are in the arena: the document, then the root.
+const TOP_DEPTH: usize = 2;
 
 impl Sink {
+    fn new(limits: Limits) -> Self {
+        let nodes_left = limits.max_nodes;
+        let steps = u64::try_from(nodes_left)
+            .unwrap_or(u64::MAX)
+            .saturating_mul(STEPS_PER_NODE);
+        Sink {
+            // The document, and the node of a spent budget.
+            nodes: RefCell::new(vec![Node::new(Data::Document), Node::new(Data::Document)]),
+            unnamed: Rc::new(QualName::new(None, ns!(), local_name!(""))),
+            limits,
+            nodes_left: Cell::new(nodes_left),
+            steps_left: Cell::new(steps),
+            exceeded: Cell::new(None),
+        }
+    }
+
+    fn spent(&self) -> bool {
+        self.exceeded.get().is_some()
+    }
+
+    fn too_many_nodes(&self) {
+        self.exceeded.set(Some(HtmlError::TooManyNodes {
+            max: self.limits.max_nodes,
+        }));
+    }
+
+    /// Takes `cost` from the budget; `false` when it isn't there.
+    fn charge(&self, cost: usize) -> bool {
+        if self.spent() {
+            return false;
+        }
+        match self.nodes_left.get().checked_sub(cost) {
+            Some(left) => {
+                self.nodes_left.set(left);
+                true
+            }
+            None => {
+                self.too_many_nodes();
+                false
+            }
+        }
+    }
+
+    /// Takes what writing `attrs` out will cost. An attribute goes to the
+    /// serializer whole, and for each `&` and each byte `0xC2` in it the
+    /// serializer scans for the next `<`, `>` or `"`; a value is rarely long
+    /// and full of them at once.
+    fn charge_writing(&self, attrs: &[Attribute]) -> bool {
+        let scanned = attrs
+            .iter()
+            .map(|attr| {
+                let value = attr.value.as_bytes();
+                let stops = memchr::memchr2_iter(b'&', 0xC2, value).count();
+                u64::try_from(stops.saturating_mul(value.len())).unwrap_or(u64::MAX)
+            })
+            .fold(0, u64::saturating_add);
+        match self.steps_left.get().checked_sub(scanned / BYTES_PER_STEP) {
+            Some(left) => {
+                self.steps_left.set(left);
+                true
+            }
+            None => {
+                self.too_many_nodes();
+                false
+            }
+        }
+    }
+
+    /// Notes that `child` is now under `parent`: the depth it has there.
+    fn place(&self, nodes: &mut [Node], parent: Id, child: Id) {
+        let depth = nodes.get(parent).map_or(0, |parent| parent.depth) + 1;
+        if let Some(child) = nodes.get_mut(child) {
+            child.depth = depth;
+            child.parent = Some(parent);
+        }
+        if depth > self.limits.max_depth.saturating_add(TOP_DEPTH - 1) {
+            self.exceeded.set(Some(HtmlError::TooDeep {
+                max: self.limits.max_depth,
+            }));
+        }
+    }
+
     fn push(&self, data: Data) -> Id {
+        if !self.charge(1) {
+            return SPENT;
+        }
         let mut nodes = self.nodes.borrow_mut();
         nodes.push(Node::new(data));
         nodes.len() - 1
@@ -269,10 +579,12 @@ impl Sink {
         }
     }
 
-    /// The node's parent and its position among the parent's children.
+    /// The node's parent and its position among the parent's children. The
+    /// tree builder works at the end of a parent's children, so the search
+    /// starts there.
     fn position(nodes: &[Node], id: Id) -> Option<(Id, usize)> {
         let parent = nodes.get(id)?.parent?;
-        let index = nodes.get(parent)?.children.iter().position(|&c| c == id)?;
+        let index = nodes.get(parent)?.children.iter().rposition(|&c| c == id)?;
         Some((parent, index))
     }
 
@@ -322,20 +634,40 @@ impl TreeSink for Sink {
         self.handle(0)
     }
 
+    /// Every scan of the parser's stack of open elements asks for the names.
     fn elem_name<'a>(&'a self, target: &'a Handle) -> &'a QualName {
+        match self.steps_left.get().checked_sub(1) {
+            Some(left) => self.steps_left.set(left),
+            None => self.too_many_nodes(),
+        }
         &target.name
     }
 
     fn create_element(&self, name: QualName, attrs: Vec<Attribute>, flags: ElementFlags) -> Handle {
-        let template = flags.template.then(|| self.push(Data::Document));
         let name = Rc::new(name);
-        let id = self.push(Data::Element {
+        let bytes: usize = attrs
+            .iter()
+            .map(|attr| attr.name.local.len() + attr.value.len())
+            .sum();
+        let cost = 1 + usize::from(flags.template) + attrs.len() + bytes / BYTES_PER_NODE;
+        if !self.charge(cost) || !self.charge_writing(&attrs) {
+            return Handle { id: SPENT, name };
+        }
+        let mut nodes = self.nodes.borrow_mut();
+        let template = flags.template.then(|| {
+            nodes.push(Node::new(Data::Document));
+            nodes.len() - 1
+        });
+        nodes.push(Node::new(Data::Element {
             name: name.clone(),
             attrs,
             template,
             integration_point: flags.mathml_annotation_xml_integration_point,
-        });
-        Handle { id, name }
+        }));
+        Handle {
+            id: nodes.len() - 1,
+            name,
+        }
     }
 
     fn create_comment(&self, _: StrTendril) -> Handle {
@@ -347,13 +679,16 @@ impl TreeSink for Sink {
     }
 
     fn append(&self, parent: &Handle, child: NodeOrText<Handle>) {
+        if self.spent() {
+            return;
+        }
         let mut nodes = self.nodes.borrow_mut();
         let child = match child {
             NodeOrText::AppendText(text) => {
                 let last = nodes
                     .get(parent.id)
                     .and_then(|p| p.children.last().copied());
-                if Self::extend_text(&mut nodes, last, &text) {
+                if Self::extend_text(&mut nodes, last, &text) || !self.charge(1) {
                     return;
                 }
                 Self::new_text(&mut nodes, text)
@@ -365,13 +700,14 @@ impl TreeSink for Sink {
         };
         if let Some(parent_node) = nodes.get_mut(parent.id) {
             parent_node.children.push(child);
-            if let Some(child) = nodes.get_mut(child) {
-                child.parent = Some(parent.id);
-            }
+            self.place(&mut nodes, parent.id, child);
         }
     }
 
     fn append_before_sibling(&self, sibling: &Handle, new_node: NodeOrText<Handle>) {
+        if self.spent() {
+            return;
+        }
         let mut nodes = self.nodes.borrow_mut();
         let Some((parent, index)) = Self::position(&nodes, sibling.id) else {
             return;
@@ -381,7 +717,7 @@ impl TreeSink for Sink {
                 let previous = index
                     .checked_sub(1)
                     .and_then(|i| nodes.get(parent)?.children.get(i).copied());
-                if Self::extend_text(&mut nodes, previous, &text) {
+                if Self::extend_text(&mut nodes, previous, &text) || !self.charge(1) {
                     return;
                 }
                 Self::new_text(&mut nodes, text)
@@ -395,9 +731,7 @@ impl TreeSink for Sink {
             let index = index.min(parent_node.children.len());
             parent_node.children.insert(index, child);
         }
-        if let Some(child) = nodes.get_mut(child) {
-            child.parent = Some(parent);
-        }
+        self.place(&mut nodes, parent, child);
     }
 
     fn append_based_on_parent_node(
@@ -433,7 +767,14 @@ impl TreeSink for Sink {
         };
         // The tree builder only asks for a template's contents; anything
         // else gets a detached fragment.
-        self.handle(contents.unwrap_or_else(|| self.push(Data::Document)))
+        let contents = contents.unwrap_or_else(|| self.push(Data::Document));
+        // The contents are a separate fragment, but they nest all the same.
+        let mut nodes = self.nodes.borrow_mut();
+        let depth = nodes.get(target.id).map_or(0, |target| target.depth);
+        if let Some(contents) = nodes.get_mut(contents) {
+            contents.depth = depth + 1;
+        }
+        self.handle(contents)
     }
 
     fn same_node(&self, x: &Handle, y: &Handle) -> bool {
@@ -442,25 +783,19 @@ impl TreeSink for Sink {
 
     fn set_quirks_mode(&self, _: QuirksMode) {}
 
-    fn add_attrs_if_missing(&self, target: &Handle, new: Vec<Attribute>) {
-        if let Some(Node {
-            data: Data::Element { attrs, .. },
-            ..
-        }) = self.nodes.borrow_mut().get_mut(target.id)
-        {
-            let missing: Vec<Attribute> = new
-                .into_iter()
-                .filter(|attr| !attrs.iter().any(|existing| existing.name == attr.name))
-                .collect();
-            attrs.extend(missing);
-        }
-    }
+    /// The parser adds a later `<html>`'s attributes to the root (and, in a
+    /// whole document, a later `<body>`'s to the body). A fragment's root is
+    /// never written out, so they go.
+    fn add_attrs_if_missing(&self, _: &Handle, _: Vec<Attribute>) {}
 
     fn remove_from_parent(&self, target: &Handle) {
         Self::detach(&mut self.nodes.borrow_mut(), target.id);
     }
 
     fn reparent_children(&self, node: &Handle, new_parent: &Handle) {
+        if self.spent() {
+            return;
+        }
         let mut nodes = self.nodes.borrow_mut();
         let Some(children) = nodes
             .get_mut(node.id)
@@ -469,9 +804,7 @@ impl TreeSink for Sink {
             return;
         };
         for &child in &children {
-            if let Some(child) = nodes.get_mut(child) {
-                child.parent = Some(new_parent.id);
-            }
+            self.place(&mut nodes, new_parent.id, child);
         }
         if let Some(new_parent) = nodes.get_mut(new_parent.id) {
             new_parent.children.extend(children);

@@ -60,7 +60,9 @@ Go through it in order; each item says how to check.
   (feature `validation-html`), never a `String`: grep the DTOs for fields
   named `body`, `content`, `description`, `notes` and `html`. A custom
   `validation.html` policy allows no `img` or `iframe` unless the app means
-  to load images from any server.
+  to load images from any server. Its limits (`max_input_bytes`, `max_nodes`,
+  `max_depth`) stay near their defaults: they are what keeps a short hostile
+  field from filling the memory.
 
 ## 4. Authentication and tokens
 

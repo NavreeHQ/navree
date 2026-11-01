@@ -169,10 +169,20 @@ pub struct CreateContact {
   number`. Store `phone.as_str()` (E.164); `extension()` is not part of it.
 - `Folded<u32>` (any `T: FromStr`) parses native digits and JSON numbers;
   `fold_digits(text)` folds any string.
-- `SafeHtml` never fails on a string; it removes what the policy doesn't
-  allow, and rules measure the sanitized HTML. The policy is
+- `SafeHtml` removes what the policy doesn't allow, and rules measure the
+  sanitized HTML. It fails on a string only over a limit, a 400 on the field:
+  `validation.html.max_input_bytes` (512 KiB, checked first), `max_nodes`
+  (131,072: elements, text runs, attributes, every 32 bytes of attributes),
+  `max_depth` (128, at most 256; browsers read past 512 flat), and 256
+  attributes on a tag. At the limit a parse takes at most about 220 ms; a
+  field of 16 KiB or more gives up its worker (`block_in_place`) on a
+  multi-threaded runtime. `SafeHtml::new`, `with_policy` and
+  `HtmlPolicy::clean` can't fail (over a limit: the input, escaped);
+  `try_with_policy` and `try_clean` return `HtmlError`. The policy is
   `[validation.html]` (`tags`, `generic_attributes`, `tag_attributes`,
-  `url_schemes`, `link_rel`); allowing `script` or `style` fails the boot.
+  `url_schemes`, `link_rel`); allowing `script`, `style`, `on*`, `srcdoc` or
+  `http-equiv` fails the boot. A URL with a host and no scheme (`//x`) stays
+  only when `http` and `https` are both allowed.
   The output is parsed again and returned only when a browser would build
   the tree that was checked; SVG animation elements are always removed.
 - To check a `String` and keep it as sent: `custom(rules::phone)`,

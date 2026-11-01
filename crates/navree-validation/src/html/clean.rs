@@ -20,8 +20,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use html5ever::{Attribute, QualName, local_name, ns};
 
-use super::CONTENT_TAGS;
-use super::tree::{Data, Id, Tree, escape_text};
+use super::tree::{Data, Id, Limits, Tree, escape_text};
+use super::{CONTENT_TAGS, HtmlError, NEVER_ATTRIBUTES};
 
 /// How many times the output is cleaned and parsed again before only the
 /// text is kept. An output a browser splits differently is stable after one
@@ -58,6 +58,9 @@ const URL_ATTRIBUTES: [&str; 16] = [
     "src",
     "xlink:href",
 ];
+
+/// A base for reading a relative URL: where it leaves for is what counts.
+const SITE: &str = "https://site.invalid/";
 
 /// The elements of SVG 2 and SVG 1.1's `animateColor` (sorted).
 #[rustfmt::skip]
@@ -118,6 +121,16 @@ fn is_html_tag(local: &str) -> bool {
         || matches!(local, "title" | "style" | "font" | "a" | "script" | "span")
 }
 
+/// `html` as the text an HTML parser would read from it once it is escaped:
+/// no NUL, no leading byte order mark, and line ends as a single LF.
+pub(crate) fn as_text(html: &str) -> String {
+    html.replace('\0', "")
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .trim_start_matches('\u{feff}')
+        .to_owned()
+}
+
 /// A policy, read for one call: [`HtmlPolicy`](super::HtmlPolicy)'s lists.
 pub(crate) struct Sanitizer<'a> {
     pub(crate) tags: &'a BTreeSet<String>,
@@ -126,6 +139,7 @@ pub(crate) struct Sanitizer<'a> {
     pub(crate) url_schemes: &'a BTreeSet<String>,
     /// The `rel` set on every link, `None` for none.
     pub(crate) link_rel: Option<&'a str>,
+    pub(crate) limits: Limits,
 }
 
 /// What an output parses to (read by the fuzz targets).
@@ -147,30 +161,39 @@ struct Visit {
 }
 
 impl Sanitizer<'_> {
-    /// `html` sanitized.
+    /// `html` sanitized, or escaped whole when it passes a limit.
     pub(crate) fn clean(&self, html: &str) -> String {
-        self.sanitize(html).0
+        match self.sanitize(html) {
+            Ok((out, _)) => out,
+            Err(_) => escape_text(&as_text(html)),
+        }
     }
 
     /// `html` sanitized, and what it parses to.
-    pub(crate) fn sanitize(&self, html: &str) -> (String, Checked) {
-        let mut tree = Tree::parse(html);
+    pub(crate) fn sanitize(&self, html: &str) -> Result<(String, Checked), HtmlError> {
+        let mut tree = Tree::parse(html, self.limits)?;
+        // An output may be longer than its input (`&` is `&amp;`). It has
+        // passed the input's limit, and the others still apply.
+        let output = Limits {
+            max_input_bytes: usize::MAX,
+            ..self.limits
+        };
         // The text of the input's own tree, for when no output is stable.
         let mut text = None;
         for _ in 0..ROUNDS {
             self.clean_tree(&mut tree);
             let out = tree.to_html();
-            let again = Tree::parse(&out);
+            let again = Tree::parse(&out, output)?;
             let same = tree.events(|_, _| false)
                 == again.events(|name, attrs| self.implied_by_parser(name, attrs));
             if same {
-                return (out, Checked::Tree(tree));
+                return Ok((out, Checked::Tree(tree)));
             }
             text.get_or_insert_with(|| tree.text());
             tree = again;
         }
         let text = text.unwrap_or_default();
-        (escape_text(&text), Checked::Text(text))
+        Ok((escape_text(&text), Checked::Text(text)))
     }
 
     fn tag_allowed(&self, local: &str) -> bool {
@@ -183,20 +206,47 @@ impl Sanitizer<'_> {
                 .tag_attributes
                 .get(tag)
                 .is_some_and(|attributes| attributes.contains(attribute));
-        if !listed || (self.link_rel.is_some() && attribute == "rel") {
+        if !listed
+            || (self.link_rel.is_some() && attribute == "rel")
+            || NEVER_ATTRIBUTES.contains(&attribute)
+            || attribute.starts_with("on")
+        {
             return false;
         }
-        !URL_ATTRIBUTES.contains(&attribute) || self.url_allowed(value)
+        match attribute {
+            // Candidates split by commas, each a URL and maybe a size.
+            "srcset" | "imagesrcset" => value.split(',').all(|candidate| {
+                let url = candidate.split_ascii_whitespace().next();
+                url.is_none_or(|url| self.url_allowed(url))
+            }),
+            // URLs split by spaces.
+            "ping" => value
+                .split_ascii_whitespace()
+                .all(|url| self.url_allowed(url)),
+            _ => !URL_ATTRIBUTES.contains(&attribute) || self.url_allowed(value),
+        }
     }
 
     /// An absolute URL with an allowed scheme, or a relative URL. The
     /// scheme is the one a browser reads (`url` parses as WHATWG URL does:
     /// leading spaces and controls go, tabs and newlines in it are ignored,
     /// case doesn't count).
+    ///
+    /// A relative URL with a host of its own (`//evil.test`, and `/\evil.test`
+    /// and `\\evil.test`, which a browser reads the same) leaves the site with
+    /// the page's scheme, which may be `http` or `https`: it stays only when
+    /// both are allowed.
     fn url_allowed(&self, value: &str) -> bool {
         match url::Url::parse(value) {
             Ok(url) => self.url_schemes.contains(url.scheme()),
-            Err(url::ParseError::RelativeUrlWithoutBase) => true,
+            Err(url::ParseError::RelativeUrlWithoutBase) => {
+                let leaves_the_site = url::Url::parse(SITE)
+                    .and_then(|site| Ok(site.join(value)?.host_str() != site.host_str()));
+                !leaves_the_site.unwrap_or(true)
+                    || ["http", "https"]
+                        .iter()
+                        .all(|scheme| self.url_schemes.contains(*scheme))
+            }
             Err(_) => false,
         }
     }
@@ -261,7 +311,8 @@ impl Sanitizer<'_> {
                 Data::Text(_) => (true, None),
                 Data::Element { name, attrs, .. } => {
                     let keep = self.keep_element(name, attrs);
-                    if let Some(rel) = self.link_rel.filter(|_| &*name.local == "a") {
+                    let link = matches!(&*name.local, "a" | "area");
+                    if let Some(rel) = self.link_rel.filter(|_| link) {
                         attrs.push(Attribute {
                             name: QualName::new(None, ns!(), local_name!("rel")),
                             value: rel.into(),

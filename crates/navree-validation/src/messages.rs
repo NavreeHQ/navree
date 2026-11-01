@@ -38,6 +38,16 @@ pub const DEFAULT_MESSAGES: &[(&str, &str)] = &[
     ("ends_with", ":attribute must end with :values"),
     ("exists", ":attribute does not exist"),
     (
+        "html.attributes",
+        ":attribute has a tag with more than :max attributes",
+    ),
+    ("html.depth", ":attribute nests deeper than :max levels"),
+    (
+        "html.input",
+        ":attribute must be shorter than or equal to :max bytes of HTML",
+    ),
+    ("html.nodes", ":attribute has too much markup"),
+    (
         "in",
         ":attribute must be one of the following values: :values",
     ),

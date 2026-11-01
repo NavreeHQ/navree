@@ -14,6 +14,27 @@ pub(crate) mod tree;
 /// Tags whose content goes with them, which a policy can never allow.
 const CONTENT_TAGS: [&str; 2] = ["script", "style"];
 
+/// Attributes that act on their own and that no list can vet, which a policy
+/// can never allow: `srcdoc` holds a whole document for an `iframe`, and
+/// `http-equiv` makes a `meta` redirect the page to its `content`. `on*`
+/// handlers are the same.
+const NEVER_ATTRIBUTES: [&str; 2] = ["srcdoc", "http-equiv"];
+
+/// The most an input may be, unless the policy says otherwise (see
+/// [`HtmlPolicy::max_input_bytes`]).
+const DEFAULT_MAX_INPUT_BYTES: usize = 512 * 1024;
+
+/// The most nodes a parse may hold (see [`HtmlPolicy::max_nodes`]).
+const DEFAULT_MAX_NODES: usize = 128 * 1024;
+
+/// How deep elements may nest (see [`HtmlPolicy::max_depth`]).
+const DEFAULT_MAX_DEPTH: usize = 128;
+
+/// The deepest a policy may allow: browsers read markup past 512 levels flat (so
+/// the output would not be the tree that was checked), and a page may already be
+/// some levels deep where it goes.
+const MOST_DEPTH: usize = 256;
+
 /// What rich text may keep (configuration section `validation.html`). The
 /// sanitizer parses the input as an HTML fragment and writes it back with
 /// only these tags, attributes and URL schemes:
@@ -71,6 +92,19 @@ pub struct HtmlPolicy {
     pub url_schemes: BTreeSet<String>,
     /// The `rel` set on every link; empty leaves `rel` out.
     pub link_rel: String,
+    /// The longest input, in bytes, the parser is given (default 512 KiB, a
+    /// long article pasted from an editor): longer is refused before any of
+    /// it is parsed.
+    pub max_input_bytes: usize,
+    /// How much markup a parse may hold (default 131,072): each element,
+    /// text run and comment is 1, each attribute 1, and every 32 bytes of
+    /// attributes 1. The parser copies open formatting elements for every
+    /// block it meets, so this bounds what a short input can multiply into;
+    /// it also pays for the parser's scans of its own stacks (64 per node).
+    pub max_nodes: usize,
+    /// How deep elements may nest (default 128, at most 256). Rich text stays
+    /// far below it, and it keeps the parser's scans short.
+    pub max_depth: usize,
 }
 
 fn set<const N: usize>(items: [&str; N]) -> BTreeSet<String> {
@@ -123,6 +157,9 @@ impl Default for HtmlPolicy {
             ]),
             url_schemes: set(["http", "https", "mailto", "tel"]),
             link_rel: "noopener noreferrer nofollow".to_owned(),
+            max_input_bytes: DEFAULT_MAX_INPUT_BYTES,
+            max_nodes: DEFAULT_MAX_NODES,
+            max_depth: DEFAULT_MAX_DEPTH,
         }
     }
 }
@@ -165,10 +202,44 @@ impl HtmlPolicy {
         self
     }
 
+    /// With these limits on what an input may take (see
+    /// [`max_input_bytes`](HtmlPolicy::max_input_bytes),
+    /// [`max_nodes`](HtmlPolicy::max_nodes) and
+    /// [`max_depth`](HtmlPolicy::max_depth)).
+    pub fn limits(mut self, max_input_bytes: usize, max_nodes: usize, max_depth: usize) -> Self {
+        self.max_input_bytes = max_input_bytes;
+        self.max_nodes = max_nodes;
+        self.max_depth = max_depth;
+        self
+    }
+
     /// Whether the policy is safe to use: `Err` names the key at fault
-    /// (`validation.html.tags: ...`) when it allows `script` or `style`, or
-    /// `rel` while [`link_rel`](HtmlPolicy::link_rel) is set.
+    /// (`validation.html.tags: ...`) when it allows `script` or `style`, an
+    /// `on*` handler, `srcdoc` or `http-equiv`, `rel` while
+    /// [`link_rel`](HtmlPolicy::link_rel) is set, or a
+    /// [`max_depth`](HtmlPolicy::max_depth) over 256.
     pub fn check(&self) -> Result<(), String> {
+        if self.max_depth > MOST_DEPTH {
+            return Err(format!(
+                "validation.html.max_depth: {} is over {MOST_DEPTH} (browsers read deeper markup flat, so they would build another tree than the one checked)",
+                self.max_depth
+            ));
+        }
+        let never = |attribute: &String| {
+            NEVER_ATTRIBUTES.contains(&attribute.as_str()) || attribute.starts_with("on")
+        };
+        if let Some(attribute) = self.generic_attributes.iter().find(|a| never(a)) {
+            return Err(format!(
+                "validation.html.generic_attributes: `{attribute}` can't be allowed (it acts on its own, and no list can vet it)"
+            ));
+        }
+        for (tag, attributes) in &self.tag_attributes {
+            if let Some(attribute) = attributes.iter().find(|a| never(a)) {
+                return Err(format!(
+                    "validation.html.tag_attributes: `{attribute}` on `{tag}` can't be allowed (it acts on its own, and no list can vet it)"
+                ));
+            }
+        }
         if let Some(tag) = CONTENT_TAGS.iter().find(|tag| self.tags.contains(**tag)) {
             return Err(format!(
                 "validation.html.tags: `{tag}` can't be allowed (scripts and styles are always removed)"
@@ -202,6 +273,10 @@ impl HtmlPolicy {
     /// `html` sanitized by this policy. Parts of the policy that
     /// [`check`](HtmlPolicy::check) refuses are ignored here.
     ///
+    /// It can't fail: an input over one of the limits comes back whole as
+    /// escaped text, tags and all, so nothing in it is parsed, kept or lost.
+    /// [`try_clean`](HtmlPolicy::try_clean) says so instead.
+    ///
     /// ```
     /// use navree_validation::HtmlPolicy;
     ///
@@ -214,7 +289,32 @@ impl HtmlPolicy {
     /// ```
     #[cfg(feature = "html")]
     pub fn clean(&self, html: &str) -> String {
-        self.sanitizer().clean(html)
+        off_the_worker(html, || self.sanitizer().clean(html))
+    }
+
+    /// `html` sanitized by this policy, or the limit it passes.
+    ///
+    /// ```
+    /// use navree_validation::{HtmlError, HtmlPolicy};
+    ///
+    /// let policy = HtmlPolicy::default().limits(16, 1024, 2);
+    /// assert_eq!(policy.try_clean("<b>short</b>").unwrap(), "<b>short</b>");
+    /// assert_eq!(
+    ///     policy.try_clean("<b>a little too long</b>"),
+    ///     Err(HtmlError::InputTooLarge { max: 16 })
+    /// );
+    /// assert_eq!(
+    ///     policy.try_clean("<ul><ul><ul>"),
+    ///     Err(HtmlError::TooDeep { max: 2 })
+    /// );
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`HtmlError`]: the input is over one of the policy's limits.
+    #[cfg(feature = "html")]
+    pub fn try_clean(&self, html: &str) -> Result<String, HtmlError> {
+        off_the_worker(html, || self.sanitizer().sanitize(html).map(|(out, _)| out))
     }
 
     #[cfg(feature = "html")]
@@ -225,6 +325,78 @@ impl HtmlPolicy {
             tag_attributes: &self.tag_attributes,
             url_schemes: &self.url_schemes,
             link_rel: Some(self.link_rel.as_str()).filter(|rel| !rel.is_empty()),
+            limits: tree::Limits {
+                max_input_bytes: self.max_input_bytes,
+                max_nodes: self.max_nodes,
+                max_depth: self.max_depth,
+            },
+        }
+    }
+}
+
+/// Inputs of this many bytes or more give up the async worker while they are
+/// sanitized; shorter ones take less time than that costs.
+#[cfg(feature = "html")]
+const OFF_THE_WORKER_BYTES: usize = 16 * 1024;
+
+/// Runs `sanitize` on `html`, on a multi-threaded Tokio runtime handing the
+/// worker's other tasks to another thread first when `html` is long, so that
+/// a hostile field holds up one request and not all those on its worker.
+#[cfg(feature = "html")]
+fn off_the_worker<R>(html: &str, sanitize: impl FnOnce() -> R) -> R {
+    use tokio::runtime::{Handle, RuntimeFlavor};
+
+    let multi_threaded = html.len() >= OFF_THE_WORKER_BYTES
+        && Handle::try_current()
+            .is_ok_and(|runtime| runtime.runtime_flavor() == RuntimeFlavor::MultiThread);
+    if multi_threaded {
+        tokio::task::block_in_place(sanitize)
+    } else {
+        sanitize()
+    }
+}
+
+/// Why [`HtmlPolicy::try_clean`] refused an input: it passes one of the
+/// policy's limits. The client's fault; in the extractors, a 400 on the field.
+#[cfg(feature = "html")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum HtmlError {
+    /// Longer than [`max_input_bytes`](HtmlPolicy::max_input_bytes).
+    #[error("the HTML is longer than {max} bytes")]
+    InputTooLarge {
+        /// The limit.
+        max: usize,
+    },
+    /// More markup than [`max_nodes`](HtmlPolicy::max_nodes) pays for, or
+    /// more work for the parser than that much markup takes.
+    #[error("the HTML has more markup than {max} nodes")]
+    TooManyNodes {
+        /// The limit.
+        max: usize,
+    },
+    /// Elements nested deeper than [`max_depth`](HtmlPolicy::max_depth).
+    #[error("the HTML nests deeper than {max} levels")]
+    TooDeep {
+        /// The limit.
+        max: usize,
+    },
+    /// A tag with more attributes than any tag needs.
+    #[error("a tag in the HTML has more than {max} attributes")]
+    TooManyAttributes {
+        /// The limit.
+        max: usize,
+    },
+}
+
+#[cfg(feature = "html")]
+impl HtmlError {
+    /// The rule of the message table, and the limit it names.
+    fn rule(self) -> (&'static str, usize) {
+        match self {
+            HtmlError::InputTooLarge { max } => ("html.input", max),
+            HtmlError::TooManyNodes { max } => ("html.nodes", max),
+            HtmlError::TooDeep { max } => ("html.depth", max),
+            HtmlError::TooManyAttributes { max } => ("html.attributes", max),
         }
     }
 }
@@ -240,9 +412,9 @@ mod safe {
     use serde::de::{self, Deserializer, Visitor};
     use serde::{Deserialize, Serialize, Serializer};
 
-    use super::HtmlPolicy;
+    use super::{HtmlError, HtmlPolicy};
     use crate::context;
-    use crate::failure::serde_error;
+    use crate::failure::{serde_error, serde_error_with};
     use crate::rules::{Length, Measure, RuleInput, Unit};
 
     /// Rich text from the client, sanitized by the app's [`HtmlPolicy`]
@@ -253,9 +425,16 @@ mod safe {
     /// - In the extractors the policy is the app's (`validation.html`, see
     ///   [`InputContext`](crate::InputContext)); elsewhere the default
     ///   policy, unless the code runs in an `InputContext::scope`.
-    /// - It never fails on a string: anything unsafe is removed. Rules run
-    ///   on the sanitized HTML, so `length(chars, max = 10000)` measures
-    ///   what is stored.
+    /// - Anything unsafe is removed, so it fails on a string only when the
+    ///   string is over one of the policy's limits ([`HtmlError`], a 400 on
+    ///   the field). Rules run on the sanitized HTML, so
+    ///   `length(chars, max = 10000)` measures what is stored, and a body over
+    ///   the limit never gets as far as the parser.
+    /// - Sanitizing a long field takes a while (tens of milliseconds for a
+    ///   long article, see `validation.html` in the docs). On a multi-threaded
+    ///   runtime a field of 16 KiB or more gives up its async worker
+    ///   (`block_in_place`), so other requests go on. On a current-thread
+    ///   runtime there is no other thread, and they wait.
     /// - It serializes as the sanitized string; [`as_str`](SafeHtml::as_str)
     ///   and [`into_inner`](SafeHtml::into_inner) give it back.
     ///
@@ -285,9 +464,19 @@ mod safe {
             Self::with_policy(html, &HtmlPolicy::default())
         }
 
-        /// `html` sanitized by `policy`.
+        /// `html` sanitized by `policy`. Over one of its limits the input
+        /// comes back as escaped text (see [`HtmlPolicy::clean`]).
         pub fn with_policy(html: &str, policy: &HtmlPolicy) -> Self {
             SafeHtml(policy.clean(html))
+        }
+
+        /// `html` sanitized by `policy`, or the limit it passes.
+        ///
+        /// # Errors
+        ///
+        /// [`HtmlError`]: the input is over one of the policy's limits.
+        pub fn try_with_policy(html: &str, policy: &HtmlPolicy) -> Result<Self, HtmlError> {
+            policy.try_clean(html).map(SafeHtml)
         }
 
         /// The sanitized HTML.
@@ -352,7 +541,12 @@ mod safe {
 
                 fn visit_str<E: de::Error>(self, html: &str) -> Result<SafeHtml, E> {
                     match context::current() {
-                        Some(context) => Ok(SafeHtml::with_policy(html, context.html())),
+                        Some(context) => {
+                            SafeHtml::try_with_policy(html, context.html()).map_err(|error| {
+                                let (rule, max) = error.rule();
+                                serde_error_with(rule, &[("max", &max)], error)
+                            })
+                        }
                         // The extractor resolves the app's policy and runs again.
                         None => Err(serde_error("html", "the HTML policy is not resolved yet")),
                     }

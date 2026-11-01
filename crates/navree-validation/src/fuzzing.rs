@@ -2,8 +2,8 @@
 //! HTML sanitizer's output, and the tree it checked. Not part of the API.
 
 use crate::HtmlPolicy;
-use crate::html::clean::Checked;
-use crate::html::tree::{Event, Tree};
+use crate::html::clean::{Checked, as_text};
+use crate::html::tree::{Event, Limits, Tree, escape_text};
 
 /// One step of a walk over a parsed fragment, in document order.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -53,13 +53,24 @@ fn nodes(events: Vec<Event<'_>>) -> Vec<Node> {
 /// `html` parsed as the content of a `<div>`, the way the sanitizer (and a
 /// browser) parses it.
 pub fn parse(html: &str) -> Vec<Node> {
-    nodes(Tree::parse(html).events(|_, _| false))
+    let limits = Limits {
+        max_input_bytes: usize::MAX,
+        max_nodes: usize::MAX,
+        max_depth: usize::MAX,
+    };
+    Tree::parse(html, limits)
+        .map(|tree| nodes(tree.events(|_, _| false)))
+        .unwrap_or_default()
 }
 
 /// `html` sanitized by `policy`, and the walk over what the sanitizer
 /// checked: the tree it kept, or the text alone when it kept only text.
 pub fn sanitize(policy: &HtmlPolicy, html: &str) -> (String, Vec<Node>) {
-    let (out, checked) = policy.sanitizer().sanitize(html);
+    // Over a limit, `HtmlPolicy::clean` keeps the input as text.
+    let (out, checked) = policy.sanitizer().sanitize(html).unwrap_or_else(|_| {
+        let text = as_text(html);
+        (escape_text(&text), Checked::Text(text))
+    });
     let checked = match checked {
         Checked::Tree(tree) => nodes(tree.events(|_, _| false)),
         Checked::Text(text) if text.is_empty() => Vec::new(),

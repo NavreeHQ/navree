@@ -6159,6 +6159,7 @@ dependencies = [
  "html5ever",
  "http",
  "icu_locale_core",
+ "memchr",
  "navree-config",
  "navree-db",
  "navree-http",

@@ -16,7 +16,7 @@ workspace = true
 phone = ["dep:rlibphonenumber"]
 ## `SafeHtml`: rich text sanitized by the app's `HtmlPolicy` (parsed with
 ## html5ever, URLs read with url).
-html = ["dep:html5ever", "dep:url"]
+html = ["dep:html5ever", "dep:memchr", "dep:tokio", "dep:url"]
 ## `Validate` for navree-time's `Zone`, `LocalDay` and `DayRange`
 ## (`Valid<Query<DayRange>>`).
 time = ["dep:navree-time"]
@@ -34,6 +34,7 @@ form_urlencoded = { workspace = true }
 html5ever = { workspace = true, optional = true }
 http = { workspace = true }
 icu_locale_core = { workspace = true }
+memchr = { workspace = true, optional = true }
 navree-config = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
@@ -48,6 +49,8 @@ serde_urlencoded = { workspace = true }
 # `pattern("...")` rules.
 regex = { workspace = true }
 thiserror = { workspace = true }
+# Sanitizing a long `SafeHtml` gives up the async worker (`block_in_place`).
+tokio = { workspace = true, optional = true }
 unicode-properties = { workspace = true }
 url = { workspace = true, optional = true }
 uuid = { workspace = true }

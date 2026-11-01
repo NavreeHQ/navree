@@ -120,6 +120,8 @@ pub use digits::{Folded, fold_digits};
 pub use errors::ValidationErrors;
 pub use extract::{Valid, ValidAsync, ValidInput, validate, validate_in, validate_value};
 pub use failure::rule_error;
+#[cfg(feature = "html")]
+pub use html::HtmlError;
 pub use html::HtmlPolicy;
 #[cfg(feature = "html")]
 pub use html::SafeHtml;

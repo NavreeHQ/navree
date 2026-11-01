@@ -307,7 +307,7 @@ People write their names in Arabic and Devanagari, type codes with the digits th
 | `Phone` | phone numbers as people write them | E.164: `+447400123456` | `phone must be a valid phone number` |
 | `Country` | ISO 3166-1 alpha-2 codes, any case | `GB` | `country must be a valid ISO 3166-1 alpha-2 country code` |
 | `Locale` | BCP 47 language tags, any case | `en-GB` | `locale must be a valid locale` |
-| `SafeHtml` | rich text | HTML with only the allowed tags | never fails on a string |
+| `SafeHtml` | rich text | HTML with only the allowed tags | input over a [limit](#limits-on-rich-text) |
 
 The types do their work while the extractor deserializes. A field typed `Phone` holds a valid number in E.164 form, and a bad number is a field error like a wrong type. `rules::phone`, `rules::country` and `rules::locale` check a `String` field instead and leave it as sent.
 
@@ -533,8 +533,8 @@ With the default policy:
 - A URL attribute (`href`, `src`, `action`, `formaction`, `data`, `poster`, `cite` and the like, on any tag) keeps only an allowed scheme or a relative URL. The scheme is the one a browser reads, so ` JaVaScRiPt:` and `jav&#x09;ascript:` are `javascript:`.
 - An SVG or MathML element where the HTML parser would not put it is removed with its content, and SVG animation elements (`animate`, `set`) are always removed: they change another element's attributes, which the policy's lists can't check.
 - The sanitized HTML is parsed again before your handler sees it, and kept only when that parse is the tree the policy allowed, so a browser builds exactly what was checked. Markup the parser rearranges comes out the way a browser reads it (`<a>1<table><a>2</a></table></a>` becomes two links side by side, and the blank line after `<pre>` goes), and markup no HTML can hold, such as an allowed `plaintext`, leaves only its text.
-- It never fails on a string, because anything unsafe is removed. Rules measure the sanitized HTML: `length(max = 20_000)` limits what you store, and a body that was only a script fails `min = 1`.
-- It serializes as the sanitized string, derefs to `str`, and `as_str()`, `into_inner()` and `String::from(html)` give it back. `SafeHtml::new(html)` sanitizes with the default policy, `SafeHtml::with_policy(html, &policy)` with another.
+- Anything unsafe is removed, so a string fails only when it is over one of the policy's [limits](#limits-on-rich-text): a 400 on the field, with a message that says which. Rules measure the sanitized HTML: `length(max = 20_000)` limits what you store, and a body that was only a script fails `min = 1`.
+- It serializes as the sanitized string, derefs to `str`, and `as_str()`, `into_inner()` and `String::from(html)` give it back. `SafeHtml::new(html)` sanitizes with the default policy, `SafeHtml::with_policy(html, &policy)` with another. These two can't fail: over a limit, the input comes back whole as escaped text, tags and all. `SafeHtml::try_with_policy` and `HtmlPolicy::try_clean` return the `HtmlError` instead.
 
 #### The HTML policy
 
@@ -562,7 +562,27 @@ img = ["src", "alt"]
 
 In code, `HtmlPolicy` has builders: `HtmlPolicy::default().allow_tags(["img"]).allow_attributes("img", ["src", "alt"])`, `url_schemes([...])`, `link_rel("noopener")`, and `HtmlPolicy::text_only()`, which keeps no tags at all. Pass it as `ValidationOptions { html, ..ValidationOptions::default() }`.
 
-A policy can't allow `script` or `style`, and can't allow a `rel` attribute while `link_rel` is set (set `link_rel = ""` to let links keep their own). `ValidationModule` refuses to boot with such a policy and names the key: ``validation.html.tags: `script` can't be allowed (scripts and styles are always removed)``.
+A policy can't allow `script` or `style`, an `on*` event handler, `srcdoc` (it holds a whole document for an `iframe`) or `http-equiv` (it makes a `meta` redirect the page), and can't allow a `rel` attribute while `link_rel` is set (set `link_rel = ""` to let links keep their own). `ValidationModule` refuses to boot with such a policy and names the key: ``validation.html.tags: `script` can't be allowed (scripts and styles are always removed)``. `link_rel` goes on every `a` and `area`.
+
+A scheme list is about schemes: a relative URL stays, whatever the list says. A URL with a host of its own and no scheme (`//evil.test`, and `/\evil.test` or `\\evil.test`, which a browser reads the same) leaves the site with the page's scheme, so it stays only when both `http` and `https` are allowed. So `url_schemes = ["https"]` removes `//evil.test` and keeps `https://evil.test`, and `url_schemes = []` keeps every link on the site. The URL lists `srcset`, `imagesrcset` and `ping` are checked URL by URL.
+
+#### Limits on rich text
+
+Rich text comes from strangers, and HTML is cheap to write and dear to parse: the parser copies open formatting elements for every block it meets, so a few kilobytes can ask for millions of nodes, and each block scans the stack of open elements, so deep nesting takes the square of its length. So a parse has limits, in the same `validation.html` section. Over one, the field is a 400 and the parse stops there:
+
+| Key | Default | What it bounds |
+|---|---|---|
+| `max_input_bytes` | 524288 (512 KiB) | The input, before any of it is parsed. Over: `body must be shorter than or equal to 524288 bytes of HTML`. |
+| `max_nodes` | 131072 | The markup one parse may hold: 1 for each element, text run and comment, 1 for each attribute, 1 for every 32 bytes of attributes, and a budget of 64 scans of the parser's stacks for each. Over: `body has too much markup`. |
+| `max_depth` | 128 | How deep elements nest, up to 256. Over: `body nests deeper than 128 levels`. |
+
+A tag with more than 256 attributes is refused as well; nothing written by a person or an editor comes near it. `HtmlPolicy::default().limits(max_input_bytes, max_nodes, max_depth)` sets the three in code.
+
+Chromium and Firefox read markup past 512 levels flat, so what they build from anything deeper isn't what was checked: that's why `max_depth` can't go past 256, which leaves room for how deep the page already is. A real article stays below 30 levels and well inside the rest: 512 KiB of headings, paragraphs, links and lists is about 100,000 nodes.
+
+**The cost.** Measured on a shared machine in a release build, a 512 KiB article takes 60 ms and the worst input we know of at the limit takes about 220 ms, and about 35 MiB of memory at its peak, whether it's accepted or refused. A body can hold several fields, and when one fails the body is read again to report the rest, so the most one request can cost is about `body_limit_bytes / max_input_bytes * 2` times that. Lower `max_input_bytes` when your rich text is short (a comment has no need of 512 KiB): the time follows the input.
+
+A field of 16 KiB or more gives up its async worker while it is sanitized (`tokio::task::block_in_place`), on a multi-threaded runtime: the other tasks on the worker go on on another thread, so a hostile field holds up its own request and no other. On a current-thread runtime there's no other thread to go to, and they wait for it, up to the time above.
 
 ### Outside the extractors
 
