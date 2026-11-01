@@ -9,11 +9,14 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::marker::PhantomData;
 
+use http::header::{ALLOW, CONTENT_TYPE, HOST, ORIGIN};
 use http::request::Parts;
-use http::{Method, StatusCode};
+use http::{HeaderValue, Method, StatusCode};
 use navree_http::body::{BodyLimit, read_body};
+use navree_http::HttpOptions;
 use navree_http::extract::{FromRequest, Request, urlencoded};
 use navree_http::response::{IntoResponse, Response};
+use navree_kernel::AppContext;
 use navree_validation::{Messages, Rule, Validate};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer};
@@ -736,11 +739,74 @@ pub(crate) fn encode_into(out: &mut String, text: &str) {
     }
 }
 
+/// Whether the browser says this request came from this site. Browsers state it in
+/// `Sec-Fetch-Site`, which no page can set, or in `Origin` when they predate that or
+/// the page isn't on HTTPS. A client that sends neither (curl, a test) isn't a browser
+/// acting for a page. A sibling subdomain is another site here: it can set cookies,
+/// but it shouldn't be able to post.
+fn from_this_site(parts: &Parts) -> bool {
+    if let Some(site) = parts.headers.get("sec-fetch-site") {
+        return matches!(site.as_bytes(), b"same-origin" | b"none");
+    }
+    let Some(origin) = parts.headers.get(ORIGIN) else {
+        return true;
+    };
+    let host = parts.headers.get(HOST).and_then(|host| host.to_str().ok()).or_else(|| parts.uri.authority().map(http::uri::Authority::as_str));
+    let authority = origin.to_str().ok().and_then(|origin| origin.split_once("://")).map(|(_, authority)| authority);
+    matches!((host, authority), (Some(host), Some(authority)) if host.eq_ignore_ascii_case(authority))
+}
+
+/// Whether the request's `Origin` is a front end the app trusts to write from
+/// another site: `http.cors.allowed_origins`, the list the session layer also reads.
+async fn from_a_trusted_front_end(parts: &Parts) -> bool {
+    let Some(origin) = parts.headers.get(ORIGIN).and_then(|origin| origin.to_str().ok()) else {
+        return false;
+    };
+    let origin = origin.trim().trim_end_matches('/');
+    let Some(context) = parts.extensions.get::<AppContext>() else {
+        return false;
+    };
+    let Some(options) = context.try_get::<HttpOptions>().await else {
+        return false;
+    };
+    options.cors.allowed_origins.iter().any(|allowed| allowed.trim().trim_end_matches('/') == origin)
+}
+
+/// Whether the request holds a urlencoded form.
+fn is_form_body(parts: &Parts) -> bool {
+    parts
+        .headers
+        .get(CONTENT_TYPE)
+        .and_then(|kind| kind.to_str().ok())
+        .and_then(|kind| kind.split(';').next())
+        .is_some_and(|kind| kind.trim().eq_ignore_ascii_case("application/x-www-form-urlencoded"))
+}
+
+/// Why a request isn't a form submission at all, before its body is read.
+async fn refusal(parts: &Parts) -> Option<StatusCode> {
+    if matches!(parts.method, Method::GET | Method::HEAD) {
+        return Some(StatusCode::METHOD_NOT_ALLOWED);
+    }
+    if !from_this_site(parts) && !from_a_trusted_front_end(parts).await {
+        return Some(StatusCode::FORBIDDEN);
+    }
+    if !is_form_body(parts) {
+        return Some(StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    }
+    None
+}
+
 /// A form submission, decoded and validated.
 ///
 /// Unlike a validated JSON body, a failure isn't a JSON 400. From the runtime
 /// it answers ops that show the errors under the inputs; with JavaScript off
 /// it answers the form again, with what was typed and the errors.
+///
+/// It has its own answer to cross-site request forgery, with or without a session:
+/// a body from another site is refused with 403 unless its `Origin` is in
+/// `http.cors.allowed_origins`, a body that isn't a urlencoded form with 415, and a
+/// `GET` or `HEAD` with 405, so no link or prefetch can fill one. Behind navree-session
+/// the token check also runs.
 ///
 /// ```ignore
 /// async fn store(Submit(input): Submit<NewDeal>) -> Reply {
@@ -760,7 +826,7 @@ pub struct Rejected<T> {
     errors: FieldErrors,
     from_runtime: bool,
     action: String,
-    too_large: bool,
+    refused: Option<StatusCode>,
     marker: PhantomData<fn() -> T>,
 }
 
@@ -773,8 +839,12 @@ impl<T: Form> Rejected<T> {
     /// Ops for the runtime; with JavaScript off, what `page` makes of a form
     /// holding what was typed and the errors.
     pub fn respond<R: IntoResponse>(self, page: impl FnOnce(FormView<T>) -> R) -> Response {
-        if self.too_large {
-            return StatusCode::PAYLOAD_TOO_LARGE.into_response();
+        if let Some(status) = self.refused {
+            let mut response = status.into_response();
+            if status == StatusCode::METHOD_NOT_ALLOWED {
+                response.headers_mut().insert(ALLOW, HeaderValue::from_static("POST"));
+            }
+            return response;
         }
         if self.from_runtime {
             let ops = vec![Op::Errors { form: T::ID.to_owned(), fields: self.errors }];
@@ -805,23 +875,20 @@ where
         let (parts, body): (Parts, _) = request.into_parts();
         let from_runtime = parts.headers.contains_key(UI_HEADER);
         let action = parts.uri.path_and_query().map_or_else(|| parts.uri.path().to_owned(), |path| path.as_str().to_owned());
+        let refuse = |status: StatusCode, action: String| Rejected { values: Vec::new(), errors: FieldErrors::new(), from_runtime, action, refused: Some(status), marker: PhantomData };
+        if let Some(status) = refusal(&parts).await {
+            return Err(refuse(status, action));
+        }
         let limit = BodyLimit::of(&parts.extensions);
-        let bytes = if parts.method == Method::GET || parts.method == Method::HEAD {
-            bytes::Bytes::copy_from_slice(parts.uri.query().unwrap_or_default().as_bytes())
-        } else {
-            match read_body(body, limit).await {
-                Ok(bytes) => bytes,
-                Err(_) => {
-                    return Err(Rejected { values: Vec::new(), errors: FieldErrors::new(), from_runtime, action, too_large: true, marker: PhantomData });
-                }
-            }
+        let Ok(bytes) = read_body(body, limit).await else {
+            return Err(refuse(StatusCode::PAYLOAD_TOO_LARGE, action));
         };
         let Some(values) = read_pairs::<T>(&bytes) else {
-            return Err(Rejected { values: Vec::new(), errors: FieldErrors::new(), from_runtime, action, too_large: true, marker: PhantomData });
+            return Err(refuse(StatusCode::PAYLOAD_TOO_LARGE, action));
         };
         match decode::<T>(&values) {
             Ok(value) => Ok(Self(value)),
-            Err(errors) => Err(Rejected { values: echo::<T>(values), errors, from_runtime, action, too_large: false, marker: PhantomData }),
+            Err(errors) => Err(Rejected { values: echo::<T>(values), errors, from_runtime, action, refused: None, marker: PhantomData }),
         }
     }
 }

@@ -200,3 +200,61 @@ async fn a_rejected_page_echoes_a_bounded_amount() {
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     assert!(response.text().len() < 512 * 1024, "{}", response.text().len());
 }
+
+#[tokio::test]
+async fn a_submit_refuses_another_site() {
+    let app = app().await;
+    let body = "password=longenough&email=a";
+    for site in ["cross-site", "same-site"] {
+        let response = app.client().post("/store").header("content-type", FORM).header("sec-fetch-site", site).header("origin", "https://evil.example").body(body).send().await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{site}");
+    }
+    // A browser that predates Fetch Metadata still names the page's origin.
+    let response = app.client().post("/store").header("content-type", FORM).header("host", "app.example").header("origin", "https://evil.example").body(body).send().await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn a_submit_takes_this_site_and_clients_that_are_not_browsers() {
+    let app = app().await;
+    let body = "password=longenough&email=a";
+    let same = app.client().post("/store").header("content-type", FORM).header("sec-fetch-site", "same-origin").body(body).send().await;
+    assert_eq!(same.status(), StatusCode::OK);
+    let same_host = app.client().post("/store").header("content-type", FORM).header("host", "app.example").header("origin", "https://app.example").body(body).send().await;
+    assert_eq!(same_host.status(), StatusCode::OK);
+    let script = app.client().post("/store").header("content-type", FORM).without_header("origin").body(body).send().await;
+    assert_eq!(script.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn a_submit_takes_a_front_end_the_app_trusts() {
+    let app = TestApp::builder()
+        .config("http.per_ip_rate_limit", serde_json::Value::Null)
+        .config("http.cors.allowed_origins", serde_json::json!(["https://front.example"]))
+        .module(HttpModule::from_config())
+        .module(UiModule)
+        .module(App)
+        .build()
+        .await;
+    let body = "password=longenough&email=a";
+    let trusted = app.client().post("/store").header("content-type", FORM).header("sec-fetch-site", "cross-site").header("origin", "https://front.example").body(body).send().await;
+    assert_eq!(trusted.status(), StatusCode::OK);
+    let other = app.client().post("/store").header("content-type", FORM).header("sec-fetch-site", "cross-site").header("origin", "https://evil.example").body(body).send().await;
+    assert_eq!(other.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn a_submit_never_comes_by_get_and_is_a_form() {
+    let app = app().await;
+    let response = app.client().get("/store?password=longenough&email=a").send().await;
+    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+    assert_eq!(response.header("allow"), Some("POST"));
+    for kind in ["text/plain", "application/json"] {
+        let response = app.client().post("/store").header("content-type", kind).body("password=longenough&email=a").send().await;
+        assert_eq!(response.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE, "{kind}");
+    }
+    let none = app.client().post("/store").body("password=longenough&email=a").send().await;
+    assert_eq!(none.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE, "fetch with a Blob sends no type");
+    let charset = app.client().post("/store").header("content-type", "application/x-www-form-urlencoded; charset=UTF-8").body("password=longenough&email=a").send().await;
+    assert_eq!(charset.status(), StatusCode::OK);
+}
