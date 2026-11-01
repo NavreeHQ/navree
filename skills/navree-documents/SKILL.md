@@ -223,14 +223,16 @@ let pages = sealed.page_texts()?; // one string per page
 
 `text()` and `page_texts()` allow a page 128 MiB of work and the document
 1 GiB: content decoded (a form again each time it is drawn, plus 1 KiB per
-draw), fonts read (`ToUnicode` inflated, up to 8 MiB, plus 1/16 of the memory
-reading it builds; 16 bytes per width; 8 per `Differences` entry; 1 KiB per
-re-read of a dropped font), and marked content's actual text each time it is
-decoded. Reading text (here and in navree-media's `text::extract`, which uses
-the same code), a `ToUnicode` map is refused past 64 codespace ranges, 131,072
-lines, 256 texts in one list or 65,792 in all lists, whichever way the font's
-encoding reaches it (any chain of references). Fonts and maps are kept per
-document in 256 MiB, counted before they are read (~256 B per code, two copies
+draw), everything a filter reads and writes whether the content can be used
+or not, fonts read (`ToUnicode` inflated, up to 8 MiB, plus 1/16 of the memory
+reading it builds; 16 bytes per width looked at; 8 per `Differences` entry; 1
+KiB per re-read of a dropped font), and marked content's actual text each time
+it is decoded. Reading text (here and in navree-media's `text::extract`, which
+uses the same code), a font's `ToUnicode` map comes before its `Encoding`, and
+its one reader refuses it past 64 codespace ranges, 131,072 lines, 256 texts in
+one list or 65,792 in all lists. Glyph names may be `uniXXXX` or `uXXXXXX`; one
+that cannot be read loses one code. Fonts and maps are kept per document in 256
+MiB, counted (~256 B per code, two copies
 of a range's text per split it can have, 128 B per `Differences` entry, 24 B per
 width; 17 MB for a full two-byte map, fifteen fit), plus at most one font's
 widths; a map is read once for the fonts sharing it; past 256 MiB the least
@@ -243,15 +245,21 @@ comparisons (a byte of text compared is one). Over any:
 Reading a PDF (navree-pdf, under every `Pdf` method) is lazy and budgeted per
 document: 256 MiB of objects as they are built (object and cross-reference
 streams inflate to 8 MiB each; a bigger one is skipped with its objects, so
-`Pdf::from_bytes` refuses a PDF whose page tree is in it) and 1 GiB of bytes
-scanned. Objects sharing their bytes, deep or wide nesting (100 levels) and
+`Pdf::from_bytes` refuses a PDF whose page tree is in it), of which the process
+holds at most twice that, and 1 GiB of bytes looked at, including what a failed
+parse reached and what each filter (8 at most on a stream) reads and writes.
+Objects sharing their bytes, deep or wide nesting (100 levels) and
 cross-references that rescan the same bytes are all counted: a small file that
 would take gigabytes is `TooLarge` (413). `page_count`, `text`, `title` read
-what they need; `merge`, `stamp`, `overlay`, `with_metadata` read everything.
+what they need; `merge`, `stamp`, `overlay`, `with_metadata` read everything,
+write at most the files' bytes plus 256 MiB each (`TooLarge` past that), and
+refuse a file when an object it needs cannot be read (`DocumentsError::Pdf`).
+A stream ends before the next object starts, whatever its `Length` says.
 Broken cross-references are rebuilt; files encrypted without a password to open
 (RC4, AES 40 to 256 bits) are read and edited unencrypted; one needing a
 password is `DocumentsError::Pdf`.
-`stamp`, `overlay` and `merge` keep shared or inherited resources one object.
+`stamp`, `overlay` and `merge` keep shared or inherited resources one object,
+and place what they draw on what the page shows (`MediaBox` cut to `CropBox`).
 
 ## Word documents
 

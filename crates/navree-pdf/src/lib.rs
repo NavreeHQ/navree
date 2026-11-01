@@ -59,29 +59,53 @@
 //!
 //! ## The budget
 //!
-//! A document is read within its [`ReadLimits`]: the memory its objects may
-//! hold (256 MiB), counted as each object, string, name and dictionary
-//! entry is built and as each object stream is inflated, and the bytes the
-//! reader may scan (1 GiB). A small file whose objects would take more is
-//! refused with [`PdfError::TooLarge`], however they come to take it:
-//! objects of an object stream that share their bytes, containers nested
-//! deep (100 levels at most) or wide, cross-reference entries that send the
-//! reader over the same bytes again. A request for an object never fails:
-//! one that is missing or damaged is `None`, and so is every request after
-//! a limit ran out; [`Document::check`] returns that error.
+//! A document is read within its [`ReadLimits`]. What a file can make the
+//! reader do, in terms that can be checked:
+//!
+//! - **Work.** Every byte the reader looks at is charged to
+//!   [`ReadLimits::work`] (1 GiB), again each time it is looked at: what a
+//!   scan passes, what a parse reached before it failed and moved back, what
+//!   each filter reads and writes, whether the next filter works or not. No
+//!   loop looks through a table once for each entry: scans move forward,
+//!   and tables are looked up by key. The time a document takes is in
+//!   proportion to what is charged ([`Document::work_used`]), and is linear
+//!   in the file until the limit stops it.
+//! - **Memory.** Each object, string, name and dictionary entry, each object
+//!   stream and cross-reference stream inflated, and each entry of the
+//!   cross-reference is counted against [`ReadLimits::memory`] (256 MiB) as
+//!   it is built, and [`Document::memory_used`] says how much. What the
+//!   process holds for them at its peak is at most twice what is counted,
+//!   over the shapes that bring the two furthest apart, so 256 MiB counted
+//!   is at most 512 MiB held. The bytes of a stream are the file's own, and
+//!   are not copied.
+//! - **Bytes out.** A stream ends before the next object starts, whatever its
+//!   `Length` says, so the streams a document holds add up to the file's
+//!   size (twice that when the cross-reference is wrong about some objects).
+//!   [`Objects::save`] writes at most the file's size plus
+//!   [`ReadLimits::memory`]. A filter has 8 steps at most.
+//!
+//! A small file that would take more is refused with
+//! [`PdfError::TooLarge`], however it comes to take it. A request for an
+//! object never fails: one that is missing or damaged is `None`, and so is
+//! every request after a limit ran out; [`Document::check`] returns that
+//! error.
 //!
 //! ## Text
 //!
 //! [`text::page_texts`] reads what each page shows, in reading order, held
 //! to its own [`TextLimits`]: work and text per page and per document, the
 //! glyphs of a page, the nesting of saved states and marked content, caps
-//! on `ToUnicode` maps, and the memory of the fonts read.
+//! on `ToUnicode` maps, enforced by the one reader of a map as it reads, and
+//! the memory of the fonts read. A font's `ToUnicode` map comes before its
+//! `Encoding`.
 //!
 //! ## Writing
 //!
 //! [`Objects`] holds a document's objects to be changed (renumbered,
 //! pruned, compressed) and saves them, with a cross-reference table or with
-//! object streams and a cross-reference stream.
+//! object streams and a cross-reference stream. [`Objects::read`] refuses a
+//! document when an object it needs cannot be read, since what is saved
+//! would lose it.
 
 #![forbid(unsafe_code)]
 

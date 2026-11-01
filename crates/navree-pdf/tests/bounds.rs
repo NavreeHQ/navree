@@ -460,6 +460,40 @@ fn widths_that_are_not_numbers_are_charged_each_time_they_are_looked_at() {
     too_large(text::page_texts_within(&document, limits));
 }
 
+#[test]
+fn comparisons_on_many_pages_are_held_to_the_document_s_work() {
+    // 40 pages of 14,000 letters that all sit at one place: about 49 million
+    // comparisons a page, within the page's limit, from 14 KB of content.
+    let pages = 40;
+    let kids: String = (0..pages).map(|i| format!("{} 0 R ", i + 5)).collect();
+    let mut objects = vec![
+        b"<</Type/Catalog/Pages 2 0 R>>".to_vec(),
+        format!("<</Type/Pages/Kids[{kids}]/Count {pages}/Resources<</Font<</F 4 0 R>>>>>>")
+            .into_bytes(),
+        stream("", &{
+            let mut content = b"BT /F 12 Tf (".to_vec();
+            content.extend(b"ab".repeat(7_000));
+            content.extend_from_slice(b") Tj ET");
+            content
+        }),
+        b"<</Type/Font/Subtype/TrueType/BaseFont/X/Encoding/WinAnsiEncoding/FirstChar 97/Widths[1000 0]>>"
+            .to_vec(),
+    ];
+    for _ in 0..pages {
+        objects.push(b"<</Type/Page/Parent 2 0 R/Contents 3 0 R>>".to_vec());
+    }
+    let file = file(
+        &objects,
+        &format!("<</Root 1 0 R/Size {}>>", objects.len() + 1),
+    );
+    let document = Document::load(file, ReadLimits::default()).unwrap();
+    let limits = TextLimits {
+        document_work: 8 << 20,
+        ..TextLimits::default()
+    };
+    too_large(text::page_texts_within(&document, limits));
+}
+
 // ToUnicode maps: one reader, and the caps it enforces.
 
 #[test]

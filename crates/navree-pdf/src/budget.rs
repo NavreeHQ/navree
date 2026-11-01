@@ -8,7 +8,7 @@ use crate::error::{PdfError, size};
 ///
 /// Objects are read when they are first asked for, and kept: the memory
 /// they hold, the streams that are inflated to find them, and the bytes the
-/// reader scans are counted as they are read, before they are kept. A file
+/// reader looks at are counted as they are read, before they are kept. A file
 /// whose objects would take more is refused with [`PdfError::TooLarge`],
 /// however small the file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -17,11 +17,14 @@ pub struct ReadLimits {
     /// builds them: each object, string, name and dictionary entry, each
     /// object stream and cross-reference stream inflated, and each entry
     /// of the cross-reference. The bytes of a stream are the file's own and
-    /// are not counted again.
+    /// are not counted again. What the process holds is at most twice what
+    /// is counted. It is also what an edit may write past the file's own size
+    /// (see [`Objects::output_limit`](crate::Objects::output_limit)).
     pub memory: usize,
-    /// Bytes the reader may scan (1 GiB), a byte counting again each time
-    /// it is read: objects parsed, streams inflated, a damaged file scanned
-    /// for its objects.
+    /// Bytes the reader may look at (1 GiB), a byte counting again each time
+    /// it is looked at: objects parsed, what a parse that failed reached
+    /// before it moved back, what each filter reads and writes whether the
+    /// next one works or not, a damaged file scanned for its objects.
     pub work: usize,
     /// What one object stream or cross-reference stream may inflate to (8
     /// MiB). Writers put 100 to 200 objects in an object stream, tens of

@@ -69,8 +69,8 @@ impl Pdf {
     /// PDF with at least one page.
     ///
     /// Reading a PDF is held to a budget (see the documents guide): the
-    /// objects it reads may hold 256 MiB and its reader may scan 1 GiB, and
-    /// a file that needs more is refused with
+    /// objects it reads may be counted as holding 256 MiB, and its reader may
+    /// look at 1 GiB, and a file that needs more is refused with
     /// [`DocumentsError::TooLarge`], however small it is.
     pub fn from_bytes(bytes: impl Into<Bytes>) -> Result<Pdf, DocumentsError> {
         let pdf = Pdf(bytes.into());
@@ -122,6 +122,11 @@ impl Pdf {
     /// One document with the pages of every PDF in `pdfs`, in order.
     /// Outlines, forms and tagged structure are dropped; each page keeps
     /// its contents, size and resources.
+    ///
+    /// Like every edit, this refuses a document it would lose part of (an
+    /// object it needs cannot be read: [`DocumentsError::Pdf`]), and one it
+    /// would write more than the file's size plus 256 MiB for
+    /// ([`DocumentsError::TooLarge`]).
     pub fn merge<'a>(pdfs: impl IntoIterator<Item = &'a Pdf>) -> Result<Pdf, DocumentsError> {
         let mut merged = Objects::new();
         let pages_id = merged.reserve();
@@ -181,7 +186,9 @@ impl Pdf {
         Pdf::merge([self, other])
     }
 
-    /// The document with `stamp` written on the pages it selects.
+    /// The document with `stamp` written on the pages it selects, placed on
+    /// what each page shows: its `MediaBox`, cut to its `CropBox`, wherever
+    /// that box starts.
     pub fn stamp(&self, stamp: &Stamp) -> Result<Pdf, DocumentsError> {
         let encoded = stamp.encoded_text()?;
         let mut document = self.objects()?;
@@ -231,7 +238,7 @@ impl Pdf {
 
     /// The document with the first page of `overlay` drawn over the pages
     /// `pages` selects. An overlay of another size is scaled to fit and
-    /// centered.
+    /// centered on what the page shows.
     pub fn overlay(&self, overlay: &Pdf, pages: Pages) -> Result<Pdf, DocumentsError> {
         let mut document = self.objects()?;
         flatten_inherited(&mut document)?;
@@ -276,7 +283,7 @@ impl Pdf {
             .ok_or_else(|| missing("the overlay's MediaBox"))?;
         let (left, bottom) = box_origin(&source, &media_box);
         // Everything the overlay page refers to moves into the document;
-        // what nothing references is pruned when saving.
+        // what nothing refers to is pruned below, before saving.
         for (id, object) in std::mem::take(&mut source.objects) {
             if !matches!(object.type_name(), Some(b"Catalog" | b"Pages" | b"Page")) {
                 document.insert(id, object);
@@ -563,8 +570,7 @@ fn small_enough_to_copy(value: &Object) -> bool {
 /// A value larger than a box is not copied onto each page: it becomes one
 /// object that every page inheriting it refers to, so a tree of many pages
 /// and large resources does not grow by their product. A `Rotate` that is not
-/// a number is not a rotation, and is not inherited. A page with no `Type`
-/// gets one.
+/// a number is not a rotation, and is not inherited.
 fn flatten_inherited(document: &mut Objects) -> Result<(), DocumentsError> {
     const INHERITED: [&[u8]; 4] = [b"Resources", b"MediaBox", b"CropBox", b"Rotate"];
     // The value each page gets, by the ancestor and key it comes from.
@@ -634,9 +640,6 @@ fn flatten_inherited(document: &mut Objects) -> Result<(), DocumentsError> {
         }
         if !page.has(b"MediaBox") {
             page.set("MediaBox", vec![0.into(), 0.into(), 612.into(), 792.into()]);
-        }
-        if !page.has(b"Type") {
-            page.set("Type", "Page");
         }
     }
     Ok(())

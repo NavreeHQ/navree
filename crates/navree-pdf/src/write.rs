@@ -76,6 +76,7 @@ impl Objects {
             max_number: highest.max(listed),
             output_limit: Some(output_limit),
         };
+        read.name_tree_nodes();
         if let Some((number, generation)) = read.first_reached(&lost) {
             return Err(PdfError::damaged(format!(
                 "object {number} {generation} cannot be read, and the document needs it"
@@ -85,6 +86,57 @@ impl Objects {
             read.renumber(1);
         }
         Ok(read)
+    }
+
+    /// Gives the `Type` the format requires to the nodes of the page tree that
+    /// have none: what is saved is valid where the file was not.
+    fn name_tree_nodes(&mut self) {
+        let Some(root) = self
+            .trailer
+            .get(b"Root")
+            .and_then(Object::as_reference)
+            .and_then(|id| self.dictionary(id))
+            .and_then(|catalog| catalog.get(b"Pages"))
+            .and_then(Object::as_reference)
+        else {
+            return;
+        };
+        let mut seen = HashSet::new();
+        let mut stack = vec![root];
+        let mut unnamed: Vec<(ObjectId, &str)> = Vec::new();
+        while let Some(node) = stack.pop() {
+            if !seen.insert(node) {
+                continue;
+            }
+            let Some(dictionary) = self.dictionary(node) else {
+                continue;
+            };
+            if !dictionary.has(b"Type") {
+                unnamed.push((node, "Pages"));
+            }
+            let kids = dictionary
+                .get(b"Kids")
+                .and_then(|kids| self.resolve(kids))
+                .and_then(Object::as_array)
+                .map_or(&[][..], Vec::as_slice);
+            for id in kids.iter().filter_map(Object::as_reference) {
+                let Some(kid) = self.dictionary(id) else {
+                    continue;
+                };
+                match node_kind(kid, &|value| self.resolve(value)) {
+                    NodeKind::Tree => stack.push(id),
+                    NodeKind::Page if !kid.has(b"Type") && seen.insert(id) => {
+                        unnamed.push((id, "Page"));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        for (id, name) in unnamed {
+            if let Some(dictionary) = self.dictionary_mut(id) {
+                dictionary.set("Type", name);
+            }
+        }
     }
 
     /// One of `ids` that the trailer leads to, if any.

@@ -584,7 +584,7 @@ fn after_dictionary(data: &[u8], at: usize) -> bool {
 }
 
 /// The headers of the objects in `data` (`N G obj` at the start of a
-/// line), skipping stream data, each with its offset; later ones replace
+/// line or after an `endobj`), skipping stream data, each with its offset; later ones replace
 /// earlier ones, as incremental updates do. One pass over the file: the
 /// search for the end of a stream only moves forward, and once it has
 /// found no end it does not look again.
@@ -640,6 +640,9 @@ pub(crate) fn scan(data: &[u8], budget: &Budget) -> Result<BTreeMap<u32, Entry>,
         at_line_start = match byte {
             b'\r' | b'\n' => true,
             b' ' | b'\t' => at_line_start,
+            b'j' => data
+                .get(..at + 1)
+                .is_some_and(|read| read.ends_with(b"endobj")),
             _ => false,
         };
         at += 1;

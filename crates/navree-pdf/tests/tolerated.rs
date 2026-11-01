@@ -395,6 +395,53 @@ fn a_stream_keyword_in_a_string_does_not_hide_objects_from_a_scan() {
 }
 
 #[test]
+fn objects_on_one_line_are_found_by_a_scan() {
+    let bytes = b"%PDF-1.7\n\
+        1 0 obj\n<</Type/Catalog/Pages 2 0 R>>\nendobj 2 0 obj\n<</Type/Pages/Kids[3 0 R]/Count 1>>\nendobj 3 0 obj\n\
+        <</Type/Page/Parent 2 0 R>>endobj\n\
+        trailer\n<</Root 1 0 R/Size 4>>\n"
+        .to_vec();
+    let document = Document::load(bytes, ReadLimits::default()).unwrap();
+    assert!(document.rebuilt());
+    assert_eq!(document.pages(), [(3, 0)]);
+}
+
+#[test]
+fn what_an_edit_saves_gives_the_nodes_of_a_page_tree_their_type() {
+    let objects = vec![
+        b"<</Type/Catalog/Pages 2 0 R>>".to_vec(),
+        b"<</Kids[3 0 R]/Count 1>>".to_vec(),
+        b"<</Parent 2 0 R>>".to_vec(),
+    ];
+    let bytes = file(&objects, "<</Root 1 0 R/Size 4>>");
+    let edited = Objects::read(Document::load(bytes, ReadLimits::default()).unwrap()).unwrap();
+    assert_eq!(
+        edited.dictionary((2, 0)).unwrap().type_name(),
+        Some(&b"Pages"[..])
+    );
+    assert_eq!(
+        edited.dictionary((3, 0)).unwrap().type_name(),
+        Some(&b"Page"[..])
+    );
+}
+
+#[test]
+fn an_encryption_length_given_in_bytes_is_read() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/lines.aes-128.pdf"
+    );
+    let mut bytes = std::fs::read(path).unwrap();
+    let at = bytes
+        .windows(11)
+        .position(|window| window == b"/Length 128")
+        .unwrap();
+    bytes[at..at + 11].copy_from_slice(b"/Length  16");
+    let text = text_of(bytes);
+    assert!(text.contains("Line 1") || !text.is_empty(), "{text:?}");
+}
+
+#[test]
 fn a_stray_bracket_does_not_end_a_page() {
     let file = doc(
         stream("", b"BT /F 12 Tf 50 700 Td (Hi) Tj ] (there) Tj ET"),

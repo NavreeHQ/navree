@@ -98,9 +98,13 @@ impl Crypt {
         } else {
             let length = match version {
                 1 => 5,
-                _ => usize::try_from(int(b"Length").unwrap_or(128) / 8)
-                    .unwrap_or(16)
-                    .clamp(5, 16),
+                // In bits; a few writers give it in bytes.
+                _ => {
+                    let given = int(b"Length").unwrap_or(128);
+                    usize::try_from(if given < 40 { given } else { given / 8 })
+                        .unwrap_or(16)
+                        .clamp(5, 16)
+                }
             };
             let permissions = int(b"P").unwrap_or(0) as i32;
             let compute = |password: &[u8; 32]| {

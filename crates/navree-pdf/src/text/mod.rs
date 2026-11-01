@@ -46,6 +46,9 @@ const MAX_NESTING: usize = 256;
 /// What reading a font costs in work for each byte of memory it builds
 /// (one byte for every 16): building the memory is the work.
 const MEMORY_PER_WORK: usize = 16;
+/// How many comparisons attaching marks cost one byte of work (16), so that
+/// many pages of them are held to the document's work too.
+const STEPS_PER_WORK: usize = 16;
 /// What each character width a font sets costs, in bytes of work (16).
 const WIDTH_COST: usize = 16;
 /// What each character width a font sets holds in memory, at most (24
@@ -71,10 +74,12 @@ const MAX_COMPOSITE_CODE: u32 = 0xFFFF;
 const MAX_SIMPLE_CODE: u64 = 0xFF;
 
 /// How much work reading the text of a PDF may take, so that a small file
-/// cannot make a call take more than a bounded time or memory: time in
-/// proportion to [`document_work`](Self::document_work), at the rates of the
-/// inflater and the content parser, about ten seconds at the default limits
-/// on a current machine. Every figure is per call unless it says otherwise.
+/// cannot make a call take more than a bounded time or memory. The time is in
+/// proportion to [`document_work`](Self::document_work): about 8 seconds for
+/// the default 1 GiB on a recent machine, on the slowest content tried (one
+/// operator every two bytes), and about as long again for the marks of a
+/// document that spends all of its work on them. Every figure is per call
+/// unless it says otherwise.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TextLimits {
     /// Bytes of work one page may take (128 MiB): its content decoded,
@@ -85,8 +90,9 @@ pub struct TextLimits {
     /// and one byte for every [`MEMORY_PER_WORK`] of
     /// the memory reading it builds, as for an encoding's `Differences`;
     /// [`WIDTH_COST`] for each width looked at; [`FONT_READ_COST`] for
-    /// reading a dropped font again); and the actual text of marked content
-    /// each time it is decoded.
+    /// reading a dropped font again); the actual text of marked content
+    /// each time it is decoded; and one byte for every [`STEPS_PER_WORK`]
+    /// comparisons attaching marks.
     pub page_work: usize,
     /// The same, over all the pages (1 GiB).
     pub document_work: usize,
@@ -153,10 +159,13 @@ pub fn page_texts_within(document: &Document, limits: TextLimits) -> Result<Vec<
         let content = page_content(document, page_id, &mut walker.budget)?;
         let resources = page_resources(document, page_id);
         walker.walk(&content, resources, IDENTITY, 0)?;
+        let chunks = std::mem::take(&mut walker.chunks);
+        let (page_text, steps) = assemble_counted(chunks, limits.page_steps)?;
+        walker.budget.charge(steps / STEPS_PER_WORK)?;
         work += walker.budget.work;
         text += walker.budget.text;
         fonts = walker.fonts;
-        texts.push(assemble(walker.chunks, limits.page_steps)?);
+        texts.push(page_text);
         document.check()?;
     }
     document.check()?;
@@ -1297,8 +1306,14 @@ impl Steps {
 
 /// The glyphs of a page as lines of text; `steps` is the page's budget of
 /// comparisons.
-fn assemble(mut chunks: Vec<Chunk>, steps: usize) -> Result<String, PdfError> {
-    let mut steps = Steps(steps);
+#[cfg(test)]
+fn assemble(chunks: Vec<Chunk>, steps: usize) -> Result<String, PdfError> {
+    assemble_counted(chunks, steps).map(|(text, _)| text)
+}
+
+/// [`assemble`], with how many of `allowed` steps it spent.
+fn assemble_counted(mut chunks: Vec<Chunk>, allowed: usize) -> Result<(String, usize), PdfError> {
+    let mut steps = Steps(allowed);
     // Horizontal text first, top to bottom; then each other direction.
     chunks.sort_by(|a, b| {
         (a.angle != 0)
@@ -1340,7 +1355,7 @@ fn assemble(mut chunks: Vec<Chunk>, steps: usize) -> Result<String, PdfError> {
         }
         out.push(reading_order(visual).concat().trim().to_owned());
     }
-    Ok(out.join("\n"))
+    Ok((out.join("\n"), allowed - steps.0))
 }
 
 /// Which glyphs of a line repeat another one: `duplicate[i]` is true when
