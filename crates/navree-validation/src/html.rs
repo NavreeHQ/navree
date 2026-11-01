@@ -7,9 +7,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "html")]
-mod clean;
+pub(crate) mod clean;
 #[cfg(feature = "html")]
-mod tree;
+pub(crate) mod tree;
 
 /// Tags whose content goes with them, which a policy can never allow.
 const CONTENT_TAGS: [&str; 2] = ["script", "style"];
@@ -22,9 +22,18 @@ const CONTENT_TAGS: [&str; 2] = ["script", "style"];
 ///   becomes `hi`), except `script` and `style`, which lose their content;
 /// - an attribute that is not allowed is removed, so every event handler
 ///   (`onclick`, `onerror`) and `style` go;
-/// - a URL attribute (`href`, `src`) with a scheme that is not allowed
-///   (`javascript:`, `data:`) is removed; relative URLs stay;
+/// - a URL attribute (`href`, `src`, `action`, `formaction`, `data`,
+///   `poster`, `cite` and the like, on any tag) with a scheme that is not
+///   allowed (`javascript:`, `data:`) is removed; relative URLs stay;
+/// - an SVG or MathML element where the HTML parser would not put it, and
+///   SVG animation elements (`animate`, `set`), are removed;
 /// - comments are removed, and text is escaped (`<` becomes `&lt;`).
+///
+/// The output is parsed again before it is returned, and returned only when
+/// that parse is the tree that was checked: a browser builds from it exactly
+/// what the policy kept. Markup the parser rearranges (a link inside a
+/// link) comes out the way the parser reads it, and markup no output can
+/// hold (an allowed `plaintext`) leaves only its text.
 ///
 /// The default keeps what a rich-text editor produces: paragraphs,
 /// headings, emphasis, lists, quotes, code, tables and links (`href`,
@@ -209,7 +218,7 @@ impl HtmlPolicy {
     }
 
     #[cfg(feature = "html")]
-    fn sanitizer(&self) -> clean::Sanitizer<'_> {
+    pub(crate) fn sanitizer(&self) -> clean::Sanitizer<'_> {
         clean::Sanitizer {
             tags: &self.tags,
             generic_attributes: &self.generic_attributes,

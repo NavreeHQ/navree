@@ -20,6 +20,9 @@ html = ["dep:html5ever", "dep:url"]
 ## `Validate` for navree-time's `Zone`, `LocalDay` and `DayRange`
 ## (`Valid<Query<DayRange>>`).
 time = ["dep:navree-time"]
+## Entry points for the fuzz targets in `fuzz/` (`navree_validation::fuzzing`).
+## Not part of the API.
+fuzzing = ["html"]
 ## Runs the PostgreSQL suite (`NAVREE_TEST_POSTGRES_URL`).
 postgres = ["navree-db/postgres"]
 ## Runs the MySQL suite (`NAVREE_TEST_MYSQL_URL`).

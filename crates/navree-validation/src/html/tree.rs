@@ -277,10 +277,10 @@ impl Sink {
     }
 
     fn detach(nodes: &mut [Node], id: Id) {
-        if let Some((parent, index)) = Self::position(nodes, id) {
-            if let Some(parent) = nodes.get_mut(parent) {
-                parent.children.remove(index);
-            }
+        if let Some((parent, index)) = Self::position(nodes, id)
+            && let Some(parent) = nodes.get_mut(parent)
+        {
+            parent.children.remove(index);
         }
         if let Some(node) = nodes.get_mut(id) {
             node.parent = None;

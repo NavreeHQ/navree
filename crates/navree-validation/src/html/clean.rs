@@ -128,6 +128,15 @@ pub(crate) struct Sanitizer<'a> {
     pub(crate) link_rel: Option<&'a str>,
 }
 
+/// What an output parses to.
+pub(crate) enum Checked {
+    /// The tree that was kept (without the table parts
+    /// [`Sanitizer::implied_by_parser`] allows).
+    Tree(Tree),
+    /// Only this text.
+    Text(String),
+}
+
 /// A node to visit, and the kept element (or the root) it goes under.
 struct Visit {
     id: Id,
@@ -142,9 +151,8 @@ impl Sanitizer<'_> {
         self.sanitize(html).0
     }
 
-    /// `html` sanitized, and the tree it parses to (`None` when only the
-    /// text was kept).
-    pub(crate) fn sanitize(&self, html: &str) -> (String, Option<Tree>) {
+    /// `html` sanitized, and what it parses to.
+    pub(crate) fn sanitize(&self, html: &str) -> (String, Checked) {
         let mut tree = Tree::parse(html);
         // The text of the input's own tree, for when no output is stable.
         let mut text = None;
@@ -155,12 +163,13 @@ impl Sanitizer<'_> {
             let same = tree.events(|_, _| false)
                 == again.events(|name, attrs| self.implied_by_parser(name, attrs));
             if same {
-                return (out, Some(tree));
+                return (out, Checked::Tree(tree));
             }
             text.get_or_insert_with(|| tree.text());
             tree = again;
         }
-        (escape_text(&text.unwrap_or_default()), None)
+        let text = text.unwrap_or_default();
+        (escape_text(&text), Checked::Text(text))
     }
 
     fn tag_allowed(&self, local: &str) -> bool {
@@ -204,7 +213,7 @@ impl Sanitizer<'_> {
     /// The `tbody`, `tr` and `colgroup` the parser puts into a table by
     /// itself, when the policy doesn't keep them: a browser adds them to
     /// the output too.
-    fn implied_by_parser(&self, name: &QualName, attrs: &[Attribute]) -> bool {
+    pub(crate) fn implied_by_parser(&self, name: &QualName, attrs: &[Attribute]) -> bool {
         name.ns == ns!(html)
             && matches!(&*name.local, "tbody" | "tr" | "colgroup")
             && attrs.is_empty()
@@ -261,12 +270,11 @@ impl Sanitizer<'_> {
                 }
                 Data::Comment | Data::Document | Data::Other => (false, None),
             };
-            if let Some(name) = &name {
-                if CONTENT_TAGS.contains(&&*name.local)
-                    || !self.expected_namespace(tree, parent, name)
-                {
-                    continue;
-                }
+            if let Some(name) = &name
+                && (CONTENT_TAGS.contains(&&*name.local)
+                    || !self.expected_namespace(tree, parent, name))
+            {
+                continue;
             }
             let children = tree
                 .nodes

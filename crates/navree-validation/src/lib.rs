@@ -98,6 +98,9 @@ mod digits;
 mod errors;
 mod extract;
 mod failure;
+#[cfg(feature = "fuzzing")]
+#[doc(hidden)]
+pub mod fuzzing;
 mod html;
 mod locale;
 mod messages;
