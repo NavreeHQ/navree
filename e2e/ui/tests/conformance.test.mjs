@@ -107,6 +107,37 @@ for (const [name, path, prepare, viewport] of STATES) {
   });
 }
 
+// A real tool's page: run with `UI_PROOF_LOGBOOK=1 PORT=8092 ui-proof serve`.
+const LOGBOOK = process.env.UI_LOGBOOK_URL;
+
+test("Logbook's list: axe, new entries morph in, the filter keeps focus, Clear works", { skip: !LOGBOOK, timeout: 60000 }, async () => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await context.newPage();
+  const problems = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") problems.push(message.text());
+  });
+  await fetch(`${LOGBOOK}/plain`);
+  await page.goto(`${LOGBOOK}/_logbook`);
+  assert.ok((await page.locator("#rows tbody tr").count()) >= 1, "the first request is on the page");
+  assert.deepEqual(await axe(page), []);
+  await page.evaluate(() => { window.kept = document.querySelector("#rows tbody tr"); });
+  const before = await page.locator("#rows tbody tr").count();
+  await fetch(`${LOGBOOK}/deals/new`);
+  await page.waitForFunction((n) => document.querySelectorAll("#rows tbody tr").length > n, before, { timeout: 15000 });
+  assert.equal(await page.evaluate(() => window.kept.isConnected), true, "the old row is the same node");
+  await page.locator("input[name=q]").click();
+  await page.keyboard.type("status:2xx", { delay: 10 });
+  await page.waitForURL("**q=status**");
+  assert.equal(await page.evaluate(() => document.activeElement?.name), "q");
+  await page.getByRole("link", { name: "Requests" }).first().click();
+  await page.waitForURL("**type=**");
+  await page.getByRole("button", { name: "Clear" }).click();
+  await page.locator("[data-slot=empty]").waitFor({ timeout: 15000 });
+  await context.close();
+  assert.deepEqual(problems, []);
+});
+
 test("the design rules hold on every page", { timeout: 60000 }, async () => {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const page = await context.newPage();

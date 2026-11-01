@@ -4,6 +4,7 @@
 //! cargo run --release -p ui-proof -- serve          # http://127.0.0.1:8090
 //! PORT=9000 ui-proof serve                          # another port
 //! ui-proof bench                                    # render times, no server
+//! UI_PROOF_LOGBOOK=1 ui-proof serve                 # with Logbook at /_logbook
 //! ```
 //!
 //! | Page | Shows |
@@ -21,6 +22,7 @@ use navree::http::extract::Request;
 use navree::http::middleware::{self, Next};
 use navree::http::response::Response;
 use navree::http::{GlobalLayer, LayerSlot};
+use navree::logbook::{LogbookOptions, StoreKind};
 use navree::prelude::*;
 use navree::ui::{NavGroup, NavItem, Shell, UiModule, UserMenu, icons};
 
@@ -83,10 +85,15 @@ fn main() -> Result<(), BoxError> {
             ("APP_HTTP__PER_IP_RATE_LIMIT".to_owned(), "100000000".to_owned()),
         ],
     );
-    Navree::app()
+    let app = Navree::app()
         .module(ConfigModule::for_root(sources))
         .module(HttpModule::from_config())
         .module(UiModule::from_config())
-        .module(ProofModule)
-        .run()
+        .module(ProofModule);
+    // Off by default: it records every request, which a speed benchmark shouldn't pay for.
+    if std::env::var_os("UI_PROOF_LOGBOOK").is_some() {
+        let options = LogbookOptions { enabled: Some(true), store: StoreKind::Memory, ..LogbookOptions::default() };
+        return app.module(LogbookModule::for_root(options)).run();
+    }
+    app.run()
 }
