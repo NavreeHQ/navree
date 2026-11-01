@@ -167,8 +167,10 @@ impl Import for ContactsImport {
   Windows-1252, Shift_JIS, GBK, ...). The upload's `encoding` wins.
 - **Format:** workbooks by content (XLSX, XLSM, XLSB, XLS, ODS), else text;
   dates and times are `Cell::Date`/`DateTime` in every workbook format (ODS
-  by its null date); an error cell is its text (`#Div0`, `#SPILL!`); ODS
-  `text:tab` is `\t`, `text:line-break` `\n`;
+  by its null date), to the millisecond; a number past the largest double
+  (`1e999`, `INF`) is the largest double of its sign and `NaN` is refused; an
+  error cell is its text (`#Div0`, `#SPILL!`); ODS `text:tab` is `\t`,
+  `text:line-break` `\n`, a shape in a cell is not its text;
   the delimiter is sniffed from `,` `;` tab `|`; `.tsv`/`.tab` are tab.
 - **Headers:** the first non-empty row; blanks become `Column 3`, repeats
   get ` (2)`. Row numbers match the spreadsheet's.
@@ -274,7 +276,8 @@ assert_eq!(imports.find(import.id).await?.counts.created, 1);
   the table keeps, counted per cell (a shared string counts again for each
   cell it is in); a file past it fails the import. For CSV, TSV, XLSX, XLSB
   and ODS it is counted before the text is copied (ODS: every copy of a
-  repeated row or cell; spaces of `text:s` before they are made) and XLS
+  repeated row or cell; spaces of `text:s` before they are made, never the
+  ones that end a cell, and none for a row or cell that gives nothing) and XLS
   (whose shared strings also count against it as they are decoded). Rows are padded to the header's width, so
   `sheets.imports.max_columns` (16,384) and `sheets.imports.max_cells`
   (10,000,000, rows times columns) bound the table too; a file past either
@@ -287,7 +290,9 @@ assert_eq!(imports.find(import.id).await?.counts.created, 1);
   refused, even if the table would have fitted. After a refusal the rest of
   a workbook's sheet is still read through, keeping nothing, until the job's
   timeout stops it. The file is read on the blocking pool, and the reading
-  stops at its next record when the job's timeout drops it.
+  stops when the job's timeout drops it: a workbook's sheet within 64 KiB of
+  its part (an XLS sheet within 1,024 records) whether or not it gives a cell,
+  a text file at its next record.
 - The `/api/exports` and `/api/imports` routes mount only when the app has
   an authenticator and `sheets.*.routes` is true.
 - With the `i18n` feature, headers come from Fluent (`contacts.email` is the
