@@ -102,6 +102,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::ai` | navree-ai, plus `#[agent]` | `ai` (opt-in) | `AiModule`: the [AI SDK](/docs/ai/ai-sdk/), [agents and tools](/docs/ai/agents-and-tools/), [embeddings and vector stores](/docs/ai/embeddings-and-rag/) |
 | `navree::micro` | navree-micro, plus `#[message_handlers]` | `micro` (opt-in), with `micro-nats`, `micro-kafka`, `micro-rabbitmq`, `micro-redis` and `micro-mqtt` | `MicroModule`, `ServiceClient`: [messages and events between services](/docs/microservices/introduction/) over TCP or a broker |
 | `navree::documents` | navree-documents | `documents` (opt-in) | `DocumentsModule`: [PDF from HTML templates or `PdfDocument`, DOCX, merge and stamps](/docs/packages/documents/) |
+| `navree::pdf` | navree-pdf | `pdf` (opt-in; `documents` and `media` turn it on) | PDF files read, edited and read for their text within a budget of memory and work |
 | `navree::media` | navree-media | `media` (opt-in), with `media-ffmpeg` | `MediaModule`: [files attached to models](/docs/packages/media/) in collections, image conversions and responsive variants, safe remote downloads, zip archives, text from PDF, DOCX and HTML, and video through FFmpeg |
 | `navree::billing` | navree-billing | `billing` (opt-in) | `BillingModule`: [subscriptions, trials, usage and invoices](/docs/packages/billing/) with Stripe or Paddle |
 | `navree::search` | navree-search | `search` (opt-in) | `SearchModule`: [full-text and vector search over models](/docs/packages/search/), `#[derive(Searchable)]` |
@@ -223,8 +224,8 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `flags` (opt-in, not in `full`) | `http`, `cache`, `db`, `events`, `audit`, `workspace`, `auth`, `orm` |
 | `graphql` (opt-in, not in `full`) | `http`, `events`, `db`, `validation`, `access`, `auth`, `workspace` |
 | `grpc` (opt-in, not in `full`) | `http`, `db`, `validation`, `testing` |
-| `documents` (opt-in, not in `full`) | `http`, `view`, `storage`; with `queue` on too, renders queued behind an operation |
-| `media` (opt-in, not in `full`) | `http`, `http-client`, `db`, `orm`, `storage`, `queue` |
+| `documents` (opt-in, not in `full`) | `http`, `view`, `storage`, `pdf`; with `queue` on too, renders queued behind an operation |
+| `media` (opt-in, not in `full`) | `http`, `http-client`, `db`, `orm`, `storage`, `queue`, `pdf` |
 | `media-ffmpeg` (opt-in) | `media`, and its FFmpeg sidecar for video and audio |
 | `billing` (opt-in, not in `full`) | `http`, `events`, `http-client`, `db`, `schedule`, `auth`, `workspace`, `orm` |
 | `search` (opt-in, not in `full`) | `http`, `http-client`, `db`, `orm`, `queue`, `access`, `workspace` |

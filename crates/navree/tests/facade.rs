@@ -583,6 +583,7 @@ const OPT_IN: &[&str] = &[
     "graphql",
     "grpc",
     "documents",
+    "pdf",
     "media",
     "billing",
     "search",

@@ -4252,6 +4252,7 @@ dependencies = [
  "navree-oauth",
  "navree-observe",
  "navree-orm",
+ "navree-pdf",
  "navree-queue",
  "navree-realtime",
  "navree-redis",

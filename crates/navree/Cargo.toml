@@ -365,11 +365,14 @@ ai = [
     "access",
     "auth",
 ]
+## PDF: reading, editing and the text of PDF files within a budget of memory
+## and work (navree-pdf), under `documents` and `media`.
+pdf = ["dep:navree-pdf"]
 ## L6 (opt-in: not in `full`; the native PDF engine and the bundled fonts
 ## add to the build)
 ## Documents: PDF from HTML templates or `PdfDocument` (the native engine in
 ## process, or headless Chrome), DOCX, merge and stamps, queued renders.
-documents = ["dep:navree-documents", "http", "view", "storage"]
+documents = ["dep:navree-documents", "http", "view", "storage", "pdf"]
 ## L7 (opt-in, not in `full`)
 ## Search: full-text and vector search over navree-orm models (postgres,
 ## meilisearch, typesense and memory engines).
@@ -521,6 +524,7 @@ media = [
     "orm",
     "storage",
     "queue",
+    "pdf",
 ]
 ## Video and audio for `media` through an FFmpeg sidecar: probe, poster
 ## frames and transcodes. Needs `ffmpeg` and `ffprobe` on the server.
@@ -630,6 +634,7 @@ navree-directory = { workspace = true, optional = true }
 navree-dock = { workspace = true, optional = true }
 navree-domains = { workspace = true, optional = true }
 navree-documents = { workspace = true, optional = true }
+navree-pdf = { workspace = true, optional = true }
 navree-navigator = { workspace = true, optional = true }
 navree-events = { workspace = true, optional = true }
 navree-graphql = { workspace = true, optional = true }

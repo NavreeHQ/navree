@@ -306,6 +306,10 @@ pub use navree_helm as helm;
 /// `media-ffmpeg`, `navree::media::video` too.
 #[cfg(feature = "media")]
 pub use navree_media as media;
+/// PDF files (the `pdf` feature, which `documents` and `media` turn on):
+/// navree-pdf re-exported whole.
+#[cfg(feature = "pdf")]
+pub use navree_pdf as pdf;
 
 /// Durable workflows and end-user automations (the `workflows` feature):
 /// navree-workflows re-exported whole, with `#[workflow]`, `#[trigger]`,
