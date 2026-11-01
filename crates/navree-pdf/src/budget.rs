@@ -50,11 +50,12 @@ impl Default for ReadLimits {
     }
 }
 
-/// What looking up one object costs, in bytes of work (16): a search of the
-/// table of objects, whether the object was read already or not. Every lookup
-/// a [`Document`](crate::Document) makes goes through
+/// What looking up one object costs, in bytes of work (32): a search of the
+/// table of objects, whether the object was read already or not, and the
+/// objects far apart in memory that a walk over references comes to. Every
+/// lookup a [`Document`](crate::Document) makes goes through
 /// [`Budget::lookup`], so a walk over references cannot be free.
-pub(crate) const LOOKUP_COST: usize = 16;
+pub(crate) const LOOKUP_COST: usize = 32;
 
 /// What reading a document has spent of its [`ReadLimits`].
 #[derive(Debug)]

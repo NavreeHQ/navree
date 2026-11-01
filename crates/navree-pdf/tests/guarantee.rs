@@ -676,6 +676,392 @@ fn a_byte_charged_takes_about_the_same_on_every_shape_of_file() {
     assert!(over.is_empty(), "over {MOST} units: {over:?}");
 }
 
+// Shapes at the size of a whole page, and what an edit takes.
+
+fn lcg(seed: &mut u64) -> u64 {
+    *seed = seed
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
+    *seed >> 33
+}
+
+/// A byte that is safe in a literal string: none of `(`, `)`, `\`, or a line
+/// end.
+fn safe(value: u64) -> u8 {
+    let byte = (value % 170) as u8;
+    if byte < 44 {
+        0x30 + byte
+    } else {
+        0x60 + (byte - 44) % 0x50
+    }
+}
+
+/// A simple font in which every code is read as `A` and has a width of its own.
+fn all_codes_a_font() -> String {
+    let widths: String = (0..256).map(|i| format!("{} ", 100 + i * 3)).collect();
+    let differences: String = (0..256).map(|_| "/A ".to_string()).collect();
+    format!(
+        "<< /Type /Font /Subtype /Type1 /BaseFont /X /FirstChar 0 /Widths [{widths}] \
+         /Encoding << /Differences [0 {differences}] >> >>"
+    )
+}
+
+/// A composite font with a map of 64 codespace ranges and 16,000 lines that
+/// cover scattered codes, and a width for each of 65,000 codes: object 5 is the
+/// font, 6 its map, 7 its descendant.
+fn cold_composite_font(pdf: &mut Pdf, content: &[u8]) {
+    let mut map = String::from("64 begincodespacerange\n");
+    for i in 0..63 {
+        map.push_str(&format!("<00{i:02X}> <0100>\n"));
+    }
+    map.push_str("<0000> <FFFF> endcodespacerange\n");
+    let mut lines = Vec::new();
+    for high in 0x30u32..=0xAF {
+        for low in 0x30u32..=0xAF {
+            lines.push(format!("<{:04X}> <0041>\n", high * 256 + low));
+        }
+    }
+    for chunk in lines.chunks(100) {
+        map.push_str(&format!("{} beginbfchar\n", chunk.len()));
+        chunk.iter().for_each(|line| map.push_str(line));
+        map.push_str("endbfchar\n");
+    }
+    let mut widths = String::from("0 [");
+    for i in 0..65_000u32 {
+        widths.push_str(&format!("{} ", 300 + (i * 7) % 800));
+    }
+    widths.push(']');
+    font_page(
+        pdf,
+        content,
+        "<< /Type /Font /Subtype /Type0 /Encoding /Identity-H /ToUnicode 6 0 R \
+         /DescendantFonts [7 0 R] >>",
+    );
+    pdf.add(6, stream("/Filter /FlateDecode", &deflate(map.as_bytes())));
+    pdf.add(7, format!("<< /W [{widths}] >>"));
+}
+
+/// `glyphs` glyphs of random bytes in a literal string, spaced apart (`Tc`), so
+/// that none touches another: `width` bytes to a glyph.
+fn scattered_glyphs(glyphs: usize, width: usize, seed: u64) -> Vec<u8> {
+    let mut seed = seed;
+    let mut content = b"BT /F 1 Tf 5 Tc (".to_vec();
+    content.extend((0..glyphs * width).map(|_| safe(lcg(&mut seed))));
+    content.extend_from_slice(b") Tj ET");
+    content
+}
+
+/// `pages` pages that all show `content`, one stream they share.
+fn pages_sharing(pdf: &mut Pdf, content: &[u8], pages: u32) {
+    pdf.add(4, stream("/Filter /FlateDecode", &deflate(content)));
+    let kids: String = (0..pages)
+        .map(|page| format!("{} 0 R ", 100 + page))
+        .collect();
+    pdf.add(
+        2,
+        format!(
+            "<< /Type /Pages /Kids [{kids}] /Count {pages} \
+             /Resources << /Font << /F 5 0 R >> >> >>"
+        ),
+    );
+    pdf.0.remove(&3);
+    for page in 0..pages {
+        pdf.add(
+            100 + page,
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Contents 4 0 R >>",
+        );
+    }
+}
+
+/// Pages whose content array is one the pages share: 70,000 items, each the start of
+/// a chain of 8 references, their numbers shuffled so that none is next to the
+/// last in the file.
+fn pages_sharing_a_contents_array(pages: u32, chains: u32) -> Vec<u8> {
+    let total = chains * 8;
+    let mut numbers: Vec<u32> = (0..total).map(|i| 1000 + i).collect();
+    let mut seed = 3u64;
+    for i in (1..numbers.len()).rev() {
+        numbers.swap(i, (lcg(&mut seed) as usize) % (i + 1));
+    }
+    let mut pdf = Pdf::default();
+    pdf.add(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    let kids: String = (0..pages)
+        .map(|page| format!("{} 0 R ", 100 + page))
+        .collect();
+    pdf.add(
+        2,
+        format!("<< /Type /Pages /Kids [{kids}] /Count {pages} >>"),
+    );
+    for page in 0..pages {
+        pdf.add(
+            100 + page,
+            "<< /Type /Page /Parent 2 0 R /Contents 5 0 R >>",
+        );
+    }
+    let mut list = String::new();
+    for chain in 0..chains as usize {
+        let at = chain * 8;
+        list.push_str(&format!("{} 0 R ", numbers[at]));
+        for hop in 0..7 {
+            pdf.add(numbers[at + hop], format!("{} 0 R", numbers[at + hop + 1]));
+        }
+        pdf.add(numbers[at + 7], "0");
+    }
+    pdf.add(5, format!("[{list}]"));
+    pdf.with_xref_stream(&[])
+}
+
+/// A page tree of `kids` kids, each a page behind a chain of 8 references whose
+/// numbers are shuffled, with `filler` objects among them.
+fn tree_behind_chains(kids: u32, filler: u32) -> Vec<u8> {
+    let total = kids * 9 + filler;
+    let mut numbers: Vec<u32> = (0..total).map(|i| 10 + i).collect();
+    let mut seed = 77u64;
+    for i in (1..numbers.len()).rev() {
+        numbers.swap(i, (lcg(&mut seed) as usize) % (i + 1));
+    }
+    let mut pdf = Pdf::default();
+    pdf.add(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    let mut list = String::new();
+    let mut at = 0usize;
+    for _ in 0..kids {
+        list.push_str(&format!("{} 0 R ", numbers[at]));
+        for hop in 0..8 {
+            pdf.add(numbers[at + hop], format!("{} 0 R", numbers[at + hop + 1]));
+        }
+        pdf.add(numbers[at + 8], "<</Type/Page>>");
+        at += 9;
+    }
+    for number in &numbers[at..] {
+        pdf.add(*number, "0");
+    }
+    pdf.add(
+        2,
+        format!("<< /Type /Pages /Kids [{list}] /Count {kids} >>"),
+    );
+    pdf.table()
+}
+
+/// Pages that show a million glyphs, in the ways that cost the most for a byte
+/// charged.
+fn full_page_shapes() -> Vec<(&'static str, Vec<u8>)> {
+    let glyphs = 999_000;
+    let mut shapes: Vec<(&'static str, Vec<u8>)> = Vec::new();
+
+    let content = scattered_glyphs(glyphs, 2, 7);
+    let mut pdf = Pdf::default();
+    cold_composite_font(&mut pdf, &content);
+    shapes.push((
+        "a page of random two-byte codes, a cold map and widths",
+        pdf.table(),
+    ));
+
+    let mut pdf = Pdf::default();
+    cold_composite_font(&mut pdf, &content);
+    pages_sharing(&mut pdf, &content, 8);
+    shapes.push((
+        "8 pages of random two-byte codes, a cold map and widths",
+        pdf.table(),
+    ));
+
+    let mut pdf = Pdf::default();
+    font_page(
+        &mut pdf,
+        &scattered_glyphs(glyphs, 1, 42),
+        all_codes_a_font(),
+    );
+    shapes.push(("a page of random codes, widths of their own", pdf.table()));
+
+    shapes.push((
+        "8 pages sharing a Contents array of 70,000 chains of 8",
+        pages_sharing_a_contents_array(8, 70_000),
+    ));
+    shapes
+}
+
+/// A page of a million glyphs takes about as long as the densest content for
+/// the bytes it is charged: this is the figure the documentation gives for the
+/// slowest shape there is. It takes a few seconds in a release build and
+/// minutes without optimizations, so those run it with `--ignored`.
+#[test]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "pages of a million glyphs: run in a release build"
+)]
+fn a_byte_charged_takes_about_the_same_on_every_shape_of_a_full_page() {
+    let mut base = unit();
+    println!("unit: {base:.1} ns a byte of the densest content");
+    let mut over = Vec::new();
+    for (name, file) in full_page_shapes() {
+        let document = Document::load(file, ReadLimits::default()).unwrap();
+        let (_, charged) = walk(&document);
+        document.check().unwrap();
+        let multiple = units(name, charged, &mut base, || walk(&document).0);
+        if multiple > MOST {
+            over.push(format!("{name}: {multiple:.2} units"));
+        }
+    }
+    assert!(over.is_empty(), "over {MOST} units: {over:?}");
+}
+
+/// Looking up an object takes about as long when the objects are far apart in
+/// memory as the lookup is charged for: pages behind chains of references, in a
+/// shuffled file.
+#[test]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "hundreds of thousands of objects: run in a release build"
+)]
+fn a_lookup_of_an_object_far_away_takes_about_what_it_is_charged() {
+    let mut base = unit();
+    let mut over = Vec::new();
+    for (kids, filler) in [(10_000u32, 0u32), (70_000, 0), (30_000, 400_000)] {
+        let file = tree_behind_chains(kids, filler);
+        let document = Document::load(file, ReadLimits::default()).unwrap();
+        std::hint::black_box(document.objects().count());
+        let looking = || {
+            let start = Instant::now();
+            for _ in 0..3 {
+                std::hint::black_box(document.pages().len());
+            }
+            start.elapsed()
+        };
+        let before = document.work_used();
+        looking();
+        let charged = document.work_used() - before;
+        let name = format!("{kids} pages behind chains, {filler} others, read");
+        let multiple = units(&name, charged, &mut base, looking);
+        if multiple > MOST {
+            over.push(format!("{name}: {multiple:.2} units"));
+        }
+        // The same objects, held to be edited.
+        let objects = Objects::read(document).unwrap();
+        let editing = || {
+            let start = Instant::now();
+            for _ in 0..3 {
+                std::hint::black_box(objects.pages().len());
+            }
+            start.elapsed()
+        };
+        let before = objects.work_used();
+        editing();
+        let charged = objects.work_used() - before;
+        let name = format!("{kids} pages behind chains, {filler} others, edited");
+        let multiple = units(&name, charged, &mut base, editing);
+        if multiple > MOST {
+            over.push(format!("{name}: {multiple:.2} units"));
+        }
+    }
+    assert!(over.is_empty(), "over {MOST} units: {over:?}");
+}
+
+/// Compressing the streams of an edit takes about what it is charged for, on
+/// the data that takes the compressor the longest for each byte.
+#[test]
+fn compressing_takes_about_what_it_is_charged() {
+    let mut base = unit();
+    let length = 2 * MIB;
+    let mut shapes: Vec<(String, Vec<u8>)> = Vec::new();
+    for alphabet in [2u64, 3, 4, 6, 8, 16] {
+        let mut seed = alphabet;
+        let data = (0..length)
+            .map(|_| b'a' + (lcg(&mut seed) % alphabet) as u8)
+            .collect();
+        shapes.push((format!("random over {alphabet} letters"), data));
+    }
+    let mut seed = 9u64;
+    let block: Vec<u8> = (0..32_000).map(|_| (lcg(&mut seed) & 0xff) as u8).collect();
+    shapes.push((
+        "a random block of 32 KB, repeated".into(),
+        block.iter().cycle().take(length).copied().collect(),
+    ));
+    let mut data = Vec::with_capacity(length);
+    while data.len() < length {
+        data.extend_from_slice(b"abc");
+        data.push((lcg(&mut seed) & 0xff) as u8);
+    }
+    shapes.push(("abc then a random byte".into(), data));
+    let mut data = Vec::with_capacity(length);
+    while data.len() < length {
+        data.extend_from_slice(b"abcdefgh");
+        data.push(b'a' + (lcg(&mut seed) % 4) as u8);
+    }
+    shapes.push(("abcdefgh then one of 4".into(), data));
+    shapes.push(("zeros".into(), vec![0; length]));
+    shapes.push((
+        "content of a page".into(),
+        repeated(
+            b"q 1 0 0 1 72 700 cm BT /F1 12 Tf (Hello) Tj ET Q\n",
+            length,
+        ),
+    ));
+    // Many streams too short to give back what a compressor costs to make.
+    let many: Vec<u8> = repeated(b"q 1 0 0 1 72 700 cm BT /F1 12 Tf (Hello) Tj ET Q\n", 160)
+        .iter()
+        .copied()
+        .chain(*b"x")
+        .collect();
+    let mut over = Vec::new();
+    let mut streams = Objects::new();
+    for _ in 0..20_000 {
+        streams.add(navree_pdf::Stream::new(
+            navree_pdf::Dictionary::new(),
+            many.clone(),
+        ));
+    }
+    let before = streams.work_used();
+    streams.compress();
+    let charged = streams.work_used() - before;
+    let compressing_many = || {
+        let mut streams = Objects::new();
+        for _ in 0..20_000 {
+            streams.add(navree_pdf::Stream::new(
+                navree_pdf::Dictionary::new(),
+                many.clone(),
+            ));
+        }
+        let start = Instant::now();
+        streams.compress();
+        start.elapsed()
+    };
+    let multiple = units(
+        "20,000 streams of 148 bytes",
+        charged,
+        &mut base,
+        compressing_many,
+    );
+    if multiple > MOST {
+        over.push(format!("20,000 streams of 148 bytes: {multiple:.2} units"));
+    }
+    for (name, data) in shapes {
+        // The stream is made again for each try; only compressing it is timed.
+        let compressing = || {
+            let mut objects = Objects::new();
+            objects.add(navree_pdf::Stream::new(
+                navree_pdf::Dictionary::new(),
+                data.clone(),
+            ));
+            let start = Instant::now();
+            objects.compress();
+            start.elapsed()
+        };
+        let mut objects = Objects::new();
+        objects.add(navree_pdf::Stream::new(
+            navree_pdf::Dictionary::new(),
+            data.clone(),
+        ));
+        let before = objects.work_used();
+        objects.compress();
+        let charged = objects.work_used() - before;
+        assert!(charged > 0, "{name}");
+        let multiple = units(&name, charged, &mut base, compressing);
+        if multiple > MOST {
+            over.push(format!("{name}: {multiple:.2} units"));
+        }
+    }
+    assert!(over.is_empty(), "over {MOST} units: {over:?}");
+}
+
 /// The slowest shape found, pages that each show a line of a million glyphs,
 /// filling the default 1 GiB of work (with no limit on the document's text,
 /// which would stop it a little short). It takes tens of seconds: run it in a
@@ -1004,6 +1390,62 @@ fn saving_stops_at_the_work_an_edit_may_do() {
     too_large(objects.save());
 }
 
+/// `marks` marks left open, each with `bytes` of actual text in Latin-1 (twice
+/// as long once it is text).
+fn open_marks_with_actual_text(marks: usize, bytes: usize) -> Vec<u8> {
+    let mut content = b"BT /F 1 Tf ".to_vec();
+    for _ in 0..marks {
+        content.extend_from_slice(b"/S << /ActualText (");
+        content.extend(std::iter::repeat_n(0xE9u8, bytes));
+        content.extend_from_slice(b") >> BDC ");
+    }
+    let mut pdf = Pdf::default();
+    font_page(
+        &mut pdf,
+        &content,
+        "<< /Type /Font /Subtype /Type1 /BaseFont /X >>",
+    );
+    pdf.table()
+}
+
+#[test]
+fn the_actual_text_of_open_marks_counts_against_the_text_of_the_page() {
+    let limits = TextLimits {
+        page_text: MIB,
+        ..TextLimits::default()
+    };
+    // 256 marks of 8 KiB each are 4 MiB of text, for a page that may have 1.
+    let document = Document::load(
+        open_marks_with_actual_text(256, 8 * 1024),
+        ReadLimits::default(),
+    )
+    .unwrap();
+    let message = too_large(text::page_texts_within(&document, limits));
+    assert!(message.contains("1 MiB"), "{message}");
+    // A mark that is closed lets go of its text.
+    let mut content = b"BT /F 1 Tf ".to_vec();
+    for _ in 0..256 {
+        content.extend_from_slice(b"/S << /ActualText (");
+        content.extend(std::iter::repeat_n(0xE9u8, 8 * 1024));
+        content.extend_from_slice(b") >> BDC EMC ");
+    }
+    let mut pdf = Pdf::default();
+    font_page(
+        &mut pdf,
+        &content,
+        "<< /Type /Font /Subtype /Type1 /BaseFont /X >>",
+    );
+    let document = Document::load(pdf.table(), ReadLimits::default()).unwrap();
+    text::page_texts_within(&document, limits).unwrap();
+    // A few marks are read as they were.
+    let document = Document::load(
+        open_marks_with_actual_text(8, 8 * 1024),
+        ReadLimits::default(),
+    )
+    .unwrap();
+    text::page_texts_within(&document, limits).unwrap();
+}
+
 /// The peak of a case in a process of its own, as in `bounds.rs`. Linux only:
 /// the kernel keeps the figure.
 #[cfg(target_os = "linux")]
@@ -1071,6 +1513,38 @@ mod peak {
         pdf.table()
     }
 
+    /// A page that draws a form that draws a form, 8 deep, each with an array
+    /// of `items` zeros as the operand before its `Do`: what an operation holds
+    /// while the form it draws is read is not held through it.
+    fn forms_with_operands(items: usize) -> Vec<u8> {
+        let operands = format!("[{}] ", "0 ".repeat(items));
+        let mut pdf = Pdf::default();
+        one_page(
+            &mut pdf,
+            "/Contents 4 0 R /Resources << /XObject << /X 10 0 R >> >>",
+        );
+        pdf.add(4, stream("", format!("/X {operands}Do").as_bytes()));
+        for level in 0..9u32 {
+            let content = if level < 8 {
+                format!("/X {operands}Do")
+            } else {
+                "n".to_owned()
+            };
+            pdf.add(
+                10 + level,
+                stream(
+                    &format!(
+                        "/Type /XObject /Subtype /Form /BBox [0 0 1 1] \
+                         /Resources << /XObject << /X {} 0 R >> >>",
+                        11 + level
+                    ),
+                    content.as_bytes(),
+                ),
+            );
+        }
+        pdf.table()
+    }
+
     /// What the glyphs of a page hold, each, as the documentation adds it up.
     const GLYPH_MEMORY: usize = 160;
 
@@ -1126,8 +1600,19 @@ mod peak {
                 pdf.add(4, stream("/Filter /FlateDecode", &deflate(&content)));
                 past_the_sum(pdf.table(), content.len());
             }
+            // 9 arrays of 4 MiB: 36 MiB if each is held through the form it draws.
+            "forms-operands" => {
+                let file = forms_with_operands(131_072);
+                past_the_sum(file, 9 * 262_144);
+            }
             other => panic!("{other}"),
         }
+    }
+
+    #[test]
+    fn operands_are_not_held_through_the_form_they_draw() {
+        let past = in_child("forms-operands");
+        assert!(past < SLACK, "{} MiB past the sum", past >> 20);
     }
 
     #[test]

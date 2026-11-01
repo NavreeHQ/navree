@@ -35,21 +35,23 @@ pub(super) const MAX_LIST_ITEMS: usize = 256;
 /// or two bytes.
 pub(super) const MAX_MAP_LIST_ITEMS: usize = 65_792;
 
-// What a ToUnicode map is counted as holding: a bound on what reading builds,
-// so that a map of a few bytes that covers millions of codes is refused.
+// What a ToUnicode map is counted as holding: what reading builds. A range
+// of codes is one entry however many codes it covers, and splitting it shares
+// its text, so a map is counted by its lines and not by the codes they cover.
 
 /// For each byte of the map: the lines it parses before it builds the map.
 const MAP_TEXT_MEMORY: u64 = 8;
-/// For each range it keeps, besides the text the range maps to.
+/// For each range it keeps, besides the text the range maps to; a line makes
+/// two at the most (itself, and the piece it leaves of a range it lands in).
 const MAP_RANGE_MEMORY: u64 = 96;
-/// For each code it covers, besides the code's text.
-pub(super) const MAP_CODE_MEMORY: u64 = 256;
-/// For each text of more than one UTF-16 unit, besides its units.
-const MAP_TEXT_VALUE_MEMORY: u64 = 32;
-/// For each text of a list (`[<..> <..>]`), besides its units.
-const MAP_LIST_ITEM_MEMORY: u64 = 56;
-/// Codes of one or two bytes there can be.
-const SHORT_CODES: u64 = 256 + 65_536;
+/// For each text of a list (`[<..> <..>]`), besides the text: its place in the
+/// list.
+const MAP_LIST_ITEM_MEMORY: u64 = 16;
+/// For a list, besides its texts.
+const MAP_LIST_MEMORY: u64 = 32;
+/// What deciding whether a code is whole holds when a map has a codespace:
+/// a bit for each code of one byte, and for each of two (8 KiB).
+const MAP_CODESPACE_MEMORY: u64 = 8 * 1024 + 256;
 
 /// The replacement character, for a code a map does not cover.
 pub(crate) const REPLACEMENT: u16 = 0xFFFD;
@@ -74,6 +76,30 @@ struct Range {
     target: Target,
 }
 
+/// Which codes of one and two bytes are whole codes, one bit for each: deciding
+/// is a lookup however many ranges the codespace has.
+#[derive(Debug, Default)]
+struct Whole {
+    one: [u64; 4],
+    /// By the first byte, the bits of the second. Made when a range has two
+    /// bytes.
+    two: Option<Box<[[u64; 4]; 256]>>,
+}
+
+/// Sets the bits of `from` to `to` in `bits`.
+fn set_bits(bits: &mut [u64; 4], from: u8, to: u8) {
+    for byte in from..=to {
+        if let Some(word) = bits.get_mut(usize::from(byte / 64)) {
+            *word |= 1 << (byte % 64);
+        }
+    }
+}
+
+fn has_bit(bits: &[u64; 4], byte: u8) -> bool {
+    bits.get(usize::from(byte / 64))
+        .is_some_and(|word| word >> (byte % 64) & 1 == 1)
+}
+
 /// A `ToUnicode` map.
 #[derive(Debug, Default)]
 pub(crate) struct ToUnicode {
@@ -81,6 +107,8 @@ pub(crate) struct ToUnicode {
     ranges: [BTreeMap<u32, Range>; 4],
     /// The codespace: (low, high, length).
     codespace: Vec<(u32, u32, u8)>,
+    /// What the codespace makes of codes of one and two bytes.
+    whole: Whole,
 }
 
 /// A text in angle brackets: its bytes, when it holds only hex digits, white
@@ -200,14 +228,10 @@ fn map_over(what: &str, cap: usize) -> PdfError {
     PdfError::TooLarge(format!("a font's ToUnicode map has more than {cap} {what}"))
 }
 
-/// What a text of `units` UTF-16 units is counted as: one unit is kept as
-/// a number.
+/// What a text of `units` UTF-16 units is counted as: the shared slice (a count
+/// of 16 bytes, and the units), in a block of the allocator's.
 fn text_memory(units: u64) -> u64 {
-    if units <= 1 {
-        0
-    } else {
-        MAP_TEXT_VALUE_MEMORY + 2 * units
-    }
+    ((16 + 2 * units + 8 + 15) & !15).max(32)
 }
 
 /// What a map is counted as holding, as it is read.
@@ -216,19 +240,8 @@ struct Counted {
     codespace: usize,
     lines: usize,
     list_items: usize,
-    /// The most any one text is counted as.
-    text_most: u64,
-    /// What the texts of `bfchar` lines and of lists are counted as.
-    code_memory: u64,
-    /// The texts of more than one unit that lines map to, with the codes of
-    /// each line: what splits may copy, and how often.
-    copied: Vec<(u64, u64)>,
-    /// What the codes of one or two bytes are counted as, and the most one
-    /// of them is.
-    short: u64,
-    short_most: u64,
-    /// What longer codes are counted as.
-    long: u64,
+    /// What the texts of the lines and the lists are counted as.
+    texts: u64,
 }
 
 impl Counted {
@@ -241,33 +254,9 @@ impl Counted {
         Ok(())
     }
 
-    /// Counts a text of `units` that a `bfchar` line maps its code to.
-    fn char_line(&mut self, units: u64) {
-        let value = text_memory(units);
-        self.text_most = self.text_most.max(value);
-        if value > 0 {
-            self.copied.push((value, 1));
-        }
-        self.code_memory = self.code_memory.saturating_add(MAP_CODE_MEMORY + 2 * units);
-    }
-
-    /// Counts the codes `first` to `last` of `length` bytes that a `bfrange`
-    /// line maps, each to a text of `units`, the line's own text counted as
-    /// `value`: `short` for codes of one or two bytes, `long` for longer ones.
-    fn range_line(&mut self, first: u32, last: u32, length: u8, units: u64, value: u64) {
-        let codes = u64::from(last - first) + 1;
-        let per_code = MAP_CODE_MEMORY + 2 * units;
-        let memory = codes.saturating_mul(per_code);
-        if length <= 2 {
-            self.short = self.short.saturating_add(memory);
-            self.short_most = self.short_most.max(per_code);
-        } else {
-            self.long = self.long.saturating_add(memory);
-        }
-        self.text_most = self.text_most.max(value);
-        if value > 0 {
-            self.copied.push((value, codes));
-        }
+    /// Counts a text of `units` that a line maps its codes to.
+    fn text(&mut self, units: u64) {
+        self.texts = self.texts.saturating_add(text_memory(units));
     }
 
     /// What is known to be held so far: what the map's bytes and lines build,
@@ -276,39 +265,22 @@ impl Counted {
         MAP_TEXT_MEMORY
             .saturating_mul(bytes as u64)
             .saturating_add((2 * self.lines as u64).saturating_mul(MAP_RANGE_MEMORY))
-            .saturating_add(self.code_memory)
+            .saturating_add(self.texts)
     }
 
     /// The memory counted for the whole map. It counts
     /// [`MAP_TEXT_MEMORY`] for each byte of the map; for each line, two ranges
-    /// of [`MAP_RANGE_MEMORY`]; for each code a range covers,
-    /// [`MAP_CODE_MEMORY`] and its text (codes of one or two bytes are at most
-    /// 65,792, however many lines cover them); each text of a list; and two
-    /// copies of a text longer than one unit for each split of its range.
-    ///
-    /// A later line that lands inside a range splits it in two. Each line
-    /// splits one range at most, and a range can be split no more often than
-    /// it has codes. So the splits, as many as the lines at most, are given to
-    /// the longest texts first, each counting two copies, plus two copies of
-    /// the longest made in passing.
-    fn memory(mut self, bytes: usize) -> u64 {
-        let built = self.built(bytes);
-        let short = self.short.min(SHORT_CODES.saturating_mul(self.short_most));
-        self.copied
-            .sort_unstable_by_key(|&(value, _)| std::cmp::Reverse(value));
-        let (mut copies, mut splits) = (2 * self.text_most, self.lines as u64);
-        for (value, codes) in self.copied {
-            let these = splits.min(codes.max(1));
-            copies = copies.saturating_add((2 * value).saturating_mul(these));
-            splits -= these;
-            if splits == 0 {
-                break;
-            }
-        }
-        built
-            .saturating_add(copies)
-            .saturating_add(short)
-            .saturating_add(self.long)
+    /// of [`MAP_RANGE_MEMORY`] (a range is one entry however many codes it
+    /// covers, and a later line that lands in it splits it in two, the pieces
+    /// sharing its text); each text a line or a list keeps; and what a
+    /// codespace holds.
+    fn memory(self, bytes: usize) -> u64 {
+        let codespace = if self.codespace > 0 {
+            MAP_CODESPACE_MEMORY
+        } else {
+            0
+        };
+        self.built(bytes).saturating_add(codespace)
     }
 }
 
@@ -330,8 +302,8 @@ impl ToUnicode {
         let mut line: Vec<Option<Vec<u8>>> = Vec::new();
         let mut list: Option<Vec<Rc<[u16]>>> = None;
         let mut list_valid = true;
-        // What the list being read is counted as, and its longest text.
-        let (mut list_memory, mut list_most) = (0u64, 0u64);
+        // What the list being read is counted as.
+        let mut list_memory = 0u64;
         let mut lexer = Lexer::new(data, 0);
         while let Some(token) = token(&mut lexer) {
             if counted.built(data.len()) > limit as u64 {
@@ -373,7 +345,7 @@ impl ToUnicode {
                             source.as_deref().and_then(code),
                             text.as_deref().and_then(units),
                         ) {
-                            counted.char_line(text.len() as u64);
+                            counted.text(text.len() as u64);
                             map.put(value, value, length, Target::Text(text));
                         }
                         line.clear();
@@ -387,8 +359,8 @@ impl ToUnicode {
                         }
                         match bytes.as_deref().and_then(units) {
                             Some(text) => {
-                                list_memory += MAP_LIST_ITEM_MEMORY + 2 * text.len() as u64;
-                                list_most = list_most.max(text.len() as u64);
+                                list_memory +=
+                                    MAP_LIST_ITEM_MEMORY + text_memory(text.len() as u64);
                                 items.push(text);
                                 if items.len() > MAX_LIST_ITEMS {
                                     return Err(map_over("texts in one list", MAX_LIST_ITEMS));
@@ -401,10 +373,7 @@ impl ToUnicode {
                     None => {
                         counted.line()?;
                         if let Some(text) = bytes.as_deref().and_then(units) {
-                            if let Some((first, last, length)) = codes(&line) {
-                                let units = text.len() as u64;
-                                counted.range_line(first, last, length, units, text_memory(units));
-                            }
+                            counted.text(text.len() as u64);
                             map.put_line(&line, Target::Text(text));
                         }
                         line.clear();
@@ -413,16 +382,13 @@ impl ToUnicode {
                 Token::Open if section == In::Ranges && line.len() == 2 && list.is_none() => {
                     list = Some(Vec::new());
                     list_valid = true;
-                    (list_memory, list_most) = (MAP_TEXT_VALUE_MEMORY, 0);
+                    list_memory = MAP_LIST_MEMORY;
                 }
                 Token::Close if section == In::Ranges => {
                     if let Some(items) = list.take() {
                         counted.line()?;
-                        counted.code_memory = counted.code_memory.saturating_add(list_memory);
+                        counted.texts = counted.texts.saturating_add(list_memory);
                         if list_valid && !items.is_empty() {
-                            if let Some((first, last, length)) = codes(&line) {
-                                counted.range_line(first, last, length, list_most, list_memory);
-                            }
                             map.put_line(&line, Target::List(items.into()));
                         }
                         line.clear();
@@ -431,8 +397,36 @@ impl ToUnicode {
                 _ => {}
             }
         }
+        map.index_codespace();
         let memory = counted.memory(data.len());
         Ok((map, memory))
+    }
+
+    /// Makes the lookup of which codes of one and two bytes the codespace
+    /// holds: a mask of the second byte for each first one, whatever the
+    /// ranges.
+    fn index_codespace(&mut self) {
+        let mut whole = Whole::default();
+        for &(low, high, size) in &self.codespace {
+            match size {
+                1 => set_bits(&mut whole.one, low as u8, high as u8),
+                2 => {
+                    let (first, last) = ((low >> 8) as u8, (high >> 8) as u8);
+                    let mut second = [0u64; 4];
+                    set_bits(&mut second, low as u8, high as u8);
+                    let table = whole.two.get_or_insert_with(|| Box::new([[0; 4]; 256]));
+                    for row in first..=last {
+                        if let Some(bits) = table.get_mut(usize::from(row)) {
+                            for (word, add) in bits.iter_mut().zip(second) {
+                                *word |= add;
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        self.whole = whole;
     }
 
     /// A `bfrange` line: its two codes, and `target`.
@@ -486,45 +480,64 @@ impl ToUnicode {
         );
     }
 
-    /// The text of `code` of `length` bytes, if a line maps it.
-    pub(crate) fn get(&self, code: u32, length: u8) -> Option<Vec<u16>> {
-        let ranges = self.ranges.get(usize::from(length).checked_sub(1)?)?;
-        let (_, range) = ranges.range(..=code).next_back()?;
+    /// Adds the text of `code` of `length` bytes to `out`, if a line maps it.
+    fn push(&self, code: u32, length: u8, out: &mut Vec<u16>) -> bool {
+        let Some(ranges) = usize::from(length)
+            .checked_sub(1)
+            .and_then(|index| self.ranges.get(index))
+        else {
+            return false;
+        };
+        let Some((_, range)) = ranges.range(..=code).next_back() else {
+            return false;
+        };
         if range.last < code {
-            return None;
+            return false;
         }
         let offset = code.wrapping_sub(range.base);
-        Some(match &range.target {
+        match &range.target {
             Target::Text(text) => {
-                let mut text = text.to_vec();
-                if let Some(last) = text.last_mut() {
+                out.extend_from_slice(text);
+                if let Some(last) = out.last_mut() {
                     *last = last.wrapping_add(offset as u16);
                 }
-                text
             }
             Target::List(items) => match items.get(offset as usize) {
-                Some(text) => text.to_vec(),
-                None => vec![REPLACEMENT],
+                Some(text) => out.extend_from_slice(text),
+                None => out.push(REPLACEMENT),
             },
-        })
+        }
+        true
     }
 
-    /// The text of `code` when it is a whole code: one in the codespace (or
-    /// any code a line maps, when the map has no codespace); the
+    /// Adds the text of `code` to `out` when it is a whole code: one in the
+    /// codespace (or any code a line maps, when the map has no codespace); the
     /// replacement character for a whole code no line maps.
-    fn decoding(&self, code: u32, length: u8) -> Option<Vec<u16>> {
+    fn push_whole(&self, code: u32, length: u8, out: &mut Vec<u16>) -> bool {
         if self.codespace.is_empty() {
-            return self.get(code, length);
+            return self.push(code, length, out);
         }
-        let inside = self.codespace.iter().any(|&(low, high, size)| {
-            size == length
-                && (0..u32::from(length)).all(|i| {
-                    let shift = 8 * i;
-                    let byte = (code >> shift) as u8;
-                    (low >> shift) as u8 <= byte && byte <= (high >> shift) as u8
-                })
-        });
-        inside.then(|| self.get(code, length).unwrap_or_else(|| vec![REPLACEMENT]))
+        let inside = match length {
+            1 => has_bit(&self.whole.one, code as u8),
+            2 => self
+                .whole
+                .two
+                .as_ref()
+                .and_then(|table| table.get(usize::from((code >> 8) as u8)))
+                .is_some_and(|bits| has_bit(bits, code as u8)),
+            _ => self.codespace.iter().any(|&(low, high, size)| {
+                size == length
+                    && (0..u32::from(length)).all(|i| {
+                        let shift = 8 * i;
+                        let byte = (code >> shift) as u8;
+                        (low >> shift) as u8 <= byte && byte <= (high >> shift) as u8
+                    })
+            }),
+        };
+        if inside && !self.push(code, length, out) {
+            out.push(REPLACEMENT);
+        }
+        inside
     }
 
     /// The text of `bytes`: codes are read one byte at a time until a
@@ -534,18 +547,19 @@ impl ToUnicode {
         let (mut length, mut code) = (0u8, 0u32);
         for &byte in bytes {
             if length == 4 {
-                units.extend(self.get(code, 4).unwrap_or_else(|| vec![REPLACEMENT]));
+                if !self.push(code, 4, &mut units) {
+                    units.push(REPLACEMENT);
+                }
                 (length, code) = (0, 0);
             }
             length += 1;
             code = code << 8 | u32::from(byte);
-            if let Some(text) = self.decoding(code, length) {
-                units.extend(text);
+            if self.push_whole(code, length, &mut units) {
                 (length, code) = (0, 0);
             }
         }
-        if length > 0 {
-            units.extend(self.get(code, length).unwrap_or_else(|| vec![REPLACEMENT]));
+        if length > 0 && !self.push(code, length, &mut units) {
+            units.push(REPLACEMENT);
         }
         utf16_with_bom(&units)
     }
@@ -565,6 +579,11 @@ fn codes(line: &[Option<Vec<u8>>]) -> Option<(u32, u32, u8)> {
 /// rest (UTF-16 in either order, or UTF-8). Unpaired surrogates become
 /// replacement characters.
 pub(crate) fn utf16_with_bom(units: &[u16]) -> String {
+    // The first unit, as the bytes of a byte-order mark: `FE FF`, `FF FE`, or
+    // the start of `EF BB BF`. Without one, the units are the text.
+    if !matches!(units.first(), Some(0xFEFF | 0xFFFE | 0xEFBB)) {
+        return String::from_utf16_lossy(units);
+    }
     let bytes: Vec<u8> = units.iter().flat_map(|unit| unit.to_be_bytes()).collect();
     utf16_bytes_with_bom(&bytes)
 }

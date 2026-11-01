@@ -4688,6 +4688,7 @@ dependencies = [
  "base64 0.23.1",
  "bytes",
  "chrono",
+ "flate2",
  "futures-util",
  "harfrust 0.15.0",
  "http",

@@ -648,16 +648,10 @@ fn png(width: u32, height: u32) -> Vec<u8> {
     header.extend(height.to_be_bytes());
     header.extend([8, 0, 0, 0, 0]);
     // Each row is a filter byte (none) and one byte per pixel.
-    let mut objects = navree_pdf::Objects::new();
-    let id = objects.add(navree_pdf::Stream::new(
-        Dictionary::new(),
-        vec![0u8; (width as usize + 1) * height as usize],
-    ));
-    objects.compress();
-    let rows = objects.get(id).unwrap().as_stream().unwrap().clone();
+    let rows = crate::support::smallest_deflate(&vec![0u8; (width as usize + 1) * height as usize]);
     let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
     chunk(&mut out, b"IHDR", &header);
-    chunk(&mut out, b"IDAT", &rows.content);
+    chunk(&mut out, b"IDAT", &rows);
     chunk(&mut out, b"IEND", &[]);
     out
 }

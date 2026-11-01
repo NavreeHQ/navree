@@ -36,7 +36,7 @@ fn a_tagged_sheet_written_plain_is_edited() {
 #[test]
 fn a_tagged_sheet_in_object_streams_is_edited() {
     let pdf = sheet(10_000, true);
-    assert!(pdf.len() < 8 * 1024 * 1024, "{} bytes", pdf.len());
+    assert!(pdf.len() < 20 * 1024 * 1024, "{} bytes", pdf.len());
     assert_eq!(pdf.page_count().unwrap(), 189);
     let stamped = pdf.stamp(&Stamp::text("PAID")).unwrap();
     assert!(first_page(&stamped).contains("PAID"));

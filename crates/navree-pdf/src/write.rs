@@ -38,9 +38,13 @@ const DESCRIBES_BYTES: [&[u8]; 6] = [
     b"FFilter",
     b"FDecodeParms",
 ];
-/// What compressing one stream costs in work, besides four bytes for each of
-/// its own (4 KiB): the compressor's tables.
+/// What compressing one stream costs in work, besides [`COMPRESS_PER_BYTE`] for
+/// each of its own bytes (4 KiB): the compressor's tables.
 const COMPRESS_COST: usize = 4096;
+/// What compressing costs in work for each byte of a stream (2): the fastest
+/// level of Flate takes 7 ns a byte at the most, on data of any kind, and a
+/// byte of work is about 8 ns.
+const COMPRESS_PER_BYTE: usize = 2;
 /// The keys of a page tree node that lead to what a page needs, besides its
 /// `Kids`.
 const NEEDED_KEYS: [&[u8]; 5] = [
@@ -678,7 +682,7 @@ impl Objects {
 
     /// Compresses (Flate) every stream of 64 bytes or more that has no filter
     /// (and no parameters for one, nor a file its bytes are in), when that makes
-    /// it smaller, as long as there is work left for it: it takes 4 KiB and 4
+    /// it smaller, as long as there is work left for it: it takes 4 KiB and 2
     /// bytes for each byte. A stream past that stays as it is.
     pub fn compress(&mut self) {
         let budget = &self.budget;
@@ -687,7 +691,11 @@ impl Objects {
                 && stream.content.len() >= SHORTEST_COMPRESSED
                 && !DESCRIBES_BYTES.iter().any(|key| stream.dict.has(key))
             {
-                let cost = stream.content.len().saturating_mul(4) + COMPRESS_COST;
+                let cost = stream
+                    .content
+                    .len()
+                    .saturating_mul(COMPRESS_PER_BYTE)
+                    .saturating_add(COMPRESS_COST);
                 if budget.work.get().saturating_add(cost) > budget.work_limit {
                     continue;
                 }

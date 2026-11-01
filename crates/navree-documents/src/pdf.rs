@@ -394,9 +394,11 @@ fn merge_within<'a>(
         // are not listed, and are not lost without a word.
         document.check().map_err(shared)?;
         for &id in &page_ids {
-            let page = document
-                .dictionary_mut(id)
-                .ok_or_else(|| missing("a page of the document"))?;
+            let Some(page) = document.dictionary_mut(id) else {
+                // No object is found once the work has run out.
+                document.check().map_err(shared)?;
+                return Err(missing("a page of the document"));
+            };
             page.set("Parent", pages_id);
             page.remove(b"StructParents");
         }
@@ -1031,13 +1033,18 @@ fn contents_streams(
     document
         .hold(items.len().saturating_mul(std::mem::size_of::<Object>()))
         .map_err(pdf_error)?;
-    Ok(items
-        .iter()
-        .filter_map(|item| match document.followed(item)? {
-            (id, Some(Object::Stream(_))) => Some(Object::Reference(id)),
-            _ => None,
-        })
-        .collect())
+    // Room for the most there can be, so that the list is not grown by
+    // doubling, which holds up to twice what it is counted as.
+    let mut streams = Vec::with_capacity(items.len());
+    streams.extend(
+        items
+            .iter()
+            .filter_map(|item| match document.followed(item)? {
+                (id, Some(Object::Stream(_))) => Some(Object::Reference(id)),
+                _ => None,
+            }),
+    );
+    Ok(streams)
 }
 
 /// Appends `operations` to a page after wrapping its existing contents in
@@ -1058,7 +1065,8 @@ fn draw_over(
     let mut close = b"\nQ\n".to_vec();
     close.extend(content::encode(operations));
     let close = document.add(Stream::new(Dictionary::new(), close));
-    let mut contents = vec![Object::Reference(open)];
+    let mut contents = Vec::with_capacity(existing.len() + 2);
+    contents.push(Object::Reference(open));
     contents.extend(existing);
     contents.push(Object::Reference(close));
     document
@@ -1331,6 +1339,25 @@ mod tests {
             }
         }
         assert!(refused > 0);
+    }
+
+    #[test]
+    fn the_contents_a_page_gets_hold_what_they_are_counted_as() {
+        // The list a stamp makes of a page's contents is counted for its length
+        // once. A list that grew by doubling would hold up to twice that.
+        let mut objects = Objects::new();
+        let stream = objects.add(Stream::new(Dictionary::new(), b"n".to_vec()));
+        let shared = objects.add(vec![Object::Reference(stream); 2_000]);
+        let page = objects.add(dictionary! { "Type" => "Page", "Contents" => shared });
+        let operations = [Operation::new("q", vec![])];
+        draw_over(&mut objects, page, &operations).unwrap();
+        let contents = objects
+            .dictionary(page)
+            .and_then(|page| page.get(b"Contents"))
+            .and_then(Object::as_array)
+            .unwrap();
+        assert_eq!(contents.len(), 2_002);
+        assert_eq!(contents.capacity(), contents.len());
     }
 
     #[test]

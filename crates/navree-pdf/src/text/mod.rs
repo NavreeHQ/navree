@@ -52,9 +52,8 @@ const MEMORY_PER_WORK: usize = 16;
 const STEPS_PER_WORK: usize = 16;
 /// What each character width a font sets costs, in bytes of work (16).
 const WIDTH_COST: usize = 16;
-/// What each character width a font sets holds in memory, at most (24
-/// bytes: an entry of a hash map, with room to grow).
-const WIDTH_MEMORY: usize = 24;
+/// What each code a table of widths has room for holds in memory (4 bytes).
+const WIDTH_MEMORY: usize = 4;
 /// What a font holds besides its widths and maps (256 bytes).
 const FONT_INFO_MEMORY: usize = 256;
 /// What reading a font costs in work besides its widths, maps and encoding, the
@@ -77,8 +76,8 @@ const SHOW_COST: usize = 16;
 /// What each `Do` costs besides that (32), before it is known to be a form;
 /// the references it follows cost what each reference costs.
 const DO_COST: usize = 32;
-/// What each character code shown costs (12), whether it shows anything or not.
-const CODE_COST: usize = 12;
+/// What each character code shown costs (16), whether it shows anything or not.
+const CODE_COST: usize = 16;
 /// What each line a page's glyphs form costs when they are put together (32).
 const LINE_COST: usize = 32;
 /// What the operands of one operation may hold before they cost anything
@@ -240,6 +239,9 @@ struct Budget<'d> {
     text_by_document: bool,
     /// The character codes this page showed so far.
     codes: usize,
+    /// The actual text that the marked content now open holds, over all the
+    /// forms the page draws.
+    marked: usize,
 }
 
 impl<'d> Budget<'d> {
@@ -259,7 +261,27 @@ impl<'d> Budget<'d> {
             text_allowed: limits.page_text.min(text_left),
             text_by_document: text_left < limits.page_text,
             codes: 0,
+            marked: 0,
         }
+    }
+
+    /// Counts `amount` bytes of actual text held by a mark that opens, or
+    /// fails when the marks open hold more than a page may have of text.
+    fn open_mark(&mut self, amount: usize) -> Result<(), PdfError> {
+        self.marked = self.marked.saturating_add(amount);
+        if self.marked > self.limits.page_text {
+            return Err(PdfError::TooLarge(format!(
+                "a PDF page holds more actual text in the marked content it has open than the \
+                 limit of {} for the text of a page",
+                size(self.limits.page_text)
+            )));
+        }
+        Ok(())
+    }
+
+    /// Lets go of the `amount` bytes of actual text a mark that closes held.
+    fn close_mark(&mut self, amount: usize) {
+        self.marked = self.marked.saturating_sub(amount);
     }
 
     /// The work the page may still do.
@@ -451,10 +473,36 @@ struct FontInfo<'a> {
     reads_past_map: bool,
     /// Bytes per character code: 2 for composite fonts, 1 otherwise.
     code_len: usize,
-    widths: HashMap<u32, f32>,
+    widths: Widths,
     default_width: f32,
     /// A standard font without a `Widths` array.
     standard: bool,
+}
+
+/// The widths a font sets, by code: a table as long as the highest code set,
+/// at most 65,536 entries, since codes have one or two bytes.
+#[derive(Default)]
+struct Widths(Vec<f32>);
+
+impl Widths {
+    fn insert(&mut self, code: u32, width: f32) {
+        let at = code as usize;
+        if at >= self.0.len() {
+            self.0.resize(at + 1, f32::NAN);
+        }
+        if let Some(slot) = self.0.get_mut(at) {
+            *slot = if width.is_nan() { 0.0 } else { width };
+        }
+    }
+
+    fn get(&self, code: u32) -> Option<f32> {
+        self.0.get(code as usize).copied().filter(|w| !w.is_nan())
+    }
+
+    /// What the table holds.
+    fn memory(&self) -> usize {
+        self.0.len() * WIDTH_MEMORY
+    }
 }
 
 /// Saved with `q`, and restored with `Q`: the name of the font is shared, not
@@ -804,13 +852,20 @@ impl<'a> Walker<'a> {
                     if let Some(text) = actual_text {
                         self.budget.charge(text.len())?;
                     }
+                    // The text is held as decoded, which may be longer.
+                    let actual_text = actual_text.map(decode_text_string);
+                    self.budget
+                        .open_mark(actual_text.as_ref().map_or(0, String::len))?;
                     marks.push(Mark {
-                        actual_text: actual_text.map(decode_text_string),
+                        actual_text,
                         chunk: None,
                     });
                 }
                 "EMC" => {
-                    marks.pop();
+                    if let Some(mark) = marks.pop() {
+                        self.budget
+                            .close_mark(mark.actual_text.as_ref().map_or(0, String::len));
+                    }
                 }
                 "Do" if depth < MAX_FORM_DEPTH => {
                     self.budget.charge(DO_COST)?;
@@ -843,6 +898,9 @@ impl<'a> Walker<'a> {
                         .and_then(|o| self.document.resolve(o))
                         .and_then(Object::as_dict)
                         .or(resources);
+                    // What this operation holds is not held through the form it
+                    // draws: that form has operations of its own.
+                    drop(op);
                     let content =
                         match decode_charged(document, form, &mut self.budget, MAX_CONTENT, 0)? {
                             Ok(content) => Cow::Owned(content),
@@ -853,6 +911,11 @@ impl<'a> Walker<'a> {
                 }
                 _ => {}
             }
+        }
+        // Marks left open end with the content.
+        for mark in marks {
+            self.budget
+                .close_mark(mark.actual_text.as_ref().map_or(0, String::len));
         }
         Ok(())
     }
@@ -1061,7 +1124,7 @@ fn font_info<'a>(
         encoding::encoding_name(doc, font),
         Some(b"Identity-H" | b"Identity-V")
     );
-    let mut widths = HashMap::new();
+    let mut widths = Widths::default();
     let mut default_width = 0.0;
     let mut standard = false;
     if composite {
@@ -1111,7 +1174,9 @@ fn font_info<'a>(
             None => standard = true,
         }
     }
-    let memory = widths.len() * WIDTH_MEMORY;
+    let memory = widths.memory();
+    // Making the table is work in proportion to it.
+    budget.charge(memory / MEMORY_PER_WORK)?;
     let info = FontInfo {
         map,
         encoding,
@@ -1144,10 +1209,7 @@ impl FontInfo<'_> {
         if self.standard {
             return standard_width(code) as f32;
         }
-        self.widths
-            .get(&code)
-            .copied()
-            .unwrap_or(self.default_width)
+        self.widths.get(code).unwrap_or(self.default_width)
     }
 }
 
@@ -1157,7 +1219,7 @@ impl FontInfo<'_> {
 fn parse_cid_widths(
     doc: &Document,
     w: &[Object],
-    widths: &mut HashMap<u32, f32>,
+    widths: &mut Widths,
     budget: &mut Budget<'_>,
 ) -> Result<(), PdfError> {
     let value = |o: &Object| doc.resolve(o).and_then(Object::as_float);
@@ -1427,15 +1489,47 @@ fn assemble_counted(
     Ok((out.join("\n"), allowed - steps.0, lines))
 }
 
+/// A glyph waiting in the sweep of [`duplicates`], greater the better it
+/// ranks: the wider, and the earlier among equals.
+struct Ranked {
+    width: f32,
+    index: usize,
+}
+
+impl PartialEq for Ranked {
+    fn eq(&self, other: &Ranked) -> bool {
+        self.cmp(other).is_eq()
+    }
+}
+
+impl Eq for Ranked {}
+
+impl PartialOrd for Ranked {
+    fn partial_cmp(&self, other: &Ranked) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Ranked {
+    fn cmp(&self, other: &Ranked) -> std::cmp::Ordering {
+        self.width
+            .total_cmp(&other.width)
+            .then(other.index.cmp(&self.index))
+    }
+}
+
 /// Which glyphs of a line repeat another one: `duplicate[i]` is true when
 /// some other glyph with the same text is wider than glyph `i` (or as wide,
 /// and earlier) and spans its centre.
 ///
-/// Within the glyphs that share a text, they are taken from the widest down
-/// (earlier first among equals): each is a duplicate when the centre falls
-/// in the union of the ones taken before it, kept as disjoint intervals.
-/// That is the same answer as comparing every pair, in time proportional to
-/// the number of glyphs times its logarithm.
+/// Within the glyphs that share a text, a glyph is a duplicate when some glyph
+/// that ranks better (the widest first, the earlier first among equals) spans
+/// its centre. That is found in one sweep along the line: the centres in order,
+/// the glyphs that start before each one waiting in a heap by rank, those that
+/// have ended thrown away when they reach its top. It is the same answer as
+/// comparing every pair, in time proportional to the number of glyphs times its
+/// logarithm, and it reads the glyphs in the order of the line and not in the
+/// order of their widths.
 fn duplicates(line: &[Chunk], steps: &mut Steps) -> Result<Vec<bool>, PdfError> {
     let mut duplicate = vec![false; line.len()];
     let mut by_text: HashMap<&str, Vec<usize>> = HashMap::new();
@@ -1468,48 +1562,37 @@ fn duplicates(line: &[Chunk], steps: &mut Steps) -> Result<Vec<bool>, PdfError> 
             }
             continue;
         }
-        let width = |i: usize| line[i].x1 - line[i].x0 + 0.0;
-        let mut ranked = group;
-        ranked.sort_by(|&a, &b| width(b).total_cmp(&width(a)).then(a.cmp(&b)));
-        // Disjoint closed intervals, by start: start -> end.
-        let mut covered: BTreeMap<i32, (f32, f32)> = BTreeMap::new();
-        for i in ranked {
-            let chunk = &line[i];
-            let (start, end) = (chunk.x0 + 0.0, chunk.x1 + 0.0);
-            let centre = (chunk.x0 + chunk.x1) / 2.0 + 0.0;
-            duplicate[i] = covered
-                .range(..=order_key(centre))
-                .next_back()
-                .is_some_and(|(_, &(_, to))| centre <= to);
-            // Add [start, end], merging what it touches.
-            let (mut from, mut to) = (start, end);
-            if let Some((&key, &(before, until))) = covered.range(..=order_key(from)).next_back()
-                && until >= from
-            {
-                from = before;
-                to = to.max(until);
-                covered.remove(&key);
-            }
-            let absorbed: Vec<i32> = covered
-                .range(order_key(from)..=order_key(to))
-                .map(|(&key, _)| key)
-                .collect();
-            for key in absorbed {
-                if let Some((_, until)) = covered.remove(&key) {
-                    to = to.max(until);
+        let ranked = |i: usize| Ranked {
+            width: line[i].x1 - line[i].x0 + 0.0,
+            index: i,
+        };
+        let centre = |i: usize| (line[i].x0 + line[i].x1) / 2.0 + 0.0;
+        let mut starts = group.clone();
+        starts.sort_unstable_by(|&a, &b| line[a].x0.total_cmp(&line[b].x0).then(a.cmp(&b)));
+        let mut centres = group;
+        centres.sort_unstable_by(|&a, &b| centre(a).total_cmp(&centre(b)).then(a.cmp(&b)));
+        let mut waiting = std::collections::BinaryHeap::new();
+        let mut next = 0;
+        for i in centres {
+            let at = centre(i);
+            while let Some(&started) = starts.get(next) {
+                if line[started].x0 > at {
+                    break;
                 }
+                waiting.push(ranked(started));
+                next += 1;
             }
-            covered.insert(order_key(from), (from, to));
+            // Those that ended before this centre end before the later ones.
+            while let Some(best) = waiting.peek() {
+                if line[best.index].x1 >= at {
+                    break;
+                }
+                waiting.pop();
+            }
+            duplicate[i] = waiting.peek().is_some_and(|best| *best > ranked(i));
         }
     }
     Ok(duplicate)
-}
-
-/// A key that sorts finite `f32`s in numeric order (`-0.0` and `0.0` as
-/// one).
-fn order_key(value: f32) -> i32 {
-    let bits = (value + 0.0).to_bits() as i32;
-    bits ^ (((bits >> 31) as u32) >> 1) as i32
 }
 
 /// Zero-width glyphs (marks: dots, vowel signs, accents drawn apart) of a
@@ -2196,25 +2279,75 @@ mod tests {
     }
 
     #[test]
-    fn a_to_unicode_map_over_millions_of_codes_is_refused() {
-        // One line of a range over 2,097,152 three-byte codes: reading the
-        // map visits each of them.
-        let cmap = "/CIDInit /ProcSet findresource begin 12 dict begin begincmap\n\
-                    /CMapName /Sample def\n\
-                    1 begincodespacerange <000000> <FFFFFF> endcodespacerange\n\
-                    1 beginbfrange\n<000000> <1FFFFF> <0041>\nendbfrange\n\
-                    endcmap CMapName currentdict /CMap defineresource pop end end\n";
+    fn a_to_unicode_range_over_millions_of_codes_is_one_range() {
+        // One line of a range over 2,097,152 three-byte codes, or over every
+        // four-byte code there is: a range is one entry, which no code is
+        // visited to read, so the map is counted for its line.
+        for (codespace, first, last) in [
+            ("<000000> <FFFFFF>", "<000000>", "<1FFFFF>"),
+            ("<00000000> <FFFFFFFF>", "<00000000>", "<FFFFFFFF>"),
+        ] {
+            let cmap = format!(
+                "/CIDInit /ProcSet findresource begin 12 dict begin begincmap\n\
+                 /CMapName /Sample def\n\
+                 1 begincodespacerange {codespace} endcodespacerange\n\
+                 1 beginbfrange\n{first} {last} <0041>\nendbfrange\n\
+                 endcmap CMapName currentdict /CMap defineresource pop end end\n"
+            );
+            let (map, counted) = ToUnicode::read_within(cmap.as_bytes(), usize::MAX).unwrap();
+            assert!(counted < 64 * 1024, "{counted} bytes for one line");
+            drop(map);
+            // A font whose limit is a few kilobytes more than that reads it.
+            let tight = TextLimits {
+                font_memory: 64 * 1024,
+                ..TextLimits::default()
+            };
+            page_texts_within(&composite_font_page(&cmap, Vec::new()), tight).unwrap();
+        }
+    }
+
+    #[test]
+    fn a_to_unicode_map_with_many_lines_is_counted_for_the_ranges_it_builds() {
+        // 100,000 lines of single codes: two ranges a line at the most.
+        let counted = |lines: usize| {
+            let mut cmap = String::from(MAP_HEAD);
+            for block in 0..lines.div_ceil(100) {
+                let count = (lines - block * 100).min(100);
+                cmap.push_str(&format!("{count} beginbfchar\n"));
+                for i in 0..count {
+                    cmap.push_str(&format!("<{:04X}> <0041>\n", block * 100 + i));
+                }
+                cmap.push_str("endbfchar\n");
+            }
+            cmap.push_str(MAP_TAIL);
+            ToUnicode::read_within(cmap.as_bytes(), usize::MAX)
+                .unwrap()
+                .1
+        };
+        let (small, large) = (counted(1_000), counted(100_000));
+        assert!(
+            large > 90 * small,
+            "{small} for 1,000 lines, {large} for 100,000"
+        );
+        assert!(large < 64 * 1024 * 1024, "{large}");
+        // A font limit under what the large map is counted as refuses it.
+        let tight = TextLimits {
+            font_memory: usize::try_from(large).unwrap() / 2,
+            ..TextLimits::default()
+        };
+        let mut cmap = String::from(MAP_HEAD);
+        for block in 0..1_000 {
+            cmap.push_str("100 beginbfchar\n");
+            for i in 0..100 {
+                cmap.push_str(&format!("<{:04X}> <0041>\n", block * 100 + i));
+            }
+            cmap.push_str("endbfchar\n");
+        }
+        cmap.push_str(MAP_TAIL);
         too_large(page_texts_within(
-            &composite_font_page(cmap, Vec::new()),
-            TextLimits::default(),
+            &composite_font_page(&cmap, Vec::new()),
+            tight,
         ));
-        // The same map over a few codes is read.
-        let small = cmap.replace("<1FFFFF>", "<0000FF>");
-        page_texts_within(
-            &composite_font_page(&small, Vec::new()),
-            TextLimits::default(),
-        )
-        .unwrap();
     }
 
     #[test]
@@ -2387,9 +2520,10 @@ mod tests {
     }
 
     #[test]
-    fn a_to_unicode_range_split_by_many_codes_is_refused() {
+    fn a_to_unicode_range_split_by_many_codes_shares_its_text() {
         // A range whose text is a list of 256 strings, split by 1,000
-        // single codes: each piece keeps a copy of the whole list.
+        // single codes: the pieces share the list, so the map is counted for
+        // its lines and the list once.
         let page = |cmap: String| {
             pages_with(
                 move |document| {
@@ -2400,17 +2534,33 @@ mod tests {
                 &[b"BT /F1 12 Tf 1 0 0 1 10 700 Tm <0001> Tj ET".to_vec()],
             )
         };
+        let (_, split) =
+            ToUnicode::read_within(split_list_map(256, 1000).as_bytes(), usize::MAX).unwrap();
+        let (_, once) =
+            ToUnicode::read_within(split_list_map(256, 0).as_bytes(), usize::MAX).unwrap();
+        // 1,000 lines of `<code> <0042>`, a range for each, and the list once.
+        assert!(
+            split < once + 1_000 * 400,
+            "{split} bytes, {once} without the splits"
+        );
         let tight = TextLimits {
-            font_memory: 32 * 1024 * 1024,
+            font_memory: 1024 * 1024,
             ..TextLimits::default()
         };
-        let message = too_large(page_texts_within(&page(split_list_map(256, 1000)), tight));
-        assert!(message.contains("32 MiB"), "{message}");
-        // A few splits are read as before: code 1 is one of them.
+        // Code 1 is one of the splits.
         assert_eq!(
-            page_texts_within(&page(split_list_map(10, 10)), tight).unwrap(),
+            page_texts_within(&page(split_list_map(256, 1000)), tight).unwrap(),
             ["B"]
         );
+        // A font limit under what the map is counted as refuses it.
+        let message = too_large(page_texts_within(
+            &page(split_list_map(256, 1000)),
+            TextLimits {
+                font_memory: 64 * 1024,
+                ..TextLimits::default()
+            },
+        ));
+        assert!(message.contains("64 KiB"), "{message}");
     }
 
     #[test]
@@ -2531,7 +2681,7 @@ mod tests {
     fn a_map_read_through_a_long_chain_of_encodings_is_counted() {
         // The chain is followed to the end, then the map is read.
         let tight = TextLimits {
-            font_memory: 4 * 1024 * 1024,
+            font_memory: 4 * 1024,
             page_work: 4096,
             ..TextLimits::default()
         };

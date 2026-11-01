@@ -11,6 +11,14 @@ pub fn fixtures_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/templates")
 }
 
+/// `data` compressed as small as Flate can: what a bomb is made of.
+pub fn smallest_deflate(data: &[u8]) -> Vec<u8> {
+    use std::io::Write;
+    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::best());
+    encoder.write_all(data).unwrap();
+    encoder.finish().unwrap()
+}
+
 /// The fixture templates.
 pub fn fixture_templates() -> Templates {
     Templates::new(vec![fixtures_dir()], Vec::<(String, Vec<u8>)>::new())

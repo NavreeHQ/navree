@@ -502,10 +502,12 @@ fn tiff_packed(row: &mut [u8], columns: usize, colors: usize, bits: usize) {
     row.copy_from_slice(&out);
 }
 
-/// `data` compressed with Flate.
+/// `data` compressed with Flate, at the fastest level: the time it takes is in
+/// proportion to the data whatever the data is, at a few nanoseconds a byte
+/// (higher levels take ten to a hundred times as long on data of low entropy).
 pub(crate) fn deflate(data: &[u8]) -> Vec<u8> {
     use std::io::Write;
-    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::best());
+    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::fast());
     // Writing to a vector cannot fail.
     let _ = encoder.write_all(data);
     encoder.finish().unwrap_or_default()
@@ -521,6 +523,14 @@ mod tests {
 
     use super::*;
     use crate::dictionary;
+
+    /// `data` compressed as small as Flate can, as a bomb is.
+    fn smallest(data: &[u8]) -> Vec<u8> {
+        use std::io::Write;
+        let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::best());
+        encoder.write_all(data).unwrap();
+        encoder.finish().unwrap()
+    }
 
     fn with(filter: &str) -> Dictionary {
         dictionary! { "Filter" => filter }
@@ -539,7 +549,7 @@ mod tests {
             Err(DecodeError::Over)
         );
         // A megabyte of zeros from a kilobyte, refused at 64 KiB.
-        let bomb = deflate(&vec![0; 1 << 20]);
+        let bomb = smallest(&vec![0; 1 << 20]);
         assert!(bomb.len() < 2048);
         assert_eq!(
             decoded(&with("FlateDecode"), &bomb, 64 * 1024),

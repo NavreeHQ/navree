@@ -61,9 +61,9 @@ fn pdf_with_an_inflating_object_stream(inflated: usize) -> Vec<u8> {
 
 #[test]
 fn a_pdf_whose_object_stream_inflates_past_the_limit_is_refused() {
-    // 72 MiB of spaces: a few kilobytes on disk, far over the 8 MiB a
+    // 16 MiB of spaces: a hundred kilobytes on disk, twice the 8 MiB a
     // single object stream may inflate to.
-    let bomb = pdf_with_an_inflating_object_stream(72 * 1024 * 1024);
+    let bomb = pdf_with_an_inflating_object_stream(16 * 1024 * 1024);
     assert!(
         bomb.len() < 256 * 1024,
         "the bomb is {} bytes, not small",
@@ -366,7 +366,10 @@ fn pdf_with_an_inflating_to_unicode_map(inflated: usize) -> Vec<u8> {
 
     let mut document = Objects::new();
     let pages_id = document.reserve();
-    let map_id = document.add(Stream::new(dictionary! {}, vec![b' '; inflated]));
+    let map_id = document.add(Stream::new(
+        dictionary! { "Filter" => "FlateDecode" },
+        crate::support::smallest_deflate(&vec![b' '; inflated]),
+    ));
     let descendant_id = document.add(dictionary! {
         "Type" => "Font", "Subtype" => "CIDFontType2", "BaseFont" => "Sample",
         "CIDSystemInfo" => dictionary! {

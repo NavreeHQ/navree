@@ -117,6 +117,9 @@ pub struct Document {
     version: String,
     trailer: Dictionary,
     slots: Vec<Slot>,
+    /// The slot of each object number, plus one (none: 0), when the numbers
+    /// are not far apart; a search of the slots otherwise.
+    index: Option<Vec<u32>>,
     /// Where objects start, in order: one ends where the next begins.
     offsets: Vec<usize>,
     containers: BTreeMap<u32, OnceCell<Option<Container>>>,
@@ -194,7 +197,7 @@ impl Document {
                 .len()
                 .saturating_mul(std::mem::size_of::<Option<Container>>() + 32),
         )?;
-        let slots = xref
+        let slots: Vec<Slot> = xref
             .entries
             .into_iter()
             // Object 0 heads the free list, whatever a damaged file says.
@@ -206,11 +209,13 @@ impl Document {
                 object: OnceCell::new(),
             })
             .collect();
+        let index = Self::index_of(&slots, &budget)?;
         let mut document = Document {
             data,
             version,
             trailer: xref.trailer,
             slots,
+            index,
             offsets,
             containers,
             budget,
@@ -249,6 +254,42 @@ impl Document {
         }
         document.check()?;
         Ok(document)
+    }
+
+    /// The slot of each object number, when there are no more than twice as
+    /// many numbers as objects (and a few thousand): finding an object is one
+    /// step then, not a search that visits the slots far apart in memory.
+    fn index_of(slots: &[Slot], budget: &Budget) -> Result<Option<Vec<u32>>, PdfError> {
+        let Some(last) = slots.last() else {
+            return Ok(None);
+        };
+        let length = last.number as usize + 1;
+        if length > slots.len().saturating_mul(2).saturating_add(4096) {
+            return Ok(None);
+        }
+        budget.memory(length.saturating_mul(std::mem::size_of::<u32>()))?;
+        let mut index = vec![0u32; length];
+        for (at, slot) in slots.iter().enumerate() {
+            if let (Some(place), Ok(at)) = (index.get_mut(slot.number as usize), u32::try_from(at))
+            {
+                *place = at.saturating_add(1);
+            }
+        }
+        Ok(Some(index))
+    }
+
+    /// The slot of object `number`.
+    fn slot_of(&self, number: u32) -> Option<usize> {
+        match &self.index {
+            Some(index) => match index.get(number as usize) {
+                Some(&at) if at > 0 => Some(at as usize - 1),
+                _ => None,
+            },
+            None => self
+                .slots
+                .binary_search_by_key(&number, |slot| slot.number)
+                .ok(),
+        }
     }
 
     /// The version in the header (`1.7`).
@@ -362,11 +403,7 @@ impl Document {
             self.fail(error);
             return None;
         }
-        let index = self
-            .slots
-            .binary_search_by_key(&id.0, |slot| slot.number)
-            .ok()?;
-        let slot = self.slots.get(index)?;
+        let slot = self.slots.get(self.slot_of(id.0)?)?;
         match slot.entry {
             Entry::Normal { generation, .. } if generation != id.1 => return None,
             Entry::Compressed { .. } if id.1 != 0 => return None,
