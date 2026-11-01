@@ -40,7 +40,7 @@ allow_hosts = ["billing.internal", "*.svc.cluster.local", "10.20.0.0/16"]
 | `timeout_secs` | `30` | Time allowed for each attempt, from connecting to the last body byte (at least 1). |
 | `connect_timeout_secs` | `5` | Time allowed to open a connection (at least 1). |
 | `retries` | `2` | Retries after the first attempt, for idempotent requests only. |
-| `retry_base_ms` | `200` | The first retry delay; each later one doubles, plus random jitter, up to 30 s. |
+| `retry_base_ms` | `200` | The first retry delay; each later one doubles up to 30 s, and each gets up to as much again in random jitter. |
 | `max_response_bytes` | `10485760` (10 MiB) | The largest response body read into memory (at least 1). |
 | `user_agent` | `navree-http-client/<version>` | The `User-Agent` sent when a request doesn't set its own (`<version>` is the crate's version, for example `navree-http-client/1.0.0`). |
 | `ssrf.block_private` | `true` | Refuse internal addresses (see [the SSRF policy](#the-ssrf-policy)). |
@@ -205,7 +205,7 @@ A streaming request goes through the same SSRF policy, carries the same `tracepa
 
 ## Retries and timeouts
 
-Idempotent requests (`GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT`, `DELETE`) are retried when the connection fails or the server answers `5xx` or `429`. The delay starts at `retry_base_ms` and doubles each time, with random jitter, up to 30 seconds. `POST` and `PATCH` are never retried, because sending them twice could charge a card twice; `retries(n)` has no effect on them.
+Idempotent requests (`GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT`, `DELETE`) are retried when the connection fails or the server answers `5xx` or `429`. The delay starts at `retry_base_ms` and doubles each time until it reaches 30 seconds. Each delay also gets a random share of itself added (jitter), so a delay lasts between once and twice its size and clients that failed together do not retry together. `POST` and `PATCH` are never retried, because sending them twice could charge a card twice; `retries(n)` has no effect on them.
 
 When the last attempt still gets a `5xx` or `429`, that response is returned as it is. `Retry-After` headers are not read; the backoff schedule decides.
 

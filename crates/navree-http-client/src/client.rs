@@ -4,7 +4,6 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use backon::{BackoffBuilder, ExponentialBuilder};
 use bytes::BytesMut;
 use http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
 use navree_config::ConfigSection;
@@ -14,6 +13,7 @@ use navree_telemetry::{
 use tokio::time::Instant;
 use url::Url;
 
+use crate::backoff::Backoff;
 use crate::error::display_url;
 use crate::fake::{FakeServer, FakeState};
 use crate::request::PreparedRequest;
@@ -242,13 +242,11 @@ impl HttpClient {
         } else {
             0
         };
-        let mut delays = ExponentialBuilder::new()
-            .with_min_delay(Duration::from_millis(options.retry_base_ms))
-            .with_factor(2.0)
-            .with_max_delay(MAX_RETRY_DELAY)
-            .with_max_times(retries as usize)
-            .with_jitter()
-            .build();
+        let mut delays = Backoff::new(
+            Duration::from_millis(options.retry_base_ms),
+            MAX_RETRY_DELAY,
+            retries,
+        );
         let url = display_url(&request.url);
         let started = Instant::now();
         let mut attempts = 1;

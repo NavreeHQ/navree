@@ -13,7 +13,7 @@
 //!   events), sent once (never retried) under the same SSRF policy.
 //! - **Retries**: idempotent requests (`GET`, `HEAD`, `OPTIONS`, `TRACE`,
 //!   `PUT`, `DELETE`) are retried on connection errors, 5xx and 429, with
-//!   jittered exponential backoff (backon). `POST` and `PATCH` never are.
+//!   jittered exponential backoff. `POST` and `PATCH` never are.
 //!   After the last attempt the last response is returned as it is; call
 //!   [`Response::error_for_status`] to turn 4xx/5xx into an error.
 //! - **Timeouts**: each attempt has its own timeout, from connecting to the
@@ -59,6 +59,7 @@
 //! ```
 #![forbid(unsafe_code)]
 
+mod backoff;
 mod client;
 mod error;
 mod fake;
