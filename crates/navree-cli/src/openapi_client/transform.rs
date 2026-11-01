@@ -621,7 +621,9 @@ impl Generator<'_> {
 
     /// The type of a schema.
     fn schema(&mut self, node: &Value, path: &str) -> Res<Ty> {
-        self.spend(64);
+        // Every schema below this one is given a path that starts with this
+        // one's, copied for each, so the length of the path is work too.
+        self.spend(path.len().saturating_add(64));
         if self.work.get() > MAX_WORK {
             return Err(too_much_work());
         }
@@ -741,6 +743,15 @@ impl Generator<'_> {
                     "allOf holds something that is not a schema at {path}"
                 ));
             };
+            // The member is read with the required names of the parent and
+            // of its own, copied for each member: members times names.
+            let names =
+                |value: Option<&Value>| value.and_then(Value::as_array).map_or(0, <[Value]>::len);
+            self.spend(
+                names(required)
+                    .saturating_add(names(member.get("required")))
+                    .saturating_mul(16),
+            );
             let mut ty;
             if member.contains("$ref") {
                 let reference = text(member.get("$ref"), "$ref")?;
@@ -886,6 +897,8 @@ impl Generator<'_> {
                 unique.push(Ty::Null);
                 continue;
             }
+            // Each type reads a copy of the whole schema: types times keys.
+            self.spend(object.len().saturating_mul(16));
             let mut copy = node.clone();
             if let Some(copy) = copy.object_mut() {
                 copy.set("type", kind.clone());

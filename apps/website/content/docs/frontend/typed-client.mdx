@@ -32,9 +32,9 @@ navree openapi:client --input openapi.json    # from a document you already have
 
 The command runs `cargo run --quiet -- openapi:export <out>/openapi.json`, then writes `<out>/schema.d.ts`. Commit both files and run the command again after changing routes or types; a CI step that runs it and fails on a diff keeps the front end and the API in step.
 
-The generator reads OpenAPI 3.0 and 3.1 documents in one JSON file, with every `$ref` pointing inside it. It writes `$ref`, `allOf`, `oneOf`, `anyOf`, `nullable` and 3.1 type lists, enums, `const`, tuples, `additionalProperties`, `readOnly` (as `readonly`), discriminators and descriptions (as JSDoc). It refuses a document that is not OpenAPI 3, has a `$ref` that leads nowhere or outside the file, or uses an `operationId` twice, and it says which. A reference to something it cannot follow is a warning on standard error, and the schema is written without it.
+The generator reads OpenAPI 3.0 and 3.1 documents in one JSON file, with every `$ref` pointing inside it. It writes `$ref`, `allOf`, `oneOf`, `anyOf`, `nullable` and 3.1 type lists, enums, `const`, tuples, `additionalProperties`, `readOnly` (as `readonly`), discriminators and descriptions (as JSDoc). It refuses a document that is not OpenAPI 3, has a `$ref` that leads nowhere, outside the file or to a part of the document the file does not declare (only `paths`, `webhooks`, `components` and `$defs` are), or uses an `operationId` twice, and it says which. A reference to something it cannot follow is a warning on standard error, and the schema is written without it.
 
-It works within limits: the document is at most 64 MiB and nests at most 128 levels deep, a reference may lead through at most 64 other references, and the TypeScript written for one document is bounded (about 32 MiB), so a document cannot ask for more than that.
+It works within limits: the document is at most 64 MiB and nests at most 128 levels deep, a reference may lead through at most 64 other references, and the TypeScript written for one document is bounded (about 32 MiB, counting what each schema is read with, such as the names above it and the `required` names that `allOf` members carry), so a document cannot ask for more than that.
 
 ## Creating the client
 

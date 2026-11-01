@@ -356,3 +356,236 @@ fn the_command_writes_the_schema_next_to_the_document() {
         "{stderr}"
     );
 }
+
+/// A document with `schema` as the schema of one response, and `extra` as
+/// further members of the document's root (`,"name":value`).
+fn with_schema(schema: &str, extra: &str) -> String {
+    format!(
+        r#"{{"openapi":"3.0.0","info":{{"title":"t","version":"1"}}{extra},"paths":{{"/a":{{"get":{{"responses":{{"200":{{"description":"ok","content":{{"application/json":{{"schema":{schema}}}}}}}}}}}}}}}}}"#
+    )
+}
+
+/// The statements a generated file may have at its top level.
+fn top_level_statements(schema: &str) -> Vec<&str> {
+    schema
+        .lines()
+        .filter(|line| !line.is_empty() && !line.starts_with(char::is_whitespace))
+        .filter(|line| !line.starts_with("/**") && !line.starts_with('}'))
+        .collect()
+}
+
+#[test]
+fn a_reference_is_to_a_part_of_the_document_the_file_declares() {
+    // The first segment of a reference is printed as the name of a type. A
+    // document that has a member by this name, and a reference to it, must
+    // not be able to write declarations of its own into the file.
+    let key = "string; } } } } } } declare global { interface Array<T> { injected: true } } export declare const injected: string; interface Reopen { a: { b: { c: { d: { e: { f: string";
+    let document = with_schema(
+        &format!(r##"{{"$ref":"#/{key}"}}"##),
+        &format!(r#","{key}":{{}}"#),
+    );
+    let error = generate(&document).expect_err("the reference leads outside what is declared");
+    assert!(
+        error
+            .to_string()
+            .contains("paths, webhooks, components and $defs"),
+        "{error}"
+    );
+
+    // The same, as a reference to a part of a part, and from other places
+    // a reference can stand.
+    let nested = r##"{"openapi":"3.1.0","x-here":{"s":{"type":"string"}},"components":{"schemas":{"A":{"$ref":"#/x-here/s"}}}}"##;
+    let error = generate(nested).expect_err("an extension member is not declared");
+    assert!(error.to_string().contains("x-here"), "{error}");
+    let parameter = r##"{"openapi":"3.1.0","info":{"title":"t","version":"1"},"definitions":{"p":{"in":"query","name":"q","schema":{"type":"string"}}},"paths":{"/a":{"get":{"parameters":[{"$ref":"#/definitions/p"}],"responses":{}}}}}"##;
+    assert!(generate(parameter).is_err());
+}
+
+#[test]
+fn every_part_a_reference_can_name_is_still_named() {
+    let document = r##"{"openapi":"3.1.0","info":{"title":"t","version":"1"},
+        "$defs":{"Shared":{"type":"string"}},
+        "components":{
+            "schemas":{"A":{"$ref":"#/$defs/Shared"},"B":{"$ref":"#/components/schemas/A"}},
+            "parameters":{"Q":{"in":"query","name":"q","schema":{"type":"string"}}},
+            "responses":{"Ok":{"description":"ok"}}},
+        "paths":{"/a":{"get":{"operationId":"getA","parameters":[{"$ref":"#/components/parameters/Q"}],"responses":{"200":{"$ref":"#/components/responses/Ok"}}}},
+                 "/b":{"$ref":"#/paths/~1a"}}}"##;
+    let schema = schema_of(document);
+    assert!(schema.contains("A: $defs[\"Shared\"];"), "{schema}");
+    assert!(
+        schema.contains("B: components[\"schemas\"][\"A\"];"),
+        "{schema}"
+    );
+    assert!(
+        top_level_statements(&schema)
+            .iter()
+            .all(|line| line.starts_with("export ") || line.starts_with("type WithRequired")),
+        "{:?}",
+        top_level_statements(&schema)
+    );
+}
+
+#[test]
+fn every_text_a_document_writes_stays_inside_its_statement() {
+    // Whatever a document puts in a name, a key, a description or a literal,
+    // the file has the same top-level statements.
+    let hostile = [
+        "x\" ; export declare const h1: 1; \"",
+        "*/ export declare const c1: 1; /*",
+        "x\u{2028}; export declare const h2: 2; //",
+        "x\n; export declare const s3: 3; //",
+        "string; } declare global { interface Array<T> { injected: true } } interface Reopen { a: string",
+    ];
+    for text in hostile {
+        let json = serde_json::to_string(text).unwrap();
+        let schema = format!(
+            r#"{{"type":"object","description":{json},"properties":{{{json}:{{"type":"string","enum":[{json}],"title":{json}}}}},"required":[{json}]}}"#
+        );
+        let document = with_schema(
+            &schema,
+            &format!(r#","components":{{"schemas":{{{json}:{{"type":"string"}}}}}}"#),
+        );
+        let generated = schema_of(&document);
+        let statements = top_level_statements(&generated);
+        assert!(
+            statements
+                .iter()
+                .all(|line| line.starts_with("export ") || line.starts_with("type WithRequired")),
+            "{text:?}: {statements:?}"
+        );
+        // Outside its string literals and comments, the file has nothing a
+        // document wrote: no `declare`, no `global`.
+        let code = code_of(&generated);
+        for word in ["declare", "global", "injected", "Reopen"] {
+            assert!(!code.contains(word), "{text:?}: {word} in {code}");
+        }
+    }
+}
+
+/// The file's text without its string literals and comments.
+fn code_of(file: &str) -> String {
+    let mut code = String::new();
+    let mut chars = file.chars().peekable();
+    while let Some(ch) = chars.next() {
+        match ch {
+            '"' => {
+                let mut escaped = false;
+                for next in chars.by_ref() {
+                    if escaped {
+                        escaped = false;
+                    } else if next == '\\' {
+                        escaped = true;
+                    } else if next == '"' {
+                        break;
+                    }
+                }
+                code.push_str("\"\"");
+            }
+            '/' if chars.peek() == Some(&'*') => {
+                chars.next();
+                let mut previous = '\0';
+                for next in chars.by_ref() {
+                    if previous == '*' && next == '/' {
+                        break;
+                    }
+                    previous = next;
+                }
+            }
+            other => code.push(other),
+        }
+    }
+    code
+}
+
+#[test]
+fn an_all_of_with_many_members_and_many_required_names_is_stopped_at_the_limit() {
+    // Each member carries the parent's required names with it, so N members
+    // and M names are N x M names copied: 2,000 x 2,000 is four million.
+    let count = 2_000;
+    let required = (0..count)
+        .map(|n| format!("\"r{n}\""))
+        .collect::<Vec<_>>()
+        .join(",");
+    let members = vec![r#"{"type":"string"}"#; count].join(",");
+    let document = with_schema(
+        &format!(r#"{{"required":[{required}],"allOf":[{members}]}}"#),
+        "",
+    );
+    let started = std::time::Instant::now();
+    let error = generate(&document).unwrap_err().to_string();
+    assert!(error.contains("asks for more than"), "{error}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(30));
+
+    // A schema of the size people write is fine.
+    let required = (0..40)
+        .map(|n| format!("\"r{n}\""))
+        .collect::<Vec<_>>()
+        .join(",");
+    let members = vec![r#"{"type":"object","properties":{"r1":{"type":"string"}}}"#; 20].join(",");
+    assert!(
+        generate(&with_schema(
+            &format!(r#"{{"required":[{required}],"allOf":[{members}]}}"#),
+            ""
+        ))
+        .is_ok()
+    );
+}
+
+#[test]
+fn a_list_of_types_over_an_object_with_many_keys_is_stopped_at_the_limit() {
+    // Each type in the list reads a copy of the schema: 1,000 types over
+    // 4,000 keys is four million key copies.
+    let types = vec![r#""string""#; 1_000].join(",");
+    let keys = (0..4_000)
+        .map(|n| format!("\"k{n}\":1"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let document = with_schema(&format!(r#"{{"type":[{types}],{keys}}}"#), "");
+    let started = std::time::Instant::now();
+    let error = generate(&document).unwrap_err().to_string();
+    assert!(error.contains("asks for more than"), "{error}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(30));
+
+    let keys = (0..40)
+        .map(|n| format!("\"k{n}\":1"))
+        .collect::<Vec<_>>()
+        .join(",");
+    assert!(
+        generate(&with_schema(
+            &format!(r#"{{"type":["string","null"],{keys}}}"#),
+            ""
+        ))
+        .is_ok()
+    );
+}
+
+#[test]
+fn long_property_names_nested_deep_are_work_for_every_schema_below_them() {
+    // Each schema is given its path, which holds the names above it, so many
+    // properties below a long path are long paths copied many times: six
+    // names of 40,000 bytes and 1,000 properties below them are 240 MB.
+    let name = "n".repeat(40_000);
+    let siblings = (0..1_000)
+        .map(|n| format!("\"p{n}\":{{\"type\":\"string\"}}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let mut schema = format!(r#"{{"type":"object","properties":{{{siblings}}}}}"#);
+    for _ in 0..6 {
+        schema = format!(r#"{{"type":"object","properties":{{"{name}":{schema}}}}}"#);
+    }
+    let started = std::time::Instant::now();
+    let error = generate(&with_schema(&schema, "")).unwrap_err().to_string();
+    assert!(error.contains("asks for more than"), "{error}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(30));
+
+    // Names of the length people use are not noticed.
+    let name = "customer_account_identifier".repeat(2);
+    let mut schema =
+        r#"{"type":"object","properties":{"a":{"type":"string"},"b":{"type":"string"}}}"#
+            .to_owned();
+    for _ in 0..6 {
+        schema = format!(r#"{{"type":"object","properties":{{"{name}":{schema}}}}}"#);
+    }
+    assert!(generate(&with_schema(&schema, "")).is_ok());
+}

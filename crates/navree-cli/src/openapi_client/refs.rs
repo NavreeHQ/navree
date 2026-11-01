@@ -79,14 +79,25 @@ pub(crate) fn create_ref(parts: &[&str]) -> String {
     pointer
 }
 
+/// The parts of the document the generated file declares, and so the names
+/// a reference can start with (`operations` is for the references the
+/// generator makes itself).
+const ROOTS: [&str; 5] = ["paths", "webhooks", "components", "$defs", "operations"];
+
 /// The type of what `reference` points at: `components["schemas"]["Pet"]`.
 /// For a reference to a parameter (`resolved`), the last part is the
-/// parameter's `in` and `name`.
+/// parameter's `in` and `name`. The first part is one of [`ROOTS`]; the
+/// type is named from that list, never from the document's text.
 pub(crate) fn oapi_ref(reference: &str, resolved: Option<&Value>) -> Result<Ty, String> {
     let pointer = parse_ref(reference);
     let Some((first, rest)) = pointer.split_first() else {
         return Err(format!(
             "Error parsing $ref: {reference}. Is this a valid $ref?"
+        ));
+    };
+    let Some(root) = ROOTS.iter().find(|root| **root == first.as_str()) else {
+        return Err(format!(
+            "Can't use $ref \"{reference}\": it points outside paths, webhooks, components and $defs"
         ));
     };
     let parameter = resolved.and_then(|resolved| {
@@ -96,7 +107,7 @@ pub(crate) fn oapi_ref(reference: &str, resolved: Option<&Value>) -> Result<Ty, 
         }
         Some((in_.js_string(), resolved.get("name").map(Value::js_string)?))
     });
-    let mut ty = named(first);
+    let mut ty = named(root);
     let (lead, tail) = rest.split_at(rest.len().min(2));
     for segment in lead {
         ty = Ty::Indexed(Box::new(ty), segment.clone());
