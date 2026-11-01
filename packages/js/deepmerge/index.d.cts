@@ -16,6 +16,9 @@ declare namespace deepmerge {
   /** The deepest nesting a merge follows before it throws a `RangeError`. */
   const maxDepth: number;
 
+  /** The most steps (objects and arrays copied, keys read) a merge does before it throws a `RangeError`. */
+  const maxWork: number;
+
   function all(objects: object[], options?: Options): object;
   function all<T>(objects: Partial<T>[], options?: Options): T;
 }

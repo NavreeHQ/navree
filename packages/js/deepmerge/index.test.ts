@@ -189,3 +189,36 @@ describe("depth", () => {
     expect(merge({ a: { b: 1 } }, { a: { c: 2 } })).toEqual({ a: { b: 1, c: 2 } });
   });
 });
+
+describe("work", () => {
+  // Objects that share a child are one object to a program and a tree of 2^depth nodes to a walk.
+  const shared = (depth: number) => {
+    let node: Record<string, unknown> = { leaf: 1 };
+    for (let level = 0; level < depth; level++) node = { left: node, right: node };
+    return node;
+  };
+
+  it("refuses an input whose walk is far longer than the input is large", () => {
+    const started = Date.now();
+    expect(() => merge({}, shared(22))).toThrow(/work/);
+    expect(() => merge({}, shared(22), { clone: false })).not.toThrow();
+    expect(Date.now() - started).toBeLessThan(20_000);
+  });
+
+  it("merges the shared input of a size people use", () => {
+    expect(merge({}, shared(10))).toBeTypeOf("object");
+    expect(merge.maxWork).toBeGreaterThan(1_000_000);
+  });
+
+  it("merges again after a refusal, and counts each merge on its own", () => {
+    expect(() => merge({}, shared(22))).toThrow(RangeError);
+    expect(merge({ a: { b: 1 } }, { a: { c: 2 } })).toEqual({ a: { b: 1, c: 2 } });
+    for (let round = 0; round < 50; round++) merge({}, shared(14));
+  });
+
+  it("counts the keys of wide objects as work, and takes a million of them", () => {
+    const wide: Record<string, number> = {};
+    for (let key = 0; key < 200_000; key++) wide[`k${key}`] = key;
+    expect(Object.keys(merge({}, wide))).toHaveLength(200_000);
+  });
+});

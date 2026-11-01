@@ -8,13 +8,27 @@
 // `prototype`) is never copied, from either side and whatever the target
 // holds, so no input can change what `Object.prototype` or the result's
 // prototype carries. A merge follows at most `maxDepth` levels of nesting, so a
-// self-referencing or very deep input is an error, not a stack overflow.
+// self-referencing or very deep input is an error, not a stack overflow, and
+// does at most `maxWork` steps (one for each object and array it copies and
+// each key it reads), so objects that share their children, which a walk
+// takes for a tree of 2^depth nodes, are an error too and not a hang.
 
 const maxDepth = 1000;
+const maxWork = 5000000;
 
 // How deep the merges running now have gone. Merging is synchronous, so one
 // counter serves every call, nested ones (from a custom merge) included.
 let depth = 0;
+
+// The steps the merge running now has done, counted from its outermost call.
+let work = 0;
+
+function spend(steps) {
+  work += steps;
+  if (work > maxWork) {
+    throw new RangeError(`deepmerge: the merge needs more than ${maxWork} steps of work`);
+  }
+}
 
 const reactElementType = typeof Symbol === "function" && Symbol.for ? Symbol.for("react.element") : 0xeac7;
 
@@ -75,12 +89,16 @@ function keyIsForbidden(key) {
 function mergeObject(target, source, options) {
   const destination = {};
   if (options.isMergeableObject(target)) {
-    for (const key of ownKeys(target)) {
+    const targetKeys = ownKeys(target);
+    spend(targetKeys.length);
+    for (const key of targetKeys) {
       if (keyIsForbidden(key)) continue;
       destination[key] = cloneUnlessOtherwiseSpecified(target[key], options);
     }
   }
-  for (const key of ownKeys(source)) {
+  const sourceKeys = ownKeys(source);
+  spend(sourceKeys.length);
+  for (const key of sourceKeys) {
     if (keyIsForbidden(key) || propertyIsUnsafe(target, key)) continue;
     destination[key] =
       propertyIsOnObject(target, key) && options.isMergeableObject(source[key])
@@ -100,6 +118,8 @@ function merge(target, source, options) {
   if (depth >= maxDepth) {
     throw new RangeError(`deepmerge: nesting is deeper than ${maxDepth} levels`);
   }
+  if (depth === 0) work = 0;
+  spend(1);
   depth += 1;
   try {
     const sourceIsArray = Array.isArray(source);
@@ -118,5 +138,6 @@ merge.all = function all(array, options) {
 };
 
 merge.maxDepth = maxDepth;
+merge.maxWork = maxWork;
 
 module.exports = merge;
