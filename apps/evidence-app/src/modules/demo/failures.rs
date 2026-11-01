@@ -186,7 +186,7 @@ impl FailuresController {
     async fn template_missing(&self) -> Result<Json<DemoDone>> {
         let rendered = self
             .views
-            .render("mail/weekly-digest-v2", &json!({ "name": "Priya" }));
+            .render("mail/weekly-digest-v2", json!({ "name": "Priya" }));
         match rendered {
             Ok(html) => Ok(Json(DemoDone {
                 message: format!("rendered {} bytes", html.len()),
