@@ -12,6 +12,7 @@ use navree_contracts::{
     AuditEntry, AuditKind, AuditSink, Clock, RequestId, SessionRecord, SessionStore, SystemClock,
 };
 use navree_crypto::{Encrypter, constant_time_eq};
+use navree_glob::Glob;
 use navree_http::extract::Request;
 use navree_http::middleware::{Next, State, from_fn_with_state};
 use navree_http::response::{IntoResponse, Response};
@@ -22,7 +23,6 @@ use navree_kernel::{
 use percent_encoding::percent_decode_str;
 use serde_json::json;
 use tokio::sync::OnceCell;
-use wildmatch::WildMatch;
 
 use crate::session::Session;
 use crate::{SameSite, SessionOptions, XSRF_COOKIE};
@@ -47,7 +47,7 @@ pub(crate) struct SessionManager {
     /// The app's `dyn Clock`, else the system clock.
     clock: Arc<dyn Clock>,
     /// `csrf_except`, compiled.
-    except: Vec<WildMatch>,
+    except: Vec<Glob>,
     /// `http.cors.allowed_origins`: front ends trusted to write cross-site.
     allowed_origins: Vec<String>,
 }
@@ -70,9 +70,9 @@ impl Injectable for SessionManager {
                 .map(|pattern| {
                     let pattern = pattern.trim();
                     if pattern.starts_with('/') {
-                        WildMatch::new(pattern)
+                        Glob::new(pattern)
                     } else {
-                        WildMatch::new(&format!("/{pattern}"))
+                        Glob::new(&format!("/{pattern}"))
                     }
                 })
                 .collect();

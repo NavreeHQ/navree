@@ -12,9 +12,9 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
+use navree_glob::Glob;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use url::{Host, Url};
-use wildmatch::WildMatch;
 
 use crate::{HttpClientError, SsrfPolicy};
 
@@ -93,7 +93,7 @@ pub(crate) struct SsrfGuard {
     /// Allow-list entries that are IP addresses or CIDR networks.
     allow_nets: Vec<IpNet>,
     /// Allow-list entries that are host names or globs (lower-cased).
-    allow_hosts: Vec<WildMatch>,
+    allow_hosts: Vec<Glob>,
 }
 
 impl SsrfGuard {
@@ -112,7 +112,7 @@ impl SsrfGuard {
             } else if let Ok(ip) = entry.parse::<IpAddr>() {
                 allow_nets.push(IpNet::from(ip));
             } else {
-                allow_hosts.push(WildMatch::new(&entry));
+                allow_hosts.push(Glob::new(&entry));
             }
         }
         Self {

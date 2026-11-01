@@ -8,11 +8,11 @@ use std::hash::Hash;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 
 use chrono::{Duration as ChronoDuration, Utc};
+use navree_glob::Glob;
 use navree_kernel::{BoxFuture, WeakAppContext};
 use navree_telemetry::{Interest, TelemetryContext, TelemetryRecord, TelemetrySink};
 use serde::Serialize;
 use tokio::sync::{mpsc, oneshot};
-use wildmatch::WildMatch;
 
 use crate::batch::duplicates;
 use crate::redact::Redactor;
@@ -45,7 +45,7 @@ pub(crate) struct Active {
     writer: mpsc::UnboundedSender<Command>,
     pub(crate) redactor: Redactor,
     interest: Interest,
-    ignore: Vec<WildMatch>,
+    ignore: Vec<Glob>,
     /// What the HTTP layer captured, by request id, until the request's
     /// `RequestHandled` arrives.
     captures: Mutex<Bounded<String, HttpCapture>>,
@@ -178,14 +178,14 @@ impl Logbook {
     ) -> Logbook {
         let options = Arc::new(options);
         let (writer, commands) = mpsc::unbounded_channel();
-        let mut ignore: Vec<WildMatch> = options
+        let mut ignore: Vec<Glob> = options
             .ignore
             .routes
             .iter()
-            .map(|pattern| WildMatch::new(pattern))
+            .map(|pattern| Glob::new(pattern))
             .collect();
-        ignore.push(WildMatch::new(&options.path));
-        ignore.push(WildMatch::new(&format!("{}/*", options.path)));
+        ignore.push(Glob::new(&options.path));
+        ignore.push(Glob::new(&format!("{}/*", options.path)));
         let active = Arc::new(Active {
             interest: options.interest(),
             options: options.clone(),

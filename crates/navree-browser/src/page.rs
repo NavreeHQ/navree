@@ -7,9 +7,9 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use base64::Engine;
+use navree_glob::Glob;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
-use wildmatch::WildMatch;
 
 use crate::browser::BrowserInner;
 use crate::cdp::{CdpError, PageLog};
@@ -277,7 +277,7 @@ fn path_of(url: &str) -> (&str, &str) {
 /// Whether `url` matches `glob` (`*` any characters, `?` one): its path,
 /// its path and query, or the whole URL.
 pub(crate) fn url_matches(glob: &str, url: &str) -> bool {
-    let pattern = WildMatch::new(glob);
+    let pattern = Glob::new(glob);
     let (path, with_query) = path_of(url);
     pattern.matches(path) || pattern.matches(with_query) || pattern.matches(url)
 }

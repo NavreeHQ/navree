@@ -79,6 +79,11 @@ const HIERARCHY: &[Rule] = &[
     // navree-media, so both read PDFs with one reader and one set of
     // limits. It depends on no navree crate.
     rule("navree-pdf", 0, &[]),
+    // The glob matcher (`*` and `?`) for the patterns apps configure as
+    // strings: the browser's URL waits, the HTTP client's host allow-list
+    // and fake stubs, the Logbook's ignored routes and the session layer's
+    // CSRF exceptions. It depends on no navree crate.
+    rule("navree-glob", 0, &[]),
     // L1
     rule("navree-contracts", 1, &["navree-kernel"]),
     rule("navree-config", 1, &["navree-kernel", "navree-contracts"]),
@@ -93,7 +98,7 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-view", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
     // The memory store is a navree-bounded cache.
     rule("navree-cache", 2, &["navree-kernel", "navree-bounded", "navree-contracts", "navree-config", "navree-telemetry"]),
-    rule("navree-http-client", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry"]),
+    rule("navree-http-client", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-glob"]),
     // The schema builder and migration language: below navree-db, which
     // runs its migrations, so framework crates at L4 and up can build their
     // tables (and hypertables) with it.
@@ -132,7 +137,7 @@ const HIERARCHY: &[Rule] = &[
     // navree-mail -> navree-db; the database never depends on time).
     rule("navree-time", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db"]),
     // L4
-    rule("navree-session", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto", "navree-db"]),
+    rule("navree-session", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto", "navree-db", "navree-glob"]),
     // Its derive comes from navree-validation-macros; `Validate` for
     // navree-time's zones, days and day ranges (optional feature `time`;
     // time never depends on validation).
@@ -195,6 +200,7 @@ const HIERARCHY: &[Rule] = &[
     // Protocol (may use http and testing).
     rule("navree-browser", 4, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-testing",
+        "navree-glob",
     ]),
     // L5
     // Token exchange fetches trusted issuers' key sets with navree-http-client.
@@ -423,7 +429,7 @@ const HIERARCHY: &[Rule] = &[
     // user (navree-auth's JwtService).
     rule("navree-logbook", 7, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
-        "navree-view", "navree-db", "navree-auth",
+        "navree-view", "navree-db", "navree-auth", "navree-glob",
     ]),
     // Fleet:supervised queue workers (navree-queue's supervision hooks and
     // introspection), telemetry job records for metrics, a dashboard page
@@ -529,6 +535,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-kernel",
     "navree-bounded",
     "navree-pdf",
+    "navree-glob",
     "navree-macros",
     "navree-dock",
     "navree-harbor",

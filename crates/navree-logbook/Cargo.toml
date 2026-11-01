@@ -33,6 +33,7 @@ navree-auth = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-db = { workspace = true }
+navree-glob = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-telemetry = { workspace = true }
@@ -46,7 +47,6 @@ tokio = { workspace = true }
 tower = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
-wildmatch = { workspace = true }
 
 [dev-dependencies]
 navree-access = { workspace = true }

@@ -7,10 +7,10 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
+use navree_glob::Glob;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use url::Url;
-use wildmatch::WildMatch;
 
 use crate::error::display_url;
 use crate::request::PreparedRequest;
@@ -35,7 +35,7 @@ pub(crate) struct FakeState {
 #[derive(Debug)]
 struct Stub {
     method: Method,
-    pattern: WildMatch,
+    pattern: Glob,
     /// Served front to back; the last one repeats.
     responses: VecDeque<FakeResponse>,
 }
@@ -75,7 +75,7 @@ impl FakeServer {
     ) -> &Self {
         lock(&self.state.stubs).push(Stub {
             method,
-            pattern: WildMatch::new(url_glob),
+            pattern: Glob::new(url_glob),
             responses: responses.into_iter().collect(),
         });
         self

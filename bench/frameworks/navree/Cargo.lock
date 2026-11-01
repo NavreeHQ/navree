@@ -1825,6 +1825,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "navree-glob"
+version = "1.0.0"
+
+[[package]]
 name = "navree-http"
 version = "1.0.0"
 dependencies = [
@@ -1874,6 +1878,7 @@ dependencies = [
  "ipnet",
  "navree-config",
  "navree-contracts",
+ "navree-glob",
  "navree-kernel",
  "navree-telemetry",
  "reqwest",
@@ -1885,7 +1890,6 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
- "wildmatch",
 ]
 
 [[package]]
@@ -3913,12 +3917,6 @@ name = "widestring"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72069c3113ab32ab29e5584db3c6ec55d416895e60715417b5b883a357c3e471"
-
-[[package]]
-name = "wildmatch"
-version = "2.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f18219fbd41a807dec044965d4106bb4fdb1d3a4b70aac4e5510aacc80a9f140"
 
 [[package]]
 name = "winapi-util"

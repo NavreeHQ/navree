@@ -24,6 +24,7 @@ navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-crypto = { workspace = true }
 navree-db = { workspace = true }
+navree-glob = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 percent-encoding = { workspace = true }
@@ -32,7 +33,6 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-wildmatch = { workspace = true }
 
 [dev-dependencies]
 # The tests run on SQLite files (the driver is opt-in).
