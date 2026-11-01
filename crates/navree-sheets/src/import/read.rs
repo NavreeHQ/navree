@@ -1,5 +1,5 @@
 //! Reading an uploaded file into a [`Table`]: the header row and the data
-//! rows, from CSV, TSV, XLSX, XLS or ODS.
+//! rows, from CSV, TSV, XLSX, XLSB, XLS or ODS.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::{Cursor, Read};
@@ -7,11 +7,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use bytes::Bytes;
-use calamine::{Data, Range, Reader, open_workbook_auto_from_rs};
+use calamine::{Data, Reader};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use super::decode::decode;
+use super::workbook::{CellSource, Limits, Value, Workbook};
 use crate::{Cell, ImportOptions, SheetsError};
 
 /// The kind of an uploaded file.
@@ -336,57 +337,72 @@ fn sniff_delimiter(text: &str) -> u8 {
 }
 
 fn read_workbook(bytes: &[u8], options: &ReadOptions<'_>) -> Result<Table, SheetsError> {
-    let unreadable = |error: calamine::Error| {
-        SheetsError::UnsupportedFile(format!("The workbook cannot be read: {error}"))
-    };
-    // Whatever the file starts with: detection tries the zip formats on a
-    // file the XLS reader refuses, and a zip reader finds an archive that
-    // comes after a prefix.
+    // Whatever the file starts with: a zip workbook may come after a
+    // prefix, and a file the XLS reader refuses is read as a zip workbook.
     check_unpacked_sizes(bytes, options.max_inflated_bytes)?;
-    let mut workbook = open_workbook_auto_from_rs(Cursor::new(bytes)).map_err(unreadable)?;
-    let kind = match &workbook {
-        calamine::Sheets::Xls(_) => FileKind::Xls,
-        calamine::Sheets::Ods(_) => FileKind::Ods,
-        _ => FileKind::Xlsx,
-    };
-    let name =
-        match options.sheet.map(str::trim).filter(|s| !s.is_empty()) {
-            Some(name) => {
-                if !workbook.sheet_names().iter().any(|n| n == name) {
-                    return Err(SheetsError::UnsupportedFile(format!(
-                        "The workbook has no sheet named `{name}`."
-                    )));
-                }
-                name.to_owned()
-            }
-            None => workbook.sheet_names().first().cloned().ok_or_else(|| {
-                SheetsError::UnsupportedFile("The workbook has no sheets.".into())
-            })?,
-        };
-    let tabulator = match &mut workbook {
-        // An XLSX sheet is read cell by cell, so that the limits apply
-        // before the rows are held.
-        calamine::Sheets::Xlsx(xlsx) => tabulate_cells(xlsx, &name, options)?,
-        // The other formats are read into a range first, all of the sheet's
-        // used area, and tabulated from that.
-        other => {
-            let range = other.worksheet_range(&name).map_err(unreadable)?;
-            tabulate_range(&range, options)?
+    if bytes.starts_with(OLE) {
+        if let Ok(xls) = calamine::open_workbook_from_rs(Cursor::new(bytes)) {
+            return read_xls(xls, options);
         }
-    };
-    let mut table = tabulator.finish()?;
-    table.kind = kind;
+    }
+    let workbook = Workbook::open(
+        bytes,
+        Limits {
+            max_part_bytes: options.max_inflated_bytes,
+            max_text_bytes: options.max_text_bytes,
+        },
+    )?;
+    let sheet = sheet_to_read(workbook.sheet_names(), options)?;
+    let mut table = tabulate_cells(&workbook, sheet, options)?.finish()?;
+    table.kind = workbook.kind();
+    Ok(table)
+}
+
+/// Where the sheet asked for is among `names`: the first sheet when none
+/// is asked for.
+fn sheet_to_read(names: &[String], options: &ReadOptions<'_>) -> Result<usize, SheetsError> {
+    match options.sheet.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(name) => names.iter().position(|n| n == name).ok_or_else(|| {
+            SheetsError::UnsupportedFile(format!("The workbook has no sheet named `{name}`."))
+        }),
+        None if names.is_empty() => Err(SheetsError::UnsupportedFile(
+            "The workbook has no sheets.".into(),
+        )),
+        None => Ok(0),
+    }
+}
+
+/// An XLS workbook's sheet, read into a range, all of the sheet's used
+/// area, and tabulated from that.
+fn read_xls(
+    mut xls: calamine::Xls<Cursor<&[u8]>>,
+    options: &ReadOptions<'_>,
+) -> Result<Table, SheetsError> {
+    let names = xls.sheet_names();
+    let name = names
+        .get(sheet_to_read(&names, options)?)
+        .cloned()
+        .unwrap_or_default();
+    let range = xls.worksheet_range(&name).map_err(|error| {
+        SheetsError::UnsupportedFile(format!(
+            "The workbook cannot be read: {}",
+            calamine::Error::Xls(error)
+        ))
+    })?;
+    let mut table = tabulate_range(&range, options)?.finish()?;
+    table.kind = FileKind::Xls;
     Ok(table)
 }
 
 /// Refuses a zipped workbook with a part that unpacks to more than `limit`
 /// bytes, by the size the zip file declares for it, before any part is read:
-/// calamine keeps the shared strings whole and a text of a cell whole, and
-/// a small file can unpack to a thousand times its size. The zip reader stops
-/// a part at its declared size, so a file that declares less than a part
-/// holds cannot be read, and one that declares more is refused here.
+/// the shared strings are held for the whole reading and the text of a cell
+/// is read whole, and a small file can unpack to a thousand times its size.
+/// The zip reader stops a part at its declared size, so a file that
+/// declares less than a part holds cannot be read, and one that declares
+/// more is refused here.
 fn check_unpacked_sizes(bytes: &[u8], limit: u64) -> Result<(), SheetsError> {
-    // A file that is not a zip archive is for calamine to say so.
+    // A file that is not a zip archive is for the readers to say so.
     let Ok(mut archive) = zip::ZipArchive::new(Cursor::new(bytes)) else {
         return Ok(());
     };
@@ -405,7 +421,7 @@ fn check_unpacked_sizes(bytes: &[u8], limit: u64) -> Result<(), SheetsError> {
 
 /// The rows of a range, the sheet's used area, as a table is made of them.
 fn tabulate_range(
-    range: &Range<Data>,
+    range: &calamine::Range<Data>,
     options: &ReadOptions<'_>,
 ) -> Result<Tabulator, SheetsError> {
     let first_row = range.start().map_or(0, |(row, _)| u64::from(row));
@@ -449,47 +465,29 @@ enum Order {
     Broken,
 }
 
-fn xlsx_error(error: calamine::XlsxError) -> SheetsError {
-    SheetsError::UnsupportedFile(format!(
-        "The workbook cannot be read: {}",
-        calamine::Error::Xlsx(error)
-    ))
-}
-
-/// The cells of the sheet `name`, in the order the file has them, without
-/// the ones that are empty; none when the sheet is not a worksheet (a chart
-/// sheet).
-fn sheet_cells<'a, RS: Read + std::io::Seek>(
-    xlsx: &'a mut calamine::Xlsx<RS>,
-    name: &str,
-) -> Result<Option<calamine::XlsxCellReader<'a, RS>>, SheetsError> {
-    match xlsx.worksheet_cells_reader(name) {
-        Ok(reader) => Ok(Some(reader)),
-        Err(calamine::XlsxError::NotAWorksheet(_)) => Ok(None),
-        Err(error) => Err(xlsx_error(error)),
-    }
-}
-
-/// An XLSX sheet as a table, read cell by cell.
+/// A workbook's sheet as a table, read cell by cell.
 ///
 /// A worksheet lists its cells by row and, within a row, by column, so the
 /// rows are taken one at a time and the limits apply to each as it is
 /// read; no cell is kept past its row. A sheet that lists cells in another
 /// order (Excel never writes one) is read whole, as sparse cells, and
 /// tabulated from there: the same table either way.
-fn tabulate_cells<RS: Read + std::io::Seek>(
-    xlsx: &mut calamine::Xlsx<RS>,
-    name: &str,
+fn tabulate_cells(
+    workbook: &Workbook<'_>,
+    sheet: usize,
     options: &ReadOptions<'_>,
 ) -> Result<Tabulator, SheetsError> {
     let mut tabulator = Tabulator::new(options);
-    if stream_rows(xlsx, name, &mut tabulator, options)? == Order::Kept {
+    let order = workbook.read_cells(sheet, |cells| stream_rows(cells, &mut tabulator, options))?;
+    if order == Order::Kept {
         return Ok(tabulator);
     }
     // The rows of the first reading are dropped, not held while the sheet
     // is read again.
     tabulator = Tabulator::new(options);
-    tabulate_unordered(xlsx, name, &mut tabulator, options)?;
+    workbook.read_cells(sheet, |cells| {
+        tabulate_unordered(cells, &mut tabulator, options)
+    })?;
     Ok(tabulator)
 }
 
@@ -502,13 +500,12 @@ struct OpenRow {
     cells: Vec<(usize, Cell)>,
 }
 
-fn stream_rows<RS: Read + std::io::Seek>(
-    xlsx: &mut calamine::Xlsx<RS>,
-    name: &str,
+fn stream_rows(
+    cells: Option<&mut dyn CellSource>,
     tabulator: &mut Tabulator,
     options: &ReadOptions<'_>,
 ) -> Result<Order, SheetsError> {
-    let Some(mut reader) = sheet_cells(xlsx, name)? else {
+    let Some(source) = cells else {
         return Ok(Order::Kept);
     };
     let mut last = None;
@@ -517,120 +514,81 @@ fn stream_rows<RS: Read + std::io::Seek>(
     // keeping none, because a cell out of order would change the answer:
     // the rows would not be the ones read so far.
     let mut refused = None;
-    let mut texts = Texts::default();
-    while let Some(cell) = reader.next_cell().map_err(xlsx_error)? {
+    loop {
+        // Of the cells past the header's width, a source need only give
+        // the last of a row.
+        source.cut_at(tabulator.width());
+        let Some(cell) = source.next_cell()? else {
+            break;
+        };
         options.ensure_running()?;
-        // The range of a sheet leaves out the cells with nothing in them.
-        if matches!(cell.get_value(), calamine::DataRef::Empty) {
-            continue;
-        }
-        let (row, column) = cell.get_position();
-        if last.is_some_and(|last| cell.get_position() <= last) {
+        if last.is_some_and(|last| (cell.row, cell.column) <= last) {
             return Ok(Order::Broken);
         }
-        last = Some(cell.get_position());
-        if refused.is_some() {
-            continue;
-        }
+        last = Some(cell.last());
         // Text is measured where it is, and counted, before it is copied:
         // a shared string is one text for any number of cells.
-        let text = texts.of(cell.get_value());
-        if text.is_some_and(str::is_empty) {
+        if cell.value == Value::Text("") {
             continue;
         }
-        if open.as_ref().is_some_and(|open| open.row != row) {
+        if open.as_ref().is_some_and(|open| open.row != cell.row) {
             refused = open
                 .take()
                 .and_then(|finished| push_row(tabulator, finished).err());
             if refused.is_some() {
-                continue;
+                break;
             }
         }
         let open = open.get_or_insert_with(|| OpenRow {
-            row,
+            row: cell.row,
             used: 0,
             cells: Vec::new(),
         });
-        let column = column as usize;
-        open.used = column + 1;
+        let column = cell.column as usize;
+        let end = column.saturating_add(cell.columns as usize);
+        open.used = end;
         // Cells past the header's width are cut, so they are not kept.
-        if column < tabulator.width() {
-            if let Err(error) = tabulator.charge(kept_bytes(cell.get_value(), text)) {
+        for column in column..end.min(tabulator.width()) {
+            if let Err(error) = tabulator.charge(kept_bytes(&cell.value)) {
                 refused = Some(error);
-                continue;
+                break;
             }
-            open.cells.push((column, cell_of(cell.get_value(), text)));
+            open.cells.push((column, cell_of(&cell.value)));
+        }
+        if refused.is_some() {
+            break;
         }
     }
-    if let Some(finished) = open.take().filter(|_| refused.is_none()) {
-        refused = push_row(tabulator, finished).err();
+    if let Some(error) = refused {
+        return match source.rest_in_order(last, &|| options.ensure_running())? {
+            true => Err(error),
+            false => Ok(Order::Broken),
+        };
     }
-    refused.map_or(Ok(Order::Kept), Err)
+    if let Some(finished) = open.take() {
+        push_row(tabulator, finished)?;
+    }
+    Ok(Order::Kept)
 }
 
 fn push_row(tabulator: &mut Tabulator, row: OpenRow) -> Result<(), SheetsError> {
     tabulator.push_counted(u64::from(row.row) + 1, row.used, dense(row.cells, row.used))
 }
 
-/// Shared strings at least this long are trimmed once, not for every cell
-/// that uses them.
-const LONG_SHARED_STRING: usize = 256;
-
-/// The text of cell values, trimmed as it is kept.
-#[derive(Default)]
-struct Texts {
-    /// Where the trimmed text of a long shared string starts, and how long it
-    /// is, by the address and length of the string (the strings of a workbook
-    /// do not move while it is read).
-    shared: HashMap<(usize, usize), (usize, usize)>,
-}
-
-impl Texts {
-    /// The text of a cell value that is text, trimmed; none for the values
-    /// that are not. A shared string, which any number of cells may use, is
-    /// not scanned again for each of them.
-    fn of<'a>(&mut self, value: &'a calamine::DataRef<'_>) -> Option<&'a str> {
-        use calamine::DataRef;
-        match value {
-            DataRef::String(text) | DataRef::DateTimeIso(text) | DataRef::DurationIso(text) => {
-                Some(text.trim())
-            }
-            DataRef::SharedString(text) if text.len() < LONG_SHARED_STRING => Some(text.trim()),
-            DataRef::SharedString(text) => {
-                let (start, length) = *self
-                    .shared
-                    .entry((text.as_ptr() as usize, text.len()))
-                    .or_insert_with(|| {
-                        let trimmed = text.trim();
-                        (
-                            trimmed.as_ptr() as usize - text.as_ptr() as usize,
-                            trimmed.len(),
-                        )
-                    });
-                Some(&text[start..start + length])
-            }
-            _ => None,
-        }
+/// The bytes of text a cell value is kept as: its text, trimmed already.
+fn kept_bytes(value: &Value<'_>) -> usize {
+    match value {
+        Value::Text(text) => text.len(),
+        Value::Typed(_) => 0,
     }
 }
 
-/// The bytes of text a cell value is kept as: its trimmed `text`, or for an
-/// error the text it is made into.
-fn kept_bytes(value: &calamine::DataRef<'_>, text: Option<&str>) -> usize {
-    match (value, text) {
-        (_, Some(text)) => text.len(),
-        (calamine::DataRef::Error(error), None) => format!("#{error:?}").len(),
-        _ => 0,
-    }
-}
-
-/// The cell a value is kept as, given its trimmed `text` when it has some:
-/// the same as [`data_cell`] makes of it, without a copy of the untrimmed
-/// text.
-fn cell_of(value: &calamine::DataRef<'_>, text: Option<&str>) -> Cell {
-    match text {
-        Some(text) => Cell::Text(text.to_owned()),
-        None => data_cell(&Data::from(value.clone())),
+/// The cell a value is kept as.
+fn cell_of(value: &Value<'_>) -> Cell {
+    match value {
+        Value::Text("") => Cell::Empty,
+        Value::Text(text) => Cell::Text((*text).to_owned()),
+        Value::Typed(cell) => cell.clone(),
     }
 }
 
@@ -645,55 +603,63 @@ fn cell_of(value: &calamine::DataRef<'_>, text: Option<&str>) -> Cell {
 /// more than `max_cells` cells. The rest of the sheet is then still read,
 /// keeping nothing, so that a sheet that cannot be read is reported as
 /// that.
-fn tabulate_unordered<RS: Read + std::io::Seek>(
-    xlsx: &mut calamine::Xlsx<RS>,
-    name: &str,
+fn tabulate_unordered(
+    cells: Option<&mut dyn CellSource>,
     tabulator: &mut Tabulator,
     options: &ReadOptions<'_>,
 ) -> Result<(), SheetsError> {
-    let Some(mut reader) = sheet_cells(xlsx, name)? else {
+    let Some(source) = cells else {
         return Ok(());
     };
     let mut sheet: BTreeMap<u32, BTreeMap<u32, Cell>> = BTreeMap::new();
     let mut held = 0u64;
     let mut refused = None;
-    let mut texts = Texts::default();
-    while let Some(cell) = reader.next_cell().map_err(xlsx_error)? {
+    while let Some(cell) = source.next_cell()? {
         options.ensure_running()?;
-        if refused.is_some() || matches!(cell.get_value(), calamine::DataRef::Empty) {
+        if refused.is_some() {
             continue;
         }
-        let (row, column) = cell.get_position();
-        let text = texts.of(cell.get_value());
-        let cell = if text.is_some_and(str::is_empty) {
-            Cell::Empty
-        } else if u64::from(column) >= options.max_columns {
-            Cell::Bool(true)
-        } else if let Err(error) = tabulator.charge(kept_bytes(cell.get_value(), text)) {
-            refused = Some(error);
-            sheet = BTreeMap::new();
-            continue;
-        } else {
-            cell_of(cell.get_value(), text)
-        };
-        match sheet.get_mut(&row).and_then(|cells| cells.get_mut(&column)) {
-            Some(kept) => *kept = cell,
-            // Nothing and an empty cell are the same.
-            None if cell.is_empty() => {}
-            None => {
-                sheet.entry(row).or_default().insert(column, cell);
-                held += 1;
+        let row = cell.row;
+        // A cell that covers columns past `max_columns` is kept up to there,
+        // and once more as a mark after.
+        let start = u64::from(cell.column);
+        let end = start.saturating_add(u64::from(cell.columns));
+        let kept_end = end.min(options.max_columns).max(start);
+        let marks = u64::from(end > kept_end);
+        for column in start..kept_end.saturating_add(marks) {
+            let column = u32::try_from(column).unwrap_or(u32::MAX);
+            let kept = if cell.value == Value::Text("") {
+                Cell::Empty
+            } else if u64::from(column) >= options.max_columns {
+                Cell::Bool(true)
+            } else if let Err(error) = tabulator.charge(kept_bytes(&cell.value)) {
+                refused = Some(error);
+                break;
+            } else {
+                cell_of(&cell.value)
+            };
+            match sheet.get_mut(&row).and_then(|cells| cells.get_mut(&column)) {
+                Some(slot) => *slot = kept,
+                // Nothing and an empty cell are the same.
+                None if kept.is_empty() => {}
+                None => {
+                    sheet.entry(row).or_default().insert(column, kept);
+                    held += 1;
+                }
+            }
+            refused = if held > options.max_cells {
+                Some(too_many_cells(options.max_cells))
+            } else if sheet.len() as u64 > options.max_rows.saturating_add(1) {
+                Some(SheetsError::TooManyRows {
+                    limit: options.max_rows,
+                })
+            } else {
+                None
+            };
+            if refused.is_some() {
+                break;
             }
         }
-        refused = if held > options.max_cells {
-            Some(too_many_cells(options.max_cells))
-        } else if sheet.len() as u64 > options.max_rows.saturating_add(1) {
-            Some(SheetsError::TooManyRows {
-                limit: options.max_rows,
-            })
-        } else {
-            None
-        };
         if refused.is_some() {
             sheet = BTreeMap::new();
         }

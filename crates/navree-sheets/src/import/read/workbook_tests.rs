@@ -1,5 +1,5 @@
-//! Reading workbooks: that a sheet is tabulated as the range calamine builds
-//! would be, without the range.
+//! Reading workbooks: that a sheet is tabulated as the range of its used
+//! area would be, without the range.
 
 use std::io::{Cursor, Write};
 
@@ -113,7 +113,7 @@ fn book(rows: &str, after: &str, strings: &[&str]) -> Vec<u8> {
 }
 
 /// A workbook of one sheet whose XML stops after `rows`, as a file cut short
-/// does: calamine reports it unreadable when it gets that far.
+/// does: it is reported unreadable when the reading gets that far.
 fn unfinished_book(rows: &str) -> Vec<u8> {
     book_of(
         &[("Sheet1", &|out| {
@@ -147,43 +147,60 @@ fn row(number: u32, cells: &[String]) -> String {
     format!(r#"<row r="{number}">{}</row>"#, cells.concat())
 }
 
-/// Reading as it was before the cells were streamed: the whole sheet as a
-/// range, every row of it after that.
-fn read_as_a_range(bytes: &[u8], options: &ReadOptions<'_>) -> Result<Table, SheetsError> {
-    let unreadable = |error: calamine::Error| {
-        SheetsError::UnsupportedFile(format!("The workbook cannot be read: {error}"))
-    };
-    let mut workbook = open_workbook_auto_from_rs(Cursor::new(bytes)).map_err(unreadable)?;
-    let kind = match &workbook {
-        calamine::Sheets::Xls(_) => FileKind::Xls,
-        calamine::Sheets::Ods(_) => FileKind::Ods,
-        _ => FileKind::Xlsx,
-    };
-    let range = match options.sheet.map(str::trim).filter(|s| !s.is_empty()) {
-        Some(name) => {
-            if !workbook.sheet_names().iter().any(|n| n == name) {
-                return Err(SheetsError::UnsupportedFile(format!(
-                    "The workbook has no sheet named `{name}`."
-                )));
+/// The limits of the workbook readers under `options`.
+fn reader_limits(options: &ReadOptions<'_>) -> Limits {
+    Limits {
+        max_part_bytes: options.max_inflated_bytes,
+        max_text_bytes: options.max_text_bytes,
+    }
+}
+
+/// Every cell the sheet asked for gives, in the order it gives them, one
+/// for each column it covers, as the table keeps its value.
+fn all_cells(bytes: &[u8], options: &ReadOptions<'_>) -> Result<Vec<(u32, u32, Cell)>, SheetsError> {
+    let workbook = Workbook::open(bytes, reader_limits(options))?;
+    let sheet = sheet_to_read(workbook.sheet_names(), options)?;
+    workbook.read_cells(sheet, |cells| {
+        let mut all = Vec::new();
+        if let Some(cells) = cells {
+            while let Some(cell) = cells.next_cell()? {
+                for column in cell.column..cell.column + cell.columns {
+                    all.push((cell.row, column, cell_of(&cell.value)));
+                }
             }
-            workbook.worksheet_range(name).map_err(unreadable)?
         }
-        None => workbook
-            .worksheet_range_at(0)
-            .ok_or_else(|| SheetsError::UnsupportedFile("The workbook has no sheets.".into()))?
-            .map_err(unreadable)?,
-    };
-    let first_row = range.start().map_or(0, |(row, _)| u64::from(row));
-    let first_col = range.start().map_or(0, |(_, col)| col as usize);
+        Ok(all)
+    })
+}
+
+/// Reading as it was before the cells were streamed: the whole sheet as a
+/// range (every position from its first row and column with a cell to its
+/// last, a position given twice its last cell), every row of it after that.
+fn read_as_a_range(bytes: &[u8], options: &ReadOptions<'_>) -> Result<Table, SheetsError> {
+    let kind = Workbook::open(bytes, reader_limits(options))?.kind();
+    let cells = all_cells(bytes, options)?;
     let mut tabulator = Tabulator::new(options);
-    for (index, row) in range.rows().enumerate() {
-        let mut cells = vec![Cell::Empty; first_col];
-        cells.extend(row.iter().map(data_cell));
-        let used = cells
-            .iter()
-            .rposition(|cell| !cell.is_empty())
-            .map_or(0, |index| index + 1);
-        tabulator.push(first_row + index as u64 + 1, used, cells)?;
+    if let (Some(first_row), Some(last_row), Some(first_col), Some(last_col)) = (
+        cells.iter().map(|(row, _, _)| *row).min(),
+        cells.iter().map(|(row, _, _)| *row).max(),
+        cells.iter().map(|(_, column, _)| *column as usize).min(),
+        cells.iter().map(|(_, column, _)| *column as usize).max(),
+    ) {
+        let width = last_col - first_col + 1;
+        let mut range = vec![Cell::Empty; (last_row - first_row + 1) as usize * width];
+        for (row, column, cell) in cells {
+            range[(row - first_row) as usize * width + column as usize - first_col] = cell;
+        }
+        for (index, row) in range.chunks(width).enumerate() {
+            // Cells left of the range's first column are empty.
+            let mut cells = vec![Cell::Empty; first_col];
+            cells.extend(row.iter().cloned());
+            let used = cells
+                .iter()
+                .rposition(|cell| !cell.is_empty())
+                .map_or(0, |index| index + 1);
+            tabulator.push(u64::from(first_row) + index as u64 + 1, used, cells)?;
+        }
     }
     let mut table = tabulator.finish()?;
     table.kind = kind;
@@ -220,25 +237,18 @@ fn every_limit() -> Vec<ReadOptions<'static>> {
     all
 }
 
-/// What an XLSX workbook's first sheet holds: whether its cells come by row
-/// and then by column, how many positions in the first `max_columns` columns
+/// What a workbook's first sheet holds: whether its cells come by row and
+/// then by column, how many positions in the first `max_columns` columns
 /// have a value, and how many rows have one.
 fn shape_of(bytes: &[u8], max_columns: u64) -> (bool, u64, u64) {
-    let mut xlsx = calamine::Xlsx::new(Cursor::new(bytes)).unwrap();
-    let name = xlsx.sheet_names()[0].clone();
-    let Ok(mut reader) = xlsx.worksheet_cells_reader(&name) else {
-        return (true, 0, 0);
-    };
+    let cells = all_cells(bytes, &limits(1_000)).unwrap();
     let (mut in_order, mut last) = (true, None);
     let mut positions = std::collections::BTreeSet::new();
-    while let Some(cell) = reader.next_cell().unwrap() {
-        if matches!(cell.get_value(), calamine::DataRef::Empty) {
-            continue;
-        }
-        in_order &= last.is_none_or(|last| cell.get_position() > last);
-        last = Some(cell.get_position());
-        if u64::from(cell.get_position().1) < max_columns {
-            positions.insert(cell.get_position());
+    for (row, column, _) in cells {
+        in_order &= last.is_none_or(|last| (row, column) > last);
+        last = Some((row, column));
+        if u64::from(column) < max_columns {
+            positions.insert((row, column));
         }
     }
     let rows: std::collections::BTreeSet<u32> = positions.iter().map(|(row, _)| *row).collect();

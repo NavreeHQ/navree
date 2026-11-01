@@ -25,7 +25,7 @@ mysql = ["navree-db/mysql"]
 
 [dependencies]
 bytes = { workspace = true }
-# XLSX, XLS and ODS reading.
+# XLS reading.
 calamine = { workspace = true }
 # A guess at the encoding of a legacy CSV upload (Windows-1256, Shift_JIS, ...).
 chardetng = { workspace = true }
@@ -45,6 +45,8 @@ navree-kernel = { workspace = true }
 navree-macros = { workspace = true }
 # Queued exports and imports run as operations, imports apply in batches.
 navree-queue = { workspace = true }
+# The XML of XLSX and ODS workbooks, read as a stream.
+quick-xml = { workspace = true }
 # Uploads, export files and error files live on a disk.
 navree-storage = { workspace = true }
 # Row messages, digit folding.
@@ -62,7 +64,7 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 utoipa = { workspace = true }
 uuid = { workspace = true }
-# The sizes an XLSX or ODS file declares for its parts.
+# The parts of XLSX, XLSB and ODS workbooks, and the sizes they declare.
 zip = { workspace = true }
 
 [dev-dependencies]

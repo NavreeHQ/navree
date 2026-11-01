@@ -6064,6 +6064,7 @@ dependencies = [
  "navree-validation",
  "navree-workspace",
  "percent-encoding",
+ "quick-xml 0.42.0",
  "rust_xlsxwriter",
  "serde",
  "serde_json",
