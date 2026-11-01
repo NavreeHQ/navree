@@ -20,9 +20,6 @@ by `cargo vet fmt`, so notes live here.
 
 - The exemptions are crates nobody we import has audited. They are debt, not
   approvals; do not add one by hand just to get CI green.
-- `docx-rs` is a pinned commit of `bokuweb/docx-rs` (a git dependency); the
-  `[policy.docx-rs] audit-as-crates-io = true` entry in `config.toml` makes
-  cargo-vet treat it as the crates.io release of the same name.
 
 ## Adding or updating a dependency
 

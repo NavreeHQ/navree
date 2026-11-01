@@ -1,13 +1,8 @@
-//! Word documents (DOCX): [`Docx`], built block by block on
-//! [docx-rs](https://docs.rs/docx-rs), and [`DocxFile`], the result.
+//! Word documents (DOCX): [`Docx`], built block by block, and
+//! [`DocxFile`], the result. A file is read back (`DocxFile::from_bytes`,
+//! `DocxFile::text`) within [`DocxLimits`].
 
 use bytes::Bytes;
-use docx_rs::{
-    AbstractNumbering, AlignmentType, BreakType, Footer, Header, IndentLevel, Level, LevelJc,
-    LevelText, NumPages, NumberFormat, Numbering, NumberingId, PageMargin, PageNum,
-    PageOrientationType, Pic, RunFonts, SpecialIndentType, Start, Style, StyleType, TableCell,
-    TableRow,
-};
 use navree_http::{IntoResponse, Response};
 
 use crate::DocumentsError;
@@ -16,6 +11,7 @@ use crate::print::{Margins, Paper};
 use crate::render::is_rtl;
 
 mod read;
+mod write;
 
 pub use read::DocxLimits;
 
@@ -226,200 +222,8 @@ impl Docx {
 
     /// Writes the document.
     pub fn build(&self) -> Result<DocxFile, DocumentsError> {
-        let rtl = self.rtl();
-        let (mut width, mut height) = self.paper.size_mm();
-        if self.landscape {
-            std::mem::swap(&mut width, &mut height);
-        }
-        let margins = self.margins.unwrap_or(Margins::all(25.4));
-        let mut docx = docx_rs::Docx::new()
-            .page_size(twips(width) as u32, twips(height) as u32)
-            .page_margin(PageMargin {
-                top: twips(margins.top),
-                left: twips(margins.left),
-                bottom: twips(margins.bottom),
-                right: twips(margins.right),
-                header: 720,
-                footer: 720,
-                gutter: 0,
-            });
-        if self.landscape {
-            docx = docx.page_orient(PageOrientationType::Landscape);
-        }
-        if let Some(font) = &self.font {
-            docx = docx.default_fonts(
-                RunFonts::new()
-                    .ascii(font)
-                    .hi_ansi(font)
-                    .east_asia(font)
-                    .cs(font),
-            );
-        }
-        for (level, size) in [(1, 32), (2, 28), (3, 24)] {
-            docx = docx.add_style(
-                Style::new(format!("Heading{level}"), StyleType::Paragraph)
-                    .name(format!("Heading {level}"))
-                    .size(size)
-                    .bold(),
-            );
-        }
-        if let Some(text) = &self.header {
-            docx = docx.header(Header::new().add_paragraph(direction(
-                docx_rs::Paragraph::new().add_run(docx_rs::Run::new().add_text(text)),
-                rtl,
-            )));
-        }
-        match &self.footer {
-            Some(FooterContent::Text(text)) => {
-                docx = docx.footer(Footer::new().add_paragraph(direction(
-                    docx_rs::Paragraph::new().add_run(docx_rs::Run::new().add_text(text)),
-                    rtl,
-                )));
-            }
-            Some(FooterContent::PageNumbers) => {
-                let numbers = docx_rs::Paragraph::new()
-                    .add_run(docx_rs::Run::new().add_text("Page "))
-                    .add_page_num(PageNum::new())
-                    .add_run(docx_rs::Run::new().add_text(" of "))
-                    .add_num_pages(NumPages::new())
-                    .align(AlignmentType::Center);
-                docx = docx.footer(Footer::new().add_paragraph(direction(numbers, rtl)));
-            }
-            None => {}
-        }
-        let mut next_list = 1;
-        for block in &self.blocks {
-            match block {
-                Block::Heading(level, paragraph) => {
-                    docx = docx
-                        .add_paragraph(paragraph.to_docx(rtl).style(&format!("Heading{level}")));
-                }
-                Block::Paragraph(paragraph) => docx = docx.add_paragraph(paragraph.to_docx(rtl)),
-                Block::List { ordered, items } => {
-                    let id = next_list;
-                    next_list += 1;
-                    let (format, text) = if *ordered {
-                        ("decimal", "%1.")
-                    } else {
-                        ("bullet", "•")
-                    };
-                    docx = docx
-                        .add_abstract_numbering(
-                            AbstractNumbering::new(id).add_level(
-                                Level::new(
-                                    0,
-                                    Start::new(1),
-                                    NumberFormat::new(format),
-                                    LevelText::new(text),
-                                    LevelJc::new("left"),
-                                )
-                                .indent(
-                                    Some(720),
-                                    Some(SpecialIndentType::Hanging(360)),
-                                    None,
-                                    None,
-                                ),
-                            ),
-                        )
-                        .add_numbering(Numbering::new(id, id));
-                    for item in items {
-                        docx = docx.add_paragraph(
-                            item.to_docx(rtl)
-                                .numbering(NumberingId::new(id), IndentLevel::new(0)),
-                        );
-                    }
-                }
-                Block::Table(table) => docx = docx.add_table(table.to_docx(rtl)),
-                Block::Image(image) => {
-                    let (width_px, height_px) = image.size()?;
-                    let mut pic =
-                        Pic::new_with_dimensions(image.bytes.to_vec(), width_px, height_px);
-                    if let Some(width_mm) = image.width_mm {
-                        let height_mm = width_mm * f64::from(height_px) / f64::from(width_px);
-                        pic = pic.size(emu(width_mm), emu(height_mm));
-                    }
-                    let mut paragraph =
-                        docx_rs::Paragraph::new().add_run(docx_rs::Run::new().add_image(pic));
-                    if let Some(align) = image.align {
-                        paragraph = paragraph.align(align.to_docx());
-                    }
-                    docx = docx.add_paragraph(direction(paragraph, rtl));
-                }
-                Block::PageBreak => {
-                    docx = docx.add_paragraph(
-                        docx_rs::Paragraph::new()
-                            .add_run(docx_rs::Run::new().add_break(BreakType::Page)),
-                    );
-                }
-            }
-        }
-        let mut xml = docx.build();
-        if rtl {
-            // Tables read right to left too: their first column on the right.
-            xml.document = replace_bytes(&xml.document, b"<w:tblPr>", b"<w:tblPr><w:bidiVisual />");
-        }
-        if let Some(title) = &self.title {
-            let element = format!(
-                "<dc:title>{}</dc:title></cp:coreProperties>",
-                escape_xml(title)
-            );
-            xml.doc_props.core = replace_bytes(
-                &xml.doc_props.core,
-                b"</cp:coreProperties>",
-                element.as_bytes(),
-            );
-        }
-        if let Some(author) = &self.author {
-            let author = escape_xml(author);
-            xml.doc_props.core = replace_bytes(
-                &xml.doc_props.core,
-                b"<dc:creator>unknown</dc:creator>",
-                format!("<dc:creator>{author}</dc:creator>").as_bytes(),
-            );
-            xml.doc_props.core = replace_bytes(
-                &xml.doc_props.core,
-                b"<cp:lastModifiedBy>unknown</cp:lastModifiedBy>",
-                format!("<cp:lastModifiedBy>{author}</cp:lastModifiedBy>").as_bytes(),
-            );
-        }
-        let mut out = std::io::Cursor::new(Vec::new());
-        xml.pack(&mut out)
-            .map_err(|error| DocumentsError::Docx(error.to_string()))?;
-        Ok(DocxFile(Bytes::from(out.into_inner())))
+        Ok(DocxFile(Bytes::from(write::build(self)?)))
     }
-}
-
-/// `haystack` with every `from` replaced by `to`.
-fn replace_bytes(haystack: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(haystack.len());
-    let mut i = 0;
-    while i < haystack.len() {
-        if haystack[i..].starts_with(from) {
-            out.extend_from_slice(to);
-            i += from.len();
-        } else {
-            out.push(haystack[i]);
-            i += 1;
-        }
-    }
-    out
-}
-
-/// `text` with the XML special characters escaped.
-fn escape_xml(text: &str) -> String {
-    text.chars()
-        .filter(|c| !c.is_control() || matches!(c, '\t' | '\n'))
-        .fold(String::with_capacity(text.len()), |mut out, c| {
-            match c {
-                '&' => out.push_str("&amp;"),
-                '<' => out.push_str("&lt;"),
-                '>' => out.push_str("&gt;"),
-                '"' => out.push_str("&quot;"),
-                '\'' => out.push_str("&apos;"),
-                c => out.push(c),
-            }
-            out
-        })
 }
 
 fn twips(mm: f64) -> i32 {
@@ -428,17 +232,6 @@ fn twips(mm: f64) -> i32 {
 
 fn emu(mm: f64) -> u32 {
     (mm * EMU_PER_MM).round().max(1.0) as u32
-}
-
-/// `paragraph`, right to left when `rtl`.
-fn direction(paragraph: docx_rs::Paragraph, rtl: bool) -> docx_rs::Paragraph {
-    if rtl {
-        let mut paragraph = paragraph;
-        paragraph.property = paragraph.property.bidi(true);
-        paragraph
-    } else {
-        paragraph
-    }
 }
 
 /// Where a paragraph's lines sit. `Start` and `End` follow the text
@@ -453,17 +246,6 @@ pub enum Align {
     End,
     /// Both edges.
     Justify,
-}
-
-impl Align {
-    fn to_docx(self) -> AlignmentType {
-        match self {
-            Align::Start => AlignmentType::Start,
-            Align::Center => AlignmentType::Center,
-            Align::End => AlignmentType::End,
-            Align::Justify => AlignmentType::Both,
-        }
-    }
 }
 
 /// A run of text with one format.
@@ -521,34 +303,6 @@ impl Run {
         self.color = Some(hex.into().trim_start_matches('#').to_owned());
         self
     }
-
-    fn to_docx(&self) -> docx_rs::Run {
-        let mut run = docx_rs::Run::new();
-        // Keep line breaks: one text per line, breaks between.
-        for (index, line) in self.text.split('\n').enumerate() {
-            if index > 0 {
-                run = run.add_break(BreakType::TextWrapping);
-            }
-            run = run.add_text(line);
-        }
-        if self.bold {
-            run = run.bold();
-        }
-        if self.italic {
-            run = run.italic();
-        }
-        if self.underline {
-            run = run.underline("single");
-        }
-        if let Some(points) = self.size {
-            // Half-points.
-            run = run.size((points * 2.0).round().max(1.0) as usize);
-        }
-        if let Some(color) = &self.color {
-            run = run.color(color);
-        }
-        run
-    }
 }
 
 /// A paragraph: runs of text, aligned.
@@ -603,17 +357,6 @@ impl Paragraph {
     /// The runs.
     pub fn runs(&self) -> &[Run] {
         &self.runs
-    }
-
-    fn to_docx(&self, rtl: bool) -> docx_rs::Paragraph {
-        let mut paragraph = docx_rs::Paragraph::new();
-        for run in &self.runs {
-            paragraph = paragraph.add_run(run.to_docx());
-        }
-        if let Some(align) = self.align {
-            paragraph = paragraph.align(align.to_docx());
-        }
-        direction(paragraph, rtl)
     }
 }
 
@@ -673,31 +416,6 @@ impl Table {
     {
         self.rows.push(cells.into_iter().map(Into::into).collect());
         self
-    }
-
-    fn to_docx(&self, rtl: bool) -> docx_rs::Table {
-        let mut rows = Vec::new();
-        if let Some(header) = &self.header {
-            let cells = header
-                .iter()
-                .map(|cell| {
-                    let bold = Paragraph {
-                        runs: cell.runs.iter().cloned().map(Run::bold).collect(),
-                        align: cell.align,
-                    };
-                    TableCell::new().add_paragraph(bold.to_docx(rtl))
-                })
-                .collect();
-            rows.push(TableRow::new(cells));
-        }
-        for row in &self.rows {
-            let cells = row
-                .iter()
-                .map(|cell| TableCell::new().add_paragraph(cell.to_docx(rtl)))
-                .collect();
-            rows.push(TableRow::new(cells));
-        }
-        docx_rs::Table::new(rows)
     }
 }
 

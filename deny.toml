@@ -83,7 +83,7 @@ skip = [
     { crate = "phf@0.12.1", reason = "Pulled in only by chrono-tz@0.10.4; the rest of the tree is on 0.14.0." },
     { crate = "phf_shared@0.12.1", reason = "Pulled in only by phf@0.12.1; the rest of the tree is on 0.14.0." },
     { crate = "prettyplease@0.2.37", reason = "Pulled in only by prost-build@0.14.4, tonic-build@0.14.6, tonic-prost-build@0.14.6; the rest of the tree is on 0.3.0." },
-    { crate = "quick-xml@0.41.0", reason = "Pulled in only by docx-rs@0.4.22, object_store@0.14.2; the rest of the tree is on 0.42.0." },
+    { crate = "quick-xml@0.41.0", reason = "Pulled in only by object_store@0.14.2; the rest of the tree is on 0.42.0." },
     { crate = "r-efi@5.3.0", reason = "Pulled in only by getrandom@0.3.4; the rest of the tree is on 6.0.0." },
     { crate = "rand@0.9.5", reason = "Pulled in only by bson@3.1.0, metrics-util@0.20.4, mongodb@3.9.1, opentelemetry_sdk@0.33.1 and 2 more; the rest of the tree is on 0.10.3." },
     { crate = "rand_core@0.9.5", reason = "Pulled in only by rand@0.9.5, rand_chacha@0.9.0, rand_xoshiro@0.7.0; the rest of the tree is on 0.10.1." },
@@ -113,10 +113,6 @@ skip = [
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-# The one git dependency: docx-rs 0.4.22 needs zip 8 (RUSTSEC-2026-0367, -0368,
-# -0369, fixed in zip 9). The pinned commit moves it to zip 9.0.4
-# (bokuweb/docx-rs#944). Drop this when a docx-rs release has the fix.
-allow-git = ["https://github.com/bokuweb/docx-rs"]
 
 [licenses]
 version = 2

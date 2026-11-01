@@ -346,9 +346,9 @@ utoipa = { version = "6.0.0", features = ["chrono", "preserve_order", "preserve_
 utoipa-scalar = "0.4.0"
 object_store = { version = "0.14.2", default-features = false, features = ["fs"] }
 csv = "1.4.0"
-# Chrome for Testing archives (`navree browser:install`), and reading DOCX
-# archives back in navree-documents tests: deflate through flate2 on
-# zlib-rs, pure Rust; no bzip2, lzma or zstd (C).
+# Chrome for Testing archives (`navree browser:install`), and the packages of
+# DOCX files in navree-documents: deflate through flate2 on zlib-rs, pure
+# Rust; no bzip2, lzma or zstd (C).
 zip = { version = "9.1.2", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 # Spreadsheets (navree-sheets): XLSX writing (pure Rust; never the `zlib`
 # feature, which builds C), XLSX/XLS/ODS reading, and encoding detection
@@ -386,13 +386,13 @@ regex = "1.13.1"
 # Documents (navree-documents): the native PDF engine (krilla writes the
 # PDF with subset fonts; harfrust shapes, skrifa reads fonts, unicode-bidi
 # orders, icu_segmenter breaks lines; no `simple-text`, so no rustybuzz),
-# a DOCX writer, and PDF editing (merge, stamp, text extraction). Pure Rust.
+# DOCX writing and reading (zip and quick-xml, above), and PDF editing (merge,
+# stamp, text extraction). Pure Rust.
 krilla = { version = "0.8.2", default-features = false, features = ["raster-images"] }
 harfrust = "0.15.0"
 skrifa = "0.49.0"
 unicode-bidi = "0.3.18"
 icu_segmenter = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
-docx-rs = { version = "0.4.22", default-features = false }
 lopdf = { version = "0.46.0", default-features = false }
 
 # Localization (navree-i18n): Fluent messages, and ICU4X decimal and date
@@ -442,15 +442,6 @@ wiremock = "0.6.5"
 # The request-pipeline micro-benchmarks (`crates/navree/benches/pipeline.rs`):
 # no plots, no rayon; Tokio for the async routines.
 criterion = { version = "0.8.2", default-features = false, features = ["async_tokio", "cargo_bench_support"] }
-
-# Security fixes merged upstream but not yet released, pinned to the commit
-# that carries each one. Both keep their crate's released version number, so
-# the crates that depend on them are unchanged. Drop an entry (and run
-# `cargo update -p <crate>`) once a release includes the fix.
-[patch.crates-io]
-# docx-rs 0.4.22 requires zip 8, affected by RUSTSEC-2026-0367, -0368 and
-# -0369 (fixed in zip 9). This commit moves it to zip 9.0.4 (bokuweb/docx-rs#944).
-docx-rs = { git = "https://github.com/bokuweb/docx-rs", rev = "ad7fede6a7f3b61a097c28d0c39dd04626e44701" }
 
 # Keep debug info small: less memory, faster links (many agents build at once).
 [profile.dev]

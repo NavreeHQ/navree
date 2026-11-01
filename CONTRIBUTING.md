@@ -283,8 +283,7 @@ cargo deny check                              # advisories, licenses, bans, sour
 cargo vet                                     # every crate audited or exempted (supply-chain/)
 ```
 
-- `deny.toml` allows crates.io (plus the one pinned `docx-rs` git
-  dependency), a fixed list of permissive licenses, and bans `openssl`,
+- `deny.toml` allows crates.io, a fixed list of permissive licenses, and bans `openssl`,
   `openssl-sys`, `native-tls` and `rsa`; use rustls and ring. A new duplicate
   version of a crate warns; remove it or name it under `skip` with a reason.
   A vulnerability that has no fixed release gets an entry with a reason and

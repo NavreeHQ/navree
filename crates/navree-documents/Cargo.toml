@@ -17,8 +17,8 @@ default = ["native", "chrome", "docx"]
 native = ["dep:krilla", "dep:harfrust", "dep:skrifa", "dep:unicode-bidi", "dep:icu_segmenter"]
 ## HTML to PDF in headless Chrome over the DevTools protocol.
 chrome = ["dep:tokio-tungstenite", "dep:futures-util", "dep:tempfile", "dep:mime_guess"]
-## The DOCX writer.
-docx = ["dep:docx-rs", "dep:quick-xml", "dep:zip"]
+## DOCX documents: the writer, and reading files back within limits.
+docx = ["dep:quick-xml", "dep:zip"]
 ## Queued renders behind an operation of navree-queue
 ## (`Documents::queue_operation`). Off by default: the `navree` facade
 ## turns it on when its `queue` feature is on too.
@@ -28,7 +28,6 @@ operations = ["dep:navree-queue", "dep:navree-db"]
 base64 = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
-docx-rs = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
 harfrust = { workspace = true, optional = true }
 http = { workspace = true }
