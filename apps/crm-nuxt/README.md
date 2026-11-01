@@ -71,7 +71,7 @@ pnpm typecheck     # vue-tsc, strict
 pnpm test          # Vitest: units, the BFF and its Nitro handlers, the login page in a real Nuxt app
 pnpm e2e           # Playwright against the real API (below)
 pnpm screenshots   # every screen at 1440 and 390 px into ./screenshots (git-ignored)
-pnpm gen:api       # regenerate app/lib/api/schema.d.ts from openapi.json
+pnpm gen:api       # regenerate app/lib/api/schema.d.ts from openapi.json (runs `navree openapi:client`, so `navree` is on PATH)
 ```
 
 `pnpm e2e` needs nothing listening on :8092 or :3102. Playwright starts:

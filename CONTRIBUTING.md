@@ -330,6 +330,7 @@ token's claims read back, a rendered query holds only the user's words.
 | `config_sources` | the `.env` parser, TOML and JSON files, environment merging |
 | `qr_roundtrip`, `totp_uri` | QR encode then decode with `rqrr`; `otpauth://` URIs and base32 secrets |
 | `scim_filter`, `mail_inbound`, `micro_envelope`, `time_parse` | SCIM filters and paths; raw MIME messages; broker envelopes; zone names, days and send windows |
+| `openapi_client` | OpenAPI documents (JSON, deep nesting, `$ref` chains, lists of types, odd descriptions) through the generator behind `navree openapi:client`; the file it writes has matching braces and its five declarations |
 | `small_parsers` | the logbook search box, OAuth `scope`, `X-Request-ID`, the app key, Web Push keys |
 
 Run them in Docker, so the nightly toolchain and cargo-fuzz are the pinned

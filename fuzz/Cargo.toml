@@ -29,6 +29,7 @@ futures = { version = "0.3.34", default-features = false, features = ["executor"
 mime = "0.3.17"
 multer = "3.1.0"
 navree-auth = { path = "../crates/navree-auth" }
+navree-cli = { path = "../crates/navree-cli" }
 navree-config = { path = "../crates/navree-config" }
 navree-contracts = { path = "../crates/navree-contracts" }
 navree-crypto = { path = "../crates/navree-crypto" }
@@ -163,6 +164,13 @@ bench = false
 [[bin]]
 name = "micro_envelope"
 path = "fuzz_targets/micro_envelope.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "openapi_client"
+path = "fuzz_targets/openapi_client.rs"
 test = false
 doc = false
 bench = false

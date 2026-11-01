@@ -625,6 +625,42 @@ mod tests {
     }
 
     #[test]
+    fn finds_keys_of_a_large_object_and_keeps_its_order_when_it_changes() {
+        let text = format!(
+            "{{{}}}",
+            (0..200)
+                .map(|n| format!("\"k{n}\":{n}"))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        let Value::Obj(mut object) = parse(&text).unwrap() else {
+            panic!("an object")
+        };
+        let object = Rc::make_mut(&mut object);
+        assert_eq!(object.len(), 200);
+        assert_eq!(object.get("k0"), Some(&Value::Num(0.0)));
+        assert_eq!(object.get("k199"), Some(&Value::Num(199.0)));
+        assert_eq!(object.get("k200"), None);
+        object.set("k5", Value::Null);
+        object.set("new", Value::Bool(true));
+        object.remove("k0");
+        assert_eq!(object.len(), 200);
+        assert_eq!(object.get("k5"), Some(&Value::Null));
+        assert_eq!(object.get("new"), Some(&Value::Bool(true)));
+        assert!(!object.contains("k0"));
+        assert_eq!(object.get("k199"), Some(&Value::Num(199.0)));
+        let keys: Vec<_> = object.js_entries().iter().map(|(k, _)| *k).take(2).collect();
+        assert_eq!(keys, ["k1", "k2"]);
+        // The same object, built a key at a time, finds the same keys.
+        let mut built = Object::default();
+        for n in 0..40 {
+            built.set(&format!("k{n}"), Value::Num(f64::from(n)));
+        }
+        assert_eq!(built.get("k39"), Some(&Value::Num(39.0)));
+        assert_eq!(built.get("k17"), Some(&Value::Num(17.0)));
+    }
+
+    #[test]
     fn refuses_what_is_not_json() {
         for bad in [
             "",
