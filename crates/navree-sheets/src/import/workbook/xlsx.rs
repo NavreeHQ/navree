@@ -706,7 +706,16 @@ fn plain_value(
             word if word.eq_ignore_ascii_case("true") => Found::Typed(Cell::Bool(true)),
             other => return Err(damaged(format_args!("`{other}` is not a boolean"))),
         },
-        Kind::Error => Found::Fixed(error_text(value)?),
+        Kind::Error if value.is_empty() => Found::Empty,
+        // An error of another name (`#SPILL!`) is the text it is written as.
+        Kind::Error => match error_text(value) {
+            Some(fixed) => Found::Fixed(fixed),
+            None => {
+                text.clear();
+                text.push_str(value);
+                Found::Text
+            }
+        },
         _ if value.is_empty() => Found::Empty,
         _ => match value.parse::<f64>() {
             Ok(number) if date => Found::Typed(excel_date(number, is_1904)),
@@ -722,9 +731,10 @@ fn plain_value(
     })
 }
 
-/// The text an error cell is kept as, by the error a sheet writes (`#N/A`).
-pub(super) fn error_text(error: &str) -> Result<&'static str, Damaged> {
-    Ok(match error {
+/// The text an error cell is kept as, by the error a sheet writes (`#N/A`
+/// is kept as `#NA`); none for an error of another name.
+pub(super) fn error_text(error: &str) -> Option<&'static str> {
+    Some(match error {
         "#DIV/0!" => "#Div0",
         "#N/A" => "#NA",
         "#NAME?" => "#Name",
@@ -732,7 +742,7 @@ pub(super) fn error_text(error: &str) -> Result<&'static str, Damaged> {
         "#NUM!" => "#Num",
         "#REF!" => "#Ref",
         "#VALUE!" => "#Value",
-        other => return Err(damaged(format_args!("`{other}` is not an error"))),
+        _ => return None,
     })
 }
 

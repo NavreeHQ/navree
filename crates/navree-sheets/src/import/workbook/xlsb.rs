@@ -422,10 +422,10 @@ impl CellSource for XlsbCells<'_, '_> {
                     0x24 => "#Num",
                     0x2A => "#NA",
                     0x2B => "#GettingData",
+                    // An error of another code is kept by its code.
                     code => {
-                        return Err(
-                            damaged(format_args!("the error code {code} is unknown")).into()
-                        );
+                        self.text = format!("#Error({code:#04x})");
+                        break (self.row, u32_at(body, 0).ok_or_else(cell)?, Found::Text);
                     }
                 }),
                 CELL_BOOL | FORMULA_BOOL => Found::Typed(Cell::Bool(head[8] != 0)),

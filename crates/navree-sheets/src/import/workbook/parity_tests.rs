@@ -1,6 +1,8 @@
 //! The cells of workbooks that openpyxl and LibreOffice wrote, against the
 //! cells recorded for them (`<file>.cells`): every non-empty position of
-//! every sheet, as the table keeps its value.
+//! every sheet, as the table keeps its value. An ODS file's dates, times,
+//! tabs and line breaks read as the XLSX file of the same workbook gives
+//! them.
 
 use std::collections::BTreeMap;
 use std::fmt::Write;

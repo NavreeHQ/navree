@@ -1858,7 +1858,7 @@ fn ods_text_is_its_paragraphs_and_spaces() {
             Cell::Text("a   b c".into()),
             Cell::Text("noted".into()),
             Cell::Text("the attribute".into()),
-            Cell::Text("2026-03-01".into()),
+            Cell::Date(chrono::NaiveDate::from_ymd_opt(2026, 3, 1).unwrap()),
             Cell::Bool(true),
             Cell::Float(0.25),
             Cell::Text("covered".into()),
@@ -1939,13 +1939,6 @@ fn damaged_workbooks_are_refused_as_unreadable() {
                 ),
             ]),
         ),
-        (
-            "an XLSB error code that is unknown",
-            xlsb_sheet(&[
-                (0x00, vec![0; 4]),
-                (0x03, vec![0, 0, 0, 0, 0, 0, 0, 0, 0x99]),
-            ]),
-        ),
         ("an XLSB sheet without its end", {
             let mut bytes = xlsb_sheet(&[]);
             bytes = replacing(&bytes, "xl/worksheets/sheet1.bin", "");
@@ -1965,4 +1958,111 @@ fn damaged_workbooks_are_refused_as_unreadable() {
             "{label}: {result:?}"
         );
     }
+}
+
+#[test]
+fn xlsx_errors_of_any_name_are_their_text() {
+    let errors = [
+        "#DIV/0!",
+        "#SPILL!",
+        "#CALC!",
+        "#FIELD!",
+        "#BLOCKED!",
+        "#CONNECT!",
+        "#BUSY!",
+        "#UNKNOWN!",
+        "#EXTERNAL!",
+        "not an error",
+    ];
+    let column = |index: usize| (b'A' + index as u8) as char;
+    let header: Vec<String> = (0..errors.len())
+        .map(|i| text_at(&format!("{}1", column(i)), &format!("h{i}")))
+        .collect();
+    let cells: Vec<String> = errors
+        .iter()
+        .enumerate()
+        .map(|(i, error)| format!(r#"<c r="{}2" t="e"><v>{error}</v></c>"#, column(i)))
+        .collect();
+    let bytes = book(&[row(1, &header), row(2, &cells)].concat(), "", &[]);
+    let table = read_table(&bytes, "book.xlsx", &limits(10)).unwrap();
+    let expected: Vec<Cell> = ["#Div0"]
+        .iter()
+        .chain(&errors[1..])
+        .map(|text| Cell::Text((*text).into()))
+        .collect();
+    assert_eq!(table.rows[0].cells, expected);
+}
+
+#[test]
+fn xlsb_errors_of_unknown_codes_are_text() {
+    use crate::import::workbook::xlsb_writer::Value;
+    let bytes = xlsb_of(&[
+        (0, 0, Value::Text("a".into())),
+        (0, 1, Value::Text("b".into())),
+        (1, 0, Value::Error(0x07)),
+        (1, 1, Value::Error(0x99)),
+    ]);
+    let table = read_table(&bytes, "book.xlsb", &limits(10)).unwrap();
+    assert_eq!(
+        table.rows[0].cells,
+        [Cell::Text("#Div0".into()), Cell::Text("#Error(0x99)".into())]
+    );
+}
+
+#[test]
+fn ods_dates_and_times_are_dates_and_times() {
+    let day = |y, m, d| chrono::NaiveDate::from_ymd_opt(y, m, d).unwrap();
+    let cases: [(&str, &str, Cell); 9] = [
+        ("date", "2026-03-01", Cell::Date(day(2026, 3, 1))),
+        (
+            "date",
+            "2026-03-01T13:45:10",
+            Cell::DateTime(day(2026, 3, 1).and_hms_opt(13, 45, 10).unwrap()),
+        ),
+        (
+            "date",
+            "2026-03-01T13:45:10.250",
+            Cell::DateTime(day(2026, 3, 1).and_hms_milli_opt(13, 45, 10, 250).unwrap()),
+        ),
+        ("date", "2026-03-01T00:00:00", Cell::Date(day(2026, 3, 1))),
+        ("date", "not a date", Cell::Text("not a date".into())),
+        // A time is a time on the first day, as a workbook counts it.
+        (
+            "time",
+            "PT06H30M00S",
+            Cell::DateTime(day(1899, 12, 31).and_hms_opt(6, 30, 0).unwrap()),
+        ),
+        (
+            "time",
+            "PT30H15M00S",
+            Cell::DateTime(day(1900, 1, 1).and_hms_opt(6, 15, 0).unwrap()),
+        ),
+        (
+            "time",
+            "PT00H00M01.5S",
+            Cell::DateTime(day(1899, 12, 31).and_hms_milli_opt(0, 0, 1, 500).unwrap()),
+        ),
+        ("time", "P1Y", Cell::Text("P1Y".into())),
+    ];
+    let header: String = (0..cases.len()).map(|i| ods_text(&format!("h{i}"))).collect();
+    let cells: String = cases
+        .iter()
+        .map(|(kind, value, _)| {
+            format!(
+                r#"<table:table-cell office:value-type="{kind}" office:{kind}-value="{value}"><text:p>shown</text:p></table:table-cell>"#
+            )
+        })
+        .collect();
+    let rows = [ods_row(1, &header), ods_row(1, &cells)].concat();
+    let table = read_table(&ods_of(&ods_table("Sheet1", &rows)), "book.ods", &limits(10)).unwrap();
+    let expected: Vec<Cell> = cases.iter().map(|(_, _, cell)| cell.clone()).collect();
+    assert_eq!(table.rows[0].cells, expected);
+}
+
+#[test]
+fn ods_tabs_and_line_breaks_are_text() {
+    let cell = r#"<table:table-cell office:value-type="string"><text:p>a<text:tab/>b<text:line-break/>c<text:s text:c="2"/>d</text:p></table:table-cell>"#;
+    let rows = [ods_row(1, &ods_text("h")), ods_row(1, cell)].concat();
+    let table = read_table(&ods_of(&ods_table("Sheet1", &rows)), "book.ods", &limits(10)).unwrap();
+    assert_eq!(table.rows[0].cells, [Cell::Text("a\tb\nc  d".into())]);
 }

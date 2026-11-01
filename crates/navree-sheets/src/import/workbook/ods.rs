@@ -18,6 +18,7 @@ use std::ops::Range;
 
 use quick_xml::events::{BytesStart, Event};
 
+use super::dates::{iso_date, iso_duration};
 use super::xml::{self, attribute, attributes, decode, push_entity};
 use super::{Archive, CellSource, Damaged, Limits, SourceCell, Value, damaged};
 use crate::{Cell, SheetsError};
@@ -34,6 +35,8 @@ type Xml<'r> = quick_xml::Reader<&'r mut dyn BufRead>;
 pub(crate) struct Ods<'a> {
     archive: Archive<'a>,
     limits: Limits,
+    /// Whether times count from 1904, by the file's null date.
+    is_1904: bool,
     names: Vec<String>,
     /// The table each sheet is read from, by its place among the named
     /// tables: the last of the tables with the sheet's name.
@@ -58,12 +61,13 @@ impl<'a> Ods<'a> {
             Some(true) => return Err(damaged("the file is encrypted").into()),
             Some(false) => {}
         }
-        let names = archive.read("content.xml", |source| {
-            let mut content = OdsCells::new(source, None, limits);
+        let content = archive.read("content.xml", |source| {
+            let mut content = OdsCells::new(source, None, limits, false);
             content.rest_in_order(None, &|| Ok(()))?;
-            Ok::<_, SheetsError>(content.names)
+            Ok::<_, SheetsError>((content.names, content.is_1904))
         })?;
-        let names = names.ok_or_else(|| damaged("the file has no content.xml part"))?;
+        let (names, is_1904) =
+            content.ok_or_else(|| damaged("the file has no content.xml part"))?;
         let last: HashMap<&str, usize> = names
             .iter()
             .enumerate()
@@ -76,6 +80,7 @@ impl<'a> Ods<'a> {
         Ok(Ods {
             archive: archive.clone(),
             limits,
+            is_1904,
             names,
             tables,
         })
@@ -95,7 +100,7 @@ impl<'a> Ods<'a> {
             .get(sheet)
             .ok_or_else(|| damaged("the workbook has no such sheet"))?;
         let read = self.archive.read("content.xml", |source| {
-            let mut cells = OdsCells::new(source, Some(table), self.limits);
+            let mut cells = OdsCells::new(source, Some(table), self.limits, self.is_1904);
             read(Some(&mut cells))
         })?;
         read.ok_or_else(|| damaged("the file has no content.xml part").into())
@@ -168,6 +173,8 @@ struct OdsCells<'r> {
     tables: usize,
     names: Vec<String>,
     place: Place,
+    /// Whether times count from 1904, by the null date the file states.
+    is_1904: bool,
     /// Whether the last style seen has a name, so that its table
     /// properties are read.
     named_style: bool,
@@ -189,10 +196,16 @@ struct OdsCells<'r> {
 }
 
 impl<'r> OdsCells<'r> {
-    fn new(source: &'r mut dyn BufRead, target: Option<usize>, limits: Limits) -> Self {
+    fn new(
+        source: &'r mut dyn BufRead,
+        target: Option<usize>,
+        limits: Limits,
+        is_1904: bool,
+    ) -> Self {
         OdsCells {
             xml: xml::reader(source),
             limits,
+            is_1904,
             target,
             tables: 0,
             names: Vec::new(),
@@ -238,6 +251,13 @@ impl<'r> OdsCells<'r> {
                             return Err(damaged("a table's display is not a boolean").into());
                         }
                     }
+                    // The date times count from: 1899-12-30 unless it says
+                    // 1904-01-01.
+                    Event::Start(e) if e.name().as_ref() == "table:null-date" => {
+                        if let Some(day) = attribute(&e, "table:date-value")? {
+                            self.is_1904 = decode(day)? == "1904-01-01";
+                        }
+                    }
                     Event::Start(e) if e.name().as_ref() == "table:table" => {
                         if let Some(style) = attribute(&e, "table:style-name")? {
                             decode(style)?;
@@ -275,6 +295,7 @@ impl<'r> OdsCells<'r> {
                                 given.then_some((&mut self.row, &mut self.row_text)),
                                 [&mut self.row_buf, &mut self.cell_buf],
                                 self.limits,
+                                self.is_1904,
                             )?;
                             let first = self.next_row;
                             let rows = repeats.min(MAX_ROWS.saturating_sub(first));
@@ -407,6 +428,7 @@ fn read_row(
     mut held: Option<(&mut Vec<HeldCell>, &mut String)>,
     [buf, cell_buf]: [&mut Vec<u8>; 2],
     limits: Limits,
+    is_1904: bool,
 ) -> Result<(), SheetsError> {
     if let Some((cells, text)) = held.as_mut() {
         cells.clear();
@@ -425,7 +447,7 @@ fn read_row(
                 column = column.saturating_add(repeats);
                 let end = column.min(MAX_COLUMNS);
                 let text = held.as_mut().map(|(_, text)| &mut **text);
-                let (value, closed) = cell_value(xml, &e, text, cell_buf, limits)?;
+                let (value, closed) = cell_value(xml, &e, text, cell_buf, limits, is_1904)?;
                 if !closed {
                     xml.read_to_end_into(e.name(), cell_buf)
                         .map_err(Damaged::from)?;
@@ -455,6 +477,7 @@ fn cell_value(
     mut text: Option<&mut String>,
     buf: &mut Vec<u8>,
     limits: Limits,
+    is_1904: bool,
 ) -> Result<(Option<Held>, bool), SheetsError> {
     let mut value = None;
     let mut set = false;
@@ -471,7 +494,17 @@ fn cell_value(
             }
             "office:string-value" | "office:date-value" | "office:time-value" if !set => {
                 let decoded = decode(raw)?;
-                value = text.as_mut().and_then(|text| held_text(text, &decoded));
+                // A date or a time is one when it reads as one, and text
+                // when it does not.
+                let typed = match key {
+                    "office:date-value" => iso_date(&decoded),
+                    "office:time-value" => iso_duration(&decoded, is_1904),
+                    _ => None,
+                };
+                value = match typed {
+                    Some(cell) => Some(Held::Typed(cell)),
+                    None => text.as_mut().and_then(|text| held_text(text, &decoded)),
+                };
                 set = true;
             }
             "office:boolean-value" if !set => {
@@ -519,6 +552,8 @@ fn cell_value(
                 }
                 content.paragraphs += 1;
             }
+            Event::Start(e) if e.name().as_ref() == "text:tab" => content.add("\t")?,
+            Event::Start(e) if e.name().as_ref() == "text:line-break" => content.add("\n")?,
             Event::Start(e) if e.name().as_ref() == "text:s" => {
                 let repeats = match attribute(&e, "text:c")? {
                     Some(repeats) => count(&decode(repeats)?)?,

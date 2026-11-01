@@ -101,6 +101,64 @@ pub(crate) fn excel_date(serial: f64, is_1904: bool) -> Cell {
     }
 }
 
+/// The date or date and time an ODS file writes (`2026-03-01`,
+/// `2026-03-01T13:45:10.25`), as [`excel_date`] gives it: a date and time at
+/// midnight is a [`Cell::Date`]. None for text of another form.
+pub(crate) fn iso_date(text: &str) -> Option<Cell> {
+    if let Ok(day) = NaiveDate::parse_from_str(text, "%Y-%m-%d") {
+        return Some(Cell::Date(day));
+    }
+    let at = chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M:%S%.f").ok()?;
+    Some(if at.time() == NaiveTime::MIN {
+        Cell::Date(at.date())
+    } else {
+        Cell::DateTime(at)
+    })
+}
+
+/// The time an ODS file writes as a duration (`PT13H45M10S`, `PT30H15M`,
+/// `P1DT2H`), as [`excel_date`] gives the same number of days in the same
+/// date system: a time on the first day of the epoch. None for text of
+/// another form (a duration in years or months).
+pub(crate) fn iso_duration(text: &str, is_1904: bool) -> Option<Cell> {
+    let (negative, rest) = match text.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, text),
+    };
+    let rest = rest.strip_prefix('P')?;
+    let (days, time) = match rest.split_once('T') {
+        Some((days, time)) => (days, time),
+        None => (rest, ""),
+    };
+    let mut seconds = 0.0f64;
+    let mut parts = 0;
+    if !days.is_empty() {
+        seconds += f64::from(days.strip_suffix('D')?.parse::<u32>().ok()?) * 86_400.0;
+        parts += 1;
+    }
+    let mut time = time;
+    for (unit, size) in [('H', 3_600.0), ('M', 60.0), ('S', 1.0)] {
+        if let Some((number, after)) = time.split_once(unit) {
+            let number = if unit == 'S' {
+                number.parse::<f64>().ok()?
+            } else {
+                f64::from(number.parse::<u32>().ok()?)
+            };
+            if !number.is_finite() || number < 0.0 {
+                return None;
+            }
+            seconds += number * size;
+            time = after;
+            parts += 1;
+        }
+    }
+    if !time.is_empty() || parts == 0 {
+        return None;
+    }
+    let days = seconds / 86_400.0;
+    Some(excel_date(if negative { -days } else { days }, is_1904))
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::NaiveDateTime;
