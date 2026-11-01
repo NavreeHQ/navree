@@ -1,11 +1,9 @@
 // The op applier: the closed list the server sends. Nothing here runs code
 // from the wire; the HTML in an op is rendered by the server.
 import { morph, parse } from "./morph.js";
-import { announce, toast, openTarget, closeTarget, all, field } from "./ui.js";
+import { all, byId, field, make, root } from "./dom.js";
+import { announce, toast, openTarget, closeTarget } from "./ui.js";
 import { go, setUrl, refresh } from "./nav.js";
-
-/** @param {string} id */
-const byId = (id) => document.getElementById(id);
 
 /** @param {HTMLFormElement} form @param {Record<string, string[]>} fields */
 function showErrors(form, fields) {
@@ -25,7 +23,7 @@ function showErrors(form, fields) {
     }
     box.setAttribute("data-invalid", "");
     input.setAttribute("aria-invalid", "true");
-    const error = document.createElement("p");
+    const error = make("p");
     error.setAttribute("data-slot", "field-error");
     error.id = (input.id || name) + "-error";
     error.textContent = text;
@@ -72,7 +70,7 @@ function apply(op) {
 
 /** Applies an envelope; a build this page doesn't know means reload. @param {any} envelope */
 export function applyEnvelope(envelope) {
-  const build = document.documentElement.getAttribute("data-build");
+  const build = root().getAttribute("data-build");
   if (envelope.build && build && envelope.build !== build) {
     location.reload();
     return;

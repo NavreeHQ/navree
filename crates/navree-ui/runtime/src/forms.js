@@ -2,14 +2,23 @@
 // `data-ui-form`, a fetch whose answer is ops or a page.
 import { applyEnvelope } from "./ops.js";
 import { forgetPrefetched, go, showPage, startRegions } from "./nav.js";
-import { attr, has, set, unset, toggle, toast } from "./ui.js";
+import { attr, cookies, has, on, set, unset, toggle } from "./dom.js";
+import { toast } from "./ui.js";
 
 const OPS = "application/vnd.navree.ops+json";
 
-/** @param {string} name */
+/**
+ * The cookie called `name`, decoded. Another site on the same domain can set one
+ * that doesn't decode, or that no header can carry: those are passed over.
+ * @param {string} name
+ */
 function cookie(name) {
-  for (const part of document.cookie.split("; ")) {
-    if (part.startsWith(name + "=")) return decodeURIComponent(part.slice(name.length + 1));
+  for (const part of cookies().split("; ")) {
+    if (!part.startsWith(name + "=")) continue;
+    try {
+      const value = decodeURIComponent(part.slice(name.length + 1));
+      if (/^[\x21-\x7e]+$/.test(value)) return value;
+    } catch {}
   }
   return "";
 }
@@ -30,19 +39,19 @@ async function send(form, submitter) {
   running.get(form)?.abort();
   const abort = new AbortController();
   running.set(form, abort);
-  const action = (submitter && attr(submitter, "formaction")) || attr(form, "action") || location.href;
-  const method = ((submitter && attr(submitter, "formmethod")) || attr(form, "method") || "get").toUpperCase();
-  const data = new FormData(form, submitter);
-  /** @type {Record<string, string>} */
-  const headers = { "x-navree-ui": "1" };
-  const token = cookie("XSRF-TOKEN");
-  if (token) headers["x-xsrf-token"] = token;
-  /** @type {RequestInit} */
-  const init = { method, headers, signal: abort.signal };
-  const url = new URL(action, location.href);
-  if (method === "GET") url.search = new URLSearchParams(/** @type {any} */ (data)).toString();
-  else init.body = attr(form, "enctype") === "multipart/form-data" ? data : new URLSearchParams(/** @type {any} */ (data));
   try {
+    const action = (submitter && attr(submitter, "formaction")) || attr(form, "action") || location.href;
+    const method = ((submitter && attr(submitter, "formmethod")) || attr(form, "method") || "get").toUpperCase();
+    const data = new FormData(form, submitter);
+    /** @type {Record<string, string>} */
+    const headers = { "x-navree-ui": "1" };
+    const token = cookie("XSRF-TOKEN");
+    if (token) headers["x-xsrf-token"] = token;
+    /** @type {RequestInit} */
+    const init = { method, headers, signal: abort.signal };
+    const url = new URL(action, location.href);
+    if (method === "GET") url.search = new URLSearchParams(/** @type {any} */ (data)).toString();
+    else init.body = attr(form, "enctype") === "multipart/form-data" ? data : new URLSearchParams(/** @type {any} */ (data));
     const response = await fetch(url, init);
     const type = response.headers.get("content-type") || "";
     pending(form, submitter, false);
@@ -71,7 +80,7 @@ function filter(form) {
 
 /** Wires up forms. */
 export function startForms() {
-  document.addEventListener("submit", (e) => {
+  on(document, "submit", (e) => {
     const form = /** @type {HTMLFormElement} */ (e.target);
     if (e.defaultPrevented) return;
     const submitter = /** @type {HTMLElement | null} */ (e.submitter);
@@ -88,13 +97,13 @@ export function startForms() {
   });
   /** @type {WeakMap<HTMLFormElement, number>} */
   const timers = new WeakMap();
-  document.addEventListener("input", (e) => {
+  on(document, "input", (e) => {
     const form = /** @type {HTMLInputElement} */ (e.target).form;
     if (!form || !has(form, "data-ui-target") || /** @type {InputEvent} */ (e).isComposing) return;
     clearTimeout(timers.get(form));
     timers.set(form, setTimeout(() => filter(form), 200));
   });
-  document.addEventListener("change", (e) => {
+  on(document, "change", (e) => {
     const input = /** @type {HTMLInputElement} */ (e.target);
     const owner = input.form;
     if (owner && has(owner, "data-ui-target") && input.nodeName === "SELECT") filter(owner);

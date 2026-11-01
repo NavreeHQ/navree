@@ -1,5 +1,7 @@
 // Overlays: placing popovers next to what opens them (one code path), and the
 // hover and focus behaviour of tooltips and hover cards.
+import { byId, on, one } from "./dom.js";
+
 const GAP = 4;
 const MARGIN = 8;
 const HOVER_DELAY = 300;
@@ -30,10 +32,10 @@ function place(pop, anchor) {
 /** @param {HTMLElement} pop */
 function anchorOf(pop) {
   const id = CSS.escape(pop.id);
-  return document.querySelector(`[popovertarget="${id}"],[data-ui-hover="${id}"]`);
+  return one(`[popovertarget="${id}"],[data-ui-hover="${id}"]`);
 }
 
-document.addEventListener("toggle", (e) => {
+on(document, "toggle", (e) => {
   const pop = /** @type {HTMLElement} */ (e.target);
   if (/** @type {ToggleEvent} */ (e).newState !== "open" || !pop.hasAttribute?.("data-ui-place")) return;
   const anchor = anchorOf(pop);
@@ -46,7 +48,7 @@ const timers = new Map();
 /** @param {Element} trigger @param {boolean} show */
 function hover(trigger, show) {
   const id = trigger.getAttribute("data-ui-hover") || "";
-  const pop = document.getElementById(id);
+  const pop = byId(id);
   if (!pop) return;
   clearTimeout(timers.get(id));
   timers.set(id, setTimeout(() => {
@@ -58,7 +60,7 @@ function hover(trigger, show) {
 }
 
 for (const [event, show] of /** @type {[string, boolean][]} */ ([["mouseover", true], ["focusin", true], ["mouseout", false], ["focusout", false]])) {
-  document.addEventListener(event, (e) => {
+  on(document, event, (e) => {
     const target = /** @type {Element} */ (e.target);
     const trigger = target.closest?.("[data-ui-hover]");
     if (trigger) {
@@ -67,13 +69,13 @@ for (const [event, show] of /** @type {[string, boolean][]} */ ([["mouseover", t
     }
     // Moving onto an open hover card keeps it open.
     const card = target.closest?.("[data-slot=hover-card-content]");
-    const opener = card && document.querySelector(`[data-ui-hover="${CSS.escape(card.id)}"]`);
+    const opener = card && one(`[data-ui-hover="${CSS.escape(card.id)}"]`);
     if (opener) hover(opener, show);
   }, { passive: true });
 }
-document.addEventListener("keydown", (e) => {
+on(document, "keydown", (e) => {
   if (e.key !== "Escape") return;
   for (const id of timers.keys()) {
-    try { document.getElementById(id)?.hidePopover(); } catch {}
+    try { byId(id)?.hidePopover(); } catch {}
   }
 });

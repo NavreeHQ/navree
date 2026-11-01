@@ -1,5 +1,6 @@
 // Link boosting and regions: fetch a page, morph what changed, keep the shell
 // alive. A failed fetch falls back to a real navigation.
+import { body, byId, every, head, hidden, on, one, root, setTitle, titleOf } from "./dom.js";
 import { morph } from "./morph.js";
 import { announce } from "./ui.js";
 
@@ -30,11 +31,11 @@ function prefetch(url) {
 
 /** Adds the stylesheets and module scripts of `doc` that this page lacks. @param {Document} doc */
 function mergeHead(doc) {
-  document.title = doc.title;
-  for (const el of doc.head.querySelectorAll("link[rel=stylesheet],script[src]")) {
+  setTitle(titleOf(doc));
+  for (const el of head(doc).querySelectorAll("link[rel=stylesheet],script[src]")) {
     const attr = el.nodeName === "LINK" ? "href" : "src";
     const url = el.getAttribute(attr) || "";
-    if (!document.head.querySelector(`[${attr}="${CSS.escape(url)}"]`)) document.head.append(document.importNode(el, true));
+    if (!head().querySelector(`[${attr}="${CSS.escape(url)}"]`)) head().append(document.importNode(el, true));
   }
 }
 
@@ -46,26 +47,26 @@ function mergeHead(doc) {
 export async function showPage(response, how = {}) {
   const url = how.url || response.url;
   const doc = new DOMParser().parseFromString(await response.text(), "text/html");
-  const build = doc.documentElement.getAttribute("data-build");
+  const build = root(doc).getAttribute("data-build");
   // A page from another build, or one without the runtime, loads for real.
-  if (build !== document.documentElement.getAttribute("data-build")) {
+  if (build !== root().getAttribute("data-build")) {
     location.assign(url);
     return;
   }
   if (how.push !== false && url !== location.href) history.pushState(null, "", url);
   if (how.region) {
-    const from = document.getElementById(how.region), to = doc.getElementById(how.region);
+    const from = byId(how.region), to = byId(how.region, doc);
     if (from && to) {
       morph(from, to);
-      document.title = doc.title;
+      setTitle(titleOf(doc));
       return;
     }
   }
   mergeHead(doc);
-  morph(document.body, doc.body);
+  morph(body(), body(doc));
   if (how.push !== false) scrollTo(0, 0);
-  /** @type {HTMLElement | null} */ (document.querySelector("main"))?.focus({ preventScroll: true });
-  announce(doc.title);
+  /** @type {HTMLElement | null} */ (one("main"))?.focus({ preventScroll: true });
+  announce(titleOf(doc));
 }
 
 /** Forgets prefetched pages: something changed, and they may be stale. */
@@ -97,8 +98,8 @@ function tablePending(table, on) {
 /** Goes to `url` like a boosted link. @param {string} url @param {{region?: string, push?: boolean}} [how] */
 export async function go(url, how = {}) {
   const mine = ++generation;
-  const root = document.documentElement;
-  root.setAttribute("data-ui-loading", "");
+  const html = root();
+  html.setAttribute("data-ui-loading", "");
   const region = how.region ? document.getElementById(how.region) : null;
   const table = region?.hasAttribute("data-ui-table") ? region : null;
   tablePending(table, true);
@@ -120,7 +121,7 @@ export async function go(url, how = {}) {
     else location.assign(url);
   } finally {
     if (mine === generation) {
-      root.removeAttribute("data-ui-loading");
+      html.removeAttribute("data-ui-loading");
       tablePending(table, false);
     }
   }
@@ -141,7 +142,7 @@ const regions = new Map();
  * @param {Element} el @param {string} src @param {() => boolean} current
  */
 async function feed(el, src, current) {
-  const into = document.getElementById(el.getAttribute("data-ui-feed") || "");
+  const into = byId(el.getAttribute("data-ui-feed") || "");
   if (!into || !el.contains(into)) return;
   const url = new URL(src, location.href);
   url.searchParams.set("after", el.getAttribute("data-ui-after") || "0");
@@ -151,7 +152,7 @@ async function feed(el, src, current) {
   if (!current()) return;
   if (html.trim()) {
     into.insertAdjacentHTML("afterbegin", html);
-    document.getElementById(el.getAttribute("data-ui-feed-empty") || "")?.remove();
+    byId(el.getAttribute("data-ui-feed-empty") || "")?.remove();
   }
   const cursor = response.headers.get("x-ui-cursor");
   if (cursor) el.setAttribute("data-ui-after", cursor);
@@ -159,7 +160,7 @@ async function feed(el, src, current) {
 
 /** Refetches a region. @param {string} id */
 export async function refresh(id) {
-  const el = document.getElementById(id);
+  const el = byId(id);
   const src = el?.getAttribute("data-ui-src");
   if (!el || !src) return;
   const mine = (regions.get(id) || 0) + 1;
@@ -179,10 +180,10 @@ export async function refresh(id) {
       return;
     }
     const doc = new DOMParser().parseFromString(await response.text(), "text/html");
-    let to = doc.getElementById(id);
+    let to = byId(id, doc);
     if (!to) {
       to = /** @type {HTMLElement} */ (el.cloneNode(false));
-      to.append(...doc.body.childNodes);
+      to.append(...body(doc).childNodes);
     }
     to.removeAttribute("data-ui-lazy");
     to.removeAttribute("aria-busy");
@@ -194,13 +195,13 @@ export async function refresh(id) {
 
 /** Starts lazy and polling regions, on load and after each swap. */
 export function startRegions() {
-  for (const el of document.querySelectorAll("[data-ui-lazy]")) refresh(el.id);
-  for (const el of document.querySelectorAll("[data-ui-poll]")) {
+  for (const el of every("[data-ui-lazy]")) refresh(el.id);
+  for (const el of every("[data-ui-poll]")) {
     if (/** @type {any} */ (el).uiPoll) continue;
     const every = Number(el.getAttribute("data-ui-poll")) || 5000;
     /** @type {any} */ (el).uiPoll = setInterval(() => {
       if (!el.isConnected) clearInterval(/** @type {any} */ (el).uiPoll);
-      else if (!document.hidden) refresh(el.id);
+      else if (!hidden()) refresh(el.id);
     }, every);
   }
 }
@@ -209,7 +210,7 @@ export function startRegions() {
 function linkOf(target) {
   const a = /** @type {HTMLAnchorElement | null} */ (/** @type {Element} */ (target)?.closest?.("a[href]"));
   if (!a || a.origin !== location.origin || a.target || a.hasAttribute("download") || a.hasAttribute("data-ui-noboost")) return null;
-  if (!document.body.hasAttribute("data-ui-boost")) return null;
+  if (!body().hasAttribute("data-ui-boost")) return null;
   // A link to a place on this page is the browser's.
   if (a.pathname === location.pathname && a.search === location.search && a.hash) return null;
   return a;
@@ -226,7 +227,7 @@ function onIntent(e) {
 
 /** Wires up links. */
 export function startNav() {
-  document.addEventListener("click", (e) => {
+  on(document, "click", (e) => {
     if (e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const a = linkOf(e.target);
     if (!a) return;
@@ -234,13 +235,13 @@ export function startNav() {
     const region = a.closest("[data-ui-region]");
     go(a.href, region && a.hasAttribute("data-ui-in-region") ? { region: region.id } : {}).then(startRegions);
   });
-  document.addEventListener("mouseover", onIntent, { passive: true });
-  document.addEventListener("focusin", onIntent, { passive: true });
-  document.addEventListener("touchstart", (e) => {
+  on(document, "mouseover", onIntent, { passive: true });
+  on(document, "focusin", onIntent, { passive: true });
+  on(document, "touchstart", (e) => {
     const a = linkOf(e.target);
     if (a) prefetch(a.href);
   }, { passive: true });
-  addEventListener("popstate", () => {
+  on(window, "popstate", () => {
     // Back within a table's own states changes the table, not the page.
     const table = document.querySelector("[data-ui-table]");
     const same = table && new URL(table.getAttribute("data-ui-src") || "", location.href).pathname === location.pathname;

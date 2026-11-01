@@ -4,10 +4,12 @@
 // semantics do the value work: a changed `value` attribute reaches an input
 // only if the user has not typed in it.
 
+import { active as activeElement, make, on } from "./dom.js";
+
 /** The element being composed in, if any. @type {Element | null} */
 let composing = null;
-document.addEventListener("compositionstart", (e) => { composing = /** @type {Element} */ (e.target); }, true);
-document.addEventListener("compositionend", () => { composing = null; }, true);
+on(document, "compositionstart", (e) => { composing = /** @type {Element} */ (e.target); }, true);
+on(document, "compositionend", () => { composing = null; }, true);
 
 const OPEN_STATE = new Set(["DIALOG", "DETAILS"]);
 
@@ -78,7 +80,7 @@ function same(a, b) {
 /** @param {Element} a @param {Element} b */
 function morphAttrs(a, b) {
   const keep = (attr(a, "data-ui-keep-attrs") || "").split(" ");
-  const focused = a === document.activeElement;
+  const focused = a === activeElement();
   for (const { name, value } of attrsOf(b)) {
     if (keep.includes(name) || (focused && name === "value") || (name === "open" && OPEN_STATE.has(nameOf(a)))) continue;
     if (attr(a, name) !== value) set(a, name, value);
@@ -93,7 +95,7 @@ function morphAttrs(a, b) {
 function morphElement(a, b, ids) {
   if (a === composing || has(a, "data-ui-keep")) return;
   morphAttrs(a, b);
-  if (nameOf(a) === "TEXTAREA" && a === document.activeElement) return;
+  if (nameOf(a) === "TEXTAREA" && a === activeElement()) return;
   morphChildren(a, b, ids);
 }
 
@@ -190,7 +192,7 @@ function morphChildren(a, b, ids) {
  * @param {Element} to a detached element with the new content (it is consumed)
  */
 export function morph(from, to) {
-  const active = /** @type {HTMLInputElement | null} */ (document.activeElement);
+  const active = /** @type {HTMLInputElement | null} */ (activeElement());
   const inField = active && "selectionStart" in active;
   let start = null, end = null, direction = null;
   if (inField) {
@@ -203,7 +205,7 @@ export function morph(from, to) {
     if (key) ids.set(key, element);
   }
   morphElement(from, to, ids);
-  if (active && active !== document.body && active !== document.activeElement && active.isConnected) {
+  if (active && active.nodeName !== "BODY" && active !== activeElement() && active.isConnected) {
     active.focus({ preventScroll: true });
     if (inField && start !== null) {
       try { active.setSelectionRange(start, end, direction || undefined); } catch {}
@@ -214,7 +216,7 @@ export function morph(from, to) {
 
 /** Parses `html` into its first element. @param {string} html */
 export function parse(html) {
-  const template = document.createElement("template");
+  const template = /** @type {HTMLTemplateElement} */ (make("template"));
   template.innerHTML = html;
   return template.content.firstElementChild;
 }

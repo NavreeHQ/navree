@@ -1,5 +1,6 @@
 // The command interpreter: closed verbs from `data-ui-click`, `data-ui-change`
 // and `data-ui-input`. Commands need no network and no expression language.
+import { byId, on } from "./dom.js";
 import { openTarget, closeTarget, announce } from "./ui.js";
 
 const REFUSED = /^(on|style$|srcdoc$|href$|src$|action$|formaction$)/i;
@@ -7,7 +8,7 @@ const REFUSED = /^(on|style$|srcdoc$|href$|src$|action$|formaction$)/i;
 /** @param {any[]} cmd @param {Element} from */
 function run(cmd, from) {
   const [verb, a, b, c] = cmd;
-  const target = typeof a === "string" ? document.getElementById(a) : null;
+  const target = typeof a === "string" ? byId(a) : null;
   switch (verb) {
     case "toggle": target?.toggleAttribute("hidden"); break;
     case "show": target?.removeAttribute("hidden"); break;
@@ -39,7 +40,7 @@ function handle(e, attribute) {
 
 /** Wires up commands. */
 export function startCommands() {
-  document.addEventListener("click", (e) => handle(e, "data-ui-click"));
-  document.addEventListener("change", (e) => handle(e, "data-ui-change"));
-  document.addEventListener("input", (e) => handle(e, "data-ui-input"));
+  on(document, "click", (e) => handle(e, "data-ui-click"));
+  on(document, "change", (e) => handle(e, "data-ui-change"));
+  on(document, "input", (e) => handle(e, "data-ui-input"));
 }

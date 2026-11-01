@@ -15,18 +15,18 @@ import { fileURLToPath } from "node:url";
 import { chromium, firefox } from "playwright";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const source = join(here, "../../../crates/navree-ui/runtime/src/morph.js");
+const runtime = join(here, "../../../crates/navree-ui/runtime/src");
 const ROUNDS = Number(process.env.MORPH_ROUNDS || 3000);
 
 let server;
 let origin;
 
 before(async () => {
-  const module = await readFile(source);
+  const modules = { "/morph.js": await readFile(join(runtime, "morph.js")), "/dom.js": await readFile(join(runtime, "dom.js")) };
   server = createServer((req, res) => {
-    if (req.url === "/morph.js") {
+    if (modules[req.url]) {
       res.writeHead(200, { "content-type": "text/javascript" });
-      res.end(module);
+      res.end(modules[req.url]);
     } else {
       res.writeHead(200, { "content-type": "text/html" });
       res.end(`<!doctype html><title>morph</title><body><div id="root"></div>`);
