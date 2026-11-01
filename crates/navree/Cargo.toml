@@ -93,7 +93,7 @@ api = ["dep:navree-api", "http"]
 ## tenant transports, a delivery log with provider events, suppressions,
 ## hold for approval, tracking, DKIM signing and sending-domain checks.
 mail = ["dep:navree-mail", "view", "telemetry", "http", "crypto", "events", "http-client", "db"]
-## Inbound mail: received messages parsed with mail-parser (pure Rust),
+## Inbound mail: received messages parsed by Navree's own MIME reader,
 ## Amazon SES (SNS and S3), Mailgun, Postmark and raw MIME sources,
 ## mailboxes routed by address, signed reply tokens and raw `.eml` files on
 ## a `storage` disk (in `full`). With `integrations` on too, Gmail and

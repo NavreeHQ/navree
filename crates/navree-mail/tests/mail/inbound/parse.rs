@@ -227,3 +227,116 @@ fn bytes_without_headers_do_not_parse() {
         Err(InboundError::Unparseable(_))
     ));
 }
+
+#[test]
+fn file_names_and_names_in_any_encoding_are_decoded() {
+    let mut raw = b"From: =?iso-8859-1?Q?J".to_vec();
+    raw.push(0xfc);
+    raw.extend_from_slice(
+        concat!(
+            "rgen?= <j@example.de>\r\n",
+            "To: support@acme.test\r\n",
+            "Subject: =?utf-8?B?R3LDvMOfZQ==?= =?utf-8?q?_aus_M=C3=BCnchen?=\r\n",
+            "Content-Type: multipart/mixed; boundary=\"b\"\r\n",
+            "\r\n",
+            "--b\r\n",
+            "Content-Type: text/plain; charset=utf-8\r\n",
+            "\r\n",
+            "Hallo\r\n",
+            "--b\r\n",
+            "Content-Type: application/pdf; name=\"=?utf-8?B?w6TDtsO8LnBkZg==?=\"\r\n",
+            "Content-Disposition: attachment;\r\n",
+            " filename*0*=utf-8''Gr%C3%BC%C3;\r\n",
+            " filename*1*=%9Fe.pdf\r\n",
+            "Content-Transfer-Encoding: base64\r\n",
+            "\r\n",
+            "JVBERg==\r\n",
+            "--b--\r\n",
+        )
+        .as_bytes(),
+    );
+    let mail = InboundMail::parse(raw).unwrap();
+
+    assert_eq!(
+        mail.from.as_ref().and_then(|a| a.name.as_deref()),
+        Some("Jürgen"),
+        "an 8-bit byte inside an encoded word is read in its charset"
+    );
+    assert_eq!(mail.subject.as_deref(), Some("Grüße aus München"));
+    assert_eq!(mail.text.as_deref(), Some("Hallo"));
+    let pdf = &mail.attachments[0];
+    assert_eq!(pdf.filename.as_deref(), Some("Grüße.pdf"));
+    assert_eq!(pdf.content.as_ref(), b"%PDF");
+}
+
+#[test]
+fn an_html_only_message_has_its_text_read_from_the_html() {
+    let mail = InboundMail::parse(
+        "From: a@b.test\nContent-Type: text/html; charset=utf-8\n\n<html><head><style>p{}</style></head><body><p>Hello <b>there</b>,</p><p>see&nbsp;you &amp; bye<br>Ada</p></body></html>",
+    )
+    .unwrap();
+    assert_eq!(
+        mail.text.as_deref(),
+        Some("Hello there,\nsee\u{a0}you & bye\nAda\n")
+    );
+    assert!(mail.html.as_deref().unwrap().starts_with("<html>"));
+    assert!(mail.attachments.is_empty());
+}
+
+#[test]
+fn header_fields_that_are_not_utf8_are_kept() {
+    let mut raw = b"From: a@b.test\nX-Legacy: caf".to_vec();
+    raw.extend_from_slice(b"\xe9\n\nbody\n");
+    let mail = InboundMail::parse(raw).unwrap();
+    assert_eq!(mail.header("X-Legacy"), Some("caf\u{fffd}"));
+}
+
+/// The reader's limits at reduced scale: each refuses the message as
+/// `Unparseable` while it is read, before what it counts is held.
+#[test]
+fn messages_that_declare_too_much_are_unparseable() {
+    let unparseable = |raw: String, key: &str| match InboundMail::parse(raw) {
+        Err(InboundError::Unparseable(why)) => assert!(why.contains(key), "{why}"),
+        other => panic!("{key}: {other:?}"),
+    };
+
+    // 1,001 empty parts: a few bytes each to write, a record each to hold.
+    unparseable(
+        format!(
+            "Content-Type: multipart/mixed; boundary=b\n\n{}--b--\n",
+            "--b\n\n".repeat(1001)
+        ),
+        "mail.inbound.max_parts",
+    );
+    // 33 multiparts nested in one another.
+    let mut deep = String::from("Subject: deep\n");
+    for level in 0..33 {
+        deep.push_str(&format!(
+            "Content-Type: multipart/mixed; boundary=b{level}\n\n--b{level}\n"
+        ));
+    }
+    unparseable(deep, "mail.inbound.max_depth");
+    // 1,001 header fields.
+    unparseable("X: y\n".repeat(1001) + "\nbody", "mail.inbound.max_headers");
+    // 1,001 addresses in To, and 1,001 ids in References.
+    unparseable(
+        format!("From: a@b.test\nTo: {}\n\nbody", "a@b.test,".repeat(1001)),
+        "mail.inbound.max_addresses",
+    );
+    unparseable(
+        format!(
+            "From: a@b.test\nReferences: {}\n\nbody",
+            "<a@b>".repeat(1001)
+        ),
+        "mail.inbound.max_addresses",
+    );
+
+    // At the limits the message is read.
+    let mail = InboundMail::parse(format!(
+        "From: a@b.test\nTo: {}\nReferences: {}\n\nbody",
+        "a@b.test,".repeat(1000),
+        "<a@b> ".repeat(1000)
+    ))
+    .unwrap();
+    assert_eq!((mail.to.len(), mail.references.len()), (1000, 1000));
+}

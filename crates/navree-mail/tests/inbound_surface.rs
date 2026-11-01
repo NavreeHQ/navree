@@ -26,6 +26,10 @@ use uuid::Uuid;
 fn the_configuration_keys_have_their_documented_defaults() {
     let InboundOptions {
         max_size,
+        max_parts,
+        max_depth,
+        max_headers,
+        max_addresses,
         disk,
         path,
         reply_token_ttl_days,
@@ -35,6 +39,10 @@ fn the_configuration_keys_have_their_documented_defaults() {
         raw,
     } = InboundOptions::default();
     assert_eq!(max_size, 26_214_400);
+    assert_eq!(max_parts, 1000);
+    assert_eq!(max_depth, 32);
+    assert_eq!(max_headers, 1000);
+    assert_eq!(max_addresses, 1000);
     assert_eq!(disk, None);
     assert_eq!(path, "inbound");
     assert_eq!(reply_token_ttl_days, 0);
@@ -58,6 +66,10 @@ fn the_configuration_keys_have_their_documented_defaults() {
         json!({
             "inbound": {
                 "max_size": 26_214_400,
+                "max_parts": 200,
+                "max_depth": 8,
+                "max_headers": 300,
+                "max_addresses": 400,
                 "disk": "mail",
                 "path": "inbound",
                 "reply_token_ttl_days": 30,
@@ -76,6 +88,15 @@ fn the_configuration_keys_have_their_documented_defaults() {
     .unwrap();
     let options = config.typed::<MailOptions>().unwrap().inbound;
     assert_eq!(options.disk.as_deref(), Some("mail"));
+    assert_eq!(
+        (
+            options.max_parts,
+            options.max_depth,
+            options.max_headers,
+            options.max_addresses
+        ),
+        (200, 8, 300, 400)
+    );
     assert_eq!(options.reply_token_ttl_days, 30);
     assert_eq!(options.ses.disk.as_deref(), Some("ses-mail"));
     assert!(!options.ses.confirm_subscriptions);
@@ -84,6 +105,10 @@ fn the_configuration_keys_have_their_documented_defaults() {
     // Invalid settings name their key.
     for (inbound, key) in [
         (json!({ "max_size": 0 }), "inbound.max_size"),
+        (json!({ "max_parts": 0 }), "inbound.max_parts"),
+        (json!({ "max_depth": 0 }), "inbound.max_depth"),
+        (json!({ "max_headers": 0 }), "inbound.max_headers"),
+        (json!({ "max_addresses": 0 }), "inbound.max_addresses"),
         (json!({ "path": "/abs" }), "inbound.path"),
         (json!({ "disk": " " }), "inbound.disk"),
         (json!({ "raw": { "token": "" } }), "inbound.raw.token"),

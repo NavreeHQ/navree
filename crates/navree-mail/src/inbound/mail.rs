@@ -1,17 +1,17 @@
-//! [`InboundMail`]: a received message parsed with mail-parser, and
+//! [`InboundMail`]: a received message read by Navree's MIME reader, and
 //! [`Incoming`], what a source hands to the pipeline.
 
 use std::fmt;
 
 use bytes::Bytes;
-use chrono::{DateTime, TimeZone, Utc};
-use mail_parser::{Address as ParsedAddress, HeaderValue, MessageParser, MimeHeaders, PartType};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use super::compose::Compose;
 use super::error::InboundError;
+use super::mime::{self, Limits, Mailbox};
 
 /// A mailbox address of a received message: `Ada Lovelace <ada@example.com>`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -294,14 +294,20 @@ impl Incoming {
     ///
     /// # Errors
     ///
-    /// [`InboundError::Unparseable`] when the bytes are not a message.
+    /// [`InboundError::Unparseable`] when the bytes are not a message, or
+    /// the message is over the default reading limits (see
+    /// [`InboundMail::parse`]).
     pub fn parse(self) -> Result<InboundMail, InboundError> {
-        self.parse_at(Utc::now())
+        self.parse_at(Utc::now(), Limits::default())
     }
 
-    /// Parses the message, received at `received_at`.
-    pub(crate) fn parse_at(self, received_at: DateTime<Utc>) -> Result<InboundMail, InboundError> {
-        let mut mail = InboundMail::parse(self.raw)?;
+    /// Parses the message within `limits`, received at `received_at`.
+    pub(crate) fn parse_at(
+        self,
+        received_at: DateTime<Utc>,
+        limits: Limits,
+    ) -> Result<InboundMail, InboundError> {
+        let mut mail = InboundMail::parse_with(self.raw, limits)?;
         mail.source = self.source;
         mail.provider_id = self.provider_id.filter(|id| !id.is_empty());
         mail.envelope = self.envelope;
@@ -325,10 +331,10 @@ impl fmt::Debug for Incoming {
     }
 }
 
-/// A received message, parsed with mail-parser: headers, addresses, the
-/// text and HTML bodies and the attachments, every charset decoded to
-/// UTF-8. The raw bytes stay available ([`raw`](InboundMail::raw)) and are
-/// stored as an `.eml` file when `mail.inbound.disk` is set.
+/// A received message, parsed: headers, addresses, the text and HTML
+/// bodies and the attachments, every charset decoded to UTF-8. The raw
+/// bytes stay available ([`raw`](InboundMail::raw)) and are stored as an
+/// `.eml` file when `mail.inbound.disk` is set.
 ///
 /// Mailboxes ([`ModuleBuilderMailExt::mailbox`](super::ModuleBuilderMailExt::mailbox))
 /// receive one per message.
@@ -391,68 +397,49 @@ impl InboundMail {
     /// # Errors
     ///
     /// [`InboundError::Unparseable`] when the bytes hold no message
-    /// headers.
+    /// headers, or the message is over the default reading limits
+    /// (`mail.inbound.max_parts`, `max_depth`, `max_headers` and
+    /// `max_addresses`; [`Inbound::receive`](super::Inbound::receive)
+    /// applies the configured ones).
     pub fn parse(raw: impl Into<Bytes>) -> Result<Self, InboundError> {
-        let raw: Bytes = raw.into();
-        let parsed = MessageParser::default()
-            .parse(raw.as_ref())
-            .filter(|message| !message.headers().is_empty())
-            .ok_or_else(|| InboundError::Unparseable("no message headers found".to_owned()))?;
+        Self::parse_with(raw.into(), Limits::default())
+    }
 
-        let mut text = None;
-        let mut html = None;
-        for part in parsed.text_bodies() {
-            if let PartType::Text(body) = &part.body {
-                text = Some(body.to_string());
-                break;
-            }
-        }
-        for part in parsed.html_bodies() {
-            if let PartType::Html(body) = &part.body {
-                html = Some(body.to_string());
-                break;
-            }
-        }
-        if text.is_none() {
-            text = parsed.body_text(0).map(|body| body.into_owned());
-        }
-
-        let attachments = parsed
-            .attachments()
-            .map(|part| {
-                let content_type = part.content_type().map_or_else(
-                    || {
-                        if matches!(part.body, PartType::Message(_)) {
-                            "message/rfc822".to_owned()
-                        } else {
-                            "application/octet-stream".to_owned()
-                        }
-                    },
-                    |ct| match ct.subtype() {
-                        Some(sub) => format!("{}/{}", ct.ctype(), sub).to_ascii_lowercase(),
-                        None => ct.ctype().to_ascii_lowercase(),
-                    },
-                );
-                let inline = part
-                    .content_disposition()
-                    .is_some_and(|cd| cd.ctype().eq_ignore_ascii_case("inline"));
-                Attachment {
-                    filename: part.attachment_name().map(str::to_owned),
-                    content_type,
-                    content_id: part.content_id().map(|id| strip_angles(id).to_owned()),
-                    inline,
-                    content: Bytes::copy_from_slice(part.contents()),
+    /// Parses a raw message within `limits` (`mail.inbound.max_depth`,
+    /// `max_parts`, `max_headers` and `max_addresses`).
+    pub(crate) fn parse_with(raw: Bytes, limits: Limits) -> Result<Self, InboundError> {
+        let unparseable = |error: mime::MimeError| InboundError::Unparseable(error.to_string());
+        let parsed = mime::parse(&raw, limits).map_err(unparseable)?;
+        // A field the message repeats counts once: its last occurrence.
+        let last = |name: &str| {
+            parsed
+                .headers
+                .iter()
+                .rev()
+                .find(|(field, _)| field.eq_ignore_ascii_case(name))
+                .map(|(_, value)| value.as_ref())
+        };
+        // Ids are ASCII: read them from the value as text, unfolded.
+        let text = |name: &str| last(name).map(mime::unfold);
+        let addresses = |name: &str| -> Result<Vec<Address>, InboundError> {
+            let Some(value) = last(name) else {
+                return Ok(Vec::new());
+            };
+            let list = mime::addresses(value, limits.addresses).map_err(unparseable)?;
+            Ok(list.into_iter().map(address).collect())
+        };
+        let references = match text("References") {
+            Some(value) => {
+                let references: Vec<String> = ids(&value).take(limits.addresses + 1).collect();
+                if references.len() > limits.addresses {
+                    return Err(unparseable(mime::MimeError::TooManyAddresses(
+                        limits.addresses,
+                    )));
                 }
-            })
-            .collect();
-
-        let headers = parsed
-            .headers_raw()
-            .map(|(name, value)| Header {
-                name: name.to_owned(),
-                value: unfold(value),
-            })
-            .collect();
+                references
+            }
+            None => Vec::new(),
+        };
 
         let mail = InboundMail {
             id: Uuid::now_v7(),
@@ -460,21 +447,42 @@ impl InboundMail {
             provider_id: None,
             envelope: Envelope::default(),
             verdicts: Verdicts::default(),
-            message_id: parsed.message_id().map(|id| strip_angles(id).to_owned()),
-            in_reply_to: ids(parsed.in_reply_to()).into_iter().next(),
-            references: ids(parsed.references()),
-            from: parsed.from().and_then(|a| addresses(a).into_iter().next()),
-            reply_to: parsed.reply_to().map(addresses).unwrap_or_default(),
-            to: parsed.to().map(addresses).unwrap_or_default(),
-            cc: parsed.cc().map(addresses).unwrap_or_default(),
-            subject: parsed.subject().map(str::to_owned),
-            date: parsed
-                .date()
-                .and_then(|date| Utc.timestamp_opt(date.to_timestamp(), 0).single()),
-            text,
-            html,
-            headers,
-            attachments,
+            message_id: text("Message-ID")
+                .and_then(|value| {
+                    mime::ids(&value)
+                        .last()
+                        .map(|id| strip_angles(id).to_owned())
+                })
+                .filter(|id| !id.is_empty()),
+            in_reply_to: text("In-Reply-To").and_then(|value| ids(&value).next()),
+            references,
+            from: addresses("From")?.into_iter().next(),
+            reply_to: addresses("Reply-To")?,
+            to: addresses("To")?,
+            cc: addresses("Cc")?,
+            subject: last("Subject").and_then(mime::text),
+            date: last("Date").and_then(mime::date),
+            text: parsed.text,
+            html: parsed.html,
+            headers: parsed
+                .headers
+                .into_iter()
+                .map(|(name, value)| Header {
+                    name,
+                    value: unfold(&String::from_utf8_lossy(&value)),
+                })
+                .collect(),
+            attachments: parsed
+                .attachments
+                .into_iter()
+                .map(|part| Attachment {
+                    filename: part.filename,
+                    content_type: part.content_type,
+                    content_id: part.content_id.map(|id| strip_angles(&id).to_owned()),
+                    inline: part.inline,
+                    content: part.content,
+                })
+                .collect(),
             size: raw.len(),
             fingerprint: hex::encode(Sha256::digest(&raw)),
             stored: None,
@@ -640,42 +648,25 @@ fn strip_angles(id: &str) -> &str {
     id.trim().trim_start_matches('<').trim_end_matches('>')
 }
 
-/// Message ids from an `In-Reply-To` or `References` value.
-fn ids(value: &HeaderValue<'_>) -> Vec<String> {
-    match value {
-        HeaderValue::Text(id) => id
-            .split_whitespace()
-            .map(|id| strip_angles(id).to_owned())
-            .filter(|id| !id.is_empty())
-            .collect(),
-        HeaderValue::TextList(list) => list
-            .iter()
-            .map(|id| strip_angles(id).to_owned())
-            .filter(|id| !id.is_empty())
-            .collect(),
-        _ => Vec::new(),
-    }
+/// Message ids from an `In-Reply-To` or `References` value, in order. A
+/// single id (or text without angle brackets) is split at blanks.
+fn ids(value: &str) -> impl Iterator<Item = String> + '_ {
+    let mut found = mime::ids(value);
+    let first = found.next();
+    let second = found.next();
+    let ids: Box<dyn Iterator<Item = &str>> = match (first, second) {
+        (Some(one), None) => Box::new(one.split_whitespace()),
+        (first, second) => Box::new(first.into_iter().chain(second).chain(found)),
+    };
+    ids.map(|id| strip_angles(id).to_owned())
+        .filter(|id| !id.is_empty())
 }
 
-/// The addresses of an address header, groups flattened.
-fn addresses(address: &ParsedAddress<'_>) -> Vec<Address> {
-    address
-        .iter()
-        .filter_map(|addr| {
-            let email = addr.address()?.trim();
-            if email.is_empty() {
-                return None;
-            }
-            Some(Address {
-                name: addr
-                    .name()
-                    .map(str::trim)
-                    .filter(|name| !name.is_empty())
-                    .map(str::to_owned),
-                email: email.to_owned(),
-            })
-        })
-        .collect()
+fn address(mailbox: Mailbox) -> Address {
+    Address {
+        name: mailbox.name,
+        email: mailbox.email,
+    }
 }
 
 /// Joins continuation lines and trims.

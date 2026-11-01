@@ -400,6 +400,72 @@ async fn messages_over_the_limit_are_refused() {
 }
 
 #[tokio::test]
+async fn messages_over_the_reading_limits_are_unparseable() {
+    let mail = inbound_app(&["support@acme.test"], |b| {
+        b.config("mail.inbound.max_parts", 3)
+            .config("mail.inbound.max_headers", 20)
+            .config("mail.inbound.max_addresses", 2)
+    })
+    .await;
+    let inbound = mail.inbound().await;
+
+    // The message, its multipart and two attachments: four parts.
+    let parts = Incoming::compose()
+        .from("ada@example.com")
+        .to("support@acme.test")
+        .text("see attached")
+        .attach("a.txt", "text/plain", b"a".to_vec())
+        .attach("b.txt", "text/plain", b"b".to_vec())
+        .build();
+    let error = inbound.receive(parts).await.unwrap_err();
+    assert!(
+        matches!(&error, InboundError::Unparseable(why) if why.contains("mail.inbound.max_parts")),
+        "{error}"
+    );
+
+    let mut compose = Incoming::compose()
+        .from("ada@example.com")
+        .to("support@acme.test");
+    for index in 0..20 {
+        compose = compose.header(format!("X-Trace-{index}"), "hop");
+    }
+    let error = inbound.receive(compose.build()).await.unwrap_err();
+    assert!(
+        matches!(&error, InboundError::Unparseable(why) if why.contains("mail.inbound.max_headers")),
+        "{error}"
+    );
+
+    let crowd = Incoming::compose()
+        .from("ada@example.com")
+        .to("support@acme.test")
+        .cc("a@example.com")
+        .cc("b@example.com")
+        .cc("c@example.com")
+        .build();
+    let error = inbound.receive(crowd).await.unwrap_err();
+    assert!(
+        matches!(&error, InboundError::Unparseable(why) if why.contains("mail.inbound.max_addresses")),
+        "{error}"
+    );
+    assert_eq!(
+        error.to_app_error().unwrap().status,
+        http::StatusCode::BAD_REQUEST
+    );
+    assert!(mail.seen().is_empty());
+
+    // Within the limits the same pipeline takes the message.
+    let fine = Incoming::compose()
+        .from("ada@example.com")
+        .to("support@acme.test")
+        .text("hello")
+        .build();
+    assert_eq!(
+        inbound.receive(fine).await.unwrap().status,
+        InboundStatus::Handled
+    );
+}
+
+#[tokio::test]
 async fn the_mail_fake_plays_the_provider() {
     let mail = inbound_app(&["support@acme.test"], |b| b).await;
 

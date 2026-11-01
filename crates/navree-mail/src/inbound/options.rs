@@ -3,6 +3,10 @@
 use navree_contracts::Secret;
 use serde::Deserialize;
 
+use super::mime::{
+    DEFAULT_MAX_ADDRESSES, DEFAULT_MAX_DEPTH, DEFAULT_MAX_HEADERS, DEFAULT_MAX_PARTS, Limits,
+};
+
 /// 25 MiB.
 const DEFAULT_MAX_SIZE: usize = 25 * 1024 * 1024;
 
@@ -12,6 +16,10 @@ const DEFAULT_MAX_SIZE: usize = 25 * 1024 * 1024;
 /// ```toml
 /// [mail.inbound]
 /// max_size = 26214400          # bytes (25 MiB); larger messages get a 413
+/// max_parts = 1000             # parts in a message, multiparts included
+/// max_depth = 32               # multiparts nested in multiparts
+/// max_headers = 1000           # fields in the message's header
+/// max_addresses = 1000         # addresses in one address field, ids in References
 /// disk = "mail"                # keep every raw message as an .eml on this disk
 /// path = "inbound"             # under this folder: inbound/2026/10/27/<sha-256>.eml
 /// reply_token_ttl_days = 0     # reply tokens never expire
@@ -36,6 +44,19 @@ pub struct InboundOptions {
     /// The largest message accepted, in bytes (default 25 MiB). Payloads
     /// that carry the message encoded may be up to twice as large.
     pub max_size: usize,
+    /// The most parts a message may have, multiparts and the message
+    /// itself included (default 1,000). More is `InboundError::Unparseable`.
+    pub max_parts: usize,
+    /// The most multiparts a message may nest in one another (default
+    /// 32). Deeper is `InboundError::Unparseable`.
+    pub max_depth: usize,
+    /// The most fields a message's header may have (default 1,000). More
+    /// is `InboundError::Unparseable`.
+    pub max_headers: usize,
+    /// The most addresses one address field (`From`, `To`, `Cc`,
+    /// `Reply-To`) and the most ids `References` may list (default
+    /// 1,000). More is `InboundError::Unparseable`.
+    pub max_addresses: usize,
     /// A navree-storage disk that keeps every raw message as an `.eml`
     /// file (default: none). Needs `StorageModule`.
     pub disk: Option<String>,
@@ -60,6 +81,10 @@ impl Default for InboundOptions {
     fn default() -> Self {
         Self {
             max_size: DEFAULT_MAX_SIZE,
+            max_parts: DEFAULT_MAX_PARTS,
+            max_depth: DEFAULT_MAX_DEPTH,
+            max_headers: DEFAULT_MAX_HEADERS,
+            max_addresses: DEFAULT_MAX_ADDRESSES,
             disk: None,
             path: "inbound".to_owned(),
             reply_token_ttl_days: 0,
@@ -78,8 +103,16 @@ impl InboundOptions {
     ///
     /// A message naming the key that is wrong.
     pub fn validate(&self) -> Result<(), String> {
-        if self.max_size == 0 {
-            return Err("`inbound.max_size` must be greater than 0".to_owned());
+        for (key, value) in [
+            ("max_size", self.max_size),
+            ("max_parts", self.max_parts),
+            ("max_depth", self.max_depth),
+            ("max_headers", self.max_headers),
+            ("max_addresses", self.max_addresses),
+        ] {
+            if value == 0 {
+                return Err(format!("`inbound.{key}` must be greater than 0"));
+            }
         }
         if self
             .disk
@@ -114,6 +147,16 @@ impl InboundOptions {
             }
         }
         Ok(())
+    }
+
+    /// What the MIME reader takes on.
+    pub(crate) fn limits(&self) -> Limits {
+        Limits {
+            depth: self.max_depth,
+            parts: self.max_parts,
+            headers: self.max_headers,
+            addresses: self.max_addresses,
+        }
     }
 
     /// The route body limit: room for a message encoded in base64 inside

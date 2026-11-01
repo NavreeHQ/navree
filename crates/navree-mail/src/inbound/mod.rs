@@ -1,6 +1,6 @@
-//! Inbound mail (crate feature `inbound`): received messages parsed with
-//! mail-parser, the provider sources, mailboxes routed by address, signed
-//! reply tokens and the raw `.eml` stored on a disk.
+//! Inbound mail (crate feature `inbound`): received messages parsed by
+//! Navree's own MIME reader, the provider sources, mailboxes routed by
+//! address, signed reply tokens and the raw `.eml` stored on a disk.
 //!
 //! - [`InboundMail`]: a parsed message (headers, addresses, bodies,
 //!   attachments, forwarded messages), built from an [`Incoming`] that a
@@ -21,6 +21,7 @@ mod controller;
 mod error;
 mod mail;
 mod mailbox;
+mod mime;
 mod options;
 mod sources;
 mod tokens;
@@ -242,7 +243,8 @@ impl Inbound {
             });
         }
         let received_at = self.clock.now();
-        let mut mail = blocking(move || incoming.parse_at(received_at)).await?;
+        let limits = self.options.limits();
+        let mut mail = blocking(move || incoming.parse_at(received_at, limits)).await?;
         if mail.stored.is_none() {
             mail.stored = self.store(&mail).await?;
         }
@@ -413,7 +415,8 @@ impl Inbound {
             InboundError::Config("reading a stored message needs StorageModule".into())
         })?;
         let raw = storage.disk(&stored.disk)?.get(&stored.path).await?;
-        let mut mail = blocking(move || InboundMail::parse(raw)).await?;
+        let limits = self.options.limits();
+        let mut mail = blocking(move || InboundMail::parse_with(raw, limits)).await?;
         mail.stored = Some(stored.clone());
         Ok(mail)
     }

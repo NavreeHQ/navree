@@ -11,11 +11,11 @@ publish.workspace = true
 workspace = true
 
 [features]
-## Inbound mail: received messages parsed with mail-parser, the provider
-## sources (SES through SNS and S3, Mailgun routes, Postmark inbound, raw
-## MIME), mailboxes routed by address, signed reply tokens and the raw
-## `.eml` stored on a navree-storage disk.
-inbound = ["dep:mail-parser", "dep:navree-storage", "dep:regex"]
+## Inbound mail: received messages parsed by Navree's MIME reader, the
+## provider sources (SES through SNS and S3, Mailgun routes, Postmark
+## inbound, raw MIME), mailboxes routed by address, signed reply tokens and
+## the raw `.eml` stored on a navree-storage disk.
+inbound = ["dep:encoding_rs", "dep:html5ever", "dep:memchr", "dep:navree-storage", "dep:regex"]
 ## navree-db's PostgreSQL driver (the delivery tables on PostgreSQL and
 ## TimescaleDB; the `servers` tests with `NAVREE_TEST_POSTGRES_URL`).
 postgres = ["navree-db/postgres"]
@@ -27,14 +27,18 @@ base64 = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 css-inline = { workspace = true }
+# Feature `inbound`: the charsets of received mail.
+encoding_rs = { workspace = true, optional = true }
 hex = { workspace = true }
 hickory-resolver = { workspace = true }
 hmac = { workspace = true }
 html2text = { workspace = true }
+# Feature `inbound`: the text of received mail that has only HTML.
+html5ever = { workspace = true, optional = true }
 http = { workspace = true }
 lettre = { workspace = true }
-# Feature `inbound`: MIME parsing of received mail.
-mail-parser = { workspace = true, optional = true }
+# Feature `inbound`: line scanning in received mail.
+memchr = { workspace = true, optional = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-crypto = { workspace = true }
