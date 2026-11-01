@@ -166,6 +166,9 @@ impl Import for ContactsImport {
   valid UTF-8, then chardetng's guess (Windows-1256 for Arabic,
   Windows-1252, Shift_JIS, GBK, ...). The upload's `encoding` wins.
 - **Format:** workbooks by content (XLSX, XLSM, XLSB, XLS, ODS), else text;
+  dates and times are `Cell::Date`/`DateTime` in every workbook format (ODS
+  by its null date); an error cell is its text (`#Div0`, `#SPILL!`); ODS
+  `text:tab` is `\t`, `text:line-break` `\n`;
   the delimiter is sniffed from `,` `;` tab `|`; `.tsv`/`.tab` are tab.
 - **Headers:** the first non-empty row; blanks become `Column 3`, repeats
   get ` (2)`. Row numbers match the spreadsheet's.
@@ -261,9 +264,9 @@ assert_eq!(imports.find(import.id).await?.counts.created, 1);
 - Staging holds the whole file in memory: `sheets.imports.max_upload_bytes`
   bounds the file, not what a workbook unpacks to (a zip can unpack a
   thousand-fold; the XLSX and XLSB readers keep the shared strings and a
-  cell's text whole):
+  cell's text whole; an XLS file's workbook stream is copied and held):
   `sheets.imports.max_inflated_bytes` (1 GiB) refuses a workbook (XLSX, XLSB,
-  ODS, however detected, even behind another header) with a part that declares more than that unpacked, before reading it; shared strings are kept
+  ODS, however detected, even behind another header) with a part that declares more than that unpacked, before reading it, and an XLS file whose workbook stream is larger; shared strings are kept
   trimmed in one text (4 bytes per string besides it) and count against the
   same limit; a declared count of strings reserves nothing;
   the zip reader stops a part at its declared size, so a lie in either
@@ -271,18 +274,15 @@ assert_eq!(imports.find(import.id).await?.counts.created, 1);
   the table keeps, counted per cell (a shared string counts again for each
   cell it is in); a file past it fails the import. For CSV, TSV, XLSX, XLSB
   and ODS it is counted before the text is copied (ODS: every copy of a
-  repeated row or cell; spaces of `text:s` before they are made); XLS is
-  read into a range first that copies a shared string into every cell, so
-  it is counted after the copies are in memory. Rows are padded to the header's width, so
+  repeated row or cell; spaces of `text:s` before they are made) and XLS
+  (whose shared strings also count against it as they are decoded). Rows are padded to the header's width, so
   `sheets.imports.max_columns` (16,384) and `sheets.imports.max_cells`
   (10,000,000, rows times columns) bound the table too; a file past either
   fails the import with a message, and `max_rows` is checked while reading.
-  That holds for CSV, TSV, XLSX, XLSB and ODS (read a record or cell at a
-  time; a workbook's sheet takes memory for its cells, not its area, and an
-  ODS row or cell that repeats is read once); XLS is read into a range of
-  the sheet's whole used area first, so the limits apply to the table made
-  from it, after it is in memory. An XLSX or XLSB sheet whose cells are not
-  in row order (Excel never writes one) is held only up to the limits (`max_rows` + 1 rows,
+  That holds for every format (read a record or cell at a time; a
+  workbook's sheet takes memory for its cells, not its area, and an ODS row
+  or cell that repeats is read once). A sheet whose cells are not in row
+  order (Excel never writes one) is held only up to the limits (`max_rows` + 1 rows,
   `max_cells` cells, cells past `max_columns` as marks): over that it is
   refused, even if the table would have fitted. After a refusal the rest of
   a workbook's sheet is still read through, keeping nothing, until the job's
