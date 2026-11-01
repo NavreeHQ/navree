@@ -794,3 +794,137 @@ fn cells_far_apart_hold_memory_for_the_cells_not_the_area() {
     );
     assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
 }
+
+#[test]
+fn a_formula_result_longer_than_a_record_goes_on_in_continue_records() {
+    let long = "ab".repeat(5000);
+    let mut data = (long.len() as u16).to_le_bytes().to_vec();
+    data.push(0);
+    data.extend_from_slice(long.as_bytes());
+    let mut records = formula(0, 0, 0, formula_text());
+    records.extend(record(0x0207, &data[..3 + 8000]));
+    // The rest, after a flags byte of its own: two bytes a character.
+    let rest: Vec<u8> = std::iter::once(1)
+        .chain(long[8000..].encode_utf16().flat_map(u16::to_le_bytes))
+        .collect();
+    records.extend(record(CONTINUE, &rest));
+    let xls = open(&Book::new(codepage(1200), vec![Sheet::new("S", records)]).file());
+    assert_eq!(cells_of(&xls, 0), [(0, 0, text(&long))]);
+}
+
+#[test]
+fn a_biff5_format_code_is_a_string_with_an_8_bit_length() {
+    for (code, date) in [
+        ("\\d0", false),
+        ("\"d\"0", false),
+        ("d", true),
+        ("yyyy-mm-dd", true),
+        ("0.00", false),
+    ] {
+        let mut globals = codepage(1252);
+        globals.extend(format(164, code, true));
+        globals.extend(xf(164));
+        let book = Book {
+            biff5: true,
+            ..Book::new(globals, vec![Sheet::new("S", number(0, 0, 0, 45000.0))])
+        };
+        let xls = open(&book.file());
+        let expected = if date {
+            XlsValue::DateTime(45000.0)
+        } else {
+            XlsValue::Number(45000.0)
+        };
+        assert_eq!(cells_of(&xls, 0), [(0, 0, expected)], "{code:?}");
+    }
+}
+
+#[test]
+fn biff8_strings_are_unicode_whatever_the_code_page() {
+    let mut records = label(0, 0, 0, "Café", false);
+    records.extend(label(0, 1, 0, "日本", false));
+    let xls = open(&Book::new(codepage(1252), vec![Sheet::new("S", records)]).file());
+    assert_eq!(
+        cells_of(&xls, 0),
+        [(0, 0, text("Café")), (0, 1, text("日本"))]
+    );
+}
+
+#[test]
+fn biff5_strings_are_read_in_the_workbook_code_page() {
+    let (bytes, _, _) = encoding_rs::SHIFT_JIS.encode("日本語");
+    let mut data = vec![0, 0, 0, 0, 0, 0];
+    data.extend_from_slice(&(bytes.len() as u16).to_le_bytes());
+    data.extend_from_slice(&bytes);
+    let mut cases = vec![(932, record(0x0204, &data), "日本語")];
+    // The code pages old versions of Excel write for US-ASCII, Mac Roman
+    // and Windows-1252.
+    for page in [367, 32768, 32769] {
+        cases.push((page, label(0, 0, 0, "plain", true), "plain"));
+    }
+    for (page, records, expected) in cases {
+        let book = Book {
+            biff5: true,
+            ..Book::new(codepage(page), vec![Sheet::new("S", records)])
+        };
+        let xls = open(&book.file());
+        assert_eq!(cells_of(&xls, 0), [(0, 0, text(expected))], "{page}");
+    }
+}
+
+#[test]
+fn a_workbook_obfuscated_with_xor_is_refused_as_encrypted() {
+    let mut globals = record(0x002F, &[0, 0, 0x12, 0x34, 0x56, 0x78]);
+    globals.extend(codepage(1200));
+    let bytes = Book::new(globals, vec![Sheet::new("S", label(0, 0, 0, "x", false))]).file();
+    assert!(matches!(refused(&bytes), XlsError::Encrypted));
+}
+
+#[test]
+fn sheets_with_the_same_name_keep_their_own_cells() {
+    let sheets = vec![
+        Sheet::new("Same", label(0, 0, 0, "first", false)),
+        Sheet::new("Same", label(0, 0, 0, "second", false)),
+    ];
+    let xls = open(&Book::new(codepage(1200), sheets).file());
+    assert_eq!(xls.sheet_names(), ["Same", "Same"]);
+    assert_eq!(cells_of(&xls, 0), [(0, 0, text("first"))]);
+    assert_eq!(cells_of(&xls, 1), [(0, 0, text("second"))]);
+}
+
+#[test]
+fn a_formula_is_read_by_its_cached_result_whatever_its_tokens() {
+    // A formula whose token count runs past its record: the formula is not
+    // read, its result is.
+    let mut data = vec![0, 0, 0, 0, 0, 0];
+    data.extend_from_slice(&1.5f64.to_le_bytes());
+    data.extend_from_slice(&[0; 6]);
+    data.extend_from_slice(&200u16.to_le_bytes());
+    data.extend_from_slice(&[0x1E, 1, 0]);
+    let xls = open(&one_sheet(&[], record(0x0006, &data)));
+    assert_eq!(cells_of(&xls, 0), [(0, 0, XlsValue::Number(1.5))]);
+}
+
+#[test]
+fn a_damaged_defined_name_is_refused() {
+    // NAME: options, a key, a name of 4 characters, a formula of 7 bytes,
+    // and so on: here it stops after 10 bytes.
+    let mut globals = codepage(1200);
+    globals.extend(record(0x0018, &[0, 0, 0, 4, 7, 0, 0, 0, 0, 0]));
+    let bytes = Book::new(globals, vec![Sheet::new("S", Vec::new())]).file();
+    damaged(&bytes, "NAME");
+    // A whole name whose formula is a reference to another sheet's cell,
+    // cut short.
+    let mut data = vec![0, 0, 0, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, b'x'];
+    data.extend_from_slice(&[0x3A, 0, 0]);
+    let mut globals = codepage(1200);
+    globals.extend(record(0x0018, &data));
+    let bytes = Book::new(globals, vec![Sheet::new("S", Vec::new())]).file();
+    damaged(&bytes, "NAME");
+    // And whole.
+    let mut data = vec![0, 0, 0, 1, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, b'x'];
+    data.extend_from_slice(&[0x3A, 0, 0, 1, 0, 2, 0]);
+    let mut globals = codepage(1200);
+    globals.extend(record(0x0018, &data));
+    let bytes = Book::new(globals, vec![Sheet::new("S", label(0, 0, 0, "ok", false))]).file();
+    assert_eq!(cells_of(&open(&bytes), 0), [(0, 0, text("ok"))]);
+}
