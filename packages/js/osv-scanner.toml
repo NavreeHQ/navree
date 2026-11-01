@@ -1,16 +1,11 @@
 # Findings the scanner reports for versions that already carry the fix (a
-# patched release, or a pnpm patch applied here).
+# patched release).
 # Reviewed 2026-10-28; each entry expires so it gets looked at again.
 
 [[IgnoredVulns]]
 id = "GHSA-vjh5-4x84-xrqp"
 ignoreUntil = 2027-01-31
 reason = "nuxt and @nuxt/nitro-server 4.6.3 (@navree/nuxt's development and test install) are patched (the advisory: fixed in nuxt@4.6.2). Its OSV record also lists Nuxt 3, which gets no fix, as a range with only an 'introduced: 3.0.0' event (the '< 4.0.0' bound is only in database_specific), so the scanner matches every version from 3.0.0 on, the fixed ones included. Drop this entry once the record closes that range."
-
-[[IgnoredVulns]]
-id = "GHSA-gcqx-w48m-w2h4"
-ignoreUntil = 2027-01-31
-reason = "deepmerge 4.3.1 is the latest release and the advisory lists no fix, so it is patched here: patches/deepmerge@4.3.1.patch (pnpm-workspace.yaml, patchedDependencies) makes mergeObject skip the __proto__, constructor and prototype keys, and nuxt/src/deepmerge-patch.test.ts fails if the patch is not applied. The scanner reads the version, not the lockfile's patch_hash. It is build-time tooling only, in @navree/nuxt's development and test install: @rollup/plugin-node-resolve 16.0.3 (the latest, under nitropack) is its one dependent and calls it once, as deepMerge({}, defaults) on its own constant defaults, while bundling the server; no request or user data reaches it. Drop this entry once deepmerge ships a fix."
 
 [[IgnoredVulns]]
 id = "GHSA-g3hv-75wg-m249"

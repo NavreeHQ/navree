@@ -22,11 +22,6 @@ overrides:
   glob@<14: ^14.0.2
   minimatch@>=9 <11: ^11.0.1
   readdir-glob>minimatch: ^11.0.1
-
-patchedDependencies:
-  # Nitro's bundler (@rollup/plugin-node-resolve 16.0.3) uses deepmerge 4.3.1, the
-  # latest release, whose mergeObject lets a `__proto__` key set the merged object's
-  # prototype (GHSA-gcqx-w48m-w2h4, no fixed release). The patch skips the
-  # `__proto__`, `constructor` and `prototype` keys; tests/unit/deepmerge-patch.test.ts
-  # checks it is applied. Drop it once deepmerge ships a fix.
-  deepmerge@4.3.1: patches/deepmerge@4.3.1.patch
+  # Nitro's bundler (@rollup/plugin-node-resolve) asks for deepmerge ^4.2.2. Navree's own
+  # copy keeps its API and never copies a key that reaches a prototype.
+  deepmerge: link:../../packages/js/deepmerge

@@ -1,17 +1,17 @@
 // @vitest-environment node
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 
 /**
- * deepmerge 4.3.1 is the latest release and has no fix for GHSA-gcqx-w48m-w2h4 (prototype poisoning in
- * mergeObject). Nitro's bundler loads it (nuxt -> @nuxt/nitro-server -> nitropack ->
- * @rollup/plugin-node-resolve -> deepmerge), so `patches/deepmerge@4.3.1.patch` (pnpm-workspace.yaml,
- * patchedDependencies) makes it skip the `__proto__`, `constructor` and `prototype` keys. These tests load
- * that installed copy and fail if the patch is no longer applied.
+ * Nitro's bundler loads `deepmerge` (nuxt -> @nuxt/nitro-server -> nitropack -> @rollup/plugin-node-resolve ->
+ * deepmerge). The overrides in pnpm-workspace.yaml point that name at @navree/deepmerge (packages/js/deepmerge),
+ * which skips the `__proto__`, `constructor` and `prototype` keys. These tests load the installed copy the way
+ * Node does at run time and fail if it is not Navree's, or if it copies one of those keys.
  */
 type Merge = (target: unknown, source: unknown) => Record<string, unknown>;
 
-function loadDeepmerge(): Merge {
+function resolveDeepmerge(): { merge: Merge; packageJson: string } {
   let require = createRequire(import.meta.url);
   for (const pkg of ["nuxt", "@nuxt/nitro-server", "nitropack", "@rollup/plugin-node-resolve"]) {
     // Each step resolves from the package before it, as Node does at run time. Some packages export
@@ -28,13 +28,18 @@ function loadDeepmerge(): Merge {
     if (!entry) throw new Error(`cannot resolve ${pkg}`);
     require = createRequire(entry);
   }
-  return require("deepmerge") as Merge;
+  return { merge: require("deepmerge") as Merge, packageJson: require.resolve("deepmerge/package.json") };
 }
 
-const merge = loadDeepmerge();
+const { merge, packageJson: deepmergePackageJson } = resolveDeepmerge();
 const attack = '{"__proto__": {"isAdmin": true}}';
 
-describe("deepmerge (patched for GHSA-gcqx-w48m-w2h4)", () => {
+describe("deepmerge under Nitro's bundler", () => {
+  it("is @navree/deepmerge", () => {
+    const manifest = JSON.parse(readFileSync(deepmergePackageJson, "utf8")) as { name: string };
+    expect(manifest.name).toBe("@navree/deepmerge");
+  });
+
   it("does not take a prototype from the source when the target has a null prototype", () => {
     const merged = merge(Object.create(null), JSON.parse(attack));
     expect(Object.getPrototypeOf(merged)).toBe(Object.prototype);
