@@ -676,25 +676,44 @@ fn a_byte_charged_takes_about_the_same_on_every_shape_of_file() {
     assert!(over.is_empty(), "over {MOST} units: {over:?}");
 }
 
-/// The worst shape found, filling the default limits. It takes tens of
-/// seconds: run it in a release build, with `--ignored --nocapture`, for the
-/// figure the documentation gives.
+/// The slowest shape found, pages that each show a line of a million glyphs,
+/// filling the default 1 GiB of work (with no limit on the document's text,
+/// which would stop it a little short). It takes tens of seconds: run it in a
+/// release build, with `--ignored --nocapture`, for the figure the
+/// documentation gives.
 #[test]
-#[ignore = "the figures of the documentation, in a release build"]
-fn the_whole_budget_of_the_worst_shape() {
-    let worst = std::env::var("NAVREE_PDF_WORST").unwrap_or_default();
-    for (name, file) in page_shapes() {
-        if !worst.is_empty() && !name.contains(&worst) {
-            continue;
-        }
-        let document = Document::load(file, ReadLimits::default()).unwrap();
-        let (elapsed, charged) = walk(&document);
-        let rate = best(2, || walk(&document).0).min(elapsed).as_nanos() as f64 / charged as f64;
-        println!(
-            "{name}: {rate:.1} ns a byte, so 1 GiB takes {:.1} s",
-            rate * 1024.0 * 1024.0 * 1024.0 / 1e9
+#[ignore = "the figure of the documentation, in a release build"]
+fn the_whole_budget_of_the_slowest_shape() {
+    let content = prefixed(b"BT /F 1 Tf (", b"A", 999_990, b") Tj ET");
+    let kids: String = (0..80).map(|page| format!("{} 0 R ", 100 + page)).collect();
+    let mut pdf = Pdf::default();
+    pdf.add(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    pdf.add(
+        2,
+        format!(
+            "<< /Type /Pages /Kids [{kids}] /Count 80 /Resources << /Font << /F 5 0 R >> >> >>"
+        ),
+    );
+    pdf.add(4, stream("/Filter /FlateDecode", &deflate(&content)));
+    pdf.add(5, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+    for page in 0..80 {
+        pdf.add(
+            100 + page,
+            "<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>",
         );
     }
+    let document = Document::load(pdf.table(), ReadLimits::default()).unwrap();
+    let limits = TextLimits {
+        document_text: usize::MAX,
+        ..TextLimits::default()
+    };
+    let start = Instant::now();
+    let (_, charged) = text::page_texts_counted(&document, limits).unwrap();
+    println!(
+        "{charged} bytes of work in {:.1} s",
+        start.elapsed().as_secs_f64()
+    );
+    assert!(charged > 1000 * MIB, "{charged}");
 }
 
 // What each thing costs, whatever the clock says.
