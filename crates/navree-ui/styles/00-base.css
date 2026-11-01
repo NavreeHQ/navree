@@ -6,6 +6,7 @@
  * See THIRD_PARTY.md.
  */
 @font-face{font-family:Geist;src:url(geist.woff2) format("woff2");font-weight:100 900;font-display:optional}
+@font-face{font-family:"Monaspace Neon";src:url(monaspace-neon.woff2) format("woff2");font-weight:200 800;font-display:optional}
 *,*::before,*::after{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%;scrollbar-color:var(--line-3) transparent}
 html[data-ui-loading]::before{content:"";position:fixed;inset:0 0 auto;height:2px;background:var(--accent);z-index:100;animation:ui-load 1s ease-out .1s both}

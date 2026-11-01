@@ -1,3 +1,9 @@
+/*
+ * navree-ui's stylesheet: Dialogs, drawers and sheets, popovers, tooltips, hover cards, accordions, collapsibles, scroll areas and toasts. Provenance: structure, slot names and
+ * variant names derive from shadcn/ui's style layer (MIT, Copyright (c) 2023 shadcn),
+ * compact "Nova" style; the values, the 4px and 6px corners and the app rules are
+ * Navree's own. See THIRD_PARTY.md.
+ */
 /* Dialogs: the browser's <dialog>. Closed ones stay display:none by default. */
 [data-slot=dialog],[data-slot=alert-dialog],[data-slot=sheet],[data-slot=drawer]{padding:0;border:1px solid var(--line-2);background:var(--ink-1);color:var(--fg-1);overflow:auto;
   &::backdrop{background:rgb(1 3 2/.72)}

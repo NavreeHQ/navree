@@ -17,6 +17,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
+  /* tokens:begin (generated from navree-ui's token table: cargo test -p navree-ui --lib tokens::tests::write_generated_files -- --ignored) */
   --color-ink-0: #040605;
   --color-ink-1: #0a0e0c;
   --color-ink-2: #111714;
@@ -32,6 +33,7 @@
   --color-amber: #ffbf5e;
   --color-danger: #ff6b6b;
   --color-bar: #5b6862;
+  /* tokens:end */
 
   /* Display type: page titles and big figures (Mona Sans, semi-expanded). Fluid between 390 px and 1440 px. */
   --text-display-2xl: clamp(2.75rem, 1.9rem + 3.6vw, 5rem);

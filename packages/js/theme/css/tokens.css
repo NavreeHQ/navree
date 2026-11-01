@@ -5,6 +5,7 @@
  */
 :root {
   color-scheme: dark;
+  /* tokens:begin (generated from navree-ui's token table: cargo test -p navree-ui --lib tokens::tests::write_generated_files -- --ignored) */
   --color-ink-0: #040605;
   --color-ink-1: #0a0e0c;
   --color-ink-2: #111714;
@@ -20,11 +21,12 @@
   --color-amber: #ffbf5e;
   --color-danger: #ff6b6b;
   --color-bar: #5b6862;
+  --radius-control: 4px;
+  --radius-surface: 6px;
+  /* tokens:end */
   --font-sans:
     var(--font-geist), ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   --font-display: var(--font-mona), var(--font-geist), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-monaspace), ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
-  --radius-control: 4px;
-  --radius-surface: 6px;
 }

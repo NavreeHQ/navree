@@ -1,3 +1,9 @@
+/*
+ * navree-ui's stylesheet: Text, cards, alerts, badges, avatars, tables, pagination, breadcrumbs, progress, skeletons, empty states and the other static display parts. Provenance: structure, slot names and
+ * variant names derive from shadcn/ui's style layer (MIT, Copyright (c) 2023 shadcn),
+ * compact "Nova" style; the values, the 4px and 6px corners and the app rules are
+ * Navree's own. See THIRD_PARTY.md.
+ */
 /* Text */
 [data-slot=heading]{color:var(--fg);font-weight:600;line-height:1.25;letter-spacing:-.01em}
 h1[data-slot=heading]{font-size:1.5rem}h2[data-slot=heading]{font-size:1.25rem}h3[data-slot=heading]{font-size:1rem}h4[data-slot=heading]{font-size:.875rem}

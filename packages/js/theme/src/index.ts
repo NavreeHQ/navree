@@ -7,6 +7,7 @@
 
 /** The color tokens (Tailwind names without `--color-`). */
 export const colors = {
+  // tokens:begin (generated from navree-ui's token table: cargo test -p navree-ui --lib tokens::tests::write_generated_files -- --ignored)
   "ink-0": "#040605",
   "ink-1": "#0a0e0c",
   "ink-2": "#111714",
@@ -22,6 +23,7 @@ export const colors = {
   amber: "#ffbf5e",
   danger: "#ff6b6b",
   bar: "#5b6862",
+  // tokens:end
 } as const;
 
 export type ColorToken = keyof typeof colors;

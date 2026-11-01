@@ -1,6 +1,14 @@
 //! The design tokens' one source. [`css`] writes `styles/tokens.css`, a test
 //! fails when the committed file differs, and the runtime's build step bundles
-//! it into the stylesheet.
+//! it into the stylesheet. The `@navree/theme` package's colours and radii are
+//! generated from the same table ([`SITE`], [`theme_css`], [`theme_ts`]), and a
+//! test holds them equal to the website's own stylesheet.
+//!
+//! After changing a token, write every generated file:
+//!
+//! ```sh
+//! cargo test -p navree-ui --lib tokens::tests::write_generated_files -- --ignored
+//! ```
 //!
 //! The dark theme ships. Each token holds its light value too, so the light
 //! theme is a matter of writing it out.
@@ -51,8 +59,8 @@ pub const TOKENS: &[Token] = &[
     ),
     t(
         "font-mono",
-        "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace",
-        "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace",
+        "\"Monaspace Neon\",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace",
+        "\"Monaspace Neon\",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace",
     ),
 ];
 
@@ -73,6 +81,11 @@ pub const TEXT_PAIRS: &[(&str, &str)] = &[
     ("accent", "ink-1"),
 ];
 
+/// The tokens `@navree/theme` and the website share, in order: the colours.
+pub const SITE: &[&str] = &[
+    "ink-0", "ink-1", "ink-2", "ink-3", "line", "line-2", "fg", "fg-1", "fg-2", "fg-3", "accent", "accent-ink", "amber", "danger", "bar",
+];
+
 /// The value of token `name` in the dark theme.
 pub fn dark(name: &str) -> Option<&'static str> {
     TOKENS.iter().find(|token| token.name == name).map(|token| token.dark)
@@ -89,6 +102,55 @@ pub fn css() -> String {
     }
     out.push_str("}\n");
     out
+}
+
+/// The marker lines that fence generated text inside a hand-written file.
+pub const BEGIN: &str = "tokens:begin";
+/// See [`BEGIN`].
+pub const END: &str = "tokens:end";
+
+/// The `--color-*` declarations of [`SITE`] for a stylesheet, and the radii when
+/// `radii` is set.
+pub fn theme_css(radii: bool) -> String {
+    let mut out = String::new();
+    for name in SITE {
+        out.push_str(&format!("  --color-{name}: {};
+", dark(name).unwrap_or_default()));
+    }
+    if radii {
+        out.push_str(&format!("  --radius-control: {};
+", dark("radius").unwrap_or_default()));
+        out.push_str(&format!("  --radius-surface: {};
+", dark("radius-lg").unwrap_or_default()));
+    }
+    out
+}
+
+/// The entries of the `colors` object in `@navree/theme`'s `index.ts`.
+pub fn theme_ts() -> String {
+    let mut out = String::new();
+    for name in SITE {
+        let key = if name.contains('-') { format!("\"{name}\"") } else { (*name).to_owned() };
+        out.push_str(&format!("  {key}: \"{}\",
+", dark(name).unwrap_or_default()));
+    }
+    out
+}
+
+/// `text` with the lines between its two marker lines replaced by `block`. The
+/// marker lines stay. `None` when a marker is missing or they are out of order.
+pub fn splice(text: &str, block: &str) -> Option<String> {
+    let lines: Vec<&str> = text.split_inclusive('\n').collect();
+    let begin = lines.iter().position(|line| line.contains(BEGIN))?;
+    let end = lines.iter().position(|line| line.contains(END))?;
+    if end <= begin {
+        return None;
+    }
+    let mut out = String::with_capacity(text.len() + block.len());
+    lines[..=begin].iter().for_each(|line| out.push_str(line));
+    out.push_str(block);
+    lines[end..].iter().for_each(|line| out.push_str(line));
+    Some(out)
 }
 
 /// The WCAG contrast ratio of two `#rrggbb` colours; `None` for anything else.
@@ -132,9 +194,49 @@ mod tests {
         assert_eq!(contrast("red", "#ffffff"), None);
     }
 
+    const WRITE: &str = "rerun: cargo test -p navree-ui --lib tokens::tests::write_generated_files -- --ignored";
+
+    /// The generated files and what each is made from: the stylesheet's tokens, and
+    /// the blocks of the `@navree/theme` package.
+    fn generated() -> Vec<(std::path::PathBuf, String)> {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let theme = root.join("../../packages/js/theme");
+        let read = |path: &std::path::Path| std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display())).replace("\r\n", "\n");
+        let spliced = |file: &str, block: String| {
+            let path = theme.join(file);
+            let text = splice(&read(&path), &block).unwrap_or_else(|| panic!("{file} has no `{BEGIN}`/`{END}` lines"));
+            (path, text)
+        };
+        vec![
+            (root.join("styles/tokens.css"), css()),
+            spliced("css/theme.css", theme_css(false)),
+            spliced("css/tokens.css", theme_css(true)),
+            spliced("src/index.ts", theme_ts()),
+        ]
+    }
+
     #[test]
-    fn the_committed_stylesheet_tokens_are_current() {
-        let committed = include_str!("../styles/tokens.css").replace("\r\n", "\n");
-        assert_eq!(committed, css(), "rerun: cargo test -p navree-ui --test tokens -- --ignored write");
+    fn the_committed_files_made_from_the_tokens_are_current() {
+        for (path, text) in generated() {
+            let committed = std::fs::read_to_string(&path).unwrap_or_default().replace("\r\n", "\n");
+            assert_eq!(committed, text, "{} is stale. {WRITE}", path.display());
+        }
+    }
+
+    /// Not a check: writes the files the test above compares.
+    #[test]
+    #[ignore = "writes files"]
+    fn write_generated_files() {
+        for (path, text) in generated() {
+            std::fs::write(&path, text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        }
+    }
+
+    #[test]
+    fn splice_keeps_the_marker_lines_and_the_rest() {
+        let text = "a\n  /* tokens:begin x */\n  old\n  /* tokens:end */\nb\n";
+        assert_eq!(splice(text, "  new\n").unwrap(), "a\n  /* tokens:begin x */\n  new\n  /* tokens:end */\nb\n");
+        assert_eq!(splice("no markers", "x"), None);
+        assert_eq!(splice("tokens:end\ntokens:begin\n", "x"), None);
     }
 }

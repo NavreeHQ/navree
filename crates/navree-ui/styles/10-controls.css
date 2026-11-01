@@ -1,3 +1,9 @@
+/*
+ * navree-ui's stylesheet: Buttons, button groups, inputs, input groups, fields, selects, checkboxes, radios, switches, toggles and the other controls. Provenance: structure, slot names and
+ * variant names derive from shadcn/ui's style layer (MIT, Copyright (c) 2023 shadcn),
+ * compact "Nova" style; the values, the 4px and 6px corners and the app rules are
+ * Navree's own. See THIRD_PARTY.md.
+ */
 /* Buttons */
 [data-slot=button]{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;height:2rem;padding:0 .75rem;border:1px solid transparent;border-radius:var(--radius);background:var(--ink-3);color:var(--fg);font-size:14px;font-weight:500;line-height:1;white-space:nowrap;text-decoration:none;cursor:pointer;user-select:none;transition:background-color .1s,border-color .1s,color .1s;
   &:hover{background:var(--line-2)}

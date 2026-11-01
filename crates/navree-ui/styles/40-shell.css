@@ -1,3 +1,9 @@
+/*
+ * navree-ui's stylesheet: The application shell: sidebar, top bar, page frame and the layout primitives. Provenance: structure, slot names and
+ * variant names derive from shadcn/ui's style layer (MIT, Copyright (c) 2023 shadcn),
+ * compact "Nova" style; the values, the 4px and 6px corners and the app rules are
+ * Navree's own. See THIRD_PARTY.md.
+ */
 /* The app shell: sidebar 16rem wide, 3rem collapsed to icons, top bar 48px. */
 [data-slot=sidebar-wrapper]{display:flex;min-height:100dvh}
 [data-slot=sidebar]{position:sticky;top:0;display:flex;flex:none;flex-direction:column;width:var(--sidebar-w);height:100dvh;border-inline-end:1px solid var(--line);background:var(--ink-1);overflow:hidden;transition:width .1s}

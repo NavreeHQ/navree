@@ -3,10 +3,10 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "c8ea5c4780dc";
+pub const BUILD: &str = "842d1fe68d75";
 
 /// The URL of `core.js`.
-pub const CORE_URL: &str = "/_navree/ui/core-4261d5d66eea.js";
+pub const CORE_URL: &str = "/_navree/ui/core-af75ab3f3da9.js";
 
 /// The URL of `sidebar.js`.
 pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-59f5dd043f15.js";
@@ -14,17 +14,17 @@ pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-59f5dd043f15.js";
 /// The URL of `overlay.js`.
 pub const OVERLAY_URL: &str = "/_navree/ui/overlay-b47fdfefb282.js";
 
-/// The URL of `table.js`.
-pub const TABLE_URL: &str = "/_navree/ui/table-b3ed4747b563.js";
-
 /// The URL of `navree-ui.css`.
-pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-14d2a9968155.css";
+pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-96b34b8d90b9.css";
 
 /// The URL of `speculation.json`.
 pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8fb550221f7f.json";
 
 /// The URL of `geist.woff2`.
 pub const GEIST_URL: &str = "/_navree/ui/geist-685b571ab077.woff2";
+
+/// The URL of `monaspace-neon.woff2`.
+pub const MONASPACE_NEON_URL: &str = "/_navree/ui/monaspace-neon-5014868995ec.woff2";
 
 /// The URL of `favicon.svg`.
 pub const FAVICON_URL: &str = "/_navree/ui/favicon-63eac8f67097.svg";
@@ -37,7 +37,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "core",
         ext: "js",
-        hash: "4261d5d66eea",
+        hash: "af75ab3f3da9",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/core.js"),
         gzip: Some(include_bytes!("../dist/core.js.gz")),
@@ -62,18 +62,9 @@ pub static FILES: &[Asset] = &[
         brotli: Some(include_bytes!("../dist/overlay.js.br")),
     },
     Asset {
-        name: "table",
-        ext: "js",
-        hash: "b3ed4747b563",
-        content_type: "text/javascript; charset=utf-8",
-        bytes: include_bytes!("../dist/table.js"),
-        gzip: Some(include_bytes!("../dist/table.js.gz")),
-        brotli: Some(include_bytes!("../dist/table.js.br")),
-    },
-    Asset {
         name: "navree-ui",
         ext: "css",
-        hash: "14d2a9968155",
+        hash: "96b34b8d90b9",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/navree-ui.css"),
         gzip: Some(include_bytes!("../dist/navree-ui.css.gz")),
@@ -94,6 +85,15 @@ pub static FILES: &[Asset] = &[
         hash: "685b571ab077",
         content_type: "font/woff2",
         bytes: include_bytes!("../assets/fonts/geist.woff2"),
+        gzip: None,
+        brotli: None,
+    },
+    Asset {
+        name: "monaspace-neon",
+        ext: "woff2",
+        hash: "5014868995ec",
+        content_type: "font/woff2",
+        bytes: include_bytes!("../assets/fonts/monaspace-neon.woff2"),
         gzip: None,
         brotli: None,
     },
