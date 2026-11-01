@@ -13,6 +13,7 @@ MongoDB.
 |---|---|---|---|---|---|
 | `navree::kernel` | navree-kernel | always | (the kernel) | | `Navree::app()`, `AppBuilder`, `Module`, `ModuleBuilder`, the DI container, `CommandSpec` |
 | `navree::bounded` | navree-bounded | always | | | the bounded in-process `Cache`: strict capacity, SIEVE eviction, TTL and TTI, single-flight loading |
+| `navree::glob` | navree-glob | always | | | `Glob::new("/webhooks/*").matches(path)`: `*` any run of characters, `?` one, everything else literal and case-sensitive |
 | `navree::contracts` | navree-contracts | always | | | `Principal`, `Job`, `JobContext`, `Clock`, `SystemClock`, `FixedClock`, `Broadcaster`, `Dispatcher`, `Secret<T>`, `RequestId`, `CredentialRevoker` |
 | `navree::config` | navree-config | always | `ConfigModule::for_root(sources)` | | `ConfigSources`, `Config`, `ConfigSection` (`.env`, TOML and JSON files, `APP_*` variables) |
 | `navree::telemetry` | navree-telemetry | `telemetry` (turned on by the modules that emit events) | | | typed telemetry events, sinks, W3C trace context |

@@ -1605,6 +1605,7 @@ dependencies = [
  "navree-crypto",
  "navree-db",
  "navree-events",
+ "navree-glob",
  "navree-http",
  "navree-http-client",
  "navree-kernel",

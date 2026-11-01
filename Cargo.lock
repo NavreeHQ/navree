@@ -4228,6 +4228,7 @@ dependencies = [
  "navree-events",
  "navree-flags",
  "navree-fleet",
+ "navree-glob",
  "navree-graphql",
  "navree-grpc",
  "navree-harbor",

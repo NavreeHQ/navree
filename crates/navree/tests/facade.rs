@@ -24,6 +24,7 @@ fn every_module_crate_is_reexported_whole() {
         navree::bounded::Cache<String, u32>,
         navree_bounded::Cache<String, u32>,
     >());
+    assert!(same::<navree::glob::Glob, navree_glob::Glob>());
     assert!(same::<
         navree::contracts::RequestId,
         navree::contracts::RequestId,
@@ -596,9 +597,10 @@ const OPT_IN: &[&str] = &[
 ];
 
 /// Always compiled into the facade (not behind a feature).
-const ALWAYS: [&str; 5] = [
+const ALWAYS: [&str; 6] = [
     "navree-kernel",
     "navree-bounded",
+    "navree-glob",
     "navree-contracts",
     "navree-config",
     "navree-macros",
