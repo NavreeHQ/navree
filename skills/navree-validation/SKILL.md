@@ -173,10 +173,12 @@ pub struct CreateContact {
   sanitized HTML. It fails on a string only over a limit, a 400 on the field:
   `validation.html.max_input_bytes` (512 KiB, checked first), `max_nodes`
   (131,072: elements, text runs, attributes, every 32 bytes of attributes),
-  `max_depth` (128, at most 256; browsers read past 512 flat), and 256
-  attributes on a tag. At the limit a parse takes at most about 220 ms; a
-  field of 16 KiB or more gives up its worker (`block_in_place`) on a
-  multi-threaded runtime. `SafeHtml::new`, `with_policy` and
+  `max_depth` (128, at most 256, elements only; browsers read past 512
+  flat), and 256 attributes on a tag; a limit of 0 fails the boot. At the
+  limit a parse takes at most about 0.2 s. The extractors read a body of
+  16 KiB or more on the blocking pool, whatever fields it holds; the
+  functions that sanitize work on the calling thread, so in async code call
+  them from `spawn_blocking` when the text is long. `SafeHtml::new`, `with_policy` and
   `HtmlPolicy::clean` can't fail (over a limit: the input, escaped);
   `try_with_policy` and `try_clean` return `HtmlError`. The policy is
   `[validation.html]` (`tags`, `generic_attributes`, `tag_attributes`,
@@ -184,7 +186,8 @@ pub struct CreateContact {
   `http-equiv` fails the boot. A URL with a host and no scheme (`//x`) stays
   only when `http` and `https` are both allowed.
   The output is parsed again and returned only when a browser would build
-  the tree that was checked; SVG animation elements are always removed.
+  the tree that was checked, else only the text is kept; SVG animation
+  elements are always removed.
 - To check a `String` and keep it as sent: `custom(rules::phone)`,
   `custom(rules::country)`, `custom(rules::locale)`.
 - `Phone` needs the facade feature `validation-phone`, `SafeHtml`
