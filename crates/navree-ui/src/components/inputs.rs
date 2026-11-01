@@ -104,9 +104,11 @@ impl Input {
         Self::new(InputKind::Date, name)
     }
 
-    /// Sets the value.
+    /// Sets the value. A password input takes none: a page never holds a password.
     pub fn value(mut self, value: impl Into<String>) -> Self {
-        self.el = self.el.attr("value", value.into());
+        if self.el.get("type") != Some(&AttrValue::Static("password")) {
+            self.el = self.el.attr("value", value.into());
+        }
         self
     }
 

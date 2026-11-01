@@ -258,3 +258,24 @@ async fn a_submit_never_comes_by_get_and_is_a_form() {
     let charset = app.client().post("/store").header("content-type", "application/x-www-form-urlencoded; charset=UTF-8").body("password=longenough&email=a").send().await;
     assert_eq!(charset.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn a_rejected_form_never_echoes_a_password() {
+    let app = app().await;
+    let response = app.client().post("/store").header("content-type", FORM).body("password=hunter2&email=").send().await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(!response.text().contains("hunter2"), "{}", response.text());
+    assert!(response.text().contains(r#"name="password""#), "the field is still drawn");
+    let debug = app.client().post("/inspect").header("content-type", FORM).body("password=hunter2&email=mail-value").send().await.text();
+    assert!(!debug.contains("hunter2"), "{debug}");
+    assert!(!debug.contains("mail-value"), "values stay out of logs: {debug}");
+}
+
+#[test]
+fn a_password_field_never_writes_a_value() {
+    let html = render(&FormView::<Login>::new().post("/x").with_values(pairs(&[("password", "hunter2"), ("email", "kept@b")])).into());
+    assert!(!html.contains("hunter2"), "{html}");
+    assert!(html.contains("kept@b"), "{html}");
+    let html = render(&navree_ui::Input::password("p").value("hunter2").into());
+    assert!(!html.contains("hunter2"), "{html}");
+}

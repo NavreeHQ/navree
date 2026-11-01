@@ -820,7 +820,6 @@ pub struct Submit<T>(pub T);
 /// page. Take `Result<Submit<T>, Rejected<T>>` and call
 /// [`respond`](Self::respond) to draw it in your own page, with its choices
 /// from the database.
-#[derive(Debug)]
 pub struct Rejected<T> {
     values: Vec<(String, String)>,
     errors: FieldErrors,
@@ -828,6 +827,14 @@ pub struct Rejected<T> {
     action: String,
     refused: Option<StatusCode>,
     marker: PhantomData<fn() -> T>,
+}
+
+/// Names only: what a form holds (a password, a token) stays out of logs.
+impl<T> std::fmt::Debug for Rejected<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let names: Vec<&str> = self.values.iter().map(|(name, _)| name.as_str()).collect();
+        f.debug_struct("Rejected").field("fields", &names).field("errors", &self.errors).field("from_runtime", &self.from_runtime).field("refused", &self.refused).finish()
+    }
 }
 
 impl<T: Form> Rejected<T> {
