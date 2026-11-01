@@ -1,0 +1,12 @@
+sheet 0 Chart
+sheet 1 Data
+0 0 Text("x")
+0 1 Text("y")
+1 0 Float(1.0)
+1 1 Float(1.0)
+2 0 Float(2.0)
+2 1 Float(4.0)
+3 0 Float(3.0)
+3 1 Float(9.0)
+4 0 Float(4.0)
+4 1 Float(16.0)

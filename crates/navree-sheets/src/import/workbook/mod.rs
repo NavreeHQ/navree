@@ -15,6 +15,9 @@ mod xlsb;
 mod xlsx;
 mod xml;
 
+#[cfg(test)]
+mod parity_tests;
+
 use std::fmt;
 
 use self::archive::Archive;
