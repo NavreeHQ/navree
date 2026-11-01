@@ -1736,6 +1736,29 @@ mod tests {
     }
 
     #[test]
+    fn url_globs_know_only_star_and_question_mark() {
+        // `*` crosses `/`, `?` and `.` and may match nothing; `?` is one character.
+        assert!(url_matches("/a/*/c", "http://x/a/b/b2/c"));
+        assert!(url_matches("/a/*c", "http://x/a/c"));
+        assert!(url_matches("/deal-?", "http://x/deal-7"));
+        assert!(!url_matches("/deal-?", "http://x/deal-"));
+        assert!(!url_matches("/deal-?", "http://x/deal-77"));
+        assert!(url_matches("/caf\u{e9}/?", "http://x/caf\u{e9}/\u{e9}"));
+        // Everything else is literal: no classes, no escapes, no braces.
+        assert!(!url_matches("/deal-[0-9]", "http://x/deal-7"));
+        assert!(url_matches("/deal-[0-9]", "http://x/deal-[0-9]"));
+        assert!(url_matches("/{a,b}", "http://x/{a,b}"));
+        assert!(!url_matches("/{a,b}", "http://x/a"));
+        // Matching is case-sensitive.
+        assert!(!url_matches("/Deals", "http://x/deals"));
+        // An empty glob matches only an empty URL.
+        assert!(!url_matches("", "http://x/deals"));
+        // A run of `*` between letters still matches in linear time.
+        let long = format!("http://x/{}", "a".repeat(4000));
+        assert!(!url_matches("/*a*a*a*a*a*a*b", &long));
+    }
+
+    #[test]
     fn step_texts_are_quoted_and_shortened() {
         assert_eq!(quoted("Deal saved"), "\"Deal saved\"");
         let long = "x".repeat(80);

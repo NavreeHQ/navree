@@ -574,6 +574,51 @@ mod tests {
     }
 
     #[test]
+    fn ignored_paths_use_star_and_question_mark_only() {
+        let options = |routes: &[&str]| LogbookOptions {
+            enabled: Some(true),
+            store: StoreKind::Memory,
+            ignore: crate::IgnoreOptions {
+                routes: routes.iter().map(|r| (*r).to_owned()).collect(),
+            },
+            ..LogbookOptions::default()
+        };
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        let _guard = rt.enter();
+        let logbook = Logbook::in_memory(options(&["/health/*", "/v?/ping", "/a*z", "/[ab]"]));
+        let ignored = |path: &str| logbook.active().expect("enabled").ignores_path(path);
+        // `*` crosses `/` and may match nothing; `?` is one character.
+        assert!(ignored("/health/db"));
+        assert!(ignored("/health/db/deep/er"));
+        assert!(ignored("/health/"));
+        assert!(!ignored("/health"));
+        assert!(ignored("/v1/ping"));
+        assert!(!ignored("/v/ping"));
+        assert!(!ignored("/v10/ping"));
+        assert!(ignored("/az"));
+        assert!(ignored("/a/b/z"));
+        assert!(!ignored("/a/b/zy"));
+        // Brackets are literal, matching is case-sensitive.
+        assert!(!ignored("/a"));
+        assert!(ignored("/[ab]"));
+        assert!(!ignored("/HEALTH/db"));
+        // The logbook's own path and everything under it are never recorded.
+        assert!(ignored("/_logbook"));
+        assert!(ignored("/_logbook/entries/1"));
+        assert!(!ignored("/_logbooks"));
+        // A run of `*` between letters still matches in linear time.
+        let logbook = Logbook::in_memory(options(&["/*a*a*a*a*a*a*a*b"]));
+        assert!(
+            !logbook
+                .active()
+                .expect("enabled")
+                .ignores_path(&format!("/{}", "a".repeat(4000)))
+        );
+    }
+
+    #[test]
     fn bounded_maps_forget_their_oldest_keys() {
         let mut map = Bounded::new(2);
         map.insert("a", 1);

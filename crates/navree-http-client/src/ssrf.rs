@@ -497,6 +497,34 @@ mod tests {
     }
 
     #[test]
+    fn host_globs_know_only_star_and_question_mark() {
+        let g = guard(
+            true,
+            &["db-?.internal", "*.corp.*", "a*b*c.example", "[ab].x", ""],
+        );
+        // `?` is exactly one character.
+        assert!(g.host_allowed("db-1.internal"));
+        assert!(!g.host_allowed("db-.internal"));
+        assert!(!g.host_allowed("db-12.internal"));
+        // `*` crosses dots and may match nothing.
+        assert!(g.host_allowed("x.y.corp.example.com"));
+        assert!(g.host_allowed("x.corp.y"));
+        assert!(!g.host_allowed("corp.example.com"));
+        assert!(g.host_allowed("abc.example"));
+        assert!(g.host_allowed("a-long-b-longer-c.example"));
+        assert!(!g.host_allowed("a-long-b-longer.example"));
+        // Brackets are literal; hosts are lower-cased before matching.
+        assert!(!g.host_allowed("a.x"));
+        assert!(g.host_allowed("[ab].x"));
+        assert!(g.host_allowed("DB-9.INTERNAL"));
+        // An empty entry is skipped, so the empty host is not allowed.
+        assert!(!g.host_allowed(""));
+        // A run of `*` between letters still matches in linear time.
+        let g = guard(true, &["*a*a*a*a*a*a*a*b"]);
+        assert!(!g.host_allowed(&"a".repeat(4000)));
+    }
+
+    #[test]
     fn blocked_reason_names_the_range_and_address() {
         let error = guard(true, &[])
             .check_ip(ip("169.254.169.254"))

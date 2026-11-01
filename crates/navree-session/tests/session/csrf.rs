@@ -370,3 +370,40 @@ async fn cross_site_browser_writes_without_a_session_are_rejected() {
         .await
         .assert_status(200);
 }
+
+#[tokio::test]
+async fn csrf_except_globs_know_only_star_and_question_mark() {
+    // Which of the two probe writes (`put`, `write`) a list of patterns
+    // exempts: 200 when exempt, 403 when the CSRF check applies.
+    async fn exempt(patterns: &[&str]) -> (u16, u16) {
+        let app = support::app_with(navree_session::SessionOptions {
+            csrf_except: patterns.iter().map(|p| (*p).to_owned()).collect(),
+            ..navree_session::SessionOptions::default()
+        })
+        .await;
+        let client = app.client();
+        client.csrf_cookie().await;
+        let put = client
+            .post("/api/probe/put")
+            .json(&json!({ "key": "k", "value": 1 }))
+            .send()
+            .await
+            .status();
+        let write = client.post("/api/probe/write").send().await.status();
+        (put.as_u16(), write.as_u16())
+    }
+
+    // `?` is one character; `*` crosses `/` and may match nothing.
+    assert_eq!(exempt(&["/api/probe/p?t"]).await, (200, 403));
+    assert_eq!(exempt(&["/api/*/wr?te"]).await, (403, 200));
+    assert_eq!(exempt(&["/api/*"]).await, (200, 200));
+    assert_eq!(exempt(&["/api*probe/put*"]).await, (200, 403));
+    // The whole path has to match.
+    assert_eq!(exempt(&["/api/probe/pu"]).await, (403, 403));
+    assert_eq!(exempt(&["/api/probe/p??t"]).await, (403, 403));
+    // A pattern without a leading `/` gets one; matching is case-sensitive
+    // and brackets are literal.
+    assert_eq!(exempt(&["api/probe/put"]).await, (200, 403));
+    assert_eq!(exempt(&["/API/probe/put"]).await, (403, 403));
+    assert_eq!(exempt(&["/api/probe/[pw]ut"]).await, (403, 403));
+}

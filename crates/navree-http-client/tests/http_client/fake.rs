@@ -268,3 +268,48 @@ fn fake_with_rejects_invalid_options() {
         ..HttpClientOptions::default()
     });
 }
+
+#[tokio::test]
+async fn fake_globs_know_only_star_and_question_mark() {
+    let (client, server) = HttpClient::fake();
+    server.on(
+        Method::GET,
+        "https://api.example.com/v?/users/*/posts",
+        FakeResponse::new(200),
+    );
+    server.on(
+        Method::GET,
+        "https://api.example.com/[ab]",
+        FakeResponse::new(201),
+    );
+
+    // `?` is one character, `*` crosses `/` and `?` and may match nothing.
+    for url in [
+        "https://api.example.com/v1/users/7/posts",
+        "https://api.example.com/v2/users/7/8/posts",
+        "https://api.example.com/v3/users//posts",
+    ] {
+        let response = client.get(url).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{url}");
+    }
+    for url in [
+        "https://api.example.com/v/users/7/posts",
+        "https://api.example.com/v10/users/7/posts",
+        "https://api.example.com/V1/users/7/posts",
+        "https://api.example.com/v1/users/7/posts?page=2",
+        "https://api.example.com/a",
+    ] {
+        let error = client.get(url).send().await.unwrap_err();
+        assert!(
+            matches!(error, HttpClientError::NoFakeResponse { .. }),
+            "{url}: {error:?}"
+        );
+    }
+    // Brackets are literal characters, not a class.
+    let response = client
+        .get("https://api.example.com/[ab]")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+}
