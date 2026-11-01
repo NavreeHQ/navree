@@ -571,56 +571,93 @@ impl Module for Watch {
     }
 }
 
-/// On a runtime with one thread, a task spawned before the message can
-/// only run if the parsing gave the thread up.
-#[tokio::test(flavor = "current_thread")]
-async fn a_received_message_is_parsed_off_the_async_thread() {
-    let other_ran = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let saw = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let mail = inbound_app(&[], |b| {
-        b.module(Watch {
-            other_ran: other_ran.clone(),
-            saw: saw.clone(),
-        })
-    })
-    .await;
-    let inbound = mail.inbound().await;
-
-    let flag = other_ran.clone();
-    let other = tokio::spawn(async move { flag.store(true, std::sync::atomic::Ordering::SeqCst) });
-    let received = inbound.receive(reply("watch@acme.test")).await.unwrap();
-    other.await.unwrap();
-
-    assert_eq!(received.status, InboundStatus::Handled);
-    assert!(
-        saw.load(std::sync::atomic::Ordering::SeqCst),
-        "the message was parsed on the async thread"
-    );
+/// A runtime with one thread for async work and one for blocking work.
+fn one_thread_each() -> tokio::runtime::Runtime {
+    tokio::runtime::Builder::new_current_thread()
+        .max_blocking_threads(1)
+        .enable_all()
+        .build()
+        .unwrap()
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn a_stored_message_is_read_back_off_the_async_thread() {
-    let mail = inbound_app(&[], |b| b).await;
-    let inbound = mail.inbound().await;
-    let disk = mail.app.get::<Storage>().await.disk("mail").unwrap();
-    disk.put("one.eml", fixture("reply.eml")).await.unwrap();
-    let stored = StoredMail {
-        disk: "mail".into(),
-        path: "one.eml".into(),
-    };
+/// Occupies the runtime's only blocking thread until the returned sender is
+/// used (or ten seconds go by), so that a job sent to the blocking pool after
+/// this waits its turn: it cannot start before the release. Call it inside
+/// the runtime, after the app has booted.
+fn hold_the_blocking_thread() -> std::sync::mpsc::Sender<()> {
+    let (release, held) = std::sync::mpsc::channel::<()>();
+    drop(tokio::task::spawn_blocking(move || {
+        let _ = held.recv_timeout(std::time::Duration::from_secs(10));
+    }));
+    release
+}
 
-    let other_ran = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let flag = other_ran.clone();
-    let other = tokio::spawn(async move { flag.store(true, std::sync::atomic::Ordering::SeqCst) });
-    let read = inbound.read(&stored).await.unwrap();
-    let ran_during_the_read = other_ran.load(std::sync::atomic::Ordering::SeqCst);
-    other.await.unwrap();
+/// The blocking pool has one thread and it is held until a task that was
+/// spawned before the message arrived has run, and on a runtime with one
+/// async thread that task can only run if the parsing gave the thread up.
+/// Parsing on the async thread would not wait for the release at all, and the
+/// task would not have run when the mailbox gets the message.
+#[test]
+fn a_received_message_is_parsed_off_the_async_thread() {
+    one_thread_each().block_on(async {
+        let other_ran = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let saw = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let mail = inbound_app(&[], |b| {
+            b.module(Watch {
+                other_ran: other_ran.clone(),
+                saw: saw.clone(),
+            })
+        })
+        .await;
+        let inbound = mail.inbound().await;
 
-    assert_eq!(read.stored, Some(stored));
-    assert!(
-        ran_during_the_read,
-        "the message was parsed on the async thread"
-    );
+        let release = hold_the_blocking_thread();
+        let flag = other_ran.clone();
+        let other = tokio::spawn(async move {
+            flag.store(true, std::sync::atomic::Ordering::SeqCst);
+            let _ = release.send(());
+        });
+        let received = inbound.receive(reply("watch@acme.test")).await.unwrap();
+        other.await.unwrap();
+
+        assert_eq!(received.status, InboundStatus::Handled);
+        assert!(
+            saw.load(std::sync::atomic::Ordering::SeqCst),
+            "the message was parsed on the async thread"
+        );
+    });
+}
+
+/// As above, for reading a stored message back.
+#[test]
+fn a_stored_message_is_read_back_off_the_async_thread() {
+    one_thread_each().block_on(async {
+        let mail = inbound_app(&[], |b| b).await;
+        let inbound = mail.inbound().await;
+        let disk = mail.app.get::<Storage>().await.disk("mail").unwrap();
+        disk.put("one.eml", fixture("reply.eml")).await.unwrap();
+        let stored = StoredMail {
+            disk: "mail".into(),
+            path: "one.eml".into(),
+        };
+
+        let release = hold_the_blocking_thread();
+        let other_ran = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag = other_ran.clone();
+        let other = tokio::spawn(async move {
+            flag.store(true, std::sync::atomic::Ordering::SeqCst);
+            let _ = release.send(());
+        });
+        let read = inbound.read(&stored).await.unwrap();
+        let ran_during_the_read = other_ran.load(std::sync::atomic::Ordering::SeqCst);
+        other.await.unwrap();
+
+        assert_eq!(read.stored, Some(stored));
+        assert!(
+            ran_during_the_read,
+            "the message was parsed on the async thread"
+        );
+    });
 }
 
 /// The envelope says who the mail server accepted the message for; every
