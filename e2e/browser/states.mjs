@@ -160,8 +160,8 @@ async function fillForm(page, values = {}) {
 const shot = (ctx, state, url, opts) => shotState(ctx.page, ctx.bag, ctx.tool, ctx.width, ctx.outDir, ctx.relDir, ctx.phase, state, url, opts);
 
 /** Runs `body(ctx)` in a session signed in as the operator and returns its records. */
-async function session({ browser, tool, width, outDir, relDir, phase }, body) {
-  const { context, page, bag } = await operatorSession(browser, tool, width);
+async function session({ browser, tool, width, outDir, relDir, phase }, body, email = OPERATOR) {
+  const { context, page, bag } = await operatorSession(browser, tool, width, email);
   const ctx = { page, bag, tool, width, outDir, relDir, phase };
   const out = [];
   try {
@@ -233,6 +233,31 @@ export const custom = {
     await page.goto(BASE_URL + '/_fleet#jobs', { waitUntil: 'load' });
     await page.waitForTimeout(1200);
     out.push(await shot(ctx, 'burst-jobs', '/_fleet#jobs', { navigate: false, label: 'Pending and completed jobs during the burst' }));
+    // Mails are quick: the backlog clears in seconds. Slow jobs (2 to 4 s of
+    // work each) hold a backlog long enough to see Fleet add processes; not
+    // while k6 is loading the app (its reports run on the same queue).
+    if (ctx.phase === 'after') {
+      const slow = await page.request.post(`${BASE_URL}/api/demo/jobs`, {
+        data: { kind: 'slow', count: 240 },
+        headers: { Authorization: `Bearer ${token}`, 'X-Workspace': 'acme' },
+      });
+      if (slow.status() !== 202) throw new Error(`the slow jobs were refused: ${slow.status()}`);
+      await page.goto(BASE_URL + '/_fleet#overview', { waitUntil: 'load' });
+      await page.waitForTimeout(20000);
+      out.push(await shot(ctx, 'slow-backlog', '/_fleet#overview', { navigate: false, label: 'Fleet 20 s after 240 slow jobs were queued' }));
+      await page.waitForTimeout(25000);
+      out.push(await shot(ctx, 'slow-backlog-later', '/_fleet#overview', { navigate: false, label: 'Fleet 45 s after: has it added processes?' }));
+    }
+  }),
+
+  /** Mailpit: the first message that Lighthouse's alerts sent. */
+  'mailpit-alert': (args) => session(args, async (ctx, out) => {
+    const { page } = ctx;
+    await page.goto(BASE_URL + '/', { waitUntil: 'load' });
+    await page.waitForTimeout(1500);
+    await page.getByText('[Lighthouse]').first().click({ timeout: 5000 });
+    await page.waitForTimeout(1500);
+    out.push(await shot(ctx, 'alert-email', '/', { navigate: false, label: 'An alert email from Lighthouse, as Mailpit shows it' }));
   }),
 
   /** Fleet: pause every supervisor, photograph, continue. */
@@ -306,6 +331,18 @@ export const custom = {
     await page.waitForTimeout(800);
     out.push(await shot(ctx, 'bulk-action-done', new URL(page.url()).pathname, { navigate: false, label: 'After Mark tasks done was confirmed' }));
   }),
+
+  /** Helm: a read-only account ticks a row and runs a bulk action it has no ability for. */
+  'helm-viewer-action': (args) => session(args, async (ctx, out) => {
+    const { page } = ctx;
+    await page.goto(BASE_URL + '/admin/resources/tasks?filters%5Bstatus%5D=todo', { waitUntil: 'load' });
+    await page.locator('tbody input[type="checkbox"]').first().check({ force: true });
+    page.once('dialog', (d) => d.accept());
+    await page.getByRole('button', { name: /mark tasks done/i }).first().click({ timeout: 4000 });
+    await page.waitForLoadState('load').catch(() => {});
+    await page.waitForTimeout(800);
+    out.push(await shot(ctx, 'viewer-runs-action', new URL(page.url()).pathname, { navigate: false, label: 'A read-only account runs a bulk action' }));
+  }, VIEWER),
 
   /** Helm: a record's edit form with an invalid value. */
   'helm-edit-invalid': (args) => session(args, async (ctx, out) => {

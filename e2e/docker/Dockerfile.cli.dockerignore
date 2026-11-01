@@ -1,0 +1,15 @@
+# The CLI image's build context: the workspace (every crate the CLI depends
+# on) and the skills Navigator embeds; no front ends, benchmarks or websites.
+*
+!Cargo.toml
+!Cargo.lock
+!crates/
+!apps/crm-api/
+!apps/evidence-app/
+!skills/
+!e2e/tools/cli-captures.sh
+crates/**/target/
+apps/**/target/
+apps/**/storage/
+apps/**/.env
+**/node_modules/

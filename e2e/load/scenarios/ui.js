@@ -18,7 +18,7 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter } from 'k6/metrics';
 import { API, BASE_URL, OPERATOR_EMAIL, PASSWORD, WORKSPACE } from '../lib/config.js';
-import { signIn, signInPool, sessionFor, loadUser } from '../lib/auth.js';
+import { liveSession, signIn, signInPool, sessionFor, loadUser } from '../lib/auth.js';
 import { get, json, pick, post } from '../lib/http.js';
 import { summaryFor } from '../lib/summary.js';
 import { crudStep, projectIds } from './tasks.js';
@@ -169,8 +169,9 @@ export function uiStep(data) {
       break;
     case 'viewer': {
       // A viewer reads, and may not write.
-      expectStatus(get(data.viewer, '/v1/tasks?per_page=10', 'GET /api/v1/tasks'), 200, 'viewer reads');
-      const denied = post(data.viewer, '/v1/tasks', 'POST /api/v1/tasks', { project_id: pick(data.projects), title: 'Not allowed' });
+      const viewer = liveSession(data.viewer, 'ops-viewer@evidence.test');
+      expectStatus(get(viewer, '/v1/tasks?per_page=10', 'GET /api/v1/tasks'), 200, 'viewer reads');
+      const denied = post(viewer, '/v1/tasks', 'POST /api/v1/tasks', { project_id: pick(data.projects), title: 'Not allowed' });
       expectStatus(denied, 403, 'viewer write');
       break;
     }
@@ -202,7 +203,7 @@ function clientMistake(session, data) {
   } else if (which === 4) {
     expectStatus(post(session, '/v1/tasks', 'POST /api/v1/tasks', { project_id: pick(data.projects), title: '', priority: 9 }), [400, 422], 'invalid task');
   } else {
-    expectStatus(get(data.support, '/v1/projects?per_page=5', 'GET /api/v1/projects'), [200, 403], 'support member');
+    expectStatus(get(liveSession(data.support, 'support@evidence.test'), '/v1/projects?per_page=5', 'GET /api/v1/projects'), [200, 403], 'support member');
   }
 }
 

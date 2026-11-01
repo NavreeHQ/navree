@@ -151,6 +151,38 @@ function websiteBlock(tool) {
 
 const toolNote = (tool) => notes.tools?.[tool];
 
+// Harbor and Navigator are command line tools: real terminal output, as
+// text and as an image of that text, beside the website's mock-up.
+const cliDir = path.join(dir, 'shots', 'cli');
+const cliFiles = existsSync(cliDir) ? (await readdir(cliDir)).filter((f) => f.endsWith('.png')).sort() : [];
+async function cliSection(tool, title, prefix, about) {
+  const files = cliFiles.filter((f) => f.startsWith(prefix));
+  if (!files.length) return '';
+  const site = website.tools?.[tool];
+  const mock = site?.shots?.find((x) => x.kind === 'mock' && x.n === 1 && x.width === 1440);
+  const n = toolNote(tool);
+  const items = [];
+  for (const f of files) {
+    const txt = f.replace(/\.png$/, '.txt');
+    const text = existsSync(path.join(cliDir, txt)) ? await readFile(path.join(cliDir, txt), 'utf8') : '';
+    const command = text.split(/\r?\n/)[0].replace(/^\$ /, '');
+    items.push(`<article class="card"><header><h4><code>${esc(command)}</code></h4></header>
+      <div class="shots one"><div class="desk">${img(`cli/${f}`, 'desk')}</div></div>
+      <details><summary>the text</summary><pre>${esc(text)}</pre></details></article>`);
+  }
+  return `<section id="${esc(tool)}">
+  <h2>${esc(title)} <small>command line</small></h2>
+  <p class="figures">${esc(about)}</p>
+  ${n ? `<div class="verdict"><strong>${esc(n.verdict || '')}</strong>${n.items?.length ? `<ul>${n.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}</div>` : ''}
+  ${mock ? `<div class="compare"><h3>The website's mock-up</h3><figure>${img(mock.file)}</figure></div>` : ''}
+  <h3>What the commands printed</h3><div class="cards">${items.join('')}</div>
+</section>`;
+}
+const cliSections = [
+  await cliSection('harbor', 'Harbor', 'harbor-', 'Harbor provisions and deploys over SSH. No server was available here, so these are the commands that run on their own (init, secrets, the CI workflow) and the error a deploy command gives without a provisioned server. The website shows a full `navree deploy`; that was not run.'),
+  await cliSection('navigator', 'Navigator', 'navigator-', 'Navigator is an MCP server for coding agents, started as `navree mcp`. This is a real session over stdio against the source of the evidence app: the handshake, the tool list and four calls. The tools that ask the running app (routes, modules) answer with the error they give when the app is not built.'),
+].join('\n');
+
 const sections = toolNames.map((tool) => {
   const s = stats(tool);
   const n = toolNote(tool);
@@ -203,6 +235,7 @@ const html = `<!doctype html>
   .tag { background: #ececf5; color: var(--rule); padding: 0 6px; margin-right: 6px; border-radius: 2px; font-size: 12px; font-weight: 600; }
   .flags { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; } .flags li { padding: 1px 6px; border: 1px solid; border-radius: 2px; font-size: 12px; }
   .flags .bad { color: var(--bad); } .flags .warn { color: var(--warn); } .flags .good { color: var(--good); } .flags .rule { color: var(--rule); }
+  .shots.one { grid-template-columns: 1fr; }
   .shots { display: grid; grid-template-columns: 1fr 120px; gap: 10px; align-items: start; }
   .desk, .phone { max-height: 460px; overflow: hidden; border: 1px solid var(--line); position: relative; } .desk img { width: 100%; display: block; } .phone img { width: 100%; display: block; }
   .none { padding: 30px 8px; color: var(--mute); text-align: center; font-size: 12px; }
@@ -218,8 +251,9 @@ const html = `<!doctype html>
 <h2 style="border:0;margin-top:20px">Overview</h2>
 <table><tr><th>Tool</th><th>Pages</th><th>States</th><th>Also at 390 px</th><th>With a finding</th><th>Console errors</th><th>Failed requests</th><th>Overflow at 390</th><th>Slowest</th></tr>${overview}</table>
 <p class="filter"><label><input type="checkbox" id="only-bad"> Show only the pages with a finding (red)</label></p>
-<nav>${toolNames.map((t) => `<a href="#${esc(t)}">${esc(titleOf(t))}</a>`).join('')}</nav>
+<nav>${toolNames.map((t) => `<a href="#${esc(t)}">${esc(titleOf(t))}</a>`).join('')}${cliFiles.some((f) => f.startsWith('harbor-')) ? '<a href="#harbor">Harbor</a>' : ''}${cliFiles.some((f) => f.startsWith('navigator-')) ? '<a href="#navigator">Navigator</a>' : ''}</nav>
 ${sections}
+${cliSections}
 <script>document.getElementById('only-bad').addEventListener('change', e => { document.querySelectorAll('.card').forEach(c => { c.style.display = e.target.checked && c.dataset.bad !== '1' ? 'none' : ''; }); });</script>
 </main></body></html>`;
 

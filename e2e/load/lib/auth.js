@@ -52,7 +52,30 @@ export function signInPool(count) {
   return sessions;
 }
 
+/**
+ * A token for `email` that is still good: the one given, until it is about to
+ * expire, then a fresh sign-in. Access tokens live 15 minutes
+ * (`auth.jwt.access_ttl_secs`) and a run can be longer; each virtual user
+ * keeps its own copy, made on its first use and replaced after
+ * `TOKEN_REFRESH_MS` (10 minutes).
+ */
+const issued = {};
+export function freshToken(email, token) {
+  const refreshAfter = Number(__ENV.TOKEN_REFRESH_MS || 10 * 60 * 1000);
+  const now = Date.now();
+  let entry = issued[email];
+  if (!entry) entry = issued[email] = { token, at: now };
+  if (now - entry.at > refreshAfter) entry = issued[email] = { token: signIn(email).token, at: now };
+  return entry.token;
+}
+
+/** `session` with a token that is still good for `email`. */
+export function liveSession(session, email) {
+  return { ...session, token: freshToken(email, session.token) };
+}
+
 /** This virtual user's session from a pool made by `signInPool`. */
 export function sessionFor(pool) {
-  return pool[(__VU - 1) % pool.length];
+  const index = (__VU - 1) % pool.length;
+  return liveSession(pool[index], loadUser(index + 1));
 }

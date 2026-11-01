@@ -57,6 +57,20 @@ ui_website() {
     browser /runner/src/website.mjs
 }
 
+# ui_cli: Harbor and Navigator as terminals. The `navree` binary comes from
+# its own image (e2e/docker/Dockerfile.cli, built when it is missing); the
+# captured text is drawn as images for the gallery.
+ui_cli() {
+  if ! docker image inspect navree-cli:local > /dev/null 2>&1; then
+    local args=()
+    [ -n "${E2E_BUILD_JOBS:-}" ] && args+=(--build-arg "CARGO_BUILD_JOBS=$E2E_BUILD_JOBS")
+    docker build -f "$HOST_ROOT/e2e/docker/Dockerfile.cli" ${args[@]+"${args[@]}"} -t navree-cli:local "$HOST_ROOT" || return 1
+  fi
+  mkdir -p "$EVIDENCE/shots/cli"
+  docker run --rm -v "$EVIDENCE_HOST/shots/cli:/captures" -v "$HOST_ROOT/e2e/tools/cli-captures.sh:/captures.sh:ro"     navree-cli:local sh /captures.sh || return 1
+  compose run --rm --no-deps -T -e IN_DIR=/out/shots/cli -e OUT_DIR=/out/shots/cli browser /runner/src/terminal.mjs
+}
+
 # background <name> <command...>: runs a step in the background and
 # remembers it, so wait_background can collect it.
 BG_PIDS=()
@@ -196,7 +210,10 @@ run_ui() {
     step "browser: website mock-ups" ui_website
   fi
 
-  # 8. The app processes must have survived.
+  # 8. The command line tools, as terminals.
+  step "cli: Harbor and Navigator terminal captures" ui_cli
+
+  # 9. The app processes must have survived.
   local svc restarts
   for svc in web web-dev worker scheduler; do
     restarts="$(docker inspect -f '{{.State.Status}} {{.RestartCount}} {{.State.OOMKilled}}' "$(compose ps -q "$svc")" 2>/dev/null)"
@@ -211,7 +228,7 @@ run_ui() {
   echo "{\"started\":\"$started\",\"finished\":\"$finished\",\"load_vus\":$load_vus,\"ui_vus\":$ui_vus,\"load_duration\":\"$load_duration\"}" > "$OUT/facts/run.json"
   teardown
 
-  # 9. The gallery.
+  # 10. The gallery.
   docker run --rm -v "$EVIDENCE_HOST:/e" -v "$HOST_ROOT/e2e/tools:/tools:ro" node:24-bookworm-slim \
     sh -c 'node /tools/ui-meta.mjs /e && node /tools/gallery.mjs /e' > "$OUT/logs/gallery.log" 2>&1 \
     || log "gallery failed: see data/logs/gallery.log"

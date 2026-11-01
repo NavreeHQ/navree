@@ -19,7 +19,7 @@
 // (only tools served by this compose service), EMAIL, PASSWORD, SETTLE_MS.
 
 import { chromium } from 'playwright';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -47,6 +47,7 @@ const phaseDir = path.join(OUT_DIR, PHASE);
 const RESULTS = PHASE ? `results-${SERVICE || 'all'}.json` : 'results.json';
 await mkdir(phaseDir, { recursive: true });
 
+const vanished = [];
 const SKIP_EXT = /\.(css|js|mjs|map|png|jpe?g|gif|svg|ico|woff2?|ttf|json|txt|xml|pdf|zip)(\?|$)/i;
 
 function insideScope(tool, pathname) {
@@ -170,6 +171,14 @@ async function discover(context, tool, width, dir, rel) {
     rec.phase = PHASE;
     rec.width = width;
     rec.template = item.sig.full;
+    // A record the load run deleted between the link and the visit: not a
+    // page of the tool, so it is left out (and noted).
+    if (rec.status === 404 && isRecord(item.sig) && !tool.keep_404) {
+      await rm(path.join(dir, file), { force: true });
+      vanished.push({ tool: tool.name, url: rec.url });
+      console.log(`skip ${width} ${tool.name} ${rec.url} (gone before it was opened)`);
+      continue;
+    }
     records.push(rec);
     n += 1;
     console.log(`${rec.ok ? 'ok  ' : 'FAIL'} ${width} ${tool.name} ${rec.url} ${rec.status ?? ''} ${rec.wall_ms ?? ''}ms ${rec.error ?? ''}`);
@@ -259,5 +268,6 @@ await writeFile(path.join(phaseDir, RESULTS), JSON.stringify(all, null, 2));
 const failed = all.filter((r) => !r.ok && r.kind !== 'state').length;
 const perTool = {};
 for (const r of all) perTool[r.tool] = (perTool[r.tool] || 0) + 1;
+if (vanished.length) await writeFile(path.join(phaseDir, `vanished-${SERVICE || 'all'}.json`), JSON.stringify(vanished, null, 2));
 console.log(`${PHASE || 'screenshots'}: ${all.length} screenshots, ${failed} pages not ok`, perTool);
 process.exit(failed ? 1 : 0);
