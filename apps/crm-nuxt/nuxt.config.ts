@@ -70,7 +70,6 @@ export default defineNuxtConfig({
         "vee-validate",
         "zod",
         "pusher-js",
-        "openapi-fetch",
         "vue-sonner",
         "class-variance-authority",
         "clsx",

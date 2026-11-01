@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { BASE, json, recording } from "../test/fetch-helpers.js";
 import type { paths } from "../test/fixtures/typed.js";
@@ -412,5 +412,19 @@ describe("the core stands alone", () => {
     expect(source).not.toMatch(/^s*(import|export)[^;]*from/m);
     const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as Record<string, unknown>;
     expect(manifest.dependencies).toBeUndefined();
+  });
+});
+
+describe("the front ends' copies", () => {
+  // The CRM front ends keep this file as src/lib/api/fetch.ts (app/lib/api/fetch.ts): they are
+  // separate installs and take no workspace package, so the copies are kept identical.
+  const source = readFileSync(new URL("./fetch.ts", import.meta.url), "utf8");
+  const copies = ["../../../../apps/crm-web/src/lib/api/fetch.ts", "../../../../apps/crm-nuxt/app/lib/api/fetch.ts"].map(
+    (path) => new URL(path, import.meta.url),
+  );
+
+  it.each(copies.map((url) => [url.pathname, url] as const))("%s is the same file", (_name, url) => {
+    if (!existsSync(url)) return;
+    expect(readFileSync(url, "utf8")).toBe(source);
   });
 });

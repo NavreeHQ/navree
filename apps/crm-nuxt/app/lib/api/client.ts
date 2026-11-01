@@ -1,4 +1,4 @@
-import createClient from "openapi-fetch";
+import createClient from "./fetch";
 import { ApiError } from "./errors";
 import type { paths } from "./types";
 
@@ -57,7 +57,7 @@ export type ApiClient = ReturnType<typeof createApiClient>;
 type FetchResult<T> = { data?: T; error?: unknown; response: Response };
 
 /**
- * Unwraps an openapi-fetch result: returns `data` or throws an {@link ApiError}
+ * Unwraps a typed client result: returns `data` or throws an {@link ApiError}
  * built from the Navree error body.
  */
 export async function unwrap<T>(result: Promise<FetchResult<T>>): Promise<T> {

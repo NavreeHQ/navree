@@ -35,7 +35,6 @@
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "nuxt": "4.6.3",
-    "openapi-fetch": "0.17.0",
     "pinia": "4.1.0",
     "pusher-js": "8.6.0",
     "reka-ui": "2.11.0",

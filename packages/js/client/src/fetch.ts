@@ -14,6 +14,8 @@
  * ```
  */
 
+/* oxlint-disable typescript/no-explicit-any, typescript/no-empty-object-type -- the types match any operation of any document, which `any` and `{}` bounds say */
+
 // ---- Types of the OpenAPI document -----------------------------------------------
 
 export type HttpMethod = "get" | "put" | "post" | "delete" | "options" | "head" | "patch" | "trace";
@@ -21,10 +23,56 @@ export type MediaType = `${string}/${string}`;
 
 type OkStatus = 200 | 201 | 202 | 203 | 204 | 206 | 207 | "2XX";
 type ErrorStatus =
-  | 500 | 501 | 502 | 503 | 504 | 505 | 506 | 507 | 508 | 510 | 511 | "5XX"
-  | 400 | 401 | 402 | 403 | 404 | 405 | 406 | 407 | 408 | 409 | 410 | 411 | 412 | 413 | 414 | 415 | 416 | 417
-  | 418 | 420 | 421 | 422 | 423 | 424 | 425 | 426 | 427 | 428 | 429 | 430 | 431 | 444 | 450 | 451 | 497 | 498
-  | 499 | "4XX"
+  | 500
+  | 501
+  | 502
+  | 503
+  | 504
+  | 505
+  | 506
+  | 507
+  | 508
+  | 510
+  | 511
+  | "5XX"
+  | 400
+  | 401
+  | 402
+  | 403
+  | 404
+  | 405
+  | 406
+  | 407
+  | 408
+  | 409
+  | 410
+  | 411
+  | 412
+  | 413
+  | 414
+  | 415
+  | 416
+  | 417
+  | 418
+  | 420
+  | 421
+  | 422
+  | 423
+  | 424
+  | 425
+  | 426
+  | 427
+  | 428
+  | 429
+  | 430
+  | 431
+  | 444
+  | 450
+  | 451
+  | 497
+  | 498
+  | 499
+  | "4XX"
   | "default";
 
 /** `Obj[K]` for the keys that match `Matchers` (a union of the matching members). */
@@ -45,28 +93,30 @@ export type $Read<T> = { readonly $read: T };
 export type $Write<T> = { readonly $write: T };
 
 /** `T` as a response has it: the write-only properties gone. */
-export type Readable<T> = T extends $Write<any>
-  ? never
-  : T extends $Read<infer U>
-    ? Readable<U>
-    : T extends (infer E)[]
-      ? Readable<E>[]
-      : T extends object
-        ? { [K in keyof T as NonNullable<T[K]> extends $Write<any> ? never : K]: Readable<T[K]> }
-        : T;
+export type Readable<T> =
+  T extends $Write<any>
+    ? never
+    : T extends $Read<infer U>
+      ? Readable<U>
+      : T extends (infer E)[]
+        ? Readable<E>[]
+        : T extends object
+          ? { [K in keyof T as NonNullable<T[K]> extends $Write<any> ? never : K]: Readable<T[K]> }
+          : T;
 
 /** `T` as a request has it: the read-only properties gone. */
-export type Writable<T> = T extends $Read<any>
-  ? never
-  : T extends $Write<infer U>
-    ? Writable<U>
-    : T extends (infer E)[]
-      ? Writable<E>[]
-      : T extends object
-        ? { [K in keyof T as NonNullable<T[K]> extends $Read<any> ? never : K]: Writable<T[K]> } & {
-            [K in keyof T as NonNullable<T[K]> extends $Read<any> ? K : never]?: never;
-          }
-        : T;
+export type Writable<T> =
+  T extends $Read<any>
+    ? never
+    : T extends $Write<infer U>
+      ? Writable<U>
+      : T extends (infer E)[]
+        ? Writable<E>[]
+        : T extends object
+          ? { [K in keyof T as NonNullable<T[K]> extends $Read<any> ? never : K]: Writable<T[K]> } & {
+              [K in keyof T as NonNullable<T[K]> extends $Read<any> ? K : never]?: never;
+            }
+          : T;
 
 type ResponseObjectMap<T> = T extends { responses: any } ? T["responses"] : unknown;
 type ResponseContent<T> = T extends { content: any } ? T["content"] : unknown;
@@ -99,11 +149,15 @@ type GetResponseContent<
     }[Code]
   : never;
 /** The content of the success statuses of a `responses` map. */
-export type SuccessResponse<T extends Record<string | number, any>, Media extends MediaType = MediaType> =
-  GetResponseContent<T, Media, OkStatus>;
+export type SuccessResponse<
+  T extends Record<string | number, any>,
+  Media extends MediaType = MediaType,
+> = GetResponseContent<T, Media, OkStatus>;
 /** The content of the error statuses (4xx, 5xx, `default`) of a `responses` map. */
-export type ErrorResponse<T extends Record<string | number, any>, Media extends MediaType = MediaType> =
-  GetResponseContent<T, Media, ErrorStatus>;
+export type ErrorResponse<
+  T extends Record<string | number, any>,
+  Media extends MediaType = MediaType,
+> = GetResponseContent<T, Media, ErrorStatus>;
 
 // ---- Types of the client ---------------------------------------------------------
 
@@ -338,7 +392,9 @@ export function serializePrimitiveParam(name: string, value: string, options?: {
   const v: unknown = value;
   if (v === undefined || v === null) return "";
   if (typeof v === "object") {
-    throw new Error("Deeply-nested arrays/objects aren’t supported. Provide your own `querySerializer()` to handle these.");
+    throw new Error(
+      "Deeply-nested arrays/objects aren’t supported. Provide your own `querySerializer()` to handle these.",
+    );
   }
   return `${name}=${encode(v, options?.allowReserved)}`;
 }
@@ -370,7 +426,11 @@ export function serializeObjectParam(
 
   const parts: string[] = [];
   for (const key in value) {
-    const part = serializePrimitiveParam(options.style === "deepObject" ? `${name}[${key}]` : key, value[key] as string, options);
+    const part = serializePrimitiveParam(
+      options.style === "deepObject" ? `${name}[${key}]` : key,
+      value[key] as string,
+      options,
+    );
     if (part) parts.push(part);
   }
   const joined = parts.join(joiner);
@@ -391,7 +451,8 @@ export function serializeArrayParam(
   const items = value.filter((item) => item !== undefined && item !== null);
 
   if (options.explode === false) {
-    const joiner = ({ form: ",", spaceDelimited: "%20", pipeDelimited: "|" } as Record<string, string>)[options.style] ?? ",";
+    const joiner =
+      ({ form: ",", spaceDelimited: "%20", pipeDelimited: "|" } as Record<string, string>)[options.style] ?? ",";
     const joined = items.map((item) => encode(item, options.allowReserved)).join(joiner);
     switch (options.style) {
       case "simple":
@@ -496,7 +557,8 @@ export function defaultPathSerializer(pathname: string, pathParams: Record<strin
 export function defaultBodySerializer(body: unknown, headers?: Headers | Record<string, string | undefined>): BodyInit {
   if (typeof FormData !== "undefined" && body instanceof FormData) return body;
   if (headers) {
-    const contentType = headers instanceof Headers ? headers.get("content-type") : (headers["Content-Type"] ?? headers["content-type"]);
+    const contentType =
+      headers instanceof Headers ? headers.get("content-type") : (headers["Content-Type"] ?? headers["content-type"]);
     if (contentType === "application/x-www-form-urlencoded") {
       return new URLSearchParams(body as Record<string, string>).toString();
     }
@@ -582,7 +644,9 @@ export default function createClient<Paths extends {}, Media extends MediaType =
 
     // A request's function replaces the client's; a request's options merge over the client's.
     let querySerializer: (query: any) => string =
-      typeof clientQuerySerializer === "function" ? clientQuerySerializer : createQuerySerializer(clientQuerySerializer);
+      typeof clientQuerySerializer === "function"
+        ? clientQuerySerializer
+        : createQuerySerializer(clientQuerySerializer);
     if (requestQuerySerializer) {
       querySerializer =
         typeof requestQuerySerializer === "function"
@@ -596,8 +660,10 @@ export default function createClient<Paths extends {}, Media extends MediaType =
 
     // The serializer sees every header the caller set (the form content type is one of them);
     // the content type it implies is the lowest priority, so it is merged below in front of them.
-    const serialized = body === undefined ? undefined : bodySerializer(body, mergeHeaders(clientHeaders, headers, params.header));
-    const keepsOwnContentType = serialized === undefined || (typeof FormData !== "undefined" && serialized instanceof FormData);
+    const serialized =
+      body === undefined ? undefined : bodySerializer(body, mergeHeaders(clientHeaders, headers, params.header));
+    const keepsOwnContentType =
+      serialized === undefined || (typeof FormData !== "undefined" && serialized instanceof FormData);
     const finalHeaders = mergeHeaders(
       keepsOwnContentType ? {} : { "Content-Type": "application/json" },
       clientHeaders,
@@ -606,7 +672,13 @@ export default function createClient<Paths extends {}, Media extends MediaType =
     );
 
     const middleware = [...clientMiddleware, ...requestMiddleware];
-    const requestInit = { redirect: "follow", ...clientInit, ...init, body: serialized, headers: finalHeaders } as RequestInit;
+    const requestInit = {
+      redirect: "follow",
+      ...clientInit,
+      ...init,
+      body: serialized,
+      headers: finalHeaders,
+    } as RequestInit;
     let request = new Request(
       createFinalURL(schemaPath, { baseUrl: finalBaseUrl, params, querySerializer, pathSerializer }),
       requestInit,
@@ -673,7 +745,8 @@ export default function createClient<Paths extends {}, Media extends MediaType =
         if (!hook || typeof hook.onResponse !== "function") continue;
         const result = await hook.onResponse({ ...context(), response: response as Response });
         if (!result) continue;
-        if (!(result instanceof Response)) throw new Error("onResponse: must return new Response() when modifying the response");
+        if (!(result instanceof Response))
+          throw new Error("onResponse: must return new Response() when modifying the response");
         response = result;
       }
     }
@@ -710,7 +783,8 @@ export default function createClient<Paths extends {}, Media extends MediaType =
   const call = (method: string) => (url: string, init?: Record<string, unknown>) => coreFetch(url, { ...init, method });
 
   const client = {
-    request: (method: string, url: string, init?: Record<string, unknown>) => coreFetch(url, { ...init, method: method.toUpperCase() }),
+    request: (method: string, url: string, init?: Record<string, unknown>) =>
+      coreFetch(url, { ...init, method: method.toUpperCase() }),
     GET: call("GET"),
     PUT: call("PUT"),
     POST: call("POST"),
