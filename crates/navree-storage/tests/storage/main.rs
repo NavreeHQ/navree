@@ -8,6 +8,7 @@ mod cloud;
 mod conformance;
 mod disk;
 mod drivers;
+mod local;
 mod module;
 mod options;
 mod presign;
