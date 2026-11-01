@@ -87,6 +87,7 @@ fn trailing_spaces_cost_nothing(ending: &str) {
     let took = at.elapsed();
     assert_eq!(table.rows.len(), 300);
     assert!(table.rows.iter().all(|row| row.cells == [text("a")]));
+    eprintln!("read in {took:?}");
     assert!(took < Duration::from_secs(2), "{took:?}");
 }
 

@@ -124,6 +124,7 @@ fn an_xlsx_sheet_of_cells_without_values_stops_when_told_to() {
     let file = xlsx_stored(&format!("<row>{}</row>", "<c/>".repeat(FLOOD / 4)));
     let (result, took) = stopped(&file, opts(1 << 28), SOON);
     assert!(interrupted(&result), "{result:?} after {took:?}");
+    eprintln!("ended {took:?} after the flag was raised");
     assert!(took < PROMPT, "{took:?}");
 }
 
@@ -136,6 +137,7 @@ fn an_xlsx_cell_with_a_flood_inside_it_stops_when_told_to() {
     let file = xlsx_stored(&cell);
     let (result, took) = stopped(&file, opts(1 << 28), SOON);
     assert!(interrupted(&result), "{result:?} after {took:?}");
+    eprintln!("ended {took:?} after the flag was raised");
     assert!(took < PROMPT, "{took:?}");
 }
 
@@ -153,6 +155,7 @@ fn an_xlsb_sheet_of_records_without_cells_stops_when_told_to() {
     let file = xb::workbook(&[("S", Some(sheet))], &[], &[], &[], false);
     let (result, took) = stopped(&file, opts(1 << 28), SOON);
     assert!(interrupted(&result), "{result:?} after {took:?}");
+    eprintln!("ended {took:?} after the flag was raised");
     assert!(took < PROMPT, "{took:?}");
 }
 
@@ -162,6 +165,7 @@ fn an_ods_sheet_of_rows_without_values_stops_when_told_to() {
     let file = ods_stored(&table_of(&row.repeat(FLOOD / row.len())));
     let (result, took) = stopped(&file, opts(1 << 28), SOON);
     assert!(interrupted(&result), "{result:?} after {took:?}");
+    eprintln!("ended {took:?} after the flag was raised");
     assert!(took < PROMPT, "{took:?}");
 }
 
@@ -175,6 +179,7 @@ fn the_rest_of_an_ods_sheet_after_a_limit_stops_when_told_to() {
     };
     let (result, took) = stopped(&file, options, SOON);
     assert!(interrupted(&result), "{result:?} after {took:?}");
+    eprintln!("ended {took:?} after the flag was raised");
     assert!(took < PROMPT, "{took:?}");
 }
 
@@ -188,6 +193,7 @@ fn the_rest_of_an_xlsx_sheet_after_a_limit_stops_when_told_to() {
     };
     let (result, took) = stopped(&file, options, SOON);
     assert!(interrupted(&result), "{result:?} after {took:?}");
+    eprintln!("ended {took:?} after the flag was raised");
     assert!(took < PROMPT, "{took:?}");
 }
 
@@ -199,6 +205,7 @@ fn an_xls_sheet_of_records_without_cells_stops_when_told_to() {
     let file = xw::Book::new(vec![], vec![xw::Sheet::new("S", records)]).file();
     let (result, took) = stopped(&file, opts(1 << 28), Duration::ZERO);
     assert!(interrupted(&result), "{result:?} after {took:?}");
+    eprintln!("ended {took:?} after the flag was raised");
     assert!(took < PROMPT, "{took:?}");
 }
 
@@ -211,6 +218,7 @@ fn an_xls_sheet_of_continue_records_stops_when_told_to() {
     let file = xw::Book::new(vec![], vec![xw::Sheet::new("S", records)]).file();
     let (result, took) = stopped(&file, opts(1 << 28), Duration::ZERO);
     assert!(interrupted(&result), "{result:?} after {took:?}");
+    eprintln!("ended {took:?} after the flag was raised");
     assert!(took < PROMPT, "{took:?}");
 }
 
@@ -267,6 +275,7 @@ fn ghosts_cost_nothing(row: impl Fn(usize) -> String, rows: usize) {
         refused_with(&result, "no header row"),
         "{result:?} after {took:?}"
     );
+    eprintln!("read in {took:?}");
     assert!(took < Duration::from_secs(2), "{took:?}");
 }
 
@@ -307,6 +316,7 @@ fn rows_past_the_last_row_of_a_sheet_make_no_text() {
         refused_with(&result, "no header row"),
         "{result:?} after {took:?}"
     );
+    eprintln!("read in {took:?}");
     assert!(took < Duration::from_secs(2), "{took:?}");
 }
 
@@ -324,6 +334,7 @@ fn cells_past_the_last_column_of_a_row_make_no_text() {
         refused_with(&result, "no header row"),
         "{result:?} after {took:?}"
     );
+    eprintln!("read in {took:?}");
     assert!(took < Duration::from_secs(2), "{took:?}");
 }
 

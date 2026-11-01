@@ -53,6 +53,7 @@ fn an_xls_shared_string_is_trimmed_once_however_many_cells_use_it() {
         matches!(plain, Err(SheetsError::TooManyRows { limit: 10 })),
         "{plain:?}"
     );
+    eprintln!("blank cells {blank_took:?}, plain ones {plain_took:?}");
     assert!(
         blank_took < plain_took * 4 + Duration::from_millis(500),
         "blank cells took {blank_took:?}, plain ones {plain_took:?}"
