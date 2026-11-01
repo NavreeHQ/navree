@@ -60,6 +60,7 @@ export function RecordCombobox({
           id={id}
           type="button"
           variant="outline"
+          // oxlint-disable-next-line jsx-a11y/role-has-required-aria-props -- Radix sets aria-controls on the trigger
           role="combobox"
           aria-expanded={open}
           aria-invalid={invalid || undefined}
