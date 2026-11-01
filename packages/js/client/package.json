@@ -48,7 +48,6 @@
   "devDependencies": {
     "@casl/ability": "7.0.2",
     "@types/node": "^24.19.2",
-    "openapi-typescript": "7.13.0",
     "pusher-js": "8.6.0",
     "typescript": "5.9.3",
     "vitest": "5.0.5"

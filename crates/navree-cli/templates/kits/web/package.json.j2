@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
-    "gen:api": "cd .. && navree openapi:export openapi.json && cd web && openapi-typescript ../openapi.json -o lib/api/schema.d.ts"
+    "gen:api": "cd .. && navree openapi:export openapi.json && cd web && navree openapi:client --input ../openapi.json --out lib/api"
   },
   "dependencies": {
     "@casl/ability": "^7.0.2",
@@ -43,7 +43,6 @@
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.1.2",
     "jsdom": "^30.1.3",
-    "openapi-typescript": "^7.13.0",
     "oxlint": "^1.90.0",
     "postcss": "^8.5.31",
     "tailwindcss": "^4",

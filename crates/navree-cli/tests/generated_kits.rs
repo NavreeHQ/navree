@@ -13,8 +13,8 @@
 //! The SaaS kit's front end is checked by `saas_kit_web_installs_lints_tests_and_builds`,
 //! which runs only with `NAVREE_TEST_KIT_WEB=1` (it needs Node.js 22 and
 //! pnpm, and downloads the packages): `pnpm install --frozen-lockfile`, the
-//! shipped `lib/api/schema.d.ts` against `openapi-typescript ../openapi.json`,
-//! then `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build` in `web/`.
+//! shipped `lib/api/schema.d.ts` against what `navree openapi:client` writes
+//! for `../openapi.json`, then `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build` in `web/`.
 //!
 //! `NAVREE_FACADE` may point at another `navree` facade crate directory
 //! (default: the workspace's `crates/navree`). The projects build in
@@ -221,26 +221,14 @@ fn saas_kit_web_installs_lints_tests_and_builds() {
     let (parent, root) = generate(Kit::Saas, "acme");
     let web = root.join("web");
     // The committed lockfile installs as it is, and the shipped types are
-    // what openapi-typescript makes of the shipped `openapi.json`.
+    // what `navree openapi:client` makes of the shipped `openapi.json`.
     let ok = pnpm(&web, &["install", "--frozen-lockfile"])
-        && pnpm(
-            &web,
-            &[
-                "exec",
-                "openapi-typescript",
-                "../openapi.json",
-                "-o",
-                "lib/api/schema.check.d.ts",
-            ],
-        )
         && {
-            let read = |path: &str| {
-                std::fs::read_to_string(web.join(path))
-                    .unwrap()
-                    .replace("\r\n", "\n")
-            };
-            let same = read("lib/api/schema.check.d.ts") == read("lib/api/schema.d.ts");
-            std::fs::remove_file(web.join("lib/api/schema.check.d.ts")).unwrap();
+            let read = |path: &Path| std::fs::read_to_string(path).unwrap().replace("\r\n", "\n");
+            let generated = navree_cli::openapi_client::generate(&read(&root.join("openapi.json")))
+                .expect("the shipped openapi.json is a document the generator reads")
+                .schema;
+            let same = generated == read(&web.join("lib/api/schema.d.ts"));
             if !same {
                 eprintln!(
                     "web/lib/api/schema.d.ts does not match openapi.json: run `pnpm gen:api`"
