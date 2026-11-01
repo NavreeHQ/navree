@@ -315,6 +315,85 @@ async fn a_route_opts_out_of_compression() {
     assert_eq!(gzipped.header("content-encoding"), Some("gzip"));
 }
 
+/// `HEAD` is `GET` without the body, so the headers say what `GET` says: the
+/// router empties the body, and the layer must still see the response it was.
+#[tokio::test]
+async fn a_head_response_has_the_headers_of_the_get_response() {
+    let page = "a page that goes on and on ".repeat(30);
+    let (tagged, partial, small) = (page.clone(), page.clone(), page.clone());
+    let app = Setup::new(vec![
+        RouteDef::on(Method::GET, "/etag", move || {
+            let body = tagged.clone();
+            async move { ([("etag", "\"v1\""), ("accept-ranges", "bytes")], body).into_response() }
+        })
+        .public(),
+        RouteDef::on(Method::GET, "/partial", move || {
+            let body = partial.clone();
+            async move {
+                (
+                    StatusCode::PARTIAL_CONTENT,
+                    [("content-type", "multipart/byteranges; boundary=x")],
+                    body,
+                )
+                    .into_response()
+            }
+        })
+        .public(),
+        RouteDef::on(Method::GET, "/small", move || {
+            let body = small.chars().take(31).collect::<String>();
+            async move { body }
+        })
+        .public(),
+        RouteDef::on(Method::GET, "/same", || async {
+            (StatusCode::NOT_MODIFIED, [("etag", "\"v1\"")]).into_response()
+        })
+        .public(),
+    ])
+    .boot()
+    .await;
+
+    let ask = |method: Method, path: &str, accept: &str| {
+        Request::builder()
+            .method(method)
+            .uri(path)
+            .header("accept-encoding", accept)
+            .body(Body::empty())
+            .unwrap()
+    };
+    let headers = |response: &crate::support::TestResponse| {
+        [
+            "content-encoding",
+            "etag",
+            "vary",
+            "accept-ranges",
+            "content-type",
+        ]
+        .map(|name| response.header(name).map(str::to_owned))
+    };
+    for path in ["/api/etag", "/api/partial", "/api/small", "/api/same"] {
+        for accept in ["gzip", "identity"] {
+            let get = app.send(ask(Method::GET, path, accept)).await;
+            let head = app.send(ask(Method::HEAD, path, accept)).await;
+            assert_eq!(head.status, get.status, "{path} {accept}");
+            assert_eq!(headers(&head), headers(&get), "{path} {accept}");
+            assert!(head.body.is_empty(), "{path} {accept}");
+        }
+    }
+    let head = app.send(ask(Method::HEAD, "/api/etag", "gzip")).await;
+    assert_eq!(head.header("content-encoding"), Some("gzip"));
+    assert_eq!(head.header("etag"), Some("W/\"v1\""));
+    assert_eq!(head.header("content-length"), None);
+    // A `206` and a small body are not compressed, `GET` or `HEAD`.
+    for path in ["/api/partial", "/api/small"] {
+        let head = app.send(ask(Method::HEAD, path, "gzip")).await;
+        assert_eq!(head.header("content-encoding"), None, "{path}");
+    }
+    // A `304` says what the `200` it stands in for varies on.
+    let same = app.send(ask(Method::GET, "/api/same", "gzip")).await;
+    assert_eq!(same.status, StatusCode::NOT_MODIFIED);
+    assert_eq!(same.header("vary"), Some("accept-encoding"));
+}
+
 #[tokio::test]
 async fn maintenance_mode_returns_503() {
     let dir = tempfile::Builder::new()

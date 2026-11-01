@@ -438,6 +438,7 @@ x-out: a\r\n
 x-out: b\r\n
 x-in: ba\r\n
 x-in: b\r\n
+vary: accept-encoding\r\n
 vary: Origin\r\n
 connection: close\r\n
 \r\n
@@ -732,6 +733,7 @@ x-out: a\r\n
 x-out: b\r\n
 x-in: ba\r\n
 x-in: b\r\n
+vary: accept-encoding\r\n
 vary: Origin\r\n
 connection: close\r\n
 \r\n
@@ -841,6 +843,7 @@ x-out: a\r\n
 x-out: b\r\n
 x-in: ba\r\n
 x-in: b\r\n
+vary: accept-encoding\r\n
 vary: Origin\r\n
 connection: close\r\n
 \r\n
@@ -1066,6 +1069,7 @@ x-out: a\r\n
 x-out: b\r\n
 x-in: ba\r\n
 x-in: b\r\n
+vary: accept-encoding\r\n
 vary: Origin\r\n
 connection: close\r\n
 \r\n

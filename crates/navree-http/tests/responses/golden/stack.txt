@@ -107,7 +107,7 @@ GET /deals/x [("origin", "http://evil.example")]
 400 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":400,\"message\":\"Invalid URL: Cannot parse `x` to a `u32`\",\"error\":\"Bad Request\",\"code\":\"bad_request\"}"] | 114..114
 
 HEAD /deals/x []
-400 | content-type: application/json / x-content-type-options: nosniff / content-length: 114 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+400 | content-type: application/json / x-content-type-options: nosniff / content-length: 114 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | [] | 0..0
 
 POST /deals/x []
 405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
@@ -203,7 +203,7 @@ GET /app-error [("origin", "http://evil.example")]
 409 | content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":409,\"message\":\"Taken.\",\"error\":\"Conflict\",\"code\":\"conflict\"}"] | 74..74
 
 HEAD /app-error []
-409 | content-type: application/json / x-content-type-options: nosniff / content-length: 74 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+409 | content-type: application/json / x-content-type-options: nosniff / content-length: 74 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | [] | 0..0
 
 POST /app-error []
 405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
@@ -227,7 +227,7 @@ GET /stream [("origin", "http://evil.example")]
 200 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["one", "two", "three"] | 0..
 
 HEAD /stream []
-200 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+200 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | [] | 0..0
 
 POST /stream []
 405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
@@ -251,7 +251,7 @@ GET /broken [("origin", "http://evil.example")]
 200 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["start"] | 0.. | error: gone
 
 HEAD /broken []
-200 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+200 | x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | [] | 0..0
 
 POST /broken []
 405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106
@@ -299,7 +299,7 @@ GET /large [("origin", "http://evil.example")]
 200 | content-type: text/plain; charset=utf-8 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"] | 4096..4096
 
 HEAD /large []
-200 | content-type: text/plain; charset=utf-8 / content-length: 4096 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: Origin | [] | 0..0
+200 | content-type: text/plain; charset=utf-8 / content-length: 4096 / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | [] | 0..0
 
 POST /large []
 405 | allow: GET, HEAD, OPTIONS / content-type: application/json / x-content-type-options: nosniff / x-out: a / x-out: b / x-in: ba / x-in: b / vary: accept-encoding / vary: Origin | ["{\"statusCode\":405,\"message\":\"Method Not Allowed\",\"error\":\"Method Not Allowed\",\"code\":\"method_not_allowed\"}"] | 106..106

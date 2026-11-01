@@ -847,3 +847,213 @@ async fn the_length_of_an_opted_out_response_says_nothing_of_a_guess() {
     assert!(length(right.clone(), false).await < length(wrong.clone(), false).await);
     assert_eq!(length(right, true).await, length(wrong, true).await);
 }
+
+/// Sends a `method` request accepting `accept` through the layer.
+async fn send_as(
+    method: http::Method,
+    accept: &[&str],
+    response: Response<Body>,
+) -> Response<Body> {
+    let response = std::sync::Mutex::new(Some(response));
+    let inner = service_fn(move |_: Request<Body>| {
+        let response = response.lock().unwrap().take().expect("one call");
+        async move { Ok::<_, Infallible>(response) }
+    });
+    let mut request = request(accept);
+    *request.method_mut() = method;
+    ServiceBuilder::new()
+        .layer(CompressionLayer::new())
+        .service(inner)
+        .oneshot(request)
+        .await
+        .unwrap()
+}
+
+/// A body-less response to a `HEAD` request, as the router makes it from the
+/// `GET` response: the head of the `GET` response, its length kept when it is
+/// known.
+fn head_of(get: Response<Body>) -> Response<Body> {
+    let (mut parts, body) = get.into_parts();
+    if let Some(length) = body.size_hint().exact() {
+        parts.headers.insert(CONTENT_LENGTH, length.into());
+    }
+    Response::from_parts(parts, Body::empty())
+}
+
+/// The headers that say how a response is encoded, for comparing the answers
+/// to `GET` and to `HEAD`. (`Content-Length` is another matter: a `GET`
+/// response gets its length from its body when it is sent, and a `HEAD`
+/// response has it set, unless the body is compressed.)
+fn encoding_headers(response: &Response<Body>) -> Vec<(&'static str, Option<String>)> {
+    ["content-encoding", "etag", "vary", "accept-ranges"]
+        .into_iter()
+        .map(|name| {
+            let value = response.headers().get(name);
+            (name, value.map(|v| v.to_str().unwrap().to_owned()))
+        })
+        .collect()
+}
+
+/// A `206` with a `multipart/byteranges` body has its ranges' headers inside,
+/// and none of its own `Content-Range`.
+#[tokio::test]
+async fn a_partial_content_response_is_never_compressed() {
+    for content_type in ["multipart/byteranges; boundary=x", "text/plain"] {
+        let response = Response::builder()
+            .status(StatusCode::PARTIAL_CONTENT)
+            .header(CONTENT_TYPE, content_type)
+            .body(Body::from(long("x")))
+            .unwrap();
+        let response = send(&["gzip"], response).await;
+        assert!(!gzipped(&response), "{content_type}");
+        assert!(!response.headers().contains_key(VARY), "{content_type}");
+        let (frames, _) = collect(response).await;
+        assert_eq!(frames.concat(), long("x").as_bytes(), "{content_type}");
+    }
+}
+
+/// `HEAD` is the `GET` response without a body: the same fields, each as the
+/// `GET` has it, though the router has emptied the body before the layer sees
+/// it.
+#[tokio::test]
+async fn a_head_response_is_encoded_as_the_get_response_is() {
+    let get = || {
+        Response::builder()
+            .header(CONTENT_TYPE, "text/plain")
+            .header(ACCEPT_RANGES, "bytes")
+            .header(ETAG, "\"v1\"")
+            .body(Body::from(long("x")))
+            .unwrap()
+    };
+    for accept in [&["gzip"][..], &["identity"], &["br"], &[]] {
+        let wanted = send_as(http::Method::GET, accept, get()).await;
+        let head = send_as(http::Method::HEAD, accept, head_of(get())).await;
+        assert_eq!(
+            encoding_headers(&head),
+            encoding_headers(&wanted),
+            "{accept:?}"
+        );
+        assert_eq!(gzipped(&head), gzipped(&wanted), "{accept:?}");
+        assert_eq!(
+            head.headers().get(CONTENT_LENGTH).is_some(),
+            !gzipped(&head),
+            "{accept:?}: the length of a body that is sent as it is"
+        );
+        let (frames, _) = collect(head).await;
+        assert!(frames.is_empty(), "{accept:?}: a HEAD response has no body");
+    }
+    let head = send_as(http::Method::HEAD, &["gzip"], head_of(get())).await;
+    assert!(gzipped(&head));
+    assert_eq!(head.headers()[ETAG], "W/\"v1\"");
+    assert_eq!(head.headers()[VARY], "accept-encoding");
+    assert!(!head.headers().contains_key(CONTENT_LENGTH));
+    assert!(!head.headers().contains_key(ACCEPT_RANGES));
+}
+
+/// The exclusions hold for `HEAD` as they do for `GET`: the length that `GET`
+/// would send says whether the body is under the floor.
+#[tokio::test]
+async fn a_head_response_is_left_alone_when_the_get_response_would_be() {
+    let small = || text("x".repeat(31));
+    let wanted = send_as(http::Method::GET, &["gzip"], small()).await;
+    let head = send_as(http::Method::HEAD, &["gzip"], head_of(small())).await;
+    assert_eq!(encoding_headers(&head), encoding_headers(&wanted));
+    assert!(!gzipped(&head));
+    assert_eq!(head.headers()[CONTENT_LENGTH], "31");
+
+    // A body of unknown size counts as large, for `GET` and so for `HEAD`.
+    let stream = || {
+        let chunks = futures_util::stream::iter([Ok::<_, Infallible>(long("x"))]);
+        Response::builder()
+            .header(CONTENT_TYPE, "text/plain")
+            .body(Body::from_stream(chunks))
+            .unwrap()
+    };
+    let wanted = send_as(http::Method::GET, &["gzip"], stream()).await;
+    let head = send_as(http::Method::HEAD, &["gzip"], head_of(stream())).await;
+    assert!(gzipped(&wanted));
+    assert_eq!(encoding_headers(&head), encoding_headers(&wanted));
+
+    for (name, response) in [
+        (
+            "no-transform",
+            Response::builder()
+                .header(CONTENT_TYPE, "text/plain")
+                .header(CACHE_CONTROL, "no-transform")
+                .body(Body::from(long("x")))
+                .unwrap(),
+        ),
+        (
+            "an image",
+            Response::builder()
+                .header(CONTENT_TYPE, "image/png")
+                .body(Body::from(long("x")))
+                .unwrap(),
+        ),
+    ] {
+        let head = send_as(http::Method::HEAD, &["gzip"], head_of(response)).await;
+        assert!(!gzipped(&head), "{name}");
+        assert!(!head.headers().contains_key(VARY), "{name}");
+        assert!(head.headers().contains_key(CONTENT_LENGTH), "{name}");
+    }
+}
+
+/// A `304` has the fields a `200` for the same request would, `Vary` among
+/// them: a cache that updates what it stores from it keeps the key it stores
+/// the response under.
+#[tokio::test]
+async fn a_not_modified_response_varies_like_the_response_it_stands_for() {
+    let not_modified = || {
+        Response::builder()
+            .status(StatusCode::NOT_MODIFIED)
+            .header(ETAG, "\"v1\"")
+            .body(Body::empty())
+            .unwrap()
+    };
+    for accept in [&["gzip"][..], &["identity"], &[]] {
+        let response = send(accept, not_modified()).await;
+        assert_eq!(response.headers()[VARY], "accept-encoding", "{accept:?}");
+        assert!(!gzipped(&response), "{accept:?}");
+        assert_eq!(response.headers()[ETAG], "\"v1\"");
+    }
+    let response = send_as(http::Method::HEAD, &["gzip"], not_modified()).await;
+    assert_eq!(response.headers()[VARY], "accept-encoding");
+
+    // Not for a response that is never compressed.
+    let mut opted_out = not_modified();
+    opted_out
+        .extensions_mut()
+        .insert(Arc::new(crate::route::RouteMeta {
+            no_compression: true,
+            ..Default::default()
+        }));
+    assert!(
+        !send(&["gzip"], opted_out)
+            .await
+            .headers()
+            .contains_key(VARY)
+    );
+    let mut no_transform = not_modified();
+    no_transform
+        .headers_mut()
+        .insert(CACHE_CONTROL, HeaderValue::from_static("no-transform"));
+    let response = send(&["gzip"], no_transform).await;
+    assert!(!response.headers().contains_key(VARY));
+    // And once.
+    let mut varied = not_modified();
+    varied
+        .headers_mut()
+        .insert(VARY, HeaderValue::from_static("Accept-Encoding"));
+    let response = send(&["gzip"], varied).await;
+    assert_eq!(response.headers().get_all(VARY).iter().count(), 1);
+
+    // The other statuses without a body say nothing of a representation.
+    for status in [StatusCode::NO_CONTENT, StatusCode::RESET_CONTENT] {
+        let response = Response::builder()
+            .status(status)
+            .body(Body::empty())
+            .unwrap();
+        let response = send(&["gzip"], response).await;
+        assert!(!response.headers().contains_key(VARY), "{status}");
+    }
+}

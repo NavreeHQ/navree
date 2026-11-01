@@ -11,7 +11,7 @@ use http::header::{
     ACCEPT_ENCODING, ACCEPT_RANGES, CACHE_CONTROL, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_RANGE,
     CONTENT_TYPE, ETAG, VARY,
 };
-use http::{HeaderMap, HeaderValue, Request, Response, StatusCode};
+use http::{HeaderMap, HeaderValue, Method, Request, Response, StatusCode};
 use http_body::Body as HttpBody;
 use navree_kernel::BoxError;
 use pin_project_lite::pin_project;
@@ -37,7 +37,8 @@ const MIN_SIZE: u64 = 32;
 ///   is at least that of `identity`. A header value that is not visible
 ///   ASCII is skipped.
 /// - **Some responses are never compressed**: one that already has a
-///   `Content-Encoding` or a `Content-Range`, one with
+///   `Content-Encoding` or a `Content-Range`, one with status 206 (a
+///   `multipart/byteranges` body has none of its own), one with
 ///   `Cache-Control: no-transform`, one of a route with
 ///   [`no_compression`](crate::RouteDef::no_compression), one with a status
 ///   that has no body (1xx, 204, 205, 304), a body of fewer than 32 bytes (by
@@ -45,6 +46,11 @@ const MIN_SIZE: u64 = 32;
 ///   counts as large), and the content types `image/*` (but `image/svg+xml`),
 ///   `application/grpc*` (but `application/grpc-web*`) and
 ///   `text/event-stream`, in any case.
+/// - **`HEAD` is `GET` without the body**: the router empties the body of a
+///   `HEAD` response and keeps its length, so for `HEAD` the length is what
+///   says whether the body is under 32 bytes (none: unknown, so large), and
+///   the response gets the headers of the compressed `GET` response (no
+///   `Content-Length`, a weak `ETag`, `Content-Encoding: gzip`) with no body.
 /// - **BREACH**: a compressed length gives away how much of a body repeats.
 ///   With a secret (a CSRF token) and reflected input in one response, and
 ///   cookies that a cross-site request carries, an attacker who sees lengths
@@ -52,7 +58,10 @@ const MIN_SIZE: u64 = 32;
 ///   response out with `no_compression` or `no-transform`.
 /// - **`Vary: accept-encoding`** is added to every response that could be
 ///   compressed, whatever the client accepts, unless a `Vary` value already
-///   contains `accept-encoding` (in any case).
+///   contains `accept-encoding` (in any case). A 304 carries it as well,
+///   unless it has `no-transform`, a `Content-Encoding` or a route that opts
+///   out: it has the header fields of the 200 it stands in for, and what that
+///   one is, a cache has to be told.
 /// - **A compressed response** loses its `Content-Length` and
 ///   `Accept-Ranges`, a strong `ETag` becomes a weak one, and it gets
 ///   `Content-Encoding: gzip`. Its body is a gzip
@@ -111,9 +120,11 @@ where
 
     fn call(&mut self, request: Request<ReqBody>) -> Self::Future {
         let gzip = accepts_gzip(request.headers());
+        let head = request.method() == Method::HEAD;
         ResponseFuture {
             future: self.inner.call(request),
             gzip,
+            head,
         }
     }
 }
@@ -124,6 +135,7 @@ pin_project! {
         #[pin]
         future: F,
         gzip: bool,
+        head: bool,
     }
 }
 
@@ -142,20 +154,22 @@ where
             Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
             Poll::Pending => return Poll::Pending,
         };
-        Poll::Ready(Ok(compress(response, *this.gzip)))
+        Poll::Ready(Ok(compress(response, *this.gzip, *this.head)))
     }
 }
 
 /// `response`, gzipped when `gzip` (the client accepts it) and the
-/// response may be compressed.
-fn compress<B>(response: Response<B>, gzip: bool) -> Response<Body>
+/// response may be compressed. `head`: it answers a `HEAD` request, so its
+/// body is empty, and its `Content-Length` is that of the `GET` response.
+fn compress<B>(response: Response<B>, gzip: bool, head: bool) -> Response<Body>
 where
     B: HttpBody<Data = Bytes> + Send + 'static,
     B::Error: Into<BoxError>,
 {
-    let compressible = compressible(&response);
+    let compressible = compressible(&response, head);
+    let varies = compressible || stands_in_for_a_varying_response(&response);
     let (mut parts, body) = response.into_parts();
-    if compressible && !varies_with_accept_encoding(&parts.headers) {
+    if varies && !varies_with_accept_encoding(&parts.headers) {
         parts
             .headers
             .append(VARY, HeaderValue::from_static("accept-encoding"));
@@ -169,6 +183,9 @@ where
     parts
         .headers
         .insert(CONTENT_ENCODING, HeaderValue::from_static("gzip"));
+    if head {
+        return Response::from_parts(parts, Body::new(body));
+    }
     Response::from_parts(parts, Body::new(GzipBody::new(body)))
 }
 
@@ -185,27 +202,51 @@ fn weaken_etag(headers: &mut HeaderMap) {
     }
 }
 
-/// Whether the response may be compressed, whatever the client accepts.
-fn compressible<B: HttpBody>(response: &Response<B>) -> bool {
-    let headers = response.headers();
-    let opted_out = response
+/// Whether the response was opted out of compression by its route.
+fn opted_out<B>(response: &Response<B>) -> bool {
+    response
         .extensions()
         .get::<Arc<RouteMeta>>()
-        .is_some_and(|route| route.no_compression);
-    if opted_out
+        .is_some_and(|route| route.no_compression)
+}
+
+/// Whether the response is a 304 that stands in for a 200 that would have
+/// `Vary: accept-encoding`: unless the route opted out of compression, or the
+/// response says it is not transformed or already encoded.
+fn stands_in_for_a_varying_response<B>(response: &Response<B>) -> bool {
+    let headers = response.headers();
+    response.status() == StatusCode::NOT_MODIFIED
+        && !opted_out(response)
+        && !headers.contains_key(CONTENT_ENCODING)
+        && !no_transform(headers)
+}
+
+/// Whether the response may be compressed, whatever the client accepts. For
+/// a `HEAD` response the body is already gone, and `Content-Length` is what
+/// the `GET` response's body measures.
+fn compressible<B: HttpBody>(response: &Response<B>, head: bool) -> bool {
+    let headers = response.headers();
+    if opted_out(response)
         || !has_a_body(response.status())
+        // The parts of a `multipart/byteranges` body say which ranges they are.
+        || response.status() == StatusCode::PARTIAL_CONTENT
         || headers.contains_key(CONTENT_ENCODING)
         || headers.contains_key(CONTENT_RANGE)
         || no_transform(headers)
     {
         return false;
     }
-    let size = response.body().size_hint().exact().or_else(|| {
+    let length = || {
         headers
             .get(CONTENT_LENGTH)
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.parse::<u64>().ok())
-    });
+    };
+    let size = if head {
+        length()
+    } else {
+        response.body().size_hint().exact().or_else(length)
+    };
     if size.is_some_and(|size| size < MIN_SIZE) {
         return false;
     }
