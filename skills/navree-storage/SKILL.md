@@ -91,10 +91,15 @@ last_modified }`), `delete` (succeeds when missing), `list(dir)` (recursive,
 sorted), `url(path)` (needs `public_url`). No copy or move helper: stream
 `get_stream` into another disk's `put_stream`.
 
-On a `local` disk: a write goes through a staging file (`name#1`) and a rename,
-so a file name ending in `#` and digits is refused and never listed; symlinks
-are followed; on Windows a `:` in a name is stored as `%3A`; deleting a file
-removes the directories it leaves empty; a directory reads as a missing file.
+On a `local` disk: a write goes through a private staging file (`name#1`),
+is flushed to the device and renamed over the file (which keeps its permission
+bits), so a file name whose last `#` is followed by digits only is refused and
+never listed; symlinks are followed by reads and listings, and a write at the
+name of a link replaces the link; on Windows a `:` in a name is stored as
+`%3A`, and names ending in a dot or a space, device names (`NUL`, `COM1`...),
+names with `~` and a digit and names with `< > " | ? *` are refused; deleting a
+file removes the directories it leaves empty; a directory or a pipe reads as a
+missing file.
 
 ## Uploads through the app (multipart)
 

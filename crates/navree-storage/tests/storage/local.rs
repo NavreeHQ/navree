@@ -12,12 +12,12 @@ use crate::support::{SIGNING_KEY, storage};
 
 /// A temporary directory with a `root` for the disk inside it, so that
 /// anything written outside the root shows up next to it.
-struct Sandbox {
-    outer: tempfile::TempDir,
+pub(crate) struct Sandbox {
+    pub(crate) outer: tempfile::TempDir,
 }
 
 impl Sandbox {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let outer = tempfile::Builder::new()
             .prefix("navree-test-")
             .tempdir()
@@ -26,11 +26,11 @@ impl Sandbox {
         Self { outer }
     }
 
-    fn root(&self) -> PathBuf {
+    pub(crate) fn root(&self) -> PathBuf {
         self.outer.path().join("root")
     }
 
-    fn disk(&self) -> Disk {
+    pub(crate) fn disk(&self) -> Disk {
         storage(&self.root()).disk("local").unwrap()
     }
 
@@ -50,7 +50,7 @@ impl Sandbox {
 }
 
 /// Every file under `dir`, as paths relative to it with `/` separators.
-fn files_under(dir: &Path) -> Vec<String> {
+pub(crate) fn files_under(dir: &Path) -> Vec<String> {
     fn walk(dir: &Path, base: &Path, out: &mut Vec<String>) {
         for entry in std::fs::read_dir(dir).unwrap() {
             let entry = entry.unwrap();
@@ -161,10 +161,9 @@ async fn a_drive_letter_is_a_directory_name_under_the_root() {
         files_under(&sandbox.root()),
         [format!("{directory}/Windows/system.ini")]
     );
-    assert_eq!(
-        disk.list("").await.unwrap(),
-        [format!("{directory}/Windows/system.ini")]
-    );
+    // The listing names the file the way it was written, on every platform,
+    // so that the name opens it again.
+    assert_eq!(disk.list("").await.unwrap(), ["C:/Windows/system.ini"]);
     assert_eq!(disk.get("C:/Windows/system.ini").await.unwrap(), "x");
     assert_eq!(disk.get("C:\\Windows\\system.ini").await.unwrap(), "x");
 }

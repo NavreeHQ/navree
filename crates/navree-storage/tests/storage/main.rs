@@ -9,6 +9,7 @@ mod conformance;
 mod disk;
 mod drivers;
 mod local;
+mod local_hardening;
 mod module;
 mod options;
 mod presign;

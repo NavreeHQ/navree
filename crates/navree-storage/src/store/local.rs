@@ -1,18 +1,36 @@
 //! [`Local`]: files in a directory of the local filesystem.
 //!
-//! - **Atomic writes.** A file is written to `<name>#<n>` next to its
-//!   destination and renamed over it, so readers see the old file or the new
-//!   one. The staging file is removed if the write fails, the upload is
-//!   aborted or its future is dropped. Names that end in `#` and digits are
-//!   those staging names: listings skip them and no operation accepts them.
+//! - **Atomic, durable writes.** A file is written to `<name>#<n>` next to its
+//!   destination, flushed to the device and renamed over it, so readers see
+//!   the old file or the new one and a crash leaves one of the two. On Unix
+//!   the directory is flushed after the rename as well. The staging file is
+//!   removed if the write fails, the upload is aborted or its future is
+//!   dropped. Names whose last `#` is followed by digits only are those
+//!   staging names: listings skip them and no operation accepts them. A write
+//!   tries 1,000 staging names, and a few times over for a directory that
+//!   disappears under it, and then fails.
+//! - **Modes.** Staging files are readable by their owner only. A file that
+//!   replaces another keeps the other's permission bits; a new file gets the
+//!   mode the process's umask gives (a private one if it cannot be measured).
 //! - **Paths stay under the root.** A path is joined to the root one segment
 //!   at a time, and a segment that could mean anything but a name (`.`, `..`,
 //!   a separator, a control character) is refused again here, whatever the
-//!   caller did. On Windows a `:` in a name is written as `%3A`, so a drive
-//!   letter or an alternate data stream cannot be named.
-//! - **Symlinks are followed**, by reads, writes and listings alike. A link
-//!   to nowhere is a missing file. A link back to a directory above it fails
-//!   the listing.
+//!   caller did.
+//! - **One file, one name, on Windows.** A `:` in a name is written as `%3A`
+//!   (and a `%` that starts `%25` or `%3A` as `%25`), so a drive letter or an
+//!   alternate data stream cannot be named and no two names are one file.
+//!   Names that end in a dot or a space, names of devices (`CON`, `NUL`,
+//!   `COM1` and the rest, with or without an extension), names holding `~`
+//!   and a digit (the short names of the volume) and names with `< > " | ? *`
+//!   are refused, and a listing leaves out the files that have one. File
+//!   names stay case-insensitive, as the file system keeps them.
+//! - **Only regular files are files.** A directory, a pipe, a socket or a
+//!   device is a missing file, to every operation and to listings.
+//! - **Symlinks are followed** by reads and listings, and by a path that
+//!   runs through a linked directory; a write at the name of a link replaces
+//!   the link and leaves its target. A link to nowhere is a missing file. A
+//!   link back to a directory above it fails the listing, and so does a file
+//!   whose name is not Unicode or holds a control character.
 //! - **Deleting a file removes the directories it leaves empty**, up to but
 //!   not including the root.
 //!
@@ -24,6 +42,9 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
@@ -37,6 +58,13 @@ const CHUNK_BYTES: usize = 64 * 1024;
 
 /// The most memory reserved up front to read a whole file.
 const READ_RESERVE_BYTES: u64 = 64 * 1024 * 1024;
+
+/// How many staging names a write tries before it gives up.
+const MAX_STAGING_NAMES: u32 = 1000;
+
+/// How many times a write makes the directories above its file again because
+/// they were gone when it went to use them.
+const MAX_DIRECTORY_ATTEMPTS: u32 = 16;
 
 /// Files under a directory.
 pub(crate) struct Local {
@@ -65,7 +93,11 @@ impl Local {
                 return Err(StoreError::failed(format!("invalid path `{path}`")));
             }
             if cfg!(windows) {
-                located.push(segment.replace(':', "%3A"));
+                let name = windows_name(segment);
+                if windows_refuses(&name) {
+                    return Err(StoreError::failed(format!("invalid path `{path}`")));
+                }
+                located.push(name);
             } else {
                 located.push(segment);
             }
@@ -107,13 +139,13 @@ impl Store for Local {
     fn put<'a>(&'a self, path: &'a str, contents: Bytes) -> BoxFuture<'a, StoreResult<()>> {
         Box::pin(async move {
             let destination = self.locate_file(path)?;
+            let root = self.root.clone();
             let path = path.to_owned();
             blocking(move || {
                 let (mut file, staging) = create_staged(&destination, &path)?;
                 file.write_all(&contents)
                     .map_err(|error| fail("write", &path, error))?;
-                drop(file);
-                publish(staging, &destination, &path)
+                publish(file, staging, &destination, &path, &root)
             })
             .await
         })
@@ -122,6 +154,7 @@ impl Store for Local {
     fn begin_upload<'a>(&'a self, path: &'a str) -> BoxFuture<'a, StoreResult<Box<dyn Upload>>> {
         Box::pin(async move {
             let destination = self.locate_file(path)?;
+            let root = self.root.clone();
             let path = path.to_owned();
             blocking(move || {
                 let (file, staging) = create_staged(&destination, &path)?;
@@ -129,6 +162,7 @@ impl Store for Local {
                     file: Some(file),
                     staging,
                     destination,
+                    root,
                     path,
                 }) as Box<dyn Upload>)
             })
@@ -192,7 +226,7 @@ impl Store for Local {
             blocking(move || {
                 let metadata =
                     fs::metadata(&located).map_err(|error| lookup_fail("read", &path, error))?;
-                if metadata.is_dir() {
+                if !metadata.is_file() {
                     return Err(StoreError::NotFound);
                 }
                 Ok(meta(path, &metadata))
@@ -230,6 +264,7 @@ struct LocalUpload {
     file: Option<File>,
     staging: Staging,
     destination: PathBuf,
+    root: PathBuf,
     path: String,
 }
 
@@ -261,16 +296,16 @@ impl Upload for LocalUpload {
                 file,
                 staging,
                 destination,
+                root,
                 path,
             } = *self;
             blocking(move || {
-                if file.is_none() {
+                let Some(file) = file else {
                     return Err(StoreError::failed(format!(
                         "the upload of `{path}` is no longer usable"
                     )));
-                }
-                drop(file);
-                publish(staging, &destination, &path)
+                };
+                publish(file, staging, &destination, &path, &root)
             })
             .await
         })
@@ -289,6 +324,9 @@ impl Upload for LocalUpload {
 struct Staging {
     path: PathBuf,
     published: bool,
+    /// Whether the directories above the file were made for it, so that
+    /// their own entries have to reach the device too.
+    made_directories: bool,
 }
 
 impl Drop for Staging {
@@ -300,66 +338,261 @@ impl Drop for Staging {
 }
 
 /// Opens a new staging file next to `destination`, creating the directories
-/// above it as needed.
+/// above it as needed. The file is readable by its owner only.
 fn create_staged(destination: &Path, path: &str) -> StoreResult<(File, Staging)> {
     let mut number = 1u32;
+    let mut directory_attempts = 0u32;
+    let mut made_directories = false;
     loop {
         let mut name = destination.as_os_str().to_owned();
         name.push(format!("#{number}"));
         let staging = PathBuf::from(name);
-        match File::options().write(true).create_new(true).open(&staging) {
+        match open_staging(&staging) {
             Ok(file) => {
                 let staging = Staging {
                     path: staging,
                     published: false,
+                    made_directories,
                 };
                 return Ok((file, staging));
             }
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-                number = number
-                    .checked_add(1)
-                    .ok_or_else(|| StoreError::failed("too many uploads of the same file"))?;
+            Err(error) if is_taken(&error, &staging) => {
+                if number >= MAX_STAGING_NAMES {
+                    return Err(StoreError::failed("too many uploads of the same file"));
+                }
+                number += 1;
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                directory_attempts += 1;
+                if directory_attempts > MAX_DIRECTORY_ATTEMPTS {
+                    return Err(fail("create the directory of", path, error));
+                }
                 let parent = destination
                     .parent()
                     .ok_or_else(|| StoreError::failed(format!("invalid path `{path}`")))?;
                 fs::create_dir_all(parent)
                     .map_err(|error| fail("create the directory of", path, error))?;
+                made_directories = true;
             }
             Err(error) => return Err(fail("create", path, error)),
         }
     }
 }
 
-/// Renames the written staging file over `destination`.
-fn publish(mut staging: Staging, destination: &Path, path: &str) -> StoreResult<()> {
+/// Creates the staging file at `path`, which must not exist.
+fn open_staging(path: &Path) -> io::Result<File> {
+    let mut options = File::options();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(path)
+}
+
+/// Whether creating the staging file at `path` failed because something is
+/// there already. Windows says "access denied" where a directory is.
+fn is_taken(error: &io::Error, path: &Path) -> bool {
+    match error.kind() {
+        io::ErrorKind::AlreadyExists => true,
+        io::ErrorKind::PermissionDenied => fs::symlink_metadata(path).is_ok(),
+        _ => false,
+    }
+}
+
+/// Gives the written staging file its final mode, flushes it to the device
+/// and renames it over `destination`, then flushes the directory entries.
+fn publish(
+    file: File,
+    mut staging: Staging,
+    destination: &Path,
+    path: &str,
+    root: &Path,
+) -> StoreResult<()> {
+    #[cfg(unix)]
+    file.set_permissions(fs::Permissions::from_mode(final_mode(destination)))
+        .map_err(|error| fail("set the permissions of", path, error))?;
+    sync_file(&file, &staging.path).map_err(|error| fail("write", path, error))?;
+    drop(file);
     fs::rename(&staging.path, destination).map_err(|error| fail("replace", path, error))?;
     staging.published = true;
+    sync_directories(destination, root, staging.made_directories);
     Ok(())
 }
 
-/// Whether `name` is a staging name: what follows its first `#` is digits.
+/// The permission bits the file written to `destination` ends with: those of
+/// the file it replaces, or what a new file gets here.
+#[cfg(unix)]
+fn final_mode(destination: &Path) -> u32 {
+    match fs::symlink_metadata(destination) {
+        Ok(existing) if existing.is_file() => existing.permissions().mode() & 0o777,
+        _ => new_file_mode(destination.parent()),
+    }
+}
+
+/// The mode a new file gets in `directory`: what the umask (and a default ACL
+/// of the directory) leaves of `0666`, found by making a file there. Private
+/// if no file can be made.
+#[cfg(unix)]
+fn new_file_mode(directory: Option<&Path>) -> u32 {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static PROBES: AtomicU64 = AtomicU64::new(0);
+
+    let Some(directory) = directory else {
+        return 0o600;
+    };
+    let name = format!(
+        ".mode-{}#{}",
+        std::process::id(),
+        PROBES.fetch_add(1, Ordering::Relaxed)
+    );
+    let probe = directory.join(name);
+    let mode = File::options()
+        .write(true)
+        .create_new(true)
+        .open(&probe)
+        .and_then(|file| file.metadata())
+        .map(|metadata| metadata.permissions().mode() & 0o777);
+    let _ = fs::remove_file(&probe);
+    mode.unwrap_or(0o600)
+}
+
+/// Flushes `file`, which is at `path`, to the device.
+fn sync_file(file: &File, path: &Path) -> io::Result<()> {
+    #[cfg(test)]
+    flushed::record(path);
+    let _ = path;
+    file.sync_all()
+}
+
+/// Flushes the directory that holds `destination` after the rename, and
+/// with `ancestors` the ones above it up to `root`, which were made for it.
+/// Windows keeps no directory handles to flush; a failure to flush a
+/// directory is not a failure to store the file.
+fn sync_directories(destination: &Path, root: &Path, ancestors: bool) {
+    #[cfg(unix)]
+    {
+        let mut directory = destination.parent();
+        while let Some(current) = directory {
+            if let Ok(handle) = File::open(current) {
+                #[cfg(test)]
+                flushed::record(current);
+                let _ = handle.sync_all();
+            }
+            if !ancestors || current == root {
+                break;
+            }
+            directory = current.parent();
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = (destination, root, ancestors);
+}
+
+/// Whether `name` is a staging name: what follows its last `#` is digits.
 fn is_staging_name(name: &str) -> bool {
-    match name.split_once('#') {
+    match name.rsplit_once('#') {
         Some((_, suffix)) => !suffix.is_empty() && suffix.bytes().all(|b| b.is_ascii_digit()),
         None => false,
     }
 }
 
+/// The name a segment of a path has on a Windows volume: `:` is written
+/// `%3A`, and a `%` that starts `%25`, `%3A` or `%3a` is written `%25`, so
+/// that no two segments are one name and a name written by this function
+/// reads back with [`windows_segment`].
+fn windows_name(segment: &str) -> String {
+    let mut name = String::with_capacity(segment.len());
+    let mut rest = segment;
+    while let Some(next) = rest.chars().next() {
+        rest = &rest[next.len_utf8()..];
+        match next {
+            ':' => name.push_str("%3A"),
+            '%' if rest.starts_with("25") || rest.starts_with("3A") || rest.starts_with("3a") => {
+                name.push_str("%25");
+            }
+            other => name.push(other),
+        }
+    }
+    name
+}
+
+/// The segment that [`windows_name`] writes as `name`, or `None` if it writes
+/// no segment so (a file that was not made through this store).
+fn windows_segment(name: &str) -> Option<String> {
+    let mut segment = String::with_capacity(name.len());
+    let mut rest = name;
+    while let Some(next) = rest.chars().next() {
+        rest = &rest[next.len_utf8()..];
+        if next != '%' {
+            segment.push(next);
+        } else if let Some(after) = rest.strip_prefix("3A") {
+            segment.push(':');
+            rest = after;
+        } else if let Some(after) = rest.strip_prefix("25")
+            && (after.starts_with("25") || after.starts_with("3A") || after.starts_with("3a"))
+        {
+            segment.push('%');
+            rest = after;
+        } else {
+            segment.push('%');
+        }
+    }
+    (windows_name(&segment) == name).then_some(segment)
+}
+
+/// Whether a Windows volume would read the name `name` (already written by
+/// [`windows_name`]) as something else than a file by that name: a name that
+/// ends in a dot or a space (Windows drops them), the name of a device, a
+/// short name (`~` and a digit), or characters no name may have.
+fn windows_refuses(name: &str) -> bool {
+    name.ends_with(['.', ' '])
+        || name.contains(['<', '>', '"', '|', '?', '*'])
+        || name
+            .as_bytes()
+            .windows(2)
+            .any(|pair| pair[0] == b'~' && pair[1].is_ascii_digit())
+        || is_device_name(name)
+}
+
+/// Whether `name` is the name of a Windows device: `CON`, `PRN`, `AUX`,
+/// `NUL`, `CONIN$`, `CONOUT$`, `CLOCK$`, `COM` and `LPT` with a digit, in any
+/// case, followed by an extension or spaces or nothing.
+fn is_device_name(name: &str) -> bool {
+    let base = name.split('.').next().unwrap_or(name).trim_end_matches(' ');
+    let upper = base.to_uppercase();
+    if matches!(
+        upper.as_str(),
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$" | "CLOCK$"
+    ) {
+        return true;
+    }
+    let mut letters = upper.chars();
+    let prefix: String = letters.by_ref().take(3).collect();
+    matches!(prefix.as_str(), "COM" | "LPT")
+        && matches!(
+            (letters.next(), letters.next()),
+            (Some('0'..='9' | '\u{b9}' | '\u{b2}' | '\u{b3}'), None)
+        )
+}
+
 /// Opens the regular file at `located` and gives its size. A directory, a
-/// link to nowhere and a path through a file are missing files.
+/// pipe or other file that is not a regular file, a link to nowhere and a
+/// path through a file are missing files.
 fn open_file(located: &Path, path: &str) -> StoreResult<(File, u64)> {
     let metadata = fs::metadata(located).map_err(|error| lookup_fail("open", path, error))?;
-    if metadata.is_dir() {
+    if !metadata.is_file() {
         return Err(StoreError::NotFound);
     }
     let file = File::open(located).map_err(|error| lookup_fail("open", path, error))?;
-    let size = file
+    let metadata = file
         .metadata()
-        .map_err(|error| lookup_fail("open", path, error))?
-        .len();
-    Ok((file, size))
+        .map_err(|error| lookup_fail("open", path, error))?;
+    if !metadata.is_file() {
+        return Err(StoreError::NotFound);
+    }
+    Ok((file, metadata.len()))
 }
 
 /// The contents of `file` as chunks of at most [`CHUNK_BYTES`], read on the
@@ -430,18 +663,22 @@ fn walk(start: &Path, prefix: &str) -> StoreResult<Vec<Meta>> {
             Err(error) if is_missing(&error) => continue,
             Err(error) => return Err(fail("list", &level.path, error)),
         };
-        let Ok(name) = entry.file_name().into_string() else {
+        let Ok(on_disk) = entry.file_name().into_string() else {
             return Err(StoreError::failed(format!(
                 "`{}` has a file whose name is not Unicode",
                 level.path
             )));
         };
-        if name.chars().any(|c| c.is_ascii_control()) {
+        if on_disk.chars().any(char::is_control) {
             return Err(StoreError::failed(format!(
                 "`{}` has a file with a control character in its name",
                 level.path
             )));
         }
+        // A file that no call could name is not listed.
+        let Some(name) = store_name(&on_disk) else {
+            continue;
+        };
         let path = if level.path.is_empty() {
             name.clone()
         } else {
@@ -472,7 +709,7 @@ fn walk(start: &Path, prefix: &str) -> StoreResult<Vec<Meta>> {
                     Err(_) => continue,
                 }
             } else {
-                level.canonical.join(&name)
+                level.canonical.join(&on_disk)
             };
             if open.iter().any(|level| level.canonical == canonical) {
                 return Err(StoreError::failed(format!(
@@ -488,11 +725,24 @@ fn walk(start: &Path, prefix: &str) -> StoreResult<Vec<Meta>> {
                 Err(error) if is_missing(&error) => {}
                 Err(error) => return Err(fail("list", &path, error)),
             }
-        } else if !is_staging_name(&name) {
+        } else if metadata.is_file() && !is_staging_name(&on_disk) {
             files.push(meta(path, &metadata));
         }
     }
     Ok(files)
+}
+
+/// The name a caller uses for the file or directory `on_disk`, or `None` if
+/// no call would accept one.
+fn store_name(on_disk: &str) -> Option<String> {
+    if cfg!(windows) {
+        if windows_refuses(on_disk) {
+            return None;
+        }
+        windows_segment(on_disk)
+    } else {
+        Some(on_disk.to_owned())
+    }
 }
 
 /// A directory being listed.
@@ -577,6 +827,24 @@ fn simplified(path: PathBuf) -> PathBuf {
     path
 }
 
+/// What was flushed to the device, for the tests.
+#[cfg(test)]
+mod flushed {
+    use std::path::{Path, PathBuf};
+    use std::sync::Mutex;
+
+    static LOG: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+
+    pub(super) fn record(path: &Path) {
+        LOG.lock().unwrap().push(path.to_owned());
+    }
+
+    /// Every path flushed so far, in order.
+    pub(super) fn paths() -> Vec<PathBuf> {
+        LOG.lock().unwrap().clone()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Component;
@@ -604,7 +872,7 @@ mod tests {
     #[test]
     fn every_path_that_is_accepted_is_under_the_root() {
         let (_directory, store) = store();
-        for path in [
+        let mut accepted = vec![
             "a/b",
             "a//b",
             "/a/b/",
@@ -616,8 +884,15 @@ mod tests {
             "%5c..%5cx",
             "~/x",
             "//server/share/x",
-            "a/...",
-        ] {
+        ];
+        // Windows reads a name of dots as a shorter one, so it is refused
+        // there and is an ordinary name elsewhere.
+        if cfg!(windows) {
+            assert!(store.locate("a/...").is_err());
+        } else {
+            accepted.push("a/...");
+        }
+        for path in accepted {
             let located = store.locate(path).unwrap();
             assert!(located.starts_with(&store.root), "{path:?}: {located:?}");
             assert!(
@@ -659,7 +934,16 @@ mod tests {
 
     #[test]
     fn staging_names_are_a_hash_and_digits() {
-        for name in ["file#1", "file#123", "#1", "a#7", "\u{1f600}#34"] {
+        for name in [
+            "file#1",
+            "file#123",
+            "#1",
+            "a#7",
+            "\u{1f600}#34",
+            "a#b#12",
+            "report#final.pdf#1",
+            "trail##1",
+        ] {
             assert!(is_staging_name(name), "{name}");
         }
         for name in [
@@ -668,9 +952,11 @@ mod tests {
             "file#1a",
             "file#a1",
             "file#1.txt",
-            "a#b#12",
+            "a#12#b",
+            "report#final.pdf",
             "file#\u{1f600}34",
             "#",
+            "##",
         ] {
             assert!(!is_staging_name(name), "{name}");
         }
@@ -836,5 +1122,234 @@ mod tests {
             shown.contains(directory.path().file_name().unwrap().to_str().unwrap()),
             "{shown}"
         );
+    }
+
+    #[test]
+    fn a_windows_name_reads_back_as_the_segment_it_was_made_from() {
+        let segments = [
+            "plain.txt",
+            "a:b",
+            "a%3Ab",
+            "a%3ab",
+            "a%253Ab",
+            "100% done.txt",
+            "100%25",
+            "%",
+            "%%25x",
+            "%2",
+            "%3",
+            ":",
+            "::$DATA",
+            "C:",
+            "x%:y",
+            "caf\u{e9} %3A \u{1f600}",
+        ];
+        let mut names = std::collections::BTreeSet::new();
+        for segment in segments {
+            let name = windows_name(segment);
+            assert!(!name.contains(':'), "{segment:?} -> {name:?}");
+            assert_eq!(windows_segment(&name).as_deref(), Some(segment), "{name:?}");
+            assert!(names.insert(name), "{segment:?} shares its name");
+        }
+        // The escapes are written as the store documents them.
+        assert_eq!(windows_name("a:b"), "a%3Ab");
+        assert_eq!(windows_name("a%3Ab"), "a%253Ab");
+        assert_eq!(windows_name("100% done"), "100% done");
+    }
+
+    #[test]
+    fn a_file_made_outside_the_store_is_listed_only_if_a_segment_names_it() {
+        for name in ["100%25x", "a%3ab", "x%25", "%25"] {
+            assert_eq!(windows_segment(name), None, "{name:?}");
+        }
+        for name in ["100% done", "a%20b", "%", "%2", "plain"] {
+            assert_eq!(windows_segment(name).as_deref(), Some(name), "{name:?}");
+        }
+    }
+
+    #[test]
+    fn windows_names_that_could_mean_another_file_are_refused() {
+        for name in [
+            "a.",
+            "a ",
+            "a..",
+            "a. ",
+            "a .",
+            "...",
+            "CON",
+            "con",
+            "Nul",
+            "AUX",
+            "PRN",
+            "COM1",
+            "com9",
+            "COM0",
+            "LPT1",
+            "lpt9",
+            "COM\u{b9}",
+            "COM\u{b2}",
+            "LPT\u{b3}",
+            "CONIN$",
+            "conout$",
+            "CLOCK$",
+            "NUL.txt",
+            "con.tar.gz",
+            "aux.",
+            "NUL .txt",
+            "CON ",
+            "AVERYL~1.TXT",
+            "AVERYL~1",
+            "PROGRA~12",
+            "a~1",
+            "x~9y",
+            "secret~2.txt",
+            "a<b",
+            "a>b",
+            "a\"b",
+            "a|b",
+            "a?b",
+            "a*b",
+        ] {
+            assert!(windows_refuses(name), "{name:?}");
+        }
+        for name in [
+            "secret.txt",
+            ".hidden",
+            "a.b",
+            "a b",
+            " a",
+            "console",
+            "NULL",
+            "COM10",
+            "COM",
+            "COMM1",
+            "LPT",
+            "comx",
+            "CONIN",
+            "nul_",
+            "con-1",
+            "a~b",
+            "~a",
+            "a~",
+            "notes~draft.txt",
+            "caf\u{e9}",
+            "a%3Ab",
+            "report#final.pdf",
+        ] {
+            assert!(!windows_refuses(name), "{name:?}");
+        }
+    }
+
+    #[test]
+    fn a_path_through_a_refused_name_is_refused_on_windows_only() {
+        let (_directory, store) = store();
+        for path in ["secret.txt.", "a /b", "NUL/x", "AVERYL~1/x", "a/COM1.txt"] {
+            assert_eq!(store.locate(path).is_err(), cfg!(windows), "{path:?}");
+        }
+    }
+
+    #[test]
+    fn staging_names_that_are_directories_or_taken_are_skipped_and_the_search_ends() {
+        let (directory, _store) = store();
+        let destination = directory.path().join("f");
+        fs::create_dir(directory.path().join("f#1")).unwrap();
+        fs::write(directory.path().join("f#2"), "x").unwrap();
+        let (_file, staging) = create_staged(&destination, "f").unwrap();
+        assert_eq!(staging.path, directory.path().join("f#3"));
+        drop(staging);
+
+        for number in 1..=MAX_STAGING_NAMES {
+            fs::write(directory.path().join(format!("g#{number}")), "x").unwrap();
+        }
+        let error = create_staged(&directory.path().join("g"), "g")
+            .err()
+            .unwrap();
+        assert!(error.to_string().contains("too many"), "{error}");
+        // The last name is tried, and no other.
+        let beyond = format!("g#{}", MAX_STAGING_NAMES + 1);
+        assert!(!directory.path().join(beyond).exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_directory_that_cannot_be_made_to_hold_the_file_ends_the_search() {
+        // Windows takes the trailing space off `wd ` where it makes the
+        // directory but not where it opens the file below it, so the file is
+        // never found however often the directory is made.
+        let (directory, _store) = store();
+        let destination = directory.path().join("wd ").join("x");
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let result = create_staged(&destination, "wd /x").map(|_| ());
+            let _ = sender.send(result.is_err());
+        });
+        let ended = receiver.recv_timeout(std::time::Duration::from_secs(10));
+        assert_eq!(ended, Ok(true), "the search for a place went on");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn staging_files_are_private_and_the_final_mode_is_that_of_the_file_replaced() {
+        use std::os::unix::fs::PermissionsExt;
+        let (directory, _store) = store();
+        let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        let (file, staging) = create_staged(&directory.path().join("f"), "f").unwrap();
+        assert_eq!(mode(&staging.path), 0o600);
+        drop(file);
+        drop(staging);
+
+        let shared = directory.path().join("shared");
+        fs::write(&shared, "old").unwrap();
+        fs::set_permissions(&shared, fs::Permissions::from_mode(0o640)).unwrap();
+        assert_eq!(final_mode(&shared), 0o640);
+        let ordinary = directory.path().join("ordinary");
+        fs::File::create(&ordinary).unwrap();
+        assert_eq!(final_mode(&directory.path().join("new")), mode(&ordinary));
+        // A link is replaced, not written through: it counts as a new file.
+        let link = directory.path().join("link");
+        std::os::unix::fs::symlink(&shared, &link).unwrap();
+        assert_eq!(final_mode(&link), mode(&ordinary));
+        // No probe is left behind.
+        let probes = fs::read_dir(directory.path())
+            .unwrap()
+            .filter(|entry| {
+                let name = entry.as_ref().unwrap().file_name();
+                name.to_string_lossy().starts_with(".mode")
+            })
+            .count();
+        assert_eq!(probes, 0);
+    }
+
+    #[tokio::test]
+    async fn a_file_reaches_the_device_before_the_rename_and_its_directories_after_it() {
+        let (directory, store) = store();
+        store
+            .put("made/for/it.txt", Bytes::from("one"))
+            .await
+            .unwrap();
+        let mut upload = store.begin_upload("up.bin").await.unwrap();
+        upload.write(Bytes::from("x")).await.unwrap();
+        upload.finish().await.unwrap();
+
+        let log: Vec<PathBuf> = flushed::paths()
+            .into_iter()
+            .filter(|path| path.starts_with(&store.root))
+            .collect();
+        let position = |wanted: &Path| log.iter().position(|path| path == wanted);
+        let root = &store.root;
+        let staged = position(&root.join("made/for/it.txt#1"));
+        assert!(staged.is_some(), "the file is flushed: {log:?}");
+        assert!(position(&root.join("up.bin#1")).is_some(), "{log:?}");
+        #[cfg(unix)]
+        {
+            // After a first write, the directory of the file and those made
+            // for it up to the root, all after the file.
+            for wanted in [root.join("made/for"), root.join("made"), root.clone()] {
+                let at = position(&wanted);
+                assert!(at > staged, "{wanted:?} {log:?}");
+            }
+        }
+        assert_eq!(store.read("made/for/it.txt", None).await.unwrap(), "one");
+        drop(directory);
     }
 }
