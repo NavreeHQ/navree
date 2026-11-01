@@ -921,7 +921,7 @@ impl Generator<'_> {
             || truthy(pattern)
             || truthy(object.get("$defs")))
         {
-            return Ok((!members.is_empty()).then(|| Ty::Literal(members)));
+            return Ok((!members.is_empty()).then_some(Ty::Literal(members)));
         }
 
         if property_count > 0 {
@@ -1005,11 +1005,11 @@ impl Generator<'_> {
             }
         }
         if index_types.is_empty() {
-            return Ok((!members.is_empty()).then(|| Ty::Literal(members)));
+            return Ok((!members.is_empty()).then_some(Ty::Literal(members)));
         }
         let index = Ty::Literal(vec![Member::new(Key::Index("key"), union(index_types))]);
         let parts: Vec<Ty> = (!members.is_empty())
-            .then(|| Ty::Literal(members))
+            .then_some(Ty::Literal(members))
             .into_iter()
             .chain([index])
             .collect();

@@ -649,7 +649,12 @@ mod tests {
         assert_eq!(object.get("new"), Some(&Value::Bool(true)));
         assert!(!object.contains("k0"));
         assert_eq!(object.get("k199"), Some(&Value::Num(199.0)));
-        let keys: Vec<_> = object.js_entries().iter().map(|(k, _)| *k).take(2).collect();
+        let keys: Vec<_> = object
+            .js_entries()
+            .iter()
+            .map(|(k, _)| *k)
+            .take(2)
+            .collect();
         assert_eq!(keys, ["k1", "k2"]);
         // The same object, built a key at a time, finds the same keys.
         let mut built = Object::default();
