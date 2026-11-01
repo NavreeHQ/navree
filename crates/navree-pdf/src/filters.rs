@@ -3,7 +3,9 @@
 //! encoded.
 //!
 //! Each filter's output is held to a limit as it is produced: a stream
-//! that would inflate further is refused before it does.
+//! that would inflate further is refused before it does. A stream has at most
+//! [`MAX_FILTERS`] filters, and what each step reads and writes is counted for
+//! the caller, whether the steps after it work or not.
 
 use std::io::Read;
 
@@ -23,38 +25,105 @@ pub(crate) enum DecodeError {
 
 /// Bytes read from an inflater at a time.
 const CHUNK: usize = 64 * 1024;
+/// Filters one stream may have (8). Real streams have one or two: an image
+/// behind ASCII85 and Flate is about the most a writer does.
+pub(crate) const MAX_FILTERS: usize = 8;
+
+/// What a filter reads its data with.
+#[derive(Clone, Copy, Debug)]
+struct Params {
+    predictor: i64,
+    columns: usize,
+    colors: usize,
+    bits: usize,
+    /// LZW's `EarlyChange`.
+    early: bool,
+}
+
+impl Params {
+    /// What `dict` holds, each value resolved.
+    fn of<'a>(
+        dict: Option<&'a Dictionary>,
+        resolve: &dyn Fn(&'a Object) -> Option<&'a Object>,
+    ) -> Params {
+        let number =
+            |key: &[u8]| -> Option<i64> { resolve(dict?.get(key)?).and_then(Object::as_i64) };
+        let sample = |key: &[u8], default: i64| -> usize {
+            usize::try_from(number(key).unwrap_or(default).max(1)).unwrap_or(usize::MAX)
+        };
+        Params {
+            predictor: number(b"Predictor").unwrap_or(1),
+            columns: sample(b"Columns", 1),
+            colors: sample(b"Colors", 1),
+            bits: sample(b"BitsPerComponent", 8),
+            early: number(b"EarlyChange").is_none_or(|value| value != 0),
+        }
+    }
+}
 
 /// Decodes `data` through the filters of `dict`, each step held to `limit`
 /// bytes. Data without filters is returned as it is, held to the limit
-/// too.
-pub(crate) fn decode(dict: &Dictionary, data: &[u8], limit: usize) -> Result<Vec<u8>, DecodeError> {
-    let filters: Vec<&[u8]> = match dict.get(b"Filter") {
+/// too. Values in `dict` that are references go through `resolve`.
+///
+/// `spent` grows by what each step reads and writes (a step that goes over
+/// `limit` counts it all), before the next step can fail: the caller charges
+/// it, whatever comes back.
+pub(crate) fn decode<'a>(
+    dict: &'a Dictionary,
+    data: &'a [u8],
+    limit: usize,
+    resolve: &dyn Fn(&'a Object) -> Option<&'a Object>,
+    spent: &mut usize,
+) -> Result<Vec<u8>, DecodeError> {
+    let value = |object: Option<&'a Object>| object.and_then(resolve);
+    let filters: Vec<&[u8]> = match value(dict.get(b"Filter")) {
         Some(Object::Name(name)) => vec![name.as_slice()],
-        Some(Object::Array(names)) => names.iter().filter_map(Object::as_name).collect(),
+        Some(Object::Array(names)) if names.len() > MAX_FILTERS => {
+            return Err(DecodeError::Invalid("more filters than a stream may have"));
+        }
+        Some(Object::Array(names)) => names
+            .iter()
+            .filter_map(|name| resolve(name)?.as_name())
+            .collect(),
         _ => Vec::new(),
     };
-    let params = dict.get(b"DecodeParms").or_else(|| dict.get(b"DP"));
+    let params = value(dict.get(b"DecodeParms").or_else(|| dict.get(b"DP")));
     let mut output: Option<Vec<u8>> = None;
     for (index, filter) in filters.into_iter().enumerate() {
         let params = match params {
-            Some(Object::Array(params)) => params.get(index).and_then(Object::as_dict),
+            Some(Object::Array(params)) => value(params.get(index)).and_then(Object::as_dict),
             Some(Object::Dictionary(params)) => Some(params),
             _ => None,
         };
+        let params = Params::of(params, resolve);
         let input = output.as_deref().unwrap_or(data);
+        *spent = spent.saturating_add(input.len());
         let decoded = match filter {
-            b"FlateDecode" | b"Fl" => predict(inflate(input, limit)?, params, limit)?,
-            b"LZWDecode" | b"LZW" => predict(lzw(input, params, limit)?, params, limit)?,
-            b"ASCII85Decode" | b"A85" => ascii85(input, limit)?,
-            b"ASCIIHexDecode" | b"AHx" => ascii_hex(input, limit)?,
-            b"RunLengthDecode" | b"RL" => run_length(input, limit)?,
+            b"FlateDecode" | b"Fl" => inflate(input, limit).and_then(|inflated| {
+                *spent = spent.saturating_add(inflated.len());
+                predict(inflated, params, limit)
+            }),
+            b"LZWDecode" | b"LZW" => lzw(input, params.early, limit).and_then(|inflated| {
+                *spent = spent.saturating_add(inflated.len());
+                predict(inflated, params, limit)
+            }),
+            b"ASCII85Decode" | b"A85" => ascii85(input, limit),
+            b"ASCIIHexDecode" | b"AHx" => ascii_hex(input, limit),
+            b"RunLengthDecode" | b"RL" => run_length(input, limit),
             // Decryption is done before the filters run.
-            b"Crypt" => input.to_vec(),
+            b"Crypt" => continue,
             _ => return Err(DecodeError::Unsupported),
         };
+        let decoded = decoded.inspect_err(|error| {
+            if *error == DecodeError::Over {
+                *spent = spent.saturating_add(limit);
+            }
+        })?;
         if decoded.len() > limit {
+            *spent = spent.saturating_add(limit);
             return Err(DecodeError::Over);
         }
+        *spent = spent.saturating_add(decoded.len());
         output = Some(decoded);
     }
     match output {
@@ -105,12 +174,8 @@ fn inflate(input: &[u8], limit: usize) -> Result<Vec<u8>, DecodeError> {
 }
 
 /// LZW, with `EarlyChange` (1 unless the parameters say 0).
-fn lzw(input: &[u8], params: Option<&Dictionary>, limit: usize) -> Result<Vec<u8>, DecodeError> {
+fn lzw(input: &[u8], early: bool, limit: usize) -> Result<Vec<u8>, DecodeError> {
     use weezl::{BitOrder, decode::Decoder};
-    let early = params
-        .and_then(|params| params.get(b"EarlyChange"))
-        .and_then(Object::as_i64)
-        .is_none_or(|value| value != 0);
     let mut decoder = if early {
         Decoder::with_tiff_size_switch(BitOrder::Msb, 8)
     } else {
@@ -241,36 +306,22 @@ fn run_length(input: &[u8], limit: usize) -> Result<Vec<u8>, DecodeError> {
 
 /// Undoes the predictor of `params` (`Predictor` 2 for TIFF, 10 to 15 for
 /// PNG) on `data`.
-fn predict(
-    data: Vec<u8>,
-    params: Option<&Dictionary>,
-    limit: usize,
-) -> Result<Vec<u8>, DecodeError> {
-    let Some(params) = params else {
+fn predict(data: Vec<u8>, params: Params, limit: usize) -> Result<Vec<u8>, DecodeError> {
+    let Params {
+        predictor,
+        columns,
+        colors,
+        bits,
+        ..
+    } = params;
+    if !matches!(predictor, 2 | 10..=15) {
         return Ok(data);
-    };
-    let sample = |key: &[u8], default: i64| -> usize {
-        let value = params
-            .get(key)
-            .and_then(Object::as_i64)
-            .unwrap_or(default)
-            .max(1);
-        usize::try_from(value).unwrap_or(usize::MAX)
-    };
-    let (columns, colors, bits) = (
-        sample(b"Columns", 1),
-        sample(b"Colors", 1),
-        sample(b"BitsPerComponent", 8),
-    );
+    }
     let row_bits = columns
         .checked_mul(colors)
         .and_then(|samples| samples.checked_mul(bits))
         .ok_or(DecodeError::Invalid("a predictor row too large"))?;
-    match params
-        .get(b"Predictor")
-        .and_then(Object::as_i64)
-        .unwrap_or(1)
-    {
+    match predictor {
         2 => tiff(data, columns, colors, bits),
         10..=15 => png(
             &data,
@@ -452,6 +503,12 @@ pub(crate) fn deflate(data: &[u8]) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
+    /// `decode` of a dictionary with direct values.
+    fn decoded(dict: &Dictionary, data: &[u8], limit: usize) -> Result<Vec<u8>, DecodeError> {
+        let mut spent = 0;
+        decode(dict, data, limit, &Some, &mut spent)
+    }
+
     use super::*;
     use crate::dictionary;
 
@@ -464,18 +521,18 @@ mod tests {
         let data = b"BT /F1 12 Tf (Hello) Tj ET".repeat(100);
         let packed = deflate(&data);
         assert_eq!(
-            decode(&with("FlateDecode"), &packed, 1 << 20).unwrap(),
+            decoded(&with("FlateDecode"), &packed, 1 << 20).unwrap(),
             data
         );
         assert_eq!(
-            decode(&with("FlateDecode"), &packed, data.len() - 1),
+            decoded(&with("FlateDecode"), &packed, data.len() - 1),
             Err(DecodeError::Over)
         );
         // A megabyte of zeros from a kilobyte, refused at 64 KiB.
         let bomb = deflate(&vec![0; 1 << 20]);
         assert!(bomb.len() < 2048);
         assert_eq!(
-            decode(&with("FlateDecode"), &bomb, 64 * 1024),
+            decoded(&with("FlateDecode"), &bomb, 64 * 1024),
             Err(DecodeError::Over)
         );
     }
@@ -488,13 +545,13 @@ mod tests {
         let last = packed.len() - 1;
         packed[last] ^= 0xFF;
         assert_eq!(
-            decode(&with("FlateDecode"), &packed, 1 << 20).unwrap(),
+            decoded(&with("FlateDecode"), &packed, 1 << 20).unwrap(),
             data
         );
         // A zlib header that is not one: read as raw deflate.
         packed[0] = 0;
         assert_eq!(
-            decode(&with("FlateDecode"), &packed, 1 << 20).unwrap(),
+            decoded(&with("FlateDecode"), &packed, 1 << 20).unwrap(),
             data
         );
     }
@@ -502,25 +559,31 @@ mod tests {
     #[test]
     fn ascii_filters_and_run_length() {
         assert_eq!(
-            decode(&with("ASCIIHexDecode"), b"48 65 6c6C6f>", 100).unwrap(),
+            decoded(&with("ASCIIHexDecode"), b"48 65 6c6C6f>", 100).unwrap(),
             b"Hello"
         );
-        assert_eq!(decode(&with("ASCIIHexDecode"), b"414", 100).unwrap(), b"A@");
+        assert_eq!(
+            decoded(&with("ASCIIHexDecode"), b"414", 100).unwrap(),
+            b"A@"
+        );
         assert!(matches!(
-            decode(&with("ASCIIHexDecode"), b"4X", 100),
+            decoded(&with("ASCIIHexDecode"), b"4X", 100),
             Err(DecodeError::Invalid(_))
         ));
         assert_eq!(
-            decode(&with("ASCII85Decode"), b"87cURD]i,\"Ebo80~>", 100).unwrap(),
+            decoded(&with("ASCII85Decode"), b"87cURD]i,\"Ebo80~>", 100).unwrap(),
             b"Hello World!"
         );
-        assert_eq!(decode(&with("ASCII85Decode"), b"z~>", 100).unwrap(), [0; 4]);
         assert_eq!(
-            decode(&with("ASCII85Decode"), b"zzzz~>", 8),
+            decoded(&with("ASCII85Decode"), b"z~>", 100).unwrap(),
+            [0; 4]
+        );
+        assert_eq!(
+            decoded(&with("ASCII85Decode"), b"zzzz~>", 8),
             Err(DecodeError::Over)
         );
         assert_eq!(
-            decode(
+            decoded(
                 &with("RunLengthDecode"),
                 &[2, b'a', b'b', b'c', 254, b'x', 128],
                 100
@@ -529,7 +592,7 @@ mod tests {
             b"abcxxx"
         );
         assert_eq!(
-            decode(&with("RunLengthDecode"), &[129; 64], 100),
+            decoded(&with("RunLengthDecode"), &[129; 64], 100),
             Err(DecodeError::Over)
         );
     }
@@ -544,14 +607,17 @@ mod tests {
         let both = dictionary! {
             "Filter" => vec![Object::from("ASCIIHexDecode"), Object::from("FlateDecode")],
         };
-        assert_eq!(decode(&both, &hex, 100).unwrap(), b"chained");
+        assert_eq!(decoded(&both, &hex, 100).unwrap(), b"chained");
         assert_eq!(
-            decode(&with("DCTDecode"), b"jpeg", 100),
+            decoded(&with("DCTDecode"), b"jpeg", 100),
             Err(DecodeError::Unsupported)
         );
-        assert_eq!(decode(&Dictionary::new(), b"plain", 100).unwrap(), b"plain");
         assert_eq!(
-            decode(&Dictionary::new(), b"plain", 4),
+            decoded(&Dictionary::new(), b"plain", 100).unwrap(),
+            b"plain"
+        );
+        assert_eq!(
+            decoded(&Dictionary::new(), b"plain", 4),
             Err(DecodeError::Over)
         );
     }
@@ -565,7 +631,7 @@ mod tests {
             "Filter" => "FlateDecode",
             "DecodeParms" => dictionary! { "Predictor" => 12, "Columns" => 3 },
         };
-        assert_eq!(decode(&dict, &packed, 100).unwrap(), [1, 2, 3, 2, 3, 4]);
+        assert_eq!(decoded(&dict, &packed, 100).unwrap(), [1, 2, 3, 2, 3, 4]);
         // Average and Paeth.
         let rows = [3, 2, 2, 2, 4, 1, 1, 1];
         let dict = dictionary! {
@@ -573,7 +639,7 @@ mod tests {
             "DecodeParms" => dictionary! { "Predictor" => 15, "Columns" => 3 },
         };
         assert_eq!(
-            decode(&dict, &deflate(&rows), 100).unwrap(),
+            decoded(&dict, &deflate(&rows), 100).unwrap(),
             [2, 3, 3, 3, 4, 5]
         );
         // A row longer than the data: refused, nothing set aside for it.
@@ -582,7 +648,7 @@ mod tests {
             "DecodeParms" => dictionary! { "Predictor" => 12, "Columns" => i64::MAX / 16 },
         };
         assert!(matches!(
-            decode(&huge, &packed, 100),
+            decoded(&huge, &packed, 100),
             Err(DecodeError::Invalid(_))
         ));
     }
@@ -594,7 +660,7 @@ mod tests {
             "DecodeParms" => dictionary! { "Predictor" => 2, "Columns" => 4 },
         };
         assert_eq!(
-            decode(&dict, &deflate(&[1, 1, 1, 1, 5, 0, 0, 0]), 100).unwrap(),
+            decoded(&dict, &deflate(&[1, 1, 1, 1, 5, 0, 0, 0]), 100).unwrap(),
             [1, 2, 3, 4, 5, 5, 5, 5]
         );
         let packed = dictionary! {
@@ -603,7 +669,7 @@ mod tests {
         };
         // 1 0 0 0 0 0 0 0 sums to all ones.
         assert_eq!(
-            decode(&packed, &deflate(&[0b1000_0000]), 100).unwrap(),
+            decoded(&packed, &deflate(&[0b1000_0000]), 100).unwrap(),
             [0xFF]
         );
     }
@@ -613,9 +679,52 @@ mod tests {
         // "-----A---B" from the PDF reference, with early change.
         let data = [0x80, 0x0B, 0x60, 0x50, 0x22, 0x0C, 0x0C, 0x85, 0x01];
         assert_eq!(
-            decode(&with("LZWDecode"), &data, 100).unwrap(),
+            decoded(&with("LZWDecode"), &data, 100).unwrap(),
             b"-----A---B"
         );
-        assert_eq!(decode(&with("LZWDecode"), &data, 5), Err(DecodeError::Over));
+        assert_eq!(
+            decoded(&with("LZWDecode"), &data, 5),
+            Err(DecodeError::Over)
+        );
+    }
+
+    #[test]
+    fn what_each_step_reads_and_writes_is_counted_even_when_a_later_one_fails() {
+        let data = vec![b' '; 4096];
+        let packed = deflate(&data);
+        let dict = dictionary! {
+            "Filter" => vec![Object::name("FlateDecode"), Object::name("DCTDecode")],
+        };
+        let mut spent = 0;
+        assert_eq!(
+            decode(&dict, &packed, 1 << 20, &Some, &mut spent),
+            Err(DecodeError::Unsupported)
+        );
+        assert!(spent >= data.len(), "{spent}");
+        // One step past the limit counts the limit.
+        let mut spent = 0;
+        assert_eq!(
+            decode(&with("FlateDecode"), &packed, 1024, &Some, &mut spent),
+            Err(DecodeError::Over)
+        );
+        assert!(spent >= 1024, "{spent}");
+    }
+
+    #[test]
+    fn a_stream_may_have_eight_filters_and_no_more() {
+        let names = |count: usize| Object::Array(vec![Object::name("ASCIIHexDecode"); count]);
+        let dict = |count: usize| dictionary! { "Filter" => names(count) };
+        let mut data = b"x".to_vec();
+        for _ in 0..MAX_FILTERS {
+            data = data
+                .iter()
+                .flat_map(|byte| format!("{byte:02x}").into_bytes())
+                .collect();
+        }
+        assert_eq!(decoded(&dict(MAX_FILTERS), &data, 1 << 20).unwrap(), b"x");
+        assert!(matches!(
+            decoded(&dict(MAX_FILTERS + 1), &data, 1 << 20),
+            Err(DecodeError::Invalid(_))
+        ));
     }
 }

@@ -70,6 +70,11 @@ fn hex_value(byte: u8) -> Option<u8> {
 pub(crate) struct Lexer<'a> {
     pub(crate) buf: &'a [u8],
     pub(crate) pos: usize,
+    /// The furthest it read before moving back: what a parse that fails
+    /// looked at is charged, wherever it ends.
+    furthest: usize,
+    /// How many arrays and dictionaries it is inside.
+    inside: usize,
     /// Whether `12 0 R` is a reference (in a file) or three operands (in a
     /// content stream, which has no references: `0 0 0 RG`).
     references: bool,
@@ -80,6 +85,8 @@ impl<'a> Lexer<'a> {
         Lexer {
             buf,
             pos,
+            furthest: pos,
+            inside: 0,
             references: true,
         }
     }
@@ -89,8 +96,21 @@ impl<'a> Lexer<'a> {
         Lexer {
             buf,
             pos: 0,
+            furthest: 0,
+            inside: 0,
             references: false,
         }
+    }
+
+    /// Moves back to `to`, remembering how far it read.
+    pub(crate) fn rewind(&mut self, to: usize) {
+        self.furthest = self.furthest.max(self.pos);
+        self.pos = to;
+    }
+
+    /// The furthest it has read, moved back or not.
+    pub(crate) fn reached(&self) -> usize {
+        self.furthest.max(self.pos)
     }
 
     pub(crate) fn peek(&self) -> Option<u8> {
@@ -161,13 +181,14 @@ impl<'a> Lexer<'a> {
         let start = self.pos;
         let mut value = 0u64;
         while let Some(byte) = self.peek().filter(u8::is_ascii_digit) {
-            value = value
+            let Some(next) = value
                 .checked_mul(10)
                 .and_then(|value| value.checked_add(u64::from(byte - b'0')))
-                .or_else(|| {
-                    self.pos = start;
-                    None
-                })?;
+            else {
+                self.rewind(start);
+                return None;
+            };
+            value = next;
             self.pos += 1;
         }
         (self.pos > start).then_some(value)
@@ -221,14 +242,18 @@ impl<'a> Lexer<'a> {
             (self.eat(b"R") && !self.peek().is_some_and(is_regular)).then_some((number, generation))
         })();
         if id.is_none() {
-            self.pos = start;
+            self.rewind(start);
         }
         id
     }
 
     /// An integer or a real. A real is `[sign] digits . [digits]` or
     /// `[sign] . digits`; a minus sign some writers put inside the fraction
-    /// (`0.00-4142502`) is skipped.
+    /// (`0.00-4142502`) is skipped, and so is one doubled before the digits
+    /// (`--5`). A whole number too large for an integer is an error alone in
+    /// a file; inside an array or a dictionary, or in a content stream, it is
+    /// read as the largest real it can be, so that one bad value does not
+    /// lose what is around it.
     pub(crate) fn number(&mut self) -> Result<Object, Fail> {
         let start = self.pos;
         let negative = match self.peek() {
@@ -242,6 +267,11 @@ impl<'a> Lexer<'a> {
             }
             _ => false,
         };
+        if negative {
+            while self.peek() == Some(b'-') {
+                self.pos += 1;
+            }
+        }
         let digits_start = self.pos;
         while self.peek().is_some_and(|byte| byte.is_ascii_digit()) {
             self.pos += 1;
@@ -263,13 +293,13 @@ impl<'a> Lexer<'a> {
             return match text.parse::<f32>() {
                 Ok(value) => Ok(Object::Real(value)),
                 Err(_) => {
-                    self.pos = start;
+                    self.rewind(start);
                     Err(Fail::Syntax)
                 }
             };
         }
         if whole == 0 {
-            self.pos = start;
+            self.rewind(start);
             return Err(Fail::Syntax);
         }
         let mut magnitude = 0i64;
@@ -283,8 +313,17 @@ impl<'a> Lexer<'a> {
                 }
             }) {
                 Some(value) => value,
+                None if self.inside > 0 || !self.references => {
+                    let digits = self.buf.get(digits_start..self.pos).unwrap_or_default();
+                    let value = std::str::from_utf8(digits)
+                        .ok()
+                        .and_then(|digits| digits.parse::<f32>().ok())
+                        .unwrap_or(f32::MAX)
+                        .min(f32::MAX);
+                    return Ok(Object::Real(if negative { -value } else { value }));
+                }
                 None => {
-                    self.pos = start;
+                    self.rewind(start);
                     return Err(Fail::Syntax);
                 }
             };
@@ -336,7 +375,7 @@ impl<'a> Lexer<'a> {
         let mut depth = 0usize;
         loop {
             let Some(byte) = self.peek() else {
-                self.pos = start;
+                self.rewind(start);
                 return Err(Fail::Syntax);
             };
             self.pos += 1;
@@ -424,12 +463,12 @@ impl<'a> Lexer<'a> {
                         }
                     }
                     None => {
-                        self.pos = start;
+                        self.rewind(start);
                         return Err(Fail::Syntax);
                     }
                 },
                 None => {
-                    self.pos = start;
+                    self.rewind(start);
                     return Err(Fail::Syntax);
                 }
             }
@@ -445,6 +484,7 @@ impl<'a> Lexer<'a> {
     fn array(&mut self, depth: usize, meter: &dyn Meter) -> Result<Vec<Object>, Fail> {
         self.pos += 1;
         self.skip_space();
+        self.inside += 1;
         let mut items = Vec::new();
         loop {
             if self.eat(b"]") {
@@ -452,6 +492,7 @@ impl<'a> Lexer<'a> {
             }
             items.push(self.object(depth, meter)?);
         }
+        self.inside -= 1;
         items.shrink_to_fit();
         Ok(items)
     }
@@ -466,6 +507,7 @@ impl<'a> Lexer<'a> {
             return Err(Fail::Syntax);
         }
         self.skip_space();
+        self.inside += 1;
         let mut dictionary = Dictionary::new();
         loop {
             if self.eat(b">>") {
@@ -474,9 +516,18 @@ impl<'a> Lexer<'a> {
             let key = self.name().ok_or(Fail::Syntax)?;
             meter.charge(ENTRY_MEMORY + key.len())?;
             self.skip_space();
+            // A key the dictionary ends after has no value: `null`, as a
+            // reader would take a value it could not read.
+            if self.eat(b">>") {
+                meter.charge(OBJECT_MEMORY)?;
+                dictionary.set(key, Object::Null);
+                break;
+            }
             let value = self.object(depth, meter)?;
             dictionary.set(key, value);
         }
+        self.inside -= 1;
+        dictionary.shrink_to_fit();
         Ok(dictionary)
     }
 }

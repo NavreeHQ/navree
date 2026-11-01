@@ -1,22 +1,23 @@
-//! How a font's codes decode to text: a standard encoding, an encoding's
-//! `Differences` over a base, a `ToUnicode` map, or a predefined UTF-16
+//! How a font's codes decode to text, after its `ToUnicode` map (which comes
+//! first, as ISO 32000 9.10.2 says, and is read by the font cache): a standard
+//! encoding, an encoding's `Differences` over a base, or a predefined UTF-16
 //! CMap.
 //!
-//! A font's `Encoding` decides: a standard encoding's name; `Identity-H`
-//! or `Identity-V`, which read the `ToUnicode` map; a dictionary with a
-//! `BaseEncoding` (standard when it has none) and `Differences`; or the
+//! A font's `Encoding` decides: a standard encoding's name; a dictionary with
+//! a `BaseEncoding` (standard when it has none) and `Differences`; or the
 //! name of a predefined CMap (`UniGB-UCS2-H` and `UniGB-UTF16-H` are read
-//! as UTF-16; others decode nothing). A font without an `Encoding` reads
-//! its `ToUnicode` map, or else the standard encoding. An encoding that
-//! cannot be read (a cycle of references, an unknown glyph name in
-//! `Differences`, a missing map) falls back to the standard encoding.
+//! as UTF-16; others decode nothing). A font without an `Encoding` reads the
+//! standard encoding. An encoding that cannot be read (a cycle of references,
+//! `Identity-H` with no map) falls back to the standard encoding. A glyph name
+//! that cannot be read loses that one code, and a bad item of `Differences`
+//! that one item.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-use crate::document::{ContentError, Document};
-use crate::object::{Dictionary, Object, Stream};
+use crate::document::Document;
+use crate::object::{Dictionary, Object};
 
-use super::cmap::{ToUnicode, utf16_bytes_with_bom};
+use super::cmap::utf16_bytes_with_bom;
 use super::tables;
 
 /// A font's encoding.
@@ -25,21 +26,12 @@ pub(crate) enum Encoding<'a> {
     Table(&'static [u16; 256]),
     /// A predefined CMap or another name.
     Named(&'a [u8]),
-    /// A `ToUnicode` map.
-    Map(ToUnicode),
-    /// `Differences` over a base.
+    /// `Differences` over a base: the text of each code it names, none for
+    /// a glyph name that cannot be read.
     Differences {
         base: Box<Encoding<'a>>,
-        map: HashMap<u8, u16>,
+        map: HashMap<u8, Box<str>>,
     },
-}
-
-/// Why an encoding could not be had.
-pub(crate) enum Unreadable {
-    /// The `ToUnicode` map inflates past the limit.
-    Over,
-    /// Anything else: the standard encoding is used.
-    Other,
 }
 
 /// The UTF-16 unit of the glyph called `name`.
@@ -49,6 +41,55 @@ pub(crate) fn glyph(name: &[u8]) -> Option<u16> {
         .ok()
         .and_then(|index| tables::GLYPHS.get(index))
         .map(|(_, unit)| *unit)
+}
+
+/// The text of the glyph called `name`: a name the tables know; `uni`
+/// and four hex digits for each UTF-16 unit; `u` and four to six hex digits for
+/// a code point; or, as the Adobe Glyph List reads names, the part before a
+/// `.`, and the parts between `_` each read so.
+pub(crate) fn glyph_text(name: &[u8]) -> Option<String> {
+    let name = name.split(|&byte| byte == b'.').next()?;
+    if name.is_empty() {
+        return None;
+    }
+    let mut text = String::new();
+    for part in name.split(|&byte| byte == b'_') {
+        text.push_str(&component(part)?);
+    }
+    Some(text)
+}
+
+/// One part of a glyph name.
+fn component(part: &[u8]) -> Option<String> {
+    if let Some(unit) = glyph(part) {
+        return Some(char::decode_utf16([unit]).flatten().collect());
+    }
+    let upper_hex = |digits: &[u8]| {
+        digits
+            .iter()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'A'..=b'F'))
+    };
+    let hex = |digits: &[u8]| -> Option<u32> {
+        u32::from_str_radix(std::str::from_utf8(digits).ok()?, 16).ok()
+    };
+    if let Some(digits) = part.strip_prefix(b"uni")
+        && !digits.is_empty()
+        && digits.len().is_multiple_of(4)
+        && upper_hex(digits)
+    {
+        let units: Option<Vec<u16>> = digits
+            .chunks(4)
+            .map(|unit| hex(unit).and_then(|unit| u16::try_from(unit).ok()))
+            .collect();
+        return String::from_utf16(&units?).ok();
+    }
+    if let Some(digits) = part.strip_prefix(b"u")
+        && (4..=6).contains(&digits.len())
+        && upper_hex(digits)
+    {
+        return char::from_u32(hex(digits)?).map(String::from);
+    }
+    None
 }
 
 fn table_text(table: &[u16; 256], bytes: &[u8], out: &mut String) {
@@ -78,11 +119,10 @@ impl Encoding<'_> {
                 table_text(&tables::WIN_ANSI_ENCODING, bytes, out)
             }
             Encoding::Named(_) => return None,
-            Encoding::Map(map) => out.push_str(&map.decode(bytes)),
             Encoding::Differences { base, map } => {
                 for &byte in bytes {
                     match map.get(&byte) {
-                        Some(&unit) => out.extend(char::decode_utf16([unit]).flatten()),
+                        Some(text) => out.push_str(text),
                         None => base.decode_into(&[byte], out)?,
                     }
                 }
@@ -92,118 +132,95 @@ impl Encoding<'_> {
     }
 }
 
-/// The encoding of `font`; an error only for a map over `limit` (other
-/// failures read as the standard encoding), or for an object that is not
-/// a font.
+/// The encoding of `font`, when it is one (see [`is_font`]):
+/// what its codes read as where no `ToUnicode` map says otherwise.
 pub(crate) fn font_encoding<'a>(
     document: &'a Document,
     font: &'a Dictionary,
-    limit: usize,
-) -> Result<Encoding<'a>, Unreadable> {
-    if !font.has_type(b"Font") {
-        return Err(Unreadable::Other);
+) -> Option<Encoding<'a>> {
+    if !is_font(document, font) {
+        return None;
     }
-    let result = match font.get(b"Encoding") {
-        Some(encoding) => base_of(document, font, encoding, limit),
-        None => match document.get(font, b"ToUnicode").and_then(Object::as_stream) {
-            Some(stream) => to_unicode(document, stream, limit),
-            None => Ok(Encoding::Table(&tables::STANDARD_ENCODING)),
-        },
+    let encoding = match font.get(b"Encoding") {
+        Some(encoding) => base_of(document, encoding),
+        None => None,
     };
-    match result {
-        Err(Unreadable::Over) => Err(Unreadable::Over),
-        Err(Unreadable::Other) => Ok(Encoding::Table(&tables::STANDARD_ENCODING)),
-        Ok(encoding) => Ok(encoding),
+    Some(encoding.unwrap_or(Encoding::Table(&tables::STANDARD_ENCODING)))
+}
+
+/// Whether `font` can be a font: its `Type` is `Font`, or it has none and
+/// has what a font has.
+pub(crate) fn is_font(document: &Document, font: &Dictionary) -> bool {
+    match font.get(b"Type") {
+        Some(kind) => document.resolve(kind).and_then(Object::as_name) == Some(b"Font"),
+        None => font.has(b"Subtype") || font.has(b"BaseFont"),
     }
+}
+
+/// The name an `Encoding` entry leads to, through any number of references.
+pub(crate) fn encoding_name<'a>(document: &'a Document, font: &'a Dictionary) -> Option<&'a [u8]> {
+    document.get(font, b"Encoding")?.as_name()
 }
 
 /// The encoding an `Encoding` entry stands for.
-fn base_of<'a>(
-    document: &'a Document,
-    font: &'a Dictionary,
-    mut encoding: &'a Object,
-    limit: usize,
-) -> Result<Encoding<'a>, Unreadable> {
-    let mut seen = HashSet::new();
-    loop {
-        match encoding {
-            Object::Name(name) => return named(document, font, name, limit),
-            Object::Reference(id) => {
-                if !seen.insert(*id) {
-                    return Err(Unreadable::Other);
-                }
-                encoding = document.object(*id).ok_or(Unreadable::Other)?;
+fn base_of<'a>(document: &'a Document, encoding: &'a Object) -> Option<Encoding<'a>> {
+    match document.resolve(encoding)? {
+        Object::Name(name) => named(name),
+        Object::Dictionary(dict) => {
+            if !matches!(
+                document.get(dict, b"Type").and_then(Object::as_name),
+                None | Some(b"Encoding")
+            ) {
+                return None;
             }
-            Object::Dictionary(dict) => {
-                if !matches!(dict.type_name(), None | Some(b"Encoding")) {
-                    return Err(Unreadable::Other);
-                }
-                let base = match dict.get(b"BaseEncoding").and_then(Object::as_name) {
-                    Some(name) => named(document, font, name, limit)?,
-                    None => Encoding::Table(&tables::STANDARD_ENCODING),
-                };
-                let Some(differences) = dict.get(b"Differences") else {
-                    return Ok(base);
-                };
-                let items = differences.as_array().ok_or(Unreadable::Other)?;
-                let mut map = HashMap::new();
-                let mut code = 0u8;
-                for item in items {
-                    match item {
-                        Object::Integer(value) => {
-                            code = u8::try_from(*value).map_err(|_| Unreadable::Other)?;
+            let base = match document
+                .get(dict, b"BaseEncoding")
+                .and_then(Object::as_name)
+            {
+                Some(name) => named(name)?,
+                None => Encoding::Table(&tables::STANDARD_ENCODING),
+            };
+            let Some(differences) = dict.get(b"Differences") else {
+                return Some(base);
+            };
+            let items = document.resolve(differences)?.as_array()?;
+            let mut map = HashMap::new();
+            // The code the next name is for; outside a byte, a name is for
+            // no code.
+            let mut code = 0i64;
+            for item in items {
+                match document.resolve(item) {
+                    Some(Object::Integer(value)) => code = *value,
+                    Some(Object::Name(name)) => {
+                        if let Ok(byte) = u8::try_from(code) {
+                            map.insert(byte, glyph_text(name).unwrap_or_default().into());
                         }
-                        Object::Name(name) => {
-                            map.insert(code, glyph(name).ok_or(Unreadable::Other)?);
-                            code = code.wrapping_add(1);
-                        }
-                        _ => return Err(Unreadable::Other),
+                        code = code.saturating_add(1);
                     }
+                    _ => {}
                 }
-                return Ok(Encoding::Differences {
-                    base: Box::new(base),
-                    map,
-                });
             }
-            _ => return Err(Unreadable::Other),
+            Some(Encoding::Differences {
+                base: Box::new(base),
+                map,
+            })
         }
+        _ => None,
     }
 }
 
-fn named<'a>(
-    document: &'a Document,
-    font: &'a Dictionary,
-    name: &'a [u8],
-    limit: usize,
-) -> Result<Encoding<'a>, Unreadable> {
-    Ok(match name {
+/// The encoding `name` stands for; `Identity-H` and `Identity-V` have none of
+/// their own: they read the font's `ToUnicode` map.
+fn named(name: &[u8]) -> Option<Encoding<'_>> {
+    Some(match name {
         b"StandardEncoding" => Encoding::Table(&tables::STANDARD_ENCODING),
         b"MacRomanEncoding" => Encoding::Table(&tables::MAC_ROMAN_ENCODING),
         b"MacExpertEncoding" => Encoding::Table(&tables::MAC_EXPERT_ENCODING),
         b"WinAnsiEncoding" => Encoding::Table(&tables::WIN_ANSI_ENCODING),
         b"PDFDocEncoding" => Encoding::Table(&tables::PDF_DOC_ENCODING),
-        b"Identity-H" | b"Identity-V" => {
-            let stream = document
-                .get(font, b"ToUnicode")
-                .and_then(Object::as_stream)
-                .ok_or(Unreadable::Other)?;
-            return to_unicode(document, stream, limit);
-        }
+        b"Identity-H" | b"Identity-V" => return None,
         other => Encoding::Named(other),
     })
-}
-
-/// The map in `stream`, inflated no further than `limit`.
-pub(crate) fn to_unicode<'a>(
-    document: &Document,
-    stream: &Stream,
-    limit: usize,
-) -> Result<Encoding<'a>, Unreadable> {
-    match document.decode(stream, limit) {
-        Ok(data) => Ok(Encoding::Map(ToUnicode::read(&data))),
-        Err(ContentError::Over) => Err(Unreadable::Over),
-        Err(_) => Err(Unreadable::Other),
-    }
 }
 
 /// A PDF text string as the standard reads it: UTF-16BE after its
@@ -240,6 +257,25 @@ mod tests {
     }
 
     #[test]
+    fn glyph_names_of_every_kind_read_as_text() {
+        let text = |name: &[u8]| glyph_text(name);
+        assert_eq!(text(b"A").as_deref(), Some("A"));
+        assert_eq!(text(b"uni0041").as_deref(), Some("A"));
+        assert_eq!(text(b"uni00410042").as_deref(), Some("AB"));
+        assert_eq!(text(b"uniD83DDE00").as_deref(), Some("\u{1F600}"));
+        assert_eq!(text(b"u0041").as_deref(), Some("A"));
+        assert_eq!(text(b"u1F600").as_deref(), Some("\u{1F600}"));
+        assert_eq!(text(b"a.sc").as_deref(), Some("a"));
+        assert_eq!(text(b"f_i").as_deref(), Some("fi"));
+        assert_eq!(text(b".notdef"), None);
+        assert_eq!(text(b"g12"), None);
+        assert_eq!(text(b"uni004"), None);
+        assert_eq!(text(b"uni004g"), None);
+        assert_eq!(text(b"uD800"), None);
+        assert_eq!(text(b"u110000"), None);
+    }
+
+    #[test]
     fn standard_tables_decode() {
         let win = Encoding::Table(&tables::WIN_ANSI_ENCODING);
         assert_eq!(win.decode(&[0x41, 0xE9, 0x80, 0xDF]).unwrap(), "Aé€ß");
@@ -254,7 +290,7 @@ mod tests {
         );
         let differences = Encoding::Differences {
             base: Box::new(Encoding::Table(&tables::WIN_ANSI_ENCODING)),
-            map: HashMap::from([(b'a', 0x03B1)]),
+            map: HashMap::from([(b'a', "\u{03B1}".into())]),
         };
         assert_eq!(differences.decode(b"ab").unwrap(), "αb");
     }

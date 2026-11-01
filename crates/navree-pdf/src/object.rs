@@ -297,6 +297,11 @@ impl Dictionary {
         self.0.is_empty()
     }
 
+    /// Lets go of the room kept for entries to come.
+    pub(crate) fn shrink_to_fit(&mut self) {
+        self.0.shrink_to_fit();
+    }
+
     /// The name in `Type`.
     pub fn type_name(&self) -> Option<&[u8]> {
         self.get(b"Type").and_then(Object::as_name)

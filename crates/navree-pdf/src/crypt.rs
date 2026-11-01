@@ -128,19 +128,12 @@ impl Crypt {
         })
     }
 
-    /// Decrypts the strings and stream of object `id` in place.
-    pub(crate) fn decrypt(&self, id: ObjectId, object: &mut Object) {
+    /// Decrypts the strings and stream of object `id` in place; `identity`
+    /// says the stream opts out (see [`opts_out`]).
+    pub(crate) fn decrypt(&self, id: ObjectId, object: &mut Object, identity: bool) {
         match object {
             Object::Stream(stream) => {
                 self.decrypt_strings(id, &mut stream.dict);
-                let identity = stream
-                    .dict
-                    .get(b"DecodeParms")
-                    .and_then(Object::as_dict)
-                    .and_then(|params| params.get(b"Name"))
-                    .and_then(Object::as_name)
-                    == Some(b"Identity")
-                    && stream.filters().first() == Some(&&b"Crypt"[..]);
                 let skip = identity
                     || stream.dict.has_type(b"XRef")
                     || (!self.metadata && stream.dict.has_type(b"Metadata"));
@@ -209,6 +202,38 @@ impl Crypt {
             Method::Identity => data.to_vec(),
         }
     }
+}
+
+/// Whether a stream's first filter is `Crypt` with the `Identity` crypt
+/// filter: named in its parameters, or by having no name there, which is what
+/// the name defaults to.
+pub(crate) fn opts_out<'a>(
+    dict: &'a Dictionary,
+    resolve: &dyn Fn(&'a Object) -> Option<&'a Object>,
+) -> bool {
+    let first = |object: &'a Object| -> Option<&'a Object> {
+        match resolve(object)? {
+            Object::Array(items) => resolve(items.first()?),
+            other => Some(other),
+        }
+    };
+    let crypt = dict
+        .get(b"Filter")
+        .and_then(first)
+        .and_then(Object::as_name)
+        == Some(b"Crypt");
+    if !crypt {
+        return false;
+    }
+    let name = dict
+        .get(b"DecodeParms")
+        .or_else(|| dict.get(b"DP"))
+        .and_then(first)
+        .and_then(Object::as_dict)
+        .and_then(|params| params.get(b"Name"))
+        .and_then(resolve)
+        .and_then(Object::as_name);
+    name.is_none_or(|name| name == b"Identity")
 }
 
 fn rc4(key: &[u8], data: &[u8]) -> Vec<u8> {
@@ -400,6 +425,50 @@ fn aes256_key(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_crypt_filter_opts_out_by_name_in_a_list_or_with_no_name() {
+        let parsed = |text: &str| {
+            let Some(Object::Dictionary(dict)) = crate::parse::object(text.as_bytes()) else {
+                panic!("{text}");
+            };
+            dict
+        };
+        let opted = |text: &str| opts_out(&parsed(text), &Some);
+        assert!(opted("<</Filter/Crypt>>"));
+        assert!(opted("<</Filter[/Crypt]>>"));
+        assert!(opted("<</Filter/Crypt/DecodeParms<</Name/Identity>>>>"));
+        assert!(opted("<</Filter[/Crypt]/DecodeParms[<</Name/Identity>>]>>"));
+        assert!(opted(
+            "<</Filter[/Crypt/FlateDecode]/DecodeParms[<<>> null]>>"
+        ));
+        assert!(opted("<</Filter/Crypt/DP<</Name/Identity>>>>"));
+        assert!(!opted("<</Filter/Crypt/DecodeParms<</Name/StdCF>>>>"));
+        assert!(!opted("<</Filter[/Crypt]/DecodeParms[<</Name/StdCF>>]>>"));
+        assert!(!opted("<</Filter/FlateDecode>>"));
+        assert!(!opted("<</Filter[/FlateDecode/Crypt]>>"));
+        assert!(!opted("<<>>"));
+    }
+
+    #[test]
+    fn a_stream_that_opts_out_is_kept_as_it_is_written() {
+        let crypt = Crypt {
+            key: vec![1; 16],
+            strings: Method::Rc4,
+            streams: Method::Rc4,
+            metadata: true,
+        };
+        let stream = |identity| {
+            let mut object = Object::Stream(crate::object::Stream::new(
+                Dictionary::new(),
+                b"plain".to_vec(),
+            ));
+            crypt.decrypt((4, 0), &mut object, identity);
+            object.as_stream().unwrap().content.to_vec()
+        };
+        assert_eq!(stream(true), b"plain");
+        assert_ne!(stream(false), b"plain");
+    }
 
     #[test]
     fn rc4_matches_known_vectors() {

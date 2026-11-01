@@ -1,7 +1,7 @@
 //! [`Document`]: a PDF read lazily, within its [`ReadLimits`].
 
 use std::cell::{Cell, OnceCell, RefCell};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use bytes::Bytes;
 
@@ -23,6 +23,11 @@ const MAX_TREE_DEPTH: usize = 256;
 /// What reading a stream object holds besides its dictionary: the shared
 /// handle on its bytes.
 const STREAM_MEMORY: usize = 32;
+/// What an object stream's list holds for each object in it, with room to
+/// grow: a number and offset, in the list and in its index by number.
+const MEMBER_MEMORY: usize = 72;
+/// What each entry of a page's `Contents` costs to look at, in bytes of work.
+pub(crate) const CONTENTS_ENTRY_COST: usize = 16;
 
 /// An object stream, inflated: its objects' numbers and where they start.
 struct Container {
@@ -31,6 +36,16 @@ struct Container {
     first: usize,
     /// The object numbers and offsets the stream lists, in order.
     members: Vec<(u32, usize)>,
+    /// Where each number is, for an entry whose index is wrong; the last one
+    /// listed when a number is listed twice.
+    by_number: HashMap<u32, usize>,
+}
+
+/// What a scan of the file found: where each object is, and where objects
+/// start, in order.
+struct Scanned {
+    entries: BTreeMap<u32, Entry>,
+    offsets: Vec<usize>,
 }
 
 /// One entry of the cross-reference, and its object once read.
@@ -88,7 +103,7 @@ pub struct Document {
     rebuilt: bool,
     /// The scan of a file whose cross-reference points at the wrong place,
     /// made the first time an object is not where it should be.
-    scanned: OnceCell<BTreeMap<u32, Entry>>,
+    scanned: OnceCell<Scanned>,
     depth: Cell<usize>,
 }
 
@@ -118,6 +133,7 @@ impl Document {
             String::from_utf8_lossy(lexer.word()).into_owned()
         };
         let budget = Budget::new(limits);
+        budget.work(start.saturating_add(data.len().min(1024)))?;
         let xref = xref::read(&data, &budget)?;
         // What the table of objects holds, one slot an object.
         let in_use = xref
@@ -126,18 +142,17 @@ impl Document {
             .filter(|(number, entry)| **number != 0 && **entry != Entry::Free)
             .count();
         budget.memory(in_use.saturating_mul(std::mem::size_of::<Slot>()))?;
+        // An object ends where the next one that is really there starts:
+        // not at an entry that points at bytes that are not its object.
         let mut offsets: Vec<usize> = xref
-            .entries
-            .values()
-            .filter_map(|entry| match entry {
-                Entry::Normal { offset, .. } => Some(*offset),
-                _ => None,
-            })
-            .chain(xref.starts.iter().copied())
+            .located
+            .iter()
+            .chain(xref.starts.iter())
+            .copied()
             .collect();
         offsets.sort_unstable();
         offsets.dedup();
-        let containers = xref
+        let containers: BTreeMap<u32, OnceCell<Option<Container>>> = xref
             .entries
             .values()
             .filter_map(|entry| match entry {
@@ -145,6 +160,11 @@ impl Document {
                 _ => None,
             })
             .collect();
+        budget.memory(
+            containers
+                .len()
+                .saturating_mul(std::mem::size_of::<Option<Container>>() + 32),
+        )?;
         let slots = xref
             .entries
             .into_iter()
@@ -268,18 +288,34 @@ impl Document {
     }
 
     /// Every object that can be read, moved out of the document: what it
-    /// holds is not copied.
-    pub(crate) fn into_objects(self) -> Result<BTreeMap<ObjectId, Object>, PdfError> {
+    /// holds is not copied. Also returns the ids of those the cross-reference
+    /// lists that could not be read.
+    pub(crate) fn into_objects(
+        self,
+    ) -> Result<(BTreeMap<ObjectId, Object>, HashSet<ObjectId>), PdfError> {
         let ids: Vec<ObjectId> = self.ids().collect();
         for &id in &ids {
             self.object(id);
         }
         self.check()?;
-        Ok(ids
-            .into_iter()
-            .zip(self.slots)
-            .filter_map(|(id, slot)| Some((id, slot.object.into_inner()??)))
-            .collect())
+        let mut objects = BTreeMap::new();
+        let mut lost = HashSet::new();
+        for (id, slot) in ids.into_iter().zip(self.slots) {
+            match slot.object.into_inner().flatten() {
+                Some(object) => {
+                    objects.insert(id, object);
+                }
+                None => {
+                    lost.insert(id);
+                }
+            }
+        }
+        Ok((objects, lost))
+    }
+
+    /// The number of bytes of the file, from its header on.
+    pub(crate) fn file_len(&self) -> usize {
+        self.data.len()
     }
 
     /// Object `id`, read the first time it is asked for: `None` when it is
@@ -338,19 +374,34 @@ impl Document {
             && matches!(entry, Entry::Normal { .. })
             && Some(id) != self.encrypt_id
         {
-            crypt.decrypt(id, &mut object);
+            let identity = match &object {
+                Object::Stream(stream) => {
+                    crate::crypt::opts_out(&stream.dict, &|value| self.resolve(value))
+                }
+                _ => false,
+            };
             if let Object::Stream(stream) = &object {
                 // A decrypted stream holds its own bytes.
                 self.budget.memory(stream.content.len())?;
+                self.budget.work(stream.content.len())?;
             }
+            crypt.decrypt(id, &mut object, identity);
         }
         Ok(Some(object))
     }
 
     /// The object at `offset`, if it is object `id`.
     fn read_at(&self, id: ObjectId, offset: usize) -> Result<Option<Object>, PdfError> {
-        let next = self.offsets.partition_point(|&at| at <= offset);
-        let end = self.offsets.get(next).copied().unwrap_or(self.data.len());
+        let next_of = |offsets: &[usize]| {
+            let next = offsets.partition_point(|&at| at <= offset);
+            offsets.get(next).copied().unwrap_or(self.data.len())
+        };
+        // Objects a scan found end at the next one it found, too.
+        let end = next_of(&self.offsets).min(
+            self.scanned
+                .get()
+                .map_or(self.data.len(), |scanned| next_of(&scanned.offsets)),
+        );
         let length = |target: ObjectId| -> Option<i64> {
             let value = self.object(target)?;
             value.as_i64().or_else(|| {
@@ -379,15 +430,17 @@ impl Document {
     fn scanned_entry(&self, number: u32) -> Result<Option<usize>, PdfError> {
         if self.scanned.get().is_none() {
             let entries = xref::scan(&self.data, &self.budget)?;
-            let _ = self.scanned.set(entries);
+            self.budget
+                .memory(entries.len().saturating_mul(xref::OFFSET_MEMORY))?;
+            let mut offsets: Vec<usize> =
+                entries.values().filter_map(xref::normal_offset).collect();
+            offsets.sort_unstable();
+            let _ = self.scanned.set(Scanned { entries, offsets });
         }
         Ok(self
             .scanned
             .get()
-            .and_then(|entries| match entries.get(&number) {
-                Some(Entry::Normal { offset, .. }) => Some(*offset),
-                _ => None,
-            }))
+            .and_then(|scanned| xref::normal_offset(scanned.entries.get(&number)?)))
     }
 
     /// The `index`th object of object stream `container`, if it is object
@@ -410,13 +463,8 @@ impl Document {
         };
         let offset = match stream.members.get(index as usize) {
             Some(&(number, offset)) if number == id.0 => offset,
-            _ => match stream
-                .members
-                .iter()
-                .rev()
-                .find(|(number, _)| *number == id.0)
-            {
-                Some(&(_, offset)) => offset,
+            _ => match stream.by_number.get(&id.0) {
+                Some(&offset) => offset,
                 None => return Ok(None),
             },
         };
@@ -430,7 +478,7 @@ impl Document {
         let mut lexer = Lexer::new(&stream.data, start);
         lexer.skip_white();
         let parsed = lexer.object(MAX_DEPTH, &self.budget);
-        self.budget.work(lexer.pos - start)?;
+        self.budget.work(lexer.reached().saturating_sub(start))?;
         match parsed {
             Ok(object) => Ok(Some(object)),
             Err(Fail::Over(error)) => Err(error),
@@ -450,46 +498,48 @@ impl Document {
             .limits
             .object_stream
             .min(self.budget.memory_left());
-        let data = match filters::decode(&stream.dict, &stream.content, limit) {
+        let mut spent = 0;
+        let decoded = self.decode_counted(stream, limit, &mut spent);
+        self.budget.work(spent)?;
+        let data = match decoded {
             Ok(data) => data,
-            Err(DecodeError::Over) if limit < self.budget.limits.object_stream => {
+            Err(ContentError::Over) if limit < self.budget.limits.object_stream => {
                 return Err(self.budget.out_of_memory());
             }
             Err(_) => return Ok(None),
         };
         self.budget.memory(data.len())?;
         self.budget.work(data.len())?;
-        let Some(first) = stream
-            .dict
-            .get(b"First")
+        let Some(first) = self
+            .get(&stream.dict, b"First")
             .and_then(Object::as_i64)
             .and_then(|first| usize::try_from(first).ok())
             .filter(|&first| first <= data.len())
         else {
             return Ok(None);
         };
-        let numbers: Vec<Option<u64>> = data
+        let number = |word: &[u8]| -> Option<u64> { std::str::from_utf8(word).ok()?.parse().ok() };
+        let mut words = data
             .get(..first)
             .unwrap_or_default()
             .split(|byte| byte.is_ascii_whitespace())
-            .filter(|word| !word.is_empty())
-            .map(|word| std::str::from_utf8(word).ok()?.parse().ok())
-            .collect();
-        self.budget.memory(numbers.len().saturating_mul(16))?;
-        let members = numbers
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .filter_map(|&[number, offset]| {
-                let number = u32::try_from(number?).ok()?;
-                let offset = usize::try_from(offset?).ok()?;
-                Some((number, offset))
-            })
-            .collect();
+            .filter(|word| !word.is_empty());
+        let mut members = Vec::new();
+        let mut by_number = HashMap::new();
+        while let (Some(member), Some(offset)) = (words.next(), words.next()) {
+            self.budget.memory(MEMBER_MEMORY)?;
+            let member = number(member).and_then(|member| u32::try_from(member).ok());
+            let offset = number(offset).and_then(|offset| usize::try_from(offset).ok());
+            if let (Some(member), Some(offset)) = (member, offset) {
+                members.push((member, offset));
+                by_number.insert(member, offset);
+            }
+        }
         Ok(Some(Container {
             data,
             first,
             members,
+            by_number,
         }))
     }
 
@@ -533,8 +583,9 @@ impl Document {
 
     /// The pages, in order: the leaves of the page tree. A kid whose object
     /// cannot be read counts as a (blank) page; one that is neither a page
-    /// nor a page tree node is skipped. The tree is walked at most once per
-    /// object in the file, and 256 levels deep.
+    /// nor a page tree node is skipped. A kid with no `Type` is a node when
+    /// it has `Kids`, and a page otherwise. The tree is walked at most once
+    /// per object in the file, and 256 levels deep.
     pub fn pages(&self) -> Vec<ObjectId> {
         let mut pages = Vec::new();
         let Some(root) = self
@@ -557,13 +608,12 @@ impl Document {
                 let Some(id) = kid.as_reference() else {
                     continue;
                 };
-                let kind = self.dictionary(id).map(|node| {
-                    node.type_name()
-                        .or_else(|| node.has(b"Linearized").then_some(&b"Linearized"[..]))
-                });
-                match kind {
-                    Some(Some(b"Page")) => pages.push(id),
-                    Some(Some(b"Pages")) if stack.len() < MAX_TREE_DEPTH => {
+                match self
+                    .dictionary(id)
+                    .map(|node| node_kind(node, &|value| self.resolve(value)))
+                {
+                    Some(NodeKind::Page) => pages.push(id),
+                    Some(NodeKind::Tree) if stack.len() < MAX_TREE_DEPTH => {
                         if !kids.is_empty() {
                             stack.push(kids);
                         }
@@ -588,8 +638,20 @@ impl Document {
     }
 
     /// The streams a page draws: its `Contents`, a stream or an array of
-    /// them.
+    /// them. What the array lists is charged as work: pages can share one.
     pub fn page_contents(&self, page: ObjectId) -> Vec<ObjectId> {
+        let streams = self.contents_of(page);
+        if let Err(error) = self
+            .budget
+            .work(streams.len().saturating_mul(CONTENTS_ENTRY_COST))
+        {
+            self.fail(error);
+            return Vec::new();
+        }
+        streams
+    }
+
+    fn contents_of(&self, page: ObjectId) -> Vec<ObjectId> {
         let mut streams = Vec::new();
         let Some(mut contents) = self.dictionary(page).and_then(|page| page.get(b"Contents"))
         else {
@@ -640,9 +702,37 @@ impl Document {
         Ok(content)
     }
 
-    /// `stream`'s bytes decoded through its filters, held to `limit`.
+    /// `stream`'s bytes decoded through its filters, held to `limit` for
+    /// each filter, 8 filters at most. What each filter reads and writes is
+    /// charged as work, whether the ones after it work or not: when the work
+    /// runs out this is [`ContentError::Over`], and
+    /// [`check`](Self::check) returns the error.
     pub fn decode(&self, stream: &Stream, limit: usize) -> Result<Vec<u8>, ContentError> {
-        filters::decode(&stream.dict, &stream.content, limit).map_err(|error| match error {
+        let mut spent = 0;
+        let decoded = self.decode_counted(stream, limit, &mut spent);
+        if let Err(error) = self.budget.work(spent) {
+            self.fail(error);
+            return Err(ContentError::Over);
+        }
+        decoded
+    }
+
+    /// [`decode`](Self::decode), adding what it spends to `spent` for the
+    /// caller to charge. Values in the stream's dictionary may be references.
+    pub(crate) fn decode_counted<'a>(
+        &'a self,
+        stream: &'a Stream,
+        limit: usize,
+        spent: &mut usize,
+    ) -> Result<Vec<u8>, ContentError> {
+        filters::decode(
+            &stream.dict,
+            &stream.content,
+            limit,
+            &|value| self.resolve(value),
+            spent,
+        )
+        .map_err(|error| match error {
             DecodeError::Over => ContentError::Over,
             DecodeError::Unsupported => ContentError::Unsupported,
             DecodeError::Invalid(why) => ContentError::Damaged(why),
@@ -654,9 +744,42 @@ impl Document {
         self.budget.memory_used()
     }
 
+    /// What has been counted of the work limit so far.
+    pub fn work_used(&self) -> usize {
+        self.budget.work_used()
+    }
+
     /// The limits the document is read within.
     pub fn limits(&self) -> ReadLimits {
         self.budget.limits
+    }
+}
+
+/// What a kid of the page tree is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum NodeKind {
+    Page,
+    Tree,
+    Neither,
+}
+
+/// What the dictionary `node` is in a page tree: by its `Type`, or, with none,
+/// by whether it has `Kids`. A linearized file's first object is not a page.
+pub(crate) fn node_kind<'a>(
+    node: &'a Dictionary,
+    resolve: &dyn Fn(&'a Object) -> Option<&'a Object>,
+) -> NodeKind {
+    let kind = node
+        .get(b"Type")
+        .and_then(resolve)
+        .and_then(Object::as_name);
+    match kind {
+        Some(b"Page") => NodeKind::Page,
+        Some(b"Pages") => NodeKind::Tree,
+        Some(_) => NodeKind::Neither,
+        None if node.has(b"Linearized") => NodeKind::Neither,
+        None if node.has(b"Kids") => NodeKind::Tree,
+        None => NodeKind::Page,
     }
 }
 

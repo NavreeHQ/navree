@@ -11,13 +11,16 @@
 //! lines that are mostly right to left are then put in reading order, run
 //! by run. Form XObjects are followed, so overlays are included.
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::rc::Rc;
 
 use crate::document::{ContentError, Document};
 use crate::error::{PdfError, size};
 use crate::object::{Dictionary, Object, ObjectId, Stream};
 
-use self::encoding::{Encoding, Unreadable};
+use self::cmap::ToUnicode;
+use self::encoding::Encoding;
 
 mod cmap;
 mod encoding;
@@ -56,56 +59,34 @@ const FONT_READ_COST: usize = 1024;
 /// What each entry of an encoding's `Differences` is counted as holding
 /// (128 bytes).
 const DIFFERENCE_MEMORY: usize = 128;
+/// The longest name of a font in a content stream (127 bytes, the limit the
+/// PDF reference gives on a name); one longer names no font.
+const MAX_FONT_NAME: usize = 127;
+/// What a map may build while it is read, for each of its bytes, at most.
+const MAP_READ_MEMORY: usize = 64;
 
-// Caps on what a ToUnicode map may hold, checked before it is read.
-// Real maps stay far below each; a map over one is refused.
-
-/// Codespace ranges in one map (64). Every one is checked for each code
-/// decoded; real maps have one to four.
-const MAX_CODESPACE_RANGES: usize = 64;
-/// Lines that map codes (`bfchar` and `bfrange` entries) in one map
-/// (131,072): twice one line for every code of one or two bytes.
-const MAX_MAP_LINES: usize = 131_072;
-/// Texts in the list of one range (256). A range written to the
-/// specification varies only its last byte, so it has at most 256 codes,
-/// one text for each.
-const MAX_LIST_ITEMS: usize = 256;
-/// Texts in all the lists of one map (65,792): one for every code of one
-/// or two bytes.
-const MAX_MAP_LIST_ITEMS: usize = 65_792;
-
-// What a ToUnicode map is counted as holding while it is read and once
-// read (see `map_shape`): a bound on what reading builds, so that a map of
-// a few bytes that covers millions of codes is refused before it is read.
-
-/// For each byte of the map: the lines it parses before it builds the map.
-const MAP_TEXT_MEMORY: u64 = 8;
-/// For each range it keeps, besides the text the range maps to.
-const MAP_RANGE_MEMORY: u64 = 96;
-/// For each code it covers, besides the code's text.
-const MAP_CODE_MEMORY: u64 = 256;
-/// For each text of more than one UTF-16 unit, besides its units.
-const MAP_TEXT_VALUE_MEMORY: u64 = 32;
-/// For each text of a list (`[<..> <..>]`), besides its units.
-const MAP_LIST_ITEM_MEMORY: u64 = 56;
 /// The highest code a composite font can show: codes have two bytes.
 const MAX_COMPOSITE_CODE: u32 = 0xFFFF;
 /// The highest code a simple font can show: codes have one byte.
 const MAX_SIMPLE_CODE: u64 = 0xFF;
 
 /// How much work reading the text of a PDF may take, so that a small file
-/// cannot make a call run for hours or fill the memory. Every figure is
-/// per call unless it says otherwise.
+/// cannot make a call take more than a bounded time or memory: time in
+/// proportion to [`document_work`](Self::document_work), at the rates of the
+/// inflater and the content parser, about ten seconds at the default limits
+/// on a current machine. Every figure is per call unless it says otherwise.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TextLimits {
     /// Bytes of work one page may take (128 MiB): its content decoded,
     /// counting a form again every time it is drawn, and
-    /// [`FORM_DRAW_COST`] for each draw; the fonts it reads (a `ToUnicode`
-    /// map's inflated bytes and one byte for every [`MEMORY_PER_WORK`] of
+    /// [`FORM_DRAW_COST`] for each draw; every byte a filter reads and writes
+    /// on the way, whether the content could be used or not; the fonts it
+    /// reads (a `ToUnicode` map's bytes, inflating them counted the same way,
+    /// and one byte for every [`MEMORY_PER_WORK`] of
     /// the memory reading it builds, as for an encoding's `Differences`;
-    /// [`WIDTH_COST`] for each width; [`FONT_READ_COST`] for reading a
-    /// dropped font again); and the actual text of marked content each
-    /// time it is decoded.
+    /// [`WIDTH_COST`] for each width looked at; [`FONT_READ_COST`] for
+    /// reading a dropped font again); and the actual text of marked content
+    /// each time it is decoded.
     pub page_work: usize,
     /// The same, over all the pages (1 GiB).
     pub document_work: usize,
@@ -122,14 +103,14 @@ pub struct TextLimits {
     /// pages. The text is returned whole, so this is memory as well.
     pub document_text: usize,
     /// Memory the fonts and `ToUnicode` maps read for a document may hold
-    /// at once (256 MiB), as they are counted: [`MAP_CODE_MEMORY`] for each
+    /// at once (256 MiB), as they are counted: [`cmap::MAP_CODE_MEMORY`] for each
     /// code a map covers, 17 MB for a map of every two-byte code, of which
     /// fifteen fit. Past the limit, what was used longest ago is dropped
     /// and read again when a page needs it; what the run of text being
     /// shown uses is not, so the total can pass the limit by one font's
     /// widths. One map or font that would take more on its own is refused,
-    /// as is a map over one of the caps ([`MAX_CODESPACE_RANGES`] and the
-    /// rest).
+    /// as is a map over one of the caps ([`cmap::MAX_CODESPACE_RANGES`] and
+    /// the rest), as soon as the reader gets there.
     pub font_memory: usize,
 }
 
@@ -169,10 +150,7 @@ pub fn page_texts_within(document: &Document, limits: TextLimits) -> Result<Vec<
             font_names: HashMap::new(),
             budget: Budget::new(limits, work, text),
         };
-        let content = inflate(&walker.budget, |limit| {
-            document.page_content(page_id, limit)
-        })?
-        .map_err(|_| PdfError::damaged("a page's content cannot be read"))?;
+        let content = page_content(document, page_id, &mut walker.budget)?;
         let resources = page_resources(document, page_id);
         walker.walk(&content, resources, IDENTITY, 0)?;
         work += walker.budget.work;
@@ -271,17 +249,27 @@ impl Budget {
     }
 }
 
-/// Inflates a content stream with `read`, within the work the page has
-/// left (and [`MAX_CONTENT`]), so that nothing is inflated that the page
-/// could not pay for. Going over is an error; `read`'s other errors are
-/// returned inside, for the caller to decide.
-fn inflate(
-    budget: &Budget,
-    read: impl FnOnce(usize) -> Result<Vec<u8>, ContentError>,
+/// Decodes `stream` within the work the page has left past `held`, what it
+/// will still be charged for (and within `room`), so that nothing is inflated
+/// that the page could not pay for. What every filter reads and writes is
+/// charged, whether the result can be used or not, but for the result itself:
+/// the caller walks it, and that charges it. Going over is an error; other
+/// errors are returned inside, for the caller to decide.
+fn decode_charged<'a>(
+    document: &'a Document,
+    stream: &'a Stream,
+    budget: &mut Budget,
+    room: usize,
+    held: usize,
 ) -> Result<Result<Vec<u8>, ContentError>, PdfError> {
-    let limit = budget.work_left().min(MAX_CONTENT);
-    match read(limit) {
-        Err(ContentError::Over) => Err(if limit < MAX_CONTENT {
+    let work = budget.work_left().saturating_sub(held);
+    let limit = work.min(room);
+    let mut spent = 0;
+    let decoded = document.decode_counted(stream, limit, &mut spent);
+    let result = decoded.as_ref().map_or(0, Vec::len);
+    budget.charge(spent.saturating_sub(result))?;
+    match decoded {
+        Err(ContentError::Over) => Err(if work < room {
             budget.out_of_work()
         } else {
             PdfError::TooLarge(format!(
@@ -291,6 +279,41 @@ fn inflate(
         }),
         other => Ok(other),
     }
+}
+
+/// A page's content: its streams decoded and joined, each followed by a new
+/// line, within [`MAX_CONTENT`] and the work the page has left. A stream that
+/// does not decode is taken as it is stored, if that fits.
+fn page_content(
+    document: &Document,
+    page: ObjectId,
+    budget: &mut Budget,
+) -> Result<Vec<u8>, PdfError> {
+    let mut content = Vec::new();
+    for id in document.page_contents(page) {
+        let Some(stream) = document.object(id).and_then(Object::as_stream) else {
+            continue;
+        };
+        let room = MAX_CONTENT.saturating_sub(content.len());
+        match decode_charged(document, stream, budget, room, content.len())? {
+            Ok(data) => content.extend_from_slice(&data),
+            Err(_) if stream.content.len() <= room.min(budget.work_left()) => {
+                content.extend_from_slice(&stream.content)
+            }
+            Err(_) => {
+                return Err(if budget.work_left() < room {
+                    budget.out_of_work()
+                } else {
+                    PdfError::TooLarge(format!(
+                        "a PDF content stream inflates to more than {}",
+                        size(MAX_CONTENT)
+                    ))
+                });
+            }
+        }
+        content.push(b'\n');
+    }
+    Ok(content)
 }
 
 /// A 2D affine matrix `[a b c d e f]` as PDF writes them.
@@ -335,7 +358,16 @@ struct Chunk {
 
 /// What a font needs for decoding and widths.
 struct FontInfo<'a> {
-    decoding: Decoding<'a>,
+    /// Its `ToUnicode` map, which comes first: the stream, read once for every
+    /// font that has it.
+    map: Option<&'a Stream>,
+    /// What its codes read as where the map does not say, or when it has no
+    /// map or one that cannot be read.
+    encoding: Option<Encoding<'a>>,
+    /// Whether a code the map leaves out reads through `encoding`: when the
+    /// font names an encoding, and not an identity one, whose codes mean
+    /// nothing else.
+    reads_past_map: bool,
     /// Bytes per character code: 2 for composite fonts, 1 otherwise.
     code_len: usize,
     widths: HashMap<u32, f32>,
@@ -344,9 +376,11 @@ struct FontInfo<'a> {
     standard: bool,
 }
 
+/// Saved with `q`, and restored with `Q`: the name of the font is shared, not
+/// copied.
 #[derive(Clone)]
 struct TextState {
-    font: Option<Vec<u8>>,
+    font: Option<Rc<[u8]>>,
     size: f32,
     char_spacing: f32,
     word_spacing: f32,
@@ -376,15 +410,6 @@ struct Mark {
     chunk: Option<usize>,
 }
 
-/// How a font's strings are decoded.
-enum Decoding<'a> {
-    /// With the encoding read with the font.
-    Own(Option<Encoding<'a>>),
-    /// With its `ToUnicode` map alone: the map stream, read once for every
-    /// font that has it.
-    Map(&'a Stream),
-}
-
 /// What the cache holds, with the memory it takes and when it was last used.
 struct Held<T> {
     value: T,
@@ -405,7 +430,7 @@ enum Key {
 #[derive(Default)]
 struct FontCache<'a> {
     fonts: HashMap<usize, Held<FontInfo<'a>>>,
-    maps: HashMap<usize, Held<Option<Encoding<'a>>>>,
+    maps: HashMap<usize, Held<Option<ToUnicode>>>,
     /// What is held, by when it was last used: the first was used longest
     /// ago, and is dropped first.
     order: BTreeMap<u64, Key>,
@@ -471,7 +496,7 @@ impl<'a> FontCache<'a> {
             );
         }
         self.order.insert(now, Key::Font(key));
-        let Decoding::Map(stream) = self.fonts[&key].value.decoding else {
+        let Some(stream) = self.fonts[&key].value.map else {
             return Ok(());
         };
         let map_key = address(stream);
@@ -480,15 +505,7 @@ impl<'a> FontCache<'a> {
             self.order.remove(&held.used);
             held.used = now;
         } else {
-            let memory = map_memory(document, stream, budget)?;
-            self.make_room(memory, limit)?;
-            // The map alone decides the encoding of any font that decodes
-            // with it alone: this font's is every such font's.
-            let value = match encoding::font_encoding(document, font, MAX_TO_UNICODE) {
-                Ok(encoding) => Some(encoding),
-                Err(Unreadable::Over) => return Err(to_unicode_too_large()),
-                Err(Unreadable::Other) => None,
-            };
+            let (value, memory) = self.read_map(document, stream, budget)?;
             self.memory += memory;
             self.maps.insert(
                 map_key,
@@ -501,6 +518,38 @@ impl<'a> FontCache<'a> {
         }
         self.order.insert(now, Key::Map(map_key));
         Ok(())
+    }
+
+    /// Reads the `ToUnicode` map in `stream`, with room made first for what
+    /// reading it can build and then for what it is counted as holding, which
+    /// is returned with it. A map that cannot be inflated builds nothing: the
+    /// font reads through its encoding.
+    fn read_map(
+        &mut self,
+        document: &'a Document,
+        stream: &'a Stream,
+        budget: &mut Budget,
+    ) -> Result<(Option<ToUnicode>, usize), PdfError> {
+        let limit = budget.limits.font_memory;
+        let room = budget.work_left();
+        let mut spent = 0;
+        let decoded = document.decode_counted(stream, MAX_TO_UNICODE.min(room), &mut spent);
+        budget.charge(spent)?;
+        let map = match decoded {
+            Ok(map) => map,
+            Err(ContentError::Over) if room < MAX_TO_UNICODE => return Err(budget.out_of_work()),
+            Err(ContentError::Over) => return Err(to_unicode_too_large()),
+            Err(_) => return Ok((None, 0)),
+        };
+        self.make_room(map.len().saturating_mul(MAP_READ_MEMORY).min(limit), limit)?;
+        let (read, memory) = ToUnicode::read_within(&map, limit)?;
+        let memory = usize::try_from(memory).unwrap_or(usize::MAX);
+        if memory > limit {
+            return Err(font_too_large(limit));
+        }
+        budget.charge(memory / MEMORY_PER_WORK)?;
+        self.make_room(memory, limit)?;
+        Ok((Some(read), memory))
     }
 
     /// Drops what was used longest ago, but not what the run of text being
@@ -596,7 +645,8 @@ impl<'a> Walker<'a> {
                     state.font = operands
                         .first()
                         .and_then(Object::as_name)
-                        .map(<[u8]>::to_vec);
+                        .filter(|name| name.len() <= MAX_FONT_NAME)
+                        .map(Rc::from);
                     state.size = number(1);
                 }
                 "Tc" => state.char_spacing = number(0),
@@ -688,15 +738,18 @@ impl<'a> Walker<'a> {
                         continue;
                     };
                     self.budget.charge(FORM_DRAW_COST)?;
-                    let matrix = form
-                        .dict
-                        .get(b"Matrix")
+                    let document = self.document;
+                    let matrix = document
+                        .get(&form.dict, b"Matrix")
                         .and_then(Object::as_array)
                         .filter(|m| m.len() == 6)
                         .map(|m| {
                             let mut out = IDENTITY;
                             for (slot, value) in out.iter_mut().zip(m) {
-                                *slot = value.as_float().unwrap_or(0.0);
+                                *slot = document
+                                    .resolve(value)
+                                    .and_then(Object::as_float)
+                                    .unwrap_or(0.0);
                             }
                             out
                         })
@@ -707,8 +760,12 @@ impl<'a> Walker<'a> {
                         .and_then(|o| self.document.resolve(o))
                         .and_then(Object::as_dict)
                         .or(resources);
-                    let content = inflate(&self.budget, |limit| self.document.decode(form, limit))?
-                        .unwrap_or_else(|_| form.content.to_vec());
+                    let content =
+                        match decode_charged(document, form, &mut self.budget, MAX_CONTENT, 0)? {
+                            Ok(content) => Cow::Owned(content),
+                            // Taken as it is stored; walking it charges it.
+                            Err(_) => Cow::Borrowed(&form.content[..]),
+                        };
                     self.walk(&content, form_resources, multiply(matrix, ctm), depth + 1)?;
                 }
                 _ => {}
@@ -737,14 +794,10 @@ impl<'a> Walker<'a> {
         let Some(font) = self.fonts.fonts.get(&font_key).map(|held| &held.value) else {
             return Ok(());
         };
-        let encoding = match &font.decoding {
-            Decoding::Own(encoding) => encoding.as_ref(),
-            Decoding::Map(stream) => self
-                .fonts
-                .maps
-                .get(&address(*stream))
-                .and_then(|held| held.value.as_ref()),
-        };
+        let map = font
+            .map
+            .and_then(|stream| self.fonts.maps.get(&address(stream)))
+            .and_then(|held| held.value.as_ref());
         let device = multiply(*tm, ctm);
         let size = state.size * (device[0] * device[3] - device[1] * device[2]).abs().sqrt();
         // Positions are measured along the baseline: rotated text (a
@@ -802,7 +855,7 @@ impl<'a> Walker<'a> {
                             }
                             continue;
                         }
-                        let text = encoding.and_then(|e| e.decode(code)).unwrap_or_default();
+                        let text = font.text(map, code);
                         if text.is_empty() || text == "\u{fffd}" {
                             continue;
                         }
@@ -898,7 +951,7 @@ impl<'a> Walker<'a> {
             .and_then(Object::as_dict)?;
         let object = self.document.resolve(xobjects.get(name)?)?;
         let stream = object.as_stream()?;
-        let subtype = stream.dict.get(b"Subtype").and_then(Object::as_name)?;
+        let subtype = self.document.get(&stream.dict, b"Subtype")?.as_name()?;
         (subtype == b"Form").then_some(stream)
     }
 }
@@ -912,26 +965,23 @@ fn to_unicode_too_large() -> PdfError {
 
 /// Reads `font` for decoding and widths, charging `budget` for the widths:
 /// what it needs, and the memory its widths hold (the rest is counted by
-/// [`font_before`]). A font that decodes with its `ToUnicode` map alone
-/// leaves the map to [`FontCache::read`], so that fonts sharing a map read
-/// it once.
+/// [`font_before`]). Its `ToUnicode` map is left to [`FontCache::read`], so
+/// that fonts sharing a map read it once.
 fn font_info<'a>(
     doc: &'a Document,
     font: &'a Dictionary,
     budget: &mut Budget,
 ) -> Result<(FontInfo<'a>, usize), PdfError> {
-    let decoding = match map_alone(doc, font) {
-        Some(map) => Decoding::Map(map),
-        None => Decoding::Own(match encoding::font_encoding(doc, font, MAX_TO_UNICODE) {
-            Ok(encoding) => Some(encoding),
-            Err(Unreadable::Over) => return Err(to_unicode_too_large()),
-            Err(Unreadable::Other) => None,
-        }),
-    };
-    let composite = font
-        .get(b"Subtype")
+    let map = font_map(doc, font);
+    let encoding = encoding::font_encoding(doc, font);
+    let composite = doc
+        .get(font, b"Subtype")
         .and_then(Object::as_name)
         .is_some_and(|s| s == b"Type0");
+    let identity = matches!(
+        encoding::encoding_name(doc, font),
+        Some(b"Identity-H" | b"Identity-V")
+    );
     let mut widths = HashMap::new();
     let mut default_width = 0.0;
     let mut standard = false;
@@ -945,7 +995,7 @@ fn font_info<'a>(
             .and_then(|o| doc.resolve(o))
             .and_then(Object::as_dict);
         if let Some(descendant) = descendant {
-            if let Some(dw) = descendant.get(b"DW").and_then(Object::as_float) {
+            if let Some(dw) = doc.get(descendant, b"DW").and_then(Object::as_float) {
                 default_width = dw;
             }
             let w = descendant
@@ -957,8 +1007,8 @@ fn font_info<'a>(
             }
         }
     } else {
-        let first = font
-            .get(b"FirstChar")
+        let first = doc
+            .get(font, b"FirstChar")
             .and_then(Object::as_i64)
             .unwrap_or(0)
             .max(0) as u32;
@@ -984,7 +1034,9 @@ fn font_info<'a>(
     }
     let memory = widths.len() * WIDTH_MEMORY;
     let info = FontInfo {
-        decoding,
+        map,
+        encoding,
+        reads_past_map: font.has(b"Encoding") && !identity,
         code_len: if composite { 2 } else { 1 },
         widths,
         default_width,
@@ -994,6 +1046,21 @@ fn font_info<'a>(
 }
 
 impl FontInfo<'_> {
+    /// The text of `code`: what `map`, its `ToUnicode` map once read, says, or
+    /// else what its encoding does.
+    fn text(&self, map: Option<&ToUnicode>, code: &[u8]) -> String {
+        if let Some(map) = map {
+            let text = map.decode(code);
+            if !self.reads_past_map || !(text.is_empty() || text == "\u{fffd}") {
+                return text;
+            }
+        }
+        self.encoding
+            .as_ref()
+            .and_then(|encoding| encoding.decode(code))
+            .unwrap_or_default()
+    }
+
     fn width(&self, code: u32) -> f32 {
         if self.standard {
             return standard_width(code) as f32;
@@ -1007,7 +1074,7 @@ impl FontInfo<'_> {
 
 /// A CID font's `W` array: `c [w1 w2 ..]` or `c_first c_last w`, for the
 /// codes a composite font can show (up to [`MAX_COMPOSITE_CODE`]); each
-/// width set costs [`WIDTH_COST`].
+/// width looked at costs [`WIDTH_COST`], as one list may be named many times.
 fn parse_cid_widths(
     doc: &Document,
     w: &[Object],
@@ -1017,6 +1084,7 @@ fn parse_cid_widths(
     let value = |o: &Object| doc.resolve(o).and_then(Object::as_float);
     let mut i = 0;
     while i < w.len() {
+        budget.charge(WIDTH_COST)?;
         let Some(first) = value(&w[i]) else {
             break;
         };
@@ -1028,8 +1096,8 @@ fn parse_cid_widths(
                     if code > u64::from(MAX_COMPOSITE_CODE) {
                         break;
                     }
+                    budget.charge(WIDTH_COST)?;
                     if let Some(width) = value(width) {
-                        budget.charge(WIDTH_COST)?;
                         widths.insert(code as u32, width);
                     }
                 }
@@ -1058,460 +1126,37 @@ fn parse_cid_widths(
     Ok(())
 }
 
-/// What a ToUnicode map holds, as it is counted.
-#[derive(Default)]
-struct MapShape {
-    codespace: usize,
-    lines: usize,
-    list_items: usize,
-    /// The memory it is counted as taking to read.
-    memory: u64,
-}
-
-/// The shape of the ToUnicode map `cmap`, or the cap it is over. The
-/// memory counts [`MAP_TEXT_MEMORY`] for each byte of the map; for each
-/// line, two ranges of [`MAP_RANGE_MEMORY`]; for each code a range covers,
-/// [`MAP_CODE_MEMORY`] and its text (codes of one or two bytes are at most
-/// 65,792, however many lines cover them); each text of a list; and two
-/// copies of a text longer than one unit for each split of its range.
-///
-/// A later line that lands inside a range splits it in two. Each line
-/// splits one range at most, and a range can be split no more often than
-/// it has codes. So the splits, as many as the lines at most, are given to
-/// the longest texts first, each counting two copies, plus two copies of
-/// the longest made in passing.
-///
-/// The map is tokenized as [`ToUnicode`](cmap::ToUnicode) reads it, and a
-/// line it skips counts no codes. Comments run to the end of their line,
-/// literal strings (only in the map's header) to their matching
-/// parenthesis, and a text in angle brackets may hold spaces and comments
-/// between its digits.
-fn map_shape(cmap: &[u8]) -> Result<MapShape, PdfError> {
-    /// Codes of one or two bytes there can be.
-    const SHORT_CODES: u64 = 256 + 65_536;
-    #[derive(PartialEq)]
-    enum In {
-        Nothing,
-        Codespace,
-        Chars,
-        Ranges,
-    }
-    let mut section = In::Nothing;
-    let mut shape = MapShape::default();
-    // The texts of the line being read, and a range's list being read:
-    // its texts and memory.
-    let mut line: Vec<Hex> = Vec::with_capacity(2);
-    let mut list: Option<(usize, u64, u64)> = None;
-    let (mut text_most, mut code_memory) = (0u64, 0u64);
-    // The texts of more than one unit that lines map to, with the codes
-    // of each line: what splits may copy, and how often.
-    let mut copied: Vec<(u64, u64)> = Vec::new();
-    let (mut short, mut short_most, mut long) = (0u64, 0u64, 0u64);
-    let mut at = 0;
-    while let Some(token) = next_token(cmap, &mut at) {
-        match token {
-            Token::Word(word) => {
-                section = match word {
-                    b"begincodespacerange" => In::Codespace,
-                    b"beginbfchar" => In::Chars,
-                    b"beginbfrange" => In::Ranges,
-                    _ => In::Nothing,
-                };
-                line.clear();
-                list = None;
-            }
-            Token::Hex(hex) if section == In::Codespace => {
-                line.push(hex);
-                if line.len() == 2 {
-                    line.clear();
-                    shape.codespace += 1;
-                    if shape.codespace > MAX_CODESPACE_RANGES {
-                        return Err(map_over("codespace ranges", MAX_CODESPACE_RANGES));
-                    }
-                }
-            }
-            Token::Hex(hex) if section == In::Chars => {
-                line.push(hex);
-                if line.len() == 2 {
-                    let units = line[1].digits / 4;
-                    let value = text_memory(units);
-                    text_most = text_most.max(value);
-                    if value > 0 {
-                        copied.push((value, 1));
-                    }
-                    code_memory = code_memory.saturating_add(MAP_CODE_MEMORY + 2 * units);
-                    line.clear();
-                    shape.lines += 1;
-                }
-            }
-            Token::Hex(hex) if section == In::Ranges => match &mut list {
-                Some((items, memory, most)) => {
-                    let units = hex.digits / 4;
-                    *items += 1;
-                    *memory += MAP_LIST_ITEM_MEMORY + 2 * units;
-                    *most = (*most).max(units);
-                    shape.list_items += 1;
-                    if *items > MAX_LIST_ITEMS {
-                        return Err(map_over("texts in one list", MAX_LIST_ITEMS));
-                    }
-                    if shape.list_items > MAX_MAP_LIST_ITEMS {
-                        return Err(map_over("texts in lists", MAX_MAP_LIST_ITEMS));
-                    }
-                }
-                None if line.len() < 2 => line.push(hex),
-                None => {
-                    let units = hex.digits / 4;
-                    let value = text_memory(units);
-                    let codes = range_codes(&line, units, &mut short, &mut short_most, &mut long);
-                    text_most = text_most.max(value);
-                    if value > 0 {
-                        copied.push((value, codes));
-                    }
-                    line.clear();
-                    shape.lines += 1;
-                }
-            },
-            Token::Open if section == In::Ranges && line.len() == 2 && list.is_none() => {
-                list = Some((0, MAP_TEXT_VALUE_MEMORY, 0));
-            }
-            Token::Close if section == In::Ranges => {
-                if let Some((_, memory, most)) = list.take() {
-                    let codes = range_codes(&line, most, &mut short, &mut short_most, &mut long);
-                    text_most = text_most.max(memory);
-                    copied.push((memory, codes));
-                    code_memory = code_memory.saturating_add(memory);
-                    line.clear();
-                    shape.lines += 1;
-                }
-            }
-            _ => {}
-        }
-        if shape.lines > MAX_MAP_LINES {
-            return Err(map_over("lines", MAX_MAP_LINES));
-        }
-    }
-    let lines = shape.lines as u64;
-    let short = short.min(SHORT_CODES.saturating_mul(short_most));
-    copied.sort_unstable_by_key(|&(value, _)| std::cmp::Reverse(value));
-    let (mut copies, mut splits) = (2 * text_most, lines);
-    for (value, codes) in copied {
-        let these = splits.min(codes.max(1));
-        copies = copies.saturating_add((2 * value).saturating_mul(these));
-        splits -= these;
-        if splits == 0 {
-            break;
-        }
-    }
-    shape.memory = MAP_TEXT_MEMORY
-        .saturating_mul(cmap.len() as u64)
-        .saturating_add((2 * lines).saturating_mul(MAP_RANGE_MEMORY))
-        .saturating_add(copies)
-        .saturating_add(code_memory)
-        .saturating_add(short)
-        .saturating_add(long);
-    Ok(shape)
-}
-
-/// Counts the codes of the range `line` (its first and last code), each
-/// with its text of `units` UTF-16 units: `short` for codes of one or two
-/// bytes (and the most one costs), `long` for longer ones. Returns how many
-/// codes it has: none for a line that is not read.
-fn range_codes(
-    line: &[Hex],
-    units: u64,
-    short: &mut u64,
-    short_most: &mut u64,
-    long: &mut u64,
-) -> u64 {
-    let [low, high] = line else {
-        return 0;
-    };
-    // A range is read only between codes of one length, in order.
-    let (Some(first), Some(last)) = (low.code, high.code) else {
-        return 0;
-    };
-    if low.digits != high.digits || !matches!(low.digits, 2 | 4 | 6 | 8) || last < first {
-        return 0;
-    }
-    let codes = last - first + 1;
-    let per_code = MAP_CODE_MEMORY + 2 * units;
-    let memory = codes.saturating_mul(per_code);
-    if low.digits <= 4 {
-        *short = short.saturating_add(memory);
-        *short_most = (*short_most).max(per_code);
-    } else {
-        *long = long.saturating_add(memory);
-    }
-    codes
-}
-
-fn map_over(what: &str, cap: usize) -> PdfError {
-    PdfError::TooLarge(format!("a font's ToUnicode map has more than {cap} {what}"))
-}
-
-/// What a text of `units` UTF-16 units is counted as: one unit is kept as
-/// a number.
-fn text_memory(units: u64) -> u64 {
-    if units <= 1 {
-        0
-    } else {
-        MAP_TEXT_VALUE_MEMORY + 2 * units
-    }
-}
-
-/// A text in angle brackets.
-struct Hex {
-    /// Its hex digits.
-    digits: u64,
-    /// Its value, when it has nothing but hex digits, as a code must.
-    code: Option<u64>,
-}
-
-/// A token of a map.
-enum Token<'m> {
-    Hex(Hex),
-    /// `[`.
-    Open,
-    /// `]`.
-    Close,
-    /// A keyword or a number.
-    Word(&'m [u8]),
-    /// A string, a name, a dictionary's brackets.
-    Other,
-}
-
-fn is_space(byte: u8) -> bool {
-    matches!(byte, b' ' | b'\t' | b'\r' | b'\n' | b'\0' | b'\x0C')
-}
-
-fn is_delimiter(byte: u8) -> bool {
-    matches!(
-        byte,
-        b'(' | b')' | b'<' | b'>' | b'[' | b']' | b'{' | b'}' | b'/' | b'%'
-    )
-}
-
-/// The token of `cmap` at `at` or after, moving `at` past it.
-fn next_token<'m>(cmap: &'m [u8], at: &mut usize) -> Option<Token<'m>> {
-    loop {
-        let byte = *cmap.get(*at)?;
-        match byte {
-            byte if is_space(byte) => *at += 1,
-            b'%' => skip_line(cmap, at),
-            b'(' => {
-                skip_string(cmap, at);
-                return Some(Token::Other);
-            }
-            b'[' => {
-                *at += 1;
-                return Some(Token::Open);
-            }
-            b']' => {
-                *at += 1;
-                return Some(Token::Close);
-            }
-            b'<' if cmap.get(*at + 1) == Some(&b'<') => {
-                *at += 2;
-                return Some(Token::Other);
-            }
-            b'<' => return Some(hex_token(cmap, at)),
-            b'/' => {
-                *at += 1;
-                while cmap
-                    .get(*at)
-                    .is_some_and(|&byte| !is_space(byte) && !is_delimiter(byte))
-                {
-                    *at += 1;
-                }
-                return Some(Token::Other);
-            }
-            byte if is_delimiter(byte) => {
-                *at += 1;
-                return Some(Token::Other);
-            }
-            _ => {
-                let start = *at;
-                while cmap
-                    .get(*at)
-                    .is_some_and(|&byte| !is_space(byte) && !is_delimiter(byte))
-                {
-                    *at += 1;
-                }
-                return Some(Token::Word(&cmap[start..*at]));
-            }
-        }
-    }
-}
-
-/// Moves `at` to the end of the line.
-fn skip_line(cmap: &[u8], at: &mut usize) {
-    while cmap
-        .get(*at)
-        .is_some_and(|&byte| byte != b'\r' && byte != b'\n')
-    {
-        *at += 1;
-    }
-}
-
-/// Moves `at` past the literal string that starts there, nested
-/// parentheses and escapes included.
-fn skip_string(cmap: &[u8], at: &mut usize) {
-    let mut depth = 0usize;
-    while let Some(&byte) = cmap.get(*at) {
-        *at += 1;
-        match byte {
-            b'\\' => *at += 1,
-            b'(' => depth += 1,
-            b')' => {
-                depth -= 1;
-                if depth == 0 {
-                    return;
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-/// The text in angle brackets at `at`, moving `at` past it.
-fn hex_token<'m>(cmap: &'m [u8], at: &mut usize) -> Token<'m> {
-    *at += 1;
-    let (mut digits, mut value, mut pure) = (0u64, 0u64, true);
-    while let Some(&byte) = cmap.get(*at) {
-        match byte {
-            b'>' => {
-                *at += 1;
-                let code = (pure && digits <= 16).then_some(value);
-                return Token::Hex(Hex { digits, code });
-            }
-            b'%' => {
-                pure = false;
-                skip_line(cmap, at);
-            }
-            byte if is_space(byte) => {
-                pure = false;
-                *at += 1;
-            }
-            byte if byte.is_ascii_hexdigit() => {
-                digits += 1;
-                value = value.wrapping_shl(4) | u64::from((byte as char).to_digit(16).unwrap_or(0));
-                *at += 1;
-            }
-            // Not a text of hex digits: a line that is not read.
-            _ => return Token::Other,
-        }
-    }
-    Token::Other
-}
-
-/// The `ToUnicode` map `font` decodes with alone: a font with the map and
-/// no `Encoding`, or `Identity-H` or `Identity-V` as its `Encoding`,
-/// through any number of references.
-fn map_alone<'a>(document: &'a Document, font: &'a Dictionary) -> Option<&'a Stream> {
-    if !font.has_type(b"Font") {
+/// The `ToUnicode` map of `font`: it comes before the font's `Encoding`,
+/// whatever that says.
+fn font_map<'a>(document: &'a Document, font: &'a Dictionary) -> Option<&'a Stream> {
+    if !encoding::is_font(document, font) {
         return None;
     }
-    let map = document.get(font, b"ToUnicode")?.as_stream()?;
-    let Some(mut encoding) = font.get(b"Encoding") else {
-        return Some(map);
-    };
-    let mut seen = HashSet::new();
-    loop {
-        match encoding {
-            Object::Reference(id) if seen.insert(*id) => {
-                encoding = document.object(*id)?;
-            }
-            Object::Name(name) if name == b"Identity-H" || name == b"Identity-V" => {
-                return Some(map);
-            }
-            _ => return None,
-        }
-    }
-}
-
-/// The `ToUnicode` map that may be read with `font` itself: that of any
-/// font whose `Encoding` is not a plain name other than `Identity-H` and
-/// `Identity-V`. It is read when the `Encoding` leads, through any number
-/// of references, to a dictionary over one of those; every other shape is
-/// counted too, so that no way of writing it is missed.
-fn map_with_font<'a>(document: &'a Document, font: &'a Dictionary) -> Option<&'a Stream> {
-    if !font.has_type(b"Font") {
-        return None;
-    }
-    let map = document.get(font, b"ToUnicode")?.as_stream()?;
-    match font.get(b"Encoding") {
-        Some(Object::Name(name)) if name != b"Identity-H" && name != b"Identity-V" => None,
-        _ => Some(map),
-    }
+    document.get(font, b"ToUnicode")?.as_stream()
 }
 
 /// The entries of the `Differences` read for `font`: those of the
 /// dictionary its `Encoding` leads to, through any number of references.
 fn differences(document: &Document, font: &Dictionary) -> usize {
-    let Some(mut encoding) = font.get(b"Encoding") else {
-        return 0;
-    };
-    let mut seen = HashSet::new();
-    loop {
-        match encoding {
-            Object::Reference(id) if seen.insert(*id) => match document.object(*id) {
-                Some(object) => encoding = object,
-                None => return 0,
-            },
-            Object::Dictionary(dictionary) => {
-                return dictionary
-                    .get(b"Differences")
-                    .and_then(Object::as_array)
-                    .map_or(0, Vec::len);
-            }
-            _ => return 0,
-        }
-    }
+    document
+        .get(font, b"Encoding")
+        .and_then(Object::as_dict)
+        .and_then(|encoding| document.get(encoding, b"Differences"))
+        .and_then(Object::as_array)
+        .map_or(0, Vec::len)
 }
 
-/// Counts what reading the `ToUnicode` map in `stream` takes, before it is
-/// read: refuses it past a cap, and returns the memory, held to the limit
-/// for fonts, after charging as work the map's bytes and a share of the
-/// memory.
-fn map_memory(
-    document: &Document,
-    stream: &Stream,
-    budget: &mut Budget,
-) -> Result<usize, PdfError> {
-    match document.decode(stream, MAX_TO_UNICODE) {
-        Ok(map) => {
-            let memory = usize::try_from(map_shape(&map)?.memory).unwrap_or(usize::MAX);
-            if memory > budget.limits.font_memory {
-                return Err(font_too_large(budget.limits.font_memory));
-            }
-            budget.charge(map.len().saturating_add(memory / MEMORY_PER_WORK))?;
-            Ok(memory)
-        }
-        Err(ContentError::Over) => Err(to_unicode_too_large()),
-        // A map that cannot be inflated builds nothing: the font falls back.
-        Err(_) => Ok(0),
-    }
-}
-
-/// What reading `font` builds, counted before it is read: the font itself,
-/// a `ToUnicode` map read with the font (capped and charged), and the maps
-/// built of the `Differences`. A font that decodes with its map alone
-/// leaves the map to the cache.
+/// What reading `font` builds, counted before it is read: the font itself
+/// and the maps built of the `Differences`. Its `ToUnicode` map is left to the
+/// cache.
 fn font_before(
     document: &Document,
     font: &Dictionary,
     budget: &mut Budget,
 ) -> Result<usize, PdfError> {
-    let mut memory = FONT_INFO_MEMORY;
-    if map_alone(document, font).is_some() {
-        return Ok(memory);
-    }
-    if let Some(map) = map_with_font(document, font) {
-        memory = memory.saturating_add(map_memory(document, map, budget)?);
-    }
     let differences = differences(document, font).saturating_mul(DIFFERENCE_MEMORY);
     budget.charge(differences / MEMORY_PER_WORK)?;
-    Ok(memory.saturating_add(differences))
+    Ok(FONT_INFO_MEMORY.saturating_add(differences))
 }
 
 fn font_too_large(limit: usize) -> PdfError {

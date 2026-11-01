@@ -4,8 +4,8 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write as _;
 
-use crate::document::{Document, MAX_HOPS};
-use crate::error::PdfError;
+use crate::document::{Document, MAX_HOPS, NodeKind, node_kind};
+use crate::error::{PdfError, size};
 use crate::filters;
 use crate::object::{Dictionary, Object, ObjectId, Stream, StringFormat};
 use crate::parse::{MAX_DEPTH, is_regular};
@@ -32,6 +32,8 @@ pub struct Objects {
     pub version: String,
     /// The highest object number given out.
     max_number: u32,
+    /// The most saving may write, when it is held to a limit.
+    output_limit: Option<usize>,
 }
 
 impl Objects {
@@ -44,9 +46,15 @@ impl Objects {
     }
 
     /// Every object `document` can read, and its trailer, moved out of it:
-    /// an error when a limit runs out while reading them. The objects keep
-    /// their numbers, unless one is over 8,388,607: then they are numbered
-    /// again from 1.
+    /// an error when a limit runs out while reading them, or when an object
+    /// that cannot be read is one the document needs (one reachable from the
+    /// trailer): what is saved would lose it without a word. One nothing
+    /// refers to is left out. The objects keep their numbers, unless one is
+    /// over 8,388,607: then they are numbered again from 1.
+    ///
+    /// Saving them is held to the bytes of the file plus
+    /// [`ReadLimits::memory`](crate::ReadLimits::memory) (see
+    /// [`output_limit`](Self::output_limit)).
     pub fn read(document: Document) -> Result<Objects, PdfError> {
         let mut trailer = document.trailer().clone();
         for key in [&b"Size"[..], b"Prev", b"XRefStm", b"Encrypt"] {
@@ -58,18 +66,48 @@ impl Objects {
             document.version().to_owned()
         };
         let listed = document.max_number().min(MAX_KEPT_NUMBER);
-        let objects = document.into_objects()?;
+        let output_limit = document.file_len().saturating_add(document.limits().memory);
+        let (objects, lost) = document.into_objects()?;
         let highest = objects.keys().map(|id| id.0).max().unwrap_or(0);
         let mut read = Objects {
             objects,
             trailer,
             version,
             max_number: highest.max(listed),
+            output_limit: Some(output_limit),
         };
+        if let Some((number, generation)) = read.first_reached(&lost) {
+            return Err(PdfError::damaged(format!(
+                "object {number} {generation} cannot be read, and the document needs it"
+            )));
+        }
         if highest > MAX_KEPT_NUMBER {
             read.renumber(1);
         }
         Ok(read)
+    }
+
+    /// One of `ids` that the trailer leads to, if any.
+    fn first_reached(&self, ids: &HashSet<ObjectId>) -> Option<ObjectId> {
+        if ids.is_empty() {
+            return None;
+        }
+        let mut reached: HashSet<ObjectId> = HashSet::new();
+        let mut queue: Vec<ObjectId> = Vec::new();
+        for (_, value) in self.trailer.iter() {
+            references(value, &mut queue, 0);
+        }
+        while let Some(id) = queue.pop() {
+            if ids.contains(&id) {
+                return Some(id);
+            }
+            if reached.insert(id)
+                && let Some(object) = self.objects.get(&id)
+            {
+                references(object, &mut queue, 0);
+            }
+        }
+        None
     }
 
     /// The highest object number given out.
@@ -160,13 +198,12 @@ impl Objects {
                 let Some(id) = kid.as_reference() else {
                     continue;
                 };
-                let kind = self.dictionary(id).map(|node| {
-                    node.type_name()
-                        .or_else(|| node.has(b"Linearized").then_some(&b"Linearized"[..]))
-                });
-                match kind {
-                    Some(Some(b"Page")) => pages.push(id),
-                    Some(Some(b"Pages")) if stack.len() < MAX_TREE_DEPTH => {
+                match self
+                    .dictionary(id)
+                    .map(|node| node_kind(node, &|value| self.resolve(value)))
+                {
+                    Some(NodeKind::Page) => pages.push(id),
+                    Some(NodeKind::Tree) if stack.len() < MAX_TREE_DEPTH => {
                         if !current.is_empty() {
                             stack.push(current);
                         }
@@ -249,16 +286,45 @@ impl Objects {
         }
     }
 
-    /// The document as a PDF, with a cross-reference table. An error only
-    /// for a document too large for the offsets a cross-reference can hold.
+    /// The most [`save`](Self::save) and [`save_with`](Self::save_with) may
+    /// write. Objects from [`new`](Self::new) have no limit: what an app
+    /// writes itself is its own to size. Objects from [`read`](Self::read)
+    /// may write the bytes of the file they came from plus
+    /// [`ReadLimits::memory`](crate::ReadLimits::memory), so that an edit of a
+    /// small file cannot write a large one.
+    pub fn output_limit(&self) -> usize {
+        self.output_limit.unwrap_or(usize::MAX)
+    }
+
+    /// Sets the most [`save`](Self::save) may write: for an edit that takes
+    /// its objects from more than one document, the sum of what each may.
+    pub fn set_output_limit(&mut self, limit: usize) {
+        self.output_limit = Some(limit);
+    }
+
+    /// The document as a PDF, with a cross-reference table.
+    /// [`PdfError::TooLarge`] for one over its
+    /// [`output_limit`](Self::output_limit), or too large for the offsets a
+    /// cross-reference can hold.
     pub fn save(&self) -> Result<Vec<u8>, PdfError> {
         self.save_with(false)
     }
 
     /// The document as a PDF; with `object_streams`, the objects other than
     /// streams go into compressed object streams, and the cross-reference
-    /// is a stream.
+    /// is a stream. Held to the [`output_limit`](Self::output_limit), checked
+    /// before each object is written.
     pub fn save_with(&self, object_streams: bool) -> Result<Vec<u8>, PdfError> {
+        let limit = self.output_limit();
+        let over = |written: usize| -> Result<(), PdfError> {
+            if written > limit {
+                return Err(PdfError::TooLarge(format!(
+                    "an edit of a PDF would write more than the limit of {}",
+                    size(limit)
+                )));
+            }
+            Ok(())
+        };
         let mut out = Vec::new();
         let _ = write!(out, "%PDF-{}\n%\u{e2}\u{e3}\u{cf}\u{d3}\n", self.version);
         // Where each object is: at an offset (with its generation), or in
@@ -271,8 +337,12 @@ impl Objects {
             if object_streams && id.1 == 0 && !matches!(object, Object::Stream(_)) {
                 members.push((id, object));
             } else {
+                if let Object::Stream(stream) = object {
+                    over(out.len().saturating_add(stream.content.len()))?;
+                }
                 entries.insert(id.0, (1, out.len() as u64, id.1));
                 write_indirect(&mut out, *id, object);
+                over(out.len())?;
             }
         }
         for group in members.chunks(OBJECTS_PER_STREAM) {
@@ -283,6 +353,7 @@ impl Objects {
                 let _ = write!(header, "{} {} ", id.0, body.len());
                 write_object(&mut body, object);
                 body.push(b'\n');
+                over(out.len().saturating_add(body.len()))?;
                 entries.insert(id.0, (2, u64::from(next), index as u16));
             }
             let first = header.len();
@@ -326,6 +397,7 @@ impl Objects {
             trailer.set("Filter", "FlateDecode");
             let stream = Stream::new(trailer, filters::deflate(&rows));
             write_indirect(&mut out, (own, 0), &Object::Stream(stream));
+            over(out.len())?;
         } else {
             entries.insert(0, (0, 0, 65535));
             trailer.set("Size", i64::from(next) + 1);
@@ -348,6 +420,7 @@ impl Objects {
             out.push(b'\n');
         }
         let _ = write!(out, "startxref\n{start}\n%%EOF\n");
+        over(out.len())?;
         Ok(out)
     }
 }

@@ -26,10 +26,15 @@ pub(crate) enum Entry {
 
 /// What an entry of the cross-reference holds in memory, counted for each.
 pub(crate) const ENTRY_MEMORY: usize = 48;
+/// What each known start of an object holds in memory, with room to grow.
+pub(crate) const OFFSET_MEMORY: usize = 16;
 /// Object numbers a damaged file's scan accepts (up to 8,388,607): a
 /// forged header cannot make the table larger than objects a file can
 /// hold.
 const MAX_SCANNED_NUMBER: u32 = (1 << 23) - 1;
+
+/// How far after an `endstream` its `endobj` is looked for (64 bytes).
+const AFTER_ENDSTREAM: usize = 64;
 
 /// The cross-reference and the trailer.
 pub(crate) struct Xref {
@@ -40,6 +45,9 @@ pub(crate) struct Xref {
     pub(crate) starts: Vec<usize>,
     /// Whether it was rebuilt by scanning the file.
     pub(crate) rebuilt: bool,
+    /// Where entries find their own object, in no order: where an object
+    /// starts, and so where the one before it ends.
+    pub(crate) located: Vec<usize>,
 }
 
 impl Meter for Budget {
@@ -69,11 +77,17 @@ fn rfind(haystack: &[u8], needle: &[u8], from: usize) -> Option<usize> {
 /// The offset `startxref` gives: the last `%%EOF` in the last 1,024 bytes
 /// (white space after it allowed), and `startxref` in the 25 bytes before
 /// it.
-fn start(data: &[u8]) -> Option<usize> {
+fn start(data: &[u8], budget: &Budget) -> Result<Option<usize>, PdfError> {
     let end = data
         .iter()
         .rposition(|&byte| !matches!(byte, b' ' | b'\t' | b'\n' | b'\r' | b'\0' | b'\x0C'))
         .map_or(0, |at| at + 1);
+    budget.work(data.len() - end + 1024)?;
+    Ok(start_within(data, end))
+}
+
+/// The offset `startxref` gives in `data` up to `end`.
+fn start_within(data: &[u8], end: usize) -> Option<usize> {
     let data = data.get(..end)?;
     let eof = rfind(data, b"%%EOF", end.saturating_sub(1024)).filter(|&at| at > 25)?;
     let keyword = rfind(data.get(..eof)?, b"startxref", eof - 25)?;
@@ -93,7 +107,7 @@ pub(crate) fn header(lexer: &mut Lexer<'_>) -> Option<ObjectId> {
         lexer.eat(b"obj").then_some((number, generation))
     })();
     if id.is_none() {
-        lexer.pos = start;
+        lexer.rewind(start);
     }
     id
 }
@@ -101,9 +115,11 @@ pub(crate) fn header(lexer: &mut Lexer<'_>) -> Option<ObjectId> {
 /// Reads the indirect object at `offset`, whose bytes end by `end` at the
 /// latest (where the next object starts). A stream's `Length` comes from
 /// the dictionary or, through `length`, from the object it refers to; a
-/// stream whose length is wrong or missing ends at the `endstream` before
-/// `end`. Returns `None` for bytes that are not an object; fails only when
-/// a limit runs out.
+/// stream whose length is wrong or missing, or runs past `end`, ends at the
+/// `endstream` before `end`: no stream holds the bytes of the object after
+/// it. Returns `None` for bytes that are not an object; fails only when a
+/// limit runs out. What it looks at is charged, whether it finds an object
+/// or not.
 pub(crate) fn indirect(
     data: &Bytes,
     offset: usize,
@@ -114,12 +130,12 @@ pub(crate) fn indirect(
     let mut lexer = Lexer::new(data, offset);
     lexer.skip_space();
     let Some(id) = header(&mut lexer) else {
-        budget.work(lexer.pos - offset)?;
+        budget.work(lexer.reached().saturating_sub(offset))?;
         return Ok(None);
     };
     lexer.skip_space();
     let parsed = lexer.object(MAX_DEPTH, budget);
-    budget.work(lexer.pos.saturating_sub(offset))?;
+    budget.work(lexer.reached().saturating_sub(offset))?;
     let object = match parsed {
         Ok(object) => object,
         Err(Fail::Over(error)) => return Err(error),
@@ -145,7 +161,7 @@ pub(crate) fn indirect(
     let declared = declared.and_then(|value| usize::try_from(value).ok());
     if let Some(declared) = declared
         && let Some(stop) = start.checked_add(declared)
-        && stop <= data.len()
+        && stop <= end.min(data.len())
     {
         let mut after = Lexer::new(data, stop);
         after.eat_eol();
@@ -158,19 +174,20 @@ pub(crate) fn indirect(
     // closes it, before the next object.
     let bound = end.clamp(start, data.len());
     let window = data.get(start..bound).unwrap_or_default();
-    let Some(stop) = stream_end(window) else {
-        budget.work(window.len())?;
+    let (stop, scanned) = stream_end(window);
+    budget.work(scanned)?;
+    let Some(stop) = stop else {
         return Ok(None);
     };
-    budget.work(stop)?;
     let content = data.slice(start..start + stop);
     Ok(Some((id, Object::Stream(Stream::new(dict, content)))))
 }
 
 /// Where the data of a stream whose length is unknown ends in `window`
 /// (which starts with the data): before the end of line that precedes an
-/// `endstream`, preferring one followed by `endobj`.
-fn stream_end(window: &[u8]) -> Option<usize> {
+/// `endstream`, preferring one followed by `endobj` within
+/// [`AFTER_ENDSTREAM`] bytes. Also returns how far it looked.
+fn stream_end(window: &[u8]) -> (Option<usize>, usize) {
     let mut first = None;
     let mut from = 0;
     while let Some(at) = find(window, b"endstream", from) {
@@ -183,22 +200,35 @@ fn stream_end(window: &[u8]) -> Option<usize> {
         } else {
             at
         };
-        let mut after = Lexer::new(window, at + b"endstream".len());
+        // A comment may run on to the next `endstream`: the look ahead
+        // has an end, so that each one costs the same.
+        let next = at + b"endstream".len();
+        let near = window
+            .get(..next.saturating_add(AFTER_ENDSTREAM).min(window.len()))
+            .unwrap_or_default();
+        let mut after = Lexer::new(near, next);
         after.skip_space();
         if after.starts_with(b"endobj") {
-            return Some(stop);
+            return (Some(stop), at);
         }
         first.get_or_insert(stop);
     }
-    first
+    (first, window.len())
 }
 
 /// Reads the cross-reference of `data`, following `/Prev` and `/XRefStm`,
 /// or rebuilds it by scanning the file when it cannot be read.
 pub(crate) fn read(data: &Bytes, budget: &Budget) -> Result<Xref, PdfError> {
     match chain(data, budget) {
-        Ok(xref) if locates_objects(data, &xref, budget)? => Ok(xref),
-        Ok(xref) => Ok(rebuild(data, budget)?.unwrap_or(xref)),
+        Ok(mut xref) => {
+            let (mostly, located) = locates_objects(data, &xref, budget)?;
+            xref.located = located;
+            if mostly {
+                Ok(xref)
+            } else {
+                Ok(rebuild(data, budget)?.unwrap_or(xref))
+            }
+        }
         Err(PdfError::TooLarge(message)) => Err(PdfError::TooLarge(message)),
         Err(error) => rebuild(data, budget)?.ok_or(error),
     }
@@ -206,7 +236,8 @@ pub(crate) fn read(data: &Bytes, budget: &Budget) -> Result<Xref, PdfError> {
 
 /// The sections from `startxref` back through `/Prev`, newer entries first.
 fn chain(data: &Bytes, budget: &Budget) -> Result<Xref, PdfError> {
-    let first = start(data).ok_or_else(|| PdfError::damaged("the file has no startxref"))?;
+    let first =
+        start(data, budget)?.ok_or_else(|| PdfError::damaged("the file has no startxref"))?;
     let mut entries = BTreeMap::new();
     let mut trailer: Option<Dictionary> = None;
     let mut starts = Vec::new();
@@ -233,11 +264,16 @@ fn chain(data: &Bytes, budget: &Budget) -> Result<Xref, PdfError> {
         {
             starts.push(at);
         }
-        next = section_trailer
-            .remove(b"Prev")
-            .and_then(|o| o.as_float())
-            .filter(|prev| *prev >= 0.0)
-            .map(|prev| prev as usize);
+        next = section_trailer.remove(b"Prev").and_then(|prev| {
+            // An integer exactly; a few writers put a real here.
+            match prev.as_i64() {
+                Some(prev) => usize::try_from(prev).ok(),
+                None => prev
+                    .as_float()
+                    .filter(|prev| *prev >= 0.0)
+                    .map(|prev| prev as usize),
+            }
+        });
         if let Some(prev) = next
             && prev > data.len()
         {
@@ -255,6 +291,7 @@ fn chain(data: &Bytes, budget: &Budget) -> Result<Xref, PdfError> {
         trailer,
         starts,
         rebuilt: false,
+        located: Vec::new(),
     })
 }
 
@@ -269,7 +306,7 @@ fn section(
     entries: &mut BTreeMap<u32, Entry>,
 ) -> Option<Result<(usize, Dictionary), PdfError>> {
     let mut candidates = vec![offset];
-    let window = offset.saturating_sub(64)..(offset + 64).min(data.len());
+    let window = offset.saturating_sub(64)..offset.saturating_add(64).min(data.len());
     let mut near: Vec<usize> = window
         .filter(|&at| at != offset && section_starts(data, at))
         .collect();
@@ -321,6 +358,8 @@ fn table(
 ) -> Result<Option<Dictionary>, PdfError> {
     let mut lexer = Lexer::new(data, offset + b"xref".len());
     lexer.skip_space();
+    // What was looked at so far is charged as it goes.
+    let mut charged = offset;
     loop {
         let before = lexer.pos;
         let (Some(first), Some(count)) = ({
@@ -328,7 +367,7 @@ fn table(
             lexer.skip_white();
             (first, lexer.unsigned())
         }) else {
-            lexer.pos = before;
+            lexer.rewind(before);
             break;
         };
         lexer.skip_space();
@@ -344,7 +383,7 @@ fn table(
                 lexer.skip_white();
                 (offset, lexer.unsigned())
             }) else {
-                lexer.pos = line;
+                lexer.rewind(line);
                 break;
             };
             lexer.skip_white();
@@ -364,20 +403,24 @@ fn table(
                 },
                 Some(b'f') => Entry::Free,
                 _ => {
-                    lexer.pos = line;
+                    lexer.rewind(line);
                     break;
                 }
             };
             entries.entry(number).or_insert(entry);
         }
-        budget.work(lexer.pos - before)?;
+        budget.work(lexer.reached().saturating_sub(charged))?;
+        charged = lexer.reached();
     }
     lexer.skip_space();
     if !lexer.eat(b"trailer") {
+        budget.work(lexer.reached().saturating_sub(charged))?;
         return Ok(None);
     }
     lexer.skip_space();
-    match lexer.dictionary(MAX_DEPTH, budget) {
+    let parsed = lexer.dictionary(MAX_DEPTH, budget);
+    budget.work(lexer.reached().saturating_sub(charged))?;
+    match parsed {
         Ok(trailer) => Ok(Some(trailer)),
         Err(Fail::Over(error)) => Err(error),
         Err(_) => Ok(None),
@@ -400,7 +443,10 @@ fn stream(
         return Ok(None);
     }
     let limit = budget.limits.object_stream.min(budget.memory_left());
-    let content = match filters::decode(&stream.dict, &stream.content, limit) {
+    let mut spent = 0;
+    let decoded = filters::decode(&stream.dict, &stream.content, limit, &Some, &mut spent);
+    budget.work(spent)?;
+    let content = match decoded {
         Ok(content) => content,
         Err(DecodeError::Over) if limit < budget.limits.object_stream => {
             return Err(budget.out_of_memory());
@@ -498,39 +544,66 @@ fn stream(
 /// Whether most entries at an offset point at the header of their own
 /// object, as they do in a cross-reference that describes this file. One
 /// whose objects moved (bytes inserted or removed before them) does not.
-/// The bytes looked at are charged as work.
-fn locates_objects(data: &[u8], xref: &Xref, budget: &Budget) -> Result<bool, PdfError> {
-    let (mut normal, mut located) = (0usize, 0usize);
+/// Also returns where entries find an object of their number. The bytes
+/// looked at are charged as work.
+fn locates_objects(
+    data: &[u8],
+    xref: &Xref,
+    budget: &Budget,
+) -> Result<(bool, Vec<usize>), PdfError> {
+    let (mut normal, mut matching) = (0usize, 0usize);
+    let mut located = Vec::new();
     for (&number, entry) in &xref.entries {
         if let Entry::Normal { offset, generation } = *entry {
             normal += 1;
             let mut lexer = Lexer::new(data, offset);
-            lexer.skip_white();
-            if header(&mut lexer) == Some((number, generation)) {
-                located += 1;
+            lexer.skip_space();
+            let found = header(&mut lexer);
+            if found == Some((number, generation)) {
+                matching += 1;
             }
-            budget.work(lexer.pos.saturating_sub(offset).max(1))?;
+            if found.is_some_and(|(found, _)| found == number) {
+                budget.memory(OFFSET_MEMORY)?;
+                located.push(offset);
+            }
+            budget.work(lexer.reached().saturating_sub(offset).max(1))?;
         }
     }
-    Ok(normal == 0 || located * 2 > normal)
+    Ok((normal == 0 || matching * 2 > normal, located))
+}
+
+/// Whether the bytes before `at` end a dictionary, white space aside: the
+/// word `stream` only opens a stream there, not inside a string.
+fn after_dictionary(data: &[u8], at: usize) -> bool {
+    let before = data.get(..at).unwrap_or_default();
+    let end = before
+        .iter()
+        .rposition(|&byte| !crate::parse::is_white(byte))
+        .map_or(0, |last| last + 1);
+    before.get(..end).unwrap_or_default().ends_with(b">>")
 }
 
 /// The headers of the objects in `data` (`N G obj` at the start of a
 /// line), skipping stream data, each with its offset; later ones replace
-/// earlier ones, as incremental updates do.
+/// earlier ones, as incremental updates do. One pass over the file: the
+/// search for the end of a stream only moves forward, and once it has
+/// found no end it does not look again.
 pub(crate) fn scan(data: &[u8], budget: &Budget) -> Result<BTreeMap<u32, Entry>, PdfError> {
     budget.work(data.len())?;
     let mut entries = BTreeMap::new();
     let mut at_line_start = true;
     let mut at = 0;
+    let mut no_more_ends = false;
     while at < data.len() {
-        if data
-            .get(at..)
-            .is_some_and(|rest| rest.starts_with(b"stream"))
+        if !no_more_ends
+            && data
+                .get(at..)
+                .is_some_and(|rest| rest.starts_with(b"stream"))
             && !data
                 .get(..at)
                 .is_some_and(|before| before.ends_with(b"end"))
             && matches!(data.get(at + 6), Some(b'\r' | b'\n'))
+            && after_dictionary(data, at)
         {
             match find(data, b"endstream", at + 6) {
                 Some(end) => {
@@ -539,6 +612,7 @@ pub(crate) fn scan(data: &[u8], budget: &Budget) -> Result<BTreeMap<u32, Entry>,
                     continue;
                 }
                 None => {
+                    no_more_ends = true;
                     at += 6;
                     continue;
                 }
@@ -573,6 +647,14 @@ pub(crate) fn scan(data: &[u8], budget: &Budget) -> Result<BTreeMap<u32, Entry>,
     Ok(entries)
 }
 
+/// Where an entry says its object is in the file.
+pub(crate) fn normal_offset(entry: &Entry) -> Option<usize> {
+    match entry {
+        Entry::Normal { offset, .. } => Some(*offset),
+        _ => None,
+    }
+}
+
 /// Rebuilds the cross-reference by scanning for objects, with the last
 /// trailer whose `Root` is one of them (or the last cross-reference
 /// stream's dictionary, for files that have no trailer). `None` when there
@@ -590,13 +672,16 @@ fn rebuild(data: &Bytes, budget: &Budget) -> Result<Option<Xref>, PdfError> {
     };
     let mut trailer = None;
     let mut from = data.len();
+    // The search only moves back, and each trailer it finds is charged what
+    // its parse looked at.
+    budget.work(from)?;
     while let Some(at) = rfind(data.get(..from).unwrap_or_default(), b"trailer", 0) {
         from = at;
         let start = at + b"trailer".len();
         let mut lexer = Lexer::new(data, start);
         lexer.skip_space();
         let parsed = lexer.dictionary(MAX_DEPTH, budget);
-        budget.work(lexer.pos.saturating_sub(start))?;
+        budget.work(lexer.reached().saturating_sub(start))?;
         match parsed {
             Ok(found) if has_root(&found) => {
                 trailer = Some(found);
@@ -608,20 +693,11 @@ fn rebuild(data: &Bytes, budget: &Budget) -> Result<Option<Xref>, PdfError> {
     }
     if trailer.is_none() {
         // The last cross-reference stream with a `Root`.
-        let mut offsets: Vec<usize> = entries
-            .values()
-            .filter_map(|entry| match entry {
-                Entry::Normal { offset, .. } => Some(*offset),
-                _ => None,
-            })
-            .collect();
+        let mut offsets: Vec<usize> = entries.values().filter_map(normal_offset).collect();
         offsets.sort_unstable();
         for &offset in offsets.iter().rev() {
-            let end = offsets
-                .iter()
-                .find(|&&next| next > offset)
-                .copied()
-                .unwrap_or(data.len());
+            let next = offsets.partition_point(|&at| at <= offset);
+            let end = offsets.get(next).copied().unwrap_or(data.len());
             if let Some((_, Object::Stream(stream))) =
                 indirect(data, offset, end, budget, &|_| None)?
                 && stream.dict.has_type(b"XRef")
@@ -641,11 +717,14 @@ fn rebuild(data: &Bytes, budget: &Budget) -> Result<Option<Xref>, PdfError> {
     };
     trailer.remove(b"Prev");
     trailer.remove(b"XRefStm");
+    budget.memory(entries.len().saturating_mul(OFFSET_MEMORY))?;
+    let located = entries.values().filter_map(normal_offset).collect();
     Ok(Some(Xref {
         entries,
         trailer,
         starts: Vec::new(),
         rebuilt: true,
+        located,
     }))
 }
 

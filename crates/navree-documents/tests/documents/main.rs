@@ -16,5 +16,6 @@ mod native;
 #[cfg(feature = "operations")]
 mod operations;
 mod pdf;
+mod pdf_hostile;
 mod service;
 mod support;

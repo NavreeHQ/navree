@@ -66,8 +66,10 @@ impl Meter for OperandMeter {
 
 /// The operations of `content`, one at a time, so a stream of millions is
 /// never held decoded at once. Inline images (`BI` ... `ID` ... `EI`) are
-/// skipped. Bytes that are not operations end the stream; operands nested
-/// deeper than 100 levels, or one operation's operands over
+/// skipped. A closing `]`, `>` or brace with nothing to close, and a number
+/// with a doubled minus or too large for an integer, are read past as other
+/// readers do. Bytes that cannot be made sense of end the stream; operands
+/// nested deeper than 100 levels, or one operation's operands over
 /// [`MAX_OPERANDS_MEMORY`], are an error.
 pub fn operations(content: &[u8]) -> Operations<'_> {
     Operations {
@@ -121,6 +123,11 @@ impl Iterator for Operations<'_> {
                 self.done = true;
                 return None;
             };
+            // A closing bracket with nothing open: one byte, read past.
+            if matches!(byte, b']' | b'>' | b'{' | b'}') {
+                self.lexer.pos += 1;
+                continue;
+            }
             let operator_byte =
                 |b: u8| b.is_ascii_alphanumeric() || matches!(b, b'*' | b'\'' | b'"');
             if byte.is_ascii_alphabetic() || matches!(byte, b'*' | b'\'' | b'"') {

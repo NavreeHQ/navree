@@ -101,6 +101,11 @@ impl Budget {
         self.memory.get()
     }
 
+    /// The work counted so far.
+    pub(crate) fn work_used(&self) -> usize {
+        self.work.get()
+    }
+
     /// The memory still allowed.
     pub(crate) fn memory_left(&self) -> usize {
         self.limits.memory.saturating_sub(self.memory.get())
