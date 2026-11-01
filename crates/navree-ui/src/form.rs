@@ -409,6 +409,10 @@ impl<T: Form> FormView<T> {
             select = select.options(field.options.iter().map(|(value, label)| crate::components::OptionItem::new(*value, *label)));
         }
         if let Some(value) = value {
+            // A choice from the database, on a form drawn without them: it stays.
+            if field.options.is_empty() && !self.options.contains_key(field.name) {
+                select = select.option(value.to_owned(), value.to_owned());
+            }
             select = select.selected(value.to_owned());
         }
         if required {
@@ -657,27 +661,48 @@ pub(crate) fn encode_into(out: &mut String, text: &str) {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Submit<T>(pub T);
 
-/// What a failed [`Submit`] answers.
+/// What a failed [`Submit`] answers. By itself it draws the form on a plain
+/// page. Take `Result<Submit<T>, Rejected<T>>` and call
+/// [`respond`](Self::respond) to draw it in your own page, with its choices
+/// from the database.
 #[derive(Debug)]
 pub struct Rejected<T> {
     values: Vec<(String, String)>,
     errors: FieldErrors,
     from_runtime: bool,
     action: String,
+    too_large: bool,
     marker: PhantomData<fn() -> T>,
 }
 
-impl<T: Form> IntoResponse for Rejected<T> {
-    fn into_response(self) -> Response {
+impl<T: Form> Rejected<T> {
+    /// The errors by field.
+    pub fn errors(&self) -> &FieldErrors {
+        &self.errors
+    }
+
+    /// Ops for the runtime; with JavaScript off, what `page` makes of a form
+    /// holding what was typed and the errors.
+    pub fn respond<R: IntoResponse>(self, page: impl FnOnce(FormView<T>) -> R) -> Response {
+        if self.too_large {
+            return StatusCode::PAYLOAD_TOO_LARGE.into_response();
+        }
         if self.from_runtime {
             let ops = vec![Op::Errors { form: T::ID.to_owned(), fields: self.errors }];
             return (StatusCode::UNPROCESSABLE_ENTITY, Envelope::new(ops)).into_response();
         }
         let form = FormView::<T>::new().post(self.action).with_values(self.values).with_errors(self.errors);
-        View::new("Check this form")
-            .status(StatusCode::UNPROCESSABLE_ENTITY)
-            .body(el("main").slot("page").children((el("h1").slot("page-title").child("Check this form"), Node::from(form))))
-            .into_response()
+        let mut response = page(form).into_response();
+        *response.status_mut() = StatusCode::UNPROCESSABLE_ENTITY;
+        response
+    }
+}
+
+impl<T: Form> IntoResponse for Rejected<T> {
+    fn into_response(self) -> Response {
+        self.respond(|form| {
+            View::new("Check this form").body(el("main").slot("page").children((el("h1").slot("page-title").child("Check this form"), Node::from(form))))
+        })
     }
 }
 
@@ -685,7 +710,7 @@ impl<T> FromRequest for Submit<T>
 where
     T: Form + DeserializeOwned + Validate + Send + 'static,
 {
-    type Rejection = Response;
+    type Rejection = Rejected<T>;
 
     async fn from_request(request: Request) -> Result<Self, Self::Rejection> {
         let (parts, body): (Parts, _) = request.into_parts();
@@ -695,12 +720,17 @@ where
         let bytes = if parts.method == Method::GET || parts.method == Method::HEAD {
             bytes::Bytes::copy_from_slice(parts.uri.query().unwrap_or_default().as_bytes())
         } else {
-            read_body(body, limit).await.map_err(|_| StatusCode::PAYLOAD_TOO_LARGE.into_response())?
+            match read_body(body, limit).await {
+                Ok(bytes) => bytes,
+                Err(_) => {
+                    return Err(Rejected { values: Vec::new(), errors: FieldErrors::new(), from_runtime, action, too_large: true, marker: PhantomData });
+                }
+            }
         };
         let values: Vec<(String, String)> = urlencoded::parse(&bytes).map(|(name, value)| (name.into_owned(), value.into_owned())).collect();
         match decode::<T>(&values) {
             Ok(value) => Ok(Self(value)),
-            Err(errors) => Err(Rejected::<T> { values, errors, from_runtime, action, marker: PhantomData }.into_response()),
+            Err(errors) => Err(Rejected { values, errors, from_runtime, action, too_large: false, marker: PhantomData }),
         }
     }
 }

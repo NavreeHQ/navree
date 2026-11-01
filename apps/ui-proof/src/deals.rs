@@ -6,6 +6,7 @@ use navree::http::{Controller, RouteDef};
 use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree::ui::form::Money;
 use navree::ui::table::Direction;
+use navree::ui::form::Rejected;
 use navree::ui::{AppShell, BadgeVariant, Button, DataTable, FilterBar, Options, Page, Submit, TableQuery, TableRow, icons};
 use serde::Deserialize;
 
@@ -139,7 +140,7 @@ impl Controller for DealPages {
         vec![
             RouteDef::on(Method::GET, "!/deals", |shell: AppShell, query: TableQuery<DealRow, DealFilter>| async move { index(&shell, &query) }).public(),
             RouteDef::on(Method::GET, "!/deals/new", |shell: AppShell| async move { deal_form::page(&shell) }).public(),
-            RouteDef::on(Method::POST, "!/deals", |deal: Submit<NewDeal>| async move { deal_form::store(deal) }).public(),
+            RouteDef::on(Method::POST, "!/deals", |shell: AppShell, deal: Result<Submit<NewDeal>, Rejected<NewDeal>>| async move { deal_form::store(&shell, deal) }).public(),
         ]
     }
 }

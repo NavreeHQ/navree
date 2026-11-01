@@ -1,6 +1,8 @@
 //! The deal form: one struct is the form, its rules, its errors and its input.
 
-use navree::ui::form::{FormView, Money};
+use navree::http::Response;
+use navree::http::response::IntoResponse;
+use navree::ui::form::{FormView, Money, Rejected};
 use navree::ui::{AppShell, Card, Form, Options, Page, Reply, Submit, ToastTone, Validate};
 use serde::Deserialize;
 
@@ -69,22 +71,27 @@ fn choices(names: &[&str]) -> Vec<(String, String)> {
     names.iter().enumerate().map(|(id, name)| (id.to_string(), (*name).to_owned())).collect()
 }
 
+/// The page around a form, new or sent back with errors.
+fn page_with(shell: &AppShell, form: FormView<NewDeal>) -> Page {
+    let form = form
+        .post("/deals")
+        .submit("Create deal")
+        .cancel("Cancel", "/deals?per=1000")
+        .options("company_id", choices(&["Acme", "Globex", "Initech"]))
+        .options("contact_id", choices(&["Ada Lovelace", "Alan Turing"]))
+        .options("owner_id", choices(&["Grace Hopper", "Edsger Dijkstra"]));
+    shell.page("New deal").crumb("Deals", "/deals?per=1000").body(Card::new().description("Track an opportunity through the pipeline.").body(form))
+}
+
 /// `GET /deals/new`.
 pub fn page(shell: &AppShell) -> Page {
-    shell.page("New deal").crumb("Deals", "/deals?per=1000").body(
-        Card::new().description("Track an opportunity through the pipeline.").body(
-            FormView::<NewDeal>::new()
-                .post("/deals")
-                .submit("Create deal")
-                .cancel("Cancel", "/deals?per=1000")
-                .options("company_id", choices(&["Acme", "Globex", "Initech"]))
-                .options("contact_id", choices(&["Ada Lovelace", "Alan Turing"]))
-                .options("owner_id", choices(&["Grace Hopper", "Edsger Dijkstra"])),
-        ),
-    )
+    page_with(shell, FormView::new())
 }
 
 /// `POST /deals`.
-pub fn store(Submit(deal): Submit<NewDeal>) -> Reply {
-    Reply::redirect("/deals?per=1000").toast(ToastTone::Success, format!("{} created", deal.title))
+pub fn store(shell: &AppShell, submit: Result<Submit<NewDeal>, Rejected<NewDeal>>) -> Response {
+    match submit {
+        Ok(Submit(deal)) => Reply::redirect("/deals?per=1000").toast(ToastTone::Success, format!("{} created", deal.title)).into_response(),
+        Err(rejected) => rejected.respond(|form| page_with(shell, form)),
+    }
 }

@@ -108,13 +108,14 @@ export async function refresh(id) {
     const response = await fetch(src, { headers: HEADER });
     if (regions.get(id) !== mine || !response.ok) return;
     const doc = new DOMParser().parseFromString(await response.text(), "text/html");
-    const to = doc.getElementById(id) || doc.body.firstElementChild;
-    if (to) {
-      to.id = id;
-      morph(el, to);
-      el.removeAttribute("data-ui-lazy");
-      el.removeAttribute("aria-busy");
+    let to = doc.getElementById(id);
+    if (!to) {
+      to = /** @type {HTMLElement} */ (el.cloneNode(false));
+      to.append(...doc.body.childNodes);
     }
+    to.removeAttribute("data-ui-lazy");
+    to.removeAttribute("aria-busy");
+    morph(el, to);
   } catch {}
 }
 

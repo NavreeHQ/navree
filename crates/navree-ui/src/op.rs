@@ -251,6 +251,7 @@ pub struct Reply {
     status: StatusCode,
     fallback: Fallback,
     flash: Option<String>,
+    uses: crate::node::Uses,
 }
 
 impl Reply {
@@ -262,17 +263,18 @@ impl Reply {
             status: StatusCode::OK,
             fallback: Fallback::Redirect(href),
             flash: None,
+            uses: crate::node::Uses::NONE,
         }
     }
 
     /// Applies ops; with JavaScript off, shows `view`.
     pub fn view(view: View) -> Self {
-        Self { ops: Vec::new(), status: StatusCode::OK, fallback: Fallback::View(Box::new(view)), flash: None }
+        Self { ops: Vec::new(), status: StatusCode::OK, fallback: Fallback::View(Box::new(view)), flash: None, uses: crate::node::Uses::NONE }
     }
 
     /// Applies ops; with JavaScript off, answers 204.
     pub fn ops(ops: Vec<Op>) -> Self {
-        Self { ops, status: StatusCode::OK, fallback: Fallback::Empty, flash: None }
+        Self { ops, status: StatusCode::OK, fallback: Fallback::Empty, flash: None, uses: crate::node::Uses::NONE }
     }
 
     /// Adds an op.
@@ -282,9 +284,10 @@ impl Reply {
     }
 
     /// Morphs element `target` into `node`.
-    pub fn morph(self, target: impl Into<String>, node: impl Into<Node>) -> Self {
-        let op = Op::morph(target, &node.into());
-        self.op(op)
+    pub fn morph(mut self, target: impl Into<String>, node: impl Into<Node>) -> Self {
+        let node = node.into();
+        self.uses = self.uses.with(crate::render::measure(&node).uses);
+        self.op(Op::morph(target, &node))
     }
 
     /// Adds a toast. With JavaScript off, the next page shows it.
@@ -305,7 +308,8 @@ impl Reply {
 
     /// Answers with the fallback, with the ops kept for [`crate::UiModule`]'s layer.
     fn fallback_response(self) -> (Response, Envelope, StatusCode) {
-        let envelope = Envelope::new(self.ops);
+        let mut envelope = Envelope::new(self.ops);
+        envelope.modules = assets::scripts(self.uses).collect();
         let mut response = match self.fallback {
             Fallback::Redirect(href) => {
                 let mut response = StatusCode::SEE_OTHER.into_response();
