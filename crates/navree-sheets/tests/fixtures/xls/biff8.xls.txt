@@ -1,0 +1,17 @@
+date1904: true
+sheet "Mixed"
+  0 0 Text("Key")
+  0 1 Text("Value")
+  0 2 Text("late header")
+  1 0 Text("a label")
+  1 1 Text("a rich string")
+  2 0 Text("with runs")
+  2 1 Text("with phonetic data")
+  3 0 Text(long(chars=320, bytes=960, sha256=ffbd88f299ae8d09, head="日本語のテキスト日本語のテキスト"))
+  3 1 Text("")
+  4 0 DateTime(45001.5)
+  4 1 DateTime(1.25)
+  5 0 Text("")
+  5 1 Number(0.25)
+sheet "Very hidden"
+  0 0 Text("x")

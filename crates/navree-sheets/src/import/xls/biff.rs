@@ -222,6 +222,14 @@ fn read_chars(
     at_the_end: AtTheEnd,
     out: &mut String,
 ) -> Result<(), XlsError> {
+    // A byte-order mark that starts the string is not part of its text.
+    if wide
+        && count > 0
+        && let Some(rest) = pieces.data.strip_prefix(&[0xFF, 0xFE])
+    {
+        pieces.data = rest;
+        count = count.saturating_sub(1);
+    }
     loop {
         let width = if wide { 2 } else { 1 };
         let here = count.min(pieces.data.len() / width);

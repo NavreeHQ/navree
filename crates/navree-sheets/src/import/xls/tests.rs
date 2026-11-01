@@ -347,10 +347,7 @@ fn an_embedded_chart_in_a_sheet_is_skipped() {
 fn a_sheet_with_cells_far_apart_is_two_cells() {
     // The corners of a BIFF8 sheet: 65,536 rows by 256 columns, 16.7
     // million cells between them, two in the file. DIMENSIONS says so too.
-    let mut records = dimensions(0, 65_536, 0, 256);
-    records.extend(label(0, 0, 0, "first", false));
-    records.extend(number(65_535, 255, 0, 2.0));
-    let xls = open(&Book::new(codepage(1200), vec![Sheet::new("S", records)]).file());
+    let xls = open(&corners());
     assert_eq!(
         cells_of(&xls, 0),
         [(0, 0, text("first")), (65_535, 255, XlsValue::Number(2.0))]
@@ -660,4 +657,140 @@ fn a_damaged_sheet_the_table_does_not_read_still_makes_the_workbook_damaged() {
     ];
     let bytes = Book::new(codepage(1200), sheets).file();
     damaged(&bytes, "NUMBER");
+}
+
+#[test]
+fn a_byte_order_mark_that_starts_a_string_is_dropped() {
+    let mut records = label(0, 0, 0, "\u{FEFF}Email", false);
+    records.extend(label(0, 1, 0, "a\u{FEFF}b", false));
+    records.extend(label_sst(0, 2, 0, 0));
+    let mut globals = codepage(1200);
+    globals.extend(sst(&[Shared::from("\u{FEFF}shared")], 1, 8224));
+    let xls = open(&Book::new(globals, vec![Sheet::new("S", records)]).file());
+    assert_eq!(
+        cells_of(&xls, 0),
+        [
+            (0, 0, text("Email")),
+            (0, 1, text("a\u{FEFF}b")),
+            (0, 2, text("shared"))
+        ]
+    );
+}
+
+/// A cell's value as the fixtures' expected cells write it.
+fn written(value: &XlsValue<'_>) -> String {
+    use sha2::Digest;
+    match value {
+        XlsValue::Text(text) if text.chars().count() > 64 => {
+            let head: String = text.chars().take(16).collect();
+            let digest = hex::encode(sha2::Sha256::digest(text.as_bytes()));
+            format!(
+                "Text(long(chars={}, bytes={}, sha256={}, head={head:?}))",
+                text.chars().count(),
+                text.len(),
+                &digest[..16]
+            )
+        }
+        XlsValue::Text(text) => format!("Text({text:?})"),
+        XlsValue::Number(n) => format!("Number({n:?})"),
+        XlsValue::Int(n) => format!("Int({n})"),
+        XlsValue::DateTime(n) => format!("DateTime({n:?})"),
+        XlsValue::Bool(b) => format!("Bool({b})"),
+        XlsValue::Error(name) => format!("Error({name})"),
+    }
+}
+
+/// The date system, then each worksheet and its cells by position, the
+/// last cell the file gives at a position kept.
+fn written_workbook(bytes: &[u8]) -> String {
+    let xls = open(bytes);
+    let mut out = format!("date1904: {}\n", xls.date1904());
+    for (index, name) in xls.sheet_names().iter().enumerate() {
+        out.push_str(&format!("sheet {name:?}\n"));
+        let mut cells = std::collections::BTreeMap::new();
+        for (row, col, value) in cells_of(&xls, index) {
+            cells.insert((row, col), written(&value));
+        }
+        for ((row, col), value) in cells {
+            out.push_str(&format!("  {row} {col} {value}\n"));
+        }
+    }
+    out
+}
+
+#[test]
+fn workbooks_are_read_as_the_table_has_always_read_them() {
+    // Files LibreOffice wrote (types, its 1904 twin, many rows; a chart
+    // sheet, an embedded chart, long shared strings over CONTINUE records,
+    // dates, errors, formulas), and two written here: a BIFF5 book and a
+    // BIFF8 one with the records LibreOffice does not write. Each `.txt` is
+    // the cells the table has always read from the file.
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/xls/");
+    for name in ["types", "types1904", "many", "biff5", "biff8"] {
+        let bytes = std::fs::read(format!("{dir}{name}.xls")).unwrap();
+        let expected = std::fs::read_to_string(format!("{dir}{name}.xls.txt")).unwrap();
+        let read = written_workbook(&bytes);
+        assert_eq!(read, expected.replace("\r\n", "\n"), "{name}.xls");
+    }
+}
+
+/// The corners of a BIFF8 sheet, and DIMENSIONS saying it is all used.
+fn corners() -> Vec<u8> {
+    let mut records = dimensions(0, 65_536, 0, 256);
+    records.extend(label(0, 0, 0, "first", false));
+    records.extend(number(65_535, 255, 0, 2.0));
+    Book::new(codepage(1200), vec![Sheet::new("S", records)]).file()
+}
+
+#[cfg(target_os = "linux")]
+fn kib_of(key: &str) -> u64 {
+    let status = std::fs::read_to_string("/proc/self/status").unwrap();
+    status
+        .lines()
+        .find_map(|line| line.strip_prefix(key))
+        .and_then(|rest| rest.trim().trim_end_matches(" kB").trim().parse().ok())
+        .unwrap()
+}
+
+/// Runs alone in a process (see the test below): reads the corners of a
+/// sheet of 16.7 million cells and checks the most memory that took.
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "runs in a process of its own, from the test below"]
+fn the_peak_memory_of_reading_cells_far_apart() {
+    let bytes = corners();
+    std::fs::write("/proc/self/clear_refs", "5").unwrap();
+    let before = kib_of("VmHWM:");
+    let xls = open(&bytes);
+    let cells = cells_of(&xls, 0);
+    let used = kib_of("VmHWM:").saturating_sub(before);
+    assert_eq!(cells.len(), 2);
+    // A cell of a dense grid is at least 24 bytes: 400 MB for this area.
+    assert!(
+        used < 4 * 1024,
+        "reading held {used} KiB at most, over 4 MiB"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cells_far_apart_hold_memory_for_the_cells_not_the_area() {
+    let this = module_path!().split_once("::").unwrap().1;
+    // nosemgrep: navree-process-outside-tooling
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            &format!("{this}::the_peak_memory_of_reading_cells_far_apart"),
+            "--ignored",
+            "--test-threads=1",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
 }
