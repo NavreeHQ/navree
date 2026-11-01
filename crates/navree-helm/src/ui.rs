@@ -33,6 +33,7 @@ use crate::session::{
     build_cookie, clear_cookie, cookie, redirect, request_host, session_cookie,
 };
 use crate::values::key_text;
+use crate::workspace::{WORKSPACE_COOKIE, requested};
 use crate::{ActionResult, icons, money};
 
 /// The Settings screens (feature `settings`).
@@ -313,6 +314,10 @@ impl<'a> Frame<'a> {
             .collect();
         let user = user_json(cx).await;
         let avatar = initials(user["name"].as_str().unwrap_or_default());
+        let works_in_workspaces = core.registry.resources().iter().any(|resource| {
+            let info = resource.info();
+            info.workspaces.is_some() && cx.can(READ, info.subject, None)
+        });
         let mut panel = panel_json(core, self.csrf());
         panel["collapsed"] =
             Value::Bool(cookie(self.headers, SIDEBAR_COOKIE).as_deref() == Some("collapsed"));
@@ -325,6 +330,10 @@ impl<'a> Frame<'a> {
             "user": user,
             "avatar": avatar,
             "flash": read_flash(self.headers),
+            "workspace": {
+                "shown": works_in_workspaces,
+                "current": cx.uow.workspace().map(|id| id.to_string()),
+            },
         });
         if let (Value::Object(ctx), Value::Object(extra)) = (&mut ctx, extra) {
             ctx.extend(extra);
@@ -660,6 +669,58 @@ pub(crate) async fn two_factor(request: Request) -> Response {
         }
         Err(error) => signin.auth_error(error, step),
     }
+}
+
+/// `POST {path}/workspace`: works in the workspace named by the form's
+/// `workspace` field from now on (a cookie), or in none when it is empty.
+pub(crate) async fn choose_workspace(
+    panel: Panel,
+    headers: HeaderMap,
+    request: Request,
+) -> Response {
+    let core = panel.cx.core.clone();
+    let base = core.options.base().to_owned();
+    let host = request_host(&request);
+    let body = to_bytes(request.into_body(), 16 * 1024)
+        .await
+        .unwrap_or_default();
+    let chosen = form_urlencoded::parse(&body)
+        .find(|(name, _)| name == "workspace")
+        .map(|(_, value)| value.trim().to_owned())
+        .unwrap_or_default();
+    // The workspace of a request that is inside one is not the panel's to
+    // change.
+    let fixed = panel.cx.uow.workspace().is_some() && requested(&headers).is_none();
+    if fixed {
+        return redirect_with(
+            &base,
+            "This page is inside a workspace already.",
+            "warning",
+            &core,
+            &host,
+        );
+    }
+    if chosen.is_empty() {
+        let mut response = redirect(&base);
+        if let Some(header) = clear_cookie(WORKSPACE_COOKIE, &base, &host) {
+            response.headers_mut().append(SET_COOKIE, header);
+        }
+        return response;
+    }
+    let Ok(workspace) = uuid::Uuid::parse_str(&chosen) else {
+        return redirect_with(&base, "That is not a workspace id.", "error", &core, &host);
+    };
+    let mut response = redirect(&base);
+    if let Some(header) = build_cookie(
+        WORKSPACE_COOKIE,
+        workspace.to_string(),
+        &base,
+        60 * 60 * 24 * 30,
+        &host,
+    ) {
+        response.headers_mut().append(SET_COOKIE, header);
+    }
+    response
 }
 
 /// `POST {path}/logout`: ends the panel session (and its refresh token).

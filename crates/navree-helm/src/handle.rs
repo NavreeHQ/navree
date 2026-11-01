@@ -27,7 +27,9 @@ use crate::metric::{
 };
 use crate::query::ListQuery;
 use crate::values::{self, Invalid, Shape, is_blank, key_from_str, key_text};
-use crate::{ActionContext, ActionResult, FormData, HelmOptions, RecordOf, Resource, SaveContext};
+use crate::{
+    ActionContext, ActionResult, FormData, HelmOptions, RecordOf, Resource, SaveContext, Workspaces,
+};
 use crate::{money, save};
 
 /// What the panel knows about a resource, without its types.
@@ -54,6 +56,8 @@ pub(crate) struct ResourceInfo {
     pub(crate) patterns: HashMap<String, Regex>,
     /// Columns that may hold `NULL`.
     pub(crate) nullable: HashSet<&'static str>,
+    /// Where the resource works, when its model belongs to workspaces.
+    pub(crate) workspaces: Option<Workspaces>,
 }
 
 impl ResourceInfo {
@@ -506,6 +510,7 @@ impl<R: Resource> Handle<R> {
             metrics: metric_infos,
             patterns,
             nullable,
+            workspaces: meta.workspace_column().map(|_| R::WORKSPACES),
         };
         Ok(Self {
             resource,
@@ -523,9 +528,28 @@ impl<R: Resource> Handle<R> {
     /// query: the model's query (its global scopes apply when it runs),
     /// the resource's narrowing, then the user's access filter.
     fn base(&self, cx: &Cx, action: &str) -> Builder<R::Model> {
+        let query = R::Model::query();
+        let query = if self.info.workspaces == Some(Workspaces::Every) {
+            query.without_workspace_scope()
+        } else {
+            query
+        };
         self.resource
-            .query(R::Model::query())
+            .query(query)
             .accessible_for(cx.ability(), action)
+    }
+
+    /// A 400 that asks for a workspace when the resource's model belongs to
+    /// workspaces, the resource works in one, and the request has none.
+    /// Nothing falls back to the records of every workspace.
+    fn in_a_workspace(&self, cx: &Cx) -> Result<(), AppError> {
+        if self.info.workspaces == Some(Workspaces::Current) && cx.uow.workspace().is_none() {
+            return Err(AppError::bad_request(format!(
+                "Choose a workspace first: {} belong to workspaces.",
+                self.info.label
+            )));
+        }
+        Ok(())
     }
 
     fn shape(&self, column: &str) -> Shape {
@@ -773,6 +797,7 @@ impl<R: Resource> Handle<R> {
         if !cx.can(READ, subject, None) {
             return Err(AppError::forbidden());
         }
+        self.in_a_workspace(cx)?;
         let mut query = self.base(cx, READ);
         let mut errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
         if let Some((column, id)) = &q.via {
@@ -1329,6 +1354,7 @@ impl<R: Resource> ErasedResource for Handle<R> {
             if !cx.can(READ, <R::Model as Subject>::SUBJECT, None) {
                 return Err(AppError::forbidden());
             }
+            self.in_a_workspace(cx)?;
             Ok(self.load(cx, id, false).await?.map(|r| self.raw(cx, &r)))
         })
     }
@@ -1343,6 +1369,7 @@ impl<R: Resource> ErasedResource for Handle<R> {
             if !cx.can(CREATE, subject, None) {
                 return Err(AppError::forbidden());
             }
+            self.in_a_workspace(cx)?;
             let editable: Vec<Field> = self
                 .info
                 .fields
@@ -1389,6 +1416,7 @@ impl<R: Resource> ErasedResource for Handle<R> {
             if !cx.can(READ, subject, None) {
                 return Err(AppError::forbidden());
             }
+            self.in_a_workspace(cx)?;
             let Some(record) = self.load(cx, id, true).await? else {
                 return Err(AppError::not_found());
             };
@@ -1430,6 +1458,7 @@ impl<R: Resource> ErasedResource for Handle<R> {
             if !cx.can(READ, subject, None) {
                 return Err(AppError::forbidden());
             }
+            self.in_a_workspace(cx)?;
             let Some(record) = self.load(cx, id, true).await? else {
                 return Err(AppError::not_found());
             };
@@ -1453,6 +1482,7 @@ impl<R: Resource> ErasedResource for Handle<R> {
             let Some(action) = self.actions.iter().find(|a| a.name == name) else {
                 return Err(AppError::not_found().with_detail(format!("No action `{name}`.")));
             };
+            self.in_a_workspace(cx)?;
             let mut unique = Vec::new();
             for id in ids {
                 if !unique.contains(&id) {
@@ -1506,6 +1536,7 @@ impl<R: Resource> ErasedResource for Handle<R> {
                         ids: permitted_ids.clone(),
                         input,
                         user_id: cx.user_id,
+                        workspace: cx.uow.workspace(),
                     };
                     dispatcher.dispatch(job).await.map_err(AppError::internal)?;
                     let message = format!(
@@ -1560,10 +1591,12 @@ impl<R: Resource> ErasedResource for Handle<R> {
             if !cx.can(READ, <R::Model as Subject>::SUBJECT, None) {
                 return Err(AppError::forbidden());
             }
+            self.in_a_workspace(cx)?;
             let key = format!(
-                "{}|{}|{}|{}|{}",
+                "{}|{}|{}|{}|{}|{}",
                 cx.user_id,
                 cx.access.version,
+                cx.uow.workspace().unwrap_or_default(),
                 self.info.slug,
                 metric.slug,
                 if metric.over.is_some() {
@@ -1594,6 +1627,10 @@ impl<R: Resource> ErasedResource for Handle<R> {
     ) -> BoxFuture<'a, Result<Vec<(String, String)>, AppError>> {
         Box::pin(async move {
             if !cx.can(READ, <R::Model as Subject>::SUBJECT, None) {
+                return Ok(Vec::new());
+            }
+            // A picker of records of a workspace has none to offer without one.
+            if self.in_a_workspace(cx).is_err() {
                 return Ok(Vec::new());
             }
             let mut query = self.base(cx, READ).reorder();

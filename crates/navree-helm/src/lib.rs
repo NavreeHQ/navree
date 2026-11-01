@@ -82,6 +82,7 @@ mod session;
 mod templates;
 mod ui;
 mod values;
+mod workspace;
 
 pub use action::{Action, ActionResult};
 pub use context::{ActionContext, PageContext, SaveContext};
@@ -95,6 +96,7 @@ pub use options::HelmOptions;
 pub use page::HelmPage;
 pub use resource::{FormData, ModelOf, RecordOf, Resource};
 pub use session::SESSION_COOKIE;
+pub use workspace::{WORKSPACE_COOKIE, Workspaces};
 
 /// The action that lets a user into the panel: `view` on [`Helm`].
 pub const VIEW: &str = "view";

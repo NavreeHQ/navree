@@ -265,6 +265,8 @@ To call an internal service, list it in `ssrf.allow_hosts`:
 - a host glob, `*.svc.cluster.local`;
 - an IP address, `127.0.0.1`, or a CIDR network, `10.20.0.0/16`.
 
+An allow-listed name is trusted with every address it resolves to, the cloud metadata endpoints included, so the list is as strong as the control you have over those names. A glob matches the text of a host name, and `*` matches dots too: `*.svc.cluster.local` fits `a.b.svc.cluster.local`, and `api.internal.*` fits `api.internal.example`, a name whoever owns `example` can point at any address. End a glob in a domain you own, and write a network as a CIDR network (`10.20.0.0/16`), never as a glob (`10.20.*`, which fits `10.20.attacker.example`). To allow an address range without trusting any name, list the range and not the name.
+
 Set `block_private = false` only when the client never sees user-supplied URLs. The client also ignores the system's proxy settings (`HTTP_PROXY` and friends), so requests go where the policy checked.
 
 To refuse a bad address when you store it, such as a webhook endpoint or a callback URL a user enters, check it without sending anything:

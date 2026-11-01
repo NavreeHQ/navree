@@ -1,6 +1,6 @@
 ---
 name: navree-helm
-description: "Helm, the admin panel of navree-helm: the `helm` facade feature (in `full`), `HelmModule` and the `helm` config section, `navree make:resource <module> <Model>`, the `Resource` trait over a navree-orm model (LABEL, SINGULAR, GROUP, ICON, TITLE, SEARCH, SLUG, PER_PAGE, DEFAULT_SORT, ORDER, fields, filters, actions, metrics, query, create, update, delete), `Field`, `Filter`, `Action` / `ActionContext` / `ActionResult`, `Metric`, `HelmPage` and `m.helm_page(..)`, `SaveContext` and `FormData::parse`, file fields on storage disks, the access rules every screen checks (`helm.view`, then read, create, update, delete and action abilities on each record and field), the audit entries, sign-in, CSRF and the strict CSP, and testing through `/admin/api`. Use when adding an admin panel or back office, exposing a model at `/admin`, adding a filter, bulk action, metric card or custom admin page, saving admin edits through a service, or debugging a resource missing from the menu, a 403 or 404 in the panel, a boot error naming a resource, or a field shown read-only."
+description: "Helm, the admin panel of navree-helm: the `helm` facade feature (in `full`), `HelmModule` and the `helm` config section, `navree make:resource <module> <Model>`, the `Resource` trait over a navree-orm model (LABEL, SINGULAR, GROUP, ICON, TITLE, SEARCH, SLUG, PER_PAGE, DEFAULT_SORT, ORDER, WORKSPACES, fields, filters, actions, metrics, query, create, update, delete), `Field`, `Filter`, `Action` / `ActionContext` / `ActionResult`, `Metric`, `HelmPage` and `m.helm_page(..)`, `SaveContext` and `FormData::parse`, file fields on storage disks, the access rules every screen checks (`helm.view`, then read, create, update, delete and action abilities on each record and field), the audit entries, sign-in, CSRF and the strict CSP, and testing through `/admin/api`. Use when adding an admin panel or back office, exposing a model at `/admin`, adding a filter, bulk action, metric card or custom admin page, saving admin edits through a service, or debugging a resource missing from the menu, a 403 or 404 in the panel, a boot error naming a resource, or a field shown read-only."
 ---
 
 # Helm: the admin panel
@@ -99,7 +99,8 @@ impl Resource for DealResource {
     const TITLE: &'static str = "title";        // names a record; default "id"
     const SEARCH: &'static [&'static str] = &["title"];
     // SLUG (default: table name with '-'), PER_PAGE (0 = helm.per_page),
-    // DEFAULT_SORT ("-amount_cents"; default -created_at or -pk), ORDER (i32).
+    // DEFAULT_SORT ("-amount_cents"; default -created_at or -pk), ORDER (i32),
+    // WORKSPACES (Workspaces::Current by default; Every spans workspaces).
 
     fn fields(&self) -> Vec<Field> {
         vec![
@@ -292,6 +293,12 @@ token.
 - **A resource is missing from the menu:** the user lacks `read` on its
   subject (a type-level check), or the module never called
   `m.resource::<R>()`.
+- **"Choose a workspace first" (400):** the model is `#[model(workspace)]`
+  and the request is in no workspace. The panel works in one workspace at a
+  time: the unit of work's (entered by the app), else an `X-Workspace` header
+  or the cookie that the sidebar's form sets. `Workspaces::Every` on the
+  resource spans workspaces (the database role decides what it sees; under
+  row-level security, only a role that bypasses it sees every workspace).
 - **A record is a 404, not a 403:** rows the access filter hides don't exist
   for that user, like `Accessible<M, Read>` in the API.
 - **A field is greyed out on edit:** a `.fields([..])` or `cannot(..)` rule

@@ -12,11 +12,13 @@ use navree_db::{ChangeEvent, ChangeOp, Uow};
 use navree_http::AppError;
 use navree_kernel::AppContext;
 use navree_orm::strict;
-use navree_orm::{Assignment, Model, OrmError, PrimaryKey, Record, Row};
+use navree_orm::{Assignment, Field, Model, OrmError, PrimaryKey, Record, Row, Value, col};
 use navree_validation::Messages;
 use serde_json::{Map, Value as Json};
+use uuid::Uuid;
 
 use crate::values::{self, Invalid, Shape};
+use crate::workspace;
 use crate::{FormData, SaveContext};
 
 /// The time now, from the app's `dyn Clock` when it has one.
@@ -153,7 +155,31 @@ fn record_change<M: Model>(
     });
 }
 
-/// `Resource::create`'s default.
+/// The workspace `model` belongs to: `None` when `M` is not scoped to
+/// workspaces, `Some(None)` when its workspace column is empty.
+fn owner<M: Model>(model: &M) -> Result<Option<Option<Uuid>>, AppError> {
+    let Some(column) = M::meta().workspace_column() else {
+        return Ok(None);
+    };
+    let value = model.value(column)?.ok_or_else(|| {
+        OrmError::InvalidQuery(format!(
+            "`{column}` is not a column of `{}`",
+            M::meta().table()
+        ))
+    })?;
+    let id = <Option<Uuid>>::from_value(value).map_err(|error| {
+        AppError::internal(format!(
+            "the workspace of a {} is not a UUID: {error}",
+            M::meta().name()
+        ))
+    })?;
+    Ok(Some(id.filter(|id| !id.is_nil())))
+}
+
+/// `Resource::create`'s default. A record of a model that belongs to
+/// workspaces is made inside its workspace: the one the unit of work works
+/// in, which a form that names another (`workspace_id`) is refused for, or
+/// the one the form names when the unit of work is in none.
 pub(crate) async fn create<M: Model>(
     ctx: &SaveContext,
     form: FormData,
@@ -167,6 +193,35 @@ pub(crate) async fn create<M: Model>(
         }
     }
     let uow = ctx.uow();
+    let Some(named) = owner(&model)? else {
+        return insert::<M>(uow, model).await;
+    };
+    let target = match (named, uow.workspace()) {
+        (Some(named), Some(current)) if named != current => {
+            return Err(AppError::bad_request(format!(
+                "A {} cannot be made in another workspace than the one you are working in.",
+                M::meta().name()
+            )));
+        }
+        (_, Some(current)) => current,
+        (Some(named), None) => named,
+        (None, None) => {
+            return Err(AppError::bad_request(format!(
+                "Name the workspace of the new {} (`{}`) or choose a workspace first.",
+                M::meta().name(),
+                M::meta().workspace_column().unwrap_or("workspace_id")
+            )));
+        }
+    };
+    // The insert does not fill the workspace itself.
+    if let Some(column) = M::meta().workspace_column() {
+        model.set_value(column, Value::from(target))?;
+    }
+    workspace::within(uow, target, insert::<M>(uow, model)).await
+}
+
+/// Inserts `model` with a generated key and records the change.
+async fn insert<M: Model>(uow: &Uow, model: M) -> Result<Record<M>, AppError> {
     let key = M::query().fill_and_insert_get_id(uow, model).await?;
     let record = stored::<M>(uow, key.clone()).await?;
     record_change::<M>(
@@ -179,7 +234,9 @@ pub(crate) async fn create<M: Model>(
     Ok(record)
 }
 
-/// `Resource::update`'s default.
+/// `Resource::update`'s default. A record of a model that belongs to
+/// workspaces is written inside its own workspace, and only its row of that
+/// workspace is touched.
 pub(crate) async fn update<M: Model>(
     ctx: &SaveContext,
     record: Record<M>,
@@ -203,15 +260,31 @@ pub(crate) async fn update<M: Model>(
         sets.push(Assignment::value(column, value));
     }
     let uow = ctx.uow();
+    match owner(&old)? {
+        Some(Some(workspace)) => {
+            workspace::within(uow, workspace, write::<M>(uow, old, sets, Some(workspace))).await
+        }
+        _ => write::<M>(uow, old, sets, None).await,
+    }
+}
+
+/// The changed columns of an update, written to the row of `old` (of its
+/// `workspace`, when it has one).
+async fn write<M: Model>(
+    uow: &Uow,
+    old: M,
+    sets: Vec<Assignment>,
+    workspace: Option<Uuid>,
+) -> Result<Record<M>, AppError> {
     let key = old.key();
     if sets.is_empty() {
         return stored::<M>(uow, key).await;
     }
-    let updated = M::query()
-        .without_global_scopes()
-        .where_key(key.clone())
-        .update(uow, sets)
-        .await?;
+    let mut query = M::query().without_global_scopes().where_key(key.clone());
+    if let (Some(workspace), Some(column)) = (workspace, M::meta().workspace_column()) {
+        query = query.where_(col(format!("{}.{column}", M::meta().table())).eq(workspace));
+    }
+    let updated = query.update(uow, sets).await?;
     if updated == 0 {
         return Err(missing::<M>(&key).into());
     }
@@ -230,9 +303,17 @@ pub(crate) async fn update<M: Model>(
 }
 
 /// `Resource::delete`'s default: a soft delete for a model that soft
-/// deletes.
+/// deletes. A record of a model that belongs to workspaces is deleted inside
+/// its own workspace.
 pub(crate) async fn delete<M: Model>(ctx: &SaveContext, record: Record<M>) -> Result<(), AppError> {
     let uow = ctx.uow();
+    match owner(record.model())? {
+        Some(Some(workspace)) => workspace::within(uow, workspace, remove::<M>(uow, record)).await,
+        _ => remove::<M>(uow, record).await,
+    }
+}
+
+async fn remove<M: Model>(uow: &Uow, record: Record<M>) -> Result<(), AppError> {
     let key = record.key();
     if M::query().where_key(key.clone()).delete(uow).await? == 0 {
         return Err(missing::<M>(&key).into());

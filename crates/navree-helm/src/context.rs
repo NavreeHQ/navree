@@ -50,6 +50,14 @@ macro_rules! shared_context {
                 self.0.user_id
             }
 
+            /// The workspace the request works in, if it has entered one
+            /// (the unit of work remembers it, which scopes the ORM's queries
+            /// of workspace-scoped models). Resources of
+            /// [`Workspaces::Every`](crate::Workspaces::Every) may have none.
+            pub fn workspace(&self) -> Option<Uuid> {
+                self.0.uow.workspace()
+            }
+
             /// The app.
             pub fn app(&self) -> &AppContext {
                 &self.0.app

@@ -26,6 +26,9 @@ pub struct HelmActionJob {
     pub input: Map<String, Value>,
     /// The user who ran it.
     pub user_id: Uuid,
+    /// The workspace it was started in, which it runs in again.
+    #[serde(default)]
+    pub workspace: Option<Uuid>,
 }
 
 impl Job for HelmActionJob {
@@ -49,6 +52,16 @@ impl Job for HelmActionJob {
         let uow = db
             .uow(Some(self.user_id), Some(format!("job-{}", ctx.job_id)))
             .await;
+        if let Some(workspace) = self.workspace {
+            crate::workspace::enter(&uow, Some(workspace))
+                .await
+                .map_err(|error| {
+                    format!(
+                        "helm.action: could not enter the workspace: {}",
+                        error.title
+                    )
+                })?;
+        }
         let cx = Cx {
             app: ctx.app.clone(),
             uow: uow.clone(),

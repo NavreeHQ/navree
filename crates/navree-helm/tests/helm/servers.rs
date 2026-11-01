@@ -148,7 +148,7 @@ impl Drop for ServerDatabase {
 /// Runs `sql` on the server of `admin`, on a thread and runtime of its own
 /// (so it works from synchronous code, `Drop` included, and from inside a
 /// test's runtime alike).
-fn run_admin(admin: &str, sql: String) -> Result<(), String> {
+pub fn run_admin(admin: &str, sql: String) -> Result<(), String> {
     let admin = admin.to_owned();
     std::thread::spawn(move || {
         let runtime = tokio::runtime::Builder::new_current_thread()

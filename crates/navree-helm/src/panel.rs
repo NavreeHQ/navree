@@ -14,6 +14,7 @@ use navree_kernel::AppContext;
 use crate::core::Core;
 use crate::cx::{Client, Cx};
 use crate::session::PanelSession;
+use crate::workspace;
 
 /// A signed-in panel request: its [`Cx`] and session.
 pub(crate) struct Panel {
@@ -38,6 +39,12 @@ impl FromRequestParts for Panel {
             .map(|p| p.user_id)
             .ok_or_else(AppError::unauthenticated)?;
         let uow = Uow::from_request_parts(parts).await?;
+        // A request that is not inside a workspace may name one.
+        if uow.workspace().is_none()
+            && let Some(workspace) = workspace::requested(&parts.headers)
+        {
+            workspace::enter(&uow, Some(workspace)).await?;
+        }
         let CurrentAccess(access) = CurrentAccess::from_request_parts(parts).await?;
         let ClientIp(ip) = ClientIp::from_parts(parts);
         let client = Client {

@@ -186,6 +186,7 @@ The model behind it stores the stage as its name (`#[model(cast = "string_enum")
 | `PER_PAGE` | Rows per page on the list (at most 100). `0`, the default, uses `helm.per_page` (25). |
 | `DEFAULT_SORT` | The list's order, such as `"-amount_cents"`. Defaults to newest first. See [sorting](#search-sorting-and-filters). |
 | `ORDER` | The position in the menu within the group (lower first). |
+| `WORKSPACES` | Where a resource of a model that belongs to workspaces (`#[model(workspace)]`) works: `Workspaces::Current` (the default), in the workspace the request works in, or `Workspaces::Every`, across all of them. See [workspaces](#workspaces). |
 | `fields`, `filters`, `actions`, `metrics` | What the screens show. Only `fields` is required. |
 | `query` | The base query every screen starts from. See [scoping the query](#scoping-the-query). |
 | `create`, `update`, `delete` | How records are saved. See [saving through your services](#saving-through-your-services). |
@@ -354,6 +355,21 @@ So with rules where reps read every deal but update only their own, and only som
 
 Every create, update and delete runs in the request's [unit of work](/docs/database/unit-of-work/), so [audit](/docs/security/audit-log/) entries name the user who made the change (`deal.updated`), and each action run adds an entry `helm.action` with the action's name, the resource and the record ids. The change events of Helm's own writes carry the record's [serialized form](/docs/orm/serialization/): a field the model hides (`#[model(hidden)]`, or skipped by serde) is stored, but never reaches an observer or the audit log.
 
+### Workspaces
+
+A model declared `#[model(workspace)]` belongs to workspaces, and the panel works in **one workspace at a time**. Which one is decided before a screen runs:
+
+1. the workspace the request's unit of work has entered, which is the case when the app enters it for the request (an `InWorkspace` guard, or `Workspaces::enter` in your own layer);
+2. else the one the request names: an `X-Workspace` header holding the workspace id (for API clients), or the `navree_helm_workspace` cookie that the form in the sidebar sets. The form shows when the panel has a resource of a workspace model; type the workspace id and press **Work in this workspace**, and an empty field leaves the workspace. Anything that isn't a UUID names no workspace.
+
+The panel then enters the workspace the way a workspace request does: the unit of work remembers it, so the ORM scopes every query of workspace models to it and fills the `workspace_id` of the records Helm creates, and on PostgreSQL and MySQL the transaction's `navree.workspace` setting holds it, which is what [row-level security](/docs/workspaces/isolation/) policies read. Lists, record pages, relationship pickers, metrics (counted and cached per workspace), actions (queued ones run again in the workspace they were started in) and the default `create`, `update` and `delete` all work inside it, with or without a role that bypasses row-level security. A record of another workspace is a 404, and a create form that names another workspace in `workspace_id` is a 400.
+
+Without a workspace, a resource of a workspace model answers with a 400, `Choose a workspace first`, and a picker lists nothing. Nothing falls back to the records of every workspace.
+
+A resource that has to span workspaces asks for it with `const WORKSPACES: Workspaces = Workspaces::Every`. Its queries leave out the workspace scope, so what it sees is what the database lets the connection's role see: a role that bypasses row-level security (a maintenance role) sees every workspace, and one that doesn't sees nothing. Every write still runs inside the workspace of the record it changes, and a create form must name the record's `workspace_id`. A resource that wants no workspace at all overrides `query`.
+
+In your own `create`, `update`, actions and pages, `ctx.workspace()` is the workspace the request works in, and `navree::orm::workspace::scope(id, ..)` runs ORM calls in another one.
+
 ### Saving through your services
 
 By default Helm writes the form's values straight to the model's columns, through each field's conversion (its cast and mutator):
@@ -430,7 +446,7 @@ The page is served at `/admin/pages/pipeline` and appears in the menu for users 
 
 ## Security
 
-- **Sign-in.** The panel's sign-in screen uses your app's users through `AuthService`: password, then a two-factor code (or a recovery code) when the account has [two-factor authentication](/docs/security/account-flows/#two-factor-authentication) on, with the same login throttle and the same [sign-in policies](/docs/security/authentication/#sign-in-policies) as `POST /api/auth/login` (a domain that enforces single sign-on can't use a password here either). The code check is the API's: a six-digit TOTP from `navree::crypto::totp` (30-second steps, one step of clock drift either way), compared in constant time, and each code works once, whether it was used at the panel or at `POST /api/auth/2fa/verify`. The session is an encrypted, httpOnly, `SameSite=Strict` cookie named `navree_helm`, scoped to `/admin`, so your API never accepts it. It lasts `helm.session_minutes`, renewed while you use the panel, and is `Secure` on every host but `localhost`. Signing out revokes the sign-in's refresh token.
+- **Sign-in.** The panel's sign-in screen uses your app's users through `AuthService`: password, then a two-factor code (or a recovery code) when the account has [two-factor authentication](/docs/security/account-flows/#two-factor-authentication) on, with the same login throttle and the same [sign-in policies](/docs/security/authentication/#sign-in-policies) as `POST /api/auth/login` (a domain that enforces single sign-on can't use a password here either). The code check is the API's: a six-digit TOTP from `navree::crypto::totp` (30-second steps, one step of clock drift either way), compared in constant time, and each code works once, whether it was used at the panel or at `POST /api/auth/2fa/verify`. The session is an encrypted, httpOnly, `SameSite=Strict` cookie named `navree_helm`, scoped to `/admin`, so your API never accepts it. The workspace the panel works in is a cookie of its own, `navree_helm_workspace`, with the same flags, set only by the sidebar's form (a `POST` that carries the session's CSRF token). It lasts `helm.session_minutes`, renewed while you use the panel, and is `Secure` on every host but `localhost`. Signing out revokes the sign-in's refresh token.
 - **CSRF.** Every change the panel makes sends a CSRF token (a `_csrf` form field, or the `X-CSRF-Token` header), and requests without it are refused with 403. The sign-in form has its own token. If your app also uses `SessionModule`, add the panel to its exceptions (`session.csrf_except = ["/admin/*"]`): Helm checks its own token there.
 - **Deny by default.** Nobody enters without `view` on `Helm`, and every screen and API call checks the user's ability on the subject and the record, as [above](#authorization). The super-admin role passes every check.
 - **Strict pages.** Pages are served with a strict Content Security Policy (no inline scripts or styles), `X-Frame-Options: DENY` and `Cache-Control: no-store`. Field values are escaped; `Field::markdown` renders without raw HTML and keeps only `http(s)`, `mailto` and relative links.

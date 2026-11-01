@@ -43,6 +43,14 @@
       {% endfor %}
     </nav>
     <div class="sidebar-footer">
+      {% if workspace.shown and panel.csrf %}
+      <form class="workspace-form" method="post" action="{{ panel.base }}/workspace">
+        <input type="hidden" name="_csrf" value="{{ panel.csrf }}">
+        <label class="label" for="helm-workspace">Workspace</label>
+        <input type="text" id="helm-workspace" name="workspace" value="{% if workspace.current %}{{ workspace.current }}{% endif %}" placeholder="Workspace id" autocomplete="off" spellcheck="false">
+        <button type="submit" class="btn btn-secondary btn-sm btn-block">Work in this workspace</button>
+      </form>
+      {% endif %}
       <details class="user-menu">
         <summary class="user-trigger" title="{{ user.name }}">
           <span class="avatar" aria-hidden="true">{{ avatar }}</span>

@@ -60,6 +60,10 @@ impl Controller for HelmController {
             // Pages.
             view(RouteDef::on(Method::GET, at(""), ui::dashboard).name("helm.dashboard")),
             view(
+                RouteDef::on(Method::POST, at("/workspace"), ui::choose_workspace)
+                    .name("helm.workspace"),
+            ),
+            view(
                 RouteDef::on(Method::GET, at("/resources/{resource}"), ui::list).name("helm.list"),
             ),
             view(

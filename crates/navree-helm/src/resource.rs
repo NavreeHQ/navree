@@ -9,7 +9,7 @@ use navree_validation::Valid;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 
-use crate::{Action, Field, Filter, Metric, SaveContext, save};
+use crate::{Action, Field, Filter, Metric, SaveContext, Workspaces, save};
 
 /// The model of resource `R`.
 pub type ModelOf<R> = <R as Resource>::Model;
@@ -83,6 +83,11 @@ pub trait Resource: Send + Sync + 'static {
     /// The position in the menu within the group (lower first, then by
     /// label).
     const ORDER: i32 = 0;
+    /// Where the resource works when its model belongs to workspaces
+    /// (`#[model(workspace)]`): in the workspace the request works in
+    /// ([`Workspaces::Current`], the default) or across all of them
+    /// ([`Workspaces::Every`]). Other models ignore it.
+    const WORKSPACES: Workspaces = Workspaces::Current;
 
     /// The fields, in display order.
     fn fields(&self) -> Vec<Field>;

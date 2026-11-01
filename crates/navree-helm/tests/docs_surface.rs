@@ -17,7 +17,7 @@ use navree_helm::{
     Action, ActionContext, ActionResult, DEFAULT_MAX_FILE_BYTES, Field, Filter, FormData,
     HELM_SUBJECT, Helm, HelmActionJob, HelmModule, HelmOptions, HelmPage, Metric, MetricRange,
     ModelOf, ModuleBuilderHelmExt, PageContext, RecordOf, Resource, SESSION_COOKIE, SaveContext,
-    VIEW,
+    VIEW, WORKSPACE_COOKIE, Workspaces,
 };
 use navree_http::AppError;
 use navree_kernel::{BoxFuture, ModuleBuilder};
@@ -42,6 +42,7 @@ impl Resource for EveryItem {
     const PER_PAGE: u64 = 50;
     const DEFAULT_SORT: &'static str = "-amount_cents";
     const ORDER: i32 = 1;
+    const WORKSPACES: Workspaces = Workspaces::Every;
 
     fn fields(&self) -> Vec<Field> {
         vec![
@@ -101,7 +102,13 @@ impl Resource for EveryItem {
                 .fields(vec![Field::textarea("lost_reason").required()])
                 .only_on_detail()
                 .handle(|ctx: ActionContext, deals: Vec<Record<Deal>>| async move {
-                    let _ = (ctx.uow(), ctx.user_id(), ctx.app(), deals.len());
+                    let _ = (
+                        ctx.uow(),
+                        ctx.user_id(),
+                        ctx.workspace(),
+                        ctx.app(),
+                        deals.len(),
+                    );
                     let _: String = ctx.input("lost_reason")?;
                     let _ = ctx.inputs();
                     let _ = ctx.get::<HelmOptions>().await?;
@@ -150,7 +157,13 @@ impl Resource for EveryItem {
         form: FormData,
     ) -> BoxFuture<'a, Result<RecordOf<Self>, AppError>> {
         Box::pin(async move {
-            let _ = (ctx.uow(), ctx.user_id(), form.values(), form.get("title"));
+            let _ = (
+                ctx.uow(),
+                ctx.user_id(),
+                ctx.workspace(),
+                form.values(),
+                form.get("title"),
+            );
             let _: support::NewDeal = form.parse().await?;
             Err(AppError::conflict("not saved"))
         })
@@ -226,6 +239,9 @@ fn the_documented_api_exists() {
     assert_eq!(Helm::PERMISSION_PREFIX, "helm");
     assert_eq!(VIEW, "view");
     assert_eq!(SESSION_COOKIE, "navree_helm");
+    assert_eq!(WORKSPACE_COOKIE, "navree_helm_workspace");
+    assert_eq!(Workspaces::default(), Workspaces::Current);
+    assert_eq!(<DealResource as Resource>::WORKSPACES, Workspaces::Current);
     assert_eq!(Move::NAME, "move");
 
     // Defaults of the trait's constants.
@@ -259,14 +275,16 @@ fn the_documented_api_exists() {
         ids,
         input,
         user_id,
+        workspace,
     } = HelmActionJob {
         resource: "deals".into(),
         action: "export".into(),
         ids: vec![],
         input: Default::default(),
         user_id: uuid::Uuid::nil(),
+        workspace: None,
     };
-    let _ = (resource, action, ids, input, user_id);
+    let _ = (resource, action, ids, input, user_id, workspace);
 
     // Results serialize with their type.
     assert_eq!(

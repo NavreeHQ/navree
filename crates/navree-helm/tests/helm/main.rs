@@ -17,3 +17,4 @@ mod pages;
 mod settings;
 mod signin;
 mod ui;
+mod workspaces;

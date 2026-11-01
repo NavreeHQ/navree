@@ -525,6 +525,26 @@ mod tests {
     }
 
     #[test]
+    fn a_host_glob_matches_names_and_never_addresses() {
+        // A glob is the text of a name: `*` crosses dots, so an entry that
+        // ends in a star fits names under any domain, and a network written
+        // as a glob is a name pattern. (The allow list is trusted with every
+        // address an allow-listed name resolves to; the docs say to end a
+        // glob in a domain the operator owns and to write networks as CIDR.)
+        let g = guard(true, &["api.internal.*", "10.20.*", "10.30.0.0/16"]);
+        assert!(g.host_allowed("api.internal.example"));
+        assert!(g.host_allowed("api.internal.attacker.example"));
+        assert!(g.host_allowed("10.20.attacker.example"));
+        assert!(!g.host_allowed("internal.example"));
+        // The glob does not make a network: only the CIDR entry does.
+        assert!(g.check_ip(ip("10.20.1.1")).is_err());
+        assert!(g.check_ip(ip("10.30.1.1")).is_ok());
+        assert!(g.check_ip(ip("10.31.1.1")).is_err());
+        // Without an allow-listed name, the metadata endpoints stay refused.
+        assert!(guard(false, &[]).check_ip(ip("169.254.169.254")).is_err());
+    }
+
+    #[test]
     fn blocked_reason_names_the_range_and_address() {
         let error = guard(true, &[])
             .check_ip(ip("169.254.169.254"))

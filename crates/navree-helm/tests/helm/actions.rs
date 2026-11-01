@@ -165,6 +165,7 @@ async fn queued_actions_become_helm_action_jobs() {
             ids: vec![first.id.to_string()],
             input: Default::default(),
             user_id: manager_id,
+            workspace: None,
         }]
     );
     assert_eq!(HelmActionJob::NAME, "helm.action");
@@ -202,6 +203,7 @@ async fn queued_actions_recheck_access_when_they_run() {
         ids: vec![other.id.to_string()],
         input: Default::default(),
         user_id: rep_id,
+        workspace: None,
     };
     let error = job
         .handle(JobContext {
