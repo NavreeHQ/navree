@@ -340,6 +340,7 @@ token's claims read back, a rendered query holds only the user's words.
 | `auth_jwt` | the bearer-token check of `JwtService`, against an oracle for each claim |
 | `mcp_protocol`, `mcp_server` | JSON-RPC parsing and stdio framing; a booted MCP server over HTTP and stdio |
 | `http_client_ip`, `http_cors` | `X-Forwarded-For`, `X-Real-IP`, trusted proxies, the rate-limit key; CORS origins; signed URLs |
+| `http_compression` | `Accept-Encoding` and the response headers that decide compression, and bodies handed over in any pattern of chunks, waits, trailers and failures: a gzipped body decodes to what the handler sent, in frames of at most 4 KiB |
 | `http_routing`, `http_extract` | route patterns, path matching and precedence, path checks and parameter decoding; query strings, forms and JSON bodies through the extractors |
 | `http_multipart`, `ws_handshake` | `multipart/form-data` boundaries, delimiters, part heads, `Content-Disposition` parameters and limits, split into chunks of every size and checked against a reference that reads the body whole; the headers of a WebSocket handshake |
 | `host_names` | email domains, custom-domain normalization, the `Host` header |

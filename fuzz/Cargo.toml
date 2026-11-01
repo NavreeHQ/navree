@@ -20,6 +20,9 @@ arbitrary = { version = "1.4.2", features = ["derive"] }
 chrono = { version = "0.4.45", default-features = false, features = ["std", "clock"] }
 chrono-tz = "0.10.4"
 http = "1.5.0"
+# The handler's body of `http_compression`, and the gzip it is checked with.
+http-body = "1.0.1"
+flate2 = "1.1.10"
 # The HTTP/2 `:protocol` of a handshake.
 hyper = { version = "1.12.0", features = ["http2", "server"] }
 libfuzzer-sys = "0.4.13"
@@ -108,6 +111,13 @@ bench = false
 [[bin]]
 name = "http_client_ip"
 path = "fuzz_targets/http_client_ip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "http_compression"
+path = "fuzz_targets/http_compression.rs"
 test = false
 doc = false
 bench = false
