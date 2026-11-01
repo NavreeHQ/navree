@@ -5,8 +5,11 @@
 //! The header is a disposition type, then parameters separated by `;`, each
 //! `name=value` with the value a token or a quoted string. A parameter is
 //! only ever read where a parameter starts: never inside another one's value.
-//! Something that is not a parameter ends the list, and what follows it is
-//! not read. A value that is not UTF-8 reads as absent.
+//! Whatever two readers could take differently is refused rather than guessed
+//! at, so that a reader in front of the app and the app see the same form:
+//! something that is not a parameter where one should be, a value that runs on
+//! past its quotes or its token, a quote that may not close where it seems to.
+//! A value that is not UTF-8 reads as absent.
 
 /// What a part's `Content-Disposition` says.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -17,10 +20,17 @@ pub(super) struct Disposition {
     pub(super) file_name: Option<String>,
 }
 
-/// A parameter given twice: two readers may each take a different one, so
-/// the part names neither.
+/// Why a `Content-Disposition` is refused.
 #[derive(Debug, PartialEq, Eq)]
-pub(super) struct Repeated;
+pub(super) enum Refused {
+    /// A parameter given twice: two readers may each take a different one, so
+    /// the part names neither.
+    Repeated,
+    /// Two readers may find different parameters in it.
+    Ambiguous,
+}
+
+use Refused::{Ambiguous, Repeated};
 
 /// The parameters this reads, each at most once.
 #[derive(Default)]
@@ -58,7 +68,7 @@ impl<'a> Value<'a> {
 }
 
 /// Reads the value of a `Content-Disposition` header.
-pub(super) fn parse(header: &[u8]) -> Result<Disposition, Repeated> {
+pub(super) fn parse(header: &[u8]) -> Result<Disposition, Refused> {
     let mut found = Found::default();
     // The disposition type comes first, and is not a parameter.
     let Some(start) = header.iter().position(|byte| *byte == b';') else {
@@ -75,6 +85,9 @@ pub(super) fn parse(header: &[u8]) -> Result<Disposition, Repeated> {
             .position(|byte| matches!(byte, b'=' | b';'))
             .unwrap_or(rest.len());
         let key = trim_end(rest.get(..key_end).unwrap_or_default());
+        if !key.iter().all(|byte| is_token(*byte)) {
+            return Err(Ambiguous);
+        }
         match rest.get(key_end) {
             // A parameter without a value says nothing.
             Some(b';') => {
@@ -86,17 +99,19 @@ pub(super) fn parse(header: &[u8]) -> Result<Disposition, Repeated> {
         }
         let value_start = trim_start(rest.get(key_end + 1..).unwrap_or_default());
         let (value, after) = match value_start.strip_prefix(b"\"") {
-            Some(quoted) => match quoted_string(quoted) {
-                Some(read) => read,
-                // A quote that never closes holds the rest of the header.
-                None => break,
-            },
+            Some(quoted) => quoted_string(quoted)?,
             None => {
                 let end = value_start
                     .iter()
                     .position(|byte| matches!(byte, b';' | b' '))
                     .unwrap_or(value_start.len());
                 let (token, after) = value_start.split_at(end);
+                if token
+                    .iter()
+                    .any(|byte| *byte == b'"' || byte.is_ascii_control())
+                {
+                    return Err(Ambiguous);
+                }
                 (Value::Token(token), after)
             }
         };
@@ -118,7 +133,8 @@ pub(super) fn parse(header: &[u8]) -> Result<Disposition, Repeated> {
         // Only spaces may come between a value and the next `;`.
         match trim_start(after).split_first() {
             Some((b';', next)) => rest = next,
-            _ => break,
+            Some(_) => return Err(Ambiguous),
+            None => break,
         }
     }
     let file_name = found
@@ -135,17 +151,27 @@ pub(super) fn parse(header: &[u8]) -> Result<Disposition, Repeated> {
 /// and what follows the closing quote. A quote with a backslash before it
 /// does not close the string; any other backslash is kept, so a Windows path
 /// sent as it was typed comes back as sent.
-fn quoted_string(rest: &[u8]) -> Option<(Value<'_>, &[u8])> {
+///
+/// Not every reader keeps backslashes, or escapes with them, so what would
+/// end the string for another reader is refused: a quote after an even run of
+/// backslashes, a quote after a backslash with a `;` next, and a string that
+/// never closes.
+fn quoted_string(rest: &[u8]) -> Result<(Value<'_>, &[u8]), Refused> {
     let mut from = 0;
     loop {
-        let at = from + rest.get(from..)?.iter().position(|byte| *byte == b'"')?;
-        if at > 0 && rest.get(at - 1) == Some(&b'\\') {
-            from = at + 1;
-            continue;
+        let unread = rest.get(from..).unwrap_or_default();
+        let at = unread.iter().position(|byte| *byte == b'"');
+        let at = from + at.ok_or(Ambiguous)?;
+        let inside = rest.get(..at).unwrap_or_default();
+        let after = rest.get(at + 1..).unwrap_or_default();
+        let backslashes = inside.iter().rev().take_while(|b| **b == b'\\').count();
+        if backslashes == 0 {
+            return Ok((Value::Quoted(inside), after));
         }
-        let inside = rest.get(..at)?;
-        let after = rest.get(at + 1..)?;
-        return Some((Value::Quoted(inside), after));
+        if backslashes.is_multiple_of(2) || trim_start(after).starts_with(b";") {
+            return Err(Ambiguous);
+        }
+        from = at + 1;
     }
 }
 
@@ -176,6 +202,11 @@ fn extended(value: &[u8]) -> Option<String> {
     } else {
         None
     }
+}
+
+/// RFC 9110's `tchar`: what a parameter's name is made of.
+fn is_token(byte: u8) -> bool {
+    is_attr_char(byte) || matches!(byte, b'%' | b'\'' | b'*')
 }
 
 /// RFC 8187's `attr-char`: what an extended value holds without encoding.
@@ -304,17 +335,21 @@ mod tests {
     }
 
     #[test]
-    fn what_is_not_a_parameter_ends_the_list() {
-        assert_eq!(
-            names(r#"form-data; name="a" junk; filename="b""#),
-            (Some("a".into()), None)
-        );
-        assert_eq!(
-            names("form-data; name=a b; filename=c"),
-            (Some("a".into()), None)
-        );
-        assert_eq!(names(r#"form-data; name="a"#), (None, None));
-        assert_eq!(names(r#"form-data; filename="a\""#), (None, None));
+    fn what_two_readers_could_take_differently_is_refused() {
+        for header in [
+            r#"form-data; name="a" junk; filename="b""#,
+            r#"form-data; name="a" filename="b""#,
+            "form-data; name=a b; filename=c",
+            "form-data; name=a\tfilename=c",
+            r#"form-data; name=a"; filename=c"#,
+            r#"form-data; name="a"; junk filename="b""#,
+            r#"form-data; name="a"#,
+            r#"form-data; filename="a\""#,
+            r#"form-data; name="a\\"; filename="b""#,
+            r#"form-data; name="a\"; filename="b""#,
+        ] {
+            assert_eq!(parse(header.as_bytes()), Err(Ambiguous), "{header}");
+        }
         assert_eq!(names("form-data; flag; name=a"), (Some("a".into()), None));
     }
 

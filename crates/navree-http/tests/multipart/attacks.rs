@@ -319,7 +319,9 @@ async fn a_preamble_answers_to_the_head_limit_and_a_delimiter_may_end_exactly_on
         ..wide()
     };
     let with_preamble = |bytes: usize| {
-        let mut body = vec![b'.'; bytes];
+        // The line end that lets the delimiter start a line is part of it.
+        let mut body = vec![b'.'; bytes - 2];
+        body.extend_from_slice(b"\r\n");
         body.extend_from_slice(&form(&[text_part("a", b"1")]));
         body
     };
@@ -716,11 +718,6 @@ async fn a_parameter_inside_a_value_is_not_read() {
             Some("a"),
             None,
         ),
-        (
-            "form-data; name=\"a\" filename=\"evil.php\"",
-            Some("a"),
-            None,
-        ),
         ("form-data; username=\"admin\"; name=\"a\"", Some("a"), None),
     ] {
         let mut part = head(&format!("Content-Disposition: {disposition}"));
@@ -728,6 +725,97 @@ async fn a_parameter_inside_a_value_is_not_read() {
         let parts = read(request(&form(&[part])), wide()).await.unwrap();
         assert_eq!(parts[0].name.as_deref(), name, "{disposition}");
         assert_eq!(parts[0].file_name.as_deref(), file_name, "{disposition}");
+    }
+}
+
+/// RFC 2046: a delimiter starts a line, or the body. A reader in front of the
+/// app that keeps to this sees `real` only, so the parser must too.
+#[tokio::test]
+async fn a_delimiter_in_the_middle_of_a_line_does_not_start_a_part() {
+    let smuggled = |before: &str| {
+        let mut body = before.as_bytes().to_vec();
+        body.extend_from_slice(
+            format!("--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"smuggled\"\r\n\r\nevil\r\n--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"real\"\r\n\r\nok\r\n--{BOUNDARY}--")
+                .as_bytes(),
+        );
+        body
+    };
+    let names = |parts: Vec<Read>| {
+        parts
+            .into_iter()
+            .map(|part| part.name.unwrap())
+            .collect::<Vec<_>>()
+    };
+    for before in ["junk", "a line\r\njunk", "junk\n", "junk\r"] {
+        let body = smuggled(before);
+        assert_eq!(
+            names(read(request(&body), wide()).await.unwrap()),
+            ["real"],
+            "{before:?}"
+        );
+        assert_eq!(
+            names(read(dripped(&body), wide()).await.unwrap()),
+            ["real"],
+            "{before:?}"
+        );
+    }
+    for before in ["", "a line\r\n", "\r\n"] {
+        let body = smuggled(before);
+        assert_eq!(
+            names(read(dripped(&body), wide()).await.unwrap()),
+            ["smuggled", "real"],
+            "{before:?}"
+        );
+    }
+}
+
+/// What httparse leaves of a head would be lost, so the part is refused: two
+/// `Content-Disposition` a blank line of bare LFs apart, and a head-less part
+/// whose value looks like a head.
+#[tokio::test]
+async fn a_head_is_read_to_its_end_or_refused() {
+    for head in [
+        "Content-Disposition: form-data; name=\"public\"\n\nContent-Disposition: form-data; name=\"admin\"; filename=\"evil.php\"\r\n\r\n",
+        "\r\nContent-Disposition: form-data; name=\"admin\"\r\n\r\n",
+        "\nContent-Disposition: form-data; name=\"admin\"\r\n\r\n",
+        // A line a stricter reader takes as part of the header before it.
+        "X-A: 1\nContent-Disposition: form-data; name=\"admin\"\r\n\r\n",
+        "Content-Disposition: form-data; name=\"a\"\nX-A: 1\r\n\r\n",
+    ] {
+        let body = format!("--{BOUNDARY}\r\n{head}v\r\n--{BOUNDARY}--");
+        let error = read(request(body.as_bytes()), wide()).await;
+        assert!(
+            matches!(error, Err(MultipartError::Malformed(_))),
+            "{head:?}: {error:?}"
+        );
+    }
+}
+
+/// A file a reader in front of the app sees and the handler would not.
+#[tokio::test]
+async fn a_disposition_that_can_be_read_two_ways_is_refused() {
+    for disposition in [
+        // An escaped backslash closes the string for one reader, not another.
+        "form-data; name=\"a\\\\\"; filename=\"x.php\"",
+        // A backslash is kept by one reader, and escapes the quote for another.
+        "form-data; name=\"a\\\"; filename=\"x.php\"",
+        // Something that is not a parameter, then a file.
+        "form-data; name=\"a\" junk; filename=\"x.php\"",
+        "form-data; name=\"a\" filename=\"evil.php\"",
+        "form-data; name=a junk; filename=x.php",
+        "form-data; name=a\tfilename=x.php",
+        "form-data; name=\"a\"; junk filename=\"x.php\"",
+        // A quote that never closes holds the rest of the header.
+        r#"form-data; name="a"; filename="C:\temp\""#,
+        "form-data; name=\"a; filename=x.php",
+    ] {
+        let mut part = head(&format!("Content-Disposition: {disposition}"));
+        part.extend_from_slice(b"1\r\n");
+        let error = read(request(&form(&[part])), wide()).await;
+        assert!(
+            matches!(&error, Err(MultipartError::Malformed(message)) if message.contains("Content-Disposition")),
+            "{disposition}: {error:?}"
+        );
     }
 }
 

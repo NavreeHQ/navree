@@ -15,7 +15,7 @@ use http::HeaderMap;
 use http::header::{CONTENT_DISPOSITION, CONTENT_TYPE, HeaderName, HeaderValue};
 use memchr::memmem::Finder;
 
-use super::disposition::{self, Disposition};
+use super::disposition::{self, Disposition, Refused};
 
 /// The most headers a part may have.
 const MAX_HEADERS: usize = 32;
@@ -23,10 +23,13 @@ const MAX_HEADERS: usize = 32;
 /// The blank line that ends a head.
 const HEAD_END: &[u8] = b"\r\n\r\n";
 
+/// The length of a line end.
+const LINE_END: usize = 2;
+
 /// Where the parser is in the body.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Stage {
-    /// Before the first delimiter, which may be anywhere.
+    /// Before the first delimiter, which starts the body or a line.
     Preamble,
     /// Just past a delimiter: `--` closes the form, anything else is padding
     /// and a line end.
@@ -109,7 +112,7 @@ pub(super) struct Parser {
     // The name of the part whose value is being read.
     field: Option<String>,
     // `--boundary`.
-    dash_boundary: Finder<'static>,
+    dash_boundary: Vec<u8>,
     // A line end then `--boundary`: what ends a value.
     delimiter: Finder<'static>,
     head_end: Finder<'static>,
@@ -124,7 +127,7 @@ impl Parser {
             searched: 0,
             ended: false,
             field: None,
-            dash_boundary: Finder::new(format!("--{boundary}").as_bytes()).into_owned(),
+            dash_boundary: format!("--{boundary}").into_bytes(),
             delimiter: Finder::new(format!("\r\n--{boundary}").as_bytes()).into_owned(),
             head_end: Finder::new(HEAD_END).into_owned(),
         }
@@ -204,21 +207,40 @@ impl Parser {
                     None => return Ok(None),
                 },
                 Stage::Preamble => {
-                    let length = self.dash_boundary.needle().len();
-                    match self.dash_boundary.find(&self.buffer) {
+                    // The first delimiter starts the body or a line. Nothing
+                    // has left the buffer while `seen` is 0.
+                    let dash_boundary = self.dash_boundary.as_slice();
+                    if self.seen == 0 {
+                        if self.buffer.starts_with(dash_boundary) {
+                            let length = dash_boundary.len();
+                            self.buffer.advance(length);
+                            self.enter(Stage::Delimited);
+                            continue;
+                        }
+                        if dash_boundary.starts_with(&self.buffer) {
+                            return Ok(None);
+                        }
+                    }
+                    let length = self.delimiter.needle().len();
+                    match self.delimiter.find(&self.buffer) {
                         Some(at) => {
-                            if self.seen.saturating_add(at) > limit {
+                            // The line end is the preamble's last.
+                            if self.seen.saturating_add(at + LINE_END) > limit {
                                 return Err(Failure::HeadTooLarge);
                             }
                             self.buffer.advance(at + length);
                             self.enter(Stage::Delimited);
                         }
                         None => {
-                            // Only the end may be the start of a delimiter.
-                            let gone = self.buffer.len().saturating_sub(length - 1);
+                            // Only the end may be the start of a delimiter,
+                            // and only what can't be one with its line end
+                            // counts yet.
+                            let held = held_back(&self.buffer, self.delimiter.needle());
+                            let gone = self.buffer.len() - held;
                             self.buffer.advance(gone);
                             self.seen = self.seen.saturating_add(gone);
-                            if self.seen > limit {
+                            let unsure = self.dash_boundary.len() - 1;
+                            if self.seen.saturating_add(held).saturating_sub(unsure) > limit {
                                 return Err(Failure::HeadTooLarge);
                             }
                             return Ok(None);
@@ -315,9 +337,22 @@ fn held_back(buffer: &[u8], pattern: &[u8]) -> usize {
 
 /// A part's head, its blank line included.
 fn read_head(bytes: &[u8]) -> Result<Head, Failure> {
+    // Two readers may end a line in different places.
+    let bare_line_feed = bytes
+        .iter()
+        .enumerate()
+        .any(|(at, byte)| *byte == b'\n' && (at == 0 || bytes.get(at - 1) != Some(&b'\r')));
+    if bare_line_feed {
+        return Err(Failure::malformed(BAD_HEAD));
+    }
     let mut slots = [httparse::EMPTY_HEADER; MAX_HEADERS];
     let raw = match httparse::parse_headers(bytes, &mut slots) {
-        Ok(httparse::Status::Complete((_, raw))) => raw,
+        // What httparse leaves would be lost, unless it is only the second
+        // blank line of a part with no headers.
+        Ok(httparse::Status::Complete((read, raw))) if read == bytes.len() || bytes == HEAD_END => {
+            raw
+        }
+        Ok(httparse::Status::Complete(_)) => return Err(Failure::malformed(BAD_HEAD)),
         Ok(httparse::Status::Partial) => {
             return Err(Failure::malformed("failed to read field complete headers"));
         }
@@ -351,10 +386,13 @@ fn read_head(bytes: &[u8]) -> Result<Head, Failure> {
         headers.insert(name, value);
     }
     let Disposition { name, file_name } = match headers.get(CONTENT_DISPOSITION) {
-        Some(value) => disposition::parse(value.as_bytes()).map_err(|_| {
-            Failure::malformed(
-                "A form part may name each parameter of its Content-Disposition once",
-            )
+        Some(value) => disposition::parse(value.as_bytes()).map_err(|refused| {
+            Failure::malformed(match refused {
+                Refused::Repeated => {
+                    "A form part may name each parameter of its Content-Disposition once"
+                }
+                Refused::Ambiguous => "A form part's Content-Disposition may be read one way only",
+            })
         })?,
         None => Disposition::default(),
     };
@@ -492,8 +530,12 @@ mod tests {
             read(body.as_bytes(), usize::MAX),
             [part("a"), value(b"1"), Seen::Closed]
         );
-        // The first delimiter need not start a line.
+        // A delimiter in the middle of a line is not one: the part is preamble.
         let body = format!("x--b\r\n{A}\r\n\r\n1\r\n--b--");
+        assert_eq!(read(body.as_bytes(), usize::MAX), [Seen::Closed]);
+        assert!(malformed(b"x--b--"));
+        // The body's start, or a line's, is where it may be.
+        let body = format!("x\r\n--b\r\n{A}\r\n\r\n1\r\n--b--");
         assert_eq!(read(body.as_bytes(), usize::MAX)[1], value(b"1"));
     }
 
@@ -616,7 +658,8 @@ mod tests {
 
     #[test]
     fn the_preamble_limit_is_exact() {
-        let body = b"0123456789--b--";
+        // Ten bytes before the delimiter, the line end it starts with included.
+        let body = b"01234567\r\n--b--";
         assert_eq!(read(body, 10), [Seen::Closed]);
         assert_eq!(read(body, 9), [Seen::Failed(Failure::HeadTooLarge)]);
         // Without a delimiter, what can no longer be the start of one counts:

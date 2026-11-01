@@ -136,7 +136,11 @@ impl MultipartLimits {
 /// preferred to `filename` when it decodes. A part with two
 /// `Content-Disposition` or two `Content-Type` headers, or that names a
 /// parameter twice, is a 400: whoever is in front of the app may have read
-/// the other one.
+/// the other one. So is what two readers could take differently: a head with
+/// a bare line feed or anything after its header lines, something that is not
+/// a parameter where one should be, a quote that does not close, and a
+/// backslash before a quote where another reader would close the string. A
+/// first delimiter counts only at the start of the body or of a line.
 pub struct Multipart {
     // Only ever reached through `&mut self`, with `get_mut`: the lock makes
     // the form `Sync` and is never taken.

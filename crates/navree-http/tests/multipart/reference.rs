@@ -16,9 +16,14 @@ pub type Part = (Option<String>, Option<String>, Vec<u8>);
 pub fn parts(body: &[u8], boundary: &str) -> Option<Vec<Part>> {
     let dash_boundary = format!("--{boundary}").into_bytes();
     let delimiter = format!("\r\n--{boundary}").into_bytes();
-    // The first delimiter may be anywhere.
-    let first = position(body, &dash_boundary)?;
-    let mut rest = &body[first + dash_boundary.len()..];
+    // The first delimiter starts the body or a line.
+    let mut rest = match body.strip_prefix(&dash_boundary[..]) {
+        Some(rest) => rest,
+        None => {
+            let first = position(body, &delimiter)?;
+            &body[first + delimiter.len()..]
+        }
+    };
     let mut parts = Vec::new();
     loop {
         if rest.starts_with(b"--") {
@@ -47,10 +52,20 @@ fn position(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 /// The name and file name of a head; `None` when it is not a head.
 fn names(head: &[u8]) -> Option<(Option<String>, Option<String>)> {
     let mut slots = [httparse::EMPTY_HEADER; 32];
-    let httparse::Status::Complete((_, raw)) = httparse::parse_headers(head, &mut slots).ok()?
+    let bare_line_feed =
+        (0..head.len()).any(|at| head[at] == b'\n' && (at == 0 || head[at - 1] != b'\r'));
+    if bare_line_feed {
+        return None;
+    }
+    let httparse::Status::Complete((read, raw)) = httparse::parse_headers(head, &mut slots).ok()?
     else {
         return None;
     };
+    // Nothing of a head is left unread, but the second blank line of a part
+    // with no headers.
+    if read != head.len() && head != b"\r\n\r\n" {
+        return None;
+    }
     let mut headers = HeaderMap::new();
     for header in raw {
         let name = HeaderName::from_bytes(header.name.as_bytes()).ok()?;
@@ -70,12 +85,13 @@ fn names(head: &[u8]) -> Option<(Option<String>, Option<String>)> {
 /// was quoted.
 type Parameter = (Vec<u8>, Vec<u8>, bool);
 
-/// The parameters of a `Content-Disposition`, up to the first thing that
-/// is not one.
-fn parameters(value: &[u8]) -> Vec<Parameter> {
+/// The parameters of a `Content-Disposition`; `None` when two readers could
+/// find different ones: something else where a parameter should be, a value
+/// that runs on, a quote another reader would close elsewhere.
+fn parameters(value: &[u8]) -> Option<Vec<Parameter>> {
     let mut parameters = Vec::new();
     let Some(semicolon) = value.iter().position(|byte| *byte == b';') else {
-        return parameters;
+        return Some(parameters);
     };
     let at_end = |at: usize| at >= value.len();
     let skip_spaces = |mut at: usize| {
@@ -88,16 +104,20 @@ fn parameters(value: &[u8]) -> Vec<Parameter> {
     loop {
         at = skip_spaces(at);
         if at_end(at) {
-            return parameters;
+            return Some(parameters);
         }
         let key_start = at;
         while !at_end(at) && value[at] != b'=' && value[at] != b';' {
             at += 1;
         }
-        if at_end(at) {
-            return parameters;
-        }
         let key = value[key_start..at].trim_ascii_end().to_ascii_lowercase();
+        let token = |byte: &u8| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(byte);
+        if !key.iter().all(token) {
+            return None;
+        }
+        if at_end(at) {
+            return Some(parameters);
+        }
         if value[at] == b';' {
             at += 1;
             continue;
@@ -108,10 +128,20 @@ fn parameters(value: &[u8]) -> Vec<Parameter> {
             at = start;
             loop {
                 if at_end(at) {
-                    return parameters;
+                    return None;
                 }
-                if value[at] == b'"' && !(at > start && value[at - 1] == b'\\') {
-                    break;
+                if value[at] == b'"' {
+                    let backslashes = value[start..at]
+                        .iter()
+                        .rev()
+                        .take_while(|byte| **byte == b'\\')
+                        .count();
+                    if backslashes == 0 {
+                        break;
+                    }
+                    if backslashes % 2 == 0 || value.get(skip_spaces(at + 1)) == Some(&b';') {
+                        return None;
+                    }
                 }
                 at += 1;
             }
@@ -121,23 +151,29 @@ fn parameters(value: &[u8]) -> Vec<Parameter> {
         } else {
             let start = at;
             while !at_end(at) && value[at] != b';' && value[at] != b' ' {
+                if value[at] == b'"' || value[at].is_ascii_control() {
+                    return None;
+                }
                 at += 1;
             }
             (value[start..at].to_vec(), false)
         };
         parameters.push((key, raw, quoted));
         at = skip_spaces(at);
-        if value.get(at) != Some(&b';') {
-            return parameters;
+        if at_end(at) {
+            return Some(parameters);
+        }
+        if value[at] != b';' {
+            return None;
         }
         at += 1;
     }
 }
 
 /// The name and file name of a `Content-Disposition`; `None` when it names
-/// a parameter twice.
+/// a parameter twice or can be read two ways.
 fn disposition(value: &[u8]) -> Option<(Option<String>, Option<String>)> {
-    let parameters = parameters(value);
+    let parameters = parameters(value)?;
     // `None` when `key` is there twice.
     let one = |key: &[u8]| {
         let mut found = parameters.iter().filter(|(name, ..)| name == key);
