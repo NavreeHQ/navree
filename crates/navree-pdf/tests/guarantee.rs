@@ -1642,6 +1642,27 @@ mod peak {
         pdf.table()
     }
 
+    /// A page whose font resources are one dictionary of `keys` keys.
+    fn wide_dictionary(keys: usize) -> Vec<u8> {
+        let body: String = (0..keys).map(|key| format!("/{key:x} 0 ")).collect();
+        let mut pdf = Pdf::default();
+        one_page(&mut pdf, &format!("/Resources << /Font << {body}>> >>"));
+        pdf.table()
+    }
+
+    /// The peak of reading `file`'s objects to edit them past twice what they
+    /// are counted as, the most the documentation says the process holds.
+    fn objects_past_the_sum(file: Vec<u8>) {
+        std::fs::write("/proc/self/clear_refs", "5").unwrap();
+        let before = status("VmRSS:");
+        let document = Document::load(file, ReadLimits::default()).unwrap();
+        let objects = Objects::read(document).unwrap();
+        let peak = status("VmHWM:").saturating_sub(before);
+        let counted = objects.memory_counted();
+        println!("held {peak} counted {counted}");
+        println!("PEAK {}", peak.saturating_sub(2 * counted));
+    }
+
     /// What the glyphs of a page hold, each, as the documentation adds it up.
     const GLYPH_MEMORY: usize = 160;
 
@@ -1697,6 +1718,8 @@ mod peak {
                 pdf.add(4, stream("/Filter /FlateDecode", &deflate(&content)));
                 past_the_sum(pdf.table(), content.len());
             }
+            // A map of 300,000 entries, grown by doubling.
+            "wide-dictionary" => objects_past_the_sum(wide_dictionary(300_000)),
             // 9 arrays of 4 MiB: 36 MiB if each is held through the form it draws.
             "forms-operands" => {
                 let file = forms_with_operands(131_072);
@@ -1704,6 +1727,12 @@ mod peak {
             }
             other => panic!("{other}"),
         }
+    }
+
+    #[test]
+    fn a_dictionary_of_many_keys_holds_at_most_twice_what_it_is_counted_as() {
+        let past = in_child("wide-dictionary");
+        assert!(past < SLACK, "{} MiB past the sum", past >> 20);
     }
 
     #[test]
