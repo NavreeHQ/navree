@@ -3,8 +3,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use navree_openapi::ToSchema;
 use serde::Serialize;
-use utoipa::ToSchema;
 
 use crate::config::OAuthOptions;
 

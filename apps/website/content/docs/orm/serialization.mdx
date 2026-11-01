@@ -129,7 +129,7 @@ use navree::api::ApiResource;
 use navree::orm::attributes::Resource;
 
 /// What the front end receives for a deal.
-#[derive(Serialize, utoipa::ToSchema)]
+#[derive(Serialize, navree::openapi::ToSchema)]
 pub struct DealResource {
     pub id: Uuid,
     pub title: String,
@@ -159,7 +159,7 @@ pub struct Deal { /* .. */ }
 
 ## OpenAPI schemas
 
-`Record<M>` implements utoipa's `ToSchema`, named after the model, so routes document their responses from the model itself:
+`Record<M>` implements `ToSchema`, named after the model, so routes document their responses from the model itself:
 
 ```rust
 #[get("/{user}")]

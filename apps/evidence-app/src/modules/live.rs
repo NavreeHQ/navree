@@ -4,10 +4,10 @@
 //! listen on `/app/{key}`.
 
 use navree::contracts::Broadcaster;
+use navree::openapi::ToSchema;
 use navree::prelude::*;
 use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 /// The body of `POST /api/v1/live/publish`.
 #[derive(Debug, Deserialize, Validate, ToSchema)]

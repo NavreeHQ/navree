@@ -27,7 +27,7 @@ pub struct ApiOptions {
     /// comma-separated list (`APP_API__SERVERS=https://a.example,https://b.example`).
     #[serde(deserialize_with = "list_or_comma_separated")]
     pub servers: Vec<String>,
-    /// Serve the Scalar docs UI at `{api_prefix}/docs` (default `true`).
+    /// Serve the API reference page at `{api_prefix}/docs` (default `true`).
     pub docs_ui: bool,
     /// Refuse to boot while a route has no `#[api]` documentation (default
     /// `false`; `navree check` reports undocumented routes either way).

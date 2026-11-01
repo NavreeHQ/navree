@@ -34,6 +34,7 @@ navree-http = { workspace = true }
 # connections (scope set `directory`).
 navree-integrations = { workspace = true }
 navree-kernel = { workspace = true }
+navree-openapi = { workspace = true }
 # Connections, synced users and groups, runs and their changes are
 # navree-orm models.
 navree-orm = { workspace = true }
@@ -52,7 +53,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

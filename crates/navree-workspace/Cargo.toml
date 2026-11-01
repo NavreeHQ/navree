@@ -38,6 +38,7 @@ navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-mail = { workspace = true }
+navree-openapi = { workspace = true }
 # The workspace tables are models (`Workspace`, `Member`, `Organization`, ...),
 # seven of them access subjects (`#[model(subject)]`, feature `access`).
 navree-orm = { workspace = true, features = ["access"] }
@@ -50,7 +51,6 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

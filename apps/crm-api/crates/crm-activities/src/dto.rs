@@ -4,9 +4,9 @@
 use chrono::{DateTime, Utc};
 use crm_core::models::Activity;
 use crm_core::{ActivityKind, SubjectType};
+use navree::openapi::ToSchema;
 use navree::validation::Validate;
 use serde::{Deserialize, Deserializer};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::due::Due;

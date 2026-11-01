@@ -14,7 +14,7 @@ workspace = true
 ## MCP tools, a resource and a prompt on the app's MCP server (navree-mcp),
 ## so agents read and resolve issues. The facade turns it on when both its
 ## `lighthouse` and `mcp` features are on.
-mcp = ["dep:navree-mcp", "dep:navree-validation", "dep:utoipa"]
+mcp = ["dep:navree-mcp", "dep:navree-validation"]
 ## PostgreSQL integration tests (`tests/postgres.rs`, with
 ## NAVREE_TEST_POSTGRES_URL): several processes recording into one database.
 ## Also the test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres`).
@@ -43,6 +43,7 @@ navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
 navree-mail = { workspace = true }
 navree-mcp = { workspace = true, optional = true }
+navree-openapi = { workspace = true }
 # The Lighthouse tables are models (issues, occurrences, samples, aggregates, alerts).
 navree-orm = { workspace = true }
 navree-schedule = { workspace = true }
@@ -56,7 +57,6 @@ sha2 = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-utoipa = { workspace = true, optional = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

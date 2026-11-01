@@ -1,15 +1,15 @@
 //! # navree-api
 //!
 //! `ApiModule`: the app's OpenAPI 3.1 document, generated at boot from the
-//! route table, a docs UI, and API resource helpers.
+//! route table, an API reference page, and API resource helpers.
 //!
 //! - [`ApiModule`] builds the document from `navree_http::route_table` when the
 //!   app boots and serves it at `GET {api_prefix}/openapi.json` (default
-//!   `/api/openapi.json`), with the [Scalar](https://scalar.com) docs UI at
-//!   `GET {api_prefix}/docs` (both public). The UI's script is vendored:
-//!   embedded in the binary and served by the app at
-//!   `{api_prefix}/docs/assets/`, so the page loads nothing from a third
-//!   party and its policy allows scripts from the app's own origin only. The
+//!   `/api/openapi.json`), with the API reference page at
+//!   `GET {api_prefix}/docs` (both public). The page is rendered from the
+//!   document, and its stylesheet and script are embedded in the binary and
+//!   served by the app at `{api_prefix}/docs/assets/`, so it loads nothing from
+//!   a third party and its policy allows the app's own origin only. The
 //!   command `openapi:export [path]` writes the document to a file (default
 //!   `openapi.json`), for typed client generators such as `navree openapi:client`.
 //! - Routes describe themselves with [`ApiMeta`](navree_http::ApiMeta)
@@ -57,8 +57,11 @@ mod conformity;
 mod docs;
 mod document;
 mod ext;
+#[doc(hidden)]
+pub mod markdown;
 mod module;
 mod options;
+mod reference;
 mod resource;
 
 pub use document::{

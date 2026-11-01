@@ -10,9 +10,9 @@ use navree_http::{
     ApiMeta, AppError, Controller, Json, Path, Query, RouteDef, SchemaFn, schema_fn,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
+use navree_openapi::ToSchema;
 use navree_workspace::{CurrentWorkspace, InWorkspace, WorkspaceConfig};
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{

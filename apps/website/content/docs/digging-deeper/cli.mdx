@@ -203,7 +203,7 @@ The report lists a file once per edit: here `mod.rs` gets the `pub mod jobs;` de
 | `make:command posts publish_scheduled` | `commands/publish_scheduled.rs`, the command `posts:publish-scheduled` | `m.command(..)`, in `wire` |
 | `make:agent posts assistant` | `agents/assistant.rs`, an [agent](/docs/ai/agents-and-tools/) `Assistant` named `posts-assistant` with one read-only tool (needs the `ai` feature) | `m.agent::<..>()`, in `wire` |
 | `make:test posts publishing` | `tests/publishing.rs`, a test booting the module | declares it in `tests/mod.rs` |
-| `make:mcp posts assistant` | `mcp/assistant.rs`, `AssistantMcp`, an [MCP server](/docs/ai/mcp-servers/) with one tool (`assistant_echo`) | `m.mcp_server::<..>()`, in `wire`; prints the steps it leaves to you (the `mcp` feature, utoipa, `McpModule`) |
+| `make:mcp posts assistant` | `mcp/assistant.rs`, `AssistantMcp`, an [MCP server](/docs/ai/mcp-servers/) with one tool (`assistant_echo`) | `m.mcp_server::<..>()`, in `wire`; prints the steps it leaves to you (the `mcp` feature, `McpModule`) |
 
 `make:listener --event` needs the event to exist (`make:event` first). The guides for each kind say what to fill in: [controllers](/docs/basics/routing/), [models](/docs/orm/models/), [migrations](/docs/database/migrations/), [jobs](/docs/digging-deeper/queues/), [events and listeners](/docs/digging-deeper/events/), [mail](/docs/digging-deeper/mail/), [notifications](/docs/digging-deeper/notifications/), [policies](/docs/security/authorization/), [tests](/docs/testing/getting-started/) and [MCP servers](/docs/ai/mcp-servers/).
 

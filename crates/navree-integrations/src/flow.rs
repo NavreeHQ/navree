@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
-use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::{ConnectionInfo, ServiceAccountKey};
@@ -58,8 +58,7 @@ pub struct ConnectRedirect {
 /// unchanged: `code` from an OAuth consent, `tenant` and `admin_consent`
 /// from Microsoft's admin consent, `error` and `error_description` when the
 /// admin declined.
-#[derive(Clone, Default, PartialEq, Eq, Deserialize, ToSchema, IntoParams)]
-#[into_params(parameter_in = Query)]
+#[derive(Clone, Default, PartialEq, Eq, Deserialize, ToSchema)]
 pub struct ConnectCallback {
     /// The sealed state.
     pub state: String,

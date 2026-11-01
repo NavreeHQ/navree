@@ -9,10 +9,10 @@ use std::sync::Arc;
 
 use navree_events::Event;
 use navree_kernel::{AppContext, BoxError, BoxFuture};
+use navree_openapi::ToSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::matcher::lookup;
@@ -39,7 +39,7 @@ use crate::schema::json_schema;
 /// }
 ///
 /// /// A deal was won.
-/// #[derive(Serialize, Deserialize, utoipa::ToSchema)]
+/// #[derive(Serialize, Deserialize, navree_openapi::ToSchema)]
 /// struct DealWonTrigger {
 ///     /// Only deals worth at least this much.
 ///     min_amount_cents: Option<i64>,

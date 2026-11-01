@@ -1,8 +1,8 @@
 //! Request bodies and their validation rules.
 
+use navree::openapi::ToSchema;
 use navree::validation::Validate;
 use serde::Deserialize;
-use utoipa::ToSchema;
 
 /// The body of `POST /api/v1/posts`.
 #[derive(Debug, Deserialize, Validate, ToSchema)]

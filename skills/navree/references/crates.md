@@ -11,6 +11,7 @@ MongoDB.
 
 | Path | Crate | Feature | Module to add | Config section | What it gives |
 |---|---|---|---|---|---|
+| `navree::openapi` | navree-openapi | always | (the document model) | | `ToSchema` (trait and derive, also in the prelude), `Schema`, `Document` |
 | `navree::kernel` | navree-kernel | always | (the kernel) | | `Navree::app()`, `AppBuilder`, `Module`, `ModuleBuilder`, the DI container, `CommandSpec` |
 | `navree::bounded` | navree-bounded | always | | | the bounded in-process `Cache`: strict capacity, SIEVE eviction, TTL and TTI, single-flight loading |
 | `navree::glob` | navree-glob | always | | | `Glob::new("/webhooks/*").matches(path)`: `*` any run of characters, `?` one, everything else literal and case-sensitive |

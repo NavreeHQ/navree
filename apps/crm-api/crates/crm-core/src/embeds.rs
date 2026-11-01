@@ -16,9 +16,9 @@
 //! # Ok(()) }
 //! ```
 
+use navree::openapi::ToSchema;
 use navree::orm::Record;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::models::{Company, Contact, User};

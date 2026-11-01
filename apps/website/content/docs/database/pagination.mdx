@@ -221,7 +221,7 @@ The client asks for the next page with `?cursor=` and the `next_cursor` it got, 
 
 ## Documenting pages in OpenAPI
 
-`Page<T>` doesn't implement utoipa's `ToSchema`, so the [OpenAPI document](/docs/digging-deeper/openapi/) can't describe it by itself. The CRM declares a response type per list, with a `From<Page<..>>` conversion:
+`Page<T>` doesn't implement `ToSchema`, so the [OpenAPI document](/docs/digging-deeper/openapi/) can't describe it by itself. The CRM declares a response type per list, with a `From<Page<..>>` conversion:
 
 ```rust title="src/modules/companies/resource.rs"
 /// A page of companies: `{data: Company[], meta}`.

@@ -23,10 +23,10 @@ use navree_crypto::qr::{EcLevel, QrCode};
 use navree_crypto::totp::{Secret, Totp};
 use navree_crypto::{constant_time_eq, random_token, sha256_hex};
 use navree_db::Uow;
+use navree_openapi::ToSchema;
 use navree_orm::Model as _;
 use serde::Serialize;
 use serde_json::json;
-use utoipa::ToSchema;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 

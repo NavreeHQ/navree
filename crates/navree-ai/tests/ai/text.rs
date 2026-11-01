@@ -6,10 +6,10 @@ use std::time::Duration;
 use navree_ai::{
     AiError, AiFake, AiOptions, Attachment, FakeReply, Finish, Message, ModelConfig, Role,
 };
+use navree_openapi::ToSchema;
 use navree_validation::Validate;
 use serde::Deserialize;
 use serde_json::json;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 #[tokio::test]

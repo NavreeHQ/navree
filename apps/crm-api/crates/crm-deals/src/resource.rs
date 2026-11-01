@@ -5,10 +5,10 @@ use crm_core::models::Deal;
 use crm_core::subjects::DEAL;
 use crm_core::{CompanyRef, ContactRef, OwnerRef, Stage};
 use navree::api::ApiResource;
+use navree::openapi::ToSchema;
 use navree::orm::Record;
 use navree::orm::attributes::Resource;
 use serde::Serialize;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// A deal as the API returns it: the row plus

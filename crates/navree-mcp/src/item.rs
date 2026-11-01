@@ -258,7 +258,7 @@ impl ToolDef {
     }
 
     /// The arguments are a `T` (its schema is the input schema).
-    pub fn input<T: utoipa::ToSchema>(mut self) -> Self {
+    pub fn input<T: navree_openapi::ToSchema>(mut self) -> Self {
         self.input_schema = input_schema::<T>();
         self
     }
@@ -392,7 +392,7 @@ impl PromptDef {
     }
 
     /// The arguments are the properties of a `T`.
-    pub fn input<T: utoipa::ToSchema>(mut self) -> Self {
+    pub fn input<T: navree_openapi::ToSchema>(mut self) -> Self {
         self.arguments_schema = input_schema::<T>();
         self.arguments = prompt_arguments(&self.arguments_schema);
         self

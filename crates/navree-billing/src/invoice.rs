@@ -3,8 +3,8 @@
 use std::fmt;
 
 use chrono::{DateTime, Utc};
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 /// Where an invoice stands.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]

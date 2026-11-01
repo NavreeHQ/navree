@@ -613,6 +613,7 @@ navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-kernel = { workspace = true }
 navree-macros = { workspace = true }
+navree-openapi = { workspace = true }
 
 navree-access = { workspace = true, optional = true }
 navree-ai = { workspace = true, optional = true }
@@ -698,7 +699,6 @@ tower = { workspace = true }
 # `tests/integrations_docs.rs`: the page's listener logs with tracing, as
 # an app does.
 tracing = { workspace = true }
-utoipa = { workspace = true }
 uuid = { workspace = true }
 # The gRPC docs example: tonic's generated code names these crates.
 prost = { workspace = true }

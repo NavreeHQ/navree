@@ -1,8 +1,8 @@
-//! JSON Schemas from utoipa's `ToSchema` (the derive request bodies use),
+//! JSON Schemas from `ToSchema` (the derive request bodies use),
 //! for the block catalog an automation editor builds its forms from.
 
+use navree_openapi::ToSchema;
 use serde_json::{Map, Value, json};
-use utoipa::ToSchema;
 
 /// A self-contained JSON Schema for `T`: its own schema (field doc
 /// comments become descriptions) with the schemas it refers to under
@@ -11,7 +11,7 @@ use utoipa::ToSchema;
 /// ```
 /// use navree_workflows::json_schema;
 ///
-/// #[derive(utoipa::ToSchema)]
+/// #[derive(navree_openapi::ToSchema)]
 /// #[allow(dead_code)]
 /// struct SendEmail {
 ///     /// The template to render.

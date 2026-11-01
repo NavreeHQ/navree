@@ -31,6 +31,7 @@ navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 # `#[workflow]`, `#[trigger]`, `#[condition]` and `#[action]`, re-exported.
 navree-macros = { workspace = true }
+navree-openapi = { workspace = true }
 # `workflows:tick`, every minute in apps with `ScheduleModule`.
 navree-schedule = { workspace = true }
 # Routes act on the request's workspace (`InWorkspace`).
@@ -40,7 +41,6 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

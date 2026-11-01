@@ -5,8 +5,8 @@
 //! Run with `cargo test -p navree --features ai --test ai`.
 #![cfg(feature = "ai")]
 
-use navree::ai::utoipa::{self, ToSchema};
 use navree::ai::{Agent, AgentOptions, AgentRun, Ai, FakeReply, agent};
+use navree::openapi::ToSchema;
 use navree::prelude::*;
 use navree::validation::Validate;
 use serde::{Deserialize, Serialize};

@@ -45,9 +45,11 @@ navree-http = { path = "../crates/navree-http" }
 navree-kernel = { path = "../crates/navree-kernel" }
 navree-logbook = { path = "../crates/navree-logbook" }
 navree-mail = { path = "../crates/navree-mail", features = ["inbound"] }
+navree-api = { path = "../crates/navree-api" }
 navree-mcp = { path = "../crates/navree-mcp", features = ["fuzzing"] }
 navree-micro = { path = "../crates/navree-micro" }
 navree-oauth = { path = "../crates/navree-oauth" }
+navree-openapi = { path = "../crates/navree-openapi" }
 navree-pdf = { path = "../crates/navree-pdf" }
 navree-schedule = { path = "../crates/navree-schedule" }
 navree-search = { path = "../crates/navree-search", features = ["fuzzing"] }
@@ -67,7 +69,6 @@ tower = { version = "0.5.3", features = ["util"] }
 # The independent URL parser `validation_parsers` checks the `url` rule against,
 # and `validation_html` the schemes of sanitized URLs.
 url = "2.5.8"
-utoipa = "6.0.0"
 uuid = { version = "1.29.0", features = ["serde", "v7"] }
 # The packages the `docx_read` target builds.
 zip = { version = "9.1.2", default-features = false }
@@ -183,6 +184,20 @@ bench = false
 [[bin]]
 name = "mcp_protocol"
 path = "fuzz_targets/mcp_protocol.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "openapi_schema"
+path = "fuzz_targets/openapi_schema.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "api_markdown"
+path = "fuzz_targets/api_markdown.rs"
 test = false
 doc = false
 bench = false

@@ -9,10 +9,10 @@ use navree_http::{
 };
 use navree_integrations::Level;
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
+use navree_openapi::ToSchema;
 use navree_orm::Model as _;
 use navree_workspace::{InOrganization, InWorkspace};
 use serde::{Deserialize, Serialize};
-use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::options::DirectoryOptions;
@@ -39,8 +39,7 @@ pub struct SyncInput {
 }
 
 /// `page` and `per_page` of the listing routes.
-#[derive(Clone, Copy, Debug, Default, Deserialize, IntoParams)]
-#[into_params(parameter_in = Query)]
+#[derive(Clone, Copy, Debug, Default, Deserialize)]
 pub struct PageInput {
     /// The page (default 1).
     pub page: Option<u64>,

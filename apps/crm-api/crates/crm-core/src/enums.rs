@@ -6,8 +6,8 @@
 use std::fmt;
 use std::str::FromStr;
 
+use navree::openapi::ToSchema;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 /// A value that is not one of an enum's strings.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -33,9 +33,6 @@ macro_rules! string_enum {
     (
         $(#[$meta:meta])*
         $name:ident, $kind:literal {
-            // `tt`, not `literal`: a `literal` fragment reaches the derives
-            // wrapped in an invisible group, which utoipa does not see through,
-            // so the OpenAPI enum would list the variant names instead.
             $( $(#[$vmeta:meta])* $variant:ident => $value:tt ),+ $(,)?
         }
     ) => {
@@ -277,7 +274,7 @@ mod tests {
     /// Rust variant names (crm-web generates its types from it).
     #[test]
     fn openapi_schemas_list_the_contract_strings() {
-        fn values<T: utoipa::PartialSchema>() -> serde_json::Value {
+        fn values<T: navree::openapi::ToSchema>() -> serde_json::Value {
             serde_json::to_value(T::schema()).unwrap()["enum"].clone()
         }
         assert_eq!(

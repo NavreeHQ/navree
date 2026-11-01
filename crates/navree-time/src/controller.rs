@@ -9,8 +9,8 @@ use http::header::{CACHE_CONTROL, HeaderValue};
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{ApiMeta, AppError, Controller, Json, Query, RouteDef, schema_fn};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 use crate::{TimeOptions, Zone, Zones};
 

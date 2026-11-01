@@ -5,11 +5,11 @@
 //! "missing field" error would stop at the first).
 
 use crm_core::Stage;
+use navree::openapi::ToSchema;
 use navree::validation::Validate;
 use navree::validation::rules::{self, RuleInput};
 use navree::validation::{Violation, rule_error};
 use serde::{Deserialize, Deserializer};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// The largest `amount_cents` a deal may have: 10^15 cents (ten trillion

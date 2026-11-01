@@ -2,7 +2,7 @@
 
 use navree_http::{SchemaFn, schema_fn};
 use navree_kernel::ModuleBuilder;
-use utoipa::ToSchema;
+use navree_openapi::ToSchema;
 
 /// API documentation registrations on a [`ModuleBuilder`].
 pub trait ModuleBuilderApiExt {
@@ -11,7 +11,7 @@ pub trait ModuleBuilderApiExt {
     ///
     /// Request and response schemas of routes are registered automatically.
     /// Register a type here when the document refers to it but no route
-    /// uses it directly: utoipa does not collect the schemas of generic type
+    /// uses it directly: the derive does not collect the schemas of generic type
     /// arguments, so a `Page<Note>` response refers to a `Note` component
     /// that only this registration provides. The app refuses to boot while
     /// the document refers to a schema nothing registered.
@@ -19,7 +19,7 @@ pub trait ModuleBuilderApiExt {
     /// ```
     /// use navree_api::ModuleBuilderApiExt;
     /// use navree_kernel::{Module, ModuleBuilder};
-    /// use utoipa::ToSchema;
+    /// use navree_openapi::ToSchema;
     ///
     /// #[derive(ToSchema)]
     /// struct Note {

@@ -32,6 +32,7 @@ navree-db = { workspace = true }
 navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+navree-openapi = { workspace = true }
 # The flags table is a model (`feature_flag::Model`).
 navree-orm = { workspace = true }
 navree-workspace = { workspace = true }
@@ -41,7 +42,6 @@ sha2 = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

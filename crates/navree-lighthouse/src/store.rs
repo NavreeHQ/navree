@@ -76,7 +76,7 @@ pub struct PageMeta {
 
 /// How issues are sorted.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "mcp", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "mcp", derive(navree_openapi::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum IssueSort {
     /// Most recent occurrence first (the default).

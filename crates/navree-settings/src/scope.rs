@@ -6,9 +6,9 @@ use std::fmt;
 use std::str::FromStr;
 
 use navree_contracts::Principal;
+use navree_openapi::ToSchema;
 use navree_workspace::{CurrentOrganization, CurrentWorkspace, Organization, Workspace};
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// A level of the inheritance chain, from the most general to the most

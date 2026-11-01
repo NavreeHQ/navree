@@ -121,7 +121,7 @@ impl MediaItem {
 /// A [`MediaItem`] as an API returns it, with URLs: public URLs on disks
 /// that have one, temporary signed URLs otherwise (see
 /// [`Media::resource`](crate::Media::resource)).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, navree_openapi::ToSchema)]
 pub struct MediaResource {
     /// `"Media"`.
     #[serde(rename = "__type")]

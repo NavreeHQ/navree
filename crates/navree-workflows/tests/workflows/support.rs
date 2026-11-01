@@ -416,7 +416,7 @@ async fn upgrade(ctx: WorkflowCtx, code: &'static str) -> Result<String, BoxErro
 // `Explode` implements `Action` by hand.
 
 /// A deal was won, optionally only above an amount.
-#[derive(Clone, Debug, Default, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, navree_openapi::ToSchema)]
 pub struct DealWonTrigger {
     /// Only deals worth at least this much.
     #[serde(default)]
@@ -433,11 +433,11 @@ pub fn deal_won(config: &DealWonTrigger, event: &DealWon) -> bool {
 
 /// A task was completed (no workspace field in the event).
 #[trigger(type = "task.completed", event = TaskCompleted, subject = "owner_id", workspace = false)]
-#[derive(Clone, Debug, Default, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, navree_openapi::ToSchema)]
 pub struct TaskCompletedTrigger {}
 
 /// Sends a note (to the journal).
-#[derive(Clone, Debug, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Debug, Serialize, Deserialize, navree_openapi::ToSchema)]
 pub struct SendNote {
     /// The template.
     pub template: String,
@@ -458,7 +458,7 @@ pub fn note_preview(config: &SendNote, ctx: &AutomationCtx) -> Value {
 }
 
 /// Fails every time.
-#[derive(Clone, Debug, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Debug, Serialize, Deserialize, navree_openapi::ToSchema)]
 pub struct Explode {}
 
 impl Action for Explode {
@@ -471,7 +471,7 @@ impl Action for Explode {
 }
 
 /// The won deal is worth at least `cents`.
-#[derive(Clone, Debug, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Debug, Serialize, Deserialize, navree_openapi::ToSchema)]
 pub struct AmountAtLeast {
     /// The threshold.
     pub cents: i64,
@@ -487,7 +487,7 @@ pub async fn amount_at_least(
 }
 
 /// The event names a workspace (a plain `fn` returning `bool`).
-#[derive(Clone, Debug, Default, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, navree_openapi::ToSchema)]
 pub struct InWorkspace {}
 
 /// The deal belongs to a workspace.

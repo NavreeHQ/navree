@@ -601,7 +601,7 @@ The extractors resolve the context only when a value asks for it: a phone number
 
 ### In the OpenAPI document
 
-These types don't describe themselves to utoipa. Mark such a field with the schema of what it serializes as:
+These types have no `ToSchema` of their own. Mark such a field with the schema of what it serializes as:
 
 ```rust
 #[derive(Debug, Deserialize, Validate, ToSchema)]

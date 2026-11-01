@@ -2,8 +2,8 @@
 //! customer creates, [`NewDomain`] and the summaries of the commands.
 
 use chrono::{DateTime, Utc};
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// Where a domain is in its verification.

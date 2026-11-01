@@ -3,8 +3,8 @@
 use std::fmt;
 use std::str::FromStr;
 
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// Who a message is sent for: the tenant whose transport, suppressions and

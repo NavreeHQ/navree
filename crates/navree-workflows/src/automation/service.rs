@@ -4,9 +4,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use navree_db::{Page, PageQuery, Uow};
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::blocks::Catalog;

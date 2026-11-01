@@ -9,10 +9,10 @@ use navree_http::{
     RouteDef, SchemaFn, schema_fn,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
+use navree_openapi::ToSchema;
 use navree_workspace::{InOrganization, InWorkspace};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::extract::IntegrationOwner;
@@ -27,8 +27,7 @@ use crate::{
 pub const MANAGE_PERMISSION: &str = "integrations.manage";
 
 /// The query of `GET /api/integrations/{provider}/connect`.
-#[derive(Clone, Debug, Default, Deserialize, IntoParams)]
-#[into_params(parameter_in = Query)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct ConnectQuery {
     /// The scope set to connect (default `default`).
     pub scope_set: Option<String>,

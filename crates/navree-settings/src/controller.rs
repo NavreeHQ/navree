@@ -11,10 +11,10 @@ use navree_db::Uow;
 use navree_http::extract::FromRequestParts as _;
 use navree_http::{ApiMeta, AppError, Controller, Json, Path, Query, RouteDef, schema_fn};
 use navree_kernel::{AppContext, BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
+use navree_openapi::ToSchema;
 use navree_workspace::{CurrentOrganization, CurrentWorkspace};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use utoipa::ToSchema;
 
 use crate::registry::RegisteredSettings;
 use crate::request::{app_context, request_user, request_workspace};

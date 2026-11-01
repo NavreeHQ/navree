@@ -1,4 +1,4 @@
-//! `GET {api_prefix}/openapi.json` and the docs UI at `GET {api_prefix}/docs`.
+//! `GET {api_prefix}/openapi.json` and the reference page at `GET {api_prefix}/docs`.
 
 use http::StatusCode;
 use navree_api::ApiOptions;
@@ -15,7 +15,7 @@ async fn openapi_json_route_serves_the_document() {
 }
 
 #[tokio::test]
-async fn docs_ui_serves_the_scalar_page() {
+async fn docs_ui_serves_the_reference_page() {
     let app = app(ApiOptions {
         title: "CRM <API>".to_owned(),
         ..ApiOptions::default()
@@ -33,11 +33,17 @@ async fn docs_ui_serves_the_scalar_page() {
         response.headers
     );
     let html = response.text();
+    let version = env!("CARGO_PKG_VERSION");
     assert!(
-        html.contains(r#"<script src="/api/docs/assets/scalar-api-reference-1.74.0.js"></script>"#),
+        html.contains(&format!(
+            r#"<script src="/api/docs/assets/reference-{version}.js" defer></script>"#
+        )),
         "{html}"
     );
-    assert!(html.contains(r#"data-url="/api/openapi.json""#), "{html}");
+    assert!(
+        html.contains(r#"<a class="raw" href="/api/openapi.json">"#),
+        "{html}"
+    );
     assert!(
         html.contains("<title>CRM &lt;API&gt;</title>"),
         "title escaped: {html}"
@@ -46,18 +52,20 @@ async fn docs_ui_serves_the_scalar_page() {
     let csp = response.header("content-security-policy").unwrap();
     assert!(csp.contains("script-src 'self';"), "{csp}");
     assert!(csp.contains("frame-ancestors 'none'"), "{csp}");
-    assert!(
-        !csp.contains("jsdelivr") && !csp.contains("scalar.com"),
-        "{csp}"
-    );
+    assert!(csp.contains("style-src 'self';"), "{csp}");
+    assert!(!csp.contains("unsafe"), "{csp}");
+    assert!(!csp.contains("http"), "{csp}");
 }
 
-/// Every `src` and `href` of the page names a path on this origin.
+/// Every `src` and `href` of the page, but the fragments of the page itself.
 fn references(html: &str) -> Vec<String> {
     let mut found = Vec::new();
     for attribute in ["src=\"", "href=\""] {
         for part in html.split(attribute).skip(1) {
-            found.push(part.split('"').next().unwrap().to_owned());
+            let reference = part.split('"').next().unwrap();
+            if !reference.starts_with('#') {
+                found.push(reference.to_owned());
+            }
         }
     }
     found
@@ -76,25 +84,22 @@ async fn the_docs_page_references_only_local_assets_and_the_app_serves_them() {
         );
         let asset = get(&app, reference).await;
         assert_eq!(asset.status, StatusCode::OK, "{reference}");
+        if reference.ends_with("openapi.json") {
+            continue;
+        }
         assert_eq!(
             asset.header("cache-control"),
             Some("public, max-age=31536000, immutable"),
             "{reference}"
         );
-        assert_eq!(
-            asset.header("content-type"),
-            Some("text/javascript; charset=utf-8")
+        let content_type = asset.header("content-type").unwrap();
+        assert!(
+            content_type == "text/javascript; charset=utf-8"
+                || content_type == "text/css; charset=utf-8",
+            "{content_type}"
         );
-        assert!(asset.body.len() > 100_000, "the Scalar bundle is embedded");
+        assert!(!asset.body.is_empty());
     }
-    // The license travels with the script, and nothing else is served.
-    let license = get(
-        &app,
-        "/api/docs/assets/scalar-api-reference-1.74.0.LICENSE.txt",
-    )
-    .await;
-    assert_eq!(license.status, StatusCode::OK);
-    assert!(license.text().contains("MIT License"));
     assert_eq!(
         get(&app, "/api/docs/assets/missing.js").await.status,
         StatusCode::NOT_FOUND
@@ -115,12 +120,11 @@ async fn the_assets_go_with_the_docs_page() {
     .boot()
     .await
     .unwrap();
-    assert_eq!(
-        get(&app, "/api/docs/assets/scalar-api-reference-1.74.0.js")
-            .await
-            .status,
-        StatusCode::NOT_FOUND
+    let script = format!(
+        "/api/docs/assets/reference-{}.js",
+        env!("CARGO_PKG_VERSION")
     );
+    assert_eq!(get(&app, &script).await.status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

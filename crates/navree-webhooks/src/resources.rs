@@ -6,9 +6,9 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use chrono::{DateTime, Utc};
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::entity::{attempt, delivery, endpoint};

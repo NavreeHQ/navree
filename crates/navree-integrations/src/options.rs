@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use navree_config::ConfigSection;
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Deserializer, Serialize};
-use utoipa::ToSchema;
 
 /// Options of the integrations module (configuration section
 /// `integrations`).

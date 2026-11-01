@@ -3,11 +3,14 @@
 use std::collections::{BTreeMap, HashSet};
 
 use http::StatusCode;
+use indexmap::IndexMap;
 use navree_http::{ERROR_CONTENT_TYPE, RouteMeta, SchemaFn, schema_fn};
+use navree_openapi::{
+    Components, Document, Info, MediaType, Operation, Parameter, RequestBody, Response, Schema,
+    SecurityScheme, Server, Tag, ToSchema,
+};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
-use utoipa::ToSchema;
-use utoipa::openapi::schema::{ArrayBuilder, ObjectBuilder, OneOfBuilder, Schema, Type};
+use serde_json::{Value, json};
 
 use crate::ApiOptions;
 
@@ -57,7 +60,7 @@ fn missing_message(missing: &[(String, String)]) -> String {
         })
         .collect();
     format!(
-        "the OpenAPI document refers to schemas nothing registered: {}. utoipa does not collect the schemas of generic type arguments (`Note` in `Page<Note>`); register them in their module with navree_api::ModuleBuilderApiExt::api_schema",
+        "the OpenAPI document refers to schemas nothing registered: {}. The derive does not collect the schemas of generic type arguments (`Note` in `Page<Note>`); register them in their module with navree_api::ModuleBuilderApiExt::api_schema",
         list.join(", ")
     )
 }
@@ -90,7 +93,8 @@ fn missing_message(missing: &[(String, String)]) -> String {
 /// schema nothing registered (see
 /// [`api_schema`](crate::ModuleBuilderApiExt::api_schema)).
 pub fn openapi_document(routes: &[RouteMeta], options: &ApiOptions) -> Result<Value, ApiError> {
-    build(routes, &[], options, DEFAULT_SESSION_COOKIE)
+    let document = build(routes, &[], options, DEFAULT_SESSION_COOKIE)?;
+    Ok(serde_json::to_value(document).unwrap_or_default())
 }
 
 /// [`openapi_document`] with schemas registered by modules (and a label
@@ -100,7 +104,7 @@ pub(crate) fn build(
     extra_schemas: &[(SchemaFn, String)],
     options: &ApiOptions,
     session_cookie: &str,
-) -> Result<Value, ApiError> {
+) -> Result<Document, ApiError> {
     let routes: Vec<(&RouteMeta, String)> = routes
         .iter()
         .filter_map(|route| method_of(route).map(|method| (route, method)))
@@ -132,53 +136,50 @@ pub(crate) fn build(
         operation_ids: HashSet::new(),
         tags: Vec::new(),
     };
-    let mut paths = Map::new();
+    let mut paths: IndexMap<String, IndexMap<String, Operation>> = IndexMap::new();
     let mut references = Vec::new();
     for ((route, method), (label, request, response)) in routes.into_iter().zip(bodies) {
         let (path, params) = openapi_path(&route.full_path);
         let operation = builder.operation(route, &label, &params, request, response);
-        references.push((label, schema_refs(&operation)));
-        if let Value::Object(item) = paths
-            .entry(path)
-            .or_insert_with(|| Value::Object(Map::new()))
-        {
-            item.insert(method, operation);
-        }
+        let refs = schema_refs(&serde_json::to_value(&operation).unwrap_or_default());
+        references.push((label, refs));
+        paths.entry(path).or_default().insert(method, operation);
     }
 
     builder.schemas.check_references(references)?;
 
-    let mut document = Map::new();
-    document.insert("openapi".into(), json!("3.1.0"));
-    document.insert(
-        "info".into(),
-        json!({"title": options.title, "version": options.version}),
-    );
-    if !options.servers.is_empty() {
-        let servers: Vec<Value> = options
+    Ok(Document {
+        openapi: "3.1.0".to_owned(),
+        info: Info {
+            title: options.title.clone(),
+            version: options.version.clone(),
+        },
+        servers: options
             .servers
             .iter()
-            .map(|url| json!({"url": url}))
-            .collect();
-        document.insert("servers".into(), Value::Array(servers));
-    }
-    if !builder.tags.is_empty() {
-        let tags: Vec<Value> = builder
+            .map(|url| Server { url: url.clone() })
+            .collect(),
+        tags: builder
             .tags
             .iter()
-            .map(|name| json!({"name": name}))
-            .collect();
-        document.insert("tags".into(), Value::Array(tags));
-    }
-    document.insert("paths".into(), Value::Object(paths));
-    document.insert(
-        "components".into(),
-        json!({
-            "schemas": builder.schemas.components,
-            "securitySchemes": security_schemes(session_cookie),
-        }),
-    );
-    Ok(Value::Object(document))
+            .map(|name| Tag { name: name.clone() })
+            .collect(),
+        paths,
+        components: Components {
+            schemas: builder
+                .schemas
+                .components
+                .into_iter()
+                .map(|(name, schema)| (name, read_schema(schema)))
+                .collect(),
+            security_schemes: security_schemes(session_cookie),
+        },
+    })
+}
+
+/// A schema a [`SchemaFn`] returned. One that isn't a JSON object says nothing.
+fn read_schema(schema: Value) -> Schema {
+    Schema::from_value(schema).unwrap_or_default()
 }
 
 /// The lower-case OpenAPI method of a route, or `None` (logged) for methods
@@ -200,21 +201,37 @@ fn method_of(route: &RouteMeta) -> Option<String> {
 
 /// The `cookie` (first-party session, navree-session) and `bearer` (JWT
 /// access token, navree-auth) security schemes.
-fn security_schemes(session_cookie: &str) -> Value {
-    json!({
-        "cookie": {
-            "type": "apiKey",
-            "in": "cookie",
-            "name": session_cookie,
-            "description": "The session cookie of a first-party app (apps using navree-session). Unsafe methods (POST, PUT, PATCH, DELETE) also need the XSRF-TOKEN cookie's value in the X-XSRF-TOKEN header.",
-        },
-        "bearer": {
-            "type": "http",
-            "scheme": "bearer",
-            "bearerFormat": "JWT",
-            "description": "A JWT access token from `POST /api/auth/login` or `/api/auth/refresh`: `Authorization: Bearer <token>`.",
-        },
-    })
+fn security_schemes(session_cookie: &str) -> IndexMap<String, SecurityScheme> {
+    IndexMap::from([
+        (
+            "cookie".to_owned(),
+            SecurityScheme {
+                kind: "apiKey".to_owned(),
+                location: Some("cookie".to_owned()),
+                name: Some(session_cookie.to_owned()),
+                scheme: None,
+                bearer_format: None,
+                description: Some(
+                    "The session cookie of a first-party app (apps using navree-session). Unsafe methods (POST, PUT, PATCH, DELETE) also need the XSRF-TOKEN cookie's value in the X-XSRF-TOKEN header."
+                        .to_owned(),
+                ),
+            },
+        ),
+        (
+            "bearer".to_owned(),
+            SecurityScheme {
+                kind: "http".to_owned(),
+                location: None,
+                name: None,
+                scheme: Some("bearer".to_owned()),
+                bearer_format: Some("JWT".to_owned()),
+                description: Some(
+                    "A JWT access token from `POST /api/auth/login` or `/api/auth/refresh`: `Authorization: Bearer <token>`."
+                        .to_owned(),
+                ),
+            },
+        ),
+    ])
 }
 
 /// The body of every Navree error response, in Navree's JSON error shape
@@ -264,27 +281,17 @@ pub enum HttpErrorMessage {
 
 /// The schema of `code`: a string when present (never `null`).
 fn code_schema() -> Schema {
-    ObjectBuilder::new()
-        .schema_type(Type::String)
-        .description(Some(
+    Schema::string()
+        .description(
             "The machine-readable error code (`not_found`, `validation_failed`, `invalid_credentials`), stable across releases, for front ends to map to a translation key. Left out when `http.errors.code` is false.",
-        ))
-        .examples([serde_json::json!("not_found")])
-        .build()
-        .into()
+        )
+        .examples(vec![json!("not_found")])
 }
 
 /// The schema of `message`: `string | string[]`.
 fn message_schema() -> Schema {
-    let string = || ObjectBuilder::new().schema_type(Type::String);
-    OneOfBuilder::new()
-        .item(string())
-        .item(ArrayBuilder::new().items(string()))
-        .description(Some(
-            "What went wrong: one message, or every validation message.",
-        ))
-        .build()
-        .into()
+    Schema::one_of(vec![Schema::string(), Schema::array(Schema::string())])
+        .description("What went wrong: one message, or every validation message.")
 }
 
 /// Describes operations, collecting component schemas, operation ids and tags.
@@ -303,28 +310,22 @@ impl Builder {
         params: &[String],
         request: Option<Body>,
         response: Option<Body>,
-    ) -> Value {
+    ) -> Operation {
         let api = route.api.as_ref();
-        let mut operation = Map::new();
+        let mut operation = Operation::default();
         if let Some(api) = api {
-            if !api.tags.is_empty() {
-                for tag in &api.tags {
-                    if !self.tags.contains(tag) {
-                        self.tags.push(tag.clone());
-                    }
+            for tag in &api.tags {
+                if !self.tags.contains(tag) {
+                    self.tags.push(tag.clone());
                 }
-                operation.insert("tags".into(), json!(api.tags));
             }
-            if let Some(summary) = &api.summary {
-                operation.insert("summary".into(), json!(summary));
-            }
-            if let Some(description) = &api.description {
-                operation.insert("description".into(), json!(description));
-            }
+            operation.tags.clone_from(&api.tags);
+            operation.summary.clone_from(&api.summary);
+            operation.description.clone_from(&api.description);
         }
         if let Some(name) = &route.name {
             if self.operation_ids.insert(name.clone()) {
-                operation.insert("operationId".into(), json!(name));
+                operation.operation_id = Some(name.clone());
             } else {
                 tracing::warn!(
                     target: "navree::api",
@@ -334,57 +335,63 @@ impl Builder {
                 );
             }
         }
-        if !params.is_empty() {
-            let parameters: Vec<Value> = params
-                .iter()
-                .map(|name| {
-                    json!({
-                        "name": name,
-                        "in": "path",
-                        "required": true,
-                        "schema": {"type": "string"},
-                    })
-                })
-                .collect();
-            operation.insert("parameters".into(), Value::Array(parameters));
-        }
+        operation.parameters = params
+            .iter()
+            .map(|name| Parameter {
+                name: name.clone(),
+                location: "path".to_owned(),
+                required: true,
+                schema: Schema::string(),
+            })
+            .collect();
         if let Some(request) = request {
-            operation.insert(
-                "requestBody".into(),
-                json!({
-                    "required": true,
-                    "content": {"application/json": {"schema": self.schemas.use_body(request, label)}},
-                }),
-            );
+            let schema = read_schema(self.schemas.use_body(request, label));
+            operation.request_body = Some(RequestBody {
+                required: true,
+                content: IndexMap::from([("application/json".to_owned(), MediaType { schema })]),
+            });
         }
-        operation.insert("responses".into(), self.responses(route, label, response));
+        operation.responses = self.responses(route, label, response);
         if !route.access.public {
-            operation.insert("security".into(), json!([{"cookie": []}, {"bearer": []}]));
+            operation.security = vec![
+                BTreeMap::from([("cookie".to_owned(), Vec::new())]),
+                BTreeMap::from([("bearer".to_owned(), Vec::new())]),
+            ];
         }
-        for (name, value) in &route.extensions {
-            operation.insert(name.clone(), value.clone());
-        }
-        Value::Object(operation)
+        operation.extensions.extend(
+            route
+                .extensions
+                .iter()
+                .map(|(name, value)| (name.clone(), value.clone())),
+        );
+        operation
     }
 
     /// The success response, the documented errors, 401 for non-public
     /// routes and 403 for routes the route authorizer checks.
-    fn responses(&mut self, route: &RouteMeta, label: &str, body: Option<Body>) -> Value {
+    fn responses(
+        &mut self,
+        route: &RouteMeta,
+        label: &str,
+        body: Option<Body>,
+    ) -> IndexMap<String, Response> {
         let api = route.api.as_ref();
         let success = api
             .map(|api| api.success_status)
             .filter(|status| *status != 0)
             .unwrap_or(200);
-        let mut response = Map::new();
-        response.insert("description".into(), json!(reason(success)));
+        let mut response = Response {
+            description: reason(success).to_owned(),
+            content: IndexMap::new(),
+        };
         if let Some(body) = body {
-            response.insert(
-                "content".into(),
-                json!({"application/json": {"schema": self.schemas.use_body(body, label)}}),
-            );
+            let schema = read_schema(self.schemas.use_body(body, label));
+            response
+                .content
+                .insert("application/json".to_owned(), MediaType { schema });
         }
-        let mut responses = Map::new();
-        responses.insert(success.to_string(), Value::Object(response));
+        let mut responses = IndexMap::new();
+        responses.insert(success.to_string(), response);
 
         let mut errors: Vec<u16> = api.map(|api| api.responses.clone()).unwrap_or_default();
         if !route.access.public {
@@ -394,18 +401,20 @@ impl Builder {
             errors.push(403);
         }
         for status in errors.into_iter().filter(|status| *status != success) {
-            let mut response = Map::new();
-            response.insert("description".into(), json!(reason(status)));
+            let mut response = Response {
+                description: reason(status).to_owned(),
+                content: IndexMap::new(),
+            };
             if status >= 400 {
-                let error = self.schemas.use_body(self.error.clone(), "error responses");
-                response.insert(
-                    "content".into(),
-                    json!({ERROR_CONTENT_TYPE: {"schema": error}}),
-                );
+                let schema =
+                    read_schema(self.schemas.use_body(self.error.clone(), "error responses"));
+                response
+                    .content
+                    .insert(ERROR_CONTENT_TYPE.to_owned(), MediaType { schema });
             }
-            responses.insert(status.to_string(), Value::Object(response));
+            responses.insert(status.to_string(), response);
         }
-        Value::Object(responses)
+        responses
     }
 }
 

@@ -5,6 +5,7 @@
 
 use http::request::Parts;
 use navree::BoxFuture;
+use navree::openapi::ToSchema;
 use navree::prelude::*;
 use navree::testing::TestApp;
 use navree::validation::Validate;
@@ -14,7 +15,6 @@ use navree::validation::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use utoipa::ToSchema;
 
 /// A contact: every international type at once.
 #[derive(Debug, Deserialize, Serialize, Validate)]

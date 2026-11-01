@@ -4,9 +4,9 @@
 
 use chrono::{DateTime, NaiveTime, TimeDelta, Utc};
 use crm_core::models::{Activity, ActivityScopes};
+use navree::openapi::ToSchema;
 use navree::orm::Builder;
 use serde::Deserialize;
-use utoipa::ToSchema;
 
 /// The UTC day containing a given instant: `[start, end)`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

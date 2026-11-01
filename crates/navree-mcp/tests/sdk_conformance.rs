@@ -27,7 +27,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 /// `greet`'s arguments.
-#[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Debug, Deserialize, Validate, navree_openapi::ToSchema)]
 pub struct Greet {
     /// Who to greet.
     #[validate(length(min = 1, max = 50))]
@@ -35,7 +35,7 @@ pub struct Greet {
 }
 
 /// `review`'s arguments.
-#[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Debug, Deserialize, Validate, navree_openapi::ToSchema)]
 pub struct Review {
     /// What to review.
     #[validate(length(min = 1))]

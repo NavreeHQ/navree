@@ -59,7 +59,16 @@ use serde::{Deserialize, Serialize};
 /// Stored in `workspaces.kind` as `live` or `demo`; the API returns it as
 /// `kind`, so a front end can offer a Live/Demo switch.
 #[derive(
-    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, utoipa::ToSchema,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    navree_openapi::ToSchema,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum WorkspaceKind {

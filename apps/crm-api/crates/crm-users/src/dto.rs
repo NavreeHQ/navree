@@ -1,9 +1,9 @@
 //! Request bodies and queries, with their validation rules.
 
 use crm_core::UserRole;
+use navree::openapi::ToSchema;
 use navree::validation::Validate;
 use serde::{Deserialize, Deserializer};
-use utoipa::ToSchema;
 
 /// The body of `POST /api/v1/users`.
 #[derive(Debug, Deserialize, Validate, ToSchema)]

@@ -7,10 +7,10 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use navree_contracts::AuditKind;
+use navree_openapi::ToSchema;
 use navree_orm::Model as _;
 use serde::Serialize;
 use serde_json::json;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::refresh_token::Model as RefreshToken;

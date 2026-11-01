@@ -5,10 +5,10 @@
 
 use std::collections::BTreeMap;
 
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use utoipa::ToSchema;
 
 /// A person in a directory, the same shape whichever source it came from.
 ///

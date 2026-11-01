@@ -37,6 +37,7 @@ navree-http = { workspace = true }
 navree-i18n-macros = { workspace = true }
 navree-kernel = { workspace = true }
 navree-notify = { workspace = true }
+navree-openapi = { workspace = true }
 navree-template = { workspace = true }
 navree-validation = { workspace = true }
 navree-view = { workspace = true }
@@ -47,7 +48,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 unic-langid = { workspace = true }
-utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

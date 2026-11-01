@@ -21,11 +21,11 @@ use crm_core::Stage;
 use crm_core::models::{Activity, ActivityScopes, Deal, DealScopes};
 use navree::access::{Accessible, CurrentAccess, Read};
 use navree::contracts::Clock;
+use navree::openapi::ToSchema;
 use navree::orm::access::AccessibleQuery;
 use navree::orm::{Builder, Expr, OrmError, Row, TableBuilder};
 use navree::prelude::*;
 use serde::Serialize;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::due::{Due, Today};

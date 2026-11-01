@@ -18,9 +18,9 @@ use navree_http::{
     ApiMeta, AppError, ClientIp, Controller, IntoResponse, Json, Response, RouteDef, schema_fn,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use utoipa::ToSchema;
 
 use crate::clients::{
     ClientCredentials, GRANT_AUTHORIZATION_CODE, GRANT_CLIENT_CREDENTIALS, GRANT_DEVICE_CODE,

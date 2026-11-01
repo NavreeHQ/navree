@@ -195,19 +195,13 @@ impl<'de> Deserialize<'de> for LocalDay {
     }
 }
 
-impl utoipa::PartialSchema for LocalDay {
-    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
-        utoipa::openapi::ObjectBuilder::new()
-            .schema_type(utoipa::openapi::schema::Type::String)
-            .format(Some(utoipa::openapi::SchemaFormat::KnownFormat(
-                utoipa::openapi::KnownFormat::Date,
-            )))
-            .examples([serde_json::json!("2026-10-27")])
-            .into()
+impl navree_openapi::ToSchema for LocalDay {
+    fn schema() -> navree_openapi::Schema {
+        navree_openapi::Schema::string()
+            .format("date")
+            .examples(vec![serde_json::json!("2026-10-27")])
     }
 }
-
-impl utoipa::ToSchema for LocalDay {}
 
 /// Whole local days from `from` to `to`, both included: the window of a
 /// report, counted in the tenant's days.
@@ -230,7 +224,9 @@ impl utoipa::ToSchema for LocalDay {}
 /// assert_eq!(october.day_count(), 31);
 /// # Ok::<(), navree_time::LocalDayError>(())
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, navree_openapi::ToSchema,
+)]
 pub struct DayRange {
     /// The first day.
     pub from: LocalDay,

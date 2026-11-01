@@ -1,5 +1,5 @@
 //! A small blog built the way a Navree app is: only the `navree` facade and its
-//! macros (plus `serde` and `utoipa`, whose derives name
+//! macros (plus `serde`, whose derives name
 //! their own crates). `fullstack_blog.rs` drives it over HTTP.
 //!
 //! ```text

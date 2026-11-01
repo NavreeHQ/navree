@@ -7,7 +7,7 @@ use navree::validation::Validate;
 use navree::{Result, injectable};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use utoipa::ToSchema;
+use navree::openapi::ToSchema;
 
 /// The arguments of `{{ name }}_echo`. Field doc comments become the
 /// descriptions in the tool's input schema; their `#[validate]` rules are

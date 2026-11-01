@@ -6,9 +6,9 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::time::Duration;
 
+use navree_openapi::ToSchema;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::AiError;

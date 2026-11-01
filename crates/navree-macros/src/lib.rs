@@ -5,6 +5,7 @@
 //! `#[notification]` (a notification's category, digest and urgency, for
 //! navree-notify), `#[resolver]` (GraphQL root fields, for navree-graphql),
 //! `#[grpc_service]` (gRPC services, for navree-grpc), the
+//! `ToSchema` derive of navree-openapi, the
 //! `Searchable` derive of navree-search, the `Settings` derive of
 //! navree-settings, the `Exportable` and `Importable` derives of
 //! navree-sheets, `#[agent]` (navree-ai's agents and their tools) and
@@ -47,6 +48,7 @@ mod route;
 mod searchable;
 mod settings;
 mod sheets;
+mod to_schema;
 mod workflows;
 
 /// Implements `navree_micro::MessageHandlers` for an impl block whose
@@ -733,7 +735,7 @@ pub fn derive_importable(input: TokenStream) -> TokenStream {
 ///
 /// - `&McpContext` (the caller);
 /// - for tools and prompts, one arguments value (a struct deriving
-///   `Deserialize`, `utoipa::ToSchema` and `navree_validation::Validate`; its schema is
+///   `Deserialize`, `navree_openapi::ToSchema` and `navree_validation::Validate`; its schema is
 ///   the tool's input schema or the prompt's arguments, and it is validated
 ///   before the method runs);
 /// - for resource templates, parameters named like the URI's variables
@@ -801,7 +803,7 @@ pub fn mcp_prompt(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 ///
 /// A tool is an `async fn` taking `&self`, the run (`&AgentRun`) and at
-/// most one arguments value, whose type derives `Deserialize`, utoipa's
+/// most one arguments value, whose type derives `Deserialize`,
 /// `ToSchema` (its JSON Schema, field doc comments included) and
 /// `navree_validation::Validate`; it returns a `Result` of anything that serializes,
 /// with an error that converts into `AppError`. The method name is the tool
@@ -876,7 +878,7 @@ pub fn workflow(args: TokenStream, item: TokenStream) -> TokenStream {
 /// | `workspace = ".."` or `false` | `"workspace_id"` | the event field holding the workspace id, or none |
 /// | `event = Type` | the fn's second argument | the event, for the struct form |
 ///
-/// The configuration type derives `Serialize`, `Deserialize` and utoipa's
+/// The configuration type derives `Serialize`, `Deserialize` and
 /// `ToSchema` (its JSON Schema is the editor's form); the event implements
 /// `navree_events::Event`. The doc comment becomes the description.
 #[proc_macro_attribute]
@@ -930,4 +932,53 @@ pub fn condition(args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn action(args: TokenStream, item: TokenStream) -> TokenStream {
     workflows::expand_action(args.into(), item.into()).into()
+}
+
+/// Implements `navree_openapi::ToSchema` for a struct or an enum: its JSON
+/// Schema, for the OpenAPI document, AI tools and structured output, MCP tools
+/// and automation blocks.
+///
+/// The schema follows the type's serde attributes (`rename`, `rename_all`,
+/// `skip`, `default`, `skip_serializing_if`, `flatten`, `tag`, `content`,
+/// `untagged`, `deny_unknown_fields`), so it describes the JSON serde reads and
+/// writes. Doc comments become descriptions. A field is required unless it's
+/// an `Option`, has a serde default or may be skipped when serializing.
+///
+/// | Attribute | On | What it does |
+/// |---|---|---|
+/// | `#[schema(as = Name)]` | type | the component name (default: the Rust name) |
+/// | `#[schema(description = "..")]` | type | the description, in place of the doc comment |
+/// | `#[schema(value_type = T)]` | field | describes the field as `T`; `Object` is `{"type": "object"}` |
+/// | `#[schema(inline)]` | field | the type's schema in place of a `$ref` |
+/// | `#[schema(nullable = false)]` | field | an `Option` that's never `null` when present |
+/// | `#[schema(required = true)]` | field | overrides whether the field is required |
+/// | `#[schema(rename = "..")]` | field, variant | the name, unless serde renames it |
+/// | `#[schema(format = Uuid)]` | field | `format`, a known name or a string |
+/// | `#[schema(example = "..")]` | field | `example`: a literal or `json!(..)` |
+/// | `#[schema(title = "..")]` | field | `title` |
+/// | `#[schema(minimum = 0, maximum = 100)]` | field | the numeric limits |
+/// | `#[schema(schema_with = function)]` | field | the schema a `fn() -> Schema` returns |
+///
+/// The generated code names `navree_openapi` through the `navree` facade when
+/// the crate depends on it (`::navree::openapi`).
+///
+/// ```ignore
+/// use navree::openapi::ToSchema;
+///
+/// /// A note on a deal.
+/// #[derive(Serialize, ToSchema)]
+/// #[schema(as = Note)]
+/// #[serde(rename_all = "camelCase")]
+/// pub struct NoteResource {
+///     /// Always `"Note"`.
+///     #[schema(example = "Note")]
+///     pub resource_type: &'static str,
+///     pub id: Uuid,
+///     #[schema(format = Password)]
+///     pub secret: Option<String>,
+/// }
+/// ```
+#[proc_macro_derive(ToSchema, attributes(schema))]
+pub fn derive_to_schema(input: TokenStream) -> TokenStream {
+    to_schema::expand(input.into()).into()
 }

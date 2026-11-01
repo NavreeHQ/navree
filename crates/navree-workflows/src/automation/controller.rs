@@ -8,10 +8,10 @@ use navree_http::{
     ApiMeta, AppError, Controller, Created, Json, NoContent, Path, RouteDef, SchemaFn, schema_fn,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
+use navree_openapi::ToSchema;
 use navree_workspace::{InWorkspace, WorkspaceConfig};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::blocks::BlockInfo;

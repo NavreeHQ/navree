@@ -7,9 +7,9 @@ use std::fmt;
 
 use chrono::{DateTime, Utc};
 use navree_contracts::Secret;
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// The tokens a provider issued for a user: what

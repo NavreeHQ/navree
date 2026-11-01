@@ -7,10 +7,10 @@ use std::future::Future;
 use navree_access::PrincipalAccess;
 use navree_http::AppError;
 use navree_kernel::{BoxFuture, Injectable};
+use navree_openapi::ToSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::response::Usage;
@@ -296,7 +296,7 @@ fn outcome<T: Serialize, E: Into<AppError>>(result: Result<T, E>) -> ToolOutcome
 
 /// The JSON Schema of a tool's arguments type.
 #[doc(hidden)]
-pub fn tool_schema<A: utoipa::ToSchema>() -> Value {
+pub fn tool_schema<A: navree_openapi::ToSchema>() -> Value {
     crate::schema::json_schema::<A>()
 }
 

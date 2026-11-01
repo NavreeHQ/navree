@@ -24,12 +24,12 @@ use navree::contracts::{Backoff, Job, JobContext, JobOptions};
 use navree::http::{IntoResponse, Response};
 use navree::mail::Mailer;
 use navree::notify::{Channel, Notifiable, Notification, Notifier, USER_NOTIFIABLE_TYPE};
+use navree::openapi::ToSchema;
 use navree::prelude::*;
 use navree::queue::Queue;
 use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::random::between;

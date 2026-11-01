@@ -16,7 +16,6 @@ crm-core = { path = "../crm-core" }
 navree = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

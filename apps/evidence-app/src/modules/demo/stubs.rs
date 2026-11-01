@@ -11,10 +11,10 @@
 use std::time::Duration;
 
 use navree::http::{IntoResponse, Response};
+use navree::openapi::ToSchema;
 use navree::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use utoipa::ToSchema;
 
 /// The longest a stub waits before it answers, in milliseconds.
 const MAX_DELAY_MS: u64 = 5_000;

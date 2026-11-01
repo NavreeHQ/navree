@@ -3,8 +3,8 @@
 
 use std::collections::BTreeMap;
 
+use navree_openapi::ToSchema;
 use serde::Serialize;
-use utoipa::ToSchema;
 
 use crate::client::{GoogleClient, GraphClient, IntegrationClient, SlackClient};
 use crate::{CredentialKind, ProviderType};

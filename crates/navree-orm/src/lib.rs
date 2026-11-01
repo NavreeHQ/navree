@@ -215,11 +215,11 @@ pub mod __private {
     pub use crate::relations::derive_support as relations;
     pub use chrono::{DateTime, FixedOffset, Utc};
     pub use navree_kernel::BoxFuture;
+    pub use navree_openapi;
     pub use serde;
     pub use serde_json;
     pub use std::sync::{Arc, OnceLock};
     pub use tokio;
-    pub use utoipa;
 }
 
 /// The models the documentation examples use, so every example compiles.

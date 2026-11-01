@@ -17,12 +17,11 @@ You get the `Automations` service, the catalog of blocks, validation with JSON p
 
 ## Installation
 
-Automations come with `WorkflowsModule` (the `workflows` feature, in `full`); see the [workflows installation](/docs/packages/workflows/#installation). Block settings derive utoipa's `ToSchema`, so add utoipa too:
+Automations come with `WorkflowsModule` (the `workflows` feature, in `full`); see the [workflows installation](/docs/packages/workflows/#installation). Block settings derive `ToSchema` (`navree::openapi::ToSchema`, also in the prelude):
 
 ```toml title="Cargo.toml"
 [dependencies]
 navree = { git = "https://github.com/NavreeHQ/navree" }
-utoipa = { version = "6", features = ["chrono", "uuid"] }
 ```
 
 They need `DatabaseModule` (for the `automations`, `automation_versions` and `automation_enrollments` tables) and `EventsModule` (triggers are events). `workflows.automations = false` turns them off: no event enrolls, and the routes are not mounted.
@@ -35,7 +34,7 @@ A trigger is an [event](/docs/digging-deeper/events/) and the settings a person 
 use navree::prelude::*;
 use navree::workflows::{AutomationCtx, action, condition, trigger};
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use navree::openapi::ToSchema;
 
 /// A deal was won.
 #[derive(Clone, Debug, Serialize, Deserialize)]

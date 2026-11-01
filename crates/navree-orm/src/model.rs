@@ -255,8 +255,8 @@ impl<T: Timestamp> Timestamp for Option<T> {
 }
 
 /// The OpenAPI schema of a column or appended value
-/// (`#[model(schema = Type)]` gives `Type`'s `PartialSchema::schema`).
-pub type PartialSchemaFn = fn() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema>;
+/// (`#[model(schema = Type)]` gives `Type`'s `ToSchema::schema`).
+pub type PartialSchemaFn = fn() -> navree_openapi::Schema;
 
 /// One column of a model, as `#[derive(Model)]` describes it.
 #[derive(Clone, Copy, Debug)]

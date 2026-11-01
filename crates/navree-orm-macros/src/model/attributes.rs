@@ -977,8 +977,9 @@ pub(crate) fn column_meta_calls(
         calls.extend(quote!(.mutator()));
     }
     if let Some(schema) = &field.schema {
-        calls
-            .extend(quote!(.schema(<#schema as #krate::__private::utoipa::PartialSchema>::schema)));
+        calls.extend(
+            quote!(.schema(<#schema as #krate::__private::navree_openapi::ToSchema>::schema)),
+        );
     }
     calls
 }

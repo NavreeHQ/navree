@@ -1,11 +1,10 @@
-//! The routes serving the document: `GET {api_prefix}/openapi.json`, the
-//! Scalar docs UI at `GET {api_prefix}/docs` and the UI's own script at
-//! `GET {api_prefix}/docs/assets/{file}`.
+//! The routes serving the document: `GET {api_prefix}/openapi.json`, the API
+//! reference page at `GET {api_prefix}/docs` and the page's own stylesheet and
+//! script at `GET {api_prefix}/docs/assets/{file}`.
 //!
-//! The script is vendored (embedded in the binary, pinned to one version,
-//! with its license file) and served by the app itself, so the page loads
-//! nothing from a third party and its policy allows scripts from `'self'`
-//! only.
+//! The page is rendered here from the document, and its stylesheet and script
+//! are embedded in the binary, so it loads nothing from a third party and its
+//! policy allows styles and scripts from `'self'` only.
 
 use std::sync::Arc;
 
@@ -15,56 +14,57 @@ use navree_http::body::Bytes;
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{AppError, Controller, HttpOptions, Path, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
-use utoipa_scalar::Scalar;
+use tokio::sync::OnceCell;
 
 use crate::ApiDocs;
+use crate::reference::{Links, render};
 
-/// One vendored file, served under `{api_prefix}/docs/assets/{path}`. The
-/// file names carry the version, so a response is cached for a year.
+/// The stylesheet's and the script's file names. They carry the version, so a
+/// response is cached for a year.
+const STYLESHEET: &str = concat!("reference-", env!("CARGO_PKG_VERSION"), ".css");
+const SCRIPT: &str = concat!("reference-", env!("CARGO_PKG_VERSION"), ".js");
+
+/// One embedded file, served under `{api_prefix}/docs/assets/{path}`.
 struct Asset {
     path: &'static str,
     content_type: &'static str,
     bytes: &'static [u8],
 }
 
-/// The Scalar UI script: the `@scalar/api-reference` 1.74.0 standalone
-/// build from npm (`dist/browser/standalone.js`, MIT, unmodified), and its
-/// license. Updating means replacing both files and the names here.
 const ASSETS: &[Asset] = &[
     Asset {
-        path: SCALAR_SCRIPT,
-        content_type: "text/javascript; charset=utf-8",
-        bytes: include_bytes!("../assets/scalar-api-reference-1.74.0.js"),
+        path: STYLESHEET,
+        content_type: "text/css; charset=utf-8",
+        bytes: include_bytes!("../assets/reference.css"),
     },
     Asset {
-        path: "scalar-api-reference-1.74.0.LICENSE.txt",
-        content_type: "text/plain; charset=utf-8",
-        bytes: include_bytes!("../assets/scalar-api-reference-1.74.0.LICENSE.txt"),
+        path: SCRIPT,
+        content_type: "text/javascript; charset=utf-8",
+        bytes: include_bytes!("../assets/reference.js"),
     },
 ];
-
-/// The vendored script's file name (the version is part of it).
-const SCALAR_SCRIPT: &str = "scalar-api-reference-1.74.0.js";
 
 /// The cache policy of the versioned files.
 const ASSET_CACHE: &str = "public, max-age=31536000, immutable";
 
-/// The docs page's content security policy: scripts from this origin only
-/// (the vendored Scalar script), the inline styles the UI injects, API calls
-/// to this origin. Server URLs from the options are added to `connect-src`.
-const PAGE_CSP: &str = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; font-src data:; img-src 'self' data:; connect-src 'self'; worker-src blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+/// The docs page's content security policy: its own stylesheet and script,
+/// nothing inline, API calls to this origin. Server URLs from the options are
+/// added to `connect-src`.
+const PAGE_CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
 
 /// The docs routes of `ApiModule` (public, under the API prefix, unversioned).
 pub(crate) struct DocsController {
     docs: Arc<ApiDocs>,
-    page: Option<DocsPage>,
+    page: Option<Arc<DocsPage>>,
 }
 
-/// The rendered docs page and its content security policy.
-#[derive(Clone)]
+/// The docs page, rendered the first time it's asked for, and its policy.
 struct DocsPage {
-    html: Bytes,
+    html: OnceCell<Bytes>,
     csp: HeaderValue,
+    json: String,
+    stylesheet: String,
+    script: String,
 }
 
 impl Injectable for DocsController {
@@ -81,12 +81,13 @@ impl Injectable for DocsController {
             let http = r.get::<HttpOptions>().await?;
             let page = docs.options().docs_ui.then(|| {
                 let prefix = http.api_prefix.trim_end_matches('/');
-                let url = format!("{prefix}/openapi.json");
-                let script = format!("{prefix}/docs/assets/{SCALAR_SCRIPT}");
-                DocsPage {
-                    html: Bytes::from(render_page(&docs.options().title, &url, &script)),
+                Arc::new(DocsPage {
+                    html: OnceCell::new(),
                     csp: page_csp(&docs.options().servers),
-                }
+                    json: format!("{prefix}/openapi.json"),
+                    stylesheet: format!("{prefix}/docs/assets/{STYLESHEET}"),
+                    script: format!("{prefix}/docs/assets/{SCRIPT}"),
+                })
             });
             Ok(Self { docs, page })
         })
@@ -110,21 +111,12 @@ impl Controller for DocsController {
         ];
         if let Some(page) = &self.page {
             let page = page.clone();
+            let docs = self.docs.clone();
             routes.push(
                 RouteDef::on(Method::GET, "/docs", move || {
                     let page = page.clone();
-                    async move {
-                        (
-                            [
-                                (
-                                    CONTENT_TYPE,
-                                    HeaderValue::from_static("text/html; charset=utf-8"),
-                                ),
-                                (CONTENT_SECURITY_POLICY, page.csp),
-                            ],
-                            page.html,
-                        )
-                    }
+                    let docs = docs.clone();
+                    async move { docs_page(&docs, &page).await }
                 })
                 .name("api.docs")
                 .public(),
@@ -143,7 +135,40 @@ impl Controller for DocsController {
     }
 }
 
-/// `GET {api_prefix}/docs/assets/{file}`: a vendored file.
+/// `GET {api_prefix}/docs`: the page.
+async fn docs_page(docs: &ApiDocs, page: &DocsPage) -> Response {
+    let html = page
+        .html
+        .get_or_try_init(|| async {
+            let document = docs.model().await?;
+            let html = render(
+                document,
+                &Links {
+                    json: &page.json,
+                    stylesheet: &page.stylesheet,
+                    script: &page.script,
+                },
+            );
+            Ok::<_, navree_kernel::BoxError>(Bytes::from(html))
+        })
+        .await;
+    match html {
+        Ok(html) => (
+            [
+                (
+                    CONTENT_TYPE,
+                    HeaderValue::from_static("text/html; charset=utf-8"),
+                ),
+                (CONTENT_SECURITY_POLICY, page.csp.clone()),
+            ],
+            html.clone(),
+        )
+            .into_response(),
+        Err(error) => AppError::internal(error).into_response(),
+    }
+}
+
+/// `GET {api_prefix}/docs/assets/{file}`: an embedded file.
 fn serve_asset(file: &str) -> Response {
     let Some(asset) = ASSETS.iter().find(|asset| asset.path == file) else {
         return AppError::not_found().into_response();
@@ -165,41 +190,18 @@ async fn openapi_json(docs: &ApiDocs) -> Response {
     }
 }
 
-/// The Scalar page: it loads the document from `url` (rather than embedding
-/// it), so no document text ends up inside the HTML, and the script from
-/// `script`, a path on this origin. The UI's own web fonts (a third-party
-/// stylesheet) are off.
-fn render_page(title: &str, url: &str, script: &str) -> String {
-    let template = format!(
-        r#"<!doctype html>
-<html>
-<head>
-    <title>$title</title>
-    <meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1"/>
-</head>
-<body>
-<script id="api-reference" data-url="{url}" data-configuration='{{"withDefaultFonts":false}}'></script>
-<script src="{script}"></script>
-</body>
-</html>
-"#,
-        url = escape_html(url),
-        script = escape_html(script),
-    );
-    Scalar::new(serde_json::Value::Null)
-        .custom_html(template)
-        .title(escape_html(title))
-        .to_html()
-}
-
-/// [`PAGE_CSP`] with the absolute server URLs (those safe in a policy) added
-/// to `connect-src`, so the UI's "try it" client can call them.
-fn page_csp(servers: &[String]) -> HeaderValue {
-    let connect: String = servers
+/// The absolute server URLs safe in a policy: what the "Try it" form can call.
+pub(crate) fn callable_servers(servers: &[String]) -> impl Iterator<Item = &String> {
+    servers
         .iter()
         .filter(|server| server.starts_with("https://") || server.starts_with("http://"))
         .filter(|server| !server.contains([';', ',', ' ', '\'']))
+}
+
+/// [`PAGE_CSP`] with the absolute server URLs (those safe in a policy) added
+/// to `connect-src`, so the "Try it" form can call them.
+fn page_csp(servers: &[String]) -> HeaderValue {
+    let connect: String = callable_servers(servers)
         .map(|server| format!(" {server}"))
         .collect();
     if connect.is_empty() {
@@ -212,51 +214,21 @@ fn page_csp(servers: &[String]) -> HeaderValue {
     HeaderValue::from_str(&policy).unwrap_or(HeaderValue::from_static(PAGE_CSP))
 }
 
-/// Escapes text for HTML element content and quoted attribute values.
-fn escape_html(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for c in text.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&#39;"),
-            c => out.push(c),
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn page_escapes_title_and_url() {
-        let html = render_page("A & <B>", "/api\"/openapi.json", "/api/docs/assets/x.js");
-        assert!(html.contains("<title>A &amp; &lt;B&gt;</title>"), "{html}");
-        assert!(
-            html.contains(r#"data-url="/api&quot;/openapi.json""#),
-            "{html}"
-        );
-    }
-
-    #[test]
-    fn the_page_loads_only_its_own_script() {
-        let html = render_page("API", "/api/openapi.json", "/api/docs/assets/s.js");
-        assert!(html.contains(r#"<script src="/api/docs/assets/s.js"></script>"#));
-        assert!(
-            !html.contains("jsdelivr") && !html.contains("unpkg"),
-            "{html}"
-        );
-        assert!(!PAGE_CSP.contains("https://cdn"), "{PAGE_CSP}");
+    fn the_policy_allows_only_this_origin_for_code_and_style() {
         assert!(PAGE_CSP.contains("script-src 'self';"), "{PAGE_CSP}");
+        assert!(PAGE_CSP.contains("style-src 'self';"), "{PAGE_CSP}");
+        assert!(PAGE_CSP.contains("default-src 'none';"), "{PAGE_CSP}");
+        assert!(!PAGE_CSP.contains("unsafe"), "{PAGE_CSP}");
+        assert!(!PAGE_CSP.contains("https:"), "{PAGE_CSP}");
     }
 
-    /// The UI loads no image from another origin (its own icons are inline),
-    /// so the page cannot be made to fetch one: images come from this
-    /// origin or `data:` URIs only.
+    /// The page loads no image from another origin, so it cannot be made to
+    /// fetch one: images come from this origin or `data:` URIs only.
     #[test]
     fn the_page_loads_images_from_its_own_origin_and_data_uris_only() {
         let images = |policy: &str| {
@@ -272,25 +244,36 @@ mod tests {
             images(with_servers.to_str().unwrap()).as_deref(),
             Some("img-src 'self' data:")
         );
-        assert!(!PAGE_CSP.contains("https:"), "{PAGE_CSP}");
     }
 
     #[test]
-    fn the_vendored_files_are_there_and_carry_their_version() {
+    fn the_embedded_files_are_there_and_carry_their_version() {
         for asset in ASSETS {
             assert!(!asset.bytes.is_empty(), "{}", asset.path);
-            assert!(asset.path.contains("1.74.0"), "{}", asset.path);
+            assert!(
+                asset.path.contains(env!("CARGO_PKG_VERSION")),
+                "{}",
+                asset.path
+            );
         }
-        assert!(ASSETS.iter().any(|a| a.path == SCALAR_SCRIPT));
-        let license = ASSETS
-            .iter()
-            .find(|a| a.path.ends_with("LICENSE.txt"))
-            .unwrap();
-        assert!(
-            std::str::from_utf8(license.bytes)
-                .unwrap()
-                .contains("MIT License")
-        );
+    }
+
+    /// Everything the stylesheet and the script ask of the page's policy: no
+    /// third-party URL, no HTML built from a string, nothing written to a
+    /// `style` attribute.
+    #[test]
+    fn the_embedded_files_load_nothing_else() {
+        for asset in ASSETS {
+            let text = std::str::from_utf8(asset.bytes).unwrap();
+            assert!(!text.contains("http://"), "{}", asset.path);
+            assert!(!text.contains("https://"), "{}", asset.path);
+            assert!(!text.contains("@import"), "{}", asset.path);
+            assert!(!text.contains("url("), "{}", asset.path);
+            assert!(!text.contains(".innerHTML"), "{}", asset.path);
+            assert!(!text.contains("insertAdjacentHTML"), "{}", asset.path);
+            assert!(!text.contains(".style."), "{}", asset.path);
+            assert!(!text.contains("eval("), "{}", asset.path);
+        }
     }
 
     #[test]

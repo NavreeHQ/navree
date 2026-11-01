@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 
 use navree_db::DbError;
 use navree_http::AppError;
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// What can go wrong starting, running or managing workflows and

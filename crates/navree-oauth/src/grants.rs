@@ -10,10 +10,10 @@ use chrono::{DateTime, Utc};
 use navree_auth::AuthService;
 use navree_contracts::{AuditEntry, AuditKind};
 use navree_db::Uow;
+use navree_openapi::ToSchema;
 use navree_orm::{Executor, Model as _, Record};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::clients::{

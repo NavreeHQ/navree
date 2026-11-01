@@ -15,9 +15,9 @@ use std::future::Future;
 use chrono::{DateTime, Utc};
 use navree_contracts::BoxError;
 use navree_kernel::AppContext;
+use navree_openapi::ToSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{Exportable, SheetFormat};

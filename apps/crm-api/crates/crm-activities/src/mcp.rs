@@ -4,10 +4,10 @@
 use chrono::{DateTime, Utc};
 use crm_core::{Activity, ActivityKind, SubjectType};
 use navree::mcp::{McpContext, mcp_server};
+use navree::openapi::ToSchema;
 use navree::prelude::*;
 use navree::validation::Validate;
 use serde::Deserialize;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::dto::trimmed;

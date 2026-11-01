@@ -1,17 +1,17 @@
-//! Tool input schemas and prompt arguments from `utoipa::ToSchema`, the
+//! Tool input schemas and prompt arguments from `navree_openapi::ToSchema`, the
 //! derive request bodies already use.
 
 use serde_json::{Map, Value, json};
 
-/// The JSON Schema of `T` for a tool's `inputSchema`: the schema utoipa
-/// derives (field doc comments become descriptions), with the schemas it
+/// The JSON Schema of `T` for a tool's `inputSchema`: the schema the
+/// derive gives (field doc comments become descriptions), with the schemas it
 /// refers to inlined under `$defs` (`#/components/schemas/Stage` becomes
 /// `#/$defs/Stage`), so the document stands alone.
 ///
 /// ```
 /// use navree_mcp::input_schema;
 ///
-/// #[derive(utoipa::ToSchema)]
+/// #[derive(navree_openapi::ToSchema)]
 /// #[allow(dead_code)]
 /// struct ListDeals {
 ///     /// Words from the deal title.
@@ -22,7 +22,7 @@ use serde_json::{Map, Value, json};
 /// assert_eq!(schema["type"], "object");
 /// assert_eq!(schema["properties"]["query"]["description"], "Words from the deal title.");
 /// ```
-pub fn input_schema<T: utoipa::ToSchema>() -> Value {
+pub fn input_schema<T: navree_openapi::ToSchema>() -> Value {
     let mut schema = serde_json::to_value(T::schema()).unwrap_or_else(|_| json!({}));
     let mut referenced = Vec::new();
     T::schemas(&mut referenced);
@@ -173,14 +173,14 @@ fn schema_types(schema: &Value) -> Vec<String> {
 mod tests {
     use super::*;
 
-    #[derive(utoipa::ToSchema)]
+    #[derive(navree_openapi::ToSchema)]
     #[allow(dead_code)]
     enum Stage {
         Lead,
         Won,
     }
 
-    #[derive(utoipa::ToSchema)]
+    #[derive(navree_openapi::ToSchema)]
     #[allow(dead_code)]
     struct ListDeals {
         /// Words from the deal title.

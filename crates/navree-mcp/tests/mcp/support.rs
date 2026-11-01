@@ -92,7 +92,7 @@ pub fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
 }
 
 /// A deal as tools and resources return it.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, navree_openapi::ToSchema)]
 pub struct DealResource {
     pub id: Uuid,
     pub owner_id: Uuid,
@@ -114,7 +114,7 @@ impl From<Deal> for DealResource {
 }
 
 /// A deal stage.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, navree_openapi::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Stage {
     Lead,
@@ -134,7 +134,7 @@ impl Stage {
     }
 }
 
-#[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Debug, Deserialize, Validate, navree_openapi::ToSchema)]
 pub struct ListDeals {
     /// Words from the deal title.
     #[validate(length(max = 100))]
@@ -148,7 +148,7 @@ pub struct ListDeals {
     pub mine: bool,
 }
 
-#[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Debug, Deserialize, Validate, navree_openapi::ToSchema)]
 pub struct CreateDeal {
     /// The deal's title.
     #[validate(length(min = 1, max = 100))]
@@ -158,7 +158,7 @@ pub struct CreateDeal {
     pub amount_cents: i64,
 }
 
-#[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Debug, Deserialize, Validate, navree_openapi::ToSchema)]
 pub struct MoveDealArgs {
     /// The deal to move.
     #[validate(skip)]
@@ -168,7 +168,7 @@ pub struct MoveDealArgs {
     pub stage: Stage,
 }
 
-#[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Debug, Deserialize, Validate, navree_openapi::ToSchema)]
 pub struct RenameDeal {
     /// The deal to rename.
     #[validate(skip)]
@@ -178,14 +178,14 @@ pub struct RenameDeal {
     pub title: String,
 }
 
-#[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Debug, Deserialize, Validate, navree_openapi::ToSchema)]
 pub struct FollowUpArgs {
     /// The deal to follow up on.
     #[validate(skip)]
     pub deal_id: Uuid,
 }
 
-#[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Debug, Deserialize, Validate, navree_openapi::ToSchema)]
 pub struct SummarizeArgs {
     /// How many days back.
     #[validate(range(min = 1, max = 90))]

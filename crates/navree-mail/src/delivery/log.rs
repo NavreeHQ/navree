@@ -6,8 +6,8 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use navree_db::record::{self, Filter, Update};
 use navree_db::{Page, PageQuery, Record as _};
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::entity::{DeliveryRow, EventRow};

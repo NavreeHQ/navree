@@ -23,11 +23,11 @@ use chrono::{DateTime, Utc};
 use navree_contracts::BoxError;
 use navree_db::Uow;
 use navree_kernel::AppContext;
+use navree_openapi::ToSchema;
 use navree_validation::Validate;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 pub use mapping::Mapping;

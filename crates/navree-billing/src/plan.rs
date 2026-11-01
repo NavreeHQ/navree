@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 use crate::config::PlanOptions;
 

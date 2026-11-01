@@ -1,6 +1,6 @@
 //! OpenAPI schemas of models and their pages.
 //!
-//! [`Record<M>`] implements utoipa's `ToSchema`, so a route documents a
+//! [`Record<M>`] implements `ToSchema`, so a route documents a
 //! record response with `navree_http::schema_fn::<Record<Deal>>`: the
 //! schema has one property per serialized column under serde's key
 //! (hidden columns left out, the visible list respected), typed from the
@@ -15,7 +15,7 @@
 //!
 //! ```
 //! # use navree_orm::__doc_models::*;
-//! use utoipa::{PartialSchema, ToSchema};
+//! use navree_openapi::ToSchema;
 //!
 //! assert_eq!(Record::<Tag>::name(), "Tag");
 //! let schema = serde_json::to_value(Record::<Tag>::schema()).unwrap();
@@ -26,10 +26,8 @@
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
+use navree_openapi::{Schema, ToSchema};
 use serde_json::{Map, Value as Json, json};
-use utoipa::openapi::RefOr;
-use utoipa::openapi::schema::Schema;
-use utoipa::{PartialSchema, ToSchema};
 
 use crate::attributes::serialize::output_key;
 use crate::model::Model;
@@ -163,8 +161,8 @@ pub fn rust_type_schema(text: &str) -> Json {
     kind_schema(kind)
 }
 
-/// A utoipa schema as JSON.
-fn schema_json(schema: RefOr<Schema>) -> Json {
+/// A schema as JSON.
+fn schema_json(schema: Schema) -> Json {
     serde_json::to_value(schema).unwrap_or_else(|_| json!({}))
 }
 
@@ -243,28 +241,26 @@ impl<M: Model> ModelSchema<M> {
         json!({"type": "object", "properties": properties, "required": required})
     }
 
-    /// The schema in utoipa's form.
-    pub fn schema() -> RefOr<Schema> {
+    /// The schema in the document model's form.
+    pub fn schema() -> Schema {
         to_schema(Self::json())
     }
 }
 
-/// JSON Schema in utoipa's form.
-fn to_schema(json: Json) -> RefOr<Schema> {
-    serde_json::from_value(json).unwrap_or_else(|_| RefOr::T(Schema::default()))
+/// JSON Schema in the document model's form.
+fn to_schema(json: Json) -> Schema {
+    Schema::from_value(json).unwrap_or_default()
 }
 
-/// A record's schema: the model's ([`ModelSchema`]).
-impl<M: Model> PartialSchema for Record<M> {
-    fn schema() -> RefOr<Schema> {
-        ModelSchema::<M>::schema()
-    }
-}
-
-/// Named after the model (`Deal`).
+/// A record's schema: the model's ([`ModelSchema`]), named after the model
+/// (`Deal`).
 impl<M: Model> ToSchema for Record<M> {
     fn name() -> Cow<'static, str> {
         ModelSchema::<M>::name()
+    }
+
+    fn schema() -> Schema {
+        ModelSchema::<M>::schema()
     }
 }
 
@@ -274,7 +270,7 @@ fn reference<T: ToSchema>() -> Json {
 }
 
 /// The schemas a page of `T` refers to: `T` and what `T` refers to.
-fn page_components<T: ToSchema>(schemas: &mut Vec<(String, RefOr<Schema>)>) {
+fn page_components<T: ToSchema>(schemas: &mut Vec<(String, Schema)>) {
     schemas.push((T::name().into_owned(), T::schema()));
     T::schemas(schemas);
 }
@@ -334,38 +330,33 @@ fn page_json<T: ToSchema>() -> Json {
     })
 }
 
-/// `{data: [T], meta: {current_page, per_page, has_more}}`.
-impl<T: ToSchema> PartialSchema for SimplePage<T> {
-    fn schema() -> RefOr<Schema> {
-        to_schema(simple_page_json::<T>())
-    }
-}
-
-/// Named `<T>SimplePage`.
+/// `{data: [T], meta: {current_page, per_page, has_more}}`, named
+/// `<T>SimplePage`.
 impl<T: ToSchema> ToSchema for SimplePage<T> {
     fn name() -> Cow<'static, str> {
         Cow::Owned(format!("{}SimplePage", T::name()))
     }
 
-    fn schemas(schemas: &mut Vec<(String, RefOr<Schema>)>) {
+    fn schema() -> Schema {
+        to_schema(simple_page_json::<T>())
+    }
+
+    fn schemas(schemas: &mut Vec<(String, Schema)>) {
         page_components::<T>(schemas);
     }
 }
 
-/// `{data: [T], next_cursor, prev_cursor}`.
-impl<T: ToSchema> PartialSchema for CursorPage<T> {
-    fn schema() -> RefOr<Schema> {
-        to_schema(cursor_page_json::<T>())
-    }
-}
-
-/// Named `<T>CursorPage`.
+/// `{data: [T], next_cursor, prev_cursor}`, named `<T>CursorPage`.
 impl<T: ToSchema> ToSchema for CursorPage<T> {
     fn name() -> Cow<'static, str> {
         Cow::Owned(format!("{}CursorPage", T::name()))
     }
 
-    fn schemas(schemas: &mut Vec<(String, RefOr<Schema>)>) {
+    fn schema() -> Schema {
+        to_schema(cursor_page_json::<T>())
+    }
+
+    fn schemas(schemas: &mut Vec<(String, Schema)>) {
         page_components::<T>(schemas);
     }
 }
@@ -449,7 +440,7 @@ mod tests {
     }
 
     #[test]
-    fn json_schemas_survive_utoipas_types() {
+    fn json_schemas_survive_the_document_model() {
         for schema in [
             json!({"type": "object", "properties": {"a": {"type": ["string", "null"], "format": "date-time"}}, "required": ["a"]}),
             json!({"type": "array", "items": {"type": "integer", "format": "int64"}}),

@@ -8,9 +8,9 @@ use std::sync::{Arc, Mutex, PoisonError};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use navree_kernel::BoxFuture;
+use navree_openapi::ToSchema;
 use serde::Serialize;
 use tokio::sync::OnceCell;
-use utoipa::ToSchema;
 
 use crate::MailError;
 

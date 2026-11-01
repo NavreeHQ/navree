@@ -870,8 +870,6 @@ pub fn make_item(
         MakeKind::Mcp => report.hints.extend([
             "turn on navree's MCP feature in Cargo.toml: navree = { ..., features = [\"mcp\"] }"
                 .to_owned(),
-            "add utoipa for the arguments' `ToSchema` derive: utoipa = { version = \"6\", features = [\"chrono\", \"uuid\"] }"
-                .to_owned(),
             "serve /mcp: add `.module(McpModule::from_config())` to the app root, after HttpModule and AuthModule"
                 .to_owned(),
         ]),

@@ -2,8 +2,8 @@
 //! how signed-in people become users and members.
 
 use chrono::{DateTime, Utc};
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// Who a connection belongs to.

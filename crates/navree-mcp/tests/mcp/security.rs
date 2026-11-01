@@ -36,7 +36,7 @@ const WAIT: Duration = Duration::from_secs(10);
 static COUNTED: [AtomicU64; 3] = [AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0)];
 
 /// Which counter `count_slowly` counts on.
-#[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Debug, Deserialize, Validate, navree_openapi::ToSchema)]
 pub struct Counter {
     /// The counter's index.
     #[validate(range(max = 2))]

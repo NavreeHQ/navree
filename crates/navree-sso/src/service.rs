@@ -16,12 +16,12 @@ use navree_events::{Event, EventBus};
 use navree_http::HttpOptions;
 use navree_http_client::{HttpClient, HttpClientOptions};
 use navree_kernel::{AppContext, BoxError, WeakAppContext};
+use navree_openapi::ToSchema;
 use navree_orm::{Assignment, Executor, Model as _, Record};
 use navree_workspace::{Organization, Workspace};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::sync::OnceCell;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::entity::{sso_connection, sso_domain, sso_identity};

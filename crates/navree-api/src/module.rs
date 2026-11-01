@@ -11,6 +11,7 @@ use navree_kernel::{
     AppContext, BoxError, BoxFuture, CommandSpec, Injectable, KernelError, Lifecycle, Module,
     ModuleBuilder, ModuleId, ProviderKey, Resolver, WeakAppContext,
 };
+use navree_openapi::Document;
 use serde_json::Value;
 use tokio::sync::OnceCell;
 
@@ -31,7 +32,7 @@ use crate::{ApiOptions, DEFAULT_SESSION_COOKIE};
 ///   stops the boot (see [`openapi_document`](crate::openapi_document)).
 /// - Routes (public, under the API prefix, left out of the document):
 ///   `GET {api_prefix}/openapi.json` and, with
-///   [`docs_ui`](ApiOptions::docs_ui), the Scalar UI at
+///   [`docs_ui`](ApiOptions::docs_ui), the API reference page at
 ///   `GET {api_prefix}/docs`.
 /// - Command `openapi:export [path]`: writes the document (default
 ///   `openapi.json`), creating missing directories.
@@ -154,10 +155,11 @@ pub struct ApiDocs {
     built: OnceCell<Built>,
 }
 
-/// The document and its serialized form.
+/// The document and its serialized forms.
 struct Built {
     document: Arc<Value>,
     json: Bytes,
+    model: Document,
 }
 
 impl ApiDocs {
@@ -176,6 +178,15 @@ impl ApiDocs {
     /// fail.
     pub async fn document(&self) -> Result<Arc<Value>, BoxError> {
         Ok(self.built().await?.document.clone())
+    }
+
+    /// The document, in its model's form.
+    ///
+    /// # Errors
+    ///
+    /// As [`document`](ApiDocs::document).
+    pub async fn model(&self) -> Result<&Document, BoxError> {
+        Ok(&self.built().await?.model)
     }
 
     /// The document as pretty-printed JSON, with a trailing newline (what
@@ -214,11 +225,13 @@ impl ApiDocs {
                     .filter(|name| !name.trim().is_empty())
                     .unwrap_or_else(|| DEFAULT_SESSION_COOKIE.to_owned());
                 let document = build(&routes, &extra, &self.options, &cookie)?;
-                let mut json = serde_json::to_vec_pretty(&document)?;
+                let value = serde_json::to_value(&document)?;
+                let mut json = serde_json::to_vec_pretty(&value)?;
                 json.push(b'\n');
                 Ok::<_, BoxError>(Built {
-                    document: Arc::new(document),
+                    document: Arc::new(value),
                     json: Bytes::from(json),
+                    model: document,
                 })
             })
             .await

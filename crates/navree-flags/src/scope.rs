@@ -5,9 +5,9 @@ use std::ops::Deref;
 use std::str::FromStr;
 
 use navree_contracts::Principal;
+use navree_openapi::ToSchema;
 use navree_workspace::{CurrentWorkspace, Workspace};
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// Who a flag is resolved for: a user, a workspace, both, or neither

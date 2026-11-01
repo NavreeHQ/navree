@@ -51,6 +51,7 @@ navree-db = { workspace = true }
 navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+navree-openapi = { workspace = true }
 navree-orm-macros = { workspace = true }
 navree-telemetry = { workspace = true }
 navree-testing = { workspace = true, optional = true }
@@ -68,7 +69,6 @@ tracing = { workspace = true }
 # `url::Url` fields (serialized as their text).
 url = { workspace = true, features = ["serde"] }
 # OpenAPI schemas of models and pages.
-utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

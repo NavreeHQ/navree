@@ -15,7 +15,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 /// The arguments of `greet` and `greet-someone`.
-#[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Debug, Deserialize, Validate, navree::openapi::ToSchema)]
 pub struct Greet {
     /// Who to greet.
     #[validate(length(min = 1, max = 40))]

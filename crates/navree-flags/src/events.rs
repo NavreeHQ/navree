@@ -1,9 +1,9 @@
 //! [`FlagChanged`]: emitted once a change to a flag is committed.
 
 use navree_events::Event;
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::ScopeType;

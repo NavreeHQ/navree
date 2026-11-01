@@ -317,17 +317,13 @@ impl<'de> Deserialize<'de> for Zone {
     }
 }
 
-impl utoipa::PartialSchema for Zone {
-    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
-        utoipa::openapi::ObjectBuilder::new()
-            .schema_type(utoipa::openapi::schema::Type::String)
-            .description(Some("An IANA time zone name"))
-            .examples([serde_json::json!("Europe/Paris")])
-            .into()
+impl navree_openapi::ToSchema for Zone {
+    fn schema() -> navree_openapi::Schema {
+        navree_openapi::Schema::string()
+            .description("An IANA time zone name")
+            .examples(vec![serde_json::json!("Europe/Paris")])
     }
 }
-
-impl utoipa::ToSchema for Zone {}
 
 #[cfg(test)]
 mod tests {

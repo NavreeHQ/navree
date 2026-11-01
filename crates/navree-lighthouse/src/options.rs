@@ -515,7 +515,7 @@ fn kinds<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Vec<AlertKind>>, D::E
 
 /// A period of the dashboard: the last hour, 24 hours or 7 days.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[cfg_attr(feature = "mcp", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "mcp", derive(navree_openapi::ToSchema))]
 pub enum Period {
     /// The last hour (per-minute buckets).
     #[serde(rename = "1h")]

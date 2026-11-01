@@ -4,9 +4,9 @@
 
 use navree::auth::User;
 use navree::notify::{Notifiable, USER_NOTIFIABLE_TYPE};
+use navree::openapi::ToSchema;
 use navree::orm::Record;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::models;

@@ -4,8 +4,8 @@
 use std::future::{Future, IntoFuture};
 use std::pin::Pin;
 
+use navree_openapi::ToSchema;
 use serde::Deserialize;
-use utoipa::ToSchema;
 
 use crate::ai::{Ai, Extra, Spec};
 use crate::error::AiError;

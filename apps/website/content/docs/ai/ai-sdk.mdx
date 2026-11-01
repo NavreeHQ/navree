@@ -350,7 +350,7 @@ Free text is for people. When code consumes the answer, ask for a type. `ai.stru
 use chrono::NaiveDate;
 use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use navree::openapi::ToSchema;
 
 /// A follow-up email the rep can edit before sending.
 #[derive(Debug, Deserialize, Serialize, ToSchema, Validate)]
@@ -393,7 +393,7 @@ impl DealInsights {
 
 How it works:
 
-1. The JSON Schema comes from utoipa's `ToSchema`, the same derive your [OpenAPI](/docs/digging-deeper/openapi/) document uses, with the types it refers to under `$defs`. Doc comments become field descriptions, and the model reads them, so write them for the model: units, formats, what to leave out. An app without its own `utoipa` dependency imports the derive as `use navree::ai::utoipa::{self, ToSchema};`.
+1. The JSON Schema comes from `ToSchema`, the same derive your [OpenAPI](/docs/digging-deeper/openapi/) document uses, with the types it refers to under `$defs`. Doc comments become field descriptions, and the model reads them, so write them for the model: units, formats, what to leave out. The derive is `navree::openapi::ToSchema`, also in the prelude.
 2. Navree asks the provider for JSON that matches the schema with the provider's own structured-output mode (Anthropic, OpenAI, Gemini, Mistral and Ollama have one). Bedrock gets the schema in the system prompt instead. The answer is read as JSON (code fences and surrounding prose are tolerated) and deserialized into `T`.
 3. With `.validated()` (available when `T` derives `Validate`), the value is also checked against its rules, the same rules as a [validated request](/docs/basics/validation/).
 4. When the answer doesn't deserialize or breaks a rule, the errors go back to the model with a request to correct it, up to `ai.structured_retries` times. After that the request fails with `AiError::InvalidOutput`.

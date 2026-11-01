@@ -9,8 +9,8 @@ use chrono::{DateTime, Utc};
 use navree_db::record::{self, Filter};
 use navree_db::{Record as _, Uow};
 use navree_http_client::{HttpClient, HttpClientError, HttpClientOptions};
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::Store;

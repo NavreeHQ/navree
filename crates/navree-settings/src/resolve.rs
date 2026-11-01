@@ -5,10 +5,10 @@
 use std::collections::BTreeMap;
 use std::ops::Deref;
 
+use navree_openapi::ToSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use utoipa::ToSchema;
 
 use crate::{Scope, SettingsDefinition, SettingsError, SettingsGroup, Source};
 

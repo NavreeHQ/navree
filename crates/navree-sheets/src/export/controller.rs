@@ -9,11 +9,11 @@ use navree_http::{
     Authenticator, Controller, CurrentPrincipal, Json, Path, Query, RouteDef, schema_fn,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver, WeakAppContext};
+use navree_openapi::ToSchema;
 use navree_queue::OperationRecord;
 use navree_workspace::WorkspaceConfig;
 use serde::Deserialize;
 use serde_json::Value;
-use utoipa::ToSchema;
 
 use super::service::Exports;
 use super::{ExportInfo, ExportRequest};

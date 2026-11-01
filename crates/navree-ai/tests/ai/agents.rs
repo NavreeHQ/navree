@@ -15,13 +15,13 @@ use navree_db::{Db, PageQuery};
 use navree_http::AppError;
 use navree_kernel::{Module, ModuleBuilder};
 use navree_macros::injectable;
+use navree_openapi::ToSchema;
 use navree_orm::Model as _;
 use navree_orm::access::AccessibleQuery;
 use navree_testing::TestApp;
 use navree_validation::Validate;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::support::{Note, agent_app, start, user};

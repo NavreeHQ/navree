@@ -35,10 +35,10 @@ use std::fmt;
 use chrono::{DateTime, Utc};
 use navree_contracts::AuditKind;
 use navree_crypto::{random_token, sha256_hex};
+use navree_openapi::ToSchema;
 use navree_orm::{Model as _, Record};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 pub(crate) use self::cbor::Cbor;

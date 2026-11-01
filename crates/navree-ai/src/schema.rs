@@ -1,9 +1,9 @@
-//! JSON Schemas for structured output and tool arguments, from utoipa's
+//! JSON Schemas for structured output and tool arguments, from
 //! `ToSchema` (the derive the OpenAPI document uses), and the adjustments
 //! each provider needs.
 
+use navree_openapi::ToSchema;
 use serde_json::{Map, Value, json};
-use utoipa::ToSchema;
 
 /// The schema name of a wrapped non-object value (`{"value": ...}`).
 pub(crate) const WRAPPED: &str = "value";

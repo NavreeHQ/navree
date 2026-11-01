@@ -40,6 +40,7 @@ navree-macros = { workspace = true }
 # Feature `notify`: `SettingsTemplateOverrides` is navree-notify's
 # `dyn TemplateOverrides`.
 navree-notify = { workspace = true, optional = true }
+navree-openapi = { workspace = true }
 # The settings table is a model (`setting::Model`).
 navree-orm = { workspace = true }
 navree-validation = { workspace = true }
@@ -51,7 +52,6 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 # Feature `notify`: the logo URL check.
 url = { workspace = true, optional = true }
-utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

@@ -10,8 +10,8 @@ use navree_http::{
     schema_fn,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Deserializer, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::access_requests::{AccessRequestInfo, ApprovedRequest};

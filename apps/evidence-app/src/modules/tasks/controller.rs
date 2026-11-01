@@ -1,12 +1,12 @@
 //! `/api/v1/tasks`: the current workspace's tasks.
 
 use chrono::NaiveDate;
+use navree::openapi::ToSchema;
 use navree::orm::access::AccessibleQuery;
 use navree::orm::prelude::*;
 use navree::prelude::*;
 use navree::validation::Validate;
 use serde::Deserialize;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::model::{Task, TaskStatus};

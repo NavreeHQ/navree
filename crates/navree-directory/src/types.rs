@@ -6,9 +6,9 @@ use std::fmt;
 
 use chrono::{DateTime, Utc};
 use navree_integrations::{Owner, OwnerType};
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::user::{DirectoryGroup, DirectoryUser};

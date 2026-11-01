@@ -10,6 +10,7 @@ use std::time::Duration;
 use navree::contracts::{Backoff, Clock, FixedClock};
 use navree::db::Db;
 use navree::events::{Event, EventBus};
+use navree::openapi::ToSchema;
 use navree::prelude::*;
 use navree::testing::{TestApp, TestAppBuilder};
 use navree::workflows::{
@@ -19,7 +20,6 @@ use navree::workflows::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 const DAY: Duration = Duration::from_secs(86_400);

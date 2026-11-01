@@ -5,10 +5,10 @@
 
 use crm_core::{Deal, Move, Stage};
 use navree::mcp::{McpContext, PromptMessage, mcp_server};
+use navree::openapi::ToSchema;
 use navree::prelude::*;
 use navree::validation::Validate;
 use serde::Deserialize;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{DealBoard, DealFilter, DealResource, DealService, MoveDeal};

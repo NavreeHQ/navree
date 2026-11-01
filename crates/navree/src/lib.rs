@@ -167,6 +167,8 @@ pub use navree_config as config;
 pub use navree_contracts as contracts;
 pub use navree_glob as glob;
 pub use navree_kernel as kernel;
+/// OpenAPI: the document model, and `ToSchema` (trait and derive).
+pub use navree_openapi as openapi;
 #[cfg(feature = "telemetry")]
 pub use navree_telemetry as telemetry;
 

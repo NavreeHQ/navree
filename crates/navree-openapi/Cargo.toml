@@ -1,0 +1,19 @@
+[package]
+name = "navree-openapi"
+description = "Navree's OpenAPI 3.1 document model and the ToSchema trait and derive that describe Rust types."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+indexmap = { workspace = true }
+navree-macros = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }

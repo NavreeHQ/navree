@@ -33,6 +33,7 @@ navree-crypto = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+navree-openapi = { workspace = true }
 # The OAuth tables are models (`Client`, `PersonalAccessToken`, ...).
 navree-orm = { workspace = true }
 # `navree_oauth::testing` drives the flows with navree-testing's TestClient.
@@ -47,7 +48,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

@@ -434,10 +434,10 @@ fn workflow_macros_expand_through_the_facade() {
 
     /// A user signed.
     #[trigger(type = "user.signed", event = Signed, subject = "user_id")]
-    #[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+    #[derive(serde::Serialize, serde::Deserialize, navree::openapi::ToSchema)]
     struct SignedTrigger {}
 
-    #[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+    #[derive(serde::Serialize, serde::Deserialize, navree::openapi::ToSchema)]
     struct Always {}
 
     #[condition(type = "always")]
@@ -445,7 +445,7 @@ fn workflow_macros_expand_through_the_facade() {
         true
     }
 
-    #[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+    #[derive(serde::Serialize, serde::Deserialize, navree::openapi::ToSchema)]
     struct Ping {}
 
     #[action(type = "ping", label = "Ping")]

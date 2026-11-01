@@ -2398,18 +2398,6 @@ criteria = "safe-to-deploy"
 version = "1.0.5"
 criteria = "safe-to-deploy"
 
-[[exemptions.utoipa]]
-version = "6.0.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.utoipa-gen]]
-version = "6.0.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.utoipa-scalar]]
-version = "0.4.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.uuid]]
 version = "1.29.0"
 criteria = "safe-to-deploy"

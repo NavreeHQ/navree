@@ -50,7 +50,7 @@ L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage  navree-time
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-schema  navree-navigator (dev tool)
 L1  navree-contracts  navree-config  navree-telemetry
-L0  navree-kernel  navree-bounded  navree-pdf  navree-glob    navree-macros  navree-orm-macros  navree-i18n-macros  navree-validation-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (tools; no navree deps)
+L0  navree-kernel  navree-bounded  navree-pdf  navree-glob  navree-openapi    navree-macros  navree-orm-macros  navree-i18n-macros  navree-validation-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (tools; no navree deps)
 ```
 
 | Layer | Crate | What it provides |
@@ -60,6 +60,7 @@ L0  navree-kernel  navree-bounded  navree-pdf  navree-glob    navree-macros  nav
 | L0 | `navree-pdf` | PDF object layer under navree-documents and navree-media: a lazy reader held to a memory and work budget (cross-reference tables and streams, object streams, incremental updates, repair of a broken cross-reference, the standard filters, files encrypted without a password to open them), a writer, and text in reading order |
 | L0 | `navree-glob` | The glob matcher for patterns configured as strings (`*` any run of characters, `?` one character, everything else literal, case-sensitive), matched in time bounded by the pattern times the input: the browser's URL waits, the HTTP client's host allow-list and fake stubs, the Logbook's ignored routes and the CSRF exceptions |
 | L0 | `navree-template` | The template engine under navree-view, navree-cli and navree-harbor: the Jinja syntax, HTML autoescaping, a sandboxed value model, caps on depth, loops, work and output |
+| L0 | `navree-openapi` | The OpenAPI 3.1 document model, and `ToSchema` (trait; its derive is in `navree-macros`) |
 | L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, `#[resolver]`, route and access attributes |
 | L0 | `navree-orm-macros` | `#[derive(Model)]` and `#[scopes]` (re-exported by `navree-orm`) |
 | L0 | `navree-validation-macros` | `#[derive(Validate)]` and `#[validate(...)]` (re-exported by `navree-validation`) |
@@ -341,6 +342,7 @@ token's claims read back, a rendered query holds only the user's words.
 |---|---|
 | `jose_token`, `jose_keys` | compact JWS verification against fixed keys and key sets; PEM, DER, certificates and JWKs |
 | `auth_jwt` | the bearer-token check of `JwtService`, against an oracle for each claim |
+| `openapi_schema`, `api_markdown` | `Schema` reading JSON and writing it back; the reference page's Markdown, whose output holds only what the reader writes |
 | `mcp_protocol`, `mcp_server` | JSON-RPC parsing and stdio framing; a booted MCP server over HTTP and stdio |
 | `http_client_ip`, `http_cors` | `X-Forwarded-For`, `X-Real-IP`, trusted proxies, the rate-limit key; CORS origins; signed URLs |
 | `http_compression` | `Accept-Encoding` and the response headers that decide compression, and bodies handed over in any pattern of chunks, waits, trailers and failures: a gzipped body decodes to what the handler sent, in frames of at most 4 KiB |

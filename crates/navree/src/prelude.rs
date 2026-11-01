@@ -27,6 +27,7 @@ pub use navree_kernel::{
     AppBuilder, AppContext, BoxError, Factory, Injectable, Lazy, Module, ModuleBuilder, Navree,
     Resolver,
 };
+pub use navree_openapi::ToSchema;
 
 #[cfg(feature = "telemetry")]
 pub use navree_telemetry::ModuleBuilderTelemetryExt as _;

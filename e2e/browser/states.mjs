@@ -374,9 +374,7 @@ export const custom = {
   'api-docs-operation': (args) => session(args, async (ctx, out) => {
     const { page } = ctx;
     await page.goto(BASE_URL + '/api/docs', { waitUntil: 'load' });
-    await page.waitForTimeout(2500);
-    await page.locator('a[href*="#tag/"], a[href*="/operation/"]').nth(2).click({ timeout: 4000 }).catch(() => {});
-    await page.waitForTimeout(1500);
+    await page.locator('nav a[data-target^="op-"]').nth(2).click({ timeout: 4000 }).catch(() => {});
     out.push(await shot(ctx, 'operation', '/api/docs', { navigate: false, label: 'An operation open in the reference' }));
   }),
 };

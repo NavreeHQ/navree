@@ -11,7 +11,9 @@ use serde::Serialize;
 use crate::{DayRange, LocalDay};
 
 /// One holiday: a day and its name.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, utoipa::ToSchema)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, navree_openapi::ToSchema,
+)]
 pub struct Holiday {
     /// The day.
     pub date: LocalDay,

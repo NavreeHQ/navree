@@ -86,7 +86,7 @@ impl SubjectRecords for Note {
     }
 }
 
-#[derive(Debug, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Debug, Deserialize, Validate, navree_openapi::ToSchema)]
 struct NoteArgs {
     /// The note to read.
     #[validate(skip)]

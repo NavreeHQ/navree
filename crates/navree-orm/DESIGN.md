@@ -49,7 +49,7 @@ navree-db and navree-orm-macros. Its HIERARCHY row
 navree-telemetry, navree-events, navree-crypto and navree-api, for the
 lifecycle and the attribute layer. The attribute layer uses navree-crypto
 (encrypted and hashed casts), navree-config (the configuration casts can
-read) and navree-api (records as API resources), plus utoipa (OpenAPI
+read) and navree-api (records as API resources), plus navree-openapi (OpenAPI
 schemas of models), argon2 (recognising Argon2 hashes without hashing),
 url (`Url` fields) and tokio (task-local scopes). It re-exports the
 macros, so `use navree_orm::Model;` imports the trait and the derive at
@@ -1166,7 +1166,7 @@ serializes straight through its model's `Serialize`.
 receives; `#[model(resource = Type)]` makes one the model's own
 (`HasResource`, `Record::resource`); a record is also a resource of its own
 (`to_resource_json`: its JSON plus `"__type"`), and `to_value_masked`
-applies navree-api field masks. `Record<M>` implements utoipa's `ToSchema`
+applies navree-api field masks. `Record<M>` implements `ToSchema`
 (named after the model) from `ModelSchema<M>`: one property per serialized
 field under its serde key, typed from `FieldKind` (or the cast's `KIND`, or
 `#[model(schema = Type)]`), `Option`s nullable, `skip_serializing_if`

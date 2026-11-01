@@ -39,6 +39,7 @@ navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
+navree-openapi = { workspace = true }
 # The SSO tables are models (`sso_connection::Model`, ...); users and
 # workspaces are read as navree-auth's and navree-workspace's models.
 navree-orm = { workspace = true }
@@ -51,7 +52,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

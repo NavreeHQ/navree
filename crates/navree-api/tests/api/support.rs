@@ -17,10 +17,10 @@ use navree_http::{
 use navree_kernel::{
     App, AppBuilder, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, Resolver,
 };
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tower::ServiceExt;
-use utoipa::ToSchema;
 
 /// The owner of a deal (referenced by [`Deal`], so hoisted into components).
 #[derive(Serialize, Deserialize, ToSchema)]

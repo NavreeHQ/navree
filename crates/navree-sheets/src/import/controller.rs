@@ -15,9 +15,9 @@ use navree_http::{
 use navree_kernel::{
     AppContext, BoxFuture, Injectable, KernelError, ProviderKey, Resolver, WeakAppContext,
 };
+use navree_openapi::ToSchema;
 use navree_workspace::WorkspaceConfig;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::service::{Imports, Upload, UploadOptions};

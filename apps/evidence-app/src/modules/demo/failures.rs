@@ -22,12 +22,12 @@ use std::time::{Duration, Instant};
 
 use navree::db::{Executor as _, Statement, Value};
 use navree::http_client::{HttpClient, HttpClientError};
+use navree::openapi::ToSchema;
 use navree::orm::prelude::*;
 use navree::prelude::*;
 use navree::view::Views;
 use serde::Serialize;
 use serde_json::json;
-use utoipa::ToSchema;
 
 use super::faults::{Fault, UpstreamStatus};
 use super::options::DemoOptions;

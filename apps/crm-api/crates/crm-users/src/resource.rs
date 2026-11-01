@@ -8,12 +8,12 @@ use navree::BoxFuture;
 use navree::access::AccessService;
 use navree::api::ApiResource;
 use navree::auth::{USER_SUBJECT, UserResourceExtension};
+use navree::openapi::ToSchema;
 use navree::orm::Record;
 use navree::orm::attributes::Resource;
 use navree::prelude::*;
 use serde::Serialize;
 use serde_json::{Map, Value};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// A user as `/api/v1/users` returns it:

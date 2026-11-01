@@ -1,9 +1,9 @@
 //! [`Task`]: a piece of work in a project (`tasks`).
 
 use chrono::{DateTime, NaiveDate, Utc};
+use navree::openapi::ToSchema;
 use navree::orm::prelude::*;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// Where a task stands.

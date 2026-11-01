@@ -1,6 +1,6 @@
 ---
 name: navree-mcp
-description: "Adds an MCP server to a Navree app with navree-mcp: `McpModule` and the `mcp.*` keys, `#[mcp_server]` with `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]`, typed and validated arguments (`Deserialize` + utoipa `ToSchema` + `#[derive(Validate)]`), per-item access attributes, `McpContext`, `McpNotifier`, streamable HTTP at `/mcp`, stdio with `mcp:serve --user`, bearer or OAuth (RFC 9728) auth, and `McpTestClient`. Use when the product should expose tools, resources or prompts to Claude, ChatGPT, Cursor or any MCP client, when `navree make:mcp` was run, or when an MCP tool is missing from a client's list, answers \"Unknown tool\", a 401, 403 or 404, or a server fails to boot."
+description: "Adds an MCP server to a Navree app with navree-mcp: `McpModule` and the `mcp.*` keys, `#[mcp_server]` with `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]`, typed and validated arguments (`Deserialize` + `ToSchema` + `#[derive(Validate)]`), per-item access attributes, `McpContext`, `McpNotifier`, streamable HTTP at `/mcp`, stdio with `mcp:serve --user`, bearer or OAuth (RFC 9728) auth, and `McpTestClient`. Use when the product should expose tools, resources or prompts to Claude, ChatGPT, Cursor or any MCP client, when `navree make:mcp` was run, or when an MCP tool is missing from a client's list, answers \"Unknown tool\", a 401, 403 or 404, or a server fails to boot."
 ---
 
 # MCP servers with navree-mcp
@@ -23,7 +23,6 @@ Navigator (`navree mcp`), configured by nothing in the app.
 
    ```toml
    navree = { git = "https://github.com/NavreeHQ/navree", features = ["mcp"] }
-   utoipa = { version = "6", features = ["chrono", "uuid"] }   # ToSchema on arguments
    ```
 
 2. Add the module in `src/app.rs` (after `HttpModule`, `DatabaseModule`,
@@ -58,7 +57,7 @@ below calls service methods of your own (`DealService::list`, `rename`,
 use navree::mcp::{McpContext, PromptMessage, ResourceContents, mcp_server};
 use navree::prelude::*;
 use serde::Deserialize;
-use utoipa::ToSchema;
+use navree::openapi::ToSchema;
 
 /// Tool arguments: doc comments become the schema's descriptions; the rules run
 /// before the method (a failure is a tool error with a 400 body).
@@ -257,7 +256,7 @@ Also: `list_resources()`, `list_resource_templates()`, `list_prompts()`,
 
 - `#[mcp_server]` names `::navree::mcp`: the `mcp` feature must be on, and
   import the macro from `navree::mcp` (the item attributes need no import).
-- `ToSchema` comes from utoipa, not schemars; the app needs utoipa itself.
+- `ToSchema` is `navree::openapi::ToSchema`, also in the prelude; the app needs no other crate for it.
 - A tool the user may not use is invisible: calling it is `-32602 Unknown
   tool`, not a 403. Check roles/permissions/abilities first when a client
   can't see a tool. Token abilities (PATs, OAuth scopes) narrow the list.

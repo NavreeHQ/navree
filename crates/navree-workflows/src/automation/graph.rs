@@ -3,9 +3,9 @@
 
 use std::collections::BTreeMap;
 
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use utoipa::ToSchema;
 
 use super::blocks::Catalog;
 use crate::DefinitionIssue;

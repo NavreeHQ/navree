@@ -3,8 +3,8 @@
 use std::fmt;
 
 use chrono::{DateTime, TimeDelta, Utc};
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::entity::subscription;

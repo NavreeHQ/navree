@@ -15,7 +15,7 @@ use crate::normalize::normalize_message;
 #[derive(
     Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
 )]
-#[cfg_attr(feature = "mcp", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "mcp", derive(navree_openapi::ToSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum Level {
     /// Something to know about; never alerts.
@@ -56,7 +56,7 @@ impl fmt::Display for Level {
 
 /// What an issue groups.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[cfg_attr(feature = "mcp", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "mcp", derive(navree_openapi::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum IssueKind {
     /// Errors: 5xx responses, panics and reports.

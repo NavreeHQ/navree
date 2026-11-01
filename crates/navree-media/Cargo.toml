@@ -36,6 +36,7 @@ navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
+navree-openapi = { workspace = true }
 # `media` is a navree-orm model.
 navree-orm = { workspace = true }
 navree-pdf = { workspace = true }
@@ -52,7 +53,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-utoipa = { workspace = true }
 uuid = { workspace = true }
 zip = { workspace = true }
 

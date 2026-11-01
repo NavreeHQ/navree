@@ -39,6 +39,7 @@ navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
 # navree-mail: the account flows (password reset mail).
 navree-mail = { workspace = true }
+navree-openapi = { workspace = true }
 # The auth tables are models (`User`, `refresh_token::Model`, ...); sessions,
 # sign-in tokens, pending resets and passkeys are written through the ORM;
 # `User` is an access subject (`#[model(subject)]`, feature `access`).
@@ -51,7 +52,6 @@ sha2 = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-utoipa = { workspace = true }
 # IDNA mapping of email domains (`email_domain`).
 url = { workspace = true }
 uuid = { workspace = true }

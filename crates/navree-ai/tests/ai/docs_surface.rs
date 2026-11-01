@@ -20,10 +20,10 @@ use navree_db::PageQuery;
 use navree_http::AppError;
 use navree_http::response::{IntoResponse, Response};
 use navree_kernel::{Module, ModuleBuilder};
+use navree_openapi::ToSchema;
 use navree_validation::Validate;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::agents::NotesAssistant;

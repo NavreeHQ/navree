@@ -7,11 +7,11 @@ use navree_ai::{
     VectorMatch, VectorRecord, VectorStore,
 };
 use navree_kernel::{Module, ModuleBuilder};
+use navree_openapi::ToSchema;
 use navree_testing::TestApp;
 use navree_validation::Validate;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// The model's answer, citing sources by their number.

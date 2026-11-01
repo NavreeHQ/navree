@@ -50,7 +50,7 @@ pub const ISSUE_RESOURCE: &str = "lighthouse://issues/{id}";
 pub const FIX_ISSUE_PROMPT: &str = "fix-lighthouse-issue";
 
 /// Which statuses `lighthouse_list_issues` lists.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, navree_openapi::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum StatusFilter {
     /// Open issues (the default).
@@ -80,7 +80,7 @@ impl StatusFilter {
 }
 
 /// The arguments of `lighthouse_list_issues`.
-#[derive(Clone, Debug, Default, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Clone, Debug, Default, Deserialize, Validate, navree_openapi::ToSchema)]
 pub struct ListIssuesArgs {
     /// Only issues with this status: `open` (the default), `resolved`,
     /// `resolved_in_next_release`, `ignored`, or `any` for every status.
@@ -169,7 +169,7 @@ impl ListIssuesArgs {
 }
 
 /// The arguments of the tools that take one issue.
-#[derive(Clone, Debug, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Clone, Debug, Deserialize, Validate, navree_openapi::ToSchema)]
 pub struct IssueArgs {
     /// The issue's id.
     #[validate(skip)]
@@ -177,7 +177,7 @@ pub struct IssueArgs {
 }
 
 /// The arguments of `lighthouse_list_occurrences`.
-#[derive(Clone, Debug, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Clone, Debug, Deserialize, Validate, navree_openapi::ToSchema)]
 pub struct OccurrencesArgs {
     /// The issue's id.
     #[validate(skip)]
@@ -193,7 +193,7 @@ pub struct OccurrencesArgs {
 }
 
 /// The arguments of `lighthouse_get_trace`.
-#[derive(Clone, Debug, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Clone, Debug, Deserialize, Validate, navree_openapi::ToSchema)]
 pub struct TraceArgs {
     /// The stored trace's id (an occurrence's `sample_id`, or a route's
     /// slowest trace).
@@ -202,7 +202,7 @@ pub struct TraceArgs {
 }
 
 /// The arguments of the tools that read figures over a period.
-#[derive(Clone, Debug, Default, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Clone, Debug, Default, Deserialize, Validate, navree_openapi::ToSchema)]
 pub struct PeriodArgs {
     /// The period: `1h`, `24h` (the default) or `7d`.
     #[validate(skip)]
@@ -211,7 +211,7 @@ pub struct PeriodArgs {
 }
 
 /// The arguments of `lighthouse_get_route`.
-#[derive(Clone, Debug, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Clone, Debug, Deserialize, Validate, navree_openapi::ToSchema)]
 pub struct RouteArgs {
     /// The method and route template, as `lighthouse_list_routes` lists
     /// them (`GET /api/v1/deals/{id}`).
@@ -224,7 +224,7 @@ pub struct RouteArgs {
 }
 
 /// The arguments of `lighthouse_resolve_issue`.
-#[derive(Clone, Debug, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Clone, Debug, Deserialize, Validate, navree_openapi::ToSchema)]
 pub struct ResolveIssueArgs {
     /// The issue's id.
     #[validate(skip)]
@@ -243,7 +243,7 @@ pub struct ResolveIssueArgs {
 
 /// The arguments of `lighthouse_ignore_issue`: forever, `until` a time or
 /// for `occurrences` more occurrences.
-#[derive(Clone, Debug, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Clone, Debug, Deserialize, Validate, navree_openapi::ToSchema)]
 pub struct IgnoreIssueArgs {
     /// The issue's id.
     #[validate(skip)]
@@ -263,7 +263,7 @@ pub struct IgnoreIssueArgs {
 }
 
 /// The arguments of the `fix-lighthouse-issue` prompt.
-#[derive(Clone, Debug, Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Clone, Debug, Deserialize, Validate, navree_openapi::ToSchema)]
 pub struct FixIssueArgs {
     /// The issue's id.
     #[validate(skip)]
@@ -317,7 +317,7 @@ fn clean(comment: Option<String>) -> Option<String> {
 /// A tool whose arguments are a `T`, running `run` with the service.
 fn tool<T, R, F, Fut>(lighthouse: &Arc<Lighthouse>, def: ToolDef, run: F) -> McpItem
 where
-    T: DeserializeOwned + Validate + utoipa::ToSchema + Send + 'static,
+    T: DeserializeOwned + Validate + navree_openapi::ToSchema + Send + 'static,
     R: Serialize,
     F: Fn(Arc<Lighthouse>, T) -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = Result<R, AppError>> + Send + 'static,

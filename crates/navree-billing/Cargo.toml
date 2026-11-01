@@ -33,6 +33,7 @@ navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
+navree-openapi = { workspace = true }
 # The billing tables are models (customers, subscriptions, items, usage, events).
 navree-orm = { workspace = true, features = ["access"] }
 navree-schedule = { workspace = true }
@@ -44,7 +45,6 @@ subtle = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

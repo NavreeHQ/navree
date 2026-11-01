@@ -38,6 +38,7 @@ mime = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-kernel = { workspace = true }
+navree-openapi = { workspace = true }
 navree-telemetry = { workspace = true }
 pin-project-lite = { workspace = true }
 serde = { workspace = true }
@@ -53,7 +54,6 @@ tokio-util = { workspace = true }
 # The per-route pipeline is a Tower layer of its own.
 tower = { workspace = true }
 tracing = { workspace = true }
-utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

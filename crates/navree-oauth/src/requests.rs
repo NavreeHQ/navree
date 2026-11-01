@@ -9,11 +9,11 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use navree_contracts::{AuditEntry, AuditKind};
 use navree_db::Uow;
+use navree_openapi::ToSchema;
 use navree_orm::{Executor, Model as _, Record};
 use navree_workspace::Members;
 use serde::Serialize;
 use serde_json::json;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::clients::{GRANT_AUTHORIZATION_CODE, GRANT_DEVICE_CODE};

@@ -3,9 +3,9 @@
 
 use chrono::{DateTime, Utc};
 use navree_contracts::{BoxError, BoxFuture};
+use navree_openapi::ToSchema;
 use serde::Serialize;
 use serde_json::{Map, Value};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::User;

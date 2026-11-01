@@ -271,7 +271,7 @@ impl Ai {
     /// JSON that matches `T`'s schema.
     pub fn structured<T>(&self, prompt: impl Into<Prompt>) -> StructuredRequest<T>
     where
-        T: serde::de::DeserializeOwned + utoipa::ToSchema,
+        T: serde::de::DeserializeOwned + navree_openapi::ToSchema,
     {
         StructuredRequest::new(self.clone(), prompt.into())
     }

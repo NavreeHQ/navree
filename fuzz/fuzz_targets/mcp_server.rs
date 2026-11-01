@@ -31,7 +31,7 @@ use uuid::Uuid;
 
 const PATIENCE: Duration = Duration::from_secs(20);
 
-#[derive(Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Deserialize, Validate, navree_openapi::ToSchema)]
 struct Echo {
     /// What to repeat.
     #[validate(length(max = 64))]
@@ -41,7 +41,7 @@ struct Echo {
     times: Option<u32>,
 }
 
-#[derive(Deserialize, Validate, utoipa::ToSchema)]
+#[derive(Deserialize, Validate, navree_openapi::ToSchema)]
 struct Greet {
     /// Who to greet.
     #[validate(length(min = 1, max = 32))]

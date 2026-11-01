@@ -7,9 +7,9 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use navree_db::record::{self, Filter};
 use navree_db::{Page, PageQuery, Record as _, Uow};
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::Store;

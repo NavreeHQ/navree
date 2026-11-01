@@ -12,11 +12,11 @@ use chrono::{Datelike, Duration, Utc};
 
 use navree::http::{IntoResponse, Response};
 use navree::mail::{Mailer, TemplateMail};
+use navree::openapi::ToSchema;
 use navree::prelude::*;
 use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use utoipa::ToSchema;
 
 use super::jobs::TaskAssigned;
 use super::random::between;

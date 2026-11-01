@@ -14,12 +14,12 @@ use navree_http::HttpOptions;
 use navree_kernel::{
     AppContext, BoxFuture, Injectable, KernelError, ProviderKey, Resolver, WeakAppContext,
 };
+use navree_openapi::ToSchema;
 use navree_orm::{Executor, Model as _, Record};
 use navree_validation::Messages;
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use tokio::sync::OnceCell;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::policy::Policies;

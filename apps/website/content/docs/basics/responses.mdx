@@ -161,7 +161,7 @@ The CRM gives every model a `*Resource` struct, builds it from the model, and re
 ```rust title="src/companies/resource.rs"
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use utoipa::ToSchema;
+use navree::openapi::ToSchema;
 use uuid::Uuid;
 
 /// A company as the API returns it.
@@ -268,7 +268,7 @@ async fn index(&self, uow: Uow, page: PageQuery) -> Result<Page<CompanyResource>
 
 <Callout type="note" title="Pages in the OpenAPI document">
 
-`Page<T>` doesn't implement utoipa's `ToSchema`, so `#[api(response = ...)]` can't name it. To document a page, the CRM declares a struct per page (`CompanyPage { data: Vec<CompanyResource>, meta: ... }`) and names that instead.
+`Page<T>` doesn't implement `ToSchema`, so `#[api(response = ...)]` can't name it. To document a page, the CRM declares a struct per page (`CompanyPage { data: Vec<CompanyResource>, meta: ... }`) and names that instead.
 
 </Callout>
 

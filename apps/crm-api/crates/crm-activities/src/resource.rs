@@ -7,10 +7,10 @@ use chrono::{DateTime, Utc};
 use crm_core::models::{Activity, Company, Contact, Deal};
 use crm_core::{ActivityKind, OwnerRef, SubjectType};
 use navree::api::ApiResource;
+use navree::openapi::ToSchema;
 use navree::orm::Record;
 use navree::orm::attributes::Resource;
 use serde::Serialize;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// The subject type of activities (`__type`).

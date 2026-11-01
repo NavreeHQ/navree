@@ -5,9 +5,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use navree_kernel::BoxError;
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::blocks::{AutomationCtx, Catalog};

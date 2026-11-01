@@ -3,9 +3,9 @@
 
 use std::fmt;
 
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::Flag;

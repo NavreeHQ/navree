@@ -13,10 +13,10 @@ use chrono::{DateTime, Utc};
 use navree_contracts::{BoxError, Broadcaster, Job, JobEnvelope, Principal, permitted};
 use navree_db::{Db, Executor, Statement, Uow};
 use navree_kernel::{AppContext, WeakAppContext};
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::broadcast;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 pub(crate) use controller::authorize_channel;

@@ -1,8 +1,8 @@
 //! [`FlagState`] and [`FlagOverride`]: what is stored about a flag.
 
 use chrono::{DateTime, Utc};
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{Rollout, ScopeType};

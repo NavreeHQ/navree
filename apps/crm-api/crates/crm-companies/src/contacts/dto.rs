@@ -3,11 +3,11 @@
 
 use crm_core::ContactStatus;
 use crm_core::models::{Company, Contact, User};
+use navree::openapi::ToSchema;
 use navree::orm::validation::exists;
 use navree::validation::Validate;
 use navree::validation::{AsyncRule, AsyncRules};
 use serde::Deserialize;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::common::{

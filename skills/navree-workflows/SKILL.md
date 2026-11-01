@@ -104,7 +104,7 @@ has runs waiting.
 
 ```rust
 use navree::workflows::{AutomationCtx, action, condition, trigger};
-use utoipa::ToSchema;
+use navree::openapi::ToSchema;
 
 #[derive(Serialize, Deserialize, ToSchema)]
 pub struct DealWonTrigger {

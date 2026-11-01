@@ -13,11 +13,11 @@ use navree_http::{
     RouteDef, schema_fn,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
+use navree_openapi::ToSchema;
 use navree_validation::Valid;
 use navree_validation::Validate;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::account_controller::{AuthMessage, TwoFactorVerifyInput, two_factor_proof};

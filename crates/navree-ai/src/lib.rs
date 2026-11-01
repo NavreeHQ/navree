@@ -4,7 +4,7 @@
 //! configuration (`smart`, `fast`, `embed`), inject `Arc<Ai>` and ask:
 //!
 //! - [`Ai::text`] for text, [`Ai::structured`] for a typed value (JSON
-//!   Schema from utoipa's `ToSchema`, the provider's structured-output mode,
+//!   Schema from `ToSchema`, the provider's structured-output mode,
 //!   a repair loop, and validation rules with `.validated()`), [`Ai::stream`] for
 //!   a [`TextStream`] that is also a server-sent events response.
 //! - **Providers are drivers**: Anthropic (Messages API), OpenAI (chat
@@ -92,12 +92,6 @@ pub use vectors::{
 /// (`#[can(Action, Subject)]`, `#[permissions(..)]`, `#[roles(..)]`), and
 /// the dispatch that deserializes, validates and calls them.
 pub use navree_macros::agent;
-
-/// utoipa, whose `ToSchema` derive gives structured output and tool
-/// arguments their JSON Schema. Its derive names `utoipa::..`, so an app
-/// without its own `utoipa` dependency writes
-/// `use navree::ai::utoipa::{self, ToSchema};`.
-pub use utoipa;
 
 /// What `#[agent]` expands to. Not a public API.
 #[doc(hidden)]

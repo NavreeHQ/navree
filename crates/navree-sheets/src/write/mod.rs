@@ -3,8 +3,8 @@
 pub(crate) mod csv;
 pub(crate) mod xlsx;
 
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 use crate::download::{CSV_CONTENT_TYPE, XLSX_CONTENT_TYPE};
 

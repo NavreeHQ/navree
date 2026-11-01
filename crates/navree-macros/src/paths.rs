@@ -20,6 +20,13 @@ pub(crate) const KERNEL: RuntimeCrate = RuntimeCrate {
     facade_module: "kernel",
 };
 
+/// navree-openapi: `ToSchema` and `Schema` (`#[derive(ToSchema)]`). The facade
+/// has it whatever its features.
+pub(crate) const OPENAPI: RuntimeCrate = RuntimeCrate {
+    package: "navree-openapi",
+    facade_module: "openapi",
+};
+
 /// navree-http: `ModuleBuilderHttpExt` (controllers).
 pub(crate) const HTTP: RuntimeCrate = RuntimeCrate {
     package: "navree-http",
@@ -108,6 +115,7 @@ pub(crate) const NOTIFY: RuntimeCrate = RuntimeCrate {
 const NAMED_FROM_INSIDE: &[(&str, &str)] = &[
     ("navree-mcp", "navree_mcp"),
     ("navree-notify", "navree_notify"),
+    ("navree-openapi", "navree_openapi"),
     ("navree-sheets", "navree_sheets"),
     ("navree-workflows", "navree_workflows"),
 ];

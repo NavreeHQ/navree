@@ -2,7 +2,7 @@
 
 use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use navree::openapi::ToSchema;
 use uuid::Uuid;
 
 use navree::workspace::Workspace;

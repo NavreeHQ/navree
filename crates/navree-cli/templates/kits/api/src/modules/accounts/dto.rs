@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use utoipa::ToSchema;
+use navree::openapi::ToSchema;
 use uuid::Uuid;
 
 /// A signed-in device or browser: one sign-in, kept alive by its rotating

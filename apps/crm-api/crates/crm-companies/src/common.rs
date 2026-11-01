@@ -3,11 +3,11 @@
 //! a query, the documented page shape and CSV cells.
 
 use navree::db::PageMeta;
+use navree::openapi::ToSchema;
 use navree::validation::Violation;
 use navree::validation::rules::RuleInput;
 use serde::de::value::StringDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
-use utoipa::ToSchema;
 
 /// The longest text the CRM stores in a short text column.
 pub(crate) const MAX_TEXT: usize = 255;

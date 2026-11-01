@@ -13,9 +13,9 @@ use navree_contracts::AuthState;
 use navree_http::extract::FromRequestParts;
 use navree_http::{ApiMeta, AppError, Controller, Json, RouteDef, schema_fn};
 use navree_kernel::{AppContext, BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
+use navree_openapi::ToSchema;
 use navree_workspace::InWorkspace;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 use crate::BillingOptions;
 use crate::billable::{BillableRef, USER_BILLABLE, WORKSPACE_BILLABLE};

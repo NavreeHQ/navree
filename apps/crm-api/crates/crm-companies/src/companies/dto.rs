@@ -2,12 +2,12 @@
 
 use crm_core::CompanySize;
 use crm_core::models::{Company, User};
+use navree::openapi::ToSchema;
 use navree::orm::validation::exists;
 use navree::orm::{Builder, Expr};
 use navree::validation::Validate;
 use navree::validation::{AsyncRule, AsyncRules};
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::common::{

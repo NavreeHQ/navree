@@ -1,6 +1,6 @@
 ---
 name: navree-openapi
-description: "Documents a Navree API with the OpenAPI 3.1 document generated at boot: `ApiModule`, `#[api(..)]` on routes, utoipa `ToSchema` resources, page schemas, `m.api_schema`, the schema boot errors, `openapi:export` and typed clients. Use when adding API documentation, describing request or response bodies, fixing a schema-conflict or missing-schema boot error, exporting the document, or generating a typed TypeScript client."
+description: "Documents a Navree API with the OpenAPI 3.1 document generated at boot: `ApiModule`, `#[api(..)]` on routes, `ToSchema` resources, page schemas, `m.api_schema`, the schema boot errors, `openapi:export` and typed clients. Use when adding API documentation, describing request or response bodies, fixing a schema-conflict or missing-schema boot error, exporting the document, or generating a typed TypeScript client."
 ---
 
 # OpenAPI
@@ -9,18 +9,17 @@ description: "Documents a Navree API with the OpenAPI 3.1 document generated at 
 when the app boots: paths with prefix and version, path parameters,
 security (bearer) and the access-related error responses come for free.
 `#[api(..)]` adds summaries, tags and bodies. It is served at
-`GET /api/openapi.json` with a Scalar UI at `GET /api/docs`.
+`GET /api/openapi.json` with an API reference page at `GET /api/docs`.
 
 ## Steps
 
-1. Add utoipa to the app: `utoipa = { version = "6", features = ["chrono", "uuid"] }`
-   (a new app doesn't have it).
-2. Derive `ToSchema` on request DTOs and response resources; name
-   components with `#[schema(as = Note)]`.
-3. Put `#[api(..)]` (and `#[name("notes.store")]` for an `operationId`) on
+1. Derive `ToSchema` (`navree::openapi::ToSchema`, also in the prelude) on
+   request DTOs and response resources; name components with
+   `#[schema(as = Note)]`.
+2. Put `#[api(..)]` (and `#[name("notes.store")]` for an `operationId`) on
    each route.
-4. Check `/api/docs`, then export: `navree openapi:export web/openapi.json`.
-5. Add a test that fetches the document and checks the route's schema.
+3. Check `/api/docs`, then export: `navree openapi:export web/openapi.json`.
+4. Add a test that fetches the document and checks the route's schema.
 
 ## Template
 
@@ -28,7 +27,6 @@ security (bearer) and the access-related error responses come for free.
 use chrono::{DateTime, Utc};
 use navree::prelude::*;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// A note as the API returns it.
@@ -130,12 +128,12 @@ pub struct NotePage {
 title = "My App API"
 version = "1.0.0"                     # your API's version
 servers = ["https://api.example.com"]
-docs_ui = true                        # false removes /api/docs and its embedded Scalar script (/api/docs/assets/)
+docs_ui = true                        # false removes /api/docs and its embedded stylesheet and script (/api/docs/assets/)
 ```
 
-The docs page's CSP allows scripts from the app only, and images from the
-app (`'self'`) and `data:` URIs only (Scalar loads no other): a remote image
-in a description is not shown, so serve it from the app or inline it as a
+The page's CSP allows styles and scripts from the app only, nothing inline,
+and images from the app (`'self'`) and `data:` URIs only: a remote image in a
+description shows its alt text, so serve it from the app or inline it as a
 `data:` URI. `connect-src` adds the absolute `api.servers` URLs.
 
 ## Export and typed clients

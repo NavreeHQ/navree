@@ -22,7 +22,7 @@
 //!   `#[authenticated]`, `#[roles]`, `#[permissions]` or `#[can]` (deny by
 //!   default). Lists show only what the user may use; calls are checked,
 //!   `from = "id"` record checks included.
-//! - Tool arguments are a struct deriving `Deserialize`, `utoipa::ToSchema`
+//! - Tool arguments are a struct deriving `Deserialize`, `navree_openapi::ToSchema`
 //!   and `navree_validation::Validate`: the input schema comes from `ToSchema`
 //!   ([`input_schema`]) and invalid arguments are refused with field
 //!   messages before the method runs.
@@ -50,7 +50,7 @@
 //! use navree_mcp::{Call, McpItem, McpOutput, McpServer, ToolDef};
 //! use serde::Deserialize;
 //!
-//! #[derive(Deserialize, Validate, utoipa::ToSchema)]
+//! #[derive(Deserialize, Validate, navree_openapi::ToSchema)]
 //! struct Greet {
 //!     /// Who to greet.
 //!     #[validate(length(min = 1, max = 50))]

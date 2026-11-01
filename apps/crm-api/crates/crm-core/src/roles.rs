@@ -4,8 +4,8 @@
 use std::fmt;
 use std::str::FromStr;
 
+use navree::openapi::ToSchema;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 use crate::enums::UnknownValue;
 

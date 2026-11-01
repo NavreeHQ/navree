@@ -39,12 +39,11 @@ This page is about the MCP server your **product** offers its users. [Navigator]
 
 ## Installation
 
-Turn on the `mcp` feature. It is opt-in: `full` (the default) doesn't include it, so name it next to the defaults. Tool and prompt arguments derive utoipa's `ToSchema`, so add utoipa too:
+Turn on the `mcp` feature. It is opt-in: `full` (the default) doesn't include it, so name it next to the defaults. Tool and prompt arguments derive `ToSchema` (`navree::openapi::ToSchema`, also in the prelude):
 
 ```toml title="Cargo.toml"
 [dependencies]
 navree = { git = "https://github.com/NavreeHQ/navree", features = ["mcp"] }
-utoipa = { version = "6", features = ["chrono", "uuid"] }
 ```
 
 Add `McpModule` to the app, next to the HTTP and auth modules:
@@ -196,7 +195,7 @@ impl ActivitiesMcp {
 
 `m.mcp_server::<S>()` registers `S` as a provider of the module (its `Arc<T>` fields are injected) and offers its items. Two tools, resources or prompts with the same name fail the boot, naming both modules. An access attribute on the `impl` block applies to every item that has none of its own.
 
-`navree make:mcp deals crm` generates `mcp/crm.rs` in the deals module, a `CrmMcp` server with one tool (`crm_echo`), and registers it at the module's `// navree:wire` marker. It then prints what it leaves to you: the `mcp` feature, utoipa and `McpModule`.
+`navree make:mcp deals crm` generates `mcp/crm.rs` in the deals module, a `CrmMcp` server with one tool (`crm_echo`), and registers it at the module's `// navree:wire` marker. It then prints what it leaves to you: the `mcp` feature and `McpModule`.
 
 ## Tools
 

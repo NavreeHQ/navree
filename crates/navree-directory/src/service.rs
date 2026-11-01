@@ -10,11 +10,11 @@ use navree_crypto::{random_token, sha256_hex};
 use navree_db::Uow;
 use navree_integrations::{Level, Owner};
 use navree_kernel::{AppContext, BoxError, BoxFuture, Lifecycle};
+use navree_openapi::ToSchema;
 use navree_orm::{Model as _, Record};
 use navree_queue::{Operation, Operations};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::apply::{group_with_members, groups_of};

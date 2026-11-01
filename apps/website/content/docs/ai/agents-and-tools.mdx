@@ -183,7 +183,7 @@ Arguments are one struct per tool. It derives `Deserialize`, `ToSchema` and `Val
 use chrono::{DateTime, Utc};
 use navree::validation::Validate;
 use serde::Deserialize;
-use utoipa::ToSchema;
+use navree::openapi::ToSchema;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]

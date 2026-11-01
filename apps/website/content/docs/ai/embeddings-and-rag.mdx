@@ -328,7 +328,7 @@ Put together: retrieve, rerank, then ask for a structured answer that cites its 
 use navree::ai::{Ai, Filter, VectorStore};
 use navree::prelude::*;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use navree::openapi::ToSchema;
 use uuid::Uuid;
 
 /// The model's answer, citing sources by their number.

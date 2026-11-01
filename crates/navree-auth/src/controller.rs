@@ -12,12 +12,12 @@ use navree_http::{
     RouteDef, schema_fn,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
+use navree_openapi::ToSchema;
 use navree_validation::Valid;
 use navree_validation::Validate;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use utoipa::ToSchema;
 
 use crate::{
     AuthError, AuthOptions, AuthService, ClientMeta, CurrentUser, LoginOutcome, NewUser, TokenPair,

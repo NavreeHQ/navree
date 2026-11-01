@@ -41,6 +41,7 @@ navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-lighthouse = { workspace = true, optional = true }
+navree-openapi = { workspace = true }
 # Domains, certificates, challenges and ACME accounts are navree-orm models.
 navree-orm = { workspace = true }
 # `domains:verify --due` and `domains:certificates --due` on the scheduler.
@@ -63,7 +64,6 @@ tokio-rustls = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-utoipa = { workspace = true }
 uuid = { workspace = true }
 x509-parser = { workspace = true }
 

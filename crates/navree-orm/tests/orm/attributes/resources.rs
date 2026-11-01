@@ -12,6 +12,7 @@ use navree_http::{
     ApiMeta, AppError, Controller, Json, ModuleBuilderHttpExt, Path, RouteDef, schema_fn,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
+use navree_openapi::ToSchema;
 use navree_orm::attributes::{
     ModelSchema, Resource, cursor_page_schema, page_schema, simple_page_schema,
 };
@@ -19,7 +20,6 @@ use navree_orm::{Collection, CursorPage, Model, Page, Record, SimplePage, access
 use navree_testing::TestApp;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use utoipa::{PartialSchema, ToSchema};
 
 use super::support::{create, sqlite};
 

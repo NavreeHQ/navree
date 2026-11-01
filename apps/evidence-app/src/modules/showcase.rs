@@ -13,12 +13,12 @@ use async_graphql::{Context, SimpleObject};
 use navree::flags::flag;
 use navree::graphql::{ContextExt, resolver};
 use navree::mcp::{McpContext, mcp_server};
+use navree::openapi::ToSchema;
 use navree::orm::prelude::*;
 use navree::prelude::*;
 use navree::validation::Validate;
 use navree::workspace::Workspaces;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::modules::tasks::Task;

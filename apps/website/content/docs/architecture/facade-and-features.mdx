@@ -17,7 +17,7 @@ serde = { version = "1", features = ["derive"] }
 
 The crates aren't on crates.io yet, so the dependency comes from Git: `cargo add --git https://github.com/NavreeHQ/navree navree` adds it for you. An app created with `navree new` depends on a local checkout of Navree instead (a `path` dependency); see [where new apps get Navree from](/docs/getting-started/installation/#where-new-apps-get-navree-from).
 
-`main` needs nothing else: `AppBuilder::run` starts its own Tokio runtime. Add `tokio` when you write `#[tokio::test]` tests, and add `serde` or `utoipa` directly when you use their derives, because derive macros name their own crate. `#[derive(Validate)]` comes with `navree`.
+`main` needs nothing else: `AppBuilder::run` starts its own Tokio runtime. Add `tokio` when you write `#[tokio::test]` tests, and add `serde` directly when you use its derives, because derive macros name their own crate. `#[derive(Validate)]` and `#[derive(ToSchema)]` come with `navree`.
 
 Then one import brings the usual names into scope:
 
@@ -72,7 +72,8 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::orm` | navree-orm | `orm` | `OrmModule`: the [ORM](/docs/orm/getting-started/), models, the query builder, records, relationships, factories and testing helpers |
 | `navree::testing` | navree-testing | `testing` | `TestApp`, `TestClient` |
 | `navree::observe` | navree-observe | `observe` | `ObserveModule`: health checks and metrics |
-| `navree::api` | navree-api | `api` | `ApiModule`: OpenAPI document and docs UI |
+| `navree::openapi` | navree-openapi | always | The OpenAPI document model and `ToSchema` (trait and derive) |
+| `navree::api` | navree-api | `api` | `ApiModule`: OpenAPI document and the API reference page |
 | `navree::mail` | navree-mail | `mail` | `MailModule`: mailables, transports (SMTP, SES, Mailgun, Postmark, Resend), queued mail, the delivery log, suppressions, tracking; [inbound mail](/docs/digging-deeper/inbound-mail/) with `mail-inbound` |
 | `navree::realtime` | navree-realtime | `realtime` | `RealtimeModule`: Pusher-protocol broadcasting |
 | `navree::storage` | navree-storage | `storage` | `StorageModule`: [disks](/docs/digging-deeper/storage/), signed links, direct uploads, disk sync |
@@ -191,7 +192,7 @@ The facade has one feature per module crate, named after it (`http-client` for `
 navree = { git = "https://github.com/NavreeHQ/navree", default-features = false, features = ["http", "log"] }
 ```
 
-`navree-kernel`, `navree-bounded`, `navree-glob`, `navree-contracts`, `navree-config` and `navree-macros` are always included. A module's feature also turns on the features of the modules its crate builds on, so `navree::<that module>` is always there to name their types:
+`navree-kernel`, `navree-bounded`, `navree-glob`, `navree-contracts`, `navree-config`, `navree-openapi` and `navree-macros` are always included. A module's feature also turns on the features of the modules its crate builds on, so `navree::<that module>` is always there to name their types:
 
 | Feature | Also turns on |
 |---|---|

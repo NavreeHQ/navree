@@ -3,8 +3,8 @@
 use std::fmt;
 use std::ops::{Add, AddAssign};
 
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// The tokens a request used.

@@ -30,6 +30,7 @@ navree-contracts = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+navree-openapi = { workspace = true }
 # Failed jobs are models of `failed_jobs` (`FailedJob`), written and read by
 # the database driver through the ORM.
 navree-orm = { workspace = true }
@@ -45,7 +46,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
-utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

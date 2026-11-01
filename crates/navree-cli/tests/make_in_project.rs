@@ -429,11 +429,7 @@ fn make_mcp_generates_a_server_and_registers_it() {
     );
     // What the generator does not edit is left as steps.
     let hints = report.hints.join("\n");
-    for step in [
-        "features = [\"mcp\"]",
-        "utoipa",
-        ".module(McpModule::from_config())",
-    ] {
+    for step in ["features = [\"mcp\"]", ".module(McpModule::from_config())"] {
         assert!(hints.contains(step), "missing `{step}` in\n{hints}");
     }
 }

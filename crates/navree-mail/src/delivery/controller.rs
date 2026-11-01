@@ -18,9 +18,9 @@ use navree_http::{
 };
 use navree_http_client::{HttpClient, HttpClientOptions};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::log::{Deliveries, Delivery, DeliveryEvent, DeliveryFilter};

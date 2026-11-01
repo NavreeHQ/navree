@@ -9,8 +9,8 @@ use navree_db::navree_schema::{
 };
 use navree_db::record::{self, Compare, Filter};
 use navree_db::{Db, DbError, MigrationSet, Page, PageQuery, Record};
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::agent::PendingApproval;

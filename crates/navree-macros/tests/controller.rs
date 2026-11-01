@@ -543,13 +543,13 @@ async fn extractors_forwarded() {
 mod documented {
     use navree_macros::{controller, injectable, module};
 
-    #[derive(utoipa::ToSchema)]
+    #[derive(navree_openapi::ToSchema)]
     #[allow(dead_code)]
     pub struct CreateDeal {
         title: String,
     }
 
-    #[derive(utoipa::ToSchema)]
+    #[derive(navree_openapi::ToSchema)]
     #[allow(dead_code)]
     pub struct DealDto {
         id: u64,

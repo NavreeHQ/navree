@@ -83,7 +83,7 @@ pub struct RequestStamp {
 }
 
 /// The body of `GET /api/v1/greetings/{name}`.
-#[derive(Serialize, utoipa::ToSchema)]
+#[derive(Serialize, navree::openapi::ToSchema)]
 pub struct GreetingBody {
     /// The greeting.
     message: String,

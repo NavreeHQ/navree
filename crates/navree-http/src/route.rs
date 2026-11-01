@@ -351,7 +351,7 @@ pub type SchemaFn = fn() -> (String, serde_json::Value);
 /// Schemas that `T` references (`$ref: "#/components/schemas/Inner"`) are
 /// carried in the extension member `x-navree-components` (`{name: schema}`);
 /// navree-api hoists them into `components.schemas` and removes the member.
-pub fn schema_fn<T: utoipa::ToSchema>() -> (String, serde_json::Value) {
+pub fn schema_fn<T: navree_openapi::ToSchema>() -> (String, serde_json::Value) {
     let mut schema = serde_json::to_value(T::schema()).unwrap_or_default();
     let mut referenced = Vec::new();
     T::schemas(&mut referenced);
@@ -446,13 +446,13 @@ mod tests {
         assert!(route.meta.access.is_declared() && !route.meta.access.needs_authorizer());
     }
 
-    #[derive(utoipa::ToSchema)]
+    #[derive(navree_openapi::ToSchema)]
     #[allow(dead_code)]
     struct Owner {
         id: String,
     }
 
-    #[derive(utoipa::ToSchema)]
+    #[derive(navree_openapi::ToSchema)]
     #[allow(dead_code)]
     struct Deal {
         title: String,

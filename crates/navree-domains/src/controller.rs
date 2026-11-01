@@ -11,7 +11,6 @@ use navree_http::{
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_workspace::{CurrentWorkspace, InWorkspace};
 use serde::{Deserialize, Serialize};
-use utoipa::IntoParams;
 use uuid::Uuid;
 
 use crate::options::{DomainsOptions, TlsMode};
@@ -190,8 +189,7 @@ impl Controller for DomainsController {
 }
 
 /// The query of the ask endpoint: `?domain=crm.acme-corp.com`.
-#[derive(Clone, Debug, Default, Deserialize, IntoParams)]
-#[into_params(parameter_in = Query)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct AskQuery {
     /// The domain the proxy is about to get a certificate for.
     pub domain: Option<String>,

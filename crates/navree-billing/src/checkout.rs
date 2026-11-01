@@ -2,8 +2,8 @@
 
 use std::collections::BTreeMap;
 
+use navree_openapi::ToSchema;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 use crate::billable::BillableRef;
 use crate::billing::Billing;

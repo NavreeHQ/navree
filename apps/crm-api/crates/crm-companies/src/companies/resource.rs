@@ -6,10 +6,10 @@ use crm_core::subjects::COMPANY;
 use crm_core::{CompanySize, OwnerRef};
 use navree::api::ApiResource;
 use navree::db::Page;
+use navree::openapi::ToSchema;
 use navree::orm::attributes::Resource;
 use navree::orm::{OrmError, Record};
 use serde::Serialize;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::common::PageInfo;

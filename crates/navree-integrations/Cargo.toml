@@ -45,6 +45,7 @@ navree-kernel = { workspace = true }
 navree-mail = { workspace = true, optional = true }
 # Feature `notify`: `IntegrationTokens` is navree-notify's `dyn ConnectionTokens`.
 navree-notify = { workspace = true, optional = true }
+navree-openapi = { workspace = true }
 # `integration_connections` is a navree-orm model.
 navree-orm = { workspace = true }
 # `integrations:check` on the scheduler.
@@ -58,7 +59,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

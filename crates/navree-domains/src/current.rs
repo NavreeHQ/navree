@@ -7,9 +7,9 @@ use navree_http::extract::{FromRequestParts, OptionalFromRequestParts};
 use navree_http::middleware::Next;
 use navree_http::{AppError, Response};
 use navree_kernel::AppContext;
+use navree_openapi::ToSchema;
 use navree_workspace::DomainWorkspace;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::host::request_host;

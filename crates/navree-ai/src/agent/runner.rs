@@ -16,10 +16,10 @@ use navree_contracts::{AuthVia, Clock, Principal, SystemClock};
 use navree_db::Db;
 use navree_http::AppError;
 use navree_http::response::{IntoResponse, Response};
+use navree_openapi::ToSchema;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::run::{AgentRun, RunShared};

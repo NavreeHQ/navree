@@ -11,7 +11,7 @@ use tokio::sync::OnceCell;
 use uuid::Uuid;
 
 /// A user as member lists show them.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, utoipa::ToSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, navree_openapi::ToSchema)]
 pub struct UserSummary {
     /// The user id.
     pub id: Uuid,

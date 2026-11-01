@@ -2,14 +2,14 @@
 
 use navree_api::{ApiOptions, ModuleBuilderApiExt};
 use navree_http::{ApiMeta, schema_fn};
+use navree_openapi::ToSchema;
 use serde_json::json;
-use utoipa::ToSchema;
 
 use crate::support::{app_registering, app_with, boot_error, document, documented};
 
 /// A second, different schema named `Owner`.
 mod crm {
-    use utoipa::ToSchema;
+    use navree_openapi::ToSchema;
 
     #[derive(ToSchema)]
     #[allow(dead_code)]
@@ -120,7 +120,7 @@ async fn same_named_body_schemas_are_inlined() {
 
 #[tokio::test]
 async fn unregistered_referenced_schemas_fail_boot() {
-    // utoipa does not collect the schemas of generic type arguments, so
+    // The derive does not collect the schemas of generic type arguments, so
     // `Page<Note>` refers to a `Note` component nothing registered.
     let builder = app_with(
         ApiOptions::default(),

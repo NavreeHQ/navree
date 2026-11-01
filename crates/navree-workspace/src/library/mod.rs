@@ -104,7 +104,7 @@ use crate::{CurrentOrganization, CurrentWorkspace, Workspace, WorkspaceError};
     Ord,
     Serialize,
     Deserialize,
-    utoipa::ToSchema,
+    navree_openapi::ToSchema,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum LibraryScope {
