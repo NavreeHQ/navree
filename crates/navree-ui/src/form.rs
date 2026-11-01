@@ -254,6 +254,7 @@ pub struct FormView<T> {
     errors: BTreeMap<String, Vec<String>>,
     options: BTreeMap<&'static str, Vec<(String, String)>>,
     columns: bool,
+    csrf: Option<String>,
     marker: PhantomData<fn() -> T>,
 }
 
@@ -269,6 +270,7 @@ impl<T: Form> FormView<T> {
             errors: BTreeMap::new(),
             options: BTreeMap::new(),
             columns: true,
+            csrf: None,
             marker: PhantomData,
         }
     }
@@ -277,6 +279,15 @@ impl<T: Form> FormView<T> {
     pub fn post(mut self, action: impl Into<Href>) -> Self {
         self.action = Some(action.into());
         self.method = "post";
+        self
+    }
+
+    /// Puts the session's CSRF token in the form as the field `_csrf`, which is
+    /// how a plain form with JavaScript off proves it came from this site. The
+    /// runtime sends the token as a header itself, so this costs nothing with
+    /// JavaScript on.
+    pub fn csrf(mut self, token: impl Into<String>) -> Self {
+        self.csrf = Some(token.into());
         self
     }
 
@@ -474,6 +485,7 @@ impl<T: Form> FormView<T> {
             .flag("data-ui-form", true)
             .uses(Uses::CORE)
             .children((
+                self.csrf.map(csrf_field),
                 el("div").slot(grid).child(boxes),
                 el("div").slot("form-actions").children((
                     self.cancel.map(|(label, href)| Button::ghost(label).href(href)),
@@ -482,6 +494,14 @@ impl<T: Form> FormView<T> {
             ))
             .into()
     }
+}
+
+/// The name of the field that carries the CSRF token in a plain form.
+pub const CSRF_FIELD: &str = "_csrf";
+
+/// The hidden field that carries `token`, for a form that is not a [`FormView`].
+pub fn csrf_field(token: impl Into<crate::node::AttrValue>) -> Element {
+    el("input").attr("type", "hidden").attr("name", CSRF_FIELD).attr("value", token)
 }
 
 /// An already checked URL, as an attribute value.

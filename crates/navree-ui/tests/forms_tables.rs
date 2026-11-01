@@ -252,3 +252,13 @@ fn row_columns_come_from_the_struct() {
     assert_eq!(DealRow::COLUMNS[3].label, "Owner");
     assert!(DealRow::COLUMNS[0].sortable);
 }
+
+#[test]
+fn a_form_carries_the_csrf_token_first_and_escaped() {
+    let html = render(&FormView::<NewDeal>::new().post("/deals").csrf("tok\"><script>").into());
+    let at = html.find(r#"<input type="hidden" name="_csrf" value="tok&quot;&gt;&lt;script&gt;">"#).expect(&html);
+    assert!(at < html.find("<div data-slot=\"form-grid\"").unwrap_or(usize::MAX), "{html}");
+    assert!(!html.contains("<script>"), "{html}");
+    // Without a token there is no field.
+    assert!(!render(&FormView::<NewDeal>::new().post("/deals").into()).contains("_csrf"));
+}

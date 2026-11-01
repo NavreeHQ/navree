@@ -92,8 +92,10 @@ cargo run --release -p ui-proof -- bench    # render times, no server
 
 ## Known limits
 
-- With JavaScript off, a form's POST carries no CSRF header, so on routes under
-  navree-session's check it fails with a 403 once the browser has a session.
+- Behind navree-session a plain form proves itself with the token field:
+  `FormView::csrf(session.csrf_token())`, or `form::csrf_field` in any other form.
+  The session layer reads that field from a urlencoded body of at most 256 KiB;
+  a multipart form or a larger body has to send the header, which the runtime does.
 - A wrong-typed value reports only the first such field per submit; rules report
   every field once the form deserializes.
 - `Toggle` is a checkbox underneath rather than a button with `aria-pressed`, so that
