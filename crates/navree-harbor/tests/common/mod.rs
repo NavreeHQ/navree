@@ -105,6 +105,13 @@ pub fn assert_bash_syntax(name: &str, script: &str) {
         .write_all(navree_harbor::ssh::wrap_script(script).as_bytes())
         .unwrap();
     let output = child.wait_with_output().unwrap();
+    // bash always says what is wrong with a script. A failure with nothing to
+    // say is a launcher that didn't start it: on Windows `bash` can be the WSL
+    // launcher in System32.
+    if !output.status.success() && output.stderr.is_empty() {
+        eprintln!("bash did not start; skipping the syntax check of {name}");
+        return;
+    }
     assert!(
         output.status.success(),
         "{name} is not valid bash:\n{}\n{script}",
