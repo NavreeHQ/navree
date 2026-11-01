@@ -50,10 +50,6 @@ criteria = "safe-to-deploy"
 version = "1.1.5"
 criteria = "safe-to-deploy"
 
-[[exemptions.ammonia]]
-version = "4.2.4"
-criteria = "safe-to-deploy"
-
 [[exemptions.amq-protocol]]
 version = "10.6.3"
 criteria = "safe-to-deploy"
@@ -1220,10 +1216,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.mail-parser]]
 version = "0.11.9"
-criteria = "safe-to-deploy"
-
-[[exemptions.maplit]]
-version = "1.0.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.markup5ever]]

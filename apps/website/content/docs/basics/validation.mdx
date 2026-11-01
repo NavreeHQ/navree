@@ -530,6 +530,9 @@ With the default policy:
 | `1 < 2 & 3` | `1 &lt; 2 &amp; 3` |
 
 - A tag that isn't allowed is removed and its text kept. `script` and `style` are removed with their content.
+- A URL attribute (`href`, `src`, `action`, `formaction`, `data`, `poster`, `cite` and the like, on any tag) keeps only an allowed scheme or a relative URL. The scheme is the one a browser reads, so ` JaVaScRiPt:` and `jav&#x09;ascript:` are `javascript:`.
+- An SVG or MathML element where the HTML parser would not put it is removed with its content, and SVG animation elements (`animate`, `set`) are always removed: they change another element's attributes, which the policy's lists can't check.
+- The sanitized HTML is parsed again before your handler sees it, and kept only when that parse is the tree the policy allowed, so a browser builds exactly what was checked. Markup the parser rearranges comes out the way a browser reads it (`<a>1<table><a>2</a></table></a>` becomes two links side by side, and the blank line after `<pre>` goes), and markup no HTML can hold, such as an allowed `plaintext`, leaves only its text.
 - It never fails on a string, because anything unsafe is removed. Rules measure the sanitized HTML: `length(max = 20_000)` limits what you store, and a body that was only a script fails `min = 1`.
 - It serializes as the sanitized string, derefs to `str`, and `as_str()`, `into_inner()` and `String::from(html)` give it back. `SafeHtml::new(html)` sanitizes with the default policy, `SafeHtml::with_policy(html, &policy)` with another.
 

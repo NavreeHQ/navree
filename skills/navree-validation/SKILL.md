@@ -173,6 +173,8 @@ pub struct CreateContact {
   allow, and rules measure the sanitized HTML. The policy is
   `[validation.html]` (`tags`, `generic_attributes`, `tag_attributes`,
   `url_schemes`, `link_rel`); allowing `script` or `style` fails the boot.
+  The output is parsed again and returned only when a browser would build
+  the tree that was checked; SVG animation elements are always removed.
 - To check a `String` and keep it as sent: `custom(rules::phone)`,
   `custom(rules::country)`, `custom(rules::locale)`.
 - `Phone` needs the facade feature `validation-phone`, `SafeHtml`

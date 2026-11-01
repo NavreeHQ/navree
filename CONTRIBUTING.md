@@ -347,6 +347,7 @@ token's claims read back, a rendered query holds only the user's words.
 | `sso_saml_response`, `sso_saml_metadata`, `sso_xml` | SAML responses, identity provider metadata, XML and Canonical XML |
 | `webhooks_signatures` | the signature headers and bodies of every incoming webhook verifier |
 | `validation_international` | E.164 phone numbers, names, countries, locales, sanitized HTML |
+| `validation_html` | the HTML sanitizer under policies built from the input: the output parses back to the tree it checked and holds nothing the policy doesn't allow |
 | `search_query` | query text and filter values rendered for each search engine |
 | `sheets_workbook` | uploaded spreadsheets read into a table: whole files, and XLSX, XLSB and ODS workbooks built around one fuzzed part |
 | `sheets_xls` | XLS workbooks: the compound file, and the BIFF5 and BIFF8 records of the workbook stream |
