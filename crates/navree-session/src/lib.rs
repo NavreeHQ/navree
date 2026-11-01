@@ -35,7 +35,13 @@
 //! session cookie has no token to send and passes, unless the browser marks
 //! it cross-site (`Sec-Fetch-Site: cross-site`) and its `Origin` is not in
 //! `http.cors.allowed_origins` (a forged cross-site form, e.g. login CSRF).
-//! Paths matching [`SessionOptions::csrf_except`] are exempt from both
+//! A plain HTML form has no script to set a header, so a request whose body is
+//! `application/x-www-form-urlencoded` and sends neither header may carry the
+//! token once, in the field [`CSRF_FIELD`] (`_csrf`) of its body. The field is
+//! taken out before the handler reads the body; two fields of that name, one
+//! in the URL, a body past 256 KiB and any other body type do not count; and a
+//! header that is wrong is not rescued by the field. Paths matching
+//! [`SessionOptions::csrf_except`] are exempt from both
 //! checks. Tokens are compared in constant time and never logged.
 //!
 //! ```no_run
@@ -106,6 +112,7 @@ pub use database::{DatabaseStore, SESSIONS_TABLE};
 pub use memory::MemoryStore;
 pub use module::SessionModule;
 pub use options::{SameSite, SessionOptions, SessionStoreKind};
+pub use layer::CSRF_FIELD;
 pub use session::{Session, SessionError};
 
 /// Stores delete expired records on every this many saves.

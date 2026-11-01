@@ -407,3 +407,119 @@ async fn csrf_except_globs_know_only_star_and_question_mark() {
     assert_eq!(exempt(&["/API/probe/put"]).await, (403, 403));
     assert_eq!(exempt(&["/api/probe/[pw]ut"]).await, (403, 403));
 }
+
+/// A plain HTML form has no script to put the token in a header, so a
+/// urlencoded body may carry it as `_csrf`, once.
+mod plain_forms {
+    use navree_testing::TestClient;
+
+    use crate::support::{self, XSRF};
+
+    async fn signed_in() -> (navree_testing::TestApp, TestClient, String) {
+        let app = support::app().await;
+        let client = app.client();
+        let token = client.csrf_cookie().await.set_cookie(XSRF).unwrap().value().to_owned();
+        (app, client, token)
+    }
+
+    fn form(client: &TestClient, body: String) -> navree_testing::TestRequest {
+        client
+            .post("/api/probe/echo")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(body)
+    }
+
+    #[tokio::test]
+    async fn the_token_field_passes_and_the_handler_never_sees_it() {
+        let (_app, client, token) = signed_in().await;
+        let response = form(&client, format!("title=Acme&_csrf={token}&amount=12")).send().await.assert_status(200);
+        assert_eq!(response.text(), "title=Acme&amount=12");
+        let response = form(&client, format!("_csrf={token}&title=Acme")).send().await.assert_status(200);
+        assert_eq!(response.text(), "title=Acme");
+        let response = form(&client, format!("_csrf={token}")).send().await.assert_status(200);
+        assert_eq!(response.text(), "");
+    }
+
+    #[tokio::test]
+    async fn a_wrong_or_missing_token_field_is_403() {
+        let (_app, client, token) = signed_in().await;
+        let mut wrong = token.clone();
+        let last = wrong.pop().unwrap();
+        wrong.push(if last == 'a' { 'b' } else { 'a' });
+        for body in [
+            "title=Acme".to_owned(),
+            format!("_csrf={wrong}"),
+            "_csrf=".to_owned(),
+            format!("_csrf={}", &token[..39]),
+            format!("csrf={token}"),
+            format!("_CSRF={token}"),
+            format!("x_csrf={token}"),
+            format!("_csrf%5B%5D={token}"),
+        ] {
+            form(&client, body.clone()).send().await.assert_error(403, "Invalid CSRF token");
+        }
+    }
+
+    #[tokio::test]
+    async fn two_token_fields_are_refused_whichever_is_right() {
+        let (_app, client, token) = signed_in().await;
+        for body in [format!("_csrf=x&_csrf={token}"), format!("_csrf={token}&_csrf=x"), format!("_csrf={token}&_csrf={token}")] {
+            form(&client, body).send().await.assert_error(403, "Invalid CSRF token");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_token_in_the_url_or_another_body_type_does_not_count() {
+        let (_app, client, token) = signed_in().await;
+        client
+            .post(&format!("/api/probe/echo?_csrf={token}"))
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body("title=Acme")
+            .send()
+            .await
+            .assert_error(403, "Invalid CSRF token");
+        for kind in ["application/json", "text/plain", "multipart/form-data; boundary=x"] {
+            client
+                .post("/api/probe/echo")
+                .header("content-type", kind)
+                .body(format!("_csrf={token}"))
+                .send()
+                .await
+                .assert_error(403, "Invalid CSRF token");
+        }
+        client.post("/api/probe/echo").body(format!("_csrf={token}")).send().await.assert_error(403, "Invalid CSRF token");
+    }
+
+    #[tokio::test]
+    async fn a_header_that_is_wrong_is_not_rescued_by_the_field() {
+        let (_app, client, token) = signed_in().await;
+        form(&client, format!("_csrf={token}"))
+            .header("x-csrf-token", "wrong")
+            .send()
+            .await
+            .assert_error(403, "Invalid CSRF token");
+        // The header alone still passes, and leaves the body as it is.
+        let response = form(&client, "_csrf=whatever&title=Acme".to_owned()).header("x-csrf-token", &token).send().await.assert_status(200);
+        assert_eq!(response.text(), "_csrf=whatever&title=Acme");
+    }
+
+    #[tokio::test]
+    async fn a_body_past_the_cap_must_send_the_header() {
+        let (_app, client, token) = signed_in().await;
+        let big = "x".repeat(300 * 1024);
+        form(&client, format!("_csrf={token}&note={big}")).send().await.assert_error(403, "Invalid CSRF token");
+        form(&client, format!("note={big}")).header("x-csrf-token", &token).send().await.assert_status(200);
+    }
+
+    #[tokio::test]
+    async fn an_encoded_token_passes_and_a_session_less_form_is_untouched() {
+        let (_app, client, token) = signed_in().await;
+        let encoded: String = token.bytes().map(|b| format!("%{b:02X}")).collect();
+        form(&client, format!("_csrf={encoded}&a=1")).send().await.assert_status(200);
+        // No session cookie: nothing to check, and nothing removed.
+        let app = support::app().await;
+        let fresh = app.client();
+        let response = form(&fresh, "_csrf=whatever&a=1".to_owned()).send().await.assert_status(200);
+        assert_eq!(response.text(), "_csrf=whatever&a=1");
+    }
+}

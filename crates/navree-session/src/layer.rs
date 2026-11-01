@@ -6,13 +6,14 @@ use std::sync::Arc;
 
 use chrono::TimeDelta;
 use cookie::Cookie;
-use http::header::{AUTHORIZATION, COOKIE, HeaderName, ORIGIN, SET_COOKIE, USER_AGENT};
+use http::header::{AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, COOKIE, HeaderName, ORIGIN, SET_COOKIE, USER_AGENT};
 use http::{HeaderMap, HeaderValue, Method};
 use navree_contracts::{
     AuditEntry, AuditKind, AuditSink, Clock, RequestId, SessionRecord, SessionStore, SystemClock,
 };
 use navree_crypto::{Encrypter, constant_time_eq};
 use navree_glob::Glob;
+use navree_http::body::Body;
 use navree_http::extract::Request;
 use navree_http::middleware::{Next, State, from_fn_with_state};
 use navree_http::response::{IntoResponse, Response};
@@ -160,7 +161,22 @@ impl SessionManager {
             let checked = if cookies.is_empty() {
                 self.check_cross_site(request.headers())
             } else {
-                check_csrf(&request, &session)
+                match check_csrf(&request, &session) {
+                    // A plain HTML form cannot set a header: its body may carry the token.
+                    Err(CsrfFailure::Missing) if is_urlencoded(request.headers()) => {
+                        match take_form_token(request, &session).await {
+                            Ok(checked) => {
+                                request = checked;
+                                Ok(())
+                            }
+                            Err((returned, failure)) => {
+                                reject(&returned, failure).await;
+                                return AppError::csrf_mismatch().into_response();
+                            }
+                        }
+                    }
+                    other => other,
+                }
             };
             if let Err(failure) = checked {
                 reject(&request, failure).await;
@@ -330,6 +346,67 @@ impl CsrfFailure {
             CsrfFailure::CrossSite => "cross_site",
         }
     }
+}
+
+/// The field a plain HTML form carries the CSRF token in.
+pub const CSRF_FIELD: &str = "_csrf";
+
+/// The most of a urlencoded body read to find the token field. A larger body
+/// has to send the header (a script can).
+const FORM_TOKEN_BODY_MAX: usize = 256 * 1024;
+
+/// Whether the request body is `application/x-www-form-urlencoded`.
+fn is_urlencoded(headers: &HeaderMap) -> bool {
+    headers
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .is_some_and(|kind| kind.trim().eq_ignore_ascii_case("application/x-www-form-urlencoded"))
+}
+
+/// Reads a urlencoded body, takes its one `_csrf` field out, and checks that
+/// field against the session's token. On success the request goes on with the
+/// body it would have had without the field; on failure it comes back (with an
+/// empty body) beside the reason.
+///
+/// Nothing but the exact field name counts, in the body only. Two fields of
+/// the name are refused whichever is right, so no parser downstream can read a
+/// different one than this does.
+async fn take_form_token(
+    request: Request,
+    session: &Session,
+) -> Result<Request, (Request, CsrfFailure)> {
+    let limit = navree_http::body::BodyLimit::of(request.extensions()).min(FORM_TOKEN_BODY_MAX);
+    let (mut parts, body) = request.into_parts();
+    let fail = |parts: http::request::Parts, failure| {
+        Err((Request::from_parts(parts, Body::empty()), failure))
+    };
+    let Ok(bytes) = navree_http::body::read_body(body, limit).await else {
+        return fail(parts, CsrfFailure::Missing);
+    };
+    let mut kept: Vec<&[u8]> = Vec::new();
+    let mut found: Vec<String> = Vec::new();
+    for segment in bytes.split(|byte| *byte == b'&') {
+        match form_urlencoded::parse(segment).next() {
+            Some((name, value)) if name == CSRF_FIELD => found.push(value.into_owned()),
+            _ => kept.push(segment),
+        }
+    }
+    let [given] = found.as_slice() else {
+        return fail(parts, if found.is_empty() { CsrfFailure::Missing } else { CsrfFailure::Mismatch });
+    };
+    let matches = {
+        let state = session.lock();
+        state
+            .token()
+            .is_some_and(|expected| constant_time_eq(given.trim().as_bytes(), expected.as_bytes()))
+    };
+    if !matches {
+        return fail(parts, CsrfFailure::Mismatch);
+    }
+    let rest = kept.join(&b'&');
+    parts.headers.insert(CONTENT_LENGTH, HeaderValue::from(rest.len()));
+    Ok(Request::from_parts(parts, Body::from(rest)))
 }
 
 /// Whether `X-CSRF-TOKEN`, or the URL-decoded `X-XSRF-TOKEN`, equals the

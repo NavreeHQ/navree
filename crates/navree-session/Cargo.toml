@@ -19,6 +19,7 @@ mysql = ["navree-db/mysql"]
 [dependencies]
 chrono = { workspace = true }
 cookie = { workspace = true }
+form_urlencoded = { workspace = true }
 http = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }

@@ -75,6 +75,11 @@ async fn put_then_fail(session: Session) -> navree_http::Result<Json<Value>> {
     Err(navree_http::AppError::bad_request("rejected"))
 }
 
+/// What a form handler would see: the body, as text.
+async fn echo(body: String) -> String {
+    body
+}
+
 async fn write() -> Json<Value> {
     Json(json!({ "ok": true }))
 }
@@ -100,6 +105,7 @@ impl Controller for ProbeController {
             RouteDef::on(Method::GET, "/untouched", untouched).public(),
             RouteDef::on(Method::POST, "/fail", put_then_fail).public(),
             RouteDef::on(Method::POST, "/write", write).public(),
+            RouteDef::on(Method::POST, "/echo", echo).public(),
             RouteDef::on(Method::PUT, "/write", write).public(),
             RouteDef::on(Method::PATCH, "/write", write).public(),
             RouteDef::on(Method::DELETE, "/write", write).public(),
