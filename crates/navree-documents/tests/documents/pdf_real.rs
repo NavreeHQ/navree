@@ -73,7 +73,7 @@ fn real_documents_are_read_and_edited_with_room_to_spare() {
     let limits = ReadLimits::default();
     let text_limits = TextLimits::default();
     println!(
-        "{:<12} {:>6} {:>6} {:>8} | text work | edit: objects counted | read work",
+        "{:<12} {:>6} {:>6} {:>8} | text work | edit: objects counted | read work | merge keeps",
         "document", "MiB", "pages", "objects"
     );
     for name in [
@@ -108,14 +108,25 @@ fn real_documents_are_read_and_edited_with_room_to_spare() {
         );
         drop(objects);
 
+        // What a merge keeps of it: the objects of its output, read again.
+        let kept = {
+            let merged = Pdf::merge([&pdf]).unwrap_or_else(|error| panic!("{name}: {error}"));
+            let document = Document::load(merged.bytes().clone(), limits).unwrap();
+            Objects::read(document).unwrap().memory_counted()
+        };
         println!(
-            "{name:<12} {:>6} {pages:>6} {count:>8} | {:>8.1}% | {:>8.1}% ({} MiB) | {:>5.1}%",
+            "{name:<12} {:>6} {pages:>6} {count:>8} | {:>8.1}% | {:>8.1}% ({} MiB) | {:>5.1}% | {} MiB",
             size / MIB,
             percent(text_work, text_limits.document_work),
             percent(memory, limits.memory),
             memory / MIB,
             percent(work, limits.work),
+            kept / MIB,
         );
+        // Four copies of it merge within the limits of one document.
+        let four = Pdf::merge(std::iter::repeat_n(&pdf, 4))
+            .unwrap_or_else(|error| panic!("{name}: four copies: {error}"));
+        assert_eq!(four.page_count().unwrap(), 4 * pages, "{name}");
         assert!(
             memory < limits.memory * 6 / 10,
             "{name}: {} MiB of {} MiB counted",

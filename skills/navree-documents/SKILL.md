@@ -226,40 +226,48 @@ let pages = sealed.page_texts()?; // one string per page
 `text()` and `page_texts()` allow a page 128 MiB of work and the document
 1 GiB: content decoded (a form again each time it is drawn, plus 1 KiB per
 draw), every operation (4 bytes; 16 more to show text; 32 for `Do`), every
-character code (12), every object looked up (16, however many references),
+character code (16), every object looked up (32, however many references),
 everything a filter reads and writes whether the content can be used or not, 1
 KiB per filter, fonts read (1 KiB each, `ToUnicode` inflated, up to 8 MiB, plus
 1/16 of the memory reading it builds; 16 bytes per width looked at; 8 per
 `Differences` item and per byte of a glyph name), and marked content's actual
 text each time it is decoded. The time is in proportion: all of it takes about
-22 to 30 s on one core on the slowest shape found. Reading text (here and in navree-media's `text::extract`, which
+22 s on one core on the slowest shape found (pages of a million random
+two-byte codes through a map of 16,000 lines), 15 s on the densest plain one,
+and a test runs both at the size of a full page. Reading text (here and in navree-media's `text::extract`, which
 uses the same code), a font's `ToUnicode` map comes before its `Encoding`, and
 its one reader refuses it past 64 codespace ranges, 131,072 lines, 256 texts in
 one list or 65,792 in all lists. Glyph names may be `uniXXXX` or `uXXXXXX`; one
 that cannot be read, or over 127 bytes, loses one code; a map's text over 512
 bytes is skipped. Fonts and maps are kept per document in 256
-MiB, counted (~256 B per code, two copies
-of a range's text per split it can have, 160 B per code `Differences` names, 24
-B per width; 17 MB for a full two-byte map, fifteen fit), plus at most one font's
-widths; a map is read once for the fonts sharing it; past 256 MiB the least
+MiB, counted by what reading builds (8 B per
+byte of a map, two ranges of 96 B per line that maps codes, a range being one
+entry however many codes it covers, the texts kept, 160 B per code
+`Differences` names, 4 B per code a table of widths has room for), plus at most
+one font's widths; a map is read once for the fonts sharing it; past 256 MiB the least
 recently used is dropped and read again; one map or font over 256 MiB is
 refused. A page may show 1,000,000 character codes, produce 8 MiB of text (the document
-64 MiB), nest `q` and marked content 256 deep, and spend 50,000,000 mark
-comparisons (a byte of text compared is one). Over any:
+64 MiB), nest `q` and marked content 256 deep, hold 8 MiB of actual text in open
+marked content, and spend 50,000,000 mark comparisons (a byte of text compared
+is one). Over any:
 `DocumentsError::TooLarge` (413). These are fixed, not config keys.
 
 Reading a PDF (navree-pdf, under every `Pdf` method) is lazy and budgeted per
-document: 256 MiB of objects as they are built (object and cross-reference
-streams inflate to 8 MiB each; a bigger one is skipped with its objects, so
-`Pdf::from_bytes` refuses a PDF whose page tree is in it), of which the process
-holds at most twice that, and 1 GiB of bytes looked at, including what a failed
-parse reached, what each filter (8 at most on a stream) reads and writes, and 16
-bytes per object looked up; a chain of references stops at 8.
+document: 256 MiB of objects as they are built (an object is 32 bytes, a
+dictionary a list of entries, a short name kept inside its entry; object and
+cross-reference streams inflate to 8 MiB each, a bigger one is skipped with its
+objects, so `Pdf::from_bytes` refuses a PDF whose page tree is in it, and one is
+not counted once an edit has read its objects), of which the process holds at
+most twice that (1.15 times measured), and 1 GiB of bytes looked at, including
+what a failed parse reached, what each filter (8 at most on a stream) reads and
+writes, and 32 bytes per object looked up; a chain of references stops at 8. A
+tagged spreadsheet of 10,000 rows (250,000 objects) is half the memory, a book of
+3,000 pages an eighth, plain or in object streams; 20,000 rows is the most.
 Objects sharing their bytes, deep or wide nesting (100 levels) and
 cross-references that rescan the same bytes are all counted: a small file that
 would take gigabytes is `TooLarge` (413). `page_count`, `text`, `title` read
 what they need; `merge`, `stamp`, `overlay`, `with_metadata` read everything,
-write at most the files' bytes plus 256 MiB each and add what is counted as 256
+write at most the files' bytes plus 256 MiB and add what is counted as 256
 MiB, about 100,000 pages stamped (`TooLarge` past that, before it is held), and
 refuse a file when an object its page tree, contents or resources lead to cannot
 be read (`DocumentsError::Pdf`); another that cannot be read is dropped, and an
@@ -270,6 +278,11 @@ Broken cross-references are rebuilt; files encrypted without a password to open
 password is `DocumentsError::Pdf`.
 `stamp`, `overlay` and `merge` keep shared or inherited resources one object,
 and place what they draw on what the page shows (`MediaBox` cut to `CropBox`).
+Saving compresses streams with Flate at its fastest level, 2 bytes of work a
+byte. `merge` and `overlay` hold all their inputs to the limits of one
+document, each read with what the ones before left: a merge counts of an input
+only the pages it keeps and what they lead to (not outlines, forms or tagged
+structure), so many ordinary files merge and a few near the limit do not.
 
 ## Word documents
 
