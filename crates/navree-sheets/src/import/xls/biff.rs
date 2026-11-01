@@ -47,8 +47,8 @@ pub(super) enum Biff {
 }
 
 fn u16_at(data: &[u8], at: usize) -> Option<u16> {
-    let bytes = data.get(at..at.checked_add(2)?)?;
-    Some(u16::from_le_bytes([*bytes.first()?, *bytes.get(1)?]))
+    let bytes: [u8; 2] = data.get(at..at.checked_add(2)?)?.try_into().ok()?;
+    Some(u16::from_le_bytes(bytes))
 }
 
 fn u32_at(data: &[u8], at: usize) -> Option<u32> {
@@ -279,7 +279,7 @@ fn unicode_string(
         Biff::Unicode => {
             let (Some(count), Some(flags)) = (u16_at(data, 0), data.get(2)) else {
                 // An empty string written as its count alone.
-                if data.len() == 2 {
+                if data == [0, 0] {
                     return Ok(out);
                 }
                 return Err(short(what));

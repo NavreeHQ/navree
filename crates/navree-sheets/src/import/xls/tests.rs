@@ -935,3 +935,14 @@ fn a_damaged_defined_name_is_refused() {
     let bytes = Book::new(globals, vec![Sheet::new("S", label(0, 0, 0, "ok", false))]).file();
     assert_eq!(cells_of(&open(&bytes), 0), [(0, 0, text("ok"))]);
 }
+
+#[test]
+fn a_string_of_its_count_alone_is_empty_only_when_the_count_is_zero() {
+    let mut records = formula(0, 0, 0, formula_text());
+    records.extend(record(0x0207, &[0, 0]));
+    let xls = open(&one_sheet(&[], records));
+    assert_eq!(cells_of(&xls, 0), [(0, 0, text(""))]);
+    let mut records = formula(0, 0, 0, formula_text());
+    records.extend(record(0x0207, &[3, 0]));
+    damaged(&one_sheet(&[], records), "STRING");
+}
