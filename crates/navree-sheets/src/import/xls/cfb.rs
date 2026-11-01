@@ -41,6 +41,15 @@ fn u64_at(data: &[u8], at: usize) -> Option<u64> {
     Some(u64::from_le_bytes(bytes))
 }
 
+/// The sector numbers in a sector of the FAT or the DIFAT.
+fn entries(sector: &[u8]) -> impl Iterator<Item = u32> + '_ {
+    sector
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|entry| u32::from_le_bytes(*entry))
+}
+
 fn loops() -> XlsError {
     damaged("a chain of sectors loops")
 }
@@ -117,12 +126,7 @@ impl<'a> Compound<'a> {
     /// entries, then the DIFAT's own chain of sectors, whose last entry
     /// each leads to the next), as far as the file has sectors to describe.
     fn load_fat(&mut self, header: &[u8]) -> Result<(), XlsError> {
-        let mut difat: Vec<u32> = header
-            .get(76..512)
-            .unwrap_or_default()
-            .chunks_exact(4)
-            .filter_map(|entry| u32_at(entry, 0))
-            .collect();
+        let mut difat: Vec<u32> = entries(header.get(76..512).unwrap_or_default()).collect();
         let mut next = u32_at(header, 68).unwrap_or(END_OF_CHAIN);
         let mut seen = vec![false; usize::try_from(self.sectors).unwrap_or(0)];
         while next < LAST_SECTOR {
@@ -135,7 +139,7 @@ impl<'a> Compound<'a> {
             }
             *mark = true;
             let sector = self.sector(next)?;
-            difat.extend(sector.chunks_exact(4).filter_map(|entry| u32_at(entry, 0)));
+            difat.extend(entries(sector));
             next = difat
                 .pop()
                 .ok_or_else(|| damaged("the compound file's DIFAT is empty"))?;
@@ -146,8 +150,7 @@ impl<'a> Compound<'a> {
         for id in difat.into_iter().filter(|id| *id < DIFAT_SECTOR) {
             let sector = self.sector(id)?;
             if self.fat.len() < needed {
-                self.fat
-                    .extend(sector.chunks_exact(4).filter_map(|entry| u32_at(entry, 0)));
+                self.fat.extend(entries(sector));
             }
         }
         Ok(())
@@ -209,7 +212,7 @@ fn find_entries(
         if sector.len() % ENTRY != 0 {
             broken = true;
         }
-        for entry in sector.chunks_exact(ENTRY) {
+        for entry in sector.as_chunks::<ENTRY>().0 {
             let parsed = parse_entry(entry, compound.sector);
             if root.is_none() {
                 root = Some(parsed.1);
@@ -239,8 +242,10 @@ fn parse_entry(entry: &[u8], sector: usize) -> (String, Entry) {
     let units: Vec<u16> = entry
         .get(..64)
         .unwrap_or_default()
-        .chunks_exact(2)
-        .filter_map(|unit| u16_at(unit, 0))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|unit| u16::from_le_bytes(*unit))
         .take_while(|unit| *unit != 0)
         .collect();
     let name = String::from_utf16_lossy(&units);
@@ -275,8 +280,11 @@ impl Mini<'_> {
     /// at the end of a sector or of the stream).
     fn bytes_at(&self, at: u64, len: usize) -> Result<&[u8], XlsError> {
         let sector = self.compound.sector as u64;
-        let id = usize::try_from(at / sector).map_err(|_| past_the_end())?;
-        let within = usize::try_from(at % sector).map_err(|_| past_the_end())?;
+        let (Some(id), Some(within)) = (at.checked_div(sector), at.checked_rem(sector)) else {
+            return Err(past_the_end());
+        };
+        let id = usize::try_from(id).map_err(|_| past_the_end())?;
+        let within = usize::try_from(within).map_err(|_| past_the_end())?;
         let id = *self.sectors.get(id).ok_or_else(past_the_end)?;
         let data = self.compound.sector(id)?;
         let end = within.saturating_add(len).min(data.len());
@@ -287,8 +295,12 @@ impl Mini<'_> {
     fn next(&self, id: u32) -> Result<u32, XlsError> {
         let per_sector = (self.compound.sector / 4) as u64;
         let id = u64::from(id);
-        let sector = usize::try_from(id / per_sector).map_err(|_| past_the_end())?;
-        let within = usize::try_from(id % per_sector)
+        let (Some(sector), Some(within)) = (id.checked_div(per_sector), id.checked_rem(per_sector))
+        else {
+            return Err(past_the_end());
+        };
+        let sector = usize::try_from(sector).map_err(|_| past_the_end())?;
+        let within = usize::try_from(within)
             .ok()
             .and_then(|n| n.checked_mul(4))
             .ok_or_else(past_the_end)?;

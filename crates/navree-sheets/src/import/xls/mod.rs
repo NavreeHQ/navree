@@ -200,11 +200,12 @@ pub(crate) fn custom_format_kind(code: &str) -> NumberKind {
             brackets = brackets.saturating_sub(1);
         } else if !in_brackets && !am_pm && matches!(c, 'a' | 'A') {
             am_pm = true;
-        } else if !in_brackets && am_pm && matches!(c, 'p' | 'P' | 'm' | 'M' | '/') {
-            return NumberKind::Date;
         } else if !in_brackets
-            && !am_pm
-            && matches!(c.to_ascii_lowercase(), 'd' | 'm' | 'h' | 'y' | 's')
+            && if am_pm {
+                matches!(c, 'p' | 'P' | 'm' | 'M' | '/')
+            } else {
+                matches!(c.to_ascii_lowercase(), 'd' | 'm' | 'h' | 'y' | 's')
+            }
         {
             return NumberKind::Date;
         } else if !(elapsed && c.eq_ignore_ascii_case(&previous)) {

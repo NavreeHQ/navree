@@ -232,7 +232,7 @@ fn read_chars(
     }
     loop {
         let width = if wide { 2 } else { 1 };
-        let here = count.min(pieces.data.len() / width);
+        let here = count.min(pieces.data.len().checked_div(width).unwrap_or(0));
         let bytes = here.saturating_mul(width);
         push_chars(pieces.data.get(..bytes).unwrap_or_default(), wide, out);
         count = count.saturating_sub(here);
@@ -591,7 +591,7 @@ pub(super) fn encoding_of(codepage: u16) -> Option<&'static Encoding> {
         38598 => ISO_8859_8_I,
         28594 => ISO_8859_4,
         28596 => ISO_8859_6,
-        50220 | 50221 | 50222 => ISO_2022_JP,
+        50220..=50222 => ISO_2022_JP,
         21866 => KOI8_U,
         28603 => ISO_8859_13,
         28593 => ISO_8859_3,
