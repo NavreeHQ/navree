@@ -454,6 +454,65 @@ mod windows_names {
     }
 
     #[tokio::test]
+    async fn a_name_a_short_name_cannot_be_is_an_ordinary_name() {
+        let sandbox = Sandbox::new();
+        let disk = sandbox.disk();
+        for name in [
+            "notes~2024.txt",
+            "a~1.final.txt",
+            "averylong~1.txt",
+            "x~9y",
+            "report~1.long",
+        ] {
+            disk.put(name, name).await.unwrap();
+            assert_eq!(disk.get(name).await.unwrap(), name.as_bytes(), "{name}");
+        }
+        let mut listed = disk.list("").await.unwrap();
+        listed.sort();
+        assert_eq!(
+            listed,
+            [
+                "a~1.final.txt",
+                "averylong~1.txt",
+                "notes~2024.txt",
+                "report~1.long",
+                "x~9y",
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn no_short_name_reaches_the_file_it_stands_for() {
+        let sandbox = Sandbox::new();
+        let disk = sandbox.disk();
+        // A name that looks like a short name itself still gets one.
+        disk.put("notes~2024.txt", "NOTES").await.unwrap();
+        disk.put("averylongfilename.txt", "LONG").await.unwrap();
+        let listing = std::process::Command::new("cmd")
+            .args(["/C", "dir", "/x"])
+            .arg(sandbox.root())
+            .output()
+            .unwrap();
+        let listing = String::from_utf8_lossy(&listing.stdout).into_owned();
+        for name in listing
+            .split_whitespace()
+            .filter(|word| word.contains('~') && !word.contains("notes~2024"))
+        {
+            assert!(disk.get(name).await.is_err(), "{name} reads through");
+            assert!(
+                disk.put(name, "over").await.is_err(),
+                "{name} writes through"
+            );
+        }
+        // Whether or not the volume makes short names.
+        for name in ["AVERYL~1.TXT", "NOTES~~1.TXT", "NOTES~1.TXT", "NO1AB~1.TXT"] {
+            assert!(disk.get(name).await.is_err(), "{name} reads through");
+        }
+        assert_eq!(disk.get("averylongfilename.txt").await.unwrap(), "LONG");
+        assert_eq!(disk.get("notes~2024.txt").await.unwrap(), "NOTES");
+    }
+
+    #[tokio::test]
     async fn names_made_outside_the_disk_that_no_call_accepts_are_not_listed() {
         let sandbox = Sandbox::new();
         let disk = sandbox.disk();

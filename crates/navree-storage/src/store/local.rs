@@ -20,9 +20,11 @@
 //!   (and a `%` that starts `%25` or `%3A` as `%25`), so a drive letter or an
 //!   alternate data stream cannot be named and no two names are one file.
 //!   Names that end in a dot or a space, names of devices (`CON`, `NUL`,
-//!   `COM1` and the rest, with or without an extension), names holding `~`
-//!   and a digit (the short names of the volume) and names with `< > " | ? *`
-//!   are refused, and a listing leaves out the files that have one. File
+//!   `COM1` and the rest, with or without an extension), names a short name
+//!   of the volume could have (`~` and digits at the end of a base of at most
+//!   8 characters, with one extension of at most 3) and names with
+//!   `< > " | ? *` are refused, and a listing leaves out the files that have
+//!   one. File
 //!   names stay case-insensitive, as the file system keeps them.
 //! - **Only regular files are files.** A directory, a pipe, a socket or a
 //!   device is a missing file, to every operation and to listings.
@@ -436,26 +438,30 @@ fn final_mode(destination: &Path) -> u32 {
 /// if no file can be made.
 #[cfg(unix)]
 fn new_file_mode(directory: Option<&Path>) -> u32 {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static PROBES: AtomicU64 = AtomicU64::new(0);
+    /// A name another process has too is very unlikely to come up twice.
+    const ATTEMPTS: usize = 4;
 
     let Some(directory) = directory else {
         return 0o600;
     };
-    let name = format!(
-        ".mode-{}#{}",
-        std::process::id(),
-        PROBES.fetch_add(1, Ordering::Relaxed)
-    );
-    let probe = directory.join(name);
-    let mode = File::options()
-        .write(true)
-        .create_new(true)
-        .open(&probe)
-        .and_then(|file| file.metadata())
-        .map(|metadata| metadata.permissions().mode() & 0o777);
-    let _ = fs::remove_file(&probe);
-    mode.unwrap_or(0o600)
+    for _ in 0..ATTEMPTS {
+        // Process ids repeat across containers sharing a volume: the name is
+        // random, and only a file this call made is removed.
+        let name = format!(".mode-{}#1", navree_crypto::random_token(16));
+        let probe = directory.join(name);
+        match File::options().write(true).create_new(true).open(&probe) {
+            Ok(file) => {
+                let mode = file
+                    .metadata()
+                    .map(|metadata| metadata.permissions().mode() & 0o777);
+                let _ = fs::remove_file(&probe);
+                return mode.unwrap_or(0o600);
+            }
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(_) => return 0o600,
+        }
+    }
+    0o600
 }
 
 /// Flushes `file`, which is at `path`, to the device.
@@ -545,15 +551,29 @@ fn windows_segment(name: &str) -> Option<String> {
 /// Whether a Windows volume would read the name `name` (already written by
 /// [`windows_name`]) as something else than a file by that name: a name that
 /// ends in a dot or a space (Windows drops them), the name of a device, a
-/// short name (`~` and a digit), or characters no name may have.
+/// short name, or characters no name may have.
 fn windows_refuses(name: &str) -> bool {
     name.ends_with(['.', ' '])
         || name.contains(['<', '>', '"', '|', '?', '*'])
-        || name
-            .as_bytes()
-            .windows(2)
-            .any(|pair| pair[0] == b'~' && pair[1].is_ascii_digit())
+        || is_short_name(name)
         || is_device_name(name)
+}
+
+/// Whether Windows could have made `name` as the short name of another file:
+/// `~` and digits at the end of a base of at most 8 characters, with at most
+/// one extension of at most 3. Anything longer is not a short name, so a file
+/// by that name is that file.
+fn is_short_name(name: &str) -> bool {
+    let (base, extension) = name.split_once('.').unwrap_or((name, ""));
+    let Some((before, digits)) = base.rsplit_once('~') else {
+        return false;
+    };
+    !before.is_empty()
+        && !digits.is_empty()
+        && digits.bytes().all(|byte| byte.is_ascii_digit())
+        && base.chars().count() <= 8
+        && !extension.contains('.')
+        && extension.chars().count() <= 3
 }
 
 /// Whether `name` is the name of a Windows device: `CON`, `PRN`, `AUX`,
@@ -1199,9 +1219,8 @@ mod tests {
             "CON ",
             "AVERYL~1.TXT",
             "AVERYL~1",
-            "PROGRA~12",
+            "PROGR~12",
             "a~1",
-            "x~9y",
             "secret~2.txt",
             "a<b",
             "a>b",
@@ -1232,6 +1251,14 @@ mod tests {
             "~a",
             "a~",
             "notes~draft.txt",
+            "x~9y",
+            "notes~2024.txt",
+            "report~1.final.txt",
+            "a~1.long",
+            "averylong~1.txt",
+            "PROGRA~12",
+            ".a~1",
+            "~1",
             "caf\u{e9}",
             "a%3Ab",
             "report#final.pdf",
@@ -1246,6 +1273,33 @@ mod tests {
         for path in ["secret.txt.", "a /b", "NUL/x", "AVERYL~1/x", "a/COM1.txt"] {
             assert_eq!(store.locate(path).is_err(), cfg!(windows), "{path:?}");
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_probe_for_the_mode_keeps_off_the_files_of_other_processes() {
+        let directory = tempfile::tempdir().unwrap();
+        // What another process with this process id (pid 1 in two containers
+        // on one volume) would be holding, whatever the counter says.
+        let pid = std::process::id();
+        let theirs: Vec<PathBuf> = (0..5_000)
+            .map(|number| directory.path().join(format!(".mode-{pid}#{number}")))
+            .collect();
+        for path in &theirs {
+            File::create(path).unwrap();
+        }
+        let plain = tempfile::tempdir().unwrap();
+        let expected = new_file_mode(Some(plain.path()));
+        assert_eq!(new_file_mode(Some(directory.path())), expected);
+        assert_ne!(expected, 0o600, "the umask of this test run hides the case");
+        for path in &theirs {
+            assert!(path.exists(), "{path:?} is gone");
+        }
+        assert_eq!(fs::read_dir(plain.path()).unwrap().count(), 0);
+        assert_eq!(
+            fs::read_dir(directory.path()).unwrap().count(),
+            theirs.len()
+        );
     }
 
     #[test]
