@@ -200,11 +200,12 @@ renders templates (`render`, `render_html`) and documents (`render_document`).
 - `TemplateNotFound { name, tried }` names `<name>.html`.
 - `Template { file, line, column, message }`: `certificates/course.html:3: undefined value`.
 - Returned with `?`: 500 (`EngineUnavailable` and `Timeout`: 503); the body
-  never contains the template's details. `Pdf(..)` (bytes that are not a
-  readable PDF) is a 400 and `TooLarge(..)` (an image or PDF over a limit) a
-  413; both send their message. Writing an edited PDF failing is
-  `Engine { engine: "pdf" }`, and an edit the app should not ask for (merging
-  nothing, a stamp Helvetica can't show) is `Edit(..)`: both 500.
+  never contains the template's details. `Pdf(..)` and `InvalidDocx(..)` (bytes
+  that are not a readable PDF or Word file) are a 400 and `TooLarge(..)` (an
+  image, PDF or Word file over a limit) a 413; all send their message.
+  Writing an edited PDF failing is `Engine { engine: "pdf" }`, and an edit the
+  app should not ask for (merging nothing, a stamp Helvetica can't show) is
+  `Edit(..)`: both 500.
 
 ## Editing PDFs and reading them
 
@@ -276,9 +277,10 @@ text boxes are not.
 entries, 64 MiB for a part, 128 MiB for all the parts read, 64 MiB of text,
 256 levels of elements. `from_bytes_within(bytes, &limits)` and
 `text_within(&limits)` take your own. Over a limit is `TooLarge` (413); bytes
-that are not a Word document are `Docx` (a 500: map it to a 4xx yourself when
-the bytes came from a client). Reading is synchronous CPU work, seconds at the
-limits: run a client's file with `spawn_blocking`.
+that are not a Word document that can be read are `InvalidDocx` (a 400, like an
+unreadable PDF's `Pdf`; `Docx` is for writing one failing, a 500). Reading is
+synchronous CPU work, seconds at the limits: run a client's file with
+`spawn_blocking`.
 
 ## Saving and queueing
 

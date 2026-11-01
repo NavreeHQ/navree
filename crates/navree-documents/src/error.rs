@@ -6,11 +6,11 @@ use navree_http::AppError;
 /// What can go wrong while rendering or editing a document.
 ///
 /// Returned from a handler with `?`, a variant is a 500 response unless it
-/// says otherwise (`EngineUnavailable` and `Timeout` are 503, `Pdf` is
-/// 400, `TooLarge` is 413). A 500 is logged with the full message and the
-/// response carries only the reason phrase, so template paths and data
-/// never reach the client; the 400 and 413 say what is wrong with the
-/// input, and their messages name no template file.
+/// says otherwise (`EngineUnavailable` and `Timeout` are 503, `Pdf` and
+/// `InvalidDocx` are 400, `TooLarge` is 413). A 500 is logged with the full
+/// message and the response carries only the reason phrase, so template
+/// paths and data never reach the client; the 400 and 413 say what is wrong
+/// with the input, and their messages name no template file.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum DocumentsError {
@@ -87,10 +87,16 @@ pub enum DocumentsError {
     /// limit, and no template file.
     #[error("{0}")]
     TooLarge(String),
-    /// Building the DOCX file failed, or the bytes given to
-    /// `DocxFile::from_bytes` are not a Word document.
+    /// Building the DOCX file failed: a fault of the server or of the app.
     #[error("DOCX: {0}")]
     Docx(String),
+    /// The bytes are not a Word document this crate can read: a damaged
+    /// archive or XML, a package whose main part is not a Word document, a
+    /// DTD, two entries of one name. The client's error, like
+    /// [`Pdf`](Self::Pdf). A file over a reading limit is
+    /// [`TooLarge`](Self::TooLarge).
+    #[error("invalid DOCX: {0}")]
+    InvalidDocx(String),
     /// Reading or writing a storage disk failed.
     #[error(transparent)]
     Storage(#[from] navree_storage::StorageError),
@@ -115,14 +121,15 @@ fn template_message(
 impl DocumentsError {
     /// The status code of the error response: 503 for
     /// [`EngineUnavailable`](Self::EngineUnavailable) and
-    /// [`Timeout`](Self::Timeout), 400 for [`Pdf`](Self::Pdf), 413 for
+    /// [`Timeout`](Self::Timeout), 400 for [`Pdf`](Self::Pdf) and
+    /// [`InvalidDocx`](Self::InvalidDocx), 413 for
     /// [`TooLarge`](Self::TooLarge), 500 otherwise.
     pub fn status(&self) -> StatusCode {
         match self {
             Self::EngineUnavailable { .. } | Self::Timeout { .. } => {
                 StatusCode::SERVICE_UNAVAILABLE
             }
-            Self::Pdf(_) => StatusCode::BAD_REQUEST,
+            Self::Pdf(_) | Self::InvalidDocx(_) => StatusCode::BAD_REQUEST,
             Self::TooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -187,6 +194,15 @@ mod tests {
         assert_eq!(too_large.to_string(), "a page needs too much work");
         let edit = DocumentsError::Edit("nothing to merge".into());
         assert_eq!(edit.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        // A Word file that cannot be read is the client's; writing one is not.
+        let unreadable = DocumentsError::InvalidDocx("the package has no main document".into());
+        assert_eq!(unreadable.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            unreadable.to_string(),
+            "invalid DOCX: the package has no main document"
+        );
+        let writing = DocumentsError::Docx("an image must be a PNG or a JPEG file".into());
+        assert_eq!(writing.status(), StatusCode::INTERNAL_SERVER_ERROR);
         let missing = DocumentsError::TemplateNotFound {
             name: "x".into(),
             tried: vec!["x.html".into()],
@@ -195,6 +211,24 @@ mod tests {
         assert_eq!(
             missing.to_string(),
             "document template `x` not found (tried x.html)"
+        );
+    }
+
+    #[test]
+    fn an_unreadable_word_file_answers_400_with_its_message_and_a_failed_write_500_without() {
+        let unreadable = DocumentsError::InvalidDocx("the package has no main document".into());
+        let body = map_documents_error(&unreadable).unwrap().body();
+        assert_eq!(body["statusCode"], 400, "{body}");
+        assert_eq!(
+            body["message"], "invalid DOCX: the package has no main document",
+            "{body}"
+        );
+        let writing = DocumentsError::Docx("zip: disk full".into());
+        let body = map_documents_error(&writing).unwrap().body();
+        assert_eq!(body["statusCode"], 500, "{body}");
+        assert!(
+            !body["message"].as_str().unwrap().contains("disk full"),
+            "{body}"
         );
     }
 }

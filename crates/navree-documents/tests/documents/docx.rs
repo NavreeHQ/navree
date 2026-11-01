@@ -149,7 +149,7 @@ fn files_saved_by_an_office_suite_read_as_the_text_they_show() {
 }
 
 #[test]
-fn what_the_limits_refuse_is_too_large_and_a_broken_file_is_a_docx_error() {
+fn what_the_limits_refuse_is_too_large_and_a_broken_file_is_an_invalid_docx() {
     let bytes = office_file("word", "basic");
     let text_limit = DocxLimits {
         max_text_bytes: 100,
@@ -176,18 +176,31 @@ fn what_the_limits_refuse_is_too_large_and_a_broken_file_is_a_docx_error() {
     for end in (0..bytes.len()).step_by(7) {
         let _ = DocxFile::from_bytes(bytes[..end].to_vec());
     }
-    assert!(matches!(
-        DocxFile::from_bytes(bytes[..bytes.len() - 100].to_vec()),
-        Err(DocumentsError::Docx(_))
-    ));
+    let cut = DocxFile::from_bytes(bytes[..bytes.len() - 100].to_vec()).unwrap_err();
+    assert!(matches!(cut, DocumentsError::InvalidDocx(_)), "{cut:?}");
+    assert_eq!(cut.status(), http::StatusCode::BAD_REQUEST);
 }
 
 #[test]
 fn garbage_is_not_a_docx_file() {
-    assert!(matches!(
-        DocxFile::from_bytes(&b"not a zip"[..]),
-        Err(DocumentsError::Docx(_))
-    ));
+    let error = DocxFile::from_bytes(&b"not a zip"[..]).unwrap_err();
+    assert!(matches!(error, DocumentsError::InvalidDocx(_)), "{error:?}");
+    // The caller's error, like a PDF that cannot be read.
+    assert_eq!(error.status(), http::StatusCode::BAD_REQUEST);
+    assert!(error.to_string().starts_with("invalid DOCX: "), "{error}");
+}
+
+#[test]
+fn a_failed_write_is_the_servers_error_and_an_unreadable_file_the_callers() {
+    let write = Docx::new()
+        .image(Image::new(&b"GIF89a"[..]))
+        .build()
+        .unwrap_err();
+    assert!(matches!(write, DocumentsError::Docx(_)), "{write:?}");
+    assert_eq!(write.status(), http::StatusCode::INTERNAL_SERVER_ERROR);
+    let read = DocxFile::from_bytes(office_file("word", "basic")[..40].to_vec()).unwrap_err();
+    assert!(matches!(read, DocumentsError::InvalidDocx(_)), "{read:?}");
+    assert_eq!(read.status(), http::StatusCode::BAD_REQUEST);
 }
 
 #[test]

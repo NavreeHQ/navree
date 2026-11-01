@@ -7,7 +7,7 @@
 //! reader instead of stopping at a checksum.
 //!
 //! Invariants: a file that is accepted reads as text; the text is within
-//! the limit; a refusal is a `Docx` or a `TooLarge` error; and limits
+//! the limit; a refusal is an `InvalidDocx` or a `TooLarge` error; and limits
 //! that are looser give the same text for a file the tight ones accepted.
 #![no_main]
 
@@ -62,7 +62,7 @@ fuzz_target!(|data: &[u8]| {
                 .expect("looser limits read what tight ones read");
             assert_eq!(roomy, text);
         }
-        Err(DocumentsError::Docx(_) | DocumentsError::TooLarge(_)) => {}
+        Err(DocumentsError::InvalidDocx(_) | DocumentsError::TooLarge(_)) => {}
         Err(other) => panic!("unexpected error: {other:?}"),
     }
 });

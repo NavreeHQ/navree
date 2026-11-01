@@ -128,9 +128,10 @@ pub(super) fn read_text(
     package.part(index, |xml| document_text(xml, limits, keep_text))
 }
 
-/// The error for a file that is not a Word document.
+/// The error for a file that is not a Word document that can be read: the
+/// client's, a 400.
 fn damaged(reason: impl std::fmt::Display) -> DocumentsError {
-    DocumentsError::Docx(format!("not a Word document: {reason}"))
+    DocumentsError::InvalidDocx(reason.to_string())
 }
 
 /// A zip archive of parts and how much of them has been read.
@@ -829,10 +830,110 @@ mod tests {
         }
     }
 
+    /// The message of an unreadable file, which is the client's error: a 400.
     fn damaged(result: Result<String, DocumentsError>) -> String {
         match result {
-            Err(DocumentsError::Docx(message)) => message,
-            other => panic!("expected Docx, got {other:?}"),
+            Err(error) => {
+                assert_eq!(error.status(), http::StatusCode::BAD_REQUEST, "{error:?}");
+                match error {
+                    DocumentsError::InvalidDocx(message) => message,
+                    other => panic!("expected InvalidDocx, got {other:?}"),
+                }
+            }
+            other => panic!("expected InvalidDocx, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn every_kind_of_unreadable_file_is_the_clients_error() {
+        let limits = DocxLimits::default();
+        let good = docx(&para(&run("some text to compress ".repeat(40).as_str())));
+        let mut deflate = good.clone();
+        {
+            let mut archive = ZipArchive::new(Cursor::new(&good[..])).unwrap();
+            let file = archive.by_name("word/document.xml").unwrap();
+            let start = file.data_start().unwrap() as usize;
+            for byte in &mut deflate[start + 2..start + 40] {
+                *byte ^= 0xff;
+            }
+        }
+        let document = format!(r#"<w:document xmlns:w="{W}"><w:body/></w:document>"#);
+        let sheet = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml";
+        let mut duplicate = zip_of(&[
+            ("[Content_Types].xml", content_types(MAIN).as_bytes()),
+            ("_rels/.rels", RELS.as_bytes()),
+            ("word/document.xml", document.as_bytes()),
+            ("word/document.xmX", document.as_bytes()),
+        ]);
+        let from = b"word/document.xmX";
+        while let Some(at) = duplicate.windows(from.len()).position(|w| w == from) {
+            duplicate[at..at + from.len()].copy_from_slice(b"word/document.xml");
+        }
+        let cases: Vec<(&str, Vec<u8>, &str)> = vec![
+            ("not a zip archive", b"not a zip".to_vec(), ""),
+            ("an empty file", Vec::new(), ""),
+            ("a cut archive", good[..good.len() - 30].to_vec(), ""),
+            ("a damaged deflate stream", deflate, ""),
+            (
+                "XML cut off",
+                package(&format!(r#"<w:document xmlns:w="{W}"><w:body><w:p>"#)),
+                "",
+            ),
+            (
+                "XML with a mismatched end tag",
+                package(&format!(
+                    r#"<w:document xmlns:w="{W}"><w:body></w:p></w:body></w:document>"#
+                )),
+                "",
+            ),
+            (
+                "XML with an undefined entity",
+                docx(&para(&run("&custom;"))),
+                "&custom;",
+            ),
+            (
+                "a main part of another content type",
+                zip_of(&[
+                    ("[Content_Types].xml", content_types(sheet).as_bytes()),
+                    ("_rels/.rels", RELS.as_bytes()),
+                    ("word/document.xml", document.as_bytes()),
+                ]),
+                "not a Word document",
+            ),
+            (
+                "a DTD",
+                package(&format!(
+                    r#"<!DOCTYPE w:document [<!ENTITY a "b">]><w:document xmlns:w="{W}"><w:body/></w:document>"#
+                )),
+                "DTD",
+            ),
+            ("two entries of one name", duplicate, ""),
+            (
+                "no main document",
+                zip_of(&[
+                    ("[Content_Types].xml", content_types(MAIN).as_bytes()),
+                    ("_rels/.rels", RELS.as_bytes()),
+                ]),
+                "no main document",
+            ),
+        ];
+        for (name, bytes, fragment) in cases {
+            let error = match read_text(&bytes, &limits, true) {
+                Err(error) => error,
+                Ok(text) => panic!("{name}: read as {text:?}"),
+            };
+            assert_eq!(
+                error.status(),
+                http::StatusCode::BAD_REQUEST,
+                "{name}: {error:?}"
+            );
+            let shown = error.to_string();
+            assert!(shown.starts_with("invalid DOCX: "), "{name}: {shown}");
+            assert!(shown.contains(fragment), "{name}: {shown}");
+            assert!(
+                matches!(error, DocumentsError::InvalidDocx(_)),
+                "{name}: {error:?}"
+            );
         }
     }
 

@@ -513,8 +513,10 @@ impl DocxFile {
     /// A DOCX file from its bytes, checked within `limits`: the same as
     /// [`from_bytes`](Self::from_bytes) with limits of your own.
     ///
-    /// Bytes that are not a Word document are [`DocumentsError::Docx`], and
-    /// a file that is over a limit is [`DocumentsError::TooLarge`].
+    /// Bytes that are not a Word document that can be read (a damaged
+    /// archive or XML, another kind of package, a DTD, two entries of one
+    /// name) are [`DocumentsError::InvalidDocx`], a 400; a file that is over a
+    /// limit is [`DocumentsError::TooLarge`], a 413.
     pub fn from_bytes_within(
         bytes: impl Into<Bytes>,
         limits: &DocxLimits,

@@ -375,7 +375,7 @@ Ok(pdf.inline("invoice-42.pdf"))     // shown, saved under that name
 
 Both return a `Download`, which also takes any bytes: `Download::new(bytes, "text/csv", "deals.csv")`. The file name is sent as plain ASCII and as UTF-8 (`filename*`), so `شهادة.pdf` keeps its name; path separators, quotes and control characters are removed. Document responses carry `Cache-Control: private, no-store`, because documents usually hold personal data, and `X-Content-Type-Options: nosniff`.
 
-A `DocumentsError` returned with `?` is a 500 response, or 503 when an engine is unavailable or timed out. The response carries only the status's standard message; the template's file, line and message stay in your logs. The two errors that are the client's fault answer with their message: `Pdf` is a 400 (the bytes are not a PDF this crate can read), and `TooLarge` is a 413 (an input is over one of the limits below). An edit your code should not have asked for, such as merging no documents, is `Edit`, a 500 like the rest.
+A `DocumentsError` returned with `?` is a 500 response, or 503 when an engine is unavailable or timed out. The response carries only the status's standard message; the template's file, line and message stay in your logs. The errors that are the client's fault answer with their message: `Pdf` and `InvalidDocx` are a 400 (the bytes are not a PDF or a Word file this crate can read), and `TooLarge` is a 413 (an input is over one of the limits below). An edit your code should not have asked for, such as merging no documents, is `Edit`, a 500 like the rest.
 
 ## Merging, stamping and overlays
 
@@ -479,7 +479,7 @@ A Word file is untrusted input too, so reading one has limits. `DocxLimits` hold
 | `max_text_bytes` | 64 MiB | The text is longer; it is held whole, so this is memory as well |
 | `max_depth` | 256 | Elements nest deeper |
 
-Each is a `DocumentsError::TooLarge`, a 413 whose message names the limit. The sizes an archive declares are checked before a part is read, and the bytes a part unpacks to are counted as they are produced, so a file whose headers are wrong is refused and not trusted. The document is read as a stream: a read holds the text it returns and the largest single element or text of the part, which is at most `max_part_bytes`, and no more of the file. Reading is synchronous work for the CPU: in a release build a part of 64 MiB took about a second as ordinary paragraphs and a few seconds as the worst shape measured (millions of empty paragraphs under a hundred namespace declarations), so run a client's file on a blocking thread (`tokio::task::spawn_blocking`) and not on a request's executor thread. Bytes that are not a Word document are `DocumentsError::Docx`: not a zip archive, a damaged archive or part, XML that is not well-formed or has a DTD, no main document, or a main part that is not a Word document's. That is a 500 like the rest of that error, so map it to a 4xx yourself when the bytes came from a client.
+Each is a `DocumentsError::TooLarge`, a 413 whose message names the limit. The sizes an archive declares are checked before a part is read, and the bytes a part unpacks to are counted as they are produced, so a file whose headers are wrong is refused and not trusted. The document is read as a stream: a read holds the text it returns and the largest single element or text of the part, which is at most `max_part_bytes`, and no more of the file. Reading is synchronous work for the CPU: in a release build a part of 64 MiB took about a second as ordinary paragraphs and a few seconds as the worst shape measured (millions of empty paragraphs under a hundred namespace declarations), so run a client's file on a blocking thread (`tokio::task::spawn_blocking`) and not on a request's executor thread. Bytes that are not a Word document that can be read are `DocumentsError::InvalidDocx`, a 400 whose message says what is wrong, the way an unreadable PDF is `Pdf`: not a zip archive, a damaged archive or part, XML that is not well-formed or has a DTD, two entries of one name, no main document, or a main part that is not a Word document's. Returned with `?` from a handler, it needs no mapping. `Docx(..)` stays for the app's side: writing a Word file failing, or an image that is not a PNG or a JPEG, is a 500.
 
 ## Saving and queueing
 
@@ -702,7 +702,8 @@ Every engine implements `PdfEngine` and passes the same conformance suite: the n
 | `Pdf(..)` | 400 | The bytes are not a PDF that can be read |
 | `Edit(..)` | 500 | The app asked for an edit that cannot be done: merging nothing, a stamp Helvetica cannot show |
 | `TooLarge(..)` | 413 | An image has more pixels than `max_image_pixels`, or a PDF or a DOCX is over a reading limit |
-| `Docx(..)` | 500 | Writing a DOCX failed, or the bytes given to `DocxFile::from_bytes` are not a Word document |
+| `Docx(..)` | 500 | Writing a DOCX failed |
+| `InvalidDocx(..)` | 400 | The bytes given to `DocxFile::from_bytes` are not a Word document that can be read |
 | `Storage(..)`, `Queue(..)` | 500 | The disk or the queue failed |
 
 <LinkCards>
