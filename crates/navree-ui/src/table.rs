@@ -2,6 +2,7 @@
 //! filter and page in the URL, so links are shareable and JavaScript is
 //! optional) and [`DataTable`] (a region that morphs in place).
 
+use std::fmt::Write as _;
 use std::marker::PhantomData;
 use std::time::Duration;
 
@@ -9,9 +10,9 @@ use http::request::Parts;
 use navree_http::extract::{FromRequestParts, urlencoded};
 use serde::de::DeserializeOwned;
 
-use crate::components::{Badge, BadgeVariant, Button, Empty, Input, NativeSelect, Pagination, Skeleton, SkeletonShape, icon};
+use crate::components::{BadgeVariant, Button, Empty, Input, NativeSelect, Pagination, Skeleton, SkeletonShape, icon};
 use crate::form::{encode, encode_into};
-use crate::html::Href;
+use crate::html::{Href, SafeHtml, escape_into};
 use crate::icons;
 use crate::node::{AttrValue, Element, IntoNodes, Node, Uses, el};
 
@@ -38,27 +39,27 @@ pub trait TableRow {
     /// The row's stable key, so a morph keeps it.
     fn key(&self) -> Option<String>;
 
-    /// The cells, in the order of the columns.
-    fn cells(&self) -> Vec<Node>;
+    /// Writes the row's `<td>`s, in the order of the columns.
+    fn write_cells(&self, out: &mut String);
 }
 
-/// A value as a table cell shows it.
+/// A value as a table cell shows it, written straight to the page.
 pub trait CellValue {
-    /// The cell's content.
-    fn to_cell(&self) -> Node;
+    /// Writes the cell's content, through the one escaping path.
+    fn write_cell(&self, out: &mut String);
 }
 
 impl CellValue for String {
     #[inline]
-    fn to_cell(&self) -> Node {
-        Node::Text(self.clone().into())
+    fn write_cell(&self, out: &mut String) {
+        escape_into(out, self);
     }
 }
 
 impl CellValue for &'static str {
     #[inline]
-    fn to_cell(&self) -> Node {
-        Node::from(*self)
+    fn write_cell(&self, out: &mut String) {
+        escape_into(out, self);
     }
 }
 
@@ -66,49 +67,56 @@ macro_rules! int_cells {
     ($($type:ty),+) => {
         $(impl CellValue for $type {
             #[inline]
-            fn to_cell(&self) -> Node {
-                Node::Int(i64::from(*self))
+            fn write_cell(&self, out: &mut String) {
+                let _ = write!(out, "{self}");
             }
         })+
     };
 }
 
-int_cells!(i8, i16, i32, i64, u8, u16, u32);
+int_cells!(i8, i16, i32, i64, u8, u16, u32, u64);
 
 impl CellValue for crate::form::Money {
-    fn to_cell(&self) -> Node {
-        Node::Text(self.display().into())
+    fn write_cell(&self, out: &mut String) {
+        out.push_str(&self.display());
     }
 }
 
 impl CellValue for chrono::NaiveDate {
-    fn to_cell(&self) -> Node {
-        Node::Text(self.format("%Y-%m-%d").to_string().into())
+    fn write_cell(&self, out: &mut String) {
+        let _ = write!(out, "{}", self.format("%Y-%m-%d"));
     }
 }
 
 impl<T: CellValue> CellValue for Option<T> {
-    fn to_cell(&self) -> Node {
-        self.as_ref().map_or(Node::Empty, CellValue::to_cell)
+    #[inline]
+    fn write_cell(&self, out: &mut String) {
+        if let Some(value) = self {
+            value.write_cell(out);
+        }
     }
 }
 
-/// A `<td>`. The derive calls this.
-#[inline]
-pub fn cell(content: Node, numeric: bool, hide_on_mobile: bool) -> Node {
-    Node::Element(el("td").flag("data-numeric", numeric).flag("data-hide-mobile", hide_on_mobile).child(content))
+/// Writes a link in a cell. The derive calls this.
+pub fn write_link(out: &mut String, href: String, content: &impl CellValue) {
+    out.push_str("<a href=\"");
+    escape_into(out, Href::from(href).as_str());
+    out.push_str("\">");
+    content.write_cell(out);
+    out.push_str("</a>");
 }
 
-/// A link in a cell. The derive calls this.
-#[inline]
-pub fn link_cell(href: String, content: Node) -> Node {
-    Node::Element(el("a").href(href).child(content))
-}
-
-/// A badge in a cell. The derive calls this.
-#[inline]
-pub fn badge_cell(content: Node, variant: BadgeVariant) -> Node {
-    Badge::new(content).variant(variant).into()
+/// Writes a badge in a cell. The derive calls this.
+pub fn write_badge(out: &mut String, content: &impl CellValue, variant: BadgeVariant) {
+    out.push_str(match variant {
+        BadgeVariant::Outline => "<span data-slot=\"badge\" data-variant=\"outline\">",
+        BadgeVariant::Success => "<span data-slot=\"badge\" data-variant=\"success\">",
+        BadgeVariant::Warning => "<span data-slot=\"badge\" data-variant=\"warning\">",
+        BadgeVariant::Danger => "<span data-slot=\"badge\" data-variant=\"danger\">",
+        _ => "<span data-slot=\"badge\">",
+    });
+    content.write_cell(out);
+    out.push_str("</span>");
 }
 
 /// A struct of filters. `#[derive(FilterBar)]` implements it.
@@ -368,19 +376,29 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         if self.rows.is_empty() {
             return root.child(self.empty.unwrap_or_else(|| Empty::new("Nothing here yet.").icon(icons::INBOX))).into();
         }
-        let mut rows = Vec::with_capacity(self.rows.len());
-        for row in self.rows {
-            let mut tr = el("tr");
-            if let Some(key) = row.key() {
-                tr = tr.attr("data-key", key);
+        // Rows are the bulk of a page, so they skip the tree: each writes
+        // straight to one buffer, sized from the first, through the same
+        // escaping as everything else.
+        let mut rows = String::new();
+        for (at, row) in self.rows.iter().enumerate() {
+            match row.key() {
+                Some(key) => {
+                    rows.push_str("<tr data-key=\"");
+                    escape_into(&mut rows, &key);
+                    rows.push_str("\">");
+                }
+                None => rows.push_str("<tr>"),
             }
-            tr.children = row.cells();
-            rows.push(Node::Element(tr));
+            row.write_cells(&mut rows);
+            rows.push_str("</tr>");
+            if at == 0 {
+                rows.reserve((rows.len() + 16) * self.rows.len());
+            }
         }
         let table = el("table").slot("table").children((
             self.caption.map(|caption| el("caption").child(caption)),
             self.head(),
-            el("tbody").child(rows),
+            el("tbody").child(SafeHtml::trusted(rows)),
         ));
         let per = u64::from(self.query.per_page());
         let pages = u32::try_from(self.total.div_ceil(per).max(1)).unwrap_or(u32::MAX);

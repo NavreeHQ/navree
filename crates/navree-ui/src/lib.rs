@@ -25,6 +25,7 @@ pub mod assets;
 mod assets_gen;
 pub mod cmd;
 pub mod components;
+pub mod compress;
 pub mod form;
 pub mod html;
 pub mod icons;

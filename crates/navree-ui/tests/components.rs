@@ -144,8 +144,8 @@ fn pagination_shows_the_near_pages_and_is_safe_at_the_edges() {
     assert!(!html.contains(r#"aria-label="Page 2""#), "{html}");
     assert_eq!(html.matches('…').count(), 2, "{html}");
     let html = render(&Pagination::new(99, 0, |page| format!("?page={page}")).into());
-    assert!(html.contains(r#"aria-label="Previous page" aria-disabled="true""#), "{html}");
-    assert!(html.contains(r#"aria-label="Next page" aria-disabled="true""#), "{html}");
+    assert!(html.contains(r#"aria-label="Previous page" role="link" aria-disabled="true""#), "{html}");
+    assert!(html.contains(r#"aria-label="Next page" role="link" aria-disabled="true""#), "{html}");
 }
 
 #[test]

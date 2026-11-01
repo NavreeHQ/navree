@@ -91,14 +91,23 @@ pub(crate) fn table_row(input: DeriveInput) -> syn::Result<TokenStream> {
         let content = match (&hint.link, &hint.badge) {
             (Some(link), _) => {
                 let href = link_expr(link)?;
-                quote!(#ui::table::link_cell(#href, #ui::table::CellValue::to_cell(&self.#ident)))
+                quote!(#ui::table::write_link(out, #href, &self.#ident);)
             }
-            (None, Some(tone)) => quote!(#ui::table::badge_cell(#ui::table::CellValue::to_cell(&self.#ident), #tone(&self.#ident))),
-            (None, None) => quote!(#ui::table::CellValue::to_cell(&self.#ident)),
+            (None, Some(tone)) => quote!(#ui::table::write_badge(out, &self.#ident, #tone(&self.#ident));),
+            (None, None) => quote!(#ui::table::CellValue::write_cell(&self.#ident, out);),
         };
-        cells.push(quote!(out.push(#ui::table::cell(#content, #numeric, #hide));));
+        let open = match (numeric, hide) {
+            (false, false) => "<td>",
+            (true, false) => "<td data-numeric>",
+            (false, true) => "<td data-hide-mobile>",
+            (true, true) => "<td data-numeric data-hide-mobile>",
+        };
+        cells.push(quote! {
+            out.push_str(#open);
+            #content
+            out.push_str("</td>");
+        });
     }
-    let count = cells.len();
     let ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     Ok(quote! {
@@ -110,10 +119,8 @@ pub(crate) fn table_row(input: DeriveInput) -> syn::Result<TokenStream> {
                 #key
             }
 
-            fn cells(&self) -> ::std::vec::Vec<#ui::Node> {
-                let mut out = ::std::vec::Vec::with_capacity(#count);
+            fn write_cells(&self, out: &mut ::std::string::String) {
                 #(#cells)*
-                out
             }
         }
     })

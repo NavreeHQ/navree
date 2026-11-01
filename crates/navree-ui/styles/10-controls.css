@@ -31,7 +31,7 @@
 [data-slot=input],[data-slot=textarea],[data-slot=native-select]{display:block;width:100%;height:2rem;padding:0 .625rem;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--ink-1);color:var(--fg);font-size:14px;transition:border-color .1s;
   &::placeholder{color:var(--fg-3)}
   &:hover{border-color:var(--line-3)}
-  &:focus-visible{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+  &:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
   &[aria-invalid=true]{border-color:var(--danger)}
   &:disabled{opacity:.5;cursor:not-allowed}
   &[readonly]{background:var(--ink-2)}
@@ -63,7 +63,7 @@ input[type=date],input[type=time],input[type=datetime-local]{color-scheme:dark}
   &:hover{border-color:var(--line-3)}
   &:focus-within{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
   &:has([aria-invalid=true]){border-color:var(--danger)}
-  & > [data-slot=input]{flex:1;min-width:0;height:100%;border:0;background:transparent;&:focus-visible{outline:0}}
+  & > [data-slot=input]{flex:1;min-width:0;height:100%;border:0;background:transparent;&:focus{outline:0}}
   & [data-slot=native-select]{width:auto;height:1.5rem;border:0;background-color:transparent;font-size:13px}
 }
 [data-slot=input-group-addon]{display:flex;align-items:center;gap:.25rem;flex:none;padding-inline:.5rem;color:var(--fg-3);font-size:13px;&:has([data-slot=native-select]){padding-inline:0 .125rem}}

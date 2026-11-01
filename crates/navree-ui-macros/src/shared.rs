@@ -55,6 +55,9 @@ pub(crate) fn doc_line(attrs: &[Attribute]) -> Option<String> {
 
 /// A name as words: `expected_close_date` is `Expected close date`.
 pub(crate) fn words(name: &str) -> String {
+    if name.len() > 1 && !name.contains('_') && name.chars().all(|c| !c.is_lowercase()) {
+        return name.to_owned();
+    }
     let title = name.to_title_case().to_lowercase();
     let mut chars = title.chars();
     match chars.next() {

@@ -12,7 +12,7 @@ use navree_http::response::{IntoResponse, Response};
 use navree_http::{Controller, GlobalLayer, LayerSlot, ModuleBuilderHttpExt, Path, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
 
-use crate::assets;
+use crate::{assets, compress};
 use crate::op::{PendingOps, UI_HEADER};
 
 /// Registers the toolkit in an app: the routes of its files, and the layer
@@ -45,16 +45,19 @@ impl Module for UiModule {
     }
 }
 
-/// Swaps a reply's fallback for its ops when the request came from the runtime.
+/// Swaps a reply's fallback for its ops when the request came from the runtime,
+/// and sends rendered responses in brotli to clients that take it.
 async fn reply_layer(request: Request, next: Next) -> Response {
     let from_runtime = request.headers().contains_key(UI_HEADER);
+    let accept = compress::accept_of(request.headers());
+    let method = request.method().clone();
     let mut response = next.run(request).await;
     if let Some(PendingOps(envelope, status)) = response.extensions_mut().remove::<PendingOps>()
         && from_runtime
     {
-        return (status, envelope).into_response();
+        response = (status, envelope).into_response();
     }
-    response
+    compress::encode(&method, &accept, response).await
 }
 
 /// The route of the files.

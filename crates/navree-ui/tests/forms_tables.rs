@@ -2,9 +2,9 @@
 //! back; a row struct draws its table with sort, filter and page in the URL.
 
 use navree_ui::form::{Form, FormView, Money, Widget, decode};
-use navree_ui::table::{DataTable, Direction, TableQuery, TableRow};
+use navree_ui::table::{Direction, TableRow};
 use navree_ui::test_view::Clicked;
-use navree_ui::{BadgeVariant, FilterBar, Form, InputKind, Options, TableRow, TestView, Validate, View, render};
+use navree_ui::{BadgeVariant, DataTable, FilterBar, Form, InputKind, Options, TableQuery, TableRow, TestView, Validate, View, render};
 use serde::Deserialize;
 
 #[derive(Clone, Copy, Debug, Deserialize, Options, PartialEq, Eq)]
@@ -66,6 +66,7 @@ fn the_type_picks_the_widget_and_the_doc_comment_the_label() {
     assert_eq!(fields[4].widget, Widget::Input(InputKind::Date));
     assert!(fields[4].optional);
     assert_eq!(fields[5].label, "Contact email");
+    assert_eq!(fields[2].options, [("USD", "USD"), ("EUR", "EUR")], "a name in capitals keeps them");
     assert_eq!(fields[8].widget, Widget::Checkbox);
 }
 
@@ -226,6 +227,15 @@ fn a_table_is_a_region_with_links_that_keep_the_state() {
     assert!(html.contains(r#"data-variant="success""#), "{html}");
     assert!(html.contains("data-hide-mobile"), "{html}");
     assert!(html.contains("51–51 of 500"), "{html}");
+}
+
+#[test]
+fn test_view_reads_table_rows() {
+    let query = TableQuery::<DealRow, DealFilter>::parse("/deals", "");
+    let rows = rows();
+    let page = TestView::of_node(DataTable::new("deals", &query, &rows));
+    assert!(page.sees("A<cme"));
+    assert!(page.sees("12.34"));
 }
 
 #[test]

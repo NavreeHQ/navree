@@ -78,7 +78,7 @@ fn lookup(file: &str) -> Option<(&'static Asset, bool)> {
 }
 
 /// Whether `accept` takes `encoding` (an explicit `;q=0` refuses it).
-fn accepts(accept: &str, encoding: &str) -> bool {
+pub(crate) fn accepts(accept: &str, encoding: &str) -> bool {
     accept.split(',').any(|item| {
         let mut parts = item.split(';');
         let name = parts.next().unwrap_or_default().trim();

@@ -266,6 +266,22 @@ criteria = "safe-to-deploy"
 version = "0.1.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.alloc-no-stdlib]]
+version = "3.0.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.alloc-stdlib]]
+version = "0.3.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.brotli]]
+version = "9.1.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.brotli-decompressor]]
+version = "6.2.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.bytes]]
 version = "1.12.1"
 criteria = "safe-to-deploy"

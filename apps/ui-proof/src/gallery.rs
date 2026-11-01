@@ -85,7 +85,7 @@ fn display() -> Element {
             )),
             Item::new("An item").description("With a description").media(components::icon(icons::FILE)).variant(ItemVariant::Outline).actions(Button::ghost("Open")),
             Item::new("A link item").href("/plain").variant(ItemVariant::Muted),
-            Breadcrumb::new().link("Deals", "/deals").current("Acme"),
+            Breadcrumb::new().label("Example trail").link("Deals", "/deals").current("Acme"),
             Pagination::new(5, 10, |page| format!("/gallery?page={page}")),
             Progress::new(40, 100, "Upload"),
             Progress::indeterminate("Working"),

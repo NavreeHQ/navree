@@ -17,6 +17,10 @@
 
 use std::sync::Arc;
 
+use navree::http::extract::Request;
+use navree::http::middleware::{self, Next};
+use navree::http::response::Response;
+use navree::http::{GlobalLayer, LayerSlot};
 use navree::prelude::*;
 use navree::ui::{NavGroup, NavItem, Shell, UiModule, UserMenu, icons};
 
@@ -49,8 +53,20 @@ struct ProofModule;
 impl Module for ProofModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.factory(Factory::<Shell>::new(|_| async { Ok(Arc::new(shell())) })).exports::<Shell>();
+        m.http_layer(GlobalLayer::new(LayerSlot::Context, "proof.timing", |_, router| Ok(router.layer(middleware::from_fn(timing)))));
         m.controller::<deals::DealPages>().controller::<dashboard::DashboardPages>().controller::<gallery::GalleryPages>();
     }
+}
+
+/// `Server-Timing: app`: the time from the router to the finished response,
+/// so a benchmark can tell the app's time from the network's.
+async fn timing(request: Request, next: Next) -> Response {
+    let start = std::time::Instant::now();
+    let mut response = next.run(request).await;
+    if let Ok(value) = http::HeaderValue::from_str(&format!("app;dur={:.3}", start.elapsed().as_secs_f64() * 1000.0)) {
+        response.headers_mut().insert("server-timing", value);
+    }
+    response
 }
 
 fn main() -> Result<(), BoxError> {

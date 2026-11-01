@@ -11,9 +11,11 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+brotli = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 http = { workspace = true }
+http-body = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-ui-macros = { workspace = true }

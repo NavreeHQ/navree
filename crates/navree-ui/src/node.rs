@@ -62,7 +62,21 @@ impl Node {
 
     fn collect_text(&self, out: &mut String) {
         match self {
-            Self::Empty | Self::Raw(_) | Self::Static(_) => {}
+            Self::Empty | Self::Static(_) => {}
+            Self::Raw(html) => {
+                // Tests read this: tags go, and the entities the escaping path writes.
+                let mut inside = false;
+                let mut text = String::new();
+                for c in html.as_str().chars() {
+                    match c {
+                        '<' => inside = true,
+                        '>' => inside = false,
+                        _ if !inside => text.push(c),
+                        _ => {}
+                    }
+                }
+                out.push_str(&text.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&#39;", "'").replace("&amp;", "&"));
+            }
             Self::Text(text) => out.push_str(text),
             Self::Int(value) => out.push_str(&value.to_string()),
             Self::Element(element) => {

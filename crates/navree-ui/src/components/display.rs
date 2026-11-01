@@ -262,13 +262,20 @@ impl Badge {
 #[must_use]
 pub struct Breadcrumb {
     el: Element,
+    label: &'static str,
     items: Vec<Element>,
 }
 
 impl Breadcrumb {
     /// An empty trail.
     pub fn new() -> Self {
-        Self { el: el("nav").slot("breadcrumb").attr("aria-label", "Breadcrumb"), items: Vec::new() }
+        Self { el: el("nav").slot("breadcrumb"), label: "Breadcrumb", items: Vec::new() }
+    }
+
+    /// Names it, when a page has more than one: landmarks must differ.
+    pub fn label(mut self, label: &'static str) -> Self {
+        self.label = label;
+        self
     }
 
     /// Adds a link.
@@ -284,7 +291,7 @@ impl Breadcrumb {
     }
 
     fn into_node(self) -> Node {
-        self.el.child(el("ol").child(self.items)).into()
+        self.el.attr("aria-label", self.label).child(el("ol").child(self.items)).into()
     }
 }
 
@@ -330,6 +337,7 @@ impl Bubble {
 #[must_use]
 pub struct Card {
     el: Element,
+    level: &'static str,
     title: Option<Node>,
     description: Option<Node>,
     action: Option<Node>,
@@ -340,7 +348,18 @@ pub struct Card {
 impl Card {
     /// An empty card.
     pub fn new() -> Self {
-        Self { el: el("div").slot("card"), title: None, description: None, action: None, body: Vec::new(), footer: Vec::new() }
+        Self { el: el("div").slot("card"), level: "h2", title: None, description: None, action: None, body: Vec::new(), footer: Vec::new() }
+    }
+
+    /// Sets the heading level of its title (2 by default, under a page's `h1`).
+    pub fn heading(mut self, level: u8) -> Self {
+        self.level = match level {
+            0..=2 => "h2",
+            3 => "h3",
+            4 => "h4",
+            _ => "h5",
+        };
+        self
     }
 
     /// A card with a title.
@@ -381,7 +400,7 @@ impl Card {
     fn into_node(self) -> Node {
         let header = (self.title.is_some() || self.description.is_some() || self.action.is_some()).then(|| {
             el("div").slot("card-header").children((
-                self.title.map(|title| el("h3").slot("card-title").child(title)),
+                self.title.map(|title| el(self.level).slot("card-title").child(title)),
                 self.description.map(|text| el("p").slot("card-description").child(text)),
                 self.action.map(|action| el("div").slot("card-action").child(action)),
             ))
@@ -682,7 +701,7 @@ impl Pagination {
         let mut items = Vec::with_capacity(9);
         let edge = |target: u32, enabled: bool, glyph: Icon, label: &'static str| {
             let link = el("a").slot("pagination-link").attr("aria-label", label).child(icon(glyph));
-            let link = if enabled { link.href(href(target)) } else { link.attr("aria-disabled", "true") };
+            let link = if enabled { link.href(href(target)) } else { link.attr("role", "link").attr("aria-disabled", "true") };
             el("li").child(link)
         };
         items.push(edge(page.saturating_sub(1), page > 1, icons::CHEVRON_LEFT, "Previous page"));
