@@ -1587,7 +1587,7 @@ fn cells_far_apart_take_memory_for_the_cells_not_the_area() {
 }
 
 /// `bytes` with the part `name` holding `content` instead.
-fn replacing(bytes: &[u8], name: &str, content: &str) -> Vec<u8> {
+fn replacing(bytes: &[u8], name: &str, content: impl AsRef<[u8]>) -> Vec<u8> {
     let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
     let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
     let options = zip::write::SimpleFileOptions::default();
@@ -1596,7 +1596,7 @@ fn replacing(bytes: &[u8], name: &str, content: &str) -> Vec<u8> {
         let part_name = part.name().unwrap().into_owned();
         zip.start_file(part_name.as_str(), options).unwrap();
         if part_name == name {
-            zip.write_all(content.as_bytes()).unwrap();
+            zip.write_all(content.as_ref()).unwrap();
         } else {
             std::io::copy(&mut part, &mut zip).unwrap();
         }
@@ -1678,4 +1678,233 @@ fn the_peak_memory_of_reading_an_ods_cell_of_many_spaces() {
 #[test]
 fn an_ods_cell_that_repeats_a_space_makes_no_more_text_than_the_limit() {
     run_alone("the_peak_memory_of_reading_an_ods_cell_of_many_spaces");
+}
+
+#[test]
+fn an_ods_spreadsheet_is_read_by_the_sheet_asked_for() {
+    let first = ods_table(
+        "First",
+        &[
+            ods_row(2, ""),
+            ods_row(1, &[ods_gap(1), ods_text("a"), ods_text("b")].concat()),
+            ods_row(1, &[ods_gap(1), ods_number("1.5"), ods_number("2")].concat()),
+        ]
+        .concat(),
+    );
+    let twice = ods_table("Twice", &ods_row(1, &ods_text("first of two")));
+    let again = ods_table("Twice", &ods_row(1, &ods_text("second of two")));
+    let bytes = ods_of(&[first, twice, again].concat());
+    let table = read_table(&bytes, "book.ods", &limits(10)).unwrap();
+    assert_eq!(table.kind, FileKind::Ods);
+    assert_eq!(table.headers, ["Column 1", "a", "b"]);
+    assert_eq!(table.rows.len(), 1);
+    assert_eq!(table.rows[0].number, 4);
+    assert_eq!(
+        table.rows[0].cells,
+        [Cell::Empty, Cell::Float(1.5), Cell::Float(2.0)]
+    );
+    // Two tables of one name are one sheet: the last.
+    let table = read_table(
+        &bytes,
+        "book.ods",
+        &ReadOptions {
+            sheet: Some("Twice"),
+            ..limits(10)
+        },
+    )
+    .unwrap();
+    assert_eq!(table.headers, ["second of two"]);
+    let result = read_table(
+        &bytes,
+        "book.ods",
+        &ReadOptions {
+            sheet: Some("Third"),
+            ..limits(10)
+        },
+    );
+    assert!(refused_for(&result, "no sheet named `Third`"), "{result:?}");
+}
+
+#[test]
+fn repeated_ods_rows_and_cells_are_rows_and_cells() {
+    let rows = [
+        ods_row(1, &[ods_text("a"), ods_text("b"), ods_text("c")].concat()),
+        ods_row(3, &format!(r#"<table:table-cell table:number-columns-repeated="2" office:value-type="float" office:value="7"/>"#)),
+        ods_row(1_000, &ods_gap(1_024)),
+        ods_row(1, &[ods_gap(2), ods_text("last")].concat()),
+        // What spreadsheets write after the last row.
+        ods_row(1_047_570, &ods_gap(16_384)),
+    ]
+    .concat();
+    let bytes = ods_of(&ods_table("Sheet1", &rows));
+    let table = read_table(&bytes, "book.ods", &limits(10)).unwrap();
+    let numbers: Vec<u64> = table.rows.iter().map(|r| r.number).collect();
+    assert_eq!(numbers, [2, 3, 4, 1_005]);
+    for row in &table.rows[..3] {
+        assert_eq!(row.cells, [Cell::Float(7.0), Cell::Float(7.0), Cell::Empty]);
+    }
+    assert_eq!(
+        table.rows[3].cells,
+        [Cell::Empty, Cell::Empty, Cell::Text("last".into())]
+    );
+    assert_read_as_a_range("repeats", &bytes);
+}
+
+#[test]
+fn an_ods_row_repeated_a_million_times_is_refused_at_the_row_limit_at_once() {
+    let rows = [
+        ods_row(1, &ods_text("h")),
+        ods_row(1_000_000, &ods_number("1")),
+    ]
+    .concat();
+    let bytes = ods_of(&ods_table("Sheet1", &rows));
+    let started = std::time::Instant::now();
+    let result = read_table(&bytes, "book.ods", &limits(100));
+    assert!(
+        matches!(result, Err(SheetsError::TooManyRows { limit: 100 })),
+        "{result:?}"
+    );
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(2),
+        "took {:?}",
+        started.elapsed()
+    );
+    // Within the limit, every copy is a row.
+    let rows = [ods_row(1, &ods_text("h")), ods_row(50_000, &ods_number("1"))].concat();
+    let bytes = ods_of(&ods_table("Sheet1", &rows));
+    let table = read_table(&bytes, "book.ods", &limits(50_000)).unwrap();
+    assert_eq!(table.rows.len(), 50_000);
+    assert_eq!(table.rows[49_999].number, 50_001);
+}
+
+#[test]
+fn an_ods_cell_repeated_past_the_last_column_stops_there() {
+    let cell = r#"<table:table-cell table:number-columns-repeated="1099511627776" office:value-type="string" office:string-value="x"/>"#;
+    let bytes = ods_of(&ods_table("Sheet1", &ods_row(1, cell)));
+    let started = std::time::Instant::now();
+    let table = read_table(&bytes, "book.ods", &limits(10)).unwrap();
+    assert_eq!(table.headers.len(), 16_384);
+    assert_eq!(table.headers[16_383], "x (16384)");
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    let result = read_table(
+        &bytes,
+        "book.ods",
+        &ReadOptions {
+            max_columns: 100,
+            ..limits(10)
+        },
+    );
+    assert!(refused_for(&result, "more than 100 columns"), "{result:?}");
+}
+
+#[test]
+fn a_wide_ods_row_repeated_past_a_narrow_header_costs_the_header_s_width() {
+    // 16,384 values in a row, 20,000 times, under a header of one column:
+    // 300 million cells, of which the table keeps 20,000.
+    let wide: String = (0..16_384).map(|i| ods_number(&i.to_string())).collect();
+    let rows = [ods_row(1, &ods_text("h")), ods_row(20_000, &wide)].concat();
+    let bytes = ods_of(&ods_table("Sheet1", &rows));
+    let started = std::time::Instant::now();
+    let table = read_table(&bytes, "book.ods", &limits(100_000)).unwrap();
+    assert_eq!(table.rows.len(), 20_000);
+    assert_eq!(table.rows[19_999].cells, [Cell::Float(0.0)]);
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(10),
+        "took {:?}",
+        started.elapsed()
+    );
+}
+
+#[test]
+fn ods_text_is_its_paragraphs_and_spaces() {
+    let cells = [
+        r#"<table:table-cell office:value-type="string"><text:p>first</text:p><text:p>sec<text:span>ond</text:span></text:p></table:table-cell>"#,
+        r#"<table:table-cell office:value-type="string"><text:p>a<text:s text:c="3"/>b<text:s/>c</text:p></table:table-cell>"#,
+        r#"<table:table-cell office:value-type="string"><office:annotation><text:p>a note</text:p></office:annotation><text:p>noted</text:p></table:table-cell>"#,
+        r#"<table:table-cell office:value-type="string" office:string-value="the attribute"><text:p>not this</text:p></table:table-cell>"#,
+        r#"<table:table-cell office:value-type="date" office:date-value="2026-03-01"><text:p>01/03/26</text:p></table:table-cell>"#,
+        r#"<table:table-cell office:value-type="boolean" office:boolean-value="true"><text:p>TRUE</text:p></table:table-cell>"#,
+        r#"<table:table-cell office:value-type="percentage" office:value="0.25"><text:p>25%</text:p></table:table-cell>"#,
+        r#"<table:covered-table-cell office:value-type="string"><text:p>covered</text:p></table:covered-table-cell>"#,
+        r#"<table:table-cell office:value-type="string"><text:p>&lt;tag&gt; &amp; &#233;</text:p></table:table-cell>"#,
+    ]
+    .concat();
+    let header: String = (0..9).map(|i| ods_text(&format!("h{i}"))).collect();
+    let rows = [ods_row(1, &header), ods_row(1, &cells)].concat();
+    let table = read_table(&ods_of(&ods_table("Sheet1", &rows)), "book.ods", &limits(10)).unwrap();
+    assert_eq!(
+        table.rows[0].cells,
+        [
+            Cell::Text("first\nsecond".into()),
+            Cell::Text("a   b c".into()),
+            Cell::Text("noted".into()),
+            Cell::Text("the attribute".into()),
+            Cell::Text("2026-03-01".into()),
+            Cell::Bool(true),
+            Cell::Float(0.25),
+            Cell::Text("covered".into()),
+            Cell::Text("<tag> & é".into()),
+        ]
+    );
+}
+
+#[test]
+fn an_xlsb_workbook_is_read_as_an_excel_workbook() {
+    use crate::import::workbook::xlsb_writer::Value;
+    let bytes = xlsb_of(&[
+        (0, 0, Value::Text("Name".into())),
+        (0, 1, Value::Text("Age".into())),
+        (1, 0, Value::Text(" Ada ".into())),
+        (1, 1, Value::RkInt(36, false)),
+    ]);
+    let table = read_table(&bytes, "people.xlsb", &limits(10)).unwrap();
+    assert_eq!(table.kind, FileKind::Xlsx);
+    assert_eq!(table.headers, ["Name", "Age"]);
+    assert_eq!(
+        table.rows[0].cells,
+        [Cell::Text("Ada".into()), Cell::Int(36)]
+    );
+}
+
+#[test]
+fn damaged_workbooks_are_refused_as_unreadable() {
+    use crate::import::workbook::xlsb_writer::{part, sheet, workbook};
+    let ods = |content: &str| ods_of(&ods_table("Sheet1", content));
+    let xlsb_sheet = |records: &[(u16, Vec<u8>)]| {
+        workbook(&[("Sheet1", Some(sheet(records)))], &[], &[], &[0], false)
+    };
+    let cases: Vec<(&str, Vec<u8>)> = vec![
+        ("an ODS row of text", ods(&ods_row(1, "<text:p>x</text:p>"))),
+        ("an ODS count that is not one", ods(&ods_row(1, r#"<table:table-cell table:number-columns-repeated="many"/>"#))),
+        ("an ODS number that is not one", ods(&ods_row(1, r#"<table:table-cell office:value-type="float" office:value="one"/>"#))),
+        ("an ODS table not closed", {
+            let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+            let options = zip::write::SimpleFileOptions::default();
+            zip.start_file("mimetype", options).unwrap();
+            zip.write_all(b"application/vnd.oasis.opendocument.spreadsheet").unwrap();
+            zip.start_file("META-INF/manifest.xml", options).unwrap();
+            zip.write_all(b"<m/>").unwrap();
+            zip.start_file("content.xml", options).unwrap();
+            zip.write_all(br#"<a><table:table table:name="S"><table:table-row>"#).unwrap();
+            zip.finish().unwrap().into_inner()
+        }),
+        ("an XLSB cell cut short", xlsb_sheet(&[(0x00, vec![0; 4]), (0x05, vec![0; 6])])),
+        ("an XLSB shared string that is missing", xlsb_sheet(&[(0x00, vec![0; 4]), (0x07, [0u8; 8].iter().chain(&9u32.to_le_bytes()).copied().collect())])),
+        ("an XLSB error code that is unknown", xlsb_sheet(&[(0x00, vec![0; 4]), (0x03, vec![0, 0, 0, 0, 0, 0, 0, 0, 0x99])])),
+        ("an XLSB sheet without its end", {
+            let mut bytes = xlsb_sheet(&[]);
+            bytes = replacing(&bytes, "xl/worksheets/sheet1.bin", "");
+            bytes
+        }),
+        ("an XLSB record longer than its part", {
+            let records = part(&[(0x81, vec![]), (0x94, vec![0; 16]), (0x91, vec![])]);
+            let mut cut = records.clone();
+            cut.extend_from_slice(&[0x05, 0x7F, 1, 2]);
+            replacing(&xlsb_sheet(&[]), "xl/worksheets/sheet1.bin", &cut)
+        }),
+    ];
+    for (label, bytes) in cases {
+        let result = read_table(&bytes, "book", &limits(10));
+        assert!(refused_for(&result, "cannot be read"), "{label}: {result:?}");
+    }
 }
