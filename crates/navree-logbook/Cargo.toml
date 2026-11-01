@@ -35,6 +35,7 @@ navree-contracts = { workspace = true }
 navree-db = { workspace = true }
 navree-glob = { workspace = true }
 navree-http = { workspace = true }
+navree-ui = { workspace = true }
 navree-kernel = { workspace = true }
 navree-telemetry = { workspace = true }
 navree-view = { workspace = true }

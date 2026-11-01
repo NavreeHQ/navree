@@ -58,7 +58,7 @@ async fn the_list_renders_with_a_strict_csp() {
     );
     let html = unescape(&page.text());
     assert!(html.contains("POST /echo"), "{html}");
-    assert!(html.contains("/_logbook/assets/logbook.js"));
+    assert!(html.contains("/_navree/ui/core-"), "the toolkit's runtime");
     assert!(html.contains("Outgoing HTTP"), "the type buttons");
     assert!(!html.contains("<script>"), "no inline script");
 

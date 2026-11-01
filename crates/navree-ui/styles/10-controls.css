@@ -10,6 +10,7 @@
   &[data-size=sm]{height:1.75rem;padding:0 .625rem;font-size:13px;gap:.375rem}
   &[data-size=lg]{height:2.25rem;padding:0 1rem}
   &[data-icon-only]{width:2rem;padding:0;&[data-size=xs]{width:1.5rem}&[data-size=sm]{width:1.75rem}&[data-size=lg]{width:2.25rem}}
+  &[aria-current]{background:var(--ink-3);color:var(--fg)}
   &[data-block]{display:flex;width:100%}
   &:disabled,&[aria-disabled=true]{opacity:.5;pointer-events:none}
   &[data-pending]{pointer-events:none;color:transparent;position:relative;&::after{content:"";position:absolute;width:14px;height:14px;border:2px solid var(--fg);border-right-color:transparent;border-radius:50%;animation:ui-spin .6s linear infinite}&[data-variant=primary]::after{border-color:var(--accent-ink);border-right-color:transparent}}

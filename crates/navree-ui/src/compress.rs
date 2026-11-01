@@ -2,8 +2,9 @@
 //! unit of CPU on the toolkit's own markup: quality 4 costs about what gzip's
 //! default costs and is a third smaller on a table, because markup repeats
 //! over long distances. Files are compressed once, at quality 11, ahead of time
-//! (`assets`); this is for what is rendered per request. A client that doesn't
-//! take brotli gets the HTTP pipeline's gzip.
+//! (`assets`); this is for what is rendered per request. Below [`MIN_SIZE`],
+//! brotli gained 2% for three times the CPU when measured, so small responses
+//! stay with the HTTP pipeline's gzip unless the client takes only brotli.
 
 use std::io::Write as _;
 
@@ -22,8 +23,11 @@ pub const QUALITY: u32 = 4;
 /// The window, in bits: the pages are far smaller than the default's 4 MiB.
 const WINDOW: u32 = 18;
 
-/// Bodies smaller than this gain too little to spend the CPU.
-const MIN_SIZE: usize = 256;
+/// From this size a body goes out in brotli even if the client takes gzip.
+pub const MIN_SIZE: usize = 32 * 1024;
+
+/// Below this, a body isn't worth compressing at all.
+const TINY: usize = 256;
 
 /// `bytes` in brotli.
 pub fn brotli(bytes: &[u8]) -> Vec<u8> {
@@ -56,7 +60,7 @@ pub(crate) async fn encode(method: &Method, accept: &str, response: Response) ->
     let Some(size) = http_body::Body::size_hint(&body).exact().and_then(|size| usize::try_from(size).ok()) else {
         return Response::from_parts(parts, body);
     };
-    if size < MIN_SIZE {
+    if size < TINY || (size < MIN_SIZE && accepts(accept, "gzip")) {
         return Response::from_parts(parts, body);
     }
     let bytes = match read_body(body, size).await {

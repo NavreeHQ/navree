@@ -139,6 +139,7 @@ fn register(m: &mut ModuleBuilder, options: Option<LogbookOptions>) {
             .deps(vec![ProviderKey::of::<Logbook>()]),
         )
         .http_layer(capture::layer(built))
+        .import(navree_ui::UiModule)
         .controller::<LogbookController>()
         .factory(
             Factory::<Announce>::new(|r: Resolver| async move {

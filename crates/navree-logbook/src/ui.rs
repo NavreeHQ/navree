@@ -40,6 +40,9 @@ const TEMPLATES: [(&str, &str); 4] = [
     ("logbook/detail.html", include_str!("ui/detail.html")),
 ];
 
+#[path = "ui/list_page.rs"]
+mod list_page;
+
 const STYLESHEET: &str = include_str!("ui/logbook.css");
 const SCRIPT: &str = include_str!("ui/logbook.js");
 
@@ -152,6 +155,10 @@ impl Controller for LogbookController {
             path("/api/entries"),
             move |Query(params): Query<ListParams>| async move { this.api_list(params).await },
         ));
+        let this = self.clone();
+        routes.push(RouteDef::on(Method::POST, path("/clear"), move || async move {
+            this.clear().await
+        }));
         let this = self.clone();
         routes.push(RouteDef::on(
             Method::DELETE,
@@ -454,11 +461,6 @@ impl LogbookController {
             }
             Err(error) => (Vec::new(), error),
         };
-        let latest = if params.before.is_none() {
-            rows.first().map_or(0, |entry| entry.seq)
-        } else {
-            0
-        };
         let next_href = if rows.len() == PAGE {
             let mut href = list_href(&base, &q, kind.as_deref());
             let last = rows.last().map_or(0, |entry| entry.seq);
@@ -469,40 +471,31 @@ impl LogbookController {
             String::new()
         };
         let live_href = if params.before.is_none() && error.is_empty() {
-            let mut href = list_href(&format!("{base}/rows"), &q, kind.as_deref());
-            href.push(if href.contains('?') { '&' } else { '?' });
-            href.push_str("live=1");
-            href
+            list_href(&base, &q, kind.as_deref())
         } else {
             String::new()
         };
-        let buttons: Vec<Value> = EntryKind::ALL
+        let buttons: Vec<list_page::TypeButton> = EntryKind::ALL
             .iter()
-            .map(|k| {
-                json!({
-                    "label": k.label(),
-                    "href": list_href(&base, &q, Some(k.as_str())),
-                    "on": kind.as_deref().and_then(EntryKind::parse) == Some(*k),
-                })
+            .map(|k| list_page::TypeButton {
+                label: k.label(),
+                href: list_href(&base, &q, Some(k.as_str())),
+                on: kind.as_deref().and_then(EntryKind::parse) == Some(*k),
             })
             .collect();
         let rows: Vec<Row> = rows.iter().map(|entry| row(&base, entry)).collect();
-        let page = self.render(
-            "logbook/index.html",
-            json!({
-                "base": base,
-                "q": q,
-                "kind": kind.clone().unwrap_or_default(),
-                "all_href": list_href(&base, &q, None),
-                "buttons": buttons,
-                "error": error,
-                "rows": rows,
-                "latest": latest,
-                "live_href": live_href,
-                "next_href": next_href,
-            }),
-        )?;
-        Ok(html(page))
+        Ok(list_page::page(list_page::List {
+            all_href: list_href(&base, &q, None),
+            live_href: (!live_href.is_empty()).then_some(live_href),
+            next_href: (!next_href.is_empty()).then_some(next_href),
+            base,
+            q,
+            kind,
+            buttons,
+            error,
+            rows,
+        })
+        .into_response())
     }
 
     /// New rows for the live list (`after`), as HTML.
@@ -926,6 +919,12 @@ impl LogbookController {
             "entries": batch.entries(),
             "duplicate_queries": batch.duplicate_queries(),
         })))
+    }
+
+    /// `POST /clear`: the list page's button.
+    async fn clear(&self) -> Result<Response, AppError> {
+        let _ = self.api_clear().await?;
+        Ok(navree_ui::Reply::redirect(self.base().to_owned()).into_response())
     }
 
     async fn api_clear(&self) -> Result<Json<Value>, AppError> {

@@ -439,7 +439,7 @@ const HIERARCHY: &[Rule] = &[
     // HTTP layer and UI (navree-http, navree-view), replay as the signed-in
     // user (navree-auth's JwtService).
     rule("navree-logbook", 7, &[
-        "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
+        "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-ui",
         "navree-view", "navree-db", "navree-auth", "navree-glob",
     ]),
     // Fleet:supervised queue workers (navree-queue's supervision hooks and
@@ -527,6 +527,8 @@ const HIERARCHY: &[Rule] = &[
     // The evidence app (e2e/): one binary on the `navree` facade that wires
     // every package for the Docker evidence harness.
     rule("evidence-app", 9, &["navree"]),
+    // The toolkit's proof pages: one binary on the `navree` facade.
+    rule("ui-proof", 9, &["navree"]),
 ];
 
 /// What the crm-api binary may depend on: the facade and the CRM crates.
