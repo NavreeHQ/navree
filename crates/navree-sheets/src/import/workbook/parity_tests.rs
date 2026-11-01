@@ -90,3 +90,24 @@ fn workbooks_are_read_cell_for_cell_as_recorded() {
         }
     }
 }
+
+#[test]
+fn xlsb_workbooks_are_read_cell_for_cell_as_recorded() {
+    let recorded = [
+        ("xlsb-types", include_str!("../../../tests/fixtures/workbooks/xlsb-types.cells")),
+        ("xlsb-1904", include_str!("../../../tests/fixtures/workbooks/xlsb-1904.cells")),
+        ("xlsb-sheets", include_str!("../../../tests/fixtures/workbooks/xlsb-sheets.cells")),
+        (
+            "xlsb-unordered",
+            include_str!("../../../tests/fixtures/workbooks/xlsb-unordered.cells"),
+        ),
+        ("xlsb-columns", include_str!("../../../tests/fixtures/workbooks/xlsb-columns.cells")),
+        ("xlsb-rows", include_str!("../../../tests/fixtures/workbooks/xlsb-rows.cells")),
+    ];
+    let samples = super::xlsb_writer::samples();
+    assert_eq!(samples.len(), recorded.len());
+    for ((name, bytes), (recorded_name, recorded)) in samples.iter().zip(recorded) {
+        assert_eq!(*name, recorded_name);
+        assert_eq!(dump(bytes), recorded, "{name}");
+    }
+}

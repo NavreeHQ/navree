@@ -17,6 +17,8 @@ mod xml;
 
 #[cfg(test)]
 mod parity_tests;
+#[cfg(test)]
+pub(crate) mod xlsb_writer;
 
 use std::fmt;
 
