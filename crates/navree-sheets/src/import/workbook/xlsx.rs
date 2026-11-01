@@ -393,11 +393,14 @@ fn find_sheet_data(xml: &mut Xml<'_>) -> Result<bool, Damaged> {
             Event::Start(e) if is(&e, "dimension") => {
                 let range = attribute(&e, "ref")?
                     .ok_or_else(|| damaged("the sheet's dimension has no range"))?;
-                let corners: Vec<&str> = range.split(':').collect();
-                if corners.len() > 2 {
+                // Two corners at most: the pieces are not listed, which
+                // would take memory in proportion to the colons.
+                let mut corners = range.split(':');
+                let (first, second, third) = (corners.next(), corners.next(), corners.next());
+                if third.is_some() {
                     return Err(damaged(format_args!("the range {range} is not a range")));
                 }
-                for corner in corners {
+                for corner in [first, second].into_iter().flatten() {
                     cell_position(corner)?;
                 }
             }

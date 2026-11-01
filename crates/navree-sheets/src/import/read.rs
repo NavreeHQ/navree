@@ -733,7 +733,7 @@ impl Tabulator {
                     }
                 }
             }
-            self.headers = Some(headers_of(&header_cells));
+            self.headers = Some(headers_of(header_cells));
             return Ok(());
         };
         if self.rows.len() as u64 >= self.max_rows {
@@ -782,19 +782,30 @@ fn too_many_cells(limit: u64) -> SheetsError {
 }
 
 /// Header texts: trailing empty headers dropped, blank ones named
-/// `Column N`, repeats suffixed ` (2)`, ` (3)`.
-fn headers_of(cells: &[Cell]) -> Vec<String> {
+/// `Column N`, repeats suffixed ` (2)`, ` (3)`. The cells' text is moved into
+/// the names, not copied, so the header takes the room of its names and of
+/// the set that keeps them apart, and not that of its cells besides.
+fn headers_of(mut cells: Vec<Cell>) -> Vec<String> {
     let last = cells
         .iter()
         .rposition(|cell| !cell.is_empty())
         .map_or(0, |i| i + 1);
+    cells.truncate(last);
     let mut headers: Vec<String> = Vec::with_capacity(last);
     let mut taken: HashSet<String> = HashSet::with_capacity(last);
     // The suffix each repeated text tries next: every one below it is taken
     // already (names are only ever added), so a repeat never searches again.
     let mut next_suffix: HashMap<String, u64> = HashMap::new();
-    for (index, cell) in cells[..last].iter().enumerate() {
-        let text = cell.to_text().trim().to_owned();
+    for (index, cell) in cells.into_iter().enumerate() {
+        let text = match cell {
+            Cell::Text(text) => text,
+            other => other.to_text().into_owned(),
+        };
+        let text = if text.trim().len() == text.len() {
+            text
+        } else {
+            text.trim().to_owned()
+        };
         let base = if text.is_empty() {
             format!("Column {}", index + 1)
         } else {
@@ -1324,19 +1335,19 @@ mod tests {
     #[test]
     fn a_header_named_like_a_suffixed_repeat_is_kept_apart() {
         assert_eq!(
-            headers_of(&texts(&["a", "a (2)", "a"])),
+            headers_of(texts(&["a", "a (2)", "a"])),
             ["a", "a (2)", "a (3)"]
         );
         assert_eq!(
-            headers_of(&texts(&["a", "a", "a (2)"])),
+            headers_of(texts(&["a", "a", "a (2)"])),
             ["a", "a (2)", "a (2) (2)"]
         );
         assert_eq!(
-            headers_of(&texts(&["a (3)", "a", "a", "a"])),
+            headers_of(texts(&["a (3)", "a", "a", "a"])),
             ["a (3)", "a", "a (2)", "a (4)"]
         );
         assert_eq!(
-            headers_of(&texts(&["Column 2", "", "", "Column 3", "Column 2"])),
+            headers_of(texts(&["Column 2", "", "", "Column 3", "Column 2"])),
             [
                 "Column 2",
                 "Column 2 (2)",
@@ -1375,7 +1386,7 @@ mod tests {
                 .map(|_| Cell::Text(pieces[(next() % pieces.len() as u64) as usize].into()))
                 .collect();
             assert_eq!(
-                headers_of(&cells),
+                headers_of(cells.clone()),
                 searched_headers_of(&cells),
                 "{:?}",
                 text(&cells)

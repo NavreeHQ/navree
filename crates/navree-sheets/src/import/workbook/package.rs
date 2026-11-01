@@ -14,6 +14,11 @@ use super::{Archive, Budget, Damaged, damaged};
 /// The relationships of the package itself, which name the workbook.
 pub(super) const PACKAGE: &str = "_rels/.rels";
 
+/// The longest target that can lead to a part: a name in a zip file is at
+/// most 65,535 bytes. A longer one is read and leads nowhere, without being
+/// resolved, which would list its folders.
+const MAX_TARGET: usize = 65_535;
+
 /// What a relationship's type says its target is, by the type's last word:
 /// the Transitional, Strict and Microsoft types all end the same.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -87,7 +92,11 @@ impl Relationships {
                             continue;
                         };
                         let target = decode(target.unwrap_or_default())?;
-                        let part = existing(archive, resolve(folder, &target));
+                        let part = if target.len() > MAX_TARGET {
+                            String::new()
+                        } else {
+                            existing(archive, resolve(folder, &target))
+                        };
                         // The list's entry and the table's, besides the text.
                         budget.hold(id.len() + part.len() + 64)?;
                         found.by_id.insert(id.to_owned(), found.all.len());

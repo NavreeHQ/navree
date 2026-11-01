@@ -1581,3 +1581,187 @@ alone!(
         assert!(peak < 8 * MIB, "held {peak} bytes at most");
     }
 );
+
+// What the lists a file's own numbers make take.
+
+alone!(
+    the_dimension_of_a_sheet_takes_memory_in_proportion_to_its_bytes,
+    peak_of_a_dimension_of_colons,
+    {
+        // 1 MiB of colons, which are pieces of a range one after the other.
+        let sheet = format!(
+            r#"<worksheet><dimension ref="{}"/><sheetData/></worksheet>"#,
+            ":".repeat(MIB)
+        );
+        let file = xlsx_with(
+            &sheet_rel("s.xml"),
+            ONE_SHEET,
+            &[("xl/s.xml", sheet.as_bytes())],
+        );
+        let (result, peak) = measured(|| read_table(&file, "x.xlsx", &opts(1 << 28)));
+        assert!(refused_with(&result, "is not a range"), "{result:?}");
+        assert!(peak < 6 * MIB, "held {peak} bytes at most");
+    }
+);
+
+alone!(
+    a_relationship_target_of_many_folders_takes_memory_in_proportion_to_its_bytes,
+    peak_of_a_target_of_many_folders,
+    {
+        // A target of 1 MiB, longer than any part's name, of folders one
+        // inside the other.
+        let rels = format!(
+            r#"<Relationships><Relationship Id="r" Type="{WS}" Target="s.xml"/><Relationship Id="x" Type="y" Target="{}"/></Relationships>"#,
+            "a/".repeat(MIB / 2)
+        );
+        let file = xlsx_with(
+            &rels,
+            ONE_SHEET,
+            &[("xl/s.xml", br#"<worksheet><sheetData/></worksheet>"#)],
+        );
+        let (result, peak) = measured(|| read_table(&file, "x.xlsx", &opts(1 << 28)));
+        assert!(refused_with(&result, "no header row"), "{result:?}");
+        assert!(peak < 6 * MIB, "held {peak} bytes at most");
+    }
+);
+
+#[test]
+fn a_relationship_target_is_resolved_up_to_the_longest_name_a_part_has() {
+    // Folders that are nothing (`./`), then the sheet: exactly as long as the
+    // longest name a part has, and one folder more.
+    let sheet = format!("<worksheet><sheetData>{ONE}</sheetData></worksheet>");
+    for (folders, read) in [(32_765, true), (32_766, false)] {
+        let target = format!("{}s.xml", "./".repeat(folders));
+        assert_eq!(target.len(), 2 * folders + 5);
+        let file = xlsx_with(
+            &sheet_rel(&target),
+            ONE_SHEET,
+            &[("xl/s.xml", sheet.as_bytes())],
+        );
+        let result = read_table(&file, "x.xlsx", &opts(1 << 28));
+        if read {
+            assert_eq!(result.unwrap().headers, ["7"]);
+        } else {
+            assert!(refused_with(&result, "is missing"), "{result:?}");
+        }
+    }
+}
+
+/// The name of the column `at` (from 0) as a sheet writes it.
+fn column_name(mut at: usize) -> String {
+    let mut name = Vec::new();
+    loop {
+        name.push(b'A' + (at % 26) as u8);
+        if at < 26 {
+            break;
+        }
+        at = at / 26 - 1;
+    }
+    name.reverse();
+    String::from_utf8(name).unwrap()
+}
+
+alone!(
+    a_header_of_one_shared_string_many_times_takes_two_copies_of_it,
+    peak_of_a_header_of_one_shared_string,
+    {
+        // 1,023 cells that name one string of 16 KiB, under a text limit of
+        // 16 MiB: the cells of the header and the names made of them.
+        let limit = 16 * MIB;
+        let text = "h".repeat(16 * 1024);
+        let width = limit / text.len() - 1;
+        let strings = format!("<sst><si><t>{text}</t></si></sst>");
+        let mut cells = String::new();
+        for at in 0..width {
+            cells.push_str(&format!(
+                r#"<c r="{}1" t="s"><v>0</v></c>"#,
+                column_name(at)
+            ));
+        }
+        let sheet =
+            format!("<worksheet><sheetData><row r=\"1\">{cells}</row></sheetData></worksheet>");
+        let file = xlsx_with(
+            &sheet_rel("s.xml"),
+            ONE_SHEET,
+            &[
+                ("xl/sharedStrings.xml", strings.as_bytes()),
+                ("xl/s.xml", sheet.as_bytes()),
+            ],
+        );
+        let (result, peak) = measured(|| read_table(&file, "x.xlsx", &opts(limit as u64)));
+        assert_eq!(result.unwrap().headers.len(), width);
+        assert!(peak < limit * 5 / 2, "held {peak} bytes at most");
+    }
+);
+
+alone!(
+    a_sheet_out_of_order_takes_about_sixty_bytes_for_each_cell,
+    peak_of_a_sheet_out_of_order,
+    {
+        // 1,000,000 cells, the rows last first: kept as sparse cells until the
+        // sheet ends.
+        let (rows, width) = (10_000, 100);
+        let mut sheet = String::from("<worksheet><sheetData>");
+        for row in (0..rows).rev() {
+            sheet.push_str(&format!(r#"<row r="{}">"#, row + 1));
+            for at in 0..width {
+                sheet.push_str(&format!(
+                    r#"<c r="{}{}"><v>1</v></c>"#,
+                    column_name(at),
+                    row + 1
+                ));
+            }
+            sheet.push_str("</row>");
+        }
+        sheet.push_str("</sheetData></worksheet>");
+        let file = xlsx_with(
+            &sheet_rel("s.xml"),
+            ONE_SHEET,
+            &[("xl/s.xml", sheet.as_bytes())],
+        );
+        let (result, peak) = measured(|| read_table(&file, "x.xlsx", &opts(1 << 28)));
+        assert_eq!(result.unwrap().rows.len(), rows - 1);
+        let each = peak / (rows * width);
+        assert!(each < 70, "{each} bytes for each cell");
+    }
+);
+
+alone!(
+    what_opening_holds_is_within_twice_what_it_is_charged,
+    peak_of_opening_relationships_and_strings,
+    {
+        // Half of the budget in relationships, the rest in empty shared
+        // strings, the shapes that take the most beyond what they are charged.
+        let limit = 32 * MIB;
+        let count = limit / 2 / (64 + 8);
+        let mut extra = String::new();
+        for at in 0..count {
+            extra.push_str(&format!(r#"<Relationship Id="{at:08x}" Target=""/>"#));
+        }
+        let rels = format!(
+            r#"<Relationships><Relationship Id="r" Type="{WS}" Target="s.xml"/>{extra}</Relationships>"#
+        );
+        let strings = format!("<sst>{}</sst>", "<si/>".repeat(limit * 47 / 100 / 4));
+        let file = xlsx_with(
+            &rels,
+            ONE_SHEET,
+            &[
+                ("xl/sharedStrings.xml", strings.as_bytes()),
+                ("xl/s.xml", br#"<worksheet><sheetData/></worksheet>"#),
+            ],
+        );
+        let base = kib_of("VmRSS:") as usize * 1024;
+        let (book, peak) = measured(|| {
+            Workbook::open(
+                &file,
+                Limits {
+                    max_part_bytes: limit as u64,
+                    max_text_bytes: 1 << 28,
+                },
+            )
+        });
+        let held = (kib_of("VmRSS:") as usize * 1024).saturating_sub(base);
+        assert!(book.is_ok());
+        assert!(held < limit * 2 && peak < limit * 5 / 2, "{held} {peak}");
+    }
+);
