@@ -53,11 +53,12 @@ pub(super) fn shows_date(code: &str) -> bool {
             brackets = brackets.saturating_sub(1);
         } else if brackets == 0 && !after_a && matches!(c, 'a' | 'A') {
             after_a = true;
-        } else if brackets == 0 && after_a && matches!(c, 'p' | 'P' | 'm' | 'M' | '/') {
-            return true;
         } else if brackets == 0
-            && !after_a
-            && matches!(c.to_ascii_lowercase(), 'd' | 'm' | 'h' | 'y' | 's')
+            && if after_a {
+                matches!(c, 'p' | 'P' | 'm' | 'M' | '/')
+            } else {
+                matches!(c.to_ascii_lowercase(), 'd' | 'm' | 'h' | 'y' | 's')
+            }
         {
             return true;
         } else if !(elapsed && c.eq_ignore_ascii_case(&previous)) {
@@ -165,7 +166,11 @@ mod tests {
     #[test]
     fn built_in_formats_that_show_dates() {
         let dates: Vec<u16> = (0..200).filter(|id| builtin_shows_date(*id)).collect();
-        let expected: Vec<u16> = (14..=22).chain(27..=36).chain(45..=47).chain(50..=58).collect();
+        let expected: Vec<u16> = (14..=22)
+            .chain(27..=36)
+            .chain(45..=47)
+            .chain(50..=58)
+            .collect();
         assert_eq!(dates, expected);
         assert!(builtin_id_shows_date("14"));
         assert!(!builtin_id_shows_date("014"));

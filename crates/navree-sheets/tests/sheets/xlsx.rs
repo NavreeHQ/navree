@@ -76,27 +76,33 @@ fn walk(xml: &str, mut each: impl FnMut(&quick_xml::events::BytesStart<'_>, bool
 pub fn read_xlsx(bytes: &[u8]) -> (Vec<String>, Vec<Vec<Data>>) {
     let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
     let mut names = Vec::new();
-    walk(&part(&mut zip, "xl/workbook.xml").unwrap(), |e, start, _| {
-        if start && e.local_name().as_ref() == "sheet" {
-            names.push(attribute(e, "name").unwrap());
-        }
-    });
+    walk(
+        &part(&mut zip, "xl/workbook.xml").unwrap(),
+        |e, start, _| {
+            if start && e.local_name().as_ref() == "sheet" {
+                names.push(attribute(e, "name").unwrap());
+            }
+        },
+    );
     let mut strings = Vec::new();
     if let Some(xml) = part(&mut zip, "xl/sharedStrings.xml") {
         let mut current = String::new();
-        walk(&xml, |e, start, text| match (e.local_name().as_ref(), start) {
-            ("si", true) => current.clear(),
-            ("t", false) => current.push_str(text),
-            ("si", false) => strings.push(current.clone()),
-            _ => {}
+        walk(&xml, |e, start, text| {
+            match (e.local_name().as_ref(), start) {
+                ("si", true) => current.clear(),
+                ("t", false) => current.push_str(text),
+                ("si", false) => strings.push(current.clone()),
+                _ => {}
+            }
         });
     }
     // Which cell formats show dates.
     let mut custom = HashMap::new();
     let mut dates = Vec::new();
     let mut in_cell_formats = false;
-    walk(&part(&mut zip, "xl/styles.xml").unwrap(), |e, start, _| {
-        match (e.local_name().as_ref(), start) {
+    walk(
+        &part(&mut zip, "xl/styles.xml").unwrap(),
+        |e, start, _| match (e.local_name().as_ref(), start) {
             ("numFmt", true) => {
                 let code = attribute(e, "formatCode").unwrap().to_lowercase();
                 custom.insert(
@@ -111,14 +117,15 @@ pub fn read_xlsx(bytes: &[u8]) -> (Vec<String>, Vec<Vec<Data>>) {
                 dates.push(builtin || custom.get(&id).copied().unwrap_or(false));
             }
             _ => {}
-        }
-    });
+        },
+    );
     let mut cells: BTreeMap<(u32, u32), Data> = BTreeMap::new();
     let mut at = (0, 0);
     let mut kind = String::new();
     let mut style = 0usize;
-    walk(&part(&mut zip, "xl/worksheets/sheet1.xml").unwrap(), |e, start, text| {
-        match (e.local_name().as_ref(), start) {
+    walk(
+        &part(&mut zip, "xl/worksheets/sheet1.xml").unwrap(),
+        |e, start, text| match (e.local_name().as_ref(), start) {
             ("c", true) => {
                 let r = attribute(e, "r").unwrap();
                 let letters: String = r.chars().take_while(char::is_ascii_alphabetic).collect();
@@ -156,8 +163,8 @@ pub fn read_xlsx(bytes: &[u8]) -> (Vec<String>, Vec<Vec<Data>>) {
                 cells.insert(at, Data::String(text.to_owned()));
             }
             _ => {}
-        }
-    });
+        },
+    );
     let Some(first_row) = cells.keys().map(|(row, _)| *row).min() else {
         return (names, Vec::new());
     };

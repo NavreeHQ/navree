@@ -157,7 +157,10 @@ fn reader_limits(options: &ReadOptions<'_>) -> Limits {
 
 /// Every cell the sheet asked for gives, in the order it gives them, one
 /// for each column it covers, as the table keeps its value.
-fn all_cells(bytes: &[u8], options: &ReadOptions<'_>) -> Result<Vec<(u32, u32, Cell)>, SheetsError> {
+fn all_cells(
+    bytes: &[u8],
+    options: &ReadOptions<'_>,
+) -> Result<Vec<(u32, u32, Cell)>, SheetsError> {
     let workbook = Workbook::open(bytes, reader_limits(options))?;
     let sheet = sheet_to_read(workbook.sheet_names(), options)?;
     workbook.read_cells(sheet, |cells| {
@@ -1610,9 +1613,13 @@ fn replacing(bytes: &[u8], name: &str, content: impl AsRef<[u8]>) -> Vec<u8> {
 #[ignore = "runs in a process of its own, from the test below"]
 fn the_peak_memory_of_reading_shared_strings_that_claim_millions() {
     let bytes = replacing(
-        &book(&row(1, &[r#"<c r="A1" t="s"><v>0</v></c>"#.into()]), "", &["h"]),
+        &book(
+            &row(1, &[r#"<c r="A1" t="s"><v>0</v></c>"#.into()]),
+            "",
+            &["h"],
+        ),
         "xl/sharedStrings.xml",
-        &format!(
+        format!(
             r#"<?xml version="1.0" encoding="UTF-8"?><sst xmlns="{NS}" count="20000000" uniqueCount="20000000"><si><t>h</t></si></sst>"#
         ),
     );
@@ -1687,7 +1694,10 @@ fn an_ods_spreadsheet_is_read_by_the_sheet_asked_for() {
         &[
             ods_row(2, ""),
             ods_row(1, &[ods_gap(1), ods_text("a"), ods_text("b")].concat()),
-            ods_row(1, &[ods_gap(1), ods_number("1.5"), ods_number("2")].concat()),
+            ods_row(
+                1,
+                &[ods_gap(1), ods_number("1.5"), ods_number("2")].concat(),
+            ),
         ]
         .concat(),
     );
@@ -1729,7 +1739,7 @@ fn an_ods_spreadsheet_is_read_by_the_sheet_asked_for() {
 fn repeated_ods_rows_and_cells_are_rows_and_cells() {
     let rows = [
         ods_row(1, &[ods_text("a"), ods_text("b"), ods_text("c")].concat()),
-        ods_row(3, &format!(r#"<table:table-cell table:number-columns-repeated="2" office:value-type="float" office:value="7"/>"#)),
+        ods_row(3, r#"<table:table-cell table:number-columns-repeated="2" office:value-type="float" office:value="7"/>"#),
         ods_row(1_000, &ods_gap(1_024)),
         ods_row(1, &[ods_gap(2), ods_text("last")].concat()),
         // What spreadsheets write after the last row.
@@ -1770,7 +1780,11 @@ fn an_ods_row_repeated_a_million_times_is_refused_at_the_row_limit_at_once() {
         started.elapsed()
     );
     // Within the limit, every copy is a row.
-    let rows = [ods_row(1, &ods_text("h")), ods_row(50_000, &ods_number("1"))].concat();
+    let rows = [
+        ods_row(1, &ods_text("h")),
+        ods_row(50_000, &ods_number("1")),
+    ]
+    .concat();
     let bytes = ods_of(&ods_table("Sheet1", &rows));
     let table = read_table(&bytes, "book.ods", &limits(50_000)).unwrap();
     assert_eq!(table.rows.len(), 50_000);
@@ -1831,7 +1845,12 @@ fn ods_text_is_its_paragraphs_and_spaces() {
     .concat();
     let header: String = (0..9).map(|i| ods_text(&format!("h{i}"))).collect();
     let rows = [ods_row(1, &header), ods_row(1, &cells)].concat();
-    let table = read_table(&ods_of(&ods_table("Sheet1", &rows)), "book.ods", &limits(10)).unwrap();
+    let table = read_table(
+        &ods_of(&ods_table("Sheet1", &rows)),
+        "book.ods",
+        &limits(10),
+    )
+    .unwrap();
     assert_eq!(
         table.rows[0].cells,
         [
@@ -1875,22 +1894,58 @@ fn damaged_workbooks_are_refused_as_unreadable() {
     };
     let cases: Vec<(&str, Vec<u8>)> = vec![
         ("an ODS row of text", ods(&ods_row(1, "<text:p>x</text:p>"))),
-        ("an ODS count that is not one", ods(&ods_row(1, r#"<table:table-cell table:number-columns-repeated="many"/>"#))),
-        ("an ODS number that is not one", ods(&ods_row(1, r#"<table:table-cell office:value-type="float" office:value="one"/>"#))),
+        (
+            "an ODS count that is not one",
+            ods(&ods_row(
+                1,
+                r#"<table:table-cell table:number-columns-repeated="many"/>"#,
+            )),
+        ),
+        (
+            "an ODS number that is not one",
+            ods(&ods_row(
+                1,
+                r#"<table:table-cell office:value-type="float" office:value="one"/>"#,
+            )),
+        ),
         ("an ODS table not closed", {
             let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
             let options = zip::write::SimpleFileOptions::default();
             zip.start_file("mimetype", options).unwrap();
-            zip.write_all(b"application/vnd.oasis.opendocument.spreadsheet").unwrap();
+            zip.write_all(b"application/vnd.oasis.opendocument.spreadsheet")
+                .unwrap();
             zip.start_file("META-INF/manifest.xml", options).unwrap();
             zip.write_all(b"<m/>").unwrap();
             zip.start_file("content.xml", options).unwrap();
-            zip.write_all(br#"<a><table:table table:name="S"><table:table-row>"#).unwrap();
+            zip.write_all(br#"<a><table:table table:name="S"><table:table-row>"#)
+                .unwrap();
             zip.finish().unwrap().into_inner()
         }),
-        ("an XLSB cell cut short", xlsb_sheet(&[(0x00, vec![0; 4]), (0x05, vec![0; 6])])),
-        ("an XLSB shared string that is missing", xlsb_sheet(&[(0x00, vec![0; 4]), (0x07, [0u8; 8].iter().chain(&9u32.to_le_bytes()).copied().collect())])),
-        ("an XLSB error code that is unknown", xlsb_sheet(&[(0x00, vec![0; 4]), (0x03, vec![0, 0, 0, 0, 0, 0, 0, 0, 0x99])])),
+        (
+            "an XLSB cell cut short",
+            xlsb_sheet(&[(0x00, vec![0; 4]), (0x05, vec![0; 6])]),
+        ),
+        (
+            "an XLSB shared string that is missing",
+            xlsb_sheet(&[
+                (0x00, vec![0; 4]),
+                (
+                    0x07,
+                    [0u8; 8]
+                        .iter()
+                        .chain(&9u32.to_le_bytes())
+                        .copied()
+                        .collect(),
+                ),
+            ]),
+        ),
+        (
+            "an XLSB error code that is unknown",
+            xlsb_sheet(&[
+                (0x00, vec![0; 4]),
+                (0x03, vec![0, 0, 0, 0, 0, 0, 0, 0, 0x99]),
+            ]),
+        ),
         ("an XLSB sheet without its end", {
             let mut bytes = xlsb_sheet(&[]);
             bytes = replacing(&bytes, "xl/worksheets/sheet1.bin", "");
@@ -1905,6 +1960,9 @@ fn damaged_workbooks_are_refused_as_unreadable() {
     ];
     for (label, bytes) in cases {
         let result = read_table(&bytes, "book", &limits(10));
-        assert!(refused_for(&result, "cannot be read"), "{label}: {result:?}");
+        assert!(
+            refused_for(&result, "cannot be read"),
+            "{label}: {result:?}"
+        );
     }
 }

@@ -101,10 +101,7 @@ async fn an_xlsx_download_has_typed_cells_and_the_sheet_name() {
     assert_eq!(rows[1][1], Data::Float(1200.5));
     match &rows[1][2] {
         Data::DateTime(at) => {
-            assert_eq!(
-                at.date(),
-                NaiveDate::from_ymd_opt(2026, 10, 1).unwrap()
-            );
+            assert_eq!(at.date(), NaiveDate::from_ymd_opt(2026, 10, 1).unwrap());
         }
         other => panic!("a date cell, not {other:?}"),
     }

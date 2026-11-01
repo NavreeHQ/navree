@@ -258,9 +258,10 @@ fn date_formats(archive: &Archive<'_>, folder: &str) -> Result<Vec<bool>, Damage
                     match next(&mut xml, &mut inner)? {
                         Event::Start(e) if is(&e, "xf") => {
                             dates.push(attribute(&e, "numFmtId")?.is_some_and(|id| {
-                                custom
-                                    .get(id)
-                                    .map_or_else(|| builtin_id_shows_date(id), |code| shows_date(code))
+                                custom.get(id).map_or_else(
+                                    || builtin_id_shows_date(id),
+                                    |code| shows_date(code),
+                                )
                             }));
                         }
                         Event::End(e) if ends(&e, "cellXfs") => break,
@@ -291,9 +292,7 @@ fn relationships(
         loop {
             match next(&mut xml, &mut buf)? {
                 Event::Start(e) if is(&e, "Relationship") => {
-                    if let [Some(id), kind, target] =
-                        attributes_of(&e, ["Id", "Type", "Target"])?
-                    {
+                    if let [Some(id), kind, target] = attributes_of(&e, ["Id", "Type", "Target"])? {
                         relationships.insert(
                             id.to_owned(),
                             (
@@ -529,7 +528,10 @@ impl CellSource for XlsxCells<'_, '_> {
                     }
                 }
                 Event::End(e) if ends(&e, "row") => {
-                    self.row = self.row.checked_add(1).ok_or_else(|| damaged("too many rows"))?;
+                    self.row = self
+                        .row
+                        .checked_add(1)
+                        .ok_or_else(|| damaged("too many rows"))?;
                     self.column = 0;
                 }
                 Event::Start(e) if is(&e, "c") => {
@@ -661,7 +663,9 @@ fn read_value(
                     }
                     Ok(Found::Text)
                 }
-                _ => Err(damaged(format_args!("a cell has the unknown type {kind:?}"))),
+                _ => Err(damaged(format_args!(
+                    "a cell has the unknown type {kind:?}"
+                ))),
             }
         }
         "f" => {
@@ -688,7 +692,9 @@ fn plain_value(
             // An index that is not a number is the first.
             let index = value.parse::<usize>().unwrap_or(0);
             if strings.get(index).is_none() {
-                return Err(damaged(format_args!("the shared string {index} is missing")));
+                return Err(damaged(format_args!(
+                    "the shared string {index} is missing"
+                )));
             }
             Found::Shared(index)
         }

@@ -8,10 +8,10 @@ pub(crate) mod decode;
 pub(crate) mod jobs;
 pub(crate) mod mapping;
 pub(crate) mod read;
-pub(crate) mod workbook;
 pub(crate) mod registry;
 pub(crate) mod service;
 pub(crate) mod store;
+pub(crate) mod workbook;
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};

@@ -296,7 +296,10 @@ fn sheets(
             let (kind, body) = records.next()?;
             match kind {
                 WORKBOOK_PROPERTIES => {
-                    is_1904 = body.first().ok_or_else(|| short("the workbook's properties"))? & 1
+                    is_1904 = body
+                        .first()
+                        .ok_or_else(|| short("the workbook's properties"))?
+                        & 1
                         != 0;
                 }
                 SHEET => {
@@ -318,7 +321,9 @@ fn sheets(
                         path.split('/').nth(1),
                         Some("worksheets" | "chartsheets" | "dialogsheets")
                     ) {
-                        return Err(damaged(format_args!("the sheet {path} is of an unknown type")));
+                        return Err(damaged(format_args!(
+                            "the sheet {path} is of an unknown type"
+                        )));
                     }
                     let (name, _) = wide_string(body.get(8 + used..).unwrap_or_default())?;
                     names.push(name.into_owned());
@@ -418,8 +423,9 @@ impl CellSource for XlsbCells<'_, '_> {
                     0x2A => "#NA",
                     0x2B => "#GettingData",
                     code => {
-                        return Err(damaged(format_args!("the error code {code} is unknown"))
-                            .into());
+                        return Err(
+                            damaged(format_args!("the error code {code} is unknown")).into()
+                        );
                     }
                 }),
                 CELL_BOOL | FORMULA_BOOL => Found::Typed(Cell::Bool(head[8] != 0)),
@@ -437,8 +443,9 @@ impl CellSource for XlsbCells<'_, '_> {
                 CELL_SHARED => {
                     let index = u32_at(body, 8).ok_or_else(cell)? as usize;
                     if self.strings.get(index).is_none() {
-                        return Err(damaged(format_args!("the shared string {index} is missing"))
-                            .into());
+                        return Err(
+                            damaged(format_args!("the shared string {index} is missing")).into(),
+                        );
                     }
                     Found::Shared(index)
                 }

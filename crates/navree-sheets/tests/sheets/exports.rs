@@ -135,7 +135,7 @@ async fn an_xlsx_export_is_built_page_by_page() {
             .unwrap()
             .contains("contacts.xlsx")
     );
-    let (names, rows) = read_xlsx(&response.bytes());
+    let (names, rows) = read_xlsx(response.bytes());
     assert_eq!(names, ["Contacts"]);
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[1][0], Data::String("alan@example.com".into()));

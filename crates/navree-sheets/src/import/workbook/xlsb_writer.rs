@@ -148,7 +148,13 @@ pub(crate) fn row(row: u32) -> (u16, Vec<u8>) {
 pub(crate) fn sheet(records: &[(u16, Vec<u8>)]) -> Vec<u8> {
     let mut all: Records = vec![(0x81, vec![]), (0x93, vec![0; 19])];
     // The dimension: first and last row, first and last column.
-    all.push((0x94, [0u32, 0, 0, 0].iter().flat_map(|n| n.to_le_bytes()).collect()));
+    all.push((
+        0x94,
+        [0u32, 0, 0, 0]
+            .iter()
+            .flat_map(|n| n.to_le_bytes())
+            .collect(),
+    ));
     // Views, which a reader passes over.
     all.push((0x85, vec![]));
     all.push((0x89, vec![0; 30]));
@@ -205,7 +211,10 @@ pub(crate) fn workbook(
                 r#"<Relationship Id="{id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{}.bin"/>"#,
                 index + 1
             ));
-            names.push((format!("xl/worksheets/sheet{}.bin", index + 1), part.clone()));
+            names.push((
+                format!("xl/worksheets/sheet{}.bin", index + 1),
+                part.clone(),
+            ));
         }
     }
     book.push((0x90, vec![]));
@@ -256,7 +265,11 @@ pub(crate) fn workbook(
 pub(crate) fn samples() -> Vec<(&'static str, Vec<u8>)> {
     use Value::*;
     let strings = ["Name", "  padded  ", "shared", "", "Ünïcødé 名前"];
-    let formats = [(164, "yyyy\\-mm\\-dd\\ hh:mm"), (165, "[h]:mm:ss"), (166, "0.00%")];
+    let formats = [
+        (164, "yyyy\\-mm\\-dd\\ hh:mm"),
+        (165, "[h]:mm:ss"),
+        (166, "0.00%"),
+    ];
     // 0 general, 1 a date (14), 2 a date and time (22), 3 custom date and
     // time, 4 a duration, 5 a percentage, 6 a time (21).
     let cell_formats = [0, 14, 22, 164, 165, 166, 21];
@@ -301,7 +314,10 @@ pub(crate) fn samples() -> Vec<(&'static str, Vec<u8>)> {
         types.push(cell(column as u32, 0, value));
     }
     types.push(row(3));
-    for (column, code) in [0x00u8, 0x07, 0x0F, 0x17, 0x1D, 0x24, 0x2A, 0x2B].iter().enumerate() {
+    for (column, code) in [0x00u8, 0x07, 0x0F, 0x17, 0x1D, 0x24, 0x2A, 0x2B]
+        .iter()
+        .enumerate()
+    {
         types.push(cell(column as u32, 0, &Error(*code)));
     }
     types.push(row(4));
@@ -360,8 +376,16 @@ pub(crate) fn samples() -> Vec<(&'static str, Vec<u8>)> {
 
     let mut first = header(&["one"]);
     first.extend([row(1), cell(0, 0, &RkInt(1, false))]);
-    let mut second = vec![row(2), cell(1, 0, &Text("two".into())), cell(2, 0, &Text("2".into()))];
-    second.extend([row(3), cell(0, 0, &RkInt(1, false)), cell(2, 0, &RkInt(5, false))]);
+    let mut second = vec![
+        row(2),
+        cell(1, 0, &Text("two".into())),
+        cell(2, 0, &Text("2".into())),
+    ];
+    second.extend([
+        row(3),
+        cell(0, 0, &RkInt(1, false)),
+        cell(2, 0, &RkInt(5, false)),
+    ]);
     let sheets = workbook(
         &[
             ("First", Some(sheet(&first))),
@@ -390,7 +414,13 @@ pub(crate) fn samples() -> Vec<(&'static str, Vec<u8>)> {
         cell(0, 0, &Text("kept".into())),
         cell(0, 0, &Text(" ".into())),
     ];
-    let unordered = workbook(&[("Unordered", Some(sheet(&unordered)))], &[], &[], &[0], false);
+    let unordered = workbook(
+        &[("Unordered", Some(sheet(&unordered)))],
+        &[],
+        &[],
+        &[0],
+        false,
+    );
 
     // The last column of a sheet.
     let columns = vec![

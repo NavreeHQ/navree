@@ -218,7 +218,11 @@ impl<'r> OdsCells<'r> {
             self.buf.clear();
             match self.place {
                 Place::Done => return Ok(()),
-                Place::Outside => match self.xml.read_event_into(&mut self.buf).map_err(Damaged::from)? {
+                Place::Outside => match self
+                    .xml
+                    .read_event_into(&mut self.buf)
+                    .map_err(Damaged::from)?
+                {
                     Event::Start(e) if e.name().as_ref() == "style:style" => {
                         self.named_style = match attribute(&e, "style:name")? {
                             Some(name) => decode(name).map(|_| true)?,
@@ -228,10 +232,10 @@ impl<'r> OdsCells<'r> {
                     Event::Start(e)
                         if self.named_style && e.name().as_ref() == "style:table-properties" =>
                     {
-                        if let Some(display) = attribute(&e, "table:display")? {
-                            if !matches!(&*decode(display)?, "true" | "false") {
-                                return Err(damaged("a table's display is not a boolean").into());
-                            }
+                        if let Some(display) = attribute(&e, "table:display")?
+                            && !matches!(&*decode(display)?, "true" | "false")
+                        {
+                            return Err(damaged("a table's display is not a boolean").into());
                         }
                     }
                     Event::Start(e) if e.name().as_ref() == "table:table" => {
@@ -256,7 +260,11 @@ impl<'r> OdsCells<'r> {
                     _ => {}
                 },
                 Place::Table { given, last } => {
-                    match self.xml.read_event_into(&mut self.buf).map_err(Damaged::from)? {
+                    match self
+                        .xml
+                        .read_event_into(&mut self.buf)
+                        .map_err(Damaged::from)?
+                    {
                         Event::Start(e) if e.name().as_ref() == "table:table-row" => {
                             let repeats = match attribute(&e, "table:number-rows-repeated")? {
                                 Some(repeats) => count(&decode(repeats)?)?,
@@ -504,8 +512,10 @@ fn cell_value(
             }
             Event::Start(e) if e.name().as_ref() == "text:p" => {
                 if content.paragraphs > 0 {
-                    content.add("
-")?;
+                    content.add(
+                        "
+",
+                    )?;
                 }
                 content.paragraphs += 1;
             }

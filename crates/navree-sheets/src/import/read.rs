@@ -340,10 +340,10 @@ fn read_workbook(bytes: &[u8], options: &ReadOptions<'_>) -> Result<Table, Sheet
     // Whatever the file starts with: a zip workbook may come after a
     // prefix, and a file the XLS reader refuses is read as a zip workbook.
     check_unpacked_sizes(bytes, options.max_inflated_bytes)?;
-    if bytes.starts_with(OLE) {
-        if let Ok(xls) = calamine::open_workbook_from_rs(Cursor::new(bytes)) {
-            return read_xls(xls, options);
-        }
+    if bytes.starts_with(OLE)
+        && let Ok(xls) = calamine::open_workbook_from_rs(Cursor::new(bytes))
+    {
+        return read_xls(xls, options);
     }
     let workbook = Workbook::open(
         bytes,

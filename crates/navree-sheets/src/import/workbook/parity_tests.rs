@@ -26,7 +26,7 @@ pub(super) fn dump(bytes: &[u8]) -> String {
             if let Some(cells) = cells {
                 while let Some(cell) = cells.next_cell()? {
                     let kept = match cell.value {
-                        Value::Text(text) if text.is_empty() => Cell::Empty,
+                        Value::Text("") => Cell::Empty,
                         Value::Text(text) => Cell::Text(text.to_owned()),
                         Value::Typed(typed) => typed,
                     };
@@ -56,7 +56,11 @@ macro_rules! fixture {
         (
             $name,
             &include_bytes!(concat!("../../../tests/fixtures/workbooks/", $name))[..],
-            include_str!(concat!("../../../tests/fixtures/workbooks/", $name, ".cells")),
+            include_str!(concat!(
+                "../../../tests/fixtures/workbooks/",
+                $name,
+                ".cells"
+            )),
         )
     };
 }
@@ -94,15 +98,30 @@ fn workbooks_are_read_cell_for_cell_as_recorded() {
 #[test]
 fn xlsb_workbooks_are_read_cell_for_cell_as_recorded() {
     let recorded = [
-        ("xlsb-types", include_str!("../../../tests/fixtures/workbooks/xlsb-types.cells")),
-        ("xlsb-1904", include_str!("../../../tests/fixtures/workbooks/xlsb-1904.cells")),
-        ("xlsb-sheets", include_str!("../../../tests/fixtures/workbooks/xlsb-sheets.cells")),
+        (
+            "xlsb-types",
+            include_str!("../../../tests/fixtures/workbooks/xlsb-types.cells"),
+        ),
+        (
+            "xlsb-1904",
+            include_str!("../../../tests/fixtures/workbooks/xlsb-1904.cells"),
+        ),
+        (
+            "xlsb-sheets",
+            include_str!("../../../tests/fixtures/workbooks/xlsb-sheets.cells"),
+        ),
         (
             "xlsb-unordered",
             include_str!("../../../tests/fixtures/workbooks/xlsb-unordered.cells"),
         ),
-        ("xlsb-columns", include_str!("../../../tests/fixtures/workbooks/xlsb-columns.cells")),
-        ("xlsb-rows", include_str!("../../../tests/fixtures/workbooks/xlsb-rows.cells")),
+        (
+            "xlsb-columns",
+            include_str!("../../../tests/fixtures/workbooks/xlsb-columns.cells"),
+        ),
+        (
+            "xlsb-rows",
+            include_str!("../../../tests/fixtures/workbooks/xlsb-rows.cells"),
+        ),
     ];
     let samples = super::xlsb_writer::samples();
     assert_eq!(samples.len(), recorded.len());

@@ -24,7 +24,10 @@ impl<'a> Archive<'a> {
         let mut folded = HashMap::new();
         for name in zip.file_names() {
             let name = name.map_err(zip_error)?;
-            folded.insert(name.replace('\\', "/").to_ascii_lowercase(), name.into_owned());
+            folded.insert(
+                name.replace('\\', "/").to_ascii_lowercase(),
+                name.into_owned(),
+            );
         }
         Ok(Archive { zip, folded })
     }
