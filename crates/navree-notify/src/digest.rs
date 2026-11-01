@@ -119,8 +119,10 @@ impl DigestMail<'_> {
             "count": self.items.len(),
             "digest": self.digest,
         });
-        if let (Some(locale), Some(fields)) = (locale, context.as_object_mut()) {
-            fields.insert("locale".to_owned(), locale);
+        // Always set, so that the name is never the `locale()` function an app
+        // with translations has in its templates.
+        if let Some(fields) = context.as_object_mut() {
+            fields.insert("locale".to_owned(), locale.unwrap_or(Value::Null));
         }
         with_style(&context, self.overrides)
     }
@@ -198,6 +200,26 @@ mod tests {
             },
             created_at: "2026-10-29T08:00:00Z".parse().unwrap(),
         }
+    }
+
+    #[test]
+    fn the_language_is_not_the_function_an_app_with_translations_has() {
+        let mut views = views();
+        views.configure(|env| env.add_function("locale", || "fr".to_owned()));
+        let items = [item("Acme")];
+        let options = DigestOptions::default();
+        let to = ["ada@example.com".to_owned()];
+        let message = DigestMail {
+            to: &to,
+            digest: Digest::Daily,
+            items: &items,
+            options: &options,
+            overrides: None,
+        }
+        .build(&views)
+        .unwrap();
+        let html = message.html.unwrap();
+        assert!(html.contains("<html lang=\"en\">"), "{html}");
     }
 
     #[test]
