@@ -49,6 +49,19 @@ impl Region {
         self
     }
 
+    /// Makes it a feed: each poll asks the source for what is newer than a cursor
+    /// and adds it at the start of the element `into` inside the region, instead
+    /// of fetching the whole region again.
+    ///
+    /// The source is the region's [`src`](Self::src) with `after=<cursor>` added.
+    /// It answers the new rows as HTML, nothing when there are none, and the
+    /// newest cursor in the `X-UI-Cursor` header. `empty`, if given, names an
+    /// element removed once the first row arrives (an "nothing yet" message).
+    pub fn feed(mut self, into: impl Into<AttrValue>, after: impl Into<AttrValue>, empty: Option<&str>) -> Self {
+        self.el = self.el.attr("data-ui-feed", into).attr("data-ui-after", after).attr_opt("data-ui-feed-empty", empty.map(str::to_owned));
+        self
+    }
+
     /// Adds its content.
     pub fn children(mut self, children: impl IntoNodes) -> Self {
         self.el = self.el.child(children);

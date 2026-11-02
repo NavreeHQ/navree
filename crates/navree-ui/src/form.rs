@@ -796,7 +796,7 @@ fn is_form_body(parts: &Parts) -> bool {
 }
 
 /// Why a request isn't a form submission at all, before its body is read.
-async fn refusal(parts: &Parts) -> Option<StatusCode> {
+pub(crate) async fn refusal(parts: &Parts) -> Option<StatusCode> {
     if matches!(parts.method, Method::GET | Method::HEAD) {
         return Some(StatusCode::METHOD_NOT_ALLOWED);
     }

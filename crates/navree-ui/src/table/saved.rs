@@ -90,6 +90,9 @@ where
 
     async fn from_request(request: Request) -> Result<Self, Self::Rejection> {
         let (parts, body) = request.into_parts();
+        if let Some(status) = crate::form::refusal(&parts).await {
+            return Err(status);
+        }
         let limit = BodyLimit::of(&parts.extensions);
         let bytes = read_body(body, limit).await.map_err(|_| StatusCode::PAYLOAD_TOO_LARGE)?;
         let (mut op, mut name, mut view, mut is_default, mut table, mut path, mut state) = (ViewOp::Save, String::new(), String::new(), false, String::new(), String::new(), String::new());

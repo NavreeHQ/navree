@@ -645,6 +645,35 @@ for (const browserName of browsers) {
       await close();
     });
 
+    test("a bulk post from another site, by GET, or with another body is refused", async () => {
+      await reset();
+      const form = { "content-type": "application/x-www-form-urlencoded" };
+      const cross = await fetch(BASE + "/deals/bulk", { method: "POST", headers: { ...form, "sec-fetch-site": "cross-site" }, body: "action=archive&ids=1" });
+      assert.equal(cross.status, 403);
+      const json = await fetch(BASE + "/deals/bulk", { method: "POST", headers: { "content-type": "text/plain" }, body: "action=archive&ids=1" });
+      assert.ok(json.status >= 400, String(json.status));
+      assert.equal(await get("/__t/archived"), "");
+    });
+
+    test("only safe links are fetched ahead of a click, and they say so", async () => {
+      await reset();
+      const { page, close } = await open("/deals?per=10");
+      const seen = [];
+      page.on("request", (request) => {
+        if (request.headers()["x-navree-prefetch"]) seen.push(request.url());
+      });
+      await page.getByRole("link", { name: "Page 2", exact: true }).hover();
+      await page.waitForTimeout(250);
+      assert.equal(seen.filter((url) => /page=2/.test(url)).length, 1, "a page link is safe");
+      seen.length = 0;
+      await page.locator("#deals tbody a[href^='/deal/']").first().hover();
+      await page.waitForTimeout(250);
+      assert.deepEqual(seen, [], "a cell's link isn't marked, so hovering it fetches nothing");
+      const unsafe = await page.locator("#deals a[data-ui-in-region]").evaluateAll((links) => links.map((link) => link.getAttribute("href")).filter((href) => /delete|archive|bulk/.test(href)));
+      assert.deepEqual(unsafe, []);
+      await close();
+    });
+
     test("a user who loses permission mid-session: fetch and action are both handled", async () => {
       await reset();
       const { page, close } = await open("/deals?per=10");

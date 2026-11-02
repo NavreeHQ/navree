@@ -487,7 +487,7 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
 
     /// The rows to skip, for SQL's `OFFSET`.
     pub fn offset(&self) -> u64 {
-        u64::from(self.state.page - 1) * u64::from(self.state.per)
+        u64::from(self.state.page.saturating_sub(1)) * u64::from(self.state.per)
     }
 
     /// The cursor to read after.

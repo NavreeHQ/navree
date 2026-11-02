@@ -1536,7 +1536,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         let labels = &self.labels;
         let state = &self.query.state;
         let per = u64::from(state.per);
-        let from = if R::CONFIG.cursor { 0 } else { u64::from(self.page() - 1) * per + 1 };
+        let from = if R::CONFIG.cursor { 0 } else { u64::from(self.page().saturating_sub(1)) * per + 1 };
         let to = from + (shown as u64).saturating_sub(1);
         let base = |template: &str, total: String| template.replace("{from}", &grouped(from)).replace("{to}", &grouped(to)).replace("{total}", &total);
         let count_link = |text: &str| -> Element { self.region_link(self.query.href_with(|state| state.count = true)).slot("count-link").child(text.to_owned()) };
