@@ -40,7 +40,8 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
   `Shell::for_request(path, &headers)`, which does what the `AppShell` extractor does:
   the active link, a collapsed sidebar, the toast the last page left. `NavItem::current`
   says which link is the current page when several differ only in their query.
-  `data-hide-mobile` hides any element below 768px, a pane of two as well as a table column.
+  `data-hide-mobile` hides any element below 768px, a pane of two as well as a table column;
+  `data-pane` keeps a pane of a two-pane page in view on wide screens and scrolls it on its own.
 - **Forms.** `#[derive(Validate, Form)]` on one struct: doc comments are labels, types
   pick widgets, rules set `required`, `maxlength` and `min` in the browser and run
   again on the server. `FormView` draws it, `Submit<T>` reads it back and answers

@@ -53,3 +53,5 @@
 
 /* What a page keeps for wide screens only: a table column, one pane of two. */
 @media (max-width:767px){[data-hide-mobile]{display:none}}
+/* A pane of a page with two: on wide screens it stays in view and scrolls on its own. */
+@media (min-width:768px){[data-pane]{position:sticky;top:calc(var(--topbar-h) + var(--page-pad));align-self:start;max-height:calc(100dvh - var(--topbar-h) - 2 * var(--page-pad));overflow:auto;scrollbar-width:thin}}
