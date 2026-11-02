@@ -498,3 +498,57 @@ async fn tables_may_shrink_to_their_box() {
     assert!(rule.contains("overflow-wrap: anywhere"), "{css}");
     assert!(css.contains(".table time, .table .badge { white-space: nowrap; }"));
 }
+
+/// A tree: its children name the same key as its parent.
+struct ChildrenFirst;
+
+impl Injectable for ChildrenFirst {
+    fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async { Ok(ChildrenFirst) })
+    }
+}
+
+impl Resource for ChildrenFirst {
+    type Model = Contact;
+
+    const LABEL: &'static str = "Children first";
+    const SLUG: &'static str = "children-first";
+    const TITLE: &'static str = "name";
+    const SIDEBAR_COUNT: bool = false;
+
+    fn fields(&self) -> Vec<Field> {
+        vec![
+            Field::has_many::<ContactResource>("company_id").label("Listed contacts"),
+            Field::text("name").required(),
+            Field::text("company_id").label("Parent").required(),
+        ]
+    }
+}
+
+struct ChildrenFirstModule;
+
+impl Module for ChildrenFirstModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.resource::<ChildrenFirst>();
+    }
+}
+
+#[tokio::test]
+async fn a_message_names_a_column_by_its_own_field_not_a_has_many_on_the_same_key() {
+    let app = builder()
+        .module(ManyModule)
+        .module(ChildrenFirstModule)
+        .build()
+        .await;
+    let staff = staff(&app).await;
+    let answer = staff
+        .post("/admin/api/resources/children-first")
+        .json(&json!({ "name": "A", "company_id": "x" }))
+        .send()
+        .await
+        .assert_status(400)
+        .json_value();
+    let message = answer["errors"]["company_id"][0].as_str().unwrap();
+    assert!(message.contains("Parent"), "{answer}");
+    assert!(!message.contains("Listed contacts"), "{answer}");
+}

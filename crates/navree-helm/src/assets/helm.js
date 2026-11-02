@@ -246,6 +246,18 @@
       });
     });
     chips.forEach(function (chip) {
+      // A range typed in and a preset chosen would both be sent, and the last
+      // counts: choosing one clears the other.
+      var range = chip.querySelector("input.range-input");
+      if (range) {
+        var presets = chip.querySelectorAll("input[type=radio]");
+        presets.forEach(function (preset) {
+          preset.addEventListener("change", function () { range.value = ""; });
+        });
+        range.addEventListener("input", function () {
+          if (range.value) presets.forEach(function (preset) { preset.checked = false; });
+        });
+      }
       chip.addEventListener("toggle", function () {
         if (!chip.open) return;
         chips.forEach(function (other) {

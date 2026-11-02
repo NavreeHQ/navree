@@ -517,3 +517,56 @@ async fn only_the_releases_read_the_release_counts_and_they_never_fetch_the_issu
     }
     app.shutdown().await.unwrap();
 }
+
+/// Two releases whose names differ by case are two releases on every database,
+/// each with its own issues.
+#[tokio::test]
+async fn releases_that_differ_by_case_keep_their_own_issues() {
+    use navree_db::Executor as _;
+
+    let app = builder().config("lighthouse.release", "R9").build().await;
+    operators(&app).await;
+    let deploy = token(&app, "deploy@acme.test").await;
+    boom(&app, 1).await;
+    app.client().get("/api/demo/panic/1").send().await;
+    let store = flushed(&app).await;
+    let issues = store.issues(&IssueFilter::default()).await.unwrap().data;
+    assert_eq!(issues.len(), 2, "two issues to tell apart");
+    app.client()
+        .post("/_lighthouse/api/releases")
+        .bearer(&deploy)
+        .json(&json!({ "release": "r9" }))
+        .send()
+        .await
+        .assert_status(200);
+    // One of them came in with the other release.
+    let db = app.get::<navree_db::Db>().await;
+    db.execute(&navree_db::Statement::portable(
+        "UPDATE lighthouse_issues SET first_release = ? WHERE id = ?",
+        ["r9".into(), issues[0].issue.id.into()],
+    ))
+    .await
+    .unwrap();
+    let list = app
+        .client()
+        .get("/_lighthouse/api/releases")
+        .bearer(&deploy)
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    let introduced = |name: &str| {
+        list.as_array()
+            .unwrap()
+            .iter()
+            .find(|release| release["name"] == name)
+            .map(|release| release["introduced"].clone())
+    };
+    assert_eq!(introduced("R9"), Some(json!(1)), "{list}");
+    assert_eq!(introduced("r9"), Some(json!(1)), "{list}");
+    for name in ["R9", "r9"] {
+        let rows = store.release_issues(name, true, 10).await.unwrap();
+        assert_eq!(rows.len(), 1, "{name}: {rows:?}");
+    }
+    app.shutdown().await.unwrap();
+}

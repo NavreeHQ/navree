@@ -172,6 +172,16 @@ impl Migration for IndexIssueReleases {
                      CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL",
                 )
                 .await?;
+            // The issues name their releases the same way, or `r9` and `R9` would
+            // count each other's.
+            for (column, _) in ISSUE_RELEASE_INDEXES {
+                schema
+                    .statement(&format!(
+                        "ALTER TABLE lighthouse_issues MODIFY {column} VARCHAR(255) \
+                         CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL"
+                    ))
+                    .await?;
+            }
         }
         Ok(())
     }
