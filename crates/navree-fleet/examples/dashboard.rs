@@ -117,7 +117,7 @@ impl Job for SendMail {
 
     async fn handle(self, _ctx: JobContext) -> Result<(), BoxError> {
         tokio::time::sleep(Duration::from_millis(MAIL_MS.load(Ordering::Relaxed))).await;
-        if self.user_id.as_u128() % 100 == 0 {
+        if self.user_id.as_u128().is_multiple_of(100) {
             return Err("connection refused: smtp.internal:587".into());
         }
         Ok(())
@@ -142,6 +142,22 @@ impl Job for PushNotification {
 
     async fn handle(self, _ctx: JobContext) -> Result<(), BoxError> {
         tokio::time::sleep(Duration::from_millis(80)).await;
+        Ok(())
+    }
+}
+
+/// A listener with a long name, as the events module names its jobs.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct SyncSeats {
+    workspace: Uuid,
+}
+
+impl Job for SyncSeats {
+    const NAME: &'static str =
+        "events.listener.workspace.member_added.navree_billing::seats::SyncSeatsAfterMemberAdded";
+
+    async fn handle(self, _ctx: JobContext) -> Result<(), BoxError> {
+        tokio::time::sleep(Duration::from_millis(120)).await;
         Ok(())
     }
 }
@@ -200,6 +216,7 @@ impl Module for DemoModule {
             .job::<SendMail>()
             .job::<PushNotification>()
             .job::<DeliverWebhook>()
+            .job::<SyncSeats>()
             .job::<ExportContacts>()
             .global()
             .factory(Factory::<dyn Authenticator>::new(|_| async {
@@ -309,6 +326,13 @@ async fn main() -> Result<(), BoxError> {
                         .dispatch(SendMail {
                             user_id: Uuid::now_v7(),
                             api_token: "tok_live_123".into(),
+                        })
+                        .await;
+                }
+                if n.is_multiple_of(10) {
+                    let _ = queue
+                        .dispatch(SyncSeats {
+                            workspace: Uuid::now_v7(),
                         })
                         .await;
                 }

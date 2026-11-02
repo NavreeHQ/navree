@@ -572,6 +572,8 @@ async fn the_overview_fits_a_laptop_and_a_phone_and_the_sidebar_becomes_a_rail()
         (Viewport::desktop(), "1440", false),
         (Viewport::new(900, 800), "900", true),
         (Viewport::phone(), "390", false),
+        // The narrow phones: 360 pixels is a common Android width.
+        (Viewport::new(360, 800), "360", false),
     ] {
         let width = viewport.width();
         let page = site.open("operator", "#overview", viewport).await;
@@ -584,6 +586,19 @@ async fn the_overview_fits_a_laptop_and_a_phone_and_the_sidebar_becomes_a_rail()
             page.script::<bool>(collapsed).await.unwrap(),
             rail,
             "the icon rail at {name}"
+        );
+        // The workload table shows every queue and its squares without
+        // scrolling sideways.
+        let table: Value = page
+            .script(
+                "const wrap = document.querySelector('.workload').parentElement;
+                 return { scroll: wrap.scrollWidth, shown: wrap.clientWidth };",
+            )
+            .await
+            .unwrap();
+        assert!(
+            table["scroll"].as_u64() <= table["shown"].as_u64(),
+            "the workload table scrolls sideways at {name}: {table}"
         );
     }
     master.stop().await;

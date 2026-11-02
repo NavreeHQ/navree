@@ -227,6 +227,8 @@ pre {
   .detail { grid-template-columns: 1fr; }
   .updated { display: none; }
   .wide { display: none; }
+  .workload th, .workload td { padding: 0 8px; }
+  .slots { gap: 3px; }
   .failure { flex-wrap: wrap; }
   .failure-actions { margin-left: auto; }
 }
