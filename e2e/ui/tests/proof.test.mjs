@@ -293,6 +293,8 @@ test("a popover sits by its button and dismisses on a click outside", async () =
   await button.click();
   const popover = page.locator("#g-popover");
   await popover.waitFor();
+  // The browser's toggle event places it, a task after it shows.
+  await page.waitForFunction(() => document.getElementById("g-popover").style.top !== "");
   const [a, p] = [await button.boundingBox(), await popover.boundingBox()];
   assert.ok(Math.abs(p.y - (a.y + a.height)) < 8 || Math.abs(a.y - (p.y + p.height)) < 8, JSON.stringify({ a, p }));
   await page.mouse.click(5, 5);

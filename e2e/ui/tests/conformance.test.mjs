@@ -254,6 +254,7 @@ test("firefox: dialogs, popovers and forms work the same", { timeout: 120000 }, 
     const button = page.getByRole("button", { name: "Open popover" });
     await button.click();
     await page.locator("#g-popover").waitFor();
+    await page.waitForFunction(() => document.getElementById("g-popover").style.top !== "");
     const [a, p] = [await button.boundingBox(), await page.locator("#g-popover").boundingBox()];
     assert.ok(Math.abs(p.y - (a.y + a.height)) < 8 || Math.abs(a.y - (p.y + p.height)) < 8, JSON.stringify({ a, p }));
     await page.goto(URL_BASE + "/deals?per=1000");
