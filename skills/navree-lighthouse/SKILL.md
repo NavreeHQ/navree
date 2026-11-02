@@ -111,7 +111,9 @@ show up. A scheduled task is a unit of its own, and so is a task of the app's
 with `TelemetryContext::new(telemetry).with_task("sync-prices").scope(work)`:
 their slow statements open issues named after them. Other statements outside any
 request or job (queue polling, heartbeats) are counted but never open an issue. A statement's time is the time it ran: waiting for a free pooled
-connection is not part of it. A panic is recorded under the route that
+connection is reported beside it (`QueryExecuted::pool_wait`), and shows as
+Pool wait on the overview and a `pool` span in a trace. A statement that gets
+no connection is reported as failed, with no time run. A panic is recorded under the route that
 panicked, not `unmatched`. One-off commands (`migrate`, a seeder, a script;
 any process that is not `serve`, `schedule:run`, `queue:watchdog` or `*:work`,
 `*:serve`, `*:listen`) record exceptions and reports

@@ -110,8 +110,10 @@ tokio::task_local! {
 /// the named ones of `[database.connections.<name>]`).
 pub const DEFAULT_CONNECTION: &str = "default";
 
-/// The connections of a pool: how many are open, how many idle, and the
-/// most the pool opens ([`Db::pool_stats`]).
+/// The connections of a pool: how many are open, how many idle, the most
+/// the pool opens, and how many statements wait for one
+/// ([`Db::pool_stats`]). `idle: 0` alone is a busy pool; `waiting` above zero
+/// is one that is full.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PoolStats {
     /// Connections open (idle or in use).
@@ -120,6 +122,8 @@ pub struct PoolStats {
     pub idle: usize,
     /// The most connections the pool opens (`max_connections`).
     pub max: u32,
+    /// Statements and transactions waiting for a connection now.
+    pub waiting: usize,
 }
 
 impl Db {

@@ -35,6 +35,11 @@
       <div class="value-row"><span class="value" id="fig-open-issues">{{ overview.open_issues }}</span></div>
       <div class="sub"><span id="fig-new-issues">{{ overview.new_issues }}</span> new in {{ period }}</div>
     </div>
+    <div class="tile" title="How long statements waited for a database connection. A wait here with fast statements means the connection pool is too small for the load.">
+      <div class="label">Pool wait</div>
+      <div class="value-row"><span class="value{% if overview.pool_timeouts %} bad{% endif %}" id="fig-pool-wait">{{ overview.pool_wait_p95_ms|round|int }} ms</span></div>
+      <div class="sub"><span id="fig-pool-waits">{{ overview.pool_waits }}</span> waited, <span id="fig-pool-timeouts">{{ overview.pool_timeouts }}</span> timed out</div>
+    </div>
     <div class="tile" title="Traces and occurrences dropped because the write queue was full. Counts are never dropped.">
       <div class="label">Sampled out</div>
       <div class="value-row"><span class="value" id="fig-sampled-out">{{ overview.sampled_out }}</span></div>

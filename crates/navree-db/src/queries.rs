@@ -22,8 +22,10 @@ pub struct LoggedQuery {
     pub sql: String,
     /// The bound values, in placeholder order.
     pub values: Vec<Value>,
-    /// How long it took.
+    /// How long it ran, once it had a connection.
     pub duration: Duration,
+    /// How long it waited for a connection from the pool before it ran.
+    pub wait: Duration,
     /// Whether it failed.
     pub failed: bool,
     /// The connection's name: `default`, or a named connection's.
@@ -45,6 +47,7 @@ impl LoggedQuery {
     ///     sql: "SELECT * FROM deals WHERE title = $1".into(),
     ///     values: vec!["Renewal".into()],
     ///     duration: Duration::from_millis(2),
+    ///     wait: Duration::ZERO,
     ///     failed: false,
     ///     connection: "default".into(),
     ///     backend: Backend::Postgres,
@@ -201,9 +204,10 @@ impl Watchers {
         sql: &str,
         values: impl FnOnce() -> Vec<Value>,
         backend: Backend,
-        elapsed: Duration,
+        timing: crate::engine::report::Timing,
         failed: bool,
     ) {
+        let elapsed = timing.elapsed;
         let capture = CAPTURE.try_with(Arc::clone).ok();
         let listeners = read(&self.listeners).clone();
         if capture.is_some() || !listeners.is_empty() {
@@ -211,6 +215,7 @@ impl Watchers {
                 sql: sql.to_owned(),
                 values: values(),
                 duration: elapsed,
+                wait: timing.wait,
                 failed,
                 connection: self.name.clone(),
                 backend,

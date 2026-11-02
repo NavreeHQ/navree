@@ -203,3 +203,134 @@ async fn a_finished_unit_of_work_logs_its_statements_and_repeats() {
     assert!(text.contains("req-9"), "logs: {text}");
     assert!(!text.contains("person 3"), "values are not logged: {text}");
 }
+
+/// A pool of one connection, every statement logged as (sql, time, failed).
+async fn one_connection() -> (Db, Arc<Mutex<Vec<(String, Duration, bool)>>>, TempDb) {
+    let temp = TempDb::new();
+    let db = Db::connect(&navree_db::DbOptions {
+        url: temp.url.clone(),
+        max_connections: 1,
+        min_connections: 0,
+        connect_timeout_secs: 1,
+        ..navree_db::DbOptions::default()
+    })
+    .await
+    .unwrap();
+    let log: Arc<Mutex<Vec<(String, Duration, bool)>>> = Arc::default();
+    let seen = log.clone();
+    db.on_query(move |query| {
+        seen.lock()
+            .unwrap()
+            .push((query.sql.clone(), query.duration, query.failed));
+    });
+    (db, log, temp)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_statement_that_gets_no_connection_is_reported_as_failed() {
+    let (db, log, _temp) = one_connection().await;
+    let tx = db.begin().await.unwrap();
+    let error = db
+        .fetch_all(&Statement::text("SELECT 3 AS timed_out"))
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("timed out"), "{error}");
+    let reported = log.lock().unwrap().clone();
+    let this = reported
+        .iter()
+        .find(|(sql, _, _)| sql.contains("timed_out"))
+        .unwrap_or_else(|| panic!("reported: {reported:?}"));
+    assert!(this.2, "failed: {this:?}");
+    assert!(
+        this.1 < Duration::from_millis(500),
+        "it never ran: {this:?}"
+    );
+    tx.rollback().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stream_reports_the_time_it_ran_not_the_wait_for_a_connection() {
+    use futures_util::StreamExt as _;
+    let (db, log, _temp) = one_connection().await;
+    let tx = db.begin().await.unwrap();
+    let reader = db.clone();
+    let waiter = tokio::spawn(async move {
+        let mut rows = reader
+            .fetch(&Statement::text("SELECT 2 AS streamed"))
+            .await
+            .unwrap();
+        while rows.next().await.is_some() {}
+    });
+    tokio::time::sleep(Duration::from_millis(700)).await;
+    tx.rollback().await.unwrap();
+    waiter.await.unwrap();
+    let reported = log.lock().unwrap().clone();
+    let this = reported
+        .iter()
+        .find(|(sql, _, _)| sql.contains("streamed"))
+        .unwrap_or_else(|| panic!("reported: {reported:?}"));
+    assert!(this.1 < Duration::from_millis(500), "{this:?}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_wait_for_a_connection_is_reported_beside_the_time_a_statement_ran() {
+    use futures_util::StreamExt as _;
+    let temp = TempDb::new();
+    let db = Db::connect(&navree_db::DbOptions {
+        url: temp.url.clone(),
+        max_connections: 1,
+        min_connections: 0,
+        connect_timeout_secs: 5,
+        ..navree_db::DbOptions::default()
+    })
+    .await
+    .unwrap();
+    let log: Arc<Mutex<Vec<(String, Duration, Duration)>>> = Arc::default();
+    let seen = log.clone();
+    db.on_query(move |query| {
+        seen.lock()
+            .unwrap()
+            .push((query.sql.clone(), query.duration, query.wait));
+    });
+    let find = |needle: &str| {
+        log.lock()
+            .unwrap()
+            .iter()
+            .find(|(sql, _, _)| sql.contains(needle))
+            .cloned()
+            .unwrap_or_else(|| panic!("{needle} is not reported"))
+    };
+    let tx = db.begin().await.unwrap();
+    let (one, two, three) = (db.clone(), db.clone(), db.clone());
+    let fetched = tokio::spawn(async move {
+        one.fetch_all(&Statement::text("SELECT 1 AS fetched"))
+            .await
+            .unwrap();
+    });
+    let streamed = tokio::spawn(async move {
+        let mut rows = two
+            .fetch(&Statement::text("SELECT 2 AS streamed"))
+            .await
+            .unwrap();
+        while rows.next().await.is_some() {}
+    });
+    let begun = tokio::spawn(async move {
+        three.begin().await.unwrap().rollback().await.unwrap();
+    });
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    assert_eq!(db.pool_stats().waiting, 3, "{:?}", db.pool_stats());
+    assert_eq!(db.pool_stats().idle, 0);
+    tx.rollback().await.unwrap();
+    fetched.await.unwrap();
+    streamed.await.unwrap();
+    begun.await.unwrap();
+    assert_eq!(db.pool_stats().waiting, 0);
+    for needle in ["fetched", "streamed"] {
+        let (_, ran, wait) = find(needle);
+        assert!(
+            wait >= Duration::from_millis(300),
+            "{needle}: waited {wait:?}"
+        );
+        assert!(ran < wait, "{needle}: ran {ran:?}, waited {wait:?}");
+    }
+}

@@ -47,6 +47,7 @@ fn query(id: &str, sql: &str) -> TelemetryRecord {
         event: TelemetryEvent::QueryExecuted(QueryExecuted {
             sql: sql.into(),
             duration: Duration::from_millis(1),
+            pool_wait: std::time::Duration::ZERO,
             rows: None,
             connection: "sqlite".into(),
             failed: false,

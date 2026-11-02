@@ -32,6 +32,9 @@ pub(crate) mod kind {
     pub(crate) const EXCEPTION: &str = "exception";
     /// Occurrences per issue fingerprint (sparklines and spikes).
     pub(crate) const ISSUE: &str = "issue";
+    /// Statements that waited for a database connection (key `all`): the
+    /// time they waited, and as errors the ones that never got one.
+    pub(crate) const POOL_WAIT: &str = "pool_wait";
     /// Details (traces, occurrences) dropped because the write queue was
     /// full (key `all`).
     pub(crate) const SAMPLED_OUT: &str = "sampled_out";

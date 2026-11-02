@@ -179,9 +179,14 @@ pub struct RequestHandled {
 pub struct QueryExecuted {
     /// The statement with its placeholders, never the bound values.
     pub sql: String,
-    /// How long it took.
+    /// How long it ran, once it had a connection.
     #[serde(with = "millis")]
     pub duration: Duration,
+    /// How long it waited for a connection from the pool before it ran: a
+    /// saturated pool shows here, not as slow statements. A statement that
+    /// never got one has a `duration` of zero and is `failed`.
+    #[serde(default, with = "millis")]
+    pub pool_wait: Duration,
     /// The rows returned or affected, when known.
     pub rows: Option<u64>,
     /// The connection: the database URL without its password.

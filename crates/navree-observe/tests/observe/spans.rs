@@ -239,6 +239,7 @@ fn queries_are_named_by_operation_and_table() {
             TelemetryEvent::QueryExecuted(QueryExecuted {
                 sql: sql.to_owned(),
                 duration: Duration::from_millis(2),
+                pool_wait: std::time::Duration::ZERO,
                 rows: None,
                 connection: "postgres://app:***@db/crm".to_owned(),
                 failed: sql.starts_with("DELETE"),

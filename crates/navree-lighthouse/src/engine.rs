@@ -93,6 +93,10 @@ pub(crate) fn records_background_work(process: &str) -> bool {
             .any(|suffix| process.ends_with(suffix))
 }
 
+/// A wait for a database connection shorter than this isn't one: the pool
+/// had a connection to give.
+const POOL_WAIT_WORTH_SHOWING: Duration = Duration::from_millis(1);
+
 /// What an occurrence in background task `task` says it came from.
 fn task_origin(task: &str) -> Origin {
     Origin {
@@ -140,7 +144,8 @@ impl UnitKey {
 /// One span of a trace.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Span {
-    /// `db`, `http`, `cache` or `mail`.
+    /// `db`, `pool` (waiting for a database connection), `http`, `cache` or
+    /// `mail`.
     pub kind: String,
     /// The statement, the call, the cache key or the subject.
     pub label: String,
@@ -759,6 +764,21 @@ impl Engine {
         now: DateTime<Utc>,
     ) {
         let duration_ms = millis(query.duration);
+        let wait_ms = millis(query.pool_wait);
+        let waited = query.pool_wait >= POOL_WAIT_WORTH_SHOWING;
+        let timed_out = query.failed && query.duration.is_zero() && !query.pool_wait.is_zero();
+        if waited {
+            self.counts.observe(
+                now,
+                kind::POOL_WAIT,
+                "all",
+                &Observation {
+                    duration_ms: Some(wait_ms),
+                    error: timed_out,
+                    ..Observation::default()
+                },
+            );
+        }
         let pending = PendingQuery {
             at,
             statement: normalize_sql(&query.sql),
@@ -769,6 +789,15 @@ impl Engine {
         let mut pending = Some(pending);
         if let Some(key) = UnitKey::of(&context) {
             self.with_unit(&key, |unit| {
+                if waited {
+                    unit.push_span(RawSpan {
+                        kind: "pool",
+                        label: "Waiting for a database connection".to_owned(),
+                        end: at - duration_delta(duration_ms),
+                        duration_ms: wait_ms,
+                        failed: timed_out,
+                    });
+                }
                 unit.push_span(RawSpan {
                     kind: "db",
                     label: truncate(query.sql.trim(), 500),
@@ -1684,6 +1713,7 @@ mod tests {
         TelemetryEvent::QueryExecuted(QueryExecuted {
             sql: sql.into(),
             duration: Duration::from_millis(ms),
+            pool_wait: std::time::Duration::ZERO,
             rows: None,
             connection: "sqlite".into(),
             failed: false,

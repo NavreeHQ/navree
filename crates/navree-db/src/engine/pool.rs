@@ -1,7 +1,9 @@
 //! [`Pool`]: a pool of connections to one database server.
 
 use std::sync::Arc;
-use std::time::Instant;
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 
 use navree_config::ConfigSection;
 use navree_kernel::BoxFuture;
@@ -9,7 +11,7 @@ use navree_telemetry::Telemetry;
 
 use crate::engine::driver::{DriverConn, DriverPool, DriverRow, Executed, RowStream};
 use crate::engine::executor::ReportingStream;
-use crate::engine::report::Reporter;
+use crate::engine::report::{Reporter, Timing};
 use crate::engine::{Backend, DbError, Executor, Row, Statement, Transaction, TxOptions};
 use crate::queries::Watchers;
 use crate::{DbOptions, PoolStats};
@@ -45,6 +47,8 @@ pub struct Pool {
 struct PoolInner {
     driver: DriverPool,
     reporter: Reporter,
+    /// Statements and transactions waiting for a connection.
+    waiting: Arc<AtomicUsize>,
 }
 
 impl Pool {
@@ -80,7 +84,11 @@ impl Pool {
             error.with_message(message)
         })?;
         Ok(Pool {
-            inner: Arc::new(PoolInner { driver, reporter }),
+            inner: Arc::new(PoolInner {
+                driver,
+                reporter,
+                waiting: Arc::new(AtomicUsize::new(0)),
+            }),
         })
     }
 
@@ -97,7 +105,12 @@ impl Pool {
     /// Connections open, idle, and the most the pool opens.
     pub fn stats(&self) -> PoolStats {
         let (size, idle, max) = self.inner.driver.stats();
-        PoolStats { size, idle, max }
+        PoolStats {
+            size,
+            idle,
+            max,
+            waiting: self.inner.waiting.load(Ordering::Relaxed),
+        }
     }
 
     /// Checks a connection with a round trip to the server.
@@ -123,14 +136,34 @@ impl Pool {
 
     /// Begins a transaction with `options`.
     pub async fn begin_with(&self, options: TxOptions) -> Result<Transaction, DbError> {
-        let conn = self.inner.driver.acquire().await?;
-        Transaction::begin(conn, self.inner.reporter.clone(), options).await
+        let reporter = &self.inner.reporter;
+        let waited = Instant::now();
+        let conn = match self.take_connection().await {
+            Ok(conn) => conn,
+            Err(error) => {
+                let timing = Timing {
+                    elapsed: Duration::ZERO,
+                    wait: waited.elapsed(),
+                };
+                reporter.report_timed("BEGIN", &[], self.backend(), timing, true, None);
+                return Err(error);
+            }
+        };
+        Transaction::begin(conn, reporter.clone(), options, waited.elapsed()).await
+    }
+
+    /// A connection from the pool, counted in [`PoolStats::waiting`] until it
+    /// comes.
+    async fn take_connection(&self) -> Result<DriverConn, DbError> {
+        let _waiting = Waiting::new(self.inner.waiting.clone());
+        self.inner.driver.acquire().await
     }
 
     /// Runs `op` for `statement` (rewritten for this backend), timing and
-    /// reporting it. The time is the statement's own: waiting for a free
-    /// connection comes before the clock starts, so a saturated pool does
-    /// not make every statement look slow.
+    /// reporting it. The time is the statement's own; waiting for a free
+    /// connection is reported beside it, so a saturated pool shows as what
+    /// it is and does not make every statement look slow. A statement that
+    /// gets no connection is reported as failed, having run for no time.
     async fn run<T>(
         &self,
         statement: &Statement,
@@ -145,18 +178,57 @@ impl Pool {
         let statement = statement.for_backend(backend)?;
         let reporter = &self.inner.reporter;
         reporter.before(statement.sql());
-        let mut conn = self.inner.driver.acquire().await?;
+        let waited = Instant::now();
+        let mut conn = match self.take_connection().await {
+            Ok(conn) => conn,
+            Err(error) => {
+                let timing = Timing {
+                    elapsed: Duration::ZERO,
+                    wait: waited.elapsed(),
+                };
+                reporter.report_timed(
+                    statement.sql(),
+                    statement.values(),
+                    backend,
+                    timing,
+                    true,
+                    None,
+                );
+                return Err(error);
+            }
+        };
+        let wait = waited.elapsed();
         let started = Instant::now();
         let result = op(&mut conn, statement.sql(), statement.values()).await;
-        reporter.report(
+        let timing = Timing {
+            elapsed: started.elapsed(),
+            wait,
+        };
+        reporter.report_timed(
             statement.sql(),
             statement.values(),
             backend,
-            started.elapsed(),
+            timing,
             result.is_err(),
             result.as_ref().ok().and_then(rows),
         );
         result
+    }
+}
+
+/// Counts one in [`PoolStats::waiting`] while it lives.
+struct Waiting(Arc<AtomicUsize>);
+
+impl Waiting {
+    fn new(count: Arc<AtomicUsize>) -> Waiting {
+        count.fetch_add(1, Ordering::Relaxed);
+        Waiting(count)
+    }
+}
+
+impl Drop for Waiting {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::Relaxed);
     }
 }
 
@@ -219,14 +291,28 @@ impl Executor for Pool {
             let backend = self.backend();
             let statement = statement.for_backend(backend)?;
             self.inner.reporter.before(statement.sql());
-            let rows = self
-                .inner
-                .driver
-                .fetch_stream(statement.sql().to_owned(), statement.values())?;
-            Ok(
-                ReportingStream::new(rows, self.inner.reporter.clone(), backend, &statement)
-                    .boxed(),
+            let connected = Arc::new(OnceLock::new());
+            let waiting = Waiting::new(self.inner.waiting.clone());
+            let on_connected = {
+                let connected = connected.clone();
+                Box::new(move || {
+                    let _ = connected.set(Instant::now());
+                    drop(waiting);
+                })
+            };
+            let rows = self.inner.driver.fetch_stream(
+                statement.sql().to_owned(),
+                statement.values(),
+                on_connected,
+            )?;
+            Ok(ReportingStream::new(
+                rows,
+                self.inner.reporter.clone(),
+                backend,
+                &statement,
+                Some(connected),
             )
+            .boxed())
         })
     }
 

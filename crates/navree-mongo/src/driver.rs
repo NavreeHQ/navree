@@ -146,6 +146,7 @@ impl MongoDriver {
             TelemetryEvent::QueryExecuted(QueryExecuted {
                 sql: shape.clone(),
                 duration: elapsed,
+                pool_wait: std::time::Duration::ZERO,
                 rows,
                 connection: shared.connection.clone(),
                 failed,

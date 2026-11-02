@@ -277,6 +277,9 @@
         set("fig-open-issues", String(data.open_issues));
         set("fig-new-issues", String(data.new_issues));
         set("fig-sampled-out", String(data.sampled_out));
+        set("fig-pool-wait", Math.round(data.pool_wait_p95_ms) + " ms");
+        set("fig-pool-waits", String(data.pool_waits));
+        set("fig-pool-timeouts", String(data.pool_timeouts));
         if (data.series) {
           spark("spark-requests", data.series.requests_per_minute);
           spark("spark-errors", data.series.error_rate);

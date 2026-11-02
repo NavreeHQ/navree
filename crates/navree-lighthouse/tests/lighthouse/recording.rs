@@ -463,6 +463,7 @@ async fn a_slow_statement_in_a_scheduled_task_opens_an_issue_named_after_it() {
                         TelemetryEvent::QueryExecuted(QueryExecuted {
                             sql: "SELECT slow_report FROM big".to_owned(),
                             duration: std::time::Duration::from_secs(30),
+                            pool_wait: std::time::Duration::ZERO,
                             rows: None,
                             connection: "x".to_owned(),
                             failed: false,
@@ -506,5 +507,43 @@ async fn a_slow_statement_in_a_scheduled_task_opens_an_issue_named_after_it() {
             .collect::<Vec<_>>()
     );
     assert_eq!(found[0].issue.culprit, "nightly-report");
+    app.shutdown().await.unwrap();
+}
+
+/// A saturated pool: the statements stay fast and open no issue, and the wait
+/// shows on the overview and in the request's trace.
+#[tokio::test]
+async fn the_wait_for_a_connection_shows_on_the_overview() {
+    use navree_telemetry::{EventKind, QueryExecuted};
+    let app = builder().build().await;
+    let telemetry = Telemetry::from_app(app.ctx()).await;
+    let lighthouse = lighthouse(&app).await;
+    let _ = lighthouse;
+    let emit = |wait_ms: u64, failed: bool| {
+        telemetry.emit_with(EventKind::QueryExecuted, || {
+            TelemetryEvent::QueryExecuted(QueryExecuted {
+                sql: "SELECT waited FROM deals".to_owned(),
+                duration: Duration::ZERO,
+                pool_wait: Duration::from_millis(wait_ms),
+                rows: None,
+                connection: "x".to_owned(),
+                failed,
+            })
+        });
+    };
+    emit(700, false);
+    emit(700, false);
+    emit(4000, true);
+    let store = flushed(&app).await;
+    let overview = store.overview(Period::Hour).await.unwrap();
+    assert_eq!(overview.pool_waits, 3);
+    assert_eq!(overview.pool_timeouts, 1);
+    assert!(
+        overview.pool_wait_p95_ms >= 500.0,
+        "{}",
+        overview.pool_wait_p95_ms
+    );
+    let issues = store.issues(&IssueFilter::default()).await.unwrap();
+    assert!(issues.data.is_empty(), "a wait is not a slow statement");
     app.shutdown().await.unwrap();
 }

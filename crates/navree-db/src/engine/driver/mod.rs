@@ -346,13 +346,24 @@ impl DriverPool {
         &self,
         sql: String,
         values: &[Value],
+        on_connected: Box<dyn FnOnce() + Send>,
     ) -> Result<BoxStream<'static, Result<DriverRow, DbError>>, DbError> {
         on_driver!(self, DriverPool, |pool, driver, BACKEND| {
             let (sql, args) = driver::statement(&sql, values)?;
             let pool = pool.clone();
             let (sender, receiver) = tokio::sync::mpsc::channel(STREAM_BUFFER);
             tokio::spawn(async move {
-                let mut rows = sqlx::query_with(AssertSqlSafe(sql), args).fetch(&pool);
+                let mut conn = match pool.acquire().await {
+                    Ok(conn) => conn,
+                    Err(error) => {
+                        let _ = sender
+                            .send(Err(DbError::from_sqlx(error, Some(BACKEND))))
+                            .await;
+                        return;
+                    }
+                };
+                on_connected();
+                let mut rows = sqlx::query_with(AssertSqlSafe(sql), args).fetch(&mut *conn);
                 while let Some(row) = rows.next().await {
                     let row = row
                         .map(DriverRow::from)

@@ -9,6 +9,14 @@ use crate::DbOptions;
 use crate::engine::{Backend, Value};
 use crate::queries::Watchers;
 
+/// How long a statement took: running, and before that waiting for a
+/// connection from the pool.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Timing {
+    pub(crate) elapsed: Duration,
+    pub(crate) wait: Duration,
+}
+
 /// Where the statements of a connection (its writer, replicas and
 /// transactions) are reported: its [`Watchers`] (query logs, listeners,
 /// unit-of-work statistics and duration handlers), the telemetry sinks
@@ -52,7 +60,7 @@ impl Reporter {
         self.watchers.before_transaction();
     }
 
-    /// Reports a statement that ran.
+    /// Reports a statement that ran on a connection it already held.
     pub(crate) fn report(
         &self,
         sql: &str,
@@ -62,23 +70,46 @@ impl Reporter {
         failed: bool,
         rows: Option<u64>,
     ) {
+        let timing = Timing {
+            elapsed,
+            wait: Duration::ZERO,
+        };
+        self.report_timed(sql, values, backend, timing, failed, rows);
+    }
+
+    /// Reports a statement that took a connection from the pool.
+    pub(crate) fn report_timed(
+        &self,
+        sql: &str,
+        values: &[Value],
+        backend: Backend,
+        timing: Timing,
+        failed: bool,
+        rows: Option<u64>,
+    ) {
         self.watchers
-            .observe_statement(sql, || values.to_vec(), backend, elapsed, failed);
-        self.emit(sql, elapsed, failed, rows);
+            .observe_statement(sql, || values.to_vec(), backend, timing, failed);
+        self.emit(sql, timing, failed, rows);
     }
 
     /// Sends the telemetry event and the `tracing` log of a statement.
-    pub(crate) fn emit(&self, sql: &str, elapsed: Duration, failed: bool, rows: Option<u64>) {
+    fn emit(&self, sql: &str, timing: Timing, failed: bool, rows: Option<u64>) {
+        let Timing { elapsed, wait } = timing;
         self.telemetry.emit_with(EventKind::QueryExecuted, || {
             TelemetryEvent::QueryExecuted(QueryExecuted {
                 sql: sql.to_owned(),
                 duration: elapsed,
+                pool_wait: wait,
                 rows,
                 connection: self.connection.to_string(),
                 failed,
             })
         });
         let elapsed_ms = elapsed.as_secs_f64() * 1000.0;
+        if self.slow.is_some_and(|slow| wait >= slow) {
+            let wait_ms = wait.as_secs_f64() * 1000.0;
+            tracing::warn!(target: "navree_db::query", sql, wait_ms, failed, "slow to get a connection from the pool");
+        }
         if self.slow.is_some_and(|slow| elapsed >= slow) {
             tracing::warn!(target: "navree_db::query", sql, elapsed_ms, failed, "slow query");
         } else if self.log_queries {

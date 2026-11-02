@@ -13,6 +13,7 @@ fn query(sql: &str) -> TelemetryEvent {
     TelemetryEvent::QueryExecuted(QueryExecuted {
         sql: sql.to_owned(),
         duration: Duration::from_millis(3),
+        pool_wait: std::time::Duration::ZERO,
         rows: None,
         connection: "sqlite".to_owned(),
         failed: false,

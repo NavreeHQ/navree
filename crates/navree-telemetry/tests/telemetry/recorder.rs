@@ -27,6 +27,7 @@ fn every_event() -> Vec<TelemetryEvent> {
         TelemetryEvent::QueryExecuted(QueryExecuted {
             sql: "SELECT 1".into(),
             duration: ms(1),
+            pool_wait: std::time::Duration::ZERO,
             rows: None,
             connection: "sqlite".into(),
             failed: false,

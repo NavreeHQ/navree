@@ -311,6 +311,13 @@ pub struct Overview {
     /// Details (traces and occurrences) every process dropped in the period
     /// because the write queue was full.
     pub sampled_out: i64,
+    /// Statements that had to wait for a database connection in the period.
+    pub pool_waits: i64,
+    /// Statements that never got one in the period.
+    pub pool_timeouts: i64,
+    /// The 95th percentile of those waits, in milliseconds. A saturated pool
+    /// shows here, while the statements themselves stay fast.
+    pub pool_wait_p95_ms: f64,
     /// The median latency, in milliseconds.
     pub p50_ms: f64,
     /// Issues whose first occurrence was in the period.
@@ -1164,6 +1171,10 @@ impl LighthouseStore {
         for (_, values, _) in &requests {
             all.merge(values);
         }
+        let mut pool = Values::default();
+        for (_, values, _) in self.merged(kind::POOL_WAIT, period, None).await? {
+            pool.merge(&values);
+        }
         let exception_count: i64 = exceptions.iter().map(|(_, values, _)| values.count).sum();
         let failed_jobs: i64 = jobs.iter().map(|(_, values, _)| values.extra).sum();
         let open_issues = self.open_issue_count().await?;
@@ -1200,6 +1211,9 @@ impl LighthouseStore {
             feed,
             dropped: 0,
             sampled_out,
+            pool_waits: pool.count,
+            pool_timeouts: pool.errors,
+            pool_wait_p95_ms: round2(pool.histogram.quantile(0.95)),
             p50_ms: extras.p50_ms,
             new_issues: extras.new_issues,
             series: extras.series,

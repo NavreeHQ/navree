@@ -67,6 +67,7 @@ pub fn query_event(sql: &str, ms: u64) -> TelemetryEvent {
     TelemetryEvent::QueryExecuted(QueryExecuted {
         sql: sql.to_owned(),
         duration: Duration::from_millis(ms),
+        pool_wait: std::time::Duration::ZERO,
         rows: None,
         connection: "sqlite".to_owned(),
         failed: false,

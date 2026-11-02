@@ -2,16 +2,16 @@
 //! work, a [`Db`](crate::Db).
 
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::task::{Context, Poll};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use futures_util::Stream;
 use futures_util::stream::BoxStream;
 use navree_kernel::BoxFuture;
 
 use crate::engine::driver::{DriverRow, Executed, RowStream};
-use crate::engine::report::Reporter;
+use crate::engine::report::{Reporter, Timing};
 use crate::engine::{Backend, DbError, FromValue, Row, Statement, Value};
 
 /// Something statements run on: a [`Pool`](crate::Pool), a
@@ -144,8 +144,8 @@ macro_rules! forward {
 forward!(&E, Arc<E>, Box<E>);
 
 /// Rows of a driver stream as [`Row`]s, reported to the connection once the
-/// stream ends or is dropped (with the rows read and the time since it
-/// opened).
+/// stream ends or is dropped (with the rows read and the time it ran, from
+/// when it had a connection; the wait for one is reported beside it).
 pub(crate) struct ReportingStream {
     rows: BoxStream<'static, Result<DriverRow, DbError>>,
     report: Option<PendingReport>,
@@ -157,17 +157,34 @@ struct PendingReport {
     sql: String,
     values: Vec<Value>,
     started: Instant,
+    /// When it got a connection from the pool; `None` when it holds one
+    /// already (a transaction's).
+    connected: Option<Arc<OnceLock<Instant>>>,
     rows: u64,
     failed: bool,
 }
 
 impl PendingReport {
     fn send(self) {
-        self.reporter.report(
+        let timing = match self.connected.as_ref().map(|at| at.get().copied()) {
+            None => Timing {
+                elapsed: self.started.elapsed(),
+                wait: Duration::ZERO,
+            },
+            Some(Some(at)) => Timing {
+                elapsed: at.elapsed(),
+                wait: at.duration_since(self.started),
+            },
+            Some(None) => Timing {
+                elapsed: Duration::ZERO,
+                wait: self.started.elapsed(),
+            },
+        };
+        self.reporter.report_timed(
             &self.sql,
             &self.values,
             self.backend,
-            self.started.elapsed(),
+            timing,
             self.failed,
             Some(self.rows),
         );
@@ -180,6 +197,7 @@ impl ReportingStream {
         reporter: Reporter,
         backend: Backend,
         statement: &Statement,
+        connected: Option<Arc<OnceLock<Instant>>>,
     ) -> ReportingStream {
         ReportingStream {
             rows,
@@ -189,6 +207,7 @@ impl ReportingStream {
                 sql: statement.sql().to_owned(),
                 values: statement.values().to_vec(),
                 started: Instant::now(),
+                connected,
                 rows: 0,
                 failed: false,
             }),

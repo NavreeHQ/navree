@@ -2,14 +2,14 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use navree_kernel::BoxFuture;
 
 use crate::IsolationLevel;
 use crate::engine::driver::{DriverConn, DriverRow, Executed, RowStream};
 use crate::engine::executor::ReportingStream;
-use crate::engine::report::Reporter;
+use crate::engine::report::{Reporter, Timing};
 use crate::engine::{Backend, DbError, Executor, Row, Statement};
 
 /// How a transaction begins: its isolation level, whether it only reads,
@@ -182,6 +182,7 @@ impl Transaction {
         mut conn: DriverConn,
         reporter: Reporter,
         options: TxOptions,
+        wait: Duration,
     ) -> Result<Transaction, DbError> {
         let backend = conn.backend();
         reporter.before_transaction();
@@ -195,14 +196,11 @@ impl Transaction {
         let shown = begin.clone().unwrap_or_else(|| "BEGIN".to_owned());
         let started = Instant::now();
         let result = conn.begin(begin).await;
-        reporter.report(
-            &shown,
-            &[],
-            backend,
-            started.elapsed(),
-            result.is_err(),
-            None,
-        );
+        let timing = Timing {
+            elapsed: started.elapsed(),
+            wait,
+        };
+        reporter.report_timed(&shown, &[], backend, timing, result.is_err(), None);
         result?;
         Ok(Transaction {
             shared: Arc::new(Shared {
@@ -493,6 +491,7 @@ impl Executor for Transaction {
                 self.shared.reporter.clone(),
                 self.shared.backend,
                 &statement,
+                None,
             )
             .boxed())
         })
