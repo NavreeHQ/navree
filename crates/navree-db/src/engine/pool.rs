@@ -7,7 +7,7 @@ use navree_config::ConfigSection;
 use navree_kernel::BoxFuture;
 use navree_telemetry::Telemetry;
 
-use crate::engine::driver::{DriverPool, DriverRow, Executed, RowStream};
+use crate::engine::driver::{DriverConn, DriverPool, DriverRow, Executed, RowStream};
 use crate::engine::executor::ReportingStream;
 use crate::engine::report::Reporter;
 use crate::engine::{Backend, DbError, Executor, Row, Statement, Transaction, TxOptions};
@@ -128,13 +128,15 @@ impl Pool {
     }
 
     /// Runs `op` for `statement` (rewritten for this backend), timing and
-    /// reporting it.
+    /// reporting it. The time is the statement's own: waiting for a free
+    /// connection comes before the clock starts, so a saturated pool does
+    /// not make every statement look slow.
     async fn run<T>(
         &self,
         statement: &Statement,
         rows: impl FnOnce(&T) -> Option<u64>,
         op: impl for<'c> FnOnce(
-            &'c DriverPool,
+            &'c mut DriverConn,
             &'c str,
             &'c [crate::Value],
         ) -> BoxFuture<'c, Result<T, DbError>>,
@@ -143,8 +145,9 @@ impl Pool {
         let statement = statement.for_backend(backend)?;
         let reporter = &self.inner.reporter;
         reporter.before(statement.sql());
+        let mut conn = self.inner.driver.acquire().await?;
         let started = Instant::now();
-        let result = op(&self.inner.driver, statement.sql(), statement.values()).await;
+        let result = op(&mut conn, statement.sql(), statement.values()).await;
         reporter.report(
             statement.sql(),
             statement.values(),
@@ -175,7 +178,7 @@ impl Executor for Pool {
         Box::pin(self.run(
             statement,
             |done: &Executed| Some(done.rows_affected),
-            |pool, sql, values| Box::pin(pool.execute(sql, values)),
+            |conn, sql, values| Box::pin(conn.execute(sql, values)),
         ))
     }
 
@@ -188,7 +191,7 @@ impl Executor for Pool {
                 .run(
                     statement,
                     |rows: &Vec<DriverRow>| u64::try_from(rows.len()).ok(),
-                    |pool, sql, values| Box::pin(pool.fetch_all(sql, values)),
+                    |conn, sql, values| Box::pin(conn.fetch_all(sql, values)),
                 )
                 .await?;
             Ok(rows.into_iter().map(Row::from_driver).collect())
@@ -204,7 +207,7 @@ impl Executor for Pool {
                 .run(
                     statement,
                     |row: &Option<DriverRow>| Some(u64::from(row.is_some())),
-                    |pool, sql, values| Box::pin(pool.fetch_optional(sql, values)),
+                    |conn, sql, values| Box::pin(conn.fetch_optional(sql, values)),
                 )
                 .await?;
             Ok(row.map(Row::from_driver))
@@ -233,7 +236,7 @@ impl Executor for Pool {
             self.run(
                 &statement,
                 |done: &Executed| Some(done.rows_affected),
-                |pool, sql, _values| Box::pin(pool.execute_script(sql)),
+                |conn, sql, _values| Box::pin(conn.execute_script(sql)),
             )
             .await
         })

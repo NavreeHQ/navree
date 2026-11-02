@@ -149,3 +149,47 @@ async fn queries_in_a_request_carry_its_request_id() {
     assert!(query.context.trace.is_some());
     app.shutdown().await.unwrap();
 }
+
+/// A statement waiting for a free connection has not been running: its
+/// reported duration is the time it ran, so a saturated pool shows up as
+/// slow requests and an exhausted pool, not as every statement being slow.
+#[tokio::test]
+async fn a_statement_waiting_for_a_connection_reports_only_the_time_it_ran() {
+    let temp = TempDb::new();
+    let recorder = TelemetryRecorder::new();
+    let telemetry = Telemetry::with_sinks(vec![Arc::new(recorder.clone())]);
+    let db = Db::connect_with_telemetry(
+        &DbOptions {
+            max_connections: 1,
+            ..quiet(&temp)
+        },
+        telemetry,
+    )
+    .await
+    .expect("connects");
+
+    // The only connection is busy for a while.
+    let holder = db.begin().await.expect("a transaction");
+    let waiting = {
+        let db = db.clone();
+        tokio::spawn(async move {
+            db.fetch_optional(&Statement::text("SELECT 42 AS waited"))
+                .await
+                .expect("runs once the connection is free")
+        })
+    };
+    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    holder.commit().await.expect("commits");
+    waiting.await.expect("joins");
+
+    let queries = recorder.queries();
+    let waited = queries
+        .iter()
+        .find(|q| q.sql == "SELECT 42 AS waited")
+        .expect("the query is reported");
+    assert!(
+        waited.duration < std::time::Duration::from_millis(150),
+        "it ran in microseconds but was reported as {:?}",
+        waited.duration
+    );
+}

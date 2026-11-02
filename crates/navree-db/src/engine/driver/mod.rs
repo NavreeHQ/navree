@@ -339,61 +339,6 @@ impl DriverPool {
             .map_err(|error| DbError::from_sqlx(error, Some(BACKEND))))
     }
 
-    /// Runs a statement that returns no rows.
-    pub(crate) async fn execute(&self, sql: &str, values: &[Value]) -> Result<Executed, DbError> {
-        on_driver!(self, DriverPool, |pool, driver, BACKEND| {
-            let (sql, args) = driver::statement(sql, values)?;
-            let done = sqlx::query_with(AssertSqlSafe(sql), args)
-                .execute(pool)
-                .await
-                .map_err(|error| DbError::from_sqlx(error, Some(BACKEND)))?;
-            Ok(executed(&done))
-        })
-    }
-
-    /// Runs a query and returns its rows.
-    pub(crate) async fn fetch_all(
-        &self,
-        sql: &str,
-        values: &[Value],
-    ) -> Result<Vec<DriverRow>, DbError> {
-        on_driver!(self, DriverPool, |pool, driver, BACKEND| {
-            let (sql, args) = driver::statement(sql, values)?;
-            let rows = sqlx::query_with(AssertSqlSafe(sql), args)
-                .fetch_all(pool)
-                .await
-                .map_err(|error| DbError::from_sqlx(error, Some(BACKEND)))?;
-            Ok(rows.into_iter().map(Into::into).collect())
-        })
-    }
-
-    /// Runs a query and returns its first row, if any.
-    pub(crate) async fn fetch_optional(
-        &self,
-        sql: &str,
-        values: &[Value],
-    ) -> Result<Option<DriverRow>, DbError> {
-        on_driver!(self, DriverPool, |pool, driver, BACKEND| {
-            let (sql, args) = driver::statement(sql, values)?;
-            let row = sqlx::query_with(AssertSqlSafe(sql), args)
-                .fetch_optional(pool)
-                .await
-                .map_err(|error| DbError::from_sqlx(error, Some(BACKEND)))?;
-            Ok(row.map(Into::into))
-        })
-    }
-
-    /// Runs SQL that binds nothing and may hold several statements.
-    pub(crate) async fn execute_script(&self, sql: &str) -> Result<Executed, DbError> {
-        on_driver!(self, DriverPool, |pool, _driver, BACKEND| {
-            let done = sqlx::raw_sql(AssertSqlSafe(sql.to_owned()))
-                .execute(pool)
-                .await
-                .map_err(|error| DbError::from_sqlx(error, Some(BACKEND)))?;
-            Ok(executed(&done))
-        })
-    }
-
     /// Runs a query whose rows arrive one by one, on a connection of the
     /// stream's own (taken from the pool until the stream ends or is
     /// dropped).
