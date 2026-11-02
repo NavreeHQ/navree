@@ -10,6 +10,7 @@ mod support;
 mod actions;
 mod api;
 mod boot;
+mod exports;
 mod files;
 mod fixes;
 mod hidden;

@@ -98,8 +98,8 @@ async fn export_is_the_list_as_csv_for_its_filters() {
     assert_eq!(response.header("cache-control"), Some("no-store"));
     assert_eq!(response.header("x-content-type-options"), Some("nosniff"));
     let body = response.text();
-    assert!(!body.starts_with('\u{feff}'));
-    let lines = lines(&body);
+    assert!(body.starts_with('\u{feff}'), "{body}");
+    let lines = lines(body.trim_start_matches('\u{feff}'));
     assert_eq!(
         lines[0],
         "Title,Amount,Currency,Stage,Company,Owner,Expected close date,Notes,Priority,Probability,Lost reason,Closed at,Created at"

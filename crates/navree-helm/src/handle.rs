@@ -1187,6 +1187,9 @@ impl<R: Resource> Handle<R> {
                 .with_detail(format!("{} are not exported.", self.info.label)));
         }
         let (query, column_name, descending) = self.filtered(cx, q).await?;
+        // A cursor goes by columns: an order the resource's own query set, which may
+        // be anything, gives way to the list's.
+        let query = query.reorder();
         let by_column = values::column::<R::Model>(&column_name).is_some()
             && !self.info.nullable.contains(column_name.as_str());
         let query = if by_column {

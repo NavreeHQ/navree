@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 /// metrics_cache_secs = 60       # metric results cached per user and range
 /// dashboard = true              # metric cards on the home page
 /// session_minutes = 480         # how long a panel sign-in lasts
+/// export_max_secs = 1800        # how long a list's CSV file may take to send
 /// ```
 ///
 /// From the environment: `APP_HELM__TITLE="Acme CRM"`,
@@ -43,6 +44,9 @@ pub struct HelmOptions {
     pub dashboard: bool,
     /// How long a sign-in to the panel lasts, in minutes (480).
     pub session_minutes: u64,
+    /// How long a list's CSV file may take to send, in seconds (1800): however
+    /// slowly a client reads, no more rows are read for it after this.
+    pub export_max_secs: u64,
 }
 
 impl Default for HelmOptions {
@@ -56,6 +60,7 @@ impl Default for HelmOptions {
             metrics_cache_secs: 60,
             dashboard: true,
             session_minutes: 480,
+            export_max_secs: 1800,
         }
     }
 }
@@ -104,6 +109,9 @@ impl HelmOptions {
         }
         if self.session_minutes == 0 {
             errors.push("helm.session_minutes must be at least 1".to_owned());
+        }
+        if self.export_max_secs == 0 {
+            errors.push("helm.export_max_secs must be at least 1".to_owned());
         }
         if errors.is_empty() {
             Ok(())

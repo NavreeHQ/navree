@@ -12,12 +12,14 @@
 
 use std::sync::Arc;
 
+use http::HeaderMap;
 use navree_access::READ;
 use navree_db::{Backend, Executor};
 use navree_http::{AppError, Json};
 use serde_json::{Map, Value, json};
 
 use crate::cx::Cx;
+use crate::export::refuse_other_sites;
 use crate::handle::ErasedResource;
 use crate::money;
 use crate::panel::Panel;
@@ -64,7 +66,11 @@ async fn counted(cx: &Cx, resource: &dyn ErasedResource) -> Result<u64, AppError
 
 /// `GET {path}/counts`: `{"counts": {"deals": {"value": 30, "text": "30"}}}`
 /// for each resource the user may read whose count is on.
-pub(crate) async fn counts(Panel { cx, .. }: Panel) -> Result<Json<Value>, AppError> {
+pub(crate) async fn counts(
+    Panel { cx, .. }: Panel,
+    headers: HeaderMap,
+) -> Result<Json<Value>, AppError> {
+    refuse_other_sites(&headers)?;
     let mut counts = Map::new();
     for resource in cx.core.registry.resources() {
         let info = resource.info();

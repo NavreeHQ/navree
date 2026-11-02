@@ -5,7 +5,7 @@ use std::sync::Arc;
 use http::header::USER_AGENT;
 use http::request::Parts;
 use navree_access::{CurrentAccess, PinnedWorkspace, WorkspaceGate};
-use navree_contracts::{AuthState, RequestId};
+use navree_contracts::{AuthState, Principal, RequestId};
 use navree_crypto::Encrypter;
 use navree_db::Uow;
 use navree_http::extract::FromRequestParts;
@@ -21,6 +21,8 @@ use crate::workspace::{self, Admitted, NamedBy, RefusedWrite};
 pub(crate) struct Panel {
     pub(crate) cx: Cx,
     pub(crate) session: PanelSession,
+    /// Who signed in, with what their credential allows.
+    pub(crate) principal: Principal,
 }
 
 /// A [`Panel`] that doesn't enter the workspace the request names, for the
@@ -52,12 +54,12 @@ async fn panel(parts: &mut Parts, enter_named: bool) -> Result<Panel, AppError> 
             .cloned()
             .ok_or_else(|| AppError::internal("the panel needs the navree request pipeline"))?;
         let core: Arc<Core> = app.get::<Core>().await.map_err(AppError::internal)?;
-        let user_id = parts
+        let principal = parts
             .extensions
             .get::<AuthState>()
-            .and_then(|state| state.0.as_ref())
-            .map(|p| p.user_id)
+            .and_then(|state| state.0.clone())
             .ok_or_else(AppError::unauthenticated)?;
+        let user_id = principal.user_id;
         let uow = Uow::from_request_parts(parts).await?;
         // The user's app-wide access: entering a workspace below doesn't change it.
         let CurrentAccess(access) = CurrentAccess::from_request_parts(parts).await?;
@@ -173,7 +175,11 @@ async fn panel(parts: &mut Parts, enter_named: bool) -> Result<Panel, AppError> 
             ))
             .await;
         }
-        Ok(Panel { cx, session })
+        Ok(Panel {
+            cx,
+            session,
+            principal,
+        })
     }
 }
 

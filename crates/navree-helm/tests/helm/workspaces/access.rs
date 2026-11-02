@@ -16,6 +16,7 @@ use super::*;
 mod cookie;
 mod demo;
 mod every_schema;
+mod export;
 mod oracle;
 mod pinned;
 mod queued;

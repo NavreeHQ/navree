@@ -1170,7 +1170,7 @@ pub(crate) async fn list(
                 "new_url": format!("{list_url}/new"),
                 "actions_url": format!("{list_url}/actions"),
                 "can_create": cx.can(CREATE, info.subject, None) && cx.offers(info, CREATE),
-                "export": info.export,
+                "export": crate::export::offered(cx, info).await,
                 "export_url": match q.to_query(None, None) {
                     query if query.is_empty() => format!("{list_url}/export.csv"),
                     query => format!("{list_url}/export.csv?{query}"),

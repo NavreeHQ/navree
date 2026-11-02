@@ -176,7 +176,7 @@ impl Cx {
     }
 
     /// `entry` with the user and client.
-    fn entry_of_client(&self, entry: AuditEntry) -> AuditEntry {
+    pub(crate) fn entry_of_client(&self, entry: AuditEntry) -> AuditEntry {
         let mut entry = entry.actor(self.user_id);
         if let Some(id) = &self.client.request_id {
             entry = entry.request_id(id.clone());
