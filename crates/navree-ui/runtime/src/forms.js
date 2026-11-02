@@ -39,6 +39,7 @@ async function send(form, submitter) {
   running.get(form)?.abort();
   const abort = new AbortController();
   running.set(form, abort);
+  let answered = false;
   try {
     const action = (submitter && attr(submitter, "formaction")) || attr(form, "action") || location.href;
     const method = ((submitter && attr(submitter, "formmethod")) || attr(form, "method") || "get").toUpperCase();
@@ -53,6 +54,7 @@ async function send(form, submitter) {
     if (method === "GET") url.search = new URLSearchParams(/** @type {any} */ (data)).toString();
     else init.body = attr(form, "enctype") === "multipart/form-data" ? data : new URLSearchParams(/** @type {any} */ (data));
     const response = await (method === "GET" ? fetch(url, init) : whileWriting(() => fetch(url, init)));
+    answered = true;
     const type = response.headers.get("content-type") || "";
     pending(form, submitter, false);
     document.dispatchEvent(new CustomEvent("ui:sent", { detail: { form, ok: response.ok } }));
@@ -63,7 +65,7 @@ async function send(form, submitter) {
   } catch (error) {
     if (/** @type {Error} */ (error).name === "AbortError") return;
     pending(form, submitter, false);
-    toast("danger", "No connection. Try again.");
+    toast("danger", answered ? "That didn't work. Try again." : "No connection. Try again.");
   }
 }
 

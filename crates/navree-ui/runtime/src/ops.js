@@ -15,6 +15,7 @@ function showErrors(form, fields) {
   for (const name in fields) {
     const input = /** @type {HTMLElement | undefined} */ (field(form, name));
     const box = input?.closest?.("[data-slot=field]");
+    const radio = input?.getAttribute?.("type") === "radio";
     const text = fields[name].join(" ");
     count++;
     if (!input || !box) {
@@ -22,7 +23,7 @@ function showErrors(form, fields) {
       continue;
     }
     box.setAttribute("data-invalid", "");
-    input.setAttribute("aria-invalid", "true");
+    if (!radio) input.setAttribute("aria-invalid", "true");
     const error = make("p");
     error.setAttribute("data-slot", "field-error");
     error.id = (input.id || name) + "-error";
@@ -77,8 +78,13 @@ export function applyEnvelope(envelope) {
     return;
   }
   forget();
-  for (const url of envelope.modules || []) {
+  for (const url of Array.isArray(envelope.modules) ? envelope.modules : []) {
     if (ownModule(url)) import(url).catch(() => {});
   }
-  for (const op of envelope.ops || []) apply(op);
+  // One op that can't apply doesn't take the others with it.
+  for (const op of Array.isArray(envelope.ops) ? envelope.ops : []) {
+    try {
+      apply(op);
+    } catch {}
+  }
 }

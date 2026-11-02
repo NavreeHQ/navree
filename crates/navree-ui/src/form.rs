@@ -23,7 +23,7 @@ use serde::{Deserialize, Deserializer};
 
 pub use navree_validation::{FieldRules, RuleTable};
 
-use crate::components::{Button, Checkbox, Field, Input, InputGroup, InputKind, NativeSelect, RadioGroup, Switch, Textarea};
+use crate::components::{Alert, AlertTone, Button, Checkbox, Field, Input, InputGroup, InputKind, NativeSelect, RadioGroup, Switch, Textarea};
 use crate::html::Href;
 use crate::node::{Element, Node, Uses, el};
 use crate::op::{Envelope, Op, UI_HEADER};
@@ -496,6 +496,13 @@ impl<T: Form> FormView<T> {
     fn into_node(self) -> Node {
         let boxes: Vec<Element> = T::FIELDS.iter().filter_map(|field| self.field(field)).collect();
         let grid = if self.columns { "form-grid" } else { "form-stack" };
+        // An error no field can show: the runtime makes these toasts.
+        let whole: Vec<Alert> = self
+            .errors
+            .iter()
+            .filter(|(name, _)| !T::FIELDS.iter().any(|field| field.name == *name))
+            .map(|(_, messages)| Alert::new(AlertTone::Danger).title(messages.join(" ")))
+            .collect();
         el("form")
             .slot("form")
             .attr("id", T::ID)
@@ -505,6 +512,7 @@ impl<T: Form> FormView<T> {
             .uses(Uses::CORE)
             .children((
                 self.csrf.map(csrf_field),
+                whole,
                 el("div").slot(grid).child(boxes),
                 el("div").slot("form-actions").children((
                     self.cancel.map(|(label, href)| Button::ghost(label).href(href)),

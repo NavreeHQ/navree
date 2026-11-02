@@ -427,6 +427,22 @@ fn a_request_says_when_it_is_a_prefetch() {
 }
 
 #[test]
+fn an_error_of_the_whole_form_is_drawn() {
+    let errors = BTreeMap::from([("_form".to_owned(), vec!["This form could not be read.".to_owned()])]);
+    let html = render(&FormView::<Login>::new().post("/x").with_errors(errors).into());
+    assert!(html.contains("This form could not be read."), "{html}");
+    assert!(html.contains(r#"role="alert""#), "{html}");
+}
+
+#[tokio::test]
+async fn a_repeated_field_says_so_with_javascript_off() {
+    let app = app().await;
+    let response = app.client().post("/store").header("content-type", FORM).body("password=longenough&email=a&email=b").send().await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(response.text().contains("could not be read"), "{}", response.text());
+}
+
+#[test]
 fn a_textarea_keeps_a_first_newline() {
     let html = render(&navree_ui::Textarea::new("a").value("\nfirst").into());
     assert!(html.contains(">\n\nfirst</textarea>"), "the parser eats one newline: {html}");

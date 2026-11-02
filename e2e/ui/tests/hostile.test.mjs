@@ -783,6 +783,41 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       await context.close();
     });
 
+    test(`an error on a radio group shows under the group (${engine})`, async () => {
+      const name = key("radio");
+      route(`/${name}`, doc(`<form id="f" data-ui-form method="post" action="/${name}-post"><div data-slot="field"><fieldset data-slot="radio-group"><input type="radio" name="stage" value="a"><input type="radio" name="stage" value="b"></fieldset></div><button id="go">go</button></form>`));
+      f.routes.set(`/${name}-post`, (req, res) => f.ops(res, { ops: [{ op: "errors", form: "f", fields: { stage: ["Choose a stage"] } }] }, 422));
+      const { context, page } = await fresh(`/${name}`);
+      await page.click("#go");
+      await sleep(200);
+      assert.equal(await page.textContent("[data-slot=field] [data-slot=field-error]"), "Choose a stage");
+      assert.deepEqual(await toasts(page), []);
+      await context.close();
+    });
+
+    test(`a failed op doesn't stop the rest or blame the connection (${engine})`, async () => {
+      const { context, page, errors } = await afterOps({ ops: [{ op: "morph", target: "t", html: { a: 1 } }, { op: "url", href: `${E()}/x`, mode: "push" }, { op: "errors", form: "t", fields: { a: ["x"] } }, { op: "eval", code: "1" }, { op: "toast", tone: "info", text: "after" }] });
+      const shown = await toasts(page);
+      assert.ok(shown.includes("after"), JSON.stringify(shown));
+      assert.ok(!shown.some((text) => text.includes("connection")), JSON.stringify(shown));
+      assert.deepEqual(errors, []);
+      assert.ok(page.url().startsWith(f.origin));
+      await context.close();
+    });
+
+    test(`a toast's and an error's text stays text (${engine})`, async () => {
+      const { context, page } = await afterOps(() => JSON.parse(`{"ops":[{"op":"toast","tone":"x\\" onclick=\\"1","text":"<img src=x onerror=1>"},{"op":"errors","form":"f","fields":{"__proto__":["<img src=x>"],"constructor":["y"]}}]}`));
+      assert.equal(await page.locator("[data-slot=toast] img, [data-slot=field-error] img").count(), 0);
+      assert.equal(await page.evaluate(() => ({}).polluted), undefined);
+      await context.close();
+    });
+
+    test(`an envelope from another build reloads and applies nothing (${engine})`, async () => {
+      const { context, page } = await afterOps({ build: "other", ops: [{ op: "toast", tone: "info", text: "should not show" }] });
+      assert.deepEqual(await toasts(page), []);
+      await context.close();
+    });
+
     test(`a morph keeps where an open popover was placed (${engine})`, async () => {
       const name = key("placed");
       const body = (n) => `<div id="r" data-ui-src="/${name}-frag"><button id="pop" popovertarget="p">open ${n}</button><div id="p" popover data-ui-place>menu</div></div>`;
