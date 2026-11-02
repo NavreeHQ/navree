@@ -93,7 +93,9 @@ impl SameOrigin {
         let Some(origin) = headers.get(http::header::ORIGIN) else {
             return true;
         };
-        let host = headers.get(http::header::HOST).and_then(|host| host.to_str().ok());
+        let host = headers
+            .get(http::header::HOST)
+            .and_then(|host| host.to_str().ok());
         let authority = origin
             .to_str()
             .ok()
@@ -106,7 +108,13 @@ impl SameOrigin {
 impl Guard for SameOrigin {
     fn check<'a>(&'a self, parts: &'a mut Parts) -> BoxFuture<'a, Result<(), AppError>> {
         let allowed = Self::allows(&parts.headers);
-        Box::pin(async move { if allowed { Ok(()) } else { Err(AppError::forbidden()) } })
+        Box::pin(async move {
+            if allowed {
+                Ok(())
+            } else {
+                Err(AppError::forbidden())
+            }
+        })
     }
 }
 
@@ -169,7 +177,8 @@ impl Controller for LogbookController {
         routes.push(RouteDef::on(
             Method::POST,
             path("/entries/{id}/replay"),
-            move |Path(id): Path<String>, navree_http::Form(form): navree_http::Form<ReplayForm>| async move {
+            move |Path(id): Path<String>,
+                  navree_http::Form(form): navree_http::Form<ReplayForm>| async move {
                 this.replay_form(id, form).await
             },
         ));
@@ -186,9 +195,11 @@ impl Controller for LogbookController {
             move |Query(params): Query<ListParams>| async move { this.api_list(params).await },
         ));
         let this = self.clone();
-        routes.push(RouteDef::on(Method::POST, path("/clear"), move || async move {
-            this.clear().await
-        }));
+        routes.push(RouteDef::on(
+            Method::POST,
+            path("/clear"),
+            move || async move { this.clear().await },
+        ));
         let this = self.clone();
         routes.push(RouteDef::on(
             Method::DELETE,
@@ -953,8 +964,10 @@ impl LogbookController {
         let reply = match self.logbook.replay(&id, edit).await {
             Ok(replayed) => {
                 let at = replayed.entry_id.unwrap_or(replayed.batch_id);
-                navree_ui::Reply::redirect(format!("{base}/entries/{at}"))
-                    .toast(navree_ui::ToastTone::Success, format!("Replayed: {}", replayed.status))
+                navree_ui::Reply::redirect(format!("{base}/entries/{at}")).toast(
+                    navree_ui::ToastTone::Success,
+                    format!("Replayed: {}", replayed.status),
+                )
             }
             Err(error) => navree_ui::Reply::redirect(format!("{base}/entries/{id}"))
                 .toast(navree_ui::ToastTone::Danger, error.to_string()),

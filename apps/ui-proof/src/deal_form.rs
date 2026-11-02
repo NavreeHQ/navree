@@ -3,7 +3,7 @@
 use navree::http::Response;
 use navree::http::response::IntoResponse;
 use navree::ui::form::{FormView, Money, Rejected};
-use navree::ui::{AppShell, Card, Form, Options, AppPage, Reply, Submit, ToastTone, Validate};
+use navree::ui::{AppPage, AppShell, Card, Form, Options, Reply, Submit, ToastTone, Validate};
 use serde::Deserialize;
 
 #[derive(Clone, Copy, Debug, Deserialize, Options)]
@@ -36,7 +36,12 @@ pub enum Stage {
 pub struct NewDeal {
     /// Deal name
     #[validate(length(min = 1, max = 255))]
-    #[form(placeholder = "Annual platform license", autofocus, wide, error = "Give the deal a name.")]
+    #[form(
+        placeholder = "Annual platform license",
+        autofocus,
+        wide,
+        error = "Give the deal a name."
+    )]
     pub title: String,
     /// Company
     #[validate(length(min = 1))]
@@ -48,7 +53,11 @@ pub struct NewDeal {
     pub contact_id: Option<String>,
     /// Value
     #[validate(custom(not_negative))]
-    #[form(addon = "currency", placeholder = "12,500", error = "Enter an amount of 0 or more, like 12,500.")]
+    #[form(
+        addon = "currency",
+        placeholder = "12,500",
+        error = "Enter an amount of 0 or more, like 12,500."
+    )]
     pub amount: Money,
     #[validate(skip)]
     pub currency: Currency,
@@ -64,11 +73,19 @@ pub struct NewDeal {
 }
 
 fn not_negative(amount: &Money) -> Result<(), String> {
-    if amount.0 < 0 { Err("Enter an amount of 0 or more.".to_owned()) } else { Ok(()) }
+    if amount.0 < 0 {
+        Err("Enter an amount of 0 or more.".to_owned())
+    } else {
+        Ok(())
+    }
 }
 
 fn choices(names: &[&str]) -> Vec<(String, String)> {
-    names.iter().enumerate().map(|(id, name)| (id.to_string(), (*name).to_owned())).collect()
+    names
+        .iter()
+        .enumerate()
+        .map(|(id, name)| (id.to_string(), (*name).to_owned()))
+        .collect()
 }
 
 /// The page around a form, new or sent back with errors.
@@ -80,7 +97,14 @@ fn page_with(shell: &AppShell, form: FormView<NewDeal>) -> AppPage {
         .options("company_id", choices(&["Acme", "Globex", "Initech"]))
         .options("contact_id", choices(&["Ada Lovelace", "Alan Turing"]))
         .options("owner_id", choices(&["Grace Hopper", "Edsger Dijkstra"]));
-    shell.page("New deal").crumb("Deals", "/deals?per=1000").body(Card::new().description("Track an opportunity through the pipeline.").body(form))
+    shell
+        .page("New deal")
+        .crumb("Deals", "/deals?per=1000")
+        .body(
+            Card::new()
+                .description("Track an opportunity through the pipeline.")
+                .body(form),
+        )
 }
 
 /// `GET /deals/new`.
@@ -91,7 +115,9 @@ pub fn page(shell: &AppShell) -> AppPage {
 /// `POST /deals`.
 pub fn store(shell: &AppShell, submit: Result<Submit<NewDeal>, Rejected<NewDeal>>) -> Response {
     match submit {
-        Ok(Submit(deal)) => Reply::redirect("/deals?per=1000").toast(ToastTone::Success, format!("{} created", deal.title)).into_response(),
+        Ok(Submit(deal)) => Reply::redirect("/deals?per=1000")
+            .toast(ToastTone::Success, format!("{} created", deal.title))
+            .into_response(),
         Err(rejected) => rejected.respond(|form| page_with(shell, form)),
     }
 }

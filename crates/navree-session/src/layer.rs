@@ -6,7 +6,9 @@ use std::sync::Arc;
 
 use chrono::TimeDelta;
 use cookie::Cookie;
-use http::header::{AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, COOKIE, HeaderName, ORIGIN, SET_COOKIE, USER_AGENT};
+use http::header::{
+    AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, COOKIE, HeaderName, ORIGIN, SET_COOKIE, USER_AGENT,
+};
 use http::{HeaderMap, HeaderValue, Method};
 use navree_contracts::{
     AuditEntry, AuditKind, AuditSink, Clock, RequestId, SessionRecord, SessionStore, SystemClock,
@@ -362,7 +364,10 @@ fn is_urlencoded(headers: &HeaderMap) -> bool {
         .get(CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.split(';').next())
-        .is_some_and(|kind| kind.trim().eq_ignore_ascii_case("application/x-www-form-urlencoded"))
+        .is_some_and(|kind| {
+            kind.trim()
+                .eq_ignore_ascii_case("application/x-www-form-urlencoded")
+        })
 }
 
 /// Reads a urlencoded body, takes its one `_csrf` field out, and checks that
@@ -380,7 +385,10 @@ async fn take_form_token(
     let limit = navree_http::body::BodyLimit::of(request.extensions()).min(FORM_TOKEN_BODY_MAX);
     let (mut parts, body) = request.into_parts();
     let fail = |parts: http::request::Parts, failure| {
-        Err(Box::new((Request::from_parts(parts, Body::empty()), failure)))
+        Err(Box::new((
+            Request::from_parts(parts, Body::empty()),
+            failure,
+        )))
     };
     let Ok(bytes) = navree_http::body::read_body(body, limit).await else {
         return fail(parts, CsrfFailure::Missing);
@@ -394,7 +402,14 @@ async fn take_form_token(
         }
     }
     let [given] = found.as_slice() else {
-        return fail(parts, if found.is_empty() { CsrfFailure::Missing } else { CsrfFailure::Mismatch });
+        return fail(
+            parts,
+            if found.is_empty() {
+                CsrfFailure::Missing
+            } else {
+                CsrfFailure::Mismatch
+            },
+        );
     };
     let matches = {
         let state = session.lock();
@@ -406,7 +421,9 @@ async fn take_form_token(
         return fail(parts, CsrfFailure::Mismatch);
     }
     let rest = kept.join(&b'&');
-    parts.headers.insert(CONTENT_LENGTH, HeaderValue::from(rest.len()));
+    parts
+        .headers
+        .insert(CONTENT_LENGTH, HeaderValue::from(rest.len()));
     Ok(Request::from_parts(parts, Body::from(rest)))
 }
 

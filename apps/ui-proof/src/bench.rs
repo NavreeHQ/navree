@@ -23,7 +23,11 @@ fn time(name: &str, rounds: u32, work: impl Fn() -> String) {
     times.sort();
     let median = times[times.len() / 2];
     let p99 = times[times.len() * 99 / 100];
-    println!("{name:<28} median {:>9.1} us   p99 {:>9.1} us   {bytes:>8} bytes", median.as_secs_f64() * 1e6, p99.as_secs_f64() * 1e6);
+    println!(
+        "{name:<28} median {:>9.1} us   p99 {:>9.1} us   {bytes:>8} bytes",
+        median.as_secs_f64() * 1e6,
+        p99.as_secs_f64() * 1e6
+    );
 }
 
 pub fn run() {
@@ -33,27 +37,65 @@ pub fn run() {
     let (selected, total) = select(&query, &deals);
 
     time("deal form page", 2000, || {
-        shell.page("New deal", "/deals/new").body(Card::new().body(FormView::<NewDeal>::new().post("/deals").submit("Create deal"))).to_view().to_html()
+        shell
+            .page("New deal", "/deals/new")
+            .body(
+                Card::new().body(
+                    FormView::<NewDeal>::new()
+                        .post("/deals")
+                        .submit("Create deal"),
+                ),
+            )
+            .to_view()
+            .to_html()
     });
     time("1,000-row table, render", 300, || {
-        View::new("Deals").body(DataTable::new("deals", &query, &selected).total(total)).to_html()
+        View::new("Deals")
+            .body(DataTable::new("deals", &query, &selected).total(total))
+            .to_html()
     });
     time("1,000-row page, with shell", 300, || {
-        shell.page("Deals", "/deals").body(DataTable::new("deals", &query, &selected).total(total)).to_view().to_html()
+        shell
+            .page("Deals", "/deals")
+            .body(DataTable::new("deals", &query, &selected).total(total))
+            .to_view()
+            .to_html()
     });
     time("1,000-row page, sort and all", 300, || {
         let sorted = TableQuery::<DealRow, DealFilter>::parse("/deals", "per=1000&sort=-amount");
         let (found, count) = select(&sorted, &deals);
-        shell.page("Deals", "/deals").body(DataTable::new("deals", &sorted, &found).total(count)).to_view().to_html()
+        shell
+            .page("Deals", "/deals")
+            .body(DataTable::new("deals", &sorted, &found).total(count))
+            .to_view()
+            .to_html()
     });
     time("plain page", 5000, || crate::dashboard::plain().to_html());
 
-    let table = shell.page("Deals", "/deals").body(DataTable::new("deals", &query, &selected).total(total)).to_view().to_html();
-    let form = shell.page("New deal", "/deals/new").body(Card::new().body(FormView::<NewDeal>::new().post("/deals").submit("Create deal"))).to_view().to_html();
+    let table = shell
+        .page("Deals", "/deals")
+        .body(DataTable::new("deals", &query, &selected).total(total))
+        .to_view()
+        .to_html();
+    let form = shell
+        .page("New deal", "/deals/new")
+        .body(
+            Card::new().body(
+                FormView::<NewDeal>::new()
+                    .post("/deals")
+                    .submit("Create deal"),
+            ),
+        )
+        .to_view()
+        .to_html();
     for (name, html, rounds) in [("1,000-row page", table, 300), ("form page", form, 2000)] {
-        time(&format!("brotli q{}, {name}", navree::ui::compress::QUALITY), rounds, || {
-            let packed = navree::ui::compress::brotli(html.as_bytes());
-            "x".repeat(packed.len())
-        });
+        time(
+            &format!("brotli q{}, {name}", navree::ui::compress::QUALITY),
+            rounds,
+            || {
+                let packed = navree::ui::compress::brotli(html.as_bytes());
+                "x".repeat(packed.len())
+            },
+        );
     }
 }

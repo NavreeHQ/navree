@@ -418,7 +418,13 @@ mod plain_forms {
     async fn signed_in() -> (navree_testing::TestApp, TestClient, String) {
         let app = support::app().await;
         let client = app.client();
-        let token = client.csrf_cookie().await.set_cookie(XSRF).unwrap().value().to_owned();
+        let token = client
+            .csrf_cookie()
+            .await
+            .set_cookie(XSRF)
+            .unwrap()
+            .value()
+            .to_owned();
         (app, client, token)
     }
 
@@ -432,11 +438,20 @@ mod plain_forms {
     #[tokio::test]
     async fn the_token_field_passes_and_the_handler_never_sees_it() {
         let (_app, client, token) = signed_in().await;
-        let response = form(&client, format!("title=Acme&_csrf={token}&amount=12")).send().await.assert_status(200);
+        let response = form(&client, format!("title=Acme&_csrf={token}&amount=12"))
+            .send()
+            .await
+            .assert_status(200);
         assert_eq!(response.text(), "title=Acme&amount=12");
-        let response = form(&client, format!("_csrf={token}&title=Acme")).send().await.assert_status(200);
+        let response = form(&client, format!("_csrf={token}&title=Acme"))
+            .send()
+            .await
+            .assert_status(200);
         assert_eq!(response.text(), "title=Acme");
-        let response = form(&client, format!("_csrf={token}")).send().await.assert_status(200);
+        let response = form(&client, format!("_csrf={token}"))
+            .send()
+            .await
+            .assert_status(200);
         assert_eq!(response.text(), "");
     }
 
@@ -456,15 +471,25 @@ mod plain_forms {
             format!("x_csrf={token}"),
             format!("_csrf%5B%5D={token}"),
         ] {
-            form(&client, body.clone()).send().await.assert_error(403, "Invalid CSRF token");
+            form(&client, body.clone())
+                .send()
+                .await
+                .assert_error(403, "Invalid CSRF token");
         }
     }
 
     #[tokio::test]
     async fn two_token_fields_are_refused_whichever_is_right() {
         let (_app, client, token) = signed_in().await;
-        for body in [format!("_csrf=x&_csrf={token}"), format!("_csrf={token}&_csrf=x"), format!("_csrf={token}&_csrf={token}")] {
-            form(&client, body).send().await.assert_error(403, "Invalid CSRF token");
+        for body in [
+            format!("_csrf=x&_csrf={token}"),
+            format!("_csrf={token}&_csrf=x"),
+            format!("_csrf={token}&_csrf={token}"),
+        ] {
+            form(&client, body)
+                .send()
+                .await
+                .assert_error(403, "Invalid CSRF token");
         }
     }
 
@@ -478,7 +503,11 @@ mod plain_forms {
             .send()
             .await
             .assert_error(403, "Invalid CSRF token");
-        for kind in ["application/json", "text/plain", "multipart/form-data; boundary=x"] {
+        for kind in [
+            "application/json",
+            "text/plain",
+            "multipart/form-data; boundary=x",
+        ] {
             client
                 .post("/api/probe/echo")
                 .header("content-type", kind)
@@ -487,7 +516,12 @@ mod plain_forms {
                 .await
                 .assert_error(403, "Invalid CSRF token");
         }
-        client.post("/api/probe/echo").body(format!("_csrf={token}")).send().await.assert_error(403, "Invalid CSRF token");
+        client
+            .post("/api/probe/echo")
+            .body(format!("_csrf={token}"))
+            .send()
+            .await
+            .assert_error(403, "Invalid CSRF token");
     }
 
     #[tokio::test]
@@ -499,7 +533,11 @@ mod plain_forms {
             .await
             .assert_error(403, "Invalid CSRF token");
         // The header alone still passes, and leaves the body as it is.
-        let response = form(&client, "_csrf=whatever&title=Acme".to_owned()).header("x-csrf-token", &token).send().await.assert_status(200);
+        let response = form(&client, "_csrf=whatever&title=Acme".to_owned())
+            .header("x-csrf-token", &token)
+            .send()
+            .await
+            .assert_status(200);
         assert_eq!(response.text(), "_csrf=whatever&title=Acme");
     }
 
@@ -507,19 +545,32 @@ mod plain_forms {
     async fn a_body_past_the_cap_must_send_the_header() {
         let (_app, client, token) = signed_in().await;
         let big = "x".repeat(300 * 1024);
-        form(&client, format!("_csrf={token}&note={big}")).send().await.assert_error(403, "Invalid CSRF token");
-        form(&client, format!("note={big}")).header("x-csrf-token", &token).send().await.assert_status(200);
+        form(&client, format!("_csrf={token}&note={big}"))
+            .send()
+            .await
+            .assert_error(403, "Invalid CSRF token");
+        form(&client, format!("note={big}"))
+            .header("x-csrf-token", &token)
+            .send()
+            .await
+            .assert_status(200);
     }
 
     #[tokio::test]
     async fn an_encoded_token_passes_and_a_session_less_form_is_untouched() {
         let (_app, client, token) = signed_in().await;
         let encoded: String = token.bytes().map(|b| format!("%{b:02X}")).collect();
-        form(&client, format!("_csrf={encoded}&a=1")).send().await.assert_status(200);
+        form(&client, format!("_csrf={encoded}&a=1"))
+            .send()
+            .await
+            .assert_status(200);
         // No session cookie: nothing to check, and nothing removed.
         let app = support::app().await;
         let fresh = app.client();
-        let response = form(&fresh, "_csrf=whatever&a=1".to_owned()).send().await.assert_status(200);
+        let response = form(&fresh, "_csrf=whatever&a=1".to_owned())
+            .send()
+            .await
+            .assert_status(200);
         assert_eq!(response.text(), "_csrf=whatever&a=1");
     }
 }

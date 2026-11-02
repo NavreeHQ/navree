@@ -40,12 +40,14 @@ pub mod prelude {
 }
 
 pub mod assets;
+#[rustfmt::skip]
 mod assets_gen;
 pub mod cmd;
 pub mod components;
 pub mod compress;
 pub mod form;
 pub mod html;
+#[rustfmt::skip]
 pub mod icons;
 mod module;
 pub mod node;

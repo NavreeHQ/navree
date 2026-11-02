@@ -68,9 +68,13 @@ async fn app(ui_first: bool) -> TestApp {
         .module(HttpModule::for_root(Default::default()))
         .module(CryptoModule);
     let builder = if ui_first {
-        builder.module(UiModule).module(SessionModule::for_root(Default::default()))
+        builder
+            .module(UiModule)
+            .module(SessionModule::for_root(Default::default()))
     } else {
-        builder.module(SessionModule::for_root(Default::default())).module(UiModule)
+        builder
+            .module(SessionModule::for_root(Default::default()))
+            .module(UiModule)
     };
     builder.module(App).build().await
 }
@@ -83,15 +87,44 @@ async fn signing_in_and_out_through_the_runtime_works_in_either_order() {
         client.csrf_cookie().await;
         let token = client.cookie("XSRF-TOKEN");
 
-        let response = client.post("/login").xsrf().header("x-navree-ui", "1").send().await;
+        let response = client
+            .post("/login")
+            .xsrf()
+            .header("x-navree-ui", "1")
+            .send()
+            .await;
         assert_eq!(response.status(), 200, "ui_first={ui_first}");
-        assert_eq!(response.header("content-type"), Some("application/vnd.navree.ops+json"), "ui_first={ui_first}");
-        assert!(response.set_cookie("navree_session").is_some(), "the rotated id reaches the browser, ui_first={ui_first}");
-        assert_ne!(client.cookie("XSRF-TOKEN"), token, "a login rotates the token the runtime can see, ui_first={ui_first}");
-        assert_eq!(client.get("/who").send().await.text(), "Some(\"ada\")", "ui_first={ui_first}");
+        assert_eq!(
+            response.header("content-type"),
+            Some("application/vnd.navree.ops+json"),
+            "ui_first={ui_first}"
+        );
+        assert!(
+            response.set_cookie("navree_session").is_some(),
+            "the rotated id reaches the browser, ui_first={ui_first}"
+        );
+        assert_ne!(
+            client.cookie("XSRF-TOKEN"),
+            token,
+            "a login rotates the token the runtime can see, ui_first={ui_first}"
+        );
+        assert_eq!(
+            client.get("/who").send().await.text(),
+            "Some(\"ada\")",
+            "ui_first={ui_first}"
+        );
 
-        let response = client.post("/logout").xsrf().header("x-navree-ui", "1").send().await;
+        let response = client
+            .post("/logout")
+            .xsrf()
+            .header("x-navree-ui", "1")
+            .send()
+            .await;
         assert_eq!(response.status(), 200, "ui_first={ui_first}");
-        assert_eq!(client.get("/who").send().await.text(), "None", "ui_first={ui_first}");
+        assert_eq!(
+            client.get("/who").send().await.text(),
+            "None",
+            "ui_first={ui_first}"
+        );
     }
 }

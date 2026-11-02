@@ -3,8 +3,8 @@
 //! stylesheet of its own: everything on the page is the toolkit's.
 
 use navree_ui::{
-    Uses, Badge, BadgeVariant, Button, Card, Checkbox, Field, Heading, Input, Node, Row as Layout, Size, Stack, Table, TableCell, TableHead, TableRowEl,
-    Text, Textarea, View, el,
+    Badge, BadgeVariant, Button, Card, Checkbox, Field, Heading, Input, Node, Row as Layout, Size,
+    Stack, Table, TableCell, TableHead, TableRowEl, Text, Textarea, Uses, View, el,
 };
 
 use super::{Bar, Fact, Item, Section, list_page};
@@ -62,14 +62,23 @@ pub(super) struct Detail {
 
 /// A block of text that keeps its line breaks and wraps.
 fn block(text: String) -> Node {
-    if text.is_empty() { Node::Empty } else { el("pre").slot("code").child(text).into() }
+    if text.is_empty() {
+        Node::Empty
+    } else {
+        el("pre").slot("code").child(text).into()
+    }
 }
 
 fn pairs(headers: Vec<(String, String)>) -> Node {
     Table::new()
         .caption("Headers")
         .head((TableHead::new("Header"), TableHead::new("Value")))
-        .rows(headers.into_iter().map(|(name, value)| TableRowEl::new((TableCell::new(name), TableCell::new(value)))).collect::<Vec<_>>())
+        .rows(
+            headers
+                .into_iter()
+                .map(|(name, value)| TableRowEl::new((TableCell::new(name), TableCell::new(value))))
+                .collect::<Vec<_>>(),
+        )
         .into()
 }
 
@@ -77,11 +86,17 @@ fn message(title: &'static str, id: &'static str, message: Message) -> Node {
     let meta = (!message.body_meta.is_empty()).then(|| Text::muted(message.body_meta));
     el("section")
         .attr("id", id)
-        .child(Card::titled(title).body(Stack::gap(3).children((
-            (!message.query.is_empty()).then(|| Stack::gap(1).children((Heading::h3("Query string"), block(message.query)))),
-            pairs(message.headers),
-            (meta.is_some() || !message.body.is_empty()).then(|| Stack::gap(1).children((Heading::h3("Body"), meta, block(message.body)))),
-        ))))
+        .child(Card::titled(title).body(Stack::gap(3).children(
+            (
+                (!message.query.is_empty()).then(|| {
+                    Stack::gap(1).children((Heading::h3("Query string"), block(message.query)))
+                }),
+                pairs(message.headers),
+                (meta.is_some() || !message.body.is_empty()).then(|| {
+                    Stack::gap(1).children((Heading::h3("Body"), meta, block(message.body)))
+                }),
+            ),
+        )))
         .into()
 }
 
@@ -91,7 +106,11 @@ fn queries(statements: Vec<Statement>, repeated: Vec<Repeated>) -> Node {
             Heading::h3("Repeated statements"),
             Table::new()
                 .caption("Statements that ran more than once")
-                .head((TableHead::new("Statement"), TableHead::new("Times").numeric(), TableHead::new("Total").numeric()))
+                .head((
+                    TableHead::new("Statement"),
+                    TableHead::new("Times").numeric(),
+                    TableHead::new("Total").numeric(),
+                ))
                 .rows(
                     repeated
                         .into_iter()
@@ -106,33 +125,64 @@ fn queries(statements: Vec<Statement>, repeated: Vec<Repeated>) -> Node {
                 ),
         ))
     });
-    let all = Table::new().caption("Every statement").head((TableHead::new("Statement"), TableHead::new("Time").numeric())).rows(
-        statements
-            .into_iter()
-            .map(|q| {
-                let mut flags: Vec<Node> = Vec::new();
-                if q.slow {
-                    flags.push(Badge::new("slow").variant(BadgeVariant::Warning).into());
-                }
-                if q.duplicate {
-                    flags.push(Badge::new("repeated").variant(BadgeVariant::Warning).into());
-                }
-                TableRowEl::new((TableCell::new(Node::list((el("code").child(q.sql), " ", Node::list(flags)))), TableCell::new(q.duration).numeric()))
-            })
-            .collect::<Vec<_>>(),
-    );
-    el("section").attr("id", "queries").child(Card::titled("Queries").body(Stack::gap(3).children((repeated_table, all)))).into()
+    let all = Table::new()
+        .caption("Every statement")
+        .head((
+            TableHead::new("Statement"),
+            TableHead::new("Time").numeric(),
+        ))
+        .rows(
+            statements
+                .into_iter()
+                .map(|q| {
+                    let mut flags: Vec<Node> = Vec::new();
+                    if q.slow {
+                        flags.push(Badge::new("slow").variant(BadgeVariant::Warning).into());
+                    }
+                    if q.duplicate {
+                        flags.push(Badge::new("repeated").variant(BadgeVariant::Warning).into());
+                    }
+                    TableRowEl::new((
+                        TableCell::new(Node::list((
+                            el("code").child(q.sql),
+                            " ",
+                            Node::list(flags),
+                        ))),
+                        TableCell::new(q.duration).numeric(),
+                    ))
+                })
+                .collect::<Vec<_>>(),
+        );
+    el("section")
+        .attr("id", "queries")
+        .child(Card::titled("Queries").body(Stack::gap(3).children((repeated_table, all))))
+        .into()
 }
 
 fn item(item: Item) -> Node {
-    let title: Node = if item.href.is_empty() { Node::from(item.title) } else { el("a").href(item.href).child(item.title).into() };
+    let title: Node = if item.href.is_empty() {
+        Node::from(item.title)
+    } else {
+        el("a").href(item.href).child(item.title).into()
+    };
     el("article")
         .attr("id", format!("entry-{}", item.id))
         .flag("data-selected", item.selected)
         .child(Stack::gap(1).children((
-            Heading::h3(Node::list((title, item.selected.then(|| Node::list((" ", Badge::new("this entry").variant(BadgeVariant::Outline))))))),
+            Heading::h3(Node::list((
+                title,
+                item.selected.then(|| {
+                    Node::list((" ", Badge::new("this entry").variant(BadgeVariant::Outline)))
+                }),
+            ))),
             (!item.meta.is_empty()).then(|| Text::muted(item.meta)),
-            (!item.html_href.is_empty()).then(|| el("a").href(item.html_href).attr("target", "_blank").attr("rel", "noopener").child("Open HTML")),
+            (!item.html_href.is_empty()).then(|| {
+                el("a")
+                    .href(item.html_href)
+                    .attr("target", "_blank")
+                    .attr("rel", "noopener")
+                    .child("Open HTML")
+            }),
             block(item.body),
         )))
         .into()
@@ -141,7 +191,11 @@ fn item(item: Item) -> Node {
 fn section(section: Section) -> Node {
     el("section")
         .attr("id", section.id)
-        .child(Card::titled(section.label).body(Stack::gap(4).children(section.items.into_iter().map(item).collect::<Vec<_>>())))
+        .child(
+            Card::titled(section.label).body(
+                Stack::gap(4).children(section.items.into_iter().map(item).collect::<Vec<_>>()),
+            ),
+        )
         .into()
 }
 
@@ -161,10 +215,20 @@ fn track(bar: &Bar) -> Node {
         .attr("width", "100%")
         .attr("height", 10_i64)
         .attr("role", "img")
-        .attr("aria-label", format!("starts {left:.0}% in, lasts {width:.1}% of the whole"))
+        .attr(
+            "aria-label",
+            format!("starts {left:.0}% in, lasts {width:.1}% of the whole"),
+        )
         .children((
-            el("rect").attr("width", 100_i64).attr("height", 10_i64).attr("fill", "var(--ink-3)"),
-            el("rect").attr("x", format!("{left:.2}")).attr("width", format!("{:.2}", width.max(0.4))).attr("height", 10_i64).attr("fill", tone),
+            el("rect")
+                .attr("width", 100_i64)
+                .attr("height", 10_i64)
+                .attr("fill", "var(--ink-3)"),
+            el("rect")
+                .attr("x", format!("{left:.2}"))
+                .attr("width", format!("{:.2}", width.max(0.4)))
+                .attr("height", 10_i64)
+                .attr("fill", tone),
         ))
         .into()
 }
@@ -174,7 +238,11 @@ fn timeline(bars: Vec<Bar>) -> Node {
         .iter()
         .map(|bar| {
             TableRowEl::new((
-                TableCell::new(el("a").href(format!("#entry-{}", bar.id)).child(bar.label.clone())),
+                TableCell::new(
+                    el("a")
+                        .href(format!("#entry-{}", bar.id))
+                        .child(bar.label.clone()),
+                ),
                 TableCell::new(track(bar)),
                 TableCell::new(bar.duration.clone()).numeric(),
             ))
@@ -182,27 +250,58 @@ fn timeline(bars: Vec<Bar>) -> Node {
         .collect();
     el("section")
         .attr("id", "timeline")
-        .child(Card::titled("Timeline").body(
-            Table::new().caption("Where each entry started and how long it took").head((TableHead::new("Entry"), TableHead::new("When"), TableHead::new("Took").numeric())).rows(rows),
-        ))
+        .child(
+            Card::titled("Timeline").body(
+                Table::new()
+                    .caption("Where each entry started and how long it took")
+                    .head((
+                        TableHead::new("Entry"),
+                        TableHead::new("When"),
+                        TableHead::new("Took").numeric(),
+                    ))
+                    .rows(rows),
+            ),
+        )
         .into()
 }
 
 /// The replay form posts to the page's own action: with the runtime it answers
 /// with the new entry and a toast, with JavaScript off it redirects there.
 fn replay(replay: Replay) -> Node {
-    let form = el("form").attr("method", "post").attr("action", replay.action).flag("data-ui-form", true).uses(Uses::CORE).child(Stack::gap(3).children((
-        Layout::gap(2).children((
-            Field::new("replay-method", "Method").control(Input::text("method").value(replay.method)),
-            Field::new("replay-path", "Path and query string").control(Input::text("path").value(replay.path)),
-        )),
-        Field::new("replay-headers", "Headers, one per line").control(Textarea::new("headers").value(replay.headers).rows(6)),
-        Field::new("replay-body", "Body").control(Textarea::new("body").value(replay.body).rows(8)),
-        (!replay.user.is_empty()).then(|| Checkbox::new("as_user").checked(true).label(format!("As {}", replay.user))),
-        Checkbox::new("confirm").label("Replaying anything but a GET changes data again: send it anyway"),
-        Layout::gap(2).children((Button::primary("Replay").submit(), Button::outline("Show as curl").href(replay.curl))),
-    )));
-    el("section").attr("id", "replay").child(Card::titled("Replay").body(form)).into()
+    let form = el("form")
+        .attr("method", "post")
+        .attr("action", replay.action)
+        .flag("data-ui-form", true)
+        .uses(Uses::CORE)
+        .child(
+            Stack::gap(3).children((
+                Layout::gap(2).children((
+                    Field::new("replay-method", "Method")
+                        .control(Input::text("method").value(replay.method)),
+                    Field::new("replay-path", "Path and query string")
+                        .control(Input::text("path").value(replay.path)),
+                )),
+                Field::new("replay-headers", "Headers, one per line")
+                    .control(Textarea::new("headers").value(replay.headers).rows(6)),
+                Field::new("replay-body", "Body")
+                    .control(Textarea::new("body").value(replay.body).rows(8)),
+                (!replay.user.is_empty()).then(|| {
+                    Checkbox::new("as_user")
+                        .checked(true)
+                        .label(format!("As {}", replay.user))
+                }),
+                Checkbox::new("confirm")
+                    .label("Replaying anything but a GET changes data again: send it anyway"),
+                Layout::gap(2).children((
+                    Button::primary("Replay").submit(),
+                    Button::outline("Show as curl").href(replay.curl),
+                )),
+            )),
+        );
+    el("section")
+        .attr("id", "replay")
+        .child(Card::titled("Replay").body(form))
+        .into()
 }
 
 /// The page.
@@ -224,42 +323,79 @@ pub(super) fn page(detail: Detail) -> View {
     if detail.replay.is_some() {
         jump.push(("replay", "Replay"));
     }
-    let tone = if detail.flags.is_empty() { BadgeVariant::Outline } else { BadgeVariant::Warning };
-    let flags: Vec<Node> = detail.flags.iter().map(|flag| Node::list((" ", Badge::new(*flag).variant(tone)))).collect();
-    let facts = Table::new().caption("Summary").head((TableHead::new("Field"), TableHead::new("Value"))).rows(
-        detail
-            .facts
-            .into_iter()
-            .map(|fact| {
-                let value: Node = if fact.href.is_empty() { Node::from(fact.value) } else { el("a").href(fact.href).child(fact.value).into() };
-                TableRowEl::new((TableCell::new(fact.label), TableCell::new(value)))
-            })
-            .collect::<Vec<_>>(),
-    );
+    let tone = if detail.flags.is_empty() {
+        BadgeVariant::Outline
+    } else {
+        BadgeVariant::Warning
+    };
+    let flags: Vec<Node> = detail
+        .flags
+        .iter()
+        .map(|flag| Node::list((" ", Badge::new(*flag).variant(tone))))
+        .collect();
+    let facts = Table::new()
+        .caption("Summary")
+        .head((TableHead::new("Field"), TableHead::new("Value")))
+        .rows(
+            detail
+                .facts
+                .into_iter()
+                .map(|fact| {
+                    let value: Node = if fact.href.is_empty() {
+                        Node::from(fact.value)
+                    } else {
+                        el("a").href(fact.href).child(fact.value).into()
+                    };
+                    TableRowEl::new((TableCell::new(fact.label), TableCell::new(value)))
+                })
+                .collect::<Vec<_>>(),
+        );
     let tags = (!detail.tags.is_empty()).then(|| {
         Layout::gap(2).wrap().children(
-            detail.tags.into_iter().map(|(tag, href)| el("a").href(href).child(tag)).collect::<Vec<_>>(),
+            detail
+                .tags
+                .into_iter()
+                .map(|(tag, href)| el("a").href(href).child(tag))
+                .collect::<Vec<_>>(),
         )
     });
     let title = format!("{} · Logbook", detail.title);
     View::new(title).body((
         list_page::topbar(&detail.base, "", None, false),
-        el("main").slot("page").attr("id", "main").attr("tabindex", -1_i64).child(Stack::gap(4).children((
-            el("a").href(detail.base.clone()).child("All entries"),
-            Card::new().body(Stack::gap(3).children((
-                Heading::h1(Node::list((Badge::new(detail.kind_label).variant(BadgeVariant::Outline), " ", detail.title, Node::list(flags)))),
-                facts,
-                tags,
-            ))),
-            el("nav").attr("aria-label", "On this page").child(Layout::gap(1).wrap().children(
-                jump.into_iter().map(|(id, label)| Button::ghost(label).size(Size::Sm).href(format!("#{id}"))).collect::<Vec<_>>(),
-            )),
-            detail.request.map(|m| message("Request", "request", m)),
-            detail.response.map(|m| message("Response", "response", m)),
-            (!detail.statements.is_empty()).then(|| queries(detail.statements, detail.repeated)),
-            Node::list(detail.sections.into_iter().map(section).collect::<Vec<_>>()),
-            (!detail.timeline.is_empty()).then(|| timeline(detail.timeline)),
-            detail.replay.map(replay),
-        ))),
+        el("main")
+            .slot("page")
+            .attr("id", "main")
+            .attr("tabindex", -1_i64)
+            .child(
+                Stack::gap(4).children((
+                    el("a").href(detail.base.clone()).child("All entries"),
+                    Card::new().body(Stack::gap(3).children((
+                        Heading::h1(Node::list((
+                            Badge::new(detail.kind_label).variant(BadgeVariant::Outline),
+                            " ",
+                            detail.title,
+                            Node::list(flags),
+                        ))),
+                        facts,
+                        tags,
+                    ))),
+                    el("nav").attr("aria-label", "On this page").child(
+                        Layout::gap(1).wrap().children(
+                            jump.into_iter()
+                                .map(|(id, label)| {
+                                    Button::ghost(label).size(Size::Sm).href(format!("#{id}"))
+                                })
+                                .collect::<Vec<_>>(),
+                        ),
+                    ),
+                    detail.request.map(|m| message("Request", "request", m)),
+                    detail.response.map(|m| message("Response", "response", m)),
+                    (!detail.statements.is_empty())
+                        .then(|| queries(detail.statements, detail.repeated)),
+                    Node::list(detail.sections.into_iter().map(section).collect::<Vec<_>>()),
+                    (!detail.timeline.is_empty()).then(|| timeline(detail.timeline)),
+                    detail.replay.map(replay),
+                )),
+            ),
     ))
 }

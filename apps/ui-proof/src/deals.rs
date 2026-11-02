@@ -5,9 +5,12 @@ use std::sync::{Arc, LazyLock};
 use navree::http::{Controller, RouteDef};
 use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree::ui::form::Money;
-use navree::ui::table::Direction;
 use navree::ui::form::Rejected;
-use navree::ui::{AppShell, BadgeVariant, Button, DataTable, FilterBar, Options, AppPage, Submit, TableQuery, TableRow, icons};
+use navree::ui::table::Direction;
+use navree::ui::{
+    AppPage, AppShell, BadgeVariant, Button, DataTable, FilterBar, Options, Submit, TableQuery,
+    TableRow, icons,
+};
 use serde::Deserialize;
 
 use crate::deal_form::{self, NewDeal};
@@ -23,7 +26,12 @@ pub enum StageFilter {
 }
 
 const STAGES: [&str; 5] = ["Lead", "Qualified", "Proposal", "Negotiation", "Won"];
-const OWNERS: [&str; 4] = ["Ada Lovelace", "Alan Turing", "Grace Hopper", "Edsger Dijkstra"];
+const OWNERS: [&str; 4] = [
+    "Ada Lovelace",
+    "Alan Turing",
+    "Grace Hopper",
+    "Edsger Dijkstra",
+];
 const COMPANIES: [&str; 6] = ["Acme", "Globex", "Initech", "Umbrella", "Hooli", "Stark"];
 
 fn tone(stage: &&'static str) -> BadgeVariant {
@@ -87,10 +95,16 @@ static DEALS: LazyLock<Vec<DealRow>> = LazyLock::new(|| rows(1000));
 pub fn select(query: &TableQuery<DealRow, DealFilter>, deals: &[DealRow]) -> (Vec<DealRow>, u64) {
     let filter = query.filter();
     let needle = filter.q.as_deref().map(str::to_lowercase);
-    let stage = filter.stage.map(|stage| navree::ui::form::Options::option_value(&stage));
+    let stage = filter
+        .stage
+        .map(|stage| navree::ui::form::Options::option_value(&stage));
     let mut found: Vec<&DealRow> = deals
         .iter()
-        .filter(|deal| needle.as_deref().is_none_or(|needle| deal.title.to_lowercase().contains(needle)))
+        .filter(|deal| {
+            needle
+                .as_deref()
+                .is_none_or(|needle| deal.title.to_lowercase().contains(needle))
+        })
         .filter(|deal| stage.is_none_or(|stage| deal.stage.eq_ignore_ascii_case(stage)))
         .collect();
     if let Some((column, direction)) = query.sort() {
@@ -107,7 +121,10 @@ pub fn select(query: &TableQuery<DealRow, DealFilter>, deals: &[DealRow]) -> (Ve
     let total = found.len() as u64;
     let skip = usize::try_from(query.offset()).unwrap_or(usize::MAX);
     let take = query.per_page() as usize;
-    (found.into_iter().skip(skip).take(take).cloned().collect(), total)
+    (
+        found.into_iter().skip(skip).take(take).cloned().collect(),
+        total,
+    )
 }
 
 /// `GET /deals`.
@@ -115,8 +132,16 @@ fn index(shell: &AppShell, query: &TableQuery<DealRow, DealFilter>) -> AppPage {
     let (rows, total) = select(query, &DEALS);
     shell
         .page("Deals")
-        .actions(Button::primary("New deal").icon(icons::PLUS).href("/deals/new"))
-        .body(DataTable::new("deals", query, &rows).total(total).caption("Deals in the pipeline"))
+        .actions(
+            Button::primary("New deal")
+                .icon(icons::PLUS)
+                .href("/deals/new"),
+        )
+        .body(
+            DataTable::new("deals", query, &rows)
+                .total(total)
+                .caption("Deals in the pipeline"),
+        )
 }
 
 pub struct DealPages;
@@ -139,9 +164,26 @@ impl Controller for DealPages {
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
         use http::Method;
         vec![
-            RouteDef::on(Method::GET, "!/deals", |shell: AppShell, query: TableQuery<DealRow, DealFilter>| async move { index(&shell, &query) }).public(),
-            RouteDef::on(Method::GET, "!/deals/new", |shell: AppShell| async move { deal_form::page(&shell) }).public(),
-            RouteDef::on(Method::POST, "!/deals", |shell: AppShell, deal: Result<Submit<NewDeal>, Rejected<NewDeal>>| async move { deal_form::store(&shell, deal) }).public(),
+            RouteDef::on(
+                Method::GET,
+                "!/deals",
+                |shell: AppShell, query: TableQuery<DealRow, DealFilter>| async move {
+                    index(&shell, &query)
+                },
+            )
+            .public(),
+            RouteDef::on(Method::GET, "!/deals/new", |shell: AppShell| async move {
+                deal_form::page(&shell)
+            })
+            .public(),
+            RouteDef::on(
+                Method::POST,
+                "!/deals",
+                |shell: AppShell, deal: Result<Submit<NewDeal>, Rejected<NewDeal>>| async move {
+                    deal_form::store(&shell, deal)
+                },
+            )
+            .public(),
         ]
     }
 }

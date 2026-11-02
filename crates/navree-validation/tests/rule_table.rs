@@ -39,38 +39,84 @@ fn always_ok(_: &String) -> Result<(), String> {
 }
 
 fn rules(name: &str) -> &'static [Rule] {
-    Deal::FIELDS.iter().find(|field| field.name == name).map_or(&[], |field: &FieldRules| field.rules)
+    Deal::FIELDS
+        .iter()
+        .find(|field| field.name == name)
+        .map_or(&[], |field: &FieldRules| field.rules)
 }
 
 #[test]
 fn literal_and_constant_bounds_are_data() {
-    assert_eq!(rules("title"), [Rule::Required, Rule::Length { min: Some(1), max: Some(255), bytes: false }]);
-    assert_eq!(rules("percent"), [Rule::Range { min: Some("0"), max: Some("100") }]);
-    assert_eq!(rules("tilt"), [Rule::Range { min: Some("-1.5"), max: None }]);
+    assert_eq!(
+        rules("title"),
+        [
+            Rule::Required,
+            Rule::Length {
+                min: Some(1),
+                max: Some(255),
+                bytes: false
+            }
+        ]
+    );
+    assert_eq!(
+        rules("percent"),
+        [Rule::Range {
+            min: Some("0"),
+            max: Some("100")
+        }]
+    );
+    assert_eq!(
+        rules("tilt"),
+        [Rule::Range {
+            min: Some("-1.5"),
+            max: None
+        }]
+    );
 }
 
 #[test]
 fn a_bound_only_known_at_run_time_is_left_out() {
-    assert_eq!(rules("code"), [Rule::Length { min: None, max: None, bytes: false }]);
+    assert_eq!(
+        rules("code"),
+        [Rule::Length {
+            min: None,
+            max: None,
+            bytes: false
+        }]
+    );
 }
 
 #[test]
 fn text_rules_are_named() {
     assert_eq!(rules("email"), [Rule::Format("email")]);
-    assert_eq!(rules("slug"), [Rule::Pattern("^[a-z]+$"), Rule::StartsWith("x")]);
+    assert_eq!(
+        rules("slug"),
+        [Rule::Pattern("^[a-z]+$"), Rule::StartsWith("x")]
+    );
     assert_eq!(rules("other"), [Rule::Custom]);
 }
 
 #[test]
 fn skipped_fields_have_no_rules_and_renames_apply() {
     assert!(Deal::FIELDS.iter().all(|field| field.name != "note"));
-    assert_eq!(rules("zip_code"), [Rule::Length { min: None, max: Some(8), bytes: true }]);
+    assert_eq!(
+        rules("zip_code"),
+        [Rule::Length {
+            min: None,
+            max: Some(8),
+            bytes: true
+        }]
+    );
     assert!(rules("zip").is_empty());
 }
 
 #[test]
 fn item_rules_are_nested() {
-    const ITEM: &[Rule] = &[Rule::Length { min: None, max: Some(30), bytes: false }];
+    const ITEM: &[Rule] = &[Rule::Length {
+        min: None,
+        max: Some(30),
+        bytes: false,
+    }];
     assert_eq!(rules("tags"), [Rule::Each(ITEM)]);
 }
 
@@ -89,7 +135,14 @@ struct Renamed<'a, const N: usize> {
 fn generics_and_serde_names_work() {
     let fields = <Renamed<'static, 3> as RuleTable>::FIELDS;
     assert_eq!(fields[0].name, "firstName");
-    assert_eq!(fields[0].rules, [Rule::Length { min: None, max: Some(3), bytes: false }]);
+    assert_eq!(
+        fields[0].rules,
+        [Rule::Length {
+            min: None,
+            max: Some(3),
+            bytes: false
+        }]
+    );
 }
 
 #[derive(Validate)]

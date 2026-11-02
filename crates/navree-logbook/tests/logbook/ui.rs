@@ -170,15 +170,41 @@ async fn a_request_shows_its_detail_and_replay_form() {
 #[tokio::test]
 async fn the_pages_use_the_toolkit_and_nothing_of_their_own() {
     let app = with_requests().await;
-    let head = app.get::<Logbook>().await.last_request().await.unwrap().head().unwrap().clone();
-    for path in ["/_logbook".to_owned(), format!("/_logbook/entries/{}", head.id)] {
-        let html = app.client().get(&path).send().await.assert_status(200).text();
-        assert!(html.contains("/_navree/ui/navree-ui-"), "{path}: the toolkit's stylesheet");
-        assert!(!html.contains("logbook.css") && !html.contains("logbook.js"), "{path}");
+    let head = app
+        .get::<Logbook>()
+        .await
+        .last_request()
+        .await
+        .unwrap()
+        .head()
+        .unwrap()
+        .clone();
+    for path in [
+        "/_logbook".to_owned(),
+        format!("/_logbook/entries/{}", head.id),
+    ] {
+        let html = app
+            .client()
+            .get(&path)
+            .send()
+            .await
+            .assert_status(200)
+            .text();
+        assert!(
+            html.contains("/_navree/ui/navree-ui-"),
+            "{path}: the toolkit's stylesheet"
+        );
+        assert!(
+            !html.contains("logbook.css") && !html.contains("logbook.js"),
+            "{path}"
+        );
         assert!(!html.contains(" style="), "{path}: no style attribute");
         assert!(!html.contains("<script>"), "{path}: no inline script");
     }
-    for gone in ["/_logbook/assets/logbook.css", "/_logbook/assets/logbook.js"] {
+    for gone in [
+        "/_logbook/assets/logbook.css",
+        "/_logbook/assets/logbook.js",
+    ] {
         app.client().get(gone).send().await.assert_status(404);
     }
 }
@@ -186,20 +212,61 @@ async fn the_pages_use_the_toolkit_and_nothing_of_their_own() {
 #[tokio::test]
 async fn the_list_polls_for_what_is_newer_and_not_for_the_whole_list() {
     let app = with_requests().await;
-    let latest = app.get::<Logbook>().await.last_request().await.unwrap().head().unwrap().seq;
-    let html = app.client().get("/_logbook").send().await.assert_status(200).text();
+    let latest = app
+        .get::<Logbook>()
+        .await
+        .last_request()
+        .await
+        .unwrap()
+        .head()
+        .unwrap()
+        .seq;
+    let html = app
+        .client()
+        .get("/_logbook")
+        .send()
+        .await
+        .assert_status(200)
+        .text();
     assert!(html.contains("data-ui-feed=\"rows-body\""), "{html}");
-    assert!(html.contains(&format!("data-ui-after=\"{latest}\"")), "{html}");
+    assert!(
+        html.contains(&format!("data-ui-after=\"{latest}\"")),
+        "{html}"
+    );
     assert!(html.contains("data-ui-src=\"/_logbook/rows\""), "{html}");
     assert!(html.contains("id=\"rows-body\""), "{html}");
     // A filter is part of the feed's address.
-    let filtered = app.client().get("/_logbook?q=status%3A2xx").send().await.assert_status(200).text();
-    assert!(filtered.contains("data-ui-src=\"/_logbook/rows?q=status%3A2xx\""), "{filtered}");
+    let filtered = app
+        .client()
+        .get("/_logbook?q=status%3A2xx")
+        .send()
+        .await
+        .assert_status(200)
+        .text();
+    assert!(
+        filtered.contains("data-ui-src=\"/_logbook/rows?q=status%3A2xx\""),
+        "{filtered}"
+    );
     // Nothing newer: no rows, the cursor stays. Something newer: only that.
-    let none = app.client().get(&format!("/_logbook/rows?after={latest}")).send().await.assert_status(200);
+    let none = app
+        .client()
+        .get(&format!("/_logbook/rows?after={latest}"))
+        .send()
+        .await
+        .assert_status(200);
     assert!(!none.text().contains("<tr"));
-    app.client().post("/echo").json(&json!({ "n": 9 })).send().await.assert_status(200);
-    let newer = app.client().get(&format!("/_logbook/rows?after={latest}")).send().await.assert_status(200);
+    app.client()
+        .post("/echo")
+        .json(&json!({ "n": 9 }))
+        .send()
+        .await
+        .assert_status(200);
+    let newer = app
+        .client()
+        .get(&format!("/_logbook/rows?after={latest}"))
+        .send()
+        .await
+        .assert_status(200);
     assert_eq!(newer.text().matches("<tr").count(), 1);
     assert!(newer.header("x-ui-cursor").unwrap().parse::<u64>().unwrap() > latest);
 }
@@ -207,7 +274,13 @@ async fn the_list_polls_for_what_is_newer_and_not_for_the_whole_list() {
 #[tokio::test]
 async fn an_empty_list_has_a_table_for_rows_to_arrive_in() {
     let app = app().await;
-    let html = app.client().get("/_logbook").send().await.assert_status(200).text();
+    let html = app
+        .client()
+        .get("/_logbook")
+        .send()
+        .await
+        .assert_status(200)
+        .text();
     assert!(html.contains("id=\"rows-body\""), "{html}");
     assert!(html.contains("id=\"rows-empty\""), "{html}");
     assert!(html.contains("data-ui-feed-empty=\"rows-empty\""), "{html}");
@@ -217,7 +290,13 @@ async fn an_empty_list_has_a_table_for_rows_to_arrive_in() {
 async fn the_replay_form_replays_and_goes_to_the_new_entry() {
     let app = with_requests().await;
     let logbook = app.get::<Logbook>().await;
-    let head = logbook.last_request().await.unwrap().head().unwrap().clone();
+    let head = logbook
+        .last_request()
+        .await
+        .unwrap()
+        .head()
+        .unwrap()
+        .clone();
     let action = format!("/_logbook/entries/{}/replay", head.id);
     let form = |confirm: bool| {
         let mut fields = vec![
@@ -234,37 +313,89 @@ async fn the_replay_form_replays_and_goes_to_the_new_entry() {
     // With JavaScript off an unconfirmed replay goes back to the page with the reason.
     let refused = app.client().post(&action).form(&form(false)).send().await;
     assert_eq!(refused.status(), http::StatusCode::SEE_OTHER);
-    assert_eq!(refused.header("location"), Some(format!("/_logbook/entries/{}", head.id).as_str()));
+    assert_eq!(
+        refused.header("location"),
+        Some(format!("/_logbook/entries/{}", head.id).as_str())
+    );
     let before = logbook.count().await.unwrap();
     // Confirmed, it replays and goes to the new entry.
     let done = app.client().post(&action).form(&form(true)).send().await;
     assert_eq!(done.status(), http::StatusCode::SEE_OTHER);
     let location = done.header("location").unwrap().to_owned();
-    assert!(location.starts_with("/_logbook/entries/") && !location.ends_with(&head.id), "{location}");
+    assert!(
+        location.starts_with("/_logbook/entries/") && !location.ends_with(&head.id),
+        "{location}"
+    );
     assert!(logbook.count().await.unwrap() > before);
     app.client().get(&location).send().await.assert_status(200);
     // From the runtime the same answer is ops.
-    let ops = app.client().post(&action).header("x-navree-ui", "1").form(&form(true)).send().await;
-    assert_eq!(ops.header("content-type"), Some("application/vnd.navree.ops+json"));
+    let ops = app
+        .client()
+        .post(&action)
+        .header("x-navree-ui", "1")
+        .form(&form(true))
+        .send()
+        .await;
+    assert_eq!(
+        ops.header("content-type"),
+        Some("application/vnd.navree.ops+json")
+    );
     assert!(ops.text().contains("Replayed: 200"), "{}", ops.text());
 }
 
 #[tokio::test]
 async fn a_write_from_another_site_is_refused() {
     let app = with_requests().await;
-    let head = app.get::<Logbook>().await.last_request().await.unwrap().head().unwrap().clone();
+    let head = app
+        .get::<Logbook>()
+        .await
+        .last_request()
+        .await
+        .unwrap()
+        .head()
+        .unwrap()
+        .clone();
     let replay = format!("/_logbook/entries/{}/replay", head.id);
     for path in ["/_logbook/clear", replay.as_str()] {
-        for (name, value) in [("sec-fetch-site", "cross-site"), ("sec-fetch-site", "same-site"), ("origin", "https://evil.example")] {
-            app.client().post(path).header(name, value).send().await.assert_status(403);
+        for (name, value) in [
+            ("sec-fetch-site", "cross-site"),
+            ("sec-fetch-site", "same-site"),
+            ("origin", "https://evil.example"),
+        ] {
+            app.client()
+                .post(path)
+                .header(name, value)
+                .send()
+                .await
+                .assert_status(403);
         }
     }
-    assert!(app.get::<Logbook>().await.count().await.unwrap() > 0, "nothing was cleared");
+    assert!(
+        app.get::<Logbook>().await.count().await.unwrap() > 0,
+        "nothing was cleared"
+    );
     // The page's own site, a browser that sends nothing, and a command line client all pass.
     let empty: [(&str, &str); 0] = [];
-    app.client().post(&replay).form(&empty).header("sec-fetch-site", "same-origin").send().await.assert_status(303);
-    app.client().post(&replay).form(&empty).header("origin", "http://localhost").header("host", "localhost").send().await.assert_status(303);
-    app.client().post("/_logbook/clear").send().await.assert_status(303);
+    app.client()
+        .post(&replay)
+        .form(&empty)
+        .header("sec-fetch-site", "same-origin")
+        .send()
+        .await
+        .assert_status(303);
+    app.client()
+        .post(&replay)
+        .form(&empty)
+        .header("origin", "http://localhost")
+        .header("host", "localhost")
+        .send()
+        .await
+        .assert_status(303);
+    app.client()
+        .post("/_logbook/clear")
+        .send()
+        .await
+        .assert_status(303);
     assert_eq!(app.get::<Logbook>().await.count().await.unwrap(), 0);
 }
 
@@ -383,11 +514,7 @@ async fn only_loopback_clients_are_served() {
         .module(FixturesModule)
         .build()
         .await;
-    for path in [
-        "/_logbook",
-        "/_logbook/api/entries",
-        "/_logbook/rows",
-    ] {
+    for path in ["/_logbook", "/_logbook/api/entries", "/_logbook/rows"] {
         app.client()
             .get(path)
             .header("x-forwarded-for", "203.0.113.7")
@@ -543,7 +670,11 @@ async fn a_logbook_that_is_off_adds_no_toolkit_route_and_no_layer() {
         .build()
         .await;
     assert!(!app.get::<Logbook>().await.is_enabled());
-    assert!(ui_routes(&app).await.is_empty(), "{:?}", ui_routes(&app).await);
+    assert!(
+        ui_routes(&app).await.is_empty(),
+        "{:?}",
+        ui_routes(&app).await
+    );
     app.client()
         .get(navree_ui::assets::CORE_URL)
         .send()

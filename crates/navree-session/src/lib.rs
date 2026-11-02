@@ -109,10 +109,10 @@ mod options;
 mod session;
 
 pub use database::{DatabaseStore, SESSIONS_TABLE};
+pub use layer::CSRF_FIELD;
 pub use memory::MemoryStore;
 pub use module::SessionModule;
 pub use options::{SameSite, SessionOptions, SessionStoreKind};
-pub use layer::CSRF_FIELD;
 pub use session::{Session, SessionError};
 
 /// Stores delete expired records on every this many saves.

@@ -40,7 +40,11 @@ fn shell() -> Shell {
         .group(
             NavGroup::new("Sales")
                 .item(NavItem::new("Overview", "/").icon(icons::LAYOUT_DASHBOARD))
-                .item(NavItem::new("Deals", "/deals?per=1000").icon(icons::HANDSHAKE).count("1000"))
+                .item(
+                    NavItem::new("Deals", "/deals?per=1000")
+                        .icon(icons::HANDSHAKE)
+                        .count("1000"),
+                )
                 .item(NavItem::new("New deal", "/deals/new").icon(icons::CIRCLE_PLUS)),
         )
         .group(
@@ -48,16 +52,27 @@ fn shell() -> Shell {
                 .item(NavItem::new("Plain page", "/plain").icon(icons::FILE))
                 .item(NavItem::new("Gallery", "/gallery").icon(icons::LAYOUT_GRID)),
         )
-        .user(UserMenu::new("Ada Lovelace", "ada@navree.test").link("Settings", "/plain").action("Sign out", "/sign-out"))
+        .user(
+            UserMenu::new("Ada Lovelace", "ada@navree.test")
+                .link("Settings", "/plain")
+                .action("Sign out", "/sign-out"),
+        )
 }
 
 struct ProofModule;
 
 impl Module for ProofModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.factory(Factory::<Shell>::new(|_| async { Ok(Arc::new(shell())) })).exports::<Shell>();
-        m.http_layer(GlobalLayer::new(LayerSlot::Context, "proof.timing", |_, router| Ok(router.layer(middleware::from_fn(timing)))));
-        m.controller::<deals::DealPages>().controller::<dashboard::DashboardPages>().controller::<gallery::GalleryPages>();
+        m.factory(Factory::<Shell>::new(|_| async { Ok(Arc::new(shell())) }))
+            .exports::<Shell>();
+        m.http_layer(GlobalLayer::new(
+            LayerSlot::Context,
+            "proof.timing",
+            |_, router| Ok(router.layer(middleware::from_fn(timing))),
+        ));
+        m.controller::<deals::DealPages>()
+            .controller::<dashboard::DashboardPages>()
+            .controller::<gallery::GalleryPages>();
     }
 }
 
@@ -66,7 +81,10 @@ impl Module for ProofModule {
 async fn timing(request: Request, next: Next) -> Response {
     let start = std::time::Instant::now();
     let mut response = next.run(request).await;
-    if let Ok(value) = http::HeaderValue::from_str(&format!("app;dur={:.3}", start.elapsed().as_secs_f64() * 1000.0)) {
+    if let Ok(value) = http::HeaderValue::from_str(&format!(
+        "app;dur={:.3}",
+        start.elapsed().as_secs_f64() * 1000.0
+    )) {
         response.headers_mut().insert("server-timing", value);
     }
     response
@@ -83,7 +101,10 @@ fn main() -> Result<(), BoxError> {
         [
             ("APP_HTTP__ADDR".to_owned(), format!("127.0.0.1:{port}")),
             // The benchmark sends every request from one address.
-            ("APP_HTTP__PER_IP_RATE_LIMIT".to_owned(), "100000000".to_owned()),
+            (
+                "APP_HTTP__PER_IP_RATE_LIMIT".to_owned(),
+                "100000000".to_owned(),
+            ),
         ],
     );
     let app = Navree::app()
@@ -95,7 +116,11 @@ fn main() -> Result<(), BoxError> {
     // records every request, which a speed measurement shouldn't pay for.
     #[cfg(feature = "logbook")]
     if std::env::var_os("UI_PROOF_LOGBOOK").is_some() {
-        let options = LogbookOptions { enabled: Some(true), store: StoreKind::Memory, ..LogbookOptions::default() };
+        let options = LogbookOptions {
+            enabled: Some(true),
+            store: StoreKind::Memory,
+            ..LogbookOptions::default()
+        };
         return app.module(LogbookModule::for_root(options)).run();
     }
     app.run()
