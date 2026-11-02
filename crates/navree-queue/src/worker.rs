@@ -181,19 +181,26 @@ enum Ran {
 }
 
 /// The jobs the workers of one `work` call may still take.
-struct Budget(AtomicU64);
+struct Budget {
+    left: AtomicU64,
+    /// Whether the call has a limit, so that it ends by itself.
+    limited: bool,
+}
 
 impl Budget {
     fn new(max_jobs: Option<u64>) -> Self {
-        Self(AtomicU64::new(max_jobs.unwrap_or(u64::MAX)))
+        Self {
+            left: AtomicU64::new(max_jobs.unwrap_or(u64::MAX)),
+            limited: max_jobs.is_some(),
+        }
     }
 
     /// Takes one job slot; false when none are left.
     fn take(&self) -> bool {
-        let mut left = self.0.load(Ordering::SeqCst);
+        let mut left = self.left.load(Ordering::SeqCst);
         while left > 0 {
             match self
-                .0
+                .left
                 .compare_exchange_weak(left, left - 1, Ordering::SeqCst, Ordering::SeqCst)
             {
                 Ok(_) => return true,
@@ -205,7 +212,7 @@ impl Budget {
 
     /// Returns a slot that found no job.
     fn give_back(&self) {
-        self.0.fetch_add(1, Ordering::SeqCst);
+        self.left.fetch_add(1, Ordering::SeqCst);
     }
 }
 
@@ -254,6 +261,11 @@ impl Queue {
     ///
     /// Errors of the driver end the call when it would stop on an empty
     /// queue; otherwise they are logged and the worker polls again.
+    ///
+    /// A job's outcome is stored for as long as its worker holds it, whatever
+    /// the database says for now. Past that, another worker may take the job and
+    /// it runs again: the worker logs an error naming it, and a call limited by
+    /// `once`, `stop_when_empty` or `max_jobs` returns the error, never `Ok`.
     ///
     /// A [`QueueFake`](crate::QueueFake) queue runs nothing and returns at once.
     pub async fn work(&self, opts: WorkOptions) -> Result<WorkStats, QueueError> {
@@ -390,7 +402,8 @@ impl Queue {
             return Ok(AttemptOutcome::Failed);
         };
         if self.is_skipped(ctx, &job).await? {
-            self.finish(&job, worker, Finish::Skipped, "").await?;
+            self.finish(&job, worker, Finish::Skipped, "", started)
+                .await?;
             log_cancelled(
                 &job,
                 started,
@@ -409,7 +422,8 @@ impl Queue {
         self.end(running).await;
         match ran {
             Ran::Succeeded => {
-                self.finish(&job, worker, Finish::Succeeded, "").await?;
+                self.finish(&job, worker, Finish::Succeeded, "", started)
+                    .await?;
                 self.inner.telemetry.emit_with(EventKind::JobProcessed, || {
                     TelemetryEvent::JobProcessed(JobProcessed {
                         queue: job.queue.clone(),
@@ -432,7 +446,8 @@ impl Queue {
                 Ok(AttemptOutcome::Succeeded)
             }
             Ran::Cancelled => {
-                self.finish(&job, worker, Finish::Skipped, "").await?;
+                self.finish(&job, worker, Finish::Skipped, "", started)
+                    .await?;
                 log_cancelled(
                     &job,
                     started,
@@ -473,12 +488,14 @@ impl Queue {
         worker: &str,
         finish: Finish,
         error: &str,
+        started: Instant,
     ) -> Result<bool, QueueError> {
         let now = self.now_ms();
+        let held = held_until(job, started);
         let mut step = None;
         if job.membership.batch_id.is_some() {
             let prepare = |envelope, row: &BatchRow| self.prepare_callback(envelope, row);
-            match storing(|| {
+            match storing(held, || {
                 self.inner
                     .store
                     .finish_batch_job(job, worker, finish, error, now, &prepare)
@@ -491,10 +508,10 @@ impl Queue {
         } else {
             match finish {
                 Finish::Succeeded | Finish::Skipped => {
-                    storing(|| self.inner.store.complete(job)).await?;
+                    storing(held, || self.inner.store.complete(job)).await?;
                 }
                 Finish::Failed => {
-                    if !storing(|| self.inner.store.fail(job, worker, error, now)).await? {
+                    if !storing(held, || self.inner.store.fail(job, worker, error, now)).await? {
                         return Ok(false);
                     }
                 }
@@ -540,7 +557,10 @@ impl Queue {
         let delay = job.options.backoff.delay_for(job.attempts);
         let delay_ms = i64::try_from(delay.as_millis()).unwrap_or(i64::MAX);
         let available_at = self.now_ms().saturating_add(delay_ms);
-        let released = storing(|| self.inner.store.release(job, worker, available_at)).await?;
+        let released = storing(held_until(job, started), || {
+            self.inner.store.release(job, worker, available_at)
+        })
+        .await?;
         if released {
             self.report_failure(job, error, started, true);
             tracing::warn!(
@@ -569,7 +589,9 @@ impl Queue {
         error: &str,
         started: Instant,
     ) -> Result<(), QueueError> {
-        let moved = self.finish(job, worker, Finish::Failed, error).await?;
+        let moved = self
+            .finish(job, worker, Finish::Failed, error, started)
+            .await?;
         if moved {
             self.report_failure(job, error, started, false);
             tracing::error!(
@@ -617,18 +639,23 @@ fn is_busy(error: &QueueError) -> bool {
     matches!(error, QueueError::Db(error) if error.is_retryable())
 }
 
-/// Stores what became of a job, trying again while the database is busy: the
-/// job has run, and if this is lost its reservation goes stale and the job
-/// runs again.
-async fn storing<T, Fut>(mut store: impl FnMut() -> Fut) -> Result<T, QueueError>
+/// Until when a worker holds `job`, reserved about when `started` was taken: after
+/// that its reservation is stale and another worker may take it.
+fn held_until(job: &ReservedJob, started: Instant) -> Instant {
+    let held = Duration::from_millis(u64::try_from(crate::record::stale_after_ms(&job.options)).unwrap_or(u64::MAX));
+    started.checked_add(held).unwrap_or(started)
+}
+
+/// Stores what became of a job, trying again while the database is busy and the
+/// worker still holds it (until `held`): the job has run, and if this is lost
+/// its reservation goes stale and the job runs again.
+async fn storing<T, Fut>(held: Instant, mut store: impl FnMut() -> Fut) -> Result<T, QueueError>
 where
     Fut: Future<Output = Result<T, QueueError>>,
 {
-    let mut tries = 0;
     loop {
         match store().await {
-            Err(error) if is_busy(&error) && tries < BUSY_RETRIES => {
-                tries += 1;
+            Err(error) if is_busy(&error) && Instant::now() < held => {
                 tracing::warn!(target: "navree::job", %error, "cannot store a job's outcome; trying again");
                 tokio::time::sleep(BUSY_RETRY_DELAY).await;
             }
@@ -695,11 +722,25 @@ impl Worker {
                                 });
                             }
                         }
-                        // The job ran (or was skipped) but its outcome could not be
-                        // stored; the reservation goes stale and another worker
-                        // retries it.
+                        // The job ran (or was skipped) and its outcome could not be
+                        // stored while the worker held it: its reservation goes stale
+                        // and another worker runs it again. A call that ends by itself
+                        // says so, and never returns `Ok` for it.
                         Err(error) => {
-                            if !self.recover(error, "cannot record a job's outcome").await? {
+                            tracing::error!(
+                                target: "navree::job",
+                                %error,
+                                worker = %self.id,
+                                name = %job_type,
+                                job_id = %job_id,
+                                queue = %queue,
+                                attempt,
+                                "cannot store a job's outcome; the job will run again"
+                            );
+                            if self.finite || self.budget.limited {
+                                return Err(error);
+                            }
+                            if !self.idle().await {
                                 break;
                             }
                         }
@@ -722,9 +763,9 @@ impl Worker {
         Ok(stats)
     }
 
-    /// A driver error: returned when the worker stops on an empty queue,
-    /// unless it is the database being busy for now (a lock held longer than
-    /// it waits, a deadlock), which is tried again a few times; otherwise
+    /// A driver error finding a job: returned when the worker stops on an empty
+    /// queue, unless it is the database being busy for now (a lock held longer
+    /// than it waits, a deadlock), which is tried again a few times; otherwise
     /// logged, then the worker waits a poll interval. `Ok(false)` when the app
     /// shuts down meanwhile.
     async fn recover(&self, error: QueueError, what: &str) -> Result<bool, QueueError> {

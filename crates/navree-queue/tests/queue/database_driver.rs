@@ -292,3 +292,181 @@ async fn a_lock_held_while_an_outcome_is_stored_does_not_lose_the_outcome() {
     assert_eq!(stats.succeeded, 1);
     assert_eq!(queue.pending_count("default").await.unwrap(), 0);
 }
+
+/// A job that takes SQLite's write lock for `hold_ms` as it ends, so that its
+/// outcome can't be stored for that long; counted by the database it runs on.
+mod outcomes {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+
+    use navree_contracts::{BoxError, Job, JobContext, JobOptions, ModuleBuilderJobsExt};
+    use navree_kernel::{Module, ModuleBuilder};
+
+    use super::*;
+
+    static RUNS: Mutex<Option<HashMap<String, u32>>> = Mutex::new(None);
+    static HOLDING: Mutex<Option<HashMap<String, tokio::task::JoinHandle<()>>>> = Mutex::new(None);
+
+    #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+    struct LocksAsItEnds {
+        url: String,
+        hold_ms: u64,
+    }
+
+    impl Job for LocksAsItEnds {
+        const NAME: &'static str = "test.locks_as_it_ends";
+
+        fn options() -> JobOptions {
+            JobOptions {
+                timeout_secs: 1,
+                ..JobOptions::default()
+            }
+        }
+
+        async fn handle(self, _ctx: JobContext) -> Result<(), BoxError> {
+            let first = {
+                let mut runs = RUNS.lock().unwrap();
+                let count = runs
+                    .get_or_insert_with(HashMap::new)
+                    .entry(self.url.clone())
+                    .or_insert(0);
+                *count += 1;
+                *count == 1
+            };
+            if first {
+                let holder = hold_write_lock(&self.url, Duration::from_millis(self.hold_ms)).await;
+                HOLDING
+                    .lock()
+                    .unwrap()
+                    .get_or_insert_with(HashMap::new)
+                    .insert(self.url.clone(), holder);
+            }
+            Ok(())
+        }
+    }
+
+    struct Jobs;
+
+    impl Module for Jobs {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.job::<LocksAsItEnds>();
+        }
+    }
+
+    fn runs(url: &str) -> u32 {
+        RUNS.lock()
+            .unwrap()
+            .as_ref()
+            .and_then(|runs| runs.get(url).copied())
+            .unwrap_or(0)
+    }
+
+    async fn holder_done(url: &str) {
+        let holder = HOLDING
+            .lock()
+            .unwrap()
+            .as_mut()
+            .and_then(|holding| holding.remove(url));
+        if let Some(holder) = holder {
+            holder.await.unwrap();
+        }
+    }
+
+    /// Runs the job with the lock held for `hold_ms`: what the call returned, the
+    /// runs by then and what a later worker makes of it.
+    async fn run(
+        hold_ms: u64,
+        opts: WorkOptions,
+    ) -> (Result<navree_queue::WorkStats, QueueError>, u32, u32, u64) {
+        let (url, _guard) = crate::servers::scratch();
+        let journal = Arc::new(Journal::default());
+        let clock = Arc::new(FixedClock::new(start()));
+        let app = crate::support::app_builder_on(
+            &url,
+            options(QueueDriver::Database),
+            journal,
+            clock.clone(),
+        )
+        .config(
+            "database.sqlite",
+            serde_json::json!({ "busy_timeout_ms": 100 }),
+        )
+        .module(Jobs)
+        .build()
+        .await;
+        let queue = app.get::<Queue>().await;
+        queue
+            .dispatch(LocksAsItEnds {
+                url: url.clone(),
+                hold_ms,
+            })
+            .await
+            .unwrap();
+        let result = queue.work(opts).await;
+        holder_done(&url).await;
+        let first = runs(&url);
+        clock.advance(Duration::from_secs(3600));
+        queue
+            .work(WorkOptions {
+                stop_when_empty: true,
+                ..WorkOptions::default()
+            })
+            .await
+            .unwrap();
+        let pending = queue.pending_count("default").await.unwrap();
+        let later = runs(&url);
+        app.shutdown().await.unwrap();
+        (result, first, later, pending)
+    }
+
+    fn sqlite() -> bool {
+        crate::servers::Server::current() == crate::servers::Server::Sqlite
+    }
+
+    fn drain() -> WorkOptions {
+        WorkOptions {
+            stop_when_empty: true,
+            ..WorkOptions::default()
+        }
+    }
+
+    fn once() -> WorkOptions {
+        WorkOptions {
+            once: true,
+            ..WorkOptions::default()
+        }
+    }
+
+    /// While the worker still holds the job, it keeps trying to store the outcome.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_long_lock_does_not_run_a_job_twice_while_its_worker_holds_it() {
+        if !sqlite() {
+            return;
+        }
+        let (result, first, later, pending) = run(2500, once()).await;
+        assert_eq!(result.unwrap().succeeded, 1);
+        assert_eq!((first, later, pending), (1, 1, 0));
+        // With a worker of its own, draining says the same. Others of the call may
+        // find the database busy too long when they look for a job, and say that.
+        let (result, first, later, pending) = run(2500, drain()).await;
+        if let Ok(stats) = result {
+            assert_eq!(stats.succeeded, 1);
+        }
+        assert_eq!((first, later, pending), (1, 1, 0));
+    }
+
+    /// Past the reservation another worker may take the job: the outcome is lost,
+    /// and the call that ran it says so.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn an_outcome_lost_past_the_reservation_is_an_error_and_never_ok() {
+        if !sqlite() {
+            return;
+        }
+        let (result, first, later, pending) = run(33_000, once()).await;
+        let error = result.expect_err("the call does not say all is well");
+        assert!(error.to_string().contains("locked"), "{error}");
+        assert_eq!(first, 1);
+        // The job runs again, which the error said it would: at least once.
+        assert_eq!((later, pending), (2, 0));
+    }
+}
