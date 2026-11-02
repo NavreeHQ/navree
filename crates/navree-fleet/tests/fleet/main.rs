@@ -1,5 +1,6 @@
 //! navree-fleet integration tests.
 
+mod browser;
 mod commands;
 mod dashboard;
 mod database;

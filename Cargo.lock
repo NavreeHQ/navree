@@ -4820,6 +4820,7 @@ dependencies = [
  "memory-stats",
  "metrics",
  "navree-access",
+ "navree-browser",
  "navree-config",
  "navree-contracts",
  "navree-db",

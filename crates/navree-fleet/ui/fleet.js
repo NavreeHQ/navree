@@ -181,7 +181,9 @@
 
   function signIn(problem) {
     stopTimer();
+    setBare(false);
     setStatus(null);
+    setTitle("Sign in");
     const content = document.getElementById("content");
     const error = h("div", { class: "message error", hidden: !problem, text: problem || "" });
     const email = h("input", { class: "input", type: "email", name: "email", autocomplete: "username", required: true });
@@ -281,6 +283,32 @@
       : "Signed out";
   }
 
+  /** The tab's title: the page, then the tool ("Failed jobs · Fleet"). */
+  function setTitle(...parts) {
+    document.title = parts.filter(Boolean).concat("Fleet").join(" · ");
+  }
+
+  /** The shell without its navigation: sign-in and no-access screens. */
+  function setBare(bare) {
+    document.getElementById("shell").classList.toggle("bare", bare);
+  }
+
+  function forbidden() {
+    stopTimer();
+    setBare(true);
+    setTitle("No access");
+    document.getElementById("crumb").textContent = "No access";
+    const who = state.session && state.session.name ? state.session.name : null;
+    document.getElementById("content").replaceChildren(
+      h("div", { class: "card message-card" }, [
+        h("h1", { text: "No access" }),
+        h("p", { class: "message error", text: "Your account cannot open the Fleet dashboard: it needs the fleet.view permission." }),
+        h("p", { class: "muted", text: (who ? "Signed in as " + who + ". " : "") + "Ask an administrator for the permission, or sign out and use another account." }),
+        h("div", {}, [h("button", { class: "button", type: "button", text: "Sign out", onclick: signOut })]),
+      ])
+    );
+  }
+
   function stamp() {
     document.getElementById("updated").textContent = "Updated " + new Date().toLocaleTimeString();
   }
@@ -298,6 +326,8 @@
       item.classList.toggle("active", item.dataset.view === state.view);
     }
     document.getElementById("crumb").textContent = VIEWS[state.view] + (state.detail ? " / " + state.detail : "");
+    setBare(false);
+    setTitle(VIEWS[state.view]);
     if (!state.session) return signIn();
     stopTimer();
     show();
@@ -335,12 +365,7 @@
       stamp();
     } catch (error) {
       if (error.status === 401) return signIn("Your session ended. Sign in again.");
-      if (error.status === 403) {
-        stopTimer();
-        return document.getElementById("content").replaceChildren(
-          h("div", { class: "message error", text: "Your account cannot open the Fleet dashboard: it needs the fleet.view permission." })
-        );
-      }
+      if (error.status === 403) return forbidden();
       if (!quiet) toast(error.message || "The dashboard could not load.", true);
     } finally {
       state.busy = false;
@@ -451,8 +476,172 @@
 
   function chart(label, summary, points, first, second) {
     return h("div", { class: "card chart" }, [
-      h("div", { class: "label" }, [h("span", { text: label }), h("span", { class: "mono", text: summary })]),
+      h("div", { class: "label" }, [h("span", { title: label, text: label }), h("span", { class: "mono", text: summary })]),
       plot(points, first, second),
+    ]);
+  }
+
+  /** "2 masters . worker-1, worker-2", or that none runs. */
+  function mastersLine(names) {
+    if (!names.length) return ["No master running"];
+    const line = [names.length + (names.length === 1 ? " master" : " masters") + " · "];
+    names.forEach((name, i) => {
+      if (i) line.push(", ");
+      line.push(h("span", { class: "mono", text: name }));
+    });
+    return line;
+  }
+
+  /** The most slots drawn for one queue: more are counted, not drawn. */
+  const MAX_SLOTS = 16;
+
+  /** A queue's processes as squares: filled while a process runs, outlined
+      while the supervisor could still start one. */
+  function slotsFor(running, slots, label) {
+    const shown = Math.min(Math.max(slots, running), MAX_SLOTS);
+    const squares = [];
+    for (let i = 0; i < shown; i++) squares.push(h("span", { class: "slot" + (i < running ? " on" : "") }));
+    const hidden = Math.max(running, slots) - shown;
+    if (hidden > 0) squares.push(h("span", { class: "slot-more", text: "+" + number(hidden) }));
+    const words = running + " of " + slots + " processes" + (label ? " (" + label + ")" : "");
+    return h("span", { class: "slots", role: "img", "aria-label": words, title: words }, squares);
+  }
+
+  /** The workload, grouped by supervisor: a square per process. */
+  function workloadCard(o) {
+    const byQueue = new Map(o.workload.map((w) => [w.queue, w]));
+    const head = h("tr", {}, [
+      h("th", { text: "Queue" }),
+      h("th", { text: "Processes" }),
+      h("th", { class: "num", text: "Pending" }),
+      h("th", { class: "num wide", title: "How long the oldest waiting job has waited", text: "Wait" }),
+      h("th", { class: "num wide", title: "How long the queue takes to clear on its processes", text: "Clears in" }),
+      h("th", { class: "num wide", text: "Jobs/min" }),
+    ]);
+    const bodies = [];
+    for (const sup of o.supervisors) {
+      const rows = [
+        h("tr", { class: "group" }, [
+          h("td", { colspan: 6 }, [
+            sup.name + " · " + sup.balance + " · " + sup.processes_label,
+            sup.paused ? h("span", { class: "badge warn", text: "paused" }) : null,
+          ]),
+        ]),
+      ];
+      for (const queue of sup.queues) {
+        const w = byQueue.get(queue);
+        if (!w) continue;
+        rows.push(h("tr", { class: w.over_threshold ? "behind" : "" }, [
+          h("td", { class: "mono", text: queue }),
+          h("td", {}, [slotsFor(w.processes, sup.slots, sup.paused ? "paused" : "")]),
+          h("td", { class: "num", text: number(w.pending) }),
+          h("td", { class: "num wide wait", text: duration(w.oldest_wait_secs) }),
+          h("td", { class: "num wide", text: w.pending ? duration(w.time_to_clear_secs) : "now" }),
+          h("td", { class: "num wide", text: number(w.jobs_per_minute) }),
+        ]));
+      }
+      bodies.push(h("tbody", { class: sup.paused ? "paused" : "" }, rows));
+    }
+    return h("div", { class: "card" }, [
+      h("div", { class: "card-head" }, [h("h2", { text: "Workload" })]),
+      o.supervisors.length
+        ? h("div", { class: "table-wrap" }, [h("table", { class: "workload" }, [h("thead", {}, [head]), ...bodies])])
+        : h("div", { class: "empty", text: "No supervisor is configured." }),
+    ]);
+  }
+
+  function sum(values) {
+    return values.reduce((n, v) => n + v, 0);
+  }
+
+  /** The queue the throughput chart shows: the one picked, else the one
+      that finished the most jobs, else the first. */
+  function chartQueue(series) {
+    if (state.chartQueue && series.some((t) => t.queue === state.chartQueue)) return state.chartQueue;
+    let best = series[0];
+    for (const t of series) {
+      if (sum(t.per_minute) > sum(best.per_minute)) best = t;
+    }
+    return best.queue;
+  }
+
+  function clock(date) {
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  /** Jobs finished per minute over the last half hour: a bar a minute. */
+  function throughputCard(series) {
+    if (!series.length) return h("div", { class: "card chart-card" }, [h("div", { class: "empty", text: "No queue is supervised." })]);
+    const queue = chartQueue(series);
+    const counts = series.find((t) => t.queue === queue).per_minute;
+    const picker = series.length > 1
+      ? h("select", {
+        class: "input select mono", "aria-label": "Queue", "data-keep": "chart-queue",
+        onchange: (event) => { state.chartQueue = event.target.value; show(true); },
+      }, series.map((t) => h("option", { value: t.queue, text: t.queue, selected: t.queue === queue })))
+      : h("span", { class: "mono", text: queue });
+    const width = 300;
+    const height = 80;
+    const step = width / counts.length;
+    const max = Math.max(1, ...counts);
+    const plot = svg("svg", {
+      class: "bars", viewBox: "0 0 " + width + " " + height, preserveAspectRatio: "none", role: "img",
+      "aria-label": "Jobs finished per minute on " + queue + ", last " + counts.length + " minutes",
+    });
+    const now = Date.now();
+    counts.forEach((n, i) => {
+      const barHeight = n ? Math.max(2, (n / max) * (height - 4)) : 1;
+      const at = new Date(now - (counts.length - 1 - i) * 60000);
+      const bar = svg("rect", {
+        class: n ? "bar" : "bar zero", x: (i * step + 1).toFixed(2), y: (height - barHeight).toFixed(2),
+        width: (step - 2).toFixed(2), height: barHeight.toFixed(2),
+      });
+      const tip = svg("title");
+      tip.textContent = number(n) + (n === 1 ? " job" : " jobs") + " · " + clock(at);
+      bar.append(tip);
+      plot.append(bar);
+    });
+    const total = sum(counts);
+    return h("div", { class: "card chart-card" }, [
+      h("div", { class: "chart-head" }, [
+        h("span", { class: "chart-title" }, [picker, " jobs per minute"]),
+        h("span", { class: "muted small", text: counts.length + " min" }),
+      ]),
+      plot,
+      h("div", { class: "chart-foot muted small" }, [
+        h("span", { text: clock(new Date(now - (counts.length - 1) * 60000)) }),
+        h("span", { text: total ? number(total) + " jobs, peak " + number(Math.max(...counts)) + "/min" : "No jobs finished" }),
+        h("span", { text: "now" }),
+      ]),
+    ]);
+  }
+
+  /** The newest failed jobs, with Retry and Forget. */
+  function failedCard(o) {
+    const rows = o.recent_failures.map((job) => h("div", { class: "failure" }, [
+      h("div", { class: "failure-text" }, [
+        h("div", { class: "failure-line" }, [
+          h("a", { class: "mono", href: "#failed/" + encodeURIComponent(job.id), text: job.job_type }),
+          h("span", { class: "muted small", title: job.attempts + " of " + job.max_attempts + " attempts", text: job.attempts + "/" + job.max_attempts }),
+        ]),
+        h("div", { class: "failure-error mono", title: job.error, text: job.error }),
+      ]),
+      h("div", { class: "failure-actions" }, [
+        h("button", { class: "button", type: "button", text: "Retry", onclick: () => act("The job is back on its queue.", "/failed/" + encodeURIComponent(job.id) + "/retry") }),
+        h("button", { class: "button ghost", type: "button", text: "Forget", onclick: () => act("The job is forgotten.", "/failed/" + encodeURIComponent(job.id), { method: "DELETE" }) }),
+      ]),
+    ]));
+    const more = o.failed_total - o.recent_failures.length;
+    const retryAll = h("button", {
+      class: "button", type: "button", text: "Retry all", title: "Put all " + number(o.failed_total) + " failed jobs back on their queues",
+      onclick: () => {
+        if (confirm("Put all " + number(o.failed_total) + " failed jobs back on their queues?")) act("Failed jobs are back on their queues.", "/failed/retry");
+      },
+    });
+    return h("div", { class: "card failed-card" }, [
+      h("div", { class: "card-head" }, [h("h2", { text: "Failed jobs" }), h("div", { class: "actions" }, [o.failed_total ? retryAll : null])]),
+      ...(rows.length ? rows : [h("div", { class: "empty", text: "No failed jobs." })]),
+      more > 0 ? h("a", { class: "failure-more", href: "#failed", text: "View all " + number(o.failed_total) + " failed jobs" }) : null,
     ]);
   }
 
@@ -462,11 +651,12 @@
     async overview() {
       const o = await api("/overview");
       setStatus(o.status);
-      document.getElementById("count-failed").textContent = o.failed_past_week ? number(o.failed_past_week) : "";
+      document.getElementById("count-failed").textContent = o.failed_total ? number(o.failed_total) : "";
       const paused = o.paused.length;
       return [
         h("div", { class: "page-head" }, [
           h("h1", { text: "Overview" }),
+          h("span", { class: "muted masters" }, mastersLine(o.masters)),
           h("div", { class: "actions" }, [
             paused
               ? h("button", { class: "button", type: "button", text: "Continue all", onclick: () => act("Every supervisor continues.", "/continue") })
@@ -475,22 +665,13 @@
         ]),
         h("div", { class: "figures" }, [
           figure("Status", { running: "Running", paused: "Paused", inactive: "Inactive" }[o.status], paused ? paused + " supervisor(s) paused" : null),
-          figure("Jobs per minute", number(o.jobs_per_minute)),
-          figure("Jobs past hour", number(o.jobs_past_hour)),
-          figure("Failed past 7 days", number(o.failed_past_week)),
-          figure("Longest wait", o.longest_wait ? duration(o.longest_wait.wait_secs) : "0 s", o.longest_wait ? o.longest_wait.queue : null),
+          figure("Jobs per minute", number(o.jobs_per_minute), "All queues"),
+          figure("Jobs past hour", number(o.jobs_past_hour), o.supervisors.length + (o.supervisors.length === 1 ? " supervisor" : " supervisors")),
+          figure("Failed past 7 days", number(o.failed_past_week), o.failed_total ? "Retry or forget" : "Nothing to handle"),
+          figure("Longest wait", o.longest_wait ? duration(o.longest_wait.wait_secs) : "0 s", o.longest_wait ? "Queue " + o.longest_wait.queue : null),
         ]),
-        h("div", { class: "card" }, [
-          h("div", { class: "card-head" }, [h("h2", { text: "Workload" })]),
-          table([
-            { label: "Queue", value: (w) => w.queue },
-            { label: "Pending", num: true, value: (w) => number(w.pending) },
-            { label: "Processes", num: true, value: (w) => number(w.processes) },
-            { label: "Oldest wait", num: true, cls: "wait", value: (w) => duration(w.oldest_wait_secs) },
-            { label: "Time to clear", num: true, value: (w) => duration(w.time_to_clear_secs) },
-            { label: "Jobs/min", num: true, value: (w) => number(w.jobs_per_minute) },
-          ], o.workload, null, (w) => (w.over_threshold ? "behind" : "")),
-        ]),
+        workloadCard(o),
+        h("div", { class: "panels" }, [throughputCard(o.throughput), failedCard(o)]),
       ];
     },
 
@@ -538,6 +719,7 @@
     async jobs() {
       if (state.detail) {
         const job = await api("/jobs/" + encodeURIComponent(state.detail));
+        setTitle(job.job_type, "Jobs");
         return [
           h("div", { class: "page-head" }, [
             h("h1", { text: job.job_type }),
@@ -593,6 +775,7 @@
     async failed() {
       if (state.detail) {
         const job = await api("/failed/" + encodeURIComponent(state.detail));
+        setTitle(job.job_type, "Failed jobs");
         return [
           h("div", { class: "page-head" }, [
             h("h1", { text: job.job_type }),
@@ -686,10 +869,16 @@
 
   function boot() {
     const shell = document.getElementById("shell");
+    // The sidebar is an icon rail between a phone and a laptop (a drawer
+    // below 761px), unless the person chose: the choice is kept.
+    let chosen = null;
     try {
-      if (localStorage.getItem(STORE + ".collapsed") === "1") shell.classList.add("collapsed");
+      chosen = localStorage.getItem(STORE + ".collapsed");
     } catch (_) {
-      /* no storage: start expanded */
+      /* no storage: the width decides */
+    }
+    if (chosen === "1" || (chosen === null && window.matchMedia("(min-width: 761px) and (max-width: 1023px)").matches)) {
+      shell.classList.add("collapsed");
     }
     const toggle = () => {
       if (window.matchMedia("(max-width: 760px)").matches) {
