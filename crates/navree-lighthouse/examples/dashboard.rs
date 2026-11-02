@@ -20,7 +20,8 @@
 //! scaled by a working-day shape with noise, so the charts have a shape
 //! (the same way the UI evidence harness does it). Those back-dated
 //! aggregates are not traffic; pass `--no-history` to leave them out, or
-//! `--empty` to start with no traffic at all.
+//! `--empty` to start with no traffic at all, and `--no-release` to run
+//! without a release label.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -479,7 +480,14 @@ async fn main() -> Result<(), BoxError> {
             "mail",
             json!({ "from": "Lighthouse <ops@demo.test>", "transport": "array" }),
         )
-        .set("lighthouse.release", json!("3f2a9c1"))
+        .set(
+            "lighthouse.release",
+            json!(if std::env::args().any(|arg| arg == "--no-release") {
+                ""
+            } else {
+                "3f2a9c1"
+            }),
+        )
         .set("lighthouse.environment", json!("production"))
         .set("lighthouse.thresholds.slow_query_ms", json!(60))
         .set("lighthouse.sample.requests", json!(0.2))
