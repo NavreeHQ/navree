@@ -737,3 +737,28 @@ async fn an_app_that_names_the_toolkit_keeps_it_whatever_logbook_does() {
             .assert_status(200);
     }
 }
+
+#[tokio::test]
+async fn every_route_has_a_name_of_its_own() {
+    // The API document names an operation after its route, and warns once for each
+    // route that shares a name with another one.
+    let app = app().await;
+    let routes = navree_http::route_table(app.ctx()).await.unwrap();
+    let mut seen: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    let mut count = 0;
+    for route in routes
+        .iter()
+        .filter(|route| route.full_path.starts_with("/_logbook"))
+    {
+        count += 1;
+        let label = format!("{} {}", route.method, route.full_path);
+        let name = route
+            .name
+            .clone()
+            .unwrap_or_else(|| panic!("{label} has no name"));
+        if let Some(other) = seen.insert(name.clone(), label.clone()) {
+            panic!("`{name}` names both {other} and {label}");
+        }
+    }
+    assert!(count >= 11, "Logbook's routes are in the table: {count}");
+}

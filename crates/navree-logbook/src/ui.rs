@@ -156,88 +156,119 @@ impl Controller for LogbookController {
         let mut routes = Vec::new();
 
         let this = self.clone();
-        routes.push(RouteDef::on(
-            Method::GET,
-            path(""),
-            move |Query(params): Query<ListParams>| async move { this.index(params).await },
-        ));
+        routes.push(
+            RouteDef::on(
+                Method::GET,
+                path(""),
+                move |Query(params): Query<ListParams>| async move { this.index(params).await },
+            )
+            .name("logbook.index"),
+        );
         let this = self.clone();
-        routes.push(RouteDef::on(
-            Method::GET,
-            path("/rows"),
-            move |Query(params): Query<ListParams>| async move { this.rows(params).await },
-        ));
+        routes.push(
+            RouteDef::on(
+                Method::GET,
+                path("/rows"),
+                move |Query(params): Query<ListParams>| async move { this.rows(params).await },
+            )
+            .name("logbook.rows"),
+        );
         let this = self.clone();
-        routes.push(RouteDef::on(
-            Method::GET,
-            path("/entries/{id}"),
-            move |Path(id): Path<String>| async move { this.detail(id).await },
-        ));
+        routes.push(
+            RouteDef::on(
+                Method::GET,
+                path("/entries/{id}"),
+                move |Path(id): Path<String>| async move { this.detail(id).await },
+            )
+            .name("logbook.entry"),
+        );
         let this = self.clone();
-        routes.push(RouteDef::on(
-            Method::POST,
-            path("/entries/{id}/replay"),
-            move |Path(id): Path<String>,
-                  navree_http::Form(form): navree_http::Form<ReplayForm>| async move {
-                this.replay_form(id, form).await
-            },
-        ));
+        routes.push(
+            RouteDef::on(
+                Method::POST,
+                path("/entries/{id}/replay"),
+                move |Path(id): Path<String>,
+                      navree_http::Form(form): navree_http::Form<ReplayForm>| async move {
+                    this.replay_form(id, form).await
+                },
+            )
+            .name("logbook.replay"),
+        );
         let this = self.clone();
-        routes.push(RouteDef::on(
-            Method::GET,
-            path("/mail/{id}"),
-            move |Path(id): Path<String>| async move { this.mail_html(id).await },
-        ));
+        routes.push(
+            RouteDef::on(
+                Method::GET,
+                path("/mail/{id}"),
+                move |Path(id): Path<String>| async move { this.mail_html(id).await },
+            )
+            .name("logbook.mail"),
+        );
         let this = self.clone();
-        routes.push(RouteDef::on(
-            Method::GET,
-            path("/api/entries"),
-            move |Query(params): Query<ListParams>| async move { this.api_list(params).await },
-        ));
+        routes.push(
+            RouteDef::on(
+                Method::GET,
+                path("/api/entries"),
+                move |Query(params): Query<ListParams>| async move { this.api_list(params).await },
+            )
+            .name("logbook.api.entries"),
+        );
         let this = self.clone();
-        routes.push(RouteDef::on(
-            Method::POST,
-            path("/clear"),
-            move || async move { this.clear().await },
-        ));
+        routes.push(
+            RouteDef::on(Method::POST, path("/clear"), move || async move {
+                this.clear().await
+            })
+            .name("logbook.clear"),
+        );
         let this = self.clone();
-        routes.push(RouteDef::on(
-            Method::DELETE,
-            path("/api/entries"),
-            move || async move { this.api_clear().await },
-        ));
+        routes.push(
+            RouteDef::on(Method::DELETE, path("/api/entries"), move || async move {
+                this.api_clear().await
+            })
+            .name("logbook.api.clear"),
+        );
         let this = self.clone();
-        routes.push(RouteDef::on(
-            Method::GET,
-            path("/api/entries/{id}"),
-            move |Path(id): Path<String>| async move { this.api_entry(id).await },
-        ));
+        routes.push(
+            RouteDef::on(
+                Method::GET,
+                path("/api/entries/{id}"),
+                move |Path(id): Path<String>| async move { this.api_entry(id).await },
+            )
+            .name("logbook.api.entry"),
+        );
         let this = self.clone();
-        routes.push(RouteDef::on(
-            Method::GET,
-            path("/api/batches/{id}"),
-            move |Path(id): Path<String>| async move { this.api_batch(id).await },
-        ));
+        routes.push(
+            RouteDef::on(
+                Method::GET,
+                path("/api/batches/{id}"),
+                move |Path(id): Path<String>| async move { this.api_batch(id).await },
+            )
+            .name("logbook.api.batch"),
+        );
         let this = self.clone();
-        routes.push(RouteDef::on(
-            Method::POST,
-            path("/api/requests/{id}/replay"),
-            move |Path(id): Path<String>, Json(edit): Json<ReplayRequest>| async move {
-                this.api_replay(id, edit).await
-            },
-        ));
+        routes.push(
+            RouteDef::on(
+                Method::POST,
+                path("/api/requests/{id}/replay"),
+                move |Path(id): Path<String>, Json(edit): Json<ReplayRequest>| async move {
+                    this.api_replay(id, edit).await
+                },
+            )
+            .name("logbook.api.replay"),
+        );
         let this = self.clone();
-        routes.push(RouteDef::on(
-            Method::GET,
-            path("/api/requests/{id}/curl"),
-            move |Path(id): Path<String>| async move { this.api_curl(id).await },
-        ));
+        routes.push(
+            RouteDef::on(
+                Method::GET,
+                path("/api/requests/{id}/curl"),
+                move |Path(id): Path<String>| async move { this.api_curl(id).await },
+            )
+            .name("logbook.api.curl"),
+        );
 
         let remote = self.logbook.options().allow_remote;
         routes
             .into_iter()
-            .map(|route| {
-                let mut route = route.name("logbook");
+            .map(|mut route| {
                 if route.method != Method::GET {
                     route = route.guard(Arc::new(SameOrigin));
                 }
