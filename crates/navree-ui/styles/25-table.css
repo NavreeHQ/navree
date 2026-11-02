@@ -68,7 +68,6 @@
   & [data-align=end]{text-align:end}
   & td[data-numeric]{direction:ltr;text-align:right}
   & :dir(rtl) td[data-numeric]{text-align:left}
-  & tbody tr{content-visibility:auto;contain-intrinsic-size:auto var(--row-h)}
   & tr[data-ui-row-href]{cursor:pointer}
   & tfoot td{background:var(--ink-2);border-top:1px solid var(--line-2);border-bottom:0;font-weight:500}
   & [data-slot=row-detail] td{height:auto;padding:.75rem 1rem;background:var(--ink-2);white-space:normal;overflow-wrap:anywhere}

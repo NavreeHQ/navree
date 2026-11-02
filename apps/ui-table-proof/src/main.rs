@@ -382,7 +382,7 @@ pub struct Big {
 
 /// The same million, by page number.
 #[derive(Clone, TableRow)]
-#[table(sort = "-amount", per = 50, per_pages(50, 100))]
+#[table(sort = "-amount", per = 50, per_pages(50, 100, 1000))]
 pub struct BigRow {
     #[col(skip)]
     pub id: i64,

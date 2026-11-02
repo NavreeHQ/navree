@@ -1165,6 +1165,16 @@ for (const browserName of browsers) {
       assert.equal(await get("/__t/count"), "137", "the table is still there");
     });
 
+    test("a thousand rows load and sort in this browser", async () => {
+      const { page, close } = await open("/big-pages?per=1000");
+      assert.equal(await rows(page, "big").count(), 1000);
+      await page.locator("thead th[data-col=title] [data-slot=sort-link]").click();
+      await page.waitForURL(/sort=title/);
+      await settled(page, "big");
+      assert.equal(await rows(page, "big").count(), 1000);
+      await close();
+    });
+
     test("the million: pages by cursor and by number, filtered and sorted, stay under 500 ms", async () => {
       const timed = async (path) => {
         const start = performance.now();
