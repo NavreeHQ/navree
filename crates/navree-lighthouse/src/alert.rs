@@ -217,23 +217,38 @@ fn email_text(alert: &Alert) -> String {
     )
 }
 
+/// The alert email: a self-contained page with inline styles (mail
+/// clients drop style sheets and scripts), a coloured kind label, the
+/// issue's title and details, and a button to the issue.
 fn email_html(alert: &Alert) -> String {
     let issue = &alert.issue;
+    let accent = match issue.level {
+        crate::model::Level::Error => "#d94a4a",
+        crate::model::Level::Warning => "#c98a1b",
+        crate::model::Level::Info => "#6b7770",
+    };
+    let row = |label: &str, value: String| {
+        format!(
+            "<tr><td style=\"padding:6px 16px 6px 0;color:#6b7770;font-size:13px;white-space:nowrap;vertical-align:top\">{label}</td>             <td style=\"padding:6px 0;color:#17201b;font-size:13px;word-break:break-word\">{value}</td></tr>"
+        )
+    };
+    let details = [
+        row("Where", format!("<span style=\"font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace\">{}</span>", escape(&issue.culprit))),
+        row("Kind", escape(issue.kind.label())),
+        row("Occurrences", issue.count.to_string()),
+        row("Environment", escape(&alert.environment)),
+        row("Release", escape(&alert.release)),
+    ]
+    .concat();
     format!(
-        "<p><strong>{kind}</strong>: {title}</p><table>\
-         <tr><td>Where</td><td>{culprit}</td></tr>\
-         <tr><td>Kind</td><td>{issue_kind}</td></tr>\
-         <tr><td>Occurrences</td><td>{count}</td></tr>\
-         <tr><td>Environment</td><td>{environment}</td></tr>\
-         <tr><td>Release</td><td>{release}</td></tr></table>\
-         <p><a href=\"{url}\">Open in Lighthouse</a></p>",
-        kind = escape(alert.kind.label()),
-        title = escape(&issue.title),
-        culprit = escape(&issue.culprit),
-        issue_kind = escape(issue.kind.label()),
-        count = issue.count,
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">         <meta name=\"color-scheme\" content=\"light\"><title>{subject}</title></head>         <body style=\"margin:0;padding:0;background:#f1f4f2\">         <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f1f4f2\"><tr><td align=\"center\" style=\"padding:24px 12px\">         <table role=\"presentation\" width=\"560\" cellpadding=\"0\" cellspacing=\"0\" style=\"width:100%;max-width:560px;background:#ffffff;border:1px solid #dfe5e1;border-radius:6px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif\">         <tr><td style=\"padding:14px 24px;border-bottom:1px solid #dfe5e1;font-size:13px;color:#6b7770\">         <span style=\"color:#0a0e0c;font-weight:600\">Lighthouse</span> &middot; {environment}</td></tr>         <tr><td style=\"padding:24px 24px 8px\">         <div style=\"font-size:12px;font-weight:600;letter-spacing:0.02em;color:{accent};text-transform:uppercase\">{kind}{test}</div>         <div style=\"margin-top:8px;font-size:18px;line-height:1.35;font-weight:600;color:#0a0e0c;word-break:break-word\">{title}</div></td></tr>         <tr><td style=\"padding:8px 24px 8px\"><table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\">{details}</table></td></tr>         <tr><td style=\"padding:16px 24px 28px\">         <a href=\"{url}\" style=\"display:inline-block;padding:10px 16px;background:#0a0e0c;color:#3dff8f;border-radius:4px;font-size:14px;font-weight:600;text-decoration:none\">Open in Lighthouse</a></td></tr>         </table></td></tr></table></body></html>",
+        subject = escape(&alert.summary()),
         environment = escape(&alert.environment),
-        release = escape(&alert.release),
+        accent = accent,
+        kind = escape(alert.kind.label()),
+        test = if alert.test { " &middot; test" } else { "" },
+        title = escape(&issue.title),
+        details = details,
         url = escape(&issue.url),
     )
 }

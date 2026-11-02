@@ -327,6 +327,41 @@ async fn email_alerts_go_through_the_mailer() {
 }
 
 #[tokio::test]
+async fn the_alert_email_is_a_styled_page_with_a_button_and_nothing_external() {
+    let app = builder()
+        .config(
+            "mail",
+            json!({ "from": "Lighthouse <ops@acme.test>", "transport": "array" }),
+        )
+        .config("lighthouse.alerts.email.to", "oncall@acme.test")
+        .module(navree_view::ViewModule::from_config())
+        .module(navree_mail::MailModule::from_config())
+        .build()
+        .await;
+    boom(&app, 1).await;
+    flushed(&app).await;
+    let mailer = app.get::<navree_mail::Mailer>().await;
+    let sent = mailer.array_transport().unwrap().sent();
+    let html = sent[0].html.as_deref().unwrap();
+    assert!(html.starts_with("<!doctype html>"), "{html}");
+    assert!(html.contains("<meta name=\"viewport\""), "{html}");
+    assert!(html.contains("style=\""), "inline styles, as mail clients need");
+    assert!(
+        html.contains("href=\"https://api.acme.test/_lighthouse/issues/"),
+        "the link is a button to the issue: {html}"
+    );
+    assert!(html.contains("Open in Lighthouse"));
+    assert!(html.contains("invoice inv_1 not found"));
+    assert!(html.contains("GET /api/demo/boom/{n}"));
+    for external in ["<script", "<link", "@import", "src=\"http"] {
+        assert!(!html.contains(external), "{external} in {html}");
+    }
+    // Text for clients that show no HTML stays complete.
+    assert!(sent[0].text.as_deref().unwrap().contains("Open in Lighthouse: https://"));
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn a_failed_delivery_is_recorded() {
     let (client, server) = HttpClient::fake();
     server.on(Method::POST, &format!("{SLACK}*"), FakeResponse::new(500));
