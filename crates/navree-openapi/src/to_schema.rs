@@ -121,7 +121,7 @@ pub fn components_of<T: ToSchema + ?Sized>() -> BTreeMap<String, Schema> {
         match components.get(&name) {
             Some(first) if *first == schema => {}
             Some(first) => panic!(
-                "`{name}` names two different schemas under `{}`: `{}` and `{}`; give one of them                  another name with #[schema(as = Name)]",
+                "`{name}` names two different schemas under `{}`: `{}` and `{}`; give one of them another name with #[schema(as = Name)]",
                 std::any::type_name::<T>(),
                 first.rust_type.0.unwrap_or("a schema written by hand"),
                 schema.rust_type.0.unwrap_or("a schema written by hand"),
