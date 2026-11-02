@@ -262,9 +262,10 @@ async function focusProperties() {
   dialog.close();
 
   // Keep and persist.
-  root.innerHTML = `<div id="w"><div id="island" data-ui-keep>mine</div><div id="toaster" data-ui-persist>t</div></div>`;
+  root.innerHTML = `<div id="w"><div id="island" data-ui-keep>mine</div><div id="toaster">t</div><div id="stored" data-ui-persist>s</div></div>`;
+  (await import("/dom.js")).persistent.add(document.getElementById("toaster"));
   morph(root.firstElementChild, parse(`<div id="w"><div id="island" data-ui-keep>theirs</div></div>`));
-  out.keep = { island: document.getElementById("island").textContent, persisted: !!document.getElementById("toaster") };
+  out.keep = { island: document.getElementById("island").textContent, persisted: !!document.getElementById("toaster"), asked: !!document.getElementById("stored") };
   return out;
 }
 
@@ -291,7 +292,7 @@ for (const [name, engine, options] of [
     assert.deepEqual(out.moved, { same: true, parent: "p2", focused: true, value: "moved value", start: 1, end: 3 });
     assert.deepEqual(out.values, { input: "user", textarea: "user", checked: true, select: "2", untouched: "b" });
     assert.deepEqual(out.open, { details: true, dialog: true, same: true, modal: true });
-    assert.deepEqual(out.keep, { island: "mine", persisted: true });
+    assert.deepEqual(out.keep, { island: "mine", persisted: true, asked: false });
   });
 }
 

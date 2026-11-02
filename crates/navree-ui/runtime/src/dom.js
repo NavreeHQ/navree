@@ -59,6 +59,9 @@ export const sameOrigin = (url) => {
   }
 };
 
+/** What the runtime made and keeps on every page. An attribute would let stored markup ask for the same. @type {WeakSet<Node>} */
+export const persistent = new WeakSet();
+
 /** Whether `url` is one of the toolkit's own modules. @param {string} url */
 export const ownModule = (url) => {
   try {

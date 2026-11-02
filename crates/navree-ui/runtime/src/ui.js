@@ -1,5 +1,5 @@
 // What ops and commands share: opening things, toasts, the announcer.
-import { body, make } from "./dom.js";
+import { body, make, persistent } from "./dom.js";
 
 /** @param {Element} el */
 export function openTarget(el) {
@@ -27,7 +27,7 @@ export function announce(text) {
     live = make("div");
     live.setAttribute("data-slot", "announcer");
     live.setAttribute("aria-live", "polite");
-    live.setAttribute("data-ui-persist", "");
+    persistent.add(live);
     body().append(live);
   }
   live.textContent = text;
@@ -41,7 +41,7 @@ export function toast(tone, text) {
   if (!toaster?.isConnected) {
     toaster = make("div");
     toaster.setAttribute("data-slot", "toaster");
-    toaster.setAttribute("data-ui-persist", "");
+    persistent.add(toaster);
     toaster.setAttribute("popover", "manual");
     body().append(toaster);
   }

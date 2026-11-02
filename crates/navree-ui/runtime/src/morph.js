@@ -4,7 +4,7 @@
 // semantics do the value work: a changed `value` attribute reaches an input
 // only if the user has not typed in it.
 
-import { active as activeElement, clean, make, on } from "./dom.js";
+import { active as activeElement, clean, make, on, persistent } from "./dom.js";
 
 /** The element being composed in, if any. @type {Element | null} */
 let composing = null;
@@ -12,6 +12,7 @@ on(document, "compositionstart", (e) => { composing = /** @type {Element} */ (e.
 on(document, "compositionend", () => { composing = null; }, true);
 
 const OPEN_STATE = new Set(["DIALOG", "DETAILS"]);
+const FIELD = new Set(["INPUT", "SELECT", "TEXTAREA"]);
 
 /** A navigation is under way: what was typed belongs to the page being left. */
 let resetting = false;
@@ -71,11 +72,24 @@ function moveTo(parent, node, before) {
   insert(parent, node, before);
 }
 
+/**
+ * Whether a control can become another and keep what was typed: the same field of the
+ * same form. An id alone can't do it, or markup could take over the user's input.
+ * @param {Node} a @param {Node} b
+ */
+function sameField(a, b) {
+  if (!FIELD.has(nameOf(a))) return true;
+  const x = /** @type {Element} */ (a), y = /** @type {Element} */ (b);
+  if (attr(x, "name") !== attr(y, "name") || attr(x, "type") !== attr(y, "type")) return false;
+  const one = EP.closest.call(x, "form"), other = EP.closest.call(y, "form");
+  return (one && attr(one, "action")) === (other && attr(other, "action"));
+}
+
 /** Whether two nodes can become one another without replacing. @param {Node} a @param {Node} b */
 function same(a, b) {
   if (typeOf(a) !== typeOf(b) || nameOf(a) !== nameOf(b)) return false;
   if (typeOf(a) !== 1) return true;
-  if (nameOf(a) === "INPUT" && attr(/** @type {Element} */ (a), "type") !== attr(/** @type {Element} */ (b), "type")) return false;
+  if (!sameField(a, b)) return false;
   const key = keyOf(a), other = keyOf(b);
   return (!key && !other) || key === other;
 }
@@ -115,7 +129,7 @@ function morphNode(a, b, ids) {
  * @param {Node} node
  */
 function removeOld(node) {
-  if (typeOf(node) === 1 && has(/** @type {Element} */ (node), "data-ui-persist")) return;
+  if (persistent.has(node)) return;
   const parent = parentOf(node);
   if (parent) NP.removeChild.call(parent, node);
 }
@@ -153,7 +167,7 @@ function morphChildren(a, b, ids) {
     if (key) {
       wanted.delete(key);
       const old = ids.get(key);
-      if (old && nameOf(old) === nameOf(next) && !holds(old, a)) {
+      if (old && nameOf(old) === nameOf(next) && !holds(old, a) && sameField(old, next)) {
         ids.delete(key);
         if (old !== cur) moveTo(a, old, cur);
         morphElement(old, /** @type {Element} */ (next), ids);

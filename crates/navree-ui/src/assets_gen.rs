@@ -3,16 +3,16 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "e649e24ba981";
+pub const BUILD: &str = "b5469d05bf75";
 
 /// The URL of `core.js`.
-pub const CORE_URL: &str = "/_navree/ui/core-2375d0845bc7.js";
+pub const CORE_URL: &str = "/_navree/ui/core-d6cf1432e5cb.js";
 
 /// The URL of `sidebar.js`.
-pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-26cf815aa60d.js";
+pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-be39798e378b.js";
 
 /// The URL of `overlay.js`.
-pub const OVERLAY_URL: &str = "/_navree/ui/overlay-b8426dc33830.js";
+pub const OVERLAY_URL: &str = "/_navree/ui/overlay-26f00c88e5c7.js";
 
 /// The URL of `navree-ui.css`.
 pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-6461227811d0.css";
@@ -34,7 +34,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "core",
         ext: "js",
-        hash: "2375d0845bc7",
+        hash: "d6cf1432e5cb",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/core.js"),
         gzip: Some(include_bytes!("../dist/core.js.gz")),
@@ -43,7 +43,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "sidebar",
         ext: "js",
-        hash: "26cf815aa60d",
+        hash: "be39798e378b",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/sidebar.js"),
         gzip: Some(include_bytes!("../dist/sidebar.js.gz")),
@@ -52,7 +52,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "overlay",
         ext: "js",
-        hash: "b8426dc33830",
+        hash: "26f00c88e5c7",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/overlay.js"),
         gzip: Some(include_bytes!("../dist/overlay.js.gz")),

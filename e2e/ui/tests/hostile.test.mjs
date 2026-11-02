@@ -695,6 +695,58 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       await context.close();
     });
 
+    test(`hostile markup with a field's id doesn't adopt what was typed (${engine})`, async () => {
+      for (const evil of [`<input id="secret" name="stolen">`, `<input id="secret" name="secret">`]) {
+        const name = key("steal");
+        route(`/${name}`, doc(`<div id="t"><form id="good" action="/good"><input id="secret" name="secret" value="server"></form></div><form id="f" data-ui-form method="post" action="/${name}-post"><button id="go">go</button></form>`));
+        f.routes.set(`/${name}-post`, (req, res) => f.ops(res, { ops: [{ op: "morph", target: "t", html: `<div id="t"><form id="evilform" action="/evil">${evil}</form></div>` }] }));
+        const { context, page } = await fresh(`/${name}`);
+        await page.fill("#secret", "typed secret");
+        await page.click("#go");
+        await sleep(200);
+        assert.equal(await page.inputValue("#secret"), "", evil);
+        await context.close();
+      }
+    });
+
+    test(`a field that keeps its name and form keeps what was typed (${engine})`, async () => {
+      const name = key("samefield");
+      route(`/${name}`, doc(`<div id="t"><form id="good" action="/good"><input id="v" name="v" value="server"></form></div><form id="f" data-ui-form method="post" action="/${name}-post"><button id="go">go</button></form>`));
+      f.routes.set(`/${name}-post`, (req, res) => f.ops(res, { ops: [{ op: "morph", target: "t", html: `<div id="t"><form id="good" action="/good"><input id="v" name="v" value="server 2"></form></div>` }] }));
+      const { context, page } = await fresh(`/${name}`);
+      await page.fill("#v", "typed");
+      await page.click("#go");
+      await sleep(200);
+      assert.equal(await page.inputValue("#v"), "typed");
+      await context.close();
+    });
+
+    test(`stored markup can't make itself stay on every page (${engine})`, async () => {
+      const name = key("persist");
+      route(`/${name}`, doc(`<div id="stored" data-ui-persist>content of user alice</div><a id="n" href="/${name}-next">n</a>`));
+      route(`/${name}-next`, doc(`<h1 id="h">other page</h1>`));
+      const { context, page } = await fresh(`/${name}`);
+      await page.click("#n");
+      await page.waitForSelector("#h");
+      assert.equal(await page.locator("#stored").count(), 0);
+      await context.close();
+    });
+
+    test(`the runtime's own toaster and announcer stay through a navigation (${engine})`, async () => {
+      const name = key("toaster");
+      route(`/${name}`, doc(`<form id="f" data-ui-form method="post" action="/${name}-post"><button id="go">go</button></form><a id="n" href="/${name}-next">n</a>`));
+      route(`/${name}-next`, doc(`<h1 id="h">other page</h1>`));
+      f.routes.set(`/${name}-post`, (req, res) => f.ops(res, { ops: [{ op: "toast", tone: "info", text: "still here" }] }));
+      const { context, page } = await fresh(`/${name}`);
+      await page.click("#go");
+      await sleep(150);
+      await page.click("#n");
+      await page.waitForSelector("#h");
+      assert.deepEqual(await toasts(page), ["still here"]);
+      assert.equal(await page.locator("[data-slot=announcer]").count(), 1);
+      await context.close();
+    });
+
     test(`named elements can't switch the runtime off (${engine})`, async () => {
       for (const name of ["cookie", "getElementById", "querySelector", "querySelectorAll", "body", "head", "documentElement", "activeElement", "title", "createElement", "addEventListener"]) {
         const path = key("document");
