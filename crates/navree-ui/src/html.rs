@@ -177,8 +177,8 @@ impl LocalHref {
     /// Checks `url`.
     pub fn parse(url: &str) -> Result<Self, HrefError> {
         let href = Href::parse(url)?;
-        let first = url.bytes().next();
-        let second = url.bytes().nth(1);
+        let first = url.as_bytes().first().copied();
+        let second = url.as_bytes().get(1).copied();
         let slash = |byte: Option<u8>| matches!(byte, Some(b'/' | b'\\'));
         // A browser reads a backslash as a slash in a URL of this kind.
         let has_host = first == Some(b'\\') || (slash(first) && slash(second));

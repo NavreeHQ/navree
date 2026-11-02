@@ -169,7 +169,8 @@ impl SessionManager {
                                 request = checked;
                                 Ok(())
                             }
-                            Err((returned, failure)) => {
+                            Err(refused) => {
+                                let (returned, failure) = *refused;
                                 reject(&returned, failure).await;
                                 return AppError::csrf_mismatch().into_response();
                             }
@@ -375,11 +376,11 @@ fn is_urlencoded(headers: &HeaderMap) -> bool {
 async fn take_form_token(
     request: Request,
     session: &Session,
-) -> Result<Request, (Request, CsrfFailure)> {
+) -> Result<Request, Box<(Request, CsrfFailure)>> {
     let limit = navree_http::body::BodyLimit::of(request.extensions()).min(FORM_TOKEN_BODY_MAX);
     let (mut parts, body) = request.into_parts();
     let fail = |parts: http::request::Parts, failure| {
-        Err((Request::from_parts(parts, Body::empty()), failure))
+        Err(Box::new((Request::from_parts(parts, Body::empty()), failure)))
     };
     let Ok(bytes) = navree_http::body::read_body(body, limit).await else {
         return fail(parts, CsrfFailure::Missing);

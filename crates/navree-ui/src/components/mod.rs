@@ -68,21 +68,18 @@ macro_rules! root_methods {
     ($($type:ident),+ $(,)?) => {
         $(impl $type {
             /// Sets the root element's `id`.
-            #[must_use]
             pub fn id(mut self, id: impl Into<$crate::node::AttrValue>) -> Self {
                 self.el = self.el.id(id);
                 self
             }
 
             /// Sets an attribute on the root element.
-            #[must_use]
             pub fn attr(mut self, name: &'static str, value: impl Into<$crate::node::AttrValue>) -> Self {
                 self.el = self.el.attr(name, value);
                 self
             }
 
             /// Takes `columns` columns of a [`Grid`](crate::Grid).
-            #[must_use]
             pub fn span(mut self, columns: u8) -> Self {
                 self.el = self.el.attr("data-span", $crate::components::layout::span_name(columns));
                 self

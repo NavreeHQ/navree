@@ -46,6 +46,7 @@ struct NewDeal {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Options, PartialEq, Eq)]
+#[allow(clippy::upper_case_acronyms, reason = "a name in capitals is what the test is about")]
 enum Currency {
     USD,
     EUR,

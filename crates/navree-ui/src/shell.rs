@@ -30,11 +30,6 @@ const CSRF_COOKIE: &str = "XSRF-TOKEN";
 /// The cookie the runtime sets when the sidebar collapses or expands.
 pub const SIDEBAR_COOKIE: &str = "navree_ui_sidebar";
 
-/// A cookie that shows `text` on the next page, when JavaScript is off.
-pub(crate) fn flash_cookie(text: &str) -> Result<HeaderValue, InvalidHeaderValue> {
-    flash_cookie_toned(ToastTone::Success, text)
-}
-
 /// The tone a flash holds before its text, success being the plain case. The text
 /// is percent-encoded, so its first `:` is always this one.
 const fn tone_prefix(tone: ToastTone) -> &'static str {
@@ -121,6 +116,7 @@ impl NavItem {
 
     /// Adds an item below this one.
     #[must_use]
+    #[allow(clippy::should_implement_trait, reason = "a sub-item, not subtraction")]
     pub fn sub(mut self, item: NavItem) -> Self {
         self.sub.push(item);
         self
@@ -550,7 +546,7 @@ mod tests {
 
     #[test]
     fn flash_cookies_round_trip() {
-        let cookie = flash_cookie("Deal \"Acme\" created; ok").unwrap();
+        let cookie = flash_cookie_toned(ToastTone::Success, "Deal \"Acme\" created; ok").unwrap();
         let text = cookie.to_str().unwrap();
         assert!(!text.split(';').next().unwrap()[FLASH_COOKIE.len() + 1..].contains([' ', '"']), "{text}");
         let value = text.split(';').next().unwrap().split_once('=').unwrap().1;

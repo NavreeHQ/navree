@@ -50,6 +50,14 @@ criteria = "safe-to-deploy"
 version = "1.1.5"
 criteria = "safe-to-deploy"
 
+[[exemptions.alloc-no-stdlib]]
+version = "3.0.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.alloc-stdlib]]
+version = "0.3.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.amq-protocol]]
 version = "10.6.3"
 criteria = "safe-to-deploy"
@@ -246,6 +254,14 @@ criteria = "safe-to-deploy"
 version = "1.8.1"
 criteria = "safe-to-deploy"
 
+[[exemptions.brotli]]
+version = "9.1.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.brotli-decompressor]]
+version = "6.2.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.bson]]
 version = "3.1.0"
 criteria = "safe-to-deploy"
@@ -264,22 +280,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.byteorder-lite]]
 version = "0.1.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.alloc-no-stdlib]]
-version = "3.0.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.alloc-stdlib]]
-version = "0.3.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.brotli]]
-version = "9.1.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.brotli-decompressor]]
-version = "6.2.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.bytes]]
