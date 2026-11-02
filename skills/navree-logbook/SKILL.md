@@ -1,6 +1,6 @@
 ---
 name: navree-logbook
-description: "Debug a Navree app locally with navree-logbook: `LogbookModule` and the `logbook` config section, the timeline UI at `/_logbook`, watchers (requests with headers and bodies, queries, jobs, mail, events, cache, logs, exceptions, outgoing HTTP, notifications, data changes, scheduled tasks), the filter language (`user:`, `tag:`, `status:4xx`, `route:`, `type:`, `slow`, `failed`, `duration>200`, `batch:`, `trace:`), `Logbook::tag` and `Logbook::dump`, duplicate-query (N+1) detection, request replay as the same user, `logbook:clear`, and the test API (`last_request().queries()`, `duplicate_queries()`). Use when you need to see what a request, job or scheduled task did, find an N+1 query, assert the number of queries in a test, replay a failing request, or when `/_logbook` answers 404 or records nothing."
+description: "Debug a Navree app locally with navree-logbook: `LogbookModule` and the `logbook` config section, the UI at `/_logbook` (entry types in a sidebar, the list and the open entry in two panes, an address for each entry), watchers (requests with headers and bodies, queries, jobs, mail, events, cache, logs, exceptions, outgoing HTTP, notifications, data changes, scheduled tasks), the filter language (`user:`, `tag:`, `status:4xx`, `route:`, `type:`, `slow`, `failed`, `duration>200`, `batch:`, `trace:`), `Logbook::tag` and `Logbook::dump`, duplicate-query (N+1) detection, request replay as the same user, `logbook:clear`, and the test API (`last_request().queries()`, `duplicate_queries()`). Use when you need to see what a request, job or scheduled task did, find an N+1 query, assert the number of queries in a test, replay a failing request, or when `/_logbook` answers 404 or records nothing."
 ---
 
 # Logbook
@@ -38,17 +38,20 @@ Navree::app()
 
 ## Steps: find out what a request did
 
-1. Filter the list: `route:/api/v1/deals/{id} status:5xx`, `user:<id prefix>`,
+1. Pick a type in the sidebar (each shows its count) or filter the list in the
+   top bar: `route:/api/v1/deals/{id} status:5xx`, `user:<id prefix>`,
    `tag:deal:<id prefix>` (every request or job that changed that record),
    `type:query slow`, `duration>200`, `batch:<request id>`,
    `trace:<trace id>` (a request and the jobs it queued).
-2. Open the request: one card each for the request and response (headers, bodies),
+2. Open a row: the entry opens beside the list (on a phone, instead of it) at
+   `/_logbook/entries/<id>`, which keeps the list's type and search text. One
+   card each for the request and response (headers, bodies),
    queries (repeated statements first), events, jobs in its trace, mail,
    cache calls, logs, exceptions, outgoing calls, data changes, dumps and a
    timeline waterfall.
-3. Fix the code, then **Replay** it from the Replay card (or
-   `POST /_logbook/api/requests/{id}/replay`). Unsafe methods need a
-   confirmation (`confirm: true`, otherwise 409).
+3. Fix the code, then **Replay** it from the Replay card (the Replay button
+   above the entry jumps there; or `POST /_logbook/api/requests/{id}/replay`).
+   Unsafe methods need a confirmation (`confirm: true`, otherwise 409).
 
 ## Code templates
 
@@ -117,6 +120,7 @@ and `curl(id)`. Outside an app, `Logbook::in_memory(options)`.
 | `logbook.capture.{request_body,response_body,max_body_kb}` | `true`, `true`, `64` | |
 | `logbook.replay` | `true` | |
 | `logbook.ignore.routes` | `["/health/*", "/metrics"]` | comma-separated from the environment |
+| `logbook.ignore.framework` | `true` | leaves out the toolkit's files and, outside any request, job or task, the outbox poll with its `BEGIN`/`COMMIT`/actor statements and statements on `micro_*`/`navree_*` tables; `false` shows them |
 | `logbook.watchers.<name>` | `true` | `requests`, `queries`, `jobs`, `mail`, `events`, `cache`, `logs`, `exceptions`, `http_client`, `notifications`, `models`, `schedule` |
 
 Environment: `APP_LOGBOOK__STORE=memory`, `APP_LOGBOOK__WATCHERS__CACHE=false`.
@@ -128,6 +132,10 @@ Environment: `APP_LOGBOOK__STORE=memory`, `APP_LOGBOOK__WATCHERS__CACHE=false`.
 - `GET /_logbook/api/entries?q=type:request` returns JSON for scripts.
 
 ## Gotchas
+
+- **An idle app shows no entries**: that is `logbook.ignore.framework`. The outbox
+  poll (four queries a second with `micro` and a database) and the toolkit's
+  files are left out; `logbook.ignore.framework = false` shows them.
 
 - **404 on `/_logbook`**: Logbook is off (release build, `TestApp` without
   `.config("logbook.enabled", true)`, or `logbook.enabled = false`), or the

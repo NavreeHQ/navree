@@ -5,7 +5,7 @@ description: "A local debugging timeline of every request, query, job, mail, eve
 
 ## Introduction
 
-<Badge feature="logbook" /> Logbook shows you what your app did. While you develop, it records every request with everything that happened during it: the queries it ran, the events it emitted, the mail it sent, the cache calls it made, the data it changed and the log lines it wrote. It shows them as one timeline at `/_logbook`, served by your app. Filter it by tag or user, open a request to see its queries in order, and replay it after you change the code.
+<Badge feature="logbook" /> Logbook shows you what your app did. While you develop, it records every request with everything that happened during it: the queries it ran, the events it emitted, the mail it sent, the cache calls it made, the data it changed and the log lines it wrote. It shows them as one timeline at `/_logbook`, served by your app. Filter it by type, tag or user, open a request beside the list to see its queries in order, and replay it after you change the code.
 
 Logbook is for development. It records full request and response bodies, which is what you want on your machine and never on a server. In a release build it is off: it records nothing and serves nothing, unless you [turn it on deliberately](#release-builds).
 
@@ -41,13 +41,15 @@ The first line reads `recording to memory` when Logbook keeps its entries in mem
 
 ## The timeline
 
-The page has three parts.
+The page is a shell with the entry types down the side, the list in a pane, and the open entry in the pane beside it.
 
-- **The list.** Entries, newest first, arriving live. Requests, jobs and scheduled tasks are **batches**: one line each, with the method and path or the job type, the status, the duration, the user, and small counters for the queries, events, mail, log lines, exceptions and outgoing calls inside. Failed batches are marked in amber, and so are batches with slow or [duplicate queries](#duplicate-queries).
-- **The filters.** A row of entry types (requests, queries, jobs, mail, events, cache, logs, exceptions, outgoing HTTP, notifications, data changes, scheduled tasks, dumps) under a search box that takes [filter terms](#filtering).
-- **The detail.** A selected request shows its summary first: the method, path, route template, status, duration, request id, client address, user, workspace and trace. Tabs below hold the request (headers, query string, body), the response (headers, body), the queries, the events, the jobs, the mail, the cache calls, the log lines, the exceptions, the outgoing calls, the data changes, the dumps, the **timeline** (a waterfall of everything the request did, in order, drawn against the request's duration) and [Replay](#replaying-requests).
+- **The entry types.** The sidebar lists every type (requests, queries, jobs, mail, events, cache, logs, exceptions, outgoing HTTP, notifications, data changes, scheduled tasks, dumps), each with how many entries of it there are, and **All** for the default list. A type keeps the text of the search box. The sidebar collapses to its icons.
+- **The list.** Entries, newest first, arriving live. Requests, jobs and scheduled tasks are **batches**: one row each, with the method and path or the job type, the status or outcome, the duration, and small counters for the queries, events, jobs, mail, cache calls, log lines, exceptions and outgoing calls inside. Failed batches are marked in amber, and so are batches with slow or [duplicate queries](#duplicate-queries). The search box in the top bar takes [filter terms](#filtering).
+- **The entry.** Opening a row shows its summary first: the method, path, route template, status, duration, request id, client address, user, workspace and trace. Below, one card each for the request (headers, query string, body), the response, the queries, the events, the jobs, the mail, the cache calls, the log lines, the exceptions, the outgoing calls, the data changes, the dumps, the **timeline** (a waterfall of everything the request did, in order, drawn against the request's duration) and [Replay](#replaying-requests). A row of links above the cards jumps to each, with how many it holds.
 
-A queued job continues the trace of the request that dispatched it. A job's detail links back to that request (**Dispatched by**), and a request's Jobs tab lists the job attempts in its trace, so you can follow work from the click to the worker and back.
+On a wide screen the entry opens beside the list and the list stays where it is. On a phone one of them has the page at a time: the list, and an entry when you open one, with the breadcrumb and the back button to return. Every entry has an address of its own, `/_logbook/entries/<id>`, which carries the type and the search text of the list it was opened from, so a link, a new tab and the back button all show what you saw. The page is dark whatever the system asks for, like the app's other tools.
+
+A queued job continues the trace of the request that dispatched it. A job's detail links back to that request (**Dispatched by**), and a request's Jobs card lists the job attempts in its trace, so you can follow work from the click to the worker and back.
 
 ## What Logbook records
 
@@ -73,6 +75,8 @@ A job's error is part of its entry; the `exceptions` watcher records errors of r
 Log lines reach Logbook after the [log filter](/docs/basics/logging/): Logbook keeps the lines that pass `log.level` and are at `logbook.log_level` or above. To see `debug` lines in Logbook, set `log.level` (or the target in `log.levels`) to `debug` as well.
 
 Logbook leaves its own routes out, and the paths in `logbook.ignore.routes` (`/health/*` and `/metrics` by default): nothing those requests do is recorded.
+
+It also leaves out what the framework does by itself, which nobody is using the app to cause: the requests for the toolkit's own files (`/_navree/ui/*`) and, outside any request, job or scheduled task, the poll of the transactional outbox with the `BEGIN`, `COMMIT` and actor statements around it, and any other statement on a table of the framework's own (`micro_outbox`, `micro_inbox`, `navree_migrations`). Without this an idle app records four queries a second. Set `logbook.ignore.framework = false` to see all of it. A statement your own code runs outside a request, such as a background task's, is recorded.
 
 ## Filtering
 
@@ -141,11 +145,11 @@ SELECT ... FROM companies WHERE id = ?        repeated          2.3 ms
 SELECT COUNT(*) FROM deals                                      1.2 ms
 ```
 
-The Queries tab lists the repeated statements first, with how many times each ran and their total time, then every statement in order. Fix the loop with one `IN` query or a join. Queries slower than `logbook.slow_query_ms` (100 ms) are marked too, and so is the batch that ran them.
+The Queries card lists the repeated statements first, with how many times each ran and their total time, then every statement in order. Fix the loop with one `IN` query or a join. Queries slower than `logbook.slow_query_ms` (100 ms) are marked too, and so is the batch that ran them.
 
 ## Replaying requests
 
-A request's detail has a **Replay** tab. It opens the recorded request in an editor: the method, the path and query string, the headers and the body, all prefilled and all editable. Send it and Logbook runs it through your app's router again, in-process, and records the result as a new batch tagged `replay` whose request links to the original. Fix the bug, wait for `navree dev` to restart, and replay the request that failed without going back to your front end.
+A request's entry has a **Replay** card, which the **Replay** button above it jumps to. It opens the recorded request in an editor: the method, the path and query string, the headers and the body, all prefilled and all editable. Send it and Logbook runs it through your app's router again, in-process, and records the result as a new batch tagged `replay` whose request links to the original. Fix the bug, wait for `navree dev` to restart, and replay the request that failed without going back to your front end.
 
 - **As the same user.** When the app includes `AuthModule`, Replay sends the request as the user who made it: Logbook signs a fresh access token for them, valid for five minutes. Recorded `Authorization` headers are never stored, so a replay never reuses one. Untick the **As …** box, which names the user's id, to send it as a guest.
 - **Unsafe methods ask first.** A `POST`, `PUT`, `PATCH` or `DELETE` replays only after you confirm: it changes data again, and creates a second deal if the first request created one.
@@ -270,6 +274,7 @@ Every key of the `logbook` section is optional. From the environment: `APP_LOGBO
 | `logbook.capture.max_body_kb` | `64` | Bodies are cut after this size. |
 | `logbook.replay` | `true` | Allow replaying requests. |
 | `logbook.ignore.routes` | `["/health/*", "/metrics"]` | Paths never recorded (`*` matches anything). |
+| `logbook.ignore.framework` | `true` | Leave out the framework's own polling and the toolkit's files, as [above](#what-logbook-records). |
 | `logbook.watchers.<name>` | `true` | Each [watcher](#what-logbook-records): `requests`, `queries`, `jobs`, `mail`, `events`, `cache`, `logs`, `exceptions`, `http_client`, `notifications`, `models`, `schedule`. |
 
 A bad value fails the boot with an error naming the key.
