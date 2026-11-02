@@ -958,9 +958,9 @@ fn scanned(bytes: usize) -> Pdf {
 #[test]
 fn a_merge_of_scanned_documents_is_held_to_what_it_adds_not_to_the_files_bytes() {
     // Each image is the file's own: 13 and more of them merge, past the 256 MiB
-    // a document may hold, because no copy of them is made.
+    // a document may hold, because no copy of them is made until it is written.
     let pdf = scanned(20 << 20);
-    for copies in [13, 16] {
+    for copies in [13, 16, 40] {
         let merged = Pdf::merge(std::iter::repeat_n(&pdf, copies)).unwrap();
         assert!(
             merged.len() >= copies * (20 << 20),
@@ -1003,4 +1003,83 @@ fn a_merge_past_the_limit_names_the_limit_and_not_what_was_left_of_it() {
     assert!(matches!(error, DocumentsError::TooLarge(_)), "{text}");
     assert!(!text.contains("of 0 bytes"), "{text}");
     assert!(text.contains("256 MiB"), "{text}");
+}
+
+/// Copies of one input: what a client's list of file ids can ask for, with the
+/// same id many times. Each child process runs under a bounded address space, so
+/// that running out is the process's, and shows as an abort or as the error.
+mod repeated_inputs {
+    use super::*;
+
+    const CASE: &str = "NAVREE_PDF_REPEATED_CASE";
+
+    /// What the parent runs under a limit.
+    fn run(case: &str) {
+        let pdf = scanned(1 << 20);
+        let copies = match case {
+            // Far past what repeats may write: refused before any of it is made.
+            "past_the_limit" => 6_000,
+            // Within what repeats may write, and past the address space.
+            "past_the_memory" => 450,
+            other => panic!("no case {other}"),
+        };
+        let error = Pdf::merge(std::iter::repeat_n(&pdf, copies)).unwrap_err();
+        assert!(matches!(error, DocumentsError::TooLarge(_)), "{error}");
+        if case == "past_the_limit" {
+            assert!(error.to_string().contains("copies"), "{error}");
+        }
+    }
+
+    #[test]
+    fn child() {
+        if let Ok(case) = std::env::var(CASE) {
+            run(&case);
+        }
+    }
+
+    #[cfg(unix)]
+    fn under_limit(case: &str, kib: u32) {
+        let exe = std::env::current_exe().unwrap();
+        let output = std::process::Command::new("sh")
+            .args([
+                "-c",
+                "ulimit -v \"$1\"; shift; exec \"$@\"",
+                "sh",
+                &kib.to_string(),
+            ])
+            .arg(exe)
+            .args([
+                "--exact",
+                "pdf_hostile::repeated_inputs::child",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(CASE, case)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{case}: {:?}\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn thousands_of_copies_are_refused_within_a_small_address_space() {
+        under_limit("past_the_limit", 900 * 1024);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_output_that_doesnt_fit_the_address_space_is_refused_and_doesnt_abort() {
+        under_limit("past_the_memory", 384 * 1024);
+    }
+
+    #[cfg(not(unix))]
+    #[test]
+    fn thousands_of_copies_are_refused() {
+        run("past_the_limit");
+    }
 }

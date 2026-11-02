@@ -765,7 +765,21 @@ impl Objects {
             }
             Ok(())
         };
+        // What it will take is asked for at once, so that an output there is no
+        // memory for is an error, and growing it doesn't hold two copies of it.
+        let room = |out: &mut Vec<u8>, bytes: usize| {
+            out.try_reserve(bytes).map_err(|_| {
+                PdfError::TooLarge(format!(
+                    "there is no memory for an edit of a PDF that writes {}",
+                    size(out.len().saturating_add(bytes))
+                ))
+            })
+        };
+        let expected = self.objects.values().fold(0usize, |sum, object| {
+            sum.saturating_add(memory_of(object))
+        });
         let mut out = Vec::new();
+        room(&mut out, expected.min(limit))?;
         let _ = write!(out, "%PDF-{}\n%\u{e2}\u{e3}\u{cf}\u{d3}\n", self.version);
         // Where each object is: at an offset (with its generation), or in
         // an object stream (with its index there).
@@ -780,6 +794,7 @@ impl Objects {
                 if let Object::Stream(stream) = object {
                     over(out.len().saturating_add(stream.content.len()))?;
                 }
+                room(&mut out, memory_of(object))?;
                 entries.insert(id.0, (1, out.len() as u64, id.1));
                 write_indirect(&mut out, *id, object);
                 over(out.len())?;
@@ -861,6 +876,7 @@ impl Objects {
         }
         let _ = write!(out, "startxref\n{start}\n%%EOF\n");
         over(out.len())?;
+        out.shrink_to_fit();
         Ok(out)
     }
 }

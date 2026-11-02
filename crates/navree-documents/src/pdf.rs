@@ -138,6 +138,12 @@ impl Pdf {
     /// stream, which are the inputs' own: so scanned documents merge whatever
     /// their images come to, many files of ordinary size merge, and a few that
     /// each hold objects near the limit do not.
+    ///
+    /// The output is the size of the inputs, and copies of one input (the same
+    /// [`Pdf`] many times, as a list of file ids a client sent can ask for) are
+    /// the caller's memory only once: what the copies after the first write is
+    /// held to 1 GiB. An app that merges a list a client controls bounds the list
+    /// too. An output there is no memory for is [`DocumentsError::TooLarge`].
     pub fn merge<'a>(pdfs: impl IntoIterator<Item = &'a Pdf>) -> Result<Pdf, DocumentsError> {
         merge_within(pdfs, ReadLimits::default())
     }
@@ -383,9 +389,23 @@ fn merge_within<'a>(
     let mut input_bytes = 0usize;
     // What the inputs after this one, and the pages list, may still take.
     let mut left = limits;
+    // The caller holds a file once, however many times it is listed: what the
+    // copies after the first write is all new memory, and is held to the work
+    // one document may take, since none of it is counted as it is read.
+    let mut seen = HashSet::new();
+    let mut copied = 0usize;
     for pdf in pdfs {
         if left.memory == 0 || left.work == 0 {
             return Err(limits_used_up(limits));
+        }
+        if !seen.insert((pdf.0.as_ptr() as usize, pdf.0.len())) {
+            copied = copied.saturating_add(pdf.0.len());
+            if copied > limits.work {
+                return Err(DocumentsError::TooLarge(format!(
+                    "the copies of a PDF listed more than once would write more than {} MiB",
+                    limits.work >> 20
+                )));
+            }
         }
         input_bytes = input_bytes.saturating_add(pdf.0.len());
         let shared = |error| shared_error(error, limits);
