@@ -54,7 +54,7 @@ pub use components::*;
 pub use form::{FormView, Money, Submit};
 pub use navree_ui_macros::{FilterBar, Form, Options, TableRow};
 pub use navree_validation::Validate;
-pub use html::{Href, HrefError, SafeHtml};
+pub use html::{Href, HrefError, LocalHref, SafeHtml};
 pub use module::{UiModule, UiNeed, UiOnDemand};
 pub use node::{Attr, AttrValue, Element, IntoNodes, Node, Uses, el};
 pub use op::{Envelope, Op, Reply, ToastTone, UrlMode, is_prefetch};

@@ -1,6 +1,6 @@
 // Link boosting and regions: fetch a page, morph what changed, keep the shell
 // alive. A failed fetch falls back to a real navigation.
-import { body, byId, cookies, every, head, hidden, on, one, root, setTitle, titleOf } from "./dom.js";
+import { body, byId, cookies, every, head, hidden, on, one, root, sameOrigin, setTitle, titleOf } from "./dom.js";
 import { morph } from "./morph.js";
 import { announce } from "./ui.js";
 
@@ -153,6 +153,8 @@ function tablePending(table, on) {
 
 /** Goes to `url` like a boosted link. @param {string} url @param {{region?: string, push?: boolean}} [how] */
 export async function go(url, how = {}) {
+  // Leaving the site is said by name: `leave`.
+  if (!sameOrigin(url)) return;
   const mine = ++generation;
   const html = root();
   html.setAttribute("data-ui-loading", "");
@@ -183,8 +185,15 @@ export async function go(url, how = {}) {
   }
 }
 
+/** Goes to another site, for real: only to a web address, and with nothing of the runtime's. @param {string} href */
+export function leave(href) {
+  const url = new URL(href, location.href);
+  if (url.protocol === "https:" || url.protocol === "http:") location.assign(url.href);
+}
+
 /** Changes the address bar. @param {string} href @param {string} mode */
 export function setUrl(href, mode) {
+  if (!sameOrigin(href)) return;
   if (mode === "replace") history.replaceState(null, "", href);
   else history.pushState(null, "", href);
 }

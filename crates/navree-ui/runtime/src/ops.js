@@ -3,7 +3,7 @@
 import { morph, parse } from "./morph.js";
 import { all, byId, field, make, root } from "./dom.js";
 import { announce, toast, openTarget, closeTarget } from "./ui.js";
-import { forget, go, setUrl, refresh } from "./nav.js";
+import { forget, go, leave, setUrl, refresh } from "./nav.js";
 
 /** @param {HTMLFormElement} form @param {Record<string, string[]>} fields */
 function showErrors(form, fields) {
@@ -63,6 +63,7 @@ function apply(op) {
     case "focus": target?.focus(); break;
     case "url": setUrl(op.href, op.mode); break;
     case "navigate": go(op.href); break;
+    case "navigate_external": leave(op.href); break;
     case "reload": location.reload(); break;
     case "invalidate": refresh(op.target); break;
   }

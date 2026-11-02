@@ -339,6 +339,58 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       await context.close();
     });
 
+    test(`a navigate op doesn't leave the origin unless it says so (${engine})`, async () => {
+      for (const href of [`${f.evilOrigin}/navigated`, `${f.evilOrigin.replace("http:", "")}/proto`, `/\${f.evilOrigin.slice(7)}/slash`, "javascript:document.documentElement.setAttribute('data-pwned','nav')"]) {
+        f.evil.length = 0;
+        const { context, page } = await afterOps({ ops: [{ op: "navigate", href }] });
+        assert.ok(page.url().startsWith(f.origin), `${href}: ${page.url()}`);
+        assert.equal(await attr(page, "data-pwned"), null, href);
+        assert.deepEqual(f.evil, [], href);
+        await context.close();
+      }
+    });
+
+    test(`a navigate op that names itself external leaves, with no token (${engine})`, async () => {
+      f.evil.length = 0;
+      const { context, page } = await afterOps({ ops: [{ op: "navigate_external", href: `${f.evilOrigin}/away` }] });
+      assert.ok(page.url().startsWith(f.evilOrigin), page.url());
+      assert.equal(f.evil[0].headers["x-navree-ui"], undefined);
+      assert.equal(f.evil[0].headers["x-xsrf-token"], undefined);
+      await context.close();
+    });
+
+    test(`an external navigate op still can't run a script (${engine})`, async () => {
+      for (const href of ["javascript:document.documentElement.setAttribute('data-pwned','nav')", "data:text/html,x"]) {
+        const { context, page } = await afterOps({ ops: [{ op: "navigate_external", href }] });
+        assert.ok(page.url().startsWith(f.origin), page.url());
+        assert.equal(await attr(page, "data-pwned"), null, href);
+        await context.close();
+      }
+    });
+
+    test(`a url op can't name another origin (${engine})`, async () => {
+      const { context, page } = await afterOps({ ops: [{ op: "url", href: `${f.evilOrigin}/x`, mode: "push" }] });
+      assert.ok(page.url().startsWith(f.origin), page.url());
+      await context.close();
+    });
+
+    test(`a redirect to another origin is a real navigation with no marks (${engine})`, async () => {
+      f.evil.length = 0;
+      const name = key("redir");
+      route(`/${name}`, doc(`<a id="l" href="/${name}-go">go</a>`), { "set-cookie": "XSRF-TOKEN=tok; Path=/" });
+      f.routes.set(`/${name}-go`, (req, res) => {
+        res.writeHead(302, { location: `${f.evilOrigin}/redirected` });
+        res.end();
+      });
+      const { context, page } = await fresh(`/${name}`);
+      await page.click("#l");
+      await page.waitForURL(`${f.evilOrigin}/**`);
+      const arrived = f.evil.filter((hit) => hit.url === "/redirected").at(-1);
+      assert.equal(arrived.headers["x-navree-ui"], undefined);
+      assert.equal(arrived.headers["x-xsrf-token"], undefined);
+      await context.close();
+    });
+
     test(`named elements can't switch the runtime off (${engine})`, async () => {
       for (const name of ["cookie", "getElementById", "querySelector", "querySelectorAll", "body", "head", "documentElement", "activeElement", "title", "createElement", "addEventListener"]) {
         const path = key("document");

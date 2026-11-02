@@ -201,6 +201,40 @@ async fn a_rejected_page_echoes_a_bounded_amount() {
     assert!(response.text().len() < 512 * 1024, "{}", response.text().len());
 }
 
+const OFF_ORIGIN: [&str; 9] = ["//evil.example/x", "/\\evil.example/x", "\\\\evil.example", "\\/evil.example", "https://evil.example/x", "http:evil.example", "HTTPS://evil.example", "https:\\\\evil.example", "javascript:alert(1)"];
+
+fn stays_here(url: &str) -> bool {
+    let url = url.replace('\\', "/");
+    !url.starts_with("//") && !url.to_ascii_lowercase().starts_with("http") && !url.to_ascii_lowercase().starts_with("javascript")
+}
+
+#[test]
+fn a_redirect_stays_on_this_origin() {
+    for url in OFF_ORIGIN {
+        let response = Reply::redirect(url).into_response();
+        let location = response.headers().get("location").and_then(|value| value.to_str().ok()).unwrap_or_default();
+        assert!(stays_here(location), "{url} -> {location}");
+    }
+    for url in ["/deals/1?x=a:b#c:d", "/", "?page=2", "#top", "deals/1", "../up", "/a//b"] {
+        let response = Reply::redirect(url).into_response();
+        assert_eq!(response.headers()["location"], url);
+    }
+}
+
+#[test]
+fn a_navigate_op_stays_on_this_origin() {
+    for url in OFF_ORIGIN {
+        let Op::Navigate { href, .. } = Op::navigate(url) else { panic!("an op that navigates") };
+        assert!(stays_here(&href), "{url} -> {href}");
+    }
+}
+
+#[test]
+fn a_redirect_with_letters_outside_ascii_keeps_its_location() {
+    let response = Reply::redirect("/caf\u{e9}?q=\u{e9}").into_response();
+    assert_eq!(response.headers()["location"], "/caf%C3%A9?q=%C3%A9");
+}
+
 #[tokio::test]
 async fn a_submit_refuses_another_site() {
     let app = app().await;

@@ -1,6 +1,6 @@
 //! The one escaping path, and the two types that may reach HTML without it:
 //! [`Href`] (a URL whose scheme was checked) and [`SafeHtml`] (markup you
-//! vouch for).
+//! vouch for). [`LocalHref`] is an [`Href`] that stays on this site, for redirects.
 //!
 //! Everything else that reaches the output goes through [`escape_into`]:
 //! `& < > " '` become entities. `/` is not escaped. The renderer always
@@ -74,6 +74,8 @@ pub enum HrefError {
     Control,
     /// A scheme other than `http`, `https`, `mailto` or `tel`.
     Scheme,
+    /// A URL that leaves this site, where only a [`LocalHref`] will do.
+    OffSite,
 }
 
 impl fmt::Display for HrefError {
@@ -81,6 +83,7 @@ impl fmt::Display for HrefError {
         f.write_str(match self {
             Self::Control => "a URL can't hold control characters or start with a space",
             Self::Scheme => "a URL's scheme must be http, https, mailto or tel",
+            Self::OffSite => "this URL must stay on this site: a path, a query or a fragment",
         })
     }
 }
@@ -151,6 +154,69 @@ impl From<&String> for Href {
     }
 }
 
+/// A URL on this site: a path, a query or a fragment. It has no scheme and no
+/// host, and browsers can't read one into it: `//host`, `/\\host` and `\\\\host` all
+/// name another site, so they are refused.
+///
+/// A redirect to a URL from a request (`?next=`) takes this type, so it can't be
+/// an open redirect. `From<&str>` and `From<String>` are for builders: a refused
+/// URL becomes `#`, which stays on the page.
+///
+/// ```
+/// use navree_ui::html::LocalHref;
+///
+/// assert!(LocalHref::parse("/deals/1?tab=notes").is_ok());
+/// assert!(LocalHref::parse("//evil.example").is_err());
+/// assert!(LocalHref::parse("/\\evil.example").is_err());
+/// assert!(LocalHref::parse("https://evil.example").is_err());
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LocalHref(Href);
+
+impl LocalHref {
+    /// Checks `url`.
+    pub fn parse(url: &str) -> Result<Self, HrefError> {
+        let href = Href::parse(url)?;
+        let first = url.bytes().next();
+        let second = url.bytes().nth(1);
+        let slash = |byte: Option<u8>| matches!(byte, Some(b'/' | b'\\'));
+        // A browser reads a backslash as a slash in a URL of this kind.
+        let has_host = first == Some(b'\\') || (slash(first) && slash(second));
+        let has_scheme = url.find([':', '/', '?', '#']).is_some_and(|end| url.as_bytes()[end] == b':');
+        if has_host || has_scheme {
+            return Err(HrefError::OffSite);
+        }
+        Ok(Self(href))
+    }
+
+    /// The URL.
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    pub(crate) fn into_href(self) -> Href {
+        self.0
+    }
+}
+
+impl From<&str> for LocalHref {
+    fn from(url: &str) -> Self {
+        Self::parse(url).unwrap_or_else(|_| Self(Href("#".into())))
+    }
+}
+
+impl From<String> for LocalHref {
+    fn from(url: String) -> Self {
+        Self::from(url.as_str())
+    }
+}
+
+impl From<&String> for LocalHref {
+    fn from(url: &String) -> Self {
+        Self::from(url.as_str())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,6 +273,21 @@ mod tests {
         ] {
             assert!(Href::parse(url).is_ok(), "{url}");
         }
+    }
+
+    #[test]
+    fn a_local_url_has_no_host_and_no_scheme() {
+        for url in ["//a.b", "/\\a.b", "\\\\a.b", "\\/a.b", "\\a.b", "///a.b", "http://a.b", "HTTPS://a.b", "https:\\\\a.b", "http:a.b", "mailto:a@b.c", "tel:+1"] {
+            assert_eq!(LocalHref::parse(url), Err(HrefError::OffSite), "{url}");
+        }
+        for url in ["javascript:x", "data:x", "blob:x"] {
+            assert_eq!(LocalHref::parse(url), Err(HrefError::Scheme), "{url}");
+        }
+        assert_eq!(LocalHref::parse("/a\nb"), Err(HrefError::Control));
+        for url in ["", "/", "/deals/1?x=a:b#c:d", "?page=2", "#top", "deals/1", "../up", "/a//b", "/a\\b"] {
+            assert!(LocalHref::parse(url).is_ok(), "{url}");
+        }
+        assert_eq!(LocalHref::from("//a.b").as_str(), "#");
     }
 
     #[test]

@@ -3,22 +3,19 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "4c157a49eb83";
+pub const BUILD: &str = "e7180181cc0c";
 
 /// The URL of `core.js`.
-pub const CORE_URL: &str = "/_navree/ui/core-93545372160e.js";
+pub const CORE_URL: &str = "/_navree/ui/core-60a76e1b3fed.js";
 
 /// The URL of `sidebar.js`.
-pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-bcc57ac67106.js";
+pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-cf5b7e9d4680.js";
 
 /// The URL of `overlay.js`.
-pub const OVERLAY_URL: &str = "/_navree/ui/overlay-00c184a374d6.js";
-
-/// The URL of `table.js`.
-pub const TABLE_URL: &str = "/_navree/ui/table-2a720f22a7ec.js";
+pub const OVERLAY_URL: &str = "/_navree/ui/overlay-36f7961f9f80.js";
 
 /// The URL of `navree-ui.css`.
-pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-48474afb9388.css";
+pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-6461227811d0.css";
 
 /// The URL of `speculation.json`.
 pub const SPECULATION_URL: &str = "/_navree/ui/speculation-d140a28d7b63.json";
@@ -37,7 +34,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "core",
         ext: "js",
-        hash: "93545372160e",
+        hash: "60a76e1b3fed",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/core.js"),
         gzip: Some(include_bytes!("../dist/core.js.gz")),
@@ -46,7 +43,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "sidebar",
         ext: "js",
-        hash: "bcc57ac67106",
+        hash: "cf5b7e9d4680",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/sidebar.js"),
         gzip: Some(include_bytes!("../dist/sidebar.js.gz")),
@@ -55,25 +52,16 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "overlay",
         ext: "js",
-        hash: "00c184a374d6",
+        hash: "36f7961f9f80",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/overlay.js"),
         gzip: Some(include_bytes!("../dist/overlay.js.gz")),
         brotli: Some(include_bytes!("../dist/overlay.js.br")),
     },
     Asset {
-        name: "table",
-        ext: "js",
-        hash: "2a720f22a7ec",
-        content_type: "text/javascript; charset=utf-8",
-        bytes: include_bytes!("../dist/table.js"),
-        gzip: Some(include_bytes!("../dist/table.js.gz")),
-        brotli: Some(include_bytes!("../dist/table.js.br")),
-    },
-    Asset {
         name: "navree-ui",
         ext: "css",
-        hash: "48474afb9388",
+        hash: "6461227811d0",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/navree-ui.css"),
         gzip: Some(include_bytes!("../dist/navree-ui.css.gz")),

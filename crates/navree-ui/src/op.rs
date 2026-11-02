@@ -16,13 +16,14 @@
 //! never run old JavaScript against new ops.
 
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 
 use http::{HeaderMap, HeaderValue, StatusCode, header};
 use navree_http::response::{IntoResponse, Response};
 use serde::Serialize;
 
 use crate::assets;
-use crate::html::Href;
+use crate::html::{Href, LocalHref};
 use crate::node::Node;
 use crate::render::render;
 use crate::view::View;
@@ -144,8 +145,17 @@ pub enum Op {
         /// How it enters history.
         mode: UrlMode,
     },
-    /// Goes to `href` the way a boosted link does.
+    /// Goes to `href`, on this site, the way a boosted link does. The runtime
+    /// refuses another origin here.
     Navigate {
+        /// The URL.
+        href: String,
+    },
+    /// Leaves for `href` on another site: a real navigation, with no request of the
+    /// runtime's. Only [`Op::navigate_external`] and [`Reply::redirect_external`]
+    /// write this.
+    #[serde(rename = "navigate_external")]
+    NavigateExternal {
         /// The URL.
         href: String,
     },
@@ -184,13 +194,19 @@ impl Op {
         Self::Toast { tone, text: text.into() }
     }
 
-    /// Goes to `href`.
-    pub fn navigate(href: impl Into<Href>) -> Self {
+    /// Goes to `href`, on this site: a URL that would leave it goes nowhere.
+    pub fn navigate(href: impl Into<LocalHref>) -> Self {
         Self::Navigate { href: href.into().as_str().to_owned() }
     }
 
-    /// Changes the address bar.
-    pub fn url(href: impl Into<Href>, mode: UrlMode) -> Self {
+    /// Leaves for `href`, which may be on another site. Never give this a URL from
+    /// a request unchecked: that is an open redirect.
+    pub fn navigate_external(href: impl Into<Href>) -> Self {
+        Self::NavigateExternal { href: href.into().as_str().to_owned() }
+    }
+
+    /// Changes the address bar, on this site.
+    pub fn url(href: impl Into<LocalHref>, mode: UrlMode) -> Self {
         Self::Url { href: href.into().as_str().to_owned(), mode }
     }
 }
@@ -265,9 +281,11 @@ pub struct Reply {
 }
 
 impl Reply {
-    /// Goes to `href`.
-    pub fn redirect(href: impl Into<Href>) -> Self {
-        let href = href.into();
+    /// Goes to `href`, on this site. A URL that would leave it (`//host`, `/\\host`,
+    /// `https://host`) goes nowhere, so a `next` from a request can't send a user
+    /// away. To leave on purpose, use [`redirect_external`](Self::redirect_external).
+    pub fn redirect(href: impl Into<LocalHref>) -> Self {
+        let href = href.into().into_href();
         Self {
             ops: vec![Op::Navigate { href: href.as_str().to_owned() }],
             status: StatusCode::OK,
@@ -280,6 +298,19 @@ impl Reply {
     /// Applies ops; with JavaScript off, goes to `href`.
     pub fn ops_or_redirect(href: impl Into<Href>) -> Self {
         Self { ops: Vec::new(), status: StatusCode::OK, fallback: Fallback::Redirect(href.into()), flash: None, uses: crate::node::Uses::NONE }
+    }
+
+    /// Goes to `href`, which may be on another site: a sign-in provider, a payment
+    /// page. Never give this a URL from a request unchecked: that is an open redirect.
+    pub fn redirect_external(href: impl Into<Href>) -> Self {
+        let href = href.into();
+        Self {
+            ops: vec![Op::NavigateExternal { href: href.as_str().to_owned() }],
+            status: StatusCode::OK,
+            fallback: Fallback::Redirect(href),
+            flash: None,
+            uses: crate::node::Uses::NONE,
+        }
     }
 
     /// Applies ops; with JavaScript off, shows `view`.
@@ -310,7 +341,7 @@ impl Reply {
         let text = text.into();
         self.flash = Some((tone, text.clone()));
         // A toast shows before a navigation that follows it.
-        let at = self.ops.iter().position(|op| matches!(op, Op::Navigate { .. })).unwrap_or(self.ops.len());
+        let at = self.ops.iter().position(|op| matches!(op, Op::Navigate { .. } | Op::NavigateExternal { .. })).unwrap_or(self.ops.len());
         self.ops.insert(at, Op::Toast { tone, text });
         self
     }
@@ -328,7 +359,7 @@ impl Reply {
         let mut response = match self.fallback {
             Fallback::Redirect(href) => {
                 let mut response = StatusCode::SEE_OTHER.into_response();
-                if let Ok(location) = HeaderValue::from_str(href.as_str()) {
+                if let Ok(location) = HeaderValue::from_str(&location_of(href.as_str())) {
                     response.headers_mut().insert(header::LOCATION, location);
                 }
                 response
@@ -343,6 +374,22 @@ impl Reply {
         }
         (response, envelope, self.status)
     }
+}
+
+/// `url` as a header can carry it: letters outside ASCII, percent-encoded.
+fn location_of(url: &str) -> String {
+    let mut out = String::with_capacity(url.len());
+    for character in url.chars() {
+        if character.is_ascii() {
+            out.push(character);
+        } else {
+            let mut bytes = [0; 4];
+            for byte in character.encode_utf8(&mut bytes).bytes() {
+                let _ = write!(out, "%{byte:02X}");
+            }
+        }
+    }
+    out
 }
 
 /// The ops of a [`Reply`], waiting in the response's extensions for the
@@ -393,6 +440,16 @@ mod tests {
     #[test]
     fn urls_in_ops_are_checked() {
         assert_eq!(Op::navigate("javascript:x"), Op::Navigate { href: "#".into() });
+    }
+
+    #[test]
+    fn leaving_the_site_is_said_by_name() {
+        assert_eq!(serde_json::to_string(&Op::navigate_external("https://a.b/c")).unwrap(), r#"{"op":"navigate_external","href":"https://a.b/c"}"#);
+        assert_eq!(Op::navigate_external("javascript:x"), Op::NavigateExternal { href: "#".into() });
+        let reply = Reply::redirect_external("https://a.b/c").toast(ToastTone::Info, "hi");
+        assert!(matches!(reply.ops[0], Op::Toast { .. }));
+        let response = reply.into_response();
+        assert_eq!(response.headers()[header::LOCATION], "https://a.b/c");
     }
 
     #[test]
