@@ -93,7 +93,8 @@ impl Resource for ProjectAdmin {
             Filter::date_range("created_at").label("Created"),
             Filter::custom("name_contains", "Name contains", |query, text| {
                 query.where_(Project::NAME.like(format!("%{text}%")))
-            }),
+            })
+            .reads(["name"]),
         ]
     }
 
@@ -308,14 +309,16 @@ impl Resource for TaskAdmin {
                 } else {
                     query
                 }
-            }),
+            })
+            .reads(["due_on", "status"]),
             Filter::boolean("unassigned", "Unassigned", |query, on| {
                 if on {
                     query.where_(Task::ASSIGNEE_ID.is_null())
                 } else {
                     query
                 }
-            }),
+            })
+            .reads(["assignee_id"]),
         ]
     }
 

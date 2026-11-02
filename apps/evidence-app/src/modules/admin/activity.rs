@@ -143,7 +143,8 @@ impl Resource for ActivityAdmin {
             Filter::date_range("created_at").label("When"),
             Filter::custom("action_contains", "Action contains", |query, text| {
                 query.where_(AuditEntry::ACTION.like(format!("%{text}%")))
-            }),
+            })
+            .reads(["action"]),
         ]
     }
 

@@ -55,7 +55,8 @@ impl Resource for UserAdmin {
                     query
                 }
             },
-        )]
+        )
+        .reads(["email_verified_at"])]
     }
 
     fn metrics(&self) -> Vec<Metric<User>> {

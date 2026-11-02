@@ -45,7 +45,8 @@ impl Resource for UserAdmin {
                 } else {
                     query.where_(User::EMAIL_VERIFIED_AT.is_null())
                 }
-            }),
+            })
+            .reads(["email_verified_at"]),
             Filter::date_range("created_at").label("Signed up"),
         ]
     }
