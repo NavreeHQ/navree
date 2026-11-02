@@ -1,6 +1,6 @@
 // Link boosting and regions: fetch a page, morph what changed, keep the shell
 // alive. A failed fetch falls back to a real navigation.
-import { body, byId, clean, cookies, every, head, hidden, on, one, root, sameOrigin, setTitle, titleOf } from "./dom.js";
+import { body, byId, clean, cookies, every, head, hidden, make, on, one, ownModule, root, sameOrigin, setTitle, titleOf } from "./dom.js";
 import { morph, pieces } from "./morph.js";
 import { announce } from "./ui.js";
 
@@ -90,13 +90,25 @@ function prefetch(url) {
   prefetched.set(key, { at: performance.now(), epoch, cookies: cookies(), page });
 }
 
-/** Adds the stylesheets and module scripts of `doc` that this page lacks. @param {Document} doc */
+/**
+ * Adds the stylesheets and the toolkit's modules of `doc` that this page lacks. A
+ * script from `DOMParser` never runs, so a module gets a new element; no other
+ * script loads, whatever the page's head says.
+ * @param {Document} doc
+ */
 function mergeHead(doc) {
   setTitle(titleOf(doc));
   for (const el of head(doc).querySelectorAll("link[rel=stylesheet],script[src]")) {
     const attr = el.nodeName === "LINK" ? "href" : "src";
     const url = el.getAttribute(attr) || "";
-    if (!head().querySelector(`[${attr}="${CSS.escape(url)}"]`)) head().append(document.importNode(el, true));
+    if (head().querySelector(`[${attr}="${CSS.escape(url)}"]`)) continue;
+    if (el.nodeName === "LINK") head().append(el);
+    else if (el.getAttribute("type") === "module" && ownModule(url)) {
+      const script = /** @type {HTMLScriptElement} */ (make("script"));
+      script.type = "module";
+      script.src = url;
+      head().append(script);
+    }
   }
 }
 

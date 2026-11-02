@@ -9,7 +9,11 @@ import { chromium, firefox } from "playwright";
 import { CSP, page as doc, start } from "./support/fixture.mjs";
 
 const PROOF = process.env.UI_PROOF_URL || "http://127.0.0.1:8090";
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// The short waits are for something to have happened: room for a busy machine.
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms <= 300 ? ms * 2.5 : ms));
+const until = async (done, ms = 5000) => {
+  for (const end = Date.now() + ms; !done() && Date.now() < end; ) await new Promise((resolve) => setTimeout(resolve, 20));
+};
 const GIF = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
 let unique = 0;
 const key = (name) => `${name}-${++unique}`;
@@ -60,6 +64,7 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
         f.routes.set(`/${path}-post`, (req, res) => f.ops(res, { ops: [{ op: "errors", form: "f", fields: { [name]: ["bad"] } }] }, 422));
         const { context, page, errors } = await fresh(`/${path}`);
         await page.evaluate(() => Document.prototype.getElementById.call(document, "go").click());
+        await until(() => hits(`/${path}-post`).length);
         await sleep(200);
         const state = await page.evaluate(() => {
           const form = Document.prototype.querySelector.call(document, "form");
@@ -545,6 +550,36 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
         }
       });
     }
+
+    test(`a boost to a page that needs a module loads it (${engine})`, async () => {
+      const name = key("module");
+      route(`/${name}`, doc(`<a id="n" href="/${name}-next">n</a>`));
+      route(`/${name}-next`, doc(`<h1 id="h">next</h1><button id="pop" popovertarget="p" data-ui-place>open</button><div id="p" popover data-ui-place>menu</div>`, { head: `<script type="module" src="/_navree/ui/overlay.js"></script>` }));
+      const { context, page } = await fresh(`/${name}`);
+      await page.click("#n");
+      await page.waitForSelector("#h");
+      await sleep(150);
+      assert.equal(hits("/_navree/ui/overlay.js").length > 0, true, "the file was asked for");
+      await page.click("#pop");
+      await page.waitForFunction(() => document.getElementById("p").matches(":popover-open"));
+      await sleep(50);
+      assert.notEqual(await page.evaluate(() => document.getElementById("p").style.left), "", "the module placed it");
+      await context.close();
+    });
+
+    test(`a boost only runs the toolkit's own modules (${engine})`, async () => {
+      for (const script of [`<script src="/attacker.js"></script>`, `<script type="module" src="/attacker.js"></script>`]) {
+        const name = key("headscript");
+        route(`/${name}`, doc(`<a id="n" href="/${name}-next">n</a>`));
+        route(`/${name}-next`, doc(`<h1 id="h">next</h1>`, { head: script }));
+        const { context, page } = await fresh(`/${name}`);
+        await page.click("#n");
+        await page.waitForSelector("#h");
+        await sleep(150);
+        assert.equal(await attr(page, "data-attacker-ran"), null, script);
+        await context.close();
+      }
+    });
 
     test(`named elements can't switch the runtime off (${engine})`, async () => {
       for (const name of ["cookie", "getElementById", "querySelector", "querySelectorAll", "body", "head", "documentElement", "activeElement", "title", "createElement", "addEventListener"]) {

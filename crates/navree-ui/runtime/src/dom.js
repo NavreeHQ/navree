@@ -59,6 +59,16 @@ export const sameOrigin = (url) => {
   }
 };
 
+/** Whether `url` is one of the toolkit's own modules. @param {string} url */
+export const ownModule = (url) => {
+  try {
+    const parsed = new URL(url, location.href);
+    return parsed.origin === location.origin && parsed.pathname.startsWith("/_navree/ui/");
+  } catch {
+    return false;
+  }
+};
+
 /** @param {Element} el @param {string} name */
 export const attr = (el, name) => E.getAttribute.call(el, name);
 /** @param {Element} el @param {string} name */
