@@ -44,11 +44,13 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 - **The wire.** `Cmd` is the closed list of what an element does in the browser with
   no request. `Op` is the closed list of what a server action sends back, with
   rendered HTML as payload. `Reply` carries ops and a fallback for JavaScript off.
+  `Reply::redirect` and `Op::navigate` stay on this site, so a `next` from a request
+  can't send a user away; `redirect_external` and `navigate_external` leave by name.
 - **Assets.** One stylesheet and the runtime's modules, embedded with brotli and gzip
   forms, at content-hash URLs, immutable. Rendered pages of 32 KiB or more go out in
   brotli quality 4; smaller ones in the HTTP pipeline's gzip.
 - **Tests.** `TestView` drives a page in a plain test. `e2e/ui` runs morph properties,
-  axe in every state and keyboard scripts in real browsers.
+  axe in every state, keyboard scripts and a hostile suite in real browsers.
 
 ## What ships to the browser
 
@@ -165,6 +167,16 @@ item, and `data-ui-noboost` keeps a link out of boosting altogether: it loads fo
   error or an answer that isn't HTML is never used. `Cache-Control` sets how long it
   lasts: `no-store` (the default) gives 3 s as a head start on that click, `max-age` that
   long up to 10 s, and `no-cache` never: `View::cache("no-store, no-cache")` opts a page out.
+
+## What a form accepts
+
+`Submit<T>` answers forgery itself, with or without a session. A body from another site
+is refused with 403, by `Sec-Fetch-Site`, or by `Origin` where a browser doesn't send
+that, unless its `Origin` is in `http.cors.allowed_origins`, the list navree-session reads.
+A body that isn't a urlencoded form gets 415, and `GET` and `HEAD` get 405. Only the
+struct's own fields are read: a `#[form(skip)]` field stays out of the client's reach, and
+past 1,000 pairs a body gets 413. A rejected form never writes a password back, and
+`Rejected`'s `Debug` holds field names and errors, not values.
 
 ## Fonts
 

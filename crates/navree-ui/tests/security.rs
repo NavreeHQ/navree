@@ -496,3 +496,81 @@ fn money_reads_back_what_it_writes_and_refuses_stray_commas() {
     assert_eq!(Money::parse("12,34,567.50"), Some(Money(123_456_750)));
     assert_eq!(Money::parse("1,000"), Some(Money(100_000)));
 }
+
+#[test]
+fn the_policy_is_exactly_this() {
+    // A change here has to be deliberate: each directive stops an attack in
+    // `e2e/ui/tests/hostile.test.mjs`.
+    assert_eq!(
+        navree_ui::PAGE_CSP,
+        "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+    );
+}
+
+#[tokio::test]
+async fn every_page_and_every_rejected_form_carries_the_policy() {
+    let app = app().await;
+    let page = app.client().get("/answer").send().await;
+    assert_eq!(page.header("content-security-policy"), Some(navree_ui::PAGE_CSP));
+    let rejected = app.client().post("/store").header("content-type", FORM).body("password=x&email=").send().await;
+    assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(rejected.header("content-security-policy"), Some(navree_ui::PAGE_CSP));
+}
+
+#[test]
+fn the_flash_cookie_is_out_of_reach_of_scripts() {
+    let response = Reply::redirect("/x").toast(ToastTone::Success, "Done").into_response();
+    let cookie = response.headers()["set-cookie"].to_str().unwrap().to_owned();
+    assert!(cookie.contains("; HttpOnly"), "{cookie}");
+    assert!(cookie.contains("; SameSite=Lax"), "{cookie}");
+}
+
+#[derive(navree_ui::TableRow)]
+struct Linked {
+    #[col(skip)]
+    id: String,
+    #[col(link = "{site}")]
+    label: String,
+    #[col(skip)]
+    site: String,
+}
+
+fn table_of(id: &str, site: &str) -> String {
+    type Query = navree_ui::TableQuery<Linked, navree_ui::table::NoFilter>;
+    let query = Query::parse("/t", "");
+    let rows = vec![Linked { id: id.to_owned(), label: "open".to_owned(), site: site.to_owned() }];
+    render(&navree_ui::DataTable::new("t", &query, &rows).into())
+}
+
+#[test]
+fn a_row_link_goes_through_the_url_check() {
+    for site in ["javascript:alert(1)", "JAVASCRIPT:alert(1)", "data:text/html,x", "java\tscript:x"] {
+        let html = table_of("1", site);
+        assert!(!html.contains(site), "{html}");
+        assert!(html.contains(r##"<a href="#">open</a>"##), "{html}");
+    }
+}
+
+#[test]
+fn a_row_key_is_escaped() {
+    let html = table_of("\"><script>1</script>", "/ok");
+    assert!(!html.contains("<script"), "{html}");
+    assert!(html.contains(r#"data-key="&quot;&gt;&lt;script&gt;1&lt;/script&gt;""#), "{html}");
+}
+
+#[test]
+fn page_zero_is_page_one() {
+    type Query = navree_ui::TableQuery<Linked, navree_ui::table::NoFilter>;
+    let query = Query::parse("/t", "page=0");
+    assert_eq!(query.page(), 1);
+    assert_eq!(query.offset(), 0, "no wrap below zero");
+}
+
+#[test]
+fn a_page_past_the_end_says_so_in_the_footer() {
+    type Query = navree_ui::TableQuery<Linked, navree_ui::table::NoFilter>;
+    let query = Query::parse("/t", "page=4294967295&per=1000");
+    let rows = vec![Linked { id: "1".to_owned(), label: "open".to_owned(), site: "/x".to_owned() }];
+    let html = render(&navree_ui::DataTable::new("t", &query, &rows).total(3).into());
+    assert!(!html.contains("4294967294001"), "{html}");
+}

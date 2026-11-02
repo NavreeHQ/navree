@@ -886,5 +886,66 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       assert.equal(await page.inputValue("#a"), "\nfirst line");
       await context.close();
     });
+
+    test(`the proof app sends exactly the policy (${engine})`, async () => {
+      for (const path of ["/", "/plain", "/deals/new"]) {
+        const response = await fetch(PROOF + path);
+        assert.equal(response.headers.get("content-security-policy"), CSP, path);
+      }
+      // An answer with no page behind it allows less still.
+      const missing = await fetch(`${PROOF}/nothing`);
+      assert.match(missing.headers.get("content-security-policy"), /^default-src 'none'/);
+    });
+
+    test(`hovering Sign out in the proof app asks for nothing, and it signs out by POST (${engine})`, async () => {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      const sent = [];
+      page.on("request", (request) => sent.push(request));
+      await page.goto(`${PROOF}/deals/new`);
+      await page.waitForLoadState("networkidle");
+      await page.click("[data-slot=sidebar-user]");
+      const out = page.getByRole("button", { name: "Sign out" });
+      await out.waitFor();
+      sent.length = 0;
+      await out.hover();
+      await sleep(200);
+      await out.focus();
+      await sleep(200);
+      assert.deepEqual(sent.map((request) => request.url()), []);
+      await out.click();
+      await page.waitForURL("**/plain");
+      const post = sent.find((request) => request.method() === "POST");
+      assert.ok(post, "a POST");
+      assert.equal(new URL(post.url()).pathname, "/sign-out");
+      await context.close();
+    });
+
+    test(`a sidebar link in the proof app is prefetched, marked (${engine})`, async () => {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      await page.goto(`${PROOF}/deals/new`);
+      await page.waitForLoadState("networkidle");
+      const seen = page.waitForRequest((request) => new URL(request.url()).pathname === "/gallery");
+      await page.hover('[data-slot=sidebar-item][href="/gallery"]');
+      const request = await seen;
+      assert.equal(request.headers()["x-navree-prefetch"], "1");
+      await context.close();
+    });
+
+    test(`signing out works with JavaScript off (${engine})`, async () => {
+      const context = await browser.newContext({ javaScriptEnabled: false });
+      const page = await context.newPage();
+      await page.goto(`${PROOF}/deals/new`);
+      await page.click("[data-slot=sidebar-user]");
+      await page.getByRole("button", { name: "Sign out" }).click();
+      await page.waitForURL("**/plain");
+      await context.close();
+    });
+
+    test(`a cross-site form can't post to the proof app (${engine})`, async () => {
+      const response = await fetch(`${PROOF}/deals`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", origin: "https://evil.example", "sec-fetch-site": "cross-site" }, body: "title=x", redirect: "manual" });
+      assert.equal(response.status, 403);
+    });
   });
 }
