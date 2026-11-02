@@ -171,11 +171,13 @@ function markScroll(root) {
 /** Places sticky columns: each starts where those before it end. @param {Element} root */
 function measureSticky(root) {
   const el = /** @type {HTMLElement} */ (root);
+  markScroll(root);
+  // A table with nothing sticky but its boxes needs no offsets.
+  if (!root.querySelector('[data-sticky="1"],tr[data-sticky-row]')) return;
   let at = root.querySelector(`thead ${STICKY_SELECT}`)?.getBoundingClientRect().width || 0;
   el.style.setProperty("--s0", at + "px");
   const head = root.querySelector("thead");
   if (head) el.style.setProperty("--head-h", head.getBoundingClientRect().height + "px");
-  markScroll(root);
   for (const th of root.querySelectorAll("thead tr:not([data-slot=group-row]) th[data-sticky]")) {
     const name = th.getAttribute("data-sticky");
     if (name === "s" || name === "e" || name === "e1") continue;

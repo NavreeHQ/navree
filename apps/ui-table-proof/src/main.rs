@@ -73,6 +73,7 @@ pub struct Company {
     pub name: String,
 }
 
+#[allow(clippy::ptr_arg)]
 fn tone(stage: &String) -> BadgeVariant {
     match stage.as_str() {
         "won" => BadgeVariant::Success,

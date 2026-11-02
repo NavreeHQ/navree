@@ -232,7 +232,7 @@ fn a_cell_writer_escapes_whatever_a_custom_value_writes() {
         }
 
         fn write_text(&self, out: &mut String) {
-            out.push_str("x");
+            out.push('x');
         }
     }
     impl navree_ui::table::ColumnValue for Evil {

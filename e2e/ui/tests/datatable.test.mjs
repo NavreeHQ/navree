@@ -755,7 +755,7 @@ for (const browserName of browsers) {
       const grown = await page.locator("thead th[data-col=stage]").evaluate((th) => th.getBoundingClientRect().width);
       assert.ok(Math.abs(grown - width - 80) <= 3, `${width} to ${grown}`);
       assert.match(await page.locator("#deals col[data-col=stage]").getAttribute("width"), /^\d+$/);
-      assert.equal(await page.locator("[style]:not(#deals):not([popover])").evaluateAll((items) => items.filter((item) => item.closest("#deals")).length), 0, "no style attributes on cells");
+      assert.equal(await page.locator("[style]:not(#deals):not([popover])").evaluateAll((items) => items.filter((item) => item.closest("#deals") && item.getAttribute("style")).length), 0, "no style attributes on cells: a screenshot leaves empty ones on inputs");
       await page.reload();
       const kept = await page.locator("thead th[data-col=stage]").evaluate((th) => th.getBoundingClientRect().width);
       assert.ok(Math.abs(grown - kept) <= 2, `reload keeps the width: ${grown} ${kept}`);

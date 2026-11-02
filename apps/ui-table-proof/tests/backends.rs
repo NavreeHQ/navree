@@ -11,7 +11,8 @@ use navree::db::{Db, DbOptions};
 use navree::mongo::{MongoDb, MongoOptions};
 use navree::orm::{Builder, Executor, Model, Value};
 use navree::ui::table::{BulkMode, NoFilter, TableRow as _};
-use navree::ui::{BulkRequest, TablePage, TableQuery, TableRow};
+use navree::ui::{BulkRequest, TablePage, TableQuery};
+use navree::ui::TableRow;
 
 macro_rules! deal {
     ($name:ident, $($attrs:tt)*) => {
@@ -347,7 +348,7 @@ async fn sqlite_mysql_postgres_and_mongodb_agree() {
             let db = sql_store(own_database(&url, "ui_dt_backends")).await;
             let results = run_sql(&db, "postgres").await;
             assert_same("sqlite and postgres", &baseline, &results);
-            db.close().await;
+            db.close().await.unwrap();
         }
         admin.pool().execute_script("DROP DATABASE ui_dt_backends WITH (FORCE)").await.unwrap();
     }
@@ -359,7 +360,7 @@ async fn sqlite_mysql_postgres_and_mongodb_agree() {
             let db = sql_store(own_database(&url, "ui_dt_backends")).await;
             let results = run_sql(&db, "mysql").await;
             assert_same("sqlite and mysql", &baseline, &results);
-            db.close().await;
+            db.close().await.unwrap();
         }
         admin.pool().execute_script("DROP DATABASE ui_dt_backends").await.unwrap();
     }
@@ -387,6 +388,6 @@ async fn sqlite_mysql_postgres_and_mongodb_agree() {
         assert_eq!(target.count(&mongo).await.unwrap(), matching - 2);
         mongo.database().drop().await.unwrap();
     }
-    sqlite.close().await;
+    sqlite.close().await.unwrap();
     let _ = std::fs::remove_dir_all(dir);
 }

@@ -840,7 +840,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                                     .attr("name", name.clone())
                                     .attr("value", choice.value.clone())
                                     .attr("form", self.form_id())
-                                    .flag("checked", selected.iter().any(|value| *value == choice.value)),
+                                    .flag("checked", selected.contains(&choice.value)),
                                 el("bdi").child(choice.label.clone()),
                                 choice.count.map(|count| el("span").slot("filter-count").child(grouped(count))),
                             ))
@@ -1364,7 +1364,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         let _ = write!(out, "\" aria-expanded=\"{open}\" aria-label=\"");
         escape_into(out, if open { &labels.hide_details } else { &labels.show_details });
         out.push_str("\">");
-        out.push_str(&crate::render::render(&icon(if open { icons::CHEVRON_DOWN } else { icons::CHEVRON_RIGHT }).into()));
+        out.push_str(&crate::render::render(&icon(if open { icons::CHEVRON_DOWN } else { icons::CHEVRON_RIGHT })));
         out.push_str("</a></td>");
     }
 
