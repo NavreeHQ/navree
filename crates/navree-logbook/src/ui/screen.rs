@@ -61,7 +61,7 @@ pub(super) fn short_count(count: u64) -> String {
         0..=999 => count.to_string(),
         1_000..=9_999 => {
             let tenths = count / 100;
-            if tenths % 10 == 0 {
+            if tenths.is_multiple_of(10) {
                 format!("{}k", tenths / 10)
             } else {
                 format!("{}.{}k", tenths / 10, tenths % 10)
@@ -70,7 +70,7 @@ pub(super) fn short_count(count: u64) -> String {
         10_000..=999_999 => format!("{}k", count / 1_000),
         _ => {
             let tenths = count / 100_000;
-            if tenths % 10 == 0 {
+            if tenths.is_multiple_of(10) {
                 format!("{}M", tenths / 10)
             } else {
                 format!("{}.{}M", tenths / 10, tenths % 10)
