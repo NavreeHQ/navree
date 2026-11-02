@@ -223,6 +223,18 @@ const RAW_TEXT: [&[u8]; 8] = [
     b"noframes",
 ];
 
+/// The [`RAW_TEXT`] elements a parser ignores inside a `<select>`, so that what
+/// follows is still read as markup; the newer select parser may read them
+/// otherwise.
+const IGNORED_IN_SELECT: [&[u8]; 6] = [
+    b"style",
+    b"title",
+    b"xmp",
+    b"iframe",
+    b"noembed",
+    b"noframes",
+];
+
 /// The elements of a plain inline SVG, which the tracker follows through:
 /// nothing in them is raw text, and none changes how what follows is read.
 /// Any other element in an `<svg>`, and anything in a `<math>`, leaves it
@@ -288,7 +300,9 @@ enum Scan {
 /// text: `<noscript>` (raw text to a browser with scripting on), `<![` (CDATA
 /// in foreign content runs to `]]>`), `<math>` and any element in an `<svg>`
 /// that isn't in [`PLAIN_SVG`] (a script there is tokenized as markup, and
-/// which elements hold HTML depends on the tree a browser has built).
+/// which elements hold HTML depends on the tree a browser has built), an element
+/// of [`IGNORED_IN_SELECT`] in a `<select>`, and `<frameset>`, which ignores
+/// nearly everything in it.
 #[derive(Default)]
 struct HtmlPosition {
     scan: Scan,
@@ -308,6 +322,8 @@ struct HtmlPosition {
     svg_depth: u32,
     /// The tag being read opens an `<svg>`.
     opens_svg: bool,
+    /// A `<select>` is open around this byte.
+    in_select: bool,
     /// What the text does to a browser can't be followed from here on.
     unsure: bool,
 }
@@ -452,7 +468,13 @@ impl HtmlPosition {
         if self.svg_depth > 0 && !PLAIN_SVG.contains(&name) {
             self.unsure = true;
         }
-        if name == b"math" || name == b"noscript" {
+        if name == b"math" || name == b"noscript" || name == b"frameset" {
+            self.unsure = true;
+        }
+        if name == b"select" {
+            self.in_select = !self.closing;
+        }
+        if self.in_select && IGNORED_IN_SELECT.contains(&name) {
             self.unsure = true;
         }
         if name == b"svg" {
@@ -631,6 +653,19 @@ mod tests {
             &["<svg><![CDATA[><script>]]>"],
             &["<![CDATA[><script>"],
             &["<![CDATA[></svg><script>"],
+            // A parser in a `<select>` ignores these, so its tokenizer stays in
+            // data; one with the newer select parser may read them otherwise.
+            &["<select><style><option t=\"</style><script>"],
+            &["<select><title></title><script>"],
+            &["<select><xmp></xmp><script>"],
+            &["<select><iframe></iframe><script>"],
+            &["<select><noembed></noembed><script>"],
+            &["<select><noframes></noframes><script>"],
+            &["<SELECT><STYLE></STYLE><script>"],
+            &["<select><option><style></style></option></select><script>"],
+            // So does one in a `<frameset>`.
+            &["<frameset><style></style><script>"],
+            &["<frameset><script>"],
             // A leading `=` starts a name, whose `"` opens nothing.
             &["<a =b=\"><script>"],
             &["<a = b=\"><script>"],
@@ -649,6 +684,11 @@ mod tests {
             &["<a =b=c><script>"],
             &["<a b=/><script>"],
             &["<a b==c><script>"],
+            // A form with a list of options is an ordinary page.
+            &["<select><option>a</option></select><script>"],
+            &["<select name=\"a\"><optgroup><option>a</optgroup></select><script>"],
+            &["<select><script>"],
+            &["<select></select><style></style><script>"],
         ] {
             assert!(in_script_after(pieces), "{pieces:?}");
         }

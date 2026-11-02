@@ -283,6 +283,8 @@ fn a_value_in_json_escapes_its_quotes_where_the_tracker_cannot_be_sure_of_a_scri
     let ctx = json!({ "x": BREAKOUT });
     for source in [
         "<noscript><script></noscript><a data-x=\"{{ x|tojson }}\">",
+        "<select><style><option t=\"</style><script>{{ x|tojson }}",
+        "<frameset><style><a t=\"</style><script>{{ x|tojson }}",
         "<svg><![CDATA[><script>]]><a data-x=\"{{ x|tojson }}\"></svg>",
         "<svg><script><a data-x=\"{{ x|tojson }}\"></svg>",
         "<math><script><a data-x=\"{{ x|tojson }}\"></math>",
