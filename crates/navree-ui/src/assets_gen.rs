@@ -3,10 +3,10 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "bba490a0300d";
+pub const BUILD: &str = "e50fd97d4879";
 
 /// The URL of `core.js`.
-pub const CORE_URL: &str = "/_navree/ui/core-105cd26bc90c.js";
+pub const CORE_URL: &str = "/_navree/ui/core-12e0778c7e19.js";
 
 /// The URL of `sidebar.js`.
 pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-26cf815aa60d.js";
@@ -14,11 +14,8 @@ pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-26cf815aa60d.js";
 /// The URL of `overlay.js`.
 pub const OVERLAY_URL: &str = "/_navree/ui/overlay-b8426dc33830.js";
 
-/// The URL of `table.js`.
-pub const TABLE_URL: &str = "/_navree/ui/table-2a720f22a7ec.js";
-
 /// The URL of `navree-ui.css`.
-pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-591387ec3815.css";
+pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-6461227811d0.css";
 
 /// The URL of `speculation.json`.
 pub const SPECULATION_URL: &str = "/_navree/ui/speculation-d140a28d7b63.json";
@@ -37,7 +34,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "core",
         ext: "js",
-        hash: "105cd26bc90c",
+        hash: "12e0778c7e19",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/core.js"),
         gzip: Some(include_bytes!("../dist/core.js.gz")),
@@ -62,18 +59,9 @@ pub static FILES: &[Asset] = &[
         brotli: Some(include_bytes!("../dist/overlay.js.br")),
     },
     Asset {
-        name: "table",
-        ext: "js",
-        hash: "2a720f22a7ec",
-        content_type: "text/javascript; charset=utf-8",
-        bytes: include_bytes!("../dist/table.js"),
-        gzip: Some(include_bytes!("../dist/table.js.gz")),
-        brotli: Some(include_bytes!("../dist/table.js.br")),
-    },
-    Asset {
         name: "navree-ui",
         ext: "css",
-        hash: "591387ec3815",
+        hash: "6461227811d0",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/navree-ui.css"),
         gzip: Some(include_bytes!("../dist/navree-ui.css.gz")),

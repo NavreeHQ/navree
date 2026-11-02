@@ -3,7 +3,9 @@
 import { byId, on } from "./dom.js";
 import { openTarget, closeTarget, announce } from "./ui.js";
 
-const REFUSED = /^(on|style$|srcdoc$|href$|src$|action$|formaction$)/i;
+// What a command may touch: state, never where a thing points or what it runs. The
+// `data-ui-*` hooks are the runtime's. `Cmd` in Rust holds the same list.
+const STATE = /^(data-(?!ui-)|aria-|(hidden|open|disabled)$)/i;
 
 /** @param {any[]} cmd @param {Element} from */
 function run(cmd, from) {
@@ -20,9 +22,9 @@ function run(cmd, from) {
       from.setAttribute("data-copied", "");
       setTimeout(() => from.removeAttribute("data-copied"), 1500);
       break;
-    case "set_attr": if (!REFUSED.test(b)) target?.setAttribute(b, c); break;
-    case "remove_attr": if (!REFUSED.test(b)) target?.removeAttribute(b); break;
-    case "toggle_attr": if (!REFUSED.test(b)) target?.toggleAttribute(b); break;
+    case "set_attr": if (STATE.test(b)) target?.setAttribute(b, c); break;
+    case "remove_attr": if (STATE.test(b)) target?.removeAttribute(b); break;
+    case "toggle_attr": if (STATE.test(b)) target?.toggleAttribute(b); break;
     case "dispatch": from.dispatchEvent(new CustomEvent(a, { bubbles: true })); break;
     case "focus": target?.focus(); break;
     case "submit": /** @type {HTMLFormElement | null} */ (target)?.requestSubmit?.(); break;

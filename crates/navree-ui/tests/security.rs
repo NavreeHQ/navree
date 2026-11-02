@@ -373,6 +373,19 @@ fn the_elements_that_load_or_navigate_are_never_written() {
 }
 
 #[test]
+fn a_command_sets_only_state_attributes() {
+    use navree_ui::{Cmd, Commands};
+    for name in ["href", "HREF", "src", "action", "formaction", "onclick", "ONCLICK", "style", "srcdoc", "ping", "poster", "srcset", "data", "xlink:href", "form", "name", "method", "target", "popover", "data-ui-src", "data-ui-click", "DATA-UI-CLICK", "data-ui-persist", "http-equiv", "id"] {
+        assert_eq!(Commands::from(Cmd::set_attr("t", name, "x")).to_json(), "[]", "{name}");
+        assert_eq!(Commands::from(Cmd::remove_attr("t", name)).to_json(), "[]", "{name}");
+        assert_eq!(Commands::from(Cmd::toggle_attr("t", name)).to_json(), "[]", "{name}");
+    }
+    for name in ["data-open", "aria-expanded", "hidden", "open", "disabled"] {
+        assert_ne!(Commands::from(Cmd::set_attr("t", name, "x")).to_json(), "[]", "{name}");
+    }
+}
+
+#[test]
 fn the_speculation_rules_only_name_links_marked_safe() {
     let rules = navree_ui::assets::get("speculation").expect("the rule file");
     let text = std::str::from_utf8(rules.bytes).unwrap();

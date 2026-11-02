@@ -20,7 +20,9 @@ pub enum Cmd {
     Close(String),
     /// Copies text to the clipboard.
     Copy(String),
-    /// Sets an attribute. `on*`, `style` and URL attributes are refused.
+    /// Sets a state attribute: `data-*` other than the runtime's own `data-ui-*`,
+    /// `aria-*`, `hidden`, `open` or `disabled`. Any other name is refused, here and in
+    /// the runtime, so a command can't change where a thing points or what it runs.
     SetAttr {
         /// The target's id.
         target: String,
@@ -29,14 +31,14 @@ pub enum Cmd {
         /// Its value.
         value: String,
     },
-    /// Removes an attribute.
+    /// Removes a state attribute (see [`Cmd::SetAttr`]).
     RemoveAttr {
         /// The target's id.
         target: String,
         /// The attribute.
         name: &'static str,
     },
-    /// Toggles an attribute with no value (`data-open`).
+    /// Toggles a state attribute with no value, such as `data-open` (see [`Cmd::SetAttr`]).
     ToggleAttr {
         /// The target's id.
         target: String,
@@ -112,8 +114,14 @@ impl Cmd {
         Self::Submit(id.into())
     }
 
-    fn to_value(&self) -> Value {
-        match self {
+    /// The command as data, or nothing when it names a refused attribute.
+    fn to_value(&self) -> Option<Value> {
+        if let Self::SetAttr { name, .. } | Self::RemoveAttr { name, .. } | Self::ToggleAttr { name, .. } = self
+            && !is_state_attr(name)
+        {
+            return None;
+        }
+        Some(match self {
             Self::Toggle(id) => json!(["toggle", id]),
             Self::Show(id) => json!(["show", id]),
             Self::Hide(id) => json!(["hide", id]),
@@ -126,8 +134,14 @@ impl Cmd {
             Self::Dispatch(name) => json!(["dispatch", name]),
             Self::Focus(id) => json!(["focus", id]),
             Self::Submit(id) => json!(["submit", id]),
-        }
+        })
     }
+}
+
+/// The attributes a command may touch. The runtime holds the same list.
+fn is_state_attr(name: &str) -> bool {
+    let starts = |prefix: &str| name.get(..prefix.len()).is_some_and(|start| start.eq_ignore_ascii_case(prefix));
+    (starts("data-") && !starts("data-ui-")) || starts("aria-") || ["hidden", "open", "disabled"].iter().any(|state| state.eq_ignore_ascii_case(name))
 }
 
 /// A list of commands, run in order.
@@ -137,7 +151,7 @@ pub struct Commands(pub Vec<Cmd>);
 impl Commands {
     /// The list as the JSON the runtime reads.
     pub fn to_json(&self) -> String {
-        Value::Array(self.0.iter().map(Cmd::to_value).collect()).to_string()
+        Value::Array(self.0.iter().filter_map(Cmd::to_value).collect()).to_string()
     }
 }
 

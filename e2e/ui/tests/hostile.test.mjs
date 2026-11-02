@@ -662,6 +662,26 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       }
     });
 
+    test(`commands reach only state attributes (${engine})`, async () => {
+      f.evil.length = 0;
+      const name = key("cmd");
+      const refused = [["a1", "href", "javascript:1"], ["a1", "HREF", "javascript:1"], ["a1", "onclick", "1"], ["a1", "ONCLICK", "1"], ["a1", "style", "color:red"], ["a1", "srcdoc", "x"], ["a1", "ping", `${E()}/ping`], ["a1", "target", "_blank"], ["v1", "poster", `${E()}/poster`], ["i1", "srcset", `${E()}/srcset 1x`], ["o1", "data", `${E()}/object`], ["a1", "xlink:href", "javascript:1"], ["r1", "data-ui-src", `/${name}-admin`], ["b2", "data-ui-click", `[["set_attr","a1","title","rewritten"]]`], ["a1", "data-ui-persist", ""], ["secret", "form", "evilform"], ["secret", "name", "stolen"], ["evilform", "method", "post"], ["a1", "popover", "auto"], ["a1", "DATA-UI-CLICK", "[]"]];
+      const allowed = [["a1", "data-open", "1"], ["a1", "aria-expanded", "true"], ["a1", "hidden", ""], ["d1", "open", ""], ["secret", "disabled", ""]];
+      const button = (id, command) => `<button id="${id}" data-ui-click='${JSON.stringify([command]).replace(/'/g, "&#39;")}'>x</button>`;
+      const buttons = [...refused.map((step, at) => button(`no${at}`, ["set_attr", ...step])), ...refused.map((step, at) => button(`rm${at}`, ["remove_attr", step[0], step[1]])), ...allowed.map((step, at) => button(`yes${at}`, ["set_attr", ...step]))].join("");
+      route(`/${name}`, doc(`<a id="a1" href="/ok" onclick="" data-ui-click="[]">a</a><details id="d1"></details><video id="v1"></video><img id="i1" src="${GIF}"><object id="o1"></object><div id="r1" data-ui-src="/${name}-frag"></div><button id="b2">b2</button><input id="secret" name="secret"><form id="evilform"></form>${buttons}`));
+      const { context, page } = await fresh(`/${name}`);
+      const before = await page.evaluate(() => Object.fromEntries(["a1", "v1", "i1", "o1", "r1", "b2", "secret", "evilform"].map((id) => [id, document.getElementById(id).outerHTML])));
+      for (let at = 0; at < refused.length; at++) await page.evaluate((id) => document.getElementById(id).click(), `no${at}`);
+      for (let at = 0; at < refused.length; at++) await page.evaluate((id) => document.getElementById(id).click(), `rm${at}`);
+      const afterwards = await page.evaluate(() => Object.fromEntries(["a1", "v1", "i1", "o1", "r1", "b2", "secret", "evilform"].map((id) => [id, document.getElementById(id).outerHTML])));
+      assert.deepEqual(afterwards, before);
+      for (let at = 0; at < allowed.length; at++) await page.evaluate((id) => document.getElementById(id).click(), `yes${at}`);
+      for (const [id, attribute] of allowed) assert.notEqual(await page.getAttribute(`#${id}`, attribute), null, attribute);
+      assert.deepEqual(f.evil, []);
+      await context.close();
+    });
+
     test(`named elements can't switch the runtime off (${engine})`, async () => {
       for (const name of ["cookie", "getElementById", "querySelector", "querySelectorAll", "body", "head", "documentElement", "activeElement", "title", "createElement", "addEventListener"]) {
         const path = key("document");
