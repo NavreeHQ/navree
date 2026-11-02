@@ -360,6 +360,8 @@ A `queue:work` process runs `queue.workers` loops at once (one with `--once`). E
 - A job whose type has no handler in this binary fails at once, without retries.
 - If a worker dies mid-job (a crash, `kill -9`), the job stays reserved. Once the reservation is older than the job's timeout plus 30 seconds, another worker takes it over as a new attempt. A job without a time limit waits one day.
 
+A job's outcome is stored for as long as its worker holds the job (its `timeout_secs` plus 30 seconds), whatever the database says for now, so a lock held for a while doesn't run a job twice. Past that another worker may take the job, and it runs again: a job runs at least once. The worker logs an error naming the job, and a `queue:work` limited by `--once`, `--stop-when-empty` or `--max-jobs` ends with that error, never as a success.
+
 Every attempt is logged at target `navree::job` with the job type (`name`), `job_id`, `queue`, `attempt`, `duration_ms` and `outcome` (`succeeded`, `released`, `failed`, or `cancelled` for a job of a cancelled [batch or operation](/docs/digging-deeper/batches-and-operations/#failures-and-cancellation)). Payloads are never logged.
 
 ### Stopping workers

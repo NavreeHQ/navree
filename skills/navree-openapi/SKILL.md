@@ -121,6 +121,10 @@ pub struct NotePage {
   `schema_with` or `impl ToSchema` by hand: the derive refuses to guess.
 - `ApiError::SchemaConflict`: two different types with one name; the error names both. Rename
   one with `#[schema(as = OtherName)]`.
+  The check goes by what the types mean: below two that look the same, a
+  difference further down refuses too. `navree_openapi::components_of::<T>()`, behind
+  `navree_mcp::input_schema`, `navree_ai::json_schema` and
+  `navree_workflows::json_schema`, panics with the same advice.
 - `ApiError::MissingSchemas`: a schema refers to a component nothing
   registered (typical with generic wrappers). Register it in the module's
   `wire`: `m.api_schema::<NoteResource>()`. Also use `m.api_schema::<T>()`
@@ -134,7 +138,7 @@ title = "My App API"
 version = "1.0.0"                     # your API's version
 servers = ["https://api.example.com"]
 docs_ui = true                        # false removes /api/docs and its embedded stylesheet and script (/api/docs/assets/)
-openapi_json = true                   # false removes /api/openapi.json; openapi:export still writes it. Both are public by default
+openapi_json = true                   # false removes /api/openapi.json and the /api/docs page; openapi:export still writes it. Both are public by default
 ```
 
 The page's CSP allows styles and scripts from the app only, nothing inline,

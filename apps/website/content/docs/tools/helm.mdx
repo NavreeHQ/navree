@@ -71,7 +71,7 @@ navree make:resource deals Deal
   updated  src/modules/deals/mod.rs
 ```
 
-The generator reads the model's columns (from the module's `models/deal.rs`) and writes a field for each one: text, numbers, money when there is a `currency` column, dates, booleans, read-only timestamps, and a comment suggesting `Field::belongs_to` for each foreign key. It then declares the `resources` module and registers the resource in the module's `wire` method, at the `// navree:wire` marker:
+The generator reads the model's columns (from the module's `models/deal.rs`) and writes a field for each one: text, numbers, money when there is a `currency` column, dates, booleans, read-only timestamps, and a comment suggesting `Field::belongs_to` for each foreign key. A column the model hides (`#[model(hidden)]`, its `hidden(..)` list, or left out of its `visible(..)` list) or one named like a secret (`password_hash`, `api_token`, `client_secret`) gets no field, isn't the title and isn't searched; a comment says what was left out. It then declares the `resources` module and registers the resource in the module's `wire` method, at the `// navree:wire` marker:
 
 ```rust title="src/modules/deals/mod.rs"
 impl DealsModule {
@@ -186,7 +186,7 @@ The model behind it stores the stage as its name (`#[model(cast = "string_enum")
 | `PER_PAGE` | Rows per page on the list (at most 100). `0`, the default, uses `helm.per_page` (25). |
 | `DEFAULT_SORT` | The list's order, such as `"-amount_cents"`. Defaults to newest first. See [sorting](#search-sorting-and-filters). |
 | `ORDER` | The position in the menu within the group (lower first). |
-| `READ_ONLY` | `true` for records the app writes itself, such as an audit trail: the panel shows no New, Edit or Delete for them and refuses a create, an update or a delete, in its screens and in its API. Actions still run. Defaults to `false`. |
+| `READ_ONLY` | `true` for records the app writes itself, such as an audit trail: the panel shows no New, Edit or Delete for them and refuses a create, an update or a delete, in its screens and in its API, as well as an action with the `create`, `update` or `delete` ability, which is every action that doesn't say otherwise. An action with another ability is offered and runs. Defaults to `false`. |
 | `EXPORT` | Whether the list offers **Export**, its rows as a CSV file. Defaults to `true`. See [exporting](#exporting). |
 | `SIDEBAR_COUNT` | Whether the menu shows how many records the resource has. Defaults to `true`; turn it off for a table whose count is not cheap. See [the sidebar](#the-panels-look-and-pages). |
 | `COUNT_CAP` | How many rows the list pages count before they say `10,000+` and no longer how many pages there are (10,000). The JSON API always counts them all. |
@@ -236,7 +236,7 @@ Modifiers chain after the constructor:
 | `.help("Shown under the input")` | Help text in forms. |
 | `.sortable()` | Lets the list sort by this column. |
 | `.readonly()` | Shown but never editable (and left out of create forms). |
-| `.hide_on_index()`, `.hide_on_detail()`, `.hide_on_forms()`, `.only_on_forms()` | Where the field appears. |
+| `.hide_on_index()`, `.hide_on_detail()`, `.hide_on_forms()`, `.only_on_forms()`, `.hide_on_export()` | Where the field appears. |
 | `.required()`, `.min(n)`, `.max(n)`, `.min_length(n)`, `.max_length(n)`, `.pattern(regex)` | Validation in forms, with the same messages as [validation](/docs/basics/validation/) (`title should not be empty`). For money, `min` and `max` are in minor units. |
 | `.default(value)` | The value a create form starts with, and the value saved when a create leaves the field out. |
 | `.options(pairs)`, `.badge()` | The `(value, label)` pairs of a select, and showing the label as a badge. |
@@ -272,16 +272,20 @@ Each filter is a **chip** in the list's toolbar: a dashed button with the filter
 | `Filter::boolean(name, label, f)` | Any, yes or no; `f(query, on)` changes the model query (a `Builder`) |
 | `Filter::date_range(column)` | A range of dates (`2026-10-01..2026-10-31`, either end optional), or a preset: today, this week, this month, this quarter |
 | `Filter::custom(name, label, f)` | A value typed in; `f(query, value)` changes the model query |
+| `.reads([columns])`, on a boolean or custom filter | The columns its closure reads, so it runs for who may read them. Without it the filter runs only for a user with no column hidden from them. |
 
 The search, filters, sort and page are in the URL (`?search=globex&filters[stage]=won&sort=-amount_cents&page=2`), so a filtered list is a link you can share. A filter takes one or more values: repeat it, or separate them with commas.
 
 ### Exporting
 
-**Export** on a list downloads its rows as a CSV file (`GET /admin/resources/deals/export.csv`, with the list's search, filters and sort in the query). It is what the list shows the user: the same rows, narrowed by the same access filter, and in a workspace only that workspace's. A field the user's rules hide is empty. A header line names every field of a record's page by its label; dates are ISO 8601 and Markdown is the text typed.
+**Export** on a list downloads its rows as a CSV file (`GET /admin/resources/deals/export.csv`, with the list's search, filters and sort in the query). It has the list's rows for the user: the same rows, narrowed by the same access filter, and in a workspace only that workspace's. Its columns are the fields of a record's page, less any marked `.hide_on_export()`: use that for a field someone reads one record at a time but shouldn't take by the table. A header line names them by their labels; a value the user's rules hide is empty, and a `#[model(hidden)]` column isn't there at all. Dates are ISO 8601 and Markdown is the text typed.
 
-- **A chunk at a time.** The file is written as it is sent, 500 rows per query by a key cursor, so nothing is held whole in memory and the cost of a chunk does not grow with how far into the table it is. Each chunk checks again that the user may work in the workspace, so a member who is removed stops getting rows.
-- **Spreadsheets.** A text that starts with `=`, `+`, `-` or `@` and is not a number gets a quote in front, so a spreadsheet opens it as text and runs nothing.
-- **A read.** Export is a `GET` that changes nothing, so a role that only reads may use it. Each export writes a `helm.export` entry to the [audit log](/docs/security/audit-log/) with the resource and the query.
+- **A chunk at a time.** The file is written as it is sent, 500 rows per query by a key cursor, so nothing is held whole in memory and the cost of a chunk does not grow with how far into the table it is. Each chunk reads the user's access again and checks again that they may work in the workspace, so a role or a permission taken away, or a member removed, ends the file. The panel's sign-in is a cookie with no state on the server, so signing out does not end a file already being sent; its time limit does.
+- **A time limit.** `helm.export_max_secs` (1800) ends a file however slowly the client reads, and no more rows are read for it. A client that has stopped reading altogether holds only its socket until the server's own connection limits close it: nothing is read for it.
+- **In a workspace your app entered.** The file enters the workspace itself past its first chunk, so the panel asks up front who may work there, as it does for a queued action: `WorkspaceModule`, or `helm_staff_workspaces`. An app with neither can't export from a workspace it entered, the list doesn't offer it, and the route answers with a 403 that says why.
+- **Spreadsheets.** A text that starts with `=`, `+`, `-` or `@` and is not a number gets a quote in front, so a spreadsheet opens it as text and runs nothing; a number stays a number, currency symbol and thousands separators included (`-$1,234.60`). The file starts with a UTF-8 byte order mark so that Excel reads it as UTF-8: a program that reads it should skip one.
+- **A read.** Export is a `GET` that changes nothing, so a role that only reads may use it. Each export writes a `helm.export` entry to the [audit log](/docs/security/audit-log/) with the resource, the query and the workspace, and a `helm.export.finished` entry when it ends, with the rows sent and how it ended: `finished`, `stopped`, `time_limit` or `abandoned` by a client that went away. A `HEAD` is a 405 and writes nothing.
+- **From the panel only.** A browser that says the request comes from another site of the domain (`Sec-Fetch-Site: same-site` or `cross-site`) gets a 403, here and on the menu's counts. A client that isn't a browser doesn't send the header.
 - **Off.** Set `const EXPORT: bool = false;` on a resource whose rows should not leave the panel.
 
 ### Scoping the query
@@ -363,13 +367,27 @@ Helm doesn't have its own permission system. It asks your abilities, with the [a
 | A resource in the menu, its list and its metrics | `read` on its subject, as a type-level check; rows are filtered like `Accessible<M, Read>` |
 | A record's page | `read` on that record; a record the filter hides is a 404 |
 | The create form | `create` on the subject; the saved record must then pass your `create` rules too |
-| Editing a record | `update` on that record; fields your rules don't permit (`.fields([..])` rules) are shown read-only, and changing them is a 403 |
+| Editing a record | `update` on that record; fields your rules don't permit (`.fields([..])` rules) are shown read-only, and changing them is a 403. A field the user may change but not read is blank in the form, and left blank it stays as it is |
 | Deleting a record | `delete` on that record |
 | An action | its ability on each selected record |
 | A relationship picker | `read` on the related resource; it lists only readable records |
-| A field's value | `read` on that field (a `cannot read .. fields [..]` rule hides it) |
+| A field's value | `read` on that field (a `cannot read .. fields [..]` rule hides it, by any route: see [hidden columns](#hidden-columns)) |
 
 So with rules where reps read every deal but update only their own, and only some of its fields, a rep's Helm lists every deal, shows an **Edit** button only on their own, and grays out the fields they may not change. The API under `/admin/api` enforces the same checks: hiding a button is never the only protection.
+
+### Hidden columns
+
+A column is out of a user's reach in two ways: the model hides it from everyone (`#[model(hidden)]`, its `hidden(..)` list, or left out of its `visible(..)` list), and your field rules hide it from them (`cannot(READ, "Deal").fields(["title"])`). One place in the panel decides, and every route asks it:
+
+- **The value reaches no route.** Not a cell, a page's title or heading, a list, the API's `title` and `values`, a relationship picker, a related record's name, an export, a form or a view field's template. Where the title's column is hidden, the record is named by its label and short key (`Deal #3f9a1c2e`).
+- **No query runs on the column.** A sort, a search, a filter, `via`, a metric and a relationship panel would each tell something about it. The API answers a 400 or, for a metric, a 403, and the pages and `GET /admin/api/resources` don't offer them. A search with other columns goes on with those. A default sort on such a column gives way to the newest key. A rule with conditions (`.when(..)`) hides a value only where they hold, and takes the whole column out of queries.
+- **A `#[model(hidden)]` column can still have a field.** It is write-only: it isn't on the list or the page, the form shows it blank, leaving it blank keeps the value, and the API's answer to a write doesn't echo it. To show such a value, make it a `Field::computed`, which is your code saying so.
+
+What the panel can't see through is your own code:
+
+- A filter's closure. Say what it reads with `.reads([Deal::AMOUNT_CENTS])`, and it runs for a user who may read those columns. One that doesn't say runs only for a user with no column hidden from them, since it could be reading any.
+- A computed field's closure. A rule can name the field itself (`.fields(["probability"])`), and a rule that hides a column it reads should.
+- A metric's `.filter(..)` condition, which is fixed for everyone and can't be asked about a value the user picks. A metric is withheld when a column it adds up, groups by or dates by is hidden.
 
 Every create, update and delete runs in the request's [unit of work](/docs/database/unit-of-work/), so [audit](/docs/security/audit-log/) entries name the user who made the change (`deal.updated`), and each action run adds an entry `helm.action` with the action's name, the resource and the record ids. The change events of Helm's own writes carry the record's [serialized form](/docs/orm/serialization/): a field the model hides (`#[model(hidden)]`, or skipped by serde) is stored, but never reaches an observer or the audit log.
 
@@ -583,6 +601,7 @@ Every key of the `helm` section is optional. From the environment: `APP_HELM__TI
 | `helm.metrics_cache_secs` | `60` | How long metric results and the sidebar's counts are cached per user and range (counts: per user and workspace); `0` turns the cache off. |
 | `helm.dashboard` | `true` | Show metric cards on the panel's home page. |
 | `helm.session_minutes` | `480` | How long a sign-in to the panel lasts. |
+| `helm.export_max_secs` | `1800` | How long a list's CSV file may take to send, however slowly the client reads. |
 
 | Command | What it does |
 |---|---|

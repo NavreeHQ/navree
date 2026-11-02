@@ -101,8 +101,9 @@ impl Resource for DealResource {
     // SLUG (default: table name with '-'), PER_PAGE (0 = helm.per_page),
     // DEFAULT_SORT ("-amount_cents"; default -created_at or -pk), ORDER (i32),
     // WORKSPACES (Workspaces::Current by default; Every spans workspaces),
-    // READ_ONLY (true: no New/Edit/Delete shown, writes refused; actions still
-    // run), EXPORT (true: CSV of the list), SIDEBAR_COUNT (true: a count in
+    // READ_ONLY (true: no New/Edit/Delete shown, writes refused, and actions
+    // with the create, update or delete ability, the default, refused too),
+    // EXPORT (true: CSV of the list), SIDEBAR_COUNT (true: a count in
     // the menu; false for a table whose count is not cheap), COUNT_CAP
     // (10_000: lists count rows only up to this, then say `10,000+`).
 
@@ -174,7 +175,7 @@ without a `query`), then `query`, then the user's access filter.
   `belongs_to` on that key; several may share a key if they list different
   resources), `computed(name, f)`, `view(name, template)`.
   Modifiers: `.label`, `.help`, `.sortable`, `.readonly`, `.hide_on_index`,
-  `.hide_on_detail`, `.hide_on_forms`, `.only_on_forms`, `.required`, `.min`,
+  `.hide_on_detail`, `.hide_on_forms`, `.only_on_forms`, `.hide_on_export`, `.required`, `.min`,
   `.max`, `.min_length`, `.max_length`, `.pattern`, `.default`.
 - **Filters:** `select(col).options(..)`, `belongs_to::<R>(col)`,
   `boolean(name, label, f)`, `date_range(col)` (`a..b` or presets),
@@ -183,8 +184,11 @@ without a `query`), then `query`, then the user's access filter.
   `?search=..&filters[stage]=won,lost&sort=-amount_cents&page=2`.
 - **The list toolbar:** search, filter chips, then the bulk-action menu with
   **Run** (offers only actions the user may run and the workspace role takes),
-  **Export** (`GET .../export.csv`, the list's rows as CSV, a chunk of 500 at a
-  time, formulas quoted, audited as `helm.export`) and counts in the menu
+  **Export** (`GET .../export.csv`, the list's rows as CSV with a UTF-8 byte order
+  mark, a chunk of 500 at a time, the user's access read again on each, ended by
+  `helm.export_max_secs`, formulas quoted, audited as `helm.export` and
+  `helm.export.finished` with the rows sent; `.hide_on_export()` keeps a field
+  out) and counts in the menu
   (`GET /admin/counts`, filled by the script, cached per user and workspace,
   capped at `1,000+`).
 - **Actions:** `Action::new(name, label)` + `.ability(M)`, `.confirm(text)`,
@@ -350,6 +354,14 @@ token.
   Export, counts and lists are reads and stay.
 - **A record is a 404, not a 403:** rows the access filter hides don't exist
   for that user, like `Accessible<M, Read>` in the API.
+- **A hidden column is hidden everywhere.** `#[model(hidden)]` and a
+  `cannot(READ, ..).fields([..])` rule reach no page, list, API answer, picker,
+  related column, form, template or export, and take the column out of sort,
+  search, filters, `via` and metrics (a 400, or a 403 for a metric). A title falls
+  back to the label and short key. A `#[model(hidden)]` field is write-only. A
+  filter's closure says what it reads with `.reads([..])`, or runs only for a user
+  with nothing hidden. `make:resource` makes no field for a hidden column or one
+  named like a secret.
 - **A field is greyed out on edit:** a `.fields([..])` or `cannot(..)` rule
   keeps it; sending it anyway is a 403. A field sent that isn't editable is a
   400 (`property x should not exist`).
@@ -375,7 +387,7 @@ token.
 - **Messages name a field by its label** (`Project should not be empty`); a
   record with no `TITLE` value is `Report #3f9a1c2e`, not a UUID.
 - **Config:** `helm.path` (`/admin`), `title`, `logo`, `accent`, `per_page`
-  (1 to 100), `metrics_cache_secs`, `dashboard`, `session_minutes`; env
+  (1 to 100), `metrics_cache_secs`, `dashboard`, `session_minutes`, `export_max_secs`; env
   `APP_HELM__TITLE`, `APP_HELM__PER_PAGE`.
 - **The look** follows Navree's app UI rules (sidebar shell, 4px corners,
   ink selection, green only for primary actions, focus and positive data).

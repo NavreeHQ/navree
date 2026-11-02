@@ -239,7 +239,7 @@ The tools of the ecosystem add their own commands to the CLI:
 | `navree openapi:client [--out DIR] [--input FILE]` | Exports the OpenAPI document and writes `schema.d.ts` from it, for the [typed client](/docs/frontend/typed-client/#generating-the-schema). The generator is part of `navree`; `--input` reads a JSON document and needs no app. |
 | `navree harbor:init`, `harbor:provision`, `harbor:secrets`, `deploy`, `deploy:rollback`, `deploy:releases`, `harbor:status`, `harbor:logs`, `harbor:run`, `harbor:ssh`, `harbor:backup`, `harbor:ci`, `build:image` | Prepare servers, keep their secrets and ship releases with [Harbor](/docs/tools/harbor/). |
 | `navree fleet` | Runs queue workers under [Fleet](/docs/tools/fleet/)'s supervisor. |
-| `navree make:resource <module> <Model>` | Generates a [Helm](/docs/tools/helm/) admin resource for a model of the module (`models/<model>.rs`), with a field per column, and registers it in the module's `wire`. |
+| `navree make:resource <module> <Model>` | Generates a [Helm](/docs/tools/helm/) admin resource for a model of the module (`models/<model>.rs`), with a field per column a user may see (none for a column the model hides or one named like a secret), and registers it in the module's `wire`. |
 | `navree mcp` | Starts [Navigator](/docs/ai/navigator/), the MCP server for your coding agent. |
 | `navree skills:install` | Installs the [agent skills](/docs/ai/agent-skills/) into the project. |
 | `navree check` | Validates the module graph, then runs the app's [conformity checks](/docs/testing/conformity-checks/) (`--only`, `--json`). |

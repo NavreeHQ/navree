@@ -44,7 +44,7 @@ hint with the line to add. Keep the markers:
 | `make:factory posts tag` | `factories/tag.rs`, a model factory (`--model <model>` when the names differ) | nothing; link it with `#[model(factory = ..)]` |
 | `make:seeder posts demo_data` | `seeders/demo_data.rs`, `DemoDataSeeder` named `demo_data` | `seeder::<..>` in `wire` |
 | `make:entity posts tag` | `entities/tag.rs`, an ORM model (table `tags`: id, timestamps; `make:model` without companions) | nothing; prints the `make:migration` to run |
-| `make:resource posts Tag` | `resources/tag.rs`, a Helm resource with a field per column of `models/tag.rs` (made by `make:model`; see `navree-helm`) | `pub mod resources;` and `navree::helm::ModuleBuilderHelmExt::resource::<..>(m)` in `wire` |
+| `make:resource posts Tag` | `resources/tag.rs`, a Helm resource with a field per column of `models/tag.rs` (made by `make:model`; see `navree-helm`), none for a hidden column or one named like a secret | `pub mod resources;` and `navree::helm::ModuleBuilderHelmExt::resource::<..>(m)` in `wire` |
 | `make:migration posts create_tags_table` | `migrations/m<timestamp>_create_tags_table.rs` (CREATE TABLE when named `create_<table>_table`, else empty up/down) | adds it to the module's `MigrationSet` (creating the set and `m.migrations(..)` if needed) |
 | `make:job posts publish_post` | `jobs/publish_post.rs`, job `posts.publish_post` | `m.job::<..>()` in `wire` |
 | `make:event posts post_published` | `events/post_published.rs`, event `posts.post_published` | nothing |
