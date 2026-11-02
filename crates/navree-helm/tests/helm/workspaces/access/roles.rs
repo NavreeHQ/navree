@@ -63,7 +63,12 @@ async fn assert_read_only(world: &World, client: &TestClient, base: &str) {
             request
         };
         let response = request.send().await;
-        assert_eq!(response.status().as_u16(), 403, "{what}: {}", response.text());
+        assert_eq!(
+            response.status().as_u16(),
+            403,
+            "{what}: {}",
+            response.text()
+        );
         assert!(
             response.text().contains("workspace_read_only"),
             "{what}: {}",

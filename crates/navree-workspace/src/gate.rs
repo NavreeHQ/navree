@@ -15,8 +15,8 @@ use crate::core::Core;
 use crate::current::{app_error, enter_named, guest_member, writes};
 use crate::demo::DemoIntent;
 use crate::entity::Workspace;
-use crate::workspaces::GrantedBy;
 use crate::role::WorkspaceRole;
+use crate::workspaces::GrantedBy;
 use crate::{Isolation, ResolverKind, WorkspaceError, Workspaces};
 
 /// Answers with the rules of [`CurrentWorkspace`](crate::CurrentWorkspace): a

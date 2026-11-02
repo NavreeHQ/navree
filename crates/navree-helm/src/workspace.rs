@@ -204,9 +204,8 @@ pub(crate) type StaffCheck =
     Arc<dyn Fn(StaffEntry) -> BoxFuture<'static, Result<bool, AppError>> + Send + Sync>;
 
 /// The check of [`helm_staff_organizations`](crate::ModuleBuilderHelmExt::helm_staff_organizations).
-pub(crate) type StaffOrganizationCheck = Arc<
-    dyn Fn(StaffOrganizationEntry) -> BoxFuture<'static, Result<bool, AppError>> + Send + Sync,
->;
+pub(crate) type StaffOrganizationCheck =
+    Arc<dyn Fn(StaffOrganizationEntry) -> BoxFuture<'static, Result<bool, AppError>> + Send + Sync>;
 
 /// A contribution of `helm_staff_organizations`.
 pub(crate) struct StaffOrganizationPolicy(pub(crate) StaffOrganizationCheck);

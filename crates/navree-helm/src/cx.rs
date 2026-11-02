@@ -73,7 +73,10 @@ impl Cx {
 
     /// What `workspace` takes from the user: the workspace the request works in
     /// when it is that one or `None`, else the gate says.
-    async fn writes_to(&self, workspace: Option<Uuid>) -> Result<Option<WorkspaceWrites>, AppError> {
+    async fn writes_to(
+        &self,
+        workspace: Option<Uuid>,
+    ) -> Result<Option<WorkspaceWrites>, AppError> {
         match workspace.filter(|workspace| Some(*workspace) != self.uow.workspace()) {
             None => Ok(self.writes.clone()),
             Some(other) => match self.app.try_get::<dyn WorkspaceGate>().await {

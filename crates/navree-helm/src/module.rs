@@ -13,9 +13,7 @@ use crate::controller::HelmController;
 use crate::core::Core;
 use crate::page::PageRegistration;
 use crate::registry::ResourceRegistration;
-use crate::workspace::{
-    StaffEntry, StaffOrganizationEntry, StaffOrganizationPolicy, StaffPolicy,
-};
+use crate::workspace::{StaffEntry, StaffOrganizationEntry, StaffOrganizationPolicy, StaffPolicy};
 use crate::{HelmActionJob, HelmOptions, HelmPage, Resource, session};
 
 /// The subject that guards the panel: `view` on `Helm` (permission

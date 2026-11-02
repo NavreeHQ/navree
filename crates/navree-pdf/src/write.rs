@@ -775,9 +775,10 @@ impl Objects {
                 ))
             })
         };
-        let expected = self.objects.values().fold(0usize, |sum, object| {
-            sum.saturating_add(memory_of(object))
-        });
+        let expected = self
+            .objects
+            .values()
+            .fold(0usize, |sum, object| sum.saturating_add(memory_of(object)));
         let mut out = Vec::new();
         room(&mut out, expected.min(limit))?;
         let _ = write!(out, "%PDF-{}\n%\u{e2}\u{e3}\u{cf}\u{d3}\n", self.version);

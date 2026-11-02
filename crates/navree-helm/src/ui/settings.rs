@@ -231,15 +231,9 @@ async fn workspace_scope(cx: &Cx, target: &str, writes: bool) -> Result<(Scope, 
     if cx.pin.is_some_and(|pin| pin != id) {
         return Err(PinnedWorkspace::mismatch());
     }
-    let admitted = workspace::admission_to_what_it_owns(
-        &cx.app,
-        &cx.core,
-        cx.user_id,
-        &cx.access,
-        id,
-        writes,
-    )
-    .await?;
+    let admitted =
+        workspace::admission_to_what_it_owns(&cx.app, &cx.core, cx.user_id, &cx.access, id, writes)
+            .await?;
     match admitted {
         Ok(Admitted::Member) => {}
         Ok(Admitted::Staff) => {

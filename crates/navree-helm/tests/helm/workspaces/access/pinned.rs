@@ -57,7 +57,10 @@ async fn pinned_world() -> (World, TestClient) {
     (world, staff)
 }
 
-pub(super) fn pinned(request: navree_testing::TestRequest, to: Uuid) -> navree_testing::TestRequest {
+pub(super) fn pinned(
+    request: navree_testing::TestRequest,
+    to: Uuid,
+) -> navree_testing::TestRequest {
     request.header("x-test-pin", to.to_string())
 }
 

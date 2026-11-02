@@ -320,10 +320,16 @@ async fn with_no_way_to_check_the_level_of_a_workspace_is_refused() {
     let acme = Uuid::now_v7();
     let url = format!("/admin/settings/portal?level=workspace&target={acme}");
     let response = page(&admin, &url).await.assert_status(403);
-    assert!(response.text().contains("WorkspaceModule"), "{}", response.text());
+    assert!(
+        response.text().contains("WorkspaceModule"),
+        "{}",
+        response.text()
+    );
     submit(&admin, &url, &[("page_size", "40")])
         .await
         .assert_status(403);
     // The global level is the permission's.
-    page(&admin, "/admin/settings/portal").await.assert_status(200);
+    page(&admin, "/admin/settings/portal")
+        .await
+        .assert_status(200);
 }

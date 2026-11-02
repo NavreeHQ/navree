@@ -1628,12 +1628,7 @@ impl<R: Resource> ErasedResource for Handle<R> {
                     // ask the app that entered it: what it would find is said now.
                     if let (None, Some(entered)) = (cx.named_by, cx.uow.workspace()) {
                         workspace::admission(
-                            &cx.app,
-                            &cx.core,
-                            cx.user_id,
-                            &cx.access,
-                            entered,
-                            true,
+                            &cx.app, &cx.core, cx.user_id, &cx.access, entered, true,
                         )
                         .await?
                         .map_err(Refused::error)?;

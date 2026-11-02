@@ -12,9 +12,7 @@ use navree_view::Views;
 use crate::field::FieldKind;
 use crate::metric::MetricResult;
 use crate::registry::Registry;
-use crate::workspace::{
-    StaffCheck, StaffOrganizationCheck, StaffOrganizationPolicy, StaffPolicy,
-};
+use crate::workspace::{StaffCheck, StaffOrganizationCheck, StaffOrganizationPolicy, StaffPolicy};
 use crate::{HelmOptions, save, templates};
 
 /// The panel's stylesheet.

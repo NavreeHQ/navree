@@ -124,7 +124,11 @@ async fn nobody_reaches_the_settings_of_a_workspace_they_arent_in() {
 async fn a_slug_tells_nothing_a_user_may_not_know() {
     let world = settings_world(|builder| builder).await;
     let tenants = world.app.get::<Tenants>().await;
-    let slug = tenants.resolve(&world.globex.to_string()).await.unwrap().slug;
+    let slug = tenants
+        .resolve(&world.globex.to_string())
+        .await
+        .unwrap()
+        .slug;
     page(&world.outsider, &at("workspace", slug))
         .await
         .assert_status(403);
@@ -403,9 +407,8 @@ async fn a_credential_limited_to_a_workspace_reaches_the_settings_of_that_one() 
     let world = settings_world(|builder| builder.module(PinLayer)).await;
     join(&world.app, world.globex, world.member_id).await;
     let initech = organization(&world, world.member_id, "Initech").await;
-    let html = |path: String| {
-        pinned(world.member.get(&path), world.acme).header("accept", "text/html")
-    };
+    let html =
+        |path: String| pinned(world.member.get(&path), world.acme).header("accept", "text/html");
     html(at("workspace", world.acme))
         .send()
         .await

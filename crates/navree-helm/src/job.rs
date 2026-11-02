@@ -76,9 +76,13 @@ impl Job for HelmActionJob {
                 staff = Some(workspace);
             }
             if let Some(gate) = ctx.app.try_get::<dyn WorkspaceGate>().await {
-                writes = Some(gate.writes(self.user_id, workspace).await.map_err(|error| {
-                    may_not(error.detail.as_deref().unwrap_or(&error.title))
-                })?);
+                writes = Some(
+                    gate.writes(self.user_id, workspace)
+                        .await
+                        .map_err(|error| {
+                            may_not(error.detail.as_deref().unwrap_or(&error.title))
+                        })?,
+                );
             }
             workspace::enter_in(&ctx.app, &uow, Some(workspace))
                 .await
