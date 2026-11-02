@@ -113,6 +113,7 @@ impl WebPushDriver for VapidWebPush {
             let mut request = self
                 .client
                 .post(&target.endpoint)
+                .secret_url()
                 .header("authorization", authorization)
                 .header("content-encoding", "aes128gcm")
                 .header("content-type", "application/octet-stream")

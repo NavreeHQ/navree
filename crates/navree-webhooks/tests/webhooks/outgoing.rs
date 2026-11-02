@@ -846,3 +846,29 @@ async fn change_events_never_carry_the_secrets() {
         uow.rollback().await.unwrap();
     }
 }
+
+/// An endpoint's URL is often a secret of its own: its path doesn't reach what
+/// an attempt stores or what is shown of it.
+#[tokio::test]
+async fn a_failed_attempt_does_not_store_the_path_of_the_endpoint() {
+    let h = harness(|b| b).await;
+    h.server.on(
+        Method::POST,
+        "https://hooks.lovelace.io/*",
+        FakeResponse::connection_failed(),
+    );
+    let created = h
+        .endpoint(NewEndpoint::new("https://hooks.lovelace.io/SECRETPATH?t=QUERYSECRET").events(["deal.won"]))
+        .await;
+    h.emit(deal_won(None)).await;
+    h.run_queue().await;
+    let delivery = h.last_delivery(created.endpoint.id).await;
+    let last_error = delivery.last_error.clone().unwrap();
+    let attempts = h.webhooks().await.attempts(delivery.id).await.unwrap();
+    let error = attempts[0].error.clone().unwrap();
+    for text in [&last_error, &error] {
+        assert!(text.contains("connect"), "{text}");
+        assert!(!text.contains("SECRETPATH"), "{text}");
+        assert!(!text.contains("QUERYSECRET"), "{text}");
+    }
+}

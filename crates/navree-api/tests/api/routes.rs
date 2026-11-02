@@ -151,7 +151,7 @@ async fn the_document_can_be_turned_off_and_still_exports() {
 }
 
 #[tokio::test]
-async fn the_page_without_the_document_links_to_nothing() {
+async fn without_the_document_there_is_no_page_of_the_same_routes() {
     let app = app(ApiOptions {
         openapi_json: false,
         ..ApiOptions::default()
@@ -159,9 +159,12 @@ async fn the_page_without_the_document_links_to_nothing() {
     .boot()
     .await
     .unwrap();
-    let page = get(&app, "/api/docs").await;
-    assert_eq!(page.status, StatusCode::OK);
-    assert!(!page.text().contains("openapi.json"), "{}", page.text());
+    assert_eq!(get(&app, "/api/openapi.json").await.status, StatusCode::NOT_FOUND);
+    assert_eq!(get(&app, "/api/docs").await.status, StatusCode::NOT_FOUND);
+    assert_eq!(
+        get(&app, "/api/docs/assets/nothing").await.status,
+        StatusCode::NOT_FOUND
+    );
 }
 
 #[tokio::test]

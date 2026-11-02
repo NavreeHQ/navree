@@ -9,7 +9,8 @@ use navree_contracts::{BoxFuture, Secret};
 use navree_crypto::hmac_sha256;
 use navree_crypto::jose::{Algorithm, Jws, VerifyingKey};
 use navree_crypto::webpush::VapidKey;
-use navree_http_client::{HttpClient, HttpClientOptions};
+use http::Method;
+use navree_http_client::{FakeResponse, HttpClient, HttpClientOptions};
 use navree_kernel::BoxError;
 use navree_notify::{
     ChannelError, ConnectionTokens, MetaOptions, MetaWhatsApp, PushTarget, SlackApi, SlackDriver,
@@ -1085,4 +1086,27 @@ async fn malformed_subscription_keys_are_invalid_recipients() {
         VapidWebPush::new(&WebPushOptions::default()).is_err(),
         "a key pair is required"
     );
+}
+
+/// A push endpoint's URL is the subscription's secret: its path stays out of the
+/// error a failed send gives.
+#[tokio::test]
+async fn a_failed_push_does_not_name_the_path_of_its_endpoint() {
+    let key = VapidKey::generate();
+    let (client, server) = HttpClient::fake();
+    server.on(
+        Method::POST,
+        "https://push.example/*",
+        FakeResponse::connection_failed(),
+    );
+    let driver = VapidWebPush::new(&web_push_options(&key))
+        .unwrap()
+        .with_client(client);
+    let device = Browser::new().target("https://push.example/SECRETPATH");
+    let error = driver
+        .send(&device, &WebPushMessage::new("hello"))
+        .await
+        .unwrap_err();
+    let text = format!("{error} {error:?}");
+    assert!(!text.contains("SECRETPATH"), "{text}");
 }

@@ -80,15 +80,15 @@ impl Injectable for DocsController {
         Box::pin(async move {
             let docs = r.get::<ApiDocs>().await?;
             let http = r.get::<HttpOptions>().await?;
-            let page = docs.options().docs_ui.then(|| {
+            // The page shows what the document says, so turning the document off
+            // turns it off too.
+            let options = docs.options();
+            let page = (options.docs_ui && options.openapi_json).then(|| {
                 let prefix = http.api_prefix.trim_end_matches('/');
                 Arc::new(DocsPage {
                     html: OnceCell::new(),
-                    csp: page_csp(&docs.options().servers),
-                    json: docs
-                        .options()
-                        .openapi_json
-                        .then(|| format!("{prefix}/openapi.json")),
+                    csp: page_csp(&options.servers),
+                    json: Some(format!("{prefix}/openapi.json")),
                     stylesheet: format!("{prefix}/docs/assets/{STYLESHEET}"),
                     script: format!("{prefix}/docs/assets/{SCRIPT}"),
                 })

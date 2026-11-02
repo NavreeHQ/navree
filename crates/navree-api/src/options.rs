@@ -27,12 +27,14 @@ pub struct ApiOptions {
     /// comma-separated list (`APP_API__SERVERS=https://a.example,https://b.example`).
     #[serde(deserialize_with = "list_or_comma_separated")]
     pub servers: Vec<String>,
-    /// Serve the API reference page at `{api_prefix}/docs` (default `true`).
-    /// Public: nothing signs a reader in.
+    /// Serve the API reference page at `{api_prefix}/docs` (default `true`), when
+    /// [`openapi_json`](Self::openapi_json) is on too: the page shows what the
+    /// document says. Public: nothing signs a reader in.
     pub docs_ui: bool,
     /// Serve the document at `{api_prefix}/openapi.json` (default `true`).
-    /// Public: anyone can read every documented route there. `openapi:export`
-    /// writes the document either way.
+    /// Public: anyone can read every documented route there. Off, nothing of it is
+    /// served: not this route, and not the page. `openapi:export` writes the
+    /// document either way.
     pub openapi_json: bool,
     /// Refuse to boot while a route has no `#[api]` documentation (default
     /// `false`; `navree check` reports undocumented routes either way).

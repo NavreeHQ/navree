@@ -1041,7 +1041,9 @@ impl Webhooks {
             .join(" ");
         let headers: BTreeMap<String, String> =
             serde_json::from_value(endpoint.headers.clone()).unwrap_or_default();
-        let mut request = client.post(&endpoint.url);
+        // The URL of an endpoint is often a secret of its own: it stays out of the
+        // errors an attempt stores.
+        let mut request = client.post(&endpoint.url).secret_url();
         for (name, value) in &headers {
             request = request.header(name.as_str(), value.as_str());
         }
