@@ -7,6 +7,24 @@ use navree_http::AppError;
 use navree_kernel::BoxFuture;
 use uuid::Uuid;
 
+/// A request extension that limits the request to one workspace: set by an
+/// authentication strategy whose credential belongs to a workspace (an OAuth
+/// client created for one workspace). A request that names no workspace works
+/// in this one, and one that names another is refused, whoever holds the
+/// credential.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PinnedWorkspace(pub Uuid);
+
+impl PinnedWorkspace {
+    /// The answer to a request that names another workspace than the one its
+    /// credential is limited to (a 403).
+    pub fn mismatch() -> AppError {
+        AppError::forbidden()
+            .with_code("token_workspace_mismatch")
+            .with_detail("This token is limited to another workspace.")
+    }
+}
+
 /// What a [`WorkspaceGate`] says of a user and a workspace.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WorkspaceEntry {

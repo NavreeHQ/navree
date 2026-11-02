@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use http::request::Parts;
 use navree_access::{Ability, PrincipalAccess};
+pub use navree_access::PinnedWorkspace;
 use navree_contracts::{AuthState, RequestId};
 use navree_db::Uow;
 use navree_http::extract::FromRequestParts;
@@ -217,14 +218,6 @@ impl FromRequestParts for CurrentWorkspace {
     }
 }
 
-/// A request extension that limits the request to one workspace: set by an
-/// authentication strategy whose credential belongs to a workspace (an
-/// OAuth client created for one workspace). When the request names no
-/// workspace, [`CurrentWorkspace`] and [`InWorkspace`] use this one; when
-/// it names another, they answer 403.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct PinnedWorkspace(pub Uuid);
-
 /// Where a request's workspace identifier comes from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Source {
@@ -273,9 +266,7 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
     let workspaces = ctx.get::<Workspaces>().await.map_err(AppError::internal)?;
     let workspace = workspaces.resolve(&identifier).await.map_err(app_error)?;
     if pinned.is_some_and(|pin| pin != workspace.id) {
-        return Err(AppError::forbidden()
-            .with_code("token_workspace_mismatch")
-            .with_detail("This token is limited to another workspace."));
+        return Err(PinnedWorkspace::mismatch());
     }
     // A member or an organization grant; else, in a demo workspace with
     // `workspace.demo.guest_role`, a guest.

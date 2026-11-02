@@ -35,6 +35,8 @@ pub(crate) struct Cx {
     pub(crate) tz_offset: Option<i32>,
     /// How the request named the workspace it entered, if it named one.
     pub(crate) named_by: Option<NamedBy>,
+    /// The workspace the request's credential is limited to, if it is.
+    pub(crate) pin: Option<Uuid>,
 }
 
 impl Cx {

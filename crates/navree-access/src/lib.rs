@@ -68,4 +68,4 @@ pub use options::{AbilitiesFn, AccessOptions, default_abilities};
 pub use records::{Policy, SubjectRecords};
 pub use service::{AccessService, Explanation, RoleInfo};
 pub use subject::row_json;
-pub use workspace_gate::{WorkspaceEntry, WorkspaceGate};
+pub use workspace_gate::{PinnedWorkspace, WorkspaceEntry, WorkspaceGate};

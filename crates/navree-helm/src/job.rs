@@ -92,6 +92,9 @@ impl Job for HelmActionJob {
             client: Client::default(),
             tz_offset: None,
             named_by: None,
+            // The records were picked inside the credential's workspace, and the
+            // job runs in that workspace.
+            pin: None,
         };
         if let Some(workspace) = staff {
             cx.audit_outside(workspace::staff_entry(workspace, "queued action"))

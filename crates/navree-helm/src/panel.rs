@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use http::header::USER_AGENT;
 use http::request::Parts;
-use navree_access::CurrentAccess;
+use navree_access::{CurrentAccess, PinnedWorkspace};
 use navree_contracts::{AuthState, RequestId};
 use navree_db::Uow;
 use navree_http::extract::FromRequestParts;
@@ -60,28 +60,39 @@ async fn panel(parts: &mut Parts, enter_named: bool) -> Result<Panel, AppError> 
         let uow = Uow::from_request_parts(parts).await?;
         // The user's app-wide access: entering a workspace below doesn't change it.
         let CurrentAccess(access) = CurrentAccess::from_request_parts(parts).await?;
+        let pin = parts.extensions.get::<PinnedWorkspace>().map(|pin| pin.0);
+        // What the app entered is held to the credential as well.
+        if let (Some(pin), Some(entered)) = (pin, uow.workspace())
+            && pin != entered
+        {
+            return Err(PinnedWorkspace::mismatch());
+        }
         let mut named_by = None;
         let mut staff = None;
         // A request that is not inside a workspace may name one, and is let in
         // only if the user may work in it.
-        if enter_named
-            && uow.workspace().is_none()
-            && let Some((named, by)) =
-                workspace::requested(&parts.headers, workspace::header_of(&app).await.as_deref())
-        {
-            match workspace::admit_request(parts, &app, &core, &uow, user_id, &access, named)
-                .await?
-            {
-                Ok(admitted) => {
-                    named_by = Some(by);
-                    if admitted == Admitted::Staff {
-                        staff = Some(named);
+        if enter_named && uow.workspace().is_none() {
+            let named =
+                workspace::requested(&parts.headers, workspace::header_of(&app).await.as_deref());
+            let named = match pin {
+                Some(pin) => Some(workspace::within_pin(pin, named)?),
+                None => named,
+            };
+            if let Some((named, by)) = named {
+                match workspace::admit_request(parts, &app, &core, &uow, user_id, &access, named)
+                    .await?
+                {
+                    Ok(admitted) => {
+                        named_by = Some(by);
+                        if admitted == Admitted::Staff {
+                            staff = Some(named);
+                        }
                     }
+                    // A cookie is what the browser kept: it stops counting, and the
+                    // user can still reach the form that changes it.
+                    Err(_) if by == NamedBy::Cookie => {}
+                    Err(refused) => return Err(refused.error()),
                 }
-                Err(refused) if by == NamedBy::Header => return Err(refused.error()),
-                // A cookie is what the browser kept: it stops counting, and the
-                // user can still reach the form that changes it.
-                Err(_) => {}
             }
         }
         let ClientIp(ip) = ClientIp::from_parts(parts);
@@ -111,6 +122,7 @@ async fn panel(parts: &mut Parts, enter_named: bool) -> Result<Panel, AppError> 
             client,
             tz_offset: None,
             named_by,
+            pin,
         };
         if let Some(entered) = staff {
             cx.audit_outside(workspace::staff_entry(

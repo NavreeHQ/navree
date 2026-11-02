@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use http::header::{CACHE_CONTROL, CONTENT_TYPE, SET_COOKIE};
 use http::{HeaderMap, HeaderValue, StatusCode};
-use navree_access::{CREATE, READ};
+use navree_access::{CREATE, PinnedWorkspace, READ};
 use navree_auth::{AuthError, AuthService, ClientMeta, LoginOutcome, TwoFactorProof};
 use navree_contracts::{AuthState, AuthVia};
 use navree_crypto::{Encrypter, constant_time_eq, random_token};
@@ -714,6 +714,11 @@ pub(crate) async fn choose_workspace(
     let Ok(workspace) = uuid::Uuid::parse_str(&chosen) else {
         return redirect_with(&base, "That is not a workspace id.", "error", &core, &host);
     };
+    if panel.cx.pin.is_some_and(|pin| pin != workspace) {
+        let error = PinnedWorkspace::mismatch();
+        let message = error.detail.as_deref().unwrap_or(&error.title);
+        return redirect_with(&base, message, "error", &core, &host);
+    }
     let admitted = workspace::admission(
         &panel.cx.app,
         &core,

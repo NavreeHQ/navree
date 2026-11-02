@@ -20,6 +20,10 @@
 //! `navree.workspace` setting is set, which is what row-level security
 //! policies read, and under schema isolation the `search_path`.
 //!
+//! A credential limited to a workspace ([`PinnedWorkspace`]) works in that one:
+//! it names it when the request doesn't, a header naming another is a 403 before
+//! staff is asked, and a cookie naming another counts for nothing.
+//!
 //! Without a workspace, a resource of a workspace-scoped model answers with
 //! a 400 that asks for one: it never falls back to every workspace.
 //! [`Workspaces::Every`] is the explicit way for a resource to work across
@@ -30,7 +34,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use http::HeaderMap;
-use navree_access::{PrincipalAccess, WorkspaceEntry, WorkspaceGate};
+use navree_access::{PinnedWorkspace, PrincipalAccess, WorkspaceEntry, WorkspaceGate};
 use navree_db::{Backend, Executor as _, Statement, Uow};
 use navree_http::AppError;
 use navree_kernel::{AppContext, BoxFuture};
@@ -79,6 +83,8 @@ pub enum Workspaces {
 pub(crate) enum NamedBy {
     Header,
     Cookie,
+    /// The credential is limited to it.
+    Pin,
 }
 
 impl NamedBy {
@@ -86,6 +92,7 @@ impl NamedBy {
         match self {
             NamedBy::Header => "header",
             NamedBy::Cookie => "cookie",
+            NamedBy::Pin => "credential",
         }
     }
 }
@@ -106,6 +113,19 @@ pub(crate) fn requested(headers: &HeaderMap, header: Option<&str>) -> Option<(Uu
         None => cookie(headers, WORKSPACE_COOKIE)
             .and_then(|value| Uuid::parse_str(value.trim()).ok())
             .map(|workspace| (workspace, NamedBy::Cookie)),
+    }
+}
+
+/// The workspace a request works in under a credential limited to `pin`: the
+/// pin, whatever the cookie holds, and an error for a header that names another,
+/// before anyone is asked whether the user may work there.
+pub(crate) fn within_pin(
+    pin: Uuid,
+    named: Option<(Uuid, NamedBy)>,
+) -> Result<(Uuid, NamedBy), AppError> {
+    match named {
+        Some((other, NamedBy::Header)) if other != pin => Err(PinnedWorkspace::mismatch()),
+        _ => Ok((pin, NamedBy::Pin)),
     }
 }
 

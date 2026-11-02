@@ -530,7 +530,8 @@ impl<R: Resource> Handle<R> {
     /// the resource's narrowing, then the user's access filter.
     fn base(&self, cx: &Cx, action: &str) -> Builder<R::Model> {
         let query = R::Model::query();
-        let query = if self.info.workspaces == Some(Workspaces::Every) {
+        // A credential limited to a workspace is scoped to it across workspaces too.
+        let query = if self.info.workspaces == Some(Workspaces::Every) && cx.pin.is_none() {
             query.without_workspace_scope()
         } else {
             query
