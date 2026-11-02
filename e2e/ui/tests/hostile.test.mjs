@@ -682,6 +682,19 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       await context.close();
     });
 
+    test(`an envelope loads only the toolkit's modules (${engine})`, async () => {
+      for (const url of ["/attacker.js", "/_navree/ui/../../attacker.js", `${E()}/mod.js`, "data:text/javascript,document.documentElement.setAttribute('data-attacker-ran','1')"]) {
+        f.evil.length = 0;
+        const { context, page } = await afterOps({ modules: [url], ops: [] });
+        assert.equal(await attr(page, "data-attacker-ran"), null, url);
+        assert.deepEqual(f.evil, [], url);
+        await context.close();
+      }
+      const { context, page } = await afterOps({ modules: ["/_navree/ui/stand-in.js"], ops: [] });
+      assert.equal(await attr(page, "data-stand-in-ran"), "1");
+      await context.close();
+    });
+
     test(`named elements can't switch the runtime off (${engine})`, async () => {
       for (const name of ["cookie", "getElementById", "querySelector", "querySelectorAll", "body", "head", "documentElement", "activeElement", "title", "createElement", "addEventListener"]) {
         const path = key("document");
