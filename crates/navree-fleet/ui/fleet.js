@@ -345,7 +345,7 @@
         api("/overview")
           .then((o) => {
             setStatus(o.status);
-            document.getElementById("count-failed").textContent = o.failed_past_week ? number(o.failed_past_week) : "";
+            document.getElementById("count-failed").textContent = o.failed_total ? number(o.failed_total) : "";
           })
           .catch(() => {});
       }

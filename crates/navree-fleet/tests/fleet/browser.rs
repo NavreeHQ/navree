@@ -13,7 +13,7 @@ use navree_access::{AbilityCtx, AccessModule, AccessOptions, Rules};
 use navree_browser::{Browser, Page, Target, TestServer, Viewport};
 use navree_contracts::{AuthVia, Principal};
 use navree_fleet::testing::FakeSpawner;
-use navree_fleet::{MetricKind, MetricSnapshot, Master};
+use navree_fleet::{Master, MetricKind, MetricSnapshot};
 use navree_http::{AppError, Authenticator};
 use navree_kernel::{BoxFuture, Factory, Module, ModuleBuilder};
 use navree_queue::WorkOptions;
@@ -278,7 +278,9 @@ async fn the_overview_groups_queues_by_supervisor_with_a_square_per_process() {
     })
     .await;
 
-    let page = site.open("operator", "#overview", Viewport::desktop()).await;
+    let page = site
+        .open("operator", "#overview", Viewport::desktop())
+        .await;
     page.wait_for(".workload").await.unwrap();
     page.assert_title("Overview \u{b7} Fleet").await.unwrap();
     let groups: Value = page
@@ -360,7 +362,9 @@ async fn the_overview_charts_jobs_per_minute_and_lists_failed_jobs() {
     snapshot(&site.h, MetricKind::Queue, "default", 12, 2).await;
     fail_exports(&site.h, 7).await;
 
-    let page = site.open("operator", "#overview", Viewport::desktop()).await;
+    let page = site
+        .open("operator", "#overview", Viewport::desktop())
+        .await;
     page.wait_for(".chart-card .bars").await.unwrap();
     let chart: Value = page
         .script(
@@ -377,13 +381,14 @@ async fn the_overview_charts_jobs_per_minute_and_lists_failed_jobs() {
     assert_eq!(chart["bars"], 30);
     assert_eq!(chart["filled"], 2);
     assert!(
-        chart["foot"].as_str().unwrap().contains("1,620 jobs, peak 980/min"),
+        chart["foot"]
+            .as_str()
+            .unwrap()
+            .contains("1,620 jobs, peak 980/min"),
         "{chart}"
     );
     page.select(".chart-card select", "default").await.unwrap();
-    page.wait_for(".chart-foot")
-        .await
-        .unwrap();
+    page.wait_for(".chart-foot").await.unwrap();
     page.assert_see("12 jobs, peak 12/min").await.unwrap();
 
     // The five newest failed jobs, each with its attempts and its error.
@@ -396,9 +401,10 @@ async fn the_overview_charts_jobs_per_minute_and_lists_failed_jobs() {
     let failures = failures.as_array().unwrap();
     assert_eq!(failures.len(), 5, "{failures:?}");
     assert!(
-        failures[0].as_str().unwrap().starts_with(
-            "contacts.export 1/1 the mail server is down Retry Forget"
-        ),
+        failures[0]
+            .as_str()
+            .unwrap()
+            .starts_with("contacts.export 1/1 the mail server is down Retry Forget"),
         "{failures:?}"
     );
     page.assert_see("View all 7 failed jobs").await.unwrap();
@@ -406,7 +412,9 @@ async fn the_overview_charts_jobs_per_minute_and_lists_failed_jobs() {
 
     // Retry puts one back on its queue; Forget deletes one.
     page.press(Target::from("Retry").nth(0)).await.unwrap();
-    page.assert_see("The job is back on its queue.").await.unwrap();
+    page.assert_see("The job is back on its queue.")
+        .await
+        .unwrap();
     eventually("one failed job is retried", || async {
         site.h.fleet.failed_jobs(None).await.unwrap().len() == 6
     })
@@ -460,10 +468,16 @@ async fn every_view_is_titled_by_its_page() {
         fail_exports(&site.h, 1).await;
         site.h.fleet.failed_jobs(None).await.unwrap()
     };
-    let page = site.browser.visit(site.server.url("/_fleet")).await.unwrap();
+    let page = site
+        .browser
+        .visit(site.server.url("/_fleet"))
+        .await
+        .unwrap();
     page.assert_title("Sign in \u{b7} Fleet").await.unwrap();
 
-    let page = site.open("operator", "#overview", Viewport::desktop()).await;
+    let page = site
+        .open("operator", "#overview", Viewport::desktop())
+        .await;
     for (hash, title) in [
         ("#overview", "Overview \u{b7} Fleet"),
         ("#supervisors", "Supervisors \u{b7} Fleet"),
@@ -495,7 +509,9 @@ async fn an_account_without_access_sees_only_the_message() {
         let page = site.open("nobody", "#overview", viewport).await;
         page.wait_for(".message-card").await.unwrap();
         page.assert_title("No access \u{b7} Fleet").await.unwrap();
-        page.assert_see("it needs the fleet.view permission").await.unwrap();
+        page.assert_see("it needs the fleet.view permission")
+            .await
+            .unwrap();
         page.assert_dont_see("Loading").await.unwrap();
         let shown: Value = page
             .script(
@@ -518,7 +534,8 @@ async fn the_metrics_page_fits_its_window_whatever_a_job_type_is_called() {
         "the_metrics_page_fits_its_window_whatever_a_job_type_is_called",
         dashboard_builder().config("fleet.supervisors", supervisors())
     );
-    let long = "events.listener.workspace.member_added.navree_billing::seats::SyncSeatsAfterMemberAdded";
+    let long =
+        "events.listener.workspace.member_added.navree_billing::seats::SyncSeatsAfterMemberAdded";
     for minutes_ago in [1, 2, 3, 4] {
         snapshot(&site.h, MetricKind::Job, long, 20, minutes_ago).await;
         snapshot(&site.h, MetricKind::Job, "mail.send", 5, minutes_ago).await;
@@ -559,7 +576,10 @@ async fn the_overview_fits_a_laptop_and_a_phone_and_the_sidebar_becomes_a_rail()
         let width = viewport.width();
         let page = site.open("operator", "#overview", viewport).await;
         page.wait_for(".failure").await.unwrap();
-        assert_fits(&overflow(&page, width).await, &format!("Overview at {name}"));
+        assert_fits(
+            &overflow(&page, width).await,
+            &format!("Overview at {name}"),
+        );
         assert_eq!(
             page.script::<bool>(collapsed).await.unwrap(),
             rail,

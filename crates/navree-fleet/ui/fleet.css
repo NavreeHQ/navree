@@ -168,14 +168,15 @@ pre {
 .workload tr.group td { height: 32px; padding: 0 12px; background: var(--ink-2); color: var(--fg-3); font: 12px var(--mono); }
 .workload tr.group .badge { margin-left: 8px; font-family: var(--sans); }
 .workload tbody.paused .slot.on { background: transparent; border-color: var(--amber); }
-.slots { display: inline-flex; align-items: center; gap: 4px; }
+.workload td { vertical-align: middle; }
+.slots { display: flex; align-items: center; gap: 4px; height: 20px; }
 .slot { width: 14px; height: 14px; border-radius: 2px; border: 1px solid var(--line-2); background: var(--ink-0); flex: none; }
 .slot.on { background: var(--fg-2); border-color: var(--fg-2); }
 .slot-more { font: 12px var(--mono); color: var(--fg-3); margin-left: 2px; }
 .panels { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 12px; align-items: stretch; }
 .chart-card { display: flex; flex-direction: column; padding: 16px; min-width: 0; }
 .chart-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.chart-title { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; min-width: 0; }
+.chart-title { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; min-width: 0; white-space: nowrap; }
 .chart-card .bars { flex: 1 1 0; width: 100%; height: 0; min-height: 88px; margin-top: 12px; stroke: none; }
 .bar { fill: var(--fg-2); }
 .bar.zero { fill: var(--line-2); }
@@ -198,6 +199,7 @@ pre {
 .shell.bare .sidebar-group, .shell.bare .topbar-actions { display: none; }
 .message-card { max-width: 520px; margin: 48px auto; padding: 24px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
 .message-card p { margin: 0; }
+.message-card .message { padding: 0; border: 0; background: none; }
 
 /* Sign-in */
 .signin { max-width: 380px; margin: 64px auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
@@ -221,6 +223,7 @@ pre {
   .shell.collapsed .sidebar { width: 16rem; }
   .content { padding: 16px; }
   .input { min-width: 0; width: 100%; }
+  .select { width: auto; }
   .detail { grid-template-columns: 1fr; }
   .updated { display: none; }
   .wide { display: none; }

@@ -122,6 +122,18 @@ let charts = fleet.metrics(MetricsPeriod::Hour).await?;
   `POST continue` (body `{"supervisor": "x"}` or none).
   Grant with `navree access:grant manager fleet.view`, or in code
   `rules.can("view", "Fleet")`.
+- The overview groups the workload table by supervisor (`default · auto ·
+  1-8 processes`) with a square per process (filled while it works the
+  queue), charts one queue's jobs per minute for the last 30 minutes (from
+  the stored snapshots, `fleet.snapshot_secs`), and lists the five newest
+  failed jobs with attempts, error, Retry and Forget (Retry all asks first
+  and retries every failed job). `GET /_fleet/api/overview` carries it:
+  `supervisors` (`queues`, `balance`, `min_processes`, `max_processes`,
+  `processes_label`, `paused`, `processes`, `slots`), `masters`,
+  `throughput[].per_minute` (30 counts, oldest first), `failed_total`,
+  `recent_failures`.
+- Every page sets its tab title (`Failed jobs · Fleet`); an account
+  without `fleet.view` gets a "No access" screen without the navigation.
 - Payload fields matching `log.redact` fragments show `[redacted]`.
 - `fleet.path` moves it; `fleet.dashboard = false` removes it.
 

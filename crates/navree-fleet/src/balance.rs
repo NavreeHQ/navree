@@ -230,6 +230,20 @@ mod tests {
         assert_eq!(counts(&current), [1, 1, 1]);
     }
 
+    /// Growth is sized by how many jobs wait, not by how long they take:
+    /// 25 mails of 20 ms (a second of work for one process) still claim
+    /// every spare process they can keep busy. They only get them if they
+    /// are still waiting at the following balancing steps.
+    #[test]
+    fn a_small_fast_backlog_still_targets_every_spare_process_it_can_keep_busy() {
+        let s = supervisor(Balance::Auto, &["default", "mail", "notifications"], 1, 8);
+        let work = [load("mail", 25, 20)];
+        assert_eq!(counts(&target_allocation(&s, &work)), [1, 6, 1]);
+        // Seven jobs at four per process keep two processes busy.
+        let work = [load("mail", 7, 20)];
+        assert_eq!(counts(&target_allocation(&s, &work)), [1, 2, 1]);
+    }
+
     #[test]
     fn spare_processes_follow_the_workload_proportionally() {
         let s = supervisor(Balance::Auto, &["a", "b"], 1, 10);

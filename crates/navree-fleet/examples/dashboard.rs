@@ -4,11 +4,20 @@
 //! cargo run -p navree-fleet --example dashboard
 //! ```
 //!
-//! Then open <http://127.0.0.1:8090/_fleet> and use the access token `demo`.
-//! A master runs in-process workers while a feeder queues jobs (some slow,
-//! some failing) and a backlog builds up on `mail`.
+//! Then open <http://127.0.0.1:8090/_fleet> and use the access token `demo`
+//! (`viewer` may only look; `nobody` has no access). A master runs
+//! in-process workers while a feeder queues jobs (some slow, some failing).
+//!
+//! Settings, from the environment:
+//!
+//! - `DEMO_ADDR`: where to listen (default `127.0.0.1:8090`).
+//! - `DEMO_BACKLOG`: queue this many `mail.send` jobs, like a newsletter
+//!   (default none), `DEMO_BACKLOG_AT` seconds after the start (default 20).
+//! - `DEMO_MAIL_MS`: how long a `mail.send` takes (default 400).
+//! - `DEMO_QUIET=1`: no background feeder, only the backlog.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use http::request::Parts;
@@ -26,7 +35,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-/// Accepts `Authorization: Bearer demo`.
+/// Accepts `Authorization: Bearer demo` (may operate), `viewer` (may look)
+/// and `nobody` (may do nothing).
 struct DemoAuth;
 
 impl Authenticator for DemoAuth {
@@ -34,14 +44,19 @@ impl Authenticator for DemoAuth {
         &'a self,
         parts: &'a mut Parts,
     ) -> BoxFuture<'a, Result<Option<Principal>, AppError>> {
-        let ok = parts
+        let user = match parts
             .headers
             .get(http::header::AUTHORIZATION)
             .and_then(|v| v.to_str().ok())
-            == Some("Bearer demo");
+        {
+            Some("Bearer demo") => Some(1),
+            Some("Bearer viewer") => Some(2),
+            Some("Bearer nobody") => Some(3),
+            _ => None,
+        };
         Box::pin(async move {
-            Ok(ok.then(|| Principal {
-                user_id: Uuid::from_u128(1),
+            Ok(user.map(|id| Principal {
+                user_id: Uuid::from_u128(id),
                 via: AuthVia::Token,
                 token_abilities: None,
                 session_id: None,
@@ -51,9 +66,15 @@ impl Authenticator for DemoAuth {
 }
 
 fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
-    if ctx.user.is_some() {
-        rules.can("view", "Fleet");
-        rules.can("operate", "Fleet");
+    match ctx.user.as_ref().map(|user| user.id) {
+        Some(id) if id == Uuid::from_u128(1) => {
+            rules.can("view", "Fleet");
+            rules.can("operate", "Fleet");
+        }
+        Some(id) if id == Uuid::from_u128(2) => {
+            rules.can("view", "Fleet");
+        }
+        _ => {}
     }
 }
 
@@ -72,26 +93,78 @@ impl Job for Report {
     }
 }
 
-/// A mail; on queue `mail`.
+/// How long a mail takes, in milliseconds.
+static MAIL_MS: AtomicU64 = AtomicU64::new(400);
+
+/// A mail; on queue `mail`. One in a hundred cannot reach the server.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct SendDigest {
+struct SendMail {
     user_id: Uuid,
     api_token: String,
 }
 
-impl Job for SendDigest {
-    const NAME: &'static str = "mail.send_digest";
+impl Job for SendMail {
+    const NAME: &'static str = "mail.send";
 
     fn options() -> JobOptions {
         JobOptions {
             queue: "mail".into(),
+            max_attempts: 5,
+            backoff: Backoff::Fixed { secs: 1 },
             ..JobOptions::default()
         }
     }
 
     async fn handle(self, _ctx: JobContext) -> Result<(), BoxError> {
-        tokio::time::sleep(Duration::from_millis(400)).await;
+        tokio::time::sleep(Duration::from_millis(MAIL_MS.load(Ordering::Relaxed))).await;
+        if self.user_id.as_u128() % 100 == 0 {
+            return Err("connection refused: smtp.internal:587".into());
+        }
         Ok(())
+    }
+}
+
+/// A push; on queue `notifications`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct PushNotification {
+    user_id: Uuid,
+}
+
+impl Job for PushNotification {
+    const NAME: &'static str = "notifications.push";
+
+    fn options() -> JobOptions {
+        JobOptions {
+            queue: "notifications".into(),
+            ..JobOptions::default()
+        }
+    }
+
+    async fn handle(self, _ctx: JobContext) -> Result<(), BoxError> {
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        Ok(())
+    }
+}
+
+/// A webhook to an endpoint that is gone; on queue `default`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct DeliverWebhook {
+    endpoint: String,
+}
+
+impl Job for DeliverWebhook {
+    const NAME: &'static str = "webhooks.deliver";
+
+    fn options() -> JobOptions {
+        JobOptions {
+            max_attempts: 8,
+            backoff: Backoff::Fixed { secs: 1 },
+            ..JobOptions::default()
+        }
+    }
+
+    async fn handle(self, _ctx: JobContext) -> Result<(), BoxError> {
+        Err("endpoint answered 410 Gone".into())
     }
 }
 
@@ -108,14 +181,14 @@ impl Job for ExportContacts {
     fn options() -> JobOptions {
         JobOptions {
             queue: "exports".into(),
-            max_attempts: 2,
+            max_attempts: 3,
             backoff: Backoff::Fixed { secs: 1 },
             ..JobOptions::default()
         }
     }
 
     async fn handle(self, _ctx: JobContext) -> Result<(), BoxError> {
-        Err("smtp.mail.local:587: connection refused (os error 111)".into())
+        Err("timed out after 120 s".into())
     }
 }
 
@@ -124,7 +197,9 @@ struct DemoModule;
 impl Module for DemoModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.job::<Report>()
-            .job::<SendDigest>()
+            .job::<SendMail>()
+            .job::<PushNotification>()
+            .job::<DeliverWebhook>()
             .job::<ExportContacts>()
             .global()
             .factory(Factory::<dyn Authenticator>::new(|_| async {
@@ -136,6 +211,22 @@ impl Module for DemoModule {
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
+    let addr = std::env::var("DEMO_ADDR").unwrap_or_else(|_| "127.0.0.1:8090".into());
+    let backlog: u64 = std::env::var("DEMO_BACKLOG")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let backlog_at: u64 = std::env::var("DEMO_BACKLOG_AT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(20);
+    let quiet = std::env::var("DEMO_QUIET").as_deref() == Ok("1");
+    if let Some(ms) = std::env::var("DEMO_MAIL_MS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+    {
+        MAIL_MS.store(ms, Ordering::Relaxed);
+    }
     let dir = tempfile::tempdir()?;
     let url = format!(
         "sqlite://{}?mode=rwc",
@@ -148,7 +239,7 @@ async fn main() -> Result<(), BoxError> {
     let sources = ConfigSources::new()
         .set("database.url", Value::String(url))
         .set("database.migrate_on_boot", json!(true))
-        .set("http.addr", json!("127.0.0.1:8090"))
+        .set("http.addr", json!(addr))
         .set("http.per_ip_rate_limit", Value::Null)
         .set("queue.poll_interval_ms", json!(100))
         .set("fleet.snapshot_secs", json!(5))
@@ -156,8 +247,8 @@ async fn main() -> Result<(), BoxError> {
         .set(
             "fleet.supervisors",
             json!({
-                "default": { "queues": ["default", "mail"], "max_processes": 4, "concurrency": 2, "max_jobs": 40 },
-                "exports": { "queues": ["exports"], "balance": "off", "max_processes": 1 }
+                "default": { "queues": ["default", "mail", "notifications"], "max_processes": 8, "concurrency": 4 },
+                "exports": { "queues": ["exports"], "balance": "off", "max_processes": 2 }
             }),
         );
     let app = Navree::app()
@@ -183,37 +274,62 @@ async fn main() -> Result<(), BoxError> {
         });
     tokio::spawn(master.run(ctx.shutdown_token()));
     let queue = ctx.get::<Queue>().await?;
-    tokio::spawn(async move {
-        let mut n: u64 = 0;
-        loop {
-            n += 1;
-            let _ = queue
-                .dispatch(Report {
-                    ms: 50 + (n * 37) % 400,
-                })
-                .await;
-            if n.is_multiple_of(3) {
-                for _ in 0..6 {
+    if backlog > 0 {
+        let queue = queue.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(backlog_at)).await;
+            for _ in 0..backlog {
+                let _ = queue
+                    .dispatch(SendMail {
+                        user_id: Uuid::now_v7(),
+                        api_token: "tok_live_123".into(),
+                    })
+                    .await;
+            }
+            println!("queued {backlog} mails");
+        });
+    }
+    if !quiet {
+        tokio::spawn(async move {
+            let mut n: u64 = 0;
+            loop {
+                n += 1;
+                let _ = queue
+                    .dispatch(Report {
+                        ms: 50 + (n * 37) % 400,
+                    })
+                    .await;
+                let _ = queue
+                    .dispatch(PushNotification {
+                        user_id: Uuid::now_v7(),
+                    })
+                    .await;
+                if n.is_multiple_of(4) {
                     let _ = queue
-                        .dispatch(SendDigest {
+                        .dispatch(SendMail {
                             user_id: Uuid::now_v7(),
                             api_token: "tok_live_123".into(),
                         })
                         .await;
                 }
+                if n.is_multiple_of(40) {
+                    let _ = queue
+                        .dispatch(ExportContacts {
+                            contact: format!("contact-{n}"),
+                            password: "hunter2".into(),
+                        })
+                        .await;
+                    let _ = queue
+                        .dispatch(DeliverWebhook {
+                            endpoint: format!("https://hooks.example.test/{n}"),
+                        })
+                        .await;
+                }
+                tokio::time::sleep(Duration::from_millis(250)).await;
             }
-            if n.is_multiple_of(20) {
-                let _ = queue
-                    .dispatch(ExportContacts {
-                        contact: format!("contact-{n}"),
-                        password: "hunter2".into(),
-                    })
-                    .await;
-            }
-            tokio::time::sleep(Duration::from_millis(250)).await;
-        }
-    });
-    println!("Fleet dashboard: http://127.0.0.1:8090/_fleet (token: demo)");
+        });
+    }
+    println!("Fleet dashboard: http://{addr}/_fleet (tokens: demo, viewer, nobody)");
     app.run_command("serve", Vec::new()).await?;
     Ok(())
 }

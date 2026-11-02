@@ -251,6 +251,61 @@ async fn a_backlog_moves_processes_to_its_queue_and_back() {
     master.stop().await;
 }
 
+/// The docs' newsletter, as the master runs it: while the backlog stays
+/// (nothing works it here, as with jobs that take long), `mail` gains one
+/// process per balancing step up to the six the supervisor can spare, and
+/// keeps them; `default` and `notifications` keep one each.
+#[tokio::test]
+async fn a_sustained_backlog_holds_every_spare_process_on_its_queue() {
+    let h = Harness::new(
+        builder()
+            .config(
+                "fleet.supervisors.default",
+                json!({ "queues": ["default", "mail", "notifications"], "max_processes": 8 }),
+            )
+            .config("fleet.balance_cooldown_secs", 1),
+    )
+    .await;
+    for i in 0..300 {
+        h.queue
+            .dispatch(SendDigest {
+                user: format!("u{i}"),
+                api_token: "t".into(),
+            })
+            .await
+            .unwrap();
+    }
+    let master = Running::start(&h).await;
+    let started = Instant::now();
+    let mut seen = vec![master.count_on("mail")];
+    let mut at_six = None;
+    while started.elapsed() < Duration::from_secs(12) {
+        let now = master.count_on("mail");
+        if seen.last() != Some(&now) {
+            seen.push(now);
+        }
+        if now == 6 && at_six.is_none() {
+            at_six = Some(started.elapsed());
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let at_six = at_six.expect("six mail processes");
+    // One process a step, a step a second: about five seconds, never
+    // faster than the steps and never slower than twice them.
+    assert!(
+        at_six >= Duration::from_secs(4) && at_six <= Duration::from_secs(9),
+        "six mail processes after {at_six:?}: {seen:?}"
+    );
+    assert_eq!(seen.last(), Some(&6), "it keeps them: {seen:?}");
+    assert!(
+        seen.windows(2).all(|w| w[1] == w[0] + 1),
+        "one process at a time, upwards only: {seen:?}"
+    );
+    assert_eq!(master.count_on("default"), 1);
+    assert_eq!(master.count_on("notifications"), 1);
+    master.stop().await;
+}
+
 #[tokio::test]
 async fn pausing_reaches_running_and_new_workers() {
     let h = Harness::new(builder().config("fleet.supervisors", supervisors())).await;
