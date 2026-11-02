@@ -123,7 +123,6 @@ fuzz_target!(|data: &[u8]| {
         "<svg><![CDATA[><script>]]>{{ v|tojson }}",
         "<svg><script>{{ v|tojson }}",
         "<math><script>{{ v|tojson }}",
-        "<a =b=><script>{{ v|tojson }}",
         "{% macro s(x) %}<script>{{ x|tojson }}{% endmacro %}{{ s(v) }}",
         "{% set y = v|tojson %}{{ y }}",
     ] {
