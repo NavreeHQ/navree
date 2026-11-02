@@ -11,11 +11,14 @@ use navree_http::extract::Request;
 use navree_http::middleware::{self, Next};
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{Controller, GlobalLayer, LayerSlot, ModuleBuilderHttpExt, Path, RouteDef};
-use navree_kernel::{AppContext, BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{
+    AppContext, BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, ModuleId,
+    ProviderKey, Resolver,
+};
 
-use crate::{assets, compress};
 use crate::op::{Envelope, PendingOps, UI_HEADER};
 use crate::shell::FLASH_COOKIE;
+use crate::{assets, compress};
 
 /// Registers the toolkit in an app: the routes of its files, and the layer
 /// that turns a [`Reply`](crate::Reply) into ops when the runtime asked.
@@ -99,32 +102,34 @@ fn register(m: &mut ModuleBuilder, always: bool) {
     }
     let slot: Arc<OnceLock<bool>> = Arc::new(OnceLock::new());
     let for_gate = slot.clone();
-    m.factory(
-        Factory::<UiGate>::new(move |r: Resolver| {
-            let slot = for_gate.clone();
-            async move {
-                let ctx = r.app();
-                let mut wanted = !ctx.contributions::<UiAlways>().is_empty();
-                if !wanted {
-                    for need in ctx.contributions::<UiNeed>() {
-                        if (need.value.0)(ctx.clone()).await {
-                            wanted = true;
-                            break;
-                        }
+    m.factory(Factory::<UiGate>::new(move |r: Resolver| {
+        let slot = for_gate.clone();
+        async move {
+            let ctx = r.app();
+            let mut wanted = !ctx.contributions::<UiAlways>().is_empty();
+            if !wanted {
+                for need in ctx.contributions::<UiNeed>() {
+                    if (need.value.0)(ctx.clone()).await {
+                        wanted = true;
+                        break;
                     }
                 }
-                let _ = slot.set(wanted);
-                Ok(Arc::new(UiGate(slot)))
             }
-        }),
-    );
-    m.http_layer(GlobalLayer::new(LayerSlot::Session, "ui.reply", move |_, router| {
-        if slot.get().copied().unwrap_or(false) {
-            Ok(router.layer(middleware::from_fn(reply_layer)))
-        } else {
-            Ok(router)
+            let _ = slot.set(wanted);
+            Ok(Arc::new(UiGate(slot)))
         }
     }));
+    m.http_layer(GlobalLayer::new(
+        LayerSlot::Session,
+        "ui.reply",
+        move |_, router| {
+            if slot.get().copied().unwrap_or(false) {
+                Ok(router.layer(middleware::from_fn(reply_layer)))
+            } else {
+                Ok(router)
+            }
+        },
+    ));
     m.controller::<Assets>();
 }
 
@@ -140,7 +145,9 @@ async fn reply_layer(request: Request, next: Next) -> Response {
             response = to_ops(response, envelope, status);
         }
         // The same URL answers ops or a page: a cache has to keep them apart.
-        response.headers_mut().append(header::VARY, HeaderValue::from_static(UI_HEADER));
+        response
+            .headers_mut()
+            .append(header::VARY, HeaderValue::from_static(UI_HEADER));
     }
     compress::encode(&method, &accept, response).await
 }
@@ -166,7 +173,11 @@ fn to_ops(fallback: Response, envelope: Envelope, status: StatusCode) -> Respons
     let mut response = (status, envelope).into_response();
     let headers = response.headers_mut();
     for (name, value) in &parts.headers {
-        let flash = *name == header::SET_COOKIE && value.as_bytes().strip_prefix(FLASH_COOKIE.as_bytes()).is_some_and(|rest| rest.first() == Some(&b'='));
+        let flash = *name == header::SET_COOKIE
+            && value
+                .as_bytes()
+                .strip_prefix(FLASH_COOKIE.as_bytes())
+                .is_some_and(|rest| rest.first() == Some(&b'='));
         if !flash && !fallback_only(name) {
             headers.append(name, value.clone());
         }
@@ -188,7 +199,9 @@ impl Injectable for Assets {
     fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
         Box::pin(async move {
             let gate = r.get::<UiGate>().await?;
-            Ok(Self { wanted: gate.0.get().copied().unwrap_or(false) })
+            Ok(Self {
+                wanted: gate.0.get().copied().unwrap_or(false),
+            })
         })
     }
 }
@@ -206,7 +219,9 @@ impl Controller for Assets {
             RouteDef::on(
                 Method::GET,
                 format!("!{}/{{file}}", assets::MOUNT),
-                |Path(file): Path<String>, headers: HeaderMap| async move { assets::respond(&file, &headers) },
+                |Path(file): Path<String>, headers: HeaderMap| async move {
+                    assets::respond(&file, &headers)
+                },
             )
             .name("ui.assets")
             .public(),

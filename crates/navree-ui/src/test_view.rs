@@ -45,12 +45,18 @@ pub struct TestView {
 impl TestView {
     /// The page `view`.
     pub fn of(view: &View) -> Self {
-        Self { body: view.body_node().clone(), filled: Vec::new() }
+        Self {
+            body: view.body_node().clone(),
+            filled: Vec::new(),
+        }
     }
 
     /// A part of a page.
     pub fn of_node(node: impl Into<Node>) -> Self {
-        Self { body: node.into(), filled: Vec::new() }
+        Self {
+            body: node.into(),
+            filled: Vec::new(),
+        }
     }
 
     /// Whether a user can read `text` on the page.
@@ -65,7 +71,10 @@ impl TestView {
                 if test(element) {
                     return Some(element);
                 }
-                element.child_nodes().iter().find_map(|child| Self::find(child, test))
+                element
+                    .child_nodes()
+                    .iter()
+                    .find_map(|child| Self::find(child, test))
             }
             Node::Fragment(nodes) => nodes.iter().find_map(|child| Self::find(child, test)),
             _ => None,
@@ -73,7 +82,10 @@ impl TestView {
     }
 
     fn text_of(element: &Element, name: &str) -> Option<String> {
-        element.get(name).and_then(AttrValue::as_text).map(|text| text.into_owned())
+        element
+            .get(name)
+            .and_then(AttrValue::as_text)
+            .map(|text| text.into_owned())
     }
 
     /// What clicking the link or button named `name` does. The name is its
@@ -81,13 +93,18 @@ impl TestView {
     pub fn click(&self, name: &str) -> Clicked {
         let found = Self::find(&self.body, &|element| {
             matches!(element.tag(), "a" | "button")
-                && (Node::Element(element.clone()).text_content().trim() == name || Self::text_of(element, "aria-label").as_deref() == Some(name))
+                && (Node::Element(element.clone()).text_content().trim() == name
+                    || Self::text_of(element, "aria-label").as_deref() == Some(name))
         });
-        let Some(element) = found else { return Clicked::Nothing };
+        let Some(element) = found else {
+            return Clicked::Nothing;
+        };
         if let Some(commands) = Self::text_of(element, "data-ui-click") {
             return Clicked::Commands(commands);
         }
-        if let Some(target) = Self::text_of(element, "commandfor").or_else(|| Self::text_of(element, "popovertarget")) {
+        if let Some(target) =
+            Self::text_of(element, "commandfor").or_else(|| Self::text_of(element, "popovertarget"))
+        {
             return Clicked::Target(target);
         }
         if let Some(href) = Self::text_of(element, "href") {
@@ -105,10 +122,17 @@ impl TestView {
         match name {
             Some(name) => Self::find(&self.body, &|element| {
                 element.get("data-invalid").is_some()
-                    && element.child_nodes().iter().any(|node| Self::find(node, &|inner| Self::text_of(inner, "name").as_deref() == Some(name)).is_some())
+                    && element.child_nodes().iter().any(|node| {
+                        Self::find(node, &|inner| {
+                            Self::text_of(inner, "name").as_deref() == Some(name)
+                        })
+                        .is_some()
+                    })
             })
             .is_some(),
-            None => Self::find(&self.body, &|element| element.get("data-invalid").is_some()).is_some(),
+            None => {
+                Self::find(&self.body, &|element| element.get("data-invalid").is_some()).is_some()
+            }
         }
     }
 
@@ -131,18 +155,34 @@ impl TestView {
                             let kind = TestView::text_of(element, "type").unwrap_or_default();
                             let on = element.get("checked").is_some();
                             if !matches!(kind.as_str(), "checkbox" | "radio") || on {
-                                out.push((name, TestView::text_of(element, "value").unwrap_or_default()));
+                                out.push((
+                                    name,
+                                    TestView::text_of(element, "value").unwrap_or_default(),
+                                ));
                             }
                         }
-                        ("textarea", Some(name)) => out.push((name, Node::Element(element.clone()).text_content())),
+                        ("textarea", Some(name)) => {
+                            out.push((name, Node::Element(element.clone()).text_content()))
+                        }
                         ("select", Some(name)) => {
                             let options = element.child_nodes();
-                            let chosen = options.iter().find_map(|node| TestView::find(node, &|inner| inner.tag() == "option" && inner.get("selected").is_some()));
-                            let first = options.iter().find_map(|node| TestView::find(node, &|inner| inner.tag() == "option"));
-                            let selected = chosen.or(first).and_then(|option| TestView::text_of(option, "value"));
+                            let chosen = options.iter().find_map(|node| {
+                                TestView::find(node, &|inner| {
+                                    inner.tag() == "option" && inner.get("selected").is_some()
+                                })
+                            });
+                            let first = options.iter().find_map(|node| {
+                                TestView::find(node, &|inner| inner.tag() == "option")
+                            });
+                            let selected = chosen
+                                .or(first)
+                                .and_then(|option| TestView::text_of(option, "value"));
                             out.push((name, selected.unwrap_or_default()));
                         }
-                        _ => element.child_nodes().iter().for_each(|child| walk(child, out)),
+                        _ => element
+                            .child_nodes()
+                            .iter()
+                            .for_each(|child| walk(child, out)),
                     }
                 }
                 Node::Fragment(nodes) => nodes.iter().for_each(|child| walk(child, out)),

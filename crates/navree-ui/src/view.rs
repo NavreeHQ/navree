@@ -2,8 +2,10 @@
 
 use std::borrow::Cow;
 
-use http::header::{CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HeaderName, HeaderValue, SET_COOKIE};
 use http::StatusCode;
+use http::header::{
+    CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HeaderName, HeaderValue, SET_COOKIE,
+};
 use navree_http::response::{IntoResponse, Response};
 
 use crate::assets;
@@ -118,7 +120,9 @@ impl View {
         }
         out.push_str("><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"dark\"><title>");
         escape_into(out, &self.title);
-        out.push_str("</title><link rel=\"preload\" as=\"font\" type=\"font/woff2\" crossorigin href=\"");
+        out.push_str(
+            "</title><link rel=\"preload\" as=\"font\" type=\"font/woff2\" crossorigin href=\"",
+        );
         out.push_str(assets::GEIST_URL);
         out.push_str("\"><link rel=\"stylesheet\" href=\"");
         out.push_str(assets::NAVREE_UI_URL);
@@ -130,7 +134,11 @@ impl View {
             out.push_str(url);
             out.push_str("\"></script>");
         }
-        out.push_str(if uses.has(Uses::CORE) { "</head><body data-ui-boost>" } else { "</head><body>" });
+        out.push_str(if uses.has(Uses::CORE) {
+            "</head><body data-ui-boost>"
+        } else {
+            "</head><body>"
+        });
         render_into(out, &self.body);
         out.push_str("</body></html>");
     }
@@ -143,7 +151,10 @@ impl IntoResponse for View {
         let mut response = (
             self.status,
             [
-                (CONTENT_TYPE, HeaderValue::from_static("text/html; charset=utf-8")),
+                (
+                    CONTENT_TYPE,
+                    HeaderValue::from_static("text/html; charset=utf-8"),
+                ),
                 (CONTENT_SECURITY_POLICY, HeaderValue::from_static(PAGE_CSP)),
                 (CACHE_CONTROL, HeaderValue::from_static(self.cache)),
             ],
@@ -152,7 +163,10 @@ impl IntoResponse for View {
             .into_response();
         let headers = response.headers_mut();
         if !uses.has(Uses::CORE) {
-            headers.insert(SPECULATION_RULES, HeaderValue::from_static(assets::SPECULATION_HEADER));
+            headers.insert(
+                SPECULATION_RULES,
+                HeaderValue::from_static(assets::SPECULATION_HEADER),
+            );
         }
         for cookie in self.cookies {
             headers.append(SET_COOKIE, cookie);
@@ -177,10 +191,15 @@ mod tests {
 
     #[test]
     fn a_command_loads_the_core_runtime() {
-        let html = View::new("x").body(el("button").on_click_one(Cmd::toggle("a"))).to_html();
+        let html = View::new("x")
+            .body(el("button").on_click_one(Cmd::toggle("a")))
+            .to_html();
         assert!(html.contains(assets::CORE_URL), "{html}");
         assert!(html.contains("data-ui-boost"), "{html}");
-        assert!(html.contains(&format!("data-build=\"{}\"", assets::BUILD)), "{html}");
+        assert!(
+            html.contains(&format!("data-build=\"{}\"", assets::BUILD)),
+            "{html}"
+        );
     }
 
     #[test]
@@ -194,7 +213,10 @@ mod tests {
         let response = View::new("x").into_response();
         assert_eq!(response.headers()[CONTENT_SECURITY_POLICY], PAGE_CSP);
         assert_eq!(response.headers()[CACHE_CONTROL], "no-store");
-        assert_eq!(response.headers()["speculation-rules"], assets::SPECULATION_HEADER);
+        assert_eq!(
+            response.headers()["speculation-rules"],
+            assets::SPECULATION_HEADER
+        );
     }
 
     #[test]

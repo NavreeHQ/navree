@@ -9,7 +9,9 @@
 use std::io::Write as _;
 
 use bytes::Bytes;
-use http::header::{ACCEPT_ENCODING, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, HeaderValue, VARY};
+use http::header::{
+    ACCEPT_ENCODING, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, HeaderValue, VARY,
+};
 use http::{HeaderMap, Method};
 use navree_http::body::{Body, read_body};
 use navree_http::response::Response;
@@ -57,7 +59,10 @@ pub(crate) async fn encode(method: &Method, accept: &str, response: Response) ->
         return response;
     }
     let (mut parts, body) = response.into_parts();
-    let Some(size) = http_body::Body::size_hint(&body).exact().and_then(|size| usize::try_from(size).ok()) else {
+    let Some(size) = http_body::Body::size_hint(&body)
+        .exact()
+        .and_then(|size| usize::try_from(size).ok())
+    else {
         return Response::from_parts(parts, body);
     };
     if size < TINY || (size < MIN_SIZE && accepts(accept, "gzip")) {
@@ -68,14 +73,22 @@ pub(crate) async fn encode(method: &Method, accept: &str, response: Response) ->
         Err(_) => return Response::from_parts(parts, Body::empty()),
     };
     parts.headers.remove(CONTENT_LENGTH);
-    parts.headers.insert(CONTENT_ENCODING, HeaderValue::from_static("br"));
-    parts.headers.append(VARY, HeaderValue::from_static("accept-encoding"));
+    parts
+        .headers
+        .insert(CONTENT_ENCODING, HeaderValue::from_static("br"));
+    parts
+        .headers
+        .append(VARY, HeaderValue::from_static("accept-encoding"));
     Response::from_parts(parts, Body::from(Bytes::from(brotli(&bytes))))
 }
 
 /// The value of `Accept-Encoding`, or nothing.
 pub(crate) fn accept_of(headers: &HeaderMap) -> String {
-    headers.get(ACCEPT_ENCODING).and_then(|value| value.to_str().ok()).unwrap_or_default().to_owned()
+    headers
+        .get(ACCEPT_ENCODING)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_owned()
 }
 
 #[cfg(test)]
@@ -95,11 +108,17 @@ mod tests {
     #[test]
     fn only_rendered_responses_that_the_client_takes() {
         let mut headers = HeaderMap::new();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("text/html; charset=utf-8"));
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("text/html; charset=utf-8"),
+        );
         assert!(wanted(&Method::GET, "gzip, br", &headers));
         assert!(!wanted(&Method::GET, "gzip", &headers));
         assert!(!wanted(&Method::GET, "br;q=0", &headers));
-        assert!(!wanted(&Method::HEAD, "br", &headers), "a HEAD has no body to compress");
+        assert!(
+            !wanted(&Method::HEAD, "br", &headers),
+            "a HEAD has no body to compress"
+        );
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
         assert!(!wanted(&Method::GET, "br", &headers));
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("text/html"));

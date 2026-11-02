@@ -34,7 +34,14 @@ pub struct EditCell {
 
 impl EditCell {
     fn new(value: impl ToString, href: impl Into<Href>, editor: Editor) -> Self {
-        Self { value: value.to_string(), href: href.into(), editor, label: "Edit".into(), csrf: None, disabled: false }
+        Self {
+            value: value.to_string(),
+            href: href.into(),
+            editor,
+            label: "Edit".into(),
+            csrf: None,
+            disabled: false,
+        }
     }
 
     /// Text, posted to `href`.
@@ -53,8 +60,15 @@ impl EditCell {
     }
 
     /// One of `options`, as `(value, label)`, posted to `href`.
-    pub fn select(value: impl ToString, href: impl Into<Href>, options: impl IntoIterator<Item = (impl ToString, impl ToString)>) -> Self {
-        let options = options.into_iter().map(|(value, label)| (value.to_string(), label.to_string())).collect();
+    pub fn select(
+        value: impl ToString,
+        href: impl Into<Href>,
+        options: impl IntoIterator<Item = (impl ToString, impl ToString)>,
+    ) -> Self {
+        let options = options
+            .into_iter()
+            .map(|(value, label)| (value.to_string(), label.to_string()))
+            .collect();
         Self::new(value, href, Editor::Select(options))
     }
 
@@ -78,10 +92,31 @@ impl EditCell {
 
     fn control(&self) -> Element {
         match &self.editor {
-            Editor::Input(kind) => el("input").slot("input").attr("data-size", "sm").attr("type", *kind).attr("name", "value").attr("value", self.value.clone()).attr("aria-label", self.label.to_string()).flag("disabled", self.disabled),
+            Editor::Input(kind) => el("input")
+                .slot("input")
+                .attr("data-size", "sm")
+                .attr("type", *kind)
+                .attr("name", "value")
+                .attr("value", self.value.clone())
+                .attr("aria-label", self.label.to_string())
+                .flag("disabled", self.disabled),
             Editor::Select(options) => {
-                let items: Vec<Element> = options.iter().map(|(value, label)| el("option").attr("value", value.clone()).flag("selected", *value == self.value).child(label.clone())).collect();
-                el("select").slot("native-select").attr("data-size", "sm").attr("name", "value").attr("aria-label", self.label.to_string()).flag("disabled", self.disabled).child(items)
+                let items: Vec<Element> = options
+                    .iter()
+                    .map(|(value, label)| {
+                        el("option")
+                            .attr("value", value.clone())
+                            .flag("selected", *value == self.value)
+                            .child(label.clone())
+                    })
+                    .collect();
+                el("select")
+                    .slot("native-select")
+                    .attr("data-size", "sm")
+                    .attr("name", "value")
+                    .attr("aria-label", self.label.to_string())
+                    .flag("disabled", self.disabled)
+                    .child(items)
             }
         }
     }
@@ -100,7 +135,14 @@ impl From<EditCell> for Node {
             .children((
                 cell.csrf.map(crate::form::csrf_field),
                 control,
-                el("noscript").child(el("button").slot("button").attr("data-variant", "outline").attr("data-size", "xs").attr("type", "submit").child("Save")),
+                el("noscript").child(
+                    el("button")
+                        .slot("button")
+                        .attr("data-variant", "outline")
+                        .attr("data-size", "xs")
+                        .attr("type", "submit")
+                        .child("Save"),
+                ),
             ))
             .into()
     }

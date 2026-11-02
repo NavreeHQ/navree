@@ -1,11 +1,16 @@
 //! What the derives share: the runtime crate's path, names as serde reads them,
 //! doc comments and field types.
 
-use heck::{ToKebabCase, ToLowerCamelCase, ToShoutyKebabCase, ToShoutySnakeCase, ToSnakeCase, ToTitleCase, ToUpperCamelCase};
+use heck::{
+    ToKebabCase, ToLowerCamelCase, ToShoutyKebabCase, ToShoutySnakeCase, ToSnakeCase, ToTitleCase,
+    ToUpperCamelCase,
+};
 use proc_macro_crate::FoundCrate;
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
-use syn::{Attribute, Data, DeriveInput, Fields, FieldsNamed, GenericArgument, LitStr, PathArguments, Type};
+use syn::{
+    Attribute, Data, DeriveInput, Fields, FieldsNamed, GenericArgument, LitStr, PathArguments, Type,
+};
 
 /// The path to navree-ui as the crate being compiled sees it.
 pub(crate) fn ui_path(span: Span) -> syn::Result<TokenStream> {
@@ -27,30 +32,51 @@ pub(crate) fn ui_path(span: Span) -> syn::Result<TokenStream> {
             }
         });
     }
-    Err(syn::Error::new(span, "this derive needs the `navree` crate (or `navree-ui`) in the [dependencies] of your Cargo.toml"))
+    Err(syn::Error::new(
+        span,
+        "this derive needs the `navree` crate (or `navree-ui`) in the [dependencies] of your Cargo.toml",
+    ))
 }
 
 /// The named fields of a struct.
-pub(crate) fn named_fields<'a>(input: &'a DeriveInput, derive: &str) -> syn::Result<&'a FieldsNamed> {
+pub(crate) fn named_fields<'a>(
+    input: &'a DeriveInput,
+    derive: &str,
+) -> syn::Result<&'a FieldsNamed> {
     match &input.data {
         Data::Struct(data) => match &data.fields {
             Fields::Named(fields) => Ok(fields),
-            _ => Err(syn::Error::new_spanned(&input.ident, format!("`#[derive({derive})]` needs named fields"))),
+            _ => Err(syn::Error::new_spanned(
+                &input.ident,
+                format!("`#[derive({derive})]` needs named fields"),
+            )),
         },
-        _ => Err(syn::Error::new_spanned(&input.ident, format!("`#[derive({derive})]` works on structs"))),
+        _ => Err(syn::Error::new_spanned(
+            &input.ident,
+            format!("`#[derive({derive})]` works on structs"),
+        )),
     }
 }
 
 /// The first line of the doc comment.
 pub(crate) fn doc_line(attrs: &[Attribute]) -> Option<String> {
-    attrs.iter().filter(|attr| attr.path().is_ident("doc")).find_map(|attr| {
-        let syn::Meta::NameValue(meta) = &attr.meta else { return None };
-        let syn::Expr::Lit(lit) = &meta.value else { return None };
-        let syn::Lit::Str(text) = &lit.lit else { return None };
-        let line = text.value();
-        let line = line.trim();
-        (!line.is_empty()).then(|| line.trim_end_matches('.').to_owned())
-    })
+    attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("doc"))
+        .find_map(|attr| {
+            let syn::Meta::NameValue(meta) = &attr.meta else {
+                return None;
+            };
+            let syn::Expr::Lit(lit) = &meta.value else {
+                return None;
+            };
+            let syn::Lit::Str(text) = &lit.lit else {
+                return None;
+            };
+            let line = text.value();
+            let line = line.trim();
+            (!line.is_empty()).then(|| line.trim_end_matches('.').to_owned())
+        })
 }
 
 /// A name as words: `expected_close_date` is `Expected close date`.
@@ -120,7 +146,9 @@ pub(crate) fn option_inner(ty: &Type) -> Option<&Type> {
     if segment.ident != "Option" {
         return None;
     }
-    let PathArguments::AngleBracketed(args) = &segment.arguments else { return None };
+    let PathArguments::AngleBracketed(args) = &segment.arguments else {
+        return None;
+    };
     args.args.iter().find_map(|arg| match arg {
         GenericArgument::Type(inner) => Some(inner),
         _ => None,

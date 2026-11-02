@@ -36,11 +36,25 @@ impl Alert {
         let root = el("div").slot("alert");
         let (root, glyph) = match tone {
             AlertTone::Neutral => (root.attr("role", "status"), icons::INFO),
-            AlertTone::Success => (root.attr("role", "status").attr("data-tone", "success"), icons::CIRCLE_CHECK),
-            AlertTone::Warning => (root.attr("role", "alert").attr("data-tone", "warning"), icons::TRIANGLE_ALERT),
-            AlertTone::Danger => (root.attr("role", "alert").attr("data-tone", "danger"), icons::CIRCLE_ALERT),
+            AlertTone::Success => (
+                root.attr("role", "status").attr("data-tone", "success"),
+                icons::CIRCLE_CHECK,
+            ),
+            AlertTone::Warning => (
+                root.attr("role", "alert").attr("data-tone", "warning"),
+                icons::TRIANGLE_ALERT,
+            ),
+            AlertTone::Danger => (
+                root.attr("role", "alert").attr("data-tone", "danger"),
+                icons::CIRCLE_ALERT,
+            ),
         };
-        Self { el: root, start: Some(glyph), title: None, body: Vec::new() }
+        Self {
+            el: root,
+            start: Some(glyph),
+            title: None,
+            body: Vec::new(),
+        }
     }
 
     /// Replaces the icon.
@@ -65,8 +79,10 @@ impl Alert {
         self.el
             .children((
                 self.start.map(icon),
-                self.title.map(|title| el("div").slot("alert-title").child(title)),
-                (!self.body.is_empty()).then(|| el("div").slot("alert-description").child(self.body)),
+                self.title
+                    .map(|title| el("div").slot("alert-title").child(title)),
+                (!self.body.is_empty())
+                    .then(|| el("div").slot("alert-description").child(self.body)),
             ))
             .into()
     }
@@ -104,7 +120,12 @@ impl AspectRatio {
             Ratio::Photo => "photo",
             Ratio::Wide => "wide",
         };
-        Self { el: el("div").slot("aspect-ratio").attr("data-ratio", name).child(content) }
+        Self {
+            el: el("div")
+                .slot("aspect-ratio")
+                .attr("data-ratio", name)
+                .child(content),
+        }
     }
 
     fn into_node(self) -> Node {
@@ -127,7 +148,14 @@ pub struct Attachment {
 impl Attachment {
     /// A file called `name`.
     pub fn new(name: impl Into<Node>) -> Self {
-        Self { el: el("div").slot("attachment"), name: name.into(), meta: None, glyph: icons::FILE, href: None, action: None }
+        Self {
+            el: el("div").slot("attachment"),
+            name: name.into(),
+            meta: None,
+            glyph: icons::FILE,
+            href: None,
+            action: None,
+        }
     }
 
     /// Adds what's known about it (`2.4 MB`).
@@ -156,13 +184,21 @@ impl Attachment {
 
     fn into_node(self) -> Node {
         let name: Node = match self.href {
-            Some(href) => el("a").slot("attachment-title").href(href).child(self.name).into(),
+            Some(href) => el("a")
+                .slot("attachment-title")
+                .href(href)
+                .child(self.name)
+                .into(),
             None => el("span").slot("attachment-title").child(self.name).into(),
         };
         self.el
             .children((
                 el("span").slot("attachment-media").child(icon(self.glyph)),
-                el("div").slot("attachment-content").children((name, self.meta.map(|meta| el("p").slot("attachment-description").child(meta)))),
+                el("div").slot("attachment-content").children((
+                    name,
+                    self.meta
+                        .map(|meta| el("p").slot("attachment-description").child(meta)),
+                )),
                 self.action,
             ))
             .into()
@@ -182,13 +218,29 @@ pub struct Avatar {
 impl Avatar {
     /// An image, described by `alt`.
     pub fn image(src: impl Into<Href>, alt: impl Into<String>) -> Self {
-        let image = el("img").attr("src", src.into()).attr("alt", alt.into()).attr("loading", "lazy").attr("width", 32_i64).attr("height", 32_i64);
-        Self { el: el("span").slot("avatar"), inner: image.into(), size: Size::Md }
+        let image = el("img")
+            .attr("src", src.into())
+            .attr("alt", alt.into())
+            .attr("loading", "lazy")
+            .attr("width", 32_i64)
+            .attr("height", 32_i64);
+        Self {
+            el: el("span").slot("avatar"),
+            inner: image.into(),
+            size: Size::Md,
+        }
     }
 
     /// No image: the person icon, labelled `label`.
     pub fn placeholder(label: impl Into<String>) -> Self {
-        Self { el: el("span").slot("avatar").attr("role", "img").attr("aria-label", label.into()), inner: icon(icons::USER_ROUND), size: Size::Md }
+        Self {
+            el: el("span")
+                .slot("avatar")
+                .attr("role", "img")
+                .attr("aria-label", label.into()),
+            inner: icon(icons::USER_ROUND),
+            size: Size::Md,
+        }
     }
 
     /// Sets the size.
@@ -198,7 +250,10 @@ impl Avatar {
     }
 
     fn into_node(self) -> Node {
-        self.el.attr_opt("data-size", self.size.as_str()).child(self.inner).into()
+        self.el
+            .attr_opt("data-size", self.size.as_str())
+            .child(self.inner)
+            .into()
     }
 }
 
@@ -231,7 +286,11 @@ pub struct Badge {
 impl Badge {
     /// A badge saying `text`.
     pub fn new(text: impl Into<Node>) -> Self {
-        Self { el: el("span").slot("badge"), text: text.into(), start: None }
+        Self {
+            el: el("span").slot("badge"),
+            text: text.into(),
+            start: None,
+        }
     }
 
     /// Sets the look.
@@ -269,7 +328,11 @@ pub struct Breadcrumb {
 impl Breadcrumb {
     /// An empty trail.
     pub fn new() -> Self {
-        Self { el: el("nav").slot("breadcrumb"), label: "Breadcrumb", items: Vec::new() }
+        Self {
+            el: el("nav").slot("breadcrumb"),
+            label: "Breadcrumb",
+            items: Vec::new(),
+        }
     }
 
     /// Names it, when a page has more than one: landmarks must differ.
@@ -280,18 +343,23 @@ impl Breadcrumb {
 
     /// Adds a link.
     pub fn link(mut self, label: impl Into<Node>, href: impl Into<Href>) -> Self {
-        self.items.push(el("li").child(el("a").href(href).prefetch().child(label.into())));
+        self.items
+            .push(el("li").child(el("a").href(href).prefetch().child(label.into())));
         self
     }
 
     /// Adds the current page.
     pub fn current(mut self, label: impl Into<Node>) -> Self {
-        self.items.push(el("li").child(el("span").attr("aria-current", "page").child(label.into())));
+        self.items
+            .push(el("li").child(el("span").attr("aria-current", "page").child(label.into())));
         self
     }
 
     fn into_node(self) -> Node {
-        self.el.attr("aria-label", self.label).child(el("ol").child(self.items)).into()
+        self.el
+            .attr("aria-label", self.label)
+            .child(el("ol").child(self.items))
+            .into()
     }
 }
 
@@ -323,8 +391,14 @@ impl Bubble {
     /// A bubble holding `content`.
     pub fn new(side: BubbleSide, content: impl IntoNodes) -> Self {
         let root = el("div").slot("bubble");
-        let root = if side == BubbleSide::End { root.attr("data-align", "end") } else { root };
-        Self { el: root.child(el("div").slot("bubble-content").child(content)) }
+        let root = if side == BubbleSide::End {
+            root.attr("data-align", "end")
+        } else {
+            root
+        };
+        Self {
+            el: root.child(el("div").slot("bubble-content").child(content)),
+        }
     }
 
     fn into_node(self) -> Node {
@@ -348,7 +422,15 @@ pub struct Card {
 impl Card {
     /// An empty card.
     pub fn new() -> Self {
-        Self { el: el("div").slot("card"), level: "h2", title: None, description: None, action: None, body: Vec::new(), footer: Vec::new() }
+        Self {
+            el: el("div").slot("card"),
+            level: "h2",
+            title: None,
+            description: None,
+            action: None,
+            body: Vec::new(),
+            footer: Vec::new(),
+        }
     }
 
     /// Sets the heading level of its title (2 by default, under a page's `h1`).
@@ -398,13 +480,17 @@ impl Card {
     }
 
     fn into_node(self) -> Node {
-        let header = (self.title.is_some() || self.description.is_some() || self.action.is_some()).then(|| {
-            el("div").slot("card-header").children((
-                self.title.map(|title| el(self.level).slot("card-title").child(title)),
-                self.description.map(|text| el("p").slot("card-description").child(text)),
-                self.action.map(|action| el("div").slot("card-action").child(action)),
-            ))
-        });
+        let header = (self.title.is_some() || self.description.is_some() || self.action.is_some())
+            .then(|| {
+                el("div").slot("card-header").children((
+                    self.title
+                        .map(|title| el(self.level).slot("card-title").child(title)),
+                    self.description
+                        .map(|text| el("p").slot("card-description").child(text)),
+                    self.action
+                        .map(|action| el("div").slot("card-action").child(action)),
+                ))
+            });
         self.el
             .children((
                 header,
@@ -431,12 +517,22 @@ pub struct Direction {
 impl Direction {
     /// Right to left.
     pub fn rtl(content: impl IntoNodes) -> Self {
-        Self { el: el("div").slot("direction").attr("dir", "rtl").child(content) }
+        Self {
+            el: el("div")
+                .slot("direction")
+                .attr("dir", "rtl")
+                .child(content),
+        }
     }
 
     /// Left to right.
     pub fn ltr(content: impl IntoNodes) -> Self {
-        Self { el: el("div").slot("direction").attr("dir", "ltr").child(content) }
+        Self {
+            el: el("div")
+                .slot("direction")
+                .attr("dir", "ltr")
+                .child(content),
+        }
     }
 
     fn into_node(self) -> Node {
@@ -458,7 +554,13 @@ pub struct Empty {
 impl Empty {
     /// A message saying `title`.
     pub fn new(title: impl Into<Node>) -> Self {
-        Self { el: el("div").slot("empty"), glyph: None, title: title.into(), description: None, actions: Vec::new() }
+        Self {
+            el: el("div").slot("empty"),
+            glyph: None,
+            title: title.into(),
+            description: None,
+            actions: Vec::new(),
+        }
     }
 
     /// Adds an icon.
@@ -482,10 +584,13 @@ impl Empty {
     fn into_node(self) -> Node {
         self.el
             .children((
-                self.glyph.map(|glyph| el("div").slot("empty-media").child(icon(glyph))),
+                self.glyph
+                    .map(|glyph| el("div").slot("empty-media").child(icon(glyph))),
                 el("p").slot("empty-title").child(self.title),
-                self.description.map(|text| el("p").slot("empty-description").child(text)),
-                (!self.actions.is_empty()).then(|| el("div").slot("empty-content").child(self.actions)),
+                self.description
+                    .map(|text| el("p").slot("empty-description").child(text)),
+                (!self.actions.is_empty())
+                    .then(|| el("div").slot("empty-content").child(self.actions)),
             ))
             .into()
     }
@@ -519,7 +624,14 @@ pub struct Item {
 impl Item {
     /// A row titled `title`.
     pub fn new(title: impl Into<Node>) -> Self {
-        Self { el: el("div").slot("item"), media: None, title: title.into(), description: None, actions: Vec::new(), href: None }
+        Self {
+            el: el("div").slot("item"),
+            media: None,
+            title: title.into(),
+            description: None,
+            actions: Vec::new(),
+            href: None,
+        }
     }
 
     /// Sets the look.
@@ -563,10 +675,12 @@ impl Item {
             root = root.href(href);
         }
         root.children((
-            self.media.map(|media| el("div").slot("item-media").child(media)),
+            self.media
+                .map(|media| el("div").slot("item-media").child(media)),
             el("div").slot("item-content").children((
                 el("div").slot("item-title").child(self.title),
-                self.description.map(|text| el("p").slot("item-description").child(text)),
+                self.description
+                    .map(|text| el("p").slot("item-description").child(text)),
             )),
             (!self.actions.is_empty()).then(|| el("div").slot("item-actions").child(self.actions)),
         ))
@@ -584,7 +698,9 @@ pub struct Kbd {
 impl Kbd {
     /// The key `key`.
     pub fn new(key: impl Into<Node>) -> Self {
-        Self { el: el("kbd").slot("kbd").child(key.into()) }
+        Self {
+            el: el("kbd").slot("kbd").child(key.into()),
+        }
     }
 
     fn into_node(self) -> Node {
@@ -621,7 +737,9 @@ impl Marker {
             MarkerVariant::Separator => root.attr("data-variant", "separator"),
             MarkerVariant::Border => root.attr("data-variant", "border"),
         };
-        Self { el: root.child(el("span").slot("marker-content").child(text.into())) }
+        Self {
+            el: root.child(el("span").slot("marker-content").child(text.into())),
+        }
     }
 
     fn into_node(self) -> Node {
@@ -644,8 +762,18 @@ impl Message {
     /// An empty message.
     pub fn new(side: BubbleSide) -> Self {
         let root = el("div").slot("message");
-        let root = if side == BubbleSide::End { root.attr("data-align", "end") } else { root };
-        Self { el: root, avatar: None, header: None, content: Vec::new(), footer: None }
+        let root = if side == BubbleSide::End {
+            root.attr("data-align", "end")
+        } else {
+            root
+        };
+        Self {
+            el: root,
+            avatar: None,
+            header: None,
+            content: Vec::new(),
+            footer: None,
+        }
     }
 
     /// Sets the avatar.
@@ -675,11 +803,14 @@ impl Message {
     fn into_node(self) -> Node {
         self.el
             .children((
-                self.avatar.map(|avatar| el("div").slot("message-avatar").child(avatar)),
+                self.avatar
+                    .map(|avatar| el("div").slot("message-avatar").child(avatar)),
                 el("div").slot("message-content").children((
-                    self.header.map(|header| el("div").slot("message-header").child(header)),
+                    self.header
+                        .map(|header| el("div").slot("message-header").child(header)),
                     self.content,
-                    self.footer.map(|footer| el("div").slot("message-footer").child(footer)),
+                    self.footer
+                        .map(|footer| el("div").slot("message-footer").child(footer)),
                 )),
             ))
             .into()
@@ -700,28 +831,74 @@ impl Pagination {
         let page = page.clamp(1, pages);
         let mut items = Vec::with_capacity(9);
         let edge = |target: u32, enabled: bool, glyph: Icon, label: &'static str| {
-            let link = el("a").slot("pagination-link").attr("aria-label", label).child(icon(glyph));
-            let link = if enabled { link.href(href(target)) } else { link.attr("role", "link").attr("aria-disabled", "true") };
+            let link = el("a")
+                .slot("pagination-link")
+                .attr("aria-label", label)
+                .child(icon(glyph));
+            let link = if enabled {
+                link.href(href(target))
+            } else {
+                link.attr("role", "link").attr("aria-disabled", "true")
+            };
             el("li").child(link)
         };
-        items.push(edge(page.saturating_sub(1), page > 1, icons::CHEVRON_LEFT, "Previous page"));
+        items.push(edge(
+            page.saturating_sub(1),
+            page > 1,
+            icons::CHEVRON_LEFT,
+            "Previous page",
+        ));
         // Only the pages shown are ever looked at, however many there are.
-        let near = [Some(1), page.checked_sub(1), Some(page), page.checked_add(1), Some(pages)];
+        let near = [
+            Some(1),
+            page.checked_sub(1),
+            Some(page),
+            page.checked_add(1),
+            Some(pages),
+        ];
         let mut shown = 0;
-        for number in near.into_iter().flatten().filter(|number| (1..=pages).contains(number)) {
+        for number in near
+            .into_iter()
+            .flatten()
+            .filter(|number| (1..=pages).contains(number))
+        {
             if number <= shown {
                 continue;
             }
             if shown != 0 && number > shown + 1 {
-                items.push(el("li").child(el("span").slot("pagination-ellipsis").attr("aria-hidden", "true").child("…")));
+                items.push(
+                    el("li").child(
+                        el("span")
+                            .slot("pagination-ellipsis")
+                            .attr("aria-hidden", "true")
+                            .child("…"),
+                    ),
+                );
             }
             shown = number;
-            let link = el("a").slot("pagination-link").href(href(number)).attr("aria-label", format!("Page {number}"));
-            let link = if number == page { link.attr("aria-current", "page") } else { link };
+            let link = el("a")
+                .slot("pagination-link")
+                .href(href(number))
+                .attr("aria-label", format!("Page {number}"));
+            let link = if number == page {
+                link.attr("aria-current", "page")
+            } else {
+                link
+            };
             items.push(el("li").child(link.child(i64::from(number))));
         }
-        items.push(edge(page.saturating_add(1), page < pages, icons::CHEVRON_RIGHT, "Next page"));
-        Self { el: el("nav").slot("pagination").attr("aria-label", "Pagination").child(el("ul").child(items)) }
+        items.push(edge(
+            page.saturating_add(1),
+            page < pages,
+            icons::CHEVRON_RIGHT,
+            "Next page",
+        ));
+        Self {
+            el: el("nav")
+                .slot("pagination")
+                .attr("aria-label", "Pagination")
+                .child(el("ul").child(items)),
+        }
     }
 
     fn into_node(self) -> Node {
@@ -739,12 +916,22 @@ pub struct Progress {
 impl Progress {
     /// `value` out of `max`, named `label`.
     pub fn new(value: u32, max: u32, label: impl Into<String>) -> Self {
-        Self { el: el("progress").slot("progress").attr("value", value.min(max)).attr("max", max.max(1)).attr("aria-label", label.into()) }
+        Self {
+            el: el("progress")
+                .slot("progress")
+                .attr("value", value.min(max))
+                .attr("max", max.max(1))
+                .attr("aria-label", label.into()),
+        }
     }
 
     /// Going, with no known end.
     pub fn indeterminate(label: impl Into<String>) -> Self {
-        Self { el: el("progress").slot("progress").attr("aria-label", label.into()) }
+        Self {
+            el: el("progress")
+                .slot("progress")
+                .attr("aria-label", label.into()),
+        }
     }
 
     fn into_node(self) -> Node {
@@ -762,12 +949,19 @@ pub struct Separator {
 impl Separator {
     /// A horizontal line.
     pub fn horizontal() -> Self {
-        Self { el: el("hr").slot("separator") }
+        Self {
+            el: el("hr").slot("separator"),
+        }
     }
 
     /// A vertical line, in a row.
     pub fn vertical() -> Self {
-        Self { el: el("div").slot("separator").attr("role", "separator").attr("aria-orientation", "vertical") }
+        Self {
+            el: el("div")
+                .slot("separator")
+                .attr("role", "separator")
+                .attr("aria-orientation", "vertical"),
+        }
     }
 
     fn into_node(self) -> Node {
@@ -822,7 +1016,13 @@ pub struct Spinner {
 impl Spinner {
     /// A spinner saying `label` to assistive technology.
     pub fn new(label: impl Into<String>) -> Self {
-        Self { el: el("span").slot("spinner").attr("role", "status").attr("aria-label", label.into()).child(icon(icons::LOADER_CIRCLE)) }
+        Self {
+            el: el("span")
+                .slot("spinner")
+                .attr("role", "status")
+                .attr("aria-label", label.into())
+                .child(icon(icons::LOADER_CIRCLE)),
+        }
     }
 
     fn into_node(self) -> Node {
@@ -840,7 +1040,12 @@ pub struct TableHead {
 impl TableHead {
     /// A column headed `label`.
     pub fn new(label: impl IntoNodes) -> Self {
-        Self { el: el("th").slot("table-head").attr("scope", "col").child(label) }
+        Self {
+            el: el("th")
+                .slot("table-head")
+                .attr("scope", "col")
+                .child(label),
+        }
     }
 
     /// Aligns it right, for numbers.
@@ -857,7 +1062,10 @@ impl TableHead {
 
     /// Sets how it's sorted now.
     pub fn sort(mut self, ascending: bool) -> Self {
-        self.el = self.el.attr("aria-sort", if ascending { "ascending" } else { "descending" });
+        self.el = self.el.attr(
+            "aria-sort",
+            if ascending { "ascending" } else { "descending" },
+        );
         self
     }
 
@@ -876,7 +1084,9 @@ pub struct TableCell {
 impl TableCell {
     /// A cell holding `content`.
     pub fn new(content: impl IntoNodes) -> Self {
-        Self { el: el("td").child(content) }
+        Self {
+            el: el("td").child(content),
+        }
     }
 
     /// Aligns it right in tabular figures, for numbers.
@@ -906,7 +1116,9 @@ pub struct TableRowEl {
 impl TableRowEl {
     /// A row of cells.
     pub fn new(cells: impl IntoNodes) -> Self {
-        Self { el: el("tr").child(cells) }
+        Self {
+            el: el("tr").child(cells),
+        }
     }
 
     /// Gives it a stable key, so a morph keeps the row.
@@ -940,7 +1152,13 @@ pub struct Table {
 impl Table {
     /// An empty table.
     pub fn new() -> Self {
-        Self { el: el("table").slot("table"), caption: None, head: Vec::new(), rows: Vec::new(), body_id: None }
+        Self {
+            el: el("table").slot("table"),
+            caption: None,
+            head: Vec::new(),
+            rows: Vec::new(),
+            body_id: None,
+        }
     }
 
     /// Gives the body an id, so [`Region::feed`](crate::Region::feed) can add rows to it.
@@ -993,22 +1211,30 @@ pub struct Heading {
 impl Heading {
     /// A page title: `<h1>`.
     pub fn h1(text: impl Into<Node>) -> Self {
-        Self { el: el("h1").slot("heading").child(text.into()) }
+        Self {
+            el: el("h1").slot("heading").child(text.into()),
+        }
     }
 
     /// `<h2>`.
     pub fn h2(text: impl Into<Node>) -> Self {
-        Self { el: el("h2").slot("heading").child(text.into()) }
+        Self {
+            el: el("h2").slot("heading").child(text.into()),
+        }
     }
 
     /// `<h3>`.
     pub fn h3(text: impl Into<Node>) -> Self {
-        Self { el: el("h3").slot("heading").child(text.into()) }
+        Self {
+            el: el("h3").slot("heading").child(text.into()),
+        }
     }
 
     /// `<h4>`.
     pub fn h4(text: impl Into<Node>) -> Self {
-        Self { el: el("h4").slot("heading").child(text.into()) }
+        Self {
+            el: el("h4").slot("heading").child(text.into()),
+        }
     }
 
     fn into_node(self) -> Node {
@@ -1041,7 +1267,9 @@ pub struct Text {
 impl Text {
     /// A paragraph.
     pub fn new(text: impl IntoNodes) -> Self {
-        Self { el: el("p").slot("text").child(text) }
+        Self {
+            el: el("p").slot("text").child(text),
+        }
     }
 
     /// Secondary text.
@@ -1051,7 +1279,9 @@ impl Text {
 
     /// Inline code.
     pub fn code(text: impl Into<Node>) -> Self {
-        Self { el: el("code").slot("code").child(text.into()) }
+        Self {
+            el: el("code").slot("code").child(text.into()),
+        }
     }
 
     /// Sets the look.
@@ -1089,7 +1319,12 @@ pub struct Stat {
 impl Stat {
     /// The figure `value`, called `label`.
     pub fn new(label: impl Into<Node>, value: impl Into<Node>) -> Self {
-        Self { el: el("div").slot("stat"), label: label.into(), value: value.into(), trend: None }
+        Self {
+            el: el("div").slot("stat"),
+            label: label.into(),
+            value: value.into(),
+            trend: None,
+        }
     }
 
     /// Adds how it's moving; `good` colours it.
@@ -1103,7 +1338,12 @@ impl Stat {
             .children((
                 el("span").slot("stat-label").child(self.label),
                 el("span").slot("stat-value").child(self.value),
-                self.trend.map(|(text, good)| el("span").slot("stat-trend").attr("data-tone", if good { "up" } else { "down" }).child(text)),
+                self.trend.map(|(text, good)| {
+                    el("span")
+                        .slot("stat-trend")
+                        .attr("data-tone", if good { "up" } else { "down" })
+                        .child(text)
+                }),
             ))
             .into()
     }
@@ -1126,7 +1366,11 @@ impl Bars {
             .enumerate()
             .map(|(at, value)| {
                 let height = i64::from(value.saturating_mul(100) / top);
-                el("rect").attr("x", i64::try_from(at * 10).unwrap_or(0) + 1).attr("y", 100 - height).attr("width", 8_i64).attr("height", height)
+                el("rect")
+                    .attr("x", i64::try_from(at * 10).unwrap_or(0) + 1)
+                    .attr("y", 100 - height)
+                    .attr("width", 8_i64)
+                    .attr("height", height)
             })
             .collect();
         let width = i64::try_from(values.len() * 10).unwrap_or(0);
@@ -1150,10 +1394,56 @@ root_methods!(Stat, Bars);
 into_node!(Stat, Bars);
 
 root_methods!(
-    Alert, AspectRatio, Attachment, Avatar, Badge, Breadcrumb, Bubble, Card, Direction, Empty, Item, Kbd, Marker, Message, Pagination,
-    Progress, Separator, Skeleton, Spinner, Table, TableHead, TableCell, TableRowEl, Heading, Text,
+    Alert,
+    AspectRatio,
+    Attachment,
+    Avatar,
+    Badge,
+    Breadcrumb,
+    Bubble,
+    Card,
+    Direction,
+    Empty,
+    Item,
+    Kbd,
+    Marker,
+    Message,
+    Pagination,
+    Progress,
+    Separator,
+    Skeleton,
+    Spinner,
+    Table,
+    TableHead,
+    TableCell,
+    TableRowEl,
+    Heading,
+    Text,
 );
 into_node!(
-    Alert, AspectRatio, Attachment, Avatar, Badge, Breadcrumb, Bubble, Card, Direction, Empty, Item, Kbd, Marker, Message, Pagination,
-    Progress, Separator, Skeleton, Spinner, Table, TableHead, TableCell, TableRowEl, Heading, Text,
+    Alert,
+    AspectRatio,
+    Attachment,
+    Avatar,
+    Badge,
+    Breadcrumb,
+    Bubble,
+    Card,
+    Direction,
+    Empty,
+    Item,
+    Kbd,
+    Marker,
+    Message,
+    Pagination,
+    Progress,
+    Separator,
+    Skeleton,
+    Spinner,
+    Table,
+    TableHead,
+    TableCell,
+    TableRowEl,
+    Heading,
+    Text,
 );

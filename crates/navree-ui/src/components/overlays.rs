@@ -16,8 +16,16 @@ fn dialog_parts(
     description: Option<Node>,
     close: bool,
 ) -> (Element, Option<Element>, Option<Element>) {
-    let title = el("h2").slot("dialog-title").attr("id", format!("{id}-title")).child(title);
-    let description = description.map(|text| el("p").slot("dialog-description").attr("id", format!("{id}-description")).child(text));
+    let title = el("h2")
+        .slot("dialog-title")
+        .attr("id", format!("{id}-title"))
+        .child(title);
+    let description = description.map(|text| {
+        el("p")
+            .slot("dialog-description")
+            .attr("id", format!("{id}-description"))
+            .child(text)
+    });
     let close = close.then(|| {
         el("button")
             .slot("dialog-close")
@@ -60,7 +68,11 @@ impl Dialog {
 
     fn with_slot(slot: &'static str, id: String, title: Node) -> Self {
         Self {
-            el: el("dialog").slot(slot).attr("id", id.clone()).attr("aria-labelledby", format!("{id}-title")).attr("closedby", "any"),
+            el: el("dialog")
+                .slot(slot)
+                .attr("id", id.clone())
+                .attr("aria-labelledby", format!("{id}-title"))
+                .attr("closedby", "any"),
             dialog_id: id,
             title,
             description: None,
@@ -88,14 +100,21 @@ impl Dialog {
     }
 
     fn into_node(self) -> Node {
-        let described = self.description.is_some().then(|| format!("{}-description", self.dialog_id));
-        let (title, description, close) = dialog_parts(&self.dialog_id, self.title, self.description, true);
+        let described = self
+            .description
+            .is_some()
+            .then(|| format!("{}-description", self.dialog_id));
+        let (title, description, close) =
+            dialog_parts(&self.dialog_id, self.title, self.description, true);
         self.el
             .attr_opt("aria-describedby", described)
             .children((
-                el("div").slot("dialog-header").children((title, description)),
+                el("div")
+                    .slot("dialog-header")
+                    .children((title, description)),
                 el("div").slot("dialog-body").child(self.body),
-                (!self.footer.is_empty()).then(|| el("div").slot("dialog-footer").child(self.footer)),
+                (!self.footer.is_empty())
+                    .then(|| el("div").slot("dialog-footer").child(self.footer)),
                 // Last, so the first thing to focus is the dialog's own content.
                 close,
             ))
@@ -118,7 +137,11 @@ pub struct AlertDialog {
 
 impl AlertDialog {
     /// An alert dialog with the id `id`. The title and description are required.
-    pub fn new(id: impl Into<String>, title: impl Into<Node>, description: impl Into<Node>) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        title: impl Into<Node>,
+        description: impl Into<Node>,
+    ) -> Self {
         let id = id.into();
         Self {
             el: el("dialog")
@@ -152,11 +175,17 @@ impl AlertDialog {
         let id = self.dialog_id;
         let (title, description, _) = dialog_parts(&id, self.title, Some(self.description), false);
         // The first button of a dialog takes focus: for an alert, that's Cancel.
-        let cancel = Button::new(self.cancel).variant(ButtonVariant::Outline).closes_dialog(id);
+        let cancel = Button::new(self.cancel)
+            .variant(ButtonVariant::Outline)
+            .closes_dialog(id);
         self.el
             .children((
-                el("div").slot("dialog-header").children((title, description)),
-                el("div").slot("dialog-footer").children((cancel, self.action)),
+                el("div")
+                    .slot("dialog-header")
+                    .children((title, description)),
+                el("div")
+                    .slot("dialog-footer")
+                    .children((cancel, self.action)),
             ))
             .into()
     }
@@ -199,7 +228,10 @@ pub struct Sheet {
 impl Sheet {
     /// A sheet with the id `id`. The title is required.
     pub fn new(id: impl Into<String>, title: impl Into<Node>) -> Self {
-        Self { inner: Dialog::with_slot("sheet", id.into(), title.into()), side: SheetSide::Right }
+        Self {
+            inner: Dialog::with_slot("sheet", id.into(), title.into()),
+            side: SheetSide::Right,
+        }
     }
 
     /// Sets the edge.
@@ -242,7 +274,9 @@ pub struct Drawer {
 impl Drawer {
     /// A drawer with the id `id`. The title is required.
     pub fn new(id: impl Into<String>, title: impl Into<Node>) -> Self {
-        Self { inner: Dialog::with_slot("drawer", id.into(), title.into()) }
+        Self {
+            inner: Dialog::with_slot("drawer", id.into(), title.into()),
+        }
     }
 
     /// Sets the description.
@@ -422,7 +456,12 @@ pub struct HoverCard {
 impl HoverCard {
     /// A card with the id `id` for `trigger`, usually a link.
     pub fn new(id: impl Into<String>, trigger: impl Into<Node>) -> Self {
-        Self { el: el("div").slot("hover-card-content"), card_id: id.into(), trigger: trigger.into(), body: Vec::new() }
+        Self {
+            el: el("div").slot("hover-card-content"),
+            card_id: id.into(),
+            trigger: trigger.into(),
+            body: Vec::new(),
+        }
     }
 
     /// Adds to the card.
@@ -432,7 +471,10 @@ impl HoverCard {
     }
 
     fn into_node(self) -> Node {
-        let trigger = el("span").slot("hover-card-trigger").attr("data-ui-hover", self.card_id.clone()).child(self.trigger);
+        let trigger = el("span")
+            .slot("hover-card-trigger")
+            .attr("data-ui-hover", self.card_id.clone())
+            .child(self.trigger);
         let card = self
             .el
             .attr("id", self.card_id)
@@ -458,7 +500,13 @@ pub struct Tooltip {
 impl Tooltip {
     /// A tooltip with the id `id` saying `text` about `trigger`, a focusable element.
     pub fn new(id: impl Into<String>, trigger: impl Into<Node>, text: impl Into<Node>) -> Self {
-        Self { el: el("div").slot("tooltip-content"), tip_id: id.into(), trigger: trigger.into(), text: text.into(), side: Side::Top }
+        Self {
+            el: el("div").slot("tooltip-content"),
+            tip_id: id.into(),
+            trigger: trigger.into(),
+            text: text.into(),
+            side: Side::Top,
+        }
     }
 
     /// Sets the side.
@@ -470,9 +518,15 @@ impl Tooltip {
     fn into_node(self) -> Node {
         let mut inner = self.trigger;
         if let Node::Element(element) = &mut inner {
-            element.attrs.push(crate::node::Attr { name: "aria-describedby", value: crate::node::AttrValue::Text(self.tip_id.clone().into()) });
+            element.attrs.push(crate::node::Attr {
+                name: "aria-describedby",
+                value: crate::node::AttrValue::Text(self.tip_id.clone().into()),
+            });
         }
-        let wrap = el("span").slot("tooltip-trigger").attr("data-ui-hover", self.tip_id.clone()).child(inner);
+        let wrap = el("span")
+            .slot("tooltip-trigger")
+            .attr("data-ui-hover", self.tip_id.clone())
+            .child(inner);
         let tip = self
             .el
             .attr("id", self.tip_id)
@@ -499,7 +553,11 @@ pub struct Accordion {
 impl Accordion {
     /// An accordion.
     pub fn new() -> Self {
-        Self { el: el("div").slot("accordion"), name: None, items: Vec::new() }
+        Self {
+            el: el("div").slot("accordion"),
+            name: None,
+            items: Vec::new(),
+        }
     }
 
     /// Allows one section open at a time, in the group `name`.
@@ -531,7 +589,9 @@ impl Accordion {
                     .attr_opt("name", name.clone())
                     .flag("open", open)
                     .children((
-                        el("summary").slot("accordion-trigger").children((title, icon(icons::CHEVRON_DOWN))),
+                        el("summary")
+                            .slot("accordion-trigger")
+                            .children((title, icon(icons::CHEVRON_DOWN))),
                         el("div").slot("accordion-content").child(body),
                     ))
             })
@@ -558,7 +618,11 @@ pub struct Collapsible {
 impl Collapsible {
     /// A section titled `title`.
     pub fn new(title: impl Into<Node>) -> Self {
-        Self { el: el("details").slot("collapsible"), title: title.into(), body: Vec::new() }
+        Self {
+            el: el("details").slot("collapsible"),
+            title: title.into(),
+            body: Vec::new(),
+        }
     }
 
     /// Starts open.
@@ -576,7 +640,9 @@ impl Collapsible {
     fn into_node(self) -> Node {
         self.el
             .children((
-                el("summary").slot("collapsible-trigger").children((self.title, icon(icons::CHEVRON_DOWN))),
+                el("summary")
+                    .slot("collapsible-trigger")
+                    .children((self.title, icon(icons::CHEVRON_DOWN))),
                 el("div").slot("collapsible-content").child(self.body),
             ))
             .into()
@@ -593,7 +659,13 @@ pub struct ScrollArea {
 impl ScrollArea {
     /// An area named `label` for assistive technology.
     pub fn new(label: impl Into<String>) -> Self {
-        Self { el: el("div").slot("scroll-area").attr("role", "region").attr("aria-label", label.into()).attr("tabindex", 0_i64) }
+        Self {
+            el: el("div")
+                .slot("scroll-area")
+                .attr("role", "region")
+                .attr("aria-label", label.into())
+                .attr("tabindex", 0_i64),
+        }
     }
 
     /// Adds content.
@@ -607,5 +679,25 @@ impl ScrollArea {
     }
 }
 
-root_methods!(Dialog, AlertDialog, Popover, HoverCard, Tooltip, Accordion, Collapsible, ScrollArea);
-into_node!(Dialog, AlertDialog, Sheet, Drawer, Popover, HoverCard, Tooltip, Accordion, Collapsible, ScrollArea);
+root_methods!(
+    Dialog,
+    AlertDialog,
+    Popover,
+    HoverCard,
+    Tooltip,
+    Accordion,
+    Collapsible,
+    ScrollArea
+);
+into_node!(
+    Dialog,
+    AlertDialog,
+    Sheet,
+    Drawer,
+    Popover,
+    HoverCard,
+    Tooltip,
+    Accordion,
+    Collapsible,
+    ScrollArea
+);

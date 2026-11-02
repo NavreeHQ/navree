@@ -71,7 +71,12 @@ pub struct Input {
 impl Input {
     /// An input of `kind` posting as `name`.
     pub fn new(kind: InputKind, name: impl Into<String>) -> Self {
-        Self { el: el("input").slot("input").attr("type", kind.as_str()).attr("name", name.into()) }
+        Self {
+            el: el("input")
+                .slot("input")
+                .attr("type", kind.as_str())
+                .attr("name", name.into()),
+        }
     }
 
     /// A text input.
@@ -178,7 +183,10 @@ pub struct Textarea {
 impl Textarea {
     /// A textarea posting as `name`.
     pub fn new(name: impl Into<String>) -> Self {
-        Self { el: el("textarea").slot("textarea").attr("name", name.into()), value: None }
+        Self {
+            el: el("textarea").slot("textarea").attr("name", name.into()),
+            value: None,
+        }
     }
 
     /// Sets the value.
@@ -214,7 +222,11 @@ impl Textarea {
     fn into_node(self) -> Node {
         // The HTML parser drops a newline right after `<textarea>`: a value that
         // starts with one needs a second to keep it.
-        let lead = self.value.as_deref().is_some_and(|value| value.starts_with('\n')).then_some("\n");
+        let lead = self
+            .value
+            .as_deref()
+            .is_some_and(|value| value.starts_with('\n'))
+            .then_some("\n");
         self.el.children((lead, self.value)).into()
     }
 }
@@ -231,7 +243,10 @@ pub struct OptionItem {
 impl OptionItem {
     /// A choice.
     pub fn new(value: impl Into<String>, label: impl Into<String>) -> Self {
-        Self { value: value.into(), label: label.into() }
+        Self {
+            value: value.into(),
+            label: label.into(),
+        }
     }
 }
 
@@ -248,7 +263,12 @@ pub struct NativeSelect {
 impl NativeSelect {
     /// A select posting as `name`.
     pub fn new(name: impl Into<String>) -> Self {
-        Self { el: el("select").slot("native-select").attr("name", name.into()), options: Vec::new(), selected: None, prompt: None }
+        Self {
+            el: el("select").slot("native-select").attr("name", name.into()),
+            options: Vec::new(),
+            selected: None,
+            prompt: None,
+        }
     }
 
     /// Adds a choice.
@@ -295,7 +315,12 @@ impl NativeSelect {
         }
         for option in self.options {
             let chosen = selected.as_deref() == Some(option.value.as_str());
-            children.push(el("option").attr("value", option.value).flag("selected", chosen).child(option.label));
+            children.push(
+                el("option")
+                    .attr("value", option.value)
+                    .flag("selected", chosen)
+                    .child(option.label),
+            );
         }
         self.el.child(children).into()
     }
@@ -312,7 +337,14 @@ pub struct Checkbox {
 impl Checkbox {
     /// A checkbox posting as `name`. Its value is `true`.
     pub fn new(name: impl Into<String>) -> Self {
-        Self { el: el("input").slot("checkbox").attr("type", "checkbox").attr("name", name.into()).attr("value", "true"), label: None }
+        Self {
+            el: el("input")
+                .slot("checkbox")
+                .attr("type", "checkbox")
+                .attr("name", name.into())
+                .attr("value", "true"),
+            label: None,
+        }
     }
 
     /// Starts checked.
@@ -341,7 +373,10 @@ impl Checkbox {
 
     fn into_node(self) -> Node {
         match self.label {
-            Some(label) => el("label").slot("choice").children((self.el, el("span").child(label))).into(),
+            Some(label) => el("label")
+                .slot("choice")
+                .children((self.el, el("span").child(label)))
+                .into(),
             None => self.el.into(),
         }
     }
@@ -359,7 +394,12 @@ impl Switch {
     /// A switch posting as `name`. Its value is `true`.
     pub fn new(name: impl Into<String>) -> Self {
         Self {
-            el: el("input").slot("switch").attr("type", "checkbox").attr("role", "switch").attr("name", name.into()).attr("value", "true"),
+            el: el("input")
+                .slot("switch")
+                .attr("type", "checkbox")
+                .attr("role", "switch")
+                .attr("name", name.into())
+                .attr("value", "true"),
             label: None,
         }
     }
@@ -384,7 +424,10 @@ impl Switch {
 
     fn into_node(self) -> Node {
         match self.label {
-            Some(label) => el("label").slot("choice").children((self.el, el("span").child(label))).into(),
+            Some(label) => el("label")
+                .slot("choice")
+                .children((self.el, el("span").child(label)))
+                .into(),
             None => self.el.into(),
         }
     }
@@ -406,7 +449,14 @@ pub struct RadioGroup {
 impl RadioGroup {
     /// A group posting as `name`, described by `legend`.
     pub fn new(name: impl Into<String>, legend: impl Into<Node>) -> Self {
-        Self { el: el("fieldset").slot("radio-group"), name: name.into(), legend: legend.into(), options: Vec::new(), selected: None, required: false }
+        Self {
+            el: el("fieldset").slot("radio-group"),
+            name: name.into(),
+            legend: legend.into(),
+            options: Vec::new(),
+            selected: None,
+            required: false,
+        }
     }
 
     /// Adds a choice.
@@ -458,7 +508,12 @@ impl RadioGroup {
                 ))
             })
             .collect();
-        self.el.children((el("legend").slot("field-legend").child(self.legend), options)).into()
+        self.el
+            .children((
+                el("legend").slot("field-legend").child(self.legend),
+                options,
+            ))
+            .into()
     }
 }
 
@@ -472,7 +527,12 @@ pub struct Label {
 impl Label {
     /// A label for the control `control`.
     pub fn new(control: impl Into<String>, text: impl Into<Node>) -> Self {
-        Self { el: el("label").slot("label").attr("for", control.into()).child(text.into()) }
+        Self {
+            el: el("label")
+                .slot("label")
+                .attr("for", control.into())
+                .child(text.into()),
+        }
     }
 
     fn into_node(self) -> Node {
@@ -506,7 +566,15 @@ pub struct Field {
 impl Field {
     /// A field whose control gets the id `id`.
     pub fn new(id: impl Into<String>, label: impl Into<Node>) -> Self {
-        Self { el: el("div").slot("field"), id: id.into(), label: label.into(), required: false, help: None, error: None, control: Node::Empty }
+        Self {
+            el: el("div").slot("field"),
+            id: id.into(),
+            label: label.into(),
+            required: false,
+            help: None,
+            error: None,
+            control: Node::Empty,
+        }
     }
 
     /// Sets the help below the control.
@@ -549,15 +617,37 @@ impl Field {
         };
         let mut control = self.control;
         tie_control(&mut control, &self.id, self.error.is_some(), described);
-        let label = el("label").slot("label").attr("for", self.id).child(self.label);
-        let label = if self.required { label.child(el("span").slot("field-required").attr("aria-hidden", "true").child(" *")) } else { label };
+        let label = el("label")
+            .slot("label")
+            .attr("for", self.id)
+            .child(self.label);
+        let label = if self.required {
+            label.child(
+                el("span")
+                    .slot("field-required")
+                    .attr("aria-hidden", "true")
+                    .child(" *"),
+            )
+        } else {
+            label
+        };
         self.el
             .flag("data-invalid", self.error.is_some())
             .children((
                 label,
                 control,
-                self.help.map(|help| el("p").slot("field-description").attr_opt("id", help_id).child(help)),
-                self.error.map(|error| el("p").slot("field-error").attr_opt("id", error_id).child(error)),
+                self.help.map(|help| {
+                    el("p")
+                        .slot("field-description")
+                        .attr_opt("id", help_id)
+                        .child(help)
+                }),
+                self.error.map(|error| {
+                    el("p")
+                        .slot("field-error")
+                        .attr_opt("id", error_id)
+                        .child(error)
+                }),
             ))
             .into()
     }
@@ -569,12 +659,21 @@ fn tie_control(node: &mut Node, id: &str, invalid: bool, described: Option<Strin
         Node::Element(element) => {
             if matches!(element.tag, "input" | "select" | "textarea") {
                 element.attrs.retain(|attr| attr.name != "id");
-                element.attrs.push(Attr { name: "id", value: AttrValue::Text(id.into()) });
+                element.attrs.push(Attr {
+                    name: "id",
+                    value: AttrValue::Text(id.into()),
+                });
                 if invalid && element.get("aria-invalid").is_none() {
-                    element.attrs.push(Attr { name: "aria-invalid", value: AttrValue::Static("true") });
+                    element.attrs.push(Attr {
+                        name: "aria-invalid",
+                        value: AttrValue::Static("true"),
+                    });
                 }
                 if let Some(described) = described {
-                    element.attrs.push(Attr { name: "aria-describedby", value: AttrValue::Text(described.into()) });
+                    element.attrs.push(Attr {
+                        name: "aria-describedby",
+                        value: AttrValue::Text(described.into()),
+                    });
                 }
                 return true;
             }
@@ -607,7 +706,11 @@ pub struct FieldSet {
 impl FieldSet {
     /// A set described by `legend`.
     pub fn new(legend: impl Into<Node>) -> Self {
-        Self { el: el("fieldset").slot("field-set").child(el("legend").slot("field-legend").child(legend.into())) }
+        Self {
+            el: el("fieldset")
+                .slot("field-set")
+                .child(el("legend").slot("field-legend").child(legend.into())),
+        }
     }
 
     /// Adds fields.
@@ -634,7 +737,12 @@ pub struct InputGroup {
 impl InputGroup {
     /// A group around `input`.
     pub fn new(input: impl Into<Node>) -> Self {
-        Self { el: el("div").slot("input-group"), start: None, input: input.into(), end: None }
+        Self {
+            el: el("div").slot("input-group"),
+            start: None,
+            input: input.into(),
+            end: None,
+        }
     }
 
     /// Adds something before the input.
@@ -652,13 +760,37 @@ impl InputGroup {
     fn into_node(self) -> Node {
         self.el
             .children((
-                self.start.map(|addon| el("div").slot("input-group-addon").child(addon)),
+                self.start
+                    .map(|addon| el("div").slot("input-group-addon").child(addon)),
                 self.input,
-                self.end.map(|addon| el("div").slot("input-group-addon").child(addon)),
+                self.end
+                    .map(|addon| el("div").slot("input-group-addon").child(addon)),
             ))
             .into()
     }
 }
 
-root_methods!(Input, Textarea, NativeSelect, Checkbox, Switch, RadioGroup, Label, Field, FieldSet, InputGroup);
-into_node!(Input, Textarea, NativeSelect, Checkbox, Switch, RadioGroup, Label, Field, FieldSet, InputGroup);
+root_methods!(
+    Input,
+    Textarea,
+    NativeSelect,
+    Checkbox,
+    Switch,
+    RadioGroup,
+    Label,
+    Field,
+    FieldSet,
+    InputGroup
+);
+into_node!(
+    Input,
+    Textarea,
+    NativeSelect,
+    Checkbox,
+    Switch,
+    RadioGroup,
+    Label,
+    Field,
+    FieldSet,
+    InputGroup
+);

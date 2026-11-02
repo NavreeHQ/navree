@@ -13,8 +13,14 @@ use std::time::Duration;
 use serde::de::DeserializeOwned;
 
 use super::query::{FilterValue, State};
-use super::{Align, CellWriter, Column, Direction, FilterBar, FilterKind, NoFilter, Sticky, TableQuery, TableRow, ValueKind};
-use crate::components::{AlertDialog, Button, ButtonVariant, Empty, Input, NativeSelect, Pagination, Size, Skeleton, SkeletonShape, icon};
+use super::{
+    Align, CellWriter, Column, Direction, FilterBar, FilterKind, NoFilter, Sticky, TableQuery,
+    TableRow, ValueKind,
+};
+use crate::components::{
+    AlertDialog, Button, ButtonVariant, Empty, Input, NativeSelect, Pagination, Size, Skeleton,
+    SkeletonShape, icon,
+};
 use crate::html::{Href, SafeHtml, escape_into};
 use crate::icons::{self, Icon};
 use crate::node::{Attr, AttrValue, Element, IntoNodes, Node, Uses, el};
@@ -123,7 +129,15 @@ pub struct TablePage<R> {
 impl<R> TablePage<R> {
     /// A page of `rows` of `total`.
     pub fn new(rows: Vec<R>, total: u64) -> Self {
-        Self { rows, total: Total::Exact(total), page: 1, has_more: false, next: None, prev: None, version: None }
+        Self {
+            rows,
+            total: Total::Exact(total),
+            page: 1,
+            has_more: false,
+            next: None,
+            prev: None,
+            version: None,
+        }
     }
 }
 
@@ -141,7 +155,15 @@ pub struct TableData<'a, R> {
 
 impl<'a, R> From<&'a [R]> for TableData<'a, R> {
     fn from(rows: &'a [R]) -> Self {
-        Self { rows, total: Total::Exact(rows.len() as u64), page: None, has_more: false, next: None, prev: None, version: None }
+        Self {
+            rows,
+            total: Total::Exact(rows.len() as u64),
+            page: None,
+            has_more: false,
+            next: None,
+            prev: None,
+            version: None,
+        }
     }
 }
 
@@ -182,7 +204,11 @@ pub struct FilterOption {
 impl FilterOption {
     /// A choice posting `value`, showing `label`.
     pub fn new(value: impl ToString, label: impl Into<String>) -> Self {
-        Self { value: value.to_string(), label: label.into(), count: None }
+        Self {
+            value: value.to_string(),
+            label: label.into(),
+            count: None,
+        }
     }
 
     /// How many rows hold it, shown beside it.
@@ -208,7 +234,14 @@ pub struct BulkAction {
 impl BulkAction {
     /// The action `id`, what the server reads, showing `label`.
     pub fn new(id: &'static str, label: impl Into<Cow<'static, str>>) -> Self {
-        Self { id, label: label.into(), icon: None, destructive: false, confirm: None, denied: None }
+        Self {
+            id,
+            label: label.into(),
+            icon: None,
+            destructive: false,
+            confirm: None,
+            denied: None,
+        }
     }
 
     /// Adds an icon.
@@ -250,12 +283,24 @@ pub struct RowAction {
 impl RowAction {
     /// A link.
     pub fn link(label: impl Into<Cow<'static, str>>, href: impl Into<Href>) -> Self {
-        Self { label: label.into(), href: href.into(), post: false, destructive: false, icon: None }
+        Self {
+            label: label.into(),
+            href: href.into(),
+            post: false,
+            destructive: false,
+            icon: None,
+        }
     }
 
     /// A button that posts to `href`.
     pub fn post(label: impl Into<Cow<'static, str>>, href: impl Into<Href>) -> Self {
-        Self { label: label.into(), href: href.into(), post: true, destructive: false, icon: None }
+        Self {
+            label: label.into(),
+            href: href.into(),
+            post: true,
+            destructive: false,
+            icon: None,
+        }
     }
 
     /// Marks it as destroying something.
@@ -491,7 +536,11 @@ pub struct DataTable<'a, R, F = NoFilter> {
 
 impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R, F> {
     /// The rows of this page; `id` names the region.
-    pub fn new(id: &'static str, query: &'a TableQuery<R, F>, data: impl Into<TableData<'a, R>>) -> Self {
+    pub fn new(
+        id: &'static str,
+        query: &'a TableQuery<R, F>,
+        data: impl Into<TableData<'a, R>>,
+    ) -> Self {
         Self {
             id,
             query,
@@ -537,7 +586,8 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     /// still read the field's plain text. `#[col(cell = path)]` is the same in the
     /// definition; this form can use what the page knows, such as permissions.
     pub fn cell<N: Into<Node>>(mut self, name: &'static str, draw: impl Fn(&R) -> N + 'a) -> Self {
-        self.cells.push((name, Box::new(move |row| draw(row).into())));
+        self.cells
+            .push((name, Box::new(move |row| draw(row).into())));
         self
     }
 
@@ -647,7 +697,11 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     }
 
     /// Adds selection, with actions posting to `url`. See [`super::BulkRequest`].
-    pub fn bulk(mut self, url: impl Into<Href>, actions: impl IntoIterator<Item = BulkAction>) -> Self {
+    pub fn bulk(
+        mut self,
+        url: impl Into<Href>,
+        actions: impl IntoIterator<Item = BulkAction>,
+    ) -> Self {
         self.bulk_url = Some(url.into());
         self.bulk_actions = actions.into_iter().collect();
         self
@@ -767,7 +821,10 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
 
     /// How many body columns there are, with the extras.
     fn span(&self) -> usize {
-        self.query.state.cols.len() + usize::from(self.selectable()) + usize::from(self.has_actions()) + usize::from(self.has_detail())
+        self.query.state.cols.len()
+            + usize::from(self.selectable())
+            + usize::from(self.has_actions())
+            + usize::from(self.has_detail())
     }
 
     /// The page shown.
@@ -788,14 +845,24 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     /// The filter's choices: from the definition, or from the page.
     fn choices(&self, column: &'static Column) -> Vec<FilterOption> {
         if !column.options.is_empty() {
-            return column.options.iter().map(|(value, label)| FilterOption::new(*value, *label)).collect();
+            return column
+                .options
+                .iter()
+                .map(|(value, label)| FilterOption::new(*value, *label))
+                .collect();
         }
-        self.options.iter().find(|(name, _)| *name == column.name).map_or_else(Vec::new, |(_, options)| options.clone())
+        self.options
+            .iter()
+            .find(|(name, _)| *name == column.name)
+            .map_or_else(Vec::new, |(_, options)| options.clone())
     }
 
     /// A popover from `trigger`, placed under it.
     fn popover(&self, id: String, trigger: Element, label: String, body: impl IntoNodes) -> Node {
-        let trigger = trigger.attr("popovertarget", id.clone()).attr("aria-haspopup", "dialog").attr("type", "button");
+        let trigger = trigger
+            .attr("popovertarget", id.clone())
+            .attr("aria-haspopup", "dialog")
+            .attr("type", "button");
         let popup = el("div")
             .slot("popover-content")
             .attr("id", id)
@@ -812,7 +879,14 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     }
 
     /// A small input for a filter, tied to the toolbar's form.
-    fn filter_input(&self, kind: &'static str, name: String, value: Option<&str>, placeholder: Option<String>, label: String) -> Element {
+    fn filter_input(
+        &self,
+        kind: &'static str,
+        name: String,
+        value: Option<&str>,
+        placeholder: Option<String>,
+        label: String,
+    ) -> Element {
         el("input")
             .slot("input")
             .attr("data-size", "sm")
@@ -827,7 +901,13 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     /// The controls of column `at`'s filter.
     fn filter_controls(&self, at: usize, column: &'static Column, in_row: bool) -> Node {
         let labels = &self.labels;
-        let active = self.query.state.filters.iter().find(|filter| filter.column == at).map(|filter| &filter.value);
+        let active = self
+            .query
+            .state
+            .filters
+            .iter()
+            .find(|filter| filter.column == at)
+            .map(|filter| &filter.value);
         let name = format!("f.{}", column.name);
         let body: Node = match column.filter {
             FilterKind::None => Node::Empty,
@@ -836,7 +916,14 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                     Some(FilterValue::Text(text)) => Some(text.as_str()),
                     _ => None,
                 };
-                self.filter_input("search", name, value, Some(column.label.to_owned()), format!("{}: {}", labels.search, column.label)).into()
+                self.filter_input(
+                    "search",
+                    name,
+                    value,
+                    Some(column.label.to_owned()),
+                    format!("{}: {}", labels.search, column.label),
+                )
+                .into()
             }
             FilterKind::Range => {
                 let (min, max) = match active {
@@ -845,20 +932,38 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 };
                 let kind = column.kind.input_type();
                 let date = matches!(column.kind, ValueKind::Date | ValueKind::DateTime);
-                let (low, high) = if date { (&labels.from, &labels.to) } else { (&labels.min, &labels.max) };
+                let (low, high) = if date {
+                    (&labels.from, &labels.to)
+                } else {
+                    (&labels.min, &labels.max)
+                };
                 let step = (kind == "number" && column.kind != ValueKind::Int).then_some("any");
                 let inputmode = (kind == "text").then_some("decimal");
                 let input = |suffix: &str, value, word: &Cow<'static, str>| {
                     el("label").slot("filter-field").children((
                         el("span").child(word.to_string()),
-                        self.filter_input(kind, format!("{name}.{suffix}"), value, None, format!("{} {word}", column.label)).attr_opt("step", step).attr_opt("inputmode", inputmode),
+                        self.filter_input(
+                            kind,
+                            format!("{name}.{suffix}"),
+                            value,
+                            None,
+                            format!("{} {word}", column.label),
+                        )
+                        .attr_opt("step", step)
+                        .attr_opt("inputmode", inputmode),
                     ))
                 };
-                el("div").slot("filter-range").children((input("min", min, low), input("max", max, high))).into()
+                el("div")
+                    .slot("filter-range")
+                    .children((input("min", min, low), input("max", max, high)))
+                    .into()
             }
             FilterKind::Select | FilterKind::Boolean => {
                 let choices: Vec<FilterOption> = if column.filter == FilterKind::Boolean {
-                    vec![FilterOption::new("true", labels.yes.to_string()), FilterOption::new("false", labels.no.to_string())]
+                    vec![
+                        FilterOption::new("true", labels.yes.to_string()),
+                        FilterOption::new("false", labels.no.to_string()),
+                    ]
                 } else {
                     self.choices(column)
                 };
@@ -867,7 +972,10 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                     Some(FilterValue::Bool(flag)) => Some(flag.to_string()),
                     _ => None,
                 };
-                let mut select = NativeSelect::new(name).prompt(labels.any.to_string()).attr("form", self.form_id()).attr("aria-label", column.label);
+                let mut select = NativeSelect::new(name)
+                    .prompt(labels.any.to_string())
+                    .attr("form", self.form_id())
+                    .attr("aria-label", column.label);
                 for choice in &choices {
                     select = select.option(choice.value.clone(), choice.label.clone());
                 }
@@ -885,9 +993,18 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 if choices.is_empty() {
                     // No list of choices: the key itself.
                     let value = selected.first().map(String::as_str);
-                    self.filter_input("text", name, value, None, column.label.to_owned()).into()
+                    self.filter_input("text", name, value, None, column.label.to_owned())
+                        .into()
                 } else {
-                    let find = (choices.len() > 8).then(|| el("input").slot("input").attr("data-size", "sm").attr("type", "search").attr("placeholder", labels.find_option.to_string()).attr("aria-label", labels.find_option.to_string()).flag("data-ui-find-option", true));
+                    let find = (choices.len() > 8).then(|| {
+                        el("input")
+                            .slot("input")
+                            .attr("data-size", "sm")
+                            .attr("type", "search")
+                            .attr("placeholder", labels.find_option.to_string())
+                            .attr("aria-label", labels.find_option.to_string())
+                            .flag("data-ui-find-option", true)
+                    });
                     let items: Vec<Element> = choices
                         .iter()
                         .map(|choice| {
@@ -900,7 +1017,9 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                                     .attr("form", self.form_id())
                                     .flag("checked", selected.contains(&choice.value)),
                                 el("bdi").child(choice.label.clone()),
-                                choice.count.map(|count| el("span").slot("filter-count").child(grouped(count))),
+                                choice.count.map(|count| {
+                                    el("span").slot("filter-count").child(grouped(count))
+                                }),
                             ))
                         })
                         .collect();
@@ -910,7 +1029,13 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         };
         let empty = (column.nullable && !in_row && column.filter != FilterKind::None).then(|| {
             el("label").slot("filter-option").children((
-                el("input").slot("checkbox").attr("type", "checkbox").attr("name", format!("f.{}.empty", column.name)).attr("value", "1").attr("form", self.form_id()).flag("checked", matches!(active, Some(FilterValue::Empty))),
+                el("input")
+                    .slot("checkbox")
+                    .attr("type", "checkbox")
+                    .attr("name", format!("f.{}.empty", column.name))
+                    .attr("value", "1")
+                    .attr("form", self.form_id())
+                    .flag("checked", matches!(active, Some(FilterValue::Empty))),
                 el("span").child(labels.empty_value.to_string()),
             ))
         });
@@ -924,18 +1049,31 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             if let Some((_, label)) = column.options.iter().find(|(option, _)| *option == value) {
                 return (*label).to_owned();
             }
-            self.options.iter().find(|(name, _)| *name == column.name).and_then(|(_, options)| options.iter().find(|option| option.value == value)).map_or_else(|| value.to_owned(), |option| option.label.clone())
+            self.options
+                .iter()
+                .find(|(name, _)| *name == column.name)
+                .and_then(|(_, options)| options.iter().find(|option| option.value == value))
+                .map_or_else(|| value.to_owned(), |option| option.label.clone())
         };
         match value {
             FilterValue::Text(text) => format!("{}: {text}", column.label),
             FilterValue::Values(values) => {
-                let mut names = values.iter().take(3).map(|value| name_of(value)).collect::<Vec<_>>().join(", ");
+                let mut names = values
+                    .iter()
+                    .take(3)
+                    .map(|value| name_of(value))
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 if values.len() > 3 {
                     let _ = write!(names, " +{}", values.len() - 3);
                 }
                 format!("{}: {names}", column.label)
             }
-            FilterValue::Bool(flag) => format!("{}: {}", column.label, if *flag { &labels.yes } else { &labels.no }),
+            FilterValue::Bool(flag) => format!(
+                "{}: {}",
+                column.label,
+                if *flag { &labels.yes } else { &labels.no }
+            ),
             FilterValue::Empty => format!("{}: {}", column.label, labels.empty_value),
             FilterValue::Range { min, max } => match (min, max) {
                 (Some(min), Some(max)) => format!("{}: {min} – {max}", column.label),
@@ -956,10 +1094,16 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 if let Some(term) = state.sort.iter_mut().find(|term| term.column == at) {
                     term.direction = direction;
                 } else {
-                    state.sort.push(super::SortTerm { column: at, direction });
+                    state.sort.push(super::SortTerm {
+                        column: at,
+                        direction,
+                    });
                 }
             } else {
-                state.sort = vec![super::SortTerm { column: at, direction }];
+                state.sort = vec![super::SortTerm {
+                    column: at,
+                    direction,
+                }];
             }
         })
     }
@@ -968,21 +1112,46 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     fn column_menu(&self, at: usize, column: &'static Column) -> Option<Node> {
         let labels = &self.labels;
         let state = &self.query.state;
-        let current = state.sort.iter().find(|term| term.column == at).map(|term| term.direction);
+        let current = state
+            .sort
+            .iter()
+            .find(|term| term.column == at)
+            .map(|term| term.direction);
         let can_hide = !column.locked && state.cols.len() > 1;
         let filter_here = column.filter != FilterKind::None && self.mode == FilterMode::Popover;
         if !column.sortable && !filter_here && !can_hide {
             return None;
         }
         let item = |text: &Cow<'static, str>, glyph: Icon, href: String, on: bool| -> Element {
-            self.region_link(href).slot("menu-link").flag("data-active", on).children((icon(glyph), text.to_string()))
+            self.region_link(href)
+                .slot("menu-link")
+                .flag("data-active", on)
+                .children((icon(glyph), text.to_string()))
         };
         let mut links: Vec<Element> = Vec::new();
         if column.sortable {
-            links.push(item(&labels.sort_asc, icons::ARROW_UP, self.sort_href(at, Direction::Asc, false), current == Some(Direction::Asc)));
-            links.push(item(&labels.sort_desc, icons::ARROW_DOWN, self.sort_href(at, Direction::Desc, false), current == Some(Direction::Desc)));
-            if !state.sort.is_empty() && !(state.sort.len() == 1 && current.is_some()) && current.is_none() {
-                links.push(item(&labels.sort_add, icons::PLUS, self.sort_href(at, Direction::Asc, true), false));
+            links.push(item(
+                &labels.sort_asc,
+                icons::ARROW_UP,
+                self.sort_href(at, Direction::Asc, false),
+                current == Some(Direction::Asc),
+            ));
+            links.push(item(
+                &labels.sort_desc,
+                icons::ARROW_DOWN,
+                self.sort_href(at, Direction::Desc, false),
+                current == Some(Direction::Desc),
+            ));
+            if !state.sort.is_empty()
+                && !(state.sort.len() == 1 && current.is_some())
+                && current.is_none()
+            {
+                links.push(item(
+                    &labels.sort_add,
+                    icons::PLUS,
+                    self.sort_href(at, Direction::Asc, true),
+                    false,
+                ));
             }
             if current.is_some() {
                 let clear = self.query.href_with(|state| {
@@ -995,12 +1164,22 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             }
         }
         if can_hide {
-            let hide = self.query.href_with(|state| state.cols.retain(|column| *column != at));
+            let hide = self
+                .query
+                .href_with(|state| state.cols.retain(|column| *column != at));
             links.push(item(&labels.hide_column, icons::EYE_OFF, hide, false));
         }
-        let filter = filter_here.then(|| el("div").slot("menu-filter").child(self.filter_controls(at, column, false)));
+        let filter = filter_here.then(|| {
+            el("div")
+                .slot("menu-filter")
+                .child(self.filter_controls(at, column, false))
+        });
         let active = state.filters.iter().any(|filter| filter.column == at);
-        let glyph = if filter_here { icons::LIST_FILTER } else { icons::ELLIPSIS };
+        let glyph = if filter_here {
+            icons::LIST_FILTER
+        } else {
+            icons::ELLIPSIS
+        };
         let trigger = el("button")
             .slot("button")
             .attr("data-variant", "ghost")
@@ -1008,9 +1187,17 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .flag("data-icon-only", true)
             .flag("data-th-menu", true)
             .flag("data-active", active)
-            .attr("aria-label", labels.column_options.replace("{label}", column.label))
+            .attr(
+                "aria-label",
+                labels.column_options.replace("{label}", column.label),
+            )
             .child(icon(glyph));
-        Some(self.popover(format!("{}-m-{}", self.id, column.name), trigger, labels.column_options.replace("{label}", column.label), (el("div").slot("menu-links").child(links), filter)))
+        Some(self.popover(
+            format!("{}-m-{}", self.id, column.name),
+            trigger,
+            labels.column_options.replace("{label}", column.label),
+            (el("div").slot("menu-links").child(links), filter),
+        ))
     }
 
     /// A `<th>` for column `at`.
@@ -1027,17 +1214,30 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .attr_opt("data-align", align_str(column.align))
             .attr_opt("data-sticky", sticky_at.map(str::to_owned));
         if let Some(direction) = sorted {
-            th = th.attr("aria-sort", if direction == Direction::Asc { "ascending" } else { "descending" });
+            th = th.attr(
+                "aria-sort",
+                if direction == Direction::Asc {
+                    "ascending"
+                } else {
+                    "descending"
+                },
+            );
         }
         let title: Node = if column.sortable {
             // The first click sorts up, the next down. Shift adds to the sort.
-            let next = if sorted == Some(Direction::Asc) { Direction::Desc } else { Direction::Asc };
+            let next = if sorted == Some(Direction::Asc) {
+                Direction::Desc
+            } else {
+                Direction::Asc
+            };
             let glyph = match sorted {
                 Some(Direction::Asc) => icons::ARROW_UP,
                 Some(Direction::Desc) => icons::ARROW_DOWN,
                 None => icons::ARROW_UP_DOWN,
             };
-            let order = (state.sort.len() > 1).then(|| rank.map(|rank| el("span").slot("sort-rank").child((rank + 1) as i64))).flatten();
+            let order = (state.sort.len() > 1)
+                .then(|| rank.map(|rank| el("span").slot("sort-rank").child((rank + 1) as i64)))
+                .flatten();
             self.region_link(self.sort_href(at, next, false))
                 .slot("sort-link")
                 .attr("data-ui-add-sort", self.sort_href(at, next, true))
@@ -1047,7 +1247,10 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             el("span").slot("th-label").child(column.label).into()
         };
         let drag = self.can_reorder && state.cols.len() > 1;
-        let box_ = el("div").slot("th").flag("data-ui-col-drag", drag).children((title, self.column_menu(at, column)));
+        let box_ = el("div")
+            .slot("th")
+            .flag("data-ui-col-drag", drag)
+            .children((title, self.column_menu(at, column)));
         let handle = self.can_resize.then(|| {
             el("span")
                 .slot("col-resize")
@@ -1057,7 +1260,18 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 .attr("aria-label", labels.resize.replace("{label}", column.label))
                 .attr("aria-valuemin", 40_i64)
                 .attr("aria-valuemax", 1600_i64)
-                .attr("aria-valuenow", i64::from(state.widths.iter().find(|(column, _)| *column == at).map(|(_, width)| *width).or(column.width).unwrap_or(160)))
+                .attr(
+                    "aria-valuenow",
+                    i64::from(
+                        state
+                            .widths
+                            .iter()
+                            .find(|(column, _)| *column == at)
+                            .map(|(_, width)| *width)
+                            .or(column.width)
+                            .unwrap_or(160),
+                    ),
+                )
         });
         th.children((box_, handle))
     }
@@ -1065,16 +1279,42 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     /// The header rows: group headings, column headings, the filter row.
     fn head(&self, sticky: &[Option<String>]) -> Element {
         let state = &self.query.state;
-        let columns: Vec<(usize, &'static Column)> = state.cols.iter().map(|at| (*at, TableQuery::<R, F>::column(*at))).collect();
+        let columns: Vec<(usize, &'static Column)> = state
+            .cols
+            .iter()
+            .map(|at| (*at, TableQuery::<R, F>::column(*at)))
+            .collect();
         let has_groups = columns.iter().any(|(_, column)| column.group.is_some());
         let select_head = self.selectable().then(|| {
-            el("th").attr("scope", "col").slot("cell-select").attr("data-sticky", "s").child(
-                el("input").slot("checkbox").attr("type", "checkbox").flag("data-ui-select-page", true).attr("aria-label", self.labels.select_page.to_string()),
-            )
+            el("th")
+                .attr("scope", "col")
+                .slot("cell-select")
+                .attr("data-sticky", "s")
+                .child(
+                    el("input")
+                        .slot("checkbox")
+                        .attr("type", "checkbox")
+                        .flag("data-ui-select-page", true)
+                        .attr("aria-label", self.labels.select_page.to_string()),
+                )
         });
         let detail_head = self.has_detail().then(|| el("td").slot("cell-toggle"));
-        let actions_head = self.has_actions().then(|| el("th").attr("scope", "col").slot("cell-actions").attr("data-sticky", "e").child(el("span").attr("data-ui-sr", "").child(self.labels.actions.to_string())));
-        let cells: Vec<Element> = columns.iter().zip(sticky).map(|((at, column), sticky)| self.head_cell(*at, column, sticky.as_deref())).collect();
+        let actions_head = self.has_actions().then(|| {
+            el("th")
+                .attr("scope", "col")
+                .slot("cell-actions")
+                .attr("data-sticky", "e")
+                .child(
+                    el("span")
+                        .attr("data-ui-sr", "")
+                        .child(self.labels.actions.to_string()),
+                )
+        });
+        let cells: Vec<Element> = columns
+            .iter()
+            .zip(sticky)
+            .map(|((at, column), sticky)| self.head_cell(*at, column, sticky.as_deref()))
+            .collect();
         let mut rows: Vec<Element> = Vec::with_capacity(3);
         if has_groups {
             let mut groups: Vec<Element> = Vec::new();
@@ -1092,7 +1332,11 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                     span += 1;
                 }
                 let cell = match group {
-                    Some(group) => el("th").attr("scope", "colgroup").slot("th-group").attr("colspan", span as i64).child(group),
+                    Some(group) => el("th")
+                        .attr("scope", "colgroup")
+                        .slot("th-group")
+                        .attr("colspan", span as i64)
+                        .child(group),
                     None => el("td").attr("colspan", span as i64),
                 };
                 groups.push(cell);
@@ -1104,30 +1348,66 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             rows.push(el("tr").slot("group-row").child(groups));
         }
         rows.push(el("tr").children((select_head, detail_head, cells, actions_head)));
-        if self.mode == FilterMode::Row && columns.iter().any(|(_, column)| column.filter != FilterKind::None) {
+        if self.mode == FilterMode::Row
+            && columns
+                .iter()
+                .any(|(_, column)| column.filter != FilterKind::None)
+        {
             let filters: Vec<Element> = columns
                 .iter()
                 .zip(sticky)
                 .map(|((at, column), sticky)| {
-                    let cell = el("td").attr_opt("data-sticky", sticky.clone()).flag("data-hide-mobile", column.hide_on_mobile);
+                    let cell = el("td")
+                        .attr_opt("data-sticky", sticky.clone())
+                        .flag("data-hide-mobile", column.hide_on_mobile);
                     match column.filter {
                         FilterKind::None => cell,
-                        FilterKind::Text | FilterKind::Select | FilterKind::Boolean => cell.child(self.filter_controls(*at, column, true)),
+                        FilterKind::Text | FilterKind::Select | FilterKind::Boolean => {
+                            cell.child(self.filter_controls(*at, column, true))
+                        }
                         _ => {
                             let active = state.filters.iter().find(|filter| filter.column == *at);
-                            let trigger = el("button").slot("button").attr("data-variant", "outline").attr("data-size", "sm").flag("data-filter-trigger", true).flag("data-active", active.is_some()).children((
-                                active.map_or_else(|| self.labels.any.to_string(), |filter| self.chip_text(column, &filter.value).split_once(": ").map_or(String::new(), |(_, value)| value.to_owned())),
-                                icon(icons::CHEVRON_DOWN),
-                            ));
-                            cell.child(self.popover(format!("{}-p-{}", self.id, column.name), trigger, column.label.to_owned(), self.filter_controls(*at, column, false)))
+                            let trigger = el("button")
+                                .slot("button")
+                                .attr("data-variant", "outline")
+                                .attr("data-size", "sm")
+                                .flag("data-filter-trigger", true)
+                                .flag("data-active", active.is_some())
+                                .children((
+                                    active.map_or_else(
+                                        || self.labels.any.to_string(),
+                                        |filter| {
+                                            self.chip_text(column, &filter.value)
+                                                .split_once(": ")
+                                                .map_or(String::new(), |(_, value)| {
+                                                    value.to_owned()
+                                                })
+                                        },
+                                    ),
+                                    icon(icons::CHEVRON_DOWN),
+                                ));
+                            cell.child(self.popover(
+                                format!("{}-p-{}", self.id, column.name),
+                                trigger,
+                                column.label.to_owned(),
+                                self.filter_controls(*at, column, false),
+                            ))
                         }
                     }
                 })
                 .collect();
-            let select = self.selectable().then(|| el("td").slot("cell-select").attr("data-sticky", "s"));
+            let select = self
+                .selectable()
+                .then(|| el("td").slot("cell-select").attr("data-sticky", "s"));
             let toggle = self.has_detail().then(|| el("td").slot("cell-toggle"));
-            let actions = self.has_actions().then(|| el("td").slot("cell-actions").attr("data-sticky", "e"));
-            rows.push(el("tr").slot("filter-row").children((select, toggle, filters, actions)));
+            let actions = self
+                .has_actions()
+                .then(|| el("td").slot("cell-actions").attr("data-sticky", "e"));
+            rows.push(
+                el("tr")
+                    .slot("filter-row")
+                    .children((select, toggle, filters, actions)),
+            );
         }
         el("thead").child(rows)
     }
@@ -1136,11 +1416,24 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     fn state_inputs(&self) -> Vec<Element> {
         let state = &self.query.state;
         let mut inputs = Vec::new();
-        let hidden = |name: String, value: String| el("input").attr("type", "hidden").attr("name", name).attr("value", value);
+        let hidden = |name: String, value: String| {
+            el("input")
+                .attr("type", "hidden")
+                .attr("name", name)
+                .attr("value", value)
+        };
         let mut pairs = Vec::new();
         // Filters on columns not shown have no control, but stay in force.
-        for filter in state.filters.iter().filter(|filter| self.mode != FilterMode::Bar && !state.cols.contains(&filter.column)) {
-            let one = State { filters: vec![filter.clone()], q: None, ..state.clone() };
+        for filter in state
+            .filters
+            .iter()
+            .filter(|filter| self.mode != FilterMode::Bar && !state.cols.contains(&filter.column))
+        {
+            let one = State {
+                filters: vec![filter.clone()],
+                q: None,
+                ..state.clone()
+            };
             one.filter_pairs::<R>(&mut pairs);
         }
         for (name, value) in pairs {
@@ -1161,64 +1454,132 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         let form = self.form_id();
         let searchable = R::COLUMNS.iter().any(|column| column.search);
         let search = searchable.then(|| {
-            let input = Input::search("q").placeholder(labels.search.to_string()).attr("aria-label", labels.search.to_string());
+            let input = Input::search("q")
+                .placeholder(labels.search.to_string())
+                .attr("aria-label", labels.search.to_string());
             let input = match &state.q {
                 Some(q) => input.value(q.clone()),
                 None => input,
             };
-            el("div").slot("table-search").children((icon(icons::SEARCH), input))
+            el("div")
+                .slot("table-search")
+                .children((icon(icons::SEARCH), input))
         });
         let controls = self.query.filter().controls();
         let tool = |glyph: Icon, text: String| {
-            el("button").slot("button").attr("data-variant", "outline").attr("data-size", "sm").children((icon(glyph), text))
+            el("button")
+                .slot("button")
+                .attr("data-variant", "outline")
+                .attr("data-size", "sm")
+                .children((icon(glyph), text))
         };
         // Columns: ticks, and links that move each one.
         let shown = &state.cols;
-        let order: Vec<usize> = shown.iter().copied().chain((0..R::COLUMNS.len()).filter(|at| !shown.contains(at))).collect();
+        let order: Vec<usize> = shown
+            .iter()
+            .copied()
+            .chain((0..R::COLUMNS.len()).filter(|at| !shown.contains(at)))
+            .collect();
         let column_rows: Vec<Element> = order
             .iter()
             .map(|at| {
                 let column = TableQuery::<R, F>::column(*at);
                 let place = shown.iter().position(|shown| shown == at);
                 let move_link = |to: Option<usize>, glyph: Icon, label: String| -> Element {
-                    let link = el("a").slot("column-move").attr("aria-label", label).child(icon(glyph));
+                    let link = el("a")
+                        .slot("column-move")
+                        .attr("aria-label", label)
+                        .child(icon(glyph));
                     match (place, to) {
-                        (Some(from), Some(to)) => link.href(self.query.href_with(|state| state.cols.swap(from, to))).flag("data-ui-in-region", true),
+                        (Some(from), Some(to)) => link
+                            .href(self.query.href_with(|state| state.cols.swap(from, to)))
+                            .flag("data-ui-in-region", true),
                         _ => link.attr("role", "link").attr("aria-disabled", "true"),
                     }
                 };
                 // A key, so a morph moves the row: a focused box keeps its old value otherwise.
-                el("div").slot("column-row").attr("data-col", column.name).attr("data-key", format!("c-{}", column.name)).children((
-                    el("label").slot("filter-option").children((
-                        el("input").slot("checkbox").attr("type", "checkbox").attr("name", "cols").attr("value", column.name).attr("form", form.clone()).flag("checked", place.is_some()).flag("disabled", column.locked),
-                        column.label,
-                    )),
-                    column.locked.then(|| el("input").attr("type", "hidden").attr("name", "cols").attr("value", column.name).attr("form", form.clone())),
-                    place.is_some().then(|| {
-                        Node::list((
-                            move_link(place.and_then(|from| from.checked_sub(1)), icons::CHEVRON_UP, labels.move_up.replace("{label}", column.label)),
-                            move_link(place.and_then(|from| (from + 1 < shown.len()).then_some(from + 1)), icons::CHEVRON_DOWN, labels.move_down.replace("{label}", column.label)),
-                        ))
-                    }),
-                ))
+                el("div")
+                    .slot("column-row")
+                    .attr("data-col", column.name)
+                    .attr("data-key", format!("c-{}", column.name))
+                    .children((
+                        el("label").slot("filter-option").children((
+                            el("input")
+                                .slot("checkbox")
+                                .attr("type", "checkbox")
+                                .attr("name", "cols")
+                                .attr("value", column.name)
+                                .attr("form", form.clone())
+                                .flag("checked", place.is_some())
+                                .flag("disabled", column.locked),
+                            column.label,
+                        )),
+                        column.locked.then(|| {
+                            el("input")
+                                .attr("type", "hidden")
+                                .attr("name", "cols")
+                                .attr("value", column.name)
+                                .attr("form", form.clone())
+                        }),
+                        place.is_some().then(|| {
+                            Node::list((
+                                move_link(
+                                    place.and_then(|from| from.checked_sub(1)),
+                                    icons::CHEVRON_UP,
+                                    labels.move_up.replace("{label}", column.label),
+                                ),
+                                move_link(
+                                    place.and_then(|from| {
+                                        (from + 1 < shown.len()).then_some(from + 1)
+                                    }),
+                                    icons::CHEVRON_DOWN,
+                                    labels.move_down.replace("{label}", column.label),
+                                ),
+                            ))
+                        }),
+                    ))
             })
             .collect();
-        let reset = (state.pairs::<R>().iter().any(|(name, _)| name == "cols" || name == "w")).then(|| {
+        let reset = (state
+            .pairs::<R>()
+            .iter()
+            .any(|(name, _)| name == "cols" || name == "w"))
+        .then(|| {
             self.region_link(self.query.href_with(|state| {
-                state.cols = R::COLUMNS.iter().enumerate().filter(|(_, column)| !column.hidden).map(|(at, _)| at).collect();
+                state.cols = R::COLUMNS
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, column)| !column.hidden)
+                    .map(|(at, _)| at)
+                    .collect();
                 state.widths.clear();
             }))
             .slot("menu-link")
             .children((icon(icons::ROTATE_CCW), labels.reset_columns.to_string()))
         });
-        let columns = self.popover(format!("{}-columns", self.id), tool(icons::COLUMNS_3, labels.columns.to_string()), labels.columns.to_string(), (el("div").slot("column-list").child(column_rows), reset));
+        let columns = self.popover(
+            format!("{}-columns", self.id),
+            tool(icons::COLUMNS_3, labels.columns.to_string()),
+            labels.columns.to_string(),
+            (el("div").slot("column-list").child(column_rows), reset),
+        );
         // Density.
         let density_link = |density: super::TableDensity, text: &Cow<'static, str>| -> Element {
-            self.region_link(self.query.href_with(|state| state.density = density)).slot("menu-link").flag("data-active", state.density == density).attr_opt("aria-current", (state.density == density).then_some("true")).child(text.to_string())
+            self.region_link(self.query.href_with(|state| state.density = density))
+                .slot("menu-link")
+                .flag("data-active", state.density == density)
+                .attr_opt("aria-current", (state.density == density).then_some("true"))
+                .child(text.to_string())
         };
         let view = self.popover(
             format!("{}-view", self.id),
-            el("button").slot("button").attr("data-variant", "outline").attr("data-size", "sm").flag("data-icon-only", true).attr("aria-label", labels.density.to_string()).child(icon(icons::SLIDERS_HORIZONTAL)),
+            el("button")
+                .slot("button")
+                .attr("data-variant", "outline")
+                .attr("data-size", "sm")
+                .flag("data-icon-only", true)
+                .attr("aria-label", labels.density.to_string())
+                .child(icon(icons::SLIDERS_HORIZONTAL)),
             labels.density.to_string(),
             el("div").slot("menu-links").children((
                 density_link(TableDensity::Compact, &labels.compact),
@@ -1226,20 +1587,57 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 density_link(TableDensity::Spacious, &labels.spacious),
             )),
         );
-        let views = self.views.as_ref().map(|(views, url)| super::saved::menu(self.id, &self.query.query_string(), views, url, self.query.path(), labels, self.csrf.as_deref(), |id, trigger, label, body| self.popover(id, trigger, label, body)));
+        let views = self.views.as_ref().map(|(views, url)| {
+            super::saved::menu(
+                self.id,
+                &self.query.query_string(),
+                views,
+                url,
+                self.query.path(),
+                labels,
+                self.csrf.as_deref(),
+                |id, trigger, label, body| self.popover(id, trigger, label, body),
+            )
+        });
         let export = self.export.as_ref().map(|url| {
             let query = self.query.href_with(|state| {
                 state.page = 1;
                 state.open.clear();
             });
             let query = query.split_once('?').map_or("", |(_, query)| query);
-            let href = if query.is_empty() { url.as_str().to_owned() } else { format!("{}?{query}", url.as_str()) };
-            el("a").slot("button").attr("data-variant", "outline").attr("data-size", "sm").href(href).flag("data-ui-noboost", true).flag("download", true).children((icon(icons::DOWNLOAD), labels.export.to_string()))
+            let href = if query.is_empty() {
+                url.as_str().to_owned()
+            } else {
+                format!("{}?{query}", url.as_str())
+            };
+            el("a")
+                .slot("button")
+                .attr("data-variant", "outline")
+                .attr("data-size", "sm")
+                .href(href)
+                .flag("data-ui-noboost", true)
+                .flag("download", true)
+                .children((icon(icons::DOWNLOAD), labels.export.to_string()))
         });
         // The saved-view forms sit outside the toolbar's form, since forms can't nest.
         // Every control reaches the form by its `form` attribute.
-        let live = (self.live.is_some() || self.live_from.is_some()).then(|| el("span").slot("table-live").children((el("span").slot("live-dot").attr("aria-hidden", "true"), labels.live.to_string())));
-        let refresh = self.refreshable.then(|| el("button").slot("button").attr("data-variant", "outline").attr("data-size", "sm").flag("data-icon-only", true).attr("type", "button").flag("data-ui-refresh", true).attr("aria-label", labels.refresh.to_string()).child(icon(icons::REFRESH_CW)));
+        let live = (self.live.is_some() || self.live_from.is_some()).then(|| {
+            el("span").slot("table-live").children((
+                el("span").slot("live-dot").attr("aria-hidden", "true"),
+                labels.live.to_string(),
+            ))
+        });
+        let refresh = self.refreshable.then(|| {
+            el("button")
+                .slot("button")
+                .attr("data-variant", "outline")
+                .attr("data-size", "sm")
+                .flag("data-icon-only", true)
+                .attr("type", "button")
+                .flag("data-ui-refresh", true)
+                .attr("aria-label", labels.refresh.to_string())
+                .child(icon(icons::REFRESH_CW))
+        });
         let filters_menu = (self.mode == FilterMode::Bar).then(|| self.filters_menu());
         el("div").slot("table-toolbar").children((
             el("form")
@@ -1258,9 +1656,21 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                     self.toolbar.clone(),
                     self.state_inputs(),
                     // With JavaScript off, a select or a tick needs a button.
-                    el("noscript").child(Button::outline(labels.apply.to_string()).size(Size::Sm).submit()),
+                    el("noscript").child(
+                        Button::outline(labels.apply.to_string())
+                            .size(Size::Sm)
+                            .submit(),
+                    ),
                 )),
-            el("div").slot("toolbar-end").children((live, refresh, filters_menu, views, columns, view, export)),
+            el("div").slot("toolbar-end").children((
+                live,
+                refresh,
+                filters_menu,
+                views,
+                columns,
+                view,
+                export,
+            )),
         ))
     }
 
@@ -1290,9 +1700,25 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .map(|at| {
                 let column = TableQuery::<R, F>::column(*at);
                 let active = state.filters.iter().find(|filter| filter.column == *at);
-                let text = active.map_or_else(|| column.label.to_owned(), |filter| self.chip_text(column, &filter.value));
-                let trigger = el("button").slot("button").attr("data-variant", "outline").attr("data-size", "sm").flag("data-filter-trigger", true).flag("data-active", active.is_some()).children((el("bdi").child(text), icon(icons::CHEVRON_DOWN)));
-                self.popover(format!("{}-p-{}", self.id, column.name), trigger, column.label.to_owned(), el("div").slot("menu-filter").child(self.filter_controls(*at, column, false)))
+                let text = active.map_or_else(
+                    || column.label.to_owned(),
+                    |filter| self.chip_text(column, &filter.value),
+                );
+                let trigger = el("button")
+                    .slot("button")
+                    .attr("data-variant", "outline")
+                    .attr("data-size", "sm")
+                    .flag("data-filter-trigger", true)
+                    .flag("data-active", active.is_some())
+                    .children((el("bdi").child(text), icon(icons::CHEVRON_DOWN)));
+                self.popover(
+                    format!("{}-p-{}", self.id, column.name),
+                    trigger,
+                    column.label.to_owned(),
+                    el("div")
+                        .slot("menu-filter")
+                        .child(self.filter_controls(*at, column, false)),
+                )
             })
             .collect();
         Some(el("div").slot("filter-bar").child(items))
@@ -1303,42 +1729,85 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         let labels = &self.labels;
         let form = self.form_id();
         let shown = self.bar_columns();
-        let order: Vec<usize> = shown.iter().copied().chain((0..R::COLUMNS.len()).filter(|at| TableQuery::<R, F>::column(*at).filter != FilterKind::None && !shown.contains(at))).collect();
+        let order: Vec<usize> = shown
+            .iter()
+            .copied()
+            .chain((0..R::COLUMNS.len()).filter(|at| {
+                TableQuery::<R, F>::column(*at).filter != FilterKind::None && !shown.contains(at)
+            }))
+            .collect();
         let rows: Vec<Element> = order
             .iter()
             .map(|at| {
                 let column = TableQuery::<R, F>::column(*at);
                 let place = shown.iter().position(|other| other == at);
                 let move_link = |to: Option<usize>, glyph: Icon, label: String| -> Element {
-                    let link = el("a").slot("column-move").attr("aria-label", label).child(icon(glyph));
+                    let link = el("a")
+                        .slot("column-move")
+                        .attr("aria-label", label)
+                        .child(icon(glyph));
                     match (place, to) {
                         (Some(from), Some(to)) => {
                             let mut next = shown.clone();
                             next.swap(from, to);
-                            link.href(self.query.href_with(|state| state.bar = Some(next))).flag("data-ui-in-region", true)
+                            link.href(self.query.href_with(|state| state.bar = Some(next)))
+                                .flag("data-ui-in-region", true)
                         }
                         _ => link.attr("role", "link").attr("aria-disabled", "true"),
                     }
                 };
                 // A key, so a morph moves the row: a focused box keeps its old value otherwise.
-                el("div").slot("column-row").attr("data-col", column.name).attr("data-key", format!("f-{}", column.name)).children((
-                    el("label").slot("filter-option").children((
-                        el("input").slot("checkbox").attr("type", "checkbox").attr("name", "fb").attr("value", column.name).attr("form", form.clone()).flag("checked", place.is_some()),
-                        column.label,
-                    )),
-                    place.is_some().then(|| {
-                        Node::list((
-                            move_link(place.and_then(|from| from.checked_sub(1)), icons::CHEVRON_UP, labels.move_up.replace("{label}", column.label)),
-                            move_link(place.and_then(|from| (from + 1 < shown.len()).then_some(from + 1)), icons::CHEVRON_DOWN, labels.move_down.replace("{label}", column.label)),
-                        ))
-                    }),
-                ))
+                el("div")
+                    .slot("column-row")
+                    .attr("data-col", column.name)
+                    .attr("data-key", format!("f-{}", column.name))
+                    .children((
+                        el("label").slot("filter-option").children((
+                            el("input")
+                                .slot("checkbox")
+                                .attr("type", "checkbox")
+                                .attr("name", "fb")
+                                .attr("value", column.name)
+                                .attr("form", form.clone())
+                                .flag("checked", place.is_some()),
+                            column.label,
+                        )),
+                        place.is_some().then(|| {
+                            Node::list((
+                                move_link(
+                                    place.and_then(|from| from.checked_sub(1)),
+                                    icons::CHEVRON_UP,
+                                    labels.move_up.replace("{label}", column.label),
+                                ),
+                                move_link(
+                                    place.and_then(|from| {
+                                        (from + 1 < shown.len()).then_some(from + 1)
+                                    }),
+                                    icons::CHEVRON_DOWN,
+                                    labels.move_down.replace("{label}", column.label),
+                                ),
+                            ))
+                        }),
+                    ))
             })
             .collect();
-        let trigger = el("button").slot("button").attr("data-variant", "outline").attr("data-size", "sm").children((icon(icons::LIST_FILTER), labels.filters.to_string()));
+        let trigger = el("button")
+            .slot("button")
+            .attr("data-variant", "outline")
+            .attr("data-size", "sm")
+            .children((icon(icons::LIST_FILTER), labels.filters.to_string()));
         // With none ticked the browser posts no `fb`: this says "none", not "default".
-        let none = el("input").attr("type", "hidden").attr("name", "fb").attr("value", "").attr("form", form);
-        self.popover(format!("{}-filters", self.id), trigger, labels.filters.to_string(), (none, el("div").slot("column-list").child(rows)))
+        let none = el("input")
+            .attr("type", "hidden")
+            .attr("name", "fb")
+            .attr("value", "")
+            .attr("form", form);
+        self.popover(
+            format!("{}-filters", self.id),
+            trigger,
+            labels.filters.to_string(),
+            (none, el("div").slot("column-list").child(rows)),
+        )
     }
 
     /// Active filters and sort terms, each with a way off, and Clear filters.
@@ -1360,7 +1829,11 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 state.after = None;
                 state.before = None;
             });
-            chips.push(self.chip(text.clone(), href, labels.remove_filter.replace("{label}", &text)));
+            chips.push(self.chip(
+                text.clone(),
+                href,
+                labels.remove_filter.replace("{label}", &text),
+            ));
         }
         for filter in &state.filters {
             let column = TableQuery::<R, F>::column(filter.column);
@@ -1371,12 +1844,20 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 state.after = None;
                 state.before = None;
             });
-            chips.push(self.chip(text.clone(), href, labels.remove_filter.replace("{label}", &text)));
+            chips.push(self.chip(
+                text.clone(),
+                href,
+                labels.remove_filter.replace("{label}", &text),
+            ));
         }
         if many_sorts {
             for term in &state.sort {
                 let column = TableQuery::<R, F>::column(term.column);
-                let arrow = if term.direction == Direction::Asc { "↑" } else { "↓" };
+                let arrow = if term.direction == Direction::Asc {
+                    "↑"
+                } else {
+                    "↓"
+                };
                 let href = self.query.href_with(|state| {
                     state.sort.retain(|other| other.column != term.column);
                     state.page = 1;
@@ -1384,15 +1865,26 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                     state.before = None;
                 });
                 let text = format!("{}: {} {arrow}", labels.sorted_by, column.label);
-                chips.push(self.chip(text.clone(), href, labels.remove_sort.replace("{label}", &text)));
+                chips.push(self.chip(
+                    text.clone(),
+                    href,
+                    labels.remove_sort.replace("{label}", &text),
+                ));
             }
         }
-        let clear = (!state.filters.is_empty() || state.q.is_some()).then(|| self.region_link(self.clear_href()).slot("chips-clear").child(labels.clear_filters.to_string()));
+        let clear = (!state.filters.is_empty() || state.q.is_some()).then(|| {
+            self.region_link(self.clear_href())
+                .slot("chips-clear")
+                .child(labels.clear_filters.to_string())
+        });
         Some(el("div").slot("table-chips").children((chips, clear)))
     }
 
     fn chip(&self, text: String, href: String, label: String) -> Element {
-        self.region_link(href).slot("filter-chip").attr("aria-label", label).children((el("bdi").child(text), icon(icons::X)))
+        self.region_link(href)
+            .slot("filter-chip")
+            .attr("aria-label", label)
+            .children((el("bdi").child(text), icon(icons::X)))
     }
 
     /// The URL with no search and no filter.
@@ -1418,7 +1910,11 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .iter()
             .map(|action| {
                 let mut button = Button::new(action.label.to_string())
-                    .variant(if action.destructive { ButtonVariant::Destructive } else { ButtonVariant::Outline })
+                    .variant(if action.destructive {
+                        ButtonVariant::Destructive
+                    } else {
+                        ButtonVariant::Outline
+                    })
                     .size(Size::Sm)
                     .named("action", action.id)
                     .disabled(action.denied.is_some())
@@ -1435,7 +1931,12 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 button.into()
             })
             .collect();
-        let hidden = |name: &'static str, value: String| el("input").attr("type", "hidden").attr("name", name).attr("value", value);
+        let hidden = |name: &'static str, value: String| {
+            el("input")
+                .attr("type", "hidden")
+                .attr("name", name)
+                .attr("value", value)
+        };
         let form = el("form")
             .slot("table-bulk")
             .attr("id", self.bulk_id())
@@ -1448,19 +1949,39 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 hidden("_table", self.id.to_owned()),
                 hidden("_path", self.query.path.clone()),
                 hidden("_q", self.query.query_string()),
-                self.csrf.as_ref().map(|token| crate::form::csrf_field(token.clone())),
+                self.csrf
+                    .as_ref()
+                    .map(|token| crate::form::csrf_field(token.clone())),
                 el("div").slot("bulk-status").children((
                     el("span").slot("bulk-count").attr("aria-live", "polite"),
-                    el("button").slot("bulk-link").attr("type", "button").flag("data-ui-select-all", true).flag("hidden", true),
-                    el("button").slot("bulk-link").attr("type", "button").flag("data-ui-select-clear", true).child(labels.clear_selection.to_string()),
+                    el("button")
+                        .slot("bulk-link")
+                        .attr("type", "button")
+                        .flag("data-ui-select-all", true)
+                        .flag("hidden", true),
+                    el("button")
+                        .slot("bulk-link")
+                        .attr("type", "button")
+                        .flag("data-ui-select-clear", true)
+                        .child(labels.clear_selection.to_string()),
                 )),
                 el("div").slot("bulk-actions").child(actions),
             ));
-        let dialog = self.bulk_actions.iter().any(|action| action.confirm.is_some()).then(|| {
-            AlertDialog::new(format!("{}-confirm", self.id), labels.confirm_title.to_string(), Node::Empty)
+        let dialog = self
+            .bulk_actions
+            .iter()
+            .any(|action| action.confirm.is_some())
+            .then(|| {
+                AlertDialog::new(
+                    format!("{}-confirm", self.id),
+                    labels.confirm_title.to_string(),
+                    Node::Empty,
+                )
                 .cancel(labels.cancel.to_string())
-                .action(Button::destructive(labels.confirm.to_string()).attr("data-ui-confirm-yes", ""))
-        });
+                .action(
+                    Button::destructive(labels.confirm.to_string()).attr("data-ui-confirm-yes", ""),
+                )
+            });
         Some(Node::list((form, dialog)))
     }
 
@@ -1499,17 +2020,32 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 state.open.push(key.to_owned());
             }
         });
-        out.push_str("<td data-slot=\"cell-toggle\"><a data-slot=\"row-toggle\" data-ui-in-region href=\"");
+        out.push_str(
+            "<td data-slot=\"cell-toggle\"><a data-slot=\"row-toggle\" data-ui-in-region href=\"",
+        );
         escape_into(out, Href::from(href).as_str());
         let _ = write!(out, "\" aria-expanded=\"{open}\" aria-label=\"");
-        escape_into(out, if open { &labels.hide_details } else { &labels.show_details });
+        escape_into(
+            out,
+            if open {
+                &labels.hide_details
+            } else {
+                &labels.show_details
+            },
+        );
         out.push_str("\">");
-        out.push_str(&crate::render::render(&icon(if open { icons::CHEVRON_DOWN } else { icons::CHEVRON_RIGHT })));
+        out.push_str(&crate::render::render(&icon(if open {
+            icons::CHEVRON_DOWN
+        } else {
+            icons::CHEVRON_RIGHT
+        })));
         out.push_str("</a></td>");
     }
 
     fn actions_cell(&self, key: &str, row: &R, out: &mut String) {
-        let Some(actions) = &self.row_actions else { return };
+        let Some(actions) = &self.row_actions else {
+            return;
+        };
         let items: Vec<Node> = actions(row)
             .into_iter()
             .map(|action| {
@@ -1520,17 +2056,39 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                         .attr("action", action.href)
                         .flag("data-ui-form", true)
                         .children((
-                            self.csrf.as_ref().map(|token| crate::form::csrf_field(token.clone())),
-                            el("button").slot("menu-link").attr("type", "submit").flag("data-destructive", action.destructive).children(content),
+                            self.csrf
+                                .as_ref()
+                                .map(|token| crate::form::csrf_field(token.clone())),
+                            el("button")
+                                .slot("menu-link")
+                                .attr("type", "submit")
+                                .flag("data-destructive", action.destructive)
+                                .children(content),
                         ))
                         .into()
                 } else {
-                    el("a").slot("menu-link").href(action.href).flag("data-destructive", action.destructive).children(content).into()
+                    el("a")
+                        .slot("menu-link")
+                        .href(action.href)
+                        .flag("data-destructive", action.destructive)
+                        .children(content)
+                        .into()
                 }
             })
             .collect();
-        let trigger = el("button").slot("button").attr("data-variant", "ghost").attr("data-size", "sm").flag("data-icon-only", true).attr("aria-label", self.labels.actions.to_string()).child(icon(icons::ELLIPSIS));
-        let menu = self.popover(format!("{}-a-{key}", self.id), trigger, self.labels.actions.to_string(), el("div").slot("menu-links").child(items));
+        let trigger = el("button")
+            .slot("button")
+            .attr("data-variant", "ghost")
+            .attr("data-size", "sm")
+            .flag("data-icon-only", true)
+            .attr("aria-label", self.labels.actions.to_string())
+            .child(icon(icons::ELLIPSIS));
+        let menu = self.popover(
+            format!("{}-a-{key}", self.id),
+            trigger,
+            self.labels.actions.to_string(),
+            el("div").slot("menu-links").child(items),
+        );
         out.push_str("<td data-slot=\"cell-actions\" data-sticky=\"e\">");
         crate::render::render_into(out, &menu);
         out.push_str("</td>");
@@ -1540,7 +2098,17 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     /// one buffer, sized from the first, through the same escaping as everything else.
     fn body_rows(&self, sticky: &[Option<String>]) -> String {
         let state = &self.query.state;
-        let opens: Vec<(usize, String)> = state.cols.iter().zip(sticky).map(|(at, sticky)| (*at, Self::cell_open(TableQuery::<R, F>::column(*at), sticky.as_deref()))).collect();
+        let opens: Vec<(usize, String)> = state
+            .cols
+            .iter()
+            .zip(sticky)
+            .map(|(at, sticky)| {
+                (
+                    *at,
+                    Self::cell_open(TableQuery::<R, F>::column(*at), sticky.as_deref()),
+                )
+            })
+            .collect();
         let selectable = self.selectable();
         let form = self.bulk_id();
         let span = self.span();
@@ -1582,12 +2150,18 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 }
                 out.push_str("></td>");
             }
-            let is_open = key.as_ref().is_some_and(|key| state.open.iter().any(|open| open == key));
+            let is_open = key
+                .as_ref()
+                .is_some_and(|key| state.open.iter().any(|open| open == key));
             if self.has_detail() {
                 self.toggle_cell(key.as_deref().unwrap_or_default(), is_open, &mut out);
             }
             for (at, open) in &opens {
-                let draw = self.cells.iter().find(|(name, _)| *name == TableQuery::<R, F>::column(*at).name).map(|(_, draw)| draw);
+                let draw = self
+                    .cells
+                    .iter()
+                    .find(|(name, _)| *name == TableQuery::<R, F>::column(*at).name)
+                    .map(|(_, draw)| draw);
                 out.push_str(open);
                 if TableQuery::<R, F>::column(*at).truncate {
                     out.push_str(" title=\"");
@@ -1635,29 +2209,63 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         let span = self.span() as i64;
         if self.loading {
             let cells = self.span();
-            let rows: Vec<Element> = (0..6).map(|_| el("tr").child((0..cells).map(|_| el("td").child(Skeleton::new(SkeletonShape::Line))).collect::<Vec<_>>())).collect();
+            let rows: Vec<Element> = (0..6)
+                .map(|_| {
+                    el("tr").child(
+                        (0..cells)
+                            .map(|_| el("td").child(Skeleton::new(SkeletonShape::Line)))
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect();
             return el("tbody").child(rows);
         }
         let content: Node = if let Some(message) = &self.failed {
             Empty::new(message.to_string())
                 .icon(icons::CIRCLE_ALERT)
-                .actions(el("a").slot("button").attr("data-variant", "outline").attr("data-size", "sm").href(self.query.href()).flag("data-ui-in-region", true).child(labels.retry.to_string()))
+                .actions(
+                    el("a")
+                        .slot("button")
+                        .attr("data-variant", "outline")
+                        .attr("data-size", "sm")
+                        .href(self.query.href())
+                        .flag("data-ui-in-region", true)
+                        .child(labels.retry.to_string()),
+                )
                 .into()
         } else if self.query.is_filtered() {
             Empty::new(labels.empty_filtered.to_string())
                 .icon(icons::SEARCH)
                 .description(labels.empty_filtered_hint.to_string())
-                .actions(el("a").slot("button").attr("data-variant", "outline").attr("data-size", "sm").href(self.clear_href()).flag("data-ui-in-region", true).child(labels.clear_filters.to_string()))
+                .actions(
+                    el("a")
+                        .slot("button")
+                        .attr("data-variant", "outline")
+                        .attr("data-size", "sm")
+                        .href(self.clear_href())
+                        .flag("data-ui-in-region", true)
+                        .child(labels.clear_filters.to_string()),
+                )
                 .into()
         } else {
-            self.empty.clone().unwrap_or_else(|| Empty::new(labels.empty.to_string()).icon(icons::INBOX)).into()
+            self.empty
+                .clone()
+                .unwrap_or_else(|| Empty::new(labels.empty.to_string()).icon(icons::INBOX))
+                .into()
         };
-        el("tbody").attr("data-message", "").child(el("tr").child(el("td").attr("colspan", span).child(content)))
+        el("tbody")
+            .attr("data-message", "")
+            .child(el("tr").child(el("td").attr("colspan", span).child(content)))
     }
 
     fn colgroup(&self) -> Option<Element> {
         let state = &self.query.state;
-        let any = self.can_resize || !state.widths.is_empty() || state.cols.iter().any(|at| TableQuery::<R, F>::column(*at).width.is_some());
+        let any = self.can_resize
+            || !state.widths.is_empty()
+            || state
+                .cols
+                .iter()
+                .any(|at| TableQuery::<R, F>::column(*at).width.is_some());
         if !any {
             return None;
         }
@@ -1671,8 +2279,17 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             cols.push(el("col").slot("col-toggle"));
         }
         for at in &state.cols {
-            let width = state.widths.iter().find(|(column, _)| column == at).map(|(_, width)| *width).or(TableQuery::<R, F>::column(*at).width);
-            cols.push(el("col").attr("data-col", TableQuery::<R, F>::column(*at).name).attr_opt("width", width.map(i64::from)));
+            let width = state
+                .widths
+                .iter()
+                .find(|(column, _)| column == at)
+                .map(|(_, width)| *width)
+                .or(TableQuery::<R, F>::column(*at).width);
+            cols.push(
+                el("col")
+                    .attr("data-col", TableQuery::<R, F>::column(*at).name)
+                    .attr_opt("width", width.map(i64::from)),
+            );
         }
         if self.has_actions() {
             cols.push(el("col").slot("col-actions"));
@@ -1684,20 +2301,53 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         let labels = &self.labels;
         let state = &self.query.state;
         let per = u64::from(state.per);
-        let from = if R::CONFIG.cursor { 0 } else { u64::from(self.page().saturating_sub(1)) * per + 1 };
+        let from = if R::CONFIG.cursor {
+            0
+        } else {
+            u64::from(self.page().saturating_sub(1)) * per + 1
+        };
         let to = from + (shown as u64).saturating_sub(1);
-        let base = |template: &str, total: String| template.replace("{from}", &grouped(from)).replace("{to}", &grouped(to)).replace("{total}", &total);
-        let count_link = |text: &str| -> Element { self.region_link(self.query.href_with(|state| state.count = true)).slot("count-link").child(text.to_owned()) };
+        let base = |template: &str, total: String| {
+            template
+                .replace("{from}", &grouped(from))
+                .replace("{to}", &grouped(to))
+                .replace("{total}", &total)
+        };
+        let count_link = |text: &str| -> Element {
+            self.region_link(self.query.href_with(|state| state.count = true))
+                .slot("count-link")
+                .child(text.to_owned())
+        };
         let text: Node = match (self.data.total, R::CONFIG.cursor) {
             (Total::Exact(1), _) => labels.one_result.to_string().into(),
             (Total::Exact(total), false) => base(&labels.showing, grouped(total)).into(),
-            (Total::Exact(total), true) => format!("{} {}", grouped(total), if total == 1 { "result" } else { "results" }).into(),
-            (Total::AtLeast(total), true) => Node::list((format!("{}+ results", grouped(total)), " ", count_link(&labels.count_all))),
-            (Total::AtLeast(total), false) => Node::list((base(&labels.showing, format!("{}+", grouped(total))), " ", count_link(&labels.count_all))),
+            (Total::Exact(total), true) => format!(
+                "{} {}",
+                grouped(total),
+                if total == 1 { "result" } else { "results" }
+            )
+            .into(),
+            (Total::AtLeast(total), true) => Node::list((
+                format!("{}+ results", grouped(total)),
+                " ",
+                count_link(&labels.count_all),
+            )),
+            (Total::AtLeast(total), false) => Node::list((
+                base(&labels.showing, format!("{}+", grouped(total))),
+                " ",
+                count_link(&labels.count_all),
+            )),
             (Total::Unknown, true) => count_link(&labels.count_all).into(),
-            (Total::Unknown, false) => Node::list((base(&labels.showing_open, String::new()), " ", count_link(&labels.count_all))),
+            (Total::Unknown, false) => Node::list((
+                base(&labels.showing_open, String::new()),
+                " ",
+                count_link(&labels.count_all),
+            )),
         };
-        el("span").slot("table-summary").attr("aria-live", "polite").child(text)
+        el("span")
+            .slot("table-summary")
+            .attr("aria-live", "polite")
+            .child(text)
     }
 
     fn page_size(&self) -> Option<Element> {
@@ -1707,21 +2357,38 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         if config.per_pages.len() < 2 {
             return None;
         }
-        let mut select = NativeSelect::new("per").attr("form", self.form_id()).attr("data-size", "sm").attr("aria-label", labels.rows_per_page.to_string());
+        let mut select = NativeSelect::new("per")
+            .attr("form", self.form_id())
+            .attr("data-size", "sm")
+            .attr("aria-label", labels.rows_per_page.to_string());
         for per in config.per_pages {
             select = select.option(per.to_string(), per.to_string());
         }
         select = select.selected(state.per.to_string());
-        Some(el("label").slot("page-size").children((el("span").child(labels.rows_per_page.to_string()), select)))
+        Some(
+            el("label")
+                .slot("page-size")
+                .children((el("span").child(labels.rows_per_page.to_string()), select)),
+        )
     }
 
-    fn nav_link(&self, text: &str, glyph: Option<Icon>, href: Option<String>, end: bool) -> Element {
+    fn nav_link(
+        &self,
+        text: &str,
+        glyph: Option<Icon>,
+        href: Option<String>,
+        end: bool,
+    ) -> Element {
         let link = el("a").slot("pagination-text");
         let link = match href {
             Some(href) => link.href(href).flag("data-ui-in-region", true),
             None => link.attr("role", "link").attr("aria-disabled", "true"),
         };
-        if end { link.children((text.to_owned(), glyph.map(icon))) } else { link.children((glyph.map(icon), text.to_owned())) }
+        if end {
+            link.children((text.to_owned(), glyph.map(icon)))
+        } else {
+            link.children((glyph.map(icon), text.to_owned()))
+        }
     }
 
     fn pagination(&self) -> Option<Node> {
@@ -1756,19 +2423,32 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         match self.data.total {
             Total::Exact(total) => {
                 let pages = u32::try_from(total.div_ceil(per).max(1)).unwrap_or(u32::MAX);
-                (pages > 1).then(|| in_region(Pagination::new(page, pages, |page| self.query.href_with(|state| state.page = page)).into()))
+                (pages > 1).then(|| {
+                    in_region(
+                        Pagination::new(page, pages, |page| {
+                            self.query.href_with(|state| state.page = page)
+                        })
+                        .into(),
+                    )
+                })
             }
             _ => {
                 if page == 1 && !self.data.has_more {
                     return None;
                 }
                 let prev = (page > 1).then(|| self.query.href_with(|state| state.page = page - 1));
-                let next = self.data.has_more.then(|| self.query.href_with(|state| state.page = page + 1));
+                let next = self
+                    .data
+                    .has_more
+                    .then(|| self.query.href_with(|state| state.page = page + 1));
                 Some(
                     el("nav")
                         .slot("pagination")
                         .attr("aria-label", "Pagination")
-                        .children((self.nav_link(&labels.previous, Some(icons::CHEVRON_LEFT), prev, false), self.nav_link(&labels.next, Some(icons::CHEVRON_RIGHT), next, true)))
+                        .children((
+                            self.nav_link(&labels.previous, Some(icons::CHEVRON_LEFT), prev, false),
+                            self.nav_link(&labels.next, Some(icons::CHEVRON_RIGHT), next, true),
+                        ))
                         .into(),
                 )
             }
@@ -1803,7 +2483,11 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .map(|at| match TableQuery::<R, F>::column(*at).sticky {
                 Sticky::No => None,
                 // The row's menu is the last sticky column; this one stays beside it.
-                Sticky::End => Some(if self.has_actions() { "e1".to_owned() } else { "e".to_owned() }),
+                Sticky::End => Some(if self.has_actions() {
+                    "e1".to_owned()
+                } else {
+                    "e".to_owned()
+                }),
                 Sticky::Start => {
                     starts += 1;
                     Some(starts.to_string())
@@ -1817,7 +2501,10 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .flag("data-ui-table", true)
             .attr("data-ui-src", self.canonical())
             .attr("data-filter-key", self.query.filter_key())
-            .attr_opt("data-density", (state.density != TableDensity::Default).then_some(state.density.as_str()))
+            .attr_opt(
+                "data-density",
+                (state.density != TableDensity::Default).then_some(state.density.as_str()),
+            )
             .attr_opt("data-height", self.height.as_str())
             .flag("data-sticky-header", self.sticky_header)
             .flag("data-bleed", self.bleed)
@@ -1825,7 +2512,11 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .flag("data-ui-grid", self.keyboard_grid)
             .attr_opt("data-scroll-to", self.scroll_to)
             .attr_opt("data-version", self.data.version.map(str::to_owned))
-            .attr_opt("data-ui-poll", self.live.map(|every| i64::try_from(every.as_millis()).unwrap_or(i64::MAX)))
+            .attr_opt(
+                "data-ui-poll",
+                self.live
+                    .map(|every| i64::try_from(every.as_millis()).unwrap_or(i64::MAX)),
+            )
             .attr_opt("data-ui-live-src", self.live_from.clone())
             .attr("data-l", self.runtime_labels())
             .uses(Uses::CORE.with(Uses::TABLE));
@@ -1836,7 +2527,11 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             }
         }
         let has_rows = !self.data.rows.is_empty() && self.failed.is_none() && !self.loading;
-        let body: Element = if has_rows { el("tbody").child(SafeHtml::trusted(self.body_rows(&sticky))) } else { self.message_body() };
+        let body: Element = if has_rows {
+            el("tbody").child(SafeHtml::trusted(self.body_rows(&sticky)))
+        } else {
+            self.message_body()
+        };
         root = root.uses(self.cell_uses.get());
         let foot = (!self.foot.is_empty() && has_rows).then(|| {
             let mut cells: Vec<Element> = Vec::new();
@@ -1848,7 +2543,11 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             }
             for at in &state.cols {
                 let column = TableQuery::<R, F>::column(*at);
-                let cell = self.foot.iter().find(|(name, _)| *name == column.name).map(|(_, cell)| cell.clone());
+                let cell = self
+                    .foot
+                    .iter()
+                    .find(|(name, _)| *name == column.name)
+                    .map(|(_, cell)| cell.clone());
                 cells.push(el("td").flag("data-numeric", column.numeric).child(cell));
             }
             if self.has_actions() {
@@ -1856,25 +2555,62 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             }
             el("tfoot").child(el("tr").child(cells))
         });
-        let table = el("table").slot("table").flag("data-fixed", !state.widths.is_empty()).children((
-            self.caption.as_ref().map(|caption| el("caption").child(caption.to_string())),
-            self.colgroup(),
-            self.head(&sticky),
-            body,
-            foot,
-        ));
-        let alert = el("div").slot("table-alert").attr("role", "alert").flag("hidden", true).children((
-            icon(icons::CIRCLE_ALERT),
-            el("span").slot("alert-text"),
-            el("a").slot("button").attr("data-variant", "outline").attr("data-size", "sm").attr("href", Href::from(self.canonical())).flag("data-ui-in-region", true).flag("data-ui-retry", true).child(self.labels.retry.to_string()),
-        ));
+        let table = el("table")
+            .slot("table")
+            .flag("data-fixed", !state.widths.is_empty())
+            .children((
+                self.caption
+                    .as_ref()
+                    .map(|caption| el("caption").child(caption.to_string())),
+                self.colgroup(),
+                self.head(&sticky),
+                body,
+                foot,
+            ));
+        let alert = el("div")
+            .slot("table-alert")
+            .attr("role", "alert")
+            .flag("hidden", true)
+            .children((
+                icon(icons::CIRCLE_ALERT),
+                el("span").slot("alert-text"),
+                el("a")
+                    .slot("button")
+                    .attr("data-variant", "outline")
+                    .attr("data-size", "sm")
+                    .attr("href", Href::from(self.canonical()))
+                    .flag("data-ui-in-region", true)
+                    .flag("data-ui-retry", true)
+                    .child(self.labels.retry.to_string()),
+            ));
         let footer = (has_rows).then(|| {
             el("div").slot("table-footer").children((
                 self.summary(self.data.rows.len()),
-                el("div").slot("footer-end").children((self.page_size(), self.pagination())),
+                el("div")
+                    .slot("footer-end")
+                    .children((self.page_size(), self.pagination())),
             ))
         });
-        root.children((self.toolbar_node(), self.filter_bar_node(), self.chips(), alert, self.bulk_bar(), el("div").slot("table-container").attr("tabindex", 0_i64).attr("role", "region").attr("aria-label", self.caption.as_ref().map_or_else(|| "Table".to_owned(), ToString::to_string)).child(table), footer)).into()
+        root.children((
+            self.toolbar_node(),
+            self.filter_bar_node(),
+            self.chips(),
+            alert,
+            self.bulk_bar(),
+            el("div")
+                .slot("table-container")
+                .attr("tabindex", 0_i64)
+                .attr("role", "region")
+                .attr(
+                    "aria-label",
+                    self.caption
+                        .as_ref()
+                        .map_or_else(|| "Table".to_owned(), ToString::to_string),
+                )
+                .child(table),
+            footer,
+        ))
+        .into()
     }
 }
 
@@ -1897,7 +2633,10 @@ fn in_region(mut node: Node) -> Node {
     fn walk(node: &mut Node) {
         if let Node::Element(element) = node {
             if element.tag == "a" && element.get("href").is_some() {
-                element.attrs.push(Attr { name: "data-ui-in-region", value: AttrValue::Flag });
+                element.attrs.push(Attr {
+                    name: "data-ui-in-region",
+                    value: AttrValue::Flag,
+                });
             }
             element.children.iter_mut().for_each(walk);
         }

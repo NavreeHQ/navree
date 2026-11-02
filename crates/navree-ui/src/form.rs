@@ -12,8 +12,8 @@ use std::marker::PhantomData;
 use http::header::{ALLOW, CONTENT_TYPE, HOST, ORIGIN};
 use http::request::Parts;
 use http::{HeaderValue, Method, StatusCode};
-use navree_http::body::{BodyLimit, read_body};
 use navree_http::HttpOptions;
+use navree_http::body::{BodyLimit, read_body};
 use navree_http::extract::{FromRequest, Request, urlencoded};
 use navree_http::response::{IntoResponse, Response};
 use navree_kernel::AppContext;
@@ -23,7 +23,10 @@ use serde::{Deserialize, Deserializer};
 
 pub use navree_validation::{FieldRules, RuleTable};
 
-use crate::components::{Alert, AlertTone, Button, Checkbox, Field, Input, InputGroup, InputKind, NativeSelect, RadioGroup, Switch, Textarea};
+use crate::components::{
+    Alert, AlertTone, Button, Checkbox, Field, Input, InputGroup, InputKind, NativeSelect,
+    RadioGroup, Switch, Textarea,
+};
 use crate::html::Href;
 use crate::node::{Element, Node, Uses, el};
 use crate::op::{Envelope, Op, UI_HEADER};
@@ -127,7 +130,23 @@ macro_rules! display_values {
 }
 
 display_values!(
-    String, bool, i8, i16, i32, i64, isize, u8, u16, u32, u64, usize, f32, f64, uuid::Uuid, chrono::NaiveDate, chrono::NaiveTime,
+    String,
+    bool,
+    i8,
+    i16,
+    i32,
+    i64,
+    isize,
+    u8,
+    u16,
+    u32,
+    u64,
+    usize,
+    f32,
+    f64,
+    uuid::Uuid,
+    chrono::NaiveDate,
+    chrono::NaiveTime,
 );
 
 impl FieldValue for chrono::NaiveDateTime {
@@ -155,18 +174,28 @@ impl Money {
             return None;
         }
         let digits = whole.replace(',', "");
-        if !digits.bytes().chain(fraction.bytes()).all(|byte| byte.is_ascii_digit()) {
+        if !digits
+            .bytes()
+            .chain(fraction.bytes())
+            .all(|byte| byte.is_ascii_digit())
+        {
             return None;
         }
         // Wider than the result, so the most negative amount reads back.
-        let whole: i128 = if digits.is_empty() { 0 } else { digits.parse().ok()? };
+        let whole: i128 = if digits.is_empty() {
+            0
+        } else {
+            digits.parse().ok()?
+        };
         let fraction: i128 = match fraction.len() {
             0 => 0,
             1 => fraction.parse::<i128>().ok()? * 10,
             _ => fraction.parse().ok()?,
         };
         let cents = whole.checked_mul(100)?.checked_add(fraction)?;
-        i64::try_from(if negative { -cents } else { cents }).ok().map(Self)
+        i64::try_from(if negative { -cents } else { cents })
+            .ok()
+            .map(Self)
     }
 
     /// `1250050` as `12,500.50`.
@@ -211,7 +240,8 @@ impl FieldValue for Money {
 impl<'de> Deserialize<'de> for Money {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let text = String::deserialize(deserializer)?;
-        Self::parse(&text).ok_or_else(|| serde::de::Error::custom("enter an amount, like 12,500.50"))
+        Self::parse(&text)
+            .ok_or_else(|| serde::de::Error::custom("enter an amount, like 12,500.50"))
     }
 }
 
@@ -228,7 +258,23 @@ struct Native {
 
 fn native<T: Form>(field: &FormField) -> Native {
     let mut out = Native::default();
-    if !field.optional && !matches!(field.widget, Widget::Checkbox | Widget::Switch | Widget::Textarea { .. } | Widget::Input(InputKind::Text | InputKind::Email | InputKind::Url | InputKind::Tel | InputKind::Password | InputKind::Search | InputKind::Hidden)) {
+    if !field.optional
+        && !matches!(
+            field.widget,
+            Widget::Checkbox
+                | Widget::Switch
+                | Widget::Textarea { .. }
+                | Widget::Input(
+                    InputKind::Text
+                        | InputKind::Email
+                        | InputKind::Url
+                        | InputKind::Tel
+                        | InputKind::Password
+                        | InputKind::Search
+                        | InputKind::Hidden
+                )
+        )
+    {
         out.required = true;
     }
     let Some(rules) = T::RULES.iter().find(|rules| rules.name == field.name) else {
@@ -238,7 +284,11 @@ fn native<T: Form>(field: &FormField) -> Native {
         match rule {
             Rule::Required => out.required = true,
             // Native length counts UTF-16 units, so only a character count maps.
-            Rule::Length { min, max, bytes: false } => {
+            Rule::Length {
+                min,
+                max,
+                bytes: false,
+            } => {
                 out.min_length = *min;
                 out.max_length = *max;
                 if min.is_some_and(|min| min > 0) {
@@ -325,7 +375,11 @@ impl<T: Form> FormView<T> {
 
     /// Fills the form from a value.
     pub fn of(mut self, value: &T) -> Self {
-        self.values = value.values().into_iter().map(|(name, text)| (name.to_owned(), text)).collect();
+        self.values = value
+            .values()
+            .into_iter()
+            .map(|(name, text)| (name.to_owned(), text))
+            .collect();
         self
     }
 
@@ -342,7 +396,11 @@ impl<T: Form> FormView<T> {
     }
 
     /// Sets the choices of a select whose options come from the database.
-    pub fn options(mut self, field: &'static str, options: impl IntoIterator<Item = (String, String)>) -> Self {
+    pub fn options(
+        mut self,
+        field: &'static str,
+        options: impl IntoIterator<Item = (String, String)>,
+    ) -> Self {
         self.options.insert(field, options.into_iter().collect());
         self
     }
@@ -354,7 +412,10 @@ impl<T: Form> FormView<T> {
     }
 
     fn value_of(&self, name: &str) -> Option<&str> {
-        self.values.iter().find(|(field, _)| field == name).map(|(_, value)| value.as_str())
+        self.values
+            .iter()
+            .find(|(field, _)| field == name)
+            .map(|(_, value)| value.as_str())
     }
 
     fn control(&self, field: &FormField) -> Node {
@@ -363,14 +424,26 @@ impl<T: Form> FormView<T> {
         let invalid = self.errors.contains_key(field.name);
         match field.widget {
             Widget::Input(kind) => {
-                let kind = rules.kind.filter(|_| kind == InputKind::Text).unwrap_or(kind);
+                let kind = rules
+                    .kind
+                    .filter(|_| kind == InputKind::Text)
+                    .unwrap_or(kind);
                 let mut input = Input::new(kind, field.name).invalid(invalid);
                 if kind == InputKind::Number && rules.min.is_none_or(|min| min.contains('.')) {
                     input = input.attr("step", "any");
                 }
                 self.finish_input(input, field, &rules, value).into()
             }
-            Widget::Money => self.finish_input(Input::text(field.name).inputmode("decimal").invalid(invalid), field, &rules, value).into(),
+            Widget::Money => self
+                .finish_input(
+                    Input::text(field.name)
+                        .inputmode("decimal")
+                        .invalid(invalid),
+                    field,
+                    &rules,
+                    value,
+                )
+                .into(),
             Widget::Textarea { rows } => {
                 let mut area = Textarea::new(field.name).rows(rows);
                 if let Some(value) = value {
@@ -387,7 +460,12 @@ impl<T: Form> FormView<T> {
             }
             Widget::Select => self.select(field, rules.required, value).into(),
             Widget::Radio => {
-                let mut group = RadioGroup::new(field.name, field.label).options(field.options.iter().map(|(value, label)| crate::components::OptionItem::new(*value, *label)));
+                let mut group = RadioGroup::new(field.name, field.label).options(
+                    field
+                        .options
+                        .iter()
+                        .map(|(value, label)| crate::components::OptionItem::new(*value, *label)),
+                );
                 if let Some(value) = value {
                     group = group.selected(value.to_owned());
                 }
@@ -396,12 +474,24 @@ impl<T: Form> FormView<T> {
                 }
                 group.into()
             }
-            Widget::Checkbox => Checkbox::new(field.name).checked(is_on(value)).label(field.label).into(),
-            Widget::Switch => Switch::new(field.name).checked(is_on(value)).label(field.label).into(),
+            Widget::Checkbox => Checkbox::new(field.name)
+                .checked(is_on(value))
+                .label(field.label)
+                .into(),
+            Widget::Switch => Switch::new(field.name)
+                .checked(is_on(value))
+                .label(field.label)
+                .into(),
         }
     }
 
-    fn finish_input(&self, mut input: Input, field: &FormField, rules: &Native, value: Option<&str>) -> Input {
+    fn finish_input(
+        &self,
+        mut input: Input,
+        field: &FormField,
+        rules: &Native,
+        value: Option<&str>,
+    ) -> Input {
         if let Some(value) = value {
             input = input.value(value.to_owned());
         }
@@ -435,9 +525,16 @@ impl<T: Form> FormView<T> {
             select = select.prompt(prompt);
         }
         if let Some(options) = self.options.get(field.name) {
-            select = select.options(options.iter().map(|(value, label)| crate::components::OptionItem::new(value.clone(), label.clone())));
+            select = select.options(options.iter().map(|(value, label)| {
+                crate::components::OptionItem::new(value.clone(), label.clone())
+            }));
         } else {
-            select = select.options(field.options.iter().map(|(value, label)| crate::components::OptionItem::new(*value, *label)));
+            select = select.options(
+                field
+                    .options
+                    .iter()
+                    .map(|(value, label)| crate::components::OptionItem::new(*value, *label)),
+            );
         }
         if let Some(value) = value {
             // A choice from the database, on a form drawn without them: it stays.
@@ -454,35 +551,58 @@ impl<T: Form> FormView<T> {
 
     fn field(&self, field: &FormField) -> Option<Element> {
         // A field drawn inside another's input group has no box of its own.
-        if T::FIELDS.iter().any(|other| other.addon == Some(field.name)) {
+        if T::FIELDS
+            .iter()
+            .any(|other| other.addon == Some(field.name))
+        {
             return None;
         }
-        let error = self.errors.get(field.name).map(|messages| messages.join(" "));
+        let error = self
+            .errors
+            .get(field.name)
+            .map(|messages| messages.join(" "));
         let id = format!("{}-{}", T::ID, field.name);
         let holder = match field.widget {
             Widget::Input(InputKind::Hidden) => return Some(input_only(self.control(field))),
             Widget::Checkbox | Widget::Switch => {
                 let error_id = error.as_ref().map(|_| format!("{id}-error"));
-                let mut box_el = el("div").slot("field").flag("data-invalid", error.is_some()).child(with_id(self.control(field), &id));
+                let mut box_el = el("div")
+                    .slot("field")
+                    .flag("data-invalid", error.is_some())
+                    .child(with_id(self.control(field), &id));
                 if let Some(help) = field.help {
                     box_el = box_el.child(el("p").slot("field-description").child(help));
                 }
-                box_el.child(error.map(|text| el("p").slot("field-error").attr_opt("id", error_id).child(text)))
+                box_el.child(error.map(|text| {
+                    el("p")
+                        .slot("field-error")
+                        .attr_opt("id", error_id)
+                        .child(text)
+                }))
             }
             Widget::Radio => {
-                let box_el = el("div").slot("field").flag("data-invalid", error.is_some()).child(self.control(field));
+                let box_el = el("div")
+                    .slot("field")
+                    .flag("data-invalid", error.is_some())
+                    .child(self.control(field));
                 box_el.child(error.map(|text| el("p").slot("field-error").child(text)))
             }
             _ => {
                 let mut control = self.control(field);
-                if let Some(addon) = field.addon.and_then(|name| T::FIELDS.iter().find(|other| other.name == name)) {
+                if let Some(addon) = field
+                    .addon
+                    .and_then(|name| T::FIELDS.iter().find(|other| other.name == name))
+                {
                     let mut select = self.control(addon);
                     if let Node::Element(element) = &mut select {
-                        *element = std::mem::replace(element, el("x")).attr("aria-label", addon.label);
+                        *element =
+                            std::mem::replace(element, el("x")).attr("aria-label", addon.label);
                     }
                     control = InputGroup::new(control).end(select).into();
                 }
-                let mut box_field = Field::new(id, field.label).error_opt(error).control(control);
+                let mut box_field = Field::new(id, field.label)
+                    .error_opt(error)
+                    .control(control);
                 if let Some(help) = field.help {
                     box_field = box_field.help(help);
                 }
@@ -494,8 +614,15 @@ impl<T: Form> FormView<T> {
     }
 
     fn into_node(self) -> Node {
-        let boxes: Vec<Element> = T::FIELDS.iter().filter_map(|field| self.field(field)).collect();
-        let grid = if self.columns { "form-grid" } else { "form-stack" };
+        let boxes: Vec<Element> = T::FIELDS
+            .iter()
+            .filter_map(|field| self.field(field))
+            .collect();
+        let grid = if self.columns {
+            "form-grid"
+        } else {
+            "form-stack"
+        };
         // An error no field can show: the runtime makes these toasts.
         let whole: Vec<Alert> = self
             .errors
@@ -515,7 +642,8 @@ impl<T: Form> FormView<T> {
                 whole,
                 el("div").slot(grid).child(boxes),
                 el("div").slot("form-actions").children((
-                    self.cancel.map(|(label, href)| Button::ghost(label).href(href)),
+                    self.cancel
+                        .map(|(label, href)| Button::ghost(label).href(href)),
                     Button::primary(self.submit).submit(),
                 )),
             ))
@@ -528,7 +656,10 @@ pub const CSRF_FIELD: &str = "_csrf";
 
 /// The hidden field that carries `token`, for a form that is not a [`FormView`].
 pub fn csrf_field(token: impl Into<crate::node::AttrValue>) -> Element {
-    el("input").attr("type", "hidden").attr("name", CSRF_FIELD).attr("value", token)
+    el("input")
+        .attr("type", "hidden")
+        .attr("name", CSRF_FIELD)
+        .attr("value", token)
 }
 
 /// An already checked URL, as an attribute value.
@@ -567,7 +698,10 @@ fn with_id(mut node: Node, id: &str) -> Node {
     fn walk(node: &mut Node, id: &str) -> bool {
         if let Node::Element(element) = node {
             if element.tag == "input" {
-                element.attrs.push(crate::node::Attr { name: "id", value: crate::node::AttrValue::Text(id.into()) });
+                element.attrs.push(crate::node::Attr {
+                    name: "id",
+                    value: crate::node::AttrValue::Text(id.into()),
+                });
                 return true;
             }
             return element.children.iter_mut().any(|child| walk(child, id));
@@ -623,7 +757,9 @@ fn echo<T: Form>(values: Vec<(String, String)>) -> Vec<(String, String)> {
     values
         .into_iter()
         .filter(|(name, value)| {
-            let secret = T::FIELDS.iter().any(|field| field.name == name && field.widget == Widget::Input(InputKind::Password));
+            let secret = T::FIELDS.iter().any(|field| {
+                field.name == name && field.widget == Widget::Input(InputKind::Password)
+            });
             if secret || value.len() > left {
                 return false;
             }
@@ -657,7 +793,11 @@ where
         }
         match field.widget {
             Widget::Checkbox | Widget::Switch => kept.push((field.name, "false")),
-            Widget::Input(_) | Widget::Textarea { .. } | Widget::Select | Widget::Radio | Widget::Money => kept.push((field.name, "")),
+            Widget::Input(_)
+            | Widget::Textarea { .. }
+            | Widget::Select
+            | Widget::Radio
+            | Widget::Money => kept.push((field.name, "")),
         }
     }
     // Serde stops at the first value of the wrong type. To name every such field,
@@ -700,7 +840,11 @@ where
             }
             let mut errors = FieldErrors::new();
             for (path, violation) in violations.iter() {
-                let text = match T::FIELDS.iter().find(|field| field.name == path).and_then(|field| field.error) {
+                let text = match T::FIELDS
+                    .iter()
+                    .find(|field| field.name == path)
+                    .and_then(|field| field.error)
+                {
                     Some(text) => text.to_owned(),
                     None => violation.render(path, &messages),
                 };
@@ -719,22 +863,52 @@ fn type_error<T: Form>(error: &serde_path_to_error::Error<urlencoded::Error>) ->
     let path = error.path().to_string();
     let field = T::FIELDS.iter().find(|field| field.name == path);
     let text = match field {
-        Some(FormField { error: Some(text), .. }) => (*text).to_owned(),
-        Some(FormField { widget: Widget::Money, label, .. }) => format!("{label}: enter an amount, like 12,500.50."),
-        Some(FormField { widget: Widget::Input(InputKind::Number), label, .. }) => format!("{label}: enter a number."),
-        Some(FormField { widget: Widget::Input(InputKind::Date), label, .. }) => format!("{label}: enter a date."),
-        Some(FormField { widget: Widget::Select | Widget::Radio, label, .. }) => format!("{label}: choose one of the options."),
+        Some(FormField {
+            error: Some(text), ..
+        }) => (*text).to_owned(),
+        Some(FormField {
+            widget: Widget::Money,
+            label,
+            ..
+        }) => format!("{label}: enter an amount, like 12,500.50."),
+        Some(FormField {
+            widget: Widget::Input(InputKind::Number),
+            label,
+            ..
+        }) => format!("{label}: enter a number."),
+        Some(FormField {
+            widget: Widget::Input(InputKind::Date),
+            label,
+            ..
+        }) => format!("{label}: enter a date."),
+        Some(FormField {
+            widget: Widget::Select | Widget::Radio,
+            label,
+            ..
+        }) => format!("{label}: choose one of the options."),
         Some(FormField { label, .. }) => format!("{label} is not valid."),
         None => "This form could not be read.".to_owned(),
     };
     let mut errors = FieldErrors::new();
-    errors.insert(if field.is_some() { path } else { String::from("_form") }, vec![text]);
+    errors.insert(
+        if field.is_some() {
+            path
+        } else {
+            String::from("_form")
+        },
+        vec![text],
+    );
     errors
 }
 
 /// Encodes pairs for [`urlencoded`].
 pub(crate) fn encode(pairs: &[(&str, &str)]) -> String {
-    let mut out = String::with_capacity(pairs.iter().map(|(name, value)| name.len() + value.len() + 2).sum());
+    let mut out = String::with_capacity(
+        pairs
+            .iter()
+            .map(|(name, value)| name.len() + value.len() + 2)
+            .sum(),
+    );
     for (at, (name, value)) in pairs.iter().enumerate() {
         if at > 0 {
             out.push('&');
@@ -750,11 +924,21 @@ pub(crate) fn encode(pairs: &[(&str, &str)]) -> String {
 pub(crate) fn encode_into(out: &mut String, text: &str) {
     for byte in text.bytes() {
         match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(char::from(byte)),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(char::from(byte))
+            }
             _ => {
                 out.push('%');
-                out.push(char::from_digit(u32::from(byte >> 4), 16).unwrap_or('0').to_ascii_uppercase());
-                out.push(char::from_digit(u32::from(byte & 15), 16).unwrap_or('0').to_ascii_uppercase());
+                out.push(
+                    char::from_digit(u32::from(byte >> 4), 16)
+                        .unwrap_or('0')
+                        .to_ascii_uppercase(),
+                );
+                out.push(
+                    char::from_digit(u32::from(byte & 15), 16)
+                        .unwrap_or('0')
+                        .to_ascii_uppercase(),
+                );
             }
         }
     }
@@ -772,15 +956,27 @@ fn from_this_site(parts: &Parts) -> bool {
     let Some(origin) = parts.headers.get(ORIGIN) else {
         return true;
     };
-    let host = parts.headers.get(HOST).and_then(|host| host.to_str().ok()).or_else(|| parts.uri.authority().map(http::uri::Authority::as_str));
-    let authority = origin.to_str().ok().and_then(|origin| origin.split_once("://")).map(|(_, authority)| authority);
+    let host = parts
+        .headers
+        .get(HOST)
+        .and_then(|host| host.to_str().ok())
+        .or_else(|| parts.uri.authority().map(http::uri::Authority::as_str));
+    let authority = origin
+        .to_str()
+        .ok()
+        .and_then(|origin| origin.split_once("://"))
+        .map(|(_, authority)| authority);
     matches!((host, authority), (Some(host), Some(authority)) if host.eq_ignore_ascii_case(authority))
 }
 
 /// Whether the request's `Origin` is a front end the app trusts to write from
 /// another site: `http.cors.allowed_origins`, the list the session layer also reads.
 async fn from_a_trusted_front_end(parts: &Parts) -> bool {
-    let Some(origin) = parts.headers.get(ORIGIN).and_then(|origin| origin.to_str().ok()) else {
+    let Some(origin) = parts
+        .headers
+        .get(ORIGIN)
+        .and_then(|origin| origin.to_str().ok())
+    else {
         return false;
     };
     let origin = origin.trim().trim_end_matches('/');
@@ -790,7 +986,11 @@ async fn from_a_trusted_front_end(parts: &Parts) -> bool {
     let Some(options) = context.try_get::<HttpOptions>().await else {
         return false;
     };
-    options.cors.allowed_origins.iter().any(|allowed| allowed.trim().trim_end_matches('/') == origin)
+    options
+        .cors
+        .allowed_origins
+        .iter()
+        .any(|allowed| allowed.trim().trim_end_matches('/') == origin)
 }
 
 /// Whether the request holds a urlencoded form.
@@ -800,7 +1000,10 @@ fn is_form_body(parts: &Parts) -> bool {
         .get(CONTENT_TYPE)
         .and_then(|kind| kind.to_str().ok())
         .and_then(|kind| kind.split(';').next())
-        .is_some_and(|kind| kind.trim().eq_ignore_ascii_case("application/x-www-form-urlencoded"))
+        .is_some_and(|kind| {
+            kind.trim()
+                .eq_ignore_ascii_case("application/x-www-form-urlencoded")
+        })
 }
 
 /// Why a request isn't a form submission at all, before its body is read.
@@ -854,7 +1057,12 @@ pub struct Rejected<T> {
 impl<T> std::fmt::Debug for Rejected<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let names: Vec<&str> = self.values.iter().map(|(name, _)| name.as_str()).collect();
-        f.debug_struct("Rejected").field("fields", &names).field("errors", &self.errors).field("from_runtime", &self.from_runtime).field("refused", &self.refused).finish()
+        f.debug_struct("Rejected")
+            .field("fields", &names)
+            .field("errors", &self.errors)
+            .field("from_runtime", &self.from_runtime)
+            .field("refused", &self.refused)
+            .finish()
     }
 }
 
@@ -870,15 +1078,23 @@ impl<T: Form> Rejected<T> {
         if let Some(status) = self.refused {
             let mut response = status.into_response();
             if status == StatusCode::METHOD_NOT_ALLOWED {
-                response.headers_mut().insert(ALLOW, HeaderValue::from_static("POST"));
+                response
+                    .headers_mut()
+                    .insert(ALLOW, HeaderValue::from_static("POST"));
             }
             return response;
         }
         if self.from_runtime {
-            let ops = vec![Op::Errors { form: T::ID.to_owned(), fields: self.errors }];
+            let ops = vec![Op::Errors {
+                form: T::ID.to_owned(),
+                fields: self.errors,
+            }];
             return (StatusCode::UNPROCESSABLE_ENTITY, Envelope::new(ops)).into_response();
         }
-        let form = FormView::<T>::new().post(self.action).with_values(self.values).with_errors(self.errors);
+        let form = FormView::<T>::new()
+            .post(self.action)
+            .with_values(self.values)
+            .with_errors(self.errors);
         let mut response = page(form).into_response();
         *response.status_mut() = StatusCode::UNPROCESSABLE_ENTITY;
         response
@@ -888,7 +1104,10 @@ impl<T: Form> Rejected<T> {
 impl<T: Form> IntoResponse for Rejected<T> {
     fn into_response(self) -> Response {
         self.respond(|form| {
-            View::new("Check this form").body(el("main").slot("page").children((el("h1").slot("page-title").child("Check this form"), Node::from(form))))
+            View::new("Check this form").body(el("main").slot("page").children((
+                el("h1").slot("page-title").child("Check this form"),
+                Node::from(form),
+            )))
         })
     }
 }
@@ -902,8 +1121,18 @@ where
     async fn from_request(request: Request) -> Result<Self, Self::Rejection> {
         let (parts, body): (Parts, _) = request.into_parts();
         let from_runtime = parts.headers.contains_key(UI_HEADER);
-        let action = parts.uri.path_and_query().map_or_else(|| parts.uri.path().to_owned(), |path| path.as_str().to_owned());
-        let refuse = |status: StatusCode, action: String| Rejected { values: Vec::new(), errors: FieldErrors::new(), from_runtime, action, refused: Some(status), marker: PhantomData };
+        let action = parts.uri.path_and_query().map_or_else(
+            || parts.uri.path().to_owned(),
+            |path| path.as_str().to_owned(),
+        );
+        let refuse = |status: StatusCode, action: String| Rejected {
+            values: Vec::new(),
+            errors: FieldErrors::new(),
+            from_runtime,
+            action,
+            refused: Some(status),
+            marker: PhantomData,
+        };
         if let Some(status) = refusal(&parts).await {
             return Err(refuse(status, action));
         }
@@ -916,7 +1145,14 @@ where
         };
         match decode::<T>(&values) {
             Ok(value) => Ok(Self(value)),
-            Err(errors) => Err(Rejected { values: echo::<T>(values), errors, from_runtime, action, refused: None, marker: PhantomData }),
+            Err(errors) => Err(Rejected {
+                values: echo::<T>(values),
+                errors,
+                from_runtime,
+                action,
+                refused: None,
+                marker: PhantomData,
+            }),
         }
     }
 }
@@ -931,14 +1167,25 @@ mod tests {
         assert_eq!(Money::parse("12500"), Some(Money(1_250_000)));
         assert_eq!(Money::parse("-3.5"), Some(Money(-350)));
         assert_eq!(Money::parse(".5"), Some(Money(50)));
-        for bad in ["", ".", "1.234", "abc", "1e5", "--1", "99999999999999999999"] {
+        for bad in [
+            "",
+            ".",
+            "1.234",
+            "abc",
+            "1e5",
+            "--1",
+            "99999999999999999999",
+        ] {
             assert_eq!(Money::parse(bad), None, "{bad}");
         }
         assert_eq!(Money(1_250_050).display(), "12,500.50");
         assert_eq!(Money(-350).display(), "-3.50");
         assert_eq!(Money(5).display(), "0.05");
         assert_eq!(Money(100_000_000).display(), "1,000,000.00");
-        assert_eq!(Money::parse(&Money(i64::MAX).display()), Some(Money(i64::MAX)));
+        assert_eq!(
+            Money::parse(&Money(i64::MAX).display()),
+            Some(Money(i64::MAX))
+        );
     }
 
     #[test]

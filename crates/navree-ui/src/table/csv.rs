@@ -5,7 +5,8 @@
 /// return gets a leading apostrophe, so a spreadsheet shows it as text rather than
 /// running it; a plain negative number stays a number.
 pub fn write_csv_field(out: &mut String, value: &str) {
-    let dangerous = value.starts_with(['=', '+', '@', '\t', '\r']) || (value.starts_with('-') && value.parse::<f64>().is_err());
+    let dangerous = value.starts_with(['=', '+', '@', '\t', '\r'])
+        || (value.starts_with('-') && value.parse::<f64>().is_err());
     let quote = dangerous || value.contains([',', '"', '\n', '\r']);
     if quote {
         out.push('"');
@@ -52,7 +53,15 @@ mod tests {
 
     #[test]
     fn a_formula_is_never_a_formula() {
-        for bad in ["=1+1", "+1+1", "@SUM(A1)", "-2+3", "=HYPERLINK(\"http://x\")", "\tx", "\rx"] {
+        for bad in [
+            "=1+1",
+            "+1+1",
+            "@SUM(A1)",
+            "-2+3",
+            "=HYPERLINK(\"http://x\")",
+            "\tx",
+            "\rx",
+        ] {
             let out = field(bad);
             assert!(out.starts_with("\"'"), "{bad}: {out}");
         }

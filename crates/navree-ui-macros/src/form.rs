@@ -6,7 +6,10 @@ use quote::{ToTokens, quote};
 use syn::ext::IdentExt;
 use syn::{Data, DeriveInput, Fields, Ident, LitInt, LitStr};
 
-use crate::shared::{apply_case, doc_line, named_fields, option_inner, serde_rename, serde_rename_all, type_name, ui_path, words};
+use crate::shared::{
+    apply_case, doc_line, named_fields, option_inner, serde_rename, serde_rename_all, type_name,
+    ui_path, words,
+};
 
 /// What `#[form(...)]` says about a field.
 #[derive(Default)]
@@ -80,7 +83,9 @@ fn named_widget(ui: &TokenStream, widget: &Ident, rows: u32) -> syn::Result<Toke
         other => {
             return Err(syn::Error::new(
                 widget.span(),
-                format!("unknown widget `{other}`: expected text, email, url, tel, password, search, number, date, time, datetime, hidden, textarea, select, radio, checkbox, switch or money"),
+                format!(
+                    "unknown widget `{other}`: expected text, email, url, tel, password, search, number, date, time, datetime, hidden, textarea, select, radio, checkbox, switch or money"
+                ),
             ));
         }
     })
@@ -95,7 +100,8 @@ fn inferred_widget(ui: &TokenStream, name: Option<&str>) -> Option<TokenStream> 
     Some(match name? {
         "String" | "str" | "Uuid" => input("Text"),
         "bool" => quote!(#ui::form::Widget::Checkbox),
-        "i8" | "i16" | "i32" | "i64" | "isize" | "u8" | "u16" | "u32" | "u64" | "usize" | "f32" | "f64" | "Decimal" => input("Number"),
+        "i8" | "i16" | "i32" | "i64" | "isize" | "u8" | "u16" | "u32" | "u64" | "usize" | "f32"
+        | "f64" | "Decimal" => input("Number"),
         "NaiveDate" => input("Date"),
         "NaiveTime" => input("Time"),
         "NaiveDateTime" | "DateTime" => input("DateTime"),
@@ -116,7 +122,11 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
     let fields = named_fields(&input, "Form")?;
     let case = serde_rename_all(&input.attrs);
     let mut id = input.ident.to_string().to_kebab_case();
-    for attr in input.attrs.iter().filter(|attr| attr.path().is_ident("form")) {
+    for attr in input
+        .attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("form"))
+    {
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("id") {
                 id = meta.value()?.parse::<LitStr>()?.value();
@@ -135,8 +145,14 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
         }
         let Some(ident) = &field.ident else { continue };
         let rust_name = ident.unraw().to_string();
-        let name = serde_rename(&field.attrs).unwrap_or_else(|| apply_case(&rust_name, case.as_deref()));
-        let label = hint.label.as_ref().map(LitStr::value).or_else(|| doc_line(&field.attrs)).unwrap_or_else(|| words(&rust_name));
+        let name =
+            serde_rename(&field.attrs).unwrap_or_else(|| apply_case(&rust_name, case.as_deref()));
+        let label = hint
+            .label
+            .as_ref()
+            .map(LitStr::value)
+            .or_else(|| doc_line(&field.attrs))
+            .unwrap_or_else(|| words(&rust_name));
         let optional = option_inner(&field.ty).is_some();
         let inner = option_inner(&field.ty).unwrap_or(&field.ty);
         let rows: u32 = match &hint.rows {
@@ -146,15 +162,27 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
         let inferred = inferred_widget(&ui, type_name(inner).as_deref());
         let widget = match &hint.widget {
             Some(widget) => named_widget(&ui, widget, rows)?,
-            None => inferred.clone().unwrap_or_else(|| quote!(#ui::form::Widget::Select)),
+            None => inferred
+                .clone()
+                .unwrap_or_else(|| quote!(#ui::form::Widget::Select)),
         };
-        let options = if inferred.is_none() && hint.widget.as_ref().is_none_or(|w| matches!(w.to_string().as_str(), "select" | "radio")) {
+        let options = if inferred.is_none()
+            && hint
+                .widget
+                .as_ref()
+                .is_none_or(|w| matches!(w.to_string().as_str(), "select" | "radio"))
+        {
             quote!(<#inner as #ui::form::Options>::OPTIONS)
         } else {
             quote!(&[])
         };
-        let (placeholder, help, prompt, error, addon) =
-            (opt(hint.placeholder), opt(hint.help), opt(hint.prompt), opt(hint.error), opt(hint.addon));
+        let (placeholder, help, prompt, error, addon) = (
+            opt(hint.placeholder),
+            opt(hint.help),
+            opt(hint.prompt),
+            opt(hint.error),
+            opt(hint.addon),
+        );
         let (autofocus, wide) = (hint.autofocus, hint.wide);
         specs.push(quote! {
             #ui::form::FormField {
@@ -199,17 +227,27 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
 pub(crate) fn options(input: DeriveInput) -> syn::Result<TokenStream> {
     let ui = ui_path(input.ident.span())?;
     let Data::Enum(data) = &input.data else {
-        return Err(syn::Error::new_spanned(&input.ident, "`#[derive(Options)]` works on enums of unit variants"));
+        return Err(syn::Error::new_spanned(
+            &input.ident,
+            "`#[derive(Options)]` works on enums of unit variants",
+        ));
     };
     let case = serde_rename_all(&input.attrs);
     let mut pairs = Vec::new();
     let mut arms = Vec::new();
     for variant in &data.variants {
         if !matches!(variant.fields, Fields::Unit) {
-            return Err(syn::Error::new_spanned(variant, "`#[derive(Options)]` works on unit variants"));
+            return Err(syn::Error::new_spanned(
+                variant,
+                "`#[derive(Options)]` works on unit variants",
+            ));
         }
         let mut label = None;
-        for attr in variant.attrs.iter().filter(|attr| attr.path().is_ident("option")) {
+        for attr in variant
+            .attrs
+            .iter()
+            .filter(|attr| attr.path().is_ident("option"))
+        {
             attr.parse_nested_meta(|meta| {
                 if meta.path.is_ident("label") {
                     label = Some(meta.value()?.parse::<LitStr>()?.value());
@@ -220,8 +258,11 @@ pub(crate) fn options(input: DeriveInput) -> syn::Result<TokenStream> {
             })?;
         }
         let name = variant.ident.to_string();
-        let value = serde_rename(&variant.attrs).unwrap_or_else(|| apply_case(&name, case.as_deref()));
-        let label = label.or_else(|| doc_line(&variant.attrs)).unwrap_or_else(|| words(&name));
+        let value =
+            serde_rename(&variant.attrs).unwrap_or_else(|| apply_case(&name, case.as_deref()));
+        let label = label
+            .or_else(|| doc_line(&variant.attrs))
+            .unwrap_or_else(|| words(&name));
         let variant_ident = &variant.ident;
         pairs.push(quote!((#value, #label),));
         arms.push(quote!(Self::#variant_ident => #value,));

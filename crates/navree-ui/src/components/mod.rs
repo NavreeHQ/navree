@@ -14,16 +14,19 @@ mod overlays;
 
 pub use actions::{Button, ButtonGroup, ButtonKind, ButtonVariant, Toggle};
 pub use display::{
-    Alert, AlertTone, AspectRatio, Attachment, Avatar, Badge, BadgeVariant, Bars, Breadcrumb, Bubble, BubbleSide, Card, Direction, Empty,
-    Heading, Item, ItemVariant, Kbd, Marker, MarkerVariant, Message, Pagination, Progress, Ratio, Separator, Skeleton, SkeletonShape,
+    Alert, AlertTone, AspectRatio, Attachment, Avatar, Badge, BadgeVariant, Bars, Breadcrumb,
+    Bubble, BubbleSide, Card, Direction, Empty, Heading, Item, ItemVariant, Kbd, Marker,
+    MarkerVariant, Message, Pagination, Progress, Ratio, Separator, Skeleton, SkeletonShape,
     Spinner, Stat, Table, TableCell, TableHead, TableRowEl, Text, TextVariant,
 };
 pub use inputs::{
-    Checkbox, Field, FieldSet, Input, InputGroup, InputKind, Label, NativeSelect, OptionItem, RadioGroup, Switch, Textarea,
+    Checkbox, Field, FieldSet, Input, InputGroup, InputKind, Label, NativeSelect, OptionItem,
+    RadioGroup, Switch, Textarea,
 };
 pub use layout::{Align, Container, ContainerSize, Grid, Justify, Row, Stack};
 pub use overlays::{
-    Accordion, AlertDialog, Collapsible, Dialog, Drawer, HoverCard, Popover, PopupAlign, ScrollArea, Sheet, SheetSide, Side, Tooltip,
+    Accordion, AlertDialog, Collapsible, Dialog, Drawer, HoverCard, Popover, PopupAlign,
+    ScrollArea, Sheet, SheetSide, Side, Tooltip,
 };
 
 use crate::icons::Icon;
@@ -59,7 +62,13 @@ impl Size {
 /// the text beside it.
 #[inline]
 pub fn icon(icon: Icon) -> Node {
-    Node::Element(el("svg").slot("icon").attr("viewBox", "0 0 24 24").attr("aria-hidden", "true").child(Node::Static(icon.0)))
+    Node::Element(
+        el("svg")
+            .slot("icon")
+            .attr("viewBox", "0 0 24 24")
+            .attr("aria-hidden", "true")
+            .child(Node::Static(icon.0)),
+    )
 }
 
 /// Adds `id`, `attr`, `flag` and `span` to a component whose `el` field is its

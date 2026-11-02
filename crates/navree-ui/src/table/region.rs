@@ -26,7 +26,14 @@ pub struct Region {
 impl Region {
     /// A region named `id`.
     pub fn new(id: impl Into<AttrValue>) -> Self {
-        Self { el: el("div").slot("region").attr("id", id).flag("data-ui-region", true).uses(Uses::CORE), placeholder: false }
+        Self {
+            el: el("div")
+                .slot("region")
+                .attr("id", id)
+                .flag("data-ui-region", true)
+                .uses(Uses::CORE),
+            placeholder: false,
+        }
     }
 
     /// Sets where its content comes from: a page holding an element with this
@@ -47,7 +54,10 @@ impl Region {
 
     /// Refetches it this often, while the page is visible.
     pub fn poll(mut self, every: Duration) -> Self {
-        self.el = self.el.attr("data-ui-poll", i64::try_from(every.as_millis()).unwrap_or(i64::MAX));
+        self.el = self.el.attr(
+            "data-ui-poll",
+            i64::try_from(every.as_millis()).unwrap_or(i64::MAX),
+        );
         self
     }
 
@@ -59,8 +69,17 @@ impl Region {
     /// It answers the new rows as HTML, nothing when there are none, and the
     /// newest cursor in the `X-UI-Cursor` header. `empty`, if given, names an
     /// element removed once the first row arrives (an "nothing yet" message).
-    pub fn feed(mut self, into: impl Into<AttrValue>, after: impl Into<AttrValue>, empty: Option<&str>) -> Self {
-        self.el = self.el.attr("data-ui-feed", into).attr("data-ui-after", after).attr_opt("data-ui-feed-empty", empty.map(str::to_owned));
+    pub fn feed(
+        mut self,
+        into: impl Into<AttrValue>,
+        after: impl Into<AttrValue>,
+        empty: Option<&str>,
+    ) -> Self {
+        self.el = self
+            .el
+            .attr("data-ui-feed", into)
+            .attr("data-ui-after", after)
+            .attr_opt("data-ui-feed-empty", empty.map(str::to_owned));
         self
     }
 
@@ -73,7 +92,13 @@ impl Region {
 
     fn into_node(self) -> Node {
         if self.placeholder {
-            return self.el.children((Skeleton::new(SkeletonShape::Line), Skeleton::new(SkeletonShape::Short))).into();
+            return self
+                .el
+                .children((
+                    Skeleton::new(SkeletonShape::Line),
+                    Skeleton::new(SkeletonShape::Short),
+                ))
+                .into();
         }
         self.el.into()
     }

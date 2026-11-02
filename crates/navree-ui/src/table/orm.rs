@@ -22,11 +22,16 @@ use http::{HeaderValue, StatusCode};
 use navree_http::body::Body;
 use navree_http::response::{IntoResponse, Response};
 use navree_orm::ir::Order;
-use navree_orm::{Access, Builder, Dialect, Executor, Filter, Model, Record, Result, Value, col, col_as};
+use navree_orm::{
+    Access, Builder, Dialect, Executor, Filter, Model, Record, Result, Value, col, col_as,
+};
 use serde_json::{Value as Json, json};
 
 use super::query::{FilterValue, SortTerm};
-use super::{BulkMode, BulkRefusal, BulkRequest, Column, Count, Direction, FilterBar, FilterKind, SavedView, TablePage, TableQuery, TableRow, Total, ValueKind, write_csv_field};
+use super::{
+    BulkMode, BulkRefusal, BulkRequest, Column, Count, Direction, FilterBar, FilterKind, SavedView,
+    TablePage, TableQuery, TableRow, Total, ValueKind, write_csv_field,
+};
 
 /// The most rows one export writes. A larger result is cut, and the response says
 /// so in `x-navree-truncated`.
@@ -45,9 +50,15 @@ fn bind(kind: ValueKind, text: &str) -> Option<Value> {
         ValueKind::Text => Some(Value::String(text.to_owned())),
         ValueKind::Int => text.parse().ok().map(Value::I64),
         ValueKind::Money => crate::form::Money::parse(text).map(|money| Value::I64(money.0)),
-        ValueKind::Float => text.parse().ok().filter(|value: &f64| value.is_finite()).map(Value::F64),
+        ValueKind::Float => text
+            .parse()
+            .ok()
+            .filter(|value: &f64| value.is_finite())
+            .map(Value::F64),
         ValueKind::Decimal => text.parse().ok().map(Value::Decimal),
-        ValueKind::Date => chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").ok().map(Value::Date),
+        ValueKind::Date => chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d")
+            .ok()
+            .map(Value::Date),
         ValueKind::DateTime => {
             let day = chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").ok()?;
             Some(Value::Timestamp(day.and_hms_opt(0, 0, 0)?.and_utc()))
@@ -63,13 +74,22 @@ fn filter_of(column: &'static Column, value: &FilterValue) -> Option<Filter> {
     match value {
         FilterValue::Empty => Some(source.is_null()),
         FilterValue::Bool(flag) => Some(source.eq(Value::Bool(*flag))),
-        FilterValue::Text(text) => Some(col_as::<String>(column.source).contains_ignore_case(text.clone())),
+        FilterValue::Text(text) => {
+            Some(col_as::<String>(column.source).contains_ignore_case(text.clone()))
+        }
         FilterValue::Values(values) => {
-            let bound: Vec<Value> = values.iter().filter_map(|value| bind(column.kind, value)).collect();
+            let bound: Vec<Value> = values
+                .iter()
+                .filter_map(|value| bind(column.kind, value))
+                .collect();
             if bound.is_empty() {
                 return None;
             }
-            Some(if column.filter == FilterKind::Select && bound.len() == 1 { source.eq(bound.into_iter().next()?) } else { source.is_in(bound) })
+            Some(if column.filter == FilterKind::Select && bound.len() == 1 {
+                source.eq(bound.into_iter().next()?)
+            } else {
+                source.is_in(bound)
+            })
         }
         FilterValue::Range { min, max } => {
             let mut parts = Vec::with_capacity(2);
@@ -79,7 +99,10 @@ fn filter_of(column: &'static Column, value: &FilterValue) -> Option<Filter> {
             if let Some(text) = max.as_deref() {
                 // The last day of an instant's range runs to its end.
                 if column.kind == ValueKind::DateTime {
-                    let next = chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").ok().and_then(|day| day.succ_opt()).and_then(|day| day.and_hms_opt(0, 0, 0));
+                    let next = chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d")
+                        .ok()
+                        .and_then(|day| day.succ_opt())
+                        .and_then(|day| day.and_hms_opt(0, 0, 0));
                     if let Some(next) = next {
                         parts.push(source.lt(Value::Timestamp(next.and_utc())));
                     }
@@ -87,7 +110,11 @@ fn filter_of(column: &'static Column, value: &FilterValue) -> Option<Filter> {
                     parts.push(source.lte(high));
                 }
             }
-            if parts.is_empty() { None } else { Some(Filter::all(parts)) }
+            if parts.is_empty() {
+                None
+            } else {
+                Some(Filter::all(parts))
+            }
         }
     }
 }
@@ -148,9 +175,15 @@ fn untag(tagged: &Json, kind: ValueKind, nullable: bool) -> Option<Value> {
         "e" => text()?.parse().ok().map(Value::Decimal),
         "s" => text().map(|text| Value::String(text.to_owned())),
         "u" => uuid::Uuid::parse_str(text()?).ok().map(Value::Uuid),
-        "d" => chrono::NaiveDate::parse_from_str(text()?, "%Y-%m-%d").ok().map(Value::Date),
-        "l" => chrono::NaiveDateTime::parse_from_str(text()?, "%Y-%m-%dT%H:%M:%S%.f").ok().map(Value::DateTime),
-        "t" => chrono::DateTime::parse_from_rfc3339(text()?).ok().map(|at| Value::Timestamp(at.to_utc())),
+        "d" => chrono::NaiveDate::parse_from_str(text()?, "%Y-%m-%d")
+            .ok()
+            .map(Value::Date),
+        "l" => chrono::NaiveDateTime::parse_from_str(text()?, "%Y-%m-%dT%H:%M:%S%.f")
+            .ok()
+            .map(Value::DateTime),
+        "t" => chrono::DateTime::parse_from_rfc3339(text()?)
+            .ok()
+            .map(|at| Value::Timestamp(at.to_utc())),
         _ => None,
     }
 }
@@ -168,12 +201,23 @@ struct Term {
 
 impl Term {
     fn flipped(self) -> Self {
-        Self { direction: if self.direction == Direction::Asc { Direction::Desc } else { Direction::Asc }, ..self }
+        Self {
+            direction: if self.direction == Direction::Asc {
+                Direction::Desc
+            } else {
+                Direction::Asc
+            },
+            ..self
+        }
     }
 
     fn order(self, dialect: Option<Dialect>) -> Order {
         let source = col(self.source);
-        let order = if self.direction == Direction::Asc { source.asc() } else { source.desc() };
+        let order = if self.direction == Direction::Asc {
+            source.asc()
+        } else {
+            source.desc()
+        };
         // The other stores already sort NULL as the smallest value. A column that
         // can't hold NULL says nothing, so it still matches a plain index.
         match (dialect, self.direction, self.nullable) {
@@ -189,7 +233,11 @@ impl Term {
 
     /// Where this term equals `value`.
     fn equal(self, value: &Value) -> Filter {
-        if Self::is_null(value) { col(self.source).is_null() } else { col(self.source).eq(value.clone()) }
+        if Self::is_null(value) {
+            col(self.source).is_null()
+        } else {
+            col(self.source).eq(value.clone())
+        }
     }
 
     /// Where this term is strictly past `value`, in order.
@@ -199,7 +247,9 @@ impl Term {
             (Direction::Asc, true) => Some(source.is_not_null()),
             (Direction::Asc, false) => Some(source.gt(value.clone())),
             (Direction::Desc, true) => None,
-            (Direction::Desc, false) if self.nullable => Some(Filter::any([source.lt(value.clone()), source.is_null()])),
+            (Direction::Desc, false) if self.nullable => {
+                Some(Filter::any([source.lt(value.clone()), source.is_null()]))
+            }
             (Direction::Desc, false) => Some(source.lt(value.clone())),
         }
     }
@@ -221,22 +271,44 @@ fn past_from(terms: &[Term], values: &[Value], at: usize) -> Option<Filter> {
 /// The rows past a position: a first condition, and, when NULLs of the first term
 /// lie ahead, a second one to read after it runs out.
 fn keyset(terms: &[Term], values: &[Value]) -> (Option<Filter>, Option<Filter>) {
-    let (Some(first), Some(value)) = (terms.first().copied(), values.first()) else { return (None, None) };
+    let (Some(first), Some(value)) = (terms.first().copied(), values.first()) else {
+        return (None, None);
+    };
     let source = col(first.source);
     let tail = past_from(terms, values, 1);
     let null = Term::is_null(value);
     match (first.direction, null) {
         (Direction::Asc, true) => {
             // Through the NULLs, then every value.
-            let here = tail.map_or_else(|| source.is_null(), |tail| Filter::all([source.is_null(), tail]));
+            let here = tail.map_or_else(
+                || source.is_null(),
+                |tail| Filter::all([source.is_null(), tail]),
+            );
             (Some(here), Some(source.is_not_null()))
         }
         (Direction::Desc, true) => (tail.map(|tail| Filter::all([source.is_null(), tail])), None),
         (direction, false) => {
-            let bound = if direction == Direction::Asc { source.gte(value.clone()) } else { source.lte(value.clone()) };
-            let strict = if direction == Direction::Asc { source.gt(value.clone()) } else { source.lt(value.clone()) };
-            let within = tail.map_or_else(|| strict.clone(), |tail| Filter::any([strict.clone(), Filter::all([source.eq(value.clone()), tail])]));
-            let after_nulls = (direction == Direction::Desc && first.nullable).then(|| source.is_null());
+            let bound = if direction == Direction::Asc {
+                source.gte(value.clone())
+            } else {
+                source.lte(value.clone())
+            };
+            let strict = if direction == Direction::Asc {
+                source.gt(value.clone())
+            } else {
+                source.lt(value.clone())
+            };
+            let within = tail.map_or_else(
+                || strict.clone(),
+                |tail| {
+                    Filter::any([
+                        strict.clone(),
+                        Filter::all([source.eq(value.clone()), tail]),
+                    ])
+                },
+            );
+            let after_nulls =
+                (direction == Direction::Desc && first.nullable).then(|| source.is_null());
             (Some(Filter::all([bound, within])), after_nulls)
         }
     }
@@ -254,7 +326,11 @@ fn decode_cursor(text: &str, terms: &[Term]) -> Option<Vec<Value>> {
     if items.len() != terms.len() {
         return None;
     }
-    items.iter().zip(terms).map(|(item, term)| untag(item, term.kind, term.nullable)).collect()
+    items
+        .iter()
+        .zip(terms)
+        .map(|(item, term)| untag(item, term.kind, term.nullable))
+        .collect()
 }
 
 /// The value of `term` in `record`.
@@ -262,7 +338,11 @@ fn value_of<M: Model>(record: &Record<M>, term: &Term) -> Option<Value> {
     if let Ok(Some(value)) = record.value(term.field) {
         return Some(value);
     }
-    record.extras().iter().find(|(name, _)| name == term.field).map(|(_, value)| value.clone())
+    record
+        .extras()
+        .iter()
+        .find(|(name, _)| name == term.field)
+        .map(|(_, value)| value.clone())
 }
 
 fn text_of(value: &Value) -> Option<String> {
@@ -273,7 +353,11 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
     /// The search and filters, on `builder`.
     pub fn apply<M: Model>(&self, mut builder: Builder<M>) -> Builder<M> {
         if let Some(q) = &self.state.q {
-            let searches: Vec<Filter> = R::COLUMNS.iter().filter(|column| column.search).map(|column| col_as::<String>(column.source).contains_ignore_case(q.clone())).collect();
+            let searches: Vec<Filter> = R::COLUMNS
+                .iter()
+                .filter(|column| column.search)
+                .map(|column| col_as::<String>(column.source).contains_ignore_case(q.clone()))
+                .collect();
             if !searches.is_empty() {
                 builder = builder.where_(Filter::any(searches));
             }
@@ -294,18 +378,34 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
             .iter()
             .map(|SortTerm { column, direction }| {
                 let column = &R::COLUMNS[*column];
-                Term { source: column.source, field: column.source.rsplit('.').next().unwrap_or(column.source), kind: column.kind, nullable: column.nullable, direction: *direction }
+                Term {
+                    source: column.source,
+                    field: column.source.rsplit('.').next().unwrap_or(column.source),
+                    kind: column.kind,
+                    nullable: column.nullable,
+                    direction: *direction,
+                }
             })
             .collect();
         let key = M::meta().key_column();
         let last = terms.last().map_or(Direction::Asc, |term| term.direction);
         if !terms.iter().any(|term| term.field == key) {
-            terms.push(Term { source: key, field: key, kind: R::CONFIG.key_kind, nullable: false, direction: last });
+            terms.push(Term {
+                source: key,
+                field: key,
+                kind: R::CONFIG.key_kind,
+                nullable: false,
+                direction: last,
+            });
         }
         terms
     }
 
-    fn ordered<M: Model>(terms: &[Term], dialect: Option<Dialect>, mut builder: Builder<M>) -> Builder<M> {
+    fn ordered<M: Model>(
+        terms: &[Term],
+        dialect: Option<Dialect>,
+        mut builder: Builder<M>,
+    ) -> Builder<M> {
         builder = builder.reorder();
         for term in terms {
             builder = builder.order(term.order(dialect));
@@ -324,7 +424,12 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
 
     /// One page, each record made into a row by `map`: for rows that aren't models,
     /// such as a model with joined or related names.
-    pub async fn load_as<M, E>(&self, builder: Builder<M>, exec: &E, map: impl Fn(Record<M>) -> R) -> Result<TablePage<R>>
+    pub async fn load_as<M, E>(
+        &self,
+        builder: Builder<M>,
+        exec: &E,
+        map: impl Fn(Record<M>) -> R,
+    ) -> Result<TablePage<R>>
     where
         M: Model,
         E: Executor + ?Sized,
@@ -335,30 +440,55 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         let total = self.count_rows(filtered.clone(), exec).await?;
         let version = self.version_of(filtered.clone(), exec).await?;
         let mut page = if R::CONFIG.cursor {
-            self.cursor_page(filtered, exec, dialect, &terms, total, map).await?
+            self.cursor_page(filtered, exec, dialect, &terms, total, map)
+                .await?
         } else {
-            self.number_page(filtered, exec, dialect, &terms, total, map).await?
+            self.number_page(filtered, exec, dialect, &terms, total, map)
+                .await?
         };
         page.version = version;
         Ok(page)
     }
 
-    async fn count_rows<M: Model, E: Executor + ?Sized>(&self, filtered: Builder<M>, exec: &E) -> Result<Total> {
-        let count = if self.state.count { Count::Exact } else { R::CONFIG.count };
+    async fn count_rows<M: Model, E: Executor + ?Sized>(
+        &self,
+        filtered: Builder<M>,
+        exec: &E,
+    ) -> Result<Total> {
+        let count = if self.state.count {
+            Count::Exact
+        } else {
+            R::CONFIG.count
+        };
         Ok(match count {
             Count::Exact => Total::Exact(filtered.count(exec).await?),
             Count::None => Total::Unknown,
             Count::Capped(cap) => {
                 let key = M::meta().key_column();
-                let bounded = filtered.reorder().select([key]).limit(cap.saturating_add(1));
-                let counted = navree_orm::TableBuilder::from_sub(bounded, "counted").count(exec).await?;
-                if counted > cap { Total::AtLeast(cap) } else { Total::Exact(counted) }
+                let bounded = filtered
+                    .reorder()
+                    .select([key])
+                    .limit(cap.saturating_add(1));
+                let counted = navree_orm::TableBuilder::from_sub(bounded, "counted")
+                    .count(exec)
+                    .await?;
+                if counted > cap {
+                    Total::AtLeast(cap)
+                } else {
+                    Total::Exact(counted)
+                }
             }
         })
     }
 
-    async fn version_of<M: Model, E: Executor + ?Sized>(&self, filtered: Builder<M>, exec: &E) -> Result<Option<String>> {
-        let Some(column) = R::CONFIG.version else { return Ok(None) };
+    async fn version_of<M: Model, E: Executor + ?Sized>(
+        &self,
+        filtered: Builder<M>,
+        exec: &E,
+    ) -> Result<Option<String>> {
+        let Some(column) = R::CONFIG.version else {
+            return Ok(None);
+        };
         let value: Option<Value> = filtered.reorder().max(exec, col(column)).await?;
         Ok(value.as_ref().and_then(text_of))
     }
@@ -380,7 +510,15 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
             page = page.min(pages);
             let offset = u64::from(page - 1) * per;
             if total == 0 {
-                return Ok(TablePage { rows: Vec::new(), total: Total::Exact(0), page: 1, has_more: false, next: None, prev: None, version: None });
+                return Ok(TablePage {
+                    rows: Vec::new(),
+                    total: Total::Exact(0),
+                    page: 1,
+                    has_more: false,
+                    next: None,
+                    prev: None,
+                    version: None,
+                });
             }
             // Past halfway, read from the far end of the index.
             let far = offset > total / 2;
@@ -395,51 +533,112 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
                 Self::read_at(filtered, exec, dialect, terms, offset, per).await?
             };
             let has_more = offset + (rows.len() as u64) < total;
-            return Ok(TablePage { rows: rows.into_iter().map(map).collect(), total: Total::Exact(total), page, has_more, next: None, prev: None, version: None });
+            return Ok(TablePage {
+                rows: rows.into_iter().map(map).collect(),
+                total: Total::Exact(total),
+                page,
+                has_more,
+                next: None,
+                prev: None,
+                version: None,
+            });
         }
         // No exact count: one row more says whether a next page has rows.
         let ordered = Self::ordered(terms, dialect, filtered);
         let mut offset = u64::from(page - 1) * per;
-        let mut rows = ordered.clone().offset(offset).limit(per + 1).get(exec).await?.into_vec();
+        let mut rows = ordered
+            .clone()
+            .offset(offset)
+            .limit(per + 1)
+            .get(exec)
+            .await?
+            .into_vec();
         if rows.is_empty() && page > 1 {
             page = 1;
             offset = 0;
-            rows = ordered.offset(offset).limit(per + 1).get(exec).await?.into_vec();
+            rows = ordered
+                .offset(offset)
+                .limit(per + 1)
+                .get(exec)
+                .await?
+                .into_vec();
         }
         let has_more = rows.len() as u64 > per;
         rows.truncate(self.state.per as usize);
-        Ok(TablePage { rows: rows.into_iter().map(map).collect(), total, page, has_more, next: None, prev: None, version: None })
+        Ok(TablePage {
+            rows: rows.into_iter().map(map).collect(),
+            total,
+            page,
+            has_more,
+            next: None,
+            prev: None,
+            version: None,
+        })
     }
 
     /// `take` records after skipping `skip`. A deep page finds its keys first, where
     /// the database can stay in the index, and only then reads those rows. MySQL has
     /// no `LIMIT` in an `IN` subquery, and MongoDB no cheap equivalent.
-    async fn read_at<M: Model, E: Executor + ?Sized>(filtered: Builder<M>, exec: &E, dialect: Option<Dialect>, terms: &[Term], skip: u64, take: u64) -> Result<Vec<Record<M>>> {
+    async fn read_at<M: Model, E: Executor + ?Sized>(
+        filtered: Builder<M>,
+        exec: &E,
+        dialect: Option<Dialect>,
+        terms: &[Term],
+        skip: u64,
+        take: u64,
+    ) -> Result<Vec<Record<M>>> {
         let ordered = Self::ordered(terms, dialect, filtered.clone());
-        if skip > DEFERRED_FROM && matches!(dialect, Some(Dialect::Postgres | Dialect::Sqlite)) && terms.iter().all(|term| !term.source.contains('.')) {
+        if skip > DEFERRED_FROM
+            && matches!(dialect, Some(Dialect::Postgres | Dialect::Sqlite))
+            && terms.iter().all(|term| !term.source.contains('.'))
+        {
             let key = M::meta().key_column();
             let keys = ordered.clone().select([key]).offset(skip).limit(take);
-            return Ok(Self::ordered(terms, dialect, filtered).where_(col(key).in_subquery(keys)).get(exec).await?.into_vec());
+            return Ok(Self::ordered(terms, dialect, filtered)
+                .where_(col(key).in_subquery(keys))
+                .get(exec)
+                .await?
+                .into_vec());
         }
         Ok(ordered.offset(skip).limit(take).get(exec).await?.into_vec())
     }
 
     /// Up to `want` records past `position`, in `terms`' order.
-    async fn read_past<M: Model, E: Executor + ?Sized>(filtered: &Builder<M>, exec: &E, dialect: Option<Dialect>, terms: &[Term], position: Option<&[Value]>, want: u64) -> Result<Vec<Record<M>>> {
+    async fn read_past<M: Model, E: Executor + ?Sized>(
+        filtered: &Builder<M>,
+        exec: &E,
+        dialect: Option<Dialect>,
+        terms: &[Term],
+        position: Option<&[Value]>,
+        want: u64,
+    ) -> Result<Vec<Record<M>>> {
         let ordered = Self::ordered(terms, dialect, filtered.clone());
         let Some(values) = position else {
             return Ok(ordered.limit(want).get(exec).await?.into_vec());
         };
         let (first, second) = keyset(terms, values);
         let mut rows = match first {
-            Some(filter) => ordered.clone().where_(filter).limit(want).get(exec).await?.into_vec(),
+            Some(filter) => ordered
+                .clone()
+                .where_(filter)
+                .limit(want)
+                .get(exec)
+                .await?
+                .into_vec(),
             None => Vec::new(),
         };
         let left = want.saturating_sub(rows.len() as u64);
         if left > 0
             && let Some(filter) = second
         {
-            rows.extend(ordered.where_(filter).limit(left).get(exec).await?.into_vec());
+            rows.extend(
+                ordered
+                    .where_(filter)
+                    .limit(left)
+                    .get(exec)
+                    .await?
+                    .into_vec(),
+            );
         }
         Ok(rows)
     }
@@ -456,21 +655,45 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         let per = u64::from(self.state.per);
         // Nothing matches: no need to read the table a second time to find that out.
         if total == Total::Exact(0) {
-            return Ok(TablePage { rows: Vec::new(), total, page: 1, has_more: false, next: None, prev: None, version: None });
+            return Ok(TablePage {
+                rows: Vec::new(),
+                total,
+                page: 1,
+                has_more: false,
+                next: None,
+                prev: None,
+                version: None,
+            });
         }
         // A cursor that doesn't fit this order is an old link: the first page.
-        let after = self.state.after.as_deref().and_then(|text| decode_cursor(text, terms));
-        let before = if after.is_none() { self.state.before.as_deref().and_then(|text| decode_cursor(text, terms)) } else { None };
-        let values_of = |record: &Record<M>| -> Option<Vec<Value>> { terms.iter().map(|term| value_of(record, term)).collect() };
+        let after = self
+            .state
+            .after
+            .as_deref()
+            .and_then(|text| decode_cursor(text, terms));
+        let before = if after.is_none() {
+            self.state
+                .before
+                .as_deref()
+                .and_then(|text| decode_cursor(text, terms))
+        } else {
+            None
+        };
+        let values_of = |record: &Record<M>| -> Option<Vec<Value>> {
+            terms.iter().map(|term| value_of(record, term)).collect()
+        };
         let (mut records, has_prev, has_next) = if let Some(position) = &before {
             let flipped: Vec<Term> = terms.iter().map(|term| term.flipped()).collect();
-            let mut rows = Self::read_past(&filtered, exec, dialect, &flipped, Some(position), per + 1).await?;
+            let mut rows =
+                Self::read_past(&filtered, exec, dialect, &flipped, Some(position), per + 1)
+                    .await?;
             let more = rows.len() as u64 > per;
             rows.truncate(self.state.per as usize);
             rows.reverse();
             (rows, more, true)
         } else {
-            let mut rows = Self::read_past(&filtered, exec, dialect, terms, after.as_deref(), per + 1).await?;
+            let mut rows =
+                Self::read_past(&filtered, exec, dialect, terms, after.as_deref(), per + 1).await?;
             let more = rows.len() as u64 > per;
             rows.truncate(self.state.per as usize);
             (rows, after.is_some(), more)
@@ -479,16 +702,45 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         if before.is_some() && !has_prev && (records.len() as u64) < per {
             records = Self::read_past(&filtered, exec, dialect, terms, None, per).await?;
         }
-        let next = if has_next { records.last().and_then(values_of).and_then(|values| encode_cursor(&values)) } else { None };
-        let prev = if has_prev { records.first().and_then(values_of).and_then(|values| encode_cursor(&values)) } else { None };
-        Ok(TablePage { rows: records.into_iter().map(map).collect(), total, page: 1, has_more: has_next, next, prev, version: None })
+        let next = if has_next {
+            records
+                .last()
+                .and_then(values_of)
+                .and_then(|values| encode_cursor(&values))
+        } else {
+            None
+        };
+        let prev = if has_prev {
+            records
+                .first()
+                .and_then(values_of)
+                .and_then(|values| encode_cursor(&values))
+        } else {
+            None
+        };
+        Ok(TablePage {
+            rows: records.into_iter().map(map).collect(),
+            total,
+            page: 1,
+            has_more: has_next,
+            next,
+            prev,
+            version: None,
+        })
     }
 
     /// Walks every row of this state, a chunk at a time, however many there are, to
     /// hand them to a file writer: `each` takes the rows of one chunk. The columns
     /// that matter are [`TableQuery::visible_columns`]. Answers how many rows were
     /// read, stopping at `limit`.
-    pub async fn export_rows<M, E>(&self, builder: Builder<M>, exec: &E, limit: u64, map: impl Fn(Record<M>) -> R, mut each: impl AsyncChunk<R>) -> Result<u64>
+    pub async fn export_rows<M, E>(
+        &self,
+        builder: Builder<M>,
+        exec: &E,
+        limit: u64,
+        map: impl Fn(Record<M>) -> R,
+        mut each: impl AsyncChunk<R>,
+    ) -> Result<u64>
     where
         M: Model,
         E: Executor + ?Sized,
@@ -502,9 +754,15 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         loop {
             let chunk = u64::from(EXPORT_CHUNK);
             let rows = if keyset_ok {
-                Self::read_past(&filtered, exec, dialect, &terms, position.as_deref(), chunk).await?
+                Self::read_past(&filtered, exec, dialect, &terms, position.as_deref(), chunk)
+                    .await?
             } else {
-                Self::ordered(&terms, dialect, filtered.clone()).offset(written).limit(chunk).get(exec).await?.into_vec()
+                Self::ordered(&terms, dialect, filtered.clone())
+                    .offset(written)
+                    .limit(chunk)
+                    .get(exec)
+                    .await?
+                    .into_vec()
             };
             let got = rows.len() as u64;
             if let Some(last) = rows.last() {
@@ -525,7 +783,13 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
     /// temporary file past 8 MiB. Nothing holds the whole result in memory.
     ///
     /// Formula-looking cells are neutralised, see [`write_csv_field`].
-    pub async fn export_csv<M, E>(&self, builder: Builder<M>, exec: &E, file: &str, map: impl Fn(Record<M>) -> R) -> Result<Response>
+    pub async fn export_csv<M, E>(
+        &self,
+        builder: Builder<M>,
+        exec: &E,
+        file: &str,
+        map: impl Fn(Record<M>) -> R,
+    ) -> Result<Response>
     where
         M: Model,
         E: Executor + ?Sized,
@@ -539,9 +803,19 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
             write_csv_field(&mut line, R::COLUMNS[*column].label);
         }
         line.push_str("\r\n");
-        let mut sink = CsvSink { cols: self.state.cols.clone(), spool: Spool::new(), line, cell: String::new() };
-        let written = self.export_rows(builder, exec, MAX_EXPORT_ROWS, map, &mut sink).await?;
-        Ok(sink.spool.into_response(file, written >= MAX_EXPORT_ROWS).await)
+        let mut sink = CsvSink {
+            cols: self.state.cols.clone(),
+            spool: Spool::new(),
+            line,
+            cell: String::new(),
+        };
+        let written = self
+            .export_rows(builder, exec, MAX_EXPORT_ROWS, map, &mut sink)
+            .await?;
+        Ok(sink
+            .spool
+            .into_response(file, written >= MAX_EXPORT_ROWS)
+            .await)
     }
 }
 
@@ -571,7 +845,13 @@ impl<R: TableRow> AsyncChunk<R> for &mut CsvSink {
             }
             self.line.push_str("\r\n");
         }
-        self.spool.write(self.line.as_bytes()).await.map_err(|error| navree_orm::OrmError::Driver { driver: "csv".into(), message: format!("writing an export: {error}") })?;
+        self.spool
+            .write(self.line.as_bytes())
+            .await
+            .map_err(|error| navree_orm::OrmError::Driver {
+                driver: "csv".into(),
+                message: format!("writing an export: {error}"),
+            })?;
         self.line.clear();
         Ok(())
     }
@@ -593,29 +873,42 @@ impl<R: TableRow, F: FilterBar> BulkRequest<R, F> {
     /// For "all that match", the rows matching now are counted, inside this unit of
     /// work, against what the user saw: a different count, or a different version
     /// when the table has a version column, is an `Err`, and nothing should change.
-    pub async fn resolve<M, E>(&self, builder: Builder<M>, exec: &E) -> Result<std::result::Result<Builder<M>, BulkRefusal>>
+    pub async fn resolve<M, E>(
+        &self,
+        builder: Builder<M>,
+        exec: &E,
+    ) -> Result<std::result::Result<Builder<M>, BulkRefusal>>
     where
         M: Model,
         E: Executor + ?Sized,
     {
         let key = M::meta().key_column();
         let kind = R::CONFIG.key_kind;
-        let values = |list: &[String]| -> Vec<Value> { list.iter().filter_map(|id| bind(kind, id)).collect() };
+        let values = |list: &[String]| -> Vec<Value> {
+            list.iter().filter_map(|id| bind(kind, id)).collect()
+        };
         if *self.mode() == BulkMode::Ids {
             return Ok(Ok(builder.where_(col(key).is_in(values(self.ids())))));
         }
         let matching = self.query().apply(builder);
         let version = match R::CONFIG.version {
             Some(column) => {
-                let value: Option<Value> = matching.clone().reorder().max(exec, col(column)).await?;
+                let value: Option<Value> =
+                    matching.clone().reorder().max(exec, col(column)).await?;
                 value.as_ref().and_then(text_of)
             }
             None => None,
         };
-        let selected = if self.excluded().is_empty() { matching } else { matching.where_(col(key).not_in(values(self.excluded()))) };
+        let selected = if self.excluded().is_empty() {
+            matching
+        } else {
+            matching.where_(col(key).not_in(values(self.excluded())))
+        };
         let now = selected.clone().count(exec).await?;
         let shown = self.expected().unwrap_or(0);
-        let version_moved = R::CONFIG.version.is_some() && self.version().is_some() && self.version() != version.as_deref();
+        let version_moved = R::CONFIG.version.is_some()
+            && self.version().is_some()
+            && self.version() != version.as_deref();
         if now != shown || version_moved {
             return Ok(Err(BulkRefusal { shown, now }));
         }
@@ -640,7 +933,10 @@ impl Drop for TempPath {
 
 impl Spool {
     fn new() -> Self {
-        Self { memory: Vec::new(), file: None }
+        Self {
+            memory: Vec::new(),
+            file: None,
+        }
     }
 
     async fn write(&mut self, bytes: &[u8]) -> std::io::Result<()> {
@@ -650,8 +946,14 @@ impl Spool {
             return Ok(());
         }
         if self.file.is_none() {
-            let path = std::env::temp_dir().join(format!("navree-export-{}.csv", uuid::Uuid::new_v4()));
-            let file = tokio::fs::OpenOptions::new().create_new(true).read(true).write(true).open(&path).await?;
+            let path =
+                std::env::temp_dir().join(format!("navree-export-{}.csv", uuid::Uuid::new_v4()));
+            let file = tokio::fs::OpenOptions::new()
+                .create_new(true)
+                .read(true)
+                .write(true)
+                .open(&path)
+                .await?;
             self.file = Some((file, TempPath(path)));
         }
         if let Some((file, _)) = &mut self.file {
@@ -672,23 +974,32 @@ impl Spool {
                 if file.seek(std::io::SeekFrom::Start(0)).await.is_err() {
                     return StatusCode::INTERNAL_SERVER_ERROR.into_response();
                 }
-                let stream = futures_util::stream::unfold((file, path, vec![0_u8; 64 * 1024]), |(mut file, path, mut buffer)| async move {
-                    match file.read(&mut buffer).await {
-                        Ok(0) => None,
-                        Ok(count) => {
-                            let chunk = Bytes::copy_from_slice(&buffer[..count]);
-                            Some((Ok::<_, std::io::Error>(chunk), (file, path, buffer)))
+                let stream = futures_util::stream::unfold(
+                    (file, path, vec![0_u8; 64 * 1024]),
+                    |(mut file, path, mut buffer)| async move {
+                        match file.read(&mut buffer).await {
+                            Ok(0) => None,
+                            Ok(count) => {
+                                let chunk = Bytes::copy_from_slice(&buffer[..count]);
+                                Some((Ok::<_, std::io::Error>(chunk), (file, path, buffer)))
+                            }
+                            Err(error) => Some((Err(error), (file, path, buffer))),
                         }
-                        Err(error) => Some((Err(error), (file, path, buffer))),
-                    }
-                });
+                    },
+                );
                 Body::from_stream(stream)
             }
         };
         let mut response = Response::new(body);
         let headers = response.headers_mut();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("text/csv; charset=utf-8"));
-        let safe: String = name.chars().filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.')).collect();
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("text/csv; charset=utf-8"),
+        );
+        let safe: String = name
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+            .collect();
         if let Ok(value) = HeaderValue::from_str(&format!("attachment; filename=\"{safe}\"")) {
             headers.insert(CONTENT_DISPOSITION, value);
         }
@@ -719,19 +1030,46 @@ pub struct SavedViewModel {
 
 impl From<SavedViewModel> for SavedView {
     fn from(view: SavedViewModel) -> Self {
-        Self { id: view.id, name: view.name, query: view.query, is_default: view.is_default }
+        Self {
+            id: view.id,
+            name: view.name,
+            query: view.query,
+            is_default: view.is_default,
+        }
     }
 }
 
 /// The views of `owner` on table `table`, by name.
-pub async fn list_views<E: Executor + ?Sized>(exec: &E, owner: &str, table: &str) -> Result<Vec<SavedView>> {
-    let rows = SavedViewModel::query().where_(col("owner").eq(Value::String(owner.to_owned()))).where_(col("table_id").eq(Value::String(table.to_owned()))).order_by("name").order_by("id").limit(200).get(exec).await?;
-    Ok(rows.into_vec().into_iter().map(|record| record.into_inner().into()).collect())
+pub async fn list_views<E: Executor + ?Sized>(
+    exec: &E,
+    owner: &str,
+    table: &str,
+) -> Result<Vec<SavedView>> {
+    let rows = SavedViewModel::query()
+        .where_(col("owner").eq(Value::String(owner.to_owned())))
+        .where_(col("table_id").eq(Value::String(table.to_owned())))
+        .order_by("name")
+        .order_by("id")
+        .limit(200)
+        .get(exec)
+        .await?;
+    Ok(rows
+        .into_vec()
+        .into_iter()
+        .map(|record| record.into_inner().into())
+        .collect())
 }
 
 /// Saves `owner`'s view of table `table`. The state is parsed through the table's
 /// definition first, so what's stored is only what the definition allows.
-pub async fn save_view<R, F, E>(exec: &E, owner: &str, table: &str, name: &str, query: &TableQuery<R, F>, is_default: bool) -> Result<SavedView>
+pub async fn save_view<R, F, E>(
+    exec: &E,
+    owner: &str,
+    table: &str,
+    name: &str,
+    query: &TableQuery<R, F>,
+    is_default: bool,
+) -> Result<SavedView>
 where
     R: TableRow,
     F: FilterBar,
@@ -751,8 +1089,18 @@ where
     state.count = false;
     state.open.clear();
     let pairs = state.pairs::<R>();
-    let borrowed: Vec<(&str, &str)> = pairs.iter().map(|(name, value)| (name.as_str(), value.as_str())).collect();
-    let view = SavedViewModel { id: uuid::Uuid::new_v4().to_string(), owner: owner.to_owned(), table_id: table.to_owned(), name, query: crate::form::encode(&borrowed), is_default };
+    let borrowed: Vec<(&str, &str)> = pairs
+        .iter()
+        .map(|(name, value)| (name.as_str(), value.as_str()))
+        .collect();
+    let view = SavedViewModel {
+        id: uuid::Uuid::new_v4().to_string(),
+        owner: owner.to_owned(),
+        table_id: table.to_owned(),
+        name,
+        query: crate::form::encode(&borrowed),
+        is_default,
+    };
     let stored = SavedViewModel::create(exec, view).await?;
     Ok(stored.into_inner().into())
 }
@@ -768,5 +1116,9 @@ async fn clear_default<E: Executor + ?Sized>(exec: &E, owner: &str, table: &str)
 
 /// Deletes `owner`'s view `id`. Someone else's view doesn't match.
 pub async fn delete_view<E: Executor + ?Sized>(exec: &E, owner: &str, id: &str) -> Result<u64> {
-    SavedViewModel::query().where_(col("owner").eq(Value::String(owner.to_owned()))).where_(col("id").eq(Value::String(id.to_owned()))).delete(exec).await
+    SavedViewModel::query()
+        .where_(col("owner").eq(Value::String(owner.to_owned())))
+        .where_(col("id").eq(Value::String(id.to_owned())))
+        .delete(exec)
+        .await
 }

@@ -67,7 +67,19 @@ fn measure_into(node: &Node, found: &mut Measure, depth: u32) {
 fn is_void(tag: &str) -> bool {
     matches!(
         tag,
-        "input" | "img" | "br" | "hr" | "meta" | "link" | "area" | "base" | "col" | "embed" | "source" | "track" | "wbr"
+        "input"
+            | "img"
+            | "br"
+            | "hr"
+            | "meta"
+            | "link"
+            | "area"
+            | "base"
+            | "col"
+            | "embed"
+            | "source"
+            | "track"
+            | "wbr"
     )
 }
 
@@ -161,13 +173,19 @@ mod tests {
             .attr("tabindex", 0_i64)
             .children(("<x>", el("br"), el("span").child(5_i64)))
             .into();
-        assert_eq!(render(&node), r#"<div id="a" hidden tabindex="0">&lt;x&gt;<br><span>5</span></div>"#);
+        assert_eq!(
+            render(&node),
+            r#"<div id="a" hidden tabindex="0">&lt;x&gt;<br><span>5</span></div>"#
+        );
     }
 
     #[test]
     fn attribute_values_cannot_break_out() {
         let evil = "\"><script>alert(1)</script>";
-        let node: Node = el("a").attr("title", evil.to_owned()).child(evil.to_owned()).into();
+        let node: Node = el("a")
+            .attr("title", evil.to_owned())
+            .child(evil.to_owned())
+            .into();
         let html = render(&node);
         assert!(!html.contains("<script"), "{html}");
         assert_eq!(html.matches('"').count(), 2);
@@ -175,7 +193,10 @@ mod tests {
 
     #[test]
     fn raw_markup_is_the_only_way_past_escaping() {
-        assert_eq!(render(&Node::Raw(SafeHtml::trusted("<b>x</b>"))), "<b>x</b>");
+        assert_eq!(
+            render(&Node::Raw(SafeHtml::trusted("<b>x</b>"))),
+            "<b>x</b>"
+        );
         assert_eq!(render(&Node::text("<b>x</b>")), "&lt;b&gt;x&lt;/b&gt;");
     }
 
@@ -185,7 +206,11 @@ mod tests {
             .children(
                 (0..100)
                     .map(|row| {
-                        el("tr").children((0..5).map(|cell| el("td").slot("cell").child(row * cell)).collect::<Vec<_>>())
+                        el("tr").children(
+                            (0..5)
+                                .map(|cell| el("td").slot("cell").child(row * cell))
+                                .collect::<Vec<_>>(),
+                        )
                     })
                     .collect::<Vec<_>>(),
             )

@@ -27,7 +27,9 @@ fn notes(id: i64) -> Option<String> {
     match id % 7 {
         0 => None,
         1 => Some("نص طويل باللغة العربية يتجاوز عرض العمود بكثير حتى يختبر الالتفاف".to_owned()),
-        _ => Some(format!("Notes for deal {id}. They say something about what happened last.")),
+        _ => Some(format!(
+            "Notes for deal {id}. They say something about what happened last."
+        )),
     }
 }
 
@@ -35,10 +37,15 @@ fn deal(id: i64) -> Deal {
     Deal {
         id,
         title: title(id),
-        stage: ["lead", "qualified", "proposal", "won", "lost"][usize::try_from((id * 3) % 5).unwrap_or(0)].to_owned(),
+        stage: ["lead", "qualified", "proposal", "won", "lost"]
+            [usize::try_from((id * 3) % 5).unwrap_or(0)]
+        .to_owned(),
         amount: (id % 6 != 0).then_some((id * 7919) % 5_000_000),
         company_id: (id % 8 != 0).then_some(id % 5 + 1),
-        closed_on: (id % 5 != 0).then(|| chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap_or_default() + chrono::Days::new(u64::try_from(id % 90).unwrap_or(0))),
+        closed_on: (id % 5 != 0).then(|| {
+            chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap_or_default()
+                + chrono::Days::new(u64::try_from(id % 90).unwrap_or(0))
+        }),
         active: id % 3 != 0,
         notes: notes(id),
         version: 1,
@@ -55,7 +62,14 @@ pub async fn reset_deals(uow: &Uow) -> navree::orm::Result<()> {
 /// Creates the tables and fills the small ones.
 pub async fn create(db: &Db) -> Result<(), navree::BoxError> {
     let backend = db.backend();
-    let (bigint, text) = (if matches!(backend, navree::db::Backend::Sqlite) { "INTEGER" } else { "BIGINT" }, "VARCHAR(500)");
+    let (bigint, text) = (
+        if matches!(backend, navree::db::Backend::Sqlite) {
+            "INTEGER"
+        } else {
+            "BIGINT"
+        },
+        "VARCHAR(500)",
+    );
     for statement in [
         "DROP TABLE IF EXISTS dt_deals".to_owned(),
         "DROP TABLE IF EXISTS dt_companies".to_owned(),
@@ -68,11 +82,31 @@ pub async fn create(db: &Db) -> Result<(), navree::BoxError> {
     ] {
         db.pool().execute_script(&statement).await?;
     }
-    let names = ["Acme", "Globex", "Initech", "Umbrella", "شركة الخليج", "Hooli", "Stark", "Wayne", "Tyrell", "Cyberdyne", "Soylent", "Massive"];
-    let rows = names.iter().enumerate().map(|(at, name)| Company { id: at as i64 + 1, name: (*name).to_owned() });
+    let names = [
+        "Acme",
+        "Globex",
+        "Initech",
+        "Umbrella",
+        "شركة الخليج",
+        "Hooli",
+        "Stark",
+        "Wayne",
+        "Tyrell",
+        "Cyberdyne",
+        "Soylent",
+        "Massive",
+    ];
+    let rows = names.iter().enumerate().map(|(at, name)| Company {
+        id: at as i64 + 1,
+        name: (*name).to_owned(),
+    });
     Company::query().insert(db, rows).await?;
     Deal::query().insert(db, (1..=DEALS).map(deal)).await?;
-    let tasks = (1..=5).map(|id| crate::Task { id, title: format!("Task {id}"), done: id % 2 == 0 });
+    let tasks = (1..=5).map(|id| crate::Task {
+        id,
+        title: format!("Task {id}"),
+        done: id % 2 == 0,
+    });
     crate::Task::query().insert(db, tasks).await?;
     Ok(())
 }
@@ -85,7 +119,11 @@ pub async fn big(db: &Db, count: u64) -> Result<(), navree::BoxError> {
     let pool = db.pool();
     pool.execute_script("DROP TABLE IF EXISTS dt_big").await?;
     let postgres = matches!(backend, navree::db::Backend::Postgres);
-    let bigint = if matches!(backend, navree::db::Backend::Sqlite) { "INTEGER" } else { "BIGINT" };
+    let bigint = if matches!(backend, navree::db::Backend::Sqlite) {
+        "INTEGER"
+    } else {
+        "BIGINT"
+    };
     pool.execute_script(&format!("CREATE TABLE dt_big (id {bigint} PRIMARY KEY, title VARCHAR(200) NOT NULL, stage VARCHAR(20) NOT NULL, amount {bigint}, created_on DATE)")).await?;
     if count > 0 {
         let stage = "CASE n % 5 WHEN 0 THEN 'lead' WHEN 1 THEN 'qualified' WHEN 2 THEN 'proposal' WHEN 3 THEN 'won' ELSE 'lost' END";

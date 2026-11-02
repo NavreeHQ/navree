@@ -183,13 +183,19 @@ impl Button {
 
     /// Opens the `<dialog>` with this id, natively, with no script.
     pub fn opens_dialog(mut self, dialog: impl Into<String>) -> Self {
-        self.el = self.el.attr("command", "show-modal").attr("commandfor", dialog.into());
+        self.el = self
+            .el
+            .attr("command", "show-modal")
+            .attr("commandfor", dialog.into());
         self
     }
 
     /// Closes the `<dialog>` with this id, natively, with no script.
     pub fn closes_dialog(mut self, dialog: impl Into<String>) -> Self {
-        self.el = self.el.attr("command", "close").attr("commandfor", dialog.into());
+        self.el = self
+            .el
+            .attr("command", "close")
+            .attr("commandfor", dialog.into());
         self
     }
 
@@ -201,7 +207,10 @@ impl Button {
 
     /// Sets `form`, `name` and the like, on the button itself.
     pub fn named(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
-        self.el = self.el.attr("name", name.into()).attr("value", value.into());
+        self.el = self
+            .el
+            .attr("name", name.into())
+            .attr("value", value.into());
         self
     }
 
@@ -220,14 +229,21 @@ impl Button {
             ButtonVariant::Destructive => root.attr("data-variant", "destructive"),
             ButtonVariant::Link => root.attr("data-variant", "link"),
         };
-        root = root.attr_opt("data-size", self.size.as_str()).flag("data-block", self.block).flag("data-pending", self.pending);
+        root = root
+            .attr_opt("data-size", self.size.as_str())
+            .flag("data-block", self.block)
+            .flag("data-pending", self.pending);
         if let Some(Node::Text(label)) = &self.aria_label {
             root = root.attr("aria-label", label.clone());
         }
         root = match self.href {
             Some(href) => {
                 let root = root.href(href);
-                if self.disabled { root.attr("aria-disabled", "true").attr("tabindex", -1_i64) } else { root }
+                if self.disabled {
+                    root.attr("aria-disabled", "true").attr("tabindex", -1_i64)
+                } else {
+                    root
+                }
             }
             None => {
                 let kind = match self.kind {
@@ -238,12 +254,16 @@ impl Button {
                 root.attr("type", kind).flag("disabled", self.disabled)
             }
         };
-        root.children((self.start.map(icon), self.label, self.end.map(icon))).into()
+        root.children((self.start.map(icon), self.label, self.end.map(icon)))
+            .into()
     }
 }
 
 fn slot_attr() -> crate::node::Attr {
-    crate::node::Attr { name: "data-slot", value: crate::node::AttrValue::Static("button") }
+    crate::node::Attr {
+        name: "data-slot",
+        value: crate::node::AttrValue::Static("button"),
+    }
 }
 
 /// Buttons joined together. It needs a label, because a group is a landmark
@@ -257,7 +277,12 @@ pub struct ButtonGroup {
 impl ButtonGroup {
     /// A group labelled `label`.
     pub fn new(label: impl Into<String>) -> Self {
-        Self { el: el("div").slot("button-group").attr("role", "group").attr("aria-label", label.into()) }
+        Self {
+            el: el("div")
+                .slot("button-group")
+                .attr("role", "group")
+                .attr("aria-label", label.into()),
+        }
     }
 
     /// Stacks the buttons.
@@ -293,7 +318,9 @@ impl Toggle {
     /// A toggle posting as `name`.
     pub fn new(name: impl Into<String>, label: impl Into<Node>) -> Self {
         Self {
-            input: el("input").attr("type", "checkbox").attr("name", name.into()),
+            input: el("input")
+                .attr("type", "checkbox")
+                .attr("name", name.into()),
             label: label.into(),
             start: None,
             size: Size::Md,

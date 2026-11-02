@@ -83,12 +83,29 @@ pub const TEXT_PAIRS: &[(&str, &str)] = &[
 
 /// The tokens `@navree/theme` and the website share, in order: the colours.
 pub const SITE: &[&str] = &[
-    "ink-0", "ink-1", "ink-2", "ink-3", "line", "line-2", "fg", "fg-1", "fg-2", "fg-3", "accent", "accent-ink", "amber", "danger", "bar",
+    "ink-0",
+    "ink-1",
+    "ink-2",
+    "ink-3",
+    "line",
+    "line-2",
+    "fg",
+    "fg-1",
+    "fg-2",
+    "fg-3",
+    "accent",
+    "accent-ink",
+    "amber",
+    "danger",
+    "bar",
 ];
 
 /// The value of token `name` in the dark theme.
 pub fn dark(name: &str) -> Option<&'static str> {
-    TOKENS.iter().find(|token| token.name == name).map(|token| token.dark)
+    TOKENS
+        .iter()
+        .find(|token| token.name == name)
+        .map(|token| token.dark)
 }
 
 /// `styles/tokens.css`, as it must read.
@@ -114,14 +131,23 @@ pub const END: &str = "tokens:end";
 pub fn theme_css(radii: bool) -> String {
     let mut out = String::new();
     for name in SITE {
-        out.push_str(&format!("  --color-{name}: {};
-", dark(name).unwrap_or_default()));
+        out.push_str(&format!(
+            "  --color-{name}: {};
+",
+            dark(name).unwrap_or_default()
+        ));
     }
     if radii {
-        out.push_str(&format!("  --radius-control: {};
-", dark("radius").unwrap_or_default()));
-        out.push_str(&format!("  --radius-surface: {};
-", dark("radius-lg").unwrap_or_default()));
+        out.push_str(&format!(
+            "  --radius-control: {};
+",
+            dark("radius").unwrap_or_default()
+        ));
+        out.push_str(&format!(
+            "  --radius-surface: {};
+",
+            dark("radius-lg").unwrap_or_default()
+        ));
     }
     out
 }
@@ -130,9 +156,16 @@ pub fn theme_css(radii: bool) -> String {
 pub fn theme_ts() -> String {
     let mut out = String::new();
     for name in SITE {
-        let key = if name.contains('-') { format!("\"{name}\"") } else { (*name).to_owned() };
-        out.push_str(&format!("  {key}: \"{}\",
-", dark(name).unwrap_or_default()));
+        let key = if name.contains('-') {
+            format!("\"{name}\"")
+        } else {
+            (*name).to_owned()
+        };
+        out.push_str(&format!(
+            "  {key}: \"{}\",
+",
+            dark(name).unwrap_or_default()
+        ));
     }
     out
 }
@@ -167,7 +200,11 @@ fn luminance(hex: &str) -> Option<f64> {
     }
     let channel = |at: usize| -> Option<f64> {
         let value = f64::from(u8::from_str_radix(hex.get(at..at + 2)?, 16).ok()?) / 255.0;
-        Some(if value <= 0.04045 { value / 12.92 } else { ((value + 0.055) / 1.055).powf(2.4) })
+        Some(if value <= 0.04045 {
+            value / 12.92
+        } else {
+            ((value + 0.055) / 1.055).powf(2.4)
+        })
     };
     Some(0.2126 * channel(0)? + 0.7152 * channel(2)? + 0.0722 * channel(4)?)
 }
@@ -194,17 +231,23 @@ mod tests {
         assert_eq!(contrast("red", "#ffffff"), None);
     }
 
-    const WRITE: &str = "rerun: cargo test -p navree-ui --lib tokens::tests::write_generated_files -- --ignored";
+    const WRITE: &str =
+        "rerun: cargo test -p navree-ui --lib tokens::tests::write_generated_files -- --ignored";
 
     /// The generated files and what each is made from: the stylesheet's tokens, and
     /// the blocks of the `@navree/theme` package.
     fn generated() -> Vec<(std::path::PathBuf, String)> {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let theme = root.join("../../packages/js/theme");
-        let read = |path: &std::path::Path| std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display())).replace("\r\n", "\n");
+        let read = |path: &std::path::Path| {
+            std::fs::read_to_string(path)
+                .unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+                .replace("\r\n", "\n")
+        };
         let spliced = |file: &str, block: String| {
             let path = theme.join(file);
-            let text = splice(&read(&path), &block).unwrap_or_else(|| panic!("{file} has no `{BEGIN}`/`{END}` lines"));
+            let text = splice(&read(&path), &block)
+                .unwrap_or_else(|| panic!("{file} has no `{BEGIN}`/`{END}` lines"));
             (path, text)
         };
         vec![
@@ -218,7 +261,9 @@ mod tests {
     #[test]
     fn the_committed_files_made_from_the_tokens_are_current() {
         for (path, text) in generated() {
-            let committed = std::fs::read_to_string(&path).unwrap_or_default().replace("\r\n", "\n");
+            let committed = std::fs::read_to_string(&path)
+                .unwrap_or_default()
+                .replace("\r\n", "\n");
             assert_eq!(committed, text, "{} is stale. {WRITE}", path.display());
         }
     }
@@ -235,7 +280,10 @@ mod tests {
     #[test]
     fn splice_keeps_the_marker_lines_and_the_rest() {
         let text = "a\n  /* tokens:begin x */\n  old\n  /* tokens:end */\nb\n";
-        assert_eq!(splice(text, "  new\n").unwrap(), "a\n  /* tokens:begin x */\n  new\n  /* tokens:end */\nb\n");
+        assert_eq!(
+            splice(text, "  new\n").unwrap(),
+            "a\n  /* tokens:begin x */\n  new\n  /* tokens:end */\nb\n"
+        );
         assert_eq!(splice("no markers", "x"), None);
         assert_eq!(splice("tokens:end\ntokens:begin\n", "x"), None);
     }

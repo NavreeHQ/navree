@@ -85,18 +85,32 @@ impl Cmd {
     }
 
     /// Sets attribute `name` of `target`.
-    pub fn set_attr(target: impl Into<String>, name: &'static str, value: impl Into<String>) -> Self {
-        Self::SetAttr { target: target.into(), name, value: value.into() }
+    pub fn set_attr(
+        target: impl Into<String>,
+        name: &'static str,
+        value: impl Into<String>,
+    ) -> Self {
+        Self::SetAttr {
+            target: target.into(),
+            name,
+            value: value.into(),
+        }
     }
 
     /// Removes attribute `name` of `target`.
     pub fn remove_attr(target: impl Into<String>, name: &'static str) -> Self {
-        Self::RemoveAttr { target: target.into(), name }
+        Self::RemoveAttr {
+            target: target.into(),
+            name,
+        }
     }
 
     /// Toggles attribute `name` of `target`.
     pub fn toggle_attr(target: impl Into<String>, name: &'static str) -> Self {
-        Self::ToggleAttr { target: target.into(), name }
+        Self::ToggleAttr {
+            target: target.into(),
+            name,
+        }
     }
 
     /// Sends the custom event `name`.
@@ -116,7 +130,9 @@ impl Cmd {
 
     /// The command as data, or nothing when it names a refused attribute.
     fn to_value(&self) -> Option<Value> {
-        if let Self::SetAttr { name, .. } | Self::RemoveAttr { name, .. } | Self::ToggleAttr { name, .. } = self
+        if let Self::SetAttr { name, .. }
+        | Self::RemoveAttr { name, .. }
+        | Self::ToggleAttr { name, .. } = self
             && !is_state_attr(name)
         {
             return None;
@@ -128,7 +144,11 @@ impl Cmd {
             Self::Open(id) => json!(["open", id]),
             Self::Close(id) => json!(["close", id]),
             Self::Copy(text) => json!(["copy", text]),
-            Self::SetAttr { target, name, value } => json!(["set_attr", target, name, value]),
+            Self::SetAttr {
+                target,
+                name,
+                value,
+            } => json!(["set_attr", target, name, value]),
             Self::RemoveAttr { target, name } => json!(["remove_attr", target, name]),
             Self::ToggleAttr { target, name } => json!(["toggle_attr", target, name]),
             Self::Dispatch(name) => json!(["dispatch", name]),
@@ -140,8 +160,15 @@ impl Cmd {
 
 /// The attributes a command may touch. The runtime holds the same list.
 fn is_state_attr(name: &str) -> bool {
-    let starts = |prefix: &str| name.get(..prefix.len()).is_some_and(|start| start.eq_ignore_ascii_case(prefix));
-    (starts("data-") && !starts("data-ui-")) || starts("aria-") || ["hidden", "open", "disabled"].iter().any(|state| state.eq_ignore_ascii_case(name))
+    let starts = |prefix: &str| {
+        name.get(..prefix.len())
+            .is_some_and(|start| start.eq_ignore_ascii_case(prefix))
+    };
+    (starts("data-") && !starts("data-ui-"))
+        || starts("aria-")
+        || ["hidden", "open", "disabled"]
+            .iter()
+            .any(|state| state.eq_ignore_ascii_case(name))
 }
 
 /// A list of commands, run in order.

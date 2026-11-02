@@ -38,7 +38,13 @@ pub const PREFETCH_HEADER: &str = "x-navree-prefetch";
 /// the page yet, and may never. The runtime says so in [`PREFETCH_HEADER`], and a
 /// browser following Speculation Rules in `Sec-Purpose`.
 pub fn is_prefetch(headers: &HeaderMap) -> bool {
-    headers.contains_key(PREFETCH_HEADER) || headers.get("sec-purpose").is_some_and(|purpose| purpose.as_bytes().windows(8).any(|part| part == b"prefetch"))
+    headers.contains_key(PREFETCH_HEADER)
+        || headers.get("sec-purpose").is_some_and(|purpose| {
+            purpose
+                .as_bytes()
+                .windows(8)
+                .any(|part| part == b"prefetch")
+        })
 }
 
 /// The media type of an [`Envelope`].
@@ -171,43 +177,65 @@ pub enum Op {
 impl Op {
     /// Morphs element `target` into `node`.
     pub fn morph(target: impl Into<String>, node: &Node) -> Self {
-        Self::Morph { target: target.into(), html: render(node) }
+        Self::Morph {
+            target: target.into(),
+            html: render(node),
+        }
     }
 
     /// Replaces element `target` with `node`.
     pub fn replace(target: impl Into<String>, node: &Node) -> Self {
-        Self::Replace { target: target.into(), html: render(node) }
+        Self::Replace {
+            target: target.into(),
+            html: render(node),
+        }
     }
 
     /// Adds `node` at the end of `target`.
     pub fn append(target: impl Into<String>, node: &Node) -> Self {
-        Self::Append { target: target.into(), html: render(node) }
+        Self::Append {
+            target: target.into(),
+            html: render(node),
+        }
     }
 
     /// Adds `node` at the start of `target`.
     pub fn prepend(target: impl Into<String>, node: &Node) -> Self {
-        Self::Prepend { target: target.into(), html: render(node) }
+        Self::Prepend {
+            target: target.into(),
+            html: render(node),
+        }
     }
 
     /// A toast.
     pub fn toast(tone: ToastTone, text: impl Into<String>) -> Self {
-        Self::Toast { tone, text: text.into() }
+        Self::Toast {
+            tone,
+            text: text.into(),
+        }
     }
 
     /// Goes to `href`, on this site: a URL that would leave it goes nowhere.
     pub fn navigate(href: impl Into<LocalHref>) -> Self {
-        Self::Navigate { href: href.into().as_str().to_owned() }
+        Self::Navigate {
+            href: href.into().as_str().to_owned(),
+        }
     }
 
     /// Leaves for `href`, which may be on another site. Never give this a URL from
     /// a request unchecked: that is an open redirect.
     pub fn navigate_external(href: impl Into<Href>) -> Self {
-        Self::NavigateExternal { href: href.into().as_str().to_owned() }
+        Self::NavigateExternal {
+            href: href.into().as_str().to_owned(),
+        }
     }
 
     /// Changes the address bar, on this site.
     pub fn url(href: impl Into<LocalHref>, mode: UrlMode) -> Self {
-        Self::Url { href: href.into().as_str().to_owned(), mode }
+        Self::Url {
+            href: href.into().as_str().to_owned(),
+            mode,
+        }
     }
 }
 
@@ -227,7 +255,11 @@ pub struct Envelope {
 impl Envelope {
     /// The ops of this build.
     pub fn new(ops: Vec<Op>) -> Self {
-        Self { build: assets::BUILD, modules: Vec::new(), ops }
+        Self {
+            build: assets::BUILD,
+            modules: Vec::new(),
+            ops,
+        }
     }
 }
 
@@ -236,7 +268,10 @@ impl IntoResponse for Envelope {
         let body = serde_json::to_string(&self).unwrap_or_else(|_| String::from("{\"ops\":[]}"));
         (
             [
-                (header::CONTENT_TYPE, HeaderValue::from_static(OPS_CONTENT_TYPE)),
+                (
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_static(OPS_CONTENT_TYPE),
+                ),
                 (header::CACHE_CONTROL, HeaderValue::from_static("no-store")),
             ],
             body,
@@ -287,7 +322,9 @@ impl Reply {
     pub fn redirect(href: impl Into<LocalHref>) -> Self {
         let href = href.into().into_href();
         Self {
-            ops: vec![Op::Navigate { href: href.as_str().to_owned() }],
+            ops: vec![Op::Navigate {
+                href: href.as_str().to_owned(),
+            }],
             status: StatusCode::OK,
             fallback: Fallback::Redirect(href),
             flash: None,
@@ -297,7 +334,13 @@ impl Reply {
 
     /// Applies ops; with JavaScript off, goes to `href`.
     pub fn ops_or_redirect(href: impl Into<Href>) -> Self {
-        Self { ops: Vec::new(), status: StatusCode::OK, fallback: Fallback::Redirect(href.into()), flash: None, uses: crate::node::Uses::NONE }
+        Self {
+            ops: Vec::new(),
+            status: StatusCode::OK,
+            fallback: Fallback::Redirect(href.into()),
+            flash: None,
+            uses: crate::node::Uses::NONE,
+        }
     }
 
     /// Goes to `href`, which may be on another site: a sign-in provider, a payment
@@ -305,7 +348,9 @@ impl Reply {
     pub fn redirect_external(href: impl Into<Href>) -> Self {
         let href = href.into();
         Self {
-            ops: vec![Op::NavigateExternal { href: href.as_str().to_owned() }],
+            ops: vec![Op::NavigateExternal {
+                href: href.as_str().to_owned(),
+            }],
             status: StatusCode::OK,
             fallback: Fallback::Redirect(href),
             flash: None,
@@ -315,12 +360,24 @@ impl Reply {
 
     /// Applies ops; with JavaScript off, shows `view`.
     pub fn view(view: View) -> Self {
-        Self { ops: Vec::new(), status: StatusCode::OK, fallback: Fallback::View(Box::new(view)), flash: None, uses: crate::node::Uses::NONE }
+        Self {
+            ops: Vec::new(),
+            status: StatusCode::OK,
+            fallback: Fallback::View(Box::new(view)),
+            flash: None,
+            uses: crate::node::Uses::NONE,
+        }
     }
 
     /// Applies ops; with JavaScript off, answers 204.
     pub fn ops(ops: Vec<Op>) -> Self {
-        Self { ops, status: StatusCode::OK, fallback: Fallback::Empty, flash: None, uses: crate::node::Uses::NONE }
+        Self {
+            ops,
+            status: StatusCode::OK,
+            fallback: Fallback::Empty,
+            flash: None,
+            uses: crate::node::Uses::NONE,
+        }
     }
 
     /// Adds an op.
@@ -341,7 +398,11 @@ impl Reply {
         let text = text.into();
         self.flash = Some((tone, text.clone()));
         // A toast shows before a navigation that follows it.
-        let at = self.ops.iter().position(|op| matches!(op, Op::Navigate { .. } | Op::NavigateExternal { .. })).unwrap_or(self.ops.len());
+        let at = self
+            .ops
+            .iter()
+            .position(|op| matches!(op, Op::Navigate { .. } | Op::NavigateExternal { .. }))
+            .unwrap_or(self.ops.len());
         self.ops.insert(at, Op::Toast { tone, text });
         self
     }
@@ -400,7 +461,9 @@ pub(crate) struct PendingOps(pub(crate) Envelope, pub(crate) StatusCode);
 impl IntoResponse for Reply {
     fn into_response(self) -> Response {
         let (mut response, envelope, status) = self.fallback_response();
-        response.extensions_mut().insert(PendingOps(envelope, status));
+        response
+            .extensions_mut()
+            .insert(PendingOps(envelope, status));
         response
     }
 }
@@ -414,13 +477,18 @@ mod tests {
     fn the_wire_format_is_stable() {
         let ops = vec![
             Op::morph("t", &el("div").child("<x>").into()),
-            Op::Errors { form: "f".into(), fields: BTreeMap::from([("a".to_owned(), vec!["bad".to_owned()])]) },
+            Op::Errors {
+                form: "f".into(),
+                fields: BTreeMap::from([("a".to_owned(), vec!["bad".to_owned()])]),
+            },
             Op::toast(ToastTone::Success, "ok"),
             Op::url("/a", UrlMode::Replace),
             Op::navigate("/b"),
             Op::Remove { target: "r".into() },
             Op::Reload,
-            Op::Invalidate { target: "kpis".into() },
+            Op::Invalidate {
+                target: "kpis".into(),
+            },
         ];
         assert_eq!(
             serde_json::to_string(&ops).unwrap(),
@@ -439,13 +507,22 @@ mod tests {
 
     #[test]
     fn urls_in_ops_are_checked() {
-        assert_eq!(Op::navigate("javascript:x"), Op::Navigate { href: "#".into() });
+        assert_eq!(
+            Op::navigate("javascript:x"),
+            Op::Navigate { href: "#".into() }
+        );
     }
 
     #[test]
     fn leaving_the_site_is_said_by_name() {
-        assert_eq!(serde_json::to_string(&Op::navigate_external("https://a.b/c")).unwrap(), r#"{"op":"navigate_external","href":"https://a.b/c"}"#);
-        assert_eq!(Op::navigate_external("javascript:x"), Op::NavigateExternal { href: "#".into() });
+        assert_eq!(
+            serde_json::to_string(&Op::navigate_external("https://a.b/c")).unwrap(),
+            r#"{"op":"navigate_external","href":"https://a.b/c"}"#
+        );
+        assert_eq!(
+            Op::navigate_external("javascript:x"),
+            Op::NavigateExternal { href: "#".into() }
+        );
         let reply = Reply::redirect_external("https://a.b/c").toast(ToastTone::Info, "hi");
         assert!(matches!(reply.ops[0], Op::Toast { .. }));
         let response = reply.into_response();

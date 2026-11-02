@@ -54,11 +54,16 @@ mod view;
 
 pub use csv::write_csv_field;
 pub use edit::EditCell;
-pub use query::{ActiveFilter, FilterValue, MAX_OPEN_ROWS, MAX_TEXT, MAX_VALUES, SortTerm, TableQuery};
+pub use query::{
+    ActiveFilter, FilterValue, MAX_OPEN_ROWS, MAX_TEXT, MAX_VALUES, SortTerm, TableQuery,
+};
 pub use region::Region;
 pub use saved::{SavedView, ViewOp, ViewPost};
 pub use selection::{BulkMode, BulkRefusal, BulkRequest, MAX_SELECTED_IDS};
-pub use view::{BulkAction, DataTable, FilterMode, FilterOption, RowAction, TableData, TableDensity, TableHeight, TableLabels, TablePage, Total};
+pub use view::{
+    BulkAction, DataTable, FilterMode, FilterOption, RowAction, TableData, TableDensity,
+    TableHeight, TableLabels, TablePage, Total,
+};
 
 #[cfg(feature = "orm")]
 pub use orm::{AsyncChunk, MAX_EXPORT_ROWS, SavedViewModel, delete_view, list_views, save_view};
@@ -96,7 +101,9 @@ impl ValueKind {
             Self::Int => text.parse::<i64>().is_ok(),
             Self::Money => crate::form::Money::parse(text).is_some(),
             Self::Float | Self::Decimal => text.parse::<f64>().is_ok_and(f64::is_finite),
-            Self::Date | Self::DateTime => chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").is_ok(),
+            Self::Date | Self::DateTime => {
+                chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").is_ok()
+            }
             Self::Bool => matches!(text, "true" | "false"),
             Self::Uuid => uuid::Uuid::parse_str(text).is_ok(),
         }
@@ -266,7 +273,15 @@ pub struct TableConfig {
 
 impl TableConfig {
     /// What a table has unless it says otherwise.
-    pub const DEFAULT: Self = Self { key_kind: ValueKind::Int, sort: &[], per: 25, per_pages: &[10, 25, 50, 100], cursor: false, version: None, count: Count::Exact };
+    pub const DEFAULT: Self = Self {
+        key_kind: ValueKind::Int,
+        sort: &[],
+        per: 25,
+        per_pages: &[10, 25, 50, 100],
+        cursor: false,
+        version: None,
+        count: Count::Exact,
+    };
 }
 
 /// A struct that can be a row. `#[derive(TableRow)]` implements it.
@@ -304,7 +319,10 @@ pub struct CellWriter<'a> {
 
 impl<'a> CellWriter<'a> {
     pub(crate) fn new(out: &'a mut String) -> Self {
-        Self { out, uses: Uses::NONE }
+        Self {
+            out,
+            uses: Uses::NONE,
+        }
     }
 
     /// Writes a component: a badge, an avatar, a list of tags. It goes through the
@@ -451,7 +469,10 @@ impl<T: CellValue> CellValue for Option<T> {
 
 /// The label of an option's value. The derive calls this.
 pub fn option_label<'a>(options: &[(&'a str, &'a str)], value: &'a str) -> &'a str {
-    options.iter().find(|(option, _)| *option == value).map_or(value, |(_, label)| *label)
+    options
+        .iter()
+        .find(|(option, _)| *option == value)
+        .map_or(value, |(_, label)| *label)
 }
 
 /// A stored value shown as its option's label: the derive wraps a field with
@@ -502,7 +523,10 @@ impl<T: OptionText> CellValue for OptionCell<'_, T> {
 }
 
 fn option_label_of<'a>(options: &'a [(&'a str, &'a str)], value: &'a str) -> &'a str {
-    options.iter().find(|(option, _)| *option == value).map_or(value, |(_, label)| *label)
+    options
+        .iter()
+        .find(|(option, _)| *option == value)
+        .map_or(value, |(_, label)| *label)
 }
 
 /// One value in a URL's path, percent-encoded, so a stored `../../logout` or
@@ -572,7 +596,10 @@ pub trait TableSource<R: TableRow> {
     type Error;
 
     /// One page for this state.
-    fn page<F: FilterBar + Sync>(&self, query: &TableQuery<R, F>) -> impl std::future::Future<Output = Result<TablePage<R>, Self::Error>> + Send;
+    fn page<F: FilterBar + Sync>(
+        &self,
+        query: &TableQuery<R, F>,
+    ) -> impl std::future::Future<Output = Result<TablePage<R>, Self::Error>> + Send;
 }
 
 /// A struct of filters a page owns: controls in the toolbar and parameters in the
@@ -601,7 +628,9 @@ impl FilterBar for NoFilter {
 
 /// A search box in a toolbar. The derive calls this.
 pub fn search_control(name: &'static str, label: &'static str, value: Option<String>) -> Node {
-    let input = Input::search(name).placeholder(label).attr("aria-label", label);
+    let input = Input::search(name)
+        .placeholder(label)
+        .attr("aria-label", label);
     match value {
         Some(value) => input.value(value).into(),
         None => input.into(),
@@ -609,8 +638,15 @@ pub fn search_control(name: &'static str, label: &'static str, value: Option<Str
 }
 
 /// A select in a toolbar. The derive calls this.
-pub fn select_control(name: &'static str, label: &'static str, options: &'static [(&'static str, &'static str)], value: Option<String>) -> Node {
-    let mut select = NativeSelect::new(name).prompt(label).attr("aria-label", label);
+pub fn select_control(
+    name: &'static str,
+    label: &'static str,
+    options: &'static [(&'static str, &'static str)],
+    value: Option<String>,
+) -> Node {
+    let mut select = NativeSelect::new(name)
+        .prompt(label)
+        .attr("aria-label", label);
     for (option, text) in options {
         select = select.option(*option, *text);
     }

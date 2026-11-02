@@ -118,7 +118,14 @@ impl Node {
                         _ => {}
                     }
                 }
-                out.push_str(&text.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&#39;", "'").replace("&amp;", "&"));
+                out.push_str(
+                    &text
+                        .replace("&lt;", "<")
+                        .replace("&gt;", ">")
+                        .replace("&quot;", "\"")
+                        .replace("&#39;", "'")
+                        .replace("&amp;", "&"),
+                );
             }
             Self::Text(text) => out.push_str(text),
             Self::Int(value) => out.push_str(&value.to_string()),
@@ -255,7 +262,11 @@ pub struct Element {
 /// Elements a page never writes through the tree: each loads something, runs
 /// something or moves the page. The head has its own writer, in `view`.
 fn is_refused_tag(tag: &str) -> bool {
-    ["script", "style", "link", "meta", "base", "iframe", "object", "embed"].iter().any(|refused| refused.eq_ignore_ascii_case(tag))
+    [
+        "script", "style", "link", "meta", "base", "iframe", "object", "embed",
+    ]
+    .iter()
+    .any(|refused| refused.eq_ignore_ascii_case(tag))
 }
 
 /// An element named `tag`. A refused one comes out as a `div`.
@@ -277,13 +288,31 @@ pub fn el(tag: &'static str) -> Element {
 
 /// Attributes that hold URLs: their values go through [`Href`].
 fn is_url_attr(name: &str) -> bool {
-    ["href", "src", "action", "formaction", "poster", "cite", "ping", "data", "background", "xlink:href"].iter().any(|url| url.eq_ignore_ascii_case(name))
+    [
+        "href",
+        "src",
+        "action",
+        "formaction",
+        "poster",
+        "cite",
+        "ping",
+        "data",
+        "background",
+        "xlink:href",
+    ]
+    .iter()
+    .any(|url| url.eq_ignore_ascii_case(name))
 }
 
 /// Attributes that are never written: inline style and handlers break the
 /// content security policy, and `srcdoc` is a document in an attribute.
 fn is_refused_attr(name: &str) -> bool {
-    name.eq_ignore_ascii_case("style") || name.eq_ignore_ascii_case("srcdoc") || name.as_bytes().get(..2).is_some_and(|start| start.eq_ignore_ascii_case(b"on"))
+    name.eq_ignore_ascii_case("style")
+        || name.eq_ignore_ascii_case("srcdoc")
+        || name
+            .as_bytes()
+            .get(..2)
+            .is_some_and(|start| start.eq_ignore_ascii_case(b"on"))
 }
 
 impl Element {
@@ -304,7 +333,10 @@ impl Element {
 
     /// The value of attribute `name`, when set.
     pub fn get(&self, name: &str) -> Option<&AttrValue> {
-        self.attrs.iter().find(|attr| attr.name == name).map(|attr| &attr.value)
+        self.attrs
+            .iter()
+            .find(|attr| attr.name == name)
+            .map(|attr| &attr.value)
     }
 
     /// Sets attribute `name`. A URL attribute is checked like an [`Href`];
@@ -313,7 +345,10 @@ impl Element {
     #[must_use]
     pub fn attr(mut self, name: &'static str, value: impl Into<AttrValue>) -> Self {
         if is_refused_attr(name) {
-            debug_assert!(false, "`{name}` is not allowed under the content security policy");
+            debug_assert!(
+                false,
+                "`{name}` is not allowed under the content security policy"
+            );
             return self;
         }
         let mut value = value.into();
@@ -341,7 +376,10 @@ impl Element {
     #[must_use]
     pub fn flag(mut self, name: &'static str, on: bool) -> Self {
         if on && !is_refused_attr(name) {
-            self.attrs.push(Attr { name, value: AttrValue::Flag });
+            self.attrs.push(Attr {
+                name,
+                value: AttrValue::Flag,
+            });
         }
         self
     }
@@ -364,7 +402,10 @@ impl Element {
     #[inline]
     #[must_use]
     pub fn href(mut self, href: impl Into<Href>) -> Self {
-        self.attrs.push(Attr { name: "href", value: href.into().into() });
+        self.attrs.push(Attr {
+            name: "href",
+            value: href.into().into(),
+        });
         self
     }
 
@@ -569,7 +610,8 @@ mod tests {
 
     #[test]
     fn children_take_tuples_lists_and_options() {
-        let element = el("div").children(("a", Some("b"), None::<&'static str>, vec!["c", "d"], 7_i64));
+        let element =
+            el("div").children(("a", Some("b"), None::<&'static str>, vec!["c", "d"], 7_i64));
         assert_eq!(element.child_nodes().len(), 5);
         assert_eq!(Node::from(element).text_content(), "abcd7");
     }
@@ -584,6 +626,10 @@ mod tests {
     #[test]
     fn a_node_stays_small() {
         // Children hold nodes inline, so one size change touches every page.
-        assert!(std::mem::size_of::<Node>() <= 72, "{}", std::mem::size_of::<Node>());
+        assert!(
+            std::mem::size_of::<Node>() <= 72,
+            "{}",
+            std::mem::size_of::<Node>()
+        );
     }
 }

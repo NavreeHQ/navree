@@ -59,7 +59,11 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> BulkRequest<R, F> {
                 "action" => action = value.into_owned(),
                 "_mode" if value == "all" => mode = BulkMode::All,
                 "ids" | "ex" => {
-                    let list = if name == "ids" { &mut ids } else { &mut excluded };
+                    let list = if name == "ids" {
+                        &mut ids
+                    } else {
+                        &mut excluded
+                    };
                     if list.len() >= MAX_SELECTED_IDS {
                         return Err(StatusCode::PAYLOAD_TOO_LARGE);
                     }
@@ -82,13 +86,25 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> BulkRequest<R, F> {
         if !path.starts_with('/') || path.starts_with("//") || path.contains(['\\', '\r', '\n']) {
             path = "/".to_owned();
         }
-        if !table.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_')) {
+        if !table
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        {
             table.clear();
         }
         if mode == BulkMode::All && expected.is_none() {
             return Err(StatusCode::UNPROCESSABLE_ENTITY);
         }
-        Ok(Self { action, mode, ids, excluded, expected, version, table, query: TableQuery::parse(path, &state) })
+        Ok(Self {
+            action,
+            mode,
+            ids,
+            excluded,
+            expected,
+            version,
+            table,
+            query: TableQuery::parse(path, &state),
+        })
     }
 }
 
@@ -136,12 +152,21 @@ impl<R: TableRow, F: FilterBar> BulkRequest<R, F> {
     /// The action worked on `count` rows: says so, and redraws the table. A
     /// successful reply is also what ends the selection in the browser.
     pub fn done(&self, text: impl Into<String>) -> Reply {
-        Reply::ops_or_redirect(self.back()).toast(ToastTone::Success, text).op(Op::Invalidate { target: self.table.clone() })
+        Reply::ops_or_redirect(self.back())
+            .toast(ToastTone::Success, text)
+            .op(Op::Invalidate {
+                target: self.table.clone(),
+            })
     }
 
     /// Refuses, keeping the selection: says why, and redraws the table.
     pub fn refused(&self, status: StatusCode, text: impl Into<String>) -> Reply {
-        Reply::ops_or_redirect(self.back()).toast(ToastTone::Danger, text).op(Op::Invalidate { target: self.table.clone() }).status(status)
+        Reply::ops_or_redirect(self.back())
+            .toast(ToastTone::Danger, text)
+            .op(Op::Invalidate {
+                target: self.table.clone(),
+            })
+            .status(status)
     }
 }
 
@@ -158,9 +183,16 @@ impl BulkRefusal {
     /// The refusal's words.
     pub fn message(&self) -> String {
         if self.shown == self.now {
-            format!("Nothing changed: rows were edited since you selected {}. Check them and try again.", super::view::grouped(self.shown))
+            format!(
+                "Nothing changed: rows were edited since you selected {}. Check them and try again.",
+                super::view::grouped(self.shown)
+            )
         } else {
-            format!("Nothing changed: you selected {}, but {} match now. Check them and try again.", super::view::grouped(self.shown), super::view::grouped(self.now))
+            format!(
+                "Nothing changed: you selected {}, but {} match now. Check them and try again.",
+                super::view::grouped(self.shown),
+                super::view::grouped(self.now)
+            )
         }
     }
 }
@@ -179,7 +211,9 @@ where
             return Err(status);
         }
         let limit = BodyLimit::of(&parts.extensions);
-        let bytes = read_body(body, limit).await.map_err(|_| StatusCode::PAYLOAD_TOO_LARGE)?;
+        let bytes = read_body(body, limit)
+            .await
+            .map_err(|_| StatusCode::PAYLOAD_TOO_LARGE)?;
         Self::parse(&bytes)
     }
 }

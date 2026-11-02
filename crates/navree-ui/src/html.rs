@@ -182,7 +182,9 @@ impl LocalHref {
         let slash = |byte: Option<u8>| matches!(byte, Some(b'/' | b'\\'));
         // A browser reads a backslash as a slash in a URL of this kind.
         let has_host = first == Some(b'\\') || (slash(first) && slash(second));
-        let has_scheme = url.find([':', '/', '?', '#']).is_some_and(|end| url.as_bytes()[end] == b':');
+        let has_scheme = url
+            .find([':', '/', '?', '#'])
+            .is_some_and(|end| url.as_bytes()[end] == b':');
         if has_host || has_scheme {
             return Err(HrefError::OffSite);
         }
@@ -249,7 +251,12 @@ mod tests {
         ] {
             assert_eq!(Href::parse(url), Err(HrefError::Scheme), "{url}");
         }
-        for url in ["java\tscript:alert(1)", "java\nscript:x", " javascript:x", "\u{1}javascript:x"] {
+        for url in [
+            "java\tscript:alert(1)",
+            "java\nscript:x",
+            " javascript:x",
+            "\u{1}javascript:x",
+        ] {
             assert_eq!(Href::parse(url), Err(HrefError::Control), "{url:?}");
         }
     }
@@ -277,14 +284,37 @@ mod tests {
 
     #[test]
     fn a_local_url_has_no_host_and_no_scheme() {
-        for url in ["//a.b", "/\\a.b", "\\\\a.b", "\\/a.b", "\\a.b", "///a.b", "http://a.b", "HTTPS://a.b", "https:\\\\a.b", "http:a.b", "mailto:a@b.c", "tel:+1"] {
+        for url in [
+            "//a.b",
+            "/\\a.b",
+            "\\\\a.b",
+            "\\/a.b",
+            "\\a.b",
+            "///a.b",
+            "http://a.b",
+            "HTTPS://a.b",
+            "https:\\\\a.b",
+            "http:a.b",
+            "mailto:a@b.c",
+            "tel:+1",
+        ] {
             assert_eq!(LocalHref::parse(url), Err(HrefError::OffSite), "{url}");
         }
         for url in ["javascript:x", "data:x", "blob:x"] {
             assert_eq!(LocalHref::parse(url), Err(HrefError::Scheme), "{url}");
         }
         assert_eq!(LocalHref::parse("/a\nb"), Err(HrefError::Control));
-        for url in ["", "/", "/deals/1?x=a:b#c:d", "?page=2", "#top", "deals/1", "../up", "/a//b", "/a\\b"] {
+        for url in [
+            "",
+            "/",
+            "/deals/1?x=a:b#c:d",
+            "?page=2",
+            "#top",
+            "deals/1",
+            "../up",
+            "/a//b",
+            "/a\\b",
+        ] {
             assert!(LocalHref::parse(url).is_ok(), "{url}");
         }
         assert_eq!(LocalHref::from("//a.b").as_str(), "#");

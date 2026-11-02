@@ -4,7 +4,10 @@
 use navree_ui::form::{Form, FormView, Money, Widget, decode};
 use navree_ui::table::{Direction, TableRow};
 use navree_ui::test_view::Clicked;
-use navree_ui::{BadgeVariant, DataTable, FilterBar, Form, InputKind, Options, TableQuery, TableRow, TestView, Validate, View, render};
+use navree_ui::{
+    BadgeVariant, DataTable, FilterBar, Form, InputKind, Options, TableQuery, TableRow, TestView,
+    Validate, View, render,
+};
 use serde::Deserialize;
 
 #[derive(Clone, Copy, Debug, Deserialize, Options, PartialEq, Eq)]
@@ -20,7 +23,12 @@ enum Stage {
 struct NewDeal {
     /// Deal name
     #[validate(length(min = 1, max = 255))]
-    #[form(placeholder = "Annual platform license", autofocus, wide, error = "Give the deal a name.")]
+    #[form(
+        placeholder = "Annual platform license",
+        autofocus,
+        wide,
+        error = "Give the deal a name."
+    )]
     title: String,
     /// Value
     #[form(addon = "currency")]
@@ -46,14 +54,22 @@ struct NewDeal {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Options, PartialEq, Eq)]
-#[allow(clippy::upper_case_acronyms, reason = "a name in capitals is what the test is about")]
+#[allow(
+    clippy::upper_case_acronyms,
+    reason = "a name in capitals is what the test is about"
+)]
 enum Currency {
     USD,
     EUR,
 }
 
 fn html() -> String {
-    render(&FormView::<NewDeal>::new().post("/deals").submit("Create deal").into())
+    render(
+        &FormView::<NewDeal>::new()
+            .post("/deals")
+            .submit("Create deal")
+            .into(),
+    )
 }
 
 #[test]
@@ -63,20 +79,33 @@ fn the_type_picks_the_widget_and_the_doc_comment_the_label() {
     assert_eq!(fields[0].widget, Widget::Input(InputKind::Text));
     assert_eq!(fields[1].widget, Widget::Money);
     assert_eq!(fields[3].widget, Widget::Select);
-    assert_eq!(fields[3].options, [("lead", "Lead"), ("closed_won", "Closed won")]);
+    assert_eq!(
+        fields[3].options,
+        [("lead", "Lead"), ("closed_won", "Closed won")]
+    );
     assert_eq!(fields[4].widget, Widget::Input(InputKind::Date));
     assert!(fields[4].optional);
     assert_eq!(fields[5].label, "Contact email");
-    assert_eq!(fields[2].options, [("USD", "USD"), ("EUR", "EUR")], "a name in capitals keeps them");
+    assert_eq!(
+        fields[2].options,
+        [("USD", "USD"), ("EUR", "EUR")],
+        "a name in capitals keeps them"
+    );
     assert_eq!(fields[8].widget, Widget::Checkbox);
 }
 
 #[test]
 fn rules_become_native_constraints() {
     let html = html();
-    assert!(html.contains(r#"name="title" value"#) || html.contains(r#"name="title""#), "{html}");
+    assert!(
+        html.contains(r#"name="title" value"#) || html.contains(r#"name="title""#),
+        "{html}"
+    );
     assert!(html.contains(r#"placeholder="Annual platform license" required autofocus minlength="1" maxlength="255""#), "{html}");
-    assert!(html.contains(r#"type="email" name="contact_email""#), "{html}");
+    assert!(
+        html.contains(r#"type="email" name="contact_email""#),
+        "{html}"
+    );
     assert!(html.contains(r#"min="0" max="100""#), "{html}");
     assert!(html.contains(r#"maxlength="2000""#), "{html}");
 }
@@ -86,18 +115,39 @@ fn labels_tie_to_their_controls_and_addons_sit_in_the_group() {
     let html = html();
     assert!(html.contains(r#"for="new-deal-title""#), "{html}");
     assert!(html.contains(r#"id="new-deal-title""#), "{html}");
-    assert!(html.contains(r#"<form data-slot="form" id="new-deal" method="post" action="/deals" data-ui-form>"#), "{html}");
+    assert!(
+        html.contains(
+            r#"<form data-slot="form" id="new-deal" method="post" action="/deals" data-ui-form>"#
+        ),
+        "{html}"
+    );
     assert!(html.contains(r#"data-slot="input-group""#), "{html}");
     assert!(html.contains(r#"aria-label="Currency""#), "{html}");
-    assert_eq!(html.matches(r#"for="new-deal-currency""#).count(), 0, "{html}");
-    assert!(html.contains(r#"data-slot="button" data-variant="primary" type="submit">Create deal"#), "{html}");
+    assert_eq!(
+        html.matches(r#"for="new-deal-currency""#).count(),
+        0,
+        "{html}"
+    );
+    assert!(
+        html.contains(r#"data-slot="button" data-variant="primary" type="submit">Create deal"#),
+        "{html}"
+    );
 }
 
 fn good() -> Vec<(String, String)> {
-    [("title", "Acme"), ("amount", "12,500.50"), ("currency", "USD"), ("stage", "closed_won"), ("close_date", ""), ("contact_email", ""), ("probability", ""), ("notes", "")]
-        .iter()
-        .map(|(a, b)| ((*a).to_owned(), (*b).to_owned()))
-        .collect()
+    [
+        ("title", "Acme"),
+        ("amount", "12,500.50"),
+        ("currency", "USD"),
+        ("stage", "closed_won"),
+        ("close_date", ""),
+        ("contact_email", ""),
+        ("probability", ""),
+        ("notes", ""),
+    ]
+    .iter()
+    .map(|(a, b)| ((*a).to_owned(), (*b).to_owned()))
+    .collect()
 }
 
 #[test]
@@ -118,7 +168,10 @@ fn rule_failures_land_on_their_fields() {
     pairs[5].1 = "nope".to_owned();
     let errors = decode::<NewDeal>(&pairs).unwrap_err();
     assert_eq!(errors["title"], ["Give the deal a name."]);
-    assert!(errors["contact_email"][0].contains("Contact email"), "{errors:?}");
+    assert!(
+        errors["contact_email"][0].contains("Contact email"),
+        "{errors:?}"
+    );
 }
 
 #[test]
@@ -126,7 +179,10 @@ fn a_value_of_the_wrong_type_is_a_field_error_not_a_crash() {
     let mut pairs = good();
     pairs[1].1 = "lots".to_owned();
     let errors = decode::<NewDeal>(&pairs).unwrap_err();
-    assert!(errors["amount"][0].contains("enter an amount"), "{errors:?}");
+    assert!(
+        errors["amount"][0].contains("enter an amount"),
+        "{errors:?}"
+    );
     let mut pairs = good();
     pairs[3].1 = "<script>".to_owned();
     let errors = decode::<NewDeal>(&pairs).unwrap_err();
@@ -142,10 +198,23 @@ fn every_value_of_the_wrong_type_is_named_at_once() {
     pairs.push(("probability".to_owned(), "high".to_owned()));
     let errors = decode::<NewDeal>(&pairs).unwrap_err();
     let names: Vec<&str> = errors.keys().map(String::as_str).collect();
-    assert_eq!(names, ["amount", "close_date", "probability", "stage"], "{errors:?}");
-    assert!(errors["amount"][0].contains("enter an amount"), "{errors:?}");
-    assert!(errors["close_date"][0].contains("enter a date"), "{errors:?}");
-    assert!(errors["probability"][0].contains("enter a number"), "{errors:?}");
+    assert_eq!(
+        names,
+        ["amount", "close_date", "probability", "stage"],
+        "{errors:?}"
+    );
+    assert!(
+        errors["amount"][0].contains("enter an amount"),
+        "{errors:?}"
+    );
+    assert!(
+        errors["close_date"][0].contains("enter a date"),
+        "{errors:?}"
+    );
+    assert!(
+        errors["probability"][0].contains("enter a number"),
+        "{errors:?}"
+    );
     assert!(errors["stage"][0].contains("choose one"), "{errors:?}");
     // One bad value alone still reports one field, and a second pass is the same.
     let mut one = good();
@@ -164,7 +233,10 @@ fn every_value_of_the_wrong_type_is_named_at_once() {
 fn a_rejected_form_keeps_what_was_typed_and_escapes_it() {
     let view = FormView::<NewDeal>::new()
         .post("/deals")
-        .with_values(vec![("title".to_owned(), "\"><script>x</script>".to_owned())])
+        .with_values(vec![(
+            "title".to_owned(),
+            "\"><script>x</script>".to_owned(),
+        )])
         .with_errors([("title".to_owned(), vec!["Bad <b>".to_owned()])].into());
     let html = render(&view.into());
     assert!(!html.contains("<script"), "{html}");
@@ -180,15 +252,32 @@ fn test_view_drives_a_form_with_no_browser() {
     let page = TestView::of(&view);
     assert!(page.sees("Deal name"));
     assert_eq!(page.click("Create"), Clicked::Submit);
-    let errors = page.clone().fill("title", "").fill("amount", "1").submit_as::<NewDeal>().unwrap_err();
+    let errors = page
+        .clone()
+        .fill("title", "")
+        .fill("amount", "1")
+        .submit_as::<NewDeal>()
+        .unwrap_err();
     assert!(errors.contains_key("title"), "{errors:?}");
-    let deal = page.fill("title", "Acme").fill("amount", "1").submit_as::<NewDeal>().unwrap();
+    let deal = page
+        .fill("title", "Acme")
+        .fill("amount", "1")
+        .submit_as::<NewDeal>()
+        .unwrap();
     assert_eq!(deal.title, "Acme");
-    assert_eq!(deal.stage, Stage::Lead, "a select starts on its first choice");
+    assert_eq!(
+        deal.stage,
+        Stage::Lead,
+        "a select starts on its first choice"
+    );
 }
 
 fn stage_tone(stage: &'static str) -> BadgeVariant {
-    if stage == "won" { BadgeVariant::Success } else { BadgeVariant::Neutral }
+    if stage == "won" {
+        BadgeVariant::Success
+    } else {
+        BadgeVariant::Neutral
+    }
 }
 
 fn tone_of(stage: &&'static str) -> BadgeVariant {
@@ -219,12 +308,21 @@ struct DealFilter {
 }
 
 fn rows() -> Vec<DealRow> {
-    vec![DealRow { id: 7, title: "A<cme".to_owned(), stage: "won", amount: Money(1234), owner_name: "Ada".to_owned() }]
+    vec![DealRow {
+        id: 7,
+        title: "A<cme".to_owned(),
+        stage: "won",
+        amount: Money(1234),
+        owner_name: "Ada".to_owned(),
+    }]
 }
 
 #[test]
 fn a_query_reads_sort_filter_and_page_and_forgives_bad_values() {
-    let query = TableQuery::<DealRow, DealFilter>::parse("/deals", "sort=-amount&page=3&per=25&q=ac&stage=closed_won");
+    let query = TableQuery::<DealRow, DealFilter>::parse(
+        "/deals",
+        "sort=-amount&page=3&per=25&q=ac&stage=closed_won",
+    );
     assert_eq!(query.sort(), Some(("amount", Direction::Desc)));
     assert_eq!(query.page(), 3);
     assert_eq!(query.per_page(), 25);
@@ -232,7 +330,10 @@ fn a_query_reads_sort_filter_and_page_and_forgives_bad_values() {
     assert_eq!(query.filter().q.as_deref(), Some("ac"));
     assert_eq!(query.filter().stage, Some(Stage::ClosedWon));
 
-    let query = TableQuery::<DealRow, DealFilter>::parse("/deals", "sort=owner_name&page=-1&per=999999&stage=");
+    let query = TableQuery::<DealRow, DealFilter>::parse(
+        "/deals",
+        "sort=owner_name&page=-1&per=999999&stage=",
+    );
     assert_eq!(query.sort(), None, "only sortable columns sort");
     assert_eq!(query.page(), 1);
     assert_eq!(query.per_page(), 50, "a page size not on offer is ignored");
@@ -247,10 +348,19 @@ fn a_table_is_a_region_with_links_that_keep_the_state() {
     let html = render(&DataTable::new("deals", &query, &rows).total(500).into());
     assert!(html.contains(r#"id="deals" data-ui-region"#), "{html}");
     assert!(html.contains(r#"<tr data-key="7">"#), "{html}");
-    assert!(html.contains(r#"<a href="/deals/7"><bdi>A&lt;cme</bdi></a>"#), "{html}");
+    assert!(
+        html.contains(r#"<a href="/deals/7"><bdi>A&lt;cme</bdi></a>"#),
+        "{html}"
+    );
     assert!(html.contains(r#"aria-sort="ascending""#), "{html}");
-    assert!(html.contains(r#"href="/deals?q=a%20b&amp;sort=-amount""#), "the next click sorts down, from page 1: {html}");
-    assert!(html.contains(r#"href="/deals?q=a%20b&amp;sort=amount&amp;page=3""#), "{html}");
+    assert!(
+        html.contains(r#"href="/deals?q=a%20b&amp;sort=-amount""#),
+        "the next click sorts down, from page 1: {html}"
+    );
+    assert!(
+        html.contains(r#"href="/deals?q=a%20b&amp;sort=amount&amp;page=3""#),
+        "{html}"
+    );
     assert!(html.contains(r#"data-ui-target="deals""#), "{html}");
     assert!(html.contains(r#"data-numeric>12.34</td>"#), "{html}");
     assert!(html.contains(r#"data-variant="success""#), "{html}");
@@ -272,7 +382,10 @@ fn an_empty_table_says_so() {
     let query = TableQuery::<DealRow, DealFilter>::parse("/deals", "");
     let html = render(&DataTable::new("deals", &query, &[]).into());
     assert!(html.contains(r#"data-slot="empty""#), "{html}");
-    assert!(html.contains("<thead"), "the headers stay, so nothing jumps: {html}");
+    assert!(
+        html.contains("<thead"),
+        "the headers stay, so nothing jumps: {html}"
+    );
 }
 
 #[test]
@@ -284,9 +397,21 @@ fn row_columns_come_from_the_struct() {
 
 #[test]
 fn a_form_carries_the_csrf_token_first_and_escaped() {
-    let html = render(&FormView::<NewDeal>::new().post("/deals").csrf("tok\"><script>").into());
-    let at = html.find(r#"<input type="hidden" name="_csrf" value="tok&quot;&gt;&lt;script&gt;">"#).expect(&html);
-    assert!(at < html.find("<div data-slot=\"form-grid\"").unwrap_or(usize::MAX), "{html}");
+    let html = render(
+        &FormView::<NewDeal>::new()
+            .post("/deals")
+            .csrf("tok\"><script>")
+            .into(),
+    );
+    let at = html
+        .find(r#"<input type="hidden" name="_csrf" value="tok&quot;&gt;&lt;script&gt;">"#)
+        .expect(&html);
+    assert!(
+        at < html
+            .find("<div data-slot=\"form-grid\"")
+            .unwrap_or(usize::MAX),
+        "{html}"
+    );
     assert!(!html.contains("<script>"), "{html}");
     // Without a token there is no field.
     assert!(!render(&FormView::<NewDeal>::new().post("/deals").into()).contains("_csrf"));

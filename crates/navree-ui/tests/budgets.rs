@@ -4,7 +4,9 @@
 //! machine: they catch a change of scale, not a bad day.
 
 use navree_ui::assets::{self, Asset, get};
-use navree_ui::{Button, Card, Dialog, Grid, NavGroup, NavItem, Shell, Stat, Uses, View, icons, measure};
+use navree_ui::{
+    Button, Card, Dialog, Grid, NavGroup, NavItem, Shell, Stat, Uses, View, icons, measure,
+};
 
 fn gzip(asset: &Asset) -> usize {
     asset.gzip.map_or(asset.bytes.len(), <[u8]>::len)
@@ -31,38 +33,69 @@ fn the_stylesheet_is_at_most_25_kb_gzip() {
 
 #[test]
 fn a_typical_crud_page_loads_at_most_30_kb_gzip_of_script() {
-    let total: usize = ["core", "sidebar", "overlay", "table"].iter().map(|name| size(name)).sum();
+    let total: usize = ["core", "sidebar", "overlay", "table"]
+        .iter()
+        .map(|name| size(name))
+        .sum();
     assert!(total <= 30 * 1024, "{total}");
 }
 
 #[test]
 fn all_modules_together_are_under_60_kb_gzip() {
-    let total: usize = assets::FILES.iter().filter(|asset| asset.ext == "js").map(gzip).sum();
+    let total: usize = assets::FILES
+        .iter()
+        .filter(|asset| asset.ext == "js")
+        .map(gzip)
+        .sum();
     assert!(total < 60 * 1024, "{total}");
 }
 
 #[test]
 fn every_text_asset_has_brotli_and_gzip_forms_that_are_smaller() {
-    for asset in assets::FILES.iter().filter(|asset| matches!(asset.ext, "js" | "css")) {
-        assert!(asset.gzip.is_some_and(|bytes| bytes.len() < asset.bytes.len()), "{}", asset.name);
-        assert!(asset.brotli.is_some_and(|bytes| bytes.len() < asset.bytes.len()), "{}", asset.name);
+    for asset in assets::FILES
+        .iter()
+        .filter(|asset| matches!(asset.ext, "js" | "css"))
+    {
+        assert!(
+            asset
+                .gzip
+                .is_some_and(|bytes| bytes.len() < asset.bytes.len()),
+            "{}",
+            asset.name
+        );
+        assert!(
+            asset
+                .brotli
+                .is_some_and(|bytes| bytes.len() < asset.bytes.len()),
+            "{}",
+            asset.name
+        );
     }
 }
 
 #[test]
 fn a_page_with_nothing_interactive_ships_no_script() {
-    let page = View::new("x").body(Card::titled("T").body((Button::primary("Go").href("/x"), Dialog::new("d", "T"))));
+    let page = View::new("x")
+        .body(Card::titled("T").body((Button::primary("Go").href("/x"), Dialog::new("d", "T"))));
     assert_eq!(page.uses(), Uses::NONE);
     assert!(!page.to_html().contains("<script"));
 }
 
 #[test]
 fn the_buffer_is_sized_ahead_of_the_write() {
-    let shell = Shell::new("Acme").group(NavGroup::new("Sales").item(NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE)));
-    let page = shell.page("Deals", "/deals").body(Grid::cols(2).children((Stat::new("Open", "12"), Stat::new("Won", "3")))).to_view();
+    let shell = Shell::new("Acme")
+        .group(NavGroup::new("Sales").item(NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE)));
+    let page = shell
+        .page("Deals", "/deals")
+        .body(Grid::cols(2).children((Stat::new("Open", "12"), Stat::new("Won", "3"))))
+        .to_view();
     let html = page.to_html();
     let estimate = measure(page.body_node()).bytes;
-    assert!(estimate * 2 > html.len() - 512, "the estimate should be near: {estimate} for {}", html.len());
+    assert!(
+        estimate * 2 > html.len() - 512,
+        "the estimate should be near: {estimate} for {}",
+        html.len()
+    );
 }
 
 #[cfg(not(debug_assertions))]
@@ -112,9 +145,20 @@ mod times {
 
     #[test]
     fn a_thousand_rows_render_in_under_3_ms() {
-        let rows: Vec<Row> = (0..1000).map(|id| Row { id, title: format!("Deal {id}"), amount: Money(id * 100), owner: "Ada" }).collect();
+        let rows: Vec<Row> = (0..1000)
+            .map(|id| Row {
+                id,
+                title: format!("Deal {id}"),
+                amount: Money(id * 100),
+                owner: "Ada",
+            })
+            .collect();
         let query = TableQuery::<Row, Filter>::parse("/deals", "per=1000");
-        let time = median(50, || View::new("Deals").body(DataTable::new("deals", &query, &rows)).to_html());
+        let time = median(50, || {
+            View::new("Deals")
+                .body(DataTable::new("deals", &query, &rows))
+                .to_html()
+        });
         assert!(time < Duration::from_millis(3), "{time:?}");
     }
 }

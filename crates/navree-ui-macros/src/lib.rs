@@ -33,7 +33,9 @@ mod table;
 #[proc_macro_derive(Form, attributes(form))]
 pub fn derive_form(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);
-    form::form(input).unwrap_or_else(syn::Error::into_compile_error).into()
+    form::form(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
 }
 
 /// Implements `Options` for an enum of unit variants, so a field of this type
@@ -42,7 +44,9 @@ pub fn derive_form(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(Options, attributes(option))]
 pub fn derive_options(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);
-    form::options(input).unwrap_or_else(syn::Error::into_compile_error).into()
+    form::options(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
 }
 
 /// Implements `TableRow` for a struct: each field is a column.
@@ -62,7 +66,9 @@ pub fn derive_options(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(TableRow, attributes(col, table))]
 pub fn derive_table_row(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);
-    table::table_row(input).unwrap_or_else(syn::Error::into_compile_error).into()
+    table::table_row(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
 }
 
 /// Implements `FilterBar` for a struct: each field is a control of the table's
@@ -71,5 +77,7 @@ pub fn derive_table_row(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(FilterBar, attributes(filter))]
 pub fn derive_filter_bar(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);
-    table::filter_bar(input).unwrap_or_else(syn::Error::into_compile_error).into()
+    table::filter_bar(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
 }

@@ -99,7 +99,9 @@ pub struct Stack {
 impl Stack {
     /// A stack with `gap` units of 4px between its items.
     pub fn gap(gap: u8) -> Self {
-        Self { el: el("div").slot("stack").attr("data-gap", gap_name(gap)) }
+        Self {
+            el: el("div").slot("stack").attr("data-gap", gap_name(gap)),
+        }
     }
 
     /// Sets where items sit.
@@ -129,7 +131,9 @@ pub struct Row {
 impl Row {
     /// A row with `gap` units of 4px between its items, centred across.
     pub fn gap(gap: u8) -> Self {
-        Self { el: el("div").slot("row").attr("data-gap", gap_name(gap)) }
+        Self {
+            el: el("div").slot("row").attr("data-gap", gap_name(gap)),
+        }
     }
 
     /// Sets where items sit across the row.
@@ -171,7 +175,12 @@ pub struct Grid {
 impl Grid {
     /// A grid of `columns` columns (1 to 6).
     pub fn cols(columns: u8) -> Self {
-        Self { el: el("div").slot("grid").attr("data-cols", span_name(columns)).attr("data-gap", "4") }
+        Self {
+            el: el("div")
+                .slot("grid")
+                .attr("data-cols", span_name(columns))
+                .attr("data-gap", "4"),
+        }
     }
 
     /// Sets the gap, in units of 4px.
@@ -217,7 +226,9 @@ pub struct Container {
 impl Container {
     /// A container of the default width.
     pub fn new() -> Self {
-        Self { el: el("div").slot("container") }
+        Self {
+            el: el("div").slot("container"),
+        }
     }
 
     /// Sets the maximum width.

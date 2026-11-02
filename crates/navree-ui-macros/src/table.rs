@@ -5,7 +5,10 @@ use quote::{format_ident, quote};
 use syn::ext::IdentExt;
 use syn::{DeriveInput, LitInt, LitStr, Path};
 
-use crate::shared::{apply_case, doc_line, named_fields, option_inner, serde_rename, serde_rename_all, ui_path, words};
+use crate::shared::{
+    apply_case, doc_line, named_fields, option_inner, serde_rename, serde_rename_all, ui_path,
+    words,
+};
 
 #[derive(Default)]
 struct ColHints {
@@ -117,15 +120,27 @@ fn table_hints(attrs: &[syn::Attribute]) -> syn::Result<TableHints> {
 }
 
 /// `-updated_at,title` as `(name, direction)` pairs, checked against the columns.
-fn sort_terms(sort: &LitStr, ui: &TokenStream, columns: &[String]) -> syn::Result<Vec<TokenStream>> {
+fn sort_terms(
+    sort: &LitStr,
+    ui: &TokenStream,
+    columns: &[String],
+) -> syn::Result<Vec<TokenStream>> {
     let mut out = Vec::new();
-    for term in sort.value().split(',').map(str::trim).filter(|term| !term.is_empty()) {
+    for term in sort
+        .value()
+        .split(',')
+        .map(str::trim)
+        .filter(|term| !term.is_empty())
+    {
         let (name, direction) = match term.strip_prefix('-') {
             Some(name) => (name, quote!(#ui::table::Direction::Desc)),
             None => (term, quote!(#ui::table::Direction::Asc)),
         };
         if !columns.iter().any(|column| column == name) {
-            return Err(syn::Error::new(sort.span(), format!("`{name}` in `sort` is not a column")));
+            return Err(syn::Error::new(
+                sort.span(),
+                format!("`{name}` in `sort` is not a column"),
+            ));
         }
         out.push(quote!((#name, #direction)));
     }
@@ -146,7 +161,12 @@ fn link_expr(link: &LitStr, ui: &TokenStream) -> syn::Result<TokenStream> {
         pattern.push_str(&rest[..open]);
         pattern.push_str("{}");
         let name = &rest[open + 1..open + close];
-        let field = syn::parse_str::<syn::Ident>(name).map_err(|_| syn::Error::new(link.span(), format!("`{{{name}}}` in `link` is not a field name")))?;
+        let field = syn::parse_str::<syn::Ident>(name).map_err(|_| {
+            syn::Error::new(
+                link.span(),
+                format!("`{{{name}}}` in `link` is not a field name"),
+            )
+        })?;
         args.push(quote!(#ui::table::path_segment(&self.#field)));
         rest = &rest[open + close + 1..];
     }
@@ -186,12 +206,29 @@ pub(crate) fn table_row(input: DeriveInput) -> syn::Result<TokenStream> {
         }
         let index = columns.len();
         names.push(name.clone());
-        let label = hint.label.as_ref().map(LitStr::value).or_else(|| doc_line(&field.attrs)).unwrap_or_else(|| words(&name));
-        let source = hint.source.as_ref().map_or_else(|| name.clone(), LitStr::value);
-        let (sortable, numeric, hide, search, strong) = (hint.sortable, hint.numeric, hint.hide_on_mobile, hint.search, hint.strong);
+        let label = hint
+            .label
+            .as_ref()
+            .map(LitStr::value)
+            .or_else(|| doc_line(&field.attrs))
+            .unwrap_or_else(|| words(&name));
+        let source = hint
+            .source
+            .as_ref()
+            .map_or_else(|| name.clone(), LitStr::value);
+        let (sortable, numeric, hide, search, strong) = (
+            hint.sortable,
+            hint.numeric,
+            hint.hide_on_mobile,
+            hint.search,
+            hint.strong,
+        );
         let (hidden, truncate, wrap, locked) = (hint.hidden, hint.truncate, hint.wrap, hint.locked);
         if hint.sticky && hint.sticky_end {
-            return Err(syn::Error::new_spanned(ident, "a column is `sticky` or `sticky_end`, not both"));
+            return Err(syn::Error::new_spanned(
+                ident,
+                "a column is `sticky` or `sticky_end`, not both",
+            ));
         }
         let sticky = match (hint.sticky, hint.sticky_end) {
             (true, _) => quote!(#ui::table::Sticky::Start),
@@ -202,7 +239,12 @@ pub(crate) fn table_row(input: DeriveInput) -> syn::Result<TokenStream> {
             None | Some("start") => quote!(#ui::table::Align::Start),
             Some("center") => quote!(#ui::table::Align::Center),
             Some("end") => quote!(#ui::table::Align::End),
-            Some(other) => return Err(syn::Error::new_spanned(&hint.align, format!("`align = {other}`: expected start, center or end"))),
+            Some(other) => {
+                return Err(syn::Error::new_spanned(
+                    &hint.align,
+                    format!("`align = {other}`: expected start, center or end"),
+                ));
+            }
         };
         let kind = match hint.kind.as_ref().map(ToString::to_string).as_deref() {
             None => quote!(<#ty as #ui::table::ColumnValue>::KIND),
@@ -215,7 +257,14 @@ pub(crate) fn table_row(input: DeriveInput) -> syn::Result<TokenStream> {
             Some("datetime") => quote!(#ui::table::ValueKind::DateTime),
             Some("bool") => quote!(#ui::table::ValueKind::Bool),
             Some("uuid") => quote!(#ui::table::ValueKind::Uuid),
-            Some(other) => return Err(syn::Error::new_spanned(&hint.kind, format!("`kind = {other}`: expected text, int, money, float, decimal, date, datetime, bool or uuid"))),
+            Some(other) => {
+                return Err(syn::Error::new_spanned(
+                    &hint.kind,
+                    format!(
+                        "`kind = {other}`: expected text, int, money, float, decimal, date, datetime, bool or uuid"
+                    ),
+                ));
+            }
         };
         let width = option_tokens(hint.width.as_ref());
         let group = option_tokens(hint.group.as_ref());
@@ -229,7 +278,12 @@ pub(crate) fn table_row(input: DeriveInput) -> syn::Result<TokenStream> {
             Some("boolean") => quote!(#ui::table::FilterKind::Boolean),
             Some("relation") => quote!(#ui::table::FilterKind::Relation),
             Some(other) => {
-                return Err(syn::Error::new_spanned(&hint.filter, format!("`filter = {other}`: expected text, range, date, select, multi, boolean or relation")));
+                return Err(syn::Error::new_spanned(
+                    &hint.filter,
+                    format!(
+                        "`filter = {other}`: expected text, range, date, select, multi, boolean or relation"
+                    ),
+                ));
             }
         };
         let options = match (&hint.options, filter_name.as_deref()) {
@@ -278,7 +332,9 @@ pub(crate) fn table_row(input: DeriveInput) -> syn::Result<TokenStream> {
                 let href = link_expr(link, &ui)?;
                 quote!(#ui::table::write_link(out, #href, &#shown);)
             }
-            (None, Some(tone)) => quote!(#ui::table::write_badge(out, &#shown, #tone(&self.#ident));),
+            (None, Some(tone)) => {
+                quote!(#ui::table::write_badge(out, &#shown, #tone(&self.#ident));)
+            }
             (None, None) => quote!(#ui::table::CellValue::write_cell(&#shown, out);),
         };
         cells.push(quote!(#index => { #content }));
@@ -288,7 +344,10 @@ pub(crate) fn table_row(input: DeriveInput) -> syn::Result<TokenStream> {
         Some(sort) => sort_terms(sort, &ui, &names)?,
         None => Vec::new(),
     };
-    let per = table.per.as_ref().map_or_else(|| quote!(25), |per| quote!(#per));
+    let per = table
+        .per
+        .as_ref()
+        .map_or_else(|| quote!(25), |per| quote!(#per));
     let per_pages = if table.per_pages.is_empty() {
         quote!(&[10, 25, 50, 100])
     } else {
@@ -349,10 +408,15 @@ pub(crate) fn filter_bar(input: DeriveInput) -> syn::Result<TokenStream> {
     for field in &fields.named {
         let Some(ident) = &field.ident else { continue };
         let rust_name = ident.unraw().to_string();
-        let name = serde_rename(&field.attrs).unwrap_or_else(|| apply_case(&rust_name, case.as_deref()));
+        let name =
+            serde_rename(&field.attrs).unwrap_or_else(|| apply_case(&rust_name, case.as_deref()));
         let label = doc_line(&field.attrs).unwrap_or_else(|| words(&rust_name));
         let mut search = false;
-        for attr in field.attrs.iter().filter(|attr| attr.path().is_ident("filter")) {
+        for attr in field
+            .attrs
+            .iter()
+            .filter(|attr| attr.path().is_ident("filter"))
+        {
             attr.parse_nested_meta(|meta| {
                 if meta.path.is_ident("search") {
                     search = true;
@@ -363,7 +427,10 @@ pub(crate) fn filter_bar(input: DeriveInput) -> syn::Result<TokenStream> {
             })?;
         }
         let Some(inner) = option_inner(&field.ty) else {
-            return Err(syn::Error::new_spanned(&field.ty, "a filter is optional: write `Option<...>`"));
+            return Err(syn::Error::new_spanned(
+                &field.ty,
+                "a filter is optional: write `Option<...>`",
+            ));
         };
         let value = format_ident!("__value");
         params.push(quote! {

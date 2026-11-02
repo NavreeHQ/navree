@@ -7,7 +7,8 @@
 
 use bytes::Bytes;
 use http::header::{
-    ACCEPT_ENCODING, CACHE_CONTROL, CONTENT_ENCODING, CONTENT_TYPE, ETAG, HeaderValue, IF_NONE_MATCH, VARY,
+    ACCEPT_ENCODING, CACHE_CONTROL, CONTENT_ENCODING, CONTENT_TYPE, ETAG, HeaderValue,
+    IF_NONE_MATCH, VARY,
 };
 use http::{HeaderMap, StatusCode};
 use navree_http::response::{IntoResponse, Response};
@@ -74,7 +75,9 @@ pub fn scripts(uses: Uses) -> impl Iterator<Item = &'static str> {
 fn lookup(file: &str) -> Option<(&'static Asset, bool)> {
     let (stem, ext) = file.rsplit_once('.')?;
     let (name, hash) = stem.rsplit_once('-')?;
-    let asset = FILES.iter().find(|asset| asset.name == name && asset.ext == ext)?;
+    let asset = FILES
+        .iter()
+        .find(|asset| asset.name == name && asset.ext == ext)?;
     Some((asset, asset.hash == hash))
 }
 
@@ -85,7 +88,9 @@ pub(crate) fn accepts(accept: &str, encoding: &str) -> bool {
         let name = parts.next().unwrap_or_default().trim();
         let refused = parts.any(|param| {
             let param = param.trim();
-            param.strip_prefix("q=").is_some_and(|q| q.trim().parse::<f32>().is_ok_and(|q| q == 0.0))
+            param
+                .strip_prefix("q=")
+                .is_some_and(|q| q.trim().parse::<f32>().is_ok_and(|q| q == 0.0))
         });
         name.eq_ignore_ascii_case(encoding) && !refused
     })
@@ -96,16 +101,30 @@ pub fn respond(file: &str, request: &HeaderMap) -> Response {
     let Some((asset, current)) = lookup(file) else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    let cache = if current { "public, max-age=31536000, immutable" } else { "no-cache" };
-    let etag = HeaderValue::from_str(&format!("\"{}\"", asset.hash)).unwrap_or(HeaderValue::from_static("\"navree-ui\""));
-    if request.get(IF_NONE_MATCH).is_some_and(|value| value == etag) {
+    let cache = if current {
+        "public, max-age=31536000, immutable"
+    } else {
+        "no-cache"
+    };
+    let etag = HeaderValue::from_str(&format!("\"{}\"", asset.hash))
+        .unwrap_or(HeaderValue::from_static("\"navree-ui\""));
+    if request
+        .get(IF_NONE_MATCH)
+        .is_some_and(|value| value == etag)
+    {
         return (
             StatusCode::NOT_MODIFIED,
-            [(ETAG, etag), (CACHE_CONTROL, HeaderValue::from_static(cache))],
+            [
+                (ETAG, etag),
+                (CACHE_CONTROL, HeaderValue::from_static(cache)),
+            ],
         )
             .into_response();
     }
-    let accept = request.get(ACCEPT_ENCODING).and_then(|value| value.to_str().ok()).unwrap_or_default();
+    let accept = request
+        .get(ACCEPT_ENCODING)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
     let (bytes, encoding) = match (asset.brotli, asset.gzip) {
         (Some(brotli), _) if accepts(accept, "br") => (brotli, Some("br")),
         (_, Some(gzip)) if accepts(accept, "gzip") => (gzip, Some("gzip")),
@@ -121,10 +140,14 @@ pub fn respond(file: &str, request: &HeaderMap) -> Response {
     )
         .into_response();
     if asset.gzip.is_some() {
-        response.headers_mut().insert(VARY, HeaderValue::from_static("accept-encoding"));
+        response
+            .headers_mut()
+            .insert(VARY, HeaderValue::from_static("accept-encoding"));
     }
     if let Some(encoding) = encoding {
-        response.headers_mut().insert(CONTENT_ENCODING, HeaderValue::from_static(encoding));
+        response
+            .headers_mut()
+            .insert(CONTENT_ENCODING, HeaderValue::from_static(encoding));
     }
     response
 }
@@ -148,7 +171,11 @@ mod tests {
 
     #[test]
     fn stale_hashes_are_found_but_not_current() {
-        assert!(lookup(&format!("core-{}.js", get("core").unwrap().hash)).unwrap().1);
+        assert!(
+            lookup(&format!("core-{}.js", get("core").unwrap().hash))
+                .unwrap()
+                .1
+        );
         assert!(!lookup("core-000000000000.js").unwrap().1);
         assert!(lookup("nothing-000000000000.js").is_none());
         assert!(lookup("core.js").is_none());

@@ -42,11 +42,28 @@ async fn workspaces_and_row_level_security_hold_on_every_path() {
         eprintln!("skipped: NAVREE_TEST_POSTGRES_URL isn't set");
         return;
     };
-    let admin = Db::connect(&DbOptions { url: url.clone(), ..DbOptions::default() }).await.unwrap();
-    let _ = admin.pool().execute_script("DROP DATABASE IF EXISTS ui_dt_scoping WITH (FORCE)").await;
-    admin.pool().execute_script("CREATE DATABASE ui_dt_scoping").await.unwrap();
+    let admin = Db::connect(&DbOptions {
+        url: url.clone(),
+        ..DbOptions::default()
+    })
+    .await
+    .unwrap();
+    let _ = admin
+        .pool()
+        .execute_script("DROP DATABASE IF EXISTS ui_dt_scoping WITH (FORCE)")
+        .await;
+    admin
+        .pool()
+        .execute_script("CREATE DATABASE ui_dt_scoping")
+        .await
+        .unwrap();
     let own = own_database(&url, "ui_dt_scoping");
-    let owner = Db::connect(&DbOptions { url: own.clone(), ..DbOptions::default() }).await.unwrap();
+    let owner = Db::connect(&DbOptions {
+        url: own.clone(),
+        ..DbOptions::default()
+    })
+    .await
+    .unwrap();
     let (a, b) = (Uuid::new_v4(), Uuid::new_v4());
     for statement in [
         "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'dt_app') THEN CREATE ROLE dt_app LOGIN PASSWORD 'dt_app_pw' NOSUPERUSER NOBYPASSRLS; END IF; END $$".to_owned(),
@@ -59,52 +76,119 @@ async fn workspaces_and_row_level_security_hold_on_every_path() {
     ] {
         owner.pool().execute_script(&statement).await.unwrap_or_else(|error| panic!("{statement}: {error}"));
     }
-    let db = Db::connect(&DbOptions { url: as_role(&own, "dt_app"), ..DbOptions::default() }).await.unwrap();
+    let db = Db::connect(&DbOptions {
+        url: as_role(&own, "dt_app"),
+        ..DbOptions::default()
+    })
+    .await
+    .unwrap();
 
     // With no workspace entered and row-level security on: nothing, not everything.
     let query = TableQuery::<Private, NoFilter>::parse("/p", "per=10");
-    let page = query.load(Private::query().without_workspace_scope(), &db).await.unwrap();
-    assert!(page.rows.is_empty(), "no setting, no rows: {:?}", rows(&page));
+    let page = query
+        .load(Private::query().without_workspace_scope(), &db)
+        .await
+        .unwrap();
+    assert!(
+        page.rows.is_empty(),
+        "no setting, no rows: {:?}",
+        rows(&page)
+    );
 
     // Workspace A, by the ORM's scope and by the policy.
     let uow = db.uow(None, None).await;
-    uow.set_local("navree.workspace", &a.to_string()).await.unwrap();
-    let page = query.load(Private::query().for_workspace(a), &uow).await.unwrap();
+    uow.set_local("navree.workspace", &a.to_string())
+        .await
+        .unwrap();
+    let page = query
+        .load(Private::query().for_workspace(a), &uow)
+        .await
+        .unwrap();
     assert_eq!(page.total, Total::Exact(20));
     assert!(page.rows.iter().all(|row| row.workspace_id == a));
     // The policy holds even if the ORM's scope is opted out of.
-    let page = query.load(Private::query().without_workspace_scope(), &uow).await.unwrap();
+    let page = query
+        .load(Private::query().without_workspace_scope(), &uow)
+        .await
+        .unwrap();
     assert_eq!(page.total, Total::Exact(20), "row-level security alone");
     assert!(page.rows.iter().all(|row| row.workspace_id == a));
 
     // A filter or search can't step out: B's row 1 is invisible by name.
     let searched = TableQuery::<Private, NoFilter>::parse("/p", "q=Row+1&per=10");
-    let page = searched.load(Private::query().for_workspace(a), &uow).await.unwrap();
-    assert!(page.rows.iter().all(|row| row.workspace_id == a), "{:?}", rows(&page));
+    let page = searched
+        .load(Private::query().for_workspace(a), &uow)
+        .await
+        .unwrap();
+    assert!(
+        page.rows.iter().all(|row| row.workspace_id == a),
+        "{:?}",
+        rows(&page)
+    );
     assert!(!rows(&page).contains(&"Row 1".to_owned()));
 
     // Bulk: keys of another workspace don't match, and "all" counts only this one.
-    let request = BulkRequest::<Private, NoFilter>::parse(b"action=x&ids=1&ids=2&ids=3&ids=4").unwrap();
-    let target = request.resolve(Private::query().for_workspace(a), &uow).await.unwrap().unwrap();
+    let request =
+        BulkRequest::<Private, NoFilter>::parse(b"action=x&ids=1&ids=2&ids=3&ids=4").unwrap();
+    let target = request
+        .resolve(Private::query().for_workspace(a), &uow)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(target.count(&uow).await.unwrap(), 2, "rows 2 and 4 only");
-    let request = BulkRequest::<Private, NoFilter>::parse(b"action=x&_mode=all&_expected=19&ex=2&_q=").unwrap();
-    let target = request.resolve(Private::query().for_workspace(a), &uow).await.unwrap().expect("what was shown");
+    let request =
+        BulkRequest::<Private, NoFilter>::parse(b"action=x&_mode=all&_expected=19&ex=2&_q=")
+            .unwrap();
+    let target = request
+        .resolve(Private::query().for_workspace(a), &uow)
+        .await
+        .unwrap()
+        .expect("what was shown");
     let changed = target.delete(&uow).await.unwrap();
     assert_eq!(changed, 19);
-    let refused = BulkRequest::<Private, NoFilter>::parse(b"action=x&_mode=all&_expected=40&_q=").unwrap().resolve(Private::query().for_workspace(a), &uow).await.unwrap();
-    assert!(refused.is_err(), "the whole table's count, from one workspace, is refused");
+    let refused = BulkRequest::<Private, NoFilter>::parse(b"action=x&_mode=all&_expected=40&_q=")
+        .unwrap()
+        .resolve(Private::query().for_workspace(a), &uow)
+        .await
+        .unwrap();
+    assert!(
+        refused.is_err(),
+        "the whole table's count, from one workspace, is refused"
+    );
 
     // Export: the same scope.
-    let response = query.export_csv(Private::query().for_workspace(a), &uow, "x.csv", navree::orm::Record::into_inner).await.unwrap();
-    assert_eq!(response.headers()["content-type"], "text/csv; charset=utf-8");
+    let response = query
+        .export_csv(
+            Private::query().for_workspace(a),
+            &uow,
+            "x.csv",
+            navree::orm::Record::into_inner,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        response.headers()["content-type"],
+        "text/csv; charset=utf-8"
+    );
     uow.rollback().await.unwrap();
 
     // The owner here is a superuser, which row-level security doesn't bind.
-    let all = Private::query().without_workspace_scope().count(&owner).await.unwrap();
-    assert_eq!(all, 40, "the rollback put A's rows back, and B's were never touched");
+    let all = Private::query()
+        .without_workspace_scope()
+        .count(&owner)
+        .await
+        .unwrap();
+    assert_eq!(
+        all, 40,
+        "the rollback put A's rows back, and B's were never touched"
+    );
 
     db.close().await.unwrap();
     owner.close().await.unwrap();
-    admin.pool().execute_script("DROP DATABASE ui_dt_scoping WITH (FORCE)").await.unwrap();
+    admin
+        .pool()
+        .execute_script("DROP DATABASE ui_dt_scoping WITH (FORCE)")
+        .await
+        .unwrap();
     admin.close().await.unwrap();
 }

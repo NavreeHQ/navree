@@ -77,7 +77,11 @@ impl<R: TableRow, F: FilterBar> ViewPost<R, F> {
 
     /// Says so, and redraws the table.
     pub fn done(&self, text: impl Into<String>) -> Reply {
-        Reply::ops_or_redirect(self.query.href()).toast(ToastTone::Success, text).op(Op::Invalidate { target: self.table.clone() })
+        Reply::ops_or_redirect(self.query.href())
+            .toast(ToastTone::Success, text)
+            .op(Op::Invalidate {
+                target: self.table.clone(),
+            })
     }
 }
 
@@ -94,8 +98,18 @@ where
             return Err(status);
         }
         let limit = BodyLimit::of(&parts.extensions);
-        let bytes = read_body(body, limit).await.map_err(|_| StatusCode::PAYLOAD_TOO_LARGE)?;
-        let (mut op, mut name, mut view, mut is_default, mut table, mut path, mut state) = (ViewOp::Save, String::new(), String::new(), false, String::new(), String::new(), String::new());
+        let bytes = read_body(body, limit)
+            .await
+            .map_err(|_| StatusCode::PAYLOAD_TOO_LARGE)?;
+        let (mut op, mut name, mut view, mut is_default, mut table, mut path, mut state) = (
+            ViewOp::Save,
+            String::new(),
+            String::new(),
+            false,
+            String::new(),
+            String::new(),
+            String::new(),
+        );
         for (key, value) in urlencoded::parse(&bytes) {
             match key.as_ref() {
                 "_op" if value == "delete" => op = ViewOp::Delete,
@@ -111,13 +125,23 @@ where
         if !path.starts_with('/') || path.starts_with("//") || path.contains(['\\', '\r', '\n']) {
             path = "/".to_owned();
         }
-        if !table.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_')) {
+        if !table
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        {
             table.clear();
         }
         if op == ViewOp::Save && name.trim().is_empty() {
             return Err(StatusCode::UNPROCESSABLE_ENTITY);
         }
-        Ok(Self { op, name, view, is_default, table, query: TableQuery::parse(path, &state) })
+        Ok(Self {
+            op,
+            name,
+            view,
+            is_default,
+            table,
+            query: TableQuery::parse(path, &state),
+        })
     }
 }
 
@@ -133,7 +157,12 @@ pub(crate) fn menu(
     csrf: Option<&str>,
     popover: impl Fn(String, Element, String, Vec<Node>) -> Node,
 ) -> Node {
-    let hidden = |name: &'static str, value: String| el("input").attr("type", "hidden").attr("name", name).attr("value", value);
+    let hidden = |name: &'static str, value: String| {
+        el("input")
+            .attr("type", "hidden")
+            .attr("name", name)
+            .attr("value", value)
+    };
     let common = || {
         Node::list((
             hidden("_table", table.to_owned()),
@@ -145,28 +174,95 @@ pub(crate) fn menu(
     let rows: Vec<Element> = views
         .iter()
         .map(|view| {
-            let href = if view.query.is_empty() { path.to_owned() } else { format!("{path}?{}", view.query) };
+            let href = if view.query.is_empty() {
+                path.to_owned()
+            } else {
+                format!("{path}?{}", view.query)
+            };
             let active = view.query == query;
-            let delete: Cow<'static, str> = labels.delete_view.replace("{label}", &view.name).into();
+            let delete: Cow<'static, str> =
+                labels.delete_view.replace("{label}", &view.name).into();
             el("div").slot("view-row").children((
-                el("a").slot("menu-link").href(href).flag("data-ui-in-region", true).flag("data-active", active).attr_opt("aria-current", active.then_some("true")).children((
-                    el("bdi").child(view.name.clone()),
-                    view.is_default.then(|| el("span").slot("view-default").child(labels.default_view.to_string())),
-                )),
-                el("form").attr("method", "post").attr("action", url.clone()).flag("data-ui-form", true).children((
-                    common(),
-                    hidden("_view", view.id.clone()),
-                    el("button").slot("button").attr("data-variant", "ghost").attr("data-size", "xs").flag("data-icon-only", true).attr("type", "submit").attr("name", "_op").attr("value", "delete").attr("aria-label", delete.to_string()).child(crate::components::icon(icons::X)),
-                )),
+                el("a")
+                    .slot("menu-link")
+                    .href(href)
+                    .flag("data-ui-in-region", true)
+                    .flag("data-active", active)
+                    .attr_opt("aria-current", active.then_some("true"))
+                    .children((
+                        el("bdi").child(view.name.clone()),
+                        view.is_default.then(|| {
+                            el("span")
+                                .slot("view-default")
+                                .child(labels.default_view.to_string())
+                        }),
+                    )),
+                el("form")
+                    .attr("method", "post")
+                    .attr("action", url.clone())
+                    .flag("data-ui-form", true)
+                    .children((
+                        common(),
+                        hidden("_view", view.id.clone()),
+                        el("button")
+                            .slot("button")
+                            .attr("data-variant", "ghost")
+                            .attr("data-size", "xs")
+                            .flag("data-icon-only", true)
+                            .attr("type", "submit")
+                            .attr("name", "_op")
+                            .attr("value", "delete")
+                            .attr("aria-label", delete.to_string())
+                            .child(crate::components::icon(icons::X)),
+                    )),
             ))
         })
         .collect();
-    let save = el("form").slot("view-save").attr("method", "post").attr("action", url.clone()).flag("data-ui-form", true).children((
-        common(),
-        el("input").slot("input").attr("data-size", "sm").attr("type", "text").attr("name", "_name").attr("required", "").attr("maxlength", 80_i64).attr("placeholder", labels.view_name.to_string()).attr("aria-label", labels.view_name.to_string()),
-        el("label").slot("filter-option").children((el("input").slot("checkbox").attr("type", "checkbox").attr("name", "_default").attr("value", "1"), labels.make_default.to_string())),
-        el("button").slot("button").attr("data-variant", "outline").attr("data-size", "sm").attr("type", "submit").attr("name", "_op").attr("value", "save").child(labels.save_view.to_string()),
-    ));
-    let trigger = el("button").slot("button").attr("data-variant", "outline").attr("data-size", "sm").children((crate::components::icon(icons::STAR), labels.views.to_string()));
-    popover(format!("{table}-views"), trigger, labels.views.to_string(), vec![el("div").slot("view-list").child(rows).into(), save.into()])
+    let save = el("form")
+        .slot("view-save")
+        .attr("method", "post")
+        .attr("action", url.clone())
+        .flag("data-ui-form", true)
+        .children((
+            common(),
+            el("input")
+                .slot("input")
+                .attr("data-size", "sm")
+                .attr("type", "text")
+                .attr("name", "_name")
+                .attr("required", "")
+                .attr("maxlength", 80_i64)
+                .attr("placeholder", labels.view_name.to_string())
+                .attr("aria-label", labels.view_name.to_string()),
+            el("label").slot("filter-option").children((
+                el("input")
+                    .slot("checkbox")
+                    .attr("type", "checkbox")
+                    .attr("name", "_default")
+                    .attr("value", "1"),
+                labels.make_default.to_string(),
+            )),
+            el("button")
+                .slot("button")
+                .attr("data-variant", "outline")
+                .attr("data-size", "sm")
+                .attr("type", "submit")
+                .attr("name", "_op")
+                .attr("value", "save")
+                .child(labels.save_view.to_string()),
+        ));
+    let trigger = el("button")
+        .slot("button")
+        .attr("data-variant", "outline")
+        .attr("data-size", "sm")
+        .children((
+            crate::components::icon(icons::STAR),
+            labels.views.to_string(),
+        ));
+    popover(
+        format!("{table}-views"),
+        trigger,
+        labels.views.to_string(),
+        vec![el("div").slot("view-list").child(rows).into(), save.into()],
+    )
 }
