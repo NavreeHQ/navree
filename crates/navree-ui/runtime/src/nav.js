@@ -103,7 +103,8 @@ function mergeHead(doc) {
 /**
  * Shows a fetched HTML response in this page.
  * @param {Response} response
- * @param {{region?: string, push?: boolean, url?: string}} [how]
+ * @param {{region?: string, push?: boolean, url?: string, keep?: boolean}} [how] `keep`: the same page
+ * again, so what was typed stays.
  */
 export async function showPage(response, how = {}) {
   const url = how.url || response.url;
@@ -124,7 +125,7 @@ export async function showPage(response, how = {}) {
     }
   }
   mergeHead(doc);
-  morph(body(), body(doc));
+  morph(body(), body(doc), { reset: !how.region && !how.keep });
   if (how.push !== false) scrollTo(0, 0);
   /** @type {HTMLElement | null} */ (one("main"))?.focus({ preventScroll: true });
   announce(titleOf(doc));

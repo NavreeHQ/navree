@@ -57,7 +57,7 @@ async function send(form, submitter) {
     pending(form, submitter, false);
     document.dispatchEvent(new CustomEvent("ui:sent", { detail: { form, ok: response.ok } }));
     if (type.startsWith(OPS)) applyEnvelope(await response.json());
-    else if (type.startsWith("text/html")) await showPage(response, { url: response.url });
+    else if (type.startsWith("text/html")) await showPage(response, { url: response.url, keep: response.url === location.href });
     else if (!response.ok) toast("danger", "That didn't work. Try again.");
     startRegions();
   } catch (error) {

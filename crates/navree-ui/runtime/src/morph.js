@@ -13,6 +13,9 @@ on(document, "compositionend", () => { composing = null; }, true);
 
 const OPEN_STATE = new Set(["DIALOG", "DETAILS"]);
 
+/** A navigation is under way: what was typed belongs to the page being left. */
+let resetting = false;
+
 // A form's named fields shadow its own properties and methods: in
 // `<form><input name="id"></form>`, `form.id` is the input. The morph reads
 // every property of a form through its prototype, so no field name can change
@@ -80,7 +83,7 @@ function same(a, b) {
 /** @param {Element} a @param {Element} b */
 function morphAttrs(a, b) {
   const keep = (attr(a, "data-ui-keep-attrs") || "").split(" ");
-  const focused = a === activeElement();
+  const focused = !resetting && a === activeElement();
   for (const { name, value } of attrsOf(b)) {
     if (keep.includes(name) || (focused && name === "value") || (name === "open" && OPEN_STATE.has(nameOf(a)))) continue;
     if (attr(a, name) !== value) set(a, name, value);
@@ -96,7 +99,7 @@ function morphAttrs(a, b) {
 function morphElement(a, b, ids) {
   if (a === composing || has(a, "data-ui-keep")) return;
   morphAttrs(a, b);
-  if (nameOf(a) === "TEXTAREA" && a === activeElement()) return;
+  if (nameOf(a) === "TEXTAREA" && !resetting && a === activeElement()) return;
   morphChildren(a, b, ids);
 }
 
@@ -187,12 +190,47 @@ function morphChildren(a, b, ids) {
   }
 }
 
+const resetForm = HTMLFormElement.prototype.reset;
+/** @param {Element} control */
+const spared = (control) => control === composing || EP.closest.call(control, "[data-ui-keep]");
+
+/**
+ * Sets every control in `root` back to its attributes, as a fresh page has them.
+ * A form's reset is what clears the browser's dirty mark, so later values from the
+ * server reach the field; a control in no form is reset in a form of its own.
+ * @param {Element} root
+ */
+function resetControls(root) {
+  for (const form of EP.querySelectorAll.call(root, "form")) {
+    const owned = /** @type {any[]} */ ([...EP.querySelectorAll.call(form, "input,select,textarea")]);
+    if (owned.includes(composing)) continue;
+    const kept = owned.filter(spared).map((control) => [control, control.value, control.checked]);
+    resetForm.call(/** @type {HTMLFormElement} */ (form));
+    for (const [control, value, checked] of kept) {
+      control.value = value;
+      control.checked = checked;
+    }
+  }
+  const lone = /** @type {HTMLFormElement} */ (make("form"));
+  for (const control of /** @type {NodeListOf<HTMLInputElement>} */ (EP.querySelectorAll.call(root, "input,select,textarea"))) {
+    if (control.form || spared(control)) continue;
+    const mark = new Comment();
+    control.replaceWith(mark);
+    lone.append(control);
+    resetForm.call(lone);
+    mark.replaceWith(control);
+  }
+}
+
 /**
  * Morphs `from` into `to` in place.
  * @param {Element} from the element in the page
  * @param {Element} to a detached element with the new content (it is consumed)
+ * @param {{reset?: boolean}} [how] `reset`: this is another page or another record,
+ * so controls take their new attributes and what was typed goes.
  */
-export function morph(from, to) {
+export function morph(from, to, how = {}) {
+  resetting = !!how.reset;
   const active = /** @type {HTMLInputElement | null} */ (activeElement());
   const inField = active && "selectionStart" in active;
   let start = null, end = null, direction = null;
@@ -206,6 +244,8 @@ export function morph(from, to) {
     if (key) ids.set(key, element);
   }
   morphElement(from, to, ids);
+  if (resetting) resetControls(from);
+  resetting = false;
   if (active && active.nodeName !== "BODY" && active !== activeElement() && active.isConnected) {
     active.focus({ preventScroll: true });
     if (inField && start !== null) {

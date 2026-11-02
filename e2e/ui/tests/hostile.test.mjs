@@ -391,6 +391,94 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       await context.close();
     });
 
+    const recordForm = (name, n) => `<h1 id="h">Editing record ${n}</h1><form id="f" method="post" action="/save/${n}"><input id="title" name="title" value="record ${n} title"><input id="pw" type="password" name="pw"><input id="c" type="checkbox" name="c"><select id="s" name="s"><option value="a">a</option><option value="b">b</option></select><textarea id="area" name="area">notes ${n}</textarea></form><input id="loose" name="loose" value="loose ${n}"><a id="next" href="/${name}-${n + 1}">next</a>`;
+    const readForm = (page) => page.evaluate(() => {
+      const $ = (id) => document.getElementById(id);
+      return { title: $("title").value, pw: $("pw").value, checked: $("c").checked, select: $("s").value, area: $("area").value, loose: $("loose").value };
+    });
+
+    test(`typed values don't follow a navigation to another record (${engine})`, async () => {
+      const name = key("typed");
+      for (const n of [1, 2]) route(`/${name}-${n}`, doc(recordForm(name, n)));
+      const { context, page } = await fresh(`/${name}-1`);
+      await page.fill("#title", "typed on record 1");
+      await page.fill("#pw", "hunter2");
+      await page.check("#c");
+      await page.selectOption("#s", "b");
+      await page.fill("#area", "typed notes");
+      await page.fill("#loose", "typed loose");
+      await page.click("#next");
+      await page.waitForFunction(() => document.getElementById("h").textContent.includes("record 2"));
+      assert.deepEqual(await readForm(page), { title: "record 2 title", pw: "", checked: false, select: "a", area: "notes 2", loose: "loose 2" });
+      await context.close();
+    });
+
+    test(`a navigation while a field has focus resets it too (${engine})`, async () => {
+      const name = key("focused");
+      for (const n of [1, 2]) route(`/${name}-${n}`, doc(recordForm(name, n)));
+      const { context, page } = await fresh(`/${name}-1`);
+      await page.fill("#area", "typed notes");
+      await page.focus("#area");
+      await page.evaluate(() => document.getElementById("next").click());
+      await page.waitForFunction(() => document.getElementById("h").textContent.includes("record 2"));
+      assert.equal((await readForm(page)).area, "notes 2");
+      await context.close();
+    });
+
+    test(`a field reset by a navigation takes later values from the server (${engine})`, async () => {
+      const name = key("clean");
+      for (const n of [1, 2]) route(`/${name}-${n}`, doc(`<div id="r" data-ui-src="/${name}-frag-${n}">${recordForm(name, n)}</div>`));
+      route(`/${name}-frag-2`, doc(`<div id="r">${recordForm(name, 2).replace("record 2 title", "polled title").replace('value="loose 2"', 'value="polled loose"')}</div>`));
+      f.routes.set(`/${name}-inv`, (req, res) => f.ops(res, { ops: [{ op: "invalidate", target: "r" }] }));
+      const { context, page } = await fresh(`/${name}-1`);
+      await page.fill("#title", "typed");
+      await page.fill("#loose", "typed loose");
+      await page.click("#next");
+      await page.waitForFunction(() => document.getElementById("h").textContent.includes("record 2"));
+      await page.evaluate(([path]) => {
+        const form = document.createElement("form");
+        form.id = "inv";
+        form.setAttribute("data-ui-form", "");
+        form.method = "post";
+        form.action = path;
+        document.body.append(form);
+        form.requestSubmit();
+      }, [`/${name}-inv`]);
+      await sleep(250);
+      const state = await readForm(page);
+      assert.equal(state.title, "polled title", "the dirty mark went with the reset");
+      assert.equal(state.loose, "polled loose", "also for a field in no form");
+      await context.close();
+    });
+
+    test(`a save that returns to the same form starts clean (${engine})`, async () => {
+      const name = key("another");
+      route(`/${name}`, doc(`<h1 id="h">New</h1><form id="f" data-ui-form method="post" action="/${name}-post"><input id="title" name="title"><button id="go">save</button></form>`));
+      f.routes.set(`/${name}-post`, (req, res) => f.ops(res, { ops: [{ op: "navigate", href: `/${name}` }] }));
+      const { context, page } = await fresh(`/${name}`);
+      await page.fill("#title", "first deal");
+      await page.click("#go");
+      await sleep(300);
+      assert.equal(await page.inputValue("#title"), "");
+      await context.close();
+    });
+
+    test(`typed values stay through a region update and a same-page answer (${engine})`, async () => {
+      const name = key("keep");
+      route(`/${name}`, doc(`<div id="r" data-ui-src="/${name}-frag"><input id="title" name="title" value="server"></div><form id="f" data-ui-form method="post" action="/${name}-post"><input id="other" name="other"><button id="go">go</button></form>`));
+      route(`/${name}-frag`, doc(`<div id="r" data-ui-src="/${name}-frag"><input id="title" name="title" value="server 2"></div>`));
+      f.routes.set(`/${name}-post`, (req, res) => f.ops(res, { ops: [{ op: "invalidate", target: "r" }] }));
+      const { context, page } = await fresh(`/${name}`);
+      await page.fill("#title", "typed");
+      await page.fill("#other", "other typed");
+      await page.click("#go");
+      await sleep(250);
+      assert.equal(await page.inputValue("#title"), "typed");
+      assert.equal(await page.getAttribute("#title", "value"), "server 2");
+      assert.equal(await page.inputValue("#other"), "other typed");
+      await context.close();
+    });
+
     test(`named elements can't switch the runtime off (${engine})`, async () => {
       for (const name of ["cookie", "getElementById", "querySelector", "querySelectorAll", "body", "head", "documentElement", "activeElement", "title", "createElement", "addEventListener"]) {
         const path = key("document");
