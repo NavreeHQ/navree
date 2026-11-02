@@ -1,6 +1,9 @@
 //! Metrics: values with ranges, trends, partitions, access and caching.
 
 use chrono::{TimeZone, Utc};
+use navree_db::QueryLog;
+use navree_helm::{Field, Metric, ModuleBuilderHelmExt, Resource};
+use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_testing::{TestApp, principal};
 use serde_json::json;
 use uuid::Uuid;
@@ -334,4 +337,92 @@ async fn a_trend_of_counts_reads_the_column_it_buckets_by_and_no_records() {
         .sum();
     assert!(total > 0.0, "{body}");
     assert_eq!(body["value"], json!(total));
+}
+
+/// What a trend asks the database: one grouped statement, whatever the
+/// aggregate and however many rows are in its window.
+#[tokio::test]
+async fn a_trend_is_grouped_by_the_database_in_one_statement() {
+    let app = builder().module(GroupedTrendModule).build().await;
+    let at = |day: u32| Utc.with_ymd_and_hms(2026, 10, day, 6, 0, 0).unwrap();
+    for (day, cents) in [(26, 100), (26, 200), (25, 50), (20, 7), (1, 999)] {
+        deal(
+            &app,
+            DealSeed {
+                amount_cents: cents,
+                created_at: at(day),
+                ..DealSeed::default()
+            },
+        )
+        .await;
+    }
+    let (_, manager) = user(&app, "manager").await;
+    for (slug, expected) in [
+        ("count-by-day", [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0]),
+        ("sum-by-day", [7.0, 0.0, 0.0, 0.0, 0.0, 50.0, 300.0]),
+        ("average-by-day", [7.0, 0.0, 0.0, 0.0, 0.0, 50.0, 150.0]),
+        ("largest-by-day", [7.0, 0.0, 0.0, 0.0, 0.0, 50.0, 200.0]),
+    ] {
+        let path = format!("/admin/api/resources/grouped-trend/metrics/{slug}");
+        let (response, queries) = QueryLog::capture(manager.get(&path).send()).await;
+        let body = response.assert_status(200).json_value();
+        let points: Vec<f64> = body["points"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["value"].as_f64().unwrap())
+            .collect();
+        assert_eq!(points, expected, "{slug}: {body}");
+        let grouped: Vec<String> = queries
+            .iter()
+            .map(|q| q.sql.clone())
+            .filter(|sql| sql.contains("deals"))
+            .collect();
+        assert_eq!(grouped.len(), 1, "{slug}: {grouped:?}");
+        assert!(grouped[0].contains("GROUP BY"), "{slug}: {grouped:?}");
+    }
+}
+
+struct GroupedTrend;
+
+impl Injectable for GroupedTrend {
+    fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async { Ok(GroupedTrend) })
+    }
+}
+
+impl Resource for GroupedTrend {
+    type Model = Deal;
+
+    const LABEL: &'static str = "Grouped";
+    const SLUG: &'static str = "grouped-trend";
+    const TITLE: &'static str = "title";
+    const SIDEBAR_COUNT: bool = false;
+
+    fn fields(&self) -> Vec<Field> {
+        vec![Field::text("title")]
+    }
+
+    fn metrics(&self) -> Vec<Metric<Deal>> {
+        vec![
+            Metric::trend("Count by day").count().by_day(Deal::CREATED_AT, 7),
+            Metric::trend("Sum by day")
+                .sum(Deal::AMOUNT_CENTS)
+                .by_day(Deal::CREATED_AT, 7),
+            Metric::trend("Average by day")
+                .average(Deal::AMOUNT_CENTS)
+                .by_day(Deal::CREATED_AT, 7),
+            Metric::trend("Largest by day")
+                .max(Deal::AMOUNT_CENTS)
+                .by_day(Deal::CREATED_AT, 7),
+        ]
+    }
+}
+
+struct GroupedTrendModule;
+
+impl Module for GroupedTrendModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.resource::<GroupedTrend>();
+    }
 }

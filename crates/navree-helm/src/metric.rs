@@ -47,19 +47,6 @@ impl<C> Aggregate<C> {
             }
         }
     }
-
-    /// Folds the numbers of a bucket (`None` for an empty bucket, except
-    /// counts and sums, which are 0).
-    pub(crate) fn fold(&self, values: &[f64]) -> Option<f64> {
-        match self {
-            Aggregate::Count => Some(values.len() as f64),
-            Aggregate::Sum(_) => Some(values.iter().sum()),
-            Aggregate::Average(_) if values.is_empty() => None,
-            Aggregate::Average(_) => Some(values.iter().sum::<f64>() / values.len() as f64),
-            Aggregate::Min(_) => values.iter().copied().reduce(f64::min),
-            Aggregate::Max(_) => values.iter().copied().reduce(f64::max),
-        }
-    }
 }
 
 /// The name of a column given to a metric.
@@ -480,17 +467,5 @@ mod tests {
         let labels: Vec<&str> = months.iter().map(|b| b.0.as_str()).collect();
         assert_eq!(labels, ["2025-11", "2025-12", "2026-01"]);
         assert_eq!(months[2].2, NaiveDate::from_ymd_opt(2026, 2, 1).unwrap());
-    }
-
-    #[test]
-    fn aggregates_fold_buckets() {
-        let values = [1.0, 5.0, 3.0];
-        assert_eq!(Aggregate::<()>::Count.fold(&values), Some(3.0));
-        assert_eq!(Aggregate::Sum(()).fold(&values), Some(9.0));
-        assert_eq!(Aggregate::Average(()).fold(&values), Some(3.0));
-        assert_eq!(Aggregate::Min(()).fold(&values), Some(1.0));
-        assert_eq!(Aggregate::Max(()).fold(&values), Some(5.0));
-        assert_eq!(Aggregate::Average(()).fold(&[]), None);
-        assert_eq!(Aggregate::Sum(()).fold(&[]), Some(0.0));
     }
 }

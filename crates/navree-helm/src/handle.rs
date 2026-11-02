@@ -1249,6 +1249,35 @@ impl<R: Resource> Handle<R> {
         }
     }
 
+    /// Which of `buckets` a row of `column` is in, as SQL: their index, by the end
+    /// of each, for rows already known to start in the first.
+    fn bucket_of(
+        &self,
+        cx: &Cx,
+        column: &str,
+        shape: Shape,
+        buckets: &[(String, NaiveDate, NaiveDate)],
+    ) -> Expr {
+        let quote = if navree_db::Executor::backend(&cx.uow) == navree_db::Backend::MySql {
+            '`'
+        } else {
+            '"'
+        };
+        let name = values::qualified::<R::Model>(column)
+            .split('.')
+            .map(|part| format!("{quote}{part}{quote}"))
+            .collect::<Vec<_>>()
+            .join(".");
+        let mut sql = String::from("CASE");
+        let mut ends = Vec::with_capacity(buckets.len());
+        for (index, bucket) in buckets.iter().enumerate() {
+            sql.push_str(&format!(" WHEN {name} < ? THEN {index}"));
+            ends.push(values::date_bound(shape, midnight(bucket.2)));
+        }
+        sql.push_str(" END");
+        Expr::raw(sql, ends)
+    }
+
     /// The aggregate over the rows of `query`, as a number (`None` when the
     /// database answers NULL).
     async fn aggregate(
@@ -1360,51 +1389,29 @@ impl<R: Resource> Handle<R> {
                 let today = now.date_naive();
                 let buckets = buckets(*interval, *count, today);
                 let start = buckets.first().map(|b| b.1).unwrap_or(today);
-                let in_window = query.where_(
-                    self.col(column)
-                        .gte(values::date_bound(shape, midnight(start))),
-                );
-                let mut grouped: Vec<Vec<f64>> = vec![Vec::new(); buckets.len()];
-                match metric.aggregate.column() {
-                    // A count reads the one column it buckets by, not the records
-                    // (a table of a few hundred thousand rows, with their JSON
-                    // columns, took seconds to load for a line of thirty points).
-                    None => {
-                        let days = in_window.pluck(&cx.uow, self.col(column)).await?;
-                        for day in days.iter().filter_map(values::value_date) {
-                            if let Some(index) =
-                                buckets.iter().position(|b| b.1 <= day && day < b.2)
-                            {
-                                grouped[index].push(1.0);
-                            }
-                        }
-                    }
-                    // Another aggregate is asked of the database a bucket at a time.
-                    Some(_) => {
-                        for (index, bucket) in buckets.iter().enumerate() {
-                            let within = in_window
-                                .clone()
-                                .where_(
-                                    self.col(column)
-                                        .gte(values::date_bound(shape, midnight(bucket.1))),
-                                )
-                                .where_(
-                                    self.col(column)
-                                        .lt(values::date_bound(shape, midnight(bucket.2))),
-                                );
-                            if let Some(value) =
-                                self.aggregate(cx, within, &metric.aggregate).await?
-                            {
-                                grouped[index].push(value);
-                            }
-                        }
-                    }
-                }
+                let end = buckets.last().map(|b| b.2).unwrap_or(today);
+                let in_window = query
+                    .where_(
+                        self.col(column)
+                            .gte(values::date_bound(shape, midnight(start))),
+                    )
+                    .where_(self.col(column).lt(values::date_bound(shape, midnight(end))));
+                // One grouped statement, whatever the aggregate: the database adds up
+                // the window and only a number per bucket comes back, however many
+                // rows it holds. (`2` is the second selected column, the bucket.)
+                let key = BucketKey(self.bucket_of(cx, column, shape, &buckets));
+                let by_bucket = in_window
+                    .group_by_raw("2", Vec::<Value>::new())
+                    .pluck_keyed(&cx.uow, self.aggregate_expr(&metric.aggregate), key)
+                    .await?;
                 result.points = buckets
                     .iter()
-                    .zip(grouped)
-                    .map(|((label, _, _), values)| {
-                        let value = metric.aggregate.fold(&values).unwrap_or(0.0);
+                    .enumerate()
+                    .map(|(index, (label, _, _))| {
+                        let value = by_bucket
+                            .get(&(index as i64))
+                            .and_then(values::value_number)
+                            .unwrap_or(0.0);
                         Point {
                             key: label.clone(),
                             label: label.clone(),
@@ -1541,6 +1548,26 @@ pub(crate) fn short_key(id: &str) -> &str {
 /// A condition no row matches.
 fn nothing() -> navree_orm::Filter {
     navree_orm::Filter::raw("1 = 0", Vec::<Value>::new())
+}
+
+/// The bucket of a trend's row, by its index.
+struct BucketKey(Expr);
+
+impl Selectable for BucketKey {
+    type Output = i64;
+
+    fn selected(&self) -> Expr {
+        self.0.clone()
+    }
+
+    fn read(&self, row: &Row, column: &str) -> Result<i64, FieldError> {
+        Ok(row
+            .value(column)
+            .ok()
+            .as_ref()
+            .and_then(values::value_number)
+            .map_or(-1, |index| index as i64))
+    }
 }
 
 /// The grouped column of a partition, read with the Rust type of the

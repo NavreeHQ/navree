@@ -291,22 +291,6 @@ pub(crate) fn datetime(input: &Json, tz_offset_minutes: Option<i32>) -> Option<D
         .map(|dt| dt.with_timezone(&Utc))
 }
 
-/// The date part of a stored date or date-time value, in UTC.
-pub(crate) fn value_date(value: &Value) -> Option<NaiveDate> {
-    match value {
-        Value::Date(date) => Some(*date),
-        Value::DateTime(dt) => Some(dt.date()),
-        Value::Timestamp(dt) => Some(dt.date_naive()),
-        Value::TimestampTz(dt) => Some(dt.with_timezone(&Utc).date_naive()),
-        Value::String(s) => date(&Json::String(s.clone())).or_else(|| {
-            NaiveDateTime::parse_from_str(s.trim(), "%Y-%m-%d %H:%M:%S%.f")
-                .ok()
-                .map(|dt| dt.date())
-        }),
-        _ => None,
-    }
-}
-
 /// A stored number as `f64` (metrics): integers, floats, decimals and
 /// numbers held as text; `None` for NULL and anything else.
 pub(crate) fn value_number(value: &Value) -> Option<f64> {
@@ -466,12 +450,8 @@ mod tests {
     }
 
     #[test]
-    fn stored_numbers_and_dates_read_back() {
+    fn stored_numbers_read_back() {
         assert_eq!(value_number(&Value::I64(7)), Some(7.0));
         assert_eq!(value_number(&Value::Null(navree_orm::Kind::I64)), None);
-        assert_eq!(
-            value_date(&Value::String("2026-10-26 12:00:00".into())),
-            NaiveDate::from_ymd_opt(2026, 10, 26)
-        );
     }
 }
