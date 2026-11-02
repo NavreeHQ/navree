@@ -42,7 +42,8 @@ docs_ui = true
 | `api.title` | `Navree API` | `info.title`, and the docs page's title. |
 | `api.version` | `1.0.0` | `info.version`, your API's version (not Navree's). |
 | `api.servers` | `[]` | Server URLs listed in the document. Without any, clients use the URL they loaded the document from. From the environment, comma-separated: `APP_API__SERVERS=https://a.example,https://b.example`. |
-| `api.docs_ui` | `true` | Serve the API reference page at `{api_prefix}/docs`. |
+| `api.docs_ui` | `true` | Serve the API reference page at `{api_prefix}/docs`. Public: no sign-in, in every environment. |
+| `api.openapi_json` | `true` | Serve the document at `{api_prefix}/openapi.json`. Public: anyone can read every documented route, in every environment. `openapi:export` writes the document either way. |
 
 Or configure it in code:
 
@@ -211,18 +212,22 @@ pub struct NotesModule;
 
 The request and response schemas of every route, and every schema they refer to, become `components.schemas`. Two kinds of mistakes **stop the boot**, so a broken document never ships:
 
-- **Two different schemas with the same name** (`ApiError::SchemaConflict`): the error names both routes; rename one type with `#[schema(as = OtherName)]`.
+- **Two different types with the same name** (`ApiError::SchemaConflict`): `a::Item` and `b::Item`, in one schema or in two routes. The error names both types and both routes; rename one with `#[schema(as = OtherName)]`. Two types of a name with the same schema are one component.
 - **A reference to a schema nothing registered** (`ApiError::MissingSchemas`): the derive doesn't collect the schemas of generic type arguments, so a response such as your own generic `Page<Note>` refers to a `Note` component that nothing provides. Register it in its module with `m.api_schema::<T>()`.
 
-Two different *body* schemas with the same name are not an error: the first becomes the component and the others are inlined where they are used.
+A generic type is named after its arguments, so each use is a component of its own: `Page<Note>` is `Page_Note`, and `Vec<Note>` as a response body is `Vec_Note`. `#[schema(inline)]` on a field that contains its own type doesn't compile, and types that inline each other stop the boot with a message naming them.
 
 What the derive reads:
 
 | Attribute | On | What it does |
 |---|---|---|
-| `#[serde(rename_all = "..")]`, `#[serde(rename = "..")]` | type, field, variant | The names in the schema. |
-| `#[serde(skip)]`, `skip_serializing`, `skip_deserializing` | field, variant | Leaves it out of the schema. |
-| `#[serde(default)]`, `skip_serializing_if` | type, field | The field isn't required. A type-level `default` also gives each field's `default` value. |
+| `#[serde(rename_all = "..")]`, `#[serde(rename = "..")]`, `rename_all_fields` | type, field, variant | The names in the schema. A field named differently by direction (`rename(serialize = "a", deserialize = "b")`) is two properties, `readOnly` and `writeOnly`; a variant can't be, and doesn't compile. |
+| `#[serde(skip)]` | field, variant | Leaves it out of the schema. |
+| `skip_serializing`, `skip_deserializing` | field | `writeOnly` (only in requests) and `readOnly` (only in responses). Use `skip` for a field that is never in the JSON. |
+| `#[serde(default)]`, `skip_serializing_if` | type, field | The field isn't required. A type-level `default` (or `default = "function"`) also gives each field's `default` value, when the type has a default and the field can be written. |
+| `#[serde(transparent)]` | type | The schema is its one field's. |
+| `#[serde(with = "..")]`, `serialize_with`, `getter` | field | The derive can't see what these write: a compile error unless the field says `#[schema(value_type = T)]` or `#[schema(schema_with = ..)]`. `deserialize_with` reads the same shape as far as the derive knows. |
+| `#[serde(from = "..")]`, `try_from`, `into`, `remote` | type | The derive can't see what these make: a compile error. Write `impl ToSchema` by hand. |
 | `#[serde(flatten)]` | field | `allOf` with the field's schema, or a map's `additionalProperties`. |
 | `#[serde(tag = "..")]`, `content`, `untagged` | enum | The enum's JSON shape. |
 | `#[serde(deny_unknown_fields)]` | type | `additionalProperties: false`. |

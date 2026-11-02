@@ -128,6 +128,49 @@ async fn the_assets_go_with_the_docs_page() {
 }
 
 #[tokio::test]
+async fn the_document_can_be_turned_off_and_still_exports() {
+    let path = tempfile::tempdir().unwrap();
+    let file = path.path().join("openapi.json");
+    let app = app(ApiOptions {
+        docs_ui: false,
+        openapi_json: false,
+        ..ApiOptions::default()
+    })
+    .boot()
+    .await
+    .unwrap();
+    assert_eq!(
+        get(&app, "/api/openapi.json").await.status,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(get(&app, "/api/docs").await.status, StatusCode::NOT_FOUND);
+    app.run_command("openapi:export", vec![file.display().to_string()])
+        .await
+        .unwrap();
+    assert!(std::fs::read_to_string(&file).unwrap().contains("openapi"));
+}
+
+#[tokio::test]
+async fn the_page_without_the_document_links_to_nothing() {
+    let app = app(ApiOptions {
+        openapi_json: false,
+        ..ApiOptions::default()
+    })
+    .boot()
+    .await
+    .unwrap();
+    let page = get(&app, "/api/docs").await;
+    assert_eq!(page.status, StatusCode::OK);
+    assert!(!page.text().contains("openapi.json"), "{}", page.text());
+}
+
+#[tokio::test]
+async fn by_default_the_document_and_the_page_are_public() {
+    assert!(ApiOptions::default().docs_ui);
+    assert!(ApiOptions::default().openapi_json);
+}
+
+#[tokio::test]
 async fn docs_ui_can_be_turned_off() {
     let app = app(ApiOptions {
         docs_ui: false,

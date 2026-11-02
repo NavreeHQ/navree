@@ -28,7 +28,12 @@ pub struct ApiOptions {
     #[serde(deserialize_with = "list_or_comma_separated")]
     pub servers: Vec<String>,
     /// Serve the API reference page at `{api_prefix}/docs` (default `true`).
+    /// Public: nothing signs a reader in.
     pub docs_ui: bool,
+    /// Serve the document at `{api_prefix}/openapi.json` (default `true`).
+    /// Public: anyone can read every documented route there. `openapi:export`
+    /// writes the document either way.
+    pub openapi_json: bool,
     /// Refuse to boot while a route has no `#[api]` documentation (default
     /// `false`; `navree check` reports undocumented routes either way).
     pub require_docs: bool,
@@ -47,6 +52,7 @@ impl Default for ApiOptions {
             version: "1.0.0".to_owned(),
             servers: Vec::new(),
             docs_ui: true,
+            openapi_json: true,
             require_docs: false,
             undocumented: Vec::new(),
         }

@@ -114,7 +114,12 @@ pub struct NotePage {
 
 ## Boot errors
 
-- `ApiError::SchemaConflict`: two different schemas with one name. Rename
+- Generic types are named after their arguments (`Page<Note>` is `Page_Note`).
+  `skip_serializing` is `writeOnly`, `skip_deserializing` is `readOnly`, names
+  that differ by direction are two properties, `transparent` is its field.
+  `with`, `serialize_with`, `from`, `into` and `remote` need `value_type`,
+  `schema_with` or `impl ToSchema` by hand: the derive refuses to guess.
+- `ApiError::SchemaConflict`: two different types with one name; the error names both. Rename
   one with `#[schema(as = OtherName)]`.
 - `ApiError::MissingSchemas`: a schema refers to a component nothing
   registered (typical with generic wrappers). Register it in the module's
@@ -129,6 +134,7 @@ title = "My App API"
 version = "1.0.0"                     # your API's version
 servers = ["https://api.example.com"]
 docs_ui = true                        # false removes /api/docs and its embedded stylesheet and script (/api/docs/assets/)
+openapi_json = true                   # false removes /api/openapi.json; openapi:export still writes it. Both are public by default
 ```
 
 The page's CSP allows styles and scripts from the app only, nothing inline,

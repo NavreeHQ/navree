@@ -20,7 +20,7 @@ const MAX_EXAMPLE_DEPTH: usize = 6;
 
 /// The URLs the page links to.
 pub(crate) struct Links<'a> {
-    pub(crate) json: &'a str,
+    pub(crate) json: Option<&'a str>,
     pub(crate) stylesheet: &'a str,
     pub(crate) script: &'a str,
 }
@@ -81,9 +81,12 @@ fn header(document: &Document, links: &Links<'_>, out: &mut String) {
     out.push_str("<input id=\"search\" type=\"search\" autocomplete=\"off\" spellcheck=\"false\" placeholder=\"Search (press /)\" aria-describedby=\"search-count\">");
     out.push_str("<output id=\"search-count\" for=\"search\"></output></form>\n");
     out.push_str("<button id=\"menu\" class=\"menu\" type=\"button\" aria-expanded=\"false\" aria-controls=\"nav\" hidden>Contents</button>\n");
-    out.push_str("<a class=\"raw\" href=\"");
-    escape_into(links.json, out);
-    out.push_str("\">openapi.json</a>\n</header>\n");
+    if let Some(json) = links.json {
+        out.push_str("<a class=\"raw\" href=\"");
+        escape_into(json, out);
+        out.push_str("\">openapi.json</a>\n");
+    }
+    out.push_str("</header>\n");
 }
 
 fn navigation(document: &Document, groups: &[Group<'_>], out: &mut String) {
@@ -788,7 +791,7 @@ mod tests {
 
     fn links() -> Links<'static> {
         Links {
-            json: "/api/openapi.json",
+            json: Some("/api/openapi.json"),
             stylesheet: "/api/docs/assets/reference.css",
             script: "/api/docs/assets/reference.js",
         }
@@ -949,6 +952,19 @@ mod tests {
         assert_eq!(
             value,
             json!({"id": "00000000-0000-0000-0000-000000000000", "title": "string"})
+        );
+    }
+
+    #[test]
+    fn the_script_keeps_hostile_hashes_and_paths_out() {
+        let script = include_str!("../assets/reference.js");
+        assert!(
+            script.contains("var linkByTarget = Object.create(null);"),
+            "`#constructor` in the address must not find a method"
+        );
+        assert!(
+            script.contains("isDotSegment"),
+            "`..` in a path value must not change the route"
         );
     }
 

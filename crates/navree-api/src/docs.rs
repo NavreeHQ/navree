@@ -62,7 +62,8 @@ pub(crate) struct DocsController {
 struct DocsPage {
     html: OnceCell<Bytes>,
     csp: HeaderValue,
-    json: String,
+    /// Where the page links to the document, when it is served.
+    json: Option<String>,
     stylesheet: String,
     script: String,
 }
@@ -84,7 +85,10 @@ impl Injectable for DocsController {
                 Arc::new(DocsPage {
                     html: OnceCell::new(),
                     csp: page_csp(&docs.options().servers),
-                    json: format!("{prefix}/openapi.json"),
+                    json: docs
+                        .options()
+                        .openapi_json
+                        .then(|| format!("{prefix}/openapi.json")),
                     stylesheet: format!("{prefix}/docs/assets/{STYLESHEET}"),
                     script: format!("{prefix}/docs/assets/{SCRIPT}"),
                 })
@@ -100,15 +104,18 @@ impl Controller for DocsController {
     }
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
-        let docs = self.docs.clone();
-        let mut routes = vec![
-            RouteDef::on(Method::GET, "/openapi.json", move || {
-                let docs = docs.clone();
-                async move { openapi_json(&docs).await }
-            })
-            .name("api.openapi")
-            .public(),
-        ];
+        let mut routes = Vec::new();
+        if self.docs.options().openapi_json {
+            let docs = self.docs.clone();
+            routes.push(
+                RouteDef::on(Method::GET, "/openapi.json", move || {
+                    let docs = docs.clone();
+                    async move { openapi_json(&docs).await }
+                })
+                .name("api.openapi")
+                .public(),
+            );
+        }
         if let Some(page) = &self.page {
             let page = page.clone();
             let docs = self.docs.clone();
@@ -144,7 +151,7 @@ async fn docs_page(docs: &ApiDocs, page: &DocsPage) -> Response {
             let html = render(
                 document,
                 &Links {
-                    json: &page.json,
+                    json: page.json.as_deref(),
                     stylesheet: &page.stylesheet,
                     script: &page.script,
                 },

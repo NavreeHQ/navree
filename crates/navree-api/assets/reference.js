@@ -22,7 +22,7 @@
   empty.textContent = "Nothing matches this search.";
   empty.hidden = true;
   document.getElementById("content").appendChild(empty);
-  var linkByTarget = {};
+  var linkByTarget = Object.create(null);
   navLinks.forEach(function (link) {
     linkByTarget[link.dataset.target] = link;
   });
@@ -285,6 +285,16 @@
       if (running) {
         running.abort();
       }
+      var dotted = params.filter(function (name) {
+        return isDotSegment(inputs[name].value);
+      });
+      if (dotted.length) {
+        outcome.textContent = "";
+        outcome.appendChild(
+          element("p", "note", dotted.join(", ") + ": `.` and `..` would change the route.")
+        );
+        return;
+      }
       var url = path;
       params.forEach(function (name) {
         url = url.split("{" + name + "}").join(encodeURIComponent(inputs[name].value));
@@ -329,6 +339,11 @@
         });
     });
     return form;
+  }
+
+  // A browser resolves these in a URL even when encoded as far as they can be.
+  function isDotSegment(value) {
+    return value === "." || value === "..";
   }
 
   function showResponse(outcome, response, text, elapsed) {
