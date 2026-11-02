@@ -239,24 +239,28 @@ test("radio buttons, switches and toggles use the browser's keyboard", { timeout
 
 test("firefox: dialogs, popovers and forms work the same", { timeout: 120000 }, async () => {
   const engine = await firefox.launch();
-  const context = await engine.newContext({ viewport: { width: 1280, height: 800 } });
-  const page = await context.newPage();
   const problems = [];
-  page.on("pageerror", (error) => problems.push(String(error)));
-  await page.goto(URL_BASE + "/gallery");
-  await page.getByRole("button", { name: "Open dialog" }).click();
-  const dialog = page.locator("#g-dialog");
-  await dialog.waitFor();
-  await page.keyboard.press("Escape");
-  await dialog.waitFor({ state: "hidden" });
-  const button = page.getByRole("button", { name: "Open popover" });
-  await button.click();
-  await page.locator("#g-popover").waitFor();
-  const [a, p] = [await button.boundingBox(), await page.locator("#g-popover").boundingBox()];
-  assert.ok(Math.abs(p.y - (a.y + a.height)) < 8 || Math.abs(a.y - (p.y + p.height)) < 8, JSON.stringify({ a, p }));
-  await page.goto(URL_BASE + "/deals?per=1000");
-  await page.getByRole("link", { name: "Amount" }).click();
-  await page.locator("th[aria-sort=ascending]").waitFor();
-  await engine.close();
+  // A failed step must not leave a browser running, or the suite never ends.
+  try {
+    const context = await engine.newContext({ viewport: { width: 1280, height: 800 } });
+    const page = await context.newPage();
+    page.on("pageerror", (error) => problems.push(String(error)));
+    await page.goto(URL_BASE + "/gallery");
+    await page.getByRole("button", { name: "Open dialog" }).click();
+    const dialog = page.locator("#g-dialog");
+    await dialog.waitFor();
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "hidden" });
+    const button = page.getByRole("button", { name: "Open popover" });
+    await button.click();
+    await page.locator("#g-popover").waitFor();
+    const [a, p] = [await button.boundingBox(), await page.locator("#g-popover").boundingBox()];
+    assert.ok(Math.abs(p.y - (a.y + a.height)) < 8 || Math.abs(a.y - (p.y + p.height)) < 8, JSON.stringify({ a, p }));
+    await page.goto(URL_BASE + "/deals?per=1000");
+    await page.getByRole("link", { name: "Amount" }).click();
+    await page.locator("th[aria-sort=ascending]").waitFor();
+  } finally {
+    await engine.close();
+  }
   assert.deepEqual(problems, []);
 });
