@@ -108,7 +108,7 @@ async fn new_rows_arrive_after_a_seq() {
         none.header("x-ui-cursor"),
         Some(latest.to_string().as_str())
     );
-    assert!(!none.text().contains("<tr"));
+    assert!(!none.text().contains("data-key="));
     let all = app
         .client()
         .get("/_logbook/rows?after=0")
@@ -116,7 +116,7 @@ async fn new_rows_arrive_after_a_seq() {
         .await
         .assert_status(200)
         .text();
-    assert_eq!(all.matches("<tr").count(), 2);
+    assert_eq!(all.matches("data-key=").count(), 2);
 }
 
 #[tokio::test]
@@ -254,7 +254,7 @@ async fn the_list_polls_for_what_is_newer_and_not_for_the_whole_list() {
         .send()
         .await
         .assert_status(200);
-    assert!(!none.text().contains("<tr"));
+    assert!(!none.text().contains("data-key="));
     app.client()
         .post("/echo")
         .json(&json!({ "n": 9 }))
@@ -267,7 +267,7 @@ async fn the_list_polls_for_what_is_newer_and_not_for_the_whole_list() {
         .send()
         .await
         .assert_status(200);
-    assert_eq!(newer.text().matches("<tr").count(), 1);
+    assert_eq!(newer.text().matches("data-key=").count(), 1);
     assert!(newer.header("x-ui-cursor").unwrap().parse::<u64>().unwrap() > latest);
 }
 

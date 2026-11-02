@@ -26,18 +26,22 @@ const MAX_BUFFERED: u64 = 4 * 1024 * 1024;
 /// router is left as it is.
 pub(crate) fn layer(logbook: Arc<OnceLock<Arc<Logbook>>>) -> GlobalLayer {
     GlobalLayer::new(LayerSlot::Session, "logbook", move |_ctx, router| {
-        let Some(active) = logbook.get().and_then(|logbook| logbook.active().cloned()) else {
+        let Some(active) = capturing(&logbook) else {
             return Ok(router);
         };
-        if !active.options.watchers.requests {
-            return Ok(router);
-        }
         Ok(
             router.layer(middleware::from_fn(move |request: Request, next: Next| {
                 capture(active.clone(), request, next)
             })),
         )
     })
+}
+
+/// What the layer captures for: the Logbook that records requests. `None` (so no layer
+/// at all) when Logbook is off, or its requests watcher is.
+fn capturing(logbook: &OnceLock<Arc<Logbook>>) -> Option<Arc<Active>> {
+    let active = logbook.get()?.active()?.clone();
+    active.options.watchers.requests.then_some(active)
 }
 
 /// Captures one exchange (or marks an ignored path) and hands it to the
@@ -204,5 +208,48 @@ mod tests {
         assert_eq!(cut("hello".into(), 10), ("hello".into(), false));
         assert_eq!(cut("hello".into(), 3), ("hel".into(), true));
         assert_eq!(cut("héllo".into(), 2), ("h".into(), true));
+    }
+}
+
+#[cfg(test)]
+mod layer_decision {
+    use super::*;
+    use crate::{LogbookOptions, StoreKind};
+
+    fn slot(logbook: Logbook) -> OnceLock<Arc<Logbook>> {
+        let slot = OnceLock::new();
+        assert!(slot.set(Arc::new(logbook)).is_ok());
+        slot
+    }
+
+    #[test]
+    fn a_logbook_that_is_off_adds_no_layer() {
+        let off = Logbook::disabled(LogbookOptions {
+            enabled: Some(false),
+            ..LogbookOptions::default()
+        });
+        assert!(capturing(&slot(off)).is_none());
+        assert!(
+            capturing(&OnceLock::new()).is_none(),
+            "nothing built yet, nothing to capture for"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_logbook_that_records_requests_adds_the_layer() {
+        let options = |requests: bool| {
+            let mut options = LogbookOptions {
+                enabled: Some(true),
+                store: StoreKind::Memory,
+                ..LogbookOptions::default()
+            };
+            options.watchers.requests = requests;
+            options
+        };
+        assert!(capturing(&slot(Logbook::in_memory(options(true)))).is_some());
+        assert!(
+            capturing(&slot(Logbook::in_memory(options(false)))).is_none(),
+            "no requests watcher, no layer"
+        );
     }
 }

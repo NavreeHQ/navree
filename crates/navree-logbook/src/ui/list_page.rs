@@ -1,32 +1,22 @@
-//! The list page, drawn with navree-ui: the type buttons, the filter, the
-//! table, and live arrivals as a region that polls and morphs.
+//! The list pane, drawn with navree-ui: the filter, one row for each entry, and
+//! the new arrivals, which join as a region that polls and morphs.
 
 use std::time::Duration;
 
 use navree_ui::{
-    Alert, AlertTone, Badge, BadgeVariant, Button, ButtonVariant, Empty, Input, Node, Region,
-    Row as Layout, Size, Table, TableCell, TableHead, TableRowEl, Uses, View, el, icons,
+    Alert, AlertTone, Badge, BadgeVariant, Button, ButtonVariant, Empty, Input, Item, ItemVariant,
+    Node, Region, Size, Stack, Text, el, icons,
 };
 
-use super::Row;
+use super::{Row, breakable};
 
 /// How often the list asks for new entries.
 const LIVE: Duration = Duration::from_secs(2);
 
-/// One type button: a link, marked when it's the current filter.
-pub(super) struct TypeButton {
-    pub(super) label: &'static str,
-    pub(super) href: String,
-    pub(super) on: bool,
-}
-
 /// What the list shows.
 pub(super) struct List {
-    pub(super) base: String,
     pub(super) q: String,
     pub(super) kind: Option<String>,
-    pub(super) all_href: String,
-    pub(super) buttons: Vec<TypeButton>,
     pub(super) error: String,
     pub(super) rows: Vec<Row>,
     /// The feed to poll for newer entries; `None` on older pages and after a bad filter.
@@ -34,82 +24,86 @@ pub(super) struct List {
     /// The newest entry shown: the feed asks for what is newer.
     pub(super) latest: u64,
     pub(super) next_href: Option<String>,
+    /// Whether an entry is open beside it: on a phone the list gives way to it.
+    pub(super) entry_open: bool,
 }
 
-pub(super) fn row(row: Row) -> TableRowEl {
-    let mut title = vec![Node::from(el("a").href(row.href).child(row.title))];
-    for flag in row.flags {
-        title.push(" ".into());
-        title.push(
-            Badge::new(flag)
-                .variant(if row.amber {
-                    BadgeVariant::Warning
-                } else {
-                    BadgeVariant::Outline
-                })
+/// The badge of a status: green for success, amber for a client's mistake, red for ours.
+fn status_badge(status: &str) -> Option<Badge> {
+    if status.is_empty() {
+        return None;
+    }
+    let variant = match status.as_bytes().first() {
+        Some(b'2') => BadgeVariant::Success,
+        Some(b'4') => BadgeVariant::Warning,
+        Some(b'5') => BadgeVariant::Danger,
+        _ if status == "failed" => BadgeVariant::Danger,
+        _ => BadgeVariant::Outline,
+    };
+    Some(Badge::new(status.to_owned()).variant(variant))
+}
+
+/// One entry as a row: its type and what it was, the status and how long it took,
+/// then when it happened and what it did inside.
+pub(super) fn item(row: Row) -> Item {
+    let title: Vec<Node> = vec![
+        row.prefix
+            .map(|prefix| Text::muted(format!("{prefix} ")).inline().into())
+            .unwrap_or(Node::Empty),
+        Text::code(breakable(&row.title)).into(),
+    ];
+    let mut inside = vec![Node::from(
+        el("span").attr("title", row.at.clone()).child(row.time),
+    )];
+    for counter in row.counters {
+        inside.push(
+            el("span")
+                .attr("title", counter.label)
+                .child(format!(" · {} {}", counter.count, counter.short))
                 .into(),
         );
     }
-    let user: Node = if row.user.is_empty() {
-        Node::Empty
-    } else {
-        el("a")
-            .href(row.user_href)
-            .attr("title", row.user)
-            .child(row.user_short)
-            .into()
-    };
-    let counters: Vec<Node> = row
-        .counters
-        .into_iter()
-        .map(|counter| {
-            el("span")
-                .attr("title", counter.label)
-                .child(format!("{} {} ", counter.count, counter.short))
-                .into()
+    for flag in row.flags {
+        inside.push(" ".into());
+        inside.push(Badge::new(flag).variant(BadgeVariant::Warning).into());
+    }
+    let mut at_end: Vec<Node> = Vec::new();
+    if let Some(status) = status_badge(&row.status) {
+        at_end.push(status.into());
+    }
+    if !row.duration.is_empty() {
+        at_end.push(Text::muted(row.duration).inline().into());
+    }
+    let item = Item::new(Node::list(title))
+        .variant(if row.selected {
+            ItemVariant::Muted
+        } else {
+            ItemVariant::Plain
         })
-        .collect();
-    TableRowEl::new((
-        TableCell::new(Badge::new(row.kind_label).variant(BadgeVariant::Outline)),
-        TableCell::new(title),
-        TableCell::new(row.status),
-        TableCell::new(row.duration).numeric(),
-        TableCell::new(user).hide_on_mobile(),
-        TableCell::new(counters).hide_on_mobile(),
-        TableCell::new(el("span").attr("title", row.at).child(row.time)),
-    ))
-    .key(row.seq.to_string())
+        .description(Node::list(inside))
+        .actions(Node::list(at_end))
+        .href(row.href)
+        .attr("data-key", row.seq.to_string());
+    if row.selected {
+        item.attr("aria-current", "true")
+    } else {
+        item
+    }
 }
 
-/// The rows of a feed answer, ready to go in at the top of the table.
+/// The rows of a feed answer, ready to go in at the top of the list.
 pub(super) fn rows_fragment(rows: Vec<Row>) -> String {
-    navree_ui::render(&Node::list(rows.into_iter().map(row).collect::<Vec<_>>()))
+    navree_ui::render(&Node::list(rows.into_iter().map(item).collect::<Vec<_>>()))
 }
 
-fn table(rows: Vec<Row>) -> Node {
-    Table::new()
-        .body_id("rows-body")
-        .caption("Recorded entries, newest first")
-        .head((
-            TableHead::new("Type"),
-            TableHead::new("Entry"),
-            TableHead::new("Status"),
-            TableHead::new("Duration").numeric(),
-            TableHead::new("User").hide_on_mobile(),
-            TableHead::new("Inside").hide_on_mobile(),
-            TableHead::new("Time"),
-        ))
-        .rows(rows.into_iter().map(row).collect::<Vec<_>>())
-        .into()
-}
-
-/// The bar every Logbook page has: the name, the filter and Clear.
-pub(super) fn topbar(base: &str, q: &str, kind: Option<&str>, live: bool) -> Node {
-    let search = el("form")
+/// The filter: a form that asks the server again as the user types, and keeps the
+/// entry that is open beside the list.
+pub(super) fn search(action: &str, q: &str, kind: Option<&str>) -> Node {
+    el("form")
         .attr("role", "search")
         .attr("method", "get")
-        .attr("action", base.to_owned())
-        .attr_opt("data-ui-target", live.then_some("rows"))
+        .attr("action", action.to_owned())
+        .attr("data-ui-target", "rows")
         .children((
             kind.map(|kind| {
                 el("input")
@@ -119,40 +113,17 @@ pub(super) fn topbar(base: &str, q: &str, kind: Option<&str>, live: bool) -> Nod
             }),
             Input::search("q")
                 .value(q)
-                .placeholder("Filter: user:… tag:… status:4xx route:… slow failed duration>200")
+                .placeholder("user:… route:… status:4xx slow")
                 .attr("aria-label", "Filter")
                 .autocomplete("off"),
-        ));
-    el("header")
-        .slot("topbar")
-        .children((
-            el("a").href(base.to_owned()).child("Logbook"),
-            el("div").slot("topbar-spacer").child(search),
-            el("form")
-                .attr("method", "post")
-                .attr("action", format!("{base}/clear"))
-                .flag("data-ui-form", true)
-                .uses(Uses::CORE)
-                .child(Button::outline("Clear").size(Size::Sm).submit()),
         ))
         .into()
 }
 
-/// The page.
-pub(super) fn page(list: List) -> View {
+/// The list pane.
+pub(super) fn pane(list: List) -> Node {
     let filtered = !list.q.is_empty() || list.kind.is_some();
-    let top = topbar(&list.base, &list.q, list.kind.as_deref(), true);
-    let mut types = vec![type_button(
-        "All",
-        list.all_href,
-        !filtered || list.buttons.iter().all(|button| !button.on),
-    )];
-    types.extend(
-        list.buttons
-            .into_iter()
-            .map(|button| type_button(button.label, button.href, button.on)),
-    );
-    // The table is always there, so rows that arrive have somewhere to go; the
+    // The list is always there, so rows that arrive have somewhere to go; the
     // message under an empty one goes when the first does.
     let empty = list.rows.is_empty().then(|| {
         let message = if filtered {
@@ -164,9 +135,12 @@ pub(super) fn page(list: List) -> View {
             .attr("id", "rows-empty")
             .child(Empty::new(message).icon(icons::INBOX))
     });
+    let rows: Vec<Node> = list.rows.into_iter().map(|row| item(row).into()).collect();
     let mut region = Region::new("rows").children((
         (!list.error.is_empty()).then(|| Alert::new(AlertTone::Danger).title(list.error)),
-        table(list.rows),
+        el("nav")
+            .attr("aria-label", "Entries, newest first")
+            .child(el("div").attr("id", "rows-body").child(rows)),
         empty,
     ));
     if let Some(live) = list.live_href {
@@ -176,32 +150,17 @@ pub(super) fn page(list: List) -> View {
             Some("rows-empty"),
         );
     }
-    View::new("Logbook").body((
-        top,
-        el("main")
-            .slot("page")
-            .attr("id", "main")
-            .attr("tabindex", -1_i64)
-            .children((
-                el("h1").slot("page-title").child("Logbook"),
-                el("nav")
-                    .attr("aria-label", "Entry types")
-                    .child(Layout::gap(1).wrap().children(types)),
-                region,
-                list.next_href
-                    .map(|href| Button::ghost("Older entries").href(href)),
-            )),
-    ))
-}
-
-fn type_button(label: &'static str, href: String, on: bool) -> Button {
-    let button = Button::new(label)
-        .variant(ButtonVariant::Ghost)
-        .size(Size::Sm)
-        .href(href);
-    if on {
-        button.attr("aria-current", "true")
-    } else {
-        button
+    let mut pane = Stack::gap(3).attr("data-pane", "").children((
+        region,
+        list.next_href.map(|href| {
+            Button::new("Older entries")
+                .variant(ButtonVariant::Outline)
+                .size(Size::Sm)
+                .href(href)
+        }),
+    ));
+    if list.entry_open {
+        pane = pane.attr("data-hide-mobile", "");
     }
+    pane.into()
 }

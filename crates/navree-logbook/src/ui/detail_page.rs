@@ -1,13 +1,13 @@
-//! The detail page, drawn with navree-ui: the summary, then one card per kind
-//! of thing the entry touched, and the replay form. No script of its own and no
+//! The detail pane, drawn with navree-ui: the summary, then one card per kind of
+//! thing the entry touched, and the replay form. No script of its own and no
 //! stylesheet of its own: everything on the page is the toolkit's.
 
 use navree_ui::{
-    Badge, BadgeVariant, Button, Card, Checkbox, Field, Heading, Input, Node, Row as Layout, Size,
-    Stack, Table, TableCell, TableHead, TableRowEl, Text, Textarea, Uses, View, el,
+    Badge, BadgeVariant, Button, Card, Checkbox, Empty, Field, Heading, Input, Node, Row as Layout,
+    Size, Stack, Table, TableCell, TableHead, TableRowEl, Text, Textarea, Uses, el, icons,
 };
 
-use super::{Bar, Fact, Item, Section, list_page};
+use super::{Bar, Fact, Item, Section, breakable};
 
 /// A captured request or response.
 pub(super) struct Message {
@@ -43,11 +43,13 @@ pub(super) struct Replay {
     pub(super) user: String,
 }
 
-/// Everything the page shows.
+/// Everything the pane shows.
 pub(super) struct Detail {
-    pub(super) base: String,
     pub(super) title: String,
     pub(super) kind_label: &'static str,
+    /// The request's status, or the job's outcome.
+    pub(super) status: String,
+    pub(super) duration: String,
     pub(super) facts: Vec<Fact>,
     pub(super) tags: Vec<(String, String)>,
     pub(super) flags: Vec<&'static str>,
@@ -161,9 +163,9 @@ fn queries(statements: Vec<Statement>, repeated: Vec<Repeated>) -> Node {
 
 fn item(item: Item) -> Node {
     let title: Node = if item.href.is_empty() {
-        Node::from(item.title)
+        Node::from(breakable(&item.title))
     } else {
-        el("a").href(item.href).child(item.title).into()
+        el("a").href(item.href).child(breakable(&item.title)).into()
     };
     el("article")
         .attr("id", format!("entry-{}", item.id))
@@ -241,7 +243,7 @@ fn timeline(bars: Vec<Bar>) -> Node {
                 TableCell::new(
                     el("a")
                         .href(format!("#entry-{}", bar.id))
-                        .child(bar.label.clone()),
+                        .child(breakable(&bar.label)),
                 ),
                 TableCell::new(track(bar)),
                 TableCell::new(bar.duration.clone()).numeric(),
@@ -304,25 +306,73 @@ fn replay(replay: Replay) -> Node {
         .into()
 }
 
-/// The page.
-pub(super) fn page(detail: Detail) -> View {
-    let mut jump: Vec<(&'static str, &'static str)> = Vec::new();
+/// What opens beside the list when nothing is chosen. On a phone the list has the
+/// page to itself, so this goes.
+pub(super) fn nothing_chosen() -> Node {
+    Stack::gap(3)
+        .span(2)
+        .attr("data-hide-mobile", "")
+        .children(Empty::new("Choose an entry to see what it did.").icon(icons::LIST))
+        .into()
+}
+
+/// What opens beside the list when the address names an entry that isn't there.
+pub(super) fn missing(base: &str) -> Node {
+    Stack::gap(3)
+        .span(2)
+        .children(
+            Empty::new("There is no entry with this id. It may have been pruned or cleared.")
+                .icon(icons::CIRCLE_ALERT)
+                .actions(Button::outline("Back to the list").href(base.to_owned())),
+        )
+        .into()
+}
+
+/// The jump links: what the pane holds, with how many.
+fn jumps(detail: &Detail) -> Vec<(&'static str, String)> {
+    let mut jump: Vec<(&'static str, String)> = Vec::new();
     if detail.request.is_some() {
-        jump.push(("request", "Request"));
+        jump.push(("request", "Request".to_owned()));
     }
     if detail.response.is_some() {
-        jump.push(("response", "Response"));
+        jump.push(("response", "Response".to_owned()));
     }
     if !detail.statements.is_empty() {
-        jump.push(("queries", "Queries"));
+        jump.push(("queries", format!("Queries {}", detail.statements.len())));
     }
-    jump.extend(detail.sections.iter().map(|s| (s.id, s.label)));
+    jump.extend(
+        detail
+            .sections
+            .iter()
+            .map(|s| (s.id, format!("{} {}", s.label, s.items.len()))),
+    );
     if !detail.timeline.is_empty() {
-        jump.push(("timeline", "Timeline"));
+        jump.push(("timeline", "Timeline".to_owned()));
     }
     if detail.replay.is_some() {
-        jump.push(("replay", "Replay"));
+        jump.push(("replay", "Replay".to_owned()));
     }
+    jump
+}
+
+/// The badge of a status: green for success, amber for a client's mistake, red for ours.
+fn status_badge(status: &str) -> Option<Badge> {
+    if status.is_empty() {
+        return None;
+    }
+    let variant = match status.as_bytes().first() {
+        Some(b'2') => BadgeVariant::Success,
+        Some(b'4') => BadgeVariant::Warning,
+        Some(b'5') => BadgeVariant::Danger,
+        _ if status == "failed" => BadgeVariant::Danger,
+        _ => BadgeVariant::Outline,
+    };
+    Some(Badge::new(status.to_owned()).variant(variant))
+}
+
+/// The detail pane.
+pub(super) fn pane(detail: Detail) -> Node {
+    let jump = jumps(&detail);
     let tone = if detail.flags.is_empty() {
         BadgeVariant::Outline
     } else {
@@ -331,7 +381,7 @@ pub(super) fn page(detail: Detail) -> View {
     let flags: Vec<Node> = detail
         .flags
         .iter()
-        .map(|flag| Node::list((" ", Badge::new(*flag).variant(tone))))
+        .map(|flag| Badge::new(*flag).variant(tone).into())
         .collect();
     let facts = Table::new()
         .caption("Summary")
@@ -342,9 +392,9 @@ pub(super) fn page(detail: Detail) -> View {
                 .into_iter()
                 .map(|fact| {
                     let value: Node = if fact.href.is_empty() {
-                        Node::from(fact.value)
+                        Node::from(breakable(&fact.value))
                     } else {
-                        el("a").href(fact.href).child(fact.value).into()
+                        el("a").href(fact.href).child(breakable(&fact.value)).into()
                     };
                     TableRowEl::new((TableCell::new(fact.label), TableCell::new(value)))
                 })
@@ -355,47 +405,42 @@ pub(super) fn page(detail: Detail) -> View {
             detail
                 .tags
                 .into_iter()
-                .map(|(tag, href)| el("a").href(href).child(tag))
+                .map(|(tag, href)| el("a").href(href).child(breakable(&tag)))
                 .collect::<Vec<_>>(),
         )
     });
-    let title = format!("{} · Logbook", detail.title);
-    View::new(title).body((
-        list_page::topbar(&detail.base, "", None, false),
-        el("main")
-            .slot("page")
-            .attr("id", "main")
-            .attr("tabindex", -1_i64)
-            .child(
-                Stack::gap(4).children((
-                    el("a").href(detail.base.clone()).child("All entries"),
-                    Card::new().body(Stack::gap(3).children((
-                        Heading::h1(Node::list((
-                            Badge::new(detail.kind_label).variant(BadgeVariant::Outline),
-                            " ",
-                            detail.title,
-                            Node::list(flags),
-                        ))),
-                        facts,
-                        tags,
-                    ))),
-                    el("nav").attr("aria-label", "On this page").child(
-                        Layout::gap(1).wrap().children(
-                            jump.into_iter()
-                                .map(|(id, label)| {
-                                    Button::ghost(label).size(Size::Sm).href(format!("#{id}"))
-                                })
-                                .collect::<Vec<_>>(),
-                        ),
-                    ),
-                    detail.request.map(|m| message("Request", "request", m)),
-                    detail.response.map(|m| message("Response", "response", m)),
-                    (!detail.statements.is_empty())
-                        .then(|| queries(detail.statements, detail.repeated)),
-                    Node::list(detail.sections.into_iter().map(section).collect::<Vec<_>>()),
-                    (!detail.timeline.is_empty()).then(|| timeline(detail.timeline)),
-                    detail.replay.map(replay),
+    Stack::gap(4)
+        .span(2)
+        .attr("data-pane", "")
+        .children((
+            Card::new().body(
+                Stack::gap(3).children((
+                    Layout::gap(2).wrap().children((
+                        Badge::new(detail.kind_label).variant(BadgeVariant::Outline),
+                        status_badge(&detail.status),
+                        (!detail.duration.is_empty())
+                            .then(|| Text::muted(detail.duration.clone()).inline()),
+                        Node::list(flags),
+                    )),
+                    facts,
+                    tags,
                 )),
             ),
-    ))
+            el("nav").attr("aria-label", "On this entry").child(
+                Layout::gap(1).wrap().children(
+                    jump.into_iter()
+                        .map(|(id, label)| {
+                            Button::ghost(label).size(Size::Sm).href(format!("#{id}"))
+                        })
+                        .collect::<Vec<_>>(),
+                ),
+            ),
+            detail.request.map(|m| message("Request", "request", m)),
+            detail.response.map(|m| message("Response", "response", m)),
+            (!detail.statements.is_empty()).then(|| queries(detail.statements, detail.repeated)),
+            Node::list(detail.sections.into_iter().map(section).collect::<Vec<_>>()),
+            (!detail.timeline.is_empty()).then(|| timeline(detail.timeline)),
+            detail.replay.map(replay),
+        ))
+        .into()
 }

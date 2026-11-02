@@ -1,6 +1,5 @@
 //! The timeline UI at `/_logbook` and its JSON API.
 
-use std::fmt::Write as _;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
@@ -36,6 +35,8 @@ const PAGE: usize = 50;
 mod detail_page;
 #[path = "ui/list_page.rs"]
 mod list_page;
+#[path = "ui/screen.rs"]
+mod screen;
 
 /// Serves the UI and its API under `logbook.path` (only when Logbook is on).
 pub(crate) struct LogbookController {
@@ -160,7 +161,9 @@ impl Controller for LogbookController {
             RouteDef::on(
                 Method::GET,
                 path(""),
-                move |Query(params): Query<ListParams>| async move { this.index(params).await },
+                move |Query(params): Query<ListParams>, parts: Parts| async move {
+                    this.index(params, parts).await
+                },
             )
             .name("logbook.index"),
         );
@@ -178,7 +181,9 @@ impl Controller for LogbookController {
             RouteDef::on(
                 Method::GET,
                 path("/entries/{id}"),
-                move |Path(id): Path<String>| async move { this.detail(id).await },
+                move |Path(id): Path<String>, Query(params): Query<ListParams>, parts: Parts| async move {
+                this.detail(id, params, parts).await
+            },
             )
             .name("logbook.entry"),
         );
@@ -310,7 +315,12 @@ fn filter_of(params: &ListParams) -> Result<Filter, String> {
 
 /// `base?q=<q>` (and `&type=<kind>`).
 fn list_href(base: &str, q: &str, kind: Option<&str>) -> String {
-    let mut href = base.to_owned();
+    href_with(base, q, kind, None)
+}
+
+/// `path?q=<q>&type=<kind>&before=<seq>`: a page with the state of the list in its address.
+fn href_with(path: &str, q: &str, kind: Option<&str>, before: Option<u64>) -> String {
+    let mut href = path.to_owned();
     let mut query = form_urlencoded::Serializer::new(String::new());
     if !q.is_empty() {
         query.append_pair("q", q);
@@ -318,12 +328,38 @@ fn list_href(base: &str, q: &str, kind: Option<&str>) -> String {
     if let Some(kind) = kind {
         query.append_pair("type", kind);
     }
+    if let Some(before) = before {
+        query.append_pair("before", &before.to_string());
+    }
     let query = query.finish();
     if !query.is_empty() {
         href.push('?');
         href.push_str(&query);
     }
     href
+}
+
+/// Gives a long run of text without a space somewhere to break, so that a path or
+/// an identifier a phone can't fit wraps instead of widening the page. Text that
+/// already has room to wrap is left as it is.
+pub(crate) fn breakable(text: &str) -> String {
+    const RUN: usize = 24;
+    let mut out = String::with_capacity(text.len() + text.len() / 16);
+    let mut run = 0;
+    for c in text.chars() {
+        out.push(c);
+        if c.is_whitespace() || c == '\u{200b}' {
+            run = 0;
+            continue;
+        }
+        run += 1;
+        let punctuation = matches!(c, '/' | '?' | '&' | '=' | '_' | '-' | '.' | ':' | ',' | ';');
+        if (punctuation && run >= RUN) || run >= RUN * 2 {
+            out.push('\u{200b}');
+            run = 0;
+        }
+    }
+    out
 }
 
 /// A duration for people: `0.42 ms`, `4.1 ms`, `64 ms`, `1.24 s`.
@@ -378,24 +414,23 @@ struct Counter {
     label: &'static str,
 }
 
+/// One entry of the list.
 #[derive(Serialize)]
-struct Row {
+pub(crate) struct Row {
     id: String,
     seq: u64,
     href: String,
-    kind: &'static str,
-    kind_label: &'static str,
+    /// What kind of entry, for those that aren't requests.
+    prefix: Option<&'static str>,
     title: String,
+    /// A request's status, a job's outcome.
     status: String,
     duration: String,
-    user: String,
-    user_short: String,
-    user_href: String,
     counters: Vec<Counter>,
-    amber: bool,
     flags: Vec<&'static str>,
     at: String,
     time: String,
+    selected: bool,
 }
 
 /// The flags of an entry: failed, slow, repeated queries.
@@ -413,17 +448,61 @@ fn flags(entry: &Entry) -> Vec<&'static str> {
     flags
 }
 
-fn row(base: &str, entry: &Entry) -> Row {
-    let user = entry.user_id.clone().unwrap_or_default();
+/// The word before a title that says what it is, for entries that aren't requests.
+fn prefix_of(kind: EntryKind) -> Option<&'static str> {
+    match kind {
+        EntryKind::Request => None,
+        EntryKind::Query => Some("query"),
+        EntryKind::Job => Some("job"),
+        EntryKind::Mail => Some("mail"),
+        EntryKind::Event => Some("event"),
+        EntryKind::Cache => Some("cache"),
+        EntryKind::Log => Some("log"),
+        EntryKind::Exception => Some("error"),
+        EntryKind::HttpClient => Some("http"),
+        EntryKind::Notification => Some("notification"),
+        EntryKind::Model => Some("change"),
+        EntryKind::Schedule => Some("task"),
+        EntryKind::Dump => Some("dump"),
+    }
+}
+
+/// What the list says of an entry's result: the status of a request, the outcome
+/// of a job, whether a task ran or failed.
+fn status_of(entry: &Entry) -> String {
+    match &entry.content {
+        Content::Request(request) => request.status.to_string(),
+        Content::Job(job) => job.outcome.as_str().to_owned(),
+        Content::Schedule(task) if task.error.is_some() => "failed".to_owned(),
+        Content::Schedule(_) => "ran".to_owned(),
+        _ => String::new(),
+    }
+}
+
+/// How a row's links keep the list the user is looking at.
+struct ListState<'a> {
+    base: &'a str,
+    q: &'a str,
+    kind: Option<&'a str>,
+    /// The ids of the entry that is open: its row is marked.
+    open: &'a [String],
+}
+
+fn row(state: &ListState<'_>, entry: &Entry) -> Row {
     let mut counters = Vec::new();
     if let Some(summary) = entry.summary() {
         for (count, short, label) in [
             (summary.queries, "q", "queries"),
             (summary.events, "ev", "events"),
+            (summary.jobs, "job", "jobs"),
             (summary.mail, "mail", "mail"),
+            (summary.cache, "cache", "cache calls"),
             (summary.logs, "log", "log lines"),
             (summary.exceptions, "err", "exceptions"),
             (summary.http_client, "http", "outgoing HTTP calls"),
+            (summary.notifications, "notif", "notifications"),
+            (summary.models, "chg", "data changes"),
+            (summary.dumps, "dump", "dumps"),
         ] {
             if count > 0 {
                 counters.push(Counter {
@@ -434,24 +513,24 @@ fn row(base: &str, entry: &Entry) -> Row {
             }
         }
     }
-    let flags = flags(entry);
     Row {
         id: entry.id.clone(),
         seq: entry.seq,
-        href: format!("{base}/entries/{}", entry.id),
-        kind: entry.kind().as_str(),
-        kind_label: row_label(entry.kind()),
+        href: href_with(
+            &format!("{}/entries/{}", state.base, entry.id),
+            state.q,
+            state.kind,
+            None,
+        ),
+        prefix: prefix_of(entry.kind()),
         title: shorten(&entry.title(), 240),
-        status: entry.status().map(|s| s.to_string()).unwrap_or_default(),
+        status: status_of(entry),
         duration: entry.duration_ms.map(format_ms).unwrap_or_default(),
-        user_short: user.chars().take(8).collect(),
-        user_href: list_href(base, &format!("user:{user}"), None),
-        user,
         counters,
-        amber: !flags.is_empty(),
-        flags,
+        flags: flags(entry),
         at: entry.at.to_rfc3339(),
         time: entry.at.format("%H:%M:%S%.3f").to_string(),
+        selected: state.open.contains(&entry.id),
     }
 }
 
@@ -496,14 +575,64 @@ impl LogbookController {
         &self.logbook.options().path
     }
 
-    async fn index(&self, params: ListParams) -> Result<Response, AppError> {
+    /// The list, with nothing open beside it.
+    async fn index(&self, params: ListParams, parts: Parts) -> Result<Response, AppError> {
+        self.screen(params, None, &parts).await
+    }
+
+    /// The list, and beside it what the entry `id` did.
+    async fn detail(
+        &self,
+        id: String,
+        params: ListParams,
+        parts: Parts,
+    ) -> Result<Response, AppError> {
+        self.screen(params, Some(id), &parts).await
+    }
+
+    /// One page of the tool: the list the address asks for and, when an entry is
+    /// named, the entry beside it.
+    async fn screen(
+        &self,
+        params: ListParams,
+        open: Option<String>,
+        parts: &Parts,
+    ) -> Result<Response, AppError> {
         let base = self.base().to_owned();
         let q = params.q.clone().unwrap_or_default();
         let kind = params
             .kind
             .clone()
             .filter(|kind| EntryKind::parse(kind).is_some());
-        let (rows, error) = match filter_of(&params) {
+
+        // What is open beside the list: the entry, with the ids that mark its row.
+        let (beside, open_ids) = match &open {
+            None => (screen::Beside::Nothing, Vec::new()),
+            Some(id) => match self.find(id).await {
+                Ok(selected) => {
+                    let batch = match &selected.batch_id {
+                        Some(batch_id) => self.logbook.batch(batch_id).await,
+                        None => None,
+                    };
+                    let entries: Vec<Entry> = batch
+                        .as_ref()
+                        .map_or_else(|| vec![selected.clone()], |batch| batch.entries().to_vec());
+                    let head = batch
+                        .as_ref()
+                        .and_then(Batch::head)
+                        .cloned()
+                        .unwrap_or_else(|| selected.clone());
+                    let detail = self.detail_context(&selected, &head, &entries).await?;
+                    (
+                        screen::Beside::Entry(Box::new(detail)),
+                        vec![selected.id.clone(), head.id.clone()],
+                    )
+                }
+                Err(_) => (screen::Beside::Missing, Vec::new()),
+            },
+        };
+
+        let (entries, error) = match filter_of(&params) {
             Ok(filter) => {
                 let query = ListQuery {
                     filter,
@@ -521,43 +650,56 @@ impl LogbookController {
             }
             Err(error) => (Vec::new(), error),
         };
-        let next_href = if rows.len() == PAGE {
-            let mut href = list_href(&base, &q, kind.as_deref());
-            let last = rows.last().map_or(0, |entry| entry.seq);
-            href.push(if href.contains('?') { '&' } else { '?' });
-            let _ = write!(href, "before={last}");
-            href
-        } else {
-            String::new()
+        let path = parts.uri.path().to_owned();
+        let next_href = (entries.len() == PAGE).then(|| {
+            href_with(
+                &path,
+                &q,
+                kind.as_deref(),
+                Some(entries.last().map_or(0, |entry| entry.seq)),
+            )
+        });
+        let latest = entries.first().map_or(0, |entry| entry.seq);
+        let live_href = (params.before.is_none() && error.is_empty())
+            .then(|| list_href(&format!("{base}/rows"), &q, kind.as_deref()));
+        let state = ListState {
+            base: &base,
+            q: &q,
+            kind: kind.as_deref(),
+            open: &open_ids,
         };
-        let latest = rows.first().map_or(0, |entry| entry.seq);
-        let live_href = if params.before.is_none() && error.is_empty() {
-            list_href(&format!("{base}/rows"), &q, kind.as_deref())
-        } else {
-            String::new()
+        let rows: Vec<Row> = entries.iter().map(|entry| row(&state, entry)).collect();
+        let counts = self
+            .logbook
+            .counts()
+            .await
+            .map_err(LogbookError::into_app_error)?;
+        let options = self.logbook.options();
+        let store = match options.store {
+            crate::StoreKind::File => options.file.clone(),
+            crate::StoreKind::Memory => "in memory".to_owned(),
         };
-        let buttons: Vec<list_page::TypeButton> = EntryKind::ALL
-            .iter()
-            .map(|k| list_page::TypeButton {
-                label: k.label(),
-                href: list_href(&base, &q, Some(k.as_str())),
-                on: kind.as_deref().and_then(EntryKind::parse) == Some(*k),
-            })
-            .collect();
-        let rows: Vec<Row> = rows.iter().map(|entry| row(&base, entry)).collect();
-        Ok(list_page::page(list_page::List {
-            all_href: list_href(&base, &q, None),
-            live_href: (!live_href.is_empty()).then_some(live_href),
-            latest,
-            next_href: (!next_href.is_empty()).then_some(next_href),
+        let screen = screen::Screen {
+            list: list_page::List {
+                q: q.clone(),
+                kind: kind.clone(),
+                error,
+                rows,
+                live_href,
+                latest,
+                next_href,
+                entry_open: false,
+            },
+            kind: kind.as_deref().and_then(EntryKind::parse),
             base,
             q,
-            kind,
-            buttons,
-            error,
-            rows,
-        })
-        .into_response())
+            counts,
+            store,
+            path,
+            beside,
+        };
+        let app = screen::shell(&screen).for_request(parts.uri.path(), &parts.headers);
+        Ok(screen::page(&app, screen).into_response())
     }
 
     /// New rows for the live list (`after`), as HTML.
@@ -577,7 +719,18 @@ impl LogbookController {
             .map_err(LogbookError::into_app_error)?;
         let latest = entries.first().map_or(after, |entry| entry.seq);
         let base = self.base().to_owned();
-        let rows: Vec<Row> = entries.iter().map(|entry| row(&base, entry)).collect();
+        let q = params.q.clone().unwrap_or_default();
+        let kind = params
+            .kind
+            .clone()
+            .filter(|kind| EntryKind::parse(kind).is_some());
+        let state = ListState {
+            base: &base,
+            q: &q,
+            kind: kind.as_deref(),
+            open: &[],
+        };
+        let rows: Vec<Row> = entries.iter().map(|entry| row(&state, entry)).collect();
         let mut response = html(list_page::rows_fragment(rows));
         if let Ok(value) = HeaderValue::from_str(&latest.to_string()) {
             response
@@ -602,24 +755,6 @@ impl LogbookController {
             .await
             .and_then(|batch| batch.head().cloned())
             .ok_or_else(AppError::not_found)
-    }
-
-    async fn detail(&self, id: String) -> Result<Response, AppError> {
-        let selected = self.find(&id).await?;
-        let batch = match &selected.batch_id {
-            Some(batch_id) => self.logbook.batch(batch_id).await,
-            None => None,
-        };
-        let entries: Vec<Entry> = batch
-            .as_ref()
-            .map_or_else(|| vec![selected.clone()], |batch| batch.entries().to_vec());
-        let head = batch
-            .as_ref()
-            .and_then(Batch::head)
-            .cloned()
-            .unwrap_or_else(|| selected.clone());
-        let detail = self.detail_context(&selected, &head, &entries).await?;
-        Ok(detail_page::page(detail).into_response())
     }
 
     async fn detail_context(
@@ -827,8 +962,9 @@ impl LogbookController {
         Ok(detail_page::Detail {
             title: shorten(&head.title(), 300),
             kind_label: row_label(head.kind()),
+            status: status_of(head),
+            duration: head.duration_ms.map(format_ms).unwrap_or_default(),
             flags: flags(head),
-            base,
             facts,
             tags,
             request,
@@ -1254,6 +1390,22 @@ mod tests {
         assert_eq!(format_ms(4.12), "4.1 ms");
         assert_eq!(format_ms(64.4), "64 ms");
         assert_eq!(format_ms(1240.0), "1.24 s");
+    }
+
+    #[test]
+    fn long_runs_get_somewhere_to_break_and_text_with_room_is_left_alone() {
+        assert_eq!(breakable("GET /api/v1/deals"), "GET /api/v1/deals");
+        let long = format!("/{}", "a".repeat(100));
+        let broken = breakable(&long);
+        assert!(broken.contains('\u{200b}'), "{broken}");
+        assert_eq!(
+            broken.replace('\u{200b}', ""),
+            long,
+            "only a break is added"
+        );
+        let path = "/api/v1/companies/0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23/contacts/0199c1d2-6f7e";
+        assert!(breakable(path).contains('\u{200b}'));
+        assert!(!breakable("short/word").contains('\u{200b}'));
     }
 
     #[test]

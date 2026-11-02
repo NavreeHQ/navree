@@ -10,6 +10,7 @@ mod app;
 mod docs_examples;
 mod docs_surface;
 mod filter;
+mod pages;
 mod replay;
 mod store;
 mod ui;
