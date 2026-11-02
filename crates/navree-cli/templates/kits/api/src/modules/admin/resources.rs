@@ -45,18 +45,16 @@ impl Resource for UserAdmin {
     }
 
     fn filters(&self) -> Vec<Filter<User>> {
-        vec![Filter::boolean(
-            "unverified",
-            "Unverified only",
-            |query, on| {
+        vec![
+            Filter::boolean("unverified", "Unverified only", |query, on| {
                 if on {
                     query.where_(User::EMAIL_VERIFIED_AT.is_null())
                 } else {
                     query
                 }
-            },
-        )
-        .reads(["email_verified_at"])]
+            })
+            .reads(["email_verified_at"]),
+        ]
     }
 
     fn metrics(&self) -> Vec<Metric<User>> {
