@@ -56,6 +56,62 @@ fn responding(response: navree_http::SchemaFn) -> ApiMeta {
     }
 }
 
+/// Two types of one name with the same schema by text, whose `child` differs.
+mod alike {
+    use navree_openapi::ToSchema;
+
+    pub mod first {
+        use super::ToSchema;
+
+        #[derive(ToSchema)]
+        #[allow(dead_code)]
+        pub struct Child {
+            pub in_first: i32,
+        }
+
+        #[derive(ToSchema)]
+        #[allow(dead_code)]
+        pub struct Item {
+            pub child: Child,
+        }
+    }
+
+    pub mod second {
+        use super::ToSchema;
+
+        #[derive(ToSchema)]
+        #[allow(dead_code)]
+        pub struct Child {
+            pub in_second: String,
+        }
+
+        #[derive(ToSchema)]
+        #[allow(dead_code)]
+        pub struct Item {
+            pub child: Child,
+        }
+    }
+
+    #[derive(ToSchema)]
+    #[allow(dead_code)]
+    pub struct Both {
+        pub first: first::Item,
+        pub second: second::Item,
+    }
+}
+
+#[tokio::test]
+async fn a_conflict_below_two_types_that_look_the_same_fails_boot() {
+    let builder = app_with(
+        ApiOptions::default(),
+        vec![documented("/both", responding(schema_fn::<alike::Both>))],
+    );
+    let error = boot_error(builder).await;
+    assert!(error.contains("`Child`"), "{error}");
+    assert!(error.contains("first::Child"), "names one type: {error}");
+    assert!(error.contains("second::Child"), "and the other: {error}");
+}
+
 #[tokio::test]
 async fn conflicting_referenced_schema_names_fail_boot() {
     let builder = app_with(

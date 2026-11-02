@@ -59,16 +59,25 @@ pub trait ToSchema {
 
     /// Adds the component schemas [`reference`](ToSchema::reference) refers to:
     /// this type's and what it refers to. A type already in `out` isn't walked
-    /// again, so a type that contains itself ends. A different schema of the
-    /// same name goes in beside the first, for the document to refuse.
+    /// again, so a type that contains itself ends. Another type of the same name
+    /// is walked as well, even with the same schema, since what its `$ref`s mean
+    /// may differ: a different schema of one name goes in beside the first, for
+    /// the document to refuse.
     fn components(out: &mut Vec<(String, Schema)>) {
         let name = Self::name();
+        let rust_type = std::any::type_name::<Self>();
         let schema = Schema {
-            rust_type: crate::schema::RustType(Some(std::any::type_name::<Self>())),
+            rust_type: crate::schema::RustType(Some(rust_type)),
             ..Self::schema()
         };
-        if let Some((_, existing)) = out.iter().find(|(existing, _)| *existing == name) {
-            if *existing != schema {
+        let walked = out
+            .iter()
+            .any(|(existing, other)| *existing == name && other.rust_type.0 == Some(rust_type));
+        if walked {
+            let same = out
+                .iter()
+                .any(|(existing, other)| *existing == name && *other == schema);
+            if !same {
                 out.push((name.into_owned(), schema));
             }
             return;
@@ -76,6 +85,53 @@ pub trait ToSchema {
         out.push((name.into_owned(), schema));
         Self::schemas(out);
     }
+}
+
+/// The component schemas `T` refers to, one for each name: what a schema that
+/// stands alone puts under `$defs`.
+///
+/// # Panics
+///
+/// When two different schemas have one name, since a `$ref` could only mean one
+/// of them and a tool's caller or a model would be told the wrong shape. The
+/// message names both types; `#[schema(as = Name)]` renames one.
+///
+/// ```
+/// use navree_openapi::{ToSchema, components_of};
+///
+/// #[derive(ToSchema)]
+/// #[allow(dead_code)]
+/// struct Stage {
+///     name: String,
+/// }
+///
+/// #[derive(ToSchema)]
+/// #[allow(dead_code)]
+/// struct Deal {
+///     stage: Stage,
+/// }
+///
+/// assert!(components_of::<Deal>().contains_key("Stage"));
+/// ```
+pub fn components_of<T: ToSchema + ?Sized>() -> BTreeMap<String, Schema> {
+    let mut referenced = Vec::new();
+    T::schemas(&mut referenced);
+    let mut components: BTreeMap<String, Schema> = BTreeMap::new();
+    for (name, schema) in referenced {
+        match components.get(&name) {
+            Some(first) if *first == schema => {}
+            Some(first) => panic!(
+                "`{name}` names two different schemas under `{}`: `{}` and `{}`; give one of them                  another name with #[schema(as = Name)]",
+                std::any::type_name::<T>(),
+                first.rust_type.0.unwrap_or("a schema written by hand"),
+                schema.rust_type.0.unwrap_or("a schema written by hand"),
+            ),
+            None => {
+                components.insert(name, schema);
+            }
+        }
+    }
+    components
 }
 
 /// `#[schema(value_type = Object)]`: `{"type": "object"}`, whatever the field's

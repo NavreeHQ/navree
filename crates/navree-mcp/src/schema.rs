@@ -8,6 +8,11 @@ use serde_json::{Map, Value, json};
 /// refers to inlined under `$defs` (`#/components/schemas/Stage` becomes
 /// `#/$defs/Stage`), so the document stands alone.
 ///
+/// # Panics
+///
+/// When two different types under `T` have one schema name, which a `$ref`
+/// couldn't tell apart; the message names both.
+///
 /// ```
 /// use navree_mcp::input_schema;
 ///
@@ -24,8 +29,7 @@ use serde_json::{Map, Value, json};
 /// ```
 pub fn input_schema<T: navree_openapi::ToSchema>() -> Value {
     let mut schema = serde_json::to_value(T::schema()).unwrap_or_else(|_| json!({}));
-    let mut referenced = Vec::new();
-    T::schemas(&mut referenced);
+    let referenced = navree_openapi::components_of::<T>();
     if !referenced.is_empty() {
         let defs: Map<String, Value> = referenced
             .into_iter()

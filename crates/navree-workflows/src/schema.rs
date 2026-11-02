@@ -8,6 +8,11 @@ use serde_json::{Map, Value, json};
 /// comments become descriptions) with the schemas it refers to under
 /// `$defs` (`#/components/schemas/Stage` becomes `#/$defs/Stage`).
 ///
+/// # Panics
+///
+/// When two different types under `T` have one schema name, which a `$ref`
+/// couldn't tell apart; the message names both.
+///
 /// ```
 /// use navree_workflows::json_schema;
 ///
@@ -24,8 +29,7 @@ use serde_json::{Map, Value, json};
 /// ```
 pub fn json_schema<T: ToSchema>() -> Value {
     let mut schema = serde_json::to_value(T::schema()).unwrap_or_else(|_| json!({}));
-    let mut referenced = Vec::new();
-    T::schemas(&mut referenced);
+    let referenced = navree_openapi::components_of::<T>();
     rewrite_refs(&mut schema);
     if !referenced.is_empty() {
         let defs: Map<String, Value> = referenced

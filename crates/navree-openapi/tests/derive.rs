@@ -880,3 +880,140 @@ fn an_enum_without_variants_compiles_and_allows_nothing() {
     assert_eq!(schema::<Never>(), json!({"not": {}}));
     assert_eq!(schema::<AllSkipped>(), json!({"not": {}}));
 }
+
+/// Two types of one name, with the same schema by text: what their `child`
+/// refers to differs.
+mod first {
+    use super::*;
+
+    #[derive(ToSchema)]
+    pub struct Child {
+        pub in_first: i32,
+    }
+
+    #[derive(ToSchema)]
+    pub struct Item {
+        pub child: Child,
+    }
+}
+
+mod second {
+    use super::*;
+
+    #[derive(ToSchema)]
+    pub struct Child {
+        pub in_second: String,
+    }
+
+    #[derive(ToSchema)]
+    pub struct Item {
+        pub child: Child,
+    }
+}
+
+#[derive(ToSchema)]
+struct Both {
+    first: first::Item,
+    second: second::Item,
+}
+
+#[test]
+fn the_walk_goes_on_below_two_types_that_look_the_same() {
+    let mut walked = Vec::new();
+    Both::schemas(&mut walked);
+    let children: Vec<Value> = walked
+        .iter()
+        .filter(|(name, _)| name == "Child")
+        .map(|(_, schema)| schema.to_value())
+        .collect();
+    assert_eq!(children.len(), 2, "both children are seen: {children:?}");
+    assert_ne!(children[0], children[1]);
+    let mut carried = json!({});
+    navree_openapi::__private::attach_components(&mut carried, walked);
+    assert!(
+        carried.get("x-navree-component-conflicts").is_some(),
+        "the document is told: {carried}"
+    );
+}
+
+/// The same pair of types with one `Child` between them means one thing.
+mod shared {
+    use super::*;
+
+    #[derive(ToSchema)]
+    pub struct Child {
+        pub value: i32,
+    }
+
+    pub mod left {
+        use super::*;
+
+        #[derive(ToSchema)]
+        pub struct Item {
+            pub child: Child,
+        }
+    }
+
+    pub mod right {
+        use super::*;
+
+        #[derive(ToSchema)]
+        pub struct Item {
+            pub child: Child,
+        }
+    }
+}
+
+#[derive(ToSchema)]
+struct BothShared {
+    left: shared::left::Item,
+    right: shared::right::Item,
+}
+
+#[test]
+fn two_types_that_mean_the_same_share_a_component() {
+    let mut carried = json!({});
+    let mut walked = Vec::new();
+    BothShared::schemas(&mut walked);
+    navree_openapi::__private::attach_components(&mut carried, walked);
+    assert!(
+        carried.get("x-navree-component-conflicts").is_none(),
+        "{carried}"
+    );
+}
+
+/// Types of one name that contain themselves end, however alike they are.
+mod trees {
+    use super::*;
+
+    pub mod left {
+        use super::*;
+
+        #[derive(ToSchema)]
+        pub struct Tree {
+            pub children: Vec<Tree>,
+        }
+    }
+
+    pub mod right {
+        use super::*;
+
+        #[derive(ToSchema)]
+        pub struct Tree {
+            pub children: Vec<Tree>,
+        }
+    }
+}
+
+#[derive(ToSchema)]
+struct Forest {
+    left: trees::left::Tree,
+    right: trees::right::Tree,
+}
+
+#[test]
+fn two_recursive_types_of_one_name_end() {
+    let mut walked = Vec::new();
+    Forest::schemas(&mut walked);
+    assert_eq!(walked.iter().filter(|(name, _)| name == "Tree").count(), 2);
+}

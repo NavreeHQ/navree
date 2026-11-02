@@ -47,7 +47,7 @@ pub use document::{
 #[doc(hidden)]
 pub use schema::RustType;
 pub use schema::{NotASchema, Schema, SchemaType, Subschema, Type};
-pub use to_schema::{Object, ToSchema};
+pub use to_schema::{Object, ToSchema, components_of};
 
 /// `#[derive(ToSchema)]`: see the macro's documentation in navree-macros.
 pub use navree_macros::ToSchema;

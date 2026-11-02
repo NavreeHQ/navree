@@ -10,9 +10,13 @@ pub(crate) const WRAPPED: &str = "value";
 
 /// A self-contained JSON Schema for `T`: its own schema with the types it
 /// refers to under `$defs` (`#/$defs/Stage`).
+///
+/// # Panics
+///
+/// When two different types under `T` have one schema name, which a `$ref`
+/// couldn't tell apart; the message names both.
 pub fn json_schema<T: ToSchema>() -> Value {
-    let mut components = Vec::new();
-    T::schemas(&mut components);
+    let components = navree_openapi::components_of::<T>();
     let mut schema = serde_json::to_value(T::schema()).unwrap_or_else(|_| json!({}));
     rewrite_refs(&mut schema);
     if !components.is_empty() {
