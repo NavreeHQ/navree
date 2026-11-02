@@ -130,11 +130,6 @@ export async function showPage(response, how = {}) {
   announce(titleOf(doc));
 }
 
-/** Forgets prefetched pages: something changed, and they may be stale. */
-export function forgetPrefetched() {
-  prefetched.clear();
-}
-
 /** A table whose fetch failed keeps its rows and says so. @param {Element} table @param {string} url @param {number} status */
 function tableFailed(table, url, status) {
   const alert = table.querySelector("[data-slot=table-alert]");
