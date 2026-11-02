@@ -472,8 +472,8 @@ mod windows_names {
         assert_eq!(
             listed,
             [
-                "a~1.final.txt",
                 "averylong~1.txt",
+                "a~1.final.txt",
                 "notes~2024.txt",
                 "report~1.long",
                 "x~9y",
