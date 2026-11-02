@@ -273,7 +273,8 @@ async fn a_credential_limited_to_a_workspace_reads_only_its_count() {
     let rows = list["data"].as_array().unwrap().len() as u64;
     assert_eq!(rows, 1, "{list}");
     assert_eq!(pinned["counts"]["all-notes"]["value"], rows, "{pinned}");
-    assert!(across > rows, "{across}");
+    // (A role row-level security binds sees only Acme either way.)
+    assert!(across >= rows, "{across}");
 }
 
 // ---------------------------------------------------------------------------

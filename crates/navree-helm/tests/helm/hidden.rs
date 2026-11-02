@@ -587,7 +587,7 @@ async fn a_metric_of_a_column_the_rules_hide_is_not_given() {
         &app,
         DealSeed {
             title: "Counted",
-            amount_cents: 777_00,
+            amount_cents: 77_700,
             ..DealSeed::default()
         },
     )

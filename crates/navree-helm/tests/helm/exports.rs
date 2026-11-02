@@ -179,10 +179,10 @@ async fn the_export_limit_must_make_sense() {
         .config("helm.export_max_secs", 0)
         .try_build()
         .await;
-    let error = booted
-        .err()
-        .expect("0 ends every export at once")
-        .to_string();
+    let Err(error) = booted else {
+        panic!("0 would end every export at once");
+    };
+    let error = error.to_string();
     assert!(error.contains("helm.export_max_secs"), "{error}");
 }
 

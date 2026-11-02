@@ -604,7 +604,8 @@ pub struct Deal {
                 name: "id".into(),
                 ty: "Uuid".into(),
                 optional: false,
-                primary_key: true
+                primary_key: true,
+                hidden: false
             }
         );
         assert_eq!(
@@ -613,7 +614,8 @@ pub struct Deal {
                 name: "owner_id".into(),
                 ty: "Uuid".into(),
                 optional: true,
-                primary_key: false
+                primary_key: false,
+                hidden: false
             }
         );
         assert!(parse_model("struct Other;", None).is_err());
