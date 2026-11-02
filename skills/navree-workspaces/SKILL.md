@@ -379,7 +379,10 @@ LibraryRepo::<Template>::seed_global(db, "slug", items).await?;          // seed
   module's `dyn WorkspaceGate`, `navree::access::WorkspaceGate`, which other
   modules can ask too) or for staff the app names with
   `m.helm_staff_workspaces(..)`. Under database isolation the panel can't enter
-  a workspace.
+  a workspace. The gate also reports `writes` (`WorkspaceWrites`): a read-only
+  demo, and whether the role writes (not `viewer` or the app's own roles, unless
+  `workspace.roles` names the model), which Helm enforces whatever the user holds
+  app-wide.
 - Helm: the library model derives `navree::orm::Model`; `Resource::query`
   filters `Template::SCOPE.eq(LibraryScope::Global)`, `create` calls
   `LibraryRepo::create(ctx.uow(), LibraryOwner::Global, ..)`.

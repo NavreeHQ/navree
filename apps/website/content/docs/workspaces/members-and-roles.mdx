@@ -14,7 +14,7 @@ Four roles exist in every app:
 | `owner` | `all.*` | Everything in the workspace, including deleting and transferring it |
 | `admin` | `workspace.read`, `workspace.update`, `workspace.members.*`, `workspace.invitations.*` | Running the workspace and its people |
 | `member` | `workspace.read`, `workspace.members.read` | Regular work, as you grant it |
-| `viewer` | `workspace.read`, `workspace.members.read` | Read-only access, as you grant it |
+| `viewer` | `workspace.read`, `workspace.members.read` | Read-only access, as you grant it, and [read-only in Helm](/docs/tools/helm/#workspaces) |
 
 `member` and `viewer` start the same: the difference is what you give each of them. In Rust a role is a `WorkspaceRole` (`Owner`, `Admin`, `Member`, `Viewer` or `Custom(String)`), stored by name in `workspace_members.role`.
 
@@ -155,7 +155,7 @@ if permitted(&ctx, &principal, "operations.view", Some(workspace_id)).await? {
 
 `WorkspaceModule` answers with the user's role in that workspace, evaluated as behind the guard (a non-member is refused), and `AccessModule` answers with their global roles and permissions; either one granting it is enough. With no workspace given, only the global answer counts. [Operations](/docs/digging-deeper/batches-and-operations/#who-may-see-an-operation) use this to decide who sees them.
 
-A module that works in workspaces of its own accord asks `navree::access::WorkspaceGate` (a `dyn` provider of `WorkspaceModule`) whether a user may work in one, and enters it through the gate, so that the isolation strategy applies. [Helm](/docs/tools/helm/#workspaces) does this for a workspace a request names. An app without `WorkspaceModule` has no gate, and a module must refuse rather than trust what a request names.
+A module that works in workspaces of its own accord asks `navree::access::WorkspaceGate` (a `dyn` provider of `WorkspaceModule`) whether a user may work in one, and enters it through the gate, so that the isolation strategy applies. It also reports what the workspace takes from them (`writes`, a `WorkspaceWrites`): whether it is a read-only demo, whether their role writes by default (`owner`, `admin` and `member` do, `viewer` and roles of your own don't), and the permissions `workspace.roles` sets for it, which decide for the models they name. [Helm](/docs/tools/helm/#workspaces) does this for a workspace a request names. An app without `WorkspaceModule` has no gate, and a module must refuse rather than trust what a request names.
 
 ## Roles through an organization
 

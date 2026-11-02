@@ -19,12 +19,12 @@ mod every_schema;
 mod oracle;
 mod pinned;
 mod queued;
+mod reach;
 mod relations;
 mod roles;
 #[cfg(feature = "settings")]
 mod settings_screens;
 mod staff_audit;
-mod suspicions;
 
 /// `users(id, name, email)`, as the auth module creates it.
 struct CreateUsers;

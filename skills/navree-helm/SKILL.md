@@ -309,8 +309,27 @@ token.
   Code `helm_workspace_unchecked` means the app has neither, so nothing can
   check. A cookie for a workspace the user may not enter counts for nothing
   (400, `Choose a workspace first`). Under database isolation the panel can't
-  enter a workspace at all. Member roles don't narrow abilities: inside the
-  workspace the panel uses app-wide abilities.
+  enter a workspace at all. Abilities in the panel are app-wide, and a role
+  narrows them without granting any.
+- **A write gets a 403, `workspace_read_only`:** the member's role can't write:
+  `viewer` and roles of the app's own, whatever they hold app-wide, in queued
+  actions and across workspaces too. `workspace.roles.<role>.permissions` decides
+  for the models it names (`notes.update` lets a viewer update notes,
+  `notes.read` holds a member to reading them); the user still needs the
+  app-wide ability. `demo_read_only` is a read-only demo, for staff and across
+  workspaces too. `helm_workspace_partitions` is a member limited to partitions.
+- **`token_workspace_mismatch`:** a credential limited to a workspace
+  (`PinnedWorkspace`) stays in it, staff or not; it names it when the request
+  doesn't, and `Workspaces::Every` is scoped to it.
+- **Settings screens:** the permission says which types, the level whose: a
+  workspace's or organization's are for its members, a user's for that user.
+  Across tenants only through `helm_staff_workspaces` and
+  `helm_staff_organizations`, audited, reads included.
+- **A queued action gets a 403 at once:** in a workspace the app entered itself,
+  the job can't ask the app again, so it asks `WorkspaceModule` and
+  `helm_staff_workspaces` when the action is requested.
+- **The staff audit:** `helm.workspace.staff` entries go on the log's own
+  connection and stay when the request or job fails.
 - **A record is a 404, not a 403:** rows the access filter hides don't exist
   for that user, like `Accessible<M, Read>` in the API.
 - **A field is greyed out on edit:** a `.fields([..])` or `cannot(..)` rule

@@ -126,7 +126,7 @@ A call resolves to `{ data, response }` for a success and `{ error, response }` 
 
 | Part of a call | What it does |
 |---|---|
-| `params.path` | Fills `{name}` in the path, percent-encoded, object keys too. `{.name}` (label), `{;name}` (matrix) and a trailing `*` (explode) follow the OpenAPI path styles. A value that would make `.` or `..` a whole segment of the path, and an empty first segment that would start the URL with `//` (a host), are refused with an error before anything is sent. |
+| `params.path` | Fills `{name}` in the path, percent-encoded, object keys too. `{.name}` (label), `{;name}` (matrix) and a trailing `*` (explode) follow the OpenAPI path styles. A value that would make `.` or `..` a whole segment of the path, and an empty first segment that would start the URL with `//` (a host), are refused with an error before anything is sent. An empty value elsewhere leaves an empty segment (`/v1/{a}/{b}` with `a: ""` is `/v1//x`), which is sent as it is: some servers and proxies collapse `//`, so check a value that may be empty. |
 | `params.query` | Written as the OpenAPI styles say: arrays as `a=1&a=2` and objects as `o[k]=v` by default; `undefined`, `null` and empty lists are left out. Parameter names and object keys are always percent-encoded (brackets around a key stay), values too unless `allowReserved` is set. `querySerializer` takes a function, or `{ array, object, allowReserved }`. |
 | `params.header` | Merged over the client's `headers` and the call's `headers`; `null` removes a header. |
 | `body` | JSON with `Content-Type: application/json`; a form when the `Content-Type` header is `application/x-www-form-urlencoded`; `FormData` as it is, so the runtime sets the multipart boundary. `bodySerializer` writes it another way. |

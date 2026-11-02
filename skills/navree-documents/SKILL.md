@@ -276,6 +276,8 @@ A stream ends before the next object starts, whatever its `Length` says.
 Broken cross-references are rebuilt; files encrypted without a password to open
 (RC4, AES 40 to 256 bits) are read and edited unencrypted; one needing a
 password is `DocumentsError::Pdf`.
+A merge's output is the size of its inputs; what copies of the same `Pdf` write
+past the first is held to 1 GiB (`TooLarge`), so bound a list a client sends.
 `stamp`, `overlay` and `merge` keep shared or inherited resources one object,
 and place what they draw on what the page shows (`MediaBox` cut to `CropBox`).
 Saving compresses streams with Flate at its fastest level, 2 bytes of work a
