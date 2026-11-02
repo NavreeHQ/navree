@@ -445,3 +445,66 @@ async fn nothing_is_recorded_when_lighthouse_is_disabled() {
     let _ = json!({});
     app.shutdown().await.unwrap();
 }
+
+/// Slow statements in a scheduled task are the app's own: they open issues,
+/// named after the task. The scheduler's own statements don't.
+#[tokio::test]
+async fn a_slow_statement_in_a_scheduled_task_opens_an_issue_named_after_it() {
+    use navree_kernel::{Module, ModuleBuilder};
+    use navree_schedule::{ModuleBuilderScheduleExt, ScheduleModule, Scheduler};
+    use navree_telemetry::{EventKind, QueryExecuted};
+
+    struct Tasks;
+    impl Module for Tasks {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.schedule(|s| {
+                s.task("nightly-report", |_ctx| async {
+                    Telemetry::current().emit_with(EventKind::QueryExecuted, || {
+                        TelemetryEvent::QueryExecuted(QueryExecuted {
+                            sql: "SELECT slow_report FROM big".to_owned(),
+                            duration: std::time::Duration::from_secs(30),
+                            rows: None,
+                            connection: "x".to_owned(),
+                            failed: false,
+                        })
+                    });
+                    Ok(())
+                })
+                .hourly();
+            });
+        }
+    }
+    let app = builder()
+        .config("lighthouse.thresholds.slow_query_ms", 10)
+        .module(ScheduleModule::for_root())
+        .module(Tasks)
+        .build()
+        .await;
+    let scheduler = app.get::<Scheduler>().await;
+    scheduler
+        .tick("2026-10-25T04:00:07Z".parse().unwrap())
+        .await
+        .unwrap();
+    let store = flushed(&app).await;
+    let issues = store
+        .issues(&navree_lighthouse::IssueFilter::default())
+        .await
+        .unwrap();
+    let found: Vec<_> = issues
+        .data
+        .iter()
+        .filter(|row| row.issue.title.contains("slow_report"))
+        .collect();
+    assert_eq!(
+        found.len(),
+        1,
+        "{:?}",
+        issues
+            .data
+            .iter()
+            .map(|r| r.issue.title.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(found[0].issue.culprit, "nightly-report");
+    app.shutdown().await.unwrap();
+}

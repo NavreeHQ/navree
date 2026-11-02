@@ -466,7 +466,7 @@ impl Scheduler {
         }
 
         let started = Instant::now();
-        let mut context = TelemetryContext::new(self.telemetry.clone());
+        let mut context = TelemetryContext::new(self.telemetry.clone()).with_task(name.as_str());
         if let Some(trace) = self.policy.start(None, None) {
             context = context.with_trace(trace);
         }

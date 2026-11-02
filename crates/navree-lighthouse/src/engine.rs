@@ -78,14 +78,27 @@ const FLUSH_AT: usize = 500;
 const MAX_RETRY_HITS: usize = 100_000;
 
 /// Whether a process records the statements and calls it makes outside any
-/// request or job. The processes that serve and work (`serve`, and the
-/// `:work` commands: `queue:work`, `schedule:work`, `fleet:work`) do. A
-/// one-off command (a migration, a seeder, a script) does not: its DDL and
-/// inserts are how it does its job, not application behaviour to watch, and
-/// would otherwise open slow-query issues of their own. Exceptions and
-/// reports from a command are still recorded.
+/// request, job or background task. A process that runs for long, or runs the
+/// app's scheduled work, does: `serve`, `schedule:run`, `queue:watchdog`, and
+/// any `:work`, `:serve` or `:listen` command (`queue:work`, `schedule:work`,
+/// `fleet:work`, `mcp:serve`, `micro:listen`). A one-off command (a migration,
+/// a seeder, a script) does not: its DDL and inserts are how it does its job,
+/// not application behaviour to watch, and would otherwise open slow-query
+/// issues of their own. Exceptions and reports from a command are still
+/// recorded.
 pub(crate) fn records_background_work(process: &str) -> bool {
-    process == "serve" || process.ends_with(":work")
+    matches!(process, "serve" | "schedule:run" | "queue:watchdog")
+        || [":work", ":serve", ":listen"]
+            .iter()
+            .any(|suffix| process.ends_with(suffix))
+}
+
+/// What an occurrence in background task `task` says it came from.
+fn task_origin(task: &str) -> Origin {
+    Origin {
+        details: json!({ "task": { "name": task } }),
+        ..Origin::default()
+    }
 }
 
 /// What the engine receives.
@@ -730,7 +743,11 @@ impl Engine {
         let Some(exception) = exception else {
             return;
         };
-        let culprit = self.labels.process.clone();
+        let culprit = exception
+            .context
+            .task
+            .clone()
+            .unwrap_or_else(|| self.labels.process.clone());
         self.exception_hit(exception, &culprit, &Origin::default(), None, now);
     }
 
@@ -765,10 +782,17 @@ impl Engine {
         let Some(pending) = pending else {
             return;
         };
+        // A background task of the app's: its statement is watched as a job's
+        // is. It is handled now, not when the task ends, as a task may run
+        // for hours.
+        if let Some(task) = &context.task {
+            self.query_done(pending, task, &task_origin(task), now);
+            return;
+        }
         if !self.background {
             return;
         }
-        // No route or job to blame: the statement is counted, and never
+        // No route, job or task to blame: the statement is counted, and never
         // opens an issue. This is the framework's own bookkeeping (the queue
         // taking a job, a worker's heartbeat), which is slow when the
         // database is busy like everything else on it.
@@ -806,6 +830,10 @@ impl Engine {
         let Some(pending) = pending else {
             return;
         };
+        if let Some(task) = &context.task {
+            self.call_done(pending, task, &task_origin(task), now);
+            return;
+        }
         if !self.background {
             return;
         }
@@ -1962,6 +1990,48 @@ mod tests {
             assert!(p.pending_hits().is_empty(), "{process}: no issue");
             assert!(!p.take_rows().is_empty(), "{process}: still counted");
         }
+    }
+
+    #[test]
+    fn long_running_processes_count_and_one_off_commands_do_not() {
+        for process in [
+            "serve",
+            "schedule:run",
+            "schedule:work",
+            "queue:work",
+            "fleet:work",
+            "micro:listen",
+            "queue:watchdog",
+            "mcp:serve",
+        ] {
+            assert!(records_background_work(process), "{process}");
+        }
+        for process in [
+            "migrate",
+            "db:seed",
+            "openapi:export",
+            "lighthouse:prune",
+            "tinker",
+        ] {
+            assert!(!records_background_work(process), "{process}");
+        }
+    }
+
+    #[test]
+    fn a_background_task_of_the_app_opens_issues_even_in_a_one_off_command() {
+        let p = processor_of("reports:nightly", LighthouseOptions::default());
+        let in_task = EventContext {
+            task: Some("sync-prices".into()),
+            ..EventContext::default()
+        };
+        p.handle(
+            record(in_task, query("SELECT prices FROM feed", 900)),
+            Utc::now(),
+        );
+        let hits = p.pending_hits();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].culprit, "sync-prices");
+        assert!(!p.take_rows().is_empty());
     }
 
     #[test]

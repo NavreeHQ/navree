@@ -469,6 +469,10 @@ pub struct EventContext {
     pub request_id: Option<String>,
     /// The job id, inside a job run.
     pub job_id: Option<String>,
+    /// The background task's name, inside a scheduled task or a
+    /// [`with_task`](crate::TelemetryContext::with_task) of the app's own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
     /// The trace and the unit of work's span.
     pub trace: Option<TraceContext>,
     /// The authenticated user, once known.

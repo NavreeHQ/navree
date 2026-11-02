@@ -9,7 +9,7 @@ description: "Application monitoring inside your app: exceptions, slow requests 
 
 Lighthouse runs inside your app and stores its data in your database. There is no agent to install, no service to host and no data leaving your servers unless you configure an alert or an export.
 
-- **Every process reports.** `serve`, `queue:work`, `schedule:work`, [Fleet](/docs/tools/fleet/) workers and one-off commands all write to the same store, so a job that fails on a worker shows up next to the request that failed on the web server. A one-off command (a migration, a seeder, a script) records its exceptions and reports, but not the statements and calls it makes outside a request or job: its DDL and inserts are how it does its job, and would otherwise open slow-query issues of their own.
+- **Every process reports.** `serve`, `queue:work`, `schedule:work`, [Fleet](/docs/tools/fleet/) workers and one-off commands all write to the same store, so a job that fails on a worker shows up next to the request that failed on the web server. A one-off command (a migration, a seeder, a script) records its exceptions and reports, but not the statements and calls it makes outside a request, job or background task: its DDL and inserts are how it does its job, and would otherwise open slow-query issues of their own.
 - **No code changes.** Lighthouse reads what the framework already produces: the request pipeline and its exceptions and panics, query timings from navree-db, job outcomes from navree-queue, scheduled runs, mail, cache calls and the HTTP client. You add the module; the rest is configuration.
 - **Off the request path, and exact.** Recording adds the request to in-memory counters on the thread that handled it, with no I/O and nothing queued, and puts the details worth keeping in a bounded queue. A background task writes both to the database every second, so a request never waits for Lighthouse and no count is lost, however hard the app is pushed ([how](#under-load)).
 
@@ -65,7 +65,7 @@ Users with the super-admin role need nothing: they pass every check. Open `http:
 | Exception | A request answers 500 or above, a handler panics, or your code [reports an error](#reporting-errors-yourself) | An occurrence of an issue |
 | Request | Every request completes | Counts, error rates and latency per route, every request; a [sampled](#sampling) trace |
 | Slow request | A request takes `lighthouse.thresholds.slow_request_ms` (1 s) or longer | An issue per route, with the full trace of each occurrence |
-| Slow query | A query runs `lighthouse.thresholds.slow_query_ms` (200 ms) or longer. The time is the statement's own: waiting for a free connection from the pool is not counted, so a busy pool makes requests slow, not every statement | An issue per normalized statement, with the route or job that ran it. A statement run outside any request or job (the queue taking a job, a worker's heartbeat) is counted on the Queries page but never opens an issue |
+| Slow query | A query runs `lighthouse.thresholds.slow_query_ms` (200 ms) or longer. The time is the statement's own: waiting for a free connection from the pool is not counted, so a busy pool makes requests slow, not every statement | An issue per normalized statement, with the route, job or [background task](#background-tasks) that ran it. A statement run outside all of them (the queue taking a job, a worker's heartbeat) is counted on the Queries page but never opens an issue |
 | Job | A queued job finishes an attempt | Counts and runtimes per job type; a failed attempt with its error |
 | Failed job | A job uses up its attempts and moves to the failed jobs | An issue per job type and error |
 | Scheduled task | A task of the [scheduler](/docs/digging-deeper/scheduling/) fails | An issue per task and error |
@@ -238,7 +238,7 @@ A signed-in user without `view` gets a 403 page; a guest goes to the sign-in scr
 
 A release is the label `lighthouse.release` gives the running processes. Lighthouse learns of releases in three ways:
 
-- **A process reports the release it runs when it boots**, with the time it first saw it as the deploy time.
+- **A process reports the release it runs when it boots**, with the time it first saw it as the deploy time. A process that boots on a release other than the newest deploys that release again, so a rollback moves the header to the release that is running.
 - **A deploy reports it**, with the real deploy time, a commit, a link and notes, so the Releases page and the overview's header can say when it went out:
 
   ```sh
@@ -249,6 +249,8 @@ A release is the label `lighthouse.release` gives the running processes. Lightho
 
   The token belongs to a user with `lighthouse.configure`. Use the same label that `lighthouse.release` gives the processes ([Harbor](/docs/tools/harbor/) uses the release id for both), so issues and releases match. Reporting a release again updates it.
 - **Your code reports it**: `lighthouse.report_release(ReleaseReport::new("20261102-101500-3f2a9c1").commit("3f2a9c1")).await?`.
+
+Reporting a release again updates what it says and keeps the rest. Release names compare exactly on every database: `r1` and `R1` are two releases.
 
 The release in the dashboard's header and on the overview is the newest deploy in the app's environment. If no release is known, the header shows the environment alone. Each release lists the issues that **began** in it (their first occurrence carried its label) and the resolved issues that **came back** in it (the release of the occurrence that reopened them); both counts are on the Releases page, with the issues themselves for the release you choose. The overview's chart marks each deploy of the period with a vertical line.
 
@@ -281,15 +283,30 @@ Everything on the dashboard is also JSON under `/_lighthouse/api`, for scripts, 
 | `GET /api/alerts/history` | A page of alert deliveries with the issue each was about (`page`, `per_page`) | `view` |
 | `GET /api/alerts/channels` | The channels: `name`, `detail` (never a secret), `kinds`, `configured_kinds`, `muted`, `muted_until` | `view` |
 | `PUT /api/alerts/channels/{name}` | `{"muted": true, "minutes": 60}` mutes (without `minutes`, until unmuted), `{"muted": false}` unmutes, `{"on": ["spike"]}` sets the kinds, `{"on": null}` returns to the configured ones | `configure` |
-| `POST /api/alerts/channels/{name}/test` | Sends a test alert through that channel: `{"channel", "ok", "error"}` | `configure` |
+| `POST /api/alerts/channels/{name}/test` | Sends a test alert through that channel: `{"channel", "ok", "error"}`. At most five a minute per channel on each process; past that it answers 429 with `Retry-After`. Each one sent is audited as `lighthouse.alert_channel.tested` | `configure` |
 | `GET /api/releases` | The releases seen, with `introduced` and `regressed` counts | `view` |
-| `POST /api/releases` | Reports a release: `{"release": "3f2a9c1", "commit": "3f2a9c1", "url": "https://...", "notes": "...", "deployed_at": "2026-11-02T10:15:00Z"}`, only `release` required | `configure` |
+| `POST /api/releases` | Reports a release: `{"release": "3f2a9c1", "commit": "3f2a9c1", "url": "https://...", "notes": "...", "deployed_at": "2026-11-02T10:15:00Z"}`, only `release` required. A value out of bounds answers 400 with what is wrong, on every database: a `url` over 255 characters, a `release`, `environment`, `commit` or `notes` with control characters (line breaks and tabs are fine in `notes`), or a `deployed_at` before 1970 or more than a day ahead. A time ahead of now counts as now | `configure` |
 | `GET /api/settings` | The settings that can change, with the value in use, the configured value and who changed it, and the options that cannot change | `view` |
 | `PUT /api/settings` | `{"values": {"thresholds.slow_request_ms": 500, "sample.requests": null}}`; `null` returns a setting to the configured value; one bad value refuses the whole change | `configure` |
 
 A change made through the dashboard's cookie must carry its CSRF token (`X-CSRF-Token`); one made with an access token does not need it.
 
 A session with a coding agent then looks like this: you ask it to fix the newest Lighthouse issue; it fetches `/api/issues?sort=first_seen`, reads the source chain and the failing request from `/api/issues/{id}`, opens the code, writes the fix and a test, and resolves the issue in the next release with a comment linking the change. Give it a token for a user with `lighthouse.view` to let it read, and `lighthouse.resolve` to let it close issues. On your own machine, [Navigator](/docs/ai/navigator/#lighthouses-tools) (`navree mcp`) gives the agent the same issues and figures without a token, read-only, straight from your local database.
+
+## Background tasks
+
+A slow statement or a failing call opens an issue when it belongs to something of yours: a request, a job, or a background task. Every [scheduled task](/docs/digging-deeper/scheduling/) is one, and its issues name it. Work your app runs on its own, a task it spawns, becomes one with a context of its own:
+
+```rust
+use navree::telemetry::TelemetryContext;
+
+let context = TelemetryContext::new(telemetry.clone()).with_task("sync-prices");
+tokio::spawn(context.scope(async move {
+    sync_prices(&db).await
+}));
+```
+
+Everything else outside a request or job is the framework's own bookkeeping, the queue taking a job or a worker's heartbeat. It is counted on the Queries page, in the processes that run for long (`serve`, `schedule:run`, `queue:watchdog` and any `:work`, `:serve` or `:listen` command), and never opens an issue: under load it is slow like everything else on the database. A task spawned without a context of its own is counted the same way.
 
 ## MCP tools for agents
 
@@ -450,6 +467,8 @@ impl OpsModule {
 }
 ```
 
+A delivery that fails records why and where to, never the destination's path: the built-in Slack and webhook channels send with the HTTP client's `secret_url()`, so what the failed job, the delivery history, the logs, the outgoing page and the issue say is `https://hooks.slack.com/[hidden]`, whatever the URL looks like.
+
 To check every channel, `navree lighthouse:test-alerts` sends a test alert (`"test": true` in a webhook's body) through each one, or `navree lighthouse:test-alerts slack` through one, and prints whether it was delivered. Test alerts are not stored.
 
 ## Sampling
@@ -565,8 +584,8 @@ Every key of the `lighthouse` section is optional. As environment variables: `AP
 | `lighthouse.redact` | `[]` | Name fragments masked in addition to `log.redact`. |
 | `lighthouse.ignore.routes` | `["/health/*", "/metrics"]` | Paths never recorded (`*` matches one or more segments at the end). |
 | `lighthouse.ignore.jobs` | `[]` | Job types never recorded. |
-| `lighthouse.alerts.cooldown_minutes` | `30` | Minimum time between two alerts for one issue and kind. |
-| `lighthouse.alerts.spike.occurrences` | `50` | Occurrences that make a spike. |
+| `lighthouse.alerts.cooldown_minutes` | `30` | Minimum time between two alerts for one issue and kind. At least 1, here and on the dashboard: without it every failure could send an alert. |
+| `lighthouse.alerts.spike.occurrences` | `50` | Occurrences that make a spike. At least 2. |
 | `lighthouse.alerts.spike.minutes` | `5` | The spike window (1 to 60). |
 | `lighthouse.alerts.email.to` | none | Recipients of email alerts. |
 | `lighthouse.alerts.email.on` | `new_issue`, `regression`, `spike` | Kinds sent by email. |

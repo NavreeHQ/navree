@@ -47,6 +47,7 @@ struct Inner {
     telemetry: Telemetry,
     request_id: Option<String>,
     job_id: Option<String>,
+    task: Option<String>,
     trace: Option<TraceContext>,
     user_id: OnceLock<String>,
     workspace_id: OnceLock<String>,
@@ -61,6 +62,7 @@ impl TelemetryContext {
                 telemetry,
                 request_id: None,
                 job_id: None,
+                task: None,
                 trace: None,
                 user_id: OnceLock::new(),
                 workspace_id: OnceLock::new(),
@@ -80,6 +82,18 @@ impl TelemetryContext {
     #[must_use]
     pub fn with_job_id(mut self, job_id: impl Into<String>) -> Self {
         Arc::make_mut(&mut self.inner).job_id = Some(job_id.into());
+        self
+    }
+
+    /// With the name of the background task this is: a scheduled task, or
+    /// work an app runs on its own (`TelemetryContext::new(telemetry)
+    /// .with_task("sync-prices").scope(work)`). What it does is the app's
+    /// own and is watched as a job's is, under this name: a slow statement
+    /// in it opens an issue. Without a context the same statement is only
+    /// counted, as the framework's own polling and heartbeats are.
+    #[must_use]
+    pub fn with_task(mut self, name: impl Into<String>) -> Self {
+        Arc::make_mut(&mut self.inner).task = Some(name.into());
         self
     }
 
@@ -130,6 +144,11 @@ impl TelemetryContext {
         &self.inner.telemetry
     }
 
+    /// The name of the background task.
+    pub fn task(&self) -> Option<&str> {
+        self.inner.task.as_deref()
+    }
+
     /// The HTTP request id.
     pub fn request_id(&self) -> Option<&str> {
         self.inner.request_id.as_deref()
@@ -178,6 +197,7 @@ impl TelemetryContext {
         EventContext {
             request_id: self.inner.request_id.clone(),
             job_id: self.inner.job_id.clone(),
+            task: self.inner.task.clone(),
             trace: self.inner.trace.clone(),
             user_id: self.inner.user_id.get().cloned(),
             workspace_id: self.inner.workspace_id.get().cloned(),
@@ -190,6 +210,7 @@ impl fmt::Debug for TelemetryContext {
         f.debug_struct("TelemetryContext")
             .field("request_id", &self.inner.request_id)
             .field("job_id", &self.inner.job_id)
+            .field("task", &self.inner.task)
             .field("trace", &self.inner.trace)
             .field("user_id", &self.inner.user_id.get())
             .field("workspace_id", &self.inner.workspace_id.get())

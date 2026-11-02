@@ -107,11 +107,14 @@ before hashing. 4xx responses only count towards the route's error rate.
 Lighthouse's own routes, `lighthouse.ignore.routes` (`/health/*`, `/metrics`),
 `lighthouse.ignore.jobs` and `lighthouse.alert` jobs are never recorded.
 Scripts run with `Executor::execute_script` are not timed, so they never
-show up. Statements run outside any request or job (queue polling, heartbeats)
-are counted but never open an issue. A statement's time is the time it ran: waiting for a free pooled
+show up. A scheduled task is a unit of its own, and so is a task of the app's
+with `TelemetryContext::new(telemetry).with_task("sync-prices").scope(work)`:
+their slow statements open issues named after them. Other statements outside any
+request or job (queue polling, heartbeats) are counted but never open an issue. A statement's time is the time it ran: waiting for a free pooled
 connection is not part of it. A panic is recorded under the route that
 panicked, not `unmatched`. One-off commands (`migrate`, a seeder, a script;
-any process that is not `serve` or `*:work`) record exceptions and reports
+any process that is not `serve`, `schedule:run`, `queue:watchdog` or `*:work`,
+`*:serve`, `*:listen`) record exceptions and reports
 but not statements or calls made outside a request or job.
 
 ## Counts, sampling and load
@@ -150,8 +153,8 @@ Until(t) | Occurrences(n), ..)`; `reopen(id)`. All on `LighthouseStore`
 
 ```toml
 [lighthouse.alerts]
-cooldown_minutes = 30                       # per issue and kind
-spike = { occurrences = 50, minutes = 5 }
+cooldown_minutes = 30                       # per issue and kind, at least 1
+spike = { occurrences = 50, minutes = 5 }   # occurrences at least 2
 
 [lighthouse.alerts.email]
 to = ["oncall@example.com"]                 # needs MailModule

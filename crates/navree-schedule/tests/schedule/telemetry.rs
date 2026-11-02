@@ -94,3 +94,38 @@ async fn tasks_run_in_a_traced_context() {
     assert!(record.context.trace.is_some());
     app.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn a_task_runs_under_its_own_name() {
+    let db = TestDb::new();
+    let clock = clock("2026-10-25T04:00:07Z");
+    let seen: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let inside = seen.clone();
+    let app = db
+        .app(
+            &clock,
+            Tasks::new(move |s| {
+                let inside = inside.clone();
+                s.task("report", move |_ctx| {
+                    let inside = inside.clone();
+                    async move {
+                        *inside.lock().unwrap() =
+                            TelemetryContext::with_current(|c| c.task().map(str::to_owned))
+                                .flatten();
+                        Ok(())
+                    }
+                })
+                .hourly();
+            }),
+        )
+        .boot()
+        .await
+        .expect("boots");
+    scheduler(&app)
+        .await
+        .tick(at("2026-10-25T04:00:07Z"))
+        .await
+        .unwrap();
+    assert_eq!(seen.lock().unwrap().as_deref(), Some("report"));
+    app.shutdown().await.unwrap();
+}
