@@ -15,6 +15,7 @@ use super::*;
 
 mod demo;
 mod pinned;
+mod queued;
 mod roles;
 #[cfg(feature = "settings")]
 mod settings_screens;

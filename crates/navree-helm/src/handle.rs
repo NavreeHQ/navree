@@ -27,7 +27,7 @@ use crate::metric::{
 };
 use crate::query::ListQuery;
 use crate::values::{self, Invalid, Shape, is_blank, key_from_str, key_text};
-use crate::workspace::NamedBy;
+use crate::workspace::{self, NamedBy, Refused};
 use crate::{
     ActionContext, ActionResult, FormData, HelmOptions, RecordOf, Resource, SaveContext, Workspaces,
 };
@@ -1580,6 +1580,20 @@ impl<R: Resource> ErasedResource for Handle<R> {
             };
             let (result, queued) = match dispatcher {
                 Some(dispatcher) => {
+                    // The job asks again who may work in the workspace, and can't
+                    // ask the app that entered it: what it would find is said now.
+                    if let (None, Some(entered)) = (cx.named_by, cx.uow.workspace()) {
+                        workspace::admission(
+                            &cx.app,
+                            &cx.core,
+                            cx.user_id,
+                            &cx.access,
+                            entered,
+                            true,
+                        )
+                        .await?
+                        .map_err(Refused::error)?;
+                    }
                     let job = HelmActionJob {
                         resource: self.info.slug.clone(),
                         action: action.name.clone(),
