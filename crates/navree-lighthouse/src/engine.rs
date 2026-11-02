@@ -768,8 +768,11 @@ impl Engine {
         if !self.background {
             return;
         }
-        let origin = self.labels.process.clone();
-        self.query_done(pending, &origin, &Origin::default(), now);
+        // No route or job to blame: the statement is counted, and never
+        // opens an issue. This is the framework's own bookkeeping (the queue
+        // taking a job, a worker's heartbeat), which is slow when the
+        // database is busy like everything else on it.
+        self.count_query(&pending, &self.labels.process, now);
     }
 
     fn call(
@@ -1124,13 +1127,8 @@ impl Engine {
         }
     }
 
-    fn query_done(
-        &self,
-        query: PendingQuery,
-        origin_name: &str,
-        origin: &Origin,
-        now: DateTime<Utc>,
-    ) {
+    /// Counts a statement: its figures for the Queries page.
+    fn count_query(&self, query: &PendingQuery, origin_name: &str, now: DateTime<Utc>) {
         self.counts.observe(
             now,
             kind::QUERY,
@@ -1142,6 +1140,18 @@ impl Engine {
                 ..Observation::default()
             },
         );
+    }
+
+    /// Counts a statement run by a request or job and opens a slow-query
+    /// issue when it was slow.
+    fn query_done(
+        &self,
+        query: PendingQuery,
+        origin_name: &str,
+        origin: &Origin,
+        now: DateTime<Utc>,
+    ) {
+        self.count_query(&query, origin_name, now);
         if query.duration_ms < self.tuning.slow_query_ms() as f64 {
             return;
         }
@@ -1936,14 +1946,21 @@ mod tests {
     }
 
     #[test]
-    fn long_running_processes_record_statements_outside_requests() {
+    fn statements_outside_requests_and_jobs_are_counted_but_open_no_issue() {
+        // The queue polling its table, a worker's heartbeat: the framework's
+        // own bookkeeping has no route or job to blame, and under load it is
+        // slow like everything else.
         for process in ["serve", "queue:work", "schedule:work", "fleet:work"] {
             let p = processor_of(process, LighthouseOptions::default());
             p.handle(
-                record(EventContext::default(), query("SELECT 1", 900)),
+                record(
+                    EventContext::default(),
+                    query("UPDATE jobs SET reserved_at = ?", 900),
+                ),
                 Utc::now(),
             );
-            assert_eq!(p.pending_hits().len(), 1, "{process}");
+            assert!(p.pending_hits().is_empty(), "{process}: no issue");
+            assert!(!p.take_rows().is_empty(), "{process}: still counted");
         }
     }
 

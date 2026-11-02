@@ -1,4 +1,6 @@
-//! The `lighthouse` migration set: five tables prefixed `lighthouse_`.
+//! The `lighthouse` migration set: seven tables prefixed `lighthouse_`: the
+//! five Lighthouse records into, and the releases and the settings changed
+//! from the dashboard.
 //! Samples, occurrences and aggregates are time series: TimescaleDB
 //! hypertables.
 //!

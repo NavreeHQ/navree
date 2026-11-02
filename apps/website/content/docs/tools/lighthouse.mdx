@@ -9,7 +9,7 @@ description: "Application monitoring inside your app: exceptions, slow requests 
 
 Lighthouse runs inside your app and stores its data in your database. There is no agent to install, no service to host and no data leaving your servers unless you configure an alert or an export.
 
-- **Every process reports.** `serve`, `queue:work`, `schedule:work`, [Fleet](/docs/tools/fleet/) workers and one-off commands all write to the same store, so a job that fails on a worker shows up next to the request that failed on the web server.
+- **Every process reports.** `serve`, `queue:work`, `schedule:work`, [Fleet](/docs/tools/fleet/) workers and one-off commands all write to the same store, so a job that fails on a worker shows up next to the request that failed on the web server. A one-off command (a migration, a seeder, a script) records its exceptions and reports, but not the statements and calls it makes outside a request or job: its DDL and inserts are how it does its job, and would otherwise open slow-query issues of their own.
 - **No code changes.** Lighthouse reads what the framework already produces: the request pipeline and its exceptions and panics, query timings from navree-db, job outcomes from navree-queue, scheduled runs, mail, cache calls and the HTTP client. You add the module; the rest is configuration.
 - **Off the request path, and exact.** Recording adds the request to in-memory counters on the thread that handled it, with no I/O and nothing queued, and puts the details worth keeping in a bounded queue. A background task writes both to the database every second, so a request never waits for Lighthouse and no count is lost, however hard the app is pushed ([how](#under-load)).
 
@@ -42,7 +42,7 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
 | `ScheduleModule` | Optional. Lighthouse schedules its own [pruning](#retention-and-pruning) when the app has a scheduler. |
 | `McpModule` | Optional, with the `mcp` feature. Lighthouse adds its [tools for agents](#mcp-tools-for-agents) to your app's MCP server. |
 
-The module contributes the migration set `lighthouse`, which `migrate` runs with your app's migrations. It creates five tables, all prefixed `lighthouse_`: `issues`, `occurrences`, `samples` (request and job samples with their spans), `aggregates` (per-minute and per-hour counts and latency histograms) and `alerts` (the alerts sent). On [TimescaleDB](/docs/database/timescaledb/#navrees-own-tables), samples, occurrences and aggregates are hypertables, a day per chunk, in the app's database or in `lighthouse.database_url`'s. The tables are [models](/docs/orm/getting-started/) (`navree::lighthouse::entity::{issue, occurrence, sample, aggregate, alert}`), so your own code reads them with `issue::Model::query()` and the typed columns. On PostgreSQL, rolling the set back (`migrate:reset`) locks the tables first, in the order a flush writes them, so a flush that adds a chunk during the rollback waits for it instead of deadlocking with it.
+The module contributes the migration set `lighthouse`, which `migrate` runs with your app's migrations. It creates seven tables, all prefixed `lighthouse_`: `issues`, `occurrences`, `samples` (request and job samples with their spans), `aggregates` (per-minute and per-hour counts and latency histograms), `alerts` (the alerts sent), `releases` (the releases seen and when they were deployed) and `settings` (what was changed from the dashboard). On [TimescaleDB](/docs/database/timescaledb/#navrees-own-tables), samples, occurrences and aggregates are hypertables, a day per chunk, in the app's database or in `lighthouse.database_url`'s. The tables are [models](/docs/orm/getting-started/) (`navree::lighthouse::entity::{issue, occurrence, sample, aggregate, alert, release, setting}`), so your own code reads them with `issue::Model::query()` and the typed columns. On PostgreSQL, rolling the set back (`migrate:reset`) locks the tables first, in the order a flush writes them, so a flush that adds a chunk during the rollback waits for it instead of deadlocking with it.
 
 ```sh
 navree migrate
@@ -65,13 +65,15 @@ Users with the super-admin role need nothing: they pass every check. Open `http:
 | Exception | A request answers 500 or above, a handler panics, or your code [reports an error](#reporting-errors-yourself) | An occurrence of an issue |
 | Request | Every request completes | Counts, error rates and latency per route, every request; a [sampled](#sampling) trace |
 | Slow request | A request takes `lighthouse.thresholds.slow_request_ms` (1 s) or longer | An issue per route, with the full trace of each occurrence |
-| Slow query | A query takes `lighthouse.thresholds.slow_query_ms` (200 ms) or longer | An issue per normalized statement, with the route or job that ran it |
+| Slow query | A query runs `lighthouse.thresholds.slow_query_ms` (200 ms) or longer. The time is the statement's own: waiting for a free connection from the pool is not counted, so a busy pool makes requests slow, not every statement | An issue per normalized statement, with the route or job that ran it. A statement run outside any request or job (the queue taking a job, a worker's heartbeat) is counted on the Queries page but never opens an issue |
 | Job | A queued job finishes an attempt | Counts and runtimes per job type; a failed attempt with its error |
 | Failed job | A job uses up its attempts and moves to the failed jobs | An issue per job type and error |
 | Scheduled task | A task of the [scheduler](/docs/digging-deeper/scheduling/) fails | An issue per task and error |
 | Outgoing request | A call through `HttpClient` fails, answers 5xx or takes `lighthouse.thresholds.slow_outgoing_ms` (2 s) or longer | Counts and latency per host; an issue per host and failure |
 
 A 4xx response is not an exception: it is the app working as intended. Requests answering 4xx count towards the route's error rate on the dashboard, and that's all.
+
+A handler that panics is recorded under its own route (`GET /api/v1/reports/stage/{id}`), with the panic's location, like any other failure of that route.
 
 Each record carries the context Lighthouse can find without your help:
 
@@ -179,19 +181,24 @@ Panics carry their location. For a report you build yourself, `.backtrace()` add
 | Resolved in next release | Reopens only when it happens again in a release other than the one current when you resolved it, so stragglers from the old release don't reopen it. |
 | Ignored | Kept and counted, but never alerts. Ignore forever, until a date, or until it occurs N more times. |
 
-The release comes from `lighthouse.release`. [Harbor](/docs/tools/harbor/) sets it to the release id on every deploy (`APP_LIGHTHOUSE__RELEASE`); without it, Lighthouse uses the `app.version` setting, else `unknown`.
+The release comes from `lighthouse.release`. [Harbor](/docs/tools/harbor/) sets it to the release id on every deploy (`APP_LIGHTHOUSE__RELEASE`); without it, Lighthouse uses the `app.version` setting. With neither, issues carry the label `unknown` and the dashboard shows no release rather than a made-up one: see [Releases](#releases).
 
 ## The dashboard
 
 The dashboard is served by your app at `lighthouse.path` (`/_lighthouse`), outside the API prefix: server-rendered pages from templates compiled into the crate, with a small stylesheet and script of its own. No Node.js, no CDN and no separate process. The overview refreshes its figures and its feed every ten seconds while you watch.
 
-- **Overview.** A row of figures for the selected period (the last hour, 24 hours or 7 days): requests per minute, the error rate, the 95th percentile latency, failed jobs, open issues and the details [sampled out](#under-load) because the database was not keeping up. Below them, a timeline of requests and exceptions, and a feed of the latest occurrences, new ones sliding in at the top.
+The sidebar has two groups: **Monitor** (Overview, Issues, Requests, Queries, Jobs, Outgoing) and **Configure** (Alerts, Releases, Settings).
+
+- **Overview.** The release the app is at and when it was deployed, then a row of figures for the selected period (the last hour, 24 hours or 7 days): requests per minute (with the median latency), the error rate, the 95th percentile latency, failed jobs, open issues (with how many began in the period) and the details [sampled out](#under-load) because the database was not keeping up. The first four carry a sparkline of the period. Below them, a chart of requests and exceptions with its time labels (UTC) and a line where each release was deployed, and the five most recent open issues. At the right, **New occurrences** is a live panel: the latest occurrences, newest on top, each with its kind, how long ago it happened, its title and where; new ones slide in at the top as the page polls the overview's JSON every ten seconds, and the panel says **Paused** while the tab is hidden and **Reconnecting** when the app does not answer.
 - **Issues.** One line per issue (open ones by default): its title (the first line of the message), the route or job it comes from, a sparkline of the last 24 hours, the number of occurrences, users and workspaces affected, and first and last seen. Filter by status, kind, level, release, environment, route, job, tag (`key:value`), user or workspace, search titles, and sort by last seen, first seen or count.
 - **An issue.** The message and the error's source chain, the backtrace when there is one, and the latest occurrence: the request (method, route, headers with secrets masked), the user, the workspace, the release, the server, tags and your report's context values. A chart shows occurrences per hour over seven days, and a list shows recent occurrences with a link to each trace. Buttons resolve, resolve in the next release, ignore (forever, for an hour, a day or 100 more events) or reopen it, and a table shows the alerts sent about it.
 - **Requests.** Every route with its throughput, error rate and p50, p95 and p99 latency, slowest first. A route's page lists its slowest traces, each drawn as a waterfall of spans.
 - **Queries.** Normalized statements with how often they ran, their total, average and p95 time, and the routes and jobs that ran them.
 - **Jobs.** Every job type with throughput, runtime, failed attempts and failed jobs. For queue workers and wait times in depth, see [Fleet](/docs/tools/fleet/).
 - **Outgoing.** Every host your app calls through `HttpClient`, with latency, error rate and the slowest calls.
+- **Alerts.** The [channels](#alerts) that exist, which kinds each gets and whether it is muted, with the cooldown and spike thresholds that apply, and the history of every delivery (what, to which channel, delivered, waiting or failed, with the error). With the `configure` ability you can choose the kinds a channel gets, mute it for an hour, eight hours, a day or until you unmute it, and send a test alert through it. The sidebar shows how many alerts could not be delivered in the last 24 hours.
+- **Releases.** Every release Lighthouse has seen: when it was deployed, who reported it, its commit and link, how many issues began in it and how many resolved issues came back in it, and for the release you pick, those issues. See [Releases](#releases).
+- **Settings.** What can be changed while the app runs, and, read from the options themselves, what is set in code or configuration. See [Settings](#settings).
 
 When `observe.tracing.trace_url` is set, each trace id links to the trace in your [tracing backend](/docs/microservices/tracing/).
 
@@ -207,6 +214,7 @@ Every route of the dashboard and its API checks an [ability](/docs/security/auth
 |---|---|---|
 | `view` | Opening the dashboard and reading everything on it | `lighthouse.view` |
 | `resolve` | Resolving, ignoring and reopening issues | `lighthouse.resolve` |
+| `configure` | Changing [settings](#settings), muting, changing and testing alert channels, and reporting releases | `lighthouse.configure` |
 
 Grant the permissions to a role, as in [installation](#installation), or write the rules in your abilities function:
 
@@ -226,6 +234,32 @@ pub fn define(ctx: &AbilityCtx, rules: &mut Rules) {
 
 A signed-in user without `view` gets a 403 page; a guest goes to the sign-in screen. The API answers 401 and 403 in the usual JSON error shape.
 
+## Releases
+
+A release is the label `lighthouse.release` gives the running processes. Lighthouse learns of releases in three ways:
+
+- **A process reports the release it runs when it boots**, with the time it first saw it as the deploy time.
+- **A deploy reports it**, with the real deploy time, a commit, a link and notes, so the Releases page and the overview's header can say when it went out:
+
+  ```sh
+  curl -X POST https://api.crm.example.com/_lighthouse/api/releases \
+    -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+    -d '{"release": "20261102-101500-3f2a9c1", "commit": "3f2a9c1"}'
+  ```
+
+  The token belongs to a user with `lighthouse.configure`. Use the same label that `lighthouse.release` gives the processes ([Harbor](/docs/tools/harbor/) uses the release id for both), so issues and releases match. Reporting a release again updates it.
+- **Your code reports it**: `lighthouse.report_release(ReleaseReport::new("20261102-101500-3f2a9c1").commit("3f2a9c1")).await?`.
+
+The release in the dashboard's header and on the overview is the newest deploy in the app's environment. If no release is known, the header shows the environment alone. Each release lists the issues that **began** in it (their first occurrence carried its label) and the resolved issues that **came back** in it (the release of the occurrence that reopened them); both counts are on the Releases page, with the issues themselves for the release you choose. The overview's chart marks each deploy of the period with a vertical line.
+
+## Settings
+
+The **Settings** page has two parts.
+
+**Changeable while the app runs**, with the `configure` ability: the four slow thresholds, the three [sample](#sampling) rates, the retention in days, the alert cooldown and the spike thresholds. Each shows the value in use, the configured value and when it was changed. A change is checked (a rate between 0 and 1, whole numbers within a range; one bad value refuses the whole change), stored in the `lighthouse_settings` table, applied at once by the process that took it and read by every other process within fifteen seconds. Returning a setting to the configured value removes the change. Every change is written to the [audit log](/docs/security/audit-log/) when the app has one, with who made it and the old and new values, and through the dashboard's cookie it needs the CSRF token. Without `lighthouse.configure` the page is read-only and says what is missing.
+
+**Set in code or configuration**, read-only: where it runs (recording, store, a separate database, the path, the URL, the environment, the release and server labels), what is recorded (the buffer, the prune time, what is captured, the masked names, the ignored routes and jobs) and the alert channels. They are read when the app boots; change them in configuration or in `LighthouseOptions`. A secret (a separate database URL, the Slack webhook URL, the webhook's signing secret) shows only whether it is set, and a webhook shows its host and nothing else.
+
 ## The JSON API for scripts and agents
 
 Everything on the dashboard is also JSON under `/_lighthouse/api`, for scripts, CI jobs and coding agents. Send an access token of a user with the right ability:
@@ -244,6 +278,16 @@ Everything on the dashboard is also JSON under `/_lighthouse/api`, for scripts, 
 | `GET /api/queries`, `/api/jobs`, `/api/outgoing` | The Queries, Jobs and Outgoing pages | `view` |
 | `GET /api/traces/{id}` | A trace with its spans | `view` |
 | `GET /api/alerts` | The latest alerts and whether they were delivered | `view` |
+| `GET /api/alerts/history` | A page of alert deliveries with the issue each was about (`page`, `per_page`) | `view` |
+| `GET /api/alerts/channels` | The channels: `name`, `detail` (never a secret), `kinds`, `configured_kinds`, `muted`, `muted_until` | `view` |
+| `PUT /api/alerts/channels/{name}` | `{"muted": true, "minutes": 60}` mutes (without `minutes`, until unmuted), `{"muted": false}` unmutes, `{"on": ["spike"]}` sets the kinds, `{"on": null}` returns to the configured ones | `configure` |
+| `POST /api/alerts/channels/{name}/test` | Sends a test alert through that channel: `{"channel", "ok", "error"}` | `configure` |
+| `GET /api/releases` | The releases seen, with `introduced` and `regressed` counts | `view` |
+| `POST /api/releases` | Reports a release: `{"release": "3f2a9c1", "commit": "3f2a9c1", "url": "https://...", "notes": "...", "deployed_at": "2026-11-02T10:15:00Z"}`, only `release` required | `configure` |
+| `GET /api/settings` | The settings that can change, with the value in use, the configured value and who changed it, and the options that cannot change | `view` |
+| `PUT /api/settings` | `{"values": {"thresholds.slow_request_ms": 500, "sample.requests": null}}`; `null` returns a setting to the configured value; one bad value refuses the whole change | `configure` |
+
+A change made through the dashboard's cookie must carry its CSRF token (`X-CSRF-Token`); one made with an access token does not need it.
 
 A session with a coding agent then looks like this: you ask it to fix the newest Lighthouse issue; it fetches `/api/issues?sort=first_seen`, reads the source chain and the failing request from `/api/issues/{id}`, opens the code, writes the fix and a test, and resolves the issue in the next release with a comment linking the change. Give it a token for a user with `lighthouse.view` to let it read, and `lighthouse.resolve` to let it close issues. On your own machine, [Navigator](/docs/ai/navigator/#lighthouses-tools) (`navree mcp`) gives the agent the same issues and figures without a token, read-only, straight from your local database.
 
@@ -320,9 +364,13 @@ on = ["new_issue", "regression"]
 
 A channel without `on` gets `new_issue`, `regression` and `spike`. Issues at level `Info` and ignored issues never alert. Every alert links to the issue on the dashboard at `lighthouse.url`, which defaults to `app.url` followed by the path; set it when your API has its own host, as in `https://api.crm.example.com/_lighthouse`.
 
+### Muting, kinds and tests
+
+The channels are defined in configuration or in code, because they hold secrets (a Slack webhook URL, a signing secret), so the dashboard does not create or delete them. On the **Alerts** page, with the `configure` ability, you can change what a channel gets without a deploy: tick the kinds it should receive (or return to the configured ones), mute it (a muted channel gets nothing and costs no cooldown, so the first alert after the mute is sent in full), and send a test alert through it to see whether it arrives. The choices are stored with the database, reach every process within fifteen seconds and are [audited](#settings). A delivery error shown on the page never contains the channel's secrets.
+
 ### Email
 
-Email alerts go through your app's `Mailer`, from the configured sender. The message names the issue, its kind, count, release and environment, and links to it. `to` takes one address or a list; from the environment, a comma-separated string (`APP_LIGHTHOUSE__ALERTS__EMAIL__TO=oncall@example.com,cto@example.com`).
+Email alerts go through your app's `Mailer`, from the configured sender. The message is a styled page, built with inline styles because mail clients drop style sheets, with a plain-text alternative: it names the issue, its kind, count, release and environment, and has an **Open in Lighthouse** button. `to` takes one address or a list; from the environment, a comma-separated string (`APP_LIGHTHOUSE__ALERTS__EMAIL__TO=oncall@example.com,cto@example.com`).
 
 ### Slack
 
@@ -450,7 +498,7 @@ By default Lighthouse writes to the app's database. To keep monitoring writes aw
 APP_LIGHTHOUSE__DATABASE_URL=postgres://lighthouse:secret@db.internal:5432/crm_lighthouse
 ```
 
-Lighthouse connects to it when the app boots, creates its five tables there if they are missing, and reads and writes there; the dashboard reads from it too. The URL takes the same forms as `database.url`. (The `lighthouse` migration still creates the tables in the app's database, where they stay empty, so removing the setting later works.)
+Lighthouse connects to it when the app boots, creates its seven tables there if they are missing, and reads and writes there; the dashboard reads from it too. The URL takes the same forms as `database.url`. (The `lighthouse` migration still creates the tables in the app's database, where they stay empty, so removing the setting later works.)
 
 ### Under load
 
@@ -487,7 +535,7 @@ To keep only the export, set `lighthouse.store = "off"`: nothing is recorded, no
 
 ## Configuration
 
-Every key of the `lighthouse` section is optional. As environment variables: `APP_LIGHTHOUSE__RETENTION_DAYS=30`, `APP_LIGHTHOUSE__SAMPLE__REQUESTS=0.1`, and lists as comma-separated strings (`APP_LIGHTHOUSE__IGNORE__ROUTES=/health/*,/metrics,/internal/*`). An invalid value, such as a sample rate above 1 or an unknown alert kind, fails the boot with a message naming the key.
+Every key of the `lighthouse` section is optional. As environment variables: `APP_LIGHTHOUSE__RETENTION_DAYS=30`, `APP_LIGHTHOUSE__SAMPLE__REQUESTS=0.1`, and lists as comma-separated strings (`APP_LIGHTHOUSE__IGNORE__ROUTES=/health/*,/metrics,/internal/*`). An invalid value, such as a sample rate above 1 or an unknown alert kind, fails the boot with a message naming the key. The thresholds, sample rates, `retention_days`, `alerts.cooldown_minutes` and `alerts.spike.*` can also be changed while the app runs, from [Settings](#settings); what you change there replaces the configured value until you return it.
 
 | Key | Default | What it does |
 |---|---|---|

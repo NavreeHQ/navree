@@ -217,11 +217,11 @@ table.plain td:last-child { text-align: right; }
 }
 .tile { background: var(--ink-1); padding: 12px; min-width: 0; }
 .tile .label { color: var(--fg-3); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tile .value-row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 4px 6px; margin-top: 4px; }
+.tile .value-row { display: flex; flex-wrap: nowrap; align-items: flex-end; justify-content: space-between; gap: 4px; margin-top: 4px; }
 .tile .value { color: var(--fg); font-size: 22px; line-height: 1.2; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tile .value.bad { color: var(--danger); }
 .tile .sub { margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-svg.tile-spark { width: 32px; height: 20px; flex: none; margin-bottom: 4px; }
+svg.tile-spark { width: 28px; min-width: 12px; height: 20px; flex: 0 1 28px; margin-bottom: 4px; }
 svg.tile-spark path { fill: none; stroke: var(--fg-3); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 svg .grid line { stroke: var(--line); stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; }
 svg .baseline { stroke: var(--line-2); vector-effect: non-scaling-stroke; }
@@ -238,7 +238,7 @@ svg.spark.wide { width: 88px; height: 28px; }
 .kind.warning { color: var(--amber); }
 
 /* The live panel. */
-.live { position: sticky; top: 72px; max-height: calc(100vh - 96px); overflow-y: auto; padding: 16px 12px; }
+.live-panel { position: sticky; top: 72px; max-height: calc(100vh - 96px); overflow-y: auto; padding: 16px 12px; }
 .live-head { display: flex; align-items: center; justify-content: space-between; margin: 0 4px 12px; }
 .live-head h2 { margin: 0; font-size: 14px; }
 .live-status { display: inline-flex; align-items: center; gap: 8px; color: var(--fg-3); font-size: 12px; white-space: nowrap; }
@@ -273,10 +273,11 @@ input:disabled, select:disabled, button:disabled { opacity: 0.55; cursor: not-al
 
 @media (max-width: 1260px) {
   .overview-grid { grid-template-columns: minmax(0, 1fr); }
-  .live { position: static; max-height: none; }
+  .live-panel { position: static; max-height: 32rem; }
 }
 @media (max-width: 700px) {
   .hide-narrow { display: none; }
+  .topbar .live-status { display: none; }
   .setting { grid-template-columns: minmax(0, 1fr); }
   .setting-input { justify-content: flex-start; }
 }

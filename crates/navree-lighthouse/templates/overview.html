@@ -28,17 +28,17 @@
     <div class="tile">
       <div class="label">Failed jobs</div>
       <div class="value-row"><span class="value{% if overview.failed_jobs %} bad{% endif %}" id="fig-failed-jobs">{{ overview.failed_jobs }}</span>{% if spark_failed %}<svg class="tile-spark" viewBox="0 0 80 24" aria-hidden="true"><path id="spark-failed" d="{{ spark_failed }}"/></svg>{% endif %}</div>
-      <div class="sub">last {{ period }}</div>
+      <div class="sub">in {{ period }}</div>
     </div>
     <div class="tile">
       <div class="label">Open issues</div>
       <div class="value-row"><span class="value" id="fig-open-issues">{{ overview.open_issues }}</span></div>
-      <div class="sub"><span id="fig-new-issues">{{ overview.new_issues }}</span> new in the last {{ period }}</div>
+      <div class="sub"><span id="fig-new-issues">{{ overview.new_issues }}</span> new in {{ period }}</div>
     </div>
     <div class="tile" title="Traces and occurrences dropped because the write queue was full. Counts are never dropped.">
       <div class="label">Sampled out</div>
       <div class="value-row"><span class="value" id="fig-sampled-out">{{ overview.sampled_out }}</span></div>
-      <div class="sub">details dropped, counts exact</div>
+      <div class="sub">traces dropped</div>
     </div>
   </div>
   <div class="card">
@@ -79,7 +79,7 @@
     </table>
   </div>
 </div>
-<aside class="live card" aria-label="New occurrences">
+<aside class="live-panel card" aria-label="New occurrences">
   <div class="live-head">
     <h2>New occurrences</h2>
     <span class="live-status small"><span class="dot live"></span><span id="stream-text">Streaming</span></span>

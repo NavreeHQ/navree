@@ -1,6 +1,6 @@
 ---
 name: navree-lighthouse
-description: "Application monitoring with navree-lighthouse: the `lighthouse` facade feature (in `full`), `LighthouseModule::from_config()` / `for_root(LighthouseOptions)` and the `lighthouse` config section, what it records through its telemetry sink (5xx and panics, slow requests and queries, failed jobs and scheduled tasks, failing outgoing calls), issues grouped by fingerprint with statuses (open, resolved, resolved in the next release, ignored), reporting handled errors with `Arc<Lighthouse>` (`report`, `capture(Report::..)`, `tag_current`), sampling (0.1 by default; errors and slow work always kept), exact counts under load and the sampled-out figure, alerts (email, Slack, signed Standard Webhooks, your own `AlertChannel` via `m.alert_channel::<C>()`, `lighthouse.alert` jobs, cooldown, spikes, `raise_alert`), the `/_lighthouse` dashboard and its sign-in, the JSON API under `/_lighthouse/api` behind the `view` and `resolve` abilities (`lighthouse.view`, `lighthouse.resolve`), MCP tools for agents (`lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_resolve_issue`, ..., the resource `lighthouse://issues/{id}` and the prompt `fix-lighthouse-issue`, with the `mcp` feature and `McpModule`), `lighthouse:prune` and `lighthouse:test-alerts`, a separate database, and `LighthouseFake` in tests. Use when adding monitoring to an app, reporting an error you handle, configuring alerts, giving someone or an agent access to the dashboard, its API or its MCP tools, writing tests that assert on reports, or debugging why an error is not an issue, why an alert was not sent, or why the dashboard answers 401, 403 or 404."
+description: "Application monitoring with navree-lighthouse: the `lighthouse` facade feature (in `full`), `LighthouseModule::from_config()` / `for_root(LighthouseOptions)` and the `lighthouse` config section, what it records through its telemetry sink (5xx and panics, slow requests and queries, failed jobs and scheduled tasks, failing outgoing calls), issues grouped by fingerprint with statuses (open, resolved, resolved in the next release, ignored), reporting handled errors with `Arc<Lighthouse>` (`report`, `capture(Report::..)`, `tag_current`), sampling (0.1 by default; errors and slow work always kept), exact counts under load and the sampled-out figure, alerts (email, Slack, signed Standard Webhooks, your own `AlertChannel` via `m.alert_channel::<C>()`, `lighthouse.alert` jobs, cooldown, spikes, `raise_alert`, muting a channel and changing its kinds from the dashboard), the `/_lighthouse` dashboard and its sign-in (Overview with a live panel, sparklines and a release line; Alerts, Releases and Settings pages), releases (`report_release`, `ReleaseReport`, `POST /_lighthouse/api/releases`), settings changed while the app runs, the JSON API under `/_lighthouse/api` behind the `view`, `resolve` and `configure` abilities (`lighthouse.view`, `lighthouse.resolve`, `lighthouse.configure`), MCP tools for agents (`lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_resolve_issue`, ..., the resource `lighthouse://issues/{id}` and the prompt `fix-lighthouse-issue`, with the `mcp` feature and `McpModule`), `lighthouse:prune` and `lighthouse:test-alerts`, a separate database, and `LighthouseFake` in tests. Use when adding monitoring to an app, reporting an error you handle, configuring alerts, giving someone or an agent access to the dashboard, its API or its MCP tools, writing tests that assert on reports, or debugging why an error is not an issue, why an alert was not sent, or why the dashboard answers 401, 403 or 404."
 ---
 
 # Lighthouse
@@ -107,7 +107,12 @@ before hashing. 4xx responses only count towards the route's error rate.
 Lighthouse's own routes, `lighthouse.ignore.routes` (`/health/*`, `/metrics`),
 `lighthouse.ignore.jobs` and `lighthouse.alert` jobs are never recorded.
 Scripts run with `Executor::execute_script` are not timed, so they never
-show up.
+show up. Statements run outside any request or job (queue polling, heartbeats)
+are counted but never open an issue. A statement's time is the time it ran: waiting for a free pooled
+connection is not part of it. A panic is recorded under the route that
+panicked, not `unmatched`. One-off commands (`migrate`, a seeder, a script;
+any process that is not `serve` or `*:work`) record exceptions and reports
+but not statements or calls made outside a request or job.
 
 ## Counts, sampling and load
 
@@ -176,6 +181,41 @@ on = ["new_issue", "regression", "spike", "failed_job", "long_wait"]
 - `navree lighthouse:test-alerts [channel]` sends a test alert (`"test":
   true`) through each channel, stores nothing, exits non-zero on a failure.
 
+### Muting and testing channels from the dashboard
+
+The Alerts page lists the configured channels (never their secrets), the
+kinds each gets and the delivery history. With `lighthouse.configure` a
+channel can be muted (`PUT /api/alerts/channels/{name}` `{"muted": true,
+"minutes": 60}`), given other kinds (`{"on": ["spike"]}`, `{"on": null}`
+returns to the configured ones) and tested
+(`POST /api/alerts/channels/{name}/test`). Channels themselves are not
+created or deleted there: they hold secrets, so they are config or code.
+The email is a styled page with inline styles and an **Open in Lighthouse**
+button, plus a plain-text part.
+
+## Releases and settings
+
+- Every process notes the release it runs at boot (`lighthouse.release`,
+  else `app.version`; `unknown` is not a release). A deploy reports the real
+  time: `POST /_lighthouse/api/releases` `{release, commit?, url?, notes?,
+  environment?, deployed_at?}` with `lighthouse.configure`, or
+  `lighthouse.report_release(ReleaseReport::new("3f2a9c1").commit("3f2a9c1")).await?`.
+  Use the label the processes have. The header and the overview show the
+  newest deploy; with no release the header shows the environment only.
+  `GET /api/releases` lists them with `introduced` (issues whose first
+  occurrence was in it) and `regressed` (resolved issues that came back in
+  it).
+- Settings that change while the app runs (stored in `lighthouse_settings`,
+  applied at once by the process that took the change, read by the others
+  every 15 s): `thresholds.slow_request_ms`, `slow_query_ms`, `slow_job_ms`,
+  `slow_outgoing_ms`, `sample.requests`, `sample.jobs`, `sample.exceptions`,
+  `retention_days`, `alerts.cooldown_minutes`, `alerts.spike.occurrences`,
+  `alerts.spike.minutes`. `PUT /api/settings` `{"values": {key: value|null}}`
+  (`null` returns to the configured value; one bad value refuses the whole
+  change; audited to `dyn AuditSink` when the app has one). Everything else
+  in `LighthouseOptions` is read at boot; the Settings page lists it
+  read-only, with secrets shown only as set or not set.
+
 ## The JSON API (scripts and agents)
 
 Bearer access tokens work on `/_lighthouse/api/*` (the dashboard's cookie
@@ -190,6 +230,8 @@ works too, with an `x-csrf-token` header on changes):
 | `POST /api/issues/{id}/ignore` `{}` or `{until}` or `{occurrences}`, `comment?` | resolve |
 | `POST /api/issues/{id}/reopen` | resolve |
 | `GET /api/routes`, `/api/routes/detail?endpoint=GET /api/v1/x`, `/api/queries`, `/api/jobs`, `/api/outgoing`, `/api/traces/{id}`, `/api/alerts` | view |
+| `GET /api/alerts/history`, `GET /api/alerts/channels`, `GET /api/releases`, `GET /api/settings` | view |
+| `PUT /api/alerts/channels/{name}`, `POST /api/alerts/channels/{name}/test`, `POST /api/releases`, `PUT /api/settings` | configure |
 
 ## MCP tools (agents)
 

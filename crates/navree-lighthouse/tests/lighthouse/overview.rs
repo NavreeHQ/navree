@@ -54,7 +54,7 @@ async fn the_tiles_carry_sparklines_the_chart_time_labels_and_the_deploy() {
     );
     assert!(page.contains("Times are UTC."));
     assert!(page.contains("p50 <span id=\"fig-p50\">"));
-    assert!(page.contains("new in the last 24h"));
+    assert!(page.contains("new in 24h"));
 
     // The series are real: a bucket per timeline point, with the traffic in the last.
     let token = token(&app, "ops@acme.test").await;

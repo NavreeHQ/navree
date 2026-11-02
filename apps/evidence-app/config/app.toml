@@ -7,6 +7,8 @@
 
 [app]
 name = "Navree Evidence"
+# The release Lighthouse shows and tags every record with.
+version = "1.0.0"
 
 [http]
 addr = "0.0.0.0:8080"

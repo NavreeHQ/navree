@@ -52,7 +52,7 @@
   // Where a button reports what happened: the nearest [data-result], else
   // the page's own.
   function reporter(target) {
-    var scope = target.closest("[data-channel], .actions, .card") || document;
+    var scope = target.closest(".channel") || target.closest(".actions, .card") || document;
     var box = scope.querySelector("[data-result]") || document.getElementById("settings-result") || document.getElementById("action-error");
     return function (text, bad) {
       if (!box) return;
@@ -62,7 +62,7 @@
   }
 
   function channelAction(target, action) {
-    var box = target.closest("[data-channel]");
+    var box = target.closest(".channel");
     var name = target.getAttribute("data-channel");
     var say = reporter(target);
     var path = "/api/alerts/channels/" + encodeURIComponent(name);

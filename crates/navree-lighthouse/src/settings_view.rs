@@ -31,6 +31,10 @@ fn secret(key: &str, label: &str, set: bool) -> Value {
     })
 }
 
+fn on_off(value: bool) -> &'static str {
+    if value { "on" } else { "off" }
+}
+
 fn list(values: &[String]) -> Value {
     if values.is_empty() {
         json!("none")
@@ -81,9 +85,9 @@ pub(crate) fn read_only(options: &LighthouseOptions) -> Vec<Value> {
             "items": [
                 item("buffer", "Details waiting to be written", json!(options.buffer)),
                 item("prune_at", "Daily prune (UTC)", json!(if options.prune_at.trim().is_empty() { "not scheduled" } else { options.prune_at.trim() })),
-                item("capture.request_headers", "Request headers (masked)", json!(options.capture.request_headers)),
-                item("capture.request_body", "JSON request bodies (masked)", json!(options.capture.request_body)),
-                item("capture.ip", "Client address", json!(options.capture.ip)),
+                item("capture.request_headers", "Request headers (masked)", json!(on_off(options.capture.request_headers))),
+                item("capture.request_body", "JSON request bodies (masked)", json!(on_off(options.capture.request_body))),
+                item("capture.ip", "Client address", json!(on_off(options.capture.ip))),
                 item("redact", "Extra names masked", list(&options.redact)),
                 item("ignore.routes", "Routes never recorded", list(&options.ignore.routes)),
                 item("ignore.jobs", "Jobs never recorded", list(&options.ignore.jobs)),
