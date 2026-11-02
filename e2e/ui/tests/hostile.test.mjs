@@ -581,6 +581,87 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       }
     });
 
+    test(`a region only takes HTML (${engine})`, async () => {
+      for (const [type, body] of [["text/plain", `<a id="inj" href="https://evil.example">click</a>`], ["application/json", `{"bio":"<a id='inj' href='https://evil.example'>click</a>"}`]]) {
+        const { context, page } = await regionScene((res) => {
+          res.writeHead(200, { "content-type": type });
+          res.end(body);
+        });
+        assert.equal(await page.locator("#r a#inj").count(), 0, type);
+        assert.equal(await page.textContent("#r"), "old", type);
+        await context.close();
+      }
+    });
+
+    async function regionScene(answer, attrs = "") {
+      const name = key("region");
+      route(`/${name}`, doc(`<div id="r" ${attrs} data-ui-src="/${name}-frag">old</div><form id="f" data-ui-form method="post" action="/${name}-inv"><button id="go">go</button></form>`));
+      route(`/${name}-login`, doc(`<h1 id="login">Sign in</h1><form id="loginform" method="post"><input name="password" type="password"></form>`));
+      f.routes.set(`/${name}-frag`, (req, res) => answer(res, name));
+      f.routes.set(`/${name}-inv`, (req, res) => f.ops(res, { ops: [{ op: "invalidate", target: "r" }] }));
+      const opened = await fresh(`/${name}`);
+      await opened.page.click("#go");
+      await sleep(300);
+      return { ...opened, name };
+    }
+
+    test(`an expired session takes the user to the login page, not into a region (${engine})`, async () => {
+      const { context, page, name } = await regionScene((res, n) => {
+        res.writeHead(303, { location: `/${n}-login` });
+        res.end();
+      });
+      assert.equal(new URL(page.url()).pathname, `/${name}-login`);
+      assert.equal(await page.locator("#r").count(), 0);
+      assert.equal(await page.locator("#login").count(), 1);
+      await context.close();
+    });
+
+    test(`a whole page without the region is gone to, not poured in (${engine})`, async () => {
+      const { context, page, name } = await regionScene((res, n) => f.html(res, doc(`<h1 id="login">Sign in</h1><input name="password" type="password">`)));
+      assert.equal(new URL(page.url()).pathname, `/${name}-frag`);
+      await context.close();
+    });
+
+    test(`a fragment with no runtime of its own fills a region (${engine})`, async () => {
+      const { context, page } = await regionScene((res) => f.html(res, `<!doctype html><html lang="en"><head><title>x</title></head><body><b id="b">filled</b></body></html>`));
+      assert.equal(await page.textContent("#r #b"), "filled");
+      await context.close();
+    });
+
+    test(`an answer from another build reloads the page (${engine})`, async () => {
+      const name = key("rbuild");
+      let loads = 0;
+      route(`/${name}`, () => { loads++; return doc(`<div id="r" data-ui-src="/${name}-frag">old</div><form id="f" data-ui-form method="post" action="/${name}-inv"><button id="go">go</button></form>`); });
+      route(`/${name}-frag`, doc(`<div id="r">from another build</div>`, { build: "newer" }));
+      f.routes.set(`/${name}-inv`, (req, res) => f.ops(res, { ops: [{ op: "invalidate", target: "r" }] }));
+      const { context, page } = await fresh(`/${name}`);
+      await page.click("#go");
+      await sleep(350);
+      assert.equal(await page.textContent("#r"), "old");
+      assert.equal(loads, 2, "reloaded");
+      await context.close();
+    });
+
+    test(`a feed takes only HTML that wasn't redirected (${engine})`, async () => {
+      for (const kind of ["text", "redirect"]) {
+        const name = key("feed");
+        route(`/${name}`, doc(`<div id="fd" data-ui-src="/${name}-feed" data-ui-feed="into" data-ui-after="0"><ul id="into"></ul></div><form id="f" data-ui-form method="post" action="/${name}-inv"><button id="go">go</button></form>`));
+        route(`/${name}-login`, doc(`<h1 id="login">Sign in</h1>`));
+        f.routes.set(`/${name}-feed`, (req, res) => {
+          if (kind === "redirect") res.writeHead(303, { location: `/${name}-login` });
+          else res.writeHead(200, { "content-type": "text/plain" });
+          res.end(`<li id="inj">x</li>`);
+        });
+        f.routes.set(`/${name}-inv`, (req, res) => f.ops(res, { ops: [{ op: "invalidate", target: "fd" }] }));
+        const { context, page } = await fresh(`/${name}`);
+        await page.click("#go");
+        await sleep(300);
+        assert.equal(await page.locator("#into #inj").count(), 0, kind);
+        if (kind === "redirect") assert.equal(new URL(page.url()).pathname, `/${name}-login`);
+        await context.close();
+      }
+    });
+
     test(`named elements can't switch the runtime off (${engine})`, async () => {
       for (const name of ["cookie", "getElementById", "querySelector", "querySelectorAll", "body", "head", "documentElement", "activeElement", "title", "createElement", "addEventListener"]) {
         const path = key("document");

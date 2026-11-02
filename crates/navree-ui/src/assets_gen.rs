@@ -3,10 +3,10 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "d3da71c2678a";
+pub const BUILD: &str = "5a1ae6b93c82";
 
 /// The URL of `core.js`.
-pub const CORE_URL: &str = "/_navree/ui/core-4ea72a4952dc.js";
+pub const CORE_URL: &str = "/_navree/ui/core-3f6b43ff30e8.js";
 
 /// The URL of `sidebar.js`.
 pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-26cf815aa60d.js";
@@ -34,7 +34,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "core",
         ext: "js",
-        hash: "4ea72a4952dc",
+        hash: "3f6b43ff30e8",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/core.js"),
         gzip: Some(include_bytes!("../dist/core.js.gz")),

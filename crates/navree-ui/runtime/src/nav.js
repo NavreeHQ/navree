@@ -216,6 +216,20 @@ export function setUrl(href, mode) {
 const regions = new Map();
 
 /**
+ * Whether a region can use this answer. A redirect means the place moved, as when
+ * a session ends and the answer is the login page: the user goes there, and its
+ * form doesn't land inside the region. Only HTML is markup.
+ * @param {Response} response
+ */
+function takes(response) {
+  if (response.redirected) {
+    if (sameOrigin(response.url)) location.assign(response.url);
+    return false;
+  }
+  return response.ok && (response.headers.get("content-type") || "").startsWith("text/html");
+}
+
+/**
  * A feed region asks for what is newer than its cursor and adds it at the start
  * of its container. The rows are the server's own markup, as in an `append` op.
  * @param {Element} el @param {string} src @param {() => boolean} current
@@ -226,7 +240,7 @@ async function feed(el, src, current) {
   const url = new URL(src, location.href);
   url.searchParams.set("after", el.getAttribute("data-ui-after") || "0");
   const response = await fetch(url, { headers: HEADER });
-  if (!current() || !response.ok) return;
+  if (!current() || !takes(response)) return;
   const html = await response.text();
   if (!current()) return;
   if (html.trim()) {
@@ -249,19 +263,25 @@ export async function refresh(id) {
     if (el.hasAttribute("data-ui-feed")) return await feed(el, src, () => regions.get(id) === mine);
     const response = await fetch(src, { headers: HEADER });
     if (regions.get(id) !== mine) return;
-    if (!response.ok) {
-      if (table) tableFailed(table, src, response.status);
+    if (table && !response.ok) {
+      tableFailed(table, src, response.status);
       return;
     }
-    // A sign-in page has no business inside a table: go there for real.
-    if (table && (response.redirected || !(response.headers.get("content-type") || "").startsWith("text/html"))) {
-      location.assign(response.url);
-      return;
-    }
+    if (!takes(response)) return;
     const doc = new DOMParser().parseFromString(await response.text(), "text/html");
+    const build = root(doc).getAttribute("data-build");
+    if (build && build !== root().getAttribute("data-build")) {
+      location.reload();
+      return;
+    }
     clean(body(doc));
     let to = byId(id, doc);
     if (!to) {
+      // A page with the runtime that lacks the region is somewhere else, not a fragment.
+      if (build) {
+        if (sameOrigin(response.url)) location.assign(response.url);
+        return;
+      }
       to = /** @type {HTMLElement} */ (el.cloneNode(false));
       to.append(...body(doc).childNodes);
     }
