@@ -129,6 +129,168 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       await context.close();
     });
 
+    /** Two links, a form; the form's answer changes what `/x-private` shows. */
+    function staleScene(answer) {
+      const name = key("stale");
+      const state = { user: "alice", version: 1 };
+      route(`/${name}`, doc(`<a id="link" data-ui-prefetch href="/${name}-private">account</a><form id="f" data-ui-form method="post" action="/${name}-write"><button id="go">go</button></form>`));
+      route(`/${name}-private`, () => doc(`<h1 id="who">${state.user} v${state.version}</h1>`));
+      f.routes.set(`/${name}-write`, (req, res) => {
+        state.user = "bob";
+        state.version = 2;
+        f.ops(res, answer(name), 200, { "set-cookie": "user=bob; Path=/" });
+      });
+      return { name, state };
+    }
+
+    test(`a prefetch is not shown after a write (${engine})`, async () => {
+      const { name } = staleScene(() => ({ ops: [{ op: "toast", tone: "success", text: "saved" }] }));
+      const { context, page } = await fresh(`/${name}`);
+      await page.hover("#link");
+      await sleep(150);
+      await page.click("#go");
+      await sleep(150);
+      await page.click("#link");
+      await page.waitForSelector("#who");
+      assert.equal(await page.textContent("#who"), "bob v2");
+      await context.close();
+    });
+
+    test(`a prefetch is not shown after a navigate op, relative or absolute (${engine})`, async () => {
+      for (const absolute of [false, true]) {
+        const { name } = staleScene((n) => ({ ops: [{ op: "navigate", href: `${absolute ? f.origin : ""}/${n}-private` }] }));
+        const { context, page } = await fresh(`/${name}`);
+        await page.hover("#link");
+        await sleep(150);
+        await page.click("#go");
+        await page.waitForSelector("#who");
+        assert.equal(await page.textContent("#who"), "bob v2", `absolute=${absolute}`);
+        await context.close();
+      }
+    });
+
+    test(`a prefetch started during a write is not shown after it (${engine})`, async () => {
+      const name = key("during");
+      const state = { user: "alice" };
+      route(`/${name}`, doc(`<a id="link" data-ui-prefetch href="/${name}-private">account</a><form id="f" data-ui-form method="post" action="/${name}-write"><button id="go">go</button></form>`));
+      route(`/${name}-private`, () => doc(`<h1 id="who">${state.user}</h1>`));
+      f.routes.set(`/${name}-write`, (req, res) => setTimeout(() => {
+        state.user = "bob";
+        f.ops(res, { ops: [] });
+      }, 300));
+      const { context, page } = await fresh(`/${name}`);
+      await page.click("#go");
+      await page.hover("#link");
+      await sleep(450);
+      await page.click("#link");
+      await page.waitForSelector("#who");
+      assert.equal(await page.textContent("#who"), "bob");
+      await context.close();
+    });
+
+    test(`a write in another tab drops this tab's prefetch (${engine})`, async () => {
+      const { name } = staleScene(() => ({ ops: [] }));
+      const context = await browser.newContext();
+      const one = await context.newPage();
+      const two = await context.newPage();
+      await one.goto(`${f.origin}/${name}`);
+      await two.goto(`${f.origin}/${name}`);
+      await sleep(60);
+      await one.hover("#link");
+      await sleep(150);
+      await two.click("#go");
+      await sleep(150);
+      await one.click("#link");
+      await one.waitForSelector("#who");
+      assert.equal(await one.textContent("#who"), "bob v2");
+      await context.close();
+    });
+
+    test(`a plain form's post drops the prefetch of other tabs (${engine})`, async () => {
+      const name = key("plainpost");
+      const state = { user: "alice" };
+      route(`/${name}`, doc(`<a id="link" data-ui-prefetch href="/${name}-private">account</a><form id="f" method="post" action="/${name}-write"><button id="go">go</button></form>`));
+      route(`/${name}-private`, () => doc(`<h1 id="who">${state.user}</h1>`));
+      f.routes.set(`/${name}-write`, (req, res) => {
+        state.user = "bob";
+        f.html(res, doc(`<h1>signed out</h1>`));
+      });
+      const context = await browser.newContext();
+      const one = await context.newPage();
+      const two = await context.newPage();
+      await one.goto(`${f.origin}/${name}`);
+      await two.goto(`${f.origin}/${name}`);
+      await sleep(60);
+      await one.hover("#link");
+      await sleep(150);
+      await two.click("#go");
+      await sleep(150);
+      await one.click("#link");
+      await one.waitForSelector("#who");
+      assert.equal(await one.textContent("#who"), "bob");
+      await context.close();
+    });
+
+    test(`a cookie changed by anything drops a prefetch (${engine})`, async () => {
+      const name = key("cookie");
+      let served = 0;
+      route(`/${name}`, doc(`<a id="link" data-ui-prefetch href="/${name}-private">account</a>`));
+      route(`/${name}-private`, () => doc(`<h1 id="who">${++served}</h1>`));
+      const { context, page } = await fresh(`/${name}`);
+      await page.hover("#link");
+      await sleep(150);
+      await page.evaluate(() => { document.cookie = "XSRF-TOKEN=rotated; Path=/"; });
+      await page.click("#link");
+      await page.waitForSelector("#who");
+      assert.equal(await page.textContent("#who"), "2", "the click's own answer");
+      await context.close();
+    });
+
+    test(`Cache-Control decides how long a prefetch may stand in (${engine})`, async () => {
+      for (const [control, wait, reused] of [["no-store", 0, true], ["no-store", 3400, false], ["no-store, no-cache", 0, false], ["private, max-age=0", 0, false], ["private, max-age=8", 3400, true]]) {
+        const name = key("control");
+        let served = 0;
+        route(`/${name}`, doc(`<a id="link" data-ui-prefetch href="/${name}-next">next</a>`));
+        route(`/${name}-next`, () => doc(`<h1 id="n">${++served}</h1>`), { "cache-control": control });
+        const { context, page } = await fresh(`/${name}`);
+        await page.hover("#link");
+        await sleep(150 + wait);
+        await page.click("#link");
+        await page.waitForSelector("#n");
+        assert.equal(await page.textContent("#n"), reused ? "1" : "2", `${control} after ${wait} ms`);
+        await context.close();
+      }
+    });
+
+    test(`a prefetch that redirected or failed isn't what the click shows (${engine})`, async () => {
+      for (const kind of ["redirect", "error", "ops"]) {
+        const name = key("badprefetch");
+        let calls = 0;
+        route(`/${name}`, doc(`<a id="link" data-ui-prefetch href="/${name}-next">next</a>`));
+        route(`/${name}-login`, doc(`<h1 id="login">Sign in</h1>`));
+        f.routes.set(`/${name}-next`, (req, res) => {
+          if (++calls > 1) return f.html(res, doc(`<h1 id="n">fresh</h1>`));
+          if (kind === "redirect") {
+            res.writeHead(303, { location: `/${name}-login` });
+            return res.end();
+          }
+          if (kind === "error") {
+            res.writeHead(500, { "content-type": "text/html" });
+            return res.end("boom");
+          }
+          f.ops(res, { ops: [{ op: "toast", tone: "info", text: "ran by a prefetch" }] });
+        });
+        const { context, page } = await fresh(`/${name}`);
+        await page.hover("#link");
+        await sleep(200);
+        await page.click("#link");
+        await page.waitForSelector("#n");
+        assert.equal(await page.textContent("#n"), "fresh", kind);
+        assert.deepEqual(await toasts(page), [], kind);
+        await context.close();
+      }
+    });
+
     test(`hover and focus fetch nothing unless a link is marked (${engine})`, async () => {
       const name = key("prefetch");
       let ran = 0;

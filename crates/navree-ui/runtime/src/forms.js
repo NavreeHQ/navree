@@ -1,7 +1,7 @@
 // Forms: the pending state within the frame of the submit, then, on
 // `data-ui-form`, a fetch whose answer is ops or a page.
 import { applyEnvelope } from "./ops.js";
-import { forgetPrefetched, go, showPage, startRegions } from "./nav.js";
+import { forget, go, showPage, startRegions, whileWriting } from "./nav.js";
 import { attr, cookies, has, on, set, unset, toggle } from "./dom.js";
 import { toast } from "./ui.js";
 
@@ -52,10 +52,9 @@ async function send(form, submitter) {
     const url = new URL(action, location.href);
     if (method === "GET") url.search = new URLSearchParams(/** @type {any} */ (data)).toString();
     else init.body = attr(form, "enctype") === "multipart/form-data" ? data : new URLSearchParams(/** @type {any} */ (data));
-    const response = await fetch(url, init);
+    const response = await (method === "GET" ? fetch(url, init) : whileWriting(() => fetch(url, init)));
     const type = response.headers.get("content-type") || "";
     pending(form, submitter, false);
-    if (method !== "GET") forgetPrefetched();
     document.dispatchEvent(new CustomEvent("ui:sent", { detail: { form, ok: response.ok } }));
     if (type.startsWith(OPS)) applyEnvelope(await response.json());
     else if (type.startsWith("text/html")) await showPage(response, { url: response.url });
@@ -89,11 +88,12 @@ export function startForms() {
       filter(form);
       return;
     }
-    if ((attr(form, "method") || "").toLowerCase() !== "dialog") pending(form, submitter, true);
+    const method = ((submitter && attr(submitter, "formmethod")) || attr(form, "method") || "get").toLowerCase();
+    if (method !== "dialog") pending(form, submitter, true);
     if (has(form, "data-ui-form")) {
       e.preventDefault();
       send(form, submitter);
-    }
+    } else if (method === "post") forget();
   });
   /** @type {WeakMap<HTMLFormElement, number>} */
   const timers = new WeakMap();

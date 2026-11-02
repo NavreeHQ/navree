@@ -3,7 +3,7 @@
 import { morph, parse } from "./morph.js";
 import { all, byId, field, make, root } from "./dom.js";
 import { announce, toast, openTarget, closeTarget } from "./ui.js";
-import { go, setUrl, refresh } from "./nav.js";
+import { forget, go, setUrl, refresh } from "./nav.js";
 
 /** @param {HTMLFormElement} form @param {Record<string, string[]>} fields */
 function showErrors(form, fields) {
@@ -75,6 +75,7 @@ export function applyEnvelope(envelope) {
     location.reload();
     return;
   }
+  forget();
   for (const url of envelope.modules || []) import(url);
   for (const op of envelope.ops || []) apply(op);
 }

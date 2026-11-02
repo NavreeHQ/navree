@@ -1,6 +1,6 @@
 // Link boosting and regions: fetch a page, morph what changed, keep the shell
 // alive. A failed fetch falls back to a real navigation.
-import { body, byId, every, head, hidden, on, one, root, setTitle, titleOf } from "./dom.js";
+import { body, byId, cookies, every, head, hidden, on, one, root, setTitle, titleOf } from "./dom.js";
 import { morph } from "./morph.js";
 import { announce } from "./ui.js";
 
@@ -8,27 +8,86 @@ const HEADER = { "x-navree-ui": "1" };
 // `Sec-Purpose` can't be set from `fetch`, so a prefetch says so itself.
 const PREFETCH = { ...HEADER, "x-navree-prefetch": "1" };
 const PREFETCH_MS = 65;
-const PREFETCH_TTL = 10000;
+// A page with `no-store` may stand in only as a head start on the click it was
+// fetched for; one with `max-age` for that long, up to the most anything stands in.
+const HEAD_START = 3000;
+const MOST = 10000;
 
-/** @type {Map<string, {at: number, page: Promise<Response>}>} */
+/** @type {Map<string, {at: number, epoch: number, cookies: string, page: Promise<Response>}>} */
 const prefetched = new Map();
 let generation = 0;
+/** Moves on whenever what a page shows may have changed. */
+let epoch = 0;
+/** Writes on their way: what is fetched meanwhile may be from before them. */
+let writing = 0;
+const tabs = "BroadcastChannel" in window ? new BroadcastChannel("navree-ui") : null;
+
+function drop() {
+  epoch++;
+  prefetched.clear();
+}
+if (tabs) tabs.onmessage = drop;
+on(window, "pageshow", (/** @type {PageTransitionEvent} */ e) => { if (e.persisted) drop(); });
+
+/** A write or a change of user: nothing fetched before it may be shown, in any tab. */
+export function forget() {
+  drop();
+  tabs?.postMessage(0);
+}
+
+/** Runs `write`, with no prefetch standing or started until it's over. @template T @param {() => Promise<T>} write */
+export async function whileWriting(write) {
+  writing++;
+  forget();
+  try {
+    return await write();
+  } finally {
+    writing--;
+    forget();
+  }
+}
+
+/** The address of a page, for the map: absolute, with no fragment. @param {string} url */
+function keyOf(url) {
+  const key = new URL(url, location.href);
+  key.hash = "";
+  return key.href;
+}
+
+/** How long this answer may stand in for a fresh one, from when it was asked for. @param {Response} response */
+function standsInFor(response) {
+  const control = (response.headers.get("cache-control") || "").toLowerCase();
+  if (control.includes("no-cache")) return 0;
+  const age = /max-age=(\d+)/.exec(control);
+  if (age && !control.includes("no-store")) return Math.min(Number(age[1]) * 1000, MOST);
+  return HEAD_START;
+}
+
+/** The prefetched answer for `key`, if it is still true. @param {string} key */
+async function standing(key) {
+  const hit = prefetched.get(key);
+  prefetched.delete(key);
+  // A session or token cookie that changed means another user, whoever changed it.
+  if (!hit || hit.cookies !== cookies()) return null;
+  const response = await hit.page.catch(() => null);
+  if (!response?.ok || response.redirected || hit.epoch !== epoch) return null;
+  if (!(response.headers.get("content-type") || "").startsWith("text/html")) return null;
+  return performance.now() - hit.at < standsInFor(response) ? response : null;
+}
 
 /** @param {string} url */
-function fetchPage(url) {
-  const hit = prefetched.get(url);
-  prefetched.delete(url);
-  if (hit && performance.now() - hit.at < PREFETCH_TTL) return hit.page;
-  return fetch(url, { headers: HEADER });
+async function fetchPage(url) {
+  return (await standing(keyOf(url))) || fetch(url, { headers: HEADER });
 }
 
 /** @param {string} url */
 function prefetch(url) {
-  if (prefetched.has(url) || /** @type {any} */ (navigator).connection?.saveData) return;
+  const key = keyOf(url);
+  if (writing || prefetched.has(key) || /** @type {any} */ (navigator).connection?.saveData) return;
   if (prefetched.size > 8) prefetched.clear();
   const page = fetch(url, { headers: PREFETCH, priority: "low" });
-  page.catch(() => prefetched.delete(url));
-  prefetched.set(url, { at: performance.now(), page });
+  page.catch(() => prefetched.delete(key));
+  prefetched.set(key, { at: performance.now(), epoch, cookies: cookies(), page });
 }
 
 /** Adds the stylesheets and module scripts of `doc` that this page lacks. @param {Document} doc */
