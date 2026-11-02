@@ -90,6 +90,29 @@ pub(crate) fn percentile(values: &mut [u64], p: u64) -> u64 {
     values[usize::try_from(rank - 1).unwrap_or(0).min(values.len() - 1)]
 }
 
+/// The attempts `queue` finished in each of the last `minutes` minutes
+/// before `now`, oldest first: the snapshots of every master, summed per
+/// minute (a snapshot counts in the minute it was taken).
+pub(crate) fn per_minute(
+    now: DateTime<Utc>,
+    minutes: usize,
+    snapshots: &[MetricSnapshot],
+    queue: &str,
+) -> Vec<u64> {
+    let start = now - chrono::TimeDelta::minutes(i64::try_from(minutes).unwrap_or(i64::MAX));
+    let mut counts = vec![0u64; minutes];
+    for s in snapshots
+        .iter()
+        .filter(|s| s.kind == MetricKind::Queue && s.name == queue && s.at >= start && s.at <= now)
+    {
+        let index = usize::try_from((s.at - start).num_minutes()).unwrap_or(0);
+        if let Some(count) = counts.get_mut(index.min(minutes.saturating_sub(1))) {
+            *count += s.processed;
+        }
+    }
+    counts
+}
+
 /// Chart series over `period` ending at `now`: the snapshots of every
 /// master summed per bucket.
 pub(crate) fn series(

@@ -151,6 +151,39 @@ async fn a_master_starts_each_supervisors_processes_and_reports_them() {
 }
 
 #[tokio::test]
+async fn the_overview_counts_the_running_processes_per_supervisor() {
+    let h = Harness::new(builder().config("fleet.supervisors", supervisors())).await;
+    let master = Running::start(&h).await;
+    eventually("four workers", || async {
+        master.spawner.running().len() == 4
+    })
+    .await;
+    eventually("the processes reported", || async {
+        h.fleet
+            .masters()
+            .await
+            .unwrap()
+            .first()
+            .is_some_and(|m| m.process_count() == 4)
+    })
+    .await;
+    let overview = h.fleet.overview().await.unwrap();
+    assert_eq!(overview.masters, ["worker-1"]);
+    let by_name = |name: &str| {
+        overview
+            .supervisors
+            .iter()
+            .find(|s| s.name == name)
+            .unwrap_or_else(|| panic!("{name}"))
+    };
+    let default = by_name("default");
+    assert_eq!((default.processes, default.slots), (2, 4), "one per queue");
+    let exports = by_name("exports");
+    assert_eq!((exports.processes, exports.slots), (2, 2));
+    master.stop().await;
+}
+
+#[tokio::test]
 async fn only_runs_the_named_supervisors() {
     let h = Harness::new(
         builder()

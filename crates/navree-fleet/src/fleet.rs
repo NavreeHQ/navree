@@ -14,7 +14,9 @@ use serde_json::Value;
 use crate::record::{CompletedJob, MasterReport, MetricSeries, MetricSnapshot, MetricsPeriod};
 use crate::redact::Redactor;
 use crate::store::{FleetStore, needle};
-use crate::{FleetError, FleetOptions, FleetStatus, LongWaitDetected, QueueWorkload, Supervisor};
+use crate::{
+    Balance, FleetError, FleetOptions, FleetStatus, LongWaitDetected, QueueWorkload, Supervisor,
+};
 
 /// A master that has not reported for this long is inactive: the dashboard
 /// and `fleet:status` leave it out.
@@ -39,6 +41,66 @@ pub struct LongestWait {
     pub wait_secs: u64,
 }
 
+/// How many minutes the overview's throughput chart covers.
+pub const THROUGHPUT_MINUTES: usize = 30;
+
+/// The most failed jobs the overview lists.
+pub const RECENT_FAILURES: usize = 5;
+
+/// One supervisor on the overview: its settings, and how many of its
+/// processes run now on every running master.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OverviewSupervisor {
+    /// The supervisor name.
+    pub name: String,
+    /// Its queues, in priority order.
+    pub queues: Vec<String>,
+    /// How its processes are spread over its queues.
+    pub balance: Balance,
+    /// Processes each queue keeps (`auto`).
+    pub min_processes: usize,
+    /// Processes it may use on one server.
+    pub max_processes: usize,
+    /// The process count as `fleet` prints it (`1-8 processes`).
+    pub processes_label: String,
+    /// Whether it is paused.
+    pub paused: bool,
+    /// Its processes running now, on every running master.
+    pub processes: usize,
+    /// The processes it may use on the running masters together:
+    /// `max_processes` for each master that runs it (at least one).
+    pub slots: usize,
+}
+
+/// A failed job on the overview.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecentFailure {
+    /// The job id.
+    pub id: String,
+    /// The job type.
+    pub job_type: String,
+    /// The queue it was on.
+    pub queue: String,
+    /// The attempts that ran.
+    pub attempts: u32,
+    /// The attempts it was allowed.
+    pub max_attempts: u32,
+    /// The first line of the error, cut to 200 characters.
+    pub error: String,
+    /// When it failed.
+    pub failed_at: DateTime<Utc>,
+}
+
+/// The jobs one queue finished in each of the last
+/// [`THROUGHPUT_MINUTES`] minutes, from the stored metric snapshots.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QueueThroughput {
+    /// The queue.
+    pub queue: String,
+    /// One count per minute, oldest first; the last one ends now.
+    pub per_minute: Vec<u64>,
+}
+
 /// The dashboard's row of figures and workload table.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Overview {
@@ -56,6 +118,16 @@ pub struct Overview {
     pub paused: Vec<String>,
     /// Every supervised queue's workload.
     pub workload: Vec<QueueWorkload>,
+    /// The running masters' names.
+    pub masters: Vec<String>,
+    /// Every configured supervisor, sorted by name.
+    pub supervisors: Vec<OverviewSupervisor>,
+    /// Every failed job kept, whatever its age.
+    pub failed_total: u64,
+    /// The newest failed jobs, at most [`RECENT_FAILURES`].
+    pub recent_failures: Vec<RecentFailure>,
+    /// Each supervised queue's jobs finished per minute, oldest first.
+    pub throughput: Vec<QueueThroughput>,
 }
 
 /// Fleet: supervisors and their state, the workload of the supervised
@@ -355,16 +427,16 @@ impl Fleet {
     }
 
     /// The dashboard's overview: status, throughput, failures, the longest
-    /// wait and the workload table.
+    /// wait, the workload table, the supervisors with their processes, the
+    /// newest failed jobs and the last half hour's jobs per minute.
     pub async fn overview(&self) -> Result<Overview, FleetError> {
         let now = self.now();
         let masters = self.masters().await?;
         let workload = self.workload_of(&self.queues(), &masters).await?;
         let week_ago = now - TimeDelta::days(7);
-        let failed_past_week = self
-            .queue
-            .failed()
-            .await?
+        let mut failed = self.queue.failed().await?;
+        failed.sort_by(|a, b| b.failed_at.cmp(&a.failed_at).then(b.id.cmp(&a.id)));
+        let failed_past_week = failed
             .iter()
             .filter(|job| job.failed_at >= week_ago)
             .count() as u64;
@@ -376,6 +448,11 @@ impl Fleet {
                 queue: w.queue.clone(),
                 wait_secs: w.oldest_wait_secs,
             });
+        let paused: BTreeSet<String> = self.paused().await?;
+        let snapshots = self
+            .store
+            .metrics((now - TimeDelta::minutes(THROUGHPUT_MINUTES as i64)).timestamp_millis())
+            .await?;
         Ok(Overview {
             status: status_of(&masters),
             jobs_per_minute: self
@@ -388,9 +465,73 @@ impl Fleet {
                 .await?,
             failed_past_week,
             longest_wait,
-            paused: self.paused().await?.into_iter().collect(),
+            supervisors: self.overview_supervisors(&masters, &paused),
+            paused: paused.into_iter().collect(),
+            throughput: self
+                .queues()
+                .into_iter()
+                .map(|queue| QueueThroughput {
+                    per_minute: crate::snapshot::per_minute(
+                        now,
+                        THROUGHPUT_MINUTES,
+                        &snapshots,
+                        &queue,
+                    ),
+                    queue,
+                })
+                .collect(),
             workload,
+            masters: masters.iter().map(|m| m.name.clone()).collect(),
+            failed_total: failed.len() as u64,
+            recent_failures: failed
+                .iter()
+                .take(RECENT_FAILURES)
+                .map(|job| RecentFailure {
+                    id: job.id.clone(),
+                    job_type: job.job_type.clone(),
+                    queue: job.queue.clone(),
+                    attempts: job.attempts,
+                    max_attempts: job.options.max_attempts,
+                    error: first_line(&job.error, 200),
+                    failed_at: job.failed_at,
+                })
+                .collect(),
         })
+    }
+
+    /// Every configured supervisor with the processes it runs now on
+    /// `masters` and the slots those masters give it.
+    fn overview_supervisors(
+        &self,
+        masters: &[MasterReport],
+        paused: &BTreeSet<String>,
+    ) -> Vec<OverviewSupervisor> {
+        self.supervisors
+            .iter()
+            .map(|supervisor| {
+                let running: Vec<_> = masters
+                    .iter()
+                    .flat_map(|m| &m.supervisors)
+                    .filter(|s| s.name == supervisor.name)
+                    .collect();
+                OverviewSupervisor {
+                    name: supervisor.name.clone(),
+                    queues: supervisor.queues.clone(),
+                    balance: supervisor.balance,
+                    min_processes: supervisor.min_processes,
+                    max_processes: supervisor.max_processes,
+                    processes_label: supervisor.processes_label(),
+                    paused: paused.contains(&supervisor.name),
+                    processes: running.iter().map(|s| s.processes.len()).sum(),
+                    // A server may override the limit: count what it reports.
+                    slots: if running.is_empty() {
+                        supervisor.max_processes
+                    } else {
+                        running.iter().map(|s| s.max_processes).sum()
+                    },
+                }
+            })
+            .collect()
     }
 
     // ------------------------------------------------------------ failed jobs
@@ -534,6 +675,17 @@ impl Fleet {
     pub fn redact(&self, payload: &Value) -> Value {
         self.redactor.redact(payload)
     }
+}
+
+/// The first line of `text`, at most `limit` characters (`...` marks a cut).
+fn first_line(text: &str, limit: usize) -> String {
+    let line = text.lines().next().unwrap_or_default();
+    if line.chars().count() <= limit {
+        return line.to_owned();
+    }
+    let mut cut: String = line.chars().take(limit).collect();
+    cut.push_str("...");
+    cut
 }
 
 /// Running, paused (every master's supervisors paused) or inactive (none).

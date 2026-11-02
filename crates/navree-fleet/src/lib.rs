@@ -96,7 +96,10 @@ pub use balance::{Allocation, initial_allocation, next_allocation, target_alloca
 pub use dashboard::{FleetSubject, OPERATE, VIEW};
 pub use error::FleetError;
 pub use events::LongWaitDetected;
-pub use fleet::{Fleet, LIST_LIMIT, LongestWait, MASTER_TIMEOUT, Overview, RUNTIME_WINDOW};
+pub use fleet::{
+    Fleet, LIST_LIMIT, LongestWait, MASTER_TIMEOUT, Overview, OverviewSupervisor, QueueThroughput,
+    RECENT_FAILURES, RUNTIME_WINDOW, RecentFailure, THROUGHPUT_MINUTES,
+};
 pub use gauges::{
     FAILED_JOBS, JOB_RUNTIME, PROCESSES, QUEUE_PENDING, QUEUE_THROUGHPUT, QUEUE_WAIT,
 };

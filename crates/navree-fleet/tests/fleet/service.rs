@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use chrono::TimeDelta;
 use navree_fleet::{
-    CompletedJob, FleetError, FleetStatus, LongWaitDetected, MetricKind, MetricSnapshot,
-    MetricsPeriod, REDACTED,
+    Balance, CompletedJob, FleetError, FleetStatus, LongWaitDetected, MetricKind, MetricSnapshot,
+    MetricsPeriod, RECENT_FAILURES, REDACTED, THROUGHPUT_MINUTES,
 };
 use navree_queue::{AttemptOutcome, QueueOptions};
 use serde_json::json;
@@ -218,6 +218,112 @@ async fn the_workload_counts_pending_jobs_runtimes_and_throughput() {
     assert_eq!(overview.longest_wait.as_ref().unwrap().queue, "default");
     assert_eq!(overview.longest_wait.as_ref().unwrap().wait_secs, 45);
     assert_eq!(overview.workload.len(), 3);
+}
+
+#[tokio::test]
+async fn the_overview_groups_queues_by_supervisor_and_charts_the_last_half_hour() {
+    let (h, _clock) =
+        Harness::with_clock(builder().config("fleet.supervisors", supervisors())).await;
+    let snapshot = |kind, name: &str, processed, ago_secs: i64| MetricSnapshot {
+        at: h.fleet.now() - TimeDelta::seconds(ago_secs),
+        kind,
+        name: name.into(),
+        processed,
+        failed: 0,
+        runtime_avg_ms: 20,
+        runtime_p95_ms: 40,
+        pending: None,
+        wait_ms: None,
+    };
+    h.fleet
+        .record_snapshots(
+            Some("m1"),
+            &[
+                snapshot(MetricKind::Queue, "mail", 12, 30),
+                snapshot(MetricKind::Queue, "mail", 40, 95),
+                snapshot(MetricKind::Queue, "mail", 5, 29 * 60),
+                // Two snapshots in one minute add up.
+                snapshot(MetricKind::Queue, "mail", 3, 605),
+                snapshot(MetricKind::Queue, "mail", 4, 615),
+                // Outside the half hour, and not a queue: left out.
+                snapshot(MetricKind::Queue, "mail", 99, 31 * 60),
+                snapshot(MetricKind::Job, "mail.send", 77, 30),
+                snapshot(MetricKind::Queue, "default", 8, 61),
+            ],
+        )
+        .await
+        .unwrap();
+
+    let overview = h.fleet.overview().await.unwrap();
+    let names: Vec<_> = overview
+        .supervisors
+        .iter()
+        .map(|s| s.name.as_str())
+        .collect();
+    assert_eq!(names, ["default", "exports"]);
+    let default = &overview.supervisors[0];
+    assert_eq!(default.queues, ["default", "mail"]);
+    assert_eq!(default.balance, Balance::Auto);
+    assert_eq!((default.min_processes, default.max_processes), (1, 4));
+    assert_eq!(default.processes_label, "1-4 processes");
+    assert!(!default.paused);
+    assert_eq!((default.processes, default.slots), (0, 4), "no master runs");
+    let exports = &overview.supervisors[1];
+    assert_eq!(exports.balance, Balance::Off);
+    assert_eq!(exports.processes_label, "2 processes");
+    assert!(overview.masters.is_empty());
+
+    let queues: Vec<_> = overview
+        .throughput
+        .iter()
+        .map(|t| t.queue.as_str())
+        .collect();
+    assert_eq!(queues, ["default", "mail", "exports"]);
+    let mail = &overview.throughput[1].per_minute;
+    assert_eq!(mail.len(), THROUGHPUT_MINUTES);
+    assert_eq!(mail[29], 12, "the last minute");
+    assert_eq!(mail[28], 40);
+    assert_eq!(mail[19], 7, "two snapshots of one minute");
+    assert_eq!(mail[1], 5);
+    assert_eq!(mail.iter().sum::<u64>(), 12 + 40 + 7 + 5);
+    let default_queue = &overview.throughput[0].per_minute;
+    assert_eq!(default_queue[28], 8);
+    assert_eq!(default_queue.iter().sum::<u64>(), 8);
+    assert_eq!(
+        overview.throughput[2].per_minute,
+        vec![0; THROUGHPUT_MINUTES]
+    );
+
+    fleet_paused_is_shown(&h).await;
+}
+
+async fn fleet_paused_is_shown(h: &Harness) {
+    h.fleet.pause(Some("exports")).await.unwrap();
+    let overview = h.fleet.overview().await.unwrap();
+    assert!(!overview.supervisors[0].paused);
+    assert!(overview.supervisors[1].paused);
+}
+
+#[tokio::test]
+async fn the_overview_lists_the_newest_failed_jobs_with_their_attempts() {
+    let h = Harness::new(builder()).await;
+    let empty = h.fleet.overview().await.unwrap();
+    assert_eq!(empty.failed_total, 0);
+    assert!(empty.recent_failures.is_empty());
+
+    let ids = fail_exports(&h, &["a", "b", "c", "d", "e", "f", "g"]).await;
+    let overview = h.fleet.overview().await.unwrap();
+    assert_eq!(overview.failed_total, 7);
+    assert_eq!(overview.failed_past_week, 7);
+    assert_eq!(overview.recent_failures.len(), RECENT_FAILURES);
+    let first = &overview.recent_failures[0];
+    assert_eq!(first.job_type, "contacts.export");
+    assert_eq!(first.queue, "exports");
+    assert_eq!((first.attempts, first.max_attempts), (1, 1));
+    assert_eq!(first.error, "the mail server is down");
+    let listed = h.fleet.failed_jobs(None).await.unwrap();
+    assert_eq!(first.id, listed[0].id, "newest first");
+    assert!(ids.contains(&first.id));
 }
 
 async fn fail_exports(h: &Harness, contacts: &[&str]) -> Vec<String> {
