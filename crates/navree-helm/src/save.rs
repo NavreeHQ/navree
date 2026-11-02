@@ -233,7 +233,9 @@ pub(crate) async fn create<M: Model>(
 /// Anyone else gets no setting that row-level security would read as theirs:
 /// a role it binds is refused, and a role that sees every workspace (or a
 /// database with no such thing) makes the record it could see anyway, in a
-/// workspace that exists.
+/// workspace that exists. Under schema isolation the record has nowhere to go
+/// but the workspace's schema, so they are refused there too. A refusal doesn't
+/// depend on whether the workspace exists.
 async fn named_by_form<M: Model>(
     ctx: &SaveContext,
     model: M,
@@ -269,14 +271,20 @@ async fn named_by_form<M: Model>(
     let (Refused::NotAllowed, Some(gate)) = (refused, gate) else {
         return Err(refused.error());
     };
+    if gate.own_schemas() {
+        return Err(refused.error().with_detail(
+            "Under workspace.isolation = \"schema\" a record goes in the schema of its \
+             workspace, and only someone who may work in it can make one there.",
+        ));
+    }
+    if workspace::bound_by_row_level_security(uow, M::meta().table()).await? {
+        return Err(refused.error());
+    }
     if gate.check(ctx.user_id(), named, true).await? == WorkspaceEntry::NoSuchWorkspace {
         return Err(AppError::bad_request(format!(
             "There is no workspace {named} to make a {} in.",
             M::meta().name()
         )));
-    }
-    if workspace::bound_by_row_level_security(uow, M::meta().table()).await? {
-        return Err(refused.error());
     }
     if gate.writes(ctx.user_id(), named).await?.read_only_demo {
         return Err(AppError::demo_read_only());

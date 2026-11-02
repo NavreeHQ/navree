@@ -443,7 +443,7 @@ pub(crate) async fn bound_by_row_level_security(uow: &Uow, table: &str) -> Resul
         .fetch_optional(&Statement::new(
             Backend::Postgres,
             "SELECT row_security_active($1) AS active",
-            [table.into()],
+            [quoted_table(table).into()],
         ))
         .await
         .map_err(AppError::internal)?;
@@ -451,6 +451,16 @@ pub(crate) async fn bound_by_row_level_security(uow: &Uow, table: &str) -> Resul
         Some(row) => row.get::<bool>("active").map_err(AppError::internal),
         None => Ok(true),
     }
+}
+
+/// `table`, schema and all, as a name the database reads as written: without the
+/// quotes `MixedNotes` would be asked about as `mixednotes`.
+fn quoted_table(table: &str) -> String {
+    table
+        .split('.')
+        .map(|part| format!("\"{}\"", part.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(".")
 }
 
 /// Makes `workspace` the one `uow` works in, as `WorkspaceModule` does when
@@ -525,6 +535,14 @@ mod tests {
     use http::header::COOKIE;
 
     use super::*;
+
+    #[test]
+    fn a_table_is_asked_about_by_the_name_it_was_made_with() {
+        assert_eq!(quoted_table("notes"), "\"notes\"");
+        assert_eq!(quoted_table("MixedNotes"), "\"MixedNotes\"");
+        assert_eq!(quoted_table("crm.Notes"), "\"crm\".\"Notes\"");
+        assert_eq!(quoted_table("a\"b"), "\"a\"\"b\"");
+    }
 
     #[test]
     fn the_header_comes_before_the_cookie_and_only_a_uuid_counts() {

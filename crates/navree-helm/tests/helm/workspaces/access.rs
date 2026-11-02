@@ -14,6 +14,8 @@ use navree_workspace::{
 use super::*;
 
 mod demo;
+mod every_schema;
+mod oracle;
 mod pinned;
 mod queued;
 mod roles;

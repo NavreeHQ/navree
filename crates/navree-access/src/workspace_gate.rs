@@ -129,6 +129,10 @@ pub trait WorkspaceGate: Send + Sync + 'static {
     /// which a unit of work on the app's database never reaches.
     fn own_databases(&self) -> bool;
 
+    /// Whether each workspace keeps its records in a schema of its own, which a
+    /// unit of work outside the workspace never reaches.
+    fn own_schemas(&self) -> bool;
+
     /// Whether `user` may work in `workspace`. With `writes`, an error if the
     /// workspace takes no writes from them (a read-only demo, a role that can't
     /// write).

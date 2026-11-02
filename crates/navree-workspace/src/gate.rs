@@ -104,6 +104,10 @@ impl WorkspaceGate for Gate {
         self.0.config.isolation == Isolation::Database
     }
 
+    fn own_schemas(&self) -> bool {
+        self.0.config.isolation == Isolation::Schema
+    }
+
     fn check(
         &self,
         user: Uuid,
