@@ -263,10 +263,10 @@ pub struct IgnoreOptions {
     /// comma-separated string from the environment.
     #[serde(deserialize_with = "list_or_comma_string")]
     pub routes: Vec<String>,
-    /// Leave out what the framework runs by itself, outside any request, job
-    /// or scheduled task: the poll of the transactional outbox, and the
-    /// transaction and actor statements around it. Off, they are recorded
-    /// like any other query.
+    /// Leave out what the framework does by itself: requests for the toolkit's
+    /// own files, and, outside any request, job or scheduled task, the poll of
+    /// the transactional outbox and the transaction and actor statements around
+    /// it. Off, they are recorded like anything else.
     pub framework: bool,
 }
 

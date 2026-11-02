@@ -804,3 +804,35 @@ async fn the_toolkits_own_files_are_not_requests_worth_recording() {
         .collect();
     assert_eq!(titles, ["POST /echo"], "only the app's own request");
 }
+
+#[tokio::test]
+async fn the_toolkits_own_files_show_when_the_framework_is_not_left_out() {
+    let app = crate::app::builder()
+        .config("logbook.ignore.framework", false)
+        .module(LogbookModule::from_config())
+        .module(FixturesModule)
+        .build()
+        .await;
+    app.client()
+        .get(navree_ui::assets::NAVREE_UI_URL)
+        .send()
+        .await
+        .assert_status(200);
+    let titles: Vec<String> = app
+        .get::<Logbook>()
+        .await
+        .entries(&navree_logbook::ListQuery::new(
+            navree_logbook::Filter::default(),
+            50,
+        ))
+        .await
+        .unwrap()
+        .iter()
+        .map(navree_logbook::Entry::title)
+        .collect();
+    assert_eq!(
+        titles,
+        [format!("GET {}", navree_ui::assets::NAVREE_UI_URL)],
+        "the stylesheet is a request like any other"
+    );
+}

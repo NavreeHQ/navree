@@ -187,7 +187,9 @@ impl Logbook {
         ignore.push(Glob::new(&options.path));
         ignore.push(Glob::new(&format!("{}/*", options.path)));
         // The toolkit's stylesheet, runtime and font are no traffic of the app's.
-        ignore.push(Glob::new(&format!("{}/*", navree_ui::assets::MOUNT)));
+        if options.ignore.framework {
+            ignore.push(Glob::new(&format!("{}/*", navree_ui::assets::MOUNT)));
+        }
         let active = Arc::new(Active {
             interest: options.interest(),
             options: options.clone(),
