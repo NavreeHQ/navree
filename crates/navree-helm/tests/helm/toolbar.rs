@@ -281,11 +281,39 @@ impl Resource for Uncounted {
     }
 }
 
+/// A list that counts its rows up to 25.
+struct Capped;
+
+impl Injectable for Capped {
+    fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async { Ok(Capped) })
+    }
+}
+
+impl Resource for Capped {
+    type Model = Deal;
+
+    const LABEL: &'static str = "Capped deals";
+    const SINGULAR: &'static str = "Capped deal";
+    const SLUG: &'static str = "capped";
+    const TITLE: &'static str = "title";
+    const PER_PAGE: u64 = 10;
+    const COUNT_CAP: u64 = 25;
+    const DEFAULT_SORT: &'static str = "title";
+    const SIDEBAR_COUNT: bool = false;
+
+    fn fields(&self) -> Vec<Field> {
+        vec![Field::text("title").sortable()]
+    }
+}
+
 struct CountsModule;
 
 impl Module for CountsModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.resource::<Counted>().resource::<Uncounted>();
+        m.resource::<Counted>()
+            .resource::<Uncounted>()
+            .resource::<Capped>();
     }
 }
 
@@ -671,4 +699,77 @@ async fn a_delta_shows_only_where_a_previous_period_has_something_to_compare() {
     );
     // A value with no range has no previous period at all: "Open pipeline".
     assert!(html.contains("Open pipeline"), "{html}");
+}
+
+async fn page_of(client: &TestClient, path: &str) -> TestResponse {
+    client.get(path).header("accept", "text/html").send().await
+}
+
+#[tokio::test]
+async fn a_list_counts_its_rows_only_up_to_a_cap_and_still_pages_through_them() {
+    let app = counts_app().await;
+    let (_, manager) = user(&app, "manager").await;
+    many(&app, 60, None).await;
+    let list = |page: u32| {
+        let manager = manager.clone();
+        async move {
+            plain(
+                page_of(&manager, &format!("/admin/resources/capped?page={page}"))
+                    .await
+                    .assert_status(200),
+            )
+        }
+    };
+    // 60 rows, counted to 25: the page says so, and not how many pages there are.
+    let first = list(1).await;
+    assert!(first.contains("1–10 of 25+"), "{first}");
+    assert!(first.contains("Page 1</span>"), "{first}");
+    assert!(first.contains("rel=\"next\""), "{first}");
+    assert!(first.contains("Bulk 0000") && first.contains("Bulk 0009"));
+    assert!(!first.contains("Bulk 0010"));
+    // Past the cap the pages go on, to the last row and no further.
+    let fifth = list(5).await;
+    assert!(fifth.contains("41–50 of 25+"), "{fifth}");
+    assert!(
+        fifth.contains("Bulk 0040") && fifth.contains("Bulk 0049"),
+        "{fifth}"
+    );
+    let last = list(6).await;
+    assert!(
+        last.contains("Bulk 0050") && last.contains("Bulk 0059"),
+        "{last}"
+    );
+    assert!(!last.contains("rel=\"next\""), "{last}");
+    assert!(last.contains("rel=\"prev\""), "{last}");
+    // The API counts them all.
+    let body = manager
+        .get("/admin/api/resources/capped?per_page=10")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    assert_eq!(body["meta"]["total"], 60);
+    assert_eq!(body["meta"]["last_page"], 6);
+}
+
+#[tokio::test]
+async fn under_its_cap_a_list_is_counted_exactly() {
+    let app = counts_app().await;
+    let (_, manager) = user(&app, "manager").await;
+    many(&app, 20, None).await;
+    let html = plain(
+        page_of(&manager, "/admin/resources/capped?page=2")
+            .await
+            .assert_status(200),
+    );
+    assert!(html.contains("11–20 of 20</p>"), "{html}");
+    assert!(html.contains("Page 2 of 2"), "{html}");
+    assert!(!html.contains("rel=\"next\""), "{html}");
+    // A page past the end is empty, as it was.
+    let html = plain(
+        page_of(&manager, "/admin/resources/capped?page=9")
+            .await
+            .assert_status(200),
+    );
+    assert!(html.contains("No capped deals yet"), "{html}");
 }

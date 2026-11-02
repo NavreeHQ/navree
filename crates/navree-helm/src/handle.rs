@@ -49,6 +49,7 @@ pub(crate) struct ResourceInfo {
     /// The permission prefix of the model (`deals` for `deals.update`).
     pub(crate) permission_prefix: &'static str,
     pub(crate) read_only: bool,
+    pub(crate) count_cap: u64,
     /// The column that holds the workspace of a record, when the model
     /// belongs to workspaces.
     pub(crate) workspace_column: Option<&'static str>,
@@ -145,6 +146,10 @@ pub(crate) struct RawRecord {
 pub(crate) struct RawPage {
     pub(crate) records: Vec<RawRecord>,
     pub(crate) meta: PageMeta,
+    /// The rows were counted up to the resource's `COUNT_CAP` and there are
+    /// more: `meta.total` is that cap, and `meta.last_page` the page after this
+    /// one if there is one.
+    pub(crate) capped: bool,
 }
 
 /// A chunk of an export: its rows, and where the next chunk starts, if
@@ -542,6 +547,7 @@ impl<R: Resource> Handle<R> {
             subject: <R::Model as Subject>::SUBJECT,
             permission_prefix: <R::Model as Subject>::PERMISSION_PREFIX,
             read_only: R::READ_ONLY,
+            count_cap: R::COUNT_CAP,
             workspace_column: meta.workspace_column(),
             export: R::EXPORT,
             sidebar_count: R::SIDEBAR_COUNT,
@@ -1026,12 +1032,70 @@ impl<R: Resource> Handle<R> {
             }
         }
         let per_page = q.per_page.unwrap_or(self.info.per_page);
+        if q.capped {
+            return self.capped_page(cx, query, q.page, per_page).await;
+        }
         let page = query
             .paginate(&cx.uow, PageQuery::new(q.page, per_page))
             .await?;
         Ok(RawPage {
             records: page.data.iter().map(|r| self.raw(cx, r)).collect(),
             meta: page.meta,
+            capped: false,
+        })
+    }
+
+    /// A page of `query` (already ordered) for the list, with its rows counted
+    /// only up to the resource's `COUNT_CAP`: the keys of at most that many rows
+    /// and one more, and the page with one row more than it shows to know whether
+    /// another follows. What the database does for a page and its count stops
+    /// growing with the table.
+    async fn capped_page(
+        &self,
+        cx: &Cx,
+        query: Builder<R::Model>,
+        page: u64,
+        per_page: u64,
+    ) -> Result<RawPage, AppError> {
+        let cap = self.info.count_cap;
+        let per_page = per_page.max(1);
+        let page = page.max(1);
+        let counted = query
+            .clone()
+            .reorder()
+            .limit(cap.saturating_add(1))
+            .pluck(&cx.uow, self.col(self.info.pk))
+            .await?
+            .len() as u64;
+        let capped = counted > cap;
+        let total = counted.min(cap);
+        let offset = (page - 1).saturating_mul(per_page);
+        let mut records = if !capped && offset >= total {
+            Vec::new()
+        } else {
+            query
+                .offset(offset)
+                .limit(per_page.saturating_add(1))
+                .get(&cx.uow)
+                .await?
+                .into_vec()
+        };
+        let more = records.len() as u64 > per_page;
+        records.truncate(usize::try_from(per_page).unwrap_or(usize::MAX));
+        let last_page = if capped {
+            page + u64::from(more)
+        } else {
+            total.div_ceil(per_page).max(1)
+        };
+        Ok(RawPage {
+            records: records.iter().map(|r| self.raw(cx, r)).collect(),
+            meta: PageMeta {
+                current_page: page,
+                per_page,
+                total,
+                last_page,
+            },
+            capped,
         })
     }
 

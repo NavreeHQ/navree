@@ -8,7 +8,7 @@ use navree::helm::{Action, ActionResult, Field, Filter, FormData, Metric, Record
 use navree::prelude::*;
 use navree::workspace::Workspace;
 
-use super::work::ProjectAdmin;
+use super::work::{ProjectAdmin, TaskAdmin};
 
 /// Users: every account, searchable by name and email.
 #[injectable]
@@ -125,6 +125,7 @@ impl Resource for WorkspaceAdmin {
             Field::text("timezone").readonly().hide_on_index(),
             Field::datetime("created_at").readonly().sortable(),
             Field::has_many::<ProjectAdmin>("workspace_id").label("Projects"),
+            Field::has_many::<TaskAdmin>("workspace_id").label("Tasks"),
         ]
     }
 

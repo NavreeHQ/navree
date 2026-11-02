@@ -3,11 +3,11 @@
 //!
 //! [`AuditEntry`] is a view of the audit module's `audit_logs` table as a
 //! model the panel can list. Entries are written by the audit module only,
-//! so the resource never creates, edits or deletes one.
+//! so the resource is read-only: the panel shows no New, Edit or Delete for
+//! one and refuses them.
 
 use chrono::{DateTime, Utc};
-use navree::BoxFuture;
-use navree::helm::{Field, Filter, FormData, Metric, RecordOf, Resource, SaveContext};
+use navree::helm::{Field, Filter, Metric, Resource};
 use navree::orm::prelude::*;
 use navree::prelude::*;
 use serde::Serialize;
@@ -92,6 +92,7 @@ impl Resource for ActivityAdmin {
     const SLUG: &'static str = "audit";
     const PER_PAGE: u64 = 30;
     const ORDER: i32 = 1;
+    const READ_ONLY: bool = true;
 
     fn fields(&self) -> Vec<Field> {
         vec![
@@ -162,31 +163,6 @@ impl Resource for ActivityAdmin {
                 .on_dashboard(),
         ]
     }
-
-    fn create<'a>(
-        &'a self,
-        _ctx: &'a SaveContext,
-        _form: FormData,
-    ) -> BoxFuture<'a, Result<RecordOf<Self>>> {
-        Box::pin(async move { Err(read_only()) })
-    }
-
-    fn update<'a>(
-        &'a self,
-        _ctx: &'a SaveContext,
-        _record: RecordOf<Self>,
-        _form: FormData,
-    ) -> BoxFuture<'a, Result<RecordOf<Self>>> {
-        Box::pin(async move { Err(read_only()) })
-    }
-
-    fn delete<'a>(
-        &'a self,
-        _ctx: &'a SaveContext,
-        _record: RecordOf<Self>,
-    ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async move { Err(read_only()) })
-    }
 }
 
 /// What an entry changed, as `field: before -> after` pairs.
@@ -220,9 +196,4 @@ fn shown(value: &Value) -> String {
         Value::String(text) => text.clone(),
         other => other.to_string(),
     }
-}
-
-/// The error for a change to the trail.
-fn read_only() -> AppError {
-    AppError::forbidden().with_detail("The audit log is append-only.")
 }

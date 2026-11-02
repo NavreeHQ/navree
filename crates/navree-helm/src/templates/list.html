@@ -52,10 +52,10 @@
     {{ m.table(columns, rows, actions, true) }}
   </form>
   <nav class="pagination" aria-label="Pages">
-    <p class="muted">{{ page.from }}–{{ page.to }} of {{ page.total }}</p>
+    <p class="muted">{{ page.from }}–{{ page.to }} of {{ page.total }}{% if page.capped %}+{% endif %}</p>
     <div>
       {% if page.prev_url %}<a class="btn btn-ghost btn-sm" href="{{ page.prev_url }}" rel="prev">Previous</a>{% endif %}
-      <span class="page-number">Page {{ page.current }} of {{ page.last }}</span>
+      <span class="page-number">Page {{ page.current }}{% if not page.capped %} of {{ page.last }}{% endif %}</span>
       {% if page.next_url %}<a class="btn btn-ghost btn-sm" href="{{ page.next_url }}" rel="next">Next</a>{% endif %}
     </div>
   </nav>

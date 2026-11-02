@@ -92,6 +92,11 @@ pub trait Resource: Send + Sync + 'static {
     /// Whether the list offers its rows as a CSV file (`Export`), for the
     /// current search and filters, the rows the user may read.
     const EXPORT: bool = true;
+    /// How many rows the list pages count before it says `10,000+` and no
+    /// longer how many pages there are: counting every row of a table of
+    /// millions on each page costs more than the page. Exact up to here; the
+    /// JSON API always counts them all.
+    const COUNT_CAP: u64 = 10_000;
     /// Whether the menu shows how many records the resource has. The
     /// count is read for the signed-in user and the workspace, cached for
     /// a short time and capped (`1000+`); turn it off for a table whose

@@ -19,6 +19,9 @@ pub(crate) struct ListQuery {
     pub(crate) via: Option<(String, String)>,
     /// The metric range of the list's cards.
     pub(crate) range: Option<String>,
+    /// The list page counts its rows only up to the resource's `COUNT_CAP`
+    /// (set by the page, never by the URL; the API counts them all).
+    pub(crate) capped: bool,
 }
 
 impl ListQuery {

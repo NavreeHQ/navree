@@ -1126,7 +1126,15 @@ pub(crate) async fn list(
         let info = resource.info();
         let q = ListQuery::parse(query.as_deref().unwrap_or(""))?;
         let range = parse_range(query.as_deref())?;
-        let page = resource.list(cx, &q).await?;
+        let page = resource
+            .list(
+                cx,
+                &ListQuery {
+                    capped: true,
+                    ..q.clone()
+                },
+            )
+            .await?;
         let items = present(cx, resource.as_ref(), &page.records, Screen::Index).await?;
         let base = cx.core.options.base();
         let list_url = format!("{base}/resources/{}", info.slug);
@@ -1172,7 +1180,8 @@ pub(crate) async fn list(
             "page": {
                 "current": meta.current_page,
                 "last": meta.last_page,
-                "total": meta.total,
+                "total": money::format_number(meta.total as f64),
+                "capped": page.capped,
                 "from": from,
                 "to": from + items.len().saturating_sub(1) as u64,
                 "prev_url": (meta.current_page > 1).then(|| link(meta.current_page - 1)),
