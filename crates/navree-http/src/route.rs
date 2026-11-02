@@ -355,16 +355,11 @@ pub fn schema_fn<T: navree_openapi::ToSchema>() -> (String, serde_json::Value) {
     let mut schema = serde_json::to_value(T::schema()).unwrap_or_default();
     let mut referenced = Vec::new();
     T::schemas(&mut referenced);
-    if !referenced.is_empty()
-        && let Some(object) = schema.as_object_mut()
-    {
-        let components: serde_json::Map<String, serde_json::Value> = referenced
-            .into_iter()
-            .map(|(name, schema)| (name, serde_json::to_value(schema).unwrap_or_default()))
-            .collect();
+    navree_openapi::__private::attach_components(&mut schema, referenced);
+    if let Some(object) = schema.as_object_mut() {
         object.insert(
-            "x-navree-components".to_owned(),
-            serde_json::Value::Object(components),
+            "x-navree-type".to_owned(),
+            std::any::type_name::<T>().into(),
         );
     }
     (T::name().into_owned(), schema)

@@ -153,19 +153,26 @@ fn serde_decides_names_and_what_is_required() {
         read_only: String,
     }
     let value = schema::<Input>();
-    assert_eq!(value["required"], json!(["statusCode", "__type"]));
+    assert_eq!(
+        value["required"],
+        json!(["statusCode", "__type", "writeOnly", "readOnly"])
+    );
     let names: Vec<&String> = value["properties"].as_object().unwrap().keys().collect();
     assert_eq!(
         names,
         [
             "__type",
+            "readOnly",
             "skippedIf",
             "skippedList",
             "statusCode",
             "withDefault",
             "withFunction",
+            "writeOnly",
         ]
     );
+    assert_eq!(value["properties"]["writeOnly"]["writeOnly"], true);
+    assert_eq!(value["properties"]["readOnly"]["readOnly"], true);
 }
 
 fn seven() -> u8 {
@@ -568,7 +575,7 @@ fn a_generic_type_refers_to_its_argument_without_collecting_it() {
     struct Page<T> {
         data: Vec<T>,
     }
-    assert_eq!(Page::<Address>::name(), "Page");
+    assert_eq!(Page::<Address>::name(), "Page_Address");
     assert_eq!(
         schema::<Page<Address>>()["properties"]["data"]["items"],
         json!({"$ref": "#/components/schemas/Address"})
@@ -618,4 +625,258 @@ fn a_hand_written_schema_is_a_component_by_its_rust_name() {
         json!({"$ref": "#/components/schemas/Zone"})
     );
     assert!(components::<Place>().contains_key("Zone"));
+}
+
+mod shape_a {
+    use navree_openapi::ToSchema;
+    #[derive(ToSchema)]
+    pub struct Item {
+        pub in_a: String,
+    }
+}
+
+mod shape_b {
+    use navree_openapi::ToSchema;
+    #[derive(ToSchema)]
+    pub struct Item {
+        pub in_b: String,
+    }
+}
+
+#[test]
+fn a_second_type_of_a_name_is_kept_for_the_document_to_refuse() {
+    #[derive(ToSchema)]
+    struct Both {
+        first: shape_a::Item,
+        second: shape_b::Item,
+    }
+    let mut out = Vec::new();
+    Both::schemas(&mut out);
+    let named: Vec<&(String, Schema)> = out.iter().filter(|(name, _)| name == "Item").collect();
+    assert_eq!(named.len(), 2, "{out:?}");
+    assert!(named[0].1.properties.contains_key("in_a"));
+    assert!(named[1].1.properties.contains_key("in_b"));
+    assert!(named[1].1.rust_type.0.unwrap().ends_with("shape_b::Item"));
+}
+
+#[test]
+fn the_same_type_twice_is_one_component() {
+    #[derive(ToSchema)]
+    struct Twice {
+        first: Address,
+        second: Address,
+        third: Vec<Address>,
+    }
+    assert_eq!(components::<Twice>().len(), 1);
+    let mut out = Vec::new();
+    Twice::schemas(&mut out);
+    assert_eq!(out.len(), 1);
+}
+
+#[test]
+fn generic_types_are_named_after_their_arguments() {
+    #[derive(ToSchema)]
+    struct Pair<A, B> {
+        a: A,
+        b: B,
+    }
+    assert_eq!(Pair::<Address, String>::name(), "Pair_Address_String");
+    assert_eq!(<Vec<Address>>::name(), "Vec_Address");
+    assert_eq!(<Option<Address>>::name(), "Option_Address");
+    assert_eq!(<Box<Address>>::name(), "Address");
+    assert_eq!(<BTreeMap<String, Address>>::name(), "Map_String_Address");
+    assert_eq!(Pair::<Vec<Address>, u8>::name(), "Pair_Vec_Address_u8");
+}
+
+#[test]
+fn a_map_key_with_a_component_is_collected() {
+    #[derive(ToSchema)]
+    enum Key {
+        A,
+    }
+    #[derive(ToSchema)]
+    struct Holder {
+        map: std::collections::HashMap<Key, String>,
+    }
+    assert!(components::<Holder>().contains_key("Key"));
+}
+
+#[test]
+fn names_that_differ_by_direction_are_two_properties() {
+    #[derive(Serialize, Deserialize, ToSchema)]
+    struct Renamed {
+        #[serde(rename(serialize = "out_name", deserialize = "in_name"))]
+        both: String,
+        #[serde(rename(serialize = "shown"))]
+        one: String,
+        #[serde(rename(serialize = "same", deserialize = "same"))]
+        same: String,
+    }
+    let value = schema::<Renamed>();
+    let property = |name: &str| value["properties"][name].clone();
+    assert_eq!(property("out_name")["readOnly"], true);
+    assert_eq!(property("in_name")["writeOnly"], true);
+    assert_eq!(property("shown")["readOnly"], true);
+    assert_eq!(property("one")["writeOnly"], true);
+    assert_eq!(property("same"), json!({"type": "string"}));
+    assert!(value["properties"].get("both").is_none());
+}
+
+#[test]
+fn rename_all_by_direction_is_two_properties() {
+    #[derive(Serialize, Deserialize, ToSchema)]
+    #[serde(rename_all(serialize = "camelCase"))]
+    struct Renamed {
+        some_field: String,
+    }
+    let value = schema::<Renamed>();
+    assert_eq!(value["properties"]["someField"]["readOnly"], true);
+    assert_eq!(value["properties"]["some_field"]["writeOnly"], true);
+    let names: &Value = &value["required"];
+    assert_eq!(names, &json!(["someField", "some_field"]));
+}
+
+#[test]
+fn a_field_of_one_direction_says_which() {
+    #[derive(Serialize, Deserialize, ToSchema)]
+    struct Account {
+        name: String,
+        #[serde(skip_deserializing)]
+        computed: String,
+        #[serde(skip_serializing)]
+        password: String,
+        #[serde(skip)]
+        hidden: String,
+    }
+    let value = schema::<Account>();
+    assert_eq!(value["properties"]["computed"]["readOnly"], true);
+    assert_eq!(value["properties"]["password"]["writeOnly"], true);
+    assert!(value["properties"].get("hidden").is_none());
+}
+
+#[test]
+fn a_transparent_struct_is_its_field() {
+    #[derive(Serialize, ToSchema)]
+    #[serde(transparent)]
+    struct Wrapper {
+        inner: String,
+    }
+    assert_eq!(schema::<Wrapper>(), json!({"type": "string"}));
+    #[derive(Serialize, ToSchema)]
+    #[serde(transparent)]
+    struct Holds {
+        inner: Address,
+    }
+    assert_eq!(
+        schema::<Holds>()["$ref"],
+        json!("#/components/schemas/Address")
+    );
+    assert!(components::<Holds>().contains_key("Address"));
+}
+
+#[test]
+fn rename_all_fields_renames_the_fields_of_variants() {
+    #[derive(Serialize, ToSchema)]
+    #[serde(rename_all_fields = "camelCase")]
+    enum Event {
+        Moved { new_place: String },
+    }
+    let value = schema::<Event>();
+    assert!(
+        value["oneOf"][0]["properties"]["Moved"]["properties"]
+            .get("newPlace")
+            .is_some(),
+        "{value}"
+    );
+}
+
+#[test]
+fn a_recursive_type_through_a_regular_field_is_not_affected_by_the_inline_check() {
+    #[derive(ToSchema)]
+    struct Node {
+        #[schema(inline)]
+        address: Address,
+        next: Option<Box<Node>>,
+    }
+    let value = schema::<Node>();
+    assert_eq!(value["properties"]["address"]["type"], "object");
+}
+
+#[derive(ToSchema)]
+struct InlineA {
+    #[schema(inline)]
+    b: Option<Box<InlineB>>,
+}
+
+#[derive(ToSchema)]
+struct InlineB {
+    #[schema(inline)]
+    a: Option<Box<InlineA>>,
+}
+
+#[test]
+#[should_panic(expected = "#[schema(inline)] on a field of")]
+fn types_that_inline_each_other_stop_with_a_message() {
+    let _ = InlineA::schema();
+}
+
+#[test]
+fn serde_default_works_on_a_generic_struct_and_on_types_only_read() {
+    #[derive(Serialize, Default, ToSchema)]
+    #[serde(default)]
+    struct Page<T> {
+        items: Vec<T>,
+        total: u32,
+    }
+    let value = schema::<Page<String>>();
+    assert!(value["properties"].get("items").is_some());
+    assert!(value.get("required").is_none());
+
+    #[derive(Deserialize, Default)]
+    struct NotSerializable {
+        a: String,
+    }
+    impl ToSchema for NotSerializable {
+        fn schema() -> Schema {
+            Schema::object()
+        }
+    }
+    #[derive(Deserialize, Default, ToSchema)]
+    #[serde(default)]
+    struct Input {
+        inner: NotSerializable,
+        kept: u8,
+    }
+    let value = schema::<Input>();
+    assert!(value["properties"]["inner"].get("default").is_none());
+    assert_eq!(value["properties"]["kept"]["default"], json!(0));
+}
+
+#[test]
+fn serde_default_with_a_function_reads_from_it() {
+    #[derive(Serialize, Deserialize, ToSchema)]
+    #[serde(default = "make_input")]
+    struct Input {
+        limit: u8,
+    }
+    fn make_input() -> Input {
+        Input { limit: 9 }
+    }
+    assert_eq!(
+        schema::<Input>()["properties"]["limit"]["default"],
+        json!(9)
+    );
+}
+
+#[test]
+fn an_enum_without_variants_compiles_and_allows_nothing() {
+    #[derive(ToSchema)]
+    enum Never {}
+    #[derive(Deserialize, ToSchema)]
+    enum AllSkipped {
+        #[serde(skip)]
+        A,
+    }
+    assert_eq!(schema::<Never>(), json!({"not": {}}));
+    assert_eq!(schema::<AllSkipped>(), json!({"not": {}}));
 }

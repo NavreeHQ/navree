@@ -21,7 +21,9 @@ const METHODS: [&str; 8] = [
 
 /// The extension member in which `navree_http::schema_fn` carries the schemas
 /// a schema references.
-const REFERENCED: &str = "x-navree-components";
+const REFERENCED: &str = navree_openapi::__private::COMPONENTS;
+const COMPONENT_TYPES: &str = navree_openapi::__private::COMPONENT_TYPES;
+const COMPONENT_CONFLICTS: &str = navree_openapi::__private::COMPONENT_CONFLICTS;
 
 /// The session cookie navree-session sets by default (`session.cookie`).
 pub const DEFAULT_SESSION_COOKIE: &str = "navree_session";
@@ -33,15 +35,19 @@ pub enum ApiError {
     /// Two different schemas share a component name, so a `$ref` to it
     /// would be wrong for one of them.
     #[error(
-        "two different schemas are named `{name}` (referenced by {first} and by {second}); give one of the types a distinct name with #[schema(as = OtherName)]"
+        "two different types are named `{name}`: `{first_type}` (referenced by {first}) and `{second_type}` (referenced by {second}); give one of them a distinct name with #[schema(as = OtherName)]"
     )]
     SchemaConflict {
         /// The component name.
         name: String,
         /// The route that registered the name first (`GET /api/v1/deals`).
         first: String,
+        /// The Rust type that registered it first.
+        first_type: String,
         /// The route whose schema differs.
         second: String,
+        /// The Rust type whose schema differs.
+        second_type: String,
     },
     /// The document refers to component schemas nothing registered.
     #[error("{}", missing_message(.missing))]
@@ -80,8 +86,7 @@ fn missing_message(missing: &[(String, String)]) -> String {
 ///   scheme and document 401; routes checked by the route authorizer
 ///   (roles, permissions, abilities) also document 403.
 /// - Request and response schemas, and the schemas they reference, are
-///   component schemas. A body schema whose name another, different schema
-///   already holds is inlined.
+///   component schemas, named by the type (`Page<Note>` is `Page_Note`).
 /// - The route's specification extensions
 ///   ([`RouteMeta::extensions`](navree_http::RouteMeta::extensions), such
 ///   as `x-navree-flag`) are members of its operation.
@@ -114,7 +119,7 @@ pub(crate) fn build(
     let mut schemas = Schemas::default();
     for (f, label) in extra_schemas {
         let body = Body::collect(*f, label, &mut schemas)?;
-        schemas.register(body.name, body.schema, label)?;
+        schemas.register(body.name, body.schema, body.rust_type.as_deref(), label)?;
     }
     let error = Body::collect(schema_fn::<HttpError>, "error responses", &mut schemas)?;
     let mut bodies = Vec::with_capacity(routes.len());
@@ -140,7 +145,7 @@ pub(crate) fn build(
     let mut references = Vec::new();
     for ((route, method), (label, request, response)) in routes.into_iter().zip(bodies) {
         let (path, params) = openapi_path(&route.full_path);
-        let operation = builder.operation(route, &label, &params, request, response);
+        let operation = builder.operation(route, &label, &params, request, response)?;
         let refs = schema_refs(&serde_json::to_value(&operation).unwrap_or_default());
         references.push((label, refs));
         paths.entry(path).or_default().insert(method, operation);
@@ -310,7 +315,7 @@ impl Builder {
         params: &[String],
         request: Option<Body>,
         response: Option<Body>,
-    ) -> Operation {
+    ) -> Result<Operation, ApiError> {
         let api = route.api.as_ref();
         let mut operation = Operation::default();
         if let Some(api) = api {
@@ -345,13 +350,13 @@ impl Builder {
             })
             .collect();
         if let Some(request) = request {
-            let schema = read_schema(self.schemas.use_body(request, label));
+            let schema = read_schema(self.schemas.use_body(request, label)?);
             operation.request_body = Some(RequestBody {
                 required: true,
                 content: IndexMap::from([("application/json".to_owned(), MediaType { schema })]),
             });
         }
-        operation.responses = self.responses(route, label, response);
+        operation.responses = self.responses(route, label, response)?;
         if !route.access.public {
             operation.security = vec![
                 BTreeMap::from([("cookie".to_owned(), Vec::new())]),
@@ -364,7 +369,7 @@ impl Builder {
                 .iter()
                 .map(|(name, value)| (name.clone(), value.clone())),
         );
-        operation
+        Ok(operation)
     }
 
     /// The success response, the documented errors, 401 for non-public
@@ -374,7 +379,7 @@ impl Builder {
         route: &RouteMeta,
         label: &str,
         body: Option<Body>,
-    ) -> IndexMap<String, Response> {
+    ) -> Result<IndexMap<String, Response>, ApiError> {
         let api = route.api.as_ref();
         let success = api
             .map(|api| api.success_status)
@@ -385,7 +390,7 @@ impl Builder {
             content: IndexMap::new(),
         };
         if let Some(body) = body {
-            let schema = read_schema(self.schemas.use_body(body, label));
+            let schema = read_schema(self.schemas.use_body(body, label)?);
             response
                 .content
                 .insert("application/json".to_owned(), MediaType { schema });
@@ -406,15 +411,17 @@ impl Builder {
                 content: IndexMap::new(),
             };
             if status >= 400 {
-                let schema =
-                    read_schema(self.schemas.use_body(self.error.clone(), "error responses"));
+                let schema = read_schema(
+                    self.schemas
+                        .use_body(self.error.clone(), "error responses")?,
+                );
                 response
                     .content
                     .insert(ERROR_CONTENT_TYPE.to_owned(), MediaType { schema });
             }
             responses.insert(status.to_string(), response);
         }
-        responses
+        Ok(responses)
     }
 }
 
@@ -424,6 +431,8 @@ impl Builder {
 struct Body {
     name: String,
     schema: Value,
+    /// The Rust type, when the schema says.
+    rust_type: Option<String>,
 }
 
 impl Body {
@@ -431,53 +440,83 @@ impl Body {
     /// `label`) and returns the body schema.
     fn collect(f: SchemaFn, label: &str, schemas: &mut Schemas) -> Result<Self, ApiError> {
         let (name, mut schema) = f();
-        for (referenced, component) in take_referenced(&mut schema) {
-            schemas.register(referenced, component, label)?;
+        let rust_type = schema
+            .as_object_mut()
+            .and_then(|object| object.remove("x-navree-type"))
+            .and_then(|value| value.as_str().map(str::to_owned));
+        let referenced = take_referenced(&mut schema);
+        if let Some((name, first_type, second_type)) = referenced.conflicts.into_iter().next() {
+            return Err(ApiError::SchemaConflict {
+                name,
+                first: label.to_owned(),
+                first_type,
+                second: label.to_owned(),
+                second_type,
+            });
         }
-        Ok(Self { name, schema })
+        for (referenced, component, rust_type) in referenced.components {
+            schemas.register(referenced, component, rust_type.as_deref(), label)?;
+        }
+        Ok(Self {
+            name,
+            schema,
+            rust_type,
+        })
     }
 }
 
-/// The component schemas, and for each the route that registered it.
+/// What the error says of a schema that doesn't say its Rust type.
+const UNNAMED_TYPE: &str = "a schema written by hand";
+
+/// The component schemas, and for each the route and the type that registered
+/// it.
 #[derive(Default)]
 struct Schemas {
     components: BTreeMap<String, Value>,
     origins: BTreeMap<String, String>,
+    types: BTreeMap<String, String>,
 }
 
 impl Schemas {
     /// Registers a referenced schema: `$ref`s point at it by name, so a
     /// different schema with the same name is an error.
-    fn register(&mut self, name: String, schema: Value, label: &str) -> Result<(), ApiError> {
+    fn register(
+        &mut self,
+        name: String,
+        schema: Value,
+        rust_type: Option<&str>,
+        label: &str,
+    ) -> Result<(), ApiError> {
         match self.components.get(&name) {
             Some(existing) if *existing == schema => Ok(()),
             Some(_) => Err(ApiError::SchemaConflict {
                 first: self.origins.get(&name).cloned().unwrap_or_default(),
+                first_type: self
+                    .types
+                    .get(&name)
+                    .cloned()
+                    .unwrap_or_else(|| UNNAMED_TYPE.to_owned()),
                 second: label.to_owned(),
+                second_type: rust_type.unwrap_or(UNNAMED_TYPE).to_owned(),
                 name,
             }),
             None => {
                 self.origins.insert(name.clone(), label.to_owned());
+                if let Some(rust_type) = rust_type {
+                    self.types.insert(name.clone(), rust_type.to_owned());
+                }
                 self.components.insert(name, schema);
                 Ok(())
             }
         }
     }
 
-    /// A reference to `body` as a component, or the schema itself when a
-    /// different schema already holds its name (e.g. `Page<Deal>` and
-    /// `Page<Note>`, both named `Page`).
-    fn use_body(&mut self, body: Body, label: &str) -> Value {
+    /// A reference to `body` as a component. A different schema of the same
+    /// name is an error, as for any other component.
+    fn use_body(&mut self, body: Body, label: &str) -> Result<Value, ApiError> {
         let reference = json!({"$ref": format!("#/components/schemas/{}", body.name)});
-        match self.components.get(&body.name) {
-            Some(existing) if *existing == body.schema => reference,
-            Some(_) => body.schema,
-            None => {
-                self.origins.insert(body.name.clone(), label.to_owned());
-                self.components.insert(body.name, body.schema);
-                reference
-            }
-        }
+        self.register(body.name, body.schema, body.rust_type.as_deref(), label)?;
+        Ok(reference)
     }
 
     /// Checks that every schema the operations (`(label, refs)`) and the
@@ -530,20 +569,51 @@ fn schema_refs(value: &Value) -> Vec<String> {
     out
 }
 
+/// What a body schema carries besides itself.
+#[derive(Default)]
+struct Referenced {
+    /// Each schema with its name and Rust type.
+    components: Vec<(String, Value, Option<String>)>,
+    /// Different schemas of one name: the name and their two Rust types.
+    conflicts: Vec<(String, String, String)>,
+}
+
 /// Removes the referenced schemas `navree_http::schema_fn` carries in
 /// [`REFERENCED`] from `schema`, and from them, recursively.
-fn take_referenced(schema: &mut Value) -> Vec<(String, Value)> {
-    let Some(Value::Object(referenced)) = schema
-        .as_object_mut()
-        .and_then(|object| object.remove(REFERENCED))
-    else {
-        return Vec::new();
+fn take_referenced(schema: &mut Value) -> Referenced {
+    let mut out = Referenced::default();
+    let Some(object) = schema.as_object_mut() else {
+        return out;
     };
-    let mut out = Vec::new();
+    let types = object.remove(COMPONENT_TYPES);
+    if let Some(Value::Array(conflicts)) = object.remove(COMPONENT_CONFLICTS) {
+        let text = |value: Option<&Value>| {
+            value
+                .and_then(Value::as_str)
+                .unwrap_or(UNNAMED_TYPE)
+                .to_owned()
+        };
+        for conflict in &conflicts {
+            out.conflicts.push((
+                text(conflict.get(0)),
+                text(conflict.get(1)),
+                text(conflict.get(2)),
+            ));
+        }
+    }
+    let Some(Value::Object(referenced)) = object.remove(REFERENCED) else {
+        return out;
+    };
     for (name, mut component) in referenced {
+        let rust_type = types
+            .as_ref()
+            .and_then(|types| types.get(&name))
+            .and_then(Value::as_str)
+            .map(str::to_owned);
         let nested = take_referenced(&mut component);
-        out.push((name, component));
-        out.extend(nested);
+        out.components.push((name, component, rust_type));
+        out.components.extend(nested.components);
+        out.conflicts.extend(nested.conflicts);
     }
     out
 }

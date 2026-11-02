@@ -1,6 +1,8 @@
 //! `#[derive(ToSchema)]`: the JSON Schema of a struct or an enum, from its
 //! fields, its serde attributes, its doc comments and `#[schema(..)]`.
 
+use std::cell::Cell;
+
 use proc_macro2::{Delimiter, Span, TokenStream, TokenTree};
 use quote::{ToTokens, quote};
 use syn::punctuated::Punctuated;
@@ -25,13 +27,24 @@ fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
     let krate = OPENAPI.path(Span::call_site())?;
     let serde = SerdeContainer::parse(&input.attrs);
     let container = ContainerArgs::parse(&input.attrs)?;
+    refuse_what_replaces_the_json(&input)?;
     let cx = Context {
         krate: &krate,
         root: &input.ident,
         generics: &input.generics,
+        inlines: Cell::new(false),
     };
     let body = match &input.data {
         Data::Struct(data) => match &data.fields {
+            Fields::Named(fields) if serde.transparent => {
+                let kept: Punctuated<Field, Token![,]> = fields
+                    .named
+                    .iter()
+                    .filter(|field| !SerdeField::parse(&field.attrs).skip)
+                    .cloned()
+                    .collect();
+                cx.tuple_struct(&kept)?
+            }
             Fields::Named(fields) => cx.named_struct(&fields.named, &serde, true)?,
             Fields::Unnamed(fields) => cx.tuple_struct(&fields.unnamed)?,
             Fields::Unit => Body {
@@ -76,14 +89,32 @@ fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let schema = body.schema;
     let components = body.components;
+    let name_of = if params.is_empty() {
+        quote!(::std::borrow::Cow::Borrowed(#name))
+    } else {
+        quote! {{
+            let mut name = ::std::string::String::from(#name);
+            #(
+                name.push('_');
+                name.push_str(&<#params as #krate::ToSchema>::name());
+            )*
+            ::std::borrow::Cow::Owned(name)
+        }}
+    };
+    let guard = cx.inlines.get().then(|| {
+        quote! {
+            let _inlining = #krate::__private::InlineGuard::enter(::std::any::type_name::<Self>());
+        }
+    });
     Ok(quote! {
         #[automatically_derived]
         impl #impl_generics #krate::ToSchema for #ident #ty_generics #where_clause {
             fn name() -> ::std::borrow::Cow<'static, str> {
-                ::std::borrow::Cow::Borrowed(#name)
+                #name_of
             }
 
             fn schema() -> #krate::Schema {
+                #guard
                 (#schema) #describe
             }
 
@@ -93,6 +124,47 @@ fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
             }
         }
     })
+}
+
+/// A compile error for serde attributes that replace a type's JSON, or a
+/// field's, with something the derive can't see.
+fn refuse_what_replaces_the_json(input: &DeriveInput) -> syn::Result<()> {
+    for (key, _) in serde_entries(&input.attrs) {
+        if matches!(key.as_str(), "from" | "try_from" | "into" | "remote") {
+            return Err(syn::Error::new(
+                input.ident.span(),
+                format!(
+                    "#[serde({key} = ..)] replaces this type's JSON, which #[derive(ToSchema)] can't see: write `impl ToSchema` by hand"
+                ),
+            ));
+        }
+    }
+    let check_field = |field: &Field| -> syn::Result<()> {
+        let args = FieldArgs::parse(&field.attrs)?;
+        if args.value_type.is_some() || args.schema_with.is_some() {
+            return Ok(());
+        }
+        for (key, _) in serde_entries(&field.attrs) {
+            if matches!(key.as_str(), "with" | "serialize_with" | "getter") {
+                return Err(syn::Error::new(
+                    field.span(),
+                    format!(
+                        "#[serde({key} = ..)] changes this field's JSON, which #[derive(ToSchema)] can't see: say what it is with #[schema(value_type = ..)] or #[schema(schema_with = ..)]"
+                    ),
+                ));
+            }
+        }
+        Ok(())
+    };
+    match &input.data {
+        Data::Struct(data) => data.fields.iter().try_for_each(check_field),
+        Data::Enum(data) => data
+            .variants
+            .iter()
+            .flat_map(|variant| variant.fields.iter())
+            .try_for_each(check_field),
+        Data::Union(_) => Ok(()),
+    }
 }
 
 /// What the derive makes of a struct, an enum or a variant.
@@ -108,6 +180,8 @@ struct Context<'a> {
     krate: &'a TokenStream,
     root: &'a Ident,
     generics: &'a Generics,
+    /// Whether a field says `#[schema(inline)]`.
+    inlines: Cell<bool>,
 }
 
 impl Context<'_> {
@@ -140,9 +214,12 @@ impl Context<'_> {
                 }
             } else {
                 has_properties = true;
-                let name = parsed.name;
                 let required = parsed.required;
-                object = quote!(#object.property(#name, #schema, #required));
+                for side in parsed.sides {
+                    let name = side.name;
+                    let direction = side.direction;
+                    object = quote!(#object.property(#name, #schema #direction, #required));
+                }
             }
         }
         errors.finish()?;
@@ -186,14 +263,7 @@ impl Context<'_> {
             .ok_or_else(|| syn::Error::new(field.span(), "a named field has a name"))?;
         let rust_name = ident.to_string();
         let rust_name = rust_name.strip_prefix("r#").unwrap_or(&rust_name);
-        let name = rules
-            .rename
-            .clone()
-            .or_else(|| args.rename.clone())
-            .unwrap_or_else(|| match &serde.rename_all {
-                Some(rule) => rule.field(rust_name),
-                None => rust_name.to_owned(),
-            });
+        let sides = sides(&rules, &args, serde, rust_name);
         let ty = args.value_type.as_ref().unwrap_or(&field.ty);
         let optional = is_option(ty);
         let required = args.required.unwrap_or(
@@ -203,7 +273,7 @@ impl Context<'_> {
 
         if let Some(function) = &args.schema_with {
             return Ok(Some(ParsedField {
-                name,
+                sides,
                 schema: quote!(#function()),
                 components: TokenStream::new(),
                 required,
@@ -214,6 +284,15 @@ impl Context<'_> {
 
         let keep_null = args.nullable != Some(false);
         let peeled = if keep_null { ty } else { peel_option(ty) };
+        if args.inline && mentions(peeled, self.root) {
+            return Err(syn::Error::new(
+                field.span(),
+                format!(
+                    "#[schema(inline)] would put `{}` inside itself: a type that contains itself needs a `$ref`, so remove `inline`",
+                    self.root
+                ),
+            ));
+        }
         let reference = if args.inline {
             self.inline_schema(peeled)
         } else {
@@ -241,14 +320,30 @@ impl Context<'_> {
         }
         // A value of any shape, or any object, has no default worth writing down.
         if serde.default && with_defaults && !is_untyped(peel_option(ty)) {
-            let root = self.root;
             let member = Member::Named(ident.clone());
-            schema = quote! {
-                #schema.default_value(
-                    #krate::__private::serde_json::to_value(<#root as ::std::default::Default>::default().#member)
-                        .unwrap_or_default()
-                )
+            let instance = match &serde.default_path {
+                Some(path) => {
+                    let path: Path = syn::parse_str(path)
+                        .map_err(|error| syn::Error::new(field.span(), error.to_string()))?;
+                    quote!(::std::option::Option::<Self>::Some(#path()))
+                }
+                None => quote! {{
+                    use #krate::__private::{HasDefault as _, NoDefault as _};
+                    (&#krate::__private::DefaultOf::<Self>::new()).get()
+                }},
             };
+            // No default to show when the type has none, or the field can't be
+            // written (generic types, and types that are only read).
+            schema = quote! {{
+                use #krate::__private::{HasJson as _, NoJson as _};
+                let schema = #schema;
+                match #instance
+                    .and_then(|instance| (&#krate::__private::JsonOf(&instance.#member)).get())
+                {
+                    ::std::option::Option::Some(value) => schema.default_value(value),
+                    ::std::option::Option::None => schema,
+                }
+            }};
         }
         if has_deprecated(&field.attrs) {
             schema = quote!(#schema.deprecated());
@@ -269,7 +364,7 @@ impl Context<'_> {
             };
         }
         Ok(Some(ParsedField {
-            name,
+            sides,
             schema,
             components: self.field_components(peeled, args.inline),
             required,
@@ -282,6 +377,7 @@ impl Context<'_> {
     /// `Option` and `Vec`.
     fn inline_schema(&self, ty: &Type) -> TokenStream {
         let krate = self.krate;
+        self.inlines.set(true);
         if let Some(inner) = wrapped(ty, "Option") {
             let inner = self.inline_schema(inner);
             return quote!(#krate::Schema::one_of(::std::vec![#inner, #krate::Schema::null()]));
@@ -332,6 +428,15 @@ impl Context<'_> {
         };
         let args = FieldArgs::parse(&first.attrs)?;
         let ty = args.value_type.as_ref().unwrap_or(&first.ty);
+        if args.inline && mentions(ty, self.root) {
+            return Err(syn::Error::new(
+                first.span(),
+                format!(
+                    "#[schema(inline)] would put `{}` inside itself: a type that contains itself needs a `$ref`, so remove `inline`",
+                    self.root
+                ),
+            ));
+        }
         let single = fields.len() == 1;
         let same = fields.iter().all(|field| {
             field.ty.to_token_stream().to_string() == first.ty.to_token_stream().to_string()
@@ -407,6 +512,9 @@ impl Context<'_> {
             .map(|(variant, rules)| variant_name(variant, rules, serde))
             .collect::<syn::Result<Vec<String>>>()?;
         let schema = match &serde.repr {
+            Repr::External if names.is_empty() => {
+                quote!(#krate::Schema::never())
+            }
             Repr::External => quote!(#krate::Schema::string_enum([#(#names),*])),
             Repr::Untagged => {
                 quote!(#krate::Schema::null().default_value(#krate::__private::serde_json::Value::Null))
@@ -464,7 +572,10 @@ impl Context<'_> {
                 (quote!(#schema #describe), TokenStream::new())
             }
             Fields::Named(fields) => {
-                let inner = SerdeContainer::parse(&variant.attrs);
+                let mut inner = SerdeContainer::parse(&variant.attrs);
+                if inner.rename_all.is_none() {
+                    inner.rename_all = serde.rename_all_fields.clone();
+                }
                 let body = self.named_struct(&fields.named, &inner, false)?;
                 let schema = body.schema;
                 let inner_schema = quote!((#schema) #describe);
@@ -526,9 +637,56 @@ impl Context<'_> {
     }
 }
 
+/// A name a field has in the JSON, and in which direction: a field whose name
+/// differs between responses and requests has two.
+struct Side {
+    name: String,
+    /// `.read_only()` or `.write_only()`, when it is one way.
+    direction: TokenStream,
+}
+
+/// The names of a field, by what serde reads and writes.
+fn sides(
+    rules: &SerdeField,
+    args: &FieldArgs,
+    serde: &SerdeContainer,
+    rust_name: &str,
+) -> Vec<Side> {
+    let name_for = |one_way: &Option<String>, rule: &Option<RenameRule>| {
+        one_way
+            .clone()
+            .or_else(|| args.rename.clone())
+            .unwrap_or_else(|| match rule {
+                Some(rule) => rule.field(rust_name),
+                None => rust_name.to_owned(),
+            })
+    };
+    let written = name_for(&rules.rename.serialize, &serde.rename_all.serialize);
+    let read = name_for(&rules.rename.deserialize, &serde.rename_all.deserialize);
+    let one_way = |name: String, method: &str| {
+        let method = Ident::new(method, Span::call_site());
+        Side {
+            name,
+            direction: quote!(.#method()),
+        }
+    };
+    if rules.skip_deserializing {
+        vec![one_way(written, "read_only")]
+    } else if rules.skip_serializing {
+        vec![one_way(read, "write_only")]
+    } else if written == read {
+        vec![Side {
+            name: written,
+            direction: TokenStream::new(),
+        }]
+    } else {
+        vec![one_way(written, "read_only"), one_way(read, "write_only")]
+    }
+}
+
 /// A field, ready to go in the object.
 struct ParsedField {
-    name: String,
+    sides: Vec<Side>,
     schema: TokenStream,
     components: TokenStream,
     required: bool,
@@ -679,8 +837,12 @@ fn parse_json(input: syn::parse::ParseStream<'_>) -> syn::Result<TokenStream> {
 /// The serde attributes of a struct, an enum or a variant.
 #[derive(Default)]
 struct SerdeContainer {
-    rename_all: Option<RenameRule>,
+    rename_all: Directed<RenameRule>,
+    rename_all_fields: Directed<RenameRule>,
     default: bool,
+    /// `default = "path"`.
+    default_path: Option<String>,
+    transparent: bool,
     deny_unknown_fields: bool,
     repr: Repr,
 }
@@ -703,13 +865,25 @@ impl SerdeContainer {
         let mut out = Self::default();
         let mut tag = None;
         let mut content = None;
+        let rules = |key: &str| {
+            let names = directed(attrs, key);
+            Directed {
+                serialize: names.serialize.as_deref().and_then(RenameRule::parse),
+                deserialize: names.deserialize.as_deref().and_then(RenameRule::parse),
+            }
+        };
+        out.rename_all = rules("rename_all");
+        out.rename_all_fields = rules("rename_all_fields");
         for (key, value) in serde_entries(attrs) {
             match (key.as_str(), value) {
-                ("rename_all", Some(rule)) => out.rename_all = RenameRule::parse(&rule),
                 ("tag", Some(name)) => tag = Some(name),
                 ("content", Some(name)) => content = Some(name),
                 ("untagged", _) => out.repr = Repr::Untagged,
-                ("default", _) => out.default = true,
+                ("transparent", _) => out.transparent = true,
+                ("default", path) => {
+                    out.default = true;
+                    out.default_path = path;
+                }
                 ("deny_unknown_fields", _) => out.deny_unknown_fields = true,
                 _ => {}
             }
@@ -723,11 +897,75 @@ impl SerdeContainer {
     }
 }
 
+/// What serde says for writing and for reading.
+#[derive(Clone)]
+struct Directed<T> {
+    serialize: Option<T>,
+    deserialize: Option<T>,
+}
+
+impl<T> Default for Directed<T> {
+    fn default() -> Self {
+        Directed {
+            serialize: None,
+            deserialize: None,
+        }
+    }
+}
+
+impl<T> Directed<T> {
+    fn is_none(&self) -> bool {
+        self.serialize.is_none() && self.deserialize.is_none()
+    }
+}
+
+/// `key = "both"`, or `key(serialize = "..", deserialize = "..")`, of
+/// `#[serde(..)]`.
+fn directed(attrs: &[Attribute], key: &str) -> Directed<String> {
+    let mut out = Directed::default();
+    for attr in attrs.iter().filter(|attr| attr.path().is_ident("serde")) {
+        let Ok(list) = attr.meta.require_list() else {
+            continue;
+        };
+        let tokens: Vec<TokenTree> = list.tokens.clone().into_iter().collect();
+        for (at, token) in tokens.iter().enumerate() {
+            if !matches!(token, TokenTree::Ident(ident) if ident == key) {
+                continue;
+            }
+            match tokens.get(at + 1) {
+                Some(TokenTree::Punct(punct)) if punct.as_char() == '=' => {
+                    let value = tokens.get(at + 2).cloned().and_then(string_literal);
+                    out.serialize.clone_from(&value);
+                    out.deserialize = value;
+                }
+                Some(TokenTree::Group(group)) => {
+                    let inner: Vec<TokenTree> = group.stream().into_iter().collect();
+                    for (at, token) in inner.iter().enumerate() {
+                        let TokenTree::Ident(ident) = token else {
+                            continue;
+                        };
+                        let value = inner.get(at + 2).cloned().and_then(string_literal);
+                        if ident == "serialize" {
+                            out.serialize = value;
+                        } else if ident == "deserialize" {
+                            out.deserialize = value;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    out
+}
+
 /// The serde attributes of a field or a variant.
 #[derive(Default)]
 struct SerdeField {
     skip: bool,
-    rename: Option<String>,
+    skip_serializing: bool,
+    skip_deserializing: bool,
+    rename: Directed<String>,
     default: bool,
     flatten: bool,
     skip_serializing_if: bool,
@@ -736,16 +974,19 @@ struct SerdeField {
 impl SerdeField {
     fn parse(attrs: &[Attribute]) -> Self {
         let mut out = Self::default();
-        for (key, value) in serde_entries(attrs) {
+        for (key, _) in serde_entries(attrs) {
             match key.as_str() {
-                "skip" | "skip_serializing" | "skip_deserializing" => out.skip = true,
+                "skip" => out.skip = true,
+                "skip_serializing" => out.skip_serializing = true,
+                "skip_deserializing" => out.skip_deserializing = true,
                 "skip_serializing_if" => out.skip_serializing_if = true,
                 "flatten" => out.flatten = true,
                 "default" => out.default = true,
-                "rename" if value.is_some() => out.rename = value,
                 _ => {}
             }
         }
+        out.skip |= out.skip_serializing && out.skip_deserializing;
+        out.rename = directed(attrs, "rename");
         out
     }
 }
@@ -891,14 +1132,26 @@ fn variant_name(
     let args = FieldArgs::parse(&variant.attrs)?;
     let rust_name = variant.ident.to_string();
     let rust_name = rust_name.strip_prefix("r#").unwrap_or(&rust_name);
-    Ok(rules
-        .rename
-        .clone()
-        .or(args.rename)
-        .unwrap_or_else(|| match &serde.rename_all {
-            Some(rule) => rule.variant(rust_name),
-            None => rust_name.to_owned(),
-        }))
+    let name_for = |one_way: &Option<String>, rule: &Option<RenameRule>| {
+        one_way
+            .clone()
+            .or_else(|| args.rename.clone())
+            .unwrap_or_else(|| match rule {
+                Some(rule) => rule.variant(rust_name),
+                None => rust_name.to_owned(),
+            })
+    };
+    let written = name_for(&rules.rename.serialize, &serde.rename_all.serialize);
+    let read = name_for(&rules.rename.deserialize, &serde.rename_all.deserialize);
+    if written != read {
+        return Err(syn::Error::new(
+            variant.span(),
+            format!(
+                "this variant is `{written}` in responses and `{read}` in requests, which one schema can't say: use one name, or write `impl ToSchema` by hand"
+            ),
+        ));
+    }
+    Ok(written)
 }
 
 /// The doc comment: the lines, with their common indentation gone, joined with

@@ -366,13 +366,7 @@ impl<T: ToSchema> ToSchema for CursorPage<T> {
 fn schema_fn_output<T: ToSchema>(name: String, mut schema: Json) -> (String, Json) {
     let mut referenced = Vec::new();
     page_components::<T>(&mut referenced);
-    if let Some(object) = schema.as_object_mut() {
-        let components: Map<String, Json> = referenced
-            .into_iter()
-            .map(|(name, schema)| (name, schema_json(schema)))
-            .collect();
-        object.insert("x-navree-components".to_owned(), Json::Object(components));
-    }
+    navree_openapi::__private::attach_components(&mut schema, referenced);
     (name, schema)
 }
 

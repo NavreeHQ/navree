@@ -34,7 +34,8 @@ use crate::{Schema, Type};
 /// ```
 pub trait ToSchema {
     /// The name of the type's component schema: the last segment of its Rust
-    /// path unless `#[schema(as = Name)]` says otherwise.
+    /// path unless `#[schema(as = Name)]` says otherwise, followed by the names
+    /// of its generic arguments (`Page<Note>` is `Page_Note`).
     fn name() -> Cow<'static, str> {
         let name = std::any::type_name::<Self>();
         let name = name.split('<').next().unwrap_or(name);
@@ -58,13 +59,21 @@ pub trait ToSchema {
 
     /// Adds the component schemas [`reference`](ToSchema::reference) refers to:
     /// this type's and what it refers to. A type already in `out` isn't walked
-    /// again, so a type that contains itself ends.
+    /// again, so a type that contains itself ends. A different schema of the
+    /// same name goes in beside the first, for the document to refuse.
     fn components(out: &mut Vec<(String, Schema)>) {
         let name = Self::name();
-        if out.iter().any(|(existing, _)| *existing == name) {
+        let schema = Schema {
+            rust_type: crate::schema::RustType(Some(std::any::type_name::<Self>())),
+            ..Self::schema()
+        };
+        if let Some((_, existing)) = out.iter().find(|(existing, _)| *existing == name) {
+            if *existing != schema {
+                out.push((name.into_owned(), schema));
+            }
             return;
         }
-        out.push((name.into_owned(), Self::schema()));
+        out.push((name.into_owned(), schema));
         Self::schemas(out);
     }
 }
@@ -162,6 +171,10 @@ impl ToSchema for () {
 macro_rules! transparent {
     ($(impl[$($generics:tt)*] $ty:ty => $inner:ty;)+) => {$(
         impl<$($generics)*> ToSchema for $ty {
+            fn name() -> Cow<'static, str> {
+                <$inner>::name()
+            }
+
             fn schema() -> Schema {
                 <$inner>::schema()
             }
@@ -223,6 +236,10 @@ reference! {
 /// `Option<T>` on its own is `{"oneOf": [{"type": "null"}, T's schema]}`; as a
 /// field it's what `T` says, nullable.
 impl<T: ToSchema> ToSchema for Option<T> {
+    fn name() -> Cow<'static, str> {
+        Cow::Owned(format!("Option_{}", T::name()))
+    }
+
     fn schema() -> Schema {
         Schema::one_of(vec![Schema::null(), T::schema()])
     }
@@ -245,6 +262,11 @@ impl<T: ToSchema> ToSchema for Option<T> {
 macro_rules! list {
     ($(impl[$($generics:tt)*] $ty:ty => $unique:expr;)+) => {$(
         impl<$($generics)*> ToSchema for $ty {
+            fn name() -> Cow<'static, str> {
+                let list = if ($unique as Option<bool>).is_some() { "Set" } else { "Vec" };
+                Cow::Owned(format!("{list}_{}", T::name()))
+            }
+
             fn schema() -> Schema {
                 Schema {
                     unique_items: $unique,
@@ -285,6 +307,10 @@ list! {
 macro_rules! map {
     ($(impl[$($generics:tt)*] $ty:ty;)+) => {$(
         impl<$($generics)*> ToSchema for $ty {
+            fn name() -> Cow<'static, str> {
+                Cow::Owned(format!("Map_{}_{}", K::name(), V::name()))
+            }
+
             fn schema() -> Schema {
                 Schema::map(K::schema(), V::schema())
             }
@@ -299,6 +325,7 @@ macro_rules! map {
             }
 
             fn components(out: &mut Vec<(String, Schema)>) {
+                K::components(out);
                 V::components(out);
             }
         }

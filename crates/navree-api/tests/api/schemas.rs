@@ -78,8 +78,96 @@ async fn conflicting_referenced_schema_names_fail_boot() {
     assert!(error.contains("#[schema(as"), "says how to fix it: {error}");
 }
 
+mod first {
+    use navree_openapi::ToSchema;
+
+    #[derive(ToSchema)]
+    #[allow(dead_code)]
+    pub struct Item {
+        pub in_first: String,
+    }
+}
+
+mod second {
+    use navree_openapi::ToSchema;
+
+    #[derive(ToSchema)]
+    #[allow(dead_code)]
+    pub struct Item {
+        pub in_second: String,
+    }
+}
+
+#[derive(ToSchema)]
+#[allow(dead_code)]
+struct Both {
+    a: first::Item,
+    b: second::Item,
+}
+
 #[tokio::test]
-async fn same_named_body_schemas_are_inlined() {
+async fn two_types_of_one_name_in_one_schema_refuse_the_boot_and_are_named() {
+    let builder = app_with(
+        ApiOptions::default(),
+        vec![documented("/both", responding(schema_fn::<Both>))],
+    );
+    let error = boot_error(builder).await;
+    assert!(error.contains("first::Item"), "{error}");
+    assert!(error.contains("second::Item"), "{error}");
+    assert!(error.contains("GET /api/extra/both"), "{error}");
+    assert!(error.contains("#[schema(as"), "{error}");
+}
+
+#[tokio::test]
+async fn two_body_types_of_one_name_refuse_the_boot_and_are_named() {
+    let builder = app_with(
+        ApiOptions::default(),
+        vec![
+            documented("/first", responding(schema_fn::<first::Item>)),
+            documented("/second", responding(schema_fn::<second::Item>)),
+        ],
+    );
+    let error = boot_error(builder).await;
+    assert!(error.contains("first::Item"), "{error}");
+    assert!(error.contains("second::Item"), "{error}");
+}
+
+#[derive(ToSchema)]
+#[allow(dead_code)]
+struct Pages {
+    notes: Page<Note>,
+    deals: Page<crate::support::Deal>,
+}
+
+#[tokio::test]
+async fn pages_of_two_types_in_one_schema_are_two_components() {
+    let app = app_registering(
+        vec![documented("/pages", responding(schema_fn::<Pages>))],
+        |m| {
+            m.api_schema::<Note>();
+        },
+    )
+    .boot()
+    .await
+    .unwrap();
+    let doc = document(&app).await;
+    let schemas = &doc["components"]["schemas"];
+    assert_eq!(
+        schemas["Pages"]["properties"]["notes"]["$ref"],
+        "#/components/schemas/Page_Note"
+    );
+    assert_eq!(
+        schemas["Page_Note"]["properties"]["data"]["items"]["$ref"],
+        "#/components/schemas/Note"
+    );
+    assert_eq!(
+        schemas["Page_Deal"]["properties"]["data"]["items"]["$ref"],
+        "#/components/schemas/Deal"
+    );
+}
+
+#[tokio::test]
+async fn generic_bodies_are_a_component_each() {
     let app = app_registering(
         vec![
             documented(
@@ -94,7 +182,7 @@ async fn same_named_body_schemas_are_inlined() {
     )
     .boot()
     .await
-    .expect("same-named body schemas do not fail the boot");
+    .expect("pages of two types do not share a name");
     let doc = document(&app).await;
     let schema = |path: &str| {
         doc["paths"][path]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
@@ -103,16 +191,18 @@ async fn same_named_body_schemas_are_inlined() {
 
     assert_eq!(
         schema("/api/extra/deals"),
-        json!({"$ref": "#/components/schemas/Page"})
+        json!({"$ref": "#/components/schemas/Page_Deal"})
     );
-    let notes = schema("/api/extra/notes");
-    assert!(notes.get("$ref").is_none(), "inlined: {notes}");
     assert_eq!(
-        notes["properties"]["data"]["items"]["$ref"],
+        schema("/api/extra/notes"),
+        json!({"$ref": "#/components/schemas/Page_Note"})
+    );
+    assert_eq!(
+        doc["components"]["schemas"]["Page_Note"]["properties"]["data"]["items"]["$ref"],
         "#/components/schemas/Note"
     );
     assert_eq!(
-        doc["components"]["schemas"]["Page"]["properties"]["data"]["items"]["$ref"],
+        doc["components"]["schemas"]["Page_Deal"]["properties"]["data"]["items"]["$ref"],
         "#/components/schemas/Deal"
     );
     assert!(doc["components"]["schemas"].get("Note").is_some());

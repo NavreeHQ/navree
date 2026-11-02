@@ -1,0 +1,5 @@
+error: #[schema(inline)] would put `List` inside itself: a type that contains itself needs a `$ref`, so remove `inline`
+ --> tests/ui/to_schema/inline_itself.rs:5:5
+  |
+5 |     #[schema(inline)]
+  |     ^

@@ -131,11 +131,26 @@ impl std::fmt::Display for NotASchema {
 
 impl std::error::Error for NotASchema {}
 
+/// The Rust type a component came from, for the error when two types share a
+/// name. It is not part of the schema: it is never written, and two schemas
+/// are equal whatever it says.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RustType(pub Option<&'static str>);
+
+impl PartialEq for RustType {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
 /// One JSON Schema. Every field is a keyword; [`extra`](Schema::extra) holds
 /// the ones without a field, so reading a schema and writing it again loses
 /// nothing but the order of its keywords.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Schema {
+    #[doc(hidden)]
+    pub rust_type: RustType,
     /// `$ref`.
     pub reference: Option<String>,
     /// `oneOf`.
@@ -265,6 +280,13 @@ impl Schema {
         }
     }
 
+    /// `{"not": {}}`: no value is allowed, as for an enum without variants.
+    pub fn never() -> Self {
+        let mut schema = Self::default();
+        schema.extra.insert("not".to_owned(), Value::Object(Map::new()));
+        schema
+    }
+
     /// `{"type": "string", "enum": values}`.
     pub fn string_enum<I, S>(values: I) -> Self
     where
@@ -308,6 +330,20 @@ impl Schema {
     #[must_use]
     pub fn examples(mut self, values: Vec<Value>) -> Self {
         self.examples = values;
+        self
+    }
+
+    /// `"readOnly": true`: only in responses.
+    #[must_use]
+    pub fn read_only(mut self) -> Self {
+        self.read_only = Some(true);
+        self
+    }
+
+    /// `"writeOnly": true`: only in requests.
+    #[must_use]
+    pub fn write_only(mut self) -> Self {
+        self.write_only = Some(true);
         self
     }
 

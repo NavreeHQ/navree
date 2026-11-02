@@ -75,3 +75,9 @@ fn workflows_report_misuse() {
 fn bad_duration_is_error() {
     trybuild::TestCases::new().compile_fail("tests/ui/bad_duration_is_error.rs");
 }
+
+/// `#[derive(ToSchema)]`: what it can't describe doesn't compile.
+#[test]
+fn to_schema_refuses_what_it_cannot_describe() {
+    trybuild::TestCases::new().compile_fail("tests/ui/to_schema/*.rs");
+}
