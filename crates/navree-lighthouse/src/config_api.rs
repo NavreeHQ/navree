@@ -5,8 +5,9 @@
 //! token do not need one. Every change to settings and channels is audited
 //! when the app has an audit log.
 
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::{Duration, Instant};
 
 use chrono::{TimeDelta, Utc};
 use http::{HeaderMap, Method};
@@ -49,7 +50,14 @@ const TAG: &str = "Lighthouse";
 pub struct LighthouseConfigController {
     lighthouse: Arc<Lighthouse>,
     audit: Option<Arc<dyn AuditSink>>,
+    /// When each channel's last test alerts went out.
+    tests: Mutex<HashMap<String, VecDeque<Instant>>>,
 }
+
+/// Test alerts one channel may send through this process in
+/// [`TEST_WINDOW`]: enough to try a channel, too few to flood it.
+const TESTS_PER_WINDOW: usize = 5;
+const TEST_WINDOW: Duration = Duration::from_secs(60);
 
 impl Injectable for LighthouseConfigController {
     fn dependencies() -> Vec<ProviderKey> {
@@ -61,6 +69,7 @@ impl Injectable for LighthouseConfigController {
             Ok(LighthouseConfigController {
                 lighthouse: r.get::<Lighthouse>().await?,
                 audit: r.app().try_get::<dyn AuditSink>().await,
+                tests: Mutex::new(HashMap::new()),
             })
         })
     }
@@ -198,9 +207,15 @@ impl Controller for LighthouseConfigController {
             RouteDef::on(
                 Method::POST,
                 path("/alerts/channels/{name}/test"),
-                move |name: Path<String>| {
+                move |CurrentPrincipal(principal): CurrentPrincipal,
+                      ip: ClientIp,
+                      headers: HeaderMap,
+                      name: Path<String>| {
                     let this = channel_test.clone();
-                    async move { this.test_channel(&name.0).await }
+                    async move {
+                        this.test_channel(Actor::new(principal.user_id, ip, &headers), &name.0)
+                            .await
+                    }
                 },
             )
             .can(CONFIGURE, LighthouseSubject::SUBJECT, None)
@@ -507,8 +522,29 @@ impl LighthouseConfigController {
         Ok(Json(channel_json(&after)))
     }
 
-    async fn test_channel(&self, name: &str) -> Result<Json<Value>, AppError> {
+    /// Takes a place in `name`'s window of test alerts, or says how long
+    /// until there is one.
+    fn take_test_slot(&self, name: &str, now: Instant) -> Result<(), Duration> {
+        let mut tests = self.tests.lock().unwrap_or_else(PoisonError::into_inner);
+        let sent = tests.entry(name.to_owned()).or_default();
+        while sent
+            .front()
+            .is_some_and(|at| now.duration_since(*at) >= TEST_WINDOW)
+        {
+            sent.pop_front();
+        }
+        if sent.len() >= TESTS_PER_WINDOW {
+            let oldest = sent.front().copied().unwrap_or(now);
+            return Err(TEST_WINDOW.saturating_sub(now.duration_since(oldest)));
+        }
+        sent.push_back(now);
+        Ok(())
+    }
+
+    async fn test_channel(&self, actor: Actor, name: &str) -> Result<Json<Value>, AppError> {
         self.channel_info(name)?;
+        self.take_test_slot(name, Instant::now())
+            .map_err(AppError::too_many_requests)?;
         let results = self.lighthouse.test_alerts(Some(name)).await?;
         let alerter = self.lighthouse.alerter();
         let result = results.into_iter().next();
@@ -522,6 +558,14 @@ impl LighthouseConfigController {
             },
             None => (false, Some("the channel did not answer".to_owned())),
         };
+        self.audit(
+            &actor,
+            "lighthouse.alert_channel.tested",
+            ("lighthouse_alert_channel", name.to_owned()),
+            Value::Null,
+            json!({ "ok": ok, "error": error }),
+        )
+        .await;
         Ok(Json(json!({ "channel": name, "ok": ok, "error": error })))
     }
 

@@ -365,3 +365,28 @@ async fn the_settings_page_is_read_only_without_the_ability_and_says_what_is_fix
     assert!(page.contains("data-action=\"save-settings\""));
     app.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn settings_that_remove_the_alert_throttle_are_refused() {
+    let app = builder().build().await;
+    people(&app).await;
+    let token = token(&app, "admin@acme.test").await;
+    let client = app.client();
+    for (values, names) in [
+        (json!({ "alerts.cooldown_minutes": 0 }), "Cooldown"),
+        (
+            json!({ "alerts.spike.occurrences": 1 }),
+            "Spike: occurrences",
+        ),
+    ] {
+        let response = client
+            .put("/_lighthouse/api/settings")
+            .bearer(&token)
+            .json(&json!({ "values": values }))
+            .send()
+            .await;
+        assert_eq!(response.status().as_u16(), 400, "{values}");
+        assert!(response.text().contains(names), "{}", response.text());
+    }
+    app.shutdown().await.unwrap();
+}

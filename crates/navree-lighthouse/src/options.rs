@@ -363,8 +363,11 @@ impl LighthouseOptions {
         {
             errors.push("lighthouse.database_url must not be empty when set".to_owned());
         }
-        if self.alerts.spike.occurrences == 0 {
-            errors.push("lighthouse.alerts.spike.occurrences must be at least 1".to_owned());
+        if self.alerts.spike.occurrences < 2 {
+            errors.push("lighthouse.alerts.spike.occurrences must be at least 2".to_owned());
+        }
+        if self.alerts.cooldown_minutes == 0 {
+            errors.push("lighthouse.alerts.cooldown_minutes must be at least 1".to_owned());
         }
         if self.alerts.spike.minutes == 0 || self.alerts.spike.minutes > 60 {
             errors.push("lighthouse.alerts.spike.minutes must be between 1 and 60".to_owned());

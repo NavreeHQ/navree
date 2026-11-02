@@ -145,20 +145,20 @@ pub(crate) const SETTINGS: [SettingDef; 11] = [
         key: "alerts.cooldown_minutes",
         group: "Alert throttling",
         label: "Cooldown",
-        help: "At most one alert per issue and kind in this window.",
+        help: "At most one alert per issue and kind in this window. At least a minute: without it every failure could send an alert.",
         unit: "minutes",
         kind: SettingKind::Integer,
-        min: 0.0,
+        min: 1.0,
         max: 10_080.0,
     },
     SettingDef {
         key: "alerts.spike.occurrences",
         group: "Alert throttling",
         label: "Spike: occurrences",
-        help: "Occurrences of one issue within the spike window that make a spike alert.",
+        help: "Occurrences of one issue within the spike window that make a spike alert. At least two: one would be every failure.",
         unit: "",
         kind: SettingKind::Integer,
-        min: 1.0,
+        min: 2.0,
         max: 1_000_000.0,
     },
     SettingDef {
@@ -508,6 +508,15 @@ mod tests {
             "only listed settings change"
         );
         assert!(check("sample.jobs", &Value::Null).is_err());
+    }
+
+    #[test]
+    fn a_stored_value_below_the_floor_of_the_alert_throttle_does_not_apply() {
+        let tuning = Tuning::new(&LighthouseOptions::default());
+        let mut overrides = BTreeMap::new();
+        overrides.insert("alerts.cooldown_minutes".to_owned(), json!(0));
+        tuning.apply(&overrides);
+        assert_eq!(tuning.cooldown_minutes(), 30);
     }
 
     #[test]

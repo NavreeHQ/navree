@@ -344,3 +344,61 @@ async fn changing_and_testing_channels_needs_the_configure_ability_and_a_known_c
     assert!(page.contains("Muted"), "{page}");
     app.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn test_alerts_are_throttled_per_channel_and_audited() {
+    use navree_contracts::{AuditEntry, AuditSink};
+    use navree_kernel::{BoxError, BoxFuture};
+    use std::sync::Mutex;
+
+    #[derive(Clone, Default)]
+    struct Audit(Arc<Mutex<Vec<AuditEntry>>>);
+    impl AuditSink for Audit {
+        fn record(&self, entry: AuditEntry) -> BoxFuture<'_, Result<(), BoxError>> {
+            self.0.lock().unwrap().push(entry);
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    let audit = Audit::default();
+    let (builder, server) = channels(200);
+    let app = builder
+        .override_value::<dyn AuditSink>(Arc::new(audit.clone()))
+        .build()
+        .await;
+    people(&app).await;
+    let admin = token(&app, "admin@acme.test").await;
+    let client = app.client();
+    let mut statuses = Vec::new();
+    for _ in 0..50 {
+        statuses.push(
+            client
+                .post("/_lighthouse/api/alerts/channels/slack/test")
+                .bearer(&admin)
+                .send()
+                .await
+                .status()
+                .as_u16(),
+        );
+    }
+    let sent = sent_to(&server, SLACK);
+    assert_eq!(sent, 5, "at most five a minute: {statuses:?}");
+    assert_eq!(statuses.iter().filter(|s| **s == 429).count(), 45);
+    let audited = audit
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|entry| entry.action == "lighthouse.alert_channel.tested")
+        .count();
+    assert_eq!(audited, 5, "every test that went out is audited");
+    // The limit is per channel.
+    client
+        .post("/_lighthouse/api/alerts/channels/webhook/test")
+        .bearer(&admin)
+        .send()
+        .await
+        .assert_status(200);
+    assert_eq!(sent_to(&server, WEBHOOK), 1);
+    app.shutdown().await.unwrap();
+}
