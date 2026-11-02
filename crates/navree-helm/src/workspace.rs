@@ -7,6 +7,10 @@
 //! `WorkspaceModule`, `X-Workspace` without it) or the panel's workspace
 //! cookie (set by the form in the sidebar).
 //!
+//! A write takes more than being let in: a role that can't write, and a read-only
+//! demo, take none ([`WorkspaceWrites`](navree_access::WorkspaceWrites)), and
+//! whoever holds what app-wide doesn't change that.
+//!
 //! A workspace a request names is entered only for a user who may work in it:
 //! a member, through `WorkspaceModule` (see
 //! [`WorkspaceGate`](navree_access::WorkspaceGate)), or whoever the app lets in
@@ -34,7 +38,9 @@ use std::future::Future;
 use std::sync::Arc;
 
 use http::HeaderMap;
-use navree_access::{PinnedWorkspace, PrincipalAccess, WorkspaceEntry, WorkspaceGate};
+use navree_access::{
+    PinnedWorkspace, PrincipalAccess, WorkspaceEntry, WorkspaceGate, WorkspaceWrites,
+};
 use navree_db::{Backend, Executor as _, Statement, Uow};
 use navree_http::AppError;
 use navree_kernel::{AppContext, BoxFuture};
@@ -267,7 +273,26 @@ pub(crate) async fn admission(
         Some(gate) => Some(gate.check(user_id, workspace, writes).await?),
         None => None,
     };
-    decide(app, core, user_id, access, workspace, entry).await
+    let decided = decide(app, core, user_id, access, workspace, entry).await?;
+    if decided == Ok(Admitted::Staff) && writes {
+        staff_writes(gate.as_deref(), user_id, workspace).await?;
+    }
+    Ok(decided)
+}
+
+/// An error if `workspace` is a demo that takes no writes, which staff are held
+/// to as much as anyone.
+async fn staff_writes(
+    gate: Option<&dyn WorkspaceGate>,
+    user_id: Uuid,
+    workspace: Uuid,
+) -> Result<(), AppError> {
+    if let Some(gate) = gate
+        && gate.writes(user_id, workspace).await?.read_only_demo
+    {
+        return Err(AppError::demo_read_only());
+    }
+    Ok(())
 }
 
 /// For a request that names `workspace`: checks the user and enters it.
@@ -288,9 +313,43 @@ pub(crate) async fn admit_request(
     };
     let decided = decide(app, core, user_id, access, workspace, entry).await?;
     if decided == Ok(Admitted::Staff) {
+        if !matches!(
+            parts.method,
+            http::Method::GET | http::Method::HEAD | http::Method::OPTIONS | http::Method::TRACE
+        ) {
+            staff_writes(gate.as_deref(), user_id, workspace).await?;
+        }
         enter_in(app, uow, Some(workspace)).await?;
     }
     Ok(decided)
+}
+
+/// Why a workspace takes no write from a user.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RefusedWrite {
+    /// It is a read-only demo.
+    Demo,
+    /// Their role can't write.
+    Role,
+}
+
+impl RefusedWrite {
+    /// What `error` says, if it says only that.
+    pub(crate) fn of(error: &AppError) -> Option<RefusedWrite> {
+        match error.code.as_str() {
+            "demo_read_only" => Some(RefusedWrite::Demo),
+            "workspace_read_only" => Some(RefusedWrite::Role),
+            _ => None,
+        }
+    }
+
+    /// The answer to a write.
+    pub(crate) fn error(self) -> AppError {
+        match self {
+            RefusedWrite::Demo => AppError::demo_read_only(),
+            RefusedWrite::Role => WorkspaceWrites::read_only_role_error(),
+        }
+    }
 }
 
 /// The header requests name their workspace with here, if they may.

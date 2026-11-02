@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use http::header::USER_AGENT;
 use http::request::Parts;
-use navree_access::{CurrentAccess, PinnedWorkspace};
+use navree_access::{CurrentAccess, PinnedWorkspace, WorkspaceGate};
 use navree_contracts::{AuthState, RequestId};
 use navree_db::Uow;
 use navree_http::extract::FromRequestParts;
@@ -14,7 +14,7 @@ use navree_kernel::AppContext;
 use crate::core::Core;
 use crate::cx::{Client, Cx};
 use crate::session::PanelSession;
-use crate::workspace::{self, Admitted, NamedBy};
+use crate::workspace::{self, Admitted, NamedBy, RefusedWrite};
 
 /// A signed-in panel request: its [`Cx`] and session.
 pub(crate) struct Panel {
@@ -69,6 +69,7 @@ async fn panel(parts: &mut Parts, enter_named: bool) -> Result<Panel, AppError> 
         }
         let mut named_by = None;
         let mut staff = None;
+        let mut refused_write = None;
         // A request that is not inside a workspace may name one, and is let in
         // only if the user may work in it.
         if enter_named && uow.workspace().is_none() {
@@ -80,9 +81,9 @@ async fn panel(parts: &mut Parts, enter_named: bool) -> Result<Panel, AppError> 
             };
             if let Some((named, by)) = named {
                 match workspace::admit_request(parts, &app, &core, &uow, user_id, &access, named)
-                    .await?
+                    .await
                 {
-                    Ok(admitted) => {
+                    Ok(Ok(admitted)) => {
                         named_by = Some(by);
                         if admitted == Admitted::Staff {
                             staff = Some(named);
@@ -90,10 +91,38 @@ async fn panel(parts: &mut Parts, enter_named: bool) -> Result<Panel, AppError> 
                     }
                     // A cookie is what the browser kept: it stops counting, and the
                     // user can still reach the form that changes it.
-                    Err(_) if by == NamedBy::Cookie => {}
-                    Err(refused) => return Err(refused.error()),
+                    Ok(Err(_)) if by == NamedBy::Cookie => {}
+                    Ok(Err(refused)) => return Err(refused.error()),
+                    // Nor does it get in the way of a write somewhere else: a
+                    // write that would have gone there is told why it can't.
+                    Err(error) => match RefusedWrite::of(&error) {
+                        Some(refused) if by == NamedBy::Cookie => refused_write = Some(refused),
+                        _ => return Err(error),
+                    },
                 }
             }
+        }
+        // What the workspace the request is in takes from the user, for a request
+        // that may write. A workspace the app entered hasn't been asked yet.
+        let mut writes = None;
+        if enter_named
+            && !matches!(
+                parts.method,
+                http::Method::GET
+                    | http::Method::HEAD
+                    | http::Method::OPTIONS
+                    | http::Method::TRACE
+            )
+            && let Some(entered) = uow.workspace()
+            && let Some(gate) = app.try_get::<dyn WorkspaceGate>().await
+        {
+            let allowed = gate.writes(user_id, entered).await?;
+            if named_by.is_none()
+                && let Some(refusal) = allowed.refusal()
+            {
+                return Err(refusal);
+            }
+            writes = Some(allowed);
         }
         let ClientIp(ip) = ClientIp::from_parts(parts);
         let client = Client {
@@ -123,6 +152,8 @@ async fn panel(parts: &mut Parts, enter_named: bool) -> Result<Panel, AppError> 
             tz_offset: None,
             named_by,
             pin,
+            writes,
+            refused_write,
         };
         if let Some(entered) = staff {
             cx.audit_outside(workspace::staff_entry(

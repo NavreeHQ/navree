@@ -546,6 +546,9 @@ impl<R: Resource> Handle<R> {
     /// Nothing falls back to the records of every workspace.
     fn in_a_workspace(&self, cx: &Cx) -> Result<(), AppError> {
         if self.info.workspaces == Some(Workspaces::Current) && cx.uow.workspace().is_none() {
+            if let Some(refused) = cx.refused_write {
+                return Err(refused.error());
+            }
             return Err(AppError::bad_request(format!(
                 "Choose a workspace first: {} belong to workspaces.",
                 self.info.label
@@ -556,6 +559,36 @@ impl<R: Resource> Handle<R> {
 
     fn shape(&self, column: &str) -> Shape {
         self.shapes.get(column).copied().unwrap_or(Shape::Other)
+    }
+
+    /// The workspace of `record`, when it belongs to one.
+    fn owner_of(&self, record: &RecordOf<R>) -> Result<Option<uuid::Uuid>, AppError> {
+        Ok(save::owner(record.model())?.flatten())
+    }
+
+    /// An error if the workspace of a record the user may otherwise write takes
+    /// no such write from them.
+    async fn record_writes(
+        &self,
+        cx: &Cx,
+        record: &RecordOf<R>,
+        action: &str,
+    ) -> Result<(), AppError> {
+        if self.info.workspaces.is_none() {
+            return Ok(());
+        }
+        let prefix = <R::Model as Subject>::PERMISSION_PREFIX;
+        cx.record_writes(self.owner_of(record)?, prefix, action)
+            .await
+    }
+
+    /// The workspace a form across workspaces names.
+    fn named_by_form(&self, input: &Map<String, Json>) -> Option<uuid::Uuid> {
+        if self.info.workspaces != Some(Workspaces::Every) {
+            return None;
+        }
+        let column = R::Model::meta().workspace_column()?;
+        uuid::Uuid::parse_str(input.get(column)?.as_str()?.trim()).ok()
     }
 
     /// Column `name` of the model, qualified with its table.
@@ -1377,6 +1410,11 @@ impl<R: Resource> ErasedResource for Handle<R> {
                 return Err(AppError::forbidden());
             }
             self.in_a_workspace(cx)?;
+            if self.info.workspaces.is_some() {
+                let prefix = <R::Model as Subject>::PERMISSION_PREFIX;
+                cx.role_writes(self.named_by_form(&input), prefix, CREATE)
+                    .await?;
+            }
             let editable: Vec<Field> = self
                 .info
                 .fields
@@ -1431,6 +1469,7 @@ impl<R: Resource> ErasedResource for Handle<R> {
             if !cx.can(UPDATE, subject, Some(&json)) {
                 return Err(AppError::forbidden());
             }
+            self.record_writes(cx, &record, UPDATE).await?;
             let denied: Vec<&str> = input
                 .keys()
                 .map(String::as_str)
@@ -1472,6 +1511,7 @@ impl<R: Resource> ErasedResource for Handle<R> {
             if !cx.can(DELETE, subject, Some(&record_json(&record))) {
                 return Err(AppError::forbidden());
             }
+            self.record_writes(cx, &record, DELETE).await?;
             self.resource.delete(&self.save_context(cx), record).await
         })
     }
@@ -1527,6 +1567,9 @@ impl<R: Resource> ErasedResource for Handle<R> {
             if permitted.is_empty() {
                 return Err(AppError::forbidden()
                     .with_detail("You may not run this action on the selected records."));
+            }
+            for record in &permitted {
+                self.record_writes(cx, record, action.ability).await?;
             }
             let input = self.checked(cx, &action.fields, input, true, false).await?;
             let permitted_ids: Vec<String> = permitted.iter().map(|r| self.raw_id(r)).collect();

@@ -160,7 +160,7 @@ fn record_change<M: Model>(
 
 /// The workspace `model` belongs to: `None` when `M` is not scoped to
 /// workspaces, `Some(None)` when its workspace column is empty.
-fn owner<M: Model>(model: &M) -> Result<Option<Option<Uuid>>, AppError> {
+pub(crate) fn owner<M: Model>(model: &M) -> Result<Option<Option<Uuid>>, AppError> {
     let Some(column) = M::meta().workspace_column() else {
         return Ok(None);
     };
@@ -277,6 +277,9 @@ async fn named_by_form<M: Model>(
     }
     if workspace::bound_by_row_level_security(uow, M::meta().table()).await? {
         return Err(refused.error());
+    }
+    if gate.writes(ctx.user_id(), named).await?.read_only_demo {
+        return Err(AppError::demo_read_only());
     }
     workspace::outside(ctx.app(), uow, insert::<M>(uow, model)).await
 }

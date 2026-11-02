@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use http::request::Parts;
-use navree_access::{WorkspaceEntry, WorkspaceGate};
+use navree_access::{WorkspaceEntry, WorkspaceGate, WorkspaceWrites};
 use navree_contracts::AuthState;
 use navree_db::Uow;
 use navree_http::AppError;
@@ -12,7 +12,8 @@ use navree_kernel::BoxFuture;
 use uuid::Uuid;
 
 use crate::core::Core;
-use crate::current::{app_error, enter_named, guest_member};
+use crate::current::{app_error, enter_named, guest_member, writes};
+use crate::demo::DemoIntent;
 use crate::entity::Workspace;
 use crate::role::WorkspaceRole;
 use crate::{Isolation, ResolverKind, WorkspaceError, Workspaces};
@@ -49,6 +50,45 @@ impl Gate {
         };
         Ok(Some((workspace, role)))
     }
+
+    /// What `workspace` takes from a user with `role`, if they have one.
+    fn writes_of(&self, workspace: &Workspace, role: Option<&WorkspaceRole>) -> WorkspaceWrites {
+        let config = &self.0.config;
+        let demo_editor = workspace.is_demo()
+            && config.demo.allows_write(
+                &http::Method::POST,
+                None,
+                None,
+                role.map_or("", WorkspaceRole::as_str),
+            );
+        let read_only_demo =
+            workspace.is_demo() && config.demo.mode == crate::DemoMode::ReadOnly && !demo_editor;
+        let Some(role) = role else {
+            return WorkspaceWrites {
+                read_only_demo,
+                ..WorkspaceWrites::default()
+            };
+        };
+        // An owner has everything, and `workspace.roles` only adds to that.
+        let role_permissions = match role {
+            WorkspaceRole::Owner => Vec::new(),
+            role => config
+                .roles
+                .get(role.as_str())
+                .map(|options| options.permissions.clone())
+                .unwrap_or_default(),
+        };
+        let edits_read_only_demo = demo_editor && config.demo.mode == crate::DemoMode::ReadOnly;
+        WorkspaceWrites {
+            read_only_demo,
+            read_only_role: !edits_read_only_demo
+                && !matches!(
+                    role,
+                    WorkspaceRole::Owner | WorkspaceRole::Admin | WorkspaceRole::Member
+                ),
+            role_permissions,
+        }
+    }
 }
 
 impl WorkspaceGate for Gate {
@@ -77,15 +117,8 @@ impl WorkspaceGate for Gate {
             let Some(role) = role else {
                 return Ok(WorkspaceEntry::NotAMember);
             };
-            let config = &self.0.config;
-            if writes
-                && found.is_demo()
-                && config.demo.mode == crate::DemoMode::ReadOnly
-                && !config
-                    .demo
-                    .allows_write(&http::Method::POST, None, None, role.as_str())
-            {
-                return Err(app_error(WorkspaceError::DemoReadOnly));
+            if writes && let Some(refusal) = self.writes_of(&found, Some(&role)).refusal() {
+                return Err(refusal);
             }
             Ok(WorkspaceEntry::Allowed)
         })
@@ -106,11 +139,34 @@ impl WorkspaceGate for Gate {
             match self.standing(user, workspace).await? {
                 None => Ok(WorkspaceEntry::NoSuchWorkspace),
                 Some((_, None)) => Ok(WorkspaceEntry::NotAMember),
-                Some((_, Some(_))) => {
+                Some((found, Some(role))) => {
+                    // A write to a read-only demo is refused on entering it, with
+                    // the routes that stay open in mind.
+                    let intent = parts.extensions.get::<DemoIntent>().copied();
+                    let allowed = self.writes_of(&found, Some(&role));
+                    if writes(&parts.method, intent)
+                        && !allowed.read_only_demo
+                        && allowed.role_is_read_only()
+                    {
+                        return Err(WorkspaceWrites::read_only_role_error());
+                    }
                     enter_named(parts, workspace).await?;
                     Ok(WorkspaceEntry::Allowed)
                 }
             }
+        })
+    }
+
+    fn writes(
+        &self,
+        user: Uuid,
+        workspace: Uuid,
+    ) -> BoxFuture<'_, Result<WorkspaceWrites, AppError>> {
+        Box::pin(async move {
+            Ok(match self.standing(user, workspace).await? {
+                Some((found, role)) => self.writes_of(&found, role.as_ref()),
+                None => WorkspaceWrites::default(),
+            })
         })
     }
 

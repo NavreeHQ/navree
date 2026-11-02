@@ -1,6 +1,6 @@
 //! [`HelmActionJob`]: a queued action (`Action::queued`).
 
-use navree_access::AbilityFactory;
+use navree_access::{AbilityFactory, WorkspaceGate};
 use navree_contracts::{AuthVia, Job, JobContext, Principal};
 use navree_db::Db;
 use navree_kernel::BoxError;
@@ -55,6 +55,7 @@ impl Job for HelmActionJob {
             .uow(Some(self.user_id), Some(format!("job-{}", ctx.job_id)))
             .await;
         let mut staff = None;
+        let mut writes = None;
         if let Some(workspace) = self.workspace {
             let may_not = |why: &str| {
                 format!(
@@ -73,6 +74,11 @@ impl Job for HelmActionJob {
                     })?;
             if admitted == Admitted::Staff {
                 staff = Some(workspace);
+            }
+            if let Some(gate) = ctx.app.try_get::<dyn WorkspaceGate>().await {
+                writes = Some(gate.writes(self.user_id, workspace).await.map_err(|error| {
+                    may_not(error.detail.as_deref().unwrap_or(&error.title))
+                })?);
             }
             workspace::enter_in(&ctx.app, &uow, Some(workspace))
                 .await
@@ -95,6 +101,8 @@ impl Job for HelmActionJob {
             // The records were picked inside the credential's workspace, and the
             // job runs in that workspace.
             pin: None,
+            writes,
+            refused_write: None,
         };
         if let Some(workspace) = staff {
             cx.audit_outside(workspace::staff_entry(workspace, "queued action"))

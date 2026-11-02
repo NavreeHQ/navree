@@ -423,7 +423,7 @@ fn check_demo_write(
 
 /// Whether a request writes: as its [`DemoIntent`] says, else unless its
 /// method is `GET`, `HEAD`, `OPTIONS` or `TRACE`.
-fn writes(method: &http::Method, intent: Option<DemoIntent>) -> bool {
+pub(crate) fn writes(method: &http::Method, intent: Option<DemoIntent>) -> bool {
     match intent {
         Some(DemoIntent::Read) => false,
         Some(DemoIntent::Write) => true,

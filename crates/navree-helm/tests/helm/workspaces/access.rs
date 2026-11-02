@@ -13,7 +13,9 @@ use navree_workspace::{
 
 use super::*;
 
+mod demo;
 mod pinned;
+mod roles;
 mod staff_audit;
 
 /// `users(id, name, email)`, as the auth module creates it.
