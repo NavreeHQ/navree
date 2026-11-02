@@ -76,6 +76,17 @@ const FLUSH_AT: usize = 500;
 /// Issue hits kept for the next write while the database is unreachable.
 const MAX_RETRY_HITS: usize = 100_000;
 
+/// Whether a process records the statements and calls it makes outside any
+/// request or job. The processes that serve and work (`serve`, and the
+/// `:work` commands: `queue:work`, `schedule:work`, `fleet:work`) do. A
+/// one-off command (a migration, a seeder, a script) does not: its DDL and
+/// inserts are how it does its job, not application behaviour to watch, and
+/// would otherwise open slow-query issues of their own. Exceptions and
+/// reports from a command are still recorded.
+pub(crate) fn records_background_work(process: &str) -> bool {
+    process == "serve" || process.ends_with(":work")
+}
+
 /// What the engine receives.
 pub(crate) enum Input {
     /// A telemetry record.
@@ -414,6 +425,9 @@ pub(crate) struct Engine {
     labels: Labels,
     redactor: Redactor,
     ignored_paths: Vec<String>,
+    /// Whether statements and calls made outside a request or job are
+    /// recorded (see [`records_background_work`]).
+    background: bool,
     units: Sharded<HashMap<UnitKey, Unit>>,
     counts: Counts,
     pending: Mutex<Pending>,
@@ -433,6 +447,7 @@ impl Engine {
         ignored_paths.push(options.mount_path().to_owned());
         ignored_paths.push(format!("{}/*", options.mount_path()));
         Arc::new(Engine {
+            background: records_background_work(&labels.process),
             options,
             labels,
             redactor,
@@ -733,6 +748,9 @@ impl Engine {
         let Some(pending) = pending else {
             return;
         };
+        if !self.background {
+            return;
+        }
         let origin = self.labels.process.clone();
         self.query_done(pending, &origin, &Origin::default(), now);
     }
@@ -768,6 +786,9 @@ impl Engine {
         let Some(pending) = pending else {
             return;
         };
+        if !self.background {
+            return;
+        }
         let culprit = self.labels.process.clone();
         self.call_done(pending, &culprit, &Origin::default(), now);
     }
@@ -1558,14 +1579,18 @@ mod tests {
     use super::*;
 
     fn processor(options: LighthouseOptions) -> EngineHandle {
+        processor_of("serve", options)
+    }
+
+    fn processor_of(process: &str, options: LighthouseOptions) -> EngineHandle {
         Engine::new(
             Arc::new(options),
             Labels {
                 environment: "test".into(),
                 release: "r1".into(),
                 server: "host".into(),
-                process: "serve".into(),
-                process_key: "host/serve/x".into(),
+                process: process.into(),
+                process_key: format!("host/{process}/x"),
             },
             Redactor::new(&[]),
         )
@@ -1838,6 +1863,62 @@ mod tests {
             1,
             "alert deliveries are never recorded"
         );
+    }
+
+    fn outgoing(url: &str, ms: u64) -> TelemetryEvent {
+        TelemetryEvent::HttpClientRequest(HttpClientRequest {
+            method: "GET".into(),
+            url: url.into(),
+            status: Some(200),
+            duration: Duration::from_millis(ms),
+            attempts: 1,
+            error: None,
+            span_id: None,
+        })
+    }
+
+    #[test]
+    fn one_off_commands_record_no_statements_or_calls_of_their_own() {
+        for process in ["migrate", "migrate:fresh", "db:seed", "evidence", "fleet"] {
+            let p = processor_of(process, LighthouseOptions::default());
+            let now = Utc::now();
+            p.handle(
+                record(EventContext::default(), query("CREATE TABLE tasks (id int)", 900)),
+                now,
+            );
+            p.handle(
+                record(EventContext::default(), query("INSERT INTO tasks VALUES (?)", 900)),
+                now,
+            );
+            p.handle(
+                record(EventContext::default(), outgoing("https://slow.example/x", 9_000)),
+                now,
+            );
+            assert!(p.pending_hits().is_empty(), "{process}: no issues");
+            assert!(p.take_rows().is_empty(), "{process}: no counts");
+        }
+    }
+
+    #[test]
+    fn a_command_that_fails_still_reports_its_exception() {
+        let p = processor_of("migrate", LighthouseOptions::default());
+        p.handle(
+            record(EventContext::default(), exception("column already exists")),
+            Utc::now(),
+        );
+        assert_eq!(p.pending_hits().len(), 1);
+    }
+
+    #[test]
+    fn long_running_processes_record_statements_outside_requests() {
+        for process in ["serve", "queue:work", "schedule:work", "fleet:work"] {
+            let p = processor_of(process, LighthouseOptions::default());
+            p.handle(
+                record(EventContext::default(), query("SELECT 1", 900)),
+                Utc::now(),
+            );
+            assert_eq!(p.pending_hits().len(), 1, "{process}");
+        }
     }
 
     #[test]
