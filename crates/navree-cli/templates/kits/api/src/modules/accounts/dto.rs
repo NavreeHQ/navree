@@ -1,8 +1,8 @@
 //! Response bodies of `/api/v1/account`.
 
 use chrono::{DateTime, Utc};
-use serde::Serialize;
 use navree::openapi::ToSchema;
+use serde::Serialize;
 use uuid::Uuid;
 
 /// A signed-in device or browser: one sign-in, kept alive by its rotating

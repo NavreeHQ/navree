@@ -1,9 +1,9 @@
 //! Request and response bodies of `/api/v1/projects`.
 
 use chrono::{DateTime, Utc};
+use navree::openapi::ToSchema;
 use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
-use navree::openapi::ToSchema;
 use uuid::Uuid;
 
 use super::entity::Project;

@@ -598,13 +598,14 @@ const OPT_IN: &[&str] = &[
 ];
 
 /// Always compiled into the facade (not behind a feature).
-const ALWAYS: [&str; 6] = [
+const ALWAYS: [&str; 7] = [
     "navree-kernel",
     "navree-bounded",
     "navree-glob",
     "navree-contracts",
     "navree-config",
     "navree-macros",
+    "navree-openapi",
 ];
 
 /// Proc-macro crates that a module crate re-exports, as (macro crate,

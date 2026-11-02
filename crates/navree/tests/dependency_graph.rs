@@ -543,6 +543,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-glob",
     "navree-template",
     "navree-macros",
+    "navree-openapi",
     "navree-dock",
     "navree-harbor",
     "navree-navigator",

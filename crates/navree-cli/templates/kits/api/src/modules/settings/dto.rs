@@ -1,8 +1,8 @@
 //! Request and response bodies of `/api/v1/settings`.
 
+use navree::openapi::ToSchema;
 use navree::validation::Validate;
 use serde::{Deserialize, Serialize};
-use navree::openapi::ToSchema;
 use uuid::Uuid;
 
 use navree::workspace::Workspace;
