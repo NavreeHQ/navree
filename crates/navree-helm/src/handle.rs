@@ -1323,8 +1323,9 @@ impl<R: Resource> Handle<R> {
         }
     }
 
-    /// Which of `buckets` a row of `column` is in, as SQL: their index, by the end
-    /// of each, for rows already known to start in the first.
+    /// Which of `buckets` a row of `column` is in, as SQL: their index, found by
+    /// halving them on their ends, for rows already known to fall in one of them. A
+    /// row is compared a few times however many buckets there are.
     fn bucket_of(
         &self,
         cx: &Cx,
@@ -1342,14 +1343,14 @@ impl<R: Resource> Handle<R> {
             .map(|part| format!("{quote}{part}{quote}"))
             .collect::<Vec<_>>()
             .join(".");
-        let mut sql = String::from("CASE");
-        let mut ends = Vec::with_capacity(buckets.len());
-        for (index, bucket) in buckets.iter().enumerate() {
-            sql.push_str(&format!(" WHEN {name} < ? THEN {index}"));
-            ends.push(values::date_bound(shape, midnight(bucket.2)));
-        }
-        sql.push_str(" END");
-        Expr::raw(sql, ends)
+        let ends: Vec<Value> = buckets
+            .iter()
+            .map(|bucket| values::date_bound(shape, midnight(bucket.2)))
+            .collect();
+        let mut sql = String::new();
+        let mut bound = Vec::with_capacity(ends.len());
+        halve(&name, &ends, 0, ends.len().saturating_sub(1), &mut sql, &mut bound);
+        Expr::raw(sql, bound)
     }
 
     /// The aggregate over the rows of `query`, as a number (`None` when the
@@ -1606,6 +1607,29 @@ pub(crate) fn short_key(id: &str) -> &str {
 /// A condition no row matches.
 fn nothing() -> navree_orm::Filter {
     navree_orm::Filter::raw("1 = 0", Vec::<Value>::new())
+}
+
+/// Writes to `sql` the index among `first..=last` of the first of `ends` a value of
+/// the column `name` is before, with the values it compares to in `bound`.
+fn halve(
+    name: &str,
+    ends: &[Value],
+    first: usize,
+    last: usize,
+    sql: &mut String,
+    bound: &mut Vec<Value>,
+) {
+    if first >= last {
+        sql.push_str(&first.to_string());
+        return;
+    }
+    let middle = first + (last - first) / 2;
+    sql.push_str(&format!("CASE WHEN {name} < ? THEN "));
+    bound.push(ends[middle].clone());
+    halve(name, ends, first, middle, sql, bound);
+    sql.push_str(" ELSE ");
+    halve(name, ends, middle + 1, last, sql, bound);
+    sql.push_str(" END");
 }
 
 /// The bucket of a trend's row, by its index.
