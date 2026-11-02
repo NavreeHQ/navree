@@ -2,6 +2,7 @@
 //! their values at a level with the source of each, saving changed fields
 //! and making one inherit again.
 
+use navree_helm::ModuleBuilderHelmExt;
 use navree_kernel::{Module, ModuleBuilder};
 use navree_settings::{ModuleBuilderSettingsExt, Scope, Settings, SettingsModule, Source};
 use navree_testing::{TestApp, TestClient, TestResponse};
@@ -64,7 +65,11 @@ struct SettingsFixtures;
 
 impl Module for SettingsFixtures {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.settings::<PortalSettings>().settings::<BillingMail>();
+        m.settings::<PortalSettings>()
+            .settings::<BillingMail>()
+            // These tests are about the screens, whoever may reach a level:
+            // `workspaces::access::settings_screens` is about who may.
+            .helm_staff_workspaces(|_| async { Ok(true) });
     }
 }
 
@@ -293,4 +298,32 @@ async fn without_the_settings_module_there_are_no_screens() {
     let dashboard = text(&page(&admin, "/admin").await.assert_status(200));
     assert!(!dashboard.contains("/admin/settings"), "{dashboard}");
     page(&admin, "/admin/settings").await.assert_status(404);
+}
+
+/// Settings at a workspace's level, with no `WorkspaceModule` and nobody named as staff.
+struct UncheckedFixtures;
+
+impl Module for UncheckedFixtures {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.settings::<PortalSettings>();
+    }
+}
+
+#[tokio::test]
+async fn with_no_way_to_check_the_level_of_a_workspace_is_refused() {
+    let app = builder()
+        .module(UncheckedFixtures)
+        .module(SettingsModule::from_config())
+        .build()
+        .await;
+    let (_, admin) = admin(&app, "settings-admin", &["settings.manage"]).await;
+    let acme = Uuid::now_v7();
+    let url = format!("/admin/settings/portal?level=workspace&target={acme}");
+    let response = page(&admin, &url).await.assert_status(403);
+    assert!(response.text().contains("WorkspaceModule"), "{}", response.text());
+    submit(&admin, &url, &[("page_size", "40")])
+        .await
+        .assert_status(403);
+    // The global level is the permission's.
+    page(&admin, "/admin/settings/portal").await.assert_status(200);
 }

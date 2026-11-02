@@ -13,7 +13,9 @@ use crate::controller::HelmController;
 use crate::core::Core;
 use crate::page::PageRegistration;
 use crate::registry::ResourceRegistration;
-use crate::workspace::{StaffEntry, StaffPolicy};
+use crate::workspace::{
+    StaffEntry, StaffOrganizationEntry, StaffOrganizationPolicy, StaffPolicy,
+};
 use crate::{HelmActionJob, HelmOptions, HelmPage, Resource, session};
 
 /// The subject that guards the panel: `view` on `Helm` (permission
@@ -160,6 +162,15 @@ pub trait ModuleBuilderHelmExt {
     where
         F: Fn(StaffEntry) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<bool, AppError>> + Send + 'static;
+
+    /// Lets the users `may_enter` says work with the settings of organizations
+    /// they are not members of, on the Settings screens. Without this nobody does.
+    /// Each request made that way writes a `helm.organization.staff` audit entry,
+    /// reads included. Register it once.
+    fn helm_staff_organizations<F, Fut>(&mut self, may_enter: F) -> &mut Self
+    where
+        F: Fn(StaffOrganizationEntry) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<bool, AppError>> + Send + 'static;
 }
 
 impl ModuleBuilderHelmExt for ModuleBuilder {
@@ -181,5 +192,13 @@ impl ModuleBuilderHelmExt for ModuleBuilder {
         Fut: Future<Output = Result<bool, AppError>> + Send + 'static,
     {
         self.contribute(StaffPolicy::new(may_enter))
+    }
+
+    fn helm_staff_organizations<F, Fut>(&mut self, may_enter: F) -> &mut Self
+    where
+        F: Fn(StaffOrganizationEntry) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<bool, AppError>> + Send + 'static,
+    {
+        self.contribute(StaffOrganizationPolicy::new(may_enter))
     }
 }

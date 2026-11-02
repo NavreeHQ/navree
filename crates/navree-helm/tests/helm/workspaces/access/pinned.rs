@@ -7,7 +7,7 @@ use super::*;
 
 /// What an authentication strategy does for a credential that belongs to a
 /// workspace, for a test header that names it.
-struct PinLayer;
+pub(super) struct PinLayer;
 
 impl Module for PinLayer {
     fn register(&self, m: &mut ModuleBuilder) {
@@ -57,7 +57,7 @@ async fn pinned_world() -> (World, TestClient) {
     (world, staff)
 }
 
-fn pinned(request: navree_testing::TestRequest, to: Uuid) -> navree_testing::TestRequest {
+pub(super) fn pinned(request: navree_testing::TestRequest, to: Uuid) -> navree_testing::TestRequest {
     request.header("x-test-pin", to.to_string())
 }
 

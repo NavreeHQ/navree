@@ -96,7 +96,7 @@ pub use options::HelmOptions;
 pub use page::HelmPage;
 pub use resource::{FormData, ModelOf, RecordOf, Resource};
 pub use session::SESSION_COOKIE;
-pub use workspace::{StaffEntry, WORKSPACE_COOKIE, Workspaces};
+pub use workspace::{StaffEntry, StaffOrganizationEntry, WORKSPACE_COOKIE, Workspaces};
 
 /// The action that lets a user into the panel: `view` on [`Helm`].
 pub const VIEW: &str = "view";

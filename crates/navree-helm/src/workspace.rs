@@ -150,9 +150,43 @@ pub struct StaffEntry {
     pub access: Arc<PrincipalAccess>,
 }
 
+/// What [`helm_staff_organizations`](crate::ModuleBuilderHelmExt::helm_staff_organizations)
+/// is asked about: a user who is not a member of an organization whose settings
+/// a screen names.
+#[derive(Clone)]
+#[non_exhaustive]
+pub struct StaffOrganizationEntry {
+    /// The app.
+    pub app: AppContext,
+    /// The signed-in user.
+    pub user_id: Uuid,
+    /// The organization.
+    pub organization: Uuid,
+    /// Their app-wide access.
+    pub access: Arc<PrincipalAccess>,
+}
+
 /// The check of [`helm_staff_workspaces`](crate::ModuleBuilderHelmExt::helm_staff_workspaces).
 pub(crate) type StaffCheck =
     Arc<dyn Fn(StaffEntry) -> BoxFuture<'static, Result<bool, AppError>> + Send + Sync>;
+
+/// The check of [`helm_staff_organizations`](crate::ModuleBuilderHelmExt::helm_staff_organizations).
+pub(crate) type StaffOrganizationCheck = Arc<
+    dyn Fn(StaffOrganizationEntry) -> BoxFuture<'static, Result<bool, AppError>> + Send + Sync,
+>;
+
+/// A contribution of `helm_staff_organizations`.
+pub(crate) struct StaffOrganizationPolicy(pub(crate) StaffOrganizationCheck);
+
+impl StaffOrganizationPolicy {
+    pub(crate) fn new<F, Fut>(may_enter: F) -> Self
+    where
+        F: Fn(StaffOrganizationEntry) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<bool, AppError>> + Send + 'static,
+    {
+        StaffOrganizationPolicy(Arc::new(move |entry| Box::pin(may_enter(entry))))
+    }
+}
 
 /// A contribution of `helm_staff_workspaces`.
 pub(crate) struct StaffPolicy(pub(crate) StaffCheck);
@@ -267,9 +301,26 @@ pub(crate) async fn admission(
     workspace: Uuid,
     writes: bool,
 ) -> Result<Result<Admitted, Refused>, AppError> {
+    if let Some(gate) = app.try_get::<dyn WorkspaceGate>().await
+        && gate.own_databases()
+    {
+        return Ok(Err(Refused::OwnDatabases));
+    }
+    admission_to_what_it_owns(app, core, user_id, access, workspace, writes).await
+}
+
+/// [`admission`], for what a workspace holds on the app's own database whichever
+/// its isolation: its settings.
+pub(crate) async fn admission_to_what_it_owns(
+    app: &AppContext,
+    core: &Core,
+    user_id: Uuid,
+    access: &Arc<PrincipalAccess>,
+    workspace: Uuid,
+    writes: bool,
+) -> Result<Result<Admitted, Refused>, AppError> {
     let gate = app.try_get::<dyn WorkspaceGate>().await;
     let entry = match &gate {
-        Some(gate) if gate.own_databases() => return Ok(Err(Refused::OwnDatabases)),
         Some(gate) => Some(gate.check(user_id, workspace, writes).await?),
         None => None,
     };
@@ -358,6 +409,16 @@ pub(crate) async fn header_of(app: &AppContext) -> Option<String> {
         Some(gate) => gate.header().map(str::to_owned),
         None => Some(WORKSPACE_HEADER.to_owned()),
     }
+}
+
+/// The audit entry of a request working with an organization's settings as staff.
+pub(crate) fn staff_organization_entry(organization: Uuid) -> navree_contracts::AuditEntry {
+    navree_contracts::AuditEntry::new(
+        navree_contracts::AuditKind::Custom,
+        "helm.organization.staff",
+    )
+    .subject("Organization", organization.to_string())
+    .metadata(serde_json::json!({ "organization": organization, "how": "settings" }))
 }
 
 /// The audit entry of a request or job working in `workspace` as staff.

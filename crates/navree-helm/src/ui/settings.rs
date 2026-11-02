@@ -16,12 +16,19 @@
 //! shows when the app has `SettingsModule` and the user manages at least one
 //! type. Writes go through `Settings` in the request's unit of work, so they
 //! are validated, audited and announced like any other.
+//!
+//! The permission says which types, and the level says whose: the settings of a
+//! workspace or an organization are for its members, as in the rest of the panel
+//! (a role that can't write only reads them), of a user for that user, and
+//! anyone else gets them only through `helm_staff_workspaces` or
+//! `helm_staff_organizations`, which is audited, reads included. A credential
+//! limited to a workspace reaches that workspace's settings and its user's.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use http::{HeaderMap, StatusCode};
-use navree_access::AbilityFactory;
+use navree_access::{AbilityFactory, PinnedWorkspace, WorkspaceWrites};
 use navree_http::extract::Request;
 use navree_http::response::Response;
 use navree_http::{AppError, Path, RawQuery};
@@ -29,13 +36,16 @@ use navree_settings::{
     RegisteredSettings, ResolvedSettings, SETTINGS_MANAGE_PERMISSION, Scope, ScopeKind, Settings,
     Source,
 };
-use navree_workspace::{Organizations, Workspaces};
+use navree_workspace::{
+    OrgRole, Organization, Organizations, WorkspaceConfig, WorkspaceError, Workspaces,
+};
 use serde_json::{Map, Number, Value, json};
 use uuid::Uuid;
 
 use super::{Frame, Input, crumb, page_error, redirect_with};
 use crate::cx::Cx;
 use crate::panel::Panel;
+use crate::workspace::{self, Admitted, Refused, StaffOrganizationEntry};
 
 /// The app's settings service, when it has `SettingsModule`.
 async fn service(cx: &Cx) -> Option<Arc<Settings>> {
@@ -190,35 +200,167 @@ fn level_of(entry: &RegisteredSettings, selection: &Selection) -> Result<ScopeKi
     Ok(level)
 }
 
-/// The scope a level and target name, with a label for the target.
-async fn scope_of(cx: &Cx, level: ScopeKind, target: &str) -> Result<(Scope, String), AppError> {
-    let as_id = || {
-        Uuid::parse_str(target)
-            .map_err(|_| AppError::bad_request(format!("`{target}` is not an id.")))
+/// The answer to a credential limited to a workspace, at a level beyond it.
+fn beyond_the_pin() -> AppError {
+    AppError::forbidden()
+        .with_code("token_limited_to_workspace")
+        .with_detail("This token is limited to a workspace.")
+}
+
+/// An id for a target that names nothing: a slug, or a word, that nobody may
+/// learn more of than of a workspace they aren't in.
+fn id_of_nothing(target: &str) -> Uuid {
+    Uuid::parse_str(target).unwrap_or(Uuid::nil())
+}
+
+/// The scope of the workspace `target` names, with its name, if the user may
+/// work with its settings (see [`workspace::admission_to_what_it_owns`]).
+async fn workspace_scope(cx: &Cx, target: &str, writes: bool) -> Result<(Scope, String), AppError> {
+    let (id, workspace) = match cx.app.try_get::<Workspaces>().await {
+        Some(workspaces) => match workspaces.resolve(target).await {
+            Ok(workspace) => (workspace.id, Some(workspace)),
+            Err(WorkspaceError::WorkspaceNotFound(_)) => (id_of_nothing(target), None),
+            Err(error) => return Err(error.to_app_error()),
+        },
+        None => (
+            Uuid::parse_str(target)
+                .map_err(|_| AppError::bad_request(format!("`{target}` is not an id.")))?,
+            None,
+        ),
     };
+    if cx.pin.is_some_and(|pin| pin != id) {
+        return Err(PinnedWorkspace::mismatch());
+    }
+    let admitted = workspace::admission_to_what_it_owns(
+        &cx.app,
+        &cx.core,
+        cx.user_id,
+        &cx.access,
+        id,
+        writes,
+    )
+    .await?;
+    match admitted {
+        Ok(Admitted::Member) => {}
+        Ok(Admitted::Staff) => {
+            cx.audit_outside(workspace::staff_entry(id, "settings"))
+                .await;
+        }
+        Err(refused) => return Err(refused.error()),
+    }
+    Ok(match workspace {
+        Some(workspace) => (Scope::from(&workspace), workspace.name),
+        None => (Scope::workspace(id), target.to_owned()),
+    })
+}
+
+/// Whether an organization role writes nothing: `viewer`, or a role of the app's
+/// own, unless the permissions the app set for it say otherwise.
+async fn organization_role_is_read_only(cx: &Cx, role: &OrgRole) -> bool {
+    let role_permissions = match cx.app.try_get::<WorkspaceConfig>().await {
+        Some(config) => config
+            .organizations
+            .roles
+            .get(role.as_str())
+            .map(|options| options.permissions.clone())
+            .unwrap_or_default(),
+        None => Vec::new(),
+    };
+    WorkspaceWrites {
+        read_only_demo: false,
+        read_only_role: matches!(role, OrgRole::Viewer | OrgRole::Custom(_)),
+        role_permissions,
+    }
+    .role_is_read_only()
+}
+
+/// Whether `helm_staff_organizations` lets the user work with the settings of
+/// `organization`, and the audit entry if it does.
+async fn staff_of_organization(cx: &Cx, organization: Uuid, checked: bool) -> Result<(), AppError> {
+    let Some(may_enter) = &cx.core.staff_organizations else {
+        return Err(if checked {
+            Refused::NotAllowed.error()
+        } else {
+            Refused::Unchecked.error()
+        });
+    };
+    let entry = StaffOrganizationEntry {
+        app: cx.app.clone(),
+        user_id: cx.user_id,
+        organization,
+        access: cx.access.clone(),
+    };
+    if !may_enter(entry).await? {
+        return Err(Refused::NotAllowed.error());
+    }
+    Ok(())
+}
+
+/// The scope of the organization `target` names, with its name, if the user may
+/// work with its settings.
+async fn organization_scope(
+    cx: &Cx,
+    target: &str,
+    writes: bool,
+) -> Result<(Scope, String), AppError> {
+    let staff_note = |id| cx.audit_outside(workspace::staff_organization_entry(id));
+    let Some(organizations) = cx.app.try_get::<Organizations>().await else {
+        let id = Uuid::parse_str(target)
+            .map_err(|_| AppError::bad_request(format!("`{target}` is not an id.")))?;
+        staff_of_organization(cx, id, false).await?;
+        staff_note(id).await;
+        return Ok((Scope::organization(id), target.to_owned()));
+    };
+    let organization: Option<Organization> = match organizations.resolve(target).await {
+        Ok(organization) => Some(organization),
+        Err(WorkspaceError::OrganizationNotFound(_)) => None,
+        Err(error) => return Err(error.to_app_error()),
+    };
+    let Some(organization) = organization else {
+        staff_of_organization(cx, id_of_nothing(target), true).await?;
+        return Err(Refused::Missing.error());
+    };
+    let member = organizations
+        .membership(organization.id, cx.user_id)
+        .await
+        .map_err(|error| error.to_app_error())?;
+    match member {
+        Some(member) => {
+            if writes && organization_role_is_read_only(cx, &member.role()).await {
+                return Err(WorkspaceWrites::read_only_role_error());
+            }
+        }
+        None => {
+            staff_of_organization(cx, organization.id, true).await?;
+            staff_note(organization.id).await;
+        }
+    }
+    Ok((Scope::from(&organization), organization.name))
+}
+
+/// The scope a level and target name, with a label for the target, if the user
+/// may work with what it holds: with `writes`, change it.
+async fn scope_of(
+    cx: &Cx,
+    level: ScopeKind,
+    target: &str,
+    writes: bool,
+) -> Result<(Scope, String), AppError> {
     match level {
+        ScopeKind::Global if cx.pin.is_some() => Err(beyond_the_pin()),
         ScopeKind::Global => Ok((Scope::global(), "Everyone".to_owned())),
-        ScopeKind::Organization => match cx.app.try_get::<Organizations>().await {
-            Some(organizations) => {
-                let organization = organizations
-                    .resolve(target)
-                    .await
-                    .map_err(|error| error.to_app_error())?;
-                Ok((Scope::from(&organization), organization.name))
+        ScopeKind::Organization if cx.pin.is_some() => Err(beyond_the_pin()),
+        ScopeKind::Organization => organization_scope(cx, target, writes).await,
+        ScopeKind::Workspace => workspace_scope(cx, target, writes).await,
+        ScopeKind::User => {
+            let id = Uuid::parse_str(target)
+                .map_err(|_| AppError::bad_request(format!("`{target}` is not an id.")))?;
+            // As the settings API has it: users work with their own.
+            if id != cx.user_id {
+                return Err(AppError::forbidden());
             }
-            None => Ok((Scope::organization(as_id()?), target.to_owned())),
-        },
-        ScopeKind::Workspace => match cx.app.try_get::<Workspaces>().await {
-            Some(workspaces) => {
-                let workspace = workspaces
-                    .resolve(target)
-                    .await
-                    .map_err(|error| error.to_app_error())?;
-                Ok((Scope::from(&workspace), workspace.name))
-            }
-            None => Ok((Scope::workspace(as_id()?), target.to_owned())),
-        },
-        ScopeKind::User => Ok((Scope::user(as_id()?), target.to_owned())),
+            Ok((Scope::user(id), target.to_owned()))
+        }
     }
 }
 
@@ -439,7 +581,7 @@ pub(crate) async fn show(
         if level != ScopeKind::Global && target.is_none() {
             return Ok(form_page(&frame, StatusCode::OK, state).await);
         }
-        let (scope, name) = scope_of(cx, level, target.unwrap_or_default()).await?;
+        let (scope, name) = scope_of(cx, level, target.unwrap_or_default(), false).await?;
         let resolved = settings
             .resolve_key(&key, scope)
             .await
@@ -485,7 +627,7 @@ pub(crate) async fn save(
         if level != ScopeKind::Global && target.is_none() {
             return Err(AppError::bad_request("Name the target of the level."));
         }
-        let (scope, name) = scope_of(cx, level, target.unwrap_or_default()).await?;
+        let (scope, name) = scope_of(cx, level, target.unwrap_or_default(), true).await?;
         let submitted = form(request).await?;
         let current = settings
             .resolve_key(&key, scope)
@@ -587,7 +729,7 @@ pub(crate) async fn inherit(
         if level != ScopeKind::Global && target.is_none() {
             return Err(AppError::bad_request("Name the target of the level."));
         }
-        let (scope, _) = scope_of(cx, level, target.unwrap_or_default()).await?;
+        let (scope, _) = scope_of(cx, level, target.unwrap_or_default(), true).await?;
         let submitted = form(request).await?;
         let field = submitted
             .get("_inherit")
