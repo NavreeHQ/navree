@@ -280,3 +280,240 @@ async fn code_can_report_its_release_too() {
     );
     app.shutdown().await.unwrap();
 }
+
+/// Answers a report: the status and the body.
+async fn report(app: &TestApp, deploy: &str, body: Value) -> (u16, Value) {
+    let response = app
+        .client()
+        .post("/_lighthouse/api/releases")
+        .bearer(deploy)
+        .json(&body)
+        .send()
+        .await;
+    let status = response.status().as_u16();
+    (
+        status,
+        serde_json::from_str(&response.text()).unwrap_or(Value::Null),
+    )
+}
+
+#[tokio::test]
+async fn a_report_is_stored_or_refused_with_a_reason_on_every_store() {
+    let app = builder().build().await;
+    operators(&app).await;
+    let deploy = token(&app, "deploy@acme.test").await;
+    let long = |n: usize| format!("https://x.example/{}", "a".repeat(n - 18));
+
+    // Accepted everywhere, at the longest and the widest.
+    for body in [
+        json!({ "release": "ok-url", "url": long(255) }),
+        json!({ "release": "ok-old", "deployed_at": "1971-01-01T00:00:00Z" }),
+        json!({ "release": "ok-notes", "notes": "one\ntwo\tthree" }),
+        json!({ "release": "\u{1F600}".repeat(200) }),
+        json!({ "release": "ok-env", "environment": "\u{1F600}".repeat(100) }),
+    ] {
+        let (status, answer) = report(&app, &deploy, body.clone()).await;
+        assert_eq!(status, 200, "{body}: {answer}");
+    }
+    // Refused everywhere, with what is wrong.
+    for (body, says) in [
+        (json!({ "release": "a", "url": long(256) }), "url"),
+        (json!({ "release": "a", "url": long(500) }), "url"),
+        (json!({ "release": "a", "commit": "ab\u{0}c" }), "commit"),
+        (json!({ "release": "a", "notes": "ab\u{0}c" }), "notes"),
+        (
+            json!({ "release": "a", "environment": "ab\u{0}c" }),
+            "environment",
+        ),
+        (json!({ "release": "a\u{0}" }), "release"),
+        (
+            json!({ "release": "a", "deployed_at": "2099-01-01T00:00:00Z" }),
+            "deployed_at",
+        ),
+        (
+            json!({ "release": "a", "deployed_at": "9999-12-31T23:59:59Z" }),
+            "deployed_at",
+        ),
+        (
+            json!({ "release": "a", "deployed_at": "1900-01-01T00:00:00Z" }),
+            "deployed_at",
+        ),
+        (
+            json!({ "release": "a", "deployed_at": "1970-01-01T00:00:00Z" }),
+            "deployed_at",
+        ),
+    ] {
+        let (status, answer) = report(&app, &deploy, body.clone()).await;
+        assert_eq!(status, 400, "{body}: {answer}");
+        assert!(answer.to_string().contains(says), "{body}: {answer}");
+    }
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn names_differing_only_in_case_are_two_releases_on_every_store() {
+    let app = builder().build().await;
+    operators(&app).await;
+    let deploy = token(&app, "deploy@acme.test").await;
+    let (status, first) = report(&app, &deploy, json!({ "release": "caseR", "notes": "a" })).await;
+    assert_eq!(status, 200, "{first}");
+    let (status, second) = report(&app, &deploy, json!({ "release": "CASER", "notes": "b" })).await;
+    assert_eq!(status, 200, "{second}");
+    assert_eq!(second["name"], "CASER");
+    assert_eq!(second["notes"], "b");
+    let store = flushed(&app).await;
+    let names: Vec<String> = store
+        .releases(10)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|release| release.name)
+        .collect();
+    assert!(names.contains(&"caseR".to_owned()), "{names:?}");
+    assert!(names.contains(&"CASER".to_owned()), "{names:?}");
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_report_past_the_newest_two_hundred_is_stored_and_answered() {
+    let app = builder().build().await;
+    operators(&app).await;
+    let deploy = token(&app, "deploy@acme.test").await;
+    for n in 0..201 {
+        let (status, _) = report(&app, &deploy, json!({ "release": format!("n{n}") })).await;
+        assert_eq!(status, 200);
+    }
+    let (status, answer) = report(
+        &app,
+        &deploy,
+        json!({ "release": "ancient", "deployed_at": "1999-01-01T00:00:00Z" }),
+    )
+    .await;
+    assert_eq!(status, 200, "{answer}");
+    assert_eq!(answer["name"], "ancient");
+    assert_eq!(answer["current"], false);
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_process_back_on_an_older_release_makes_it_the_current_one() {
+    let (url, _guard) = crate::servers::scratch();
+    let boot = |release: &'static str| {
+        let url = url.clone();
+        async move {
+            builder()
+                .config("database.url", url)
+                .config("database.migrate_on_boot", true)
+                .config("database.max_connections", 4)
+                .config("lighthouse.release", release)
+                .build()
+                .await
+        }
+    };
+    let name_of_current = |app: TestApp| async move {
+        let store = flushed(&app).await;
+        let current = store.current_release().await.unwrap().map(|r| r.name);
+        let listed: Vec<String> = store
+            .releases(10)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|r| r.current)
+            .map(|r| r.name)
+            .collect();
+        app.shutdown().await.unwrap();
+        assert_eq!(listed.len(), 1, "{listed:?}");
+        assert_eq!(current.as_deref(), Some(listed[0].as_str()));
+        listed[0].clone()
+    };
+    assert_eq!(name_of_current(boot("r1").await).await, "r1");
+    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    assert_eq!(name_of_current(boot("r2").await).await, "r2");
+    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    // The rollback.
+    assert_eq!(name_of_current(boot("r1").await).await, "r1");
+}
+
+#[tokio::test]
+async fn a_new_report_is_current_after_an_old_one_with_a_date() {
+    let app = builder().build().await;
+    operators(&app).await;
+    let deploy = token(&app, "deploy@acme.test").await;
+    let soon = Utc::now() + TimeDelta::hours(1);
+    let (status, answer) = report(
+        &app,
+        &deploy,
+        json!({ "release": "soon", "deployed_at": soon }),
+    )
+    .await;
+    assert_eq!(status, 200, "a clock a little ahead is allowed: {answer}");
+    let (status, answer) = report(
+        &app,
+        &deploy,
+        json!({ "release": "soon", "deployed_at": Utc::now() }),
+    )
+    .await;
+    assert_eq!(status, 200, "{answer}");
+    let (_, answer) = report(&app, &deploy, json!({ "release": "next" })).await;
+    assert_eq!(answer["current"], true, "{answer}");
+    app.shutdown().await.unwrap();
+}
+
+/// Statements the app runs while `f` does.
+async fn statements_during<F: std::future::Future>(app: &TestApp, f: F) -> Vec<String> {
+    use std::sync::{Arc, Mutex};
+    let db = app.get::<navree_db::Db>().await;
+    let seen: Arc<Mutex<Vec<String>>> = Arc::default();
+    let log = seen.clone();
+    db.on_query(move |query| log.lock().unwrap().push(query.sql.clone()));
+    f.await;
+    seen.lock().unwrap().clone()
+}
+
+#[tokio::test]
+async fn only_the_releases_read_the_release_counts_and_they_never_fetch_the_issues() {
+    let app = builder().build().await;
+    operators(&app).await;
+    boom(&app, 1).await;
+    flushed(&app).await;
+    let client = sign_in(&app, "viewer@acme.test").await;
+    for page in [
+        "/_lighthouse",
+        "/_lighthouse/issues",
+        "/_lighthouse/settings",
+        "/_lighthouse/alerts",
+        "/_lighthouse/queries",
+    ] {
+        let statements = statements_during(&app, async {
+            client.get(page).send().await.assert_status(200);
+        })
+        .await;
+        let counting: Vec<&String> = statements
+            .iter()
+            .filter(|sql| sql.contains("first_release") && sql.contains("lighthouse_issues"))
+            .filter(|sql| !sql.contains("INSERT") && !sql.contains("UPDATE"))
+            // A page listing issues reads the column along with the others.
+            .filter(|sql| !sql.contains("fingerprint"))
+            .collect();
+        assert!(counting.is_empty(), "{page}: {counting:?}");
+    }
+    let statements = statements_during(&app, async {
+        client
+            .get("/_lighthouse/releases")
+            .send()
+            .await
+            .assert_status(200);
+    })
+    .await;
+    let counting: Vec<&String> = statements
+        .iter()
+        .filter(|sql| sql.contains("first_release") || sql.contains("regressed_in_release"))
+        .filter(|sql| sql.contains("lighthouse_issues") && !sql.contains("INSERT"))
+        .filter(|sql| !sql.contains("fingerprint"))
+        .collect();
+    assert!(!counting.is_empty());
+    for sql in counting {
+        assert!(sql.contains("GROUP BY") && sql.contains("COUNT"), "{sql}");
+    }
+    app.shutdown().await.unwrap();
+}

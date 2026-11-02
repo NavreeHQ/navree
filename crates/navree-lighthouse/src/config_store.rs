@@ -6,7 +6,8 @@
 use std::collections::{BTreeMap, HashMap};
 
 use chrono::{DateTime, TimeDelta, Utc};
-use navree_orm::{ConflictUpdate, Model as _, Record, col, table};
+use navree_db::{Executor as _, Statement};
+use navree_orm::{ConflictUpdate, Model as _, Record};
 use serde::Serialize;
 use serde_json::Value;
 use uuid::Uuid;
@@ -69,14 +70,39 @@ pub struct AlertCounts {
     pub failed: u64,
 }
 
+/// A stored release with its counts.
+fn summary_of(
+    row: release::Model,
+    introduced: &HashMap<String, i64>,
+    regressed: &HashMap<String, i64>,
+    current: bool,
+) -> ReleaseSummary {
+    ReleaseSummary {
+        introduced: introduced.get(&row.name).copied().unwrap_or(0),
+        regressed: regressed.get(&row.name).copied().unwrap_or(0),
+        current,
+        name: row.name,
+        environment: row.environment,
+        commit: row.commit_sha,
+        url: row.url,
+        notes: row.notes,
+        source: row.source,
+        deployed_at: row.deployed_at,
+        first_seen: row.first_seen,
+        last_seen: row.last_seen,
+    }
+}
+
 impl LighthouseStore {
     // -----------------------------------------------------------------
     // Releases
     // -----------------------------------------------------------------
 
     /// Notes that a process runs `name` in `environment`: adds the release
-    /// (deployed now, as far as is known) or marks it seen again. The
-    /// label `unknown` (no release set) is not a release.
+    /// (deployed now, as far as is known) or marks it seen again. A process
+    /// on a release other than the environment's newest deploys it again:
+    /// that is a rollback, or a release coming back. The label `unknown`
+    /// (no release set) is not a release.
     pub(crate) async fn note_release(
         &self,
         name: &str,
@@ -88,16 +114,21 @@ impl LighthouseStore {
         let now = Utc::now();
         self.insert_release_if_missing(name, environment, "process", now)
             .await?;
+        let mut sets = vec![
+            release::Model::LAST_SEEN.set(now),
+            release::Model::UPDATED_AT.set(now),
+        ];
+        if self
+            .newest_release(environment)
+            .await?
+            .is_some_and(|newest| newest.name != name)
+        {
+            sets.push(release::Model::DEPLOYED_AT.set(now));
+        }
         release::Model::query()
             .where_(release::Model::NAME.eq(name))
             .where_(release::Model::ENVIRONMENT.eq(environment))
-            .update(
-                &self.db,
-                [
-                    release::Model::LAST_SEEN.set(now),
-                    release::Model::UPDATED_AT.set(now),
-                ],
-            )
+            .update(&self.db, sets)
             .await?;
         Ok(())
     }
@@ -134,6 +165,20 @@ impl LighthouseStore {
         Ok(())
     }
 
+    /// The newest deploy in `environment`.
+    async fn newest_release(
+        &self,
+        environment: &str,
+    ) -> Result<Option<release::Model>, LighthouseError> {
+        Ok(release::Model::query()
+            .where_(release::Model::ENVIRONMENT.eq(environment))
+            .order_by_desc(release::Model::DEPLOYED_AT)
+            .use_write()
+            .first(&self.db)
+            .await?
+            .map(Record::into_inner))
+    }
+
     /// Adds a release, or updates what is known of it: what the report
     /// gives replaces what was there. A release first seen by a process
     /// takes the reported deploy time.
@@ -149,18 +194,19 @@ impl LighthouseStore {
             .clone()
             .unwrap_or_else(|| default_environment.to_owned());
         let now = Utc::now();
+        let deployed_at = report.deployed_at.map(|at| at.min(now));
         self.insert_release_if_missing(
             &report.release,
             &environment,
             source,
-            report.deployed_at.unwrap_or(now),
+            deployed_at.unwrap_or(now),
         )
         .await?;
         let mut sets = vec![
             release::Model::SOURCE.set(source),
             release::Model::UPDATED_AT.set(now),
         ];
-        if let Some(at) = report.deployed_at {
+        if let Some(at) = deployed_at {
             sets.push(release::Model::DEPLOYED_AT.set(at));
         }
         if let Some(commit) = report.commit {
@@ -177,11 +223,23 @@ impl LighthouseStore {
             .where_(release::Model::ENVIRONMENT.eq(environment.as_str()))
             .update(&self.db, sets)
             .await?;
-        self.releases(200)
+        let row = release::Model::query()
+            .where_(release::Model::NAME.eq(report.release.as_str()))
+            .where_(release::Model::ENVIRONMENT.eq(environment.as_str()))
+            .use_write()
+            .first(&self.db)
             .await?
-            .into_iter()
-            .find(|summary| summary.name == report.release && summary.environment == environment)
-            .ok_or(LighthouseError::NotFound("release"))
+            .map(Record::into_inner)
+            .ok_or(LighthouseError::NotFound("release"))?;
+        let names = std::slice::from_ref(&row.name);
+        let introduced = self.issue_counts_by("first_release", names).await?;
+        let regressed = self.issue_counts_by("regressed_in_release", names).await?;
+        let current = environment == self.options.environment_label()
+            && self
+                .newest_release(&environment)
+                .await?
+                .is_some_and(|newest| newest.id == row.id);
+        Ok(summary_of(row, &introduced, &regressed, current))
     }
 
     /// The releases seen, newest deploy first, with the issues each
@@ -204,25 +262,16 @@ impl LighthouseStore {
             .map(|row| row.id);
         Ok(rows
             .into_iter()
-            .map(|row| ReleaseSummary {
-                introduced: introduced.get(&row.name).copied().unwrap_or(0),
-                regressed: regressed.get(&row.name).copied().unwrap_or(0),
-                current: Some(row.id) == current,
-                name: row.name,
-                environment: row.environment,
-                commit: row.commit_sha,
-                url: row.url,
-                notes: row.notes,
-                source: row.source,
-                deployed_at: row.deployed_at,
-                first_seen: row.first_seen,
-                last_seen: row.last_seen,
+            .map(|row| {
+                let is_current = Some(row.id) == current;
+                summary_of(row, &introduced, &regressed, is_current)
             })
             .collect())
     }
 
-    /// Issues counted by the release in `column` (`first_release` or
-    /// `regressed_in_release`), for `names`.
+    /// How many issues each of `names` has in `column` (`first_release` or
+    /// `regressed_in_release`): counted by the database, on the column's
+    /// index.
     async fn issue_counts_by(
         &self,
         column: &'static str,
@@ -230,56 +279,45 @@ impl LighthouseStore {
     ) -> Result<HashMap<String, i64>, LighthouseError> {
         let mut counts: HashMap<String, i64> = HashMap::new();
         for chunk in names.chunks(200) {
-            let rows = table("lighthouse_issues")
-                .select([column])
-                .where_(col(column).is_in(chunk.iter().cloned()))
-                .get(&self.db)
-                .await?;
-            for row in rows {
-                if let Some(name) = row.get::<Option<String>>(column)? {
-                    *counts.entry(name).or_default() += 1;
-                }
+            let places = vec!["?"; chunk.len()].join(", ");
+            let statement = Statement::portable(
+                format!(
+                    "SELECT {column} AS name, COUNT(*) AS issues FROM lighthouse_issues \
+                     WHERE {column} IN ({places}) GROUP BY {column}"
+                ),
+                chunk.iter().map(|name| name.as_str().into()),
+            );
+            for row in self.db.fetch_all(&statement).await? {
+                let name: String = row.get("name")?;
+                *counts.entry(name).or_default() += row.get::<i64>("issues")?;
             }
         }
         Ok(counts)
     }
 
-    /// The release the app is at: the newest deploy in its environment.
+    /// The release the app is at, and when it was deployed: the newest deploy
+    /// in its environment. Every page's header reads it.
+    pub(crate) async fn current_release_label(
+        &self,
+    ) -> Result<Option<(String, DateTime<Utc>)>, LighthouseError> {
+        let environment = self.options.environment_label();
+        Ok(self
+            .newest_release(&environment)
+            .await?
+            .map(|row| (row.name, row.deployed_at)))
+    }
+
+    /// The release the app is at, with its counts: the newest deploy in its
+    /// environment.
     pub async fn current_release(&self) -> Result<Option<ReleaseSummary>, LighthouseError> {
         let environment = self.options.environment_label();
-        let row = release::Model::query()
-            .where_(release::Model::ENVIRONMENT.eq(environment.as_str()))
-            .order_by_desc(release::Model::DEPLOYED_AT)
-            .first(&self.db)
-            .await?
-            .map(Record::into_inner);
-        let Some(row) = row else {
+        let Some(row) = self.newest_release(&environment).await? else {
             return Ok(None);
         };
-        Ok(Some(ReleaseSummary {
-            introduced: self
-                .issue_counts_by("first_release", std::slice::from_ref(&row.name))
-                .await?
-                .get(&row.name)
-                .copied()
-                .unwrap_or(0),
-            regressed: self
-                .issue_counts_by("regressed_in_release", std::slice::from_ref(&row.name))
-                .await?
-                .get(&row.name)
-                .copied()
-                .unwrap_or(0),
-            current: true,
-            name: row.name,
-            environment: row.environment,
-            commit: row.commit_sha,
-            url: row.url,
-            notes: row.notes,
-            source: row.source,
-            deployed_at: row.deployed_at,
-            first_seen: row.first_seen,
-            last_seen: row.last_seen,
-        }))
+        let names = std::slice::from_ref(&row.name);
+        let introduced = self.issue_counts_by("first_release", names).await?;
+        let regressed = self.issue_counts_by("regressed_in_release", names).await?;
+        Ok(Some(summary_of(row, &introduced, &regressed, true)))
     }
 
     /// The deploys since `since` in this environment, oldest first: the

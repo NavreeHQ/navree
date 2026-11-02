@@ -477,9 +477,9 @@ impl LighthouseDashboardController {
         let open_issues = store.open_issue_count().await?;
         // The release in the header: the newest deploy, else the label this
         // process was given; never a made-up one.
-        let current = store.current_release().await?;
+        let current = store.current_release_label().await?;
         let release = match &current {
-            Some(release) => Some(release.name.clone()),
+            Some((name, _)) => Some(name.clone()),
             None => Some(store.release().to_owned()).filter(|r| r != "unknown" && !r.is_empty()),
         };
         let failed_alerts = store.alert_counts(24).await?.failed;
@@ -493,7 +493,7 @@ impl LighthouseDashboardController {
             "user": user.unwrap_or_else(|| viewer.user_id.to_string()),
             "environment": self.lighthouse.options().environment_label(),
             "release": release,
-            "release_deployed": current.as_ref().map(|r| ago(r.deployed_at)),
+            "release_deployed": current.as_ref().map(|(_, at)| ago(*at)),
             "failed_alerts": failed_alerts,
             "can_configure": viewer.can_configure,
             "open_issues": open_issues,

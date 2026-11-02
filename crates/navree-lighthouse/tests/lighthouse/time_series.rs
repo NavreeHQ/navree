@@ -25,7 +25,8 @@ async fn samples_occurrences_and_aggregates_are_declared_hypertables() {
         [
             "m20261027_000001_create_lighthouse_tables",
             "m20261027_000002_convert_lighthouse_events_to_hypertables",
-            "m20261102_000003_create_lighthouse_releases_and_settings"
+            "m20261102_000003_create_lighthouse_releases_and_settings",
+            "m20261102_000004_index_lighthouse_issue_releases"
         ]
     );
     let schema = Schema::new(&db);

@@ -1,8 +1,20 @@
 //! Releases: what an app (or its deploy) reports about the release it runs,
 //! and how Lighthouse lists the releases it has seen.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use serde::{Deserialize, Serialize};
+
+/// The longest link a report can carry.
+pub(crate) const MAX_URL_CHARS: usize = 255;
+/// How far ahead of this machine's clock a deploy time may be: another
+/// machine's clock, a little ahead. It counts as deployed now.
+const DEPLOY_CLOCK_SKEW: TimeDelta = TimeDelta::days(1);
+
+/// The earliest deploy time, a day into 1970 so that it stays in range in
+/// every time zone (MySQL's `TIMESTAMP` starts with 1970).
+fn earliest_deploy() -> DateTime<Utc> {
+    DateTime::UNIX_EPOCH + TimeDelta::days(1)
+}
 
 /// A release an app reports: [`Lighthouse::report_release`](crate::Lighthouse::report_release)
 /// from code, or `POST {path}/api/releases` from a deploy script.
@@ -25,11 +37,13 @@ pub struct ReleaseReport {
     pub environment: Option<String>,
     /// The commit it was built from.
     pub commit: Option<String>,
-    /// A link to the release's changes or its deploy (`http` or `https`).
+    /// A link to the release's changes or its deploy (`http` or `https`, at
+    /// most 255 characters).
     pub url: Option<String>,
     /// A few words about it.
     pub notes: Option<String>,
-    /// When it was deployed; now when not given.
+    /// When it was deployed; now when not given. Between 1970 and a day from
+    /// now; a time ahead of now counts as now.
     pub deployed_at: Option<DateTime<Utc>>,
 }
 
@@ -98,26 +112,33 @@ impl ReleaseReport {
         {
             return Err("environment must be at most 100 characters".to_owned());
         }
-        if self
-            .commit
-            .as_ref()
-            .is_some_and(|c| c.chars().count() > 80 || c.chars().any(char::is_whitespace))
-        {
+        if self.commit.as_ref().is_some_and(|c| {
+            c.chars().count() > 80 || c.chars().any(|ch| ch.is_whitespace() || ch.is_control())
+        }) {
             return Err("commit must be at most 80 characters, without spaces".to_owned());
         }
         if let Some(url) = &self.url
-            && (url.chars().count() > 500
+            && (url.chars().count() > MAX_URL_CHARS
                 || !(url.starts_with("https://") || url.starts_with("http://"))
                 || url.chars().any(|c| c.is_control() || c.is_whitespace()))
         {
-            return Err("url must be an http(s) link of at most 500 characters".to_owned());
+            return Err(format!(
+                "url must be an http(s) link of at most {MAX_URL_CHARS} characters"
+            ));
         }
-        if self
-            .notes
-            .as_ref()
-            .is_some_and(|n| n.chars().count() > 2000)
+        if self.notes.as_ref().is_some_and(|n| {
+            n.chars().count() > 2000
+                || n.chars()
+                    .any(|ch| ch.is_control() && !matches!(ch, '\n' | '\r' | '\t'))
+        }) {
+            return Err(
+                "notes must be at most 2000 characters, without control characters".to_owned(),
+            );
+        }
+        if let Some(at) = self.deployed_at
+            && (at < earliest_deploy() || at > Utc::now() + DEPLOY_CLOCK_SKEW)
         {
-            return Err("notes must be at most 2000 characters".to_owned());
+            return Err("deployed_at must be between 1970 and a day from now".to_owned());
         }
         Ok(self)
     }
@@ -148,7 +169,9 @@ pub struct ReleaseSummary {
     pub introduced: i64,
     /// Issues that came back (after being resolved) in this release.
     pub regressed: i64,
-    /// Whether it is the newest release of its environment.
+    /// Whether it is the release its environment is at: the newest deploy. A
+    /// process that boots on an older label deploys it again, so a rollback
+    /// moves this.
     pub current: bool,
 }
 

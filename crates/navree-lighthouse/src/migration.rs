@@ -49,6 +49,10 @@ pub(crate) fn migrations() -> MigrationSet {
             "m20261102_000003_create_lighthouse_releases_and_settings",
             CreateReleasesAndSettings,
         ))
+        .migration(SchemaMigration::new(
+            "m20261102_000004_index_lighthouse_issue_releases",
+            IndexIssueReleases,
+        ))
 }
 
 /// How Lighthouse's events are partitioned on TimescaleDB, a day per chunk
@@ -136,6 +140,50 @@ impl Migration for CreateReleasesAndSettings {
         schema.drop_if_exists("lighthouse_settings").await?;
         schema.drop_if_exists("lighthouse_releases").await?;
         Ok(())
+    }
+}
+
+/// Indexes the columns the releases are counted by. On MySQL it also makes a
+/// release's name compare byte by byte, as it does on the other databases:
+/// `r1` and `R1` are two labels.
+struct IndexIssueReleases;
+
+const ISSUE_RELEASE_INDEXES: [(&str, &str); 2] = [
+    ("first_release", "lighthouse_issues_first_release_index"),
+    (
+        "regressed_in_release",
+        "lighthouse_issues_regressed_in_release_index",
+    ),
+];
+
+impl Migration for IndexIssueReleases {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .table("lighthouse_issues", |t| {
+                for (column, index) in ISSUE_RELEASE_INDEXES {
+                    t.index([column]).name(index);
+                }
+            })
+            .await?;
+        if schema.target().await?.dialect() == Dialect::MySql {
+            schema
+                .statement(
+                    "ALTER TABLE lighthouse_releases MODIFY name VARCHAR(255) \
+                     CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL",
+                )
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .table("lighthouse_issues", |t| {
+                for (_, index) in ISSUE_RELEASE_INDEXES {
+                    t.drop_index(index);
+                }
+            })
+            .await
     }
 }
 
