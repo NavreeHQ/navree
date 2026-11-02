@@ -49,6 +49,12 @@
   & tbody:not([data-message]) td{max-width:28rem;overflow:hidden;text-overflow:ellipsis}
   & tbody td[data-wrap]{max-width:32rem;white-space:normal;overflow-wrap:anywhere;min-width:12rem}
   & tbody td[data-truncate]{max-width:20rem}
+  /* Each text clips at its own end: Latin text in a right-to-left table, or Arabic in a left-to-right one, keeps its first words. */
+  & tbody:not([data-message]) td bdi{display:block;overflow:hidden;text-overflow:ellipsis}
+  &:dir(ltr) tbody td bdi{text-align:left}
+  &:dir(rtl) tbody td bdi{text-align:right}
+  & tbody td[data-align=center] bdi{text-align:center}
+  & tbody td[data-align=end] bdi{text-align:end}
   &[data-fixed] td,&[data-fixed] th{overflow:hidden;text-overflow:ellipsis}
   &[data-fixed] th{overflow:visible}
   & td[data-strong]{color:var(--fg);font-weight:500}

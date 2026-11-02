@@ -919,6 +919,15 @@ for (const browserName of browsers) {
       assert.match(await page.locator("#rtl [data-slot=table-summary]").innerText(), /عرض/);
       assert.equal(await page.locator("#rtl td[data-numeric]").first().evaluate((cell) => getComputedStyle(cell).direction), "ltr");
       assert.equal(await page.locator("#rtl tr[data-key='1'] bdi").first().count(), 1);
+      const clip = await page.locator("#rtl tr[data-key='6'] bdi").first().evaluate((bdi) => {
+        const range = document.createRange();
+        range.setStart(bdi.firstChild, 0);
+        range.setEnd(bdi.firstChild, 1);
+        const first = range.getBoundingClientRect(), box = bdi.getBoundingClientRect();
+        return { clips: bdi.scrollWidth > bdi.clientWidth, firstInside: first.left >= box.left - 1 && first.right <= box.right + 1, align: getComputedStyle(bdi).textAlign };
+      });
+      assert.ok(clip.clips, "the long title is cut");
+      assert.ok(clip.firstInside, `Latin text in a right-to-left table keeps its first letter: ${JSON.stringify(clip)}`);
       await shot(page, `${browserName}-rtl`);
       assert.deepEqual(await axe(page), []);
       const handle = page.locator("#rtl thead th[data-col=amount] [data-slot=col-resize]");
