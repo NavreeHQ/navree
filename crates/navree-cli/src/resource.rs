@@ -65,7 +65,11 @@ fn looks_secret(name: &str, ty: &str) -> bool {
         || lower.contains("recovery_code")
         || matches!(
             words.as_slice(),
-            [.., "api" | "private" | "signing" | "secret" | "encryption" | "access", "key"]
+            [
+                ..,
+                "api" | "private" | "signing" | "secret" | "encryption" | "access",
+                "key"
+            ]
         )
 }
 
@@ -423,12 +427,7 @@ pub fn resource_file(name: &Name, info: &ModelInfo, model_path: &str) -> anyhow:
         .iter()
         .find(|t| shown.iter().any(|c| c.name == **t && is_text(&c.ty)))
         .map(|t| (*t).to_owned())
-        .or_else(|| {
-            shown
-                .iter()
-                .find(|c| c.primary_key)
-                .map(|c| c.name.clone())
-        })
+        .or_else(|| shown.iter().find(|c| c.primary_key).map(|c| c.name.clone()))
         .unwrap_or_else(|| "id".to_owned());
     let searchable = shown.iter().any(|c| c.name == title && is_text(&c.ty));
     let mut search = Vec::new();

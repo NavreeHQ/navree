@@ -80,12 +80,7 @@ impl Ability {
     /// assert!(!ability.can_field_on_every_record(READ, "Deal", "title"));
     /// assert!(ability.can_field_on_every_record(READ, "Deal", "stage"));
     /// ```
-    pub fn can_field_on_every_record(
-        &self,
-        action: &str,
-        subject_type: &str,
-        field: &str,
-    ) -> bool {
+    pub fn can_field_on_every_record(&self, action: &str, subject_type: &str, field: &str) -> bool {
         let mut covered = false;
         let relevant = self
             .rules

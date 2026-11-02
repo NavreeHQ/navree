@@ -405,7 +405,9 @@ impl Resource for GroupedTrend {
 
     fn metrics(&self) -> Vec<Metric<Deal>> {
         vec![
-            Metric::trend("Count by day").count().by_day(Deal::CREATED_AT, 7),
+            Metric::trend("Count by day")
+                .count()
+                .by_day(Deal::CREATED_AT, 7),
             Metric::trend("Sum by day")
                 .sum(Deal::AMOUNT_CENTS)
                 .by_day(Deal::CREATED_AT, 7),

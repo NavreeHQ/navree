@@ -252,10 +252,16 @@ struct Closing {
     outcome: &'static str,
 }
 
+impl Closing {
+    /// Says how the file ended.
+    fn ended(&mut self, outcome: &'static str) {
+        self.outcome = outcome;
+    }
+}
+
 impl Drop for Closing {
     fn drop(&mut self) {
-        let (Some(entry), Ok(runtime)) =
-            (self.entry.take(), tokio::runtime::Handle::try_current())
+        let (Some(entry), Ok(runtime)) = (self.entry.take(), tokio::runtime::Handle::try_current())
         else {
             return;
         };
@@ -357,7 +363,8 @@ async fn send(
     let mut entry = AuditEntry::new(AuditKind::Custom, "helm.export").metadata(metadata.clone());
     entry.subject_type = Some(info.subject.to_owned());
     cx.audit_outside(entry).await;
-    let mut finished = cx.entry_of_client(AuditEntry::new(AuditKind::Custom, "helm.export.finished"));
+    let mut finished =
+        cx.entry_of_client(AuditEntry::new(AuditKind::Custom, "helm.export.finished"));
     finished.subject_type = Some(info.subject.to_owned());
     let day = crate::save::now(&cx.app).await.date_naive();
     let sending = Sending {
@@ -397,13 +404,13 @@ async fn send(
             return Some((Ok(Bytes::from(text)), state));
         }
         let Some(cursor) = state.cursor.take() else {
-            state.closing.outcome = "finished";
+            state.closing.ended("finished");
             return None;
         };
         if Instant::now() >= state.deadline {
             tracing::warn!(target: "navree::helm", "an export reached its time limit");
             state.failed = true;
-            state.closing.outcome = "time_limit";
+            state.closing.ended("time_limit");
             let stopped: BoxError = "the export stopped: it reached its time limit".into();
             return Some((Err(stopped), state));
         }
@@ -416,7 +423,7 @@ async fn send(
             Err(error) => {
                 tracing::warn!(target: "navree::helm", status = error.status.as_u16(), "an export stopped");
                 state.failed = true;
-                state.closing.outcome = "stopped";
+                state.closing.ended("stopped");
                 let stopped: BoxError = format!("the export stopped: {}", error.title).into();
                 Some((Err(stopped), state))
             }

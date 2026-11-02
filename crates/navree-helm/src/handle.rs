@@ -411,12 +411,7 @@ impl<R: Resource> Handle<R> {
                 filter.kind,
                 FilterKind::Select | FilterKind::BelongsTo(_) | FilterKind::DateRange
             );
-            if let Some(unknown) = filter
-                .reads
-                .iter()
-                .flatten()
-                .find(|c| column(c).is_none())
-            {
+            if let Some(unknown) = filter.reads.iter().flatten().find(|c| column(c).is_none()) {
                 return Err(fail(format!(
                     "filter `{}` reads `{unknown}`, which is not a column of `{table}`",
                     filter.name
@@ -1349,7 +1344,14 @@ impl<R: Resource> Handle<R> {
             .collect();
         let mut sql = String::new();
         let mut bound = Vec::with_capacity(ends.len());
-        halve(&name, &ends, 0, ends.len().saturating_sub(1), &mut sql, &mut bound);
+        halve(
+            &name,
+            &ends,
+            0,
+            ends.len().saturating_sub(1),
+            &mut sql,
+            &mut bound,
+        );
         Expr::raw(sql, bound)
     }
 
@@ -1470,7 +1472,10 @@ impl<R: Resource> Handle<R> {
                         self.col(column)
                             .gte(values::date_bound(shape, midnight(start))),
                     )
-                    .where_(self.col(column).lt(values::date_bound(shape, midnight(end))));
+                    .where_(
+                        self.col(column)
+                            .lt(values::date_bound(shape, midnight(end))),
+                    );
                 // One grouped statement, whatever the aggregate: the database adds up
                 // the window and only a number per bucket comes back, however many
                 // rows it holds. (`2` is the second selected column, the bucket.)

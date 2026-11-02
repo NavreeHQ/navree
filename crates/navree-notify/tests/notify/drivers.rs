@@ -5,11 +5,11 @@ use std::sync::Arc;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
+use http::Method;
 use navree_contracts::{BoxFuture, Secret};
 use navree_crypto::hmac_sha256;
 use navree_crypto::jose::{Algorithm, Jws, VerifyingKey};
 use navree_crypto::webpush::VapidKey;
-use http::Method;
 use navree_http_client::{FakeResponse, HttpClient, HttpClientOptions};
 use navree_kernel::BoxError;
 use navree_notify::{

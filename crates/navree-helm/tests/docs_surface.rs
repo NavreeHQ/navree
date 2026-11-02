@@ -63,7 +63,7 @@ impl Resource for EveryItem {
             Field::select("stage").options(STAGES).badge(),
             Field::date("expected_close_date"),
             Field::datetime("created_at").readonly(),
-            Field::email("title").hide_on_forms(),
+            Field::email("title").hide_on_forms().hide_on_export(),
             Field::url("title").only_on_forms(),
             Field::file("notes", "local")
                 .accept(["image/*"])
@@ -224,6 +224,7 @@ fn the_documented_api_exists() {
         metrics_cache_secs,
         dashboard,
         session_minutes,
+        export_max_secs,
     } = HelmOptions::default();
     assert_eq!(path, "/admin");
     assert_eq!(title, "Admin");
@@ -233,6 +234,7 @@ fn the_documented_api_exists() {
     assert_eq!(metrics_cache_secs, 60);
     assert!(dashboard);
     assert_eq!(session_minutes, 480);
+    assert_eq!(export_max_secs, 1800);
 
     // The subject, its permission and the cookie.
     assert_eq!(Helm::SUBJECT, HELM_SUBJECT);

@@ -1644,7 +1644,11 @@ async fn discard_uploads(cx: &Cx, info: &ResourceInfo, submission: &Submission) 
             continue;
         };
         let deleted = match storage.disk(disk) {
-            Ok(disk) => disk.delete(path).await.map(|_| ()).map_err(|e| e.to_string()),
+            Ok(disk) => disk
+                .delete(path)
+                .await
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
             Err(error) => Err(error.to_string()),
         };
         if let Err(error) = deleted {

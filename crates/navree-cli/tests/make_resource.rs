@@ -194,7 +194,11 @@ fn resource_for(extra: &str, attributes: &str) -> String {
     let (_dir, root) = project();
     let model = root.join("src/modules/deals/models/deal.rs");
     let text = std::fs::read_to_string(&model).unwrap();
-    let mut patched = text.replacen("pub struct Deal {", &format!("pub struct Deal {{\n{extra}"), 1);
+    let mut patched = text.replacen(
+        "pub struct Deal {",
+        &format!("pub struct Deal {{\n{extra}"),
+        1,
+    );
     assert_ne!(patched, text);
     if !attributes.is_empty() {
         let before = patched.clone();
@@ -278,7 +282,11 @@ fn a_column_that_looks_like_a_secret_gets_no_field() {
     }
     // Words that only look like one stay.
     for plain in ["token_count", "secretary", "keyboard", "monkey_name"] {
-        let ty = if plain == "token_count" { "i64" } else { "String" };
+        let ty = if plain == "token_count" {
+            "i64"
+        } else {
+            "String"
+        };
         let made = resource_for(&format!("    pub {plain}: {ty},"), "");
         assert!(
             field_lines(&made).iter().any(|line| line.contains(plain)),
@@ -290,6 +298,9 @@ fn a_column_that_looks_like_a_secret_gets_no_field() {
 #[test]
 fn a_hidden_column_is_not_the_title_or_searched() {
     let made = resource_for("    pub email: String,", "hidden(name, email)");
-    assert!(!made.contains("const TITLE: &'static str = \"name\""), "{made}");
+    assert!(
+        !made.contains("const TITLE: &'static str = \"name\""),
+        "{made}"
+    );
     assert!(!made.contains("\"email\"]"), "{made}");
 }

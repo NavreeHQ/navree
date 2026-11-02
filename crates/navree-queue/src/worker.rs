@@ -199,10 +199,12 @@ impl Budget {
     fn take(&self) -> bool {
         let mut left = self.left.load(Ordering::SeqCst);
         while left > 0 {
-            match self
-                .left
-                .compare_exchange_weak(left, left - 1, Ordering::SeqCst, Ordering::SeqCst)
-            {
+            match self.left.compare_exchange_weak(
+                left,
+                left - 1,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
                 Ok(_) => return true,
                 Err(actual) => left = actual,
             }
@@ -642,7 +644,9 @@ fn is_busy(error: &QueueError) -> bool {
 /// Until when a worker holds `job`, reserved about when `started` was taken: after
 /// that its reservation is stale and another worker may take it.
 fn held_until(job: &ReservedJob, started: Instant) -> Instant {
-    let held = Duration::from_millis(u64::try_from(crate::record::stale_after_ms(&job.options)).unwrap_or(u64::MAX));
+    let held = Duration::from_millis(
+        u64::try_from(crate::record::stale_after_ms(&job.options)).unwrap_or(u64::MAX),
+    );
     started.checked_add(held).unwrap_or(started)
 }
 

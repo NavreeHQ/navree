@@ -193,9 +193,6 @@ mod tests {
         assert_eq!(hidden_columns(columns(), &[], &[]), Vec::<&str>::new());
         assert_eq!(hidden_columns(columns(), &["email"], &[]), ["mail"]);
         assert_eq!(hidden_columns(columns(), &["mail"], &[]), ["mail"]);
-        assert_eq!(
-            hidden_columns(columns(), &[], &["id", "name"]),
-            ["mail"]
-        );
+        assert_eq!(hidden_columns(columns(), &[], &["id", "name"]), ["mail"]);
     }
 }

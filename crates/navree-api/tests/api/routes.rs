@@ -159,7 +159,10 @@ async fn without_the_document_there_is_no_page_of_the_same_routes() {
     .boot()
     .await
     .unwrap();
-    assert_eq!(get(&app, "/api/openapi.json").await.status, StatusCode::NOT_FOUND);
+    assert_eq!(
+        get(&app, "/api/openapi.json").await.status,
+        StatusCode::NOT_FOUND
+    );
     assert_eq!(get(&app, "/api/docs").await.status, StatusCode::NOT_FOUND);
     assert_eq!(
         get(&app, "/api/docs/assets/nothing").await.status,

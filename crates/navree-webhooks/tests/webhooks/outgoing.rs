@@ -858,7 +858,10 @@ async fn a_failed_attempt_does_not_store_the_path_of_the_endpoint() {
         FakeResponse::connection_failed(),
     );
     let created = h
-        .endpoint(NewEndpoint::new("https://hooks.lovelace.io/SECRETPATH?t=QUERYSECRET").events(["deal.won"]))
+        .endpoint(
+            NewEndpoint::new("https://hooks.lovelace.io/SECRETPATH?t=QUERYSECRET")
+                .events(["deal.won"]),
+        )
         .await;
     h.emit(deal_won(None)).await;
     h.run_queue().await;

@@ -246,12 +246,18 @@ async fn a_hidden_column_reaches_no_route_for_anyone() {
     assert!(!detail.contains("API token"), "{detail}");
     // The edit form doesn't fill it in.
     let form = plain(
-        page(&manager, &format!("/admin/resources/companies/{}/edit", c.id))
-            .await
-            .assert_status(200),
+        page(
+            &manager,
+            &format!("/admin/resources/companies/{}/edit", c.id),
+        )
+        .await
+        .assert_status(200),
     );
     assert!(!form.contains("TOKENSECRET"), "{form}");
-    assert!(form.contains("name=\"api_token\""), "still set here: {form}");
+    assert!(
+        form.contains("name=\"api_token\""),
+        "still set here: {form}"
+    );
     // What the metadata says.
     let index = manager
         .get("/admin/api/resources")
@@ -304,7 +310,11 @@ async fn saving_a_form_leaves_a_hidden_column_it_was_not_told_about() {
     assert_eq!(saved.api_token.as_deref(), Some("TOKENSECRET"));
     // A new one replaces it.
     assert_eq!(
-        edit(&manager, vec![("name", "Renamed"), ("api_token", "NEWTOKEN")]).await,
+        edit(
+            &manager,
+            vec![("name", "Renamed"), ("api_token", "NEWTOKEN")]
+        )
+        .await,
         303
     );
     let saved = reload_company(&app, c.id).await.unwrap();
@@ -353,7 +363,11 @@ async fn search_tells_nothing_about_a_column_the_rules_hide() {
             .json_value();
         assert_eq!(options["data"], json!([]), "{term}");
     }
-    let html = plain(page(&hides, "/admin/resources/deals").await.assert_status(200));
+    let html = plain(
+        page(&hides, "/admin/resources/deals")
+            .await
+            .assert_status(200),
+    );
     assert!(!html.contains("name=\"search\""), "no search box: {html}");
     let index = hides.get("/admin/api/resources").send().await.json_value();
     assert_eq!(deals_in(&index)["search"], false, "{index}");
@@ -407,11 +421,18 @@ async fn a_list_is_not_sorted_by_a_column_the_rules_hide() {
     page(&hides, "/admin/resources/deals?sort=amount_cents")
         .await
         .assert_status(400);
-    page(&hides, "/admin/resources/deals/export.csv?sort=amount_cents")
-        .await
-        .assert_status(400);
+    page(
+        &hides,
+        "/admin/resources/deals/export.csv?sort=amount_cents",
+    )
+    .await
+    .assert_status(400);
     // Nothing offers it, and the metadata says so.
-    let html = plain(page(&hides, "/admin/resources/deals").await.assert_status(200));
+    let html = plain(
+        page(&hides, "/admin/resources/deals")
+            .await
+            .assert_status(200),
+    );
     assert!(!html.contains("sort=amount_cents"), "{html}");
     assert!(html.contains("sort=title"), "{html}");
     let index = hides.get("/admin/api/resources").send().await.json_value();
@@ -517,7 +538,11 @@ async fn filters_on_a_column_the_rules_hide_are_refused() {
     }
     // The toolbar and the metadata don't offer it.
     let (_, no_stage) = user(&app, "no-stage").await;
-    let html = plain(page(&no_stage, "/admin/resources/deals").await.assert_status(200));
+    let html = plain(
+        page(&no_stage, "/admin/resources/deals")
+            .await
+            .assert_status(200),
+    );
     assert!(!html.contains("filters[stage]"), "{html}");
     let index = no_stage
         .get("/admin/api/resources")

@@ -87,9 +87,7 @@ async fn seed_many(app: &TestApp, workspace: Uuid, count: usize) {
 }
 
 /// The status of a response, its lines and the error its body ended with.
-async fn drain(
-    response: http::Response<navree_http::body::Body>,
-) -> (u16, usize, Option<String>) {
+async fn drain(response: http::Response<navree_http::body::Body>) -> (u16, usize, Option<String>) {
     let status = response.status().as_u16();
     let mut body = response.into_body().into_data_stream();
     let mut lines = 0;
