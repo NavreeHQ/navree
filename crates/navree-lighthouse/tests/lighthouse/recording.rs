@@ -175,8 +175,13 @@ async fn slow_requests_and_slow_queries_open_their_own_issues() {
         })
         .await
         .unwrap();
-    assert_eq!(slow.data[0].issue.culprit, "GET /api/demo/slow");
-    assert_eq!(slow.data[0].issue.level, Level::Warning);
+    // A busy database can push the other route past so low a threshold too.
+    let slow_issue = slow
+        .data
+        .iter()
+        .find(|summary| summary.issue.culprit == "GET /api/demo/slow")
+        .expect("the slow route's issue");
+    assert_eq!(slow_issue.issue.level, Level::Warning);
 
     let queries = store.queries(Period::Hour).await.unwrap();
     let statement = queries
