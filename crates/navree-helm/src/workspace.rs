@@ -219,6 +219,9 @@ pub(crate) enum Refused {
     Missing,
     /// The app has no way of checking.
     Unchecked,
+    /// They are limited to some of its partitions, and the panel doesn't keep to
+    /// partitions.
+    PartitionsLimited,
     /// Each workspace has a database of its own, out of the panel's reach.
     OwnDatabases,
 }
@@ -236,6 +239,12 @@ impl Refused {
                 .with_detail(
                     "This panel has no way to check who may work in a workspace: the app needs \
                      WorkspaceModule, or to say who may with helm_staff_workspaces.",
+                ),
+            Refused::PartitionsLimited => AppError::forbidden()
+                .with_code("helm_workspace_partitions")
+                .with_detail(
+                    "You see only some of this workspace's partitions, and the panel shows all \
+                     of them.",
                 ),
             Refused::OwnDatabases => AppError::bad_request(
                 "The panel cannot work inside a workspace under workspace.isolation = \
@@ -284,6 +293,9 @@ async fn decide(
     let staff = staff_says(app, core, user_id, access, workspace).await?;
     Ok(match (entry, staff) {
         (None, None) => Err(Refused::Unchecked),
+        (Some(WorkspaceEntry::PartitionsLimited), None | Some(false)) => {
+            Err(Refused::PartitionsLimited)
+        }
         (_, None | Some(false)) => Err(Refused::NotAllowed),
         (Some(WorkspaceEntry::NoSuchWorkspace), Some(true)) => Err(Refused::Missing),
         (_, Some(true)) => Ok(Admitted::Staff),
@@ -535,6 +547,24 @@ mod tests {
     use http::header::COOKIE;
 
     use super::*;
+
+    #[test]
+    fn of_two_header_lines_the_first_names_the_workspace() {
+        let (first, second) = (Uuid::now_v7(), Uuid::now_v7());
+        let mut headers = HeaderMap::new();
+        headers.append(
+            WORKSPACE_HEADER,
+            HeaderValue::from_str(&first.to_string()).unwrap(),
+        );
+        headers.append(
+            WORKSPACE_HEADER,
+            HeaderValue::from_str(&second.to_string()).unwrap(),
+        );
+        assert_eq!(
+            requested(&headers, Some(WORKSPACE_HEADER)),
+            Some((first, NamedBy::Header))
+        );
+    }
 
     #[test]
     fn a_table_is_asked_about_by_the_name_it_was_made_with() {

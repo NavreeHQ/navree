@@ -809,12 +809,41 @@ impl<R: Resource> Handle<R> {
         }
     }
 
+    /// [`checked`](Self::checked) for a create: a form across workspaces refers to
+    /// records of the workspace it names, as the create will find them. Someone
+    /// who may not work in that one makes the record in no workspace, and checks it
+    /// there.
+    async fn checked_for_form(
+        &self,
+        cx: &Cx,
+        fields: &[Field],
+        input: Map<String, Json>,
+    ) -> Result<Map<String, Json>, AppError> {
+        let named = self
+            .named_by_form(&input)
+            .filter(|named| cx.uow.workspace() != Some(*named))
+            .filter(|_| self.form_may_name_workspace(cx) || cx.uow.workspace().is_none());
+        let Some(named) = named else {
+            return self.checked(cx, fields, input, true, true).await;
+        };
+        let admitted =
+            workspace::admission(&cx.app, &cx.core, cx.user_id, &cx.access, named, false).await?;
+        let check = self.checked(cx, fields, input, true, true);
+        match admitted {
+            Ok(_) => workspace::within(&cx.app, &cx.uow, named, check).await,
+            Err(_) => workspace::outside(&cx.app, &cx.uow, check).await,
+        }
+    }
+
+    /// Whether the sidebar's workspace gives way to the one a form names: a header
+    /// is the client's own word for the request.
+    fn form_may_name_workspace(&self, cx: &Cx) -> bool {
+        self.info.workspaces == Some(Workspaces::Every) && cx.named_by == Some(NamedBy::Cookie)
+    }
+
     fn save_context(&self, cx: &Cx) -> SaveContext {
         let mut inner = cx.inner(self.info.module, Map::new());
-        // The sidebar's workspace is a default a form across workspaces may
-        // overrule; a header is the client's own word for this request.
-        inner.form_may_name_workspace =
-            self.info.workspaces == Some(Workspaces::Every) && cx.named_by == Some(NamedBy::Cookie);
+        inner.form_may_name_workspace = self.form_may_name_workspace(cx);
         SaveContext::new(inner)
     }
 
@@ -1422,7 +1451,7 @@ impl<R: Resource> ErasedResource for Handle<R> {
                 .filter(|f| f.editable())
                 .cloned()
                 .collect();
-            let values = self.checked(cx, &editable, input, true, true).await?;
+            let values = self.checked_for_form(cx, &editable, input).await?;
             let submitted: Vec<String> = values.keys().cloned().collect();
             let record = self
                 .resource
@@ -1489,7 +1518,22 @@ impl<R: Resource> ErasedResource for Handle<R> {
                 .filter(|f| f.editable())
                 .cloned()
                 .collect();
-            let values = self.checked(cx, &editable, input, false, true).await?;
+            // A record across workspaces refers to records of its own.
+            let owner = self
+                .owner_of(&record)?
+                .filter(|_| self.info.workspaces == Some(Workspaces::Every));
+            let values = match owner {
+                Some(owner) if cx.uow.workspace() != Some(owner) => {
+                    workspace::within(
+                        &cx.app,
+                        &cx.uow,
+                        owner,
+                        self.checked(cx, &editable, input, false, true),
+                    )
+                    .await?
+                }
+                _ => self.checked(cx, &editable, input, false, true).await?,
+            };
             let record = self
                 .resource
                 .update(&self.save_context(cx), record, self.form(cx, values))

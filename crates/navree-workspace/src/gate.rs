@@ -15,6 +15,7 @@ use crate::core::Core;
 use crate::current::{app_error, enter_named, guest_member, writes};
 use crate::demo::DemoIntent;
 use crate::entity::Workspace;
+use crate::workspaces::GrantedBy;
 use crate::role::WorkspaceRole;
 use crate::{Isolation, ResolverKind, WorkspaceError, Workspaces};
 
@@ -22,13 +23,17 @@ use crate::{Isolation, ResolverKind, WorkspaceError, Workspaces};
 /// membership, an organization's grant, or a demo's guest role.
 pub(crate) struct Gate(pub(crate) Arc<Core>);
 
+/// What a user is in a workspace.
+struct Standing {
+    workspace: Workspace,
+    role: Option<WorkspaceRole>,
+    /// Limited to some of its partitions, through their membership.
+    partitions_limited: bool,
+}
+
 impl Gate {
-    /// The workspace `id` and the role `user` works in it with, if any.
-    async fn standing(
-        &self,
-        user: Uuid,
-        id: Uuid,
-    ) -> Result<Option<(Workspace, Option<WorkspaceRole>)>, AppError> {
+    /// The workspace `id` and what `user` is in it, if it exists.
+    async fn standing(&self, user: Uuid, id: Uuid) -> Result<Option<Standing>, AppError> {
         let core = &self.0;
         let workspace = match core.workspace_in(&*core.db, id).await {
             Ok(workspace) => workspace,
@@ -40,15 +45,30 @@ impl Gate {
             .upgrade()
             .ok_or_else(|| AppError::internal("the app has shut down"))?;
         let workspaces = ctx.get::<Workspaces>().await.map_err(AppError::internal)?;
-        let role = match workspaces
+        let (role, partitions_limited) = match workspaces
             .admission(&workspace, user)
             .await
             .map_err(app_error)?
         {
-            Some(admission) => Some(admission.role),
-            None => guest_member(&core.config, &workspace, user).map(|member| member.role()),
+            Some(admission) => {
+                // The owner and those who enter through an organization see every
+                // partition.
+                let limited = core.config.partitions.enabled
+                    && admission.granted_by == GrantedBy::Membership
+                    && admission.role != WorkspaceRole::Owner
+                    && admission.member.partitions_limited();
+                (Some(admission.role), limited)
+            }
+            None => (
+                guest_member(&core.config, &workspace, user).map(|member| member.role()),
+                false,
+            ),
         };
-        Ok(Some((workspace, role)))
+        Ok(Some(Standing {
+            workspace,
+            role,
+            partitions_limited,
+        }))
     }
 
     /// What `workspace` takes from a user with `role`, if they have one.
@@ -115,13 +135,18 @@ impl WorkspaceGate for Gate {
         writes: bool,
     ) -> BoxFuture<'_, Result<WorkspaceEntry, AppError>> {
         Box::pin(async move {
-            let Some((found, role)) = self.standing(user, workspace).await? else {
+            let Some(standing) = self.standing(user, workspace).await? else {
                 return Ok(WorkspaceEntry::NoSuchWorkspace);
             };
-            let Some(role) = role else {
+            let Some(role) = &standing.role else {
                 return Ok(WorkspaceEntry::NotAMember);
             };
-            if writes && let Some(refusal) = self.writes_of(&found, Some(&role)).refusal() {
+            if standing.partitions_limited {
+                return Ok(WorkspaceEntry::PartitionsLimited);
+            }
+            if writes
+                && let Some(refusal) = self.writes_of(&standing.workspace, Some(role)).refusal()
+            {
                 return Err(refusal);
             }
             Ok(WorkspaceEntry::Allowed)
@@ -140,24 +165,27 @@ impl WorkspaceGate for Gate {
                 .and_then(|state| state.0.as_ref())
                 .map(|principal| principal.user_id)
                 .ok_or_else(AppError::unauthenticated)?;
-            match self.standing(user, workspace).await? {
-                None => Ok(WorkspaceEntry::NoSuchWorkspace),
-                Some((_, None)) => Ok(WorkspaceEntry::NotAMember),
-                Some((found, Some(role))) => {
-                    // A write to a read-only demo is refused on entering it, with
-                    // the routes that stay open in mind.
-                    let intent = parts.extensions.get::<DemoIntent>().copied();
-                    let allowed = self.writes_of(&found, Some(&role));
-                    if writes(&parts.method, intent)
-                        && !allowed.read_only_demo
-                        && allowed.role_is_read_only()
-                    {
-                        return Err(WorkspaceWrites::read_only_role_error());
-                    }
-                    enter_named(parts, workspace).await?;
-                    Ok(WorkspaceEntry::Allowed)
-                }
+            let Some(standing) = self.standing(user, workspace).await? else {
+                return Ok(WorkspaceEntry::NoSuchWorkspace);
+            };
+            let Some(role) = &standing.role else {
+                return Ok(WorkspaceEntry::NotAMember);
+            };
+            if standing.partitions_limited {
+                return Ok(WorkspaceEntry::PartitionsLimited);
             }
+            // A write to a read-only demo is refused on entering it, with the
+            // routes that stay open in mind.
+            let intent = parts.extensions.get::<DemoIntent>().copied();
+            let allowed = self.writes_of(&standing.workspace, Some(role));
+            if writes(&parts.method, intent)
+                && !allowed.read_only_demo
+                && allowed.role_is_read_only()
+            {
+                return Err(WorkspaceWrites::read_only_role_error());
+            }
+            enter_named(parts, workspace).await?;
+            Ok(WorkspaceEntry::Allowed)
         })
     }
 
@@ -168,7 +196,7 @@ impl WorkspaceGate for Gate {
     ) -> BoxFuture<'_, Result<WorkspaceWrites, AppError>> {
         Box::pin(async move {
             Ok(match self.standing(user, workspace).await? {
-                Some((found, role)) => self.writes_of(&found, role.as_ref()),
+                Some(standing) => self.writes_of(&standing.workspace, standing.role.as_ref()),
                 None => WorkspaceWrites::default(),
             })
         })

@@ -34,6 +34,9 @@ pub enum WorkspaceEntry {
     NotAMember,
     /// There is no such workspace.
     NoSuchWorkspace,
+    /// They are a member limited to some of its partitions, which a module that
+    /// doesn't keep to partitions itself can't hold them to.
+    PartitionsLimited,
 }
 
 /// What a workspace takes from a user: what a [`WorkspaceGate`] reports of the
