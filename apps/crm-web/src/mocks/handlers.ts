@@ -1372,7 +1372,7 @@ export const handlers = [
         .filter((e) => !q.get("subject_id") || e.subject_id === q.get("subject_id"))
         .filter((e) => !q.get("action") || e.action === q.get("action"))
         .sort((a, b) => b.created_at.localeCompare(a.created_at))
-        .map((e) => ({ ...e, kind: e.kind as AuditEntry["kind"], ip: null, user_agent: null, metadata: {} }));
+        .map((e) => ({ ...e, kind: e.kind as AuditEntry["kind"], impersonator_id: null, ip: null, user_agent: null, metadata: {} }));
       return HttpResponse.json(paginate(rows, ctx.url));
     }),
   ),
