@@ -860,7 +860,7 @@ async fn staff_entries(app: &TestApp) -> Vec<String> {
     let log = app.get::<navree_audit::AuditLog>().await;
     log.flush().await;
     navree_audit::AuditLog::list(
-        &*log,
+        &log,
         &navree_audit::AuditFilter::default(),
         navree_db::PageQuery {
             page: 1,
