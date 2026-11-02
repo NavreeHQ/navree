@@ -1,6 +1,6 @@
 ---
 name: navree-helm
-description: "Helm, the admin panel of navree-helm: the `helm` facade feature (in `full`), `HelmModule` and the `helm` config section, `navree make:resource <module> <Model>`, the `Resource` trait over a navree-orm model (LABEL, SINGULAR, GROUP, ICON, TITLE, SEARCH, SLUG, PER_PAGE, DEFAULT_SORT, ORDER, WORKSPACES, fields, filters, actions, metrics, query, create, update, delete), `Field`, `Filter`, `Action` / `ActionContext` / `ActionResult`, `Metric`, `HelmPage` and `m.helm_page(..)`, `SaveContext` and `FormData::parse`, file fields on storage disks, the access rules every screen checks (`helm.view`, then read, create, update, delete and action abilities on each record and field), the audit entries, sign-in, CSRF and the strict CSP, and testing through `/admin/api`. Use when adding an admin panel or back office, exposing a model at `/admin`, adding a filter, bulk action, metric card or custom admin page, saving admin edits through a service, or debugging a resource missing from the menu, a 403 or 404 in the panel, a boot error naming a resource, or a field shown read-only."
+description: "Helm, the admin panel of navree-helm: the `helm` facade feature (in `full`), `HelmModule` and the `helm` config section, `navree make:resource <module> <Model>`, the `Resource` trait over a navree-orm model (LABEL, SINGULAR, GROUP, ICON, TITLE, SEARCH, SLUG, PER_PAGE, DEFAULT_SORT, ORDER, READ_ONLY, EXPORT, SIDEBAR_COUNT, COUNT_CAP, WORKSPACES, fields, filters, actions, metrics, query, create, update, delete), `Field`, `Filter`, `Action` / `ActionContext` / `ActionResult`, `Metric`, `HelmPage` and `m.helm_page(..)`, `SaveContext` and `FormData::parse`, file fields on storage disks, the access rules every screen checks (`helm.view`, then read, create, update, delete and action abilities on each record and field), the audit entries, sign-in, CSRF and the strict CSP, and testing through `/admin/api`. Use when adding an admin panel or back office, exposing a model at `/admin`, adding a filter, bulk action, metric card or custom admin page, saving admin edits through a service, or debugging a resource missing from the menu, a 403 or 404 in the panel, a boot error naming a resource, or a field shown read-only."
 ---
 
 # Helm: the admin panel
@@ -100,7 +100,11 @@ impl Resource for DealResource {
     const SEARCH: &'static [&'static str] = &["title"];
     // SLUG (default: table name with '-'), PER_PAGE (0 = helm.per_page),
     // DEFAULT_SORT ("-amount_cents"; default -created_at or -pk), ORDER (i32),
-    // WORKSPACES (Workspaces::Current by default; Every spans workspaces).
+    // WORKSPACES (Workspaces::Current by default; Every spans workspaces),
+    // READ_ONLY (true: no New/Edit/Delete shown, writes refused; actions still
+    // run), EXPORT (true: CSV of the list), SIDEBAR_COUNT (true: a count in
+    // the menu; false for a table whose count is not cheap), COUNT_CAP
+    // (10_000: lists count rows only up to this, then say `10,000+`).
 
     fn fields(&self) -> Vec<Field> {
         vec![
@@ -167,14 +171,22 @@ without a `query`), then `query`, then the user's access filter.
   the viewer's zone, stored UTC), `email`, `url`, `file(col, disk)`
   (+ `.accept([..])`, `.max_size(bytes)`, 10 MiB default), `belongs_to::<R>`,
   `has_many::<R>(foreign_key)` (a panel on the detail page; `R` needs a
-  `belongs_to` on that key), `computed(name, f)`, `view(name, template)`.
+  `belongs_to` on that key; several may share a key if they list different
+  resources), `computed(name, f)`, `view(name, template)`.
   Modifiers: `.label`, `.help`, `.sortable`, `.readonly`, `.hide_on_index`,
   `.hide_on_detail`, `.hide_on_forms`, `.only_on_forms`, `.required`, `.min`,
   `.max`, `.min_length`, `.max_length`, `.pattern`, `.default`.
 - **Filters:** `select(col).options(..)`, `belongs_to::<R>(col)`,
   `boolean(name, label, f)`, `date_range(col)` (`a..b` or presets),
-  `custom(name, label, f)`, `.label(..)`. URL form:
+  `custom(name, label, f)`, `.label(..)`. Each is a chip in the list's toolbar
+  (a panel of checkboxes, radios or a text box; Apply, Clear, Reset). URL form:
   `?search=..&filters[stage]=won,lost&sort=-amount_cents&page=2`.
+- **The list toolbar:** search, filter chips, then the bulk-action menu with
+  **Run** (offers only actions the user may run and the workspace role takes),
+  **Export** (`GET .../export.csv`, the list's rows as CSV, a chunk of 500 at a
+  time, formulas quoted, audited as `helm.export`) and counts in the menu
+  (`GET /admin/counts`, filled by the script, cached per user and workspace,
+  capped at `1,000+`).
 - **Actions:** `Action::new(name, label)` + `.ability(M)`, `.confirm(text)`,
   `.destructive()`, `.fields(vec![..])` (read with `ctx.input::<T>(name)` /
   `ctx.inputs()`), `.only_on_detail()`, `.only_on_index()`, `.queued()`
@@ -182,7 +194,8 @@ without a `query`), then `query`, then the user's access filter.
   Results: `ActionResult::message`, `::redirect(url)`, `::download(url)`.
 - **Metrics:** `Metric::value | trend | partition(label)` then `.count()`,
   `.sum/.average/.min/.max(col)`, `.filter(cond)`, `.money(cur)`,
-  `.over(date_col)` (range picker 7/30/90 days, month, year, with change),
+  `.over(date_col)` (range picker 7/30/90 days, month, year; a delta badge
+  only when the period before has rows to compare with),
   `.by_day/.by_week/.by_month(col, n)`, `.group_by(col)`, `.on_dashboard()`.
   A metric's URL name is its label in kebab case (`open-pipeline`).
 
@@ -330,6 +343,11 @@ token.
   `helm_staff_workspaces` when the action is requested.
 - **The staff audit:** `helm.workspace.staff` entries go on the log's own
   connection and stay when the request or job fails.
+- **Buttons that are not there:** the panel hides what the user can't do. A
+  resource with `READ_ONLY`, a role that only reads in the workspace, a
+  read-only demo and an ability the user lacks all remove New, Edit, Delete and
+  the bulk actions from the page; the server still refuses a write made by hand.
+  Export, counts and lists are reads and stay.
 - **A record is a 404, not a 403:** rows the access filter hides don't exist
   for that user, like `Accessible<M, Read>` in the API.
 - **A field is greyed out on edit:** a `.fields([..])` or `cannot(..)` rule
@@ -353,6 +371,9 @@ token.
 - **Money** is in minor units in `values`, `FormData` and `min`/`max`.
 - **Metrics** are cached per user, access version and range for
   `helm.metrics_cache_secs` (60; `0` turns it off): a changed number can lag.
+  The sidebar's counts share that setting (per user, access and workspace).
+- **Messages name a field by its label** (`Project should not be empty`); a
+  record with no `TITLE` value is `Report #3f9a1c2e`, not a UUID.
 - **Config:** `helm.path` (`/admin`), `title`, `logo`, `accent`, `per_page`
   (1 to 100), `metrics_cache_secs`, `dashboard`, `session_minutes`; env
   `APP_HELM__TITLE`, `APP_HELM__PER_PAGE`.

@@ -180,12 +180,16 @@ The model behind it stores the stage as its name (`#[model(cast = "string_enum")
 | `LABEL`, `SINGULAR` | The plural and singular names on screen. `SINGULAR` defaults to `LABEL`. |
 | `GROUP` | The menu group. Resources without one go under **Resources**. |
 | `ICON` | A [Lucide](https://lucide.dev/icons/) icon name for the menu, such as `handshake`, `users`, `building-2`, `receipt` or `package`. Helm embeds about 140 common Lucide icons (no external requests); any other name shows a folder icon and logs a warning at boot. Custom front ends get the name from the [metadata API](#the-json-api). |
-| `TITLE` | The column that names a record: in headings, breadcrumbs and relationship fields. Defaults to `id`. |
+| `TITLE` | The column that names a record: in headings, breadcrumbs and relationship fields. Defaults to `id`. A record with no title (the key is the title, or the column is empty) is named by the resource and the end of its key, `Report #3f9a1c2e`, never by a whole UUID. |
 | `SEARCH` | The columns the search box matches, case-insensitively. |
 | `SLUG` | The resource's path segment, `/admin/resources/deals`. Defaults to the table name, with `-` for `_`. |
 | `PER_PAGE` | Rows per page on the list (at most 100). `0`, the default, uses `helm.per_page` (25). |
 | `DEFAULT_SORT` | The list's order, such as `"-amount_cents"`. Defaults to newest first. See [sorting](#search-sorting-and-filters). |
 | `ORDER` | The position in the menu within the group (lower first). |
+| `READ_ONLY` | `true` for records the app writes itself, such as an audit trail: the panel shows no New, Edit or Delete for them and refuses a create, an update or a delete, in its screens and in its API. Actions still run. Defaults to `false`. |
+| `EXPORT` | Whether the list offers **Export**, its rows as a CSV file. Defaults to `true`. See [exporting](#exporting). |
+| `SIDEBAR_COUNT` | Whether the menu shows how many records the resource has. Defaults to `true`; turn it off for a table whose count is not cheap. See [the sidebar](#the-panels-look-and-pages). |
+| `COUNT_CAP` | How many rows the list pages count before they say `10,000+` and no longer how many pages there are (10,000). The JSON API always counts them all. |
 | `WORKSPACES` | Where a resource of a model that belongs to workspaces (`#[model(workspace)]`) works: `Workspaces::Current` (the default), in the workspace the request works in, or `Workspaces::Every`, across all of them. See [workspaces](#workspaces). |
 | `fields`, `filters`, `actions`, `metrics` | What the screens show. Only `fields` is required. |
 | `query` | The base query every screen starts from. See [scoping the query](#scoping-the-query). |
@@ -195,9 +199,9 @@ Helm checks every resource when the app boots, so a mistake fails the boot with 
 
 ### The screens
 
-- **List.** A table of the fields shown on the index, with a search box, the filters in a side panel, sortable column headers and pagination. Tick rows to run an action on them. The resource's metrics sit above the table as cards.
+- **List.** A toolbar with a search box and a chip for each filter, a table of the fields shown on the index with sortable column headers, and pagination. Tick rows, pick an action from the menu on the right of the toolbar and press **Run**. **Export** downloads what the list shows as a CSV file. The resource's metrics sit above the table as cards. A list counts its rows up to `COUNT_CAP` (10,000), so a table of millions does not pay for its page number.
 - **Detail.** Every field shown on the detail page, a header with the record's title, buttons for edit, delete and the actions, and below it a panel for each `has_many` relationship, with its own actions.
-- **Create and edit.** A form with every editable field: a text input, a number input with the currency beside it, a select, a picker for a related record (searchable when the script runs), a date or date-time picker. Validation errors appear under their fields.
+- **Create and edit.** A form with every editable field: a text input, a number input with the currency beside it, a select, a picker for a related record (searchable when the script runs), a date or date-time picker. Validation errors appear under their fields and name a field by its label (`Company should not be empty`), not by its column.
 - **Dashboard.** The panel's home page, `/admin`, shows the metrics marked `.on_dashboard()` from every resource the user may read.
 
 Destructive buttons and actions that ask a question show a confirmation first: a dialog when the script runs, otherwise a confirmation page.
@@ -248,25 +252,37 @@ fn fields(&self) -> Vec<Field> {
         Field::text("city").sortable(),
         Field::belongs_to::<UserResource>("owner_id").label("Owner"),
         Field::has_many::<DealResource>("company_id").label("Deals"),
+        Field::has_many::<ContactResource>("company_id").label("Contacts"),
     ]
 }
 ```
+
+A resource may have several `has_many` fields on the same foreign key name, as long as they list different resources (`Deals` and `Contacts` above), and a tree's children (`has_many` on `parent_id`) sit beside its parent (`belongs_to` on `parent_id`).
 
 ## Search, sorting and filters
 
 The search box matches the `SEARCH` columns, ignoring case (non-ASCII letters included). The list sorts by any `.sortable()` field, newest first by default (`-created_at` when the model has that column, else its primary key descending); set `const DEFAULT_SORT: &'static str = "-amount_cents";` to change it (a leading `-` sorts descending).
 
-Filters narrow the list from the side panel:
+Each filter is a **chip** in the list's toolbar: a dashed button with the filter's name that, once the filter holds something, shows what it holds (`Stage | Won +1`). A chip opens a panel of choices; **Apply** submits the toolbar, **Clear** takes that filter off, and **Reset** takes them all off. Filters narrow the list:
 
 | Filter | Lets the user pick |
 |---|---|
-| `Filter::select(column).options(..)` | One or more values |
-| `Filter::belongs_to::<R>(column)` | One or more related records |
-| `Filter::boolean(name, label, f)` | On or off; `f(query, on)` changes the model query (a `Builder`) |
+| `Filter::select(column).options(..)` | One or more values, as checkboxes |
+| `Filter::belongs_to::<R>(column)` | One or more related records, as checkboxes |
+| `Filter::boolean(name, label, f)` | Any, yes or no; `f(query, on)` changes the model query (a `Builder`) |
 | `Filter::date_range(column)` | A range of dates (`2026-10-01..2026-10-31`, either end optional), or a preset: today, this week, this month, this quarter |
 | `Filter::custom(name, label, f)` | A value typed in; `f(query, value)` changes the model query |
 
 The search, filters, sort and page are in the URL (`?search=globex&filters[stage]=won&sort=-amount_cents&page=2`), so a filtered list is a link you can share. A filter takes one or more values: repeat it, or separate them with commas.
+
+### Exporting
+
+**Export** on a list downloads its rows as a CSV file (`GET /admin/resources/deals/export.csv`, with the list's search, filters and sort in the query). It is what the list shows the user: the same rows, narrowed by the same access filter, and in a workspace only that workspace's. A field the user's rules hide is empty. A header line names every field of a record's page by its label; dates are ISO 8601 and Markdown is the text typed.
+
+- **A chunk at a time.** The file is written as it is sent, 500 rows per query by a key cursor, so nothing is held whole in memory and the cost of a chunk does not grow with how far into the table it is. Each chunk checks again that the user may work in the workspace, so a member who is removed stops getting rows.
+- **Spreadsheets.** A text that starts with `=`, `+`, `-` or `@` and is not a number gets a quote in front, so a spreadsheet opens it as text and runs nothing.
+- **A read.** Export is a `GET` that changes nothing, so a role that only reads may use it. Each export writes a `helm.export` entry to the [audit log](/docs/security/audit-log/) with the resource and the query.
+- **Off.** Set `const EXPORT: bool = false;` on a resource whose rows should not leave the panel.
 
 ### Scoping the query
 
@@ -305,6 +321,8 @@ Action::new("mark-lost", "Mark as lost")
     })
 ```
 
+Tick rows on the list, choose the action in the menu beside **Run** and press it; an action that asks a question asks before it runs. The menu offers only the actions the user may run on some record and that the workspace they work in takes from them (a read-only role is offered none), and **Run** waits for a row and an action. The server checks every run again.
+
 | Builder | What it does |
 |---|---|
 | `Action::new(name, label)` | The action's name (in URLs and the audit log) and its button label. |
@@ -333,7 +351,7 @@ Metrics are cards above a resource's list, and on the dashboard when marked `.on
 
 A `col` is one of the model's typed columns (`Deal::AMOUNT_CENTS`) or a column name (`"amount_cents"`), and `.filter(cond)` takes a condition on the model (`Deal::CLOSED_AT.is_null()`).
 
-A value metric with a date column (`.over(Deal::CREATED_AT)`) gets a range picker (7, 30 or 90 days, this month, this year; 30 days by default) and shows the change against the period before. A partition labels its groups with a select field's option labels, or with the titles of related records for a `belongs_to` column. Results are cached in memory for `helm.metrics_cache_secs` (60) per user, access version and range.
+A value metric with a date column (`.over(Deal::CREATED_AT)`) gets a range picker (7, 30 or 90 days, this month, this year; 30 days by default) and, when the period before it has rows to compare with, a **delta**: `+12.4%` on the previous 30 days. With nothing before it, or for a value with no range, there is no delta. A partition labels its groups with a select field's option labels, or with the titles of related records for a `belongs_to` column. Results are cached in memory for `helm.metrics_cache_secs` (60) per user, access version and range.
 
 ## Authorization
 
@@ -399,6 +417,8 @@ permissions = ["deals.read"]    # members only read deals, and write the rest
 permissions = ["invoices.*"]    # clerks write invoices, and nothing else
 ```
 
+The panel shows only what the role takes: a role that only reads is offered no **New**, **Edit** or **Delete** and no bulk action, and the API's `can` says so, while a write made by hand is still a 403 as above. A count, a list and an export are reads, so a read-only role has them. The same goes for a [read-only demo](/docs/workspaces/demo-workspaces/) and for a resource with `READ_ONLY`.
+
 The user still needs the app-wide ability for each write. A user who is both a read-only member and staff is read-only there: the membership is asked first. A demo's `guest_role` is a role like any other, so in `reset` mode a `viewer` guest doesn't write either, and a role in `workspace.demo.editor_roles` writes to a read-only demo. The form in the sidebar stays open to a read-only member, who can still choose the workspace, and the sidebar's choice of one that takes no write doesn't stop a form for another workspace.
 
 A credential limited to one workspace ([`PinnedWorkspace`](/docs/workspaces/resolution/), such as a token of an OAuth client made for a workspace) reaches only that one, staff or not. A request that names no workspace works in it, a header that names another is a 403 (code `token_workspace_mismatch`) before staff is asked, a cookie that names another counts for nothing, the form in the sidebar refuses, and a resource across workspaces is scoped to it.
@@ -460,6 +480,7 @@ per_page = 25
 The look is dark, on ink surfaces, with your accent on the primary button of each screen, focus rings and positive figures. The layout is a sidebar and a top bar:
 
 - **The sidebar** lists the dashboard and your resources and pages, grouped by `GROUP`, then ordered by `const ORDER: i32` (lower first) and label, each with its `ICON`. Its header shows `helm.title` with `helm.logo`, and its footer the signed-in user, with **Sign out**. `Ctrl+B` (`⌘B` on a Mac) or the button at the top left collapses it to its icons; the panel remembers the choice in a cookie (`navree_helm_sidebar`), so the next page opens the same way.
+- **Counts.** Each resource in the menu shows how many records it has, read for the signed-in user and the workspace they work in (it is what their list shows), cached for `helm.metrics_cache_secs` under the user, their access and the workspace, and capped: past 1,000 it says `1,000+`. A page never counts them: the script asks for the numbers once the page is up (`GET /admin/counts`), so a list pays for none it does not show. Turn a resource's count off with `const SIDEBAR_COUNT: bool = false;`.
 - **The top bar** shows the breadcrumb and **Go to** (`Ctrl+K`, `⌘K` on a Mac), a command menu that opens any resource or page of the menu by name and, on a list with a search box, searches it.
 - **On phones** the sidebar opens as a sheet over the page, and tables become lists of cards.
 
@@ -559,7 +580,7 @@ Every key of the `helm` section is optional. From the environment: `APP_HELM__TI
 | `helm.logo` | none | A logo URL for the sidebar's header and the sign-in screen: a path on your app or an `http(s)` URL. |
 | `helm.accent` | `#3dff8f` | The accent color of the primary buttons, focus rings and positive figures (`#rgb` or `#rrggbb`). |
 | `helm.per_page` | `25` | Rows per page on lists (at most 100). |
-| `helm.metrics_cache_secs` | `60` | How long metric results are cached per user and range; `0` turns the cache off. |
+| `helm.metrics_cache_secs` | `60` | How long metric results and the sidebar's counts are cached per user and range (counts: per user and workspace); `0` turns the cache off. |
 | `helm.dashboard` | `true` | Show metric cards on the panel's home page. |
 | `helm.session_minutes` | `480` | How long a sign-in to the panel lasts. |
 
