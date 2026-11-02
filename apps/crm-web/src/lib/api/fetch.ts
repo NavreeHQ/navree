@@ -518,7 +518,7 @@ export function createQuerySerializer<T = unknown>(options?: QuerySerializerOpti
 const PLACEHOLDER = /\{[^{}]+\}/g;
 
 /** A segment a URL reads as the one before it or the same one: `.`, `..` and their `%2e` spellings. */
-const DOT_SEGMENT = /^(\.|%2e){1,2}$/i;
+const DOT_SEGMENT = /^(\.|%2e){1,2}(;.*)?$/i;
 
 /**
  * Fills the `{name}` placeholders of a path from `pathParams`, in the OpenAPI path styles:
@@ -571,6 +571,10 @@ export function defaultPathSerializer(pathname: string, pathParams: Record<strin
     while (to < url.length && url[to] !== "/" && url[to] !== "?" && url[to] !== "#") to++;
     if (DOT_SEGMENT.test(url.slice(from, to))) {
       throw new Error(`The path parameter "${name}" would make "." or ".." a segment of the path (a dot segment).`);
+    }
+    // Some proxies collapse `//`, which moves what follows up the path.
+    if (from === to && url[to] === "/" && from > 0) {
+      throw new Error(`The path parameter "${name}" is empty, which would put two slashes in the path.`);
     }
   }
   return url;

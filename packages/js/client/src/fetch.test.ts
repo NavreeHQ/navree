@@ -396,6 +396,33 @@ describe("request options", () => {
   });
 });
 
+describe("path values servers may read another way", () => {
+  const url = (template: string, path: Record<string, unknown>) =>
+    createFinalURL(template, {
+      baseUrl: "https://api.test",
+      params: { path },
+      querySerializer: () => "",
+      pathSerializer: defaultPathSerializer,
+    });
+
+  it("refuses a dot segment with parameters after it", () => {
+    for (const value of ["..", "."]) {
+      expect(() => url("/{a};v=1", { a: value })).toThrow(/dot segment/);
+      expect(() => url("/x/{a};v=1/y", { a: value })).toThrow(/dot segment/);
+    }
+    expect(url("/{a};v=1", { a: "..a" })).toBe("https://api.test/..a;v=1");
+    expect(url("/{a};v=1", { a: "a.." })).toBe("https://api.test/a..;v=1");
+  });
+
+  it("refuses an empty value that would put two slashes in the path", () => {
+    expect(() => url("/v1/{a}/{b}", { a: "", b: "evil" })).toThrow(/empty/);
+    expect(() => url("/v1/{a}/x", { a: "" })).toThrow(/empty/);
+    expect(url("/v1/{a}/{b}", { a: "x", b: "y" })).toBe("https://api.test/v1/x/y");
+    // At the end of the path it leaves a trailing slash, and nothing to collapse.
+    expect(url("/v1/{a}", { a: "" })).toBe("https://api.test/v1/");
+  });
+});
+
 describe("serialization of empty members", () => {
   it("leaves no empty segments where a member is skipped", () => {
     const serialize = createQuerySerializer();
