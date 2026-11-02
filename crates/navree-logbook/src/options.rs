@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 /// duplicate_queries = 5
 /// replay = true
 /// capture = { request_body = true, response_body = true, max_body_kb = 64 }
-/// ignore = { routes = ["/health/*", "/metrics"] }
+/// ignore = { routes = ["/health/*", "/metrics"], framework = true }
 /// watchers = { cache = false }
 /// ```
 ///
@@ -263,12 +263,18 @@ pub struct IgnoreOptions {
     /// comma-separated string from the environment.
     #[serde(deserialize_with = "list_or_comma_string")]
     pub routes: Vec<String>,
+    /// Leave out what the framework runs by itself, outside any request, job
+    /// or scheduled task: the poll of the transactional outbox, and the
+    /// transaction and actor statements around it. Off, they are recorded
+    /// like any other query.
+    pub framework: bool,
 }
 
 impl Default for IgnoreOptions {
     fn default() -> Self {
         Self {
             routes: vec!["/health/*".to_owned(), "/metrics".to_owned()],
+            framework: true,
         }
     }
 }

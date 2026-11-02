@@ -44,6 +44,7 @@ mod capture;
 mod entry;
 mod error;
 mod filter;
+mod framework;
 mod logbook;
 mod module;
 mod options;

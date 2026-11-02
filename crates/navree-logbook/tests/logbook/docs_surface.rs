@@ -41,6 +41,7 @@ fn every_documented_key_has_its_default() {
         options.ignore,
         IgnoreOptions {
             routes: vec!["/health/*".into(), "/metrics".into()],
+            framework: true,
         }
     );
     assert_eq!(options.watchers, Watchers::default());

@@ -94,6 +94,13 @@ impl Active {
             return;
         }
         let context = &record.context;
+        if self.options.ignore.framework
+            && crate::framework::is_unscoped(context)
+            && matches!(&record.event, TelemetryEvent::QueryExecuted(query)
+                if crate::framework::is_framework_statement(&query.sql))
+        {
+            return;
+        }
         if context
             .request_id
             .as_deref()

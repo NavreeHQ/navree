@@ -512,3 +512,105 @@ async fn a_disabled_logbook_wants_and_records_nothing() {
     assert_eq!(record_kinds.len(), 13);
     let _ = Content::Dump;
 }
+
+/// What the outbox's poll runs every second on PostgreSQL, statement by statement.
+const OUTBOX_POLL: [&str; 4] = [
+    "BEGIN",
+    "SELECT set_config('navree.actor', $1, true), set_config('navree.request_id', $2, true)",
+    "SELECT id, pattern, headers, payload FROM micro_outbox WHERE created_at < $1 ORDER BY created_at, seq LIMIT $2 FOR UPDATE SKIP LOCKED",
+    "COMMIT",
+];
+
+async fn queries_recorded(logbook: &navree_logbook::Logbook) -> Vec<String> {
+    let mut sql: Vec<String> = logbook
+        .entries(&ListQuery::new(Filter::parse("type:query").unwrap(), 100))
+        .await
+        .unwrap()
+        .into_iter()
+        .filter_map(|entry| match entry.content {
+            Content::Query(query) => Some(query.sql),
+            _ => None,
+        })
+        .collect();
+    sql.reverse();
+    sql
+}
+
+#[tokio::test]
+async fn the_frameworks_own_polling_is_left_out_by_default() {
+    let logbook = logbook();
+    let outside = EventContext::default();
+    for _ in 0..3 {
+        for sql in OUTBOX_POLL {
+            feed(&logbook, &outside, query_event(sql, 1));
+        }
+    }
+    // The same statements on MySQL and SQLite, and a savepoint.
+    for sql in [
+        "START TRANSACTION READ ONLY",
+        "SET @navree_actor = ?, @navree_request_id = ?",
+        "SELECT id FROM micro_inbox WHERE id = ?",
+        "SET @navree_actor = NULL, @navree_request_id = NULL",
+        "ROLLBACK",
+        "BEGIN IMMEDIATE",
+        "SAVEPOINT _sqlx_savepoint_1",
+        "RELEASE SAVEPOINT _sqlx_savepoint_1",
+    ] {
+        feed(&logbook, &outside, query_event(sql, 1));
+    }
+    assert_eq!(queries_recorded(&logbook).await, Vec::<String>::new());
+    assert_eq!(logbook.count().await.unwrap(), 0);
+
+    // What the app runs outside a request is its own business, and stays.
+    feed(&logbook, &outside, query_event("SELECT * FROM deals", 1));
+    assert_eq!(
+        queries_recorded(&logbook).await,
+        ["SELECT * FROM deals".to_owned()]
+    );
+
+    // Inside a request or a job nothing is left out: the app asked for it.
+    let request = in_request("req-poll");
+    feed(&logbook, &request, query_event(OUTBOX_POLL[2], 1));
+    feed(&logbook, &request, query_event("BEGIN", 1));
+    feed(
+        &logbook,
+        &request,
+        request_event("req-poll", "GET", "/outbox", 200),
+    );
+    let batch = logbook.last_request().await.unwrap();
+    assert_eq!(batch.queries().len(), 2);
+    let job = in_job("job-poll");
+    feed(&logbook, &job, query_event("COMMIT", 1));
+    assert_eq!(
+        logbook
+            .entries(&ListQuery::new(Filter::parse("type:query").unwrap(), 100))
+            .await
+            .unwrap()
+            .len(),
+        4,
+        "the deals query, two in the request, one in the job"
+    );
+}
+
+#[tokio::test]
+async fn the_frameworks_own_polling_shows_when_asked_for() {
+    let logbook = logbook_with(|o| o.ignore.framework = false);
+    let outside = EventContext::default();
+    for sql in OUTBOX_POLL {
+        feed(&logbook, &outside, query_event(sql, 1));
+    }
+    assert_eq!(queries_recorded(&logbook).await, OUTBOX_POLL);
+}
+
+#[test]
+fn the_framework_switch_is_a_config_key() {
+    let options: navree_logbook::LogbookOptions =
+        serde_json::from_value(json!({ "ignore": { "framework": false } })).unwrap();
+    assert!(!options.ignore.framework);
+    assert_eq!(
+        options.ignore.routes,
+        ["/health/*", "/metrics"],
+        "the routes keep their default"
+    );
+    assert!(navree_logbook::LogbookOptions::default().ignore.framework);
+}

@@ -762,3 +762,45 @@ async fn every_route_has_a_name_of_its_own() {
     }
     assert!(count >= 11, "Logbook's routes are in the table: {count}");
 }
+
+#[tokio::test]
+async fn the_toolkits_own_files_are_not_requests_worth_recording() {
+    let app = app().await;
+    let page = app
+        .client()
+        .get("/_logbook")
+        .send()
+        .await
+        .assert_status(200)
+        .text();
+    let core = page
+        .split('"')
+        .find(|part| part.starts_with("/_navree/ui/core-"))
+        .expect("the page loads the runtime")
+        .to_owned();
+    app.client().get(&core).send().await.assert_status(200);
+    app.client()
+        .get(navree_ui::assets::NAVREE_UI_URL)
+        .send()
+        .await
+        .assert_status(200);
+    app.client()
+        .post("/echo")
+        .json(&json!({}))
+        .send()
+        .await
+        .assert_status(200);
+    let titles: Vec<String> = app
+        .get::<Logbook>()
+        .await
+        .entries(&navree_logbook::ListQuery::new(
+            navree_logbook::Filter::default(),
+            50,
+        ))
+        .await
+        .unwrap()
+        .iter()
+        .map(navree_logbook::Entry::title)
+        .collect();
+    assert_eq!(titles, ["POST /echo"], "only the app's own request");
+}

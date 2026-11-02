@@ -186,6 +186,8 @@ impl Logbook {
             .collect();
         ignore.push(Glob::new(&options.path));
         ignore.push(Glob::new(&format!("{}/*", options.path)));
+        // The toolkit's stylesheet, runtime and font are no traffic of the app's.
+        ignore.push(Glob::new(&format!("{}/*", navree_ui::assets::MOUNT)));
         let active = Arc::new(Active {
             interest: options.interest(),
             options: options.clone(),
@@ -580,6 +582,7 @@ mod tests {
             store: StoreKind::Memory,
             ignore: crate::IgnoreOptions {
                 routes: routes.iter().map(|r| (*r).to_owned()).collect(),
+                ..crate::IgnoreOptions::default()
             },
             ..LogbookOptions::default()
         };
