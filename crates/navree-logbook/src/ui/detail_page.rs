@@ -66,12 +66,20 @@ pub(super) struct Detail {
     pub(super) replay: Option<Replay>,
 }
 
-/// A block of text that keeps its line breaks and wraps.
-fn block(text: String) -> Node {
+/// A block of text that keeps its line breaks and wraps. When it is taller than
+/// the toolkit lets a block grow it scrolls, so it can be reached by keyboard and
+/// is named, and `label` says which one it is.
+fn block(label: String, text: String) -> Node {
     if text.is_empty() {
         Node::Empty
     } else {
-        el("pre").slot("code").child(text).into()
+        el("pre")
+            .slot("code")
+            .attr("tabindex", 0_i64)
+            .attr("role", "region")
+            .attr("aria-label", label)
+            .child(text)
+            .into()
     }
 }
 
@@ -114,17 +122,22 @@ fn message(title: &'static str, id: &'static str, message: Message) -> Node {
     let meta = (!message.body_meta.is_empty()).then(|| Text::muted(message.body_meta));
     el("section")
         .attr("id", id)
-        .child(Card::titled(title).body(Stack::gap(3).children(
-            (
-                (!message.query.is_empty()).then(|| {
-                    Stack::gap(1).children((Heading::h3("Query string"), block(message.query)))
-                }),
-                header_pairs(message.headers),
-                (meta.is_some() || !message.body.is_empty()).then(|| {
-                    Stack::gap(1).children((Heading::h3("Body"), meta, block(message.body)))
-                }),
-            ),
-        )))
+        .child(Card::titled(title).body(Stack::gap(3).children((
+            (!message.query.is_empty()).then(|| {
+                Stack::gap(1).children((
+                    Heading::h3("Query string"),
+                    block(format!("{title} query string"), message.query),
+                ))
+            }),
+            header_pairs(message.headers),
+            (meta.is_some() || !message.body.is_empty()).then(|| {
+                Stack::gap(1).children((
+                    Heading::h3("Body"),
+                    meta,
+                    block(format!("{title} body"), message.body),
+                ))
+            }),
+        ))))
         .into()
 }
 
@@ -187,7 +200,7 @@ fn queries(statements: Vec<Statement>, repeated: Vec<Repeated>) -> Node {
         .into()
 }
 
-fn item(item: Item) -> Node {
+fn item(label: String, item: Item) -> Node {
     let title: Node = if item.href.is_empty() {
         Node::from(breakable(&item.title))
     } else {
@@ -211,7 +224,7 @@ fn item(item: Item) -> Node {
                     .attr("rel", "noopener")
                     .child("Open HTML")
             }),
-            block(item.body),
+            block(label, item.body),
         )))
         .into()
 }
@@ -221,7 +234,14 @@ fn section(section: Section) -> Node {
         .attr("id", section.id)
         .child(
             Card::titled(section.label).body(
-                Stack::gap(4).children(section.items.into_iter().map(item).collect::<Vec<_>>()),
+                Stack::gap(4).children(
+                    section
+                        .items
+                        .into_iter()
+                        .enumerate()
+                        .map(|(n, entry)| item(format!("{} {}", section.label, n + 1), entry))
+                        .collect::<Vec<_>>(),
+                ),
             ),
         )
         .into()
@@ -262,41 +282,39 @@ fn track(bar: &Bar) -> Node {
 }
 
 fn timeline(bars: Vec<Bar>, total: String) -> Node {
+    // One column, so that it fits at any width: each entry's name and how long it
+    // took on one line, and its bar, drawn against the whole, under it.
     let mut rows: Vec<TableRowEl> = bars
         .iter()
         .map(|bar| {
-            TableRowEl::new((
-                TableCell::new(
-                    el("a")
-                        .href(format!("#entry-{}", bar.id))
-                        .child(tight(&bar.label)),
-                ),
-                TableCell::new(track(bar)),
-                TableCell::new(bar.duration.clone()).numeric(),
+            TableRowEl::new(TableCell::new(
+                Stack::gap(1).children((
+                    Layout::gap(2).justify(Justify::Between).children((
+                        el("a")
+                            .href(format!("#entry-{}", bar.id))
+                            .child(tight(&bar.label)),
+                        Text::muted(bar.duration.clone()).inline(),
+                    )),
+                    track(bar),
+                )),
             ))
         })
         .collect();
     // The scale: nought, the middle and the end of the request's own time.
-    rows.push(TableRowEl::new((
-        TableCell::new(Text::muted("Scale")),
-        TableCell::new(Layout::gap(0).justify(Justify::Between).children((
+    rows.push(TableRowEl::new(TableCell::new(
+        Layout::gap(0).justify(Justify::Between).children((
             Text::muted("0").inline(),
             Text::muted("½").inline(),
             Text::muted(total).inline(),
-        ))),
-        TableCell::new(""),
+        )),
     )));
     el("section")
         .attr("id", "timeline")
         .child(
             Card::titled("Timeline").body(
                 Table::new()
-                    .caption("Where each entry started and how long it took")
-                    .head((
-                        TableHead::new("Entry"),
-                        TableHead::new("When"),
-                        TableHead::new("Took").numeric(),
-                    ))
+                    .caption("Where each entry started and how long it took, against the whole")
+                    .head(TableHead::new("Entry, how long it took, and when it ran"))
                     .rows(rows),
             ),
         )

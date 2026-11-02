@@ -10,7 +10,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import { chromium, firefox } from "playwright";
 
 const LOGBOOK = process.env.UI_LOGBOOK_URL;
@@ -43,7 +43,8 @@ async function axe(page) {
 function watch(page) {
   const problems = [];
   page.on("console", (message) => {
-    if (message.type() === "error") problems.push(message.text());
+    // A page that answers 404, as a missing entry does, is logged by the browser itself.
+    if (message.type() === "error" && !message.text().includes("status of 404")) problems.push(message.text());
   });
   page.on("pageerror", (error) => problems.push(String(error)));
   page.addInitScript(() => {
@@ -58,7 +59,7 @@ const reach = (page) => page.evaluate(() => ({ page: document.documentElement.sc
 /** The visible panes of a two-pane page, left to right. */
 const panes = (page) =>
   page.evaluate(() =>
-    [...document.querySelectorAll("[data-pane]")].map((pane) => {
+    [...document.querySelectorAll("main [data-slot=grid] > *")].map((pane) => {
       const box = pane.getBoundingClientRect();
       return { visible: getComputedStyle(pane).display !== "none" && box.width > 0, left: box.left, right: box.right, top: box.top, width: box.width };
     }),
@@ -67,6 +68,7 @@ const panes = (page) =>
 for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]]) {
   const suite = (name, options, fn) => test(`${engine}: ${name}`, { skip: !LOGBOOK, timeout: 90000, ...options }, fn);
   let browser;
+  after(() => browser?.close());
   const withPage = async (viewport, fn, contextOptions = {}) => {
     browser ||= await launcher.launch();
     const context = await browser.newContext({ viewport, reducedMotion: "reduce", ...contextOptions });
@@ -119,8 +121,10 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       assert.ok(reached <= window, `no sideways scroll: ${reached} > ${window}`);
       await page.goBack();
       await page.waitForURL(`**/_logbook`);
-      both = await panes(page);
-      assert.ok(both[0].visible && !both[1].visible, "back to the list");
+      await page.waitForFunction(() => {
+        const [list, other] = [...document.querySelectorAll("main [data-slot=grid] > *")];
+        return list && other && getComputedStyle(list).display !== "none" && getComputedStyle(other).display === "none";
+      }, null, { timeout: 5000 });
     });
   });
 
@@ -138,12 +142,14 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       await page.waitForURL(`**${hrefs[1]}`);
       const second = await page.locator("h1[data-slot=page-title]").textContent();
       assert.notEqual(first, second, "another entry, another heading");
+      const heading = (text) => page.waitForFunction((t) => document.querySelector("h1[data-slot=page-title]")?.textContent === t, text, { timeout: 5000 });
       await page.goBack();
       await page.waitForURL(`**${hrefs[0]}`);
+      await heading(first);
       assert.equal(await page.locator("h1[data-slot=page-title]").textContent(), first, "back is the first entry");
       await page.goForward();
       await page.waitForURL(`**${hrefs[1]}`);
-      assert.equal(await page.locator("h1[data-slot=page-title]").textContent(), second);
+      await heading(second);
       // The address is the page: a new tab opens the same entry with the same list.
       const other = await page.context().newPage();
       await other.goto(`${LOGBOOK}${hrefs[0]}`);
@@ -171,7 +177,7 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       // The rail: only the icons, three rem wide, and it stays that way across a reload.
       await page.getByRole("button", { name: "Toggle sidebar" }).click();
       const width = () => page.locator("[data-slot=sidebar]").evaluate((el) => el.getBoundingClientRect().width);
-      assert.equal(await width(), 48);
+      await page.waitForFunction(() => document.querySelector("[data-slot=sidebar]").getBoundingClientRect().width === 48, null, { timeout: 5000 });
       assert.ok(await page.locator("[data-slot=sidebar-item][title=Queries] svg").isVisible(), "the icon is what is left");
       await page.reload();
       assert.equal(await width(), 48);
@@ -204,6 +210,33 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
     });
   });
 
+  suite("at 390px nothing is cut off: no box in the page has more inside than it shows", {}, async () => {
+    await traffic();
+    await withPage(PHONE, async (page) => {
+      const cutOff = () =>
+        page.evaluate(() =>
+          [...document.querySelectorAll("main *")]
+            .filter((el) => {
+              const style = getComputedStyle(el);
+              if (style.display === "none" || el.closest("[hidden]")) return false;
+              const sideways = ["auto", "scroll", "hidden"].includes(style.overflowX);
+              // A box that clips or scrolls with more inside than it shows. Ellipsis on one line is how a name is cut by design.
+              return sideways && style.textOverflow !== "ellipsis" && el.scrollWidth > el.clientWidth + 1;
+            })
+            .map((el) => `${el.tagName}[${el.getAttribute("data-slot")}] ${el.scrollWidth} > ${el.clientWidth}`),
+        );
+      for (const path of ["/_logbook", "/_logbook?type=request"]) {
+        await page.goto(`${LOGBOOK}${path}`);
+        assert.deepEqual(await cutOff(), [], path);
+      }
+      const entries = await page.evaluate(async (base) => (await (await fetch(`${base}/_logbook/api/entries?type=request&limit=40`)).json()).data.map((entry) => entry.id), LOGBOOK);
+      for (const id of entries.slice(0, 10)) {
+        await page.goto(`${LOGBOOK}/_logbook/entries/${id}`);
+        assert.deepEqual(await cutOff(), [], `entry ${id}`);
+      }
+    });
+  });
+
   suite("the colours are the app's, not the system's", {}, async () => {
     await traffic();
     for (const scheme of ["light", "dark"]) {
@@ -231,8 +264,8 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
     await traffic();
     await withPage(WIDE, async (page) => {
       await page.goto(`${LOGBOOK}/_logbook?q=nothing-matches-this`);
-      await page.locator("[data-slot=empty]").waitFor();
-      assert.ok((await page.locator("[data-slot=empty]").textContent()).includes("for this filter"));
+      await page.locator("#rows-empty [data-slot=empty]").waitFor();
+      assert.ok((await page.locator("#rows-empty [data-slot=empty]").textContent()).includes("for this filter"));
       assert.deepEqual(await axe(page), []);
       await page.goto(`${LOGBOOK}/_logbook?q=status%3Anope`);
       await page.locator("[data-slot=alert]").waitFor();
@@ -240,7 +273,7 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       assert.deepEqual(await axe(page), []);
       const missing = await page.goto(`${LOGBOOK}/_logbook/entries/nope`);
       assert.equal(missing.status(), 404);
-      assert.ok((await page.locator("[data-slot=empty]").textContent()).includes("no entry with this id"));
+      assert.ok((await page.locator("main [data-slot=grid] [data-slot=empty]").textContent()).includes("no entry with this id"));
       assert.ok((await page.locator("#rows-body [data-slot=item]").count()) > 0, "the list is still there");
       assert.deepEqual(await axe(page), []);
       await page.getByRole("link", { name: "Back to the list" }).click();
@@ -321,7 +354,7 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       await page.locator("[data-slot=toast]").filter({ hasText: "Replayed" }).waitFor({ timeout: 5000 });
       await page.getByRole("button", { name: "Clear" }).click();
       await page.waitForURL("**/_logbook");
-      await page.locator("[data-slot=empty]").first().waitFor({ timeout: 15000 });
+      await page.locator("#rows-empty [data-slot=empty]").waitFor({ timeout: 15000 });
       assert.equal(await page.locator("[data-slot=sidebar-count]").count(), 0, "no counts left");
     });
   });
