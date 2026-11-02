@@ -40,6 +40,16 @@ export const make = (tag) => D.createElement.call(document, tag);
 /** @param {EventTarget} target @param {string} type @param {(e: any) => void} listener @param {boolean | AddEventListenerOptions} [options] */
 export const on = (target, type, listener, options) => T.addEventListener.call(target, type, listener, options);
 
+/**
+ * Takes out what acts by being in a page and that no content security policy
+ * stops: a refresh that leaves the site, a base that repoints every link.
+ * @param {Element | DocumentFragment} tree
+ */
+export const clean = (tree) => {
+  const found = tree.nodeType === 11 ? DocumentFragment.prototype.querySelectorAll.call(tree, "meta[http-equiv],base") : E.querySelectorAll.call(tree, "meta[http-equiv],base");
+  for (const el of found) el.remove();
+};
+
 /** Whether `url` resolves to this origin. @param {string} url */
 export const sameOrigin = (url) => {
   try {

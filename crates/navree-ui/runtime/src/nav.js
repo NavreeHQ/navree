@@ -1,7 +1,7 @@
 // Link boosting and regions: fetch a page, morph what changed, keep the shell
 // alive. A failed fetch falls back to a real navigation.
-import { body, byId, cookies, every, head, hidden, on, one, root, sameOrigin, setTitle, titleOf } from "./dom.js";
-import { morph } from "./morph.js";
+import { body, byId, clean, cookies, every, head, hidden, on, one, root, sameOrigin, setTitle, titleOf } from "./dom.js";
+import { morph, pieces } from "./morph.js";
 import { announce } from "./ui.js";
 
 const HEADER = { "x-navree-ui": "1" };
@@ -116,6 +116,7 @@ export async function showPage(response, how = {}) {
     return;
   }
   if (how.push !== false && url !== location.href) history.pushState(null, "", url);
+  clean(body(doc));
   if (how.region) {
     const from = byId(how.region), to = byId(how.region, doc);
     if (from && to) {
@@ -217,7 +218,7 @@ async function feed(el, src, current) {
   const html = await response.text();
   if (!current()) return;
   if (html.trim()) {
-    into.insertAdjacentHTML("afterbegin", html);
+    into.prepend(pieces(html));
     byId(el.getAttribute("data-ui-feed-empty") || "")?.remove();
   }
   const cursor = response.headers.get("x-ui-cursor");
@@ -246,6 +247,7 @@ export async function refresh(id) {
       return;
     }
     const doc = new DOMParser().parseFromString(await response.text(), "text/html");
+    clean(body(doc));
     let to = byId(id, doc);
     if (!to) {
       to = /** @type {HTMLElement} */ (el.cloneNode(false));

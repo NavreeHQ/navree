@@ -1,6 +1,6 @@
 // The op applier: the closed list the server sends. Nothing here runs code
 // from the wire; the HTML in an op is rendered by the server.
-import { morph, parse } from "./morph.js";
+import { morph, parse, pieces } from "./morph.js";
 import { all, byId, field, make, root } from "./dom.js";
 import { announce, toast, openTarget, closeTarget } from "./ui.js";
 import { forget, go, leave, setUrl, refresh } from "./nav.js";
@@ -47,10 +47,10 @@ function apply(op) {
       break;
     }
     case "replace":
-      if (target) target.outerHTML = op.html;
+      target?.replaceWith(pieces(op.html));
       break;
-    case "append": target?.insertAdjacentHTML("beforeend", op.html); break;
-    case "prepend": target?.insertAdjacentHTML("afterbegin", op.html); break;
+    case "append": target?.append(pieces(op.html)); break;
+    case "prepend": target?.prepend(pieces(op.html)); break;
     case "remove": target?.remove(); break;
     case "errors": {
       const form = byId(op.form);

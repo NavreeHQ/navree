@@ -4,7 +4,7 @@
 // semantics do the value work: a changed `value` attribute reaches an input
 // only if the user has not typed in it.
 
-import { active as activeElement, make, on } from "./dom.js";
+import { active as activeElement, clean, make, on } from "./dom.js";
 
 /** The element being composed in, if any. @type {Element | null} */
 let composing = null;
@@ -255,9 +255,16 @@ export function morph(from, to, how = {}) {
   document.dispatchEvent(new Event("ui:swap"));
 }
 
-/** Parses `html` into its first element. @param {string} html */
-export function parse(html) {
+/** Parses the server's `html`, with nothing left in it that acts by being there. @param {string} html */
+export function pieces(html) {
+  if (typeof html !== "string") throw new TypeError("not markup");
   const template = /** @type {HTMLTemplateElement} */ (make("template"));
   template.innerHTML = html;
-  return template.content.firstElementChild;
+  clean(template.content);
+  return template.content;
+}
+
+/** Parses `html` into its first element. @param {string} html */
+export function parse(html) {
+  return pieces(html).firstElementChild;
 }
