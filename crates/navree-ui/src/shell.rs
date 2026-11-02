@@ -7,6 +7,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
+use http::HeaderMap;
 use http::header::{COOKIE, HeaderValue, InvalidHeaderValue};
 use http::request::Parts;
 use navree_http::extract::urlencoded;
@@ -99,6 +100,7 @@ pub struct NavItem {
     count: Option<Cow<'static, str>>,
     sub: Vec<NavItem>,
     prefetch: bool,
+    current: Option<bool>,
 }
 
 impl NavItem {
@@ -112,7 +114,17 @@ impl NavItem {
             count: None,
             sub: Vec::new(),
             prefetch: true,
+            current: None,
         }
+    }
+
+    /// Says whether this is the current page, in place of what the path says. For
+    /// links that differ only in their query (a list under several filters), which
+    /// the path can't tell apart.
+    #[must_use]
+    pub fn current(mut self, current: bool) -> Self {
+        self.current = Some(current);
+        self
     }
 
     /// Keeps this link from being fetched ahead of a click. A sidebar item is
@@ -171,7 +183,9 @@ impl NavItem {
     }
 
     fn to_node(&self, path: &str, home: &str, best: usize, nested: bool) -> Element {
-        let active = best > 0 && self.score(path, home) == best;
+        let active = self
+            .current
+            .unwrap_or(best > 0 && self.score(path, home) == best);
         let link = el("a")
             .slot(if nested {
                 "sidebar-sub-item"
@@ -414,6 +428,14 @@ impl Shell {
         )
     }
 
+    /// This shell applied to a request: which link is active, whether the sidebar is
+    /// collapsed, a toast left for this page. It is what the [`AppShell`] extractor
+    /// does for the app's own `Shell`, for a module that serves pages of its own
+    /// and has no business registering one for the whole app (a debugging tool).
+    pub fn for_request(&self, path: impl Into<String>, headers: &HeaderMap) -> AppShell {
+        AppShell::read(Arc::new(self.clone()), path.into(), headers)
+    }
+
     fn sidebar(&self, path: &str, csrf: Option<&str>) -> Element {
         let home = self.home.as_str();
         let header = el("a")
@@ -625,18 +647,15 @@ impl AppShell {
     }
 }
 
-impl FromRequestParts for AppShell {
-    type Rejection = <Scoped<Shell> as FromRequestParts>::Rejection;
-
-    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
-        let Scoped(shell) = Scoped::<Shell>::from_request_parts(parts).await?;
+impl AppShell {
+    /// `shell` applied to a request with these headers, at `path`.
+    fn read(shell: Arc<Shell>, path: String, headers: &HeaderMap) -> Self {
         let mut collapsed = false;
         let mut flash = None;
         let mut csrf = None;
         // A page fetched ahead of a click may never be seen: its toast stays for the next.
-        let prefetch = crate::op::is_prefetch(&parts.headers);
-        for value in parts
-            .headers
+        let prefetch = crate::op::is_prefetch(headers);
+        for value in headers
             .get_all(COOKIE)
             .iter()
             .filter_map(|value| value.to_str().ok())
@@ -654,13 +673,26 @@ impl FromRequestParts for AppShell {
                 }
             }
         }
-        Ok(Self {
+        Self {
             shell,
-            path: parts.uri.path().to_owned(),
+            path,
             collapsed,
             flash,
             csrf,
-        })
+        }
+    }
+}
+
+impl FromRequestParts for AppShell {
+    type Rejection = <Scoped<Shell> as FromRequestParts>::Rejection;
+
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
+        let Scoped(shell) = Scoped::<Shell>::from_request_parts(parts).await?;
+        Ok(Self::read(
+            shell,
+            parts.uri.path().to_owned(),
+            &parts.headers,
+        ))
     }
 }
 
@@ -785,6 +817,85 @@ mod tests {
                 .to_str()
                 .unwrap()
                 .contains("Max-Age=0")
+        );
+    }
+
+    #[test]
+    fn an_item_can_say_whether_it_is_the_current_page() {
+        // Three links to one path that differ only in their query: the path can't tell them apart.
+        let shell = Shell::new("Acme").group(
+            NavGroup::plain()
+                .item(NavItem::new("All", "/log").icon(icons::LIST).current(false))
+                .item(
+                    NavItem::new("Queries", "/log?type=query")
+                        .icon(icons::DATABASE)
+                        .current(true),
+                )
+                .item(
+                    NavItem::new("Mail", "/log?type=mail")
+                        .icon(icons::MAIL)
+                        .current(false),
+                ),
+        );
+        let html = shell.page("x", "/log").to_view().to_html();
+        assert!(
+            html.contains(r#"href="/log?type=query" title="Queries" aria-current="page""#),
+            "{html}"
+        );
+        assert_eq!(
+            html.matches("data-slot=\"sidebar-item\"").count(),
+            3,
+            "{html}"
+        );
+        assert_eq!(
+            html.matches("aria-current=\"page\"").count(),
+            2,
+            "the item and the breadcrumb: {html}"
+        );
+    }
+
+    #[test]
+    fn a_shell_applies_to_a_request_it_did_not_come_from() {
+        use http::header::{COOKIE, HeaderMap, HeaderValue};
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            COOKIE,
+            HeaderValue::from_static("navree_ui_sidebar=collapsed; navree_ui_flash=Saved"),
+        );
+        let html = shell()
+            .for_request("/deals", &headers)
+            .page("Deals")
+            .to_view()
+            .to_html();
+        assert!(
+            html.contains(r#"data-mobile-open" data-collapsed>"#),
+            "{html}"
+        );
+        assert!(
+            html.contains("Saved"),
+            "the toast the last page left: {html}"
+        );
+        assert!(
+            html.contains(r#"href="/deals" title="Deals" aria-current="page""#),
+            "{html}"
+        );
+        // A page fetched ahead of a click leaves the toast for the one that is seen.
+        headers.insert("x-navree-prefetch", HeaderValue::from_static("1"));
+        let html = shell()
+            .for_request("/deals", &headers)
+            .page("Deals")
+            .to_view()
+            .to_html();
+        assert!(!html.contains("Saved"), "{html}");
+        // No cookies, an expanded sidebar.
+        let html = shell()
+            .for_request("/deals", &HeaderMap::new())
+            .page("Deals")
+            .to_view()
+            .to_html();
+        assert!(
+            !html.contains(r#"data-mobile-open" data-collapsed>"#),
+            "{html}"
         );
     }
 
