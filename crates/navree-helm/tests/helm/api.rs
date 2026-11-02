@@ -497,10 +497,10 @@ async fn creating_validates_and_saves_through_the_resource() {
         .send()
         .await
         .assert_status(400)
-        .assert_json_path("errors.title", json!(["title should not be empty"]))
+        .assert_json_path("errors.title", json!(["Title should not be empty"]))
         .assert_json_path(
             "errors.amount_cents",
-            json!(["amount_cents must not be less than 0"]),
+            json!(["Amount must not be less than 0"]),
         );
     rep.post("/admin/api/resources/deals")
         .json(&json!({ "title": "X", "amount_cents": 1, "created_at": "2020-01-01T00:00:00Z", "secret": 1 }))
@@ -513,14 +513,14 @@ async fn creating_validates_and_saves_through_the_resource() {
         .json(&json!({ "title": "X", "amount_cents": 1, "company_id": Uuid::now_v7() }))
         .send()
         .await
-        .assert_json_path("errors.company_id", json!(["company_id does not exist"]));
+        .assert_json_path("errors.company_id", json!(["Company does not exist"]));
     rep.post("/admin/api/resources/deals")
         .json(&json!({ "title": "X", "amount_cents": 1, "stage": "archived" }))
         .send()
         .await
         .assert_json_path(
             "errors.stage",
-            json!(["stage must be one of the following values: lead, qualified, won, lost"]),
+            json!(["Stage must be one of the following values: lead, qualified, won, lost"]),
         );
     rep.post("/admin/api/resources/deals")
         .json(&json!(["not", "an", "object"]))
@@ -589,7 +589,7 @@ async fn the_default_create_writes_the_form_to_the_columns() {
         .json(&json!({ "name": "Bad", "website": "ftp://nope" }))
         .send()
         .await
-        .assert_json_path("errors.website", json!(["website must be a URL address"]));
+        .assert_json_path("errors.website", json!(["Website must be a URL address"]));
 }
 
 #[tokio::test]

@@ -116,10 +116,10 @@ kbd {
 }
 .user-trigger:hover, .user-menu[open] > .user-trigger { background: var(--ink-2); }
 .user-trigger > .icon { margin-left: auto; color: var(--fg-3); }
-.avatar {
-  flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--radius-sm);
-  background: var(--ink-3); border: 1px solid var(--line-2); color: var(--fg-1); font-size: 0.75rem; font-weight: 600;
+.user-icon {
+  flex: none; display: grid; place-items: center; width: 32px; height: 32px; color: var(--fg-2);
 }
+.user-icon .icon { width: 18px; height: 18px; }
 .popover {
   position: absolute; left: 0.5rem; right: 0.5rem; bottom: calc(100% + 0.25rem); z-index: 35;
   padding: 0.25rem; background: var(--ink-1); border: 1px solid var(--line-2); border-radius: var(--radius);
@@ -283,6 +283,9 @@ section.card.list-card { padding: 0; overflow: hidden; }
 .table-wrap { overflow-x: auto; position: relative; }
 .table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
 .table th, .table td { height: 40px; padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
+/* A cell with one long word (a key, an address, a client string) breaks it
+   rather than set the width of the whole table. */
+.table td { overflow-wrap: anywhere; }
 .table th { color: var(--fg-3); font-weight: 500; font-size: 0.8125rem; white-space: nowrap; }
 .table th a.sort { color: inherit; text-decoration: none; }
 .table th a.sort:hover { color: var(--fg); }

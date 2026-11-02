@@ -45,7 +45,7 @@ pub(crate) async fn messages(app: &AppContext) -> Messages {
 /// fields whose values do not fit their columns.
 async fn apply<M: Model>(model: &mut M, form: &FormData, app: &AppContext) -> Result<(), AppError> {
     let mut errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut messages = None;
+    let mut messages = form.messages().cloned();
     for (name, value) in form.values() {
         let Some(column) = values::column::<M>(name) else {
             continue;

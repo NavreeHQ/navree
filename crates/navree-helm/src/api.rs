@@ -134,7 +134,7 @@ pub(crate) fn describe(cx: &Cx, resource: &dyn ErasedResource) -> Value {
             "on_dashboard": m.on_dashboard,
             "ranged": m.ranged,
         })).collect::<Vec<_>>(),
-        "can": { "create": cx.can(CREATE, info.subject, None) },
+        "can": { "create": cx.can(CREATE, info.subject, None) && cx.offers(info, CREATE) },
     })
 }
 

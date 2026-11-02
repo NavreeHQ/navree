@@ -301,7 +301,7 @@ async fn upload_problems_appear_under_the_field() {
     .text()
     .replace("&#x2f;", "/");
     assert!(
-        html.contains("scan must be a file of type: image/png"),
+        html.contains("Scan must be a file of type: image/png"),
         "{html}"
     );
     assert!(html.contains("value=\"Notes\""), "{html}");
@@ -316,7 +316,7 @@ async fn upload_problems_appear_under_the_field() {
     .assert_status(400)
     .text();
     assert!(
-        html.contains("scan must not be larger than 64 bytes"),
+        html.contains("Scan must not be larger than 64 bytes"),
         "{html}"
     );
 
@@ -337,7 +337,7 @@ async fn the_api_accepts_only_paths_helm_stored() {
         .send()
         .await
         .assert_error(400, None)
-        .assert_json_path("errors.scan", json!(["scan is invalid"]));
+        .assert_json_path("errors.scan", json!(["Scan is invalid"]));
     let stored = format!("documents/{}.png", "a".repeat(40));
     admin
         .post("/admin/api/resources/documents")

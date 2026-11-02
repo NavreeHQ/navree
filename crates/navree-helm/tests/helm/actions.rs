@@ -82,10 +82,7 @@ async fn action_fields_are_validated_and_read_by_the_handler() {
         .send()
         .await
         .assert_status(400)
-        .assert_json_path(
-            "errors.lost_reason",
-            json!(["lost_reason should not be empty"]),
-        );
+        .assert_json_path("errors.lost_reason", json!(["Reason should not be empty"]));
     rep.post("/admin/api/resources/deals/actions/mark-lost")
         .json(&json!({ "ids": [own.id], "input": { "lost_reason": "Budget", "other": 1 } }))
         .send()

@@ -3,7 +3,7 @@
 
 use std::any::TypeId;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use chrono::{Datelike, Duration, NaiveDate};
 use navree_access::{CREATE, DELETE, READ, Subject, UPDATE};
@@ -14,6 +14,7 @@ use navree_kernel::{BoxFuture, ModuleId};
 use navree_orm::access::record_json;
 use navree_orm::ir::AggregateFunction;
 use navree_orm::{Builder, Expr, FieldError, Model, Row, Selectable, Value, col};
+use navree_validation::Messages;
 use regex::Regex;
 use serde_json::{Map, Value as Json, json};
 
@@ -45,6 +46,14 @@ pub(crate) struct ResourceInfo {
     pub(crate) icon: &'static str,
     pub(crate) order: i32,
     pub(crate) subject: &'static str,
+    /// The permission prefix of the model (`deals` for `deals.update`).
+    pub(crate) permission_prefix: &'static str,
+    pub(crate) read_only: bool,
+    /// The column that holds the workspace of a record, when the model
+    /// belongs to workspaces.
+    pub(crate) workspace_column: Option<&'static str>,
+    pub(crate) export: bool,
+    pub(crate) sidebar_count: bool,
     pub(crate) pk: &'static str,
     pub(crate) title: &'static str,
     pub(crate) search: Vec<&'static str>,
@@ -64,7 +73,9 @@ pub(crate) struct ResourceInfo {
 impl ResourceInfo {
     /// The field named `name`.
     pub(crate) fn field(&self, name: &str) -> Option<&Field> {
-        self.fields.iter().find(|f| f.name == name)
+        self.fields
+            .iter()
+            .find(|f| f.name == name && !matches!(f.kind, FieldKind::HasMany(_)))
     }
 
     /// The fields whose columns can be sorted by, with the default sort's.
@@ -214,6 +225,8 @@ pub(crate) struct Handle<R: Resource> {
     shapes: HashMap<&'static str, Shape>,
     computed: Vec<(String, Computed)>,
     views: Vec<(String, String)>,
+    /// The app's validation messages with each field named by its label.
+    labelled: OnceLock<Messages>,
 }
 
 impl<R: Resource> Handle<R> {
@@ -252,7 +265,14 @@ impl<R: Resource> Handle<R> {
             if matches!(field.kind, FieldKind::Id) {
                 field.name = pk.to_owned();
             }
-            if !seen.insert(field.name.clone()) {
+            // A `has_many` is named by the foreign key of the records it lists, so
+            // two may share one (and one may share a column's name, as a tree's
+            // children and parent do): they differ by the resource they list.
+            let identity = match &field.kind {
+                FieldKind::HasMany(related) => format!("{}\u{0}{}", field.name, related.type_name),
+                _ => field.name.clone(),
+            };
+            if !seen.insert(identity) {
                 return Err(fail(format!("two fields are named `{}`", field.name)));
             }
             if field.is_column() && column(&field.name).is_none() {
@@ -500,6 +520,11 @@ impl<R: Resource> Handle<R> {
             icon: R::ICON,
             order: R::ORDER,
             subject: <R::Model as Subject>::SUBJECT,
+            permission_prefix: <R::Model as Subject>::PERMISSION_PREFIX,
+            read_only: R::READ_ONLY,
+            workspace_column: meta.workspace_column(),
+            export: R::EXPORT,
+            sidebar_count: R::SIDEBAR_COUNT,
             pk,
             title,
             search,
@@ -522,7 +547,15 @@ impl<R: Resource> Handle<R> {
             shapes,
             computed,
             views,
+            labelled: OnceLock::new(),
         })
+    }
+
+    /// The app's validation messages with every field of the resource named by
+    /// its label.
+    fn messages<'a>(&'a self, cx: &'a Cx) -> &'a Messages {
+        self.labelled
+            .get_or_init(|| labelled(&cx.core.messages, &self.info.fields))
     }
 
     /// The rows the user may do `action` on, starting from the resource's
@@ -553,6 +586,16 @@ impl<R: Resource> Handle<R> {
                 "Choose a workspace first: {} belong to workspaces.",
                 self.info.label
             )));
+        }
+        Ok(())
+    }
+
+    /// A 403 for a write to a resource that is read-only.
+    fn writable(&self) -> Result<(), AppError> {
+        if self.info.read_only {
+            return Err(AppError::forbidden()
+                .with_code("read_only_resource")
+                .with_detail(format!("{} are read-only.", self.info.label)));
         }
         Ok(())
     }
@@ -602,10 +645,7 @@ impl<R: Resource> Handle<R> {
             .get(self.info.pk)
             .and_then(key_text)
             .unwrap_or_default();
-        let title = match json.get(self.info.title) {
-            None | Some(Json::Null) => format!("#{id}"),
-            Some(value) => key_text(value).unwrap_or_else(|| value.to_string()),
-        };
+        let title = title_of(&self.info, &json, &id);
         let computed = self
             .computed
             .iter()
@@ -721,16 +761,19 @@ impl<R: Resource> Handle<R> {
         create: bool,
         columns: bool,
     ) -> Result<Map<String, Json>, AppError> {
-        let messages = &cx.core.messages;
+        // The fields checked name themselves: an action's field is "Reason" even
+        // where the record's column is "Lost reason".
+        let labelled = labelled(&cx.core.messages, fields);
+        let messages = &labelled;
         let mut errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
         let mut checked = Map::new();
         for (key, value) in input {
             let Some(field) = fields.iter().find(|f| f.name == key) else {
-                errors.entry(key.clone()).or_default().push(messages.render(
-                    &key,
-                    "prohibited",
-                    &[],
-                ));
+                // A property of the request, not a field the user sees.
+                errors
+                    .entry(key.clone())
+                    .or_default()
+                    .push(cx.core.messages.render(&key, "prohibited", &[]));
                 continue;
             };
             let value = self.normalize(field, value, cx.tz_offset);
@@ -848,7 +891,9 @@ impl<R: Resource> Handle<R> {
     }
 
     fn form(&self, cx: &Cx, values: Map<String, Json>) -> FormData {
-        FormData::new(values).with_app(cx.app.clone(), cx.tz_offset)
+        FormData::new(values)
+            .with_app(cx.app.clone(), cx.tz_offset)
+            .with_messages(self.messages(cx).clone())
     }
 
     /// The condition matching any of `columns` containing `term`, ignoring
@@ -1286,6 +1331,46 @@ impl<R: Resource> Handle<R> {
     }
 }
 
+/// `base` with each of `fields` named by its label (`Project should not be
+/// empty`, not `project_id should not be empty`), unless the app named it
+/// itself.
+fn labelled(base: &Messages, fields: &[Field]) -> Messages {
+    let mut messages = base.clone();
+    for field in fields {
+        if messages.attribute(&field.name) == field.name {
+            messages = messages.with_attribute(field.name.clone(), field.label_text());
+        }
+    }
+    messages
+}
+
+/// What names a record on screen: its `TITLE` column, or, where there is
+/// none (the key is the default title, or the column is empty), the
+/// resource's singular name and the end of its key (`Report #3f9a1c2e`),
+/// never a whole UUID.
+pub(crate) fn title_of(info: &ResourceInfo, json: &Json, id: &str) -> String {
+    let named = match json.get(info.title) {
+        None | Some(Json::Null) => None,
+        Some(value) => Some(key_text(value).unwrap_or_else(|| value.to_string())),
+    }
+    .filter(|text| !text.trim().is_empty());
+    match named {
+        Some(text) if info.title != info.pk => text,
+        _ => format!("{} #{}", info.singular, short_key(id)),
+    }
+}
+
+/// The last eight characters of a long key (the random end of a UUID v7,
+/// where the start is a timestamp), a short one whole.
+pub(crate) fn short_key(id: &str) -> &str {
+    if id.chars().count() > 12 {
+        let start = id.char_indices().rev().nth(7).map_or(0, |(at, _)| at);
+        &id[start..]
+    } else {
+        id
+    }
+}
+
 /// A condition no row matches.
 fn nothing() -> navree_orm::Filter {
     navree_orm::Filter::raw("1 = 0", Vec::<Value>::new())
@@ -1434,6 +1519,7 @@ impl<R: Resource> ErasedResource for Handle<R> {
         input: Map<String, Json>,
     ) -> BoxFuture<'a, Result<RawRecord, AppError>> {
         Box::pin(async move {
+            self.writable()?;
             let subject = <R::Model as Subject>::SUBJECT;
             if !cx.can(CREATE, subject, None) {
                 return Err(AppError::forbidden());
@@ -1486,6 +1572,7 @@ impl<R: Resource> ErasedResource for Handle<R> {
         input: Map<String, Json>,
     ) -> BoxFuture<'a, Result<RawRecord, AppError>> {
         Box::pin(async move {
+            self.writable()?;
             let subject = <R::Model as Subject>::SUBJECT;
             if !cx.can(READ, subject, None) {
                 return Err(AppError::forbidden());
@@ -1544,6 +1631,7 @@ impl<R: Resource> ErasedResource for Handle<R> {
 
     fn delete<'a>(&'a self, cx: &'a Cx, id: &'a str) -> BoxFuture<'a, Result<(), AppError>> {
         Box::pin(async move {
+            self.writable()?;
             let subject = <R::Model as Subject>::SUBJECT;
             if !cx.can(READ, subject, None) {
                 return Err(AppError::forbidden());

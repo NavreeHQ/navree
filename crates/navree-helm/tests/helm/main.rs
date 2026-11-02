@@ -11,6 +11,7 @@ mod actions;
 mod api;
 mod boot;
 mod files;
+mod fixes;
 mod metrics;
 mod pages;
 #[cfg(feature = "settings")]

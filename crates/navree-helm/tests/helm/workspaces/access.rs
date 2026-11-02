@@ -25,6 +25,7 @@ mod roles;
 #[cfg(feature = "settings")]
 mod settings_screens;
 mod staff_audit;
+mod toolbar;
 
 /// `users(id, name, email)`, as the auth module creates it.
 struct CreateUsers;

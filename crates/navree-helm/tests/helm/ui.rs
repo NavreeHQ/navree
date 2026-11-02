@@ -220,7 +220,7 @@ async fn forms_create_and_update_records() {
     .assert_status(400)
     .text()
     .replace("&#x2f;", "/");
-    assert!(html.contains("title should not be empty"), "{html}");
+    assert!(html.contains("Title should not be empty"), "{html}");
     assert!(html.contains("value=\"12.50\""));
 
     let response = submit(
@@ -377,7 +377,7 @@ async fn actions_confirm_then_run() {
     .assert_status(400)
     .text()
     .replace("&#x2f;", "/");
-    assert!(html.contains("lost_reason should not be empty"));
+    assert!(html.contains("Reason should not be empty"));
     submit(
         &rep,
         "/admin/resources/deals/actions",
@@ -546,7 +546,8 @@ async fn the_shell_shows_icons_and_remembers_a_collapsed_sidebar() {
     assert!(html.contains("<path d=\"m11 17 2 2a1 1 0 1 0 3-3\"/>"));
     assert!(html.contains("<span class=\"menu-label\">Companies</span>"));
     // The account menu, the top bar's trigger and the command menu.
-    assert!(html.contains("<span class=\"avatar\" aria-hidden=\"true\">SI</span>"));
+    assert!(html.contains("<span class=\"user-icon\" aria-hidden=\"true\"><svg"));
+    assert!(!html.contains("class=\"avatar\""));
     assert!(html.contains("data-sidebar-trigger"));
     assert!(html.contains("<dialog class=\"command\""));
     assert!(

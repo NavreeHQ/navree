@@ -111,22 +111,24 @@ async fn panel(parts: &mut Parts, enter_named: bool) -> Result<Panel, AppError> 
                 }
             }
         }
-        // What the workspace the request is in takes from the user, for a request
-        // that may write. A workspace the app entered hasn't been asked yet.
+        // What the workspace the request is in takes from the user. A request that
+        // writes is refused here when it takes nothing; a page only hides what it
+        // would refuse. A workspace the app entered hasn't been asked yet.
         let mut writes = None;
         if enter_named
-            && !matches!(
+            && let Some(entered) = uow.workspace()
+            && let Some(gate) = app.try_get::<dyn WorkspaceGate>().await
+        {
+            let allowed = gate.writes(user_id, entered).await?;
+            let writing = !matches!(
                 parts.method,
                 http::Method::GET
                     | http::Method::HEAD
                     | http::Method::OPTIONS
                     | http::Method::TRACE
-            )
-            && let Some(entered) = uow.workspace()
-            && let Some(gate) = app.try_get::<dyn WorkspaceGate>().await
-        {
-            let allowed = gate.writes(user_id, entered).await?;
-            if named_by.is_none()
+            );
+            if writing
+                && named_by.is_none()
                 && let Some(refusal) = allowed.refusal()
             {
                 return Err(refusal);

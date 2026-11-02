@@ -53,7 +53,7 @@
       {% endif %}
       <details class="user-menu">
         <summary class="user-trigger" title="{{ user.name }}">
-          <span class="avatar" aria-hidden="true">{{ avatar }}</span>
+          <span class="user-icon" aria-hidden="true">{{ panel.icons.user|safe }}</span>
           <span class="user-text">
             <span class="user-name">{{ user.name }}</span>
             {% if user.email %}<span class="user-email">{{ user.email }}</span>{% endif %}

@@ -5,7 +5,7 @@ use navree_http::extract::FromRequest;
 use navree_http::{AppError, Json};
 use navree_kernel::{AppContext, BoxFuture};
 use navree_orm::{Builder, Model, Record};
-use navree_validation::Valid;
+use navree_validation::{Messages, Valid};
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 
@@ -83,6 +83,20 @@ pub trait Resource: Send + Sync + 'static {
     /// The position in the menu within the group (lower first, then by
     /// label).
     const ORDER: i32 = 0;
+    /// Whether the records are read-only in the panel: no New, Edit or
+    /// Delete anywhere (the buttons are not shown) and the panel and its API
+    /// refuse a create, an update or a delete. Actions still run. Use it for
+    /// what the app writes itself (an audit trail, a payment provider's
+    /// copy of a subscription).
+    const READ_ONLY: bool = false;
+    /// Whether the list offers its rows as a CSV file (`Export`), for the
+    /// current search and filters, the rows the user may read.
+    const EXPORT: bool = true;
+    /// Whether the menu shows how many records the resource has. The
+    /// count is read for the signed-in user and the workspace, cached for
+    /// a short time and capped (`1000+`); turn it off for a table whose
+    /// count is not cheap.
+    const SIDEBAR_COUNT: bool = true;
     /// Where the resource works when its model belongs to workspaces
     /// (`#[model(workspace)]`): in the workspace the request works in
     /// ([`Workspaces::Current`], the default) or across all of them
@@ -164,6 +178,7 @@ pub struct FormData {
     values: Map<String, Value>,
     app: Option<AppContext>,
     tz_offset: Option<i32>,
+    messages: Option<Messages>,
 }
 
 impl FormData {
@@ -173,6 +188,7 @@ impl FormData {
             values,
             app: None,
             tz_offset: None,
+            messages: None,
         }
     }
 
@@ -180,6 +196,17 @@ impl FormData {
         self.app = Some(app);
         self.tz_offset = tz_offset;
         self
+    }
+
+    /// The validation messages that name each field by its label.
+    pub(crate) fn with_messages(mut self, messages: Messages) -> Self {
+        self.messages = Some(messages);
+        self
+    }
+
+    /// The messages the panel renders with, when it set them.
+    pub(crate) fn messages(&self) -> Option<&Messages> {
+        self.messages.as_ref()
     }
 
     /// The submitted values.

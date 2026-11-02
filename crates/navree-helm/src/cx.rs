@@ -1,8 +1,11 @@
 //! [`Cx`]: who is asking, with what, inside which unit of work.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
-use navree_access::{Ability, PrincipalAccess, WorkspaceGate, WorkspaceWrites};
+use navree_access::{
+    Ability, CREATE, DELETE, PrincipalAccess, UPDATE, WorkspaceGate, WorkspaceWrites,
+};
 use navree_audit::AuditLog;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink};
 use navree_db::Uow;
@@ -13,6 +16,7 @@ use uuid::Uuid;
 
 use crate::context::ContextInner;
 use crate::core::Core;
+use crate::handle::ResourceInfo;
 use crate::workspace::{NamedBy, RefusedWrite};
 
 /// The client of a request, for audit entries.
@@ -69,6 +73,58 @@ impl Cx {
             access: self.access.clone(),
             form_may_name_workspace: false,
         }
+    }
+
+    /// Whether the panel offers `action` (`create`, `update`, `delete` or an
+    /// action's ability) on the records of `info`: what the resource and the
+    /// workspace the request works in take from the user. It decides what the
+    /// pages show; the writes themselves are checked again when they run.
+    pub(crate) fn offers(&self, info: &ResourceInfo, action: &str) -> bool {
+        if info.read_only && matches!(action, CREATE | UPDATE | DELETE) {
+            return false;
+        }
+        takes_writes(
+            self.writes.as_ref(),
+            self.named_by,
+            info.workspaces.is_some(),
+            info.permission_prefix,
+            action,
+        )
+    }
+
+    /// [`offers`](Self::offers) for a record of `owner`'s workspace, which a
+    /// resource across workspaces shows beside others: `memo` keeps what each
+    /// workspace said.
+    pub(crate) async fn offers_for(
+        &self,
+        info: &ResourceInfo,
+        action: &str,
+        owner: Option<Uuid>,
+        memo: &mut HashMap<Uuid, Option<WorkspaceWrites>>,
+    ) -> bool {
+        let Some(owner) = owner
+            .filter(|owner| Some(*owner) != self.uow.workspace())
+            .filter(|_| info.workspaces == Some(crate::Workspaces::Every))
+        else {
+            return self.offers(info, action);
+        };
+        if info.read_only && matches!(action, CREATE | UPDATE | DELETE) {
+            return false;
+        }
+        if !memo.contains_key(&owner) {
+            let writes = match self.app.try_get::<dyn WorkspaceGate>().await {
+                Some(gate) => gate.writes(self.user_id, owner).await.ok(),
+                None => None,
+            };
+            memo.insert(owner, writes);
+        }
+        takes_writes(
+            memo[&owner].as_ref(),
+            None,
+            true,
+            info.permission_prefix,
+            action,
+        )
     }
 
     /// What `workspace` takes from the user: the workspace the request works in
@@ -197,4 +253,73 @@ pub(crate) fn action_entry(
         entry.subject_type = Some(subject.to_owned());
     }
     entry
+}
+
+/// Whether the workspace a request works in (`writes`, as its gate said of
+/// the user) takes `action` on a model with the permission prefix `prefix`.
+///
+/// A model of workspaces takes what the user's role writes there, and nothing
+/// in a read-only demo. Another model is refused only what the app's own
+/// workspace refuses outright: the workspace the panel was told of (a cookie)
+/// is entered for the models that belong to it.
+pub(crate) fn takes_writes(
+    writes: Option<&WorkspaceWrites>,
+    named_by: Option<NamedBy>,
+    workspace_model: bool,
+    prefix: &str,
+    action: &str,
+) -> bool {
+    let Some(writes) = writes else {
+        return true;
+    };
+    if workspace_model {
+        !writes.read_only_demo && writes.role_writes(prefix, action)
+    } else {
+        !(named_by.is_none() && writes.refusal().is_some())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn writes(read_only_demo: bool, read_only_role: bool, permissions: &[&str]) -> WorkspaceWrites {
+        WorkspaceWrites {
+            read_only_demo,
+            read_only_role,
+            role_permissions: permissions.iter().map(|p| (*p).to_owned()).collect(),
+        }
+    }
+
+    #[test]
+    fn a_workspace_takes_what_its_role_writes() {
+        let member = writes(false, false, &[]);
+        let viewer = writes(false, true, &[]);
+        let demo = writes(true, false, &[]);
+        for (who, expected) in [(&member, true), (&viewer, false), (&demo, false)] {
+            assert_eq!(
+                takes_writes(Some(who), Some(NamedBy::Cookie), true, "notes", "update"),
+                expected
+            );
+        }
+        // No workspace, no gate: the user's rules are all there is.
+        assert!(takes_writes(None, None, true, "notes", "update"));
+        // A viewer who the app lets update notes does.
+        let allowed = writes(false, true, &["notes.update"]);
+        assert!(takes_writes(Some(&allowed), None, true, "notes", "update"));
+        assert!(!takes_writes(Some(&allowed), None, true, "notes", "delete"));
+    }
+
+    #[test]
+    fn a_model_outside_workspaces_is_refused_only_by_the_workspace_the_app_entered() {
+        let viewer = writes(false, true, &[]);
+        assert!(!takes_writes(Some(&viewer), None, false, "users", "update"));
+        assert!(takes_writes(
+            Some(&viewer),
+            Some(NamedBy::Cookie),
+            false,
+            "users",
+            "update"
+        ));
+    }
 }

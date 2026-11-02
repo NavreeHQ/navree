@@ -189,6 +189,7 @@ pub(crate) async fn present(
     let ability = cx.ability();
     let subject = info.subject;
     let mut items = Vec::with_capacity(records.len());
+    let mut workspaces = HashMap::new();
     for record in records {
         let json = &record.json;
         let mut values = Map::new();
@@ -244,16 +245,25 @@ pub(crate) async fn present(
         } else {
             Vec::new()
         };
+        // The workspace of the record, for a resource that shows several.
+        let owner = info
+            .workspace_column
+            .and_then(|column| json.get(column))
+            .and_then(key_text)
+            .and_then(|text| uuid::Uuid::parse_str(&text).ok());
+        let can = Can {
+            update: ability.can(UPDATE, subject, Some(json))
+                && cx.offers_for(info, UPDATE, owner, &mut workspaces).await,
+            delete: ability.can(DELETE, subject, Some(json))
+                && cx.offers_for(info, DELETE, owner, &mut workspaces).await,
+        };
         items.push(Item {
             url: format!("{base}/resources/{}/{}", info.slug, encode(&record.id)),
             id: record.id.clone(),
             title: record.title.clone(),
             values,
             cells,
-            can: Can {
-                update: ability.can(UPDATE, subject, Some(json)),
-                delete: ability.can(DELETE, subject, Some(json)),
-            },
+            can,
             readonly,
         });
     }

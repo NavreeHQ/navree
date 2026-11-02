@@ -314,7 +314,6 @@ impl<'a> Frame<'a> {
             .map(|(title, items)| json!({ "title": title, "items": items }))
             .collect();
         let user = user_json(cx).await;
-        let avatar = initials(user["name"].as_str().unwrap_or_default());
         let works_in_workspaces = core.registry.resources().iter().any(|resource| {
             let info = resource.info();
             info.workspaces.is_some() && cx.can(READ, info.subject, None)
@@ -329,7 +328,6 @@ impl<'a> Frame<'a> {
             "menu": menu,
             "crumbs": crumbs,
             "user": user,
-            "avatar": avatar,
             "flash": read_flash(self.headers),
             "workspace": {
                 "shown": works_in_workspaces,
@@ -360,21 +358,6 @@ impl<'a> Frame<'a> {
         }
         response
     }
-}
-
-/// The initials of a name for the user's avatar: the first letter of its
-/// first and last words (`Maya Manager` → `MM`).
-fn initials(name: &str) -> String {
-    let first = |word: &str| word.chars().find(|c| c.is_alphanumeric());
-    let mut words = name.split_whitespace();
-    let mut out = String::new();
-    if let Some(c) = words.next().and_then(first) {
-        out.extend(c.to_uppercase());
-    }
-    if let Some(c) = words.next_back().and_then(first) {
-        out.extend(c.to_uppercase());
-    }
-    out
 }
 
 /// `{id, name, email}` of the signed-in user.
@@ -974,11 +957,13 @@ fn rows(items: &[Item]) -> Vec<Value> {
         .collect()
 }
 
-/// The actions shown on `screen`.
-fn action_views(info: &ResourceInfo, detail: bool) -> Vec<Value> {
+/// The actions shown on `screen`: those the user may run on some record and
+/// the workspace they work in takes from them.
+fn action_views(cx: &Cx, info: &ResourceInfo, detail: bool) -> Vec<Value> {
     info.actions
         .iter()
         .filter(|a| if detail { a.on_detail } else { a.on_index })
+        .filter(|a| cx.can(a.ability, info.subject, None) && cx.offers(info, a.ability))
         .map(|a| {
             json!({
                 "name": a.name,
@@ -1112,7 +1097,7 @@ pub(crate) async fn list(
                 "url": list_url,
                 "new_url": format!("{list_url}/new"),
                 "actions_url": format!("{list_url}/actions"),
-                "can_create": cx.can(CREATE, info.subject, None),
+                "can_create": cx.can(CREATE, info.subject, None) && cx.offers(info, CREATE),
             },
             "columns": columns(info, &q, &list_url),
             "rows": rows(&items),
@@ -1121,7 +1106,7 @@ pub(crate) async fn list(
             "filtered": q.search.is_some() || !q.filters.is_empty() || q.via.is_some(),
             "sort": q.sort.clone().unwrap_or_default(),
             "via": q.via.as_ref().map(|(c, id)| json!({ "column": c, "id": id })),
-            "actions": action_views(info, false),
+            "actions": action_views(cx, info, false),
             "metrics": metrics,
             "range_links": range_links,
             "return_url": format!("{list_url}?{}", q.to_query(Some(q.page), None)),
@@ -1191,7 +1176,7 @@ pub(crate) async fn show(
                 "actions_url": format!("{list_url}/actions"),
             },
             "item": item,
-            "actions": action_views(info, true),
+            "actions": action_views(cx, info, true),
             "relations": relations,
         });
         Ok::<_, AppError>(
@@ -1265,7 +1250,7 @@ async fn relation_panels(
             "actions_url": format!("{list_url}/actions"),
             "columns": columns,
             "rows": table_rows,
-            "actions": action_views(target_info, false),
+            "actions": action_views(cx, target_info, false),
         }));
     }
     Ok(panels)
@@ -1531,6 +1516,11 @@ async fn submission(
                             .and_then(|messages| messages.first().cloned())
                             .or_else(|| error.detail.clone())
                             .unwrap_or_else(|| error.title.clone());
+                        // The storage names the field by its form name.
+                        let message = match message.strip_prefix(name.as_str()) {
+                            Some(rest) => format!("{}{rest}", spec.label_text()),
+                            None => message,
+                        };
                         submission
                             .upload_errors
                             .entry(name)
@@ -1700,7 +1690,7 @@ pub(crate) async fn new_form(
     let cx = &panel.cx;
     let result = async {
         let resource = resource(cx, &slug)?;
-        if !cx.can(CREATE, resource.info().subject, None) {
+        if !cx.can(CREATE, resource.info().subject, None) || resource.info().read_only {
             return Err(AppError::forbidden());
         }
         form_page(&frame, resource.as_ref(), StatusCode::OK, None, None, None).await
@@ -1732,7 +1722,7 @@ async fn create_record(
     let info = resource.info();
     // Checked before reading the form, so no upload is stored for a user
     // who may not create (the record's own rules are checked on save).
-    if !panel.cx.can(CREATE, info.subject, None) {
+    if !panel.cx.can(CREATE, info.subject, None) || info.read_only {
         return Err(AppError::forbidden());
     }
     let submission = submission(&panel.cx, info, request, true).await?;
@@ -1917,6 +1907,9 @@ pub(crate) async fn destroy(
     let result = async {
         let resource = resource(cx, &slug)?;
         let info = resource.info();
+        if info.read_only {
+            return Err(AppError::forbidden());
+        }
         let submission = submission(cx, info, request, false).await?;
         let base = cx.core.options.base();
         let list_url = format!("{base}/resources/{}", info.slug);
