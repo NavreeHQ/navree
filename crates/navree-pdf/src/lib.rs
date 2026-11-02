@@ -82,7 +82,9 @@
 //!   a pointer to its dictionary and its bytes. What the process holds for
 //!   them at its peak is at most twice what is counted (1.15 times for a
 //!   tagged spreadsheet of 10,000 rows, 1.95 for a dictionary of 700,000
-//!   keys), so 256 MiB counted is at most 512 MiB held. The bytes of a stream
+//!   keys), so 256 MiB counted is at most 512 MiB held; an allocator that copies
+//!   a block to grow it holds the old one too for a moment (2.08 times at most,
+//!   for that dictionary). The bytes of a stream
 //!   are the file's own, and are not copied.
 //! - **Bytes out.** A stream ends before the next object starts, whatever its
 //!   `Length` says, so the streams a document holds add up to the file's
