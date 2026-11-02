@@ -46,8 +46,8 @@ importers:
         version: 0.17.0
     devDependencies:
       '@casl/ability':
-        specifier: 7.0.2
-        version: 7.0.2
+        specifier: 7.1.0
+        version: 7.1.0
       '@types/node':
         specifier: ^24.19.2
         version: 24.19.2
@@ -77,11 +77,11 @@ importers:
         version: 9.3.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
     devDependencies:
       '@casl/ability':
-        specifier: 7.0.2
-        version: 7.0.2
+        specifier: 7.1.0
+        version: 7.1.0
       '@casl/react':
-        specifier: 7.0.1
-        version: 7.0.1(@casl/ability@7.0.2)(react@19.3.1)
+        specifier: 7.1.0
+        version: 7.1.0(@casl/ability@7.1.0)(react@19.3.1)
       '@testing-library/dom':
         specifier: ^10.4.2
         version: 10.4.2
@@ -150,11 +150,11 @@ importers:
         version: 4.6.3(@babel/plugin-syntax-jsx@7.29.7(@babel/core@7.29.7(supports-color@10.2.2)))(@babel/plugin-syntax-typescript@7.29.7(@babel/core@7.29.7(supports-color@10.2.2)))(@oxc-project/types@0.155.0)(@types/node@24.19.2)(@vue/compiler-sfc@3.5.44)(acorn@8.19.0)(confbox@0.3.1)(db0@0.3.4)(dotenv@17.4.2)(esbuild@0.28.2)(giget@3.3.1)(ioredis@5.11.1(supports-color@10.2.2))(lightningcss@1.33.0)(mlly@1.8.2)(rolldown@1.2.15)(rollup-plugin-visualizer@7.1.1(rolldown@1.2.15)(rollup@4.65.0))(rollup@4.65.0)(srvx@1.0.7)(supports-color@10.2.2)(terser@5.51.2)(typescript@5.9.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2))
     devDependencies:
       '@casl/ability':
-        specifier: 7.0.2
-        version: 7.0.2
+        specifier: 7.1.0
+        version: 7.1.0
       '@casl/vue':
-        specifier: 3.0.1
-        version: 3.0.1(@casl/ability@7.0.2)(vue@3.5.44(typescript@5.9.3))
+        specifier: 3.1.0
+        version: 3.1.0(@casl/ability@7.1.0)(vue@3.5.44(typescript@5.9.3))
       '@types/node':
         specifier: ^24.19.2
         version: 24.19.2
@@ -360,17 +360,17 @@ packages:
     resolution: {integrity: sha512-0GEz8qJWokkUVYQYRukmkSHIFNoBH8QTreeHrAFbvz1XFYc3Y+puhMs8PQ5x8GNugiC2l5jvDBXKLbBIByeSBw==}
     hasBin: true
 
-  '@casl/ability@7.0.2':
-    resolution: {integrity: sha512-NOYbLTaw080a1Na4CpBtyGpL+i9NZhtGGt/tPrrNpLEv8EawFusHZCgc58ewyPBiZ0NER0iudB0et+IP8xJbLg==}
+  '@casl/ability@7.1.0':
+    resolution: {integrity: sha512-M7eETIffU3x38Oy7ggpSgjMZkIo+6q/vVIboWtlrSxEplIfP3c66g8Vi3ulImvo2WOjh+Xv9uWnJkjRhCajOiA==}
 
-  '@casl/react@7.0.1':
-    resolution: {integrity: sha512-HFfBxQD5wFUIyd9gAPa5LDqMbB7CIOqRcocxzwMC589d8vLMzaz/OAdFLglGiBz9pAcumC0ULp5QLFiYZ46mUw==}
+  '@casl/react@7.1.0':
+    resolution: {integrity: sha512-z0TkQNReAGGOGhPhtfrLBB2uJTxS2b55rBZH4aEw7dYUQQSYMj688NwCT75SwfyiKFnmwn0+B+II/DsoJKNe4w==}
     peerDependencies:
       '@casl/ability': ^4.0.0 || ^5.1.0 || ^6.0.0 || ^7.0.0
       react: ^18.0.0 || ^19.0.0
 
-  '@casl/vue@3.0.1':
-    resolution: {integrity: sha512-iCNvKqQMAUmhmwkrhReVoshTyfDSWZS7Vda4HzyGadplG0tQK3WrYulkrdEeWlR7g5r2aAdez/0Fs30oLL4roA==}
+  '@casl/vue@3.1.0':
+    resolution: {integrity: sha512-vX7VHeanuQfH9hLHnOzFVETFILGbkQaVHh5xAg41EyDItSTGssREpsbdVQ4SVZ1V+0CpL/YPLTMbJj9nW6fGjw==}
     peerDependencies:
       '@casl/ability': ^2.0.0 || ^3.0.0 || ^4.0.0 || ^5.1.0 || ^6.0.0 || ^7.0.0
       vue: ^3.0.0
@@ -4156,18 +4156,18 @@ snapshots:
     dependencies:
       css-tree: 3.2.1
 
-  '@casl/ability@7.0.2':
+  '@casl/ability@7.1.0':
     dependencies:
       '@ucast/mongo2js': 2.0.0
 
-  '@casl/react@7.0.1(@casl/ability@7.0.2)(react@19.3.1)':
+  '@casl/react@7.1.0(@casl/ability@7.1.0)(react@19.3.1)':
     dependencies:
-      '@casl/ability': 7.0.2
+      '@casl/ability': 7.1.0
       react: 19.3.1
 
-  '@casl/vue@3.0.1(@casl/ability@7.0.2)(vue@3.5.44(typescript@5.9.3))':
+  '@casl/vue@3.1.0(@casl/ability@7.1.0)(vue@3.5.44(typescript@5.9.3))':
     dependencies:
-      '@casl/ability': 7.0.2
+      '@casl/ability': 7.1.0
       vue: 3.5.44(typescript@5.9.3)
 
   '@clack/core@1.5.1':

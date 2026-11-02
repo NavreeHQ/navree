@@ -61,8 +61,8 @@
     }
   },
   "devDependencies": {
-    "@casl/ability": "7.0.2",
-    "@casl/react": "7.0.1",
+    "@casl/ability": "7.1.0",
+    "@casl/react": "7.1.0",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "16.3.3",
     "@types/node": "^24.19.2",
