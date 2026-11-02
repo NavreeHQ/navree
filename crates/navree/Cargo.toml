@@ -71,7 +71,9 @@ http = ["dep:navree-http", "telemetry"]
 log = ["dep:navree-log", "telemetry"]
 crypto = ["dep:navree-crypto"]
 events = ["dep:navree-events", "telemetry"]
-view = ["dep:navree-view"]
+## The template engine (navree-template), under `view`, `i18n` and `harbor`.
+template = ["dep:navree-template"]
+view = ["dep:navree-view", "template"]
 cache = ["dep:navree-cache", "telemetry"]
 http-client = ["dep:navree-http-client", "telemetry"]
 ## The schema builder: tables, columns, indexes and foreign keys in Rust for
@@ -441,6 +443,7 @@ micro-mqtt = ["micro", "navree-micro/mqtt"]
 ## translated validation messages, templates and notifications.
 i18n = [
     "dep:navree-i18n",
+    "template",
     "http",
     "view",
     "db",
@@ -604,7 +607,7 @@ browser = ["dep:navree-browser", "http"]
 otel = ["observe", "navree-observe/otel"]
 ## Harbor (opt-in, not in `full`): harbor.toml, provisioning and deploys as a
 ## library. The `navree` CLI has it built in; apps rarely need it.
-harbor = ["dep:navree-harbor"]
+harbor = ["dep:navree-harbor", "template"]
 
 [dependencies]
 navree-bounded = { workspace = true }
@@ -636,6 +639,7 @@ navree-dock = { workspace = true, optional = true }
 navree-domains = { workspace = true, optional = true }
 navree-documents = { workspace = true, optional = true }
 navree-pdf = { workspace = true, optional = true }
+navree-template = { workspace = true, optional = true }
 navree-navigator = { workspace = true, optional = true }
 navree-events = { workspace = true, optional = true }
 navree-graphql = { workspace = true, optional = true }

@@ -89,6 +89,9 @@ const HIERARCHY: &[Rule] = &[
     // The template engine behind views, mail, translated messages and the
     // files the CLI and Harbor generate. It depends on no navree crate.
     rule("navree-template", 0, &[]),
+    // Tests that measure the heap a render uses, with a counting allocator.
+    // Nothing depends on it.
+    rule("navree-template-peak", 0, &["navree-template"]),
     // L1
     rule("navree-contracts", 1, &["navree-kernel"]),
     rule("navree-config", 1, &["navree-kernel", "navree-contracts"]),

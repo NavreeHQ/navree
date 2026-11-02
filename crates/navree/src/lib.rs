@@ -313,6 +313,11 @@ pub use navree_media as media;
 #[cfg(feature = "pdf")]
 pub use navree_pdf as pdf;
 
+/// The template engine (the `template` feature, which `view`, `i18n` and
+/// `harbor` turn on): navree-template re-exported whole.
+#[cfg(feature = "template")]
+pub use navree_template as template;
+
 /// Durable workflows and end-user automations (the `workflows` feature):
 /// navree-workflows re-exported whole, with `#[workflow]`, `#[trigger]`,
 /// `#[condition]` and `#[action]`

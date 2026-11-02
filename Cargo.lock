@@ -4251,6 +4251,7 @@ dependencies = [
  "navree-sso",
  "navree-storage",
  "navree-telemetry",
+ "navree-template",
  "navree-testing",
  "navree-time",
  "navree-ui",
