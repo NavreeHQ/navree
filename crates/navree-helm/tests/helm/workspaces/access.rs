@@ -13,6 +13,8 @@ use navree_workspace::{
 
 use super::*;
 
+mod staff_audit;
+
 /// `users(id, name, email)`, as the auth module creates it.
 struct CreateUsers;
 
@@ -149,6 +151,7 @@ struct World {
     globex_note: Uuid,
     member_id: Uuid,
     member: TestClient,
+    outsider_id: Uuid,
     outsider: TestClient,
 }
 
@@ -173,6 +176,7 @@ async fn world(app: TestApp) -> World {
         globex_note,
         member_id,
         member,
+        outsider_id,
         outsider,
     }
 }

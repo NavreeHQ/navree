@@ -62,10 +62,8 @@ impl Cx {
         }
     }
 
-    /// Records `entry` (with the user and client) inside the unit of work
-    /// when the app has navree-audit's `AuditLog` (it commits or rolls back
-    /// with the work), else through the app's `dyn AuditSink`.
-    pub(crate) async fn audit(&self, entry: AuditEntry) {
+    /// `entry` with the user and client.
+    fn entry_of_client(&self, entry: AuditEntry) -> AuditEntry {
         let mut entry = entry.actor(self.user_id);
         if let Some(id) = &self.client.request_id {
             entry = entry.request_id(id.clone());
@@ -76,6 +74,21 @@ impl Cx {
         if let Some(agent) = &self.client.user_agent {
             entry = entry.user_agent(agent.clone());
         }
+        entry
+    }
+
+    /// Records `entry` (with the user and client) outside the unit of work,
+    /// so that it stays whatever becomes of the work: what staff do, which is
+    /// written down whether or not it works.
+    pub(crate) async fn audit_outside(&self, entry: AuditEntry) {
+        record_outside(&self.app, self.entry_of_client(entry)).await;
+    }
+
+    /// Records `entry` (with the user and client) inside the unit of work
+    /// when the app has navree-audit's `AuditLog` (it commits or rolls back
+    /// with the work), else through the app's `dyn AuditSink`.
+    pub(crate) async fn audit(&self, entry: AuditEntry) {
+        let entry = self.entry_of_client(entry);
         let action = entry.action.clone();
         if let Some(log) = self.app.try_get::<AuditLog>().await {
             if let Err(error) = log.record_in(&self.uow, entry).await {
@@ -86,6 +99,22 @@ impl Cx {
         {
             tracing::warn!(target: "navree::helm", %error, %action, "could not write an audit entry");
         }
+    }
+}
+
+/// Records `entry` on the audit log's own connection when the app has
+/// navree-audit's `AuditLog`, else through the app's `dyn AuditSink`.
+pub(crate) async fn record_outside(app: &AppContext, entry: AuditEntry) {
+    let action = entry.action.clone();
+    let recorded = if let Some(log) = app.try_get::<AuditLog>().await {
+        log.record(entry).await.map_err(|error| error.to_string())
+    } else if let Some(sink) = app.try_get::<dyn AuditSink>().await {
+        sink.record(entry).await.map_err(|error| error.to_string())
+    } else {
+        Ok(())
+    };
+    if let Err(error) = recorded {
+        tracing::warn!(target: "navree::helm", %error, %action, "could not write an audit entry");
     }
 }
 

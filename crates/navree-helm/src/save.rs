@@ -8,8 +8,7 @@ use std::collections::BTreeMap;
 
 use chrono::{DateTime, SubsecRound, Utc};
 use navree_access::{WorkspaceEntry, WorkspaceGate};
-use navree_audit::AuditLog;
-use navree_contracts::{AuditEntry, AuditSink, Clock};
+use navree_contracts::Clock;
 use navree_db::{ChangeEvent, ChangeOp, Uow};
 use navree_http::AppError;
 use navree_kernel::AppContext;
@@ -20,6 +19,7 @@ use serde_json::{Map, Value as Json};
 use uuid::Uuid;
 
 use crate::core::Core;
+use crate::cx::record_outside;
 use crate::values::{self, Invalid, Shape};
 use crate::workspace::{self, Admitted, Refused};
 use crate::{FormData, SaveContext};
@@ -253,7 +253,11 @@ async fn named_by_form<M: Model>(
     let refused = match admitted {
         Ok(admitted) => {
             if admitted == Admitted::Staff {
-                record_staff(ctx, workspace::staff_entry(named, "form")).await;
+                record_outside(
+                    ctx.app(),
+                    workspace::staff_entry(named, "form").actor(ctx.user_id()),
+                )
+                .await;
             }
             return workspace::within(ctx.app(), uow, named, insert::<M>(uow, model)).await;
         }
@@ -275,22 +279,6 @@ async fn named_by_form<M: Model>(
         return Err(refused.error());
     }
     workspace::outside(ctx.app(), uow, insert::<M>(uow, model)).await
-}
-
-/// Records `entry` with the user, in the unit of work when the app has the
-/// audit log.
-async fn record_staff(ctx: &SaveContext, entry: AuditEntry) {
-    let entry = entry.actor(ctx.user_id());
-    let action = entry.action.clone();
-    if let Some(log) = ctx.app().try_get::<AuditLog>().await {
-        if let Err(error) = log.record_in(ctx.uow(), entry).await {
-            tracing::warn!(target: "navree::helm", %error, %action, "could not write an audit entry");
-        }
-    } else if let Some(sink) = ctx.app().try_get::<dyn AuditSink>().await
-        && let Err(error) = sink.record(entry).await
-    {
-        tracing::warn!(target: "navree::helm", %error, %action, "could not write an audit entry");
-    }
 }
 
 /// Inserts `model` with a generated key and records the change.

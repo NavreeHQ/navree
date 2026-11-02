@@ -113,7 +113,7 @@ async fn panel(parts: &mut Parts, enter_named: bool) -> Result<Panel, AppError> 
             named_by,
         };
         if let Some(entered) = staff {
-            cx.audit(workspace::staff_entry(
+            cx.audit_outside(workspace::staff_entry(
                 entered,
                 workspace::named_by_name(named_by),
             ))

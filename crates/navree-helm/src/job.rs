@@ -94,7 +94,7 @@ impl Job for HelmActionJob {
             named_by: None,
         };
         if let Some(workspace) = staff {
-            cx.audit(workspace::staff_entry(workspace, "queued action"))
+            cx.audit_outside(workspace::staff_entry(workspace, "queued action"))
                 .await;
         }
         let outcome = uow
