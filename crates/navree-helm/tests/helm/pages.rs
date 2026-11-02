@@ -152,3 +152,39 @@ async fn view_fields_render_a_template_with_the_record() {
         "{html}"
     );
 }
+
+#[tokio::test]
+async fn a_view_field_sees_only_what_the_user_may_read() {
+    let app = builder()
+        .module(ViewModule::for_root(navree_view::ViewOptions::default()))
+        .module(PagesModule)
+        .build()
+        .await;
+    let d = deal(
+        &app,
+        DealSeed {
+            title: "TITLESECRET",
+            ..DealSeed::default()
+        },
+    )
+    .await;
+    let (_, hides) = user(&app, "no-title").await;
+    let html = hides
+        .get(&format!("/admin/resources/board/{}", d.id))
+        .header("accept", "text/html")
+        .send()
+        .await
+        .assert_status(200)
+        .text();
+    assert!(!html.contains("TITLESECRET"), "{html}");
+    // Someone the rule doesn't bind sees it through the template.
+    let (_, rep) = user(&app, "rep").await;
+    let html = rep
+        .get(&format!("/admin/resources/board/{}", d.id))
+        .header("accept", "text/html")
+        .send()
+        .await
+        .assert_status(200)
+        .text();
+    assert!(html.contains("<strong>TITLESECRET</strong>"), "{html}");
+}

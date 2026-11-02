@@ -60,6 +60,58 @@ impl Ability {
             .is_some_and(|rule| !rule.inverted)
     }
 
+    /// Whether `action` is allowed on `field` of every record of `subject_type`
+    /// that `action` is allowed on at all: no rule takes the field away from
+    /// any of them, conditions or not. What a query on the field would say then
+    /// says nothing the user couldn't read.
+    ///
+    /// Where [`can_field`](Ability::can_field) with no record ignores a conditional
+    /// `cannot`, this counts it, and it counts a conditional grant only if every
+    /// grant of `action` covers the field.
+    ///
+    /// ```
+    /// use navree_access::{READ, Rules, field};
+    ///
+    /// let mut rules = Rules::new();
+    /// rules.can(READ, "Deal");
+    /// rules.cannot(READ, "Deal").fields(["title"]).when(field("stage").eq("won"));
+    /// let ability = rules.build();
+    /// assert!(ability.can_field(READ, "Deal", None, "title"));
+    /// assert!(!ability.can_field_on_every_record(READ, "Deal", "title"));
+    /// assert!(ability.can_field_on_every_record(READ, "Deal", "stage"));
+    /// ```
+    pub fn can_field_on_every_record(
+        &self,
+        action: &str,
+        subject_type: &str,
+        field: &str,
+    ) -> bool {
+        let mut covered = false;
+        let relevant = self
+            .rules
+            .iter()
+            .rev()
+            .filter(|rule| rule.matches_action(action) && rule.matches_subject(subject_type));
+        for rule in relevant {
+            let conditional = rule.conditions.as_ref().is_some_and(|c| !c.is_empty());
+            let covers = rule.matches_field(Some(field));
+            match (rule.inverted, rule.fields.is_some()) {
+                // A denial of the field, on some records or all.
+                (true, true) if covers => return false,
+                (true, true) => {}
+                // A denial of whole records: those aren't read, or there are none.
+                (true, false) if conditional => {}
+                (true, false) => return false,
+                // A grant on every record that holds the field.
+                (false, _) if covers && !conditional => return true,
+                (false, _) if covers => covered = true,
+                // Some records are read without it.
+                (false, _) => return false,
+            }
+        }
+        covered
+    }
+
     /// The rule that decides the check, if any (CASL's `relevantRuleFor`):
     /// [`Ability::can`] is "a rule decides and it is not inverted". Use it to
     /// explain a decision, e.g. with the rule's `reason`.

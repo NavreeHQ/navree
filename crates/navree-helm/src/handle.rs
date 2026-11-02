@@ -27,6 +27,7 @@ use crate::metric::{
     Aggregate, Metric, MetricKind, MetricRange, MetricResult, Point, RangeOption, buckets, midnight,
 };
 use crate::query::ListQuery;
+use crate::readable::hidden_columns;
 use crate::values::{self, Invalid, Shape, is_blank, key_from_str, key_text};
 use crate::workspace::{self, NamedBy, Refused};
 use crate::{
@@ -57,6 +58,10 @@ pub(crate) struct ResourceInfo {
     pub(crate) sidebar_count: bool,
     pub(crate) pk: &'static str,
     pub(crate) title: &'static str,
+    /// Every column of the model.
+    pub(crate) columns: Vec<&'static str>,
+    /// The columns the model hides from everyone (see [`Readable`](crate::readable)).
+    pub(crate) hidden: HashSet<&'static str>,
     pub(crate) search: Vec<&'static str>,
     pub(crate) per_page: u64,
     pub(crate) default_sort: String,
@@ -103,6 +108,8 @@ pub(crate) struct FilterInfo {
     pub(crate) kind: &'static str,
     pub(crate) options: Vec<(String, String)>,
     pub(crate) related: Option<Related>,
+    /// What the filter's own code says it reads.
+    pub(crate) reads: Option<Vec<String>>,
 }
 
 /// An action, without its model type.
@@ -127,18 +134,31 @@ pub(crate) struct MetricInfo {
     pub(crate) kind: &'static str,
     pub(crate) on_dashboard: bool,
     pub(crate) ranged: bool,
+    /// The columns its value says something of.
+    pub(crate) columns: Vec<String>,
 }
 
-/// A record read for the panel: its key, title, JSON form (column →
-/// value, as access rules see it) and the values of computed and view
-/// fields.
+/// A record read for the panel: its key, title, the columns the user may read
+/// (column → value) and the values of computed and view fields. The whole record is
+/// there for rules to check against and for nothing else: it stays private to this
+/// module, behind [`for_rules`](RawRecord::for_rules).
 #[derive(Clone, Debug)]
 pub(crate) struct RawRecord {
     pub(crate) id: String,
     pub(crate) title: String,
-    pub(crate) json: Json,
+    /// What [`Readable::values`](crate::readable::Readable::values) let through.
+    pub(crate) readable: Json,
+    for_rules: Json,
     pub(crate) computed: HashMap<String, String>,
     pub(crate) html: HashMap<String, String>,
+}
+
+impl RawRecord {
+    /// The whole record, hidden columns included, as access rules see it: to check
+    /// a rule against, never to show.
+    pub(crate) fn for_rules(&self) -> &Json {
+        &self.for_rules
+    }
 }
 
 /// One page of a list.
@@ -285,6 +305,14 @@ impl<R: Resource> Handle<R> {
             .map(|c| c.name())
             .collect();
 
+        let hidden: HashSet<&'static str> = hidden_columns(
+            meta.all_columns().iter().map(|c| (c.name(), c.field())),
+            meta.hidden_names(),
+            meta.visible_names(),
+        )
+        .into_iter()
+        .filter(|column| *column != pk)
+        .collect();
         let mut fields = resource.fields();
         let mut seen = HashSet::new();
         let mut patterns = HashMap::new();
@@ -309,6 +337,15 @@ impl<R: Resource> Handle<R> {
                     "field `{}` is not a column of `{table}`",
                     field.name
                 )));
+            }
+            // A column the model hides is written and never shown: not on a screen
+            // or in a file, and in a form only if it can be written.
+            if field.is_column() && hidden.contains(field.name.as_str()) {
+                field.on_index = false;
+                field.on_detail = false;
+                field.on_export = false;
+                field.sortable = false;
+                field.on_forms = field.on_forms && !field.readonly;
             }
             match &field.kind {
                 FieldKind::Money { currency_column } if column(currency_column).is_none() => {
@@ -374,6 +411,17 @@ impl<R: Resource> Handle<R> {
                 filter.kind,
                 FilterKind::Select | FilterKind::BelongsTo(_) | FilterKind::DateRange
             );
+            if let Some(unknown) = filter
+                .reads
+                .iter()
+                .flatten()
+                .find(|c| column(c).is_none())
+            {
+                return Err(fail(format!(
+                    "filter `{}` reads `{unknown}`, which is not a column of `{table}`",
+                    filter.name
+                )));
+            }
             if needs_column && column(&filter.name).is_none() {
                 return Err(fail(format!(
                     "filter `{}` is not a column of `{table}`",
@@ -395,6 +443,7 @@ impl<R: Resource> Handle<R> {
                     FilterKind::BelongsTo(related) => Some(related),
                     _ => None,
                 },
+                reads: filter.reads.clone(),
             });
         }
 
@@ -497,6 +546,7 @@ impl<R: Resource> Handle<R> {
                 kind: metric.kind.name(),
                 on_dashboard: metric.on_dashboard,
                 ranged: metric.over.is_some(),
+                columns: named.into_iter().flatten().cloned().collect(),
             });
         }
 
@@ -557,6 +607,8 @@ impl<R: Resource> Handle<R> {
             sidebar_count: R::SIDEBAR_COUNT,
             pk,
             title,
+            columns: meta.all_columns().iter().map(|c| c.name()).collect(),
+            hidden,
             search,
             per_page,
             default_sort,
@@ -670,12 +722,14 @@ impl<R: Resource> Handle<R> {
     }
 
     fn raw(&self, cx: &Cx, record: &RecordOf<R>) -> RawRecord {
-        let json = record_json(record);
-        let id = json
+        let for_rules = record_json(record);
+        let id = for_rules
             .get(self.info.pk)
             .and_then(key_text)
             .unwrap_or_default();
-        let title = title_of(&self.info, &json, &id);
+        let readable = self.info.readable(cx.ability());
+        let title = readable.title(&for_rules, &id);
+        let json = readable.values(&for_rules);
         let computed = self
             .computed
             .iter()
@@ -700,7 +754,8 @@ impl<R: Resource> Handle<R> {
         RawRecord {
             id,
             title,
-            json,
+            readable: json,
+            for_rules,
             computed,
             html,
         }
@@ -950,13 +1005,15 @@ impl<R: Resource> Handle<R> {
             return Err(AppError::forbidden());
         }
         self.in_a_workspace(cx)?;
+        let readable = self.info.readable(cx.ability());
         let mut query = self.base(cx, READ);
         let mut errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
         if let Some((column, id)) = &q.via {
             let field = self
                 .info
                 .field(column)
-                .filter(|f| matches!(f.kind, FieldKind::BelongsTo(_)));
+                .filter(|f| matches!(f.kind, FieldKind::BelongsTo(_)))
+                .filter(|_| readable.queryable(column));
             match (field, values::column::<R::Model>(column)) {
                 (Some(_), Some(_)) => match key_from_str(self.shape(column), id) {
                     Some(key) => query = query.where_(self.col(column).eq(key)),
@@ -975,10 +1032,23 @@ impl<R: Resource> Handle<R> {
         if let Some(term) = &q.search
             && !self.info.search.is_empty()
         {
-            query = query.where_(self.search_filter(&self.info.search, term));
+            let columns = readable.search();
+            if columns.is_empty() {
+                errors.insert(
+                    "search".to_owned(),
+                    vec!["search is not available on this list".to_owned()],
+                );
+            } else {
+                query = query.where_(self.search_filter(&columns, term));
+            }
         }
         for (name, values) in &q.filters {
-            match self.filters.iter().find(|f| f.name == *name) {
+            let offered = self
+                .info
+                .filters
+                .iter()
+                .any(|f| f.name == *name && readable.filter(f));
+            match self.filters.iter().find(|f| f.name == *name && offered) {
                 Some(filter) => match self.apply_filter(cx, query.clone(), filter, values).await {
                     Ok(filtered) => query = filtered,
                     Err(message) => {
@@ -993,15 +1063,12 @@ impl<R: Resource> Handle<R> {
                 }
             }
         }
-        let sort = q
-            .sort
-            .clone()
-            .unwrap_or_else(|| self.info.default_sort.clone());
+        let sort = q.sort.clone().unwrap_or_else(|| readable.default_sort());
         let (descending, column_name) = match sort.strip_prefix('-') {
             Some(rest) => (true, rest),
             None => (false, sort.as_str()),
         };
-        let sortable = self.info.sortable();
+        let sortable = readable.sortable();
         if !sortable.contains(&column_name) {
             let allowed: Vec<String> = sortable
                 .iter()
@@ -1522,22 +1589,6 @@ fn labelled(base: &Messages, fields: &[Field]) -> Messages {
     messages
 }
 
-/// What names a record on screen: its `TITLE` column, or, where there is
-/// none (the key is the default title, or the column is empty), the
-/// resource's singular name and the end of its key (`Report #3f9a1c2e`),
-/// never a whole UUID.
-pub(crate) fn title_of(info: &ResourceInfo, json: &Json, id: &str) -> String {
-    let named = match json.get(info.title) {
-        None | Some(Json::Null) => None,
-        Some(value) => Some(key_text(value).unwrap_or_else(|| value.to_string())),
-    }
-    .filter(|text| !text.trim().is_empty());
-    match named {
-        Some(text) if info.title != info.pk => text,
-        _ => format!("{} #{}", info.singular, short_key(id)),
-    }
-}
-
 /// The last eight characters of a long key (the random end of a UUID v7,
 /// where the start is a timestamp), a short one whole.
 pub(crate) fn short_key(id: &str) -> &str {
@@ -2014,6 +2065,15 @@ impl<R: Resource> ErasedResource for Handle<R> {
             if !cx.can(READ, <R::Model as Subject>::SUBJECT, None) {
                 return Err(AppError::forbidden());
             }
+            let readable = self.info.readable(cx.ability());
+            if !self
+                .info
+                .metrics
+                .iter()
+                .any(|m| m.slug == slug && readable.metric(m))
+            {
+                return Err(AppError::forbidden());
+            }
             self.in_a_workspace(cx)?;
             let key = format!(
                 "{}|{}|{}|{}|{}|{}|{}",
@@ -2057,6 +2117,7 @@ impl<R: Resource> ErasedResource for Handle<R> {
             if self.in_a_workspace(cx).is_err() {
                 return Ok(Vec::new());
             }
+            let readable = self.info.readable(cx.ability());
             let mut query = self.base(cx, READ).reorder();
             if let Some(ids) = ids {
                 let keys: Vec<Value> = ids
@@ -2071,13 +2132,22 @@ impl<R: Resource> ErasedResource for Handle<R> {
             if let Some(term) = search.map(str::trim).filter(|t| !t.is_empty()) {
                 let columns: Vec<&'static str> = if self.info.search.is_empty() {
                     vec![self.info.title]
+                        .into_iter()
+                        .filter(|column| readable.queryable(column))
+                        .collect()
                 } else {
-                    self.info.search.clone()
+                    readable.search()
                 };
+                // Nothing it may be matched by: a term finds nothing, whatever it is.
+                if columns.is_empty() {
+                    return Ok(Vec::new());
+                }
                 query = query.where_(self.search_filter(&columns, term));
             }
+            if readable.queryable(self.info.title) {
+                query = query.order_by(values::qualified::<R::Model>(self.info.title));
+            }
             let records = query
-                .order_by(values::qualified::<R::Model>(self.info.title))
                 .order_by(values::qualified::<R::Model>(self.info.pk))
                 .limit(limit)
                 .get(&cx.uow)

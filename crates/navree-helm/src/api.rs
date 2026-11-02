@@ -70,6 +70,7 @@ pub(crate) async fn index(Panel { cx, .. }: Panel) -> Result<Json<Value>, AppErr
 /// The metadata of one resource.
 pub(crate) fn describe(cx: &Cx, resource: &dyn ErasedResource) -> Value {
     let info = resource.info();
+    let readable = info.readable(cx.ability());
     let related_slug = |type_id| {
         cx.core
             .registry
@@ -85,7 +86,7 @@ pub(crate) fn describe(cx: &Cx, resource: &dyn ErasedResource) -> Value {
             "name": f.name,
             "label": f.label_text(),
             "kind": f.kind.name(),
-            "sortable": f.sortable,
+            "sortable": f.sortable && readable.queryable(&f.name),
             "readonly": !f.editable(),
             "on_index": f.on_index,
             "on_detail": f.on_detail,
@@ -105,11 +106,11 @@ pub(crate) fn describe(cx: &Cx, resource: &dyn ErasedResource) -> Value {
         "order": info.order,
         "subject": info.subject,
         "title": info.title,
-        "search": !info.search.is_empty(),
+        "search": !readable.search().is_empty(),
         "per_page": info.per_page,
-        "default_sort": info.default_sort,
+        "default_sort": readable.default_sort(),
         "fields": info.fields.iter().map(field).collect::<Vec<_>>(),
-        "filters": info.filters.iter().map(|f| json!({
+        "filters": info.filters.iter().filter(|f| readable.filter(f)).map(|f| json!({
             "name": f.name,
             "label": f.label,
             "kind": f.kind,
@@ -127,7 +128,7 @@ pub(crate) fn describe(cx: &Cx, resource: &dyn ErasedResource) -> Value {
             "queued": a.queued,
             "fields": a.fields.iter().map(field).collect::<Vec<_>>(),
         })).collect::<Vec<_>>(),
-        "metrics": info.metrics.iter().map(|m| json!({
+        "metrics": info.metrics.iter().filter(|m| readable.metric(m)).map(|m| json!({
             "slug": m.slug,
             "label": m.label,
             "kind": m.kind,

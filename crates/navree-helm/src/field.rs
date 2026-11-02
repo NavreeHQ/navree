@@ -132,6 +132,7 @@ pub struct Field {
     pub(crate) readonly: bool,
     pub(crate) on_index: bool,
     pub(crate) on_detail: bool,
+    pub(crate) on_export: bool,
     pub(crate) on_forms: bool,
     pub(crate) required: bool,
     pub(crate) min: Option<f64>,
@@ -163,6 +164,7 @@ impl Field {
             readonly,
             on_index,
             on_detail,
+            on_export: true,
             on_forms,
             required: false,
             min: None,
@@ -326,6 +328,13 @@ impl Field {
     /// Not on the detail page.
     pub fn hide_on_detail(mut self) -> Self {
         self.on_detail = false;
+        self
+    }
+
+    /// Not in the list's CSV file, which otherwise has every field of a record's
+    /// page: what a user reads one record at a time but shouldn't take by the table.
+    pub fn hide_on_export(mut self) -> Self {
+        self.on_export = false;
         self
     }
 

@@ -82,10 +82,11 @@ where
     out
 }
 
-/// The header line: the label of every field of a record's page.
+/// The header line: the label of every field of a record's page, less any with
+/// [`hide_on_export`](crate::Field::hide_on_export).
 pub(crate) fn header(info: &ResourceInfo) -> String {
     line(
-        screen_fields(info, Screen::Detail)
+        screen_fields(info, Screen::Export)
             .into_iter()
             .map(|f| f.label_text()),
     )
@@ -198,7 +199,7 @@ async fn read_chunk(
     cursor: Option<String>,
 ) -> Result<(String, Option<String>), AppError> {
     let chunk = resource.export(cx, query, cursor, CHUNK).await?;
-    let items = present(cx, resource, &chunk.records, Screen::Detail).await?;
+    let items = present(cx, resource, &chunk.records, Screen::Export).await?;
     Ok((items.iter().map(row).collect(), chunk.next))
 }
 

@@ -20,6 +20,8 @@ use crate::{markdown, money, save};
 pub(crate) enum Screen {
     Index,
     Detail,
+    /// A line of the CSV file: a record's page, less what isn't exported.
+    Export,
 }
 
 /// How one value is shown.
@@ -141,6 +143,7 @@ pub(crate) fn screen_fields(info: &ResourceInfo, screen: Screen) -> Vec<&Field> 
         .filter(|f| match screen {
             Screen::Index => f.on_index,
             Screen::Detail => f.on_detail,
+            Screen::Export => f.on_detail && f.on_export,
         })
         .filter(|f| !matches!(f.kind, FieldKind::HasMany(_)))
         .collect()
@@ -167,7 +170,7 @@ pub(crate) async fn present(
         };
         let mut ids: Vec<String> = records
             .iter()
-            .filter_map(|r| r.json.get(&field.name).and_then(key_text))
+            .filter_map(|r| r.readable.get(&field.name).and_then(key_text))
             .collect();
         ids.sort();
         ids.dedup();
@@ -188,15 +191,15 @@ pub(crate) async fn present(
     let now = save::now(&cx.app).await;
     let ability = cx.ability();
     let subject = info.subject;
+    let reader = info.readable(ability);
     let mut items = Vec::with_capacity(records.len());
     let mut workspaces = HashMap::new();
     for record in records {
-        let json = &record.json;
+        let json = record.for_rules();
         let mut values = Map::new();
         let mut cells = Vec::new();
         for field in &fields {
-            let readable =
-                !field.is_column() || ability.can_field(READ, subject, Some(json), &field.name);
+            let readable = reader.field(json, field);
             let display = if readable {
                 display(
                     field,
@@ -220,7 +223,11 @@ pub(crate) async fn present(
                         .map(Value::String)
                         .unwrap_or(Value::Null),
                     FieldKind::View { .. } => Value::Null,
-                    _ => json.get(&field.name).cloned().unwrap_or(Value::Null),
+                    _ => record
+                        .readable
+                        .get(&field.name)
+                        .cloned()
+                        .unwrap_or(Value::Null),
                 };
                 if !matches!(field.kind, FieldKind::View { .. }) {
                     values.insert(field.name.clone(), value);
@@ -280,7 +287,7 @@ async fn display(
     storage: Option<&Storage>,
     now: DateTime<Utc>,
 ) -> Display {
-    let value = record.json.get(&field.name).unwrap_or(&Value::Null);
+    let value = record.readable.get(&field.name).unwrap_or(&Value::Null);
     match &field.kind {
         FieldKind::Computed(_) => match record.computed.get(&field.name) {
             Some(text) if !text.is_empty() => Display::Text { text: text.clone() },
@@ -301,7 +308,7 @@ async fn display(
                 Screen::Index => Display::Text {
                     text: markdown::truncate(text.lines().next().unwrap_or(""), 120),
                 },
-                Screen::Detail => Display::Multiline { text },
+                Screen::Detail | Screen::Export => Display::Multiline { text },
             }
         }
         FieldKind::Markdown => {
@@ -310,7 +317,7 @@ async fn display(
                 Screen::Index => Display::Text {
                     text: markdown::first_line(&text, 120),
                 },
-                Screen::Detail => Display::Html {
+                Screen::Detail | Screen::Export => Display::Html {
                     html: markdown::render(&text),
                 },
             }
@@ -325,7 +332,7 @@ async fn display(
         },
         FieldKind::Money { currency_column } => {
             let currency = record
-                .json
+                .readable
                 .get(currency_column)
                 .and_then(Value::as_str)
                 .filter(|c| !c.trim().is_empty())

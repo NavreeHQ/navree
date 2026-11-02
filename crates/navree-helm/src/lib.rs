@@ -76,6 +76,7 @@ mod page;
 mod panel;
 mod present;
 mod query;
+mod readable;
 mod registry;
 mod resource;
 mod save;

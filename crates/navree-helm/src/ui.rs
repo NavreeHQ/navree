@@ -867,8 +867,10 @@ async fn metric_views(
     dashboard_only: bool,
 ) -> Vec<Value> {
     let mut cards = Vec::new();
-    for metric in &resource.info().metrics {
-        if dashboard_only && !metric.on_dashboard {
+    let info = resource.info();
+    let readable = info.readable(cx.ability());
+    for metric in &info.metrics {
+        if (dashboard_only && !metric.on_dashboard) || !readable.metric(metric) {
             continue;
         }
         match resource.metric(cx, &metric.slug, range).await {
@@ -897,7 +899,13 @@ pub(crate) async fn dashboard(panel: Panel, headers: HeaderMap) -> Response {
     if core.options.dashboard {
         for resource in core.registry.resources() {
             let info = resource.info();
-            if !cx.can(READ, info.subject, None) || !info.metrics.iter().any(|m| m.on_dashboard) {
+            let readable = info.readable(cx.ability());
+            if !cx.can(READ, info.subject, None)
+                || !info
+                    .metrics
+                    .iter()
+                    .any(|m| m.on_dashboard && readable.metric(m))
+            {
                 continue;
             }
             let metrics = metric_views(cx, resource.as_ref(), Default::default(), true).await;
@@ -926,12 +934,13 @@ pub(crate) async fn dashboard(panel: Panel, headers: HeaderMap) -> Response {
 }
 
 /// The column headers of a list.
-fn columns(info: &ResourceInfo, q: &ListQuery, list_url: &str) -> Vec<Value> {
-    let current = q.sort.clone().unwrap_or_else(|| info.default_sort.clone());
+fn columns(cx: &Cx, info: &ResourceInfo, q: &ListQuery, list_url: &str) -> Vec<Value> {
+    let readable = info.readable(cx.ability());
+    let current = q.sort.clone().unwrap_or_else(|| readable.default_sort());
     screen_fields(info, Screen::Index)
         .into_iter()
         .map(|field| {
-            let sortable = field.sortable && field.is_column();
+            let sortable = field.sortable && field.is_column() && readable.queryable(&field.name);
             let sorted = if current == field.name {
                 "asc"
             } else if current.strip_prefix('-') == Some(field.name.as_str()) {
@@ -1055,7 +1064,8 @@ async fn filter_views(
     list_url: &str,
 ) -> Result<Vec<Value>, AppError> {
     let mut views = Vec::new();
-    for filter in &info.filters {
+    let readable = info.readable(cx.ability());
+    for filter in info.filters.iter().filter(|f| readable.filter(f)) {
         let values = q.filters.get(&filter.name).cloned().unwrap_or_default();
         let value = values.last().cloned().unwrap_or_default();
         let mut view = json!({
@@ -1166,9 +1176,9 @@ pub(crate) async fn list(
                     query => format!("{list_url}/export.csv?{query}"),
                 },
             },
-            "columns": columns(info, &q, &list_url),
+            "columns": columns(cx, info, &q, &list_url),
             "rows": rows(&items),
-            "search": { "enabled": !info.search.is_empty(), "value": q.search.clone().unwrap_or_default() },
+            "search": { "enabled": !info.readable(cx.ability()).search().is_empty(), "value": q.search.clone().unwrap_or_default() },
             "filters": filter_views(cx, info, &q, &list_url).await?,
             "filtered": q.search.is_some() || !q.filters.is_empty() || q.via.is_some(),
             "sort": q.sort.clone().unwrap_or_default(),
@@ -1283,7 +1293,10 @@ async fn relation_panels(
             continue;
         };
         let target_info = target.info();
-        if !cx.can(READ, target_info.subject, None) {
+        // Which records hang on this one is what the key says.
+        if !cx.can(READ, target_info.subject, None)
+            || !target_info.readable(cx.ability()).queryable(&field.name)
+        {
             continue;
         }
         let q = ListQuery {
@@ -1295,7 +1308,7 @@ async fn relation_panels(
         let page = target.list(cx, &q).await?;
         let items = present(cx, target.as_ref(), &page.records, Screen::Index).await?;
         let list_url = format!("{base}/resources/{}", target_info.slug);
-        let mut columns = columns(target_info, &q, &list_url);
+        let mut columns = columns(cx, target_info, &q, &list_url);
         let hidden: Vec<usize> = columns
             .iter()
             .enumerate()
@@ -1400,6 +1413,9 @@ async fn inputs(
             Some(text) => text.clone(),
             None => input_text(field, &stored, record),
         };
+        // A column of the record the user may not read is left blank, and blank
+        // leaves it as it is.
+        let unread = record.is_some_and(|r| r.get(&field.name).is_none());
         let currency = match &field.kind {
             FieldKind::Money { currency_column } => Some(
                 submitted
@@ -1428,8 +1444,12 @@ async fn inputs(
             label: field.label_text(),
             kind,
             input_type,
-            help: field.help.clone(),
-            required: field.required,
+            help: if unread && field.help.is_none() {
+                Some("Leave it blank to keep the current value.".to_owned())
+            } else {
+                field.help.clone()
+            },
+            required: field.required && !unread,
             checked: crate::values::boolean(&Value::String(text.clone())).unwrap_or(false),
             value: text.clone(),
             disabled: field.readonly || locked.contains(&field.name),
@@ -1714,7 +1734,7 @@ async fn form_page(
     let inputs = inputs(
         cx,
         &fields,
-        record.map(|(r, _)| &r.json),
+        record.map(|(r, _)| &r.readable),
         submitted,
         &errors,
         &locked,
@@ -1965,7 +1985,11 @@ async fn update_record(
         .into_iter()
         .filter(|f| f.editable() && !item.readonly.contains(&f.name))
         .collect();
-    let input = form_input(&fields, &submission, Some(&record.json));
+    let mut input = form_input(&fields, &submission, Some(&record.readable));
+    // The form showed what the user may not read as blank: blank isn't a new value.
+    input.retain(|name, value| {
+        record.readable.get(name).is_some() || !crate::values::is_blank(value)
+    });
     match resource.update(frame.cx, &id, input).await {
         Ok(_) => Ok(redirect_with(
             &item.url,

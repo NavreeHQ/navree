@@ -77,7 +77,10 @@ pub(crate) enum Interval {
 /// ```
 ///
 /// Columns are the model's typed columns (`Deal::AMOUNT_CENTS`) or column
-/// names (`"amount_cents"`); the panel checks them when it boots.
+/// names (`"amount_cents"`); the panel checks them when it boots. A user from
+/// whom a rule hides a column the metric adds up, groups or dates by doesn't get
+/// the metric. A [`filter`](Metric::filter) condition is the app's own, fixed for
+/// everyone, and isn't counted.
 pub struct Metric<M: Model> {
     _model: PhantomData<fn() -> M>,
     pub(crate) label: String,

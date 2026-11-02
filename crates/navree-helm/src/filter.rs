@@ -3,7 +3,7 @@
 use std::fmt;
 use std::sync::Arc;
 
-use navree_orm::{Builder, Model};
+use navree_orm::{Builder, ColumnName, Model};
 
 use crate::Resource;
 use crate::field::{Related, sentence_case};
@@ -63,6 +63,7 @@ pub struct Filter<M: Model> {
     pub(crate) label: Option<String>,
     pub(crate) options: Vec<(String, String)>,
     pub(crate) kind: FilterKind<M>,
+    pub(crate) reads: Option<Vec<String>>,
 }
 
 impl<M: Model> Filter<M> {
@@ -72,7 +73,23 @@ impl<M: Model> Filter<M> {
             label: None,
             options: Vec::new(),
             kind,
+            reads: None,
         }
+    }
+
+    /// The columns the code of a [`boolean`](Filter::boolean) or
+    /// [`custom`](Filter::custom) filter reads. A match on a column says something
+    /// about it, so the panel offers the filter only to a user who may read them.
+    /// A filter that doesn't say is offered only to a user with no column hidden from
+    /// them, since it could be reading any.
+    pub fn reads<C: ColumnName>(mut self, columns: impl IntoIterator<Item = C>) -> Self {
+        self.reads = Some(
+            columns
+                .into_iter()
+                .map(|column| column.column_name().into_owned())
+                .collect(),
+        );
+        self
     }
 
     /// One or more values of `column`, picked from [`options`](Filter::options).
@@ -150,6 +167,7 @@ impl<M: Model> Clone for Filter<M> {
             label: self.label.clone(),
             options: self.options.clone(),
             kind: self.kind.clone(),
+            reads: self.reads.clone(),
         }
     }
 }

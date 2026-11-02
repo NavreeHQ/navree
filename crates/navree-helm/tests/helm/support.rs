@@ -155,7 +155,10 @@ impl Migration for CreateTables {
 ///   nothing;
 /// - `limited` users read deals and may change only the title of their own;
 /// - `own-only` users read their own deals; `no-secrets` users read deals
-///   but not their notes.
+///   but not their notes;
+/// - `no-title`, `no-amount` and the like read deals and companies but not that
+///   column; `title-if-owner` users read every deal but the title of their own
+///   only.
 pub fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
     ctx.grant_permissions(rules);
     let Some(user) = &ctx.user else {
@@ -188,6 +191,33 @@ pub fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
     if user.has_role("no-secrets") {
         rules.can(READ, "Deal");
         rules.cannot(READ, "Deal").fields(["notes"]);
+    }
+    for (role, column) in [
+        ("no-title", "title"),
+        ("no-amount", "amount_cents"),
+        ("no-stage", "stage"),
+        ("no-company", "company_id"),
+        ("no-close-date", "expected_close_date"),
+        ("no-currency", "currency"),
+        ("no-probability", "probability"),
+    ] {
+        if user.has_role(role) {
+            rules.can(READ, "Deal");
+            rules.can(READ, "Company");
+            rules.cannot(READ, "Deal").fields([column]);
+        }
+    }
+    if user.has_role("no-company-name") {
+        rules.can(READ, "Deal");
+        rules.can(READ, "Company");
+        rules.cannot(READ, "Company").fields(["name"]);
+    }
+    if user.has_role("title-if-owner") {
+        rules.can(READ, "Deal");
+        rules
+            .cannot(READ, "Deal")
+            .fields(["title"])
+            .when(field("owner_id").ne(user.id));
     }
     let _ = DELETE;
 }
@@ -293,7 +323,8 @@ impl Resource for DealResource {
             {
                 Ok(min) => query.where_(Deal::AMOUNT_CENTS.gte(min)),
                 Err(_) => query,
-            }),
+            })
+            .reads([Deal::AMOUNT_CENTS]),
         ]
     }
 
