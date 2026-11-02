@@ -174,10 +174,11 @@ impl Term {
     fn order(self, dialect: Option<Dialect>) -> Order {
         let source = col(self.source);
         let order = if self.direction == Direction::Asc { source.asc() } else { source.desc() };
-        // The other stores already sort NULL as the smallest value.
-        match (dialect, self.direction) {
-            (Some(Dialect::Postgres), Direction::Asc) => order.nulls_first(),
-            (Some(Dialect::Postgres), Direction::Desc) => order.nulls_last(),
+        // The other stores already sort NULL as the smallest value. A column that
+        // can't hold NULL says nothing, so it still matches a plain index.
+        match (dialect, self.direction, self.nullable) {
+            (Some(Dialect::Postgres), Direction::Asc, true) => order.nulls_first(),
+            (Some(Dialect::Postgres), Direction::Desc, true) => order.nulls_last(),
             _ => order,
         }
     }
@@ -453,6 +454,10 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         map: impl Fn(Record<M>) -> R,
     ) -> Result<TablePage<R>> {
         let per = u64::from(self.state.per);
+        // Nothing matches: no need to read the table a second time to find that out.
+        if total == Total::Exact(0) {
+            return Ok(TablePage { rows: Vec::new(), total, page: 1, has_more: false, next: None, prev: None, version: None });
+        }
         // A cursor that doesn't fit this order is an old link: the first page.
         let after = self.state.after.as_deref().and_then(|text| decode_cursor(text, terms));
         let before = if after.is_none() { self.state.before.as_deref().and_then(|text| decode_cursor(text, terms)) } else { None };

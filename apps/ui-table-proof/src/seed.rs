@@ -97,9 +97,9 @@ pub async fn big(db: &Db, count: u64) -> Result<(), navree::BoxError> {
                 .await?;
             }
             navree::db::Backend::MySql => {
-                pool.execute_script("SET SESSION cte_max_recursion_depth = 2000000").await?;
+                let digits = "(SELECT 0 d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9)";
                 pool.execute_script(&format!(
-                    "INSERT INTO dt_big WITH RECURSIVE s (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM s WHERE n < {count}) SELECT n, CONCAT('Deal ', n, ' ', MD5(n)), {stage}, IF(n % 20 = 0, NULL, (n * 7919) % 5000000), IF(n % 10 = 0, NULL, DATE_ADD('2020-01-01', INTERVAL (n % 2000) DAY)) FROM s"
+                    "INSERT INTO dt_big WITH s AS (SELECT a.d + b.d * 10 + c.d * 100 + e.d * 1000 + f.d * 10000 + g.d * 100000 + 1 AS n FROM {digits} a, {digits} b, {digits} c, {digits} e, {digits} f, {digits} g) SELECT n, CONCAT('Deal ', n, ' ', MD5(n)), {stage}, IF(n % 20 = 0, NULL, (n * 7919) % 5000000), IF(n % 10 = 0, NULL, DATE_ADD('2020-01-01', INTERVAL (n % 2000) DAY)) FROM s WHERE n <= {count}"
                 ))
                 .await?;
             }
