@@ -17,5 +17,6 @@ mod pages;
 #[cfg(feature = "settings")]
 mod settings;
 mod signin;
+mod toolbar;
 mod ui;
 mod workspaces;

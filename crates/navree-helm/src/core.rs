@@ -93,6 +93,8 @@ pub(crate) struct Core {
     /// The app's templates (`ViewModule`), for view fields and pages.
     pub(crate) app_views: Option<Arc<Views>>,
     pub(crate) metrics: Option<navree_bounded::Cache<String, Arc<MetricResult>>>,
+    /// The sidebar's counts, per user, access and workspace.
+    pub(crate) counts: Option<navree_bounded::Cache<String, Arc<u64>>>,
     pub(crate) assets: Assets,
     /// Who may work in a workspace they are not in, if the app says.
     pub(crate) staff: Option<StaffCheck>,
@@ -132,6 +134,11 @@ impl Core {
                 .time_to_live(Duration::from_secs(options.metrics_cache_secs))
                 .build()
         });
+        let counts = (options.metrics_cache_secs > 0).then(|| {
+            navree_bounded::Cache::builder(10_000)
+                .time_to_live(Duration::from_secs(options.metrics_cache_secs))
+                .build()
+        });
         let mut policies = app.contributions::<StaffPolicy>().into_iter();
         let staff = policies.next().map(|policy| policy.value.0.clone());
         if policies.next().is_some() {
@@ -151,6 +158,7 @@ impl Core {
             registry,
             app_views,
             metrics,
+            counts,
             options,
         })
     }

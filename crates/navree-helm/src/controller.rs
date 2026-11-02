@@ -7,7 +7,7 @@ use navree_http::{Controller, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 
 use crate::core::Core;
-use crate::{HELM_SUBJECT, VIEW, api, ui};
+use crate::{HELM_SUBJECT, VIEW, api, export, sidebar, ui};
 
 /// The panel's routes (the pages and the JSON API under `{helm.path}/api`).
 /// Every route but the sign-in screen and the assets requires `view` on
@@ -63,6 +63,7 @@ impl Controller for HelmController {
                 RouteDef::on(Method::POST, at("/workspace"), ui::choose_workspace)
                     .name("helm.workspace"),
             ),
+            view(RouteDef::on(Method::GET, at("/counts"), sidebar::counts).name("helm.counts")),
             view(
                 RouteDef::on(Method::GET, at("/resources/{resource}"), ui::list).name("helm.list"),
             ),
@@ -81,6 +82,14 @@ impl Controller for HelmController {
                     ui::run_action,
                 )
                 .name("helm.action"),
+            ),
+            view(
+                RouteDef::on(
+                    Method::GET,
+                    at("/resources/{resource}/export.csv"),
+                    export::export,
+                )
+                .name("helm.export"),
             ),
             view(
                 RouteDef::on(Method::GET, at("/resources/{resource}/{id}"), ui::show)

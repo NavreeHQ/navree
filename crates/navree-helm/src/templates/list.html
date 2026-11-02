@@ -4,88 +4,66 @@
 <div class="page-head">
   <h1>{{ resource.label }}</h1>
   <div class="page-actions">
+    {% if resource.export %}<a class="btn" href="{{ resource.export_url }}" download>{{ panel.icons.download|safe }}Export</a>{% endif %}
     {% if resource.can_create %}<a class="btn btn-primary" href="{{ resource.new_url }}">{{ panel.icons.plus|safe }}New {{ resource.singular|lower }}</a>{% endif %}
   </div>
 </div>
 
 {% if metrics %}
 <div class="metrics">
-  {% for metric in metrics %}{{ m.metric_card(metric, range_links) }}{% endfor %}
+  {% for metric in metrics %}{{ m.metric_card(metric, range_links, panel.icons) }}{% endfor %}
 </div>
 {% endif %}
 
-<div class="list-layout{% if filters %} with-filters{% endif %}">
-  {% if filters or search.enabled %}
-  <form method="get" action="{{ resource.url }}" class="card filters" role="search" aria-label="Search and filter {{ resource.label|lower }}">
-    {% if sort %}<input type="hidden" name="sort" value="{{ sort }}">{% endif %}
-    {% if via %}<input type="hidden" name="via[{{ via.column }}]" value="{{ via.id }}">{% endif %}
-    {% if search.enabled %}
-    <div class="field">
-      <label for="search" class="label">Search</label>
-      <input type="search" id="search" name="search" value="{{ search.value }}" placeholder="Search {{ resource.label|lower }}…">
-    </div>
-    {% endif %}
-    {% for f in filters %}
-    <div class="field">
-      <label for="filter-{{ f.name }}" class="label">{{ f.label }}</label>
-      {% if f.kind == "select" or f.kind == "belongs_to" %}
-      <select id="filter-{{ f.name }}" name="filters[{{ f.name }}]" multiple size="{{ f.size }}">
-        {% for o in f.options %}<option value="{{ o.value }}"{% if o.selected %} selected{% endif %}>{{ o.label }}</option>{% endfor %}
-      </select>
-      {% elif f.kind == "boolean" %}
-      <select id="filter-{{ f.name }}" name="filters[{{ f.name }}]">
-        <option value=""{% if not f.value %} selected{% endif %}>Any</option>
-        <option value="1"{% if f.value == "1" %} selected{% endif %}>Yes</option>
-        <option value="0"{% if f.value == "0" %} selected{% endif %}>No</option>
-      </select>
-      {% elif f.kind == "date_range" %}
-      <select id="filter-{{ f.name }}" name="filters[{{ f.name }}]">
-        <option value="">Any time</option>
-        {% for o in f.options %}<option value="{{ o.value }}"{% if o.selected %} selected{% endif %}>{{ o.label }}</option>{% endfor %}
-      </select>
-      <input type="text" name="filters[{{ f.name }}]" value="{{ f.custom }}" placeholder="2026-10-01..2026-10-31" aria-label="{{ f.label }}: custom range" class="range-input">
-      {% else %}
-      <input type="text" id="filter-{{ f.name }}" name="filters[{{ f.name }}]" value="{{ f.value }}">
+<section class="card list-card" aria-labelledby="list-title">
+  <h2 id="list-title" class="visually-hidden">{{ resource.label }}</h2>
+  {% if filters or search.enabled or (actions and rows) %}
+  <div class="toolbar">
+    {% if filters or search.enabled %}
+    <form method="get" action="{{ resource.url }}" class="filter-bar" role="search" aria-label="Search and filter {{ resource.label|lower }}">
+      {% if sort %}<input type="hidden" name="sort" value="{{ sort }}">{% endif %}
+      {% if via %}<input type="hidden" name="via[{{ via.column }}]" value="{{ via.id }}">{% endif %}
+      {% if search.enabled %}
+      <label for="search" class="visually-hidden">Search</label>
+      <div class="search-field">{{ panel.icons.search|safe }}<input type="search" id="search" name="search" value="{{ search.value }}" placeholder="Search {{ resource.label|lower }}…"></div>
       {% endif %}
-    </div>
-    {% endfor %}
-    <div class="filter-buttons">
-      <button type="submit" class="btn btn-secondary btn-sm">Apply</button>
-      <a class="btn btn-ghost btn-sm" href="{{ resource.url }}">Reset</a>
-    </div>
-  </form>
-  {% endif %}
-
-  <section class="card list-card" aria-labelledby="list-title">
-    <h2 id="list-title" class="visually-hidden">{{ resource.label }}</h2>
-    {% if rows %}
-    <form method="post" action="{{ resource.actions_url }}" class="bulk">
-      <input type="hidden" name="_csrf" value="{{ panel.csrf }}">
-      <input type="hidden" name="_return" value="{{ return_url }}">
-      {% if actions %}
-      <div class="toolbar" role="toolbar" aria-label="Actions on the selected rows">
-        <span class="muted selected-count" data-selected-count>Select rows to run an action</span>
-        {% for a in actions %}
-        <button type="submit" name="action" value="{{ a.name }}" class="btn btn-sm {% if a.destructive %}btn-danger{% else %}btn-secondary{% endif %}"{% if a.question %} data-confirm="{{ a.question }}"{% endif %}>{{ a.label }}</button>
-        {% endfor %}
-      </div>
-      {% endif %}
-      {{ m.table(columns, rows, actions, true) }}
+      <button type="submit" class="visually-hidden">Apply</button>
+      {% for f in filters %}{{ m.chip(f, panel.icons) }}{% endfor %}
+      {% if filtered %}<a class="btn btn-ghost btn-sm" href="{{ resource.url }}">Reset{{ panel.icons.close|safe }}</a>{% endif %}
     </form>
-    <nav class="pagination" aria-label="Pages">
-      <p class="muted">{{ page.from }}–{{ page.to }} of {{ page.total }}</p>
-      <div>
-        {% if page.prev_url %}<a class="btn btn-ghost btn-sm" href="{{ page.prev_url }}" rel="prev">Previous</a>{% endif %}
-        <span class="page-number">Page {{ page.current }} of {{ page.last }}</span>
-        {% if page.next_url %}<a class="btn btn-ghost btn-sm" href="{{ page.next_url }}" rel="next">Next</a>{% endif %}
-      </div>
-    </nav>
-    {% else %}
-    <div class="empty">
-      <p>No {{ resource.label|lower }} {% if filtered %}match these filters{% else %}yet{% endif %}.</p>
-      {% if resource.can_create and not filtered %}<a class="btn btn-primary" href="{{ resource.new_url }}">New {{ resource.singular|lower }}</a>{% endif %}
+    {% endif %}
+    {% if actions and rows %}
+    <div class="bulk-controls" role="toolbar" aria-label="Actions on the selected rows">
+      <span class="muted selected-count" data-selected-count aria-live="polite"></span>
+      <label for="bulk-action" class="visually-hidden">Action</label>
+      <select name="action" id="bulk-action" form="bulk" class="bulk-menu">
+        <option value="" selected>Action…</option>
+        {% for a in actions %}<option value="{{ a.name }}"{% if a.question %} data-confirm="{{ a.question }}"{% endif %}{% if a.destructive %} data-destructive{% endif %}>{{ a.label }}</option>{% endfor %}
+      </select>
+      <button type="submit" class="btn btn-secondary btn-sm" form="bulk" data-bulk-run>Run</button>
     </div>
     {% endif %}
-  </section>
-</div>
+  </div>
+  {% endif %}
+  {% if rows %}
+  <form id="bulk" method="post" action="{{ resource.actions_url }}" class="bulk">
+    <input type="hidden" name="_csrf" value="{{ panel.csrf }}">
+    <input type="hidden" name="_return" value="{{ return_url }}">
+    {{ m.table(columns, rows, actions, true) }}
+  </form>
+  <nav class="pagination" aria-label="Pages">
+    <p class="muted">{{ page.from }}–{{ page.to }} of {{ page.total }}</p>
+    <div>
+      {% if page.prev_url %}<a class="btn btn-ghost btn-sm" href="{{ page.prev_url }}" rel="prev">Previous</a>{% endif %}
+      <span class="page-number">Page {{ page.current }} of {{ page.last }}</span>
+      {% if page.next_url %}<a class="btn btn-ghost btn-sm" href="{{ page.next_url }}" rel="next">Next</a>{% endif %}
+    </div>
+  </nav>
+  {% else %}
+  <div class="empty">
+    <p>No {{ resource.label|lower }} {% if filtered %}match these filters{% else %}yet{% endif %}.</p>
+    {% if resource.can_create and not filtered %}<a class="btn btn-primary" href="{{ resource.new_url }}">New {{ resource.singular|lower }}</a>{% endif %}
+  </div>
+  {% endif %}
+</section>
 {% endblock %}

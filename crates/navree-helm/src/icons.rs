@@ -41,7 +41,7 @@ pub(crate) fn svg(name: &str) -> String {
 }
 
 /// The icons the panel's own templates use: `icons.<key>` in their context.
-const UI: [(&str, &str); 14] = [
+const UI: [(&str, &str); 18] = [
     ("brand", "ship-wheel"),
     ("dashboard", "layout-dashboard"),
     ("sidebar", "panel-left"),
@@ -56,6 +56,10 @@ const UI: [(&str, &str); 14] = [
     ("filter", "filter"),
     ("check", "check"),
     ("user", "user"),
+    ("download", "download"),
+    ("circle_plus", "circle-plus"),
+    ("trend_up", "trending-up"),
+    ("trend_down", "trending-down"),
 ];
 
 /// [`UI`] drawn, as a JSON object.

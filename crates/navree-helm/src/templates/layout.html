@@ -36,7 +36,7 @@
         <p class="group-label" id="nav-{{ loop.index }}">{{ group.title }}</p>
         <ul class="menu" aria-labelledby="nav-{{ loop.index }}">
           {% for item in group.items %}
-          <li><a class="menu-item" href="{{ item.url }}" title="{{ item.label }}"{% if item.active %} aria-current="page"{% endif %}>{{ item.icon|safe }}<span class="menu-label">{{ item.label }}</span></a></li>
+          <li><a class="menu-item" href="{{ item.url }}" title="{{ item.label }}"{% if item.active %} aria-current="page"{% endif %}>{{ item.icon|safe }}<span class="menu-label">{{ item.label }}</span>{% if item.count %}<span class="menu-count" data-count="{{ item.slug }}" hidden></span>{% endif %}</a></li>
           {% endfor %}
         </ul>
       </div>

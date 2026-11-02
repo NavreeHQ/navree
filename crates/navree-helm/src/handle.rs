@@ -147,6 +147,14 @@ pub(crate) struct RawPage {
     pub(crate) meta: PageMeta,
 }
 
+/// A chunk of an export: its rows, and where the next chunk starts, if
+/// there is one.
+#[derive(Clone, Debug)]
+pub(crate) struct ExportChunk {
+    pub(crate) records: Vec<RawRecord>,
+    pub(crate) next: Option<String>,
+}
+
 /// What an action run did.
 #[derive(Clone, Debug)]
 pub(crate) struct ActionOutcome {
@@ -163,6 +171,18 @@ pub(crate) trait ErasedResource: Send + Sync + 'static {
     /// A page of the list: the rows the user may read.
     fn list<'a>(&'a self, cx: &'a Cx, q: &'a ListQuery)
     -> BoxFuture<'a, Result<RawPage, AppError>>;
+
+    /// A chunk of the list's rows for an export: see [`Handle::export_page`].
+    fn export<'a>(
+        &'a self,
+        cx: &'a Cx,
+        q: &'a ListQuery,
+        cursor: Option<String>,
+        limit: u64,
+    ) -> BoxFuture<'a, Result<ExportChunk, AppError>>;
+
+    /// How many rows the user may read, up to `cap` + 1.
+    fn count<'a>(&'a self, cx: &'a Cx, cap: u64) -> BoxFuture<'a, Result<u64, AppError>>;
 
     /// The record `id`, if the user may read it.
     fn find<'a>(
@@ -906,7 +926,15 @@ impl<R: Resource> Handle<R> {
         )
     }
 
-    async fn list_page(&self, cx: &Cx, q: &ListQuery) -> Result<RawPage, AppError> {
+    /// The rows the list shows for `q`, before they are ordered: the user's
+    /// rows narrowed by the relationship, search and filters, and the column the
+    /// list sorts by (a leading `descending`). A 400 names what is wrong in `q`.
+    /// The list and its export both start here.
+    async fn filtered(
+        &self,
+        cx: &Cx,
+        q: &ListQuery,
+    ) -> Result<(Builder<R::Model>, String, bool), AppError> {
         let subject = <R::Model as Subject>::SUBJECT;
         if !cx.can(READ, subject, None) {
             return Err(AppError::forbidden());
@@ -981,13 +1009,18 @@ impl<R: Resource> Handle<R> {
         if !errors.is_empty() {
             return Err(AppError::validation(errors));
         }
-        if values::column::<R::Model>(column_name).is_some() {
+        Ok((query, column_name.to_owned(), descending))
+    }
+
+    async fn list_page(&self, cx: &Cx, q: &ListQuery) -> Result<RawPage, AppError> {
+        let (mut query, column_name, descending) = self.filtered(cx, q).await?;
+        if values::column::<R::Model>(&column_name).is_some() {
             let direction = if descending {
                 navree_orm::ir::Direction::Desc
             } else {
                 navree_orm::ir::Direction::Asc
             };
-            query = query.order_by_dir(values::qualified::<R::Model>(column_name), direction);
+            query = query.order_by_dir(values::qualified::<R::Model>(&column_name), direction);
             if column_name != self.info.pk {
                 query = query.order_by_dir(values::qualified::<R::Model>(self.info.pk), direction);
             }
@@ -1000,6 +1033,63 @@ impl<R: Resource> Handle<R> {
             records: page.data.iter().map(|r| self.raw(cx, r)).collect(),
             meta: page.meta,
         })
+    }
+
+    /// A chunk of the rows of the list for `q` after `cursor`, for an export:
+    /// in the list's order when it is by a column that always has a value,
+    /// else by key. No count and no offset, so a chunk costs the same however
+    /// far into the table it is.
+    async fn export_page(
+        &self,
+        cx: &Cx,
+        q: &ListQuery,
+        cursor: Option<String>,
+        limit: u64,
+    ) -> Result<ExportChunk, AppError> {
+        if !self.info.export {
+            return Err(AppError::forbidden()
+                .with_code("export_off")
+                .with_detail(format!("{} are not exported.", self.info.label)));
+        }
+        let (query, column_name, descending) = self.filtered(cx, q).await?;
+        let by_column = values::column::<R::Model>(&column_name).is_some()
+            && !self.info.nullable.contains(column_name.as_str());
+        let query = if by_column {
+            let direction = if descending {
+                navree_orm::ir::Direction::Desc
+            } else {
+                navree_orm::ir::Direction::Asc
+            };
+            query.order_by_dir(values::qualified::<R::Model>(&column_name), direction)
+        } else {
+            query.order_by(values::qualified::<R::Model>(self.info.pk))
+        };
+        let request = navree_orm::pagination::CursorRequest {
+            cursor,
+            limit: Some(limit),
+        };
+        let page = query.cursor_paginate(&cx.uow, request).await?;
+        Ok(ExportChunk {
+            records: page.data.iter().map(|r| self.raw(cx, r)).collect(),
+            next: page.next_cursor,
+        })
+    }
+
+    /// How many rows the user may read, counted up to `cap` + 1: the keys of
+    /// at most that many, so a table of millions costs what one of a thousand
+    /// does.
+    async fn count_up_to(&self, cx: &Cx, cap: u64) -> Result<u64, AppError> {
+        if !cx.can(READ, <R::Model as Subject>::SUBJECT, None) {
+            return Err(AppError::forbidden());
+        }
+        self.in_a_workspace(cx)?;
+        let keys = self
+            .base(cx, READ)
+            .reorder()
+            .limit(cap.saturating_add(1))
+            .pluck(&cx.uow, self.col(self.info.pk))
+            .await?;
+        Ok(keys.len() as u64)
     }
 
     /// Applies `filter` with the submitted `values`; the message names what
@@ -1497,6 +1587,20 @@ impl<R: Resource> ErasedResource for Handle<R> {
         q: &'a ListQuery,
     ) -> BoxFuture<'a, Result<RawPage, AppError>> {
         Box::pin(self.list_page(cx, q))
+    }
+
+    fn export<'a>(
+        &'a self,
+        cx: &'a Cx,
+        q: &'a ListQuery,
+        cursor: Option<String>,
+        limit: u64,
+    ) -> BoxFuture<'a, Result<ExportChunk, AppError>> {
+        Box::pin(self.export_page(cx, q, cursor, limit))
+    }
+
+    fn count<'a>(&'a self, cx: &'a Cx, cap: u64) -> BoxFuture<'a, Result<u64, AppError>> {
+        Box::pin(self.count_up_to(cx, cap))
     }
 
     fn find<'a>(

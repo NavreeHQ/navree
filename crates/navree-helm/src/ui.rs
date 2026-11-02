@@ -279,6 +279,8 @@ impl<'a> Frame<'a> {
                     "url": format!("{base}/resources/{}", info.slug),
                     "active": active == format!("resource:{}", info.slug),
                     "icon": icons::svg(info.icon),
+                    "count": info.sidebar_count,
+                    "slug": info.slug,
                 }),
             );
         }
@@ -776,14 +778,30 @@ pub(crate) async fn logout(request: Request) -> Response {
 // Metrics
 // ---------------------------------------------------------------------------
 
+/// A change as the card shows it: `+12.4%` (a tenth of a percent under 100 %,
+/// whole percents above).
+fn change_text(change: f64) -> String {
+    let percent = change * 100.0;
+    if percent.abs() < 100.0 {
+        format!("{percent:+.1}%")
+    } else {
+        format!("{percent:+.0}%")
+    }
+}
+
+/// What the change is against, for the card's range.
+fn change_note(range: Option<&str>) -> String {
+    match range {
+        Some(days @ ("7" | "30" | "90")) => format!("On the previous {days} days"),
+        _ => "On the previous period".to_owned(),
+    }
+}
+
 /// A metric card's template data.
 fn metric_view(result: &MetricResult) -> Value {
     let mut view = serde_json::to_value(result).unwrap_or(Value::Null);
-    let change_text = result
-        .change
-        .map(|c| format!("{:+.0}%", c * 100.0))
-        .unwrap_or_default();
-    view["change_text"] = json!(change_text);
+    view["change_text"] = json!(result.change.map(change_text).unwrap_or_default());
+    view["change_note"] = json!(change_note(result.range));
     if !result.points.is_empty() {
         let max = result
             .points
@@ -1001,8 +1019,41 @@ async fn relation_options(
         .collect())
 }
 
-/// The filter panel.
-async fn filter_views(cx: &Cx, info: &ResourceInfo, q: &ListQuery) -> Result<Vec<Value>, AppError> {
+/// What a filter chip says it holds: the first choice, and how many more.
+fn chip_summary(kind: &str, values: &[String], options: &[Value]) -> String {
+    let labels: Vec<&str> = options
+        .iter()
+        .filter(|o| o["selected"] == json!(true))
+        .filter_map(|o| o["label"].as_str())
+        .collect();
+    match kind {
+        "select" | "belongs_to" => match labels.as_slice() {
+            [] => values.first().cloned().unwrap_or_default(),
+            [one] => (*one).to_owned(),
+            [first, rest @ ..] => format!("{first} +{}", rest.len()),
+        },
+        "boolean" => match values.last().map(String::as_str) {
+            Some("1" | "true" | "yes" | "on") => "Yes".to_owned(),
+            Some(_) => "No".to_owned(),
+            None => String::new(),
+        },
+        "date_range" => labels
+            .first()
+            .map(|label| (*label).to_owned())
+            .or_else(|| values.last().cloned())
+            .unwrap_or_default(),
+        _ => values.last().cloned().unwrap_or_default(),
+    }
+}
+
+/// The filter chips of the toolbar: each filter, its options (checked as the
+/// query says), what it holds and the list without it.
+async fn filter_views(
+    cx: &Cx,
+    info: &ResourceInfo,
+    q: &ListQuery,
+    list_url: &str,
+) -> Result<Vec<Value>, AppError> {
     let mut views = Vec::new();
     for filter in &info.filters {
         let values = q.filters.get(&filter.name).cloned().unwrap_or_default();
@@ -1013,7 +1064,6 @@ async fn filter_views(cx: &Cx, info: &ResourceInfo, q: &ListQuery) -> Result<Vec
             "kind": filter.kind,
             "value": value,
             "options": [],
-            "size": 1,
             "custom": "",
         });
         match filter.kind {
@@ -1023,7 +1073,6 @@ async fn filter_views(cx: &Cx, info: &ResourceInfo, q: &ListQuery) -> Result<Vec
                     .iter()
                     .map(|(v, l)| json!({ "value": v, "label": l, "selected": values.contains(v) }))
                     .collect();
-                view["size"] = json!(options.len().clamp(2, 6));
                 view["options"] = json!(options);
             }
             "belongs_to" => {
@@ -1032,7 +1081,6 @@ async fn filter_views(cx: &Cx, info: &ResourceInfo, q: &ListQuery) -> Result<Vec
                     .and_then(|r| cx.core.registry.by_type(r.type_id))
                 {
                     let options = relation_options(cx, related.as_ref(), &values).await?;
-                    view["size"] = json!(options.len().clamp(2, 6));
                     view["options"] = json!(options);
                 }
             }
@@ -1053,6 +1101,12 @@ async fn filter_views(cx: &Cx, info: &ResourceInfo, q: &ListQuery) -> Result<Vec
             }
             _ => {}
         }
+        let options = view["options"].as_array().cloned().unwrap_or_default();
+        let mut without = q.clone();
+        without.filters.remove(&filter.name);
+        view["active"] = json!(!values.is_empty());
+        view["summary"] = json!(chip_summary(filter.kind, &values, &options));
+        view["clear_url"] = json!(format!("{list_url}?{}", without.to_query(None, None)));
         views.push(view);
     }
     Ok(views)
@@ -1098,11 +1152,16 @@ pub(crate) async fn list(
                 "new_url": format!("{list_url}/new"),
                 "actions_url": format!("{list_url}/actions"),
                 "can_create": cx.can(CREATE, info.subject, None) && cx.offers(info, CREATE),
+                "export": info.export,
+                "export_url": match q.to_query(None, None) {
+                    query if query.is_empty() => format!("{list_url}/export.csv"),
+                    query => format!("{list_url}/export.csv?{query}"),
+                },
             },
             "columns": columns(info, &q, &list_url),
             "rows": rows(&items),
             "search": { "enabled": !info.search.is_empty(), "value": q.search.clone().unwrap_or_default() },
-            "filters": filter_views(cx, info, &q).await?,
+            "filters": filter_views(cx, info, &q, &list_url).await?,
             "filtered": q.search.is_some() || !q.filters.is_empty() || q.via.is_some(),
             "sort": q.sort.clone().unwrap_or_default(),
             "via": q.via.as_ref().map(|(c, id)| json!({ "column": c, "id": id })),
@@ -2053,6 +2112,15 @@ async fn action_run(
     let list_url = format!("{base}/resources/{}", info.slug);
     let back = return_url(&submission, &base, &list_url);
     let name = submission.values.get("action").cloned().unwrap_or_default();
+    if name.is_empty() {
+        return Ok(redirect_with(
+            &back,
+            "Choose an action first.",
+            "warning",
+            frame.core(),
+            &frame.host,
+        ));
+    }
     let Some(action) = info.actions.iter().find(|a| a.name == name) else {
         return Err(AppError::not_found().with_detail(format!("No action `{name}`.")));
     };

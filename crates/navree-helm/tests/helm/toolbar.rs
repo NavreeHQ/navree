@@ -1,0 +1,674 @@
+//! The list page's toolbar (chip filters, the bulk-action menu, Export), the
+//! sidebar's counts and the delta on a metric.
+
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use chrono::Duration;
+use navree_db::Db;
+use navree_helm::{Field, ModuleBuilderHelmExt, Resource};
+use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
+use navree_orm::{Builder, Model};
+use navree_testing::{TestApp, TestClient, TestResponse};
+use serde_json::{Value, json};
+use uuid::Uuid;
+
+use crate::support::*;
+
+async fn page(client: &TestClient, path: &str) -> TestResponse {
+    client.get(path).header("accept", "text/html").send().await
+}
+
+fn plain(response: TestResponse) -> String {
+    response.text().replace("&#x2f;", "/")
+}
+
+/// The lines of a CSV body, each as its fields (no quotes in the test data
+/// but the ones that are asked about).
+fn lines(csv: &str) -> Vec<String> {
+    csv.split("\r\n")
+        .filter(|line| !line.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
+async fn csv(client: &TestClient, query: &str) -> TestResponse {
+    client
+        .get(&format!("/admin/resources/deals/export.csv{query}"))
+        .header("accept", "text/html")
+        .send()
+        .await
+}
+
+/// `count` deals titled `Bulk 0000` upward, in one statement.
+async fn many(app: &TestApp, count: usize, owner: Option<Uuid>) {
+    let db = app.get::<Db>().await;
+    let deals: Vec<Deal> = (0..count)
+        .map(|i| Deal {
+            id: Uuid::now_v7(),
+            title: format!("Bulk {i:04}"),
+            amount_cents: i as i64,
+            currency: "USD".to_owned(),
+            stage: "lead".to_owned(),
+            owner_id: owner,
+            created_at: now() - Duration::seconds((count - i) as i64),
+            updated_at: now(),
+            ..Deal::default()
+        })
+        .collect();
+    for chunk in deals.chunks(200) {
+        Deal::insert(&*db, chunk.to_vec()).await.unwrap();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn export_is_the_list_as_csv_for_its_filters() {
+    let app = app().await;
+    let (_, manager) = user(&app, "manager").await;
+    let acme = company(&app, "Acme, Inc.", None).await;
+    for (title, cents, stage) in [
+        ("Alpha", 300, "lead"),
+        ("Beta", 100, "won"),
+        ("Gamma \"quoted\"", 200, "won"),
+    ] {
+        deal(
+            &app,
+            DealSeed {
+                title,
+                amount_cents: cents,
+                stage,
+                company: Some(acme.id),
+                ..DealSeed::default()
+            },
+        )
+        .await;
+    }
+    let response = csv(&manager, "?sort=amount_cents").await.assert_status(200);
+    assert_eq!(
+        response.header("content-type"),
+        Some("text/csv; charset=utf-8")
+    );
+    assert_eq!(
+        response.header("content-disposition"),
+        Some("attachment; filename=\"deals-2026-10-26.csv\"")
+    );
+    assert_eq!(response.header("cache-control"), Some("no-store"));
+    assert_eq!(response.header("x-content-type-options"), Some("nosniff"));
+    let body = response.text();
+    assert!(!body.starts_with('\u{feff}'));
+    let lines = lines(&body);
+    assert_eq!(
+        lines[0],
+        "Title,Amount,Currency,Stage,Company,Owner,Expected close date,Notes,Priority,Probability,Lost reason,Closed at,Created at"
+    );
+    // The list's order, the display of each value, quotes where they belong.
+    assert_eq!(lines.len(), 4, "{body}");
+    assert!(
+        lines[1].starts_with("Beta,$1.00,US dollar,Won,\"Acme, Inc.\","),
+        "{}",
+        lines[1]
+    );
+    assert!(
+        lines[2].starts_with("\"Gamma \"\"quoted\"\"\",$2.00,"),
+        "{}",
+        lines[2]
+    );
+    assert!(lines[3].starts_with("Alpha,$3.00,"), "{}", lines[3]);
+    // Markdown is the text typed, not its HTML; times are ISO 8601.
+    assert!(lines[3].contains("**Secret** notes"), "{}", lines[3]);
+    assert!(lines[3].contains("2026-10-26T12:00:00Z"), "{}", lines[3]);
+
+    // Only what the filters and the search show.
+    let body = csv(&manager, "?filters%5Bstage%5D=won&sort=-amount_cents")
+        .await
+        .assert_status(200)
+        .text();
+    let titles: Vec<&str> = body
+        .lines()
+        .skip(1)
+        .map(|l| l.split(',').next().unwrap())
+        .collect();
+    assert_eq!(titles, ["\"Gamma \"\"quoted\"\"\"", "Beta"], "{body}");
+    let body = csv(&manager, "?search=alph")
+        .await
+        .assert_status(200)
+        .text();
+    assert_eq!(lines_of(&body), 2, "{body}");
+    assert!(body.contains("Alpha"));
+    // A filter the list would refuse is refused, as a page.
+    csv(&manager, "?filters%5Bnope%5D=1")
+        .await
+        .assert_status(400);
+    csv(&manager, "?sort=nothing").await.assert_status(400);
+}
+
+fn lines_of(csv: &str) -> usize {
+    lines(csv).len()
+}
+
+#[tokio::test]
+async fn export_holds_to_what_the_user_may_read() {
+    let app = app().await;
+    let (rep_id, rep) = user(&app, "rep").await;
+    let (own_id, own_only) = user(&app, "own-only").await;
+    let (_, no_secrets) = user(&app, "no-secrets").await;
+    deal(
+        &app,
+        DealSeed {
+            title: "Mine",
+            owner: Some(own_id),
+            ..DealSeed::default()
+        },
+    )
+    .await;
+    deal(
+        &app,
+        DealSeed {
+            title: "Someone else's",
+            owner: Some(rep_id),
+            ..DealSeed::default()
+        },
+    )
+    .await;
+    // Rows: the access filter of the list.
+    let body = csv(&own_only, "").await.assert_status(200).text();
+    assert!(
+        body.contains("Mine") && !body.contains("Someone else's"),
+        "{body}"
+    );
+    let body = csv(&rep, "").await.assert_status(200).text();
+    assert!(body.contains("Mine") && body.contains("Someone else's"));
+    // Fields: what the rules hide is empty, whatever the rows hold.
+    let body = csv(&no_secrets, "").await.assert_status(200).text();
+    assert!(body.contains("Mine"), "{body}");
+    assert!(!body.contains("Secret"), "{body}");
+    // Whole: someone with no panel, and someone with the panel and no deals.
+    let stranger = app.acting_as(navree_testing::principal(Uuid::now_v7()));
+    csv(&stranger, "").await.assert_status(403);
+    let id = Uuid::now_v7();
+    give_role(&app, id, "empty", &["helm.view"]).await;
+    let empty = app.acting_as(navree_testing::principal(id));
+    csv(&empty, "").await.assert_status(403);
+    // Not signed in: to the sign-in page.
+    csv(&app.client(), "").await.assert_status(303);
+}
+
+#[tokio::test]
+async fn a_spreadsheet_does_not_run_what_a_deal_is_called() {
+    let app = app().await;
+    let (_, manager) = user(&app, "manager").await;
+    for title in ["=1+1", "@SUM(1,2)", "+1 555 0100", "-3"] {
+        deal(
+            &app,
+            DealSeed {
+                title,
+                ..DealSeed::default()
+            },
+        )
+        .await;
+    }
+    let body = csv(&manager, "?sort=title").await.assert_status(200).text();
+    let titles: Vec<String> = body
+        .lines()
+        .skip(1)
+        .map(|l| l.split(",$").next().unwrap().to_owned())
+        .collect();
+    // Numbers stay numbers; the rest open as the text they are.
+    assert_eq!(
+        titles,
+        ["'+1 555 0100", "-3", "'=1+1", "\"'@SUM(1,2)\""],
+        "{body}"
+    );
+}
+
+/// The tests that read `QUERIES` take turns.
+static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Counts how many times the panel builds the base query of its resource: once
+/// for each page of a list, each chunk of an export and each count.
+static QUERIES: AtomicUsize = AtomicUsize::new(0);
+
+struct Counted;
+
+impl Injectable for Counted {
+    fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async { Ok(Counted) })
+    }
+}
+
+impl Resource for Counted {
+    type Model = Deal;
+
+    const LABEL: &'static str = "Counted deals";
+    const SINGULAR: &'static str = "Counted deal";
+    const SLUG: &'static str = "counted";
+    const TITLE: &'static str = "title";
+
+    fn fields(&self) -> Vec<Field> {
+        vec![Field::text("title").sortable()]
+    }
+
+    fn query(&self, query: Builder<Deal>) -> Builder<Deal> {
+        QUERIES.fetch_add(1, Ordering::SeqCst);
+        query
+    }
+}
+
+/// A resource whose count is switched off.
+struct Uncounted;
+
+impl Injectable for Uncounted {
+    fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async { Ok(Uncounted) })
+    }
+}
+
+impl Resource for Uncounted {
+    type Model = Deal;
+
+    const LABEL: &'static str = "Uncounted deals";
+    const SINGULAR: &'static str = "Uncounted deal";
+    const SLUG: &'static str = "uncounted";
+    const TITLE: &'static str = "title";
+    const SIDEBAR_COUNT: bool = false;
+    const EXPORT: bool = false;
+
+    fn fields(&self) -> Vec<Field> {
+        vec![Field::text("title")]
+    }
+}
+
+struct CountsModule;
+
+impl Module for CountsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.resource::<Counted>().resource::<Uncounted>();
+    }
+}
+
+async fn counts_app() -> TestApp {
+    builder().module(CountsModule).build().await
+}
+
+async fn counts(client: &TestClient) -> Value {
+    client
+        .get("/admin/counts")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value()["counts"]
+        .clone()
+}
+
+#[tokio::test]
+async fn export_reads_a_chunk_at_a_time_and_every_row_once() {
+    let _alone = SERIAL.lock().await;
+    let app = counts_app().await;
+    let (_, manager) = user(&app, "manager").await;
+    many(&app, 1_250, None).await;
+    QUERIES.store(0, Ordering::SeqCst);
+    let body = manager
+        .get("/admin/resources/counted/export.csv?sort=-title")
+        .header("accept", "text/html")
+        .send()
+        .await
+        .assert_status(200)
+        .text();
+    let titles: Vec<&str> = body.lines().skip(1).collect();
+    assert_eq!(titles.len(), 1_250);
+    let expected: Vec<String> = (0..1_250).rev().map(|i| format!("Bulk {i:04}")).collect();
+    assert_eq!(
+        titles,
+        expected.iter().map(String::as_str).collect::<Vec<_>>()
+    );
+    // 500 + 500 + 250: one query for each, none for the whole.
+    assert_eq!(QUERIES.load(Ordering::SeqCst), 3);
+    // A resource that says it is not exported isn't.
+    manager
+        .get("/admin/resources/uncounted/export.csv")
+        .header("accept", "text/html")
+        .send()
+        .await
+        .assert_status(403);
+}
+
+// ---------------------------------------------------------------------------
+// The sidebar's counts
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn the_sidebar_counts_per_user_and_stops_at_a_cap() {
+    let _alone = SERIAL.lock().await;
+    let app = counts_app().await;
+    // Whoever is given a role changes what everyone may do, and counts are
+    // read again: the users are made first.
+    let (_, manager) = user(&app, "manager").await;
+    let (own_id, own_only) = user(&app, "own-only").await;
+    let (_, rep) = user(&app, "rep").await;
+    let id = Uuid::now_v7();
+    give_role(&app, id, "empty", &["helm.view"]).await;
+    let empty = app.acting_as(navree_testing::principal(id));
+    many(&app, 7, Some(own_id)).await;
+    many(&app, 3, None).await;
+    let seen = counts(&manager).await;
+    assert_eq!(
+        seen["deals"],
+        json!({ "value": 10, "capped": false, "text": "10" })
+    );
+    assert_eq!(seen["counted"]["text"], "10");
+    // A user whose rules show some of the rows counts those, and nobody else's.
+    let theirs = counts(&own_only).await;
+    assert_eq!(theirs["deals"]["text"], "7", "{theirs}");
+    // What is off is not counted; what the user may not read is not either.
+    assert!(seen.get("uncounted").is_none(), "{seen}");
+    assert!(counts(&rep).await.get("companies").is_some());
+    assert_eq!(counts(&empty).await, json!({}));
+
+    // It is cached: rows made since are not counted yet, and one user is
+    // never handed another's count.
+    many(&app, 1_000, None).await;
+    assert_eq!(counts(&manager).await["deals"]["text"], "10");
+    assert_eq!(counts(&own_only).await["deals"]["text"], "7");
+    assert_eq!(counts(&rep).await["deals"]["text"], "10");
+}
+
+#[tokio::test]
+async fn a_count_stops_at_a_cap() {
+    let _alone = SERIAL.lock().await;
+    let app = counts_app().await;
+    let (_, manager) = user(&app, "manager").await;
+    many(&app, 1_001, None).await;
+    let capped = counts(&manager).await;
+    assert_eq!(
+        capped["deals"],
+        json!({ "value": 1000, "capped": true, "text": "1,000+" })
+    );
+    // Exactly the cap is exact.
+    let app = counts_app().await;
+    let (_, manager) = user(&app, "manager").await;
+    many(&app, 1_000, None).await;
+    assert_eq!(
+        counts(&manager).await["deals"],
+        json!({ "value": 1000, "capped": false, "text": "1,000" })
+    );
+}
+
+#[tokio::test]
+async fn counts_are_read_again_when_what_a_user_may_do_changes() {
+    let _alone = SERIAL.lock().await;
+    let app = counts_app().await;
+    let (_, manager) = user(&app, "manager").await;
+    many(&app, 4, None).await;
+    assert_eq!(counts(&manager).await["deals"]["text"], "4");
+    many(&app, 2, None).await;
+    assert_eq!(counts(&manager).await["deals"]["text"], "4");
+    // A role given to anyone makes every count be read again.
+    user(&app, "rep").await;
+    assert_eq!(counts(&manager).await["deals"]["text"], "6");
+}
+
+#[tokio::test]
+async fn a_page_does_not_count_the_menu() {
+    let _alone = SERIAL.lock().await;
+    let app = counts_app().await;
+    let (_, manager) = user(&app, "manager").await;
+    many(&app, 3, None).await;
+    QUERIES.store(0, Ordering::SeqCst);
+    let html = plain(
+        page(&manager, "/admin/resources/deals")
+            .await
+            .assert_status(200),
+    );
+    assert_eq!(
+        QUERIES.load(Ordering::SeqCst),
+        0,
+        "a page of another list counted it"
+    );
+    // The menu has a place for each number and the script fills it.
+    assert!(html.contains("data-count=\"counted\""), "{html}");
+    assert!(html.contains("data-count=\"deals\""), "{html}");
+    assert!(!html.contains("data-count=\"uncounted\""), "{html}");
+    assert!(
+        !html.contains("<span class=\"menu-count\" data-count=\"deals\" hidden>3"),
+        "{html}"
+    );
+    let html = plain(page(&manager, "/admin").await.assert_status(200));
+    assert_eq!(QUERIES.load(Ordering::SeqCst), 0);
+    assert!(html.contains("data-count"), "{html}");
+    // Asking for the counts is what counts.
+    counts(&manager).await;
+    assert_eq!(QUERIES.load(Ordering::SeqCst), 1);
+    counts(&manager).await;
+    assert_eq!(QUERIES.load(Ordering::SeqCst), 1, "the second was cached");
+}
+
+// ---------------------------------------------------------------------------
+// The toolbar
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn filters_are_chips_in_a_toolbar_not_list_boxes() {
+    let app = app().await;
+    let (_, manager) = user(&app, "manager").await;
+    let acme = company(&app, "Acme", None).await;
+    deal(
+        &app,
+        DealSeed {
+            company: Some(acme.id),
+            ..DealSeed::default()
+        },
+    )
+    .await;
+    let html = plain(
+        page(
+            &manager,
+            "/admin/resources/deals?filters%5Bstage%5D=won&filters%5Bstage%5D=lost&filters%5Bopen%5D=1&search=Deal&sort=title",
+        )
+        .await
+        .assert_status(200),
+    );
+    assert!(!html.contains("multiple"), "no list boxes: {html}");
+    assert!(!html.contains("class=\"card filters\""), "{html}");
+    assert!(html.contains("class=\"toolbar\""), "{html}");
+    // One chip for each filter, the active ones saying what they hold.
+    assert_eq!(html.matches("<details class=\"chip").count(), 5, "{html}");
+    assert!(html.contains("class=\"chip is-active\""), "{html}");
+    assert!(
+        html.contains("<span class=\"chip-value\">Won +1</span>"),
+        "{html}"
+    );
+    assert!(
+        html.contains("<span class=\"chip-value\">Yes</span>"),
+        "{html}"
+    );
+    // The options are checkboxes (a boolean's are radios), checked as the query says.
+    assert!(
+        html.contains("<input type=\"checkbox\" name=\"filters[stage]\" value=\"won\" checked>"),
+        "{html}"
+    );
+    assert!(
+        html.contains("<input type=\"radio\" name=\"filters[open]\" value=\"1\" checked>"),
+        "{html}"
+    );
+    assert!(html.contains("name=\"filters[min_amount]\""), "{html}");
+    assert!(
+        html.contains("name=\"filters[expected_close_date]\""),
+        "{html}"
+    );
+    // The search, the sort and the way back.
+    assert!(
+        html.contains("type=\"search\" id=\"search\" name=\"search\" value=\"Deal\""),
+        "{html}"
+    );
+    assert!(
+        html.contains("<input type=\"hidden\" name=\"sort\" value=\"title\">"),
+        "{html}"
+    );
+    assert!(html.contains("Reset"), "{html}");
+    // A relationship's options are the records the user may read.
+    assert!(html.contains(&format!("value=\"{}\"", acme.id)), "{html}");
+    // Strict pages: no inline style, no inline script.
+    assert!(!html.contains("style=\""), "{html}");
+    assert!(!html.contains("<script>"), "{html}");
+    // The filters of a list work as they did: the form is a GET of the same names.
+    let rows = plain(
+        page(&manager, "/admin/resources/deals?filters%5Bstage%5D=won")
+            .await
+            .assert_status(200),
+    );
+    assert!(rows.contains("No deals match these filters"), "{rows}");
+}
+
+#[tokio::test]
+async fn bulk_actions_are_a_menu_and_a_run_button() {
+    let app = app().await;
+    let (rep_id, rep) = user(&app, "rep").await;
+    let (_, reader) = user(&app, "no-secrets").await;
+    let own = deal(
+        &app,
+        DealSeed {
+            owner: Some(rep_id),
+            ..DealSeed::default()
+        },
+    )
+    .await;
+    let html = plain(
+        page(&rep, "/admin/resources/deals")
+            .await
+            .assert_status(200),
+    );
+    assert!(
+        html.contains(
+            "<form id=\"bulk\" method=\"post\" action=\"/admin/resources/deals/actions\""
+        ),
+        "{html}"
+    );
+    assert!(
+        html.contains("<select name=\"action\" id=\"bulk-action\" form=\"bulk\""),
+        "{html}"
+    );
+    assert!(
+        html.contains("<option value=\"mark-won\" data-confirm=\"Mark the selected deals as won?\">Mark as won</option>"),
+        "{html}"
+    );
+    assert!(
+        html.contains("<option value=\"mark-lost\">Mark as lost</option>"),
+        "{html}"
+    );
+    assert!(
+        html.contains("form=\"bulk\" data-bulk-run>Run</button>"),
+        "{html}"
+    );
+    assert!(!html.contains("value=\"fail\""), "{html}");
+    assert!(
+        html.contains(&format!("name=\"ids\" value=\"{}\"", own.id)),
+        "{html}"
+    );
+    // Someone the rules give no action to is offered no menu, no Run and no
+    // boxes (they may still be refused one by hand).
+    let html = plain(
+        page(&reader, "/admin/resources/deals")
+            .await
+            .assert_status(200),
+    );
+    assert!(!html.contains("id=\"bulk-action\""), "{html}");
+    assert!(!html.contains("data-bulk-run"), "{html}");
+    assert!(!html.contains("name=\"ids\""), "{html}");
+    assert!(!html.contains("mark-won"), "{html}");
+    let response = reader
+        .post("/admin/resources/deals/actions")
+        .header("accept", "text/html")
+        .form(&[
+            ("action", "mark-won"),
+            ("ids", &own.id.to_string()),
+            ("_confirmed", "1"),
+        ])
+        .send()
+        .await;
+    assert_ne!(response.status().as_u16(), 200);
+    let kept = reload(&app, own.id).await.unwrap();
+    assert_eq!(kept.stage, "lead");
+    // What the menu runs, runs: the form is the one that always ran.
+    let html = plain(
+        rep.post("/admin/resources/deals/actions")
+            .header("accept", "text/html")
+            .form(&[("action", "mark-won"), ("ids", &own.id.to_string())])
+            .send()
+            .await
+            .assert_status(200),
+    );
+    assert!(html.contains("Mark the selected deals as won?"), "{html}");
+}
+
+#[tokio::test]
+async fn the_page_offers_export_for_what_it_shows() {
+    let app = app().await;
+    let (_, manager) = user(&app, "manager").await;
+    let html = plain(
+        page(
+            &manager,
+            "/admin/resources/deals?filters%5Bstage%5D=won&sort=title&page=3",
+        )
+        .await
+        .assert_status(200),
+    );
+    assert!(
+        html.contains(
+            "href=\"/admin/resources/deals/export.csv?filters%5Bstage%5D=won&amp;sort=title\""
+        ),
+        "{html}"
+    );
+    assert!(html.contains("Export</a>"), "{html}");
+    // Nothing that changes anything sits behind a link: export is a read.
+    let off = plain(
+        page(&manager, "/admin/resources/companies")
+            .await
+            .assert_status(200),
+    );
+    assert!(off.contains("companies/export.csv"));
+}
+
+// ---------------------------------------------------------------------------
+// The delta on a metric
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn a_delta_shows_only_where_a_previous_period_has_something_to_compare() {
+    let app = app().await;
+    let (_, manager) = user(&app, "manager").await;
+    // Today is the 26th of October: "New deals" counts the last 30 days.
+    for days in [1, 2, 3, 40] {
+        deal(
+            &app,
+            DealSeed {
+                created_at: now() - Duration::days(days),
+                ..DealSeed::default()
+            },
+        )
+        .await;
+    }
+    let html = plain(
+        page(&manager, "/admin/resources/deals")
+            .await
+            .assert_status(200),
+    );
+    // Three now, one before: up 200 %.
+    assert!(html.contains("class=\"delta up\">"), "{html}");
+    assert!(html.contains("+200%</span>"), "{html}");
+    assert!(html.contains("On the previous 30 days"), "{html}");
+    // The ranges: the 7-day range has nothing before it to compare with.
+    let html = plain(
+        page(&manager, "/admin/resources/deals?range=7")
+            .await
+            .assert_status(200),
+    );
+    assert!(
+        !html.contains("class=\"delta"),
+        "no previous period, no delta: {html}"
+    );
+    // A value with no range has no previous period at all: "Open pipeline".
+    assert!(html.contains("Open pipeline"), "{html}");
+}

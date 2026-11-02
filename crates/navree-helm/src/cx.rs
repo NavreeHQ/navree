@@ -111,20 +111,18 @@ impl Cx {
         if info.read_only && matches!(action, CREATE | UPDATE | DELETE) {
             return false;
         }
-        if !memo.contains_key(&owner) {
-            let writes = match self.app.try_get::<dyn WorkspaceGate>().await {
-                Some(gate) => gate.writes(self.user_id, owner).await.ok(),
-                None => None,
-            };
-            memo.insert(owner, writes);
-        }
-        takes_writes(
-            memo[&owner].as_ref(),
-            None,
-            true,
-            info.permission_prefix,
-            action,
-        )
+        let writes = match memo.get(&owner) {
+            Some(writes) => writes.clone(),
+            None => {
+                let writes = match self.app.try_get::<dyn WorkspaceGate>().await {
+                    Some(gate) => gate.writes(self.user_id, owner).await.ok(),
+                    None => None,
+                };
+                memo.insert(owner, writes.clone());
+                writes
+            }
+        };
+        takes_writes(writes.as_ref(), None, true, info.permission_prefix, action)
     }
 
     /// What `workspace` takes from the user: the workspace the request works in

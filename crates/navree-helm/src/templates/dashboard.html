@@ -21,7 +21,7 @@
 <section class="section" aria-labelledby="s-{{ loop.index }}">
   <h2 class="section-title" id="s-{{ loop.index }}"><a href="{{ section.url }}">{{ section.label }}</a></h2>
   <div class="metrics">
-    {% for metric in section.metrics %}{{ m.metric_card(metric, none) }}{% endfor %}
+    {% for metric in section.metrics %}{{ m.metric_card(metric, none, panel.icons) }}{% endfor %}
   </div>
 </section>
 {% endfor %}

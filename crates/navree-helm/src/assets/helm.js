@@ -1,7 +1,8 @@
 // Helm: small enhancements on top of pages that work without scripts.
-// The sidebar (Ctrl/Cmd+B, the sheet on phones), the account menu, the
-// command menu (Ctrl/Cmd+K), confirmations, select-all, local times,
-// time-zone offsets for forms, relationship pickers and Markdown previews.
+// The sidebar (Ctrl/Cmd+B, the sheet on phones) and its counts, the account
+// menu, the command menu (Ctrl/Cmd+K), filter chips, confirmations,
+// select-all and the bulk-action menu, local times, time-zone offsets for
+// forms, relationship pickers and Markdown previews.
 (function () {
   "use strict";
 
@@ -135,7 +136,7 @@
         icon: link.querySelector("svg")
       });
     });
-    var searchForm = document.querySelector("form.filters");
+    var searchForm = document.querySelector("form.filter-bar");
     var searchInput = searchForm && searchForm.querySelector('input[name="search"]');
     var heading = document.querySelector("main h1");
 
@@ -234,10 +235,58 @@
     });
   }
 
+  function filterChips() {
+    // A filter chip opens its panel of choices; one is open at a time, and a
+    // click elsewhere or Escape closes it.
+    var chips = document.querySelectorAll("details[data-chip]");
+    if (!chips.length) return;
+    document.addEventListener("click", function (event) {
+      chips.forEach(function (chip) {
+        if (chip.open && !chip.contains(event.target)) chip.open = false;
+      });
+    });
+    chips.forEach(function (chip) {
+      chip.addEventListener("toggle", function () {
+        if (!chip.open) return;
+        chips.forEach(function (other) {
+          if (other !== chip) other.open = false;
+        });
+      });
+      chip.addEventListener("keydown", function (event) {
+        if (event.key === "Escape" && chip.open) {
+          chip.open = false;
+          chip.querySelector("summary").focus();
+        }
+      });
+    });
+  }
+
+  function sidebarCounts() {
+    // The numbers beside the menu are asked for once the page is up, so a
+    // page never waits for them; a count that is not there leaves its slot empty.
+    var slots = document.querySelectorAll("[data-count]");
+    if (!slots.length || !window.fetch) return;
+    fetch(base + "/counts", { headers: { Accept: "application/json" }, credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (body) {
+        if (!body || !body.counts) return;
+        slots.forEach(function (slot) {
+          var count = body.counts[slot.getAttribute("data-count")];
+          if (!count) return;
+          slot.textContent = count.text;
+          if (count.capped) slot.title = "More than " + count.value;
+          slot.hidden = false;
+        });
+      })
+      .catch(function () {});
+  }
+
   ready(function () {
     sidebar();
     accountMenu();
     commandMenu();
+    filterChips();
+    sidebarCounts();
 
     // Ask before actions that say so; the server asks itself when this
     // script is not running.
@@ -258,18 +307,29 @@
       }
     });
 
-    // Select every row of a table.
+    // Select every row of a table, count the ticked ones and run the bulk
+    // action the menu holds on them (Run waits for both).
     document.querySelectorAll("input[data-select-all]").forEach(function (all) {
       var table = all.closest("table");
+      var form = all.closest("form");
+      var count = document.querySelector("[data-selected-count]");
+      var menu = document.getElementById("bulk-action");
+      var run = document.querySelector("[data-bulk-run]");
       var boxes = function () {
         return table.querySelectorAll('tbody input[type="checkbox"][name="ids"]');
       };
-      var count = all.closest("form").querySelector("[data-selected-count]");
       var update = function () {
         var n = Array.prototype.filter.call(boxes(), function (b) { return b.checked; }).length;
-        if (count) count.textContent = n ? n + " selected" : "Select rows to run an action";
+        if (count) count.textContent = n ? n + " selected" : "";
         all.checked = n > 0 && n === boxes().length;
         all.indeterminate = n > 0 && n < boxes().length;
+        if (run && menu) {
+          var option = menu.options[menu.selectedIndex];
+          var danger = !!option && option.hasAttribute("data-destructive");
+          run.disabled = !(n > 0 && menu.value);
+          run.classList.toggle("btn-danger", danger);
+          run.classList.toggle("btn-secondary", !danger);
+        }
       };
       all.addEventListener("change", function () {
         boxes().forEach(function (b) { b.checked = all.checked; });
@@ -278,6 +338,26 @@
       table.addEventListener("change", function (e) {
         if (e.target.name === "ids") update();
       });
+      if (menu) menu.addEventListener("change", update);
+      if (run && menu) {
+        run.addEventListener("click", function (event) {
+          var option = menu.options[menu.selectedIndex];
+          var question = option && option.getAttribute("data-confirm");
+          if (!question) return;
+          if (!window.confirm(question)) {
+            event.preventDefault();
+            return;
+          }
+          if (form && !form.querySelector('input[name="_confirmed"]')) {
+            var input = document.createElement("input");
+            input.type = "hidden";
+            input.name = "_confirmed";
+            input.value = "1";
+            form.appendChild(input);
+          }
+        });
+      }
+      update();
     });
 
     // Date-times in the viewer's time zone.
