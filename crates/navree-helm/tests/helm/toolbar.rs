@@ -211,15 +211,17 @@ async fn a_spreadsheet_does_not_run_what_a_deal_is_called() {
         .await;
     }
     let body = csv(&manager, "?sort=title").await.assert_status(200).text();
-    let titles: Vec<String> = body
+    // (The order is the database's collation of punctuation, which differs.)
+    let mut titles: Vec<String> = body
         .lines()
         .skip(1)
         .map(|l| l.split(",$").next().unwrap().to_owned())
         .collect();
+    titles.sort();
     // Numbers stay numbers; the rest open as the text they are.
     assert_eq!(
         titles,
-        ["'+1 555 0100", "-3", "'=1+1", "\"'@SUM(1,2)\""],
+        ["\"'@SUM(1,2)\"", "'+1 555 0100", "'=1+1", "-3"],
         "{body}"
     );
 }

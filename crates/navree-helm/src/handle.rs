@@ -1360,32 +1360,45 @@ impl<R: Resource> Handle<R> {
                 let today = now.date_naive();
                 let buckets = buckets(*interval, *count, today);
                 let start = buckets.first().map(|b| b.1).unwrap_or(today);
-                let records = query
-                    .where_(
-                        self.col(column)
-                            .gte(values::date_bound(shape, midnight(start))),
-                    )
-                    .get(&cx.uow)
-                    .await?
-                    .into_vec();
+                let in_window = query.where_(
+                    self.col(column)
+                        .gte(values::date_bound(shape, midnight(start))),
+                );
                 let mut grouped: Vec<Vec<f64>> = vec![Vec::new(); buckets.len()];
-                for record in &records {
-                    let model = record.model();
-                    let Some(day) = model.value(column)?.as_ref().and_then(values::value_date)
-                    else {
-                        continue;
-                    };
-                    let Some(index) = buckets.iter().position(|b| b.1 <= day && day < b.2) else {
-                        continue;
-                    };
-                    let value = match metric.aggregate.column() {
-                        None => 1.0,
-                        Some(c) => match model.value(c)?.as_ref().and_then(values::value_number) {
-                            Some(n) => n,
-                            None => continue,
-                        },
-                    };
-                    grouped[index].push(value);
+                match metric.aggregate.column() {
+                    // A count reads the one column it buckets by, not the records
+                    // (a table of a few hundred thousand rows, with their JSON
+                    // columns, took seconds to load for a line of thirty points).
+                    None => {
+                        let days = in_window.pluck(&cx.uow, self.col(column)).await?;
+                        for day in days.iter().filter_map(values::value_date) {
+                            if let Some(index) =
+                                buckets.iter().position(|b| b.1 <= day && day < b.2)
+                            {
+                                grouped[index].push(1.0);
+                            }
+                        }
+                    }
+                    // Another aggregate is asked of the database a bucket at a time.
+                    Some(_) => {
+                        for (index, bucket) in buckets.iter().enumerate() {
+                            let within = in_window
+                                .clone()
+                                .where_(
+                                    self.col(column)
+                                        .gte(values::date_bound(shape, midnight(bucket.1))),
+                                )
+                                .where_(
+                                    self.col(column)
+                                        .lt(values::date_bound(shape, midnight(bucket.2))),
+                                );
+                            if let Some(value) =
+                                self.aggregate(cx, within, &metric.aggregate).await?
+                            {
+                                grouped[index].push(value);
+                            }
+                        }
+                    }
                 }
                 result.points = buckets
                     .iter()

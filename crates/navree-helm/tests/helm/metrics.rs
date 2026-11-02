@@ -290,3 +290,48 @@ async fn unknown_metrics_are_404_and_unreadable_ones_403() {
         .await
         .assert_error(403, None);
 }
+
+#[tokio::test]
+async fn a_trend_of_counts_reads_the_column_it_buckets_by_and_no_records() {
+    // SQLite takes any text in a UUID column, so a record that cannot be read
+    // whole is easy to make there; the trend must not try to read it.
+    if crate::servers::Server::current() != crate::servers::Server::Sqlite {
+        return;
+    }
+    let app = app().await;
+    let (rep_id, rep) = user(&app, "rep").await;
+    seed(&app, rep_id).await;
+    {
+        use navree_db::Executor as _;
+        let db = app.get::<navree_db::Db>().await;
+        db.execute(&navree_db::Statement::text(
+            "UPDATE deals SET company_id = 'not a uuid'".to_owned(),
+        ))
+        .await
+        .unwrap();
+    }
+    // The records cannot be read whole now...
+    assert_ne!(
+        rep.get("/admin/api/resources/deals")
+            .send()
+            .await
+            .status()
+            .as_u16(),
+        200
+    );
+    // ...and the line of counts is the same as with ones that can.
+    let body = rep
+        .get("/admin/api/resources/deals/metrics/deals-by-day")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    let total: f64 = body["points"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["value"].as_f64().unwrap())
+        .sum();
+    assert!(total > 0.0, "{body}");
+    assert_eq!(body["value"], json!(total));
+}

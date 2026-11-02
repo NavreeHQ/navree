@@ -324,24 +324,22 @@ export const custom = {
     const n = Math.min(await boxes.count(), 3);
     for (let i = 0; i < n; i++) await boxes.nth(i).check({ force: true }).catch(() => {});
     await page.waitForTimeout(400);
-    out.push(await shot(ctx, 'rows-ticked', '/admin/resources/tasks?filters[status]=todo', { navigate: false, label: 'Three rows ticked: the bulk actions are live' }));
+    await page.locator('#bulk-action').selectOption({ label: 'Mark tasks done' });
+    await page.waitForTimeout(200);
+    out.push(await shot(ctx, 'rows-ticked', '/admin/resources/tasks?filters[status]=todo', { navigate: false, label: 'Three rows ticked and an action chosen: Run is live' }));
     page.once('dialog', (d) => d.accept());
-    await page.getByRole('button', { name: /mark tasks done/i }).first().click({ timeout: 4000 });
+    await page.getByRole('button', { name: /^run$/i }).first().click({ timeout: 4000 });
     await page.waitForLoadState('load').catch(() => {});
     await page.waitForTimeout(800);
     out.push(await shot(ctx, 'bulk-action-done', new URL(page.url()).pathname, { navigate: false, label: 'After Mark tasks done was confirmed' }));
   }),
 
-  /** Helm: a read-only account ticks a row and runs a bulk action it has no ability for. */
+  /** Helm: a read-only account is offered no bulk action, no New and no row boxes. */
   'helm-viewer-action': (args) => session(args, async (ctx, out) => {
     const { page } = ctx;
     await page.goto(BASE_URL + '/admin/resources/tasks?filters%5Bstatus%5D=todo', { waitUntil: 'load' });
-    await page.locator('tbody input[type="checkbox"]').first().check({ force: true });
-    page.once('dialog', (d) => d.accept());
-    await page.getByRole('button', { name: /mark tasks done/i }).first().click({ timeout: 4000 });
-    await page.waitForLoadState('load').catch(() => {});
-    await page.waitForTimeout(800);
-    out.push(await shot(ctx, 'viewer-runs-action', new URL(page.url()).pathname, { navigate: false, label: 'A read-only account runs a bulk action' }));
+    await page.waitForTimeout(400);
+    out.push(await shot(ctx, 'viewer-no-actions', '/admin/resources/tasks?filters[status]=todo', { navigate: false, label: 'A read-only account sees no bulk action' }));
   }, VIEWER),
 
   /** Helm: a record's edit form with an invalid value. */

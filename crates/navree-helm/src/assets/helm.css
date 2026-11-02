@@ -328,7 +328,7 @@ section.card.list-card { padding: 0; }
 .table th, .table td { height: 40px; padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
 /* A cell with one long word (a key, an address, a client string) breaks it
    rather than set the width of the whole table. */
-.table td { overflow-wrap: anywhere; }
+.table td { overflow-wrap: anywhere; max-width: 22rem; }
 .table th { color: var(--fg-3); font-weight: 500; font-size: 0.8125rem; white-space: nowrap; }
 .table th a.sort { color: inherit; text-decoration: none; }
 .table th a.sort:hover { color: var(--fg); }
