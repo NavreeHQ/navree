@@ -187,3 +187,109 @@ fn missing_modules_models_and_existing_files_are_errors() {
     );
     assert_eq!(read(&root, "src/modules/deals/mod.rs"), module);
 }
+
+/// The `Deal` model with `extra` added to its struct and `attributes` to its
+/// `#[model(..)]`, and the resource made for it.
+fn resource_for(extra: &str, attributes: &str) -> String {
+    let (_dir, root) = project();
+    let model = root.join("src/modules/deals/models/deal.rs");
+    let text = std::fs::read_to_string(&model).unwrap();
+    let mut patched = text.replacen("pub struct Deal {", &format!("pub struct Deal {{\n{extra}"), 1);
+    assert_ne!(patched, text);
+    if !attributes.is_empty() {
+        let before = patched.clone();
+        patched = patched.replacen("#[model(", &format!("#[model({attributes}, "), 1);
+        assert_ne!(patched, before);
+    }
+    std::fs::write(&model, patched).unwrap();
+    make_resource(&root, "src/modules", &name("deals"), "Deal").unwrap();
+    read(&root, "src/modules/deals/resources/deal.rs")
+}
+
+/// The generated fields of a resource: its `Field::` lines.
+fn field_lines(resource: &str) -> Vec<&str> {
+    resource
+        .lines()
+        .filter(|line| line.trim_start().starts_with("Field::"))
+        .collect()
+}
+
+#[test]
+fn a_hidden_column_gets_no_field() {
+    let made = resource_for(
+        "    #[model(hidden)]\n    pub internal_rank: String,\n    #[model(hidden)]\n    pub api_key_id: Option<String>,\n    pub title_shown: String,",
+        "",
+    );
+    let fields = field_lines(&made);
+    assert!(
+        fields.iter().any(|line| line.contains("title_shown")),
+        "{made}"
+    );
+    assert!(!made.contains("Field::text(\"internal_rank\")"), "{made}");
+    assert!(!made.contains("Field::text(\"api_key_id\")"), "{made}");
+    assert!(
+        made.contains("internal_rank") && made.contains("api_key_id"),
+        "says what it left out: {made}"
+    );
+}
+
+#[test]
+fn a_column_a_model_hides_by_name_gets_no_field() {
+    let made = resource_for(
+        "    pub internal_rank: String,\n    pub title_shown: String,",
+        "hidden(internal_rank)",
+    );
+    assert!(!made.contains("Field::text(\"internal_rank\")"), "{made}");
+    assert!(made.contains("title_shown"), "{made}");
+}
+
+#[test]
+fn a_column_a_model_does_not_make_visible_gets_no_field() {
+    let made = resource_for(
+        "    pub internal_rank: String,\n    pub title_shown: String,",
+        "visible(id, title_shown)",
+    );
+    assert!(!made.contains("Field::text(\"internal_rank\")"), "{made}");
+    assert!(made.contains("Field::text(\"title_shown\")"), "{made}");
+}
+
+#[test]
+fn a_column_that_looks_like_a_secret_gets_no_field() {
+    for secret in [
+        "password_hash",
+        "password",
+        "passwd",
+        "api_token",
+        "refresh_token",
+        "client_secret",
+        "secret",
+        "api_key",
+        "private_key",
+        "signing_key",
+        "credentials",
+        "recovery_codes",
+        "otp_seed",
+    ] {
+        let made = resource_for(&format!("    pub {secret}: String,"), "");
+        assert!(
+            !field_lines(&made).iter().any(|line| line.contains(secret)),
+            "{secret}: {made}"
+        );
+    }
+    // Words that only look like one stay.
+    for plain in ["token_count", "secretary", "keyboard", "monkey_name"] {
+        let ty = if plain == "token_count" { "i64" } else { "String" };
+        let made = resource_for(&format!("    pub {plain}: {ty},"), "");
+        assert!(
+            field_lines(&made).iter().any(|line| line.contains(plain)),
+            "{plain}: {made}"
+        );
+    }
+}
+
+#[test]
+fn a_hidden_column_is_not_the_title_or_searched() {
+    let made = resource_for("    pub email: String,", "hidden(name, email)");
+    assert!(!made.contains("const TITLE: &'static str = \"name\""), "{made}");
+    assert!(!made.contains("\"email\"]"), "{made}");
+}

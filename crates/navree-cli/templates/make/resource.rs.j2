@@ -23,6 +23,10 @@ impl Resource for {{ pascal }}Resource {
 {% endif %}
 
     fn fields(&self) -> Vec<Field> {
+{% if left_out %}
+        // Left out: {{ left_out }}. A column the model hides, or named like a
+        // secret, reaches no screen.
+{% endif %}
         vec![
 {% for field in fields %}
 {% if field.comment %}

@@ -1,5 +1,6 @@
 //! `navree make:resource <module> <Model>`: a Helm resource with a field
-//! for every column of a navree-orm model, registered with the module.
+//! for every column of a navree-orm model a user may see, registered with the
+//! module. A column the model hides, or one named like a secret, gets no field.
 
 use std::path::Path;
 
@@ -25,6 +26,47 @@ pub struct Column {
     pub optional: bool,
     /// Whether the column is the primary key.
     pub primary_key: bool,
+    /// Whether serialized records leave it out (`#[model(hidden)]`, a model's
+    /// `hidden(..)`, or not in its `visible(..)`).
+    pub hidden: bool,
+}
+
+impl Column {
+    /// Whether a generated resource leaves the column out.
+    fn left_out(&self) -> bool {
+        !self.primary_key && (self.hidden || looks_secret(&self.name, &self.ty))
+    }
+}
+
+/// The words of a column name that mean it holds a secret.
+const SECRET_WORDS: [&str; 7] = [
+    "password",
+    "passwd",
+    "pwd",
+    "secret",
+    "token",
+    "credentials",
+    "otp",
+];
+
+/// Whether a column named `name` of type `ty` looks like a secret: a word of its
+/// name says so (`password_hash`, `api_token`, not `secretary`), or it ends in
+/// `key` after another word that says what kind (`api_key`, `signing_key`). A
+/// number is a count of them (`token_count`).
+fn looks_secret(name: &str, ty: &str) -> bool {
+    if is_number(ty) || ty == "bool" {
+        return false;
+    }
+    let lower = name.to_ascii_lowercase();
+    let words: Vec<&str> = lower.split('_').collect();
+    let word = |candidate: &str| words.contains(&candidate);
+    SECRET_WORDS.iter().any(|secret| word(secret))
+        || lower == "apikey"
+        || lower.contains("recovery_code")
+        || matches!(
+            words.as_slice(),
+            [.., "api" | "private" | "signing" | "secret" | "encryption" | "access", "key"]
+        )
 }
 
 /// The access subject a model declares with `#[model(subject ..)]`.
@@ -126,6 +168,8 @@ pub fn parse_model(source: &str, model: Option<&Name>) -> anyhow::Result<ModelIn
     let syn::Fields::Named(fields) = &item.fields else {
         anyhow::bail!("`{name}` has no named fields");
     };
+    let hidden_names = name_list(&tokens, "hidden");
+    let visible_names = name_list(&tokens, "visible");
     let columns = fields
         .named
         .iter()
@@ -136,13 +180,18 @@ pub fn parse_model(source: &str, model: Option<&Name>) -> anyhow::Result<ModelIn
             }
             let ident = field.ident.as_ref()?.to_string();
             let ident = ident.strip_prefix("r#").unwrap_or(&ident).to_owned();
-            let name = quoted_value(&field_tokens, "column").unwrap_or(ident);
+            let name = quoted_value(&field_tokens, "column").unwrap_or_else(|| ident.clone());
             let (optional, ty) = type_name(&field.ty);
+            let named = |list: &[String]| list.contains(&ident) || list.contains(&name);
+            let hidden = has_word(&field_tokens, "hidden")
+                || named(&hidden_names)
+                || (!visible_names.is_empty() && !named(&visible_names));
             Some(Column {
                 primary_key: name == key,
                 name,
                 ty,
                 optional,
+                hidden,
             })
         })
         .collect();
@@ -160,6 +209,31 @@ fn list_tokens(attr: &syn::Attribute) -> String {
         syn::Meta::List(list) => list.tokens.to_string(),
         _ => String::new(),
     }
+}
+
+/// The names in `word(a, "b")` in attribute tokens.
+fn name_list(tokens: &str, word: &str) -> Vec<String> {
+    let mut from = 0;
+    while let Some(found) = tokens[from..].find(word) {
+        let at = from + found;
+        from = at + word.len();
+        let before = tokens[..at].chars().next_back();
+        if before.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+            continue;
+        }
+        let Some(rest) = tokens[from..].trim_start().strip_prefix('(') else {
+            continue;
+        };
+        return rest
+            .split(')')
+            .next()
+            .unwrap_or_default()
+            .split(',')
+            .map(|name| name.trim().trim_matches('"').to_owned())
+            .filter(|name| !name.is_empty())
+            .collect();
+    }
+    Vec::new()
 }
 
 /// The string after `key =` in attribute tokens (the key as a whole word).
@@ -324,6 +398,7 @@ struct ResourceContext {
     title: String,
     search: String,
     fields: Vec<FieldCode>,
+    left_out: String,
 }
 
 /// The resource file for model `name` (its resource is `<Name>Resource`),
@@ -332,31 +407,35 @@ struct ResourceContext {
 pub fn resource_file(name: &Name, info: &ModelInfo, model_path: &str) -> anyhow::Result<String> {
     let table = Name::parse("table", &info.table).ok();
     let plural = table.clone().unwrap_or_else(|| name.plural());
+    let shown: Vec<Column> = info
+        .columns
+        .iter()
+        .filter(|c| !c.left_out())
+        .cloned()
+        .collect();
+    let left_out: Vec<&str> = info
+        .columns
+        .iter()
+        .filter(|c| c.left_out())
+        .map(|c| c.name.as_str())
+        .collect();
     let title = TITLE_COLUMNS
         .iter()
-        .find(|t| info.columns.iter().any(|c| c.name == **t && is_text(&c.ty)))
+        .find(|t| shown.iter().any(|c| c.name == **t && is_text(&c.ty)))
         .map(|t| (*t).to_owned())
         .or_else(|| {
-            info.columns
+            shown
                 .iter()
                 .find(|c| c.primary_key)
                 .map(|c| c.name.clone())
         })
         .unwrap_or_else(|| "id".to_owned());
-    let searchable = info
-        .columns
-        .iter()
-        .any(|c| c.name == title && is_text(&c.ty));
+    let searchable = shown.iter().any(|c| c.name == title && is_text(&c.ty));
     let mut search = Vec::new();
     if searchable {
         search.push(format!("\"{title}\""));
     }
-    if title != "email"
-        && info
-            .columns
-            .iter()
-            .any(|c| c.name == "email" && is_text(&c.ty))
-    {
+    if title != "email" && shown.iter().any(|c| c.name == "email" && is_text(&c.ty)) {
         search.push("\"email\"".to_owned());
     }
     let ctx = ResourceContext {
@@ -376,11 +455,8 @@ pub fn resource_file(name: &Name, info: &ModelInfo, model_path: &str) -> anyhow:
             .map_or_else(|| info.name.clone(), |s| s.name.clone()),
         title,
         search: search.join(", "),
-        fields: info
-            .columns
-            .iter()
-            .filter_map(|c| field_for(c, &info.columns))
-            .collect(),
+        fields: shown.iter().filter_map(|c| field_for(c, &shown)).collect(),
+        left_out: left_out.join(", "),
     };
     Ok(render("make/resource.rs", &ctx)?)
 }
