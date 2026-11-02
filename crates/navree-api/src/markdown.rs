@@ -239,9 +239,15 @@ fn bracketed(rest: &str) -> Option<(&str, &str, &str)> {
     Some((label, url, target.get(end + 1..)?))
 }
 
+/// A control character, or a backslash: browsers read `/\\host` as `//host`.
+fn has_unsafe_byte(url: &str) -> bool {
+    url.bytes()
+        .any(|byte| byte.is_ascii_control() || byte == b'\\')
+}
+
 fn is_safe_link(url: &str) -> bool {
     let lower = url.to_ascii_lowercase();
-    !url.bytes().any(|byte| byte.is_ascii_control())
+    !has_unsafe_byte(url)
         && (lower.starts_with("https://")
             || lower.starts_with("http://")
             || lower.starts_with("mailto:")
@@ -250,7 +256,7 @@ fn is_safe_link(url: &str) -> bool {
 }
 
 fn is_safe_image(url: &str) -> bool {
-    !url.bytes().any(|byte| byte.is_ascii_control())
+    !has_unsafe_byte(url)
         && ((url.starts_with('/') && !url.starts_with("//"))
             || url.to_ascii_lowercase().starts_with("data:image/"))
 }
@@ -321,6 +327,14 @@ mod tests {
         );
         assert_eq!(render("![logo](https://evil.example/x.png)"), "<p>logo</p>");
         assert!(render("![pixel](data:image/png;base64,AA)").contains("<img"));
+    }
+
+    #[test]
+    fn a_backslash_never_makes_a_path_of_another_host() {
+        let page = render("![pix](/\\evil.example/p.png) [link](/\\evil.example/x) [ok](/a/b)");
+        assert!(!page.contains("src=\"/\\"), "{page}");
+        assert!(!page.contains("href=\"/\\"), "{page}");
+        assert!(page.contains("href=\"/a/b\""), "{page}");
     }
 
     #[test]
