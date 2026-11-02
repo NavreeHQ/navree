@@ -39,6 +39,62 @@ pub struct FailedJob {
     pub failed_at: DateTime<Utc>,
 }
 
+/// A failed job without its payload, as an overview lists it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct FailedJobBrief {
+    /// The job id.
+    pub id: String,
+    /// The queue it was on.
+    pub queue: String,
+    /// The job type.
+    pub job_type: String,
+    /// The error of the last attempt.
+    pub error: String,
+    /// How many attempts ran.
+    pub attempts: u32,
+    /// How many it could have.
+    pub max_attempts: u32,
+    /// When it failed.
+    pub failed_at: DateTime<Utc>,
+}
+
+impl From<&FailedJob> for FailedJobBrief {
+    fn from(job: &FailedJob) -> FailedJobBrief {
+        FailedJobBrief {
+            id: job.id.clone(),
+            queue: job.queue.clone(),
+            job_type: job.job_type.clone(),
+            error: job.error.clone(),
+            attempts: job.attempts,
+            max_attempts: job.options.max_attempts,
+            failed_at: job.failed_at,
+        }
+    }
+}
+
+/// The failed jobs in figures, and the newest of them: what a page polled every
+/// few seconds reads, however many have failed ([`Queue::failed_summary`](crate::Queue::failed_summary)).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct FailedSummary {
+    /// Every failed job.
+    pub total: u64,
+    /// The ones that failed at or after the time asked for.
+    pub since: u64,
+    /// The newest, newest first.
+    pub newest: Vec<FailedJobBrief>,
+}
+
+impl FailedSummary {
+    /// The summary of `failed` (newest first).
+    pub(crate) fn of(failed: &[FailedJob], since: DateTime<Utc>, limit: usize) -> FailedSummary {
+        FailedSummary {
+            total: failed.len() as u64,
+            since: failed.iter().filter(|job| job.failed_at >= since).count() as u64,
+            newest: failed.iter().take(limit).map(Into::into).collect(),
+        }
+    }
+}
+
 /// Where a job that is not finished yet stands ([`PendingJob::state`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]

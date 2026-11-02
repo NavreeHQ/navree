@@ -347,7 +347,7 @@ Processed 12 job attempt(s): 11 succeeded, 1 released for retry, 0 failed, 0 can
 |---|---|
 | `--queue high,default` | The queues to process, highest priority first (instead of `queue.queues`). |
 | `--once` | Run at most one job, with one worker, then exit. |
-| `--stop-when-empty` | Exit as soon as no job is available, instead of polling. |
+| `--stop-when-empty` | Exit as soon as no job is available, instead of polling. A database that is busy for now (a lock held longer than it waits, a deadlock) is tried again a few times before the command fails. |
 | `--max-jobs N` | Exit after N attempts, counted over every worker of the process. |
 
 Options also take the `--flag=value` form: `queue:work --queue=mail --max-jobs=500`.
@@ -403,6 +403,8 @@ A retried job keeps its id and options, starts its attempts over and runs as soo
 The same operations are available in code, for an admin screen for example:
 
 ```rust
+// `queue.failed_summary(since, limit)` counts them and reads the newest without
+// their payloads, for a page polled every few seconds.
 for job in queue.failed().await? {
     println!("{} {} after {} attempts: {}", job.id, job.job_type, job.attempts, job.error);
 }

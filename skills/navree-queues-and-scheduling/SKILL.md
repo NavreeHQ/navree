@@ -118,7 +118,7 @@ impl ExportService {
 ```sh
 navree queue:work                          # until Ctrl-C / SIGTERM (finishes running jobs)
 navree queue:work --queue exports,default  # these queues, highest priority first
-navree queue:work --stop-when-empty        # or --once, --max-jobs 500
+navree queue:work --stop-when-empty        # or --once, --max-jobs 500; a busy database is retried a few times
 navree queue:failed                        # list failed jobs
 navree queue:retry <id>|all                # put them back
 navree queue:flush                         # delete them

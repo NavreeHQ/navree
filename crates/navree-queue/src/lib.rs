@@ -157,8 +157,8 @@ pub use operations::{
 pub use options::{OperationsOptions, QueueDriver, QueueOptions};
 pub use queue::Queue;
 pub use record::{
-    FailedJob, Membership, NewJob, PendingJob, PendingQuery, PendingState, QueueStatus,
-    ReservedJob, RetryTarget,
+    FailedJob, FailedJobBrief, FailedSummary, Membership, NewJob, PendingJob, PendingQuery,
+    PendingState, QueueStatus, ReservedJob, RetryTarget,
 };
 pub use store::QueueStore;
 /// The cancellation token [`Supervision::stop`] takes (tokio-util's).

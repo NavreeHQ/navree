@@ -518,3 +518,30 @@ async fn the_queue_settings_shape_the_default_supervisor() {
     assert_eq!(default.concurrency, 2);
     let _ = QueueOptions::default();
 }
+
+#[tokio::test]
+async fn the_overview_counts_failed_jobs_and_reads_only_the_ones_it_shows() {
+    let h = Harness::new(builder()).await;
+    fail_exports(&h, &["a", "b", "c", "d", "e", "f", "g"]).await;
+    let db = h.app.get::<navree_db::Db>().await;
+    let seen: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();
+    let log = seen.clone();
+    db.on_query(move |query| log.lock().unwrap().push(query.sql.clone()));
+    let overview = h.fleet.overview().await.unwrap();
+    assert_eq!(overview.failed_total, 7);
+    assert_eq!(overview.failed_past_week, 7);
+    assert_eq!(overview.recent_failures.len(), RECENT_FAILURES);
+    let statements = seen.lock().unwrap().clone();
+    let reading: Vec<&String> = statements
+        .iter()
+        .filter(|sql| sql.contains("failed_jobs"))
+        .collect();
+    assert!(!reading.is_empty());
+    for sql in reading {
+        assert!(!sql.contains("payload"), "reads the payloads: {sql}");
+        assert!(
+            sql.contains("COUNT(") || sql.contains("LIMIT"),
+            "reads them all: {sql}"
+        );
+    }
+}

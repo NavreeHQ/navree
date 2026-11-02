@@ -10,12 +10,14 @@ use std::sync::Arc;
 pub(crate) use database::DatabaseStore;
 pub(crate) use memory::MemoryStore;
 
+use chrono::{DateTime, Utc};
 use navree_contracts::{BoxFuture, JobEnvelope};
 use navree_db::Uow;
 
 use crate::batch::{BatchRow, Finish, Finished};
 use crate::record::{
-    FailedJob, NewJob, PendingJob, PendingQuery, QueueStatus, ReservedJob, RetryTarget, from_millis,
+    FailedJob, FailedSummary, NewJob, PendingJob, PendingQuery, QueueStatus, ReservedJob,
+    RetryTarget, from_millis,
 };
 use crate::{QueueError, QueueFake};
 
@@ -95,6 +97,17 @@ pub trait QueueStore: Send + Sync + 'static {
 
     /// Every failed job, newest first (by `failed_at`, then id).
     fn failed(&self) -> BoxFuture<'_, Result<Vec<FailedJob>, QueueError>>;
+
+    /// How many jobs failed, how many of them at or after `since`, and the
+    /// newest `limit`. By default it reads [`failed`](QueueStore::failed);
+    /// a store that can count without reading every job should.
+    fn failed_summary(
+        &self,
+        since: DateTime<Utc>,
+        limit: usize,
+    ) -> BoxFuture<'_, Result<FailedSummary, QueueError>> {
+        Box::pin(async move { Ok(FailedSummary::of(&self.failed().await?, since, limit)) })
+    }
 
     /// Moves the targeted failed jobs back to their queues at `now`
     /// ([`FailedJob::requeued`]); returns how many (0 for an unknown id).
@@ -216,6 +229,19 @@ impl Store {
             Store::Memory(memory) => Ok(memory.fail(job, worker, error, now)),
             Store::Fake(_) => Ok(false),
             Store::Custom(_, store) => store.fail(job, worker, error, now).await,
+        }
+    }
+
+    pub(crate) async fn failed_summary(
+        &self,
+        since: DateTime<Utc>,
+        limit: usize,
+    ) -> Result<FailedSummary, QueueError> {
+        match self {
+            Store::Database(db) => db.failed_summary(since, limit).await,
+            Store::Memory(memory) => Ok(FailedSummary::of(&memory.failed(), since, limit)),
+            Store::Fake(_) => Ok(FailedSummary::default()),
+            Store::Custom(_, store) => store.failed_summary(since, limit).await,
         }
     }
 

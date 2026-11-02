@@ -434,12 +434,7 @@ impl Fleet {
         let masters = self.masters().await?;
         let workload = self.workload_of(&self.queues(), &masters).await?;
         let week_ago = now - TimeDelta::days(7);
-        let mut failed = self.queue.failed().await?;
-        failed.sort_by(|a, b| b.failed_at.cmp(&a.failed_at).then(b.id.cmp(&a.id)));
-        let failed_past_week = failed
-            .iter()
-            .filter(|job| job.failed_at >= week_ago)
-            .count() as u64;
+        let failed = self.queue.failed_summary(week_ago, RECENT_FAILURES).await?;
         let longest_wait = workload
             .iter()
             .filter(|w| w.oldest_wait_secs > 0)
@@ -463,7 +458,7 @@ impl Fleet {
                 .store
                 .count_jobs((now - TimeDelta::hours(1)).timestamp_millis())
                 .await?,
-            failed_past_week,
+            failed_past_week: failed.since,
             longest_wait,
             supervisors: self.overview_supervisors(&masters, &paused),
             paused: paused.into_iter().collect(),
@@ -482,17 +477,17 @@ impl Fleet {
                 .collect(),
             workload,
             masters: masters.iter().map(|m| m.name.clone()).collect(),
-            failed_total: failed.len() as u64,
+            failed_total: failed.total,
             recent_failures: failed
-                .iter()
-                .take(RECENT_FAILURES)
+                .newest
+                .into_iter()
                 .map(|job| RecentFailure {
-                    id: job.id.clone(),
-                    job_type: job.job_type.clone(),
-                    queue: job.queue.clone(),
-                    attempts: job.attempts,
-                    max_attempts: job.options.max_attempts,
                     error: first_line(&job.error, 200),
+                    id: job.id,
+                    job_type: job.job_type,
+                    queue: job.queue,
+                    attempts: job.attempts,
+                    max_attempts: job.max_attempts,
                     failed_at: job.failed_at,
                 })
                 .collect(),

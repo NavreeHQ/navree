@@ -6,14 +6,16 @@
 //! with `FOR UPDATE SKIP LOCKED` in a short transaction instead); failed
 //! jobs are [`FailedJob`] models, written and read through navree-orm.
 
+use chrono::{DateTime, Utc};
+use navree_contracts::JobOptions;
 use navree_db::{Backend, Db, DbError, Executor, ExecutorExt as _, Row, Statement, Uow, Value};
 use navree_orm::{Model as _, Record};
 
 use super::batches::finish_uow;
-use crate::migration::JOBS_TABLE;
+use crate::migration::{FAILED_JOBS_TABLE, JOBS_TABLE};
 use crate::record::{
-    FailedJob, Membership, NewJob, PendingJob, PendingQuery, PendingState, QueueStatus,
-    ReservedJob, RetryTarget, UNLIMITED_RESERVATION_SECS, from_millis,
+    FailedJob, FailedJobBrief, FailedSummary, Membership, NewJob, PendingJob, PendingQuery,
+    PendingState, QueueStatus, ReservedJob, RetryTarget, UNLIMITED_RESERVATION_SECS, from_millis,
 };
 use crate::{QueueError, STALE_RESERVATION_GRACE_SECS};
 
@@ -188,6 +190,61 @@ impl DatabaseStore {
             .get(&self.db)
             .await?
             .into_models())
+    }
+
+    /// The failed jobs counted by the database, and the newest `limit` read
+    /// without their payloads.
+    pub(crate) async fn failed_summary(
+        &self,
+        since: DateTime<Utc>,
+        limit: usize,
+    ) -> Result<FailedSummary, QueueError> {
+        let counts = self
+            .executor()
+            .fetch_one(&Statement::portable(
+                format!(
+                    "SELECT COUNT(*) AS total, \
+                     COALESCE(SUM(CASE WHEN failed_at >= ? THEN 1 ELSE 0 END), 0) AS since \
+                     FROM {FAILED_JOBS_TABLE}"
+                ),
+                [since.timestamp_millis().into()],
+            ))
+            .await?;
+        let rows = self
+            .executor()
+            .fetch_all(&Statement::portable(
+                format!(
+                    "SELECT id, queue, job_type, options, error, attempts, failed_at \
+                     FROM {FAILED_JOBS_TABLE} ORDER BY failed_at DESC, id DESC LIMIT ?"
+                ),
+                [i64::try_from(limit).unwrap_or(i64::MAX).into()],
+            ))
+            .await?;
+        let mut newest = Vec::with_capacity(rows.len());
+        for row in rows {
+            let options: String = row.get("options")?;
+            let options: JobOptions =
+                serde_json::from_str(&options).map_err(QueueError::Payload)?;
+            let attempts: i64 = row.get("attempts")?;
+            newest.push(FailedJobBrief {
+                id: row.get("id")?,
+                queue: row.get("queue")?,
+                job_type: row.get("job_type")?,
+                error: row.get("error")?,
+                attempts: u32::try_from(attempts).unwrap_or_default(),
+                max_attempts: options.max_attempts,
+                failed_at: from_millis(row.get("failed_at")?),
+            });
+        }
+        let number = |column: &str| -> Result<u64, DbError> {
+            let n: i64 = counts.get(column)?;
+            Ok(u64::try_from(n).unwrap_or_default())
+        };
+        Ok(FailedSummary {
+            total: number("total")?,
+            since: number("since")?,
+            newest,
+        })
     }
 
     /// Moves the targeted failed jobs back to `jobs`, oldest first (one

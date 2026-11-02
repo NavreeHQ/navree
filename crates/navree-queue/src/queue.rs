@@ -15,7 +15,8 @@ use uuid::Uuid;
 use crate::batch::{Batch, BatchRow, JobBatch};
 use crate::operations::RunningJobs;
 use crate::record::{
-    FailedJob, Membership, NewJob, PendingJob, PendingQuery, QueueStatus, RetryTarget,
+    FailedJob, FailedSummary, Membership, NewJob, PendingJob, PendingQuery, QueueStatus,
+    RetryTarget,
 };
 use crate::store::Store;
 use crate::{QueueError, QueueOptions};
@@ -222,6 +223,18 @@ impl Queue {
     /// Every failed job, newest first.
     pub async fn failed(&self) -> Result<Vec<FailedJob>, QueueError> {
         self.inner.store.failed().await
+    }
+
+    /// How many jobs failed, how many of them at or after `since`, and the
+    /// newest `limit`, without their payloads: what to read on a page polled
+    /// every few seconds, where [`failed`](Queue::failed) would read the
+    /// whole table.
+    pub async fn failed_summary(
+        &self,
+        since: chrono::DateTime<chrono::Utc>,
+        limit: usize,
+    ) -> Result<FailedSummary, QueueError> {
+        self.inner.store.failed_summary(since, limit).await
     }
 
     /// Puts failed jobs back on their queues, to run as soon as possible
