@@ -818,6 +818,50 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       await context.close();
     });
 
+    test(`a form being sent ignores a second submit (${engine})`, async () => {
+      for (const how of ["double click", "enter twice", "requestSubmit twice"]) {
+        const name = key("double");
+        let writes = 0;
+        route(`/${name}`, doc(`<form id="f" data-ui-form method="post" action="/${name}-post"><input id="i" name="a" value="1"><button id="go">go</button></form>`));
+        f.routes.set(`/${name}-post`, (req, res) => {
+          writes++;
+          setTimeout(() => f.ops(res, { ops: [{ op: "toast", tone: "info", text: "saved" }] }), 200);
+        });
+        const { context, page } = await fresh(`/${name}`);
+        if (how === "double click") await page.dblclick("#go");
+        else if (how === "enter twice") {
+          await page.focus("#i");
+          await page.keyboard.press("Enter");
+          await sleep(40);
+          await page.keyboard.press("Enter");
+        } else await page.evaluate(() => { const form = document.getElementById("f"); form.requestSubmit(); form.requestSubmit(); });
+        await sleep(450);
+        assert.equal(writes, 1, how);
+        assert.deepEqual(await toasts(page), ["saved"], how);
+        assert.equal(await page.evaluate(() => document.getElementById("f").hasAttribute("data-pending")), false, how);
+        // Afterwards it submits again.
+        await page.click("#go");
+        await sleep(300);
+        assert.equal(writes, 2, how);
+        await context.close();
+      }
+    });
+
+    test(`a form works again after a failed send (${engine})`, async () => {
+      const name = key("retry");
+      route(`/${name}`, doc(`<form id="f" data-ui-form method="post" action="/${name}-post"><button id="go">go</button></form>`));
+      f.routes.set(`/${name}-post`, (req, res) => f.ops(res, { ops: [{ op: "toast", tone: "info", text: "saved" }] }));
+      const { context, page } = await fresh(`/${name}`);
+      await page.route(`**/${name}-post`, (request) => request.abort(), { times: 1 });
+      await page.click("#go");
+      await sleep(200);
+      assert.ok((await toasts(page)).some((text) => text.includes("connection")));
+      await page.click("#go");
+      await sleep(200);
+      assert.ok((await toasts(page)).includes("saved"));
+      await context.close();
+    });
+
     test(`a morph keeps where an open popover was placed (${engine})`, async () => {
       const name = key("placed");
       const body = (n) => `<div id="r" data-ui-src="/${name}-frag"><button id="pop" popovertarget="p">open ${n}</button><div id="p" popover data-ui-place>menu</div></div>`;

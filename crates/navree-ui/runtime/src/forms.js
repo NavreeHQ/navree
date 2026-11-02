@@ -31,14 +31,12 @@ function pending(form, submitter, on) {
   else unset(form, "aria-busy");
 }
 
-/** The running submit of each form. @type {WeakMap<HTMLFormElement, AbortController>} */
-const running = new WeakMap();
+/** Forms on their way: the fetch of a write can't be taken back, so a second submit is ignored. @type {WeakSet<HTMLFormElement>} */
+const sending = new WeakSet();
 
 /** @param {HTMLFormElement} form @param {HTMLElement | null} submitter */
 async function send(form, submitter) {
-  running.get(form)?.abort();
-  const abort = new AbortController();
-  running.set(form, abort);
+  sending.add(form);
   let answered = false;
   try {
     const action = (submitter && attr(submitter, "formaction")) || attr(form, "action") || location.href;
@@ -49,7 +47,7 @@ async function send(form, submitter) {
     const token = cookie("XSRF-TOKEN");
     if (token) headers["x-xsrf-token"] = token;
     /** @type {RequestInit} */
-    const init = { method, headers, signal: abort.signal };
+    const init = { method, headers };
     const url = new URL(action, location.href);
     if (method === "GET") url.search = new URLSearchParams(/** @type {any} */ (data)).toString();
     else init.body = attr(form, "enctype") === "multipart/form-data" ? data : new URLSearchParams(/** @type {any} */ (data));
@@ -62,10 +60,11 @@ async function send(form, submitter) {
     else if (type.startsWith("text/html")) await showPage(response, { url: response.url, keep: response.url === location.href });
     else if (!response.ok) toast("danger", "That didn't work. Try again.");
     startRegions();
-  } catch (error) {
-    if (/** @type {Error} */ (error).name === "AbortError") return;
+  } catch {
     pending(form, submitter, false);
     toast("danger", answered ? "That didn't work. Try again." : "No connection. Try again.");
+  } finally {
+    sending.delete(form);
   }
 }
 
@@ -88,6 +87,10 @@ export function startForms() {
     if (has(form, "data-ui-target")) {
       e.preventDefault();
       filter(form);
+      return;
+    }
+    if (sending.has(form)) {
+      e.preventDefault();
       return;
     }
     const method = ((submitter && attr(submitter, "formmethod")) || attr(form, "method") || "get").toLowerCase();
