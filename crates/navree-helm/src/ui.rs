@@ -1610,6 +1610,29 @@ async fn submission(
     Ok(submission)
 }
 
+/// Deletes what a form that failed stored on its disks: no record points to it,
+/// and the form shown again asks for the file again.
+async fn discard_uploads(cx: &Cx, info: &ResourceInfo, submission: &Submission) {
+    if submission.files.is_empty() {
+        return;
+    }
+    let Some(storage) = cx.app.try_get::<Storage>().await else {
+        return;
+    };
+    for (name, path) in &submission.files {
+        let Some(FieldKind::File { disk }) = info.field(name).map(|f| &f.kind) else {
+            continue;
+        };
+        let deleted = match storage.disk(disk) {
+            Ok(disk) => disk.delete(path).await.map(|_| ()).map_err(|e| e.to_string()),
+            Err(error) => Err(error.to_string()),
+        };
+        if let Err(error) = deleted {
+            tracing::warn!(target: "navree::helm", %error, field = %name, "could not delete an upload of a form that failed");
+        }
+    }
+}
+
 /// The JSON input of a form submission for `fields` (money converted to
 /// minor units, uploads to their paths).
 fn form_input(
@@ -1789,14 +1812,13 @@ async fn create_record(
     let resource = resource(&panel.cx, &slug)?.clone();
     let info = resource.info();
     // Checked before reading the form, so no upload is stored for a user
-    // who may not create (the record's own rules are checked on save).
-    if !panel.cx.can(CREATE, info.subject, None) || info.read_only {
-        return Err(AppError::forbidden());
-    }
+    // who may not create here (the record's own rules are checked on save).
+    resource.may_create(&panel.cx).await?;
     let submission = submission(&panel.cx, info, request, true).await?;
     panel.cx.tz_offset = submission.tz_offset();
     let frame = Frame::new(&panel, &headers);
     if !submission.upload_errors.is_empty() {
+        discard_uploads(frame.cx, info, &submission).await;
         let error = AppError::validation(submission.upload_errors.clone());
         return form_page(
             &frame,
@@ -1827,6 +1849,7 @@ async fn create_record(
             ))
         }
         Err(error) if error.status == StatusCode::BAD_REQUEST => {
+            discard_uploads(frame.cx, info, &submission).await;
             form_page(
                 &frame,
                 resource.as_ref(),
@@ -1837,7 +1860,10 @@ async fn create_record(
             )
             .await
         }
-        Err(error) => Err(error),
+        Err(error) => {
+            discard_uploads(frame.cx, info, &submission).await;
+            Err(error)
+        }
     }
 }
 
@@ -1923,6 +1949,7 @@ async fn update_record(
     panel.cx.tz_offset = submission.tz_offset();
     let frame = Frame::new(&panel, &headers);
     if !submission.upload_errors.is_empty() {
+        discard_uploads(frame.cx, info, &submission).await;
         let error = AppError::validation(submission.upload_errors.clone());
         return form_page(
             &frame,
@@ -1948,6 +1975,7 @@ async fn update_record(
             &frame.host,
         )),
         Err(error) if error.status == StatusCode::BAD_REQUEST => {
+            discard_uploads(frame.cx, info, &submission).await;
             form_page(
                 &frame,
                 resource.as_ref(),
@@ -1958,7 +1986,10 @@ async fn update_record(
             )
             .await
         }
-        Err(error) => Err(error),
+        Err(error) => {
+            discard_uploads(frame.cx, info, &submission).await;
+            Err(error)
+        }
     }
 }
 

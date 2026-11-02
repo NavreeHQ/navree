@@ -196,6 +196,10 @@ pub(crate) trait ErasedResource: Send + Sync + 'static {
         id: &'a str,
     ) -> BoxFuture<'a, Result<Option<RawRecord>, AppError>>;
 
+    /// An error if the user can't create records here, whatever a form holds:
+    /// asked before a form's uploads are stored.
+    fn may_create<'a>(&'a self, cx: &'a Cx) -> BoxFuture<'a, Result<(), AppError>>;
+
     fn create<'a>(
         &'a self,
         cx: &'a Cx,
@@ -1718,6 +1722,22 @@ impl<R: Resource> ErasedResource for Handle<R> {
             }
             self.in_a_workspace(cx)?;
             Ok(self.load(cx, id, false).await?.map(|r| self.raw(cx, &r)))
+        })
+    }
+
+    fn may_create<'a>(&'a self, cx: &'a Cx) -> BoxFuture<'a, Result<(), AppError>> {
+        Box::pin(async move {
+            self.writable()?;
+            if !cx.can(CREATE, <R::Model as Subject>::SUBJECT, None) {
+                return Err(AppError::forbidden());
+            }
+            self.in_a_workspace(cx)?;
+            // A form across workspaces names its own, which only it can say.
+            if self.info.workspaces == Some(Workspaces::Current) {
+                let prefix = <R::Model as Subject>::PERMISSION_PREFIX;
+                cx.role_writes(None, prefix, CREATE).await?;
+            }
+            Ok(())
         })
     }
 
