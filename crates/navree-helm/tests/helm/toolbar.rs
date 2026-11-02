@@ -775,3 +775,58 @@ async fn under_its_cap_a_list_is_counted_exactly() {
     );
     assert!(html.contains("No capped deals yet"), "{html}");
 }
+
+/// A resource whose query fails when it runs.
+struct BrokenCount;
+
+impl Injectable for BrokenCount {
+    fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async { Ok(BrokenCount) })
+    }
+}
+
+impl Resource for BrokenCount {
+    type Model = Deal;
+
+    const LABEL: &'static str = "Broken";
+    const SLUG: &'static str = "a-broken";
+    const TITLE: &'static str = "title";
+    const GROUP: &'static str = "AAA";
+    const ORDER: i32 = -100;
+
+    fn fields(&self) -> Vec<Field> {
+        vec![Field::text("title")]
+    }
+
+    fn query(&self, query: Builder<Deal>) -> Builder<Deal> {
+        query.where_(navree_orm::Filter::raw(
+            "no_such_column = 1",
+            Vec::<navree_orm::Value>::new(),
+        ))
+    }
+}
+
+struct BrokenModule;
+
+impl Module for BrokenModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.resource::<BrokenCount>();
+    }
+}
+
+#[tokio::test]
+async fn one_failing_count_leaves_the_others_in_the_menu() {
+    let app = builder().module(BrokenModule).build().await;
+    deal(&app, DealSeed::default()).await;
+    company(&app, "One", None).await;
+    let (_, manager) = user(&app, "manager").await;
+    let body = manager
+        .get("/admin/counts")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    assert!(body["counts"].get("a-broken").is_none(), "{body}");
+    assert_eq!(body["counts"]["deals"]["value"], 1, "{body}");
+    assert_eq!(body["counts"]["companies"]["value"], 1, "{body}");
+}

@@ -4,7 +4,8 @@
 //! the numbers once the page is up, so a list page pays for nothing it does
 //! not show. Each count is read for the signed-in user and the workspace they
 //! work in (it is what their list would show), cached for `helm.metrics_cache_secs`
-//! under the user, their access and the workspace, and capped: past
+//! under the user, their access, the workspace and the credential's limit to
+//! one, and capped: past
 //! [`CAP`] rows it says `1,000+`, so a table of millions costs what one of a
 //! thousand does. A resource whose count is not cheap turns it off
 //! (`SIDEBAR_COUNT`).
@@ -12,10 +13,12 @@
 use std::sync::Arc;
 
 use navree_access::READ;
+use navree_db::{Backend, Executor};
 use navree_http::{AppError, Json};
 use serde_json::{Map, Value, json};
 
 use crate::cx::Cx;
+use crate::handle::ErasedResource;
 use crate::money;
 use crate::panel::Panel;
 
@@ -31,14 +34,32 @@ pub(crate) fn text(rows: u64) -> String {
     }
 }
 
-/// The cache key of a count: whose it is, what they may do, where, and of what.
+/// The cache key of a count: whose it is, what they may do, where, to what their
+/// credential holds them (a resource across workspaces keeps to it), and of what.
 fn key(cx: &Cx, slug: &str) -> String {
     format!(
-        "count|{}|{}|{}|{slug}",
+        "count|{}|{}|{}|{}|{slug}",
         cx.user_id,
         cx.access.version,
-        cx.uow.workspace().unwrap_or_default()
+        cx.uow.workspace().unwrap_or_default(),
+        cx.pin.unwrap_or_default()
     )
+}
+
+/// How many rows of `resource` the user may read. On PostgreSQL a failed statement
+/// ends the transaction it is in, so each count has a savepoint of its own: one
+/// that fails doesn't take the others with it.
+async fn counted(cx: &Cx, resource: &dyn ErasedResource) -> Result<u64, AppError> {
+    if Executor::backend(&cx.uow) != Backend::Postgres {
+        return resource.count(cx, CAP).await;
+    }
+    let savepoint = cx.uow.savepoint().await.map_err(AppError::internal)?;
+    let rows = resource.count(cx, CAP).await;
+    match &rows {
+        Ok(_) => savepoint.commit().await.map_err(AppError::internal)?,
+        Err(_) => savepoint.rollback().await.map_err(AppError::internal)?,
+    }
+    rows
 }
 
 /// `GET {path}/counts`: `{"counts": {"deals": {"value": 30, "text": "30"}}}`
@@ -56,7 +77,7 @@ pub(crate) async fn counts(Panel { cx, .. }: Panel) -> Result<Json<Value>, AppEr
             Some(rows) => *rows,
             // A resource of workspaces has no count outside one; one that fails
             // has none to show, and the menu goes without.
-            None => match resource.count(&cx, CAP).await {
+            None => match counted(&cx, resource.as_ref()).await {
                 Ok(rows) => {
                     if let Some(cache) = &cx.core.counts {
                         cache.insert(key, Arc::new(rows));

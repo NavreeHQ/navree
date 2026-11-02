@@ -1996,10 +1996,11 @@ impl<R: Resource> ErasedResource for Handle<R> {
             }
             self.in_a_workspace(cx)?;
             let key = format!(
-                "{}|{}|{}|{}|{}|{}",
+                "{}|{}|{}|{}|{}|{}|{}",
                 cx.user_id,
                 cx.access.version,
                 cx.uow.workspace().unwrap_or_default(),
+                cx.pin.unwrap_or_default(),
                 self.info.slug,
                 metric.slug,
                 if metric.over.is_some() {
