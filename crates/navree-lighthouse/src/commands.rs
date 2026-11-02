@@ -34,7 +34,7 @@ async fn prune(ctx: AppContext, args: Vec<String>) -> Result<String, BoxError> {
     let store = lighthouse
         .store()
         .ok_or("lighthouse:prune: lighthouse.store is off, so there is nothing to prune")?;
-    let days = days.unwrap_or(lighthouse.options().retention_days);
+    let days = days.unwrap_or_else(|| lighthouse.tuning().retention_days());
     let summary = store.prune(days).await?;
     Ok(prune_line(&summary, days))
 }

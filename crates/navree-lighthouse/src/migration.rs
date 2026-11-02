@@ -43,6 +43,10 @@ pub(crate) fn migrations() -> MigrationSet {
             "m20261027_000002_convert_lighthouse_events_to_hypertables",
             ConvertEventsToHypertables,
         ))
+        .migration(SchemaMigration::new(
+            "m20261102_000003_create_lighthouse_releases_and_settings",
+            CreateReleasesAndSettings,
+        ))
 }
 
 /// How Lighthouse's events are partitioned on TimescaleDB, a day per chunk
@@ -113,6 +117,22 @@ impl Migration for ConvertEventsToHypertables {
     }
 
     async fn down(&self, _schema: &Schema<'_>) -> SchemaResult {
+        Ok(())
+    }
+}
+
+/// Creates `lighthouse_releases` and `lighthouse_settings`, and adds the
+/// release a regression happened in to the issues, where they are missing.
+struct CreateReleasesAndSettings;
+
+impl Migration for CreateReleasesAndSettings {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        create_config_tables(schema).await
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("lighthouse_settings").await?;
+        schema.drop_if_exists("lighthouse_releases").await?;
         Ok(())
     }
 }
@@ -219,6 +239,7 @@ pub(crate) async fn create_tables(schema: &Schema<'_>) -> SchemaResult {
                 t.date_time_tz("ignored_until").nullable();
                 t.big_integer("ignore_remaining").nullable();
                 t.timestamp_tz("regressed_at").nullable();
+                varchar(t, "regressed_in_release", d).nullable();
                 t.text("comment").nullable();
                 t.timestamp_tz("created_at");
                 t.timestamp_tz("updated_at");
@@ -335,5 +356,98 @@ pub(crate) async fn create_tables(schema: &Schema<'_>) -> SchemaResult {
             })
             .await?;
     }
+    create_config_tables(schema).await
+}
+
+/// Creates the tables of releases and settings, and the issues' column for
+/// the release of a regression, where they are missing.
+pub(crate) async fn create_config_tables(schema: &Schema<'_>) -> SchemaResult {
+    let d = schema.target().await?.dialect();
+    if schema.has_table("lighthouse_issues").await?
+        && !schema
+            .has_column("lighthouse_issues", "regressed_in_release")
+            .await?
+    {
+        schema
+            .table("lighthouse_issues", |t| {
+                varchar(t, "regressed_in_release", d).nullable();
+            })
+            .await?;
+    }
+    if !schema.has_table("lighthouse_releases").await? {
+        schema
+            .create("lighthouse_releases", |t| {
+                uuid(t, "id", d).primary();
+                varchar(t, "name", d);
+                varchar(t, "environment", d);
+                varchar(t, "commit_sha", d).nullable();
+                varchar(t, "url", d).nullable();
+                t.text("notes").nullable();
+                varchar(t, "source", d);
+                t.timestamp_tz("deployed_at");
+                t.timestamp_tz("first_seen");
+                t.timestamp_tz("last_seen");
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+                t.unique(["environment", "name"])
+                    .name("lighthouse_releases_environment_name_unique");
+                t.index(["deployed_at"])
+                    .name("lighthouse_releases_deployed_at_index");
+            })
+            .await?;
+    }
+    if !schema.has_table("lighthouse_settings").await? {
+        schema
+            .create("lighthouse_settings", |t| {
+                uuid(t, "id", d).primary();
+                varchar(t, "setting_key", d).unique();
+                t.text("value");
+                varchar(t, "updated_by", d).nullable();
+                t.timestamp_tz("updated_at");
+            })
+            .await?;
+    }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_db::{Db, DbOptions};
+
+    use super::*;
+
+    /// A database an earlier build of Lighthouse created: issues without the
+    /// release of a regression, and no tables of releases or settings.
+    #[tokio::test]
+    async fn an_earlier_database_gains_the_release_tables_and_the_issue_column() {
+        let (url, _guard) = navree_testing::temp_sqlite_url();
+        let db = Db::connect(&DbOptions {
+            url,
+            ..DbOptions::default()
+        })
+        .await
+        .unwrap();
+        let schema = Schema::new(&db);
+        schema
+            .create("lighthouse_issues", |t| {
+                t.string("id").primary();
+                t.string("title");
+            })
+            .await
+            .unwrap();
+        assert!(!schema.has_table("lighthouse_releases").await.unwrap());
+
+        create_config_tables(&schema).await.unwrap();
+        assert!(schema.has_table("lighthouse_releases").await.unwrap());
+        assert!(schema.has_table("lighthouse_settings").await.unwrap());
+        assert!(
+            schema
+                .has_column("lighthouse_issues", "regressed_in_release")
+                .await
+                .unwrap()
+        );
+
+        // Running it again changes nothing.
+        create_config_tables(&schema).await.unwrap();
+    }
 }

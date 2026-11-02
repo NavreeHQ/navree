@@ -22,6 +22,7 @@ use crate::engine::{Batch, BatchWriter, EngineHandle, INTERNAL_UNIT, Input, Labe
 use crate::fake::FakeState;
 use crate::options::LighthouseOptions;
 use crate::report::{AsError, Report};
+use crate::settings::{RELOAD_SECONDS, Tuning};
 use crate::store::{LighthouseError, LighthouseStore};
 
 tokio::task_local! {
@@ -60,6 +61,7 @@ pub(crate) fn internal<F: Future>(future: F) -> impl Future<Output = F::Output> 
 /// ```
 pub struct Lighthouse {
     options: Arc<LighthouseOptions>,
+    tuning: Arc<Tuning>,
     store: Option<LighthouseStore>,
     engine: Option<EngineHandle>,
     alerter: Option<Arc<Alerter>>,
@@ -74,6 +76,8 @@ pub struct Lighthouse {
 struct Runtime {
     stop: Option<oneshot::Sender<()>>,
     task: Option<JoinHandle<()>>,
+    /// Reads the stored settings every [`RELOAD_SECONDS`].
+    settings: Option<JoinHandle<()>>,
 }
 
 impl std::fmt::Debug for Lighthouse {
@@ -90,12 +94,14 @@ impl Lighthouse {
     /// A recording Lighthouse (built by the module).
     pub(crate) fn live(
         options: Arc<LighthouseOptions>,
+        tuning: Arc<Tuning>,
         store: Option<LighthouseStore>,
         engine: Option<EngineHandle>,
         alerter: Option<Arc<Alerter>>,
     ) -> Lighthouse {
         Lighthouse {
             options,
+            tuning,
             store,
             engine,
             alerter,
@@ -108,8 +114,10 @@ impl Lighthouse {
 
     /// A Lighthouse that records into a fake.
     pub(crate) fn fake(state: Arc<FakeState>) -> Lighthouse {
+        let options = Arc::new(LighthouseOptions::default());
         Lighthouse {
-            options: Arc::new(LighthouseOptions::default()),
+            tuning: Arc::new(Tuning::new(&options)),
+            options,
             store: None,
             engine: None,
             alerter: None,
@@ -123,6 +131,51 @@ impl Lighthouse {
     /// The options.
     pub fn options(&self) -> &LighthouseOptions {
         &self.options
+    }
+
+    /// The alerter (`None` with `lighthouse.store = "off"` and in a fake).
+    pub(crate) fn alerter(&self) -> Option<&Arc<Alerter>> {
+        self.alerter.as_ref()
+    }
+
+    /// The thresholds, sample rates and alert throttling in use.
+    pub(crate) fn tuning(&self) -> &Arc<Tuning> {
+        &self.tuning
+    }
+
+    /// Reads the settings changed from the dashboard and makes them the
+    /// ones in use by this process. The module does it at boot and every
+    /// fifteen seconds; a change made through this process's own dashboard
+    /// takes effect at once.
+    pub async fn reload_settings(&self) -> Result<(), LighthouseError> {
+        match &self.store {
+            Some(store) => internal(store.reload_settings(&self.tuning)).await,
+            None => Ok(()),
+        }
+    }
+
+    /// Reports the release this app is at: when it was deployed, the
+    /// commit, a link and notes. The dashboard lists it under Releases,
+    /// shows it in the header and marks its deploy on the charts. A deploy
+    /// script can report the same through the JSON API
+    /// (`POST {path}/api/releases`). Reporting a release again updates it.
+    ///
+    /// The release this process runs is reported by itself when it boots,
+    /// with the time it first saw it as the deploy time: report it too
+    /// when you know the real deploy time.
+    pub async fn report_release(
+        &self,
+        release: crate::release::ReleaseReport,
+    ) -> Result<crate::release::ReleaseSummary, LighthouseError> {
+        match &self.store {
+            Some(store) => {
+                let environment = self.options.environment_label();
+                internal(store.report_release(release, &environment, "api")).await
+            }
+            None => Err(LighthouseError::Other(
+                "releases need lighthouse.store = \"database\"".to_owned(),
+            )),
+        }
     }
 
     /// What was recorded (`None` with `lighthouse.store = "off"` and in a
@@ -304,6 +357,21 @@ impl Lighthouse {
         ) else {
             return Ok(());
         };
+        if self.started.load(Ordering::Acquire) {
+            return Ok(());
+        }
+        // The settings changed from the dashboard, and the release this
+        // process runs.
+        let release = store.release().to_owned();
+        let environment = self.options.environment_label();
+        let boot = internal(async {
+            store.reload_settings(&self.tuning).await?;
+            store.note_release(&release, &environment).await
+        })
+        .await;
+        if let Err(error) = boot {
+            tracing::warn!(target: "navree::lighthouse", %error, "could not read the stored settings or note the release");
+        }
         let mut runtime = self
             .runtime
             .lock()
@@ -311,6 +379,19 @@ impl Lighthouse {
         if runtime.task.is_some() {
             return Ok(());
         }
+        let tuning = self.tuning.clone();
+        let settings_store = store.clone();
+        runtime.settings = Some(tokio::spawn(internal(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(RELOAD_SECONDS));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            tick.tick().await;
+            loop {
+                tick.tick().await;
+                if let Err(error) = settings_store.reload_settings(&tuning).await {
+                    tracing::warn!(target: "navree::lighthouse", %error, "could not read the stored settings");
+                }
+            }
+        })));
         let writer: Arc<dyn BatchWriter> = self
             .writer
             .get_or_init(|| Arc::new(StoreWriter { store, alerter }))
@@ -328,7 +409,12 @@ impl Lighthouse {
     /// Writes what is buffered and stops the writer (at shutdown).
     pub(crate) async fn stop(&self) {
         let (stop, task) = match self.runtime.lock() {
-            Ok(mut runtime) => (runtime.stop.take(), runtime.task.take()),
+            Ok(mut runtime) => {
+                if let Some(settings) = runtime.settings.take() {
+                    settings.abort();
+                }
+                (runtime.stop.take(), runtime.task.take())
+            }
             Err(_) => return,
         };
         if let Some(stop) = stop {

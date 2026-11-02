@@ -11,7 +11,11 @@
 //! - `lighthouse_aggregates`: per-minute and per-hour counts and latency
 //!   histograms, one row per bucket, kind, key and process;
 //! - `lighthouse_alerts`: every alert, per channel, and whether it was
-//!   delivered.
+//!   delivered;
+//! - `lighthouse_releases`: the releases seen, reported by a process at
+//!   boot or by a deploy, with when each was deployed;
+//! - `lighthouse_settings`: the settings changed from the dashboard, one
+//!   row per key (the configuration holds the default).
 
 /// `lighthouse_issues`.
 pub mod issue {
@@ -66,6 +70,8 @@ pub mod issue {
         pub ignore_remaining: Option<i64>,
         /// When it last came back after being resolved.
         pub regressed_at: Option<DateTime<Utc>>,
+        /// The release it last came back in.
+        pub regressed_in_release: Option<String>,
         /// The comment of the last status change.
         pub comment: Option<String>,
         /// When the row was created.
@@ -262,5 +268,64 @@ pub mod alert {
         pub created_at: DateTime<Utc>,
         /// When it was delivered.
         pub delivered_at: Option<DateTime<Utc>>,
+    }
+}
+
+/// `lighthouse_releases`.
+pub mod release {
+    use chrono::{DateTime, Utc};
+    use uuid::Uuid;
+
+    /// A release Lighthouse has seen.
+    #[derive(Clone, Debug, PartialEq, navree_orm::Model, serde::Serialize)]
+    #[model(table = "lighthouse_releases")]
+    pub struct Model {
+        /// The id (UUID v7).
+        pub id: Uuid,
+        /// The release label (`3f2a9c1`, `20261026-091512-3f2a9c1`).
+        pub name: String,
+        /// The environment it runs in; the pair is unique.
+        pub environment: String,
+        /// The commit it was built from, when reported.
+        pub commit_sha: Option<String>,
+        /// A link to the release (the changes, the deploy), when reported.
+        pub url: Option<String>,
+        /// Notes reported with it.
+        pub notes: Option<String>,
+        /// `process` (a process booted with this label) or `api` (reported
+        /// by a deploy, or by the app's code).
+        pub source: String,
+        /// When it was deployed: as reported, else when it was first seen.
+        pub deployed_at: DateTime<Utc>,
+        /// When a process first reported it.
+        pub first_seen: DateTime<Utc>,
+        /// When a process last reported it.
+        pub last_seen: DateTime<Utc>,
+        /// When the row was created.
+        pub created_at: DateTime<Utc>,
+        /// When the row last changed.
+        pub updated_at: DateTime<Utc>,
+    }
+}
+
+/// `lighthouse_settings`.
+pub mod setting {
+    use chrono::{DateTime, Utc};
+    use uuid::Uuid;
+
+    /// One setting changed from the dashboard.
+    #[derive(Clone, Debug, PartialEq, navree_orm::Model, serde::Serialize)]
+    #[model(table = "lighthouse_settings")]
+    pub struct Model {
+        /// The id (UUID v7).
+        pub id: Uuid,
+        /// The setting (`thresholds.slow_query_ms`), unique.
+        pub setting_key: String,
+        /// Its value, as JSON.
+        pub value: String,
+        /// The user who changed it.
+        pub updated_by: Option<String>,
+        /// When it changed.
+        pub updated_at: DateTime<Utc>,
     }
 }

@@ -345,7 +345,10 @@ async fn the_alert_email_is_a_styled_page_with_a_button_and_nothing_external() {
     let html = sent[0].html.as_deref().unwrap();
     assert!(html.starts_with("<!doctype html>"), "{html}");
     assert!(html.contains("<meta name=\"viewport\""), "{html}");
-    assert!(html.contains("style=\""), "inline styles, as mail clients need");
+    assert!(
+        html.contains("style=\""),
+        "inline styles, as mail clients need"
+    );
     assert!(
         html.contains("href=\"https://api.acme.test/_lighthouse/issues/"),
         "the link is a button to the issue: {html}"
@@ -357,7 +360,13 @@ async fn the_alert_email_is_a_styled_page_with_a_button_and_nothing_external() {
         assert!(!html.contains(external), "{external} in {html}");
     }
     // Text for clients that show no HTML stays complete.
-    assert!(sent[0].text.as_deref().unwrap().contains("Open in Lighthouse: https://"));
+    assert!(
+        sent[0]
+            .text
+            .as_deref()
+            .unwrap()
+            .contains("Open in Lighthouse: https://")
+    );
     app.shutdown().await.unwrap();
 }
 

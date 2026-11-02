@@ -20,6 +20,7 @@ use crate::histogram::Histogram;
 use crate::migration::{AGGREGATES_TABLE, OCCURRENCES_TABLE, SAMPLES_TABLE};
 use crate::model::{Issue, IssueKind, IssueStatus, Level};
 use crate::options::{LighthouseOptions, Period};
+use crate::settings::Tuning;
 
 /// An error reading or changing Lighthouse's data.
 #[derive(Debug, thiserror::Error)]
@@ -44,9 +45,10 @@ pub enum LighthouseError {
 /// its JSON API read through it.
 #[derive(Clone)]
 pub struct LighthouseStore {
-    db: Db,
+    pub(crate) db: Db,
     base_url: Arc<str>,
-    options: Arc<LighthouseOptions>,
+    pub(crate) options: Arc<LighthouseOptions>,
+    pub(crate) tuning: Arc<Tuning>,
     release: Arc<str>,
 }
 
@@ -309,6 +311,14 @@ pub struct Overview {
     /// Details (traces and occurrences) every process dropped in the period
     /// because the write queue was full.
     pub sampled_out: i64,
+    /// The median latency, in milliseconds.
+    pub p50_ms: f64,
+    /// Issues whose first occurrence was in the period.
+    pub new_issues: u64,
+    /// One value per bucket of the timeline, for the sparklines.
+    pub series: crate::overview::OverviewSeries,
+    /// The deploys in the period, oldest first.
+    pub releases: Vec<crate::release::ReleaseMarker>,
 }
 
 /// A route's figures.
@@ -539,12 +549,14 @@ impl LighthouseStore {
         db: Db,
         base_url: String,
         options: Arc<LighthouseOptions>,
+        tuning: Arc<Tuning>,
         release: String,
     ) -> LighthouseStore {
         LighthouseStore {
             db,
             base_url: base_url.trim_end_matches('/').into(),
             options,
+            tuning,
             release: release.into(),
         }
     }
@@ -625,7 +637,10 @@ impl LighthouseStore {
         };
 
         // Spikes: open issues with enough occurrences in the window.
-        let spike = self.options.alerts.spike;
+        let spike = crate::options::SpikeOptions {
+            occurrences: self.tuning.spike_occurrences(),
+            minutes: self.tuning.spike_minutes(),
+        };
         for row in touched {
             if row.status != IssueStatus::Open.as_str()
                 || Level::parse(&row.level).unwrap_or_default() <= Level::Info
@@ -1171,6 +1186,7 @@ impl LighthouseStore {
             }
         }
         let feed = self.feed(20).await?;
+        let extras = self.overview_extras(period, &timeline).await?;
         Ok(Overview {
             period,
             requests: all.count,
@@ -1184,6 +1200,10 @@ impl LighthouseStore {
             feed,
             dropped: 0,
             sampled_out,
+            p50_ms: extras.p50_ms,
+            new_issues: extras.new_issues,
+            series: extras.series,
+            releases: extras.releases,
         })
     }
 
@@ -1548,6 +1568,7 @@ async fn write_rows(
                             ignored_until: None,
                             ignore_remaining: None,
                             regressed_at: None,
+                            regressed_in_release: None,
                             comment: None,
                             created_at: now,
                             updated_at: now,
@@ -1722,6 +1743,7 @@ async fn count_existing(
                 let mut sets = reopen_columns();
                 if regression {
                     sets.push(issue::Model::REGRESSED_AT.set(Some(now)));
+                    sets.push(issue::Model::REGRESSED_IN_RELEASE.set(Some(labels.release.clone())));
                 }
                 sets
             }
@@ -1750,6 +1772,7 @@ async fn count_existing(
                     current.ignore_remaining = None;
                     if regressed {
                         current.regressed_at = Some(now);
+                        current.regressed_in_release = Some(labels.release.clone());
                     }
                 }
                 StatusChange::IgnoreRemaining(left) => {
@@ -1861,7 +1884,7 @@ fn route_stats(endpoint: String, values: &Values, period: Period) -> RouteStats 
 }
 
 /// The first bucket of `period`.
-fn period_start(now: DateTime<Utc>, period: Period) -> DateTime<Utc> {
+pub(crate) fn period_start(now: DateTime<Utc>, period: Period) -> DateTime<Utc> {
     let resolution = period.resolution();
     let buckets = period.minutes() * 60 / i64::from(resolution);
     bucket_start(now, resolution) - TimeDelta::seconds(i64::from(resolution) * (buckets - 1))
@@ -2058,6 +2081,7 @@ mod tests {
             ignored_until: None,
             ignore_remaining: remaining,
             regressed_at: None,
+            regressed_in_release: None,
             comment: None,
             created_at: at,
             updated_at: at,

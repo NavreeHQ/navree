@@ -5,7 +5,7 @@
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use chrono::{TimeDelta, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use navree_contracts::Dispatcher;
 use navree_http_client::{HttpClient, HttpClientOptions};
 use navree_kernel::{AppContext, BoxError};
@@ -18,6 +18,7 @@ use crate::alert::{
 };
 use crate::model::{Issue, IssueKind, IssueStatus, Level};
 use crate::options::{DEFAULT_ALERT_KINDS, LighthouseOptions};
+use crate::settings::{ChannelState, Tuning};
 use crate::store::{Candidate, LighthouseError, LighthouseStore};
 
 /// How long one delivery may take when it is sent at once.
@@ -27,6 +28,7 @@ const SEND_TIMEOUT: Duration = Duration::from_secs(30);
 pub(crate) struct Alerter {
     store: LighthouseStore,
     options: Arc<LighthouseOptions>,
+    tuning: Arc<Tuning>,
     environment: String,
     release: String,
     channels: OnceLock<Vec<Arc<dyn AlertChannel>>>,
@@ -46,12 +48,14 @@ impl Alerter {
     pub(crate) fn new(
         store: LighthouseStore,
         options: Arc<LighthouseOptions>,
+        tuning: Arc<Tuning>,
         environment: String,
         release: String,
     ) -> Alerter {
         Alerter {
             store,
             options,
+            tuning,
             environment,
             release,
             channels: OnceLock::new(),
@@ -149,7 +153,7 @@ impl Alerter {
         if alert.issue.status == IssueStatus::Ignored || alert.issue.level == Level::Info {
             return Ok(0);
         }
-        let cooldown = TimeDelta::minutes(i64::from(self.options.alerts.cooldown_minutes));
+        let cooldown = TimeDelta::minutes(i64::from(self.tuning.cooldown_minutes()));
         let subject = alert.issue.id.to_string();
         if self
             .store
@@ -159,8 +163,9 @@ impl Alerter {
             return Ok(0);
         }
         let mut sent = 0;
+        let now = Utc::now();
         for channel in self.channels() {
-            if !channel.wants(&alert) {
+            if !self.wants(channel.as_ref(), &alert, now) {
                 continue;
             }
             let id = Uuid::now_v7();
@@ -178,10 +183,111 @@ impl Alerter {
             }
             let result = send(channel.as_ref(), &alert).await;
             self.store
-                .record_delivery(id, result.map_err(|e| e.to_string()), 1, true)
+                .record_delivery(id, result.map_err(|e| self.scrub(&e.to_string())), 1, true)
                 .await?;
         }
         Ok(sent)
+    }
+
+    /// Whether `channel` gets `alert` at `now`: not while it is muted, and
+    /// for the kinds the dashboard set for it, else the kinds its
+    /// configuration asks for.
+    fn wants(&self, channel: &dyn AlertChannel, alert: &Alert, now: DateTime<Utc>) -> bool {
+        let state = self.tuning.channel(channel.name());
+        if state.muted_at(now) {
+            return false;
+        }
+        match &state.on {
+            Some(kinds) => kinds.contains(&alert.kind),
+            None => channel.wants(alert),
+        }
+    }
+
+    /// The kinds `channel`'s configuration asks for.
+    fn configured_kinds(&self, channel: &dyn AlertChannel) -> Vec<AlertKind> {
+        let probe = self.probe_issue();
+        AlertKind::ALL
+            .into_iter()
+            .filter(|kind| channel.wants(&self.alert(*kind, probe.clone(), true)))
+            .collect()
+    }
+
+    /// The channels as the dashboard shows them.
+    pub(crate) fn channel_infos(&self) -> Vec<ChannelInfo> {
+        let now = Utc::now();
+        self.channels()
+            .iter()
+            .map(|channel| {
+                let name = channel.name().to_owned();
+                let state = self.tuning.channel(&name);
+                let configured_kinds = self.configured_kinds(channel.as_ref());
+                ChannelInfo {
+                    detail: self.detail_of(&name),
+                    kinds: state.on.clone().unwrap_or_else(|| configured_kinds.clone()),
+                    configured_kinds,
+                    muted: state.muted_at(now),
+                    state,
+                    name,
+                }
+            })
+            .collect()
+    }
+
+    /// What to show of a channel's destination: never a secret. Slack's
+    /// webhook URL is the secret, so nothing of it shows.
+    fn detail_of(&self, name: &str) -> String {
+        let alerts = &self.options.alerts;
+        match name {
+            "email" => {
+                let n = alerts.email.to.len();
+                format!("{n} recipient{}", if n == 1 { "" } else { "s" })
+            }
+            "slack" => "a Slack incoming webhook".to_owned(),
+            "webhook" => alerts
+                .webhook
+                .url
+                .as_deref()
+                .map_or_else(String::new, |url| {
+                    format!("{}, signed", crate::normalize::url_host(url))
+                }),
+            _ => "registered in code".to_owned(),
+        }
+    }
+
+    /// The issue test alerts and kind probes are about.
+    fn probe_issue(&self) -> Issue {
+        let now = Utc::now();
+        Issue {
+            id: Uuid::nil(),
+            title: "Test alert from Lighthouse".to_owned(),
+            kind: IssueKind::Exception,
+            level: Level::Error,
+            status: IssueStatus::Open,
+            culprit: "lighthouse:test-alerts".to_owned(),
+            count: 1,
+            users: 0,
+            first_seen: now,
+            last_seen: now,
+            url: self.store.base_url().to_owned(),
+        }
+    }
+
+    /// `text` with every secret of the channels' configuration replaced:
+    /// a delivery error can echo the URL it called, and Slack's webhook
+    /// URL is a secret.
+    pub(crate) fn scrub(&self, text: &str) -> String {
+        let alerts = &self.options.alerts;
+        let mut secrets: Vec<&str> = Vec::new();
+        if let Some(url) = &alerts.slack.webhook_url {
+            secrets.push(url.expose());
+        }
+        if let Some(secret) = &alerts.webhook.secret {
+            secrets.push(secret.expose());
+        }
+        if let Some(url) = &alerts.webhook.url {
+            secrets.push(url);
+        }
+        scrub_secrets(text, &secrets)
     }
 
     /// Delivers the stored alert `id` (the `lighthouse.alert` job): attempt
@@ -211,7 +317,10 @@ impl Alerter {
         self.store
             .record_delivery(
                 id,
-                result.as_ref().map(|_| ()).map_err(ToString::to_string),
+                result
+                    .as_ref()
+                    .map(|_| ())
+                    .map_err(|error| self.scrub(&error.to_string())),
                 i32::try_from(attempt).unwrap_or(i32::MAX),
                 last,
             )
@@ -243,32 +352,45 @@ impl Alerter {
                 }
             )));
         }
-        let now = Utc::now();
-        let issue = Issue {
-            id: Uuid::nil(),
-            title: "Test alert from Lighthouse".to_owned(),
-            kind: IssueKind::Exception,
-            level: Level::Error,
-            status: IssueStatus::Open,
-            culprit: "lighthouse:test-alerts".to_owned(),
-            count: 1,
-            users: 0,
-            first_seen: now,
-            last_seen: now,
-            url: self.store.base_url().to_owned(),
-        };
-        let alert = self.alert(AlertKind::NewIssue, issue, true);
+        let alert = self.alert(AlertKind::NewIssue, self.probe_issue(), true);
         let mut results = Vec::new();
         for channel in channels {
             results.push(ChannelResult {
                 channel: channel.name().to_owned(),
                 result: send(channel.as_ref(), &alert)
                     .await
-                    .map_err(|error| error.to_string()),
+                    .map_err(|error| self.scrub(&error.to_string())),
             });
         }
         Ok(results)
     }
+}
+
+/// A channel as the dashboard shows it.
+#[derive(Clone, Debug)]
+pub(crate) struct ChannelInfo {
+    pub(crate) name: String,
+    /// Where it goes, without any secret.
+    pub(crate) detail: String,
+    /// The kinds its configuration asks for.
+    pub(crate) configured_kinds: Vec<AlertKind>,
+    /// The kinds it gets now.
+    pub(crate) kinds: Vec<AlertKind>,
+    /// Whether it is muted now.
+    pub(crate) muted: bool,
+    /// What the dashboard set for it.
+    pub(crate) state: ChannelState,
+}
+
+/// `text` without any of `secrets` (empty ones are skipped).
+pub(crate) fn scrub_secrets(text: &str, secrets: &[&str]) -> String {
+    let mut out = text.to_owned();
+    for secret in secrets {
+        if !secret.is_empty() {
+            out = out.replace(secret, "[hidden]");
+        }
+    }
+    out
 }
 
 /// Sends `alert` through `channel`, within [`SEND_TIMEOUT`].

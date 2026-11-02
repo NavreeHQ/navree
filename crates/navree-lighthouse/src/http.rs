@@ -32,6 +32,7 @@ use crate::normalize::path_matches;
 use crate::options::{LighthouseOptions, StoreKind};
 use crate::service::{Lighthouse, REPORTED};
 use crate::session::{CSRF_HEADER, Sessions};
+use crate::settings::Tuning;
 
 /// The largest JSON request body kept.
 pub(crate) const MAX_BODY: usize = 16 * 1024;
@@ -58,6 +59,7 @@ struct State {
 /// What the layer works with, resolved once.
 struct Resolved {
     options: Arc<LighthouseOptions>,
+    tuning: Arc<Tuning>,
     mount: String,
     dashboard: bool,
     sessions: Option<Sessions>,
@@ -93,6 +95,7 @@ impl State {
                         && options.store == StoreKind::Database
                         && lighthouse.store().is_some(),
                     engine: lighthouse.engine().cloned(),
+                    tuning: lighthouse.tuning().clone(),
                     options,
                     mount,
                     sessions,
@@ -230,11 +233,11 @@ async fn capture(
     let started = Instant::now();
     let reported = Arc::new(AtomicBool::new(false));
     let response = REPORTED.scope(reported.clone(), next.run(request)).await;
-    let slow = started.elapsed().as_millis() >= u128::from(options.thresholds.slow_request_ms);
+    let slow = started.elapsed().as_millis() >= u128::from(resolved.tuning.slow_request_ms());
     let keep = slow
         || response.status().is_server_error()
         || reported.load(Ordering::Relaxed)
-        || sampled(&request_id, options.sample.requests);
+        || sampled(&request_id, resolved.tuning.sample_requests());
     if keep && (headers.is_some() || body.is_some()) {
         engine.send(Input::Capture(
             request_id,

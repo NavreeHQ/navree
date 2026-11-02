@@ -53,6 +53,7 @@ use crate::normalize::{
 use crate::options::LighthouseOptions;
 use crate::redact::Redactor;
 use crate::report::Report;
+use crate::settings::Tuning;
 
 /// The job type of alert deliveries, never recorded.
 pub(crate) const ALERT_JOB: &str = "lighthouse.alert";
@@ -422,6 +423,9 @@ impl Pending {
 /// flushes.
 pub(crate) struct Engine {
     options: Arc<LighthouseOptions>,
+    /// The thresholds and sample rates in use (the configured ones, as
+    /// changed from the dashboard).
+    tuning: Arc<Tuning>,
     labels: Labels,
     redactor: Redactor,
     ignored_paths: Vec<String>,
@@ -438,10 +442,22 @@ pub(crate) struct Engine {
 }
 
 impl Engine {
+    #[cfg(test)]
     pub(crate) fn new(
         options: Arc<LighthouseOptions>,
         labels: Labels,
         redactor: Redactor,
+    ) -> EngineHandle {
+        let tuning = Arc::new(Tuning::new(&options));
+        Engine::with_tuning(options, labels, redactor, tuning)
+    }
+
+    /// An engine reading its thresholds and sample rates from `tuning`.
+    pub(crate) fn with_tuning(
+        options: Arc<LighthouseOptions>,
+        labels: Labels,
+        redactor: Redactor,
+        tuning: Arc<Tuning>,
     ) -> EngineHandle {
         let mut ignored_paths = options.ignore.routes.clone();
         ignored_paths.push(options.mount_path().to_owned());
@@ -449,6 +465,7 @@ impl Engine {
         Arc::new(Engine {
             background: records_background_work(&labels.process),
             options,
+            tuning,
             labels,
             redactor,
             ignored_paths,
@@ -861,11 +878,11 @@ impl Engine {
                 ..Observation::default()
             },
         );
-        let slow = duration_ms >= self.options.thresholds.slow_request_ms as f64;
+        let slow = duration_ms >= self.tuning.slow_request_ms() as f64;
         let keep = slow
             || request.status >= 500
             || !unit.exceptions.is_empty()
-            || sampled(&request.request_id, self.options.sample.requests);
+            || sampled(&request.request_id, self.tuning.sample_requests());
         let sample_id = keep.then(Uuid::now_v7);
         let mut context = context.clone();
         context.request_id = Some(request.request_id.clone());
@@ -1003,13 +1020,13 @@ impl Engine {
                 ..Observation::default()
             },
         );
-        let slow = job.duration_ms >= self.options.thresholds.slow_job_ms as f64;
+        let slow = job.duration_ms >= self.tuning.slow_job_ms() as f64;
         let keep = slow
             || failed
             || !unit.exceptions.is_empty()
             || sampled(
                 &format!("{}#{}", job.job_id, job.attempt),
-                self.options.sample.jobs,
+                self.tuning.sample_jobs(),
             );
         let sample_id = keep.then(Uuid::now_v7);
         let mut context = context.clone();
@@ -1125,7 +1142,7 @@ impl Engine {
                 ..Observation::default()
             },
         );
-        if query.duration_ms < self.options.thresholds.slow_query_ms as f64 {
+        if query.duration_ms < self.tuning.slow_query_ms() as f64 {
             return;
         }
         let fingerprint = slow_query_fingerprint(&query.statement);
@@ -1170,7 +1187,7 @@ impl Engine {
         let host = url_host(&call.url);
         let duration_ms = millis(call.duration);
         let failed = call.error.is_some() || call.status.is_some_and(|status| status >= 500);
-        let slow = duration_ms >= self.options.thresholds.slow_outgoing_ms as f64;
+        let slow = duration_ms >= self.tuning.slow_outgoing_ms() as f64;
         self.counts.observe(
             now,
             kind::OUTGOING,
@@ -1352,7 +1369,7 @@ impl Engine {
                 *budget = (hour, 0);
             }
             let keep = budget.1 < OCCURRENCES_PER_HOUR
-                || sampled(&id.to_string(), self.options.sample.exceptions);
+                || sampled(&id.to_string(), self.tuning.sample_exceptions());
             if !keep {
                 return None;
             }
@@ -1883,15 +1900,24 @@ mod tests {
             let p = processor_of(process, LighthouseOptions::default());
             let now = Utc::now();
             p.handle(
-                record(EventContext::default(), query("CREATE TABLE tasks (id int)", 900)),
+                record(
+                    EventContext::default(),
+                    query("CREATE TABLE tasks (id int)", 900),
+                ),
                 now,
             );
             p.handle(
-                record(EventContext::default(), query("INSERT INTO tasks VALUES (?)", 900)),
+                record(
+                    EventContext::default(),
+                    query("INSERT INTO tasks VALUES (?)", 900),
+                ),
                 now,
             );
             p.handle(
-                record(EventContext::default(), outgoing("https://slow.example/x", 9_000)),
+                record(
+                    EventContext::default(),
+                    outgoing("https://slow.example/x", 9_000),
+                ),
                 now,
             );
             assert!(p.pending_hits().is_empty(), "{process}: no issues");

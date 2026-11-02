@@ -23,7 +23,7 @@ fn form_token(page: &TestResponse) -> String {
 }
 
 /// Signs `email` in through the sign-in screen.
-async fn sign_in(app: &TestApp, email: &str) -> TestClient {
+pub async fn sign_in(app: &TestApp, email: &str) -> TestClient {
     let client = app.client();
     let page = client
         .get("/_lighthouse/login")
@@ -100,8 +100,8 @@ async fn signing_in_opens_every_page() {
         .unwrap();
     let client = sign_in(&app, "ops@acme.test").await;
     for (path, text) in [
-        ("/_lighthouse".to_owned(), "Latest occurrences"),
-        ("/_lighthouse?period=1h".to_owned(), "Requests per minute"),
+        ("/_lighthouse".to_owned(), "New occurrences"),
+        ("/_lighthouse?period=1h".to_owned(), "Requests / min"),
         ("/_lighthouse/issues".to_owned(), "invoice inv_7 not found"),
         (
             "/_lighthouse/issues?status=&sort=count".to_owned(),

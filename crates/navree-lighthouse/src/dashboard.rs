@@ -19,13 +19,13 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::api::{IssueFilterQuery, PeriodQuery, RouteQuery};
-use crate::chart::{bars, waterfall};
-use crate::module::{LighthouseSubject, RESOLVE, VIEW};
+use crate::api::{IssueFilterQuery, PageQuery, PeriodQuery, RouteQuery};
+use crate::chart::{axis_labels, bars, release_lines, sparkline, waterfall};
+use crate::module::{CONFIGURE, LighthouseSubject, RESOLVE, VIEW};
 use crate::options::{Period, StoreKind};
 use crate::service::Lighthouse;
 use crate::session::{DashboardSession, LOGIN_CSRF_COOKIE, Sessions, cookie_value};
-use crate::store::LighthouseStore;
+use crate::store::{IssueFilter, LighthouseStore};
 use crate::{IssueKind, IssueStatus};
 
 /// The stylesheet, served at `{path}/assets/lighthouse.css`.
@@ -37,7 +37,7 @@ pub const DASHBOARD_JS: &str = include_str!("../assets/lighthouse.js");
 /// script and API.
 pub const CONTENT_SECURITY_POLICY: &str = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
-const TEMPLATES: [(&str, &str); 13] = [
+const TEMPLATES: [(&str, &str); 16] = [
     (
         "lighthouse/layout.html",
         include_str!("../templates/layout.html"),
@@ -89,6 +89,18 @@ const TEMPLATES: [(&str, &str); 13] = [
     (
         "lighthouse/forbidden.html",
         include_str!("../templates/forbidden.html"),
+    ),
+    (
+        "lighthouse/alerts.html",
+        include_str!("../templates/alerts.html"),
+    ),
+    (
+        "lighthouse/releases.html",
+        include_str!("../templates/releases.html"),
+    ),
+    (
+        "lighthouse/settings.html",
+        include_str!("../templates/settings.html"),
     ),
 ];
 
@@ -147,6 +159,7 @@ pub(crate) struct Viewer {
     user_id: Uuid,
     csrf: String,
     can_resolve: bool,
+    pub(crate) can_configure: bool,
     path: String,
 }
 
@@ -164,6 +177,7 @@ impl FromRequestParts for Viewer {
                 .map(|session| session.csrf.clone())
                 .unwrap_or_default(),
             can_resolve: abilities.can(RESOLVE, LighthouseSubject::SUBJECT, None),
+            can_configure: abilities.can(CONFIGURE, LighthouseSubject::SUBJECT, None),
             path: parts.uri.path().to_owned(),
         })
     }
@@ -174,7 +188,7 @@ impl FromRequestParts for Viewer {
 /// `Lighthouse`; a guest is sent to the sign-in screen, a user without
 /// `view` gets a 403 page.
 pub struct LighthouseDashboardController {
-    lighthouse: Arc<Lighthouse>,
+    pub(crate) lighthouse: Arc<Lighthouse>,
     auth: Option<Arc<AuthService>>,
     sessions: Option<Sessions>,
     /// `observe.tracing.trace_url`: the trace backend's page, with
@@ -281,6 +295,27 @@ impl Controller for LighthouseDashboardController {
             >| {
                 c.overview(viewer, q.period()?).await
             }),
+            page!(self, path("/alerts"), "lighthouse.alerts", |c,
+                                                               viewer,
+                                                               q: Query<
+                PageQuery,
+            >| {
+                c.alerts(viewer, q.0).await
+            }),
+            page!(
+                self,
+                path("/releases"),
+                "lighthouse.releases",
+                |c, viewer, q: Query<crate::config_pages::ReleaseQuery>| {
+                    c.releases(viewer, q.0).await
+                }
+            ),
+            page!(
+                self,
+                path("/settings"),
+                "lighthouse.settings",
+                |c, viewer| { c.settings(viewer).await }
+            ),
             page!(self, path("/issues"), "lighthouse.issues", |c,
                                                                viewer,
                                                                q: Query<
@@ -403,7 +438,7 @@ fn asset(content_type: &'static str, body: &'static str) -> Response {
 }
 
 impl LighthouseDashboardController {
-    fn store(&self) -> Result<&LighthouseStore, AppError> {
+    pub(crate) fn store(&self) -> Result<&LighthouseStore, AppError> {
         self.lighthouse
             .store()
             .ok_or_else(|| AppError::service_unavailable("lighthouse.store is off"))
@@ -415,12 +450,12 @@ impl LighthouseDashboardController {
         Some(self.trace_url.as_ref()?.replace("{trace_id}", trace_id?))
     }
 
-    fn mount(&self) -> &str {
+    pub(crate) fn mount(&self) -> &str {
         self.lighthouse.options().mount_path()
     }
 
     /// Renders `template` inside the layout's context.
-    async fn render(
+    pub(crate) async fn render(
         &self,
         viewer: &Viewer,
         template: &str,
@@ -440,6 +475,14 @@ impl LighthouseDashboardController {
             None => None,
         };
         let open_issues = store.open_issue_count().await?;
+        // The release in the header: the newest deploy, else the label this
+        // process was given; never a made-up one.
+        let current = store.current_release().await?;
+        let release = match &current {
+            Some(release) => Some(release.name.clone()),
+            None => Some(store.release().to_owned()).filter(|r| r != "unknown" && !r.is_empty()),
+        };
+        let failed_alerts = store.alert_counts(24).await?.failed;
         let mut context = json!({
             "mount": self.mount(),
             "title": title,
@@ -449,7 +492,10 @@ impl LighthouseDashboardController {
             "csrf": viewer.csrf,
             "user": user.unwrap_or_else(|| viewer.user_id.to_string()),
             "environment": self.lighthouse.options().environment_label(),
-            "release": store.release(),
+            "release": release,
+            "release_deployed": current.as_ref().map(|r| ago(r.deployed_at)),
+            "failed_alerts": failed_alerts,
+            "can_configure": viewer.can_configure,
             "open_issues": open_issues,
             "dropped": self.lighthouse.dropped(),
             "period": period.map(Period::as_str),
@@ -472,11 +518,58 @@ impl LighthouseDashboardController {
         overview.dropped = self.lighthouse.dropped();
         let requests: Vec<i64> = overview.timeline.iter().map(|p| p.count).collect();
         let errors: Vec<i64> = overview.timeline.iter().map(|p| p.errors).collect();
+        let series = &overview.series;
+        let line = |values: &[f64]| sparkline(values, 80.0, 24.0);
+        let failed: Vec<f64> = series.failed_jobs.iter().map(|n| *n as f64).collect();
+        let lines = overview.timeline.first().map_or_else(Vec::new, |first| {
+            release_lines(
+                &overview.releases,
+                first.at,
+                i64::from(period.resolution()),
+                overview.timeline.len(),
+                960.0,
+            )
+        });
+        let feed: Vec<Value> = overview
+            .feed
+            .iter()
+            .map(|item| {
+                let mut row = serde_json::to_value(item).unwrap_or(Value::Null);
+                row["age"] = json!(age_short(item.at));
+                row
+            })
+            .collect();
+        let top = self
+            .store()?
+            .issues(&IssueFilter {
+                status: Some("open".to_owned()),
+                per_page: Some(5),
+                ..IssueFilter::default()
+            })
+            .await?;
+        let top_issues: Vec<Value> = top
+            .data
+            .iter()
+            .map(|summary| {
+                let mut row = serde_json::to_value(summary).unwrap_or(Value::Null);
+                row["spark"] = json!(bars(&summary.sparkline, 88.0, 28.0));
+                row["seen"] = json!(age_short(summary.issue.last_seen));
+                row
+            })
+            .collect();
         let data = json!({
             "overview": overview,
             "error_percent": round1(overview.error_rate * 100.0),
             "requests_bars": bars(&requests, 960.0, 120.0),
             "error_bars": bars(&errors, 960.0, 40.0),
+            "axis": axis_labels(&overview.timeline, period),
+            "release_lines": lines,
+            "spark_requests": line(&series.requests_per_minute),
+            "spark_errors": line(&series.error_rate),
+            "spark_p95": line(&series.p95_ms),
+            "spark_failed": line(&failed),
+            "feed": feed,
+            "top_issues": top_issues,
         });
         self.render(
             &viewer,
@@ -920,6 +1013,27 @@ impl LighthouseDashboardController {
 
 const UNAVAILABLE: &str = "Signing in needs AuthModule and CryptoModule in the app. Use an access token with the JSON API instead.";
 const EXPIRED: &str = "The sign-in form expired. Try again.";
+
+/// `Nm ago` style age for a table: `now`, `6s`, `4 min`, `3 h`, `2 d`.
+pub(crate) fn age_short(at: chrono::DateTime<chrono::Utc>) -> String {
+    let seconds = (chrono::Utc::now() - at).num_seconds().max(0);
+    match seconds {
+        0..=4 => "now".to_owned(),
+        5..=59 => format!("{seconds}s"),
+        60..=3599 => format!("{} min", seconds / 60),
+        3600..=86_399 => format!("{} h", seconds / 3600),
+        _ => format!("{} d", seconds / 86_400),
+    }
+}
+
+/// `18 min ago`, `3 h ago`: when something happened, in a sentence.
+pub(crate) fn ago(at: chrono::DateTime<chrono::Utc>) -> String {
+    let seconds = (chrono::Utc::now() - at).num_seconds();
+    if seconds < 60 {
+        return "just now".to_owned();
+    }
+    format!("{} ago", age_short(at))
+}
 
 /// Percent-encodes a query value.
 fn encode(text: &str) -> String {

@@ -1,33 +1,100 @@
 {% extends "lighthouse/layout.html" %}
 {% block content %}
-<div>
-  <h1>Overview</h1>
-  <div class="muted small">The last {{ period }}: {{ overview.requests }} requests, {{ overview.exceptions }} exceptions.</div>
+<div class="overview-grid">
+<div class="overview-main">
+  <div class="page-head">
+    <div>
+      <h1>Overview</h1>
+      <div class="muted small">The last {{ period }}: {{ overview.requests }} requests, {{ overview.exceptions }} exceptions.</div>
+    </div>
+    <div class="muted small release-note">{% if release %}Release <span class="mono">{{ release }}</span>{% if release_deployed %} · deployed {{ release_deployed }}{% endif %}{% else %}<a href="{{ mount }}/releases">No release reported</a>{% endif %}</div>
+  </div>
+  <div class="tiles">
+    <div class="tile">
+      <div class="label">Requests / min</div>
+      <div class="value-row"><span class="value" id="fig-rpm">{{ overview.requests_per_minute|round(1) }}</span>{% if spark_requests %}<svg class="tile-spark" viewBox="0 0 80 24" aria-hidden="true"><path id="spark-requests" d="{{ spark_requests }}"/></svg>{% endif %}</div>
+      <div class="sub">p50 <span id="fig-p50">{{ overview.p50_ms|round|int }}</span> ms</div>
+    </div>
+    <div class="tile">
+      <div class="label">Error rate</div>
+      <div class="value-row"><span class="value{% if error_percent >= 5 %} bad{% endif %}" id="fig-error-rate">{{ error_percent }}%</span>{% if spark_errors %}<svg class="tile-spark" viewBox="0 0 80 24" aria-hidden="true"><path id="spark-errors" d="{{ spark_errors }}"/></svg>{% endif %}</div>
+      <div class="sub">4xx and 5xx</div>
+    </div>
+    <div class="tile">
+      <div class="label">p95 latency</div>
+      <div class="value-row"><span class="value" id="fig-p95">{{ overview.p95_ms|round|int }} ms</span>{% if spark_p95 %}<svg class="tile-spark" viewBox="0 0 80 24" aria-hidden="true"><path id="spark-p95" d="{{ spark_p95 }}"/></svg>{% endif %}</div>
+      <div class="sub">all routes</div>
+    </div>
+    <div class="tile">
+      <div class="label">Failed jobs</div>
+      <div class="value-row"><span class="value{% if overview.failed_jobs %} bad{% endif %}" id="fig-failed-jobs">{{ overview.failed_jobs }}</span>{% if spark_failed %}<svg class="tile-spark" viewBox="0 0 80 24" aria-hidden="true"><path id="spark-failed" d="{{ spark_failed }}"/></svg>{% endif %}</div>
+      <div class="sub">last {{ period }}</div>
+    </div>
+    <div class="tile">
+      <div class="label">Open issues</div>
+      <div class="value-row"><span class="value" id="fig-open-issues">{{ overview.open_issues }}</span></div>
+      <div class="sub"><span id="fig-new-issues">{{ overview.new_issues }}</span> new in the last {{ period }}</div>
+    </div>
+    <div class="tile" title="Traces and occurrences dropped because the write queue was full. Counts are never dropped.">
+      <div class="label">Sampled out</div>
+      <div class="value-row"><span class="value" id="fig-sampled-out">{{ overview.sampled_out }}</span></div>
+      <div class="sub">details dropped, counts exact</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head">
+      <h2>Requests and exceptions</h2>
+      <div class="legend"><span><span class="swatch requests"></span>Requests</span><span><span class="swatch errors"></span>Exceptions</span>{% if release_lines %}<span><span class="swatch release"></span>Release</span>{% endif %}</div>
+    </div>
+    <svg class="chart" viewBox="0 0 960 170" role="img" aria-label="Requests and exceptions over time">
+      <g class="grid"><line x1="0" x2="960" y1="30" y2="30"/><line x1="0" x2="960" y1="60" y2="60"/><line x1="0" x2="960" y1="90" y2="90"/></g>
+      {% for b in requests_bars %}<rect class="bar requests" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}"><title>{{ b.value }} requests</title></rect>{% endfor %}
+      <line class="baseline" x1="0" x2="960" y1="125" y2="125"/>
+      <g transform="translate(0 130)">{% for b in error_bars %}<rect class="bar errors" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}"><title>{{ b.value }} exceptions</title></rect>{% endfor %}</g>
+      {% for l in release_lines %}<line class="release-line" x1="{{ l.x }}" x2="{{ l.x }}" y1="0" y2="170"><title>Release {{ l.name }}, deployed {{ l.at }}</title></line>{% endfor %}
+    </svg>
+    {% if axis %}<div class="axis">{% for t in axis %}<span>{{ t }}</span>{% endfor %}</div>{% endif %}
+    <div class="muted small chart-note">Times are UTC.{% for l in release_lines %} Release <span class="mono">{{ l.name }}</span> deployed {{ l.at }}.{% endfor %}</div>
+  </div>
+  <div class="card table-card">
+    <table>
+      <thead><tr><th>Issue</th><th class="hide-narrow">24 hours</th><th class="num">Events</th><th class="num hide-narrow">Users</th><th class="num">Last seen</th></tr></thead>
+      <tbody>
+      {% for s in top_issues %}
+        <tr>
+          <td class="wrap title-cell">
+            <span class="kind {{ s.level }}"><i></i>{{ s.kind|replace("_", " ")|capitalize }}</span>
+            <div><a class="mono" href="{{ mount }}/issues/{{ s.id }}">{{ s.title }}</a></div>
+            <div class="sub mono">{{ s.culprit }}</div>
+          </td>
+          <td class="hide-narrow"><svg class="spark wide" viewBox="0 0 88 28" aria-hidden="true">{% for b in s.spark %}<rect class="bar" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}"/>{% endfor %}</svg></td>
+          <td class="num">{{ s.count }}</td>
+          <td class="num hide-narrow">{{ s.users }}</td>
+          <td class="num sub">{{ s.seen }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="empty">No open issues. <a href="{{ mount }}/issues?status=">All issues</a></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
-<div class="figures">
-  <div class="card figure"><div class="label">Requests per minute</div><div class="value" id="fig-rpm">{{ overview.requests_per_minute|round(1) }}</div></div>
-  <div class="card figure"><div class="label">Error rate</div><div class="value{% if error_percent >= 5 %} bad{% endif %}" id="fig-error-rate">{{ error_percent }}%</div></div>
-  <div class="card figure"><div class="label">p95 latency</div><div class="value" id="fig-p95">{{ overview.p95_ms|round|int }} ms</div></div>
-  <div class="card figure"><div class="label">Failed jobs</div><div class="value{% if overview.failed_jobs %} bad{% endif %}" id="fig-failed-jobs">{{ overview.failed_jobs }}</div></div>
-  <div class="card figure"><div class="label">Open issues</div><div class="value" id="fig-open-issues">{{ overview.open_issues }}</div></div>
-  <div class="card figure" title="Traces and occurrences dropped because the write queue was full. Counts are never dropped."><div class="label">Sampled out</div><div class="value" id="fig-sampled-out">{{ overview.sampled_out }}</div></div>
-</div>
-<div class="card">
-  <h2>Requests and exceptions</h2>
-  <svg class="chart" viewBox="0 0 960 170" role="img" aria-label="Requests and exceptions over time">
-    {% for b in requests_bars %}<rect class="bar requests" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}"><title>{{ b.value }} requests</title></rect>{% endfor %}
-    <g transform="translate(0 130)">{% for b in error_bars %}<rect class="bar errors" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}"><title>{{ b.value }} exceptions</title></rect>{% endfor %}</g>
-  </svg>
-  <div class="legend"><span><span class="swatch requests"></span>Requests</span><span><span class="swatch errors"></span>Exceptions</span></div>
-</div>
-<div class="card">
-  <h2>Latest occurrences</h2>
-  <ul class="feed" id="feed">
-    {% for item in overview.feed %}
-    <li data-id="{{ item.occurrence_id }}"><span class="dot {{ item.level }}"></span><a href="{{ mount }}/issues/{{ item.issue_id }}">{{ item.title }}</a><span class="sub">{{ item.culprit }}</span><span class="when">{{ item.at|date("%Y-%m-%d %H:%M:%S") }}</span></li>
+<aside class="live card" aria-label="New occurrences">
+  <div class="live-head">
+    <h2>New occurrences</h2>
+    <span class="live-status small"><span class="dot live"></span><span id="stream-text">Streaming</span></span>
+  </div>
+  <ul class="live-feed" id="feed">
+    {% for item in feed %}
+    <li class="{{ item.level }}" data-id="{{ item.occurrence_id }}" data-at="{{ item.at }}">
+      <div class="live-top"><span class="kind {{ item.level }}"><i></i>{{ item.kind|replace("_", " ")|capitalize }}</span><span class="age">{{ item.age }}</span></div>
+      <a class="mono live-title" href="{{ mount }}/issues/{{ item.issue_id }}">{{ item.title }}</a>
+      <div class="sub mono live-where">{{ item.culprit }}</div>
+    </li>
     {% else %}
     <li class="empty">Nothing yet. New occurrences appear here as they happen.</li>
     {% endfor %}
   </ul>
+</aside>
 </div>
 {% endblock %}

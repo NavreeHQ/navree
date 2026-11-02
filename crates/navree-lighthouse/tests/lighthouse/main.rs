@@ -4,6 +4,7 @@
 
 mod support;
 
+mod alert_pages;
 mod alerts;
 mod commands;
 mod dashboard;
@@ -13,7 +14,10 @@ mod ingest;
 mod mcp;
 mod module;
 mod orm;
+mod overview;
 mod recording;
+mod releases;
 mod servers;
+mod settings;
 mod statuses;
 mod time_series;

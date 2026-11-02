@@ -72,6 +72,9 @@ mod alert;
 mod api;
 mod chart;
 mod commands;
+mod config_api;
+mod config_pages;
+mod config_store;
 mod dashboard;
 mod dispatch;
 mod engine;
@@ -83,10 +86,14 @@ mod model;
 mod module;
 mod normalize;
 mod options;
+mod overview;
 mod redact;
+mod release;
 mod report;
 mod service;
 mod session;
+mod settings;
+mod settings_view;
 mod store;
 
 pub use aggregate::SlowCall;
@@ -96,6 +103,8 @@ pub use alert::{
 pub use api::{
     IgnoreInput, LighthouseApiController, PageQuery, PeriodQuery, ResolveInput, RouteQuery,
 };
+pub use config_api::LighthouseConfigController;
+pub use config_store::{AlertCounts, AlertHistoryRow, StoredSetting};
 pub use dashboard::{
     CONTENT_SECURITY_POLICY, DASHBOARD_CSS, DASHBOARD_JS, LighthouseDashboardController,
 };
@@ -107,16 +116,19 @@ pub use histogram::Histogram;
 pub use mcp::LighthouseMcp;
 pub use migration::LIGHTHOUSE_MIGRATIONS;
 pub use model::{Issue, IssueKind, IssueStatus, Level};
-pub use module::{LighthouseModule, LighthouseSubject, RESOLVE, VIEW};
+pub use module::{CONFIGURE, LighthouseModule, LighthouseSubject, RESOLVE, VIEW};
 pub use normalize::{normalize_message, normalize_sql, path_matches};
 pub use options::{
     AlertOptions, CaptureOptions, DEFAULT_ALERT_KINDS, EmailAlertOptions, IgnoreOptions,
     LighthouseOptions, Period, SampleRates, SlackAlertOptions, SpikeOptions, StoreKind, Thresholds,
     WebhookAlertOptions,
 };
+pub use overview::OverviewSeries;
 pub use redact::REDACTED;
+pub use release::{ReleaseMarker, ReleaseReport, ReleaseSummary};
 pub use report::{AsError, Report};
 pub use service::Lighthouse;
+pub use settings::ChannelState;
 pub use store::{
     AlertRecord, FeedItem, HostStats, IgnoreFor, IssueDetail, IssueFilter, IssueSort, IssueSummary,
     JobStats, LighthouseError, LighthouseStore, ListPage, Occurrence, Origin, Overview, PageMeta,

@@ -18,6 +18,7 @@ use navree_telemetry::{ModuleBuilderTelemetryExt, TelemetrySink};
 use crate::alert::DeliverAlert;
 use crate::api::LighthouseApiController;
 use crate::commands::commands;
+use crate::config_api::LighthouseConfigController;
 use crate::dashboard::LighthouseDashboardController;
 use crate::dispatch::Alerter;
 use crate::engine::{Engine, Labels};
@@ -25,6 +26,7 @@ use crate::migration::{convert_time_series_at_boot, create_tables, migrations};
 use crate::options::{LighthouseOptions, StoreKind, parse_hh_mm};
 use crate::redact::{DEFAULT_FRAGMENTS, Redactor};
 use crate::service::{Lighthouse, LighthouseSink};
+use crate::settings::Tuning;
 use crate::store::{LighthouseError, LighthouseStore};
 
 /// The access subject of the dashboard, its JSON API and the MCP tools:
@@ -43,6 +45,10 @@ impl Subject for LighthouseSubject {
 pub const VIEW: &str = "view";
 /// The ability to resolve, ignore and reopen issues.
 pub const RESOLVE: &str = "resolve";
+/// The ability to change what the dashboard can change: settings, alert
+/// channels (kinds, muting, testing) and reporting releases. Permission
+/// `lighthouse.configure`.
+pub const CONFIGURE: &str = "configure";
 
 /// Application monitoring inside the app.
 ///
@@ -153,6 +159,7 @@ fn register(m: &mut ModuleBuilder, options: Option<LighthouseOptions>) {
         .job::<DeliverAlert>()
         .controller::<LighthouseDashboardController>()
         .controller::<LighthouseApiController>()
+        .controller::<LighthouseConfigController>()
         .http_layer(crate::http::layer())
         .map_error::<LighthouseError>(map_lighthouse_error)
         .schedule(|s| match prune_at {
@@ -199,7 +206,7 @@ async fn prune_if_due(ctx: AppContext) -> Result<(), BoxError> {
         return Ok(());
     }
     if let Some(store) = lighthouse.store() {
-        let summary = store.prune(options.retention_days).await?;
+        let summary = store.prune(lighthouse.tuning().retention_days()).await?;
         tracing::info!(target: "navree::lighthouse", ?summary, "pruned");
     }
     Ok(())
@@ -209,8 +216,9 @@ async fn prune_if_due(ctx: AppContext) -> Result<(), BoxError> {
 /// `database_url`'s), the labels, the redactor, the engine and the
 /// alerter.
 async fn build(app: &AppContext, options: Arc<LighthouseOptions>) -> Result<Lighthouse, BoxError> {
+    let tuning = Arc::new(Tuning::new(&options));
     if options.store == StoreKind::Off {
-        return Ok(Lighthouse::live(options, None, None, None));
+        return Ok(Lighthouse::live(options, tuning, None, None, None));
     }
     let config = app.try_get::<Config>().await;
     let db = match &options.database_url {
@@ -255,11 +263,18 @@ async fn build(app: &AppContext, options: Arc<LighthouseOptions>) -> Result<Ligh
             format!("{}{}", app_url.trim_end_matches('/'), options.mount_path())
         }
     };
-    let store = LighthouseStore::new(db, base_url, options.clone(), release.clone());
+    let store = LighthouseStore::new(
+        db,
+        base_url,
+        options.clone(),
+        tuning.clone(),
+        release.clone(),
+    );
     let environment = options.environment_label();
     let alerter = Arc::new(Alerter::new(
         store.clone(),
         options.clone(),
+        tuning.clone(),
         environment.clone(),
         release.clone(),
     ));
@@ -276,16 +291,18 @@ async fn build(app: &AppContext, options: Arc<LighthouseOptions>) -> Result<Ligh
         };
         let mut fragments = log_redact(config.as_deref());
         fragments.extend(options.redact.iter().cloned());
-        Some(Engine::new(
+        Some(Engine::with_tuning(
             options.clone(),
             labels,
             Redactor::new(&fragments),
+            tuning.clone(),
         ))
     } else {
         None
     };
     Ok(Lighthouse::live(
         options,
+        tuning,
         Some(store),
         recorder,
         Some(alerter),

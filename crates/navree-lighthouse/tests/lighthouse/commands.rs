@@ -53,6 +53,7 @@ async fn prune_deletes_what_is_older_than_the_retention_and_keeps_open_issues() 
                 ignored_until: None,
                 ignore_remaining: None,
                 regressed_at: None,
+                regressed_in_release: None,
                 comment: None,
                 created_at: old,
                 updated_at: old,

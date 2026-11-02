@@ -1,0 +1,53 @@
+{% extends "lighthouse/layout.html" %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Settings</h1>
+    <div class="muted small">What can be changed here while the app runs, and what is set in code or configuration.</div>
+  </div>
+</div>
+<div class="card">
+  <h2>Changeable here</h2>
+  <div class="muted small note">A change is stored with the database and reaches every process (web servers, workers, the scheduler) within fifteen seconds. Returning a setting to the configured value removes the change.</div>
+  {% if not can_configure %}<div class="muted small note">Read-only: changing settings needs the <code>lighthouse.configure</code> permission.</div>{% endif %}
+  {% for g in groups %}
+  <h3>{{ g.group }}</h3>
+  <div class="setting-list">
+    {% for s in g.items %}
+    <div class="setting">
+      <div class="setting-text">
+        <label for="setting-{{ s.key }}">{{ s.label }}</label>
+        <div class="muted small">{{ s.help }}</div>
+        <div class="muted small">Configured: <span class="mono">{{ s.configured }}</span>{% if s.unit %} {{ s.unit }}{% endif %}{% if s.changed %} · changed {{ s.updated_at|date("%Y-%m-%d %H:%M") }} UTC{% endif %}</div>
+      </div>
+      <div class="setting-input">
+        <input type="number" id="setting-{{ s.key }}" data-key="{{ s.key }}" data-configured="{{ s.configured }}" value="{{ s.current }}" min="{{ s.min }}" max="{{ s.max }}" step="{% if s.kind == 'fraction' %}0.01{% else %}1{% endif %}"{% if not can_configure %} disabled{% endif %}>
+        {% if s.unit %}<span class="muted small">{{ s.unit }}</span>{% endif %}
+        {% if can_configure and s.changed %}<button type="button" data-action="reset-setting" data-key="{{ s.key }}">Use configured</button>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+  {% if can_configure %}
+  <div class="actions note"><button class="primary" type="button" data-action="save-settings">Save changes</button><span class="small" id="settings-result" role="status"></span></div>
+  {% endif %}
+</div>
+<div class="card">
+  <h2>Set in code or configuration</h2>
+  <div class="muted small note">These are read when the app boots and cannot be changed here. Set them under <code>[lighthouse]</code> in the configuration, with the environment variable shown, or in <code>LighthouseOptions</code> in code. Secrets are never shown, only whether they are set.</div>
+  {% for g in read_only %}
+  <h3>{{ g.group }}</h3>
+  <table class="plain">
+    <tbody>
+    {% for i in g.items %}
+      <tr>
+        <td class="wrap"><div>{{ i.label }}</div><div class="sub mono">{{ i.key }} · {{ i.env }}</div></td>
+        <td class="wrap mono{% if i.secret %} muted{% endif %}">{{ i.value }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endfor %}
+</div>
+{% endblock %}

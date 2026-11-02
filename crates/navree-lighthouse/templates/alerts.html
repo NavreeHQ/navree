@@ -1,0 +1,86 @@
+{% extends "lighthouse/layout.html" %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Alerts</h1>
+    <div class="muted small">Where Lighthouse sends an alert when something needs a person, and what it has sent.</div>
+  </div>
+  <div class="muted small">Last 24 hours: {{ counts.delivered }} delivered{% if counts.failed %}, <span class="error-text">{{ counts.failed }} failed</span>{% endif %}{% if counts.pending %}, {{ counts.pending }} waiting{% endif %}</div>
+</div>
+<div class="card">
+  <h2>Channels</h2>
+  {% if channels %}
+  <div class="channel-list">
+    {% for c in channels %}
+    <div class="channel" data-channel="{{ c.name }}">
+      <div class="channel-head">
+        <div><span class="channel-name">{{ c.name }}</span> <span class="muted small">{{ c.detail }}</span></div>
+        <div class="small">{% if c.muted %}<span class="badge warning">Muted{% if c.until %} until {{ c.until }}{% endif %}</span>{% else %}<span class="badge ok">Active</span>{% endif %}</div>
+      </div>
+      <div class="small">Gets {{ c.kind_labels|join(", ") }}.{% if c.kinds_changed %} <span class="muted">Set here; the configuration says {{ c.configured_labels|join(", ") }}.</span>{% endif %}</div>
+      {% if can_configure %}
+      <div class="actions">
+        <span class="kinds" role="group" aria-label="Kinds {{ c.name }} gets">{% for k in c.kind_choices %}<label class="check"><input type="checkbox" value="{{ k.value }}"{% if k.on %} checked{% endif %}> {{ k.label }}</label>{% endfor %}</span>
+        <button type="button" data-action="save-kinds" data-channel="{{ c.name }}">Save kinds</button>
+        {% if c.kinds_changed %}<button type="button" data-action="reset-kinds" data-channel="{{ c.name }}">Use the configured kinds</button>{% endif %}
+      </div>
+      <div class="actions">
+        {% if c.muted %}
+        <button type="button" data-action="unmute" data-channel="{{ c.name }}">Unmute</button>
+        {% else %}
+        <select class="mute-for" aria-label="Mute {{ c.name }}">{% for m in mute_choices %}<option value="{{ m.value }}">{{ m.label }}</option>{% endfor %}</select>
+        <button type="button" data-action="mute" data-channel="{{ c.name }}">Mute</button>
+        {% endif %}
+        <button type="button" data-action="test-channel" data-channel="{{ c.name }}">Send a test alert</button>
+        <span class="small" data-result role="status"></span>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% if not can_configure %}<div class="muted small note">Read-only: changing, muting and testing channels needs the <code>lighthouse.configure</code> permission.</div>{% endif %}
+  <div class="muted small note">Channels are defined in configuration or in code because they hold secrets (a Slack webhook URL, a signing secret), so they are not created or deleted here. What each one gets, muting and testing are changed here.</div>
+  {% else %}
+  <div class="empty-block">
+    <div>No alert channel is configured, so nothing is sent.</div>
+    <div class="muted small">Add one under <code>lighthouse.alerts</code> in the configuration, for example <code>lighthouse.alerts.email.to = ["oncall@example.com"]</code>, or register your own in code. Channels hold secrets, so they are set there and not here.</div>
+  </div>
+  {% endif %}
+</div>
+<div class="card">
+  <h2>Throttling</h2>
+  <dl class="kv">
+    <dt>Cooldown</dt><dd>At most one alert per issue and kind every {{ cooldown }} minutes.</dd>
+    <dt>Spike</dt><dd>{{ spike_occurrences }} occurrences of one issue within {{ spike_minutes }} minutes.</dd>
+    <dt>Never alert</dt><dd>Ignored issues, and issues at level info.</dd>
+  </dl>
+  <div class="muted small note">Change these under <a href="{{ mount }}/settings">Settings</a>.</div>
+</div>
+<div class="card table-card">
+  <div class="card-pad"><h2>Delivery history</h2></div>
+  <table>
+    <thead><tr><th>Alert</th><th>Issue</th><th>Channel</th><th>Status</th><th class="num">Attempts</th><th class="num">Raised</th></tr></thead>
+    <tbody>
+    {% for a in history %}
+      <tr>
+        <td>{{ a.kind_label }}</td>
+        <td class="wrap title-cell">{% if a.issue_id %}<a href="{{ mount }}/issues/{{ a.issue_id }}">{{ a.title }}</a>{% else %}{{ a.title }}{% endif %}<div class="sub mono">{{ a.culprit }}</div>{% if a.error %}<div class="sub error-text">{{ a.error }}</div>{% endif %}</td>
+        <td>{{ a.channel }}</td>
+        <td><span class="badge{% if a.status == 'delivered' %} ok{% elif a.status == 'failed' %} error{% endif %}">{{ a.status }}</span></td>
+        <td class="num">{{ a.attempts }}</td>
+        <td class="num sub" title="{{ a.created_at|date("%Y-%m-%d %H:%M:%S") }} UTC">{{ a.age }} ago</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="empty">No alerts yet. They appear here when an issue opens, comes back or spikes.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if meta.last_page > 1 %}
+<div class="pager">
+  <span class="muted small">Page {{ meta.current_page }} of {{ meta.last_page }}</span>
+  {% if meta.current_page > 1 %}<a class="button" href="{{ mount }}/alerts?page={{ meta.current_page - 1 }}">Previous</a>{% endif %}
+  {% if meta.current_page < meta.last_page %}<a class="button" href="{{ mount }}/alerts?page={{ meta.current_page + 1 }}">Next</a>{% endif %}
+</div>
+{% endif %}
+{% endblock %}
