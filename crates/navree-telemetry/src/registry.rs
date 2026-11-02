@@ -31,6 +31,7 @@ use crate::{
 ///         TelemetryEvent::QueryExecuted(QueryExecuted {
 ///             sql: sql.to_owned(),
 ///             duration: took,
+///             pool_wait: Duration::ZERO,
 ///             rows: None,
 ///             connection: "sqlite".to_owned(),
 ///             failed: false,

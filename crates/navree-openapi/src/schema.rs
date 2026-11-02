@@ -283,7 +283,9 @@ impl Schema {
     /// `{"not": {}}`: no value is allowed, as for an enum without variants.
     pub fn never() -> Self {
         let mut schema = Self::default();
-        schema.extra.insert("not".to_owned(), Value::Object(Map::new()));
+        schema
+            .extra
+            .insert("not".to_owned(), Value::Object(Map::new()));
         schema
     }
 
