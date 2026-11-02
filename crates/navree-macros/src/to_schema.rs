@@ -742,11 +742,7 @@ impl SerdeField {
                 "skip_serializing_if" => out.skip_serializing_if = true,
                 "flatten" => out.flatten = true,
                 "default" => out.default = true,
-                "rename" => {
-                    if value.is_some() {
-                        out.rename = value;
-                    }
-                }
+                "rename" if value.is_some() => out.rename = value,
                 _ => {}
             }
         }
