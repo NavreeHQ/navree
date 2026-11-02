@@ -30,7 +30,9 @@ impl Region {
     }
 
     /// Sets where its content comes from: a page holding an element with this
-    /// id, or a fragment.
+    /// id, or a fragment, which is a page with no script of its own. A page with
+    /// the runtime that lacks this id, or a redirect, is somewhere else: the user
+    /// goes there, as when a session has ended.
     pub fn src(mut self, src: impl Into<Href>) -> Self {
         self.el = self.el.attr("data-ui-src", src.into());
         self
