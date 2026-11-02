@@ -61,6 +61,12 @@ macro_rules! conformance {
             }
 
             #[tokio::test]
+            async fn counts_entries_by_kind() {
+                let (store, _guard) = $make.await;
+                counts_entries_by_kind_on(store).await;
+            }
+
+            #[tokio::test]
             async fn clears_everything() {
                 let (store, _guard) = $make.await;
                 clears_everything_on(store).await;
@@ -331,6 +337,33 @@ async fn prunes_whole_batches_by_count_on(store: Arc<dyn LogbookStore>) {
     assert_eq!(deleted, 4);
     assert_eq!(titles(&list(&*store, "").await), ["loose"]);
     assert_eq!(store.prune(3, now - Duration::hours(24)).await.unwrap(), 0);
+}
+
+async fn counts_entries_by_kind_on(store: Arc<dyn LogbookStore>) {
+    assert!(store.counts().await.unwrap().is_empty());
+    let now = Utc::now();
+    store
+        .insert(vec![
+            entry_at(now, None, dump("a")),
+            entry_at(now, Some("b1"), request("GET", "/a", "/a", 200)),
+            entry_at(now, Some("b1"), query("SELECT 1", 1.0)),
+            entry_at(now, Some("b1"), query("SELECT 2", 1.0)),
+            entry_at(now, None, query("SELECT 3", 1.0)),
+        ])
+        .await
+        .unwrap();
+    let counts = store.counts().await.unwrap();
+    assert_eq!(counts.get(&EntryKind::Query), Some(&3));
+    assert_eq!(counts.get(&EntryKind::Request), Some(&1));
+    assert_eq!(counts.get(&EntryKind::Dump), Some(&1));
+    assert_eq!(
+        counts.get(&EntryKind::Mail),
+        None,
+        "kinds with none are absent"
+    );
+    assert_eq!(counts.values().sum::<u64>(), store.count().await.unwrap());
+    store.clear().await.unwrap();
+    assert!(store.counts().await.unwrap().is_empty());
 }
 
 async fn clears_everything_on(store: Arc<dyn LogbookStore>) {

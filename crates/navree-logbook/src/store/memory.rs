@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use navree_kernel::BoxFuture;
 
 use super::{ListQuery, LogbookStore};
-use crate::{Entry, LogbookError};
+use crate::{Entry, EntryKind, LogbookError};
 
 /// Keeps entries in memory (`logbook.store = "memory"`): for tests, and for
 /// machines where you would rather not write the file.
@@ -165,6 +165,14 @@ impl LogbookStore for MemoryStore {
             }
         }
         Box::pin(async move { Ok(deleted) })
+    }
+
+    fn counts(&self) -> BoxFuture<'_, Result<BTreeMap<EntryKind, u64>, LogbookError>> {
+        let mut counts = BTreeMap::new();
+        for entry in self.lock().entries.values() {
+            *counts.entry(entry.kind()).or_insert(0) += 1;
+        }
+        Box::pin(async move { Ok(counts) })
     }
 
     fn clear(&self) -> BoxFuture<'_, Result<u64, LogbookError>> {

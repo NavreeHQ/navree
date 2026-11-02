@@ -1,7 +1,7 @@
 //! [`Logbook`]: the service that records entries, serves them and is the
 //! telemetry sink behind the watchers.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::fmt;
 use std::future::Future;
 use std::hash::Hash;
@@ -353,6 +353,14 @@ impl Logbook {
         let active = self.active.as_ref().ok_or(LogbookError::Disabled)?;
         self.flush().await;
         active.store.count().await
+    }
+
+    /// How many entries there are of each kind (kinds with none are absent), after
+    /// a [`flush`](Logbook::flush).
+    pub async fn counts(&self) -> Result<BTreeMap<EntryKind, u64>, LogbookError> {
+        let active = self.active.as_ref().ok_or(LogbookError::Disabled)?;
+        self.flush().await;
+        active.store.counts().await
     }
 
     /// Deletes every entry; returns how many went.

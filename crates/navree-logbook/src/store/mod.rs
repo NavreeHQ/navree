@@ -6,6 +6,8 @@ mod memory;
 #[cfg(feature = "sqlite")]
 mod sqlite;
 
+use std::collections::BTreeMap;
+
 use chrono::{DateTime, Utc};
 use navree_kernel::BoxFuture;
 
@@ -13,7 +15,7 @@ pub use memory::MemoryStore;
 #[cfg(feature = "sqlite")]
 pub use sqlite::SqliteStore;
 
-use crate::{Entry, Filter, LogbookError};
+use crate::{Entry, EntryKind, Filter, LogbookError};
 
 /// A page of the list: entries matching `filter`, newest first.
 #[derive(Clone, Debug, PartialEq)]
@@ -76,6 +78,9 @@ pub trait LogbookStore: Send + Sync + 'static {
 
     /// How many entries there are.
     fn count(&self) -> BoxFuture<'_, Result<u64, LogbookError>>;
+
+    /// How many entries there are of each kind; a kind with none is absent.
+    fn counts(&self) -> BoxFuture<'_, Result<BTreeMap<EntryKind, u64>, LogbookError>>;
 
     /// Deletes every batch with an entry older than `older_than`, then, while
     /// more than `max_entries` remain, the oldest batches: batches go whole,

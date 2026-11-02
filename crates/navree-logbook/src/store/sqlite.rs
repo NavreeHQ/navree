@@ -1,5 +1,6 @@
 //! [`SqliteStore`]: entries in a SQLite file of their own.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -13,7 +14,7 @@ use sqlx::{Arguments, AssertSqlSafe, ConnectOptions, Row};
 
 use super::{ListQuery, LogbookStore};
 use crate::filter::{Comparison, StatusMatch, Term};
-use crate::{Content, Entry, LogbookError};
+use crate::{Content, Entry, EntryKind, LogbookError};
 
 /// The schema version in `PRAGMA user_version`; a file with another version
 /// is emptied and recreated (it only holds development data).
@@ -240,6 +241,19 @@ impl SqliteStore {
         rows.iter().map(entry_from_row).collect()
     }
 
+    async fn count_kinds(&self) -> Result<BTreeMap<EntryKind, u64>, LogbookError> {
+        let rows: Vec<(String, i64)> =
+            sqlx::query_as("SELECT kind, COUNT(*) FROM logbook_entries GROUP BY kind")
+                .fetch_all(&self.pool)
+                .await?;
+        Ok(rows
+            .into_iter()
+            .filter_map(|(kind, count)| {
+                Some((EntryKind::parse(&kind)?, u64::try_from(count).unwrap_or(0)))
+            })
+            .collect())
+    }
+
     async fn count_entries(&self) -> Result<u64, LogbookError> {
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM logbook_entries")
             .fetch_one(&self.pool)
@@ -453,6 +467,10 @@ impl LogbookStore for SqliteStore {
 
     fn count(&self) -> BoxFuture<'_, Result<u64, LogbookError>> {
         Box::pin(self.count_entries())
+    }
+
+    fn counts(&self) -> BoxFuture<'_, Result<BTreeMap<EntryKind, u64>, LogbookError>> {
+        Box::pin(self.count_kinds())
     }
 
     fn prune(
