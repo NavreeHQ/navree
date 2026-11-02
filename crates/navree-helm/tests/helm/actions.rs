@@ -5,7 +5,9 @@ use std::sync::Arc;
 
 use navree_audit::AuditModule;
 use navree_contracts::{Dispatcher, Job, JobContext};
-use navree_helm::HelmActionJob;
+use navree_helm::{Action, ActionResult, Field, HelmActionJob, ModuleBuilderHelmExt, Resource};
+use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
+use navree_orm::{Model, Record};
 use navree_queue::QueueFake;
 use serde_json::json;
 use uuid::Uuid;
@@ -287,4 +289,112 @@ async fn every_action_run_is_audited() {
             .any(|r| r.action == "deal.updated" && r.actor_id == Some(rep_id))
     );
     let _ = Arc::new(());
+}
+
+/// Deals that are read-only in the panel, with actions of each kind of ability.
+struct ReadOnlyDeals;
+
+impl Injectable for ReadOnlyDeals {
+    fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async { Ok(ReadOnlyDeals) })
+    }
+}
+
+impl Resource for ReadOnlyDeals {
+    type Model = Deal;
+
+    const LABEL: &'static str = "Read-only deals";
+    const SLUG: &'static str = "ro-deals";
+    const TITLE: &'static str = "title";
+    const READ_ONLY: bool = true;
+    const SIDEBAR_COUNT: bool = false;
+
+    fn fields(&self) -> Vec<Field> {
+        vec![Field::text("title").required()]
+    }
+
+    fn actions(&self) -> Vec<Action<Deal>> {
+        vec![
+            Action::new("touch", "Touch").handle(|ctx, deals: Vec<Record<Deal>>| async move {
+                for mut deal in deals {
+                    deal.update(ctx.uow(), |d| d.title = "TOUCHED".to_owned())
+                        .await?;
+                }
+                Ok(ActionResult::message("touched"))
+            }),
+            Action::new("zap", "Zap")
+                .ability(navree_access::Delete)
+                .handle(|ctx, deals: Vec<Record<Deal>>| async move {
+                    for deal in deals {
+                        Deal::query()
+                            .where_(Deal::ID.eq(deal.model().id))
+                            .delete(ctx.uow())
+                            .await?;
+                    }
+                    Ok(ActionResult::message("zapped"))
+                }),
+            Action::new("peek", "Peek")
+                .ability(navree_access::Read)
+                .handle(|_ctx, _deals: Vec<Record<Deal>>| async move {
+                    Ok(ActionResult::message("peeked"))
+                }),
+        ]
+    }
+}
+
+struct ReadOnlyModule;
+
+impl Module for ReadOnlyModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.resource::<ReadOnlyDeals>();
+    }
+}
+
+#[tokio::test]
+async fn a_read_only_resource_refuses_an_action_that_writes_however_it_is_posted() {
+    let app = builder().module(ReadOnlyModule).build().await;
+    let d = deal(
+        &app,
+        DealSeed {
+            title: "Keep",
+            ..DealSeed::default()
+        },
+    )
+    .await;
+    let (_, manager) = user(&app, "manager").await;
+    let id = d.id.to_string();
+    for name in ["touch", "zap"] {
+        let page = manager
+            .post("/admin/resources/ro-deals/actions")
+            .header("accept", "text/html")
+            .form(&[("action", name), ("ids", id.as_str()), ("_confirmed", "1")])
+            .send()
+            .await;
+        assert_eq!(page.status(), 303, "back with the reason: {name}");
+        assert_eq!(page.header("location"), Some("/admin/resources/ro-deals"));
+        let api = manager
+            .post(&format!("/admin/api/resources/ro-deals/actions/{name}"))
+            .json(&json!({ "ids": [id] }))
+            .send()
+            .await;
+        assert_eq!(api.status(), 403, "{name}");
+        assert_eq!(api.json_value()["code"], "read_only_resource", "{name}");
+    }
+    assert_eq!(reload(&app, d.id).await.unwrap().title, "Keep");
+    // One that only reads runs, and is offered.
+    let peek = manager
+        .post("/admin/api/resources/ro-deals/actions/peek")
+        .json(&json!({ "ids": [id] }))
+        .send()
+        .await;
+    assert_eq!(peek.status(), 200, "{}", peek.text());
+    let list = manager
+        .get("/admin/resources/ro-deals")
+        .header("accept", "text/html")
+        .send()
+        .await
+        .text();
+    assert!(list.contains("value=\"peek\""), "{list}");
+    assert!(!list.contains("value=\"touch\""), "{list}");
+    assert!(!list.contains("value=\"zap\""), "{list}");
 }

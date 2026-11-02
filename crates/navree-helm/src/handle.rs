@@ -1842,6 +1842,10 @@ impl<R: Resource> ErasedResource for Handle<R> {
             let Some(action) = self.actions.iter().find(|a| a.name == name) else {
                 return Err(AppError::not_found().with_detail(format!("No action `{name}`.")));
             };
+            // What the panel doesn't offer on a read-only resource it doesn't run.
+            if matches!(action.ability, CREATE | UPDATE | DELETE) {
+                self.writable()?;
+            }
             self.in_a_workspace(cx)?;
             let mut unique = Vec::new();
             for id in ids {

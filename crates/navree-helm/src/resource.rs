@@ -85,9 +85,11 @@ pub trait Resource: Send + Sync + 'static {
     const ORDER: i32 = 0;
     /// Whether the records are read-only in the panel: no New, Edit or
     /// Delete anywhere (the buttons are not shown) and the panel and its API
-    /// refuse a create, an update or a delete. Actions still run. Use it for
-    /// what the app writes itself (an audit trail, a payment provider's
-    /// copy of a subscription).
+    /// refuse a create, an update or a delete, and an action with one of those
+    /// abilities (which is every action unless it says otherwise,
+    /// [`Action::ability`](crate::Action::ability)). An action with another
+    /// ability is offered and runs. Use it for what the app writes itself (an
+    /// audit trail, a payment provider's copy of a subscription).
     const READ_ONLY: bool = false;
     /// Whether the list offers its rows as a CSV file (`Export`), for the
     /// current search and filters, the rows the user may read.
