@@ -375,6 +375,11 @@ LibraryRepo::<Template>::clone_to(&uow, ws_item, LibraryOwner::Organization(org)
 LibraryRepo::<Template>::seed_global(db, "slug", items).await?;          // seeders: create/update global rows by a unique column
 ```
 
+- Helm enters a workspace a request names only for a member (through the
+  module's `dyn WorkspaceGate`, `navree::access::WorkspaceGate`, which other
+  modules can ask too) or for staff the app names with
+  `m.helm_staff_workspaces(..)`. Under database isolation the panel can't enter
+  a workspace.
 - Helm: the library model derives `navree::orm::Model`; `Resource::query`
   filters `Template::SCOPE.eq(LibraryScope::Global)`, `create` calls
   `LibraryRepo::create(ctx.uow(), LibraryOwner::Global, ..)`.

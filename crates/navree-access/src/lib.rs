@@ -50,6 +50,7 @@ mod records;
 mod service;
 mod store;
 mod subject;
+mod workspace_gate;
 
 pub use authorizer::{AccessAuthorizer, AuthorizedRecord, FieldCheck};
 pub use context::{AbilityCtx, AccessUser};
@@ -67,3 +68,4 @@ pub use options::{AbilitiesFn, AccessOptions, default_abilities};
 pub use records::{Policy, SubjectRecords};
 pub use service::{AccessService, Explanation, RoleInfo};
 pub use subject::row_json;
+pub use workspace_gate::{WorkspaceEntry, WorkspaceGate};

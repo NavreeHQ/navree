@@ -12,6 +12,7 @@ use navree_view::Views;
 use crate::field::FieldKind;
 use crate::metric::MetricResult;
 use crate::registry::Registry;
+use crate::workspace::{StaffCheck, StaffPolicy};
 use crate::{HelmOptions, save, templates};
 
 /// The panel's stylesheet.
@@ -93,6 +94,8 @@ pub(crate) struct Core {
     pub(crate) app_views: Option<Arc<Views>>,
     pub(crate) metrics: Option<navree_bounded::Cache<String, Arc<MetricResult>>>,
     pub(crate) assets: Assets,
+    /// Who may work in a workspace they are not in, if the app says.
+    pub(crate) staff: Option<StaffCheck>,
 }
 
 impl Core {
@@ -128,7 +131,13 @@ impl Core {
                 .time_to_live(Duration::from_secs(options.metrics_cache_secs))
                 .build()
         });
+        let mut policies = app.contributions::<StaffPolicy>().into_iter();
+        let staff = policies.next().map(|policy| policy.value.0.clone());
+        if policies.next().is_some() {
+            return Err("Helm: `helm_staff_workspaces` is registered more than once".into());
+        }
         Ok(Core {
+            staff,
             messages: save::messages(&app).await,
             views: templates::views()?,
             assets: Assets::new(&options),

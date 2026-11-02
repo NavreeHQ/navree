@@ -232,6 +232,8 @@ enum Source {
     Configured,
     /// A path parameter of the route.
     PathParam(&'static str),
+    /// A module that checked the user, for the workspace it names.
+    Named(Uuid),
 }
 
 /// Resolves, loads and checks the request's workspace once (later calls
@@ -262,6 +264,7 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
             resolve::identifier(&config, parts).map(|(kind, identifier)| (Some(kind), identifier))
         }
         Source::PathParam(name) => path_param(parts, name).await?.map(|value| (None, value)),
+        Source::Named(id) => Some((None, id.to_string())),
     }
     // A pinned credential names its workspace when the request doesn't.
     .or_else(|| pinned.map(|id| (None, id.to_string())))
@@ -357,6 +360,11 @@ pub(crate) async fn try_resolve(parts: &mut Parts) -> Option<CurrentWorkspace> {
     resolve_request(parts, &Source::Configured).await.ok()
 }
 
+/// Treats the request as one inside workspace `id`, checked as any other.
+pub(crate) async fn enter_named(parts: &mut Parts, id: Uuid) -> Result<CurrentWorkspace, AppError> {
+    resolve_request(parts, &Source::Named(id)).await
+}
+
 /// The error response of a [`WorkspaceError`].
 pub(crate) fn app_error(error: WorkspaceError) -> AppError {
     error.to_app_error()
@@ -370,7 +378,11 @@ pub(crate) async fn current_workspace(parts: &mut Parts) -> Result<CurrentWorksp
 
 /// The guest membership of `user` in `workspace`: a demo workspace with
 /// `workspace.demo.guest_role` set. Stored nowhere (the nil id).
-fn guest_member(config: &WorkspaceConfig, workspace: &Workspace, user: Uuid) -> Option<Member> {
+pub(crate) fn guest_member(
+    config: &WorkspaceConfig,
+    workspace: &Workspace,
+    user: Uuid,
+) -> Option<Member> {
     let role = config
         .demo
         .guest_role

@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::context::ContextInner;
 use crate::core::Core;
+use crate::workspace::NamedBy;
 
 /// The client of a request, for audit entries.
 #[derive(Clone, Debug, Default)]
@@ -32,6 +33,8 @@ pub(crate) struct Cx {
     pub(crate) client: Client,
     /// The browser's `getTimezoneOffset()`, sent by forms.
     pub(crate) tz_offset: Option<i32>,
+    /// How the request named the workspace it entered, if it named one.
+    pub(crate) named_by: Option<NamedBy>,
 }
 
 impl Cx {
@@ -54,6 +57,8 @@ impl Cx {
             uow: self.uow.clone(),
             user_id: self.user_id,
             input,
+            access: self.access.clone(),
+            form_may_name_workspace: false,
         }
     }
 

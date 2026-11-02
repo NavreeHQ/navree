@@ -7,7 +7,9 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, SubsecRound, Utc};
-use navree_contracts::Clock;
+use navree_access::{WorkspaceEntry, WorkspaceGate};
+use navree_audit::AuditLog;
+use navree_contracts::{AuditEntry, AuditSink, Clock};
 use navree_db::{ChangeEvent, ChangeOp, Uow};
 use navree_http::AppError;
 use navree_kernel::AppContext;
@@ -17,8 +19,9 @@ use navree_validation::Messages;
 use serde_json::{Map, Value as Json};
 use uuid::Uuid;
 
+use crate::core::Core;
 use crate::values::{self, Invalid, Shape};
-use crate::workspace;
+use crate::workspace::{self, Admitted, Refused};
 use crate::{FormData, SaveContext};
 
 /// The time now, from the app's `dyn Clock` when it has one.
@@ -179,7 +182,9 @@ fn owner<M: Model>(model: &M) -> Result<Option<Option<Uuid>>, AppError> {
 /// `Resource::create`'s default. A record of a model that belongs to
 /// workspaces is made inside its workspace: the one the unit of work works
 /// in, which a form that names another (`workspace_id`) is refused for, or
-/// the one the form names when the unit of work is in none.
+/// the one the form names when the unit of work is in none or the sidebar's
+/// workspace gives way to it ([`Workspaces::Every`](crate::Workspaces::Every)).
+/// A form's workspace is checked like a request's: see [`named_by_form`].
 pub(crate) async fn create<M: Model>(
     ctx: &SaveContext,
     form: FormData,
@@ -198,13 +203,16 @@ pub(crate) async fn create<M: Model>(
     };
     let target = match (named, uow.workspace()) {
         (Some(named), Some(current)) if named != current => {
-            return Err(AppError::bad_request(format!(
-                "A {} cannot be made in another workspace than the one you are working in.",
-                M::meta().name()
-            )));
+            if !ctx.form_may_name_workspace() {
+                return Err(AppError::bad_request(format!(
+                    "A {} cannot be made in another workspace than the one you are working in.",
+                    M::meta().name()
+                )));
+            }
+            return named_by_form::<M>(ctx, model, named).await;
         }
         (_, Some(current)) => current,
-        (Some(named), None) => named,
+        (Some(named), None) => return named_by_form::<M>(ctx, model, named).await,
         (None, None) => {
             return Err(AppError::bad_request(format!(
                 "Name the workspace of the new {} (`{}`) or choose a workspace first.",
@@ -217,7 +225,72 @@ pub(crate) async fn create<M: Model>(
     if let Some(column) = M::meta().workspace_column() {
         model.set_value(column, Value::from(target))?;
     }
-    workspace::within(uow, target, insert::<M>(uow, model)).await
+    workspace::within(ctx.app(), uow, target, insert::<M>(uow, model)).await
+}
+
+/// Makes a record in the workspace its form names, on the terms a resource
+/// across workspaces reads on. A user who may work in it makes it inside it.
+/// Anyone else gets no setting that row-level security would read as theirs:
+/// a role it binds is refused, and a role that sees every workspace (or a
+/// database with no such thing) makes the record it could see anyway, in a
+/// workspace that exists.
+async fn named_by_form<M: Model>(
+    ctx: &SaveContext,
+    model: M,
+    named: Uuid,
+) -> Result<Record<M>, AppError> {
+    let uow = ctx.uow();
+    let core = ctx.app().get::<Core>().await.map_err(AppError::internal)?;
+    let admitted = workspace::admission(
+        ctx.app(),
+        &core,
+        ctx.user_id(),
+        ctx.user_access(),
+        named,
+        true,
+    )
+    .await?;
+    let refused = match admitted {
+        Ok(admitted) => {
+            if admitted == Admitted::Staff {
+                record_staff(ctx, workspace::staff_entry(named, "form")).await;
+            }
+            return workspace::within(ctx.app(), uow, named, insert::<M>(uow, model)).await;
+        }
+        Err(refused) => refused,
+    };
+    // With nothing to say whether the workspace exists, or who may, the form's
+    // word is not taken for it.
+    let gate = ctx.app().try_get::<dyn WorkspaceGate>().await;
+    let (Refused::NotAllowed, Some(gate)) = (refused, gate) else {
+        return Err(refused.error());
+    };
+    if gate.check(ctx.user_id(), named, true).await? == WorkspaceEntry::NoSuchWorkspace {
+        return Err(AppError::bad_request(format!(
+            "There is no workspace {named} to make a {} in.",
+            M::meta().name()
+        )));
+    }
+    if workspace::bound_by_row_level_security(uow, M::meta().table()).await? {
+        return Err(refused.error());
+    }
+    workspace::outside(ctx.app(), uow, insert::<M>(uow, model)).await
+}
+
+/// Records `entry` with the user, in the unit of work when the app has the
+/// audit log.
+async fn record_staff(ctx: &SaveContext, entry: AuditEntry) {
+    let entry = entry.actor(ctx.user_id());
+    let action = entry.action.clone();
+    if let Some(log) = ctx.app().try_get::<AuditLog>().await {
+        if let Err(error) = log.record_in(ctx.uow(), entry).await {
+            tracing::warn!(target: "navree::helm", %error, %action, "could not write an audit entry");
+        }
+    } else if let Some(sink) = ctx.app().try_get::<dyn AuditSink>().await
+        && let Err(error) = sink.record(entry).await
+    {
+        tracing::warn!(target: "navree::helm", %error, %action, "could not write an audit entry");
+    }
 }
 
 /// Inserts `model` with a generated key and records the change.
@@ -260,9 +333,22 @@ pub(crate) async fn update<M: Model>(
         sets.push(Assignment::value(column, value));
     }
     let uow = ctx.uow();
-    match owner(&old)? {
+    let was = owner(&old)?;
+    if owner(&new)? != was {
+        return Err(AppError::bad_request(format!(
+            "A {} stays in its workspace: it cannot be moved to another.",
+            M::meta().name()
+        )));
+    }
+    match was {
         Some(Some(workspace)) => {
-            workspace::within(uow, workspace, write::<M>(uow, old, sets, Some(workspace))).await
+            workspace::within(
+                ctx.app(),
+                uow,
+                workspace,
+                write::<M>(uow, old, sets, Some(workspace)),
+            )
+            .await
         }
         _ => write::<M>(uow, old, sets, None).await,
     }
@@ -308,7 +394,9 @@ async fn write<M: Model>(
 pub(crate) async fn delete<M: Model>(ctx: &SaveContext, record: Record<M>) -> Result<(), AppError> {
     let uow = ctx.uow();
     match owner(record.model())? {
-        Some(Some(workspace)) => workspace::within(uow, workspace, remove::<M>(uow, record)).await,
+        Some(Some(workspace)) => {
+            workspace::within(ctx.app(), uow, workspace, remove::<M>(uow, record)).await
+        }
         _ => remove::<M>(uow, record).await,
     }
 }

@@ -14,7 +14,7 @@ use navree_kernel::AppContext;
 use crate::core::Core;
 use crate::cx::{Client, Cx};
 use crate::session::PanelSession;
-use crate::workspace;
+use crate::workspace::{self, Admitted, NamedBy};
 
 /// A signed-in panel request: its [`Cx`] and session.
 pub(crate) struct Panel {
@@ -22,10 +22,29 @@ pub(crate) struct Panel {
     pub(crate) session: PanelSession,
 }
 
+/// A [`Panel`] that doesn't enter the workspace the request names, for the
+/// form that changes it: the user can leave a workspace they may no longer
+/// work in or write to.
+pub(crate) struct PanelOutside(pub(crate) Panel);
+
+impl FromRequestParts for PanelOutside {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
+        Ok(PanelOutside(panel(parts, false).await?))
+    }
+}
+
 impl FromRequestParts for Panel {
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
+        panel(parts, true).await
+    }
+}
+
+async fn panel(parts: &mut Parts, enter_named: bool) -> Result<Panel, AppError> {
+    {
         let app = parts
             .extensions
             .get::<AppContext>()
@@ -39,13 +58,32 @@ impl FromRequestParts for Panel {
             .map(|p| p.user_id)
             .ok_or_else(AppError::unauthenticated)?;
         let uow = Uow::from_request_parts(parts).await?;
-        // A request that is not inside a workspace may name one.
-        if uow.workspace().is_none()
-            && let Some(workspace) = workspace::requested(&parts.headers)
-        {
-            workspace::enter(&uow, Some(workspace)).await?;
-        }
+        // The user's app-wide access: entering a workspace below doesn't change it.
         let CurrentAccess(access) = CurrentAccess::from_request_parts(parts).await?;
+        let mut named_by = None;
+        let mut staff = None;
+        // A request that is not inside a workspace may name one, and is let in
+        // only if the user may work in it.
+        if enter_named
+            && uow.workspace().is_none()
+            && let Some((named, by)) =
+                workspace::requested(&parts.headers, workspace::header_of(&app).await.as_deref())
+        {
+            match workspace::admit_request(parts, &app, &core, &uow, user_id, &access, named)
+                .await?
+            {
+                Ok(admitted) => {
+                    named_by = Some(by);
+                    if admitted == Admitted::Staff {
+                        staff = Some(named);
+                    }
+                }
+                Err(refused) if by == NamedBy::Header => return Err(refused.error()),
+                // A cookie is what the browser kept: it stops counting, and the
+                // user can still reach the form that changes it.
+                Err(_) => {}
+            }
+        }
         let ClientIp(ip) = ClientIp::from_parts(parts);
         let client = Client {
             request_id: parts
@@ -64,18 +102,24 @@ impl FromRequestParts for Panel {
             .get::<PanelSession>()
             .cloned()
             .unwrap_or_default();
-        Ok(Panel {
-            cx: Cx {
-                app,
-                uow,
-                access,
-                user_id,
-                core,
-                client,
-                tz_offset: None,
-            },
-            session,
-        })
+        let cx = Cx {
+            app,
+            uow,
+            access,
+            user_id,
+            core,
+            client,
+            tz_offset: None,
+            named_by,
+        };
+        if let Some(entered) = staff {
+            cx.audit(workspace::staff_entry(
+                entered,
+                workspace::named_by_name(named_by),
+            ))
+            .await;
+        }
+        Ok(Panel { cx, session })
     }
 }
 

@@ -4,6 +4,7 @@
 use std::fmt;
 use std::sync::Arc;
 
+use navree_access::PrincipalAccess;
 use navree_db::Uow;
 use navree_http::AppError;
 use navree_kernel::{AppContext, ModuleId};
@@ -20,6 +21,10 @@ pub(crate) struct ContextInner {
     pub(crate) uow: Uow,
     pub(crate) user_id: Uuid,
     pub(crate) input: Map<String, Value>,
+    pub(crate) access: Arc<PrincipalAccess>,
+    /// A create's form may name another workspace than the one the sidebar
+    /// holds (a resource across workspaces, with no header naming one).
+    pub(crate) form_may_name_workspace: bool,
 }
 
 impl ContextInner {
@@ -112,6 +117,16 @@ impl ActionContext {
 pub struct SaveContext(Arc<ContextInner>);
 
 shared_context!(SaveContext);
+
+impl SaveContext {
+    pub(crate) fn user_access(&self) -> &Arc<PrincipalAccess> {
+        &self.0.access
+    }
+
+    pub(crate) fn form_may_name_workspace(&self) -> bool {
+        self.0.form_may_name_workspace
+    }
+}
 
 /// What a custom page's data function gets: the unit of work, the user and
 /// services.

@@ -22,6 +22,8 @@ use uuid::Uuid;
 use crate::servers::{Server, run_admin};
 use crate::support::*;
 
+mod access;
+
 /// A note, which belongs to a workspace.
 #[derive(navree_orm::Model, Clone, Debug, Default, PartialEq, Serialize)]
 #[model(
@@ -148,6 +150,17 @@ impl Resource for EveryNote {
             Field::datetime("created_at").readonly().sortable(),
         ]
     }
+
+    fn actions(&self) -> Vec<Action<Note>> {
+        vec![
+            Action::new("locate", "Locate").handle(|ctx, _notes: Vec<Record<Note>>| async move {
+                Ok(ActionResult::message(format!(
+                    "working in {:?}",
+                    ctx.workspace()
+                )))
+            }),
+        ]
+    }
 }
 
 struct NotesModule;
@@ -159,7 +172,10 @@ impl Module for NotesModule {
             CreateNotes,
         )))
         .resource::<NoteResource>()
-        .resource::<EveryNote>();
+        .resource::<EveryNote>()
+        // These tests are about what the panel does in a workspace, whoever
+        // named it: `access` is about who may.
+        .helm_staff_workspaces(|_| async { Ok(true) });
     }
 }
 

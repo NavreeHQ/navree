@@ -17,7 +17,7 @@ use navree_helm::{
     Action, ActionContext, ActionResult, DEFAULT_MAX_FILE_BYTES, Field, Filter, FormData,
     HELM_SUBJECT, Helm, HelmActionJob, HelmModule, HelmOptions, HelmPage, Metric, MetricRange,
     ModelOf, ModuleBuilderHelmExt, PageContext, RecordOf, Resource, SESSION_COOKIE, SaveContext,
-    VIEW, WORKSPACE_COOKIE, Workspaces,
+    StaffEntry, VIEW, WORKSPACE_COOKIE, Workspaces,
 };
 use navree_http::AppError;
 use navree_kernel::{BoxFuture, ModuleBuilder};
@@ -338,4 +338,12 @@ async fn the_documented_routes_answer() {
         .send()
         .await
         .assert_status(200);
+}
+
+#[allow(dead_code)]
+fn staff_are_named_on_the_panel(m: &mut ModuleBuilder) {
+    m.helm_staff_workspaces(|entry: StaffEntry| async move {
+        let _ = (&entry.app, entry.user_id, entry.workspace);
+        Ok(entry.access.ability.can("enter", "support", None))
+    });
 }

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use chrono::Timelike;
 use http::{HeaderName, HeaderValue};
-use navree_access::{AccessModule, Subject};
+use navree_access::{AccessModule, Subject, WorkspaceGate};
 use navree_config::ModuleBuilderConfigExt;
 use navree_contracts::{Clock, ModuleBuilderConformityExt, PermissionCheck, ZoneSource};
 use navree_db::{Backend, Db, DbOptions, Executor as _, MigrationSet, ModuleBuilderDbExt};
@@ -31,6 +31,7 @@ use crate::entity::{
     AccessRequest, Invitation, Member, OrgMember, Organization, Partition, Workspace,
 };
 use crate::error::map_workspace_error;
+use crate::gate::Gate;
 use crate::isolation::{IsolationDriver, WorkspaceScoped};
 use crate::library::{Library, LibraryGuard, LibraryVisibility};
 use crate::migration::migrations;
@@ -56,6 +57,8 @@ use crate::{
 /// - the subjects `Workspace`, `WorkspaceMember` and `WorkspaceInvitation`
 ///   for navree-access (permissions `workspace.*`, `workspace.members.*`,
 ///   `workspace.invitations.*`);
+/// - a `dyn WorkspaceGate`, so a module that works in workspaces of its own
+///   accord (navree-helm's panel) enters one only for who may;
 /// - a `dyn PermissionCheck`, so `navree_contracts::permitted` answers
 ///   questions about a workspace with the member's role there (evaluated
 ///   as behind [`InWorkspace`](crate::InWorkspace));
@@ -261,6 +264,14 @@ fn register(m: &mut ModuleBuilder, config: Option<WorkspaceConfig>) {
             .deps(vec![ProviderKey::of::<Core>()]),
         )
         .exports::<Members>()
+        // Who may work in a workspace, for modules that work in them.
+        .factory(
+            Factory::<dyn WorkspaceGate>::new(|r: Resolver| async move {
+                Ok(Arc::new(Gate(r.get::<Core>().await?)) as Arc<dyn WorkspaceGate>)
+            })
+            .deps(vec![ProviderKey::of::<Core>()]),
+        )
+        .exports::<dyn WorkspaceGate>()
         // Permission questions about a workspace asked outside a route
         // (`navree_contracts::permitted`).
         .multi(

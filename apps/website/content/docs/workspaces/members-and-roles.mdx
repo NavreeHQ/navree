@@ -155,6 +155,8 @@ if permitted(&ctx, &principal, "operations.view", Some(workspace_id)).await? {
 
 `WorkspaceModule` answers with the user's role in that workspace, evaluated as behind the guard (a non-member is refused), and `AccessModule` answers with their global roles and permissions; either one granting it is enough. With no workspace given, only the global answer counts. [Operations](/docs/digging-deeper/batches-and-operations/#who-may-see-an-operation) use this to decide who sees them.
 
+A module that works in workspaces of its own accord asks `navree::access::WorkspaceGate` (a `dyn` provider of `WorkspaceModule`) whether a user may work in one, and enters it through the gate, so that the isolation strategy applies. [Helm](/docs/tools/helm/#workspaces) does this for a workspace a request names. An app without `WorkspaceModule` has no gate, and a module must refuse rather than trust what a request names.
+
 ## Roles through an organization
 
 With [organizations](/docs/workspaces/organizations/) on, a user can also enter a workspace as a member of the organization it is attached to. Their organization role maps to a workspace role, and that role is what the workspace sees:

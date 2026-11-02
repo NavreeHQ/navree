@@ -129,6 +129,7 @@ mod demo;
 mod directory;
 mod error;
 mod fixtures;
+mod gate;
 mod grants;
 mod invitations;
 mod isolation;

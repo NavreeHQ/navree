@@ -27,6 +27,7 @@ use crate::metric::{
 };
 use crate::query::ListQuery;
 use crate::values::{self, Invalid, Shape, is_blank, key_from_str, key_text};
+use crate::workspace::NamedBy;
 use crate::{
     ActionContext, ActionResult, FormData, HelmOptions, RecordOf, Resource, SaveContext, Workspaces,
 };
@@ -775,7 +776,12 @@ impl<R: Resource> Handle<R> {
     }
 
     fn save_context(&self, cx: &Cx) -> SaveContext {
-        SaveContext::new(cx.inner(self.info.module, Map::new()))
+        let mut inner = cx.inner(self.info.module, Map::new());
+        // The sidebar's workspace is a default a form across workspaces may
+        // overrule; a header is the client's own word for this request.
+        inner.form_may_name_workspace =
+            self.info.workspaces == Some(Workspaces::Every) && cx.named_by == Some(NamedBy::Cookie);
+        SaveContext::new(inner)
     }
 
     fn form(&self, cx: &Cx, values: Map<String, Json>) -> FormData {

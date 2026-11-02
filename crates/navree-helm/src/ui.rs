@@ -26,6 +26,7 @@ use crate::field::{Field, FieldKind};
 use crate::handle::{ActionInfo, ErasedResource, RawRecord, ResourceInfo};
 use crate::metric::MetricResult;
 use crate::panel::Panel;
+use crate::panel::PanelOutside;
 use crate::present::{Item, Screen, encode, present, screen_fields};
 use crate::query::ListQuery;
 use crate::session::{
@@ -33,7 +34,7 @@ use crate::session::{
     build_cookie, clear_cookie, cookie, redirect, request_host, session_cookie,
 };
 use crate::values::key_text;
-use crate::workspace::{WORKSPACE_COOKIE, requested};
+use crate::workspace::{self, WORKSPACE_COOKIE};
 use crate::{ActionResult, icons, money};
 
 /// The Settings screens (feature `settings`).
@@ -530,6 +531,10 @@ impl SignIn {
         if let Some(header) = session_cookie(&self.core, encrypter, &data, &self.host) {
             response.headers_mut().append(SET_COOKIE, header);
         }
+        // A session that ran out left the last user's workspace in the browser.
+        if let Some(header) = clear_cookie(WORKSPACE_COOKIE, self.core.options.base(), &self.host) {
+            response.headers_mut().append(SET_COOKIE, header);
+        }
         let path = format!("{}/login", self.core.options.base());
         if let Some(header) = clear_cookie(LOGIN_COOKIE, &path, &self.host) {
             response.headers_mut().append(SET_COOKIE, header);
@@ -672,11 +677,10 @@ pub(crate) async fn two_factor(request: Request) -> Response {
 }
 
 /// `POST {path}/workspace`: works in the workspace named by the form's
-/// `workspace` field for the rest of the session (a cookie), or in none when
-/// it is empty.
+/// `workspace` field, if the user may, for as long as a sign-in lasts (a cookie
+/// that signing in and out clear), or in none when it is empty.
 pub(crate) async fn choose_workspace(
-    panel: Panel,
-    headers: HeaderMap,
+    PanelOutside(panel): PanelOutside,
     request: Request,
 ) -> Response {
     let core = panel.cx.core.clone();
@@ -691,8 +695,7 @@ pub(crate) async fn choose_workspace(
         .unwrap_or_default();
     // The workspace of a request that is inside one is not the panel's to
     // change.
-    let fixed = panel.cx.uow.workspace().is_some() && requested(&headers).is_none();
-    if fixed {
+    if panel.cx.uow.workspace().is_some() {
         return redirect_with(
             &base,
             "This page is inside a workspace already.",
@@ -711,12 +714,30 @@ pub(crate) async fn choose_workspace(
     let Ok(workspace) = uuid::Uuid::parse_str(&chosen) else {
         return redirect_with(&base, "That is not a workspace id.", "error", &core, &host);
     };
+    let admitted = workspace::admission(
+        &panel.cx.app,
+        &core,
+        panel.cx.user_id,
+        &panel.cx.access,
+        workspace,
+        false,
+    )
+    .await;
+    let refusal = match admitted {
+        Ok(Ok(_)) => None,
+        Ok(Err(refused)) => Some(refused.error()),
+        Err(error) => Some(error),
+    };
+    if let Some(error) = refusal {
+        let message = error.detail.as_deref().unwrap_or(&error.title).to_owned();
+        return redirect_with(&base, &message, "error", &core, &host);
+    }
     let mut response = redirect(&base);
     if let Some(header) = build_cookie(
         WORKSPACE_COOKIE,
         workspace.to_string(),
         &base,
-        60 * 60 * 24 * 30,
+        i64::try_from(core.options.session_minutes.saturating_mul(60)).unwrap_or(i64::MAX),
         &host,
     ) {
         response.headers_mut().append(SET_COOKIE, header);
@@ -739,8 +760,10 @@ pub(crate) async fn logout(request: Request) -> Response {
         tracing::warn!(target: "navree::helm", %error, "could not revoke the panel session's refresh token");
     }
     let mut response = redirect(&format!("{base}/login"));
-    if let Some(header) = clear_cookie(SESSION_COOKIE, &base, &signin.host) {
-        response.headers_mut().append(SET_COOKIE, header);
+    for name in [SESSION_COOKIE, WORKSPACE_COOKIE] {
+        if let Some(header) = clear_cookie(name, &base, &signin.host) {
+            response.headers_mut().append(SET_COOKIE, header);
+        }
     }
     response
 }

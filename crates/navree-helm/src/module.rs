@@ -1,17 +1,19 @@
 //! [`HelmModule`] and [`ModuleBuilderHelmExt`].
 
+use std::future::Future;
 use std::sync::Arc;
 
 use navree_access::{AccessModule, Subject};
 use navree_config::ModuleBuilderConfigExt;
 use navree_contracts::ModuleBuilderJobsExt;
-use navree_http::ModuleBuilderHttpExt;
+use navree_http::{AppError, ModuleBuilderHttpExt};
 use navree_kernel::{Factory, Injectable, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
 
 use crate::controller::HelmController;
 use crate::core::Core;
 use crate::page::PageRegistration;
 use crate::registry::ResourceRegistration;
+use crate::workspace::{StaffEntry, StaffPolicy};
 use crate::{HelmActionJob, HelmOptions, HelmPage, Resource, session};
 
 /// The subject that guards the panel: `view` on `Helm` (permission
@@ -135,6 +137,29 @@ pub trait ModuleBuilderHelmExt {
 
     /// Adds a custom page to the panel.
     fn helm_page(&mut self, page: HelmPage) -> &mut Self;
+
+    /// Lets the users `may_enter` says work in workspaces they are not members
+    /// of: support staff, an operator. Without this nobody does; a panel user
+    /// works only in the workspaces they are a member of. Each request made
+    /// that way is audited. Register it once.
+    ///
+    /// Inside a workspace entered this way a user keeps their app-wide
+    /// abilities. In an app without `WorkspaceModule` this is the only way a
+    /// request can name a workspace, and nothing checks that the workspace
+    /// exists unless `may_enter` does.
+    ///
+    /// ```no_run
+    /// # use navree_helm::ModuleBuilderHelmExt;
+    /// # fn register(m: &mut navree_kernel::ModuleBuilder) {
+    /// m.helm_staff_workspaces(|entry| async move {
+    ///     Ok(entry.access.ability.can("support", "Workspace", None))
+    /// });
+    /// # }
+    /// ```
+    fn helm_staff_workspaces<F, Fut>(&mut self, may_enter: F) -> &mut Self
+    where
+        F: Fn(StaffEntry) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<bool, AppError>> + Send + 'static;
 }
 
 impl ModuleBuilderHelmExt for ModuleBuilder {
@@ -148,5 +173,13 @@ impl ModuleBuilderHelmExt for ModuleBuilder {
     fn helm_page(&mut self, page: HelmPage) -> &mut Self {
         let module = self.module_id();
         self.contribute(PageRegistration { page, module })
+    }
+
+    fn helm_staff_workspaces<F, Fut>(&mut self, may_enter: F) -> &mut Self
+    where
+        F: Fn(StaffEntry) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<bool, AppError>> + Send + 'static,
+    {
+        self.contribute(StaffPolicy::new(may_enter))
     }
 }

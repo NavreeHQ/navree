@@ -295,10 +295,22 @@ token.
   `m.resource::<R>()`.
 - **"Choose a workspace first" (400):** the model is `#[model(workspace)]`
   and the request is in no workspace. The panel works in one workspace at a
-  time: the unit of work's (entered by the app), else an `X-Workspace` header
-  or the cookie that the sidebar's form sets. `Workspaces::Every` on the
-  resource spans workspaces (the database role decides what it sees; under
+  time: the unit of work's (entered by the app), else the workspace header
+  (`workspace.header`, `X-Workspace` by default) or the cookie that the
+  sidebar's form sets. `Workspaces::Every` on the resource spans workspaces
+  (the database role decides what it sees and what a create may make; under
   row-level security, only a role that bypasses it sees every workspace).
+  An action's handler on such a resource runs in no workspace unless one was
+  named: scope its writes with `navree::orm::workspace::scope`.
+- **Naming a workspace gets a 403:** a named workspace is entered only for a
+  member, through `WorkspaceModule`, or for whoever
+  `m.helm_staff_workspaces(|entry| async move { Ok(..) })` lets in (explicit,
+  and audited as `helm.workspace.staff`). Being a super-admin is not enough.
+  Code `helm_workspace_unchecked` means the app has neither, so nothing can
+  check. A cookie for a workspace the user may not enter counts for nothing
+  (400, `Choose a workspace first`). Under database isolation the panel can't
+  enter a workspace at all. Member roles don't narrow abilities: inside the
+  workspace the panel uses app-wide abilities.
 - **A record is a 404, not a 403:** rows the access filter hides don't exist
   for that user, like `Accessible<M, Read>` in the API.
 - **A field is greyed out on edit:** a `.fields([..])` or `cannot(..)` rule

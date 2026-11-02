@@ -380,6 +380,28 @@ impl IsolationDriver {
         Ok(())
     }
 
+    /// Leaves the workspace `uow` is in: what [`apply`](Self::apply) set goes
+    /// back to none, and the `search_path` to what the session started with.
+    pub(crate) async fn leave(&self, uow: &Uow) -> Result<(), WorkspaceError> {
+        uow.set_workspace(None);
+        if uow.backend() != Backend::Postgres {
+            return Ok(());
+        }
+        uow.set_local("navree.workspace", "").await?;
+        if self.isolation == Isolation::Schema {
+            let path: String = uow
+                .fetch_optional(&Statement::text(
+                    "SELECT reset_val AS path FROM pg_settings WHERE name = 'search_path'",
+                ))
+                .await?
+                .map(|row| row.get::<String>("path"))
+                .transpose()?
+                .unwrap_or_else(|| "public".to_owned());
+            uow.set_local("search_path", &path).await?;
+        }
+        Ok(())
+    }
+
     /// Sets the transaction-local setting `name` to `value` on `uow` (a
     /// unit of work on the app's database) when it runs on PostgreSQL.
     /// Begins the transaction. Nothing on other databases.
