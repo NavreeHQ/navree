@@ -419,12 +419,17 @@ async fn the_overview_charts_jobs_per_minute_and_lists_failed_jobs() {
         site.h.fleet.failed_jobs(None).await.unwrap().len() == 6
     })
     .await;
+    // The page shows the retried job gone before the next button is pressed.
+    page.assert_see("View all 6 failed jobs").await.unwrap();
     page.press(Target::from("Forget").nth(0)).await.unwrap();
     eventually("one failed job is forgotten", || async {
         site.h.fleet.failed_jobs(None).await.unwrap().len() == 5
     })
     .await;
-    page.assert_see("View all 5 failed jobs").await.ok();
+    eventually("the page counts five failed jobs", || async {
+        page.text("#count-failed").await.unwrap() == "5"
+    })
+    .await;
     assert_eq!(
         page.script::<u64>("return document.querySelectorAll('[style]').length;")
             .await
