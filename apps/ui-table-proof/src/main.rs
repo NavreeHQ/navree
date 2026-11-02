@@ -652,7 +652,7 @@ async fn export_xlsx(uow: Uow, query: TableQuery<DealRow>) -> Result<Response, A
         .export_rows(
             Deal::query(),
             &uow,
-            navree::sheets::XLSX_MAX_ROWS as u64,
+            navree::sheets::XLSX_MAX_ROWS,
             to_row(names),
             &mut rows,
         )
