@@ -154,7 +154,8 @@ let rates = self.rates.latest(&base).await.map_err(|error| {
 
 Builder: `get`, `post`, `put`, `patch`, `delete`, `request(method, url)`,
 then `header`, `bearer(token)`, `with_request_id(&id)` (not automatic),
-`query`, `json`, `form`, `body`, `timeout`, `retries(n)`. Response:
+`query`, `json`, `form`, `body`, `timeout`, `retries(n)`, `secret_url()` (the whole
+URL is a secret, as a webhook's is: errors, logs and telemetry show its host alone). Response:
 `status()`, `is_success()`, `header(name)`, `text()`, `bytes()`, `json()`.
 
 - Retries: idempotent methods (GET, HEAD, OPTIONS, TRACE, PUT, DELETE) on
