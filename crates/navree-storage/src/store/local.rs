@@ -413,14 +413,44 @@ fn publish(
     root: &Path,
 ) -> StoreResult<()> {
     #[cfg(unix)]
-    file.set_permissions(fs::Permissions::from_mode(final_mode(destination)))
-        .map_err(|error| fail("set the permissions of", path, error))?;
+    set_final_mode(&file, final_mode(destination), path)?;
     sync_file(&file, &staging.path).map_err(|error| fail("write", path, error))?;
     drop(file);
     fs::rename(&staging.path, destination).map_err(|error| fail("replace", path, error))?;
     staging.published = true;
-    sync_directories(destination, root, staging.made_directories);
-    Ok(())
+    sync_directories(destination, root, staging.made_directories)
+        .map_err(|error| fail("flush the directory of", path, error))
+}
+
+/// Gives the staged file `mode`. A file system that keeps no modes (vfat, some
+/// FUSE and NFS mounts) refuses, and the file keeps the private mode it was
+/// made with: tighter than asked for, and stored.
+#[cfg(unix)]
+fn set_final_mode(file: &File, mode: u32, path: &str) -> StoreResult<()> {
+    match set_mode(file, mode) {
+        Ok(()) => Ok(()),
+        Err(error) if keeps_no_modes(&error) => {
+            tracing::warn!(target: "navree::storage", path, %error, "the file system refused a file's mode: it stays private");
+            Ok(())
+        }
+        Err(error) => Err(fail("set the permissions of", path, error)),
+    }
+}
+
+/// Whether `error` from `chmod` says the file system doesn't do that here.
+#[cfg(unix)]
+fn keeps_no_modes(error: &io::Error) -> bool {
+    matches!(
+        error.kind(),
+        io::ErrorKind::PermissionDenied | io::ErrorKind::Unsupported
+    )
+}
+
+#[cfg(unix)]
+fn set_mode(file: &File, mode: u32) -> io::Result<()> {
+    #[cfg(test)]
+    faults::chmod()?;
+    file.set_permissions(fs::Permissions::from_mode(mode))
 }
 
 /// The permission bits the file written to `destination` ends with: those of
@@ -473,10 +503,13 @@ fn sync_file(file: &File, path: &Path) -> io::Result<()> {
 }
 
 /// Flushes the directory that holds `destination` after the rename, and
-/// with `ancestors` the ones above it up to `root`, which were made for it.
-/// Windows keeps no directory handles to flush; a failure to flush a
-/// directory is not a failure to store the file.
-fn sync_directories(destination: &Path, root: &Path, ancestors: bool) {
+/// with `ancestors` the ones above it up to `root`, which were made for it. A
+/// directory that can't be opened, or a file system that flushes no directories,
+/// leaves nothing to do; a device that fails is an error, since the rename may
+/// not last. On Windows, where a directory has no handle to flush, the file is
+/// flushed through a new handle, which commits the volume's log of the rename
+/// that came before it.
+fn sync_directories(destination: &Path, root: &Path, ancestors: bool) -> io::Result<()> {
     #[cfg(unix)]
     {
         let mut directory = destination.parent();
@@ -484,16 +517,41 @@ fn sync_directories(destination: &Path, root: &Path, ancestors: bool) {
             if let Ok(handle) = File::open(current) {
                 #[cfg(test)]
                 flushed::record(current);
-                let _ = handle.sync_all();
+                if let Err(error) = flush_directory(&handle)
+                    && !matches!(
+                        error.kind(),
+                        io::ErrorKind::InvalidInput
+                            | io::ErrorKind::Unsupported
+                            | io::ErrorKind::PermissionDenied
+                    )
+                {
+                    return Err(error);
+                }
             }
             if !ancestors || current == root {
                 break;
             }
             directory = current.parent();
         }
+        let _ = root;
     }
     #[cfg(not(unix))]
-    let _ = (destination, root, ancestors);
+    {
+        let _ = (root, ancestors);
+        if let Ok(file) = File::options().write(true).open(destination) {
+            #[cfg(test)]
+            flushed::record(destination);
+            file.sync_all()?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn flush_directory(handle: &File) -> io::Result<()> {
+    #[cfg(test)]
+    faults::directory_flush()?;
+    handle.sync_all()
 }
 
 /// Whether `name` is a staging name: what follows its last `#` is digits.
@@ -862,6 +920,39 @@ mod flushed {
     /// Every path flushed so far, in order.
     pub(super) fn paths() -> Vec<PathBuf> {
         LOG.lock().unwrap().clone()
+    }
+}
+
+/// Failures a test asks of the next call on its own thread, which no file
+/// system here would give.
+#[cfg(all(test, unix))]
+mod faults {
+    use std::cell::RefCell;
+    use std::io;
+
+    thread_local! {
+        static CHMOD: RefCell<Option<io::Error>> = const { RefCell::new(None) };
+        static FLUSH: RefCell<Option<io::Error>> = const { RefCell::new(None) };
+    }
+
+    pub(super) fn refuse_chmod(error: io::Error) {
+        CHMOD.with(|fault| *fault.borrow_mut() = Some(error));
+    }
+
+    pub(super) fn fail_directory_flush(error: io::Error) {
+        FLUSH.with(|fault| *fault.borrow_mut() = Some(error));
+    }
+
+    pub(super) fn chmod() -> io::Result<()> {
+        CHMOD
+            .with(|fault| fault.borrow_mut().take())
+            .map_or(Ok(()), Err)
+    }
+
+    pub(super) fn directory_flush() -> io::Result<()> {
+        FLUSH
+            .with(|fault| fault.borrow_mut().take())
+            .map_or(Ok(()), Err)
     }
 }
 
@@ -1300,6 +1391,49 @@ mod tests {
             fs::read_dir(directory.path()).unwrap().count(),
             theirs.len()
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_file_system_that_refuses_chmod_still_stores_the_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let destination = directory.path().join("f");
+        let (file, staging) = create_staged(&destination, "f").unwrap();
+        faults::refuse_chmod(io::ErrorKind::PermissionDenied.into());
+        publish(file, staging, &destination, "f", directory.path()).unwrap();
+        assert_eq!(fs::read(&destination).unwrap(), b"");
+        // Any other failure to set the mode is a failure to store it.
+        let destination = directory.path().join("g");
+        let (file, staging) = create_staged(&destination, "g").unwrap();
+        faults::refuse_chmod(io::Error::other("disk on fire"));
+        assert!(publish(file, staging, &destination, "g", directory.path()).is_err());
+        assert!(!destination.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_directory_that_cannot_be_flushed_is_a_failed_write_when_the_device_failed() {
+        let directory = tempfile::tempdir().unwrap();
+        // Some file systems flush no directories: nothing is at risk from that.
+        let destination = directory.path().join("f");
+        let (file, staging) = create_staged(&destination, "f").unwrap();
+        faults::fail_directory_flush(io::ErrorKind::InvalidInput.into());
+        publish(file, staging, &destination, "f", directory.path()).unwrap();
+        // A device that failed may lose the rename: the caller has to know.
+        let destination = directory.path().join("g");
+        let (file, staging) = create_staged(&destination, "g").unwrap();
+        faults::fail_directory_flush(io::Error::other("input/output error"));
+        assert!(publish(file, staging, &destination, "g", directory.path()).is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_rename_on_windows_is_flushed_through_the_file_it_made() {
+        let directory = tempfile::tempdir().unwrap();
+        let destination = directory.path().join("f");
+        let (file, staging) = create_staged(&destination, "f").unwrap();
+        publish(file, staging, &destination, "f", directory.path()).unwrap();
+        assert!(flushed::paths().contains(&destination));
     }
 
     #[test]
