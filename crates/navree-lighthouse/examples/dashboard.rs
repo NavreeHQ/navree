@@ -107,7 +107,7 @@ impl Controller for CrmController {
                 async move {
                     let n = Uuid::now_v7().as_u128() as u64;
                     // One request in twenty is slow.
-                    let wait = if spread(n) % 20 == 0 {
+                    let wait = if spread(n).is_multiple_of(20) {
                         1_100 + spread(n + 1) % 500
                     } else {
                         40 + spread(n) % 160
