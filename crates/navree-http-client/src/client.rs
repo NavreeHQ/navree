@@ -14,7 +14,7 @@ use tokio::time::Instant;
 use url::Url;
 
 use crate::backoff::Backoff;
-use crate::error::display_url;
+use crate::error::{display_url, shown_url};
 use crate::fake::{FakeServer, FakeState};
 use crate::request::PreparedRequest;
 use crate::ssrf::{Refused, SsrfGuard, SsrfResolver};
@@ -247,7 +247,7 @@ impl HttpClient {
             MAX_RETRY_DELAY,
             retries,
         );
-        let url = display_url(&request.url);
+        let url = shown_url(&request.url, request.secret_url);
         let started = Instant::now();
         let mut attempts = 1;
         let outcome = loop {
@@ -270,6 +270,7 @@ impl HttpClient {
             }
             break outcome;
         };
+        let outcome = outcome.map(|response| response.with_secret_url(request.secret_url));
         let elapsed = started.elapsed();
         let elapsed_ms = elapsed.as_millis() as u64;
         let status = outcome.as_ref().map(Response::status);
@@ -341,7 +342,7 @@ impl HttpClient {
         let span_id = inject_trace(&mut request.headers);
         let options = &self.inner.options;
         let timeout = timeout.unwrap_or(Duration::from_secs(options.timeout_secs));
-        let url = display_url(&request.url);
+        let url = shown_url(&request.url, request.secret_url);
         let limit = options.max_response_bytes;
         let started = Instant::now();
         let method = request.method.clone();
@@ -366,6 +367,7 @@ impl HttpClient {
                     )
                 }),
         };
+        let outcome = outcome.map(|response| response.with_secret_url(request.secret_url));
         let elapsed = started.elapsed();
         let elapsed_ms = elapsed.as_millis() as u64;
         let status = outcome.as_ref().map(StreamingResponse::status);
@@ -397,7 +399,7 @@ impl HttpClient {
             Transport::Fake(state) => {
                 let response = state.execute(&request).await?;
                 if response.bytes().len() as u64 > limit {
-                    return Err(too_large(&request.url, limit));
+                    return Err(too_large(&Target::of(&request), limit));
                 }
                 Ok(response)
             }
@@ -406,10 +408,30 @@ impl HttpClient {
 }
 
 /// [`HttpClientError::BodyTooLarge`].
-fn too_large(url: &Url, limit: u64) -> HttpClientError {
+fn too_large(target: &Target, limit: u64) -> HttpClientError {
     HttpClientError::BodyTooLarge {
-        url: display_url(url),
+        url: target.shown(),
         limit,
+    }
+}
+
+/// Where a transport's errors say a request went.
+#[derive(Clone)]
+struct Target {
+    url: Url,
+    secret: bool,
+}
+
+impl Target {
+    fn of(request: &PreparedRequest) -> Self {
+        Self {
+            url: request.url.clone(),
+            secret: request.secret_url,
+        }
+    }
+
+    fn shown(&self) -> String {
+        shown_url(&self.url, self.secret)
     }
 }
 
@@ -420,6 +442,7 @@ async fn execute_real(
     request: PreparedRequest,
     limit: u64,
 ) -> Result<Response, HttpClientError> {
+    let target = Target::of(&request);
     let mut builder = client
         .request(request.method, request.url.clone())
         .headers(request.headers);
@@ -429,21 +452,21 @@ async fn execute_real(
     let mut response = builder
         .send()
         .await
-        .map_err(|error| transport_error(error, &request.url))?;
+        .map_err(|error| transport_error(error, &target))?;
     if response
         .content_length()
         .is_some_and(|length| length > limit)
     {
-        return Err(too_large(&request.url, limit));
+        return Err(too_large(&target, limit));
     }
     let mut body = BytesMut::new();
     while let Some(chunk) = response
         .chunk()
         .await
-        .map_err(|error| transport_error(error, &request.url))?
+        .map_err(|error| transport_error(error, &target))?
     {
         if (body.len() + chunk.len()) as u64 > limit {
-            return Err(too_large(&request.url, limit));
+            return Err(too_large(&target, limit));
         }
         body.extend_from_slice(&chunk);
     }
@@ -460,6 +483,7 @@ async fn open_real(
     request: PreparedRequest,
     limit: u64,
 ) -> Result<StreamingResponse, HttpClientError> {
+    let target = Target::of(&request);
     let mut builder = client
         .request(request.method, request.url.clone())
         .headers(request.headers);
@@ -469,15 +493,14 @@ async fn open_real(
     let response = builder
         .send()
         .await
-        .map_err(|error| transport_error(error, &request.url))?;
+        .map_err(|error| transport_error(error, &target))?;
     let status = response.status();
     let headers = response.headers().clone();
     let url = response.url().clone();
-    let request_url = request.url;
     let body: BodyStream = Box::pin(
         response
             .bytes_stream()
-            .map(move |chunk| chunk.map_err(|error| transport_error(error, &request_url))),
+            .map(move |chunk| chunk.map_err(|error| transport_error(error, &target))),
     );
     Ok(StreamingResponse::new(status, headers, url, body, limit))
 }
@@ -485,11 +508,11 @@ async fn open_real(
 /// Maps a reqwest error: an SSRF refusal anywhere in the chain is
 /// [`HttpClientError::Blocked`]; the URL (and its query) is dropped from the
 /// source so it cannot leak into logs.
-fn transport_error(error: reqwest::Error, url: &Url) -> HttpClientError {
+fn transport_error(error: reqwest::Error, target: &Target) -> HttpClientError {
     if let Some(refused) = Refused::find(&error) {
         return refused.clone().into_error();
     }
-    let url = display_url(url);
+    let url = target.shown();
     let error = error.without_url();
     if error.is_connect() {
         HttpClientError::Connect {

@@ -77,6 +77,7 @@ impl SlackApi {
         let response = self
             .client
             .post(url)
+            .secret_url()
             .json(&message.payload())
             .send()
             .await

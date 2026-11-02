@@ -426,3 +426,85 @@ async fn store_alerts_empty(app: &TestApp) -> bool {
         .unwrap()
         .is_empty()
 }
+
+/// A delivery that cannot connect names its destination in the error the
+/// client gives. The destination's URL is the secret, in any shape.
+#[tokio::test]
+async fn a_failed_delivery_keeps_the_destinations_out_of_everything_stored() {
+    const SLACK_URL: &str = "https://hooks.slack.test/services/T000/B000/SECRETSLACK";
+    const HOOK_URL: &str = "https://OPS.acme.test:443/hook/SECRETPATH?sig=SECRETQUERY";
+    let leaks = |text: &str| {
+        ["SECRETSLACK", "T000", "SECRETPATH", "SECRETQUERY"]
+            .iter()
+            .any(|secret| text.contains(secret))
+    };
+    let (client, server) = HttpClient::fake();
+    server.on(
+        Method::POST,
+        "https://hooks.slack.test/*",
+        FakeResponse::connection_failed(),
+    );
+    server.on(
+        Method::POST,
+        "https://ops.acme.test/*",
+        FakeResponse::connection_failed(),
+    );
+    let clock = Arc::new(navree_contracts::FixedClock::new(chrono::Utc::now()));
+    let app = builder()
+        .config("queue.driver", "memory")
+        .config("lighthouse.alerts.slack.webhook_url", SLACK_URL)
+        .config(
+            "lighthouse.alerts.webhook",
+            json!({ "url": HOOK_URL, "secret": SECRET }),
+        )
+        .override_value(Arc::new(client))
+        .override_value::<dyn navree_contracts::Clock>(clock.clone())
+        .module(QueueModule::from_config())
+        .build()
+        .await;
+    boom(&app, 1).await;
+    let store = flushed(&app).await;
+    let queue = app.get::<Queue>().await;
+    // Every attempt, past the backoff, until the jobs move to the failed jobs.
+    for _ in 0..8 {
+        let _ = queue.run_pending().await;
+        clock.advance(std::time::Duration::from_secs(601));
+    }
+    let failed = queue.failed().await.unwrap();
+    assert_eq!(failed.len(), 2, "both deliveries gave up: {failed:?}");
+    for job in &failed {
+        assert!(!leaks(&job.error), "the failed job says: {}", job.error);
+        assert!(!job.error.is_empty());
+    }
+    let alerts = store.alerts_for(None).await.unwrap();
+    assert_eq!(alerts.len(), 2);
+    for alert in &alerts {
+        let error = alert.error.clone().unwrap_or_default();
+        assert!(!leaks(&error), "the alert's row says: {error}");
+        assert!(
+            error.contains("hidden") || error.contains("connect"),
+            "{error}"
+        );
+    }
+    // The calls themselves are recorded too, with whatever the client reports.
+    flushed(&app).await;
+    let db = app.get::<navree_db::Db>().await;
+    for table in [
+        "lighthouse_issues",
+        "lighthouse_occurrences",
+        "lighthouse_samples",
+        "lighthouse_aggregates",
+        "lighthouse_alerts",
+    ] {
+        use navree_db::{Executor, Statement};
+        for row in db
+            .fetch_all(&Statement::text(format!("SELECT * FROM {table}")))
+            .await
+            .unwrap()
+        {
+            let text = format!("{row:?}");
+            assert!(!leaks(&text), "{table}: {text}");
+        }
+    }
+    app.shutdown().await.unwrap();
+}

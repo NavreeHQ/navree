@@ -320,6 +320,7 @@ impl AlertChannel for SlackChannel {
             let response = self
                 .client
                 .post(&self.url)
+                .secret_url()
                 .json(&slack_message(alert))
                 .send()
                 .await?;
@@ -381,6 +382,7 @@ impl AlertChannel for WebhookChannel {
             let response = self
                 .client
                 .post(&self.url)
+                .secret_url()
                 .header("content-type", "application/json")
                 .header("webhook-id", &id)
                 .header("webhook-timestamp", &timestamp.to_string())

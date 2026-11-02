@@ -6,16 +6,28 @@ use serde::de::DeserializeOwned;
 use url::Url;
 
 use crate::HttpClientError;
-use crate::error::display_url;
+use crate::error::shown_url;
 
 /// A response whose body has been read completely, so its accessors are
 /// synchronous and can be called any number of times.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Response {
     status: StatusCode,
     headers: HeaderMap,
     body: Bytes,
     url: Url,
+    secret_url: bool,
+}
+
+impl std::fmt::Debug for Response {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Response")
+            .field("status", &self.status)
+            .field("headers", &self.headers)
+            .field("body", &self.body)
+            .field("url", &shown_url(&self.url, self.secret_url))
+            .finish()
+    }
 }
 
 impl Response {
@@ -26,7 +38,14 @@ impl Response {
             headers,
             body,
             url,
+            secret_url: false,
         }
+    }
+
+    /// Marks the URL as a secret, as its request was.
+    pub(crate) fn with_secret_url(mut self, secret: bool) -> Self {
+        self.secret_url = secret;
+        self
     }
 
     /// The status code.
@@ -76,7 +95,7 @@ impl Response {
         if self.status.is_client_error() || self.status.is_server_error() {
             Err(HttpClientError::Status {
                 status: self.status,
-                url: display_url(&self.url),
+                url: shown_url(&self.url, self.secret_url),
             })
         } else {
             Ok(self)

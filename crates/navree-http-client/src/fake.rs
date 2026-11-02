@@ -12,7 +12,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use url::Url;
 
-use crate::error::display_url;
+use crate::error::{display_url, shown_url};
 use crate::request::PreparedRequest;
 use crate::{HttpClientError, Response};
 
@@ -146,7 +146,7 @@ impl FakeState {
         let Some(response) = response else {
             return Err(HttpClientError::NoFakeResponse {
                 method: request.method.clone(),
-                url: display_url(&request.url),
+                url: shown_url(&request.url, request.secret_url),
             });
         };
         if let Some(delay) = response.delay {
@@ -154,7 +154,7 @@ impl FakeState {
         }
         if response.connection_failed {
             return Err(HttpClientError::Connect {
-                url: display_url(&request.url),
+                url: shown_url(&request.url, request.secret_url),
                 source: Box::new(io::Error::new(
                     io::ErrorKind::ConnectionRefused,
                     "connection refused (fake)",

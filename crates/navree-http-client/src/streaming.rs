@@ -9,7 +9,7 @@ use http::{HeaderMap, StatusCode};
 use url::Url;
 
 use crate::HttpClientError;
-use crate::error::display_url;
+use crate::error::shown_url;
 
 /// The body of a [`StreamingResponse`]: pieces of bytes as they arrive.
 pub type BodyStream = Pin<Box<dyn Stream<Item = Result<Bytes, HttpClientError>> + Send>>;
@@ -25,6 +25,7 @@ pub struct StreamingResponse {
     url: Url,
     body: BodyStream,
     limit: u64,
+    secret_url: bool,
 }
 
 impl StreamingResponse {
@@ -42,7 +43,14 @@ impl StreamingResponse {
             url,
             body,
             limit,
+            secret_url: false,
         }
+    }
+
+    /// Marks the URL as a secret, as its request was.
+    pub(crate) fn with_secret_url(mut self, secret: bool) -> Self {
+        self.secret_url = secret;
+        self
     }
 
     /// The status code.
@@ -89,7 +97,7 @@ impl StreamingResponse {
         while let Some(chunk) = self.chunk().await? {
             if (body.len() + chunk.len()) as u64 > self.limit {
                 return Err(HttpClientError::BodyTooLarge {
-                    url: display_url(&self.url),
+                    url: shown_url(&self.url, self.secret_url),
                     limit: self.limit,
                 });
             }
@@ -103,7 +111,7 @@ impl fmt::Debug for StreamingResponse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("StreamingResponse")
             .field("status", &self.status)
-            .field("url", &display_url(&self.url))
+            .field("url", &shown_url(&self.url, self.secret_url))
             .finish_non_exhaustive()
     }
 }

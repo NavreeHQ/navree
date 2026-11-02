@@ -228,3 +228,65 @@ async fn the_module_client_reports_to_the_app() {
     assert!(client.telemetry().is_active());
     app.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn a_secret_url_shows_only_its_host_in_errors_events_and_debug() {
+    let (client, server) = HttpClient::fake();
+    let url = "https://hooks.example.com/services/T0/B0/SECRET?sig=QUERY";
+    server.on(
+        Method::POST,
+        "https://hooks.example.com/*",
+        FakeResponse::connection_failed(),
+    );
+    let (telemetry, recorder) = recording();
+
+    let builder = client.post(url).secret_url();
+    let shown = format!("{builder:?}");
+    assert!(!shown.contains("SECRET"), "{shown}");
+    let error = TelemetryContext::new(telemetry)
+        .scope(builder.send())
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(
+        !error.contains("SECRET") && !error.contains("T0"),
+        "{error}"
+    );
+    assert!(error.contains("hooks.example.com"), "says where: {error}");
+    let events = recorder.of_kind(EventKind::HttpClientRequest);
+    let event = format!("{:?}", events[0]);
+    assert!(
+        !event.contains("SECRET") && !event.contains("/T0/"),
+        "{event}"
+    );
+
+    // A response keeps it too.
+    server.on(
+        Method::POST,
+        "https://other.example.com/*",
+        FakeResponse::new(500),
+    );
+    let response = client
+        .post("https://other.example.com/hook/SECRET")
+        .secret_url()
+        .send()
+        .await
+        .unwrap();
+    assert!(!format!("{response:?}").contains("SECRET"));
+    let error = response.error_for_status().unwrap_err().to_string();
+    assert!(!error.contains("SECRET"), "{error}");
+
+    // Without it the path shows, as it always does.
+    server.on(
+        Method::GET,
+        "https://plain.example.com/*",
+        FakeResponse::connection_failed(),
+    );
+    let error = client
+        .get("https://plain.example.com/a/b?c=d")
+        .send()
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("/a/b") && !error.contains("c=d"), "{error}");
+}

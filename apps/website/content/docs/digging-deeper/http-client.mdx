@@ -117,6 +117,7 @@ The builder methods are:
 | `body(bytes)` | Sends a raw body (set `Content-Type` with `header`). |
 | `timeout(duration)` | This request's timeout per attempt. |
 | `retries(n)` | This request's number of retries (ignored for `POST` and `PATCH`). |
+| `secret_url()` | The whole URL is a secret, as an incoming webhook's is: errors, logs, `Debug` output and the `HttpClientRequest` event show its scheme and host alone (`https://hooks.example.com/[hidden]`). Without it they show the path, never the query string or credentials. |
 
 Builder methods never fail. The first problem (an invalid URL, header or body) is kept and returned by `send` as `HttpClientError::Build`. Only `http` and `https` URLs are accepted.
 

@@ -10,7 +10,7 @@ use navree_contracts::RequestId;
 use serde::Serialize;
 use url::Url;
 
-use crate::error::display_url;
+use crate::error::shown_url;
 use crate::{HttpClient, HttpClientError, Response, StreamingResponse};
 
 /// A request being built; nothing is sent until [`send`](RequestBuilder::send).
@@ -30,6 +30,7 @@ pub struct RequestBuilder {
     body: Option<Bytes>,
     retries: Option<u32>,
     timeout: Option<Duration>,
+    secret_url: bool,
     error: Option<HttpClientError>,
 }
 
@@ -48,8 +49,19 @@ impl RequestBuilder {
             body: None,
             retries: None,
             timeout: None,
+            secret_url: false,
             error: None,
         }
+    }
+
+    /// Treats the whole URL as a secret, as an incoming webhook's URL is:
+    /// errors, logs, `Debug` output and the `HttpClientRequest` telemetry event
+    /// show its scheme and host alone (`https://hooks.example.com/[hidden]`).
+    /// Without this they show the path, leaving out only the query string and
+    /// credentials.
+    pub fn secret_url(mut self) -> Self {
+        self.secret_url = true;
+        self
     }
 
     /// Adds a header (repeated names are kept, not replaced). Values of
@@ -208,6 +220,7 @@ impl RequestBuilder {
             url,
             headers,
             body: self.body,
+            secret_url: self.secret_url,
         };
         Ok((self.client, request, self.retries, self.timeout))
     }
@@ -223,7 +236,7 @@ impl RequestBuilder {
 impl fmt::Debug for RequestBuilder {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let url = Url::parse(&self.url)
-            .map(|url| display_url(&url))
+            .map(|url| shown_url(&url, self.secret_url))
             .unwrap_or_else(|_| "<invalid URL>".to_owned());
         f.debug_struct("RequestBuilder")
             .field("method", &self.method)
@@ -244,4 +257,5 @@ pub(crate) struct PreparedRequest {
     pub(crate) url: Url,
     pub(crate) headers: HeaderMap,
     pub(crate) body: Option<Bytes>,
+    pub(crate) secret_url: bool,
 }

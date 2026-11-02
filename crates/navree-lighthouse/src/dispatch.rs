@@ -272,9 +272,10 @@ impl Alerter {
         }
     }
 
-    /// `text` with every secret of the channels' configuration replaced:
-    /// a delivery error can echo the URL it called, and Slack's webhook
-    /// URL is a secret.
+    /// `text` with every secret of the channels' configuration replaced.
+    /// The built-in channels never name their destination
+    /// ([`secret_url`](navree_http_client::RequestBuilder::secret_url)); this
+    /// is for what a mailer or a channel of the app's own echoes.
     pub(crate) fn scrub(&self, text: &str) -> String {
         let alerts = &self.options.alerts;
         let mut secrets: Vec<&str> = Vec::new();
@@ -312,20 +313,21 @@ impl Alerter {
                 .await?;
             return Ok(());
         };
-        let result = send(channel.as_ref(), &alert).await;
+        // The queue keeps what is returned in the failed job, so it gets the
+        // same text as the row.
+        let result = send(channel.as_ref(), &alert)
+            .await
+            .map_err(|error| self.scrub(&error.to_string()));
         let last = attempt >= max.max(1);
         self.store
             .record_delivery(
                 id,
-                result
-                    .as_ref()
-                    .map(|_| ())
-                    .map_err(|error| self.scrub(&error.to_string())),
+                result.clone(),
                 i32::try_from(attempt).unwrap_or(i32::MAX),
                 last,
             )
             .await?;
-        result
+        result.map_err(BoxError::from)
     }
 
     /// Sends a test alert through every channel, or the one named

@@ -6,7 +6,9 @@ use navree_kernel::BoxError;
 /// An error raised while building, sending or decoding an outgoing request.
 ///
 /// URLs in messages are shown without their query string and credentials
-/// (both often carry secrets); header values and bodies never appear.
+/// (both often carry secrets), and as scheme and host alone for a request made
+/// with [`RequestBuilder::secret_url`](crate::RequestBuilder::secret_url);
+/// header values and bodies never appear.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum HttpClientError {
@@ -77,6 +79,20 @@ pub enum HttpClientError {
     /// The response body is not the expected JSON.
     #[error("cannot decode the response body: {0}")]
     Decode(#[source] serde_json::Error),
+}
+
+/// How messages and logs show `url`: [`display_url`], or scheme and host alone
+/// when the whole URL is a secret
+/// ([`RequestBuilder::secret_url`](crate::RequestBuilder::secret_url)).
+pub(crate) fn shown_url(url: &url::Url, secret: bool) -> String {
+    if !secret {
+        return display_url(url);
+    }
+    let host = url.host_str().unwrap_or_default();
+    match url.port() {
+        Some(port) => format!("{}://{host}:{port}/[hidden]", url.scheme()),
+        None => format!("{}://{host}/[hidden]", url.scheme()),
+    }
 }
 
 /// `url` without query string, fragment or credentials, for messages and logs.

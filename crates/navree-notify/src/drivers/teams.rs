@@ -92,6 +92,7 @@ impl TeamsApi {
         let response = self
             .client
             .post(url)
+            .secret_url()
             .json(&message.webhook_payload())
             .send()
             .await
