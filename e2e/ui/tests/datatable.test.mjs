@@ -742,6 +742,12 @@ for (const browserName of browsers) {
       await page.waitForURL(/cols=/);
       await settled(page);
       assert.equal(await page.locator("thead th[data-col=notes]").count(), 1, "a hidden column can be shown");
+      await page.locator("#deals-columns [data-col=company] input[type=checkbox]").uncheck();
+      await page.waitForFunction(() => !document.querySelector("thead th[data-col=company]"));
+      await settled(page);
+      await page.locator("#deals-columns [data-col=company] input[type=checkbox]").check();
+      await page.waitForFunction(() => !!document.querySelector("thead th[data-col=company]"));
+      await settled(page);
       await page.keyboard.press("Escape");
       const handle = page.locator("thead th[data-col=stage] [data-slot=col-resize]");
       const box = await handle.boundingBox();
@@ -761,7 +767,7 @@ for (const browserName of browsers) {
       assert.ok(Math.abs(grown - kept) <= 2, `reload keeps the width: ${grown} ${kept}`);
       // Drag a heading onto another.
       await page.locator("thead th[data-col=stage] [data-ui-col-drag]").dragTo(page.locator("thead th[data-col=company]"));
-      await page.waitForFunction(() => /cols=[^&]*stage(%2C|,)company/.test(location.search));
+      await page.waitForFunction(() => /cols=[^&]*(stage(%2C|,)company|company(%2C|,)stage)/.test(location.search));
       await settled(page);
       await page.locator("[popovertarget=deals-view]").click();
       await page.locator("#deals-view a", { hasText: "Spacious" }).click();
@@ -989,10 +995,167 @@ for (const browserName of browsers) {
       await close();
     });
 
+    test("custom cells: components from the whole row, escaped, and plain text in files", async () => {
+      await reset();
+      const { page, close, problems } = await open("/rich?sort=title");
+      const row = page.locator("#rich tbody tr[data-key]").first();
+      assert.ok((await row.locator("[data-owner] [data-slot=badge]").count()) >= 1, "a tag list");
+      assert.equal(await row.locator("progress").count(), 1, "a progress bar");
+      assert.equal(await page.locator("#rich tbody [data-owner] b").count(), 0, "markup in data stays text");
+      await shot(page, `${browserName}-rich`);
+      assert.deepEqual(await axe(page), []);
+      assert.deepEqual(problems, []);
+      await close();
+    });
+
+    test("inline editing: shows at once, saves, goes back when refused or when the post fails", async () => {
+      await reset();
+      const { page, close } = await open("/rich?sort=title");
+      const key = (await keys(page, "rich"))[0];
+      const box = page.locator(`#rich tr[data-key="${key}"] [data-slot=edit-cell] input`);
+      const before = await box.inputValue();
+      await box.fill("A new name");
+      await page.keyboard.press("Enter");
+      await page.locator("[data-slot=toast]", { hasText: "Saved" }).waitFor();
+      assert.equal(await box.inputValue(), "A new name");
+      await page.reload();
+      assert.ok((await page.locator("#rich [data-slot=edit-cell] input").evaluateAll((items) => items.map((item) => item.value))).includes("A new name"), "stored");
+      await page.goto(BASE + "/rich?sort=title");
+      const second = page.locator("#rich tbody tr[data-key]").nth(2).locator("[data-slot=edit-cell] input");
+      const kept = await second.inputValue();
+      // Refused: back, with the reason.
+      await second.fill("taken");
+      assert.equal(await second.inputValue(), "taken", "optimistic");
+      await page.keyboard.press("Enter");
+      await page.locator("[data-slot=toast]", { hasText: "already has that name" }).waitFor();
+      await page.waitForFunction((value) => [...document.querySelectorAll("#rich [data-slot=edit-cell] input")].some((item) => item.value === value), kept);
+      assert.equal(await second.inputValue(), kept, "rolled back");
+      // Network failure: back.
+      await page.route(/\/field\//, (route) => route.abort());
+      await second.fill("no connection");
+      await page.keyboard.press("Enter");
+      await page.locator("[data-slot=toast]", { hasText: "No connection" }).waitFor();
+      assert.equal(await second.inputValue(), kept, "rolled back after a failed post");
+      await page.unroute(/\/field\//);
+      // Escape: back with no post.
+      let posted = 0;
+      page.on("request", (request) => {
+        if (request.method() === "POST") posted++;
+      });
+      await second.fill("thought better of it");
+      await page.keyboard.press("Escape");
+      assert.equal(await second.inputValue(), kept);
+      assert.equal(posted, 0);
+      await shot(page, `${browserName}-edit`);
+      // A select.
+      const stage = page.locator("#rich tbody tr[data-key]").nth(3).locator("[data-slot=edit-cell] select");
+      await stage.selectOption("lost");
+      await page.locator("[data-slot=toast]", { hasText: "Saved" }).last().waitFor();
+      await close();
+      // JavaScript off: a form with Save.
+      const off = await open("/rich?sort=title", { js: false });
+      assert.ok((await off.page.getByRole("button", { name: "Save" }).count()) > 0);
+      await off.close();
+    });
+
+    test("a filter bar: the user picks which filters show and their order; one in force stays", async () => {
+      await reset();
+      const { page, close } = await open("/rich");
+      const bar = page.locator("#rich [data-slot=filter-bar]");
+      assert.equal(await bar.locator("[data-filter-trigger]").count(), 4);
+      assert.equal(await page.locator("#rich-m-stage [name='f.stage']").count(), 0, "not in the header too");
+      await bar.locator("[popovertarget=rich-p-stage]").click();
+      await page.locator("#rich-p-stage input[value=won]").check();
+      await page.waitForURL(/f\.stage=won/);
+      await settled(page, "rich");
+      await page.keyboard.press("Escape");
+      await shot(page, `${browserName}-filter-bar`);
+      assert.deepEqual(await axe(page), []);
+      await page.locator("[popovertarget=rich-filters]").click();
+      await page.locator("#rich-filters [data-col=stage] input").uncheck();
+      await page.locator("#rich-filters [data-col=active] input").uncheck();
+      await page.waitForURL(/fb=/);
+      await settled(page, "rich");
+      await shot(page, `${browserName}-filters-menu`);
+      await page.keyboard.press("Escape");
+      assert.equal(await bar.locator("[popovertarget=rich-p-active]").count(), 0, "hidden");
+      assert.equal(await bar.locator("[popovertarget=rich-p-stage]").count(), 1, "holds a value, so it stays");
+      assert.match(page.url(), /f\.stage=won/);
+      const url = page.url();
+      await page.reload();
+      assert.equal(page.url(), url);
+      assert.equal(await bar.locator("[popovertarget=rich-p-active]").count(), 0, "kept in the URL");
+      await page.locator("[popovertarget=rich-filters]").click();
+      await page.locator("#rich-filters [data-col=title] [aria-label='Move Deal down']").click();
+      await page.waitForFunction(() => /fb=amount/.test(location.search));
+      await settled(page, "rich");
+      await close();
+    });
+
+    test("live refresh: new rows arrive; typing, menus, selection and the URL are kept", async () => {
+      await reset();
+      const { page, close, problems } = await open("/live?sort=-closed_on&per=10&f.title=Added");
+      assert.equal(await page.locator("#deals [data-slot=table-live]").count(), 1);
+      await shot(page, `${browserName}-live`);
+      await post("/__t/add/9001");
+      await page.locator("tr[data-key='9001']").waitFor({ timeout: 5000 });
+      await page.locator("[data-ui-select-row][value='9001']").check();
+      const url = page.url();
+      await page.locator("#deals [name=q]").click();
+      await page.keyboard.type("Add");
+      await post("/__t/add/9002");
+      await page.locator("tr[data-key='9002']").waitFor({ timeout: 5000 });
+      assert.equal(await page.locator("[data-ui-select-row][value='9001']").isChecked(), true, "the selection stays");
+      assert.ok(await page.evaluate(() => document.activeElement?.getAttribute("name") === "q"), "focus stays");
+      await page.locator("#deals-m-title").evaluate((pop) => pop.showPopover());
+      await post("/__t/add/9003");
+      await page.locator("tr[data-key='9003']").waitFor({ timeout: 5000 });
+      assert.ok(await page.locator("#deals-m-title").evaluate((pop) => pop.matches(":popover-open")), "an open menu stays open");
+      await page.keyboard.press("Escape");
+      assert.deepEqual(problems, []);
+      await close();
+    });
+
+    test("live refresh: a late poll can't undo a newer choice; Refresh now; an event stream", async () => {
+      await reset();
+      const { page, close } = await open("/live?per=10");
+      await page.route(/\/live\?per=10$/, async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        await route.continue();
+      });
+      await page.waitForTimeout(800);
+      await page.locator("thead th[data-col=amount] [data-slot=sort-link]").click();
+      await page.waitForURL(/sort=amount/);
+      await settled(page);
+      const chosen = await keys(page);
+      await page.waitForTimeout(1600);
+      assert.match(page.url(), /sort=amount/);
+      assert.deepEqual(await keys(page), chosen, "the late answer was dropped");
+      await page.unroute(/\/live\?per=10$/);
+      await close();
+      const stream = await open("/live-stream?per=10&f.title=Added");
+      await post("/__t/add/9004");
+      await stream.page.locator("tr[data-key='9004']").waitFor({ timeout: 6000 });
+      await post("/__t/add/9005");
+      await stream.page.locator("[data-ui-refresh]").click();
+      await stream.page.locator("tr[data-key='9005']").waitFor({ timeout: 3000 });
+      await stream.close();
+    });
+
+    test("XLSX: the same state, as a typed spreadsheet", async () => {
+      await reset();
+      const response = await fetch(BASE + "/deals/export.xlsx?f.stage=won&sort=title&cols=title,stage,amount");
+      assert.equal(response.status, 200);
+      assert.match(response.headers.get("content-type"), /spreadsheetml/);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      assert.equal(bytes.subarray(0, 2).toString(), "PK");
+      assert.ok(bytes.length > 2000, String(bytes.length));
+    });
+
     test("allow-list in the browser: injected parameters change nothing", async () => {
       await reset();
       const clean = await get("/deals");
-      const count = (html) => (html.match(/data-key="/g) || []).length;
+      const count = (html) => (html.match(/<tr data-key="/g) || []).length;
       for (const attack of ["sort=id;DROP TABLE dt_deals", "sort=version", "per=1000000", "per=-1", "page=-5", "f.version=1", "cols=version", "w=title:99999999", "after=abc", "before=%00", "density=<script>", "open=1;DROP"]) {
         const html = await get(`/deals?${attack}`);
         assert.ok(count(html) <= 25, attack);

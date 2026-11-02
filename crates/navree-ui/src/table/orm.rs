@@ -484,13 +484,11 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         Ok(TablePage { rows: records.into_iter().map(map).collect(), total, page: 1, has_more: has_next, next, prev, version: None })
     }
 
-    /// The rows as a CSV file: the current search, filters, sort and columns. It's
-    /// written inside the handler, so it runs in the request's unit of work under
-    /// the same row-level security, reading a chunk at a time and spilling to a
-    /// temporary file past 8 MiB. Nothing holds the whole result in memory.
-    ///
-    /// Formula-looking cells are neutralised, see [`write_csv_field`].
-    pub async fn export_csv<M, E>(&self, builder: Builder<M>, exec: &E, file: &str, map: impl Fn(Record<M>) -> R) -> Result<Response>
+    /// Walks every row of this state, a chunk at a time, however many there are, to
+    /// hand them to a file writer: `each` takes the rows of one chunk. The columns
+    /// that matter are [`TableQuery::visible_columns`]. Answers how many rows were
+    /// read, stopping at `limit`.
+    pub async fn export_rows<M, E>(&self, builder: Builder<M>, exec: &E, limit: u64, map: impl Fn(Record<M>) -> R, mut each: impl AsyncChunk<R>) -> Result<u64>
     where
         M: Model,
         E: Executor + ?Sized,
@@ -499,20 +497,8 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         let filtered = self.apply(builder);
         let terms = self.terms::<M>();
         let keyset_ok = terms.iter().all(|term| !term.source.contains('.'));
-        let mut spool = Spool::new();
-        let mut line = String::with_capacity(4096);
-        line.push('\u{feff}');
-        for (at, column) in self.state.cols.iter().enumerate() {
-            if at > 0 {
-                line.push(',');
-            }
-            write_csv_field(&mut line, R::COLUMNS[*column].label);
-        }
-        line.push_str("\r\n");
         let mut written: u64 = 0;
         let mut position: Option<Vec<Value>> = None;
-        let mut cut = false;
-        let mut cell = String::new();
         loop {
             let chunk = u64::from(EXPORT_CHUNK);
             let rows = if keyset_ok {
@@ -524,30 +510,79 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
             if let Some(last) = rows.last() {
                 position = terms.iter().map(|term| value_of(last, term)).collect();
             }
-            for record in rows {
-                let row = map(record);
-                for (at, column) in self.state.cols.iter().enumerate() {
-                    if at > 0 {
-                        line.push(',');
-                    }
-                    cell.clear();
-                    row.write_text(*column, &mut cell);
-                    write_csv_field(&mut line, &cell);
-                }
-                line.push_str("\r\n");
-            }
+            let rows: Vec<R> = rows.into_iter().map(&map).collect();
+            each.chunk(&rows).await?;
             written += got;
-            spool.write(line.as_bytes()).await.map_err(|error| navree_orm::OrmError::Driver { driver: "csv".into(), message: format!("writing an export: {error}") })?;
-            line.clear();
-            if got < chunk {
-                break;
-            }
-            if written >= MAX_EXPORT_ROWS {
-                cut = true;
-                break;
+            if got < chunk || written >= limit {
+                return Ok(written);
             }
         }
-        Ok(spool.into_response(file, cut).await)
+    }
+
+    /// The rows as a CSV file: the current search, filters, sort and columns. It's
+    /// written inside the handler, so it runs in the request's unit of work under
+    /// the same row-level security, reading a chunk at a time and spilling to a
+    /// temporary file past 8 MiB. Nothing holds the whole result in memory.
+    ///
+    /// Formula-looking cells are neutralised, see [`write_csv_field`].
+    pub async fn export_csv<M, E>(&self, builder: Builder<M>, exec: &E, file: &str, map: impl Fn(Record<M>) -> R) -> Result<Response>
+    where
+        M: Model,
+        E: Executor + ?Sized,
+    {
+        let mut line = String::with_capacity(4096);
+        line.push('\u{feff}');
+        for (at, column) in self.state.cols.iter().enumerate() {
+            if at > 0 {
+                line.push(',');
+            }
+            write_csv_field(&mut line, R::COLUMNS[*column].label);
+        }
+        line.push_str("\r\n");
+        let mut sink = CsvSink { cols: self.state.cols.clone(), spool: Spool::new(), line, cell: String::new() };
+        let written = self.export_rows(builder, exec, MAX_EXPORT_ROWS, map, &mut sink).await?;
+        Ok(sink.spool.into_response(file, written >= MAX_EXPORT_ROWS).await)
+    }
+}
+
+/// What takes the rows of an export, a chunk at a time.
+pub trait AsyncChunk<R> {
+    /// Takes one chunk.
+    fn chunk(&mut self, rows: &[R]) -> impl std::future::Future<Output = Result<()>>;
+}
+
+struct CsvSink {
+    cols: Vec<usize>,
+    spool: Spool,
+    line: String,
+    cell: String,
+}
+
+impl<R: TableRow> AsyncChunk<R> for &mut CsvSink {
+    async fn chunk(&mut self, rows: &[R]) -> Result<()> {
+        for row in rows {
+            for (at, column) in self.cols.iter().enumerate() {
+                if at > 0 {
+                    self.line.push(',');
+                }
+                self.cell.clear();
+                row.write_text(*column, &mut self.cell);
+                write_csv_field(&mut self.line, &self.cell);
+            }
+            self.line.push_str("\r\n");
+        }
+        self.spool.write(self.line.as_bytes()).await.map_err(|error| navree_orm::OrmError::Driver { driver: "csv".into(), message: format!("writing an export: {error}") })?;
+        self.line.clear();
+        Ok(())
+    }
+}
+
+/// Collects an export's rows in memory: for a file format that's built whole, such
+/// as XLSX, with `limit` as the bound on what it may hold.
+impl<R: Clone> AsyncChunk<R> for &mut Vec<R> {
+    async fn chunk(&mut self, rows: &[R]) -> Result<()> {
+        self.extend_from_slice(rows);
+        Ok(())
     }
 }
 

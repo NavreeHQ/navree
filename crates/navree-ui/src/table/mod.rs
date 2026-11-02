@@ -40,9 +40,10 @@ use std::fmt::Write as _;
 
 use crate::components::{BadgeVariant, Input, NativeSelect};
 use crate::html::{Href, escape_into};
-use crate::node::Node;
+use crate::node::{Node, Uses};
 
 mod csv;
+mod edit;
 #[cfg(feature = "orm")]
 mod orm;
 mod query;
@@ -52,6 +53,7 @@ mod selection;
 mod view;
 
 pub use csv::write_csv_field;
+pub use edit::EditCell;
 pub use query::{ActiveFilter, FilterValue, MAX_OPEN_ROWS, MAX_TEXT, MAX_VALUES, SortTerm, TableQuery};
 pub use region::Region;
 pub use saved::{SavedView, ViewOp, ViewPost};
@@ -59,7 +61,7 @@ pub use selection::{BulkMode, BulkRefusal, BulkRequest, MAX_SELECTED_IDS};
 pub use view::{BulkAction, DataTable, FilterMode, FilterOption, RowAction, TableData, TableDensity, TableHeight, TableLabels, TablePage, Total};
 
 #[cfg(feature = "orm")]
-pub use orm::{MAX_EXPORT_ROWS, SavedViewModel, delete_view, list_views, save_view};
+pub use orm::{AsyncChunk, MAX_EXPORT_ROWS, SavedViewModel, delete_view, list_views, save_view};
 
 /// How a column's values are typed, so a value from a URL binds as what the
 /// column holds. A value that doesn't parse as its kind is dropped.
@@ -292,26 +294,41 @@ pub trait TableRow {
 /// use navree_ui::table::CellWriter;
 ///
 /// fn raw(out: &mut CellWriter<'_>) {
-///     out.0.push_str("<img src=x onerror=alert(1)>");
+///     out.out.push_str("<img src=x onerror=alert(1)>");
 /// }
 /// ```
-pub struct CellWriter<'a>(&'a mut String);
+pub struct CellWriter<'a> {
+    out: &'a mut String,
+    uses: Uses,
+}
 
 impl<'a> CellWriter<'a> {
     pub(crate) fn new(out: &'a mut String) -> Self {
-        Self(out)
+        Self { out, uses: Uses::NONE }
+    }
+
+    /// Writes a component: a badge, an avatar, a list of tags. It goes through the
+    /// same renderer as the rest of a page, so its text is escaped.
+    pub fn node(&mut self, node: &Node) {
+        self.uses = self.uses.with(crate::render::measure(node).uses);
+        crate::render::render_into(self.out, node);
+    }
+
+    /// The modules what was written needs.
+    pub(crate) fn uses(&self) -> Uses {
+        self.uses
     }
 
     /// Writes text, escaped, with the direction of its own.
     pub fn text(&mut self, text: &str) {
-        self.0.push_str("<bdi>");
-        escape_into(self.0, text);
-        self.0.push_str("</bdi>");
+        self.out.push_str("<bdi>");
+        escape_into(self.out, text);
+        self.out.push_str("</bdi>");
     }
 
     /// Writes text, escaped, in the cell's direction: for numbers, dates and labels.
     pub fn plain(&mut self, text: &str) {
-        escape_into(self.0, text);
+        escape_into(self.out, text);
     }
 
     /// Writes a value through `Display`, escaped.
@@ -323,7 +340,7 @@ impl<'a> CellWriter<'a> {
                 Ok(())
             }
         }
-        let _ = write!(Escaped(self.0), "{value}");
+        let _ = write!(Escaped(self.out), "{value}");
     }
 }
 
@@ -510,16 +527,16 @@ pub fn path_segment(value: &impl std::fmt::Display) -> String {
 
 /// Writes a link in a cell. The derive calls this.
 pub fn write_link(out: &mut CellWriter<'_>, href: String, content: &impl CellValue) {
-    out.0.push_str("<a href=\"");
-    escape_into(out.0, Href::from(href).as_str());
-    out.0.push_str("\">");
+    out.out.push_str("<a href=\"");
+    escape_into(out.out, Href::from(href).as_str());
+    out.out.push_str("\">");
     content.write_cell(out);
-    out.0.push_str("</a>");
+    out.out.push_str("</a>");
 }
 
 /// Writes a badge in a cell. The derive calls this.
 pub fn write_badge(out: &mut CellWriter<'_>, content: &impl CellValue, variant: BadgeVariant) {
-    out.0.push_str(match variant {
+    out.out.push_str(match variant {
         BadgeVariant::Outline => "<span data-slot=\"badge\" data-variant=\"outline\">",
         BadgeVariant::Success => "<span data-slot=\"badge\" data-variant=\"success\">",
         BadgeVariant::Warning => "<span data-slot=\"badge\" data-variant=\"warning\">",
@@ -527,7 +544,35 @@ pub fn write_badge(out: &mut CellWriter<'_>, content: &impl CellValue, variant: 
         _ => "<span data-slot=\"badge\">",
     });
     content.write_cell(out);
-    out.0.push_str("</span>");
+    out.out.push_str("</span>");
+}
+
+/// A column with no value of its own: what it shows comes from `#[col(cell = ...)]`
+/// or `DataTable::cell`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+pub struct Computed;
+
+impl CellValue for Computed {
+    fn write_cell(&self, _: &mut CellWriter<'_>) {}
+
+    fn write_text(&self, _: &mut String) {}
+}
+
+impl ColumnValue for Computed {
+    const KIND: ValueKind = ValueKind::Text;
+}
+
+/// Where a table's rows come from, when that isn't `navree-orm`. Rows can always be
+/// handed straight to [`DataTable`]; this is the shape to give a reusable source, such
+/// as another service. `TableQuery` has already checked the state against the
+/// definition, so a source reads only allowed columns and bound values through its
+/// accessors. `navree-orm` is the path built for this: see `TableQuery::load`.
+pub trait TableSource<R: TableRow> {
+    /// What can go wrong.
+    type Error;
+
+    /// One page for this state.
+    fn page<F: FilterBar + Sync>(&self, query: &TableQuery<R, F>) -> impl std::future::Future<Output = Result<TablePage<R>, Self::Error>> + Send;
 }
 
 /// A struct of filters a page owns: controls in the toolbar and parameters in the

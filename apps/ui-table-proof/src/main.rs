@@ -17,6 +17,9 @@
 //! | `/tasks` | a model as its own row, in the simplest form |
 //! | `/extras` | the rest: a card with bleed, sticky rows, a footer, row links, rows that can't be ticked, the grid keys, header groups |
 //! | `/rtl` | right to left, in another language |
+//! | `/rich` | custom cells: an avatar and tags, a progress bar, cells that edit in place, a filter bar |
+//! | `/live`, `/live-stream` | a table that refreshes by polling, or when an event stream speaks |
+//! | `/deals/export.xlsx` | the same state as an Excel file |
 //! | `/simple` | no count: Previous and Next only |
 //! | `/skeleton`, `/failed` | a first load on its way, and rows that couldn't load |
 //!
@@ -26,19 +29,20 @@
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use http::{Method, StatusCode};
 use navree::db::{DatabaseModule, Db, DbOptions, Uow};
-use navree::http::extract::Path;
+use navree::http::extract::{Form, Path};
 use navree::http::response::Response;
 use navree::http::{AppError, Controller, RouteDef};
 use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree::orm::{Model, Record, Value, col};
 use navree::prelude::*;
 use navree::ui::form::Money;
-use navree::ui::table::{BulkMode, NoFilter, ViewOp, ViewPost, delete_view, list_views, save_view};
+use navree::ui::table::{BulkMode, EditCell, NoFilter, ViewOp, ViewPost, delete_view, list_views, save_view};
 use navree::ui::{
-    AppPage, AppShell, BadgeVariant, BulkAction, BulkRequest, Button, Card, DataTable, Empty, FilterOption, NavGroup, NavItem, Node, Reply, RowAction, Shell, TableHeight, TableLabels, TableQuery, TableRow, ToastTone, UiModule, el, icons,
+    AppPage, AppShell, Badge, BadgeVariant, BulkAction, BulkRequest, Button, Card, DataTable, Empty, FilterOption, NavGroup, NavItem, Node, Progress, Reply, RowAction, Shell, TableHeight, TableLabels, TableQuery, TableRow, ToastTone, UiModule, el, icons,
 };
 
 mod seed;
@@ -129,6 +133,8 @@ fn shell() -> Shell {
                 .item(NavItem::new("Filter row", "/deals-row").icon(icons::LIST_FILTER))
                 .item(NavItem::new("Read-only", "/viewer").icon(icons::EYE))
                 .item(NavItem::new("Extras", "/extras").icon(icons::SPARKLES))
+                .item(NavItem::new("Rich cells", "/rich").icon(icons::PENCIL))
+                .item(NavItem::new("Live", "/live").icon(icons::ACTIVITY))
                 .item(NavItem::new("Right to left", "/rtl").icon(icons::GLOBE)),
         )
         .group(
@@ -361,6 +367,128 @@ async fn extras(shell: AppShell, uow: Uow, query: TableQuery<ExtraRow>) -> Resul
     Ok(shell.page("Extras").body(Card::titled("In a card").body(table)))
 }
 
+/// `/rich`: columns drawn from the whole row.
+#[derive(Clone, TableRow)]
+#[table(sort = "title", per = 10, per_pages(10, 25))]
+pub struct RichRow {
+    #[col(skip)]
+    pub id: i64,
+    #[col(sortable, search, filter = text, label = "Deal")]
+    pub title: String,
+    #[col(sortable, filter = multi, options = STAGES)]
+    pub stage: String,
+    #[col(sortable, numeric, filter = range, label = "Amount", kind = money)]
+    pub amount: Option<Money>,
+    #[col(filter = boolean)]
+    pub active: bool,
+    #[col(cell = owner_cell, label = "Owner")]
+    pub owner: navree::ui::table::Computed,
+    #[col(cell = progress_cell, label = "Progress")]
+    pub progress: navree::ui::table::Computed,
+    #[col(skip)]
+    pub notes: Option<String>,
+}
+
+fn owner_cell(row: &RichRow) -> Node {
+    let names = ["Ada Lovelace", "Alan Turing", "<b>Grace</b> Hopper"];
+    let name = names[usize::try_from(row.id % 3).unwrap_or(0)];
+    let tags = ["vip", "renewal", "eu", "q3", "new"];
+    let count = usize::try_from(row.id % 5).unwrap_or(0) + 1;
+    let shown: Vec<Node> = tags.iter().take(count.min(2)).map(|tag| Badge::new(*tag).variant(BadgeVariant::Outline).into()).collect();
+    let more = (count > 2).then(|| el("span").child(format!("+{}", count - 2)));
+    el("div").attr("data-owner", "").children((el("bdi").child(name.to_owned()), " ", shown, " ", more)).into()
+}
+
+fn progress_cell(row: &RichRow) -> Node {
+    Progress::new(u32::try_from(row.id % 100).unwrap_or(0), 100, format!("Progress of {}", row.title)).into()
+}
+
+fn to_rich(record: Record<Deal>) -> RichRow {
+    let deal = record.into_inner();
+    RichRow { id: deal.id, title: deal.title, stage: deal.stage, amount: deal.amount.map(Money), active: deal.active, owner: navree::ui::table::Computed, progress: navree::ui::table::Computed, notes: deal.notes }
+}
+
+async fn rich(shell: AppShell, uow: Uow, query: TableQuery<RichRow>) -> Result<AppPage, AppError> {
+    let page = query.load_as(Deal::query().where_(col("id").gt(Value::I64(8))), &uow, to_rich).await?;
+    let table = DataTable::new("rich", &query, &page)
+        .caption("Rich cells")
+        .filter_bar()
+        .cell("title", |row| EditCell::text(row.title.clone(), format!("/deal/{}/field/title", row.id)).label(format!("Name of deal {}", row.id)))
+        .cell("stage", |row| EditCell::select(row.stage.clone(), format!("/deal/{}/field/stage", row.id), STAGES.iter().map(|(value, label)| (*value, *label))).label(format!("Stage of deal {}", row.id)));
+    Ok(shell.page("Rich cells").body(table))
+}
+
+#[derive(serde::Deserialize)]
+struct FieldPost {
+    value: String,
+}
+
+/// One cell's post: refused with a reason, or saved.
+async fn edit_field(uow: Uow, Path((id, field)): Path<(i64, String)>, Form(post): Form<FieldPost>) -> Result<Reply, AppError> {
+    let value = post.value.trim();
+    let refuse = |why: String| Reply::ops_or_redirect("/rich").toast(ToastTone::Danger, why).status(StatusCode::UNPROCESSABLE_ENTITY);
+    if value.is_empty() {
+        return Ok(refuse("A deal needs a name.".to_owned()));
+    }
+    if value == "taken" {
+        return Ok(refuse("Another deal already has that name.".to_owned()));
+    }
+    let column = match field.as_str() {
+        "title" => "title",
+        "stage" if STAGES.iter().any(|(stage, _)| *stage == value) => "stage",
+        _ => return Ok(refuse("That can't be changed here.".to_owned())),
+    };
+    Deal::query().where_(col("id").eq(Value::I64(id))).update(&uow, [col(column).set(Value::String(value.to_owned()))]).await?;
+    Ok(Reply::ops_or_redirect("/rich").toast(ToastTone::Success, "Saved."))
+}
+
+/// `/live` and `/live-stream`.
+async fn live_page(shell: &AppShell, uow: &Uow, query: &TableQuery<DealRow>, stream: bool) -> Result<AppPage, AppError> {
+    let names = companies(uow).await?;
+    let page = query.load_as(Deal::query(), uow, to_row(names)).await?;
+    let table = DataTable::new("deals", query, &page).caption("Live").bulk("/deals/bulk", [BulkAction::new("archive", "Archive")]);
+    let table = if stream { table.live_from("/__t/events") } else { table.live(Duration::from_millis(700)) };
+    Ok(shell.page("Live").body(table))
+}
+
+/// `/deals/export.xlsx`: the table's walker, handed to the spreadsheet writer.
+async fn export_xlsx(uow: Uow, query: TableQuery<DealRow>) -> Result<Response, AppError> {
+    use navree::http::response::IntoResponse as _;
+    use navree::sheets::{Cell, Column as SheetColumn, write_xlsx};
+    use navree::ui::table::{TableRow as _, ValueKind};
+    let names = companies(&uow).await?;
+    let mut rows: Vec<DealRow> = Vec::new();
+    query.export_rows(Deal::query(), &uow, navree::sheets::XLSX_MAX_ROWS as u64, to_row(names), &mut rows).await?;
+    let shown = query.visible_columns();
+    let columns: Vec<SheetColumn> = shown.iter().map(|at| SheetColumn::new(DealRow::COLUMNS[*at].name, DealRow::COLUMNS[*at].label)).collect();
+    let headers: Vec<String> = shown.iter().map(|at| DealRow::COLUMNS[*at].label.to_owned()).collect();
+    let cells: Vec<Vec<Cell>> = rows
+        .iter()
+        .map(|row| {
+            shown
+                .iter()
+                .map(|at| {
+                    let mut text = String::new();
+                    row.write_text(*at, &mut text);
+                    match DealRow::COLUMNS[*at].kind {
+                        _ if text.is_empty() => Cell::Empty,
+                        ValueKind::Money | ValueKind::Float | ValueKind::Decimal => text.replace(',', "").parse().map_or(Cell::Text(text), Cell::Float),
+                        // The company column binds as a key but shows a name.
+                        ValueKind::Int => text.parse().map_or(Cell::Text(text), Cell::Int),
+                        ValueKind::Date => chrono::NaiveDate::parse_from_str(&text, "%Y-%m-%d").map_or(Cell::Text(text), Cell::Date),
+                        _ => Cell::Text(text),
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    let file = write_xlsx("Deals", &columns, &headers, &cells).map_err(|error| AppError::internal(error.to_string()))?;
+    let mut response = (StatusCode::OK, file).into_response();
+    response.headers_mut().insert(http::header::CONTENT_TYPE, http::HeaderValue::from_static("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+    response.headers_mut().insert(http::header::CONTENT_DISPOSITION, http::HeaderValue::from_static("attachment; filename=\"deals.xlsx\""));
+    Ok(response)
+}
+
 /// `/simple`: no count at all.
 #[derive(Clone, TableRow)]
 #[table(sort = "title", per = 10, per_pages(10), no_count)]
@@ -468,6 +596,18 @@ impl Controller for Pages {
             })
             .public(),
             RouteDef::on(Method::GET, "!/extras", extras).public(),
+            RouteDef::on(Method::GET, "!/rich", rich).public(),
+            RouteDef::on(Method::POST, "!/deal/{id}/field/{field}", edit_field).public(),
+            RouteDef::on(Method::GET, "!/deals/export.xlsx", export_xlsx).public(),
+            RouteDef::on(Method::GET, "!/live", |shell: AppShell, uow: Uow, query: TableQuery<DealRow>| async move { live_page(&shell, &uow, &query, false).await }).public(),
+            RouteDef::on(Method::GET, "!/live-stream", |shell: AppShell, uow: Uow, query: TableQuery<DealRow>| async move { live_page(&shell, &uow, &query, true).await }).public(),
+            RouteDef::on(Method::GET, "!/__t/events", || async {
+                use navree::http::response::IntoResponse as _;
+                let mut response = "retry: 500\ndata: changed\n\n".into_response();
+                response.headers_mut().insert(http::header::CONTENT_TYPE, http::HeaderValue::from_static("text/event-stream"));
+                response
+            })
+            .public(),
             RouteDef::on(Method::GET, "!/simple", |shell: AppShell, uow: Uow, query: TableQuery<SimpleRow>| async move {
                 let page = query
                     .load_as(Deal::query(), &uow, |record| {

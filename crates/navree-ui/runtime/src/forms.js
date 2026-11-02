@@ -62,6 +62,7 @@ async function send(form, submitter) {
     startRegions();
   } catch {
     pending(form, submitter, false);
+    document.dispatchEvent(new CustomEvent("ui:sent", { detail: { form, ok: false } }));
     toast("danger", answered ? "That didn't work. Try again." : "No connection. Try again.");
   } finally {
     sending.delete(form);
@@ -73,7 +74,7 @@ function filter(form) {
   const url = new URL(attr(form, "action") || location.href, location.href);
   const params = new URLSearchParams();
   // An empty control says nothing: it stays out of the URL.
-  for (const [name, value] of new FormData(form)) if (value !== "" || name === "sort") params.append(name, /** @type {string} */ (value));
+  for (const [name, value] of new FormData(form)) if (value !== "" || name === "sort" || name === "fb") params.append(name, /** @type {string} */ (value));
   url.search = params.toString();
   go(url.href, { region: attr(form, "data-ui-target") || undefined }).then(startRegions);
 }

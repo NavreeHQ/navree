@@ -6,7 +6,9 @@
 //! resize, drag to reorder, the selection across pages.
 
 use std::borrow::Cow;
+use std::cell::Cell;
 use std::fmt::Write as _;
+use std::time::Duration;
 
 use serde::de::DeserializeOwned;
 
@@ -84,6 +86,8 @@ pub enum FilterMode {
     Popover,
     /// In a row under the headers. Ranges and multi selects open a popover from it.
     Row,
+    /// In a bar over the table, each behind a button. The user picks which show.
+    Bar,
 }
 
 /// How many rows match.
@@ -273,6 +277,9 @@ impl RowAction {
 #[allow(missing_docs)]
 pub struct TableLabels {
     pub search: Cow<'static, str>,
+    pub filters: Cow<'static, str>,
+    pub live: Cow<'static, str>,
+    pub refresh: Cow<'static, str>,
     pub columns: Cow<'static, str>,
     pub view: Cow<'static, str>,
     pub views: Cow<'static, str>,
@@ -347,6 +354,9 @@ impl Default for TableLabels {
     fn default() -> Self {
         Self {
             search: "Search".into(),
+            filters: "Filters".into(),
+            live: "Live".into(),
+            refresh: "Refresh now".into(),
             columns: "Columns".into(),
             view: "View".into(),
             views: "Views".into(),
@@ -472,6 +482,11 @@ pub struct DataTable<'a, R, F = NoFilter> {
     toolbar: Vec<Node>,
     can_reorder: bool,
     can_resize: bool,
+    cells: Vec<(&'static str, RowFn<'a, R, Node>)>,
+    live: Option<Duration>,
+    live_from: Option<Href>,
+    refreshable: bool,
+    cell_uses: Cell<Uses>,
 }
 
 impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R, F> {
@@ -509,7 +524,50 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             toolbar: Vec::new(),
             can_reorder: true,
             can_resize: true,
+            cells: Vec::new(),
+            live: None,
+            live_from: None,
+            refreshable: false,
+            cell_uses: Cell::new(Uses::NONE),
         }
+    }
+
+    /// Draws column `name` from the whole row, into anything that becomes a `Node`:
+    /// a badge, an avatar, a list of tags, an [`super::EditCell`]. Files and labels
+    /// still read the field's plain text. `#[col(cell = path)]` is the same in the
+    /// definition; this form can use what the page knows, such as permissions.
+    pub fn cell<N: Into<Node>>(mut self, name: &'static str, draw: impl Fn(&R) -> N + 'a) -> Self {
+        self.cells.push((name, Box::new(move |row| draw(row).into())));
+        self
+    }
+
+    /// Refetches the table this often while the page is visible, and shows that it's
+    /// live, with a button to refresh now. Typing, focus, open menus and the selection
+    /// are kept; a reply that a newer change overtook is dropped.
+    pub fn live(mut self, every: Duration) -> Self {
+        self.live = Some(every);
+        self.refreshable = true;
+        self
+    }
+
+    /// Refetches the table whenever this server-sent event stream says something.
+    pub fn live_from(mut self, url: impl Into<Href>) -> Self {
+        self.live_from = Some(url.into());
+        self.refreshable = true;
+        self
+    }
+
+    /// Adds a button that refetches the table.
+    pub fn refreshable(mut self) -> Self {
+        self.refreshable = true;
+        self
+    }
+
+    /// Puts the filters in a bar over the table, where each user can pick which show
+    /// and in what order. A filter holding a value always shows.
+    pub fn filter_bar(mut self) -> Self {
+        self.mode = FilterMode::Bar;
+        self
     }
 
     /// Sets how many rows there are across all pages.
@@ -1081,7 +1139,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         let hidden = |name: String, value: String| el("input").attr("type", "hidden").attr("name", name).attr("value", value);
         let mut pairs = Vec::new();
         // Filters on columns not shown have no control, but stay in force.
-        for filter in state.filters.iter().filter(|filter| !state.cols.contains(&filter.column) || (self.mode == FilterMode::Row && TableQuery::<R, F>::column(filter.column).filter == FilterKind::None)) {
+        for filter in state.filters.iter().filter(|filter| self.mode != FilterMode::Bar && !state.cols.contains(&filter.column)) {
             let one = State { filters: vec![filter.clone()], q: None, ..state.clone() };
             one.filter_pairs::<R>(&mut pairs);
         }
@@ -1089,7 +1147,8 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             inputs.push(hidden(name, value));
         }
         for (name, value) in state.pairs::<R>() {
-            if matches!(name.as_str(), "sort" | "per" | "cols" | "w" | "density") && !(name == "per") {
+            // `cols` and `fb` are their menus' ticks, and `per` its select.
+            if matches!(name.as_str(), "sort" | "w" | "density") {
                 inputs.push(hidden(name, value));
             }
         }
@@ -1128,7 +1187,8 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                         _ => link.attr("role", "link").attr("aria-disabled", "true"),
                     }
                 };
-                el("div").slot("column-row").attr("data-col", column.name).children((
+                // A key, so a morph moves the row: a focused box keeps its old value otherwise.
+                el("div").slot("column-row").attr("data-col", column.name).attr("data-key", format!("c-{}", column.name)).children((
                     el("label").slot("filter-option").children((
                         el("input").slot("checkbox").attr("type", "checkbox").attr("name", "cols").attr("value", column.name).attr("form", form.clone()).flag("checked", place.is_some()).flag("disabled", column.locked),
                         column.label,
@@ -1178,6 +1238,9 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         });
         // The saved-view forms sit outside the toolbar's form, since forms can't nest.
         // Every control reaches the form by its `form` attribute.
+        let live = (self.live.is_some() || self.live_from.is_some()).then(|| el("span").slot("table-live").children((el("span").slot("live-dot").attr("aria-hidden", "true"), labels.live.to_string())));
+        let refresh = self.refreshable.then(|| el("button").slot("button").attr("data-variant", "outline").attr("data-size", "sm").flag("data-icon-only", true).attr("type", "button").flag("data-ui-refresh", true).attr("aria-label", labels.refresh.to_string()).child(icon(icons::REFRESH_CW)));
+        let filters_menu = (self.mode == FilterMode::Bar).then(|| self.filters_menu());
         el("div").slot("table-toolbar").children((
             el("form")
                 .slot("toolbar-form")
@@ -1197,8 +1260,85 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                     // With JavaScript off, a select or a tick needs a button.
                     el("noscript").child(Button::outline(labels.apply.to_string()).size(Size::Sm).submit()),
                 )),
-            el("div").slot("toolbar-end").children((views, columns, view, export)),
+            el("div").slot("toolbar-end").children((live, refresh, filters_menu, views, columns, view, export)),
         ))
+    }
+
+    /// The columns with a filter, in the bar's order, then the rest.
+    fn bar_columns(&self) -> Vec<usize> {
+        let filterable = |at: &usize| TableQuery::<R, F>::column(*at).filter != FilterKind::None;
+        match &self.query.state.bar {
+            Some(bar) => bar.clone(),
+            None => (0..R::COLUMNS.len()).filter(filterable).collect(),
+        }
+    }
+
+    /// The bar of filters: those chosen, and any other holding a value.
+    fn filter_bar_node(&self) -> Option<Element> {
+        if self.mode != FilterMode::Bar {
+            return None;
+        }
+        let state = &self.query.state;
+        let mut shown = self.bar_columns();
+        for filter in &state.filters {
+            if !shown.contains(&filter.column) {
+                shown.push(filter.column);
+            }
+        }
+        let items: Vec<Node> = shown
+            .iter()
+            .map(|at| {
+                let column = TableQuery::<R, F>::column(*at);
+                let active = state.filters.iter().find(|filter| filter.column == *at);
+                let text = active.map_or_else(|| column.label.to_owned(), |filter| self.chip_text(column, &filter.value));
+                let trigger = el("button").slot("button").attr("data-variant", "outline").attr("data-size", "sm").flag("data-filter-trigger", true).flag("data-active", active.is_some()).children((el("bdi").child(text), icon(icons::CHEVRON_DOWN)));
+                self.popover(format!("{}-p-{}", self.id, column.name), trigger, column.label.to_owned(), el("div").slot("menu-filter").child(self.filter_controls(*at, column, false)))
+            })
+            .collect();
+        Some(el("div").slot("filter-bar").child(items))
+    }
+
+    /// Which filters the bar shows, and their order.
+    fn filters_menu(&self) -> Node {
+        let labels = &self.labels;
+        let form = self.form_id();
+        let shown = self.bar_columns();
+        let order: Vec<usize> = shown.iter().copied().chain((0..R::COLUMNS.len()).filter(|at| TableQuery::<R, F>::column(*at).filter != FilterKind::None && !shown.contains(at))).collect();
+        let rows: Vec<Element> = order
+            .iter()
+            .map(|at| {
+                let column = TableQuery::<R, F>::column(*at);
+                let place = shown.iter().position(|other| other == at);
+                let move_link = |to: Option<usize>, glyph: Icon, label: String| -> Element {
+                    let link = el("a").slot("column-move").attr("aria-label", label).child(icon(glyph));
+                    match (place, to) {
+                        (Some(from), Some(to)) => {
+                            let mut next = shown.clone();
+                            next.swap(from, to);
+                            link.href(self.query.href_with(|state| state.bar = Some(next))).flag("data-ui-in-region", true)
+                        }
+                        _ => link.attr("role", "link").attr("aria-disabled", "true"),
+                    }
+                };
+                // A key, so a morph moves the row: a focused box keeps its old value otherwise.
+                el("div").slot("column-row").attr("data-col", column.name).attr("data-key", format!("f-{}", column.name)).children((
+                    el("label").slot("filter-option").children((
+                        el("input").slot("checkbox").attr("type", "checkbox").attr("name", "fb").attr("value", column.name).attr("form", form.clone()).flag("checked", place.is_some()),
+                        column.label,
+                    )),
+                    place.is_some().then(|| {
+                        Node::list((
+                            move_link(place.and_then(|from| from.checked_sub(1)), icons::CHEVRON_UP, labels.move_up.replace("{label}", column.label)),
+                            move_link(place.and_then(|from| (from + 1 < shown.len()).then_some(from + 1)), icons::CHEVRON_DOWN, labels.move_down.replace("{label}", column.label)),
+                        ))
+                    }),
+                ))
+            })
+            .collect();
+        let trigger = el("button").slot("button").attr("data-variant", "outline").attr("data-size", "sm").children((icon(icons::LIST_FILTER), labels.filters.to_string()));
+        // With none ticked the browser posts no `fb`: this says "none", not "default".
+        let none = el("input").attr("type", "hidden").attr("name", "fb").attr("value", "").attr("form", form);
+        self.popover(format!("{}-filters", self.id), trigger, labels.filters.to_string(), (none, el("div").slot("column-list").child(rows)))
     }
 
     /// Active filters and sort terms, each with a way off, and Clear filters.
@@ -1447,6 +1587,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 self.toggle_cell(key.as_deref().unwrap_or_default(), is_open, &mut out);
             }
             for (at, open) in &opens {
+                let draw = self.cells.iter().find(|(name, _)| *name == TableQuery::<R, F>::column(*at).name).map(|(_, draw)| draw);
                 out.push_str(open);
                 if TableQuery::<R, F>::column(*at).truncate {
                     out.push_str(" title=\"");
@@ -1456,7 +1597,14 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                     out.push('"');
                 }
                 out.push('>');
-                row.write_cell(*at, &mut CellWriter::new(&mut out));
+                {
+                    let mut writer = CellWriter::new(&mut out);
+                    match draw {
+                        Some(draw) => writer.node(&draw(row)),
+                        None => row.write_cell(*at, &mut writer),
+                    }
+                    self.cell_uses.set(self.cell_uses.get().with(writer.uses()));
+                }
                 out.push_str("</td>");
             }
             if self.has_actions() {
@@ -1677,6 +1825,8 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .flag("data-ui-grid", self.keyboard_grid)
             .attr_opt("data-scroll-to", self.scroll_to)
             .attr_opt("data-version", self.data.version.map(str::to_owned))
+            .attr_opt("data-ui-poll", self.live.map(|every| i64::try_from(every.as_millis()).unwrap_or(i64::MAX)))
+            .attr_opt("data-ui-live-src", self.live_from.clone())
             .attr("data-l", self.runtime_labels())
             .uses(Uses::CORE.with(Uses::TABLE));
         if let Total::Exact(total) = self.data.total {
@@ -1687,6 +1837,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         }
         let has_rows = !self.data.rows.is_empty() && self.failed.is_none() && !self.loading;
         let body: Element = if has_rows { el("tbody").child(SafeHtml::trusted(self.body_rows(&sticky))) } else { self.message_body() };
+        root = root.uses(self.cell_uses.get());
         let foot = (!self.foot.is_empty() && has_rows).then(|| {
             let mut cells: Vec<Element> = Vec::new();
             if self.selectable() {
@@ -1723,7 +1874,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 el("div").slot("footer-end").children((self.page_size(), self.pagination())),
             ))
         });
-        root.children((self.toolbar_node(), self.chips(), alert, self.bulk_bar(), el("div").slot("table-container").attr("tabindex", 0_i64).attr("role", "region").attr("aria-label", self.caption.as_ref().map_or_else(|| "Table".to_owned(), ToString::to_string)).child(table), footer)).into()
+        root.children((self.toolbar_node(), self.filter_bar_node(), self.chips(), alert, self.bulk_bar(), el("div").slot("table-container").attr("tabindex", 0_i64).attr("role", "region").attr("aria-label", self.caption.as_ref().map_or_else(|| "Table".to_owned(), ToString::to_string)).child(table), footer)).into()
     }
 }
 

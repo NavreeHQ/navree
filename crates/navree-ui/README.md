@@ -124,6 +124,8 @@ async fn bulk(uow: Uow, request: BulkRequest<Deal>) -> Result<Reply> {
 | `.filter_row()` | filters under the headers, not in a popover from each |
 | `.detail(fn)`, `.row_actions(fn)`, `.row_href(fn)`, `.sticky_rows(fn)`, `.selectable_if(fn)` | per row |
 | `.keyboard_grid()` | one tab stop, arrow keys, Home, End, Page Up and Down |
+| `.filter_bar()` | filters in a bar over the table; the user picks which show, and their order |
+| `.cell(name, fn)`, `.live(every)`, `.live_from(url)`, `.refreshable()` | see below |
 | `.views(&views, url)`, `.export(url)`, `.foot(col, cell)`, `.labels(&labels)`, `.can_select(bool)`, `.failed(msg)`, `.loading()` | the rest |
 
 **The URL holds everything but the selection:** `q`, `sort=-amount,title`, `page`, `per`, `after`, `before`, `f.<col>`, `f.<col>.min`, `.max`, `.empty`, `cols`, `w`, `density`, `open`. Back, forward, reload and a shared link restore it, and it all works with JavaScript off. Bad values are ignored one at a time; sort and filter columns come only from the definition; values always bind, typed by the column.
@@ -135,6 +137,14 @@ async fn bulk(uow: Uow, request: BulkRequest<Deal>) -> Result<Reply> {
 **A huge table** wants an index per sort column, ending in the key. Deep numbered pages read from the nearer end of the index and find keys before rows; `#[table(cursor)]` costs the same at any depth. A search or text filter is `contains`, which reads every row unless the column has a trigram index on PostgreSQL. On numbered pages a row added or deleted between pages moves what follows by one: cursor pages don't.
 
 **Stored views** are SQL only (`SavedViewModel`, table `navree_ui_table_views`: `id, owner, table_id, name, query, is_default`; create it in a migration). Save through `save_view`, read through `list_views`, and open with `query.or_default_view(&views)`.
+
+**Cells.** `#[col(cell = draw)]` or `.cell("name", |row| ...)` draws a column from the whole row into anything that becomes a `Node`; a field of type `Computed` is a column with no value of its own. Files still read the field's text. `EditCell::text`, `number`, `date` and `select` edit in place: the value shows at once and posts itself, and a status of 400 or more, or a failed post, puts it back. The handler's toast says why.
+
+**Live.** `.live(every)` polls while the page is visible; `.live_from(url)` refetches when a server-sent event stream speaks; both show that it's live, with Refresh now. Typing, focus, open menus and the selection are kept, and an answer overtaken by a newer choice is dropped.
+
+**Other files.** `query.export_rows(builder, &exec, limit, map, sink)` walks the state's rows a chunk at a time, for any writer: `&mut Vec<R>` collects them for one built whole. Hand them to `navree_sheets::write_xlsx` for Excel; `apps/ui-table-proof` shows it in 30 lines.
+
+**Other sources.** `navree-orm` is the path built for this table: allow-list, keyset, NULL order, bulk checks, exports. Rows from anywhere else can go straight to `DataTable`, and `TableSource` is the shape for a reusable one; the source then owns scoping and checks.
 
 **One table per URL.** State lives in plain parameters, so two tables on one page would share it: give the second its own route or region.
 

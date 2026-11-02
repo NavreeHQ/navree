@@ -263,6 +263,8 @@ export async function refresh(id) {
     if (el.hasAttribute("data-ui-feed")) return await feed(el, src, () => regions.get(id) === mine);
     const response = await fetch(src, { headers: HEADER });
     if (regions.get(id) !== mine) return;
+    // The user moved on while this was on its way: it answers a state that's gone.
+    if (table && (el.getAttribute("data-ui-src") !== src || el.hasAttribute("data-pending"))) return;
     if (table && !response.ok) {
       tableFailed(table, src, response.status);
       return;
@@ -354,6 +356,11 @@ export function startNav() {
     const a = safeLinkOf(e.target);
     if (a) prefetch(a.href);
   }, { passive: true });
+  on(document, "click", (e) => {
+    const button = /** @type {Element} */ (e.target).closest?.("[data-ui-refresh]");
+    const region = button?.closest("[data-ui-region]");
+    if (region) refresh(region.id);
+  });
   on(window, "popstate", () => {
     // Back within a table's own states changes the table, not the page.
     const table = document.querySelector("[data-ui-table]");

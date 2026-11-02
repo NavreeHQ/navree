@@ -30,6 +30,7 @@ struct ColHints {
     source: Option<LitStr>,
     group: Option<LitStr>,
     label: Option<LitStr>,
+    cell: Option<Path>,
     link: Option<LitStr>,
     badge: Option<Path>,
 }
@@ -61,11 +62,12 @@ fn col_hints(attrs: &[syn::Attribute]) -> syn::Result<ColHints> {
                 "source" => out.source = Some(meta.value()?.parse()?),
                 "group" => out.group = Some(meta.value()?.parse()?),
                 "label" => out.label = Some(meta.value()?.parse()?),
+                "cell" => out.cell = Some(meta.value()?.parse()?),
                 "link" => out.link = Some(meta.value()?.parse()?),
                 "badge" => out.badge = Some(meta.value()?.parse()?),
                 _ => {
                     return Err(meta.error(format!(
-                        "unknown `col` option `{key}`: expected skip, key, sortable, numeric, hide_on_mobile, search, strong, sticky, sticky_end, hidden, truncate, wrap, locked, width, align, kind, filter, options, source, group, label, link or badge"
+                        "unknown `col` option `{key}`: expected skip, key, sortable, numeric, hide_on_mobile, search, strong, sticky, sticky_end, hidden, truncate, wrap, locked, width, align, kind, filter, options, source, group, label, cell, link or badge"
                     )));
                 }
             }
@@ -268,6 +270,10 @@ pub(crate) fn table_row(input: DeriveInput) -> syn::Result<TokenStream> {
             None => quote!(self.#ident),
         };
         let content = match (&hint.link, &hint.badge) {
+            _ if hint.cell.is_some() => {
+                let cell = &hint.cell;
+                quote!(out.node(&::core::convert::Into::<#ui::Node>::into(#cell(self)));)
+            }
             (Some(link), _) => {
                 let href = link_expr(link, &ui)?;
                 quote!(#ui::table::write_link(out, #href, &#shown);)

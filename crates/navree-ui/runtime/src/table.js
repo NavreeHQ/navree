@@ -227,6 +227,7 @@ function sync(root) {
   measureSticky(root);
   drawSelection(root);
   if (root.hasAttribute("data-ui-grid")) setupGrid(root);
+  listen(root);
   const place = location.search.replace(/.*\b(page|after|before)=([^&]*).*/, "$2");
   const scroll = root.getAttribute("data-scroll-to");
   if (scroll && /** @type {any} */ (root).uiPlace !== undefined && /** @type {any} */ (root).uiPlace !== place) document.getElementById(scroll)?.scrollIntoView();
@@ -420,8 +421,71 @@ document.addEventListener("click", (e) => {
   if (yes) /** @type {any} */ (yes.closest("dialog"))?.uiSubmit?.();
 });
 
+/** Puts an edited cell back to what the server last said. @param {HTMLFormElement} form */
+function rollBack(form) {
+  const control = /** @type {any} */ (form.querySelector("input:not([type=hidden]),select"));
+  if (!control) return;
+  if (control.nodeName === "SELECT") for (const option of control.options) option.selected = option.defaultSelected;
+  else control.value = control.defaultValue;
+}
+
+/** Makes what the cell shows the value it goes back to. @param {HTMLFormElement} form */
+function settle(form) {
+  const control = /** @type {any} */ (form.querySelector("input:not([type=hidden]),select"));
+  if (!control) return;
+  if (control.nodeName === "SELECT") for (const option of control.options) option.defaultSelected = option.selected;
+  else control.defaultValue = control.value;
+}
+
+document.addEventListener("change", (e) => {
+  const control = /** @type {HTMLInputElement} */ (e.target);
+  const form = control.closest?.("form[data-ui-edit]");
+  if (form) /** @type {HTMLFormElement} */ (form).requestSubmit();
+});
+
+document.addEventListener("keydown", (e) => {
+  const control = /** @type {HTMLInputElement} */ (e.target);
+  const form = /** @type {HTMLFormElement | null} */ (control.closest?.("form[data-ui-edit]"));
+  if (!form) return;
+  if (e.key === "Escape") {
+    rollBack(form);
+    control.blur();
+  } else if (e.key === "Enter") {
+    // Leaving the box posts it, once.
+    e.preventDefault();
+    control.blur();
+  }
+});
+
+/** The event streams live tables listen to. @type {Map<Element, EventSource>} */
+const streams = new Map();
+
+/** Refreshes a table when its stream speaks, at most every 300 ms. @param {HTMLElement} root */
+function listen(root) {
+  const url = root.getAttribute("data-ui-live-src");
+  for (const [other, stream] of streams) {
+    if (!other.isConnected) {
+      stream.close();
+      streams.delete(other);
+    }
+  }
+  if (!url || streams.has(root)) return;
+  const stream = new EventSource(url);
+  let timer = 0;
+  stream.onmessage = () => {
+    clearTimeout(timer);
+    timer = /** @type {any} */ (setTimeout(() => /** @type {HTMLElement | null} */ (root.querySelector("[data-ui-refresh]"))?.click(), 300));
+  };
+  streams.set(root, stream);
+}
+
 document.addEventListener("ui:sent", (e) => {
   const { form, ok } = /** @type {CustomEvent} */ (e).detail;
+  if (form.hasAttribute?.("data-ui-edit")) {
+    if (ok) settle(form);
+    else rollBack(form);
+    return;
+  }
   const root = form.closest?.("[data-ui-table]");
   if (root && ok && form.hasAttribute("data-ui-bulk")) {
     save(root, { mode: "ids", ids: [], ex: [], key: "" });

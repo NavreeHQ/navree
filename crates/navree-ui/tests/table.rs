@@ -393,3 +393,58 @@ fn deal_writes_text_cells_for_files() {
     deal(1).write_text(0, &mut out);
     assert_eq!(out, "Deal 1");
 }
+
+/// A source that isn't the ORM: rows in memory, read through the query's accessors.
+struct Memory(Vec<Deal>);
+
+impl navree_ui::table::TableSource<Deal> for Memory {
+    type Error = std::convert::Infallible;
+
+    async fn page<F: navree_ui::table::FilterBar + Sync>(&self, query: &TableQuery<Deal, F>) -> Result<TablePage<Deal>, Self::Error> {
+        let found: Vec<Deal> = self.0.iter().filter(|deal| query.search().is_none_or(|q| deal.title.contains(q))).cloned().collect();
+        let total = found.len() as u64;
+        let skip = usize::try_from(query.offset()).unwrap_or(usize::MAX);
+        Ok(TablePage::new(found.into_iter().skip(skip).take(query.per_page() as usize).collect(), total))
+    }
+}
+
+#[test]
+fn a_source_can_be_anything() {
+    use navree_ui::table::TableSource as _;
+    let source = Memory((1..=30).map(deal).collect());
+    let query = q("q=Deal+1&per=10");
+    let page = futures_lite(source.page(&query));
+    assert_eq!(page.total, navree_ui::table::Total::Exact(11));
+    assert!(render(&DataTable::new("deals", &query, &page).into()).contains("of 11 results"));
+}
+
+fn futures_lite<T>(future: impl std::future::Future<Output = Result<T, std::convert::Infallible>>) -> T {
+    let mut future = std::pin::pin!(future);
+    let waker = std::task::Waker::noop();
+    let mut context = std::task::Context::from_waker(waker);
+    loop {
+        if let std::task::Poll::Ready(Ok(value)) = future.as_mut().poll(&mut context) {
+            return value;
+        }
+    }
+}
+
+#[test]
+fn a_cell_drawn_from_the_row_goes_through_the_renderer() {
+    let query = q("");
+    let rows = vec![deal(1)];
+    let html = render(&DataTable::new("deals", &query, &rows).cell("owner", |_| navree_ui::el("b").child("<i>x</i>")).into());
+    assert!(html.contains("<b>&lt;i&gt;x&lt;/i&gt;</b>"), "{html}");
+}
+
+#[test]
+fn a_filter_bar_is_state_in_the_url() {
+    let query = q("fb=stage,amount,nope,owner");
+    assert_eq!(query.href(), "/deals?fb=stage%2Camount");
+    let html = render(&DataTable::new("deals", &query, &[deal(1)]).filter_bar().into());
+    assert!(html.contains("data-slot=\"filter-bar\""), "{html}");
+    assert_eq!(html.matches(r#"popovertarget="deals-p-"#).count(), 2, "only those chosen: {html}");
+    let held = q("fb=stage&f.hot=true");
+    let html = render(&DataTable::new("deals", &held, &[deal(1)]).filter_bar().into());
+    assert_eq!(html.matches(r#"popovertarget="deals-p-"#).count(), 2, "a filter in force stays: {html}");
+}

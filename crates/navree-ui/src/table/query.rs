@@ -14,6 +14,7 @@
 //! f.owner.empty=1            is NULL
 //! cols=title,amount          the columns shown, in order
 //! w=title:240,amount:120     widths in pixels
+//! fb=stage,amount             the filters a filter bar shows, in order
 //! density=compact            row height
 //! open=12,15                 rows open to their details
 //! ```
@@ -96,6 +97,8 @@ pub(crate) struct State {
     pub(crate) widths: Vec<(usize, u32)>,
     pub(crate) density: TableDensity,
     pub(crate) open: Vec<String>,
+    /// The filter bar's choice of filters, in order; `None` is every filter.
+    pub(crate) bar: Option<Vec<usize>>,
 }
 
 /// A table's state as the URL states it.
@@ -160,6 +163,7 @@ impl State {
             widths: Vec::new(),
             density: TableDensity::Default,
             open: Vec::new(),
+            bar: None,
         };
         let mut rest = Vec::new();
         let mut sort_seen = false;
@@ -214,6 +218,16 @@ impl State {
                             && !cols.contains(&at)
                         {
                             cols.push(at);
+                        }
+                    }
+                }
+                "fb" => {
+                    let bar = state.bar.get_or_insert_with(Vec::new);
+                    for name in value.split(',') {
+                        if let Some(at) = index_of(name).filter(|at| columns[*at].filter != FilterKind::None)
+                            && !bar.contains(&at)
+                        {
+                            bar.push(at);
                         }
                     }
                 }
@@ -377,6 +391,13 @@ impl State {
         if !self.widths.is_empty() {
             let widths: Vec<String> = self.widths.iter().map(|(at, width)| format!("{}:{width}", R::COLUMNS[*at].name)).collect();
             pairs.push(("w".to_owned(), widths.join(",")));
+        }
+        if let Some(bar) = &self.bar {
+            let names: Vec<&str> = bar.iter().map(|at| R::COLUMNS[*at].name).collect();
+            let every: Vec<usize> = (0..R::COLUMNS.len()).filter(|at| R::COLUMNS[*at].filter != FilterKind::None).collect();
+            if *bar != every {
+                pairs.push(("fb".to_owned(), names.join(",")));
+            }
         }
         if self.density != TableDensity::Default {
             pairs.push(("density".to_owned(), self.density.as_str().to_owned()));
