@@ -2,10 +2,11 @@
 
 use std::any::Any;
 use std::fmt;
+use std::future::Future;
 use std::ops::AddAssign;
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use futures_util::FutureExt;
@@ -314,6 +315,7 @@ impl Queue {
                 token: token.clone(),
                 hooks: hooks.clone(),
                 id: format!("worker-{}", Uuid::now_v7()),
+                busy: AtomicU32::new(0),
             };
             set.spawn(worker.run());
         }
@@ -476,20 +478,23 @@ impl Queue {
         let mut step = None;
         if job.membership.batch_id.is_some() {
             let prepare = |envelope, row: &BatchRow| self.prepare_callback(envelope, row);
-            match self
-                .inner
-                .store
-                .finish_batch_job(job, worker, finish, error, now, &prepare)
-                .await?
+            match storing(|| {
+                self.inner
+                    .store
+                    .finish_batch_job(job, worker, finish, error, now, &prepare)
+            })
+            .await?
             {
                 Finished::Lost => return Ok(false),
                 Finished::Done(done) => step = done,
             }
         } else {
             match finish {
-                Finish::Succeeded | Finish::Skipped => self.inner.store.complete(job).await?,
+                Finish::Succeeded | Finish::Skipped => {
+                    storing(|| self.inner.store.complete(job)).await?;
+                }
                 Finish::Failed => {
-                    if !self.inner.store.fail(job, worker, error, now).await? {
+                    if !storing(|| self.inner.store.fail(job, worker, error, now)).await? {
                         return Ok(false);
                     }
                 }
@@ -535,7 +540,7 @@ impl Queue {
         let delay = job.options.backoff.delay_for(job.attempts);
         let delay_ms = i64::try_from(delay.as_millis()).unwrap_or(i64::MAX);
         let available_at = self.now_ms().saturating_add(delay_ms);
-        let released = self.inner.store.release(job, worker, available_at).await?;
+        let released = storing(|| self.inner.store.release(job, worker, available_at)).await?;
         if released {
             self.report_failure(job, error, started, true);
             tracing::warn!(
@@ -602,6 +607,36 @@ impl Queue {
     }
 }
 
+/// How many times a worker tries again when the database is busy, and how long
+/// it waits in between. SQLite has already waited `busy_timeout` by then.
+const BUSY_RETRIES: u32 = 5;
+const BUSY_RETRY_DELAY: Duration = Duration::from_millis(250);
+
+/// Whether `error` is the database being busy for now.
+fn is_busy(error: &QueueError) -> bool {
+    matches!(error, QueueError::Db(error) if error.is_retryable())
+}
+
+/// Stores what became of a job, trying again while the database is busy: the
+/// job has run, and if this is lost its reservation goes stale and the job
+/// runs again.
+async fn storing<T, Fut>(mut store: impl FnMut() -> Fut) -> Result<T, QueueError>
+where
+    Fut: Future<Output = Result<T, QueueError>>,
+{
+    let mut tries = 0;
+    loop {
+        match store().await {
+            Err(error) if is_busy(&error) && tries < BUSY_RETRIES => {
+                tries += 1;
+                tracing::warn!(target: "navree::job", %error, "cannot store a job's outcome; trying again");
+                tokio::time::sleep(BUSY_RETRY_DELAY).await;
+            }
+            outcome => return outcome,
+        }
+    }
+}
+
 /// One worker loop of a `work` call.
 struct Worker {
     queue: Queue,
@@ -614,6 +649,8 @@ struct Worker {
     /// A supervisor's hooks.
     hooks: Option<Arc<dyn WorkHooks>>,
     id: String,
+    /// Tries in a row that found the database busy.
+    busy: AtomicU32,
 }
 
 impl Worker {
@@ -636,6 +673,7 @@ impl Worker {
             }
             match self.reserve().await {
                 Ok(Some(job)) => {
+                    self.busy.store(0, Ordering::Relaxed);
                     let started = Instant::now();
                     let (job_id, queue, job_type, attempt) = (
                         job.id.clone(),
@@ -684,12 +722,19 @@ impl Worker {
         Ok(stats)
     }
 
-    /// A driver error: returned when the worker stops on an empty queue;
-    /// otherwise logged, then the worker waits a poll interval. `Ok(false)`
-    /// when the app shuts down meanwhile.
+    /// A driver error: returned when the worker stops on an empty queue,
+    /// unless it is the database being busy for now (a lock held longer than
+    /// it waits, a deadlock), which is tried again a few times; otherwise
+    /// logged, then the worker waits a poll interval. `Ok(false)` when the app
+    /// shuts down meanwhile.
     async fn recover(&self, error: QueueError, what: &str) -> Result<bool, QueueError> {
         if self.finite {
-            return Err(error);
+            if !is_busy(&error) || self.busy.fetch_add(1, Ordering::Relaxed) >= BUSY_RETRIES {
+                return Err(error);
+            }
+            tracing::warn!(target: "navree::job", %error, worker = %self.id, "{what}; trying again");
+            tokio::time::sleep(BUSY_RETRY_DELAY).await;
+            return Ok(!self.token.is_cancelled());
         }
         tracing::error!(target: "navree::job", %error, worker = %self.id, "{what}");
         Ok(self.idle().await)

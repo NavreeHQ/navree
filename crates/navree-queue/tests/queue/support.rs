@@ -147,7 +147,7 @@ pub async fn app_without_jobs_on(
     app_builder_on(url, options, journal, clock).build().await
 }
 
-fn app_builder_on(
+pub fn app_builder_on(
     url: &str,
     options: QueueOptions,
     journal: Arc<Journal>,

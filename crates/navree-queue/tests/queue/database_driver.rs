@@ -177,3 +177,118 @@ async fn long_running_worker_survives_errors_recording_an_outcome() {
         .unwrap()
         .unwrap();
 }
+
+/// Takes SQLite's write lock for `hold`, on a connection of its own.
+async fn hold_write_lock(url: &str, hold: Duration) -> tokio::task::JoinHandle<()> {
+    let db = Db::connect(&navree_db::DbOptions {
+        url: url.to_owned(),
+        ..navree_db::DbOptions::default()
+    })
+    .await
+    .unwrap();
+    let tx = db
+        .begin_with(navree_db::TxOptions::new().immediate())
+        .await
+        .unwrap();
+    tokio::spawn(async move {
+        tokio::time::sleep(hold).await;
+        tx.rollback().await.unwrap();
+    })
+}
+
+/// A write lock held longer than `busy_timeout` is the database being busy: a
+/// worker draining the queue waits it out, as a long-running one does.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_lock_held_past_the_busy_timeout_does_not_stop_a_draining_worker() {
+    if crate::servers::Server::current() != crate::servers::Server::Sqlite {
+        return;
+    }
+    let (url, _guard) = crate::servers::scratch();
+    let journal = Arc::new(Journal::default());
+    let clock = Arc::new(FixedClock::new(start()));
+    let app = crate::support::app_builder_on(
+        &url,
+        options(QueueDriver::Database),
+        journal.clone(),
+        clock,
+    )
+    .config(
+        "database.sqlite",
+        serde_json::json!({ "busy_timeout_ms": 100 }),
+    )
+    .module(crate::support::JobsModule)
+    .build()
+    .await;
+    let queue = app.get::<Queue>().await;
+    queue.dispatch(Record::new("0")).await.unwrap();
+    let holder = hold_write_lock(&url, Duration::from_millis(600)).await;
+    let stats = queue
+        .work(WorkOptions {
+            stop_when_empty: true,
+            ..WorkOptions::default()
+        })
+        .await
+        .unwrap();
+    holder.await.unwrap();
+    assert_eq!(stats.succeeded, 1);
+    assert_handled_once(&journal.labels(), 1);
+}
+
+/// The same while the job's outcome is stored: the job ran, and it isn't run
+/// again for a lock that was busy for a moment.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_lock_held_while_an_outcome_is_stored_does_not_lose_the_outcome() {
+    use navree_contracts::{BoxError, Job, JobContext, ModuleBuilderJobsExt};
+    use navree_kernel::{Module, ModuleBuilder};
+    use std::sync::Mutex;
+
+    if crate::servers::Server::current() != crate::servers::Server::Sqlite {
+        return;
+    }
+    static HOLDING: Mutex<Option<tokio::task::JoinHandle<()>>> = Mutex::new(None);
+    static URL: Mutex<String> = Mutex::new(String::new());
+
+    #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+    struct TakesTheLock;
+    impl Job for TakesTheLock {
+        const NAME: &'static str = "test.takes_the_lock";
+        async fn handle(self, _ctx: JobContext) -> Result<(), BoxError> {
+            let url = URL.lock().unwrap().clone();
+            let holder = hold_write_lock(&url, Duration::from_millis(600)).await;
+            *HOLDING.lock().unwrap() = Some(holder);
+            Ok(())
+        }
+    }
+    struct Jobs;
+    impl Module for Jobs {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.job::<TakesTheLock>();
+        }
+    }
+
+    let (url, _guard) = crate::servers::scratch();
+    URL.lock().unwrap().clone_from(&url);
+    let journal = Arc::new(Journal::default());
+    let clock = Arc::new(FixedClock::new(start()));
+    let app = crate::support::app_builder_on(&url, options(QueueDriver::Database), journal, clock)
+        .config(
+            "database.sqlite",
+            serde_json::json!({ "busy_timeout_ms": 100 }),
+        )
+        .module(Jobs)
+        .build()
+        .await;
+    let queue = app.get::<Queue>().await;
+    queue.dispatch(TakesTheLock).await.unwrap();
+    let stats = queue
+        .work(WorkOptions {
+            once: true,
+            ..WorkOptions::default()
+        })
+        .await
+        .unwrap();
+    let holder = HOLDING.lock().unwrap().take().unwrap();
+    holder.await.unwrap();
+    assert_eq!(stats.succeeded, 1);
+    assert_eq!(queue.pending_count("default").await.unwrap(), 0);
+}
