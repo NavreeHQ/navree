@@ -59,12 +59,12 @@
 <div class="card table-card">
   <div class="card-pad"><h2>Delivery history</h2></div>
   <table>
-    <thead><tr><th>Alert</th><th>Issue</th><th>Channel</th><th>Status</th><th class="num hide-narrow">Attempts</th><th class="num hide-narrow">Raised</th></tr></thead>
+    <thead><tr><th class="hide-narrow">Alert</th><th>Issue</th><th>Channel</th><th>Status</th><th class="num hide-narrow">Attempts</th><th class="num hide-narrow">Raised</th></tr></thead>
     <tbody>
     {% for a in history %}
       <tr>
-        <td>{{ a.kind_label }}</td>
-        <td class="wrap title-cell">{% if a.issue_id %}<a href="{{ mount }}/issues/{{ a.issue_id }}">{{ a.title }}</a>{% else %}{{ a.title }}{% endif %}<div class="sub mono">{{ a.culprit }}</div>{% if a.error %}<div class="sub error-text">{{ a.error }}</div>{% endif %}</td>
+        <td class="hide-narrow">{{ a.kind_label }}</td>
+        <td class="wrap title-cell"><div class="sub show-narrow">{{ a.kind_label }}</div>{% if a.issue_id %}<a href="{{ mount }}/issues/{{ a.issue_id }}">{{ a.title }}</a>{% else %}{{ a.title }}{% endif %}<div class="sub mono">{{ a.culprit }}</div>{% if a.error %}<div class="sub error-text">{{ a.error }}</div>{% endif %}</td>
         <td>{{ a.channel }}</td>
         <td><span class="badge{% if a.status == 'delivered' %} ok{% elif a.status == 'failed' %} error{% endif %}">{{ a.status }}</span></td>
         <td class="num hide-narrow">{{ a.attempts }}</td>

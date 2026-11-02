@@ -255,6 +255,7 @@ svg.spark.wide { width: 88px; height: 28px; }
 .live-where { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Alerts, releases and settings. */
+.show-narrow { display: none; }
 .channel-list { display: flex; flex-direction: column; }
 .channel { padding: 12px 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
 .channel:first-child { border-top: 0; padding-top: 0; }
@@ -277,6 +278,7 @@ input:disabled, select:disabled, button:disabled { opacity: 0.55; cursor: not-al
 }
 @media (max-width: 700px) {
   .hide-narrow { display: none; }
+  .show-narrow { display: block; }
   .topbar .live-status { display: none; }
   .setting { grid-template-columns: minmax(0, 1fr); }
   .setting-input { justify-content: flex-start; }
