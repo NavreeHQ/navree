@@ -1591,7 +1591,7 @@ version = "0.1.24"
 criteria = "safe-to-deploy"
 
 [[exemptions.pulldown-cmark]]
-version = "0.13.5"
+version = "0.13.6"
 criteria = "safe-to-deploy"
 
 [[exemptions.pulldown-cmark-escape]]
