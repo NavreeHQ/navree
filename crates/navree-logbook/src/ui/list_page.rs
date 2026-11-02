@@ -5,10 +5,10 @@ use std::time::Duration;
 
 use navree_ui::{
     Alert, AlertTone, Badge, BadgeVariant, Button, ButtonVariant, Empty, Input, Item, ItemVariant,
-    Node, Region, Size, Stack, Text, el, icons,
+    Node, Region, Size, Stack, Text, TextVariant, el, icons,
 };
 
-use super::{Row, breakable};
+use super::{Row, tight};
 
 /// How often the list asks for new entries.
 const LIVE: Duration = Duration::from_secs(2);
@@ -50,7 +50,10 @@ pub(super) fn item(row: Row) -> Item {
         row.prefix
             .map(|prefix| Text::muted(format!("{prefix} ")).inline().into())
             .unwrap_or(Node::Empty),
-        Text::code(breakable(&row.title)).into(),
+        Text::new(tight(&row.title))
+            .variant(TextVariant::Code)
+            .inline()
+            .into(),
     ];
     let mut inside = vec![Node::from(
         el("span").attr("title", row.at.clone()).child(row.time),

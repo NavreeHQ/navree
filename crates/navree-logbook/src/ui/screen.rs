@@ -9,7 +9,7 @@ use navree_ui::{
     icons,
 };
 
-use super::{breakable, detail_page, list_href, list_page, shorten};
+use super::{detail_page, list_href, list_page, shorten, tight};
 use crate::EntryKind;
 
 /// What is open beside the list.
@@ -121,11 +121,7 @@ pub(super) fn page(app: &AppShell, mut screen: Screen) -> View {
             if detail.replay.is_some() {
                 actions.push(Button::outline("Replay").size(Size::Sm).href("#replay"));
             }
-            (
-                breakable(&shorten(&detail.title, 90)),
-                actions,
-                StatusCode::OK,
-            )
+            (tight(&shorten(&detail.title, 90)), actions, StatusCode::OK)
         }
         (Beside::Missing, _) => (
             "No such entry".to_owned(),

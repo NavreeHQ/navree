@@ -343,8 +343,19 @@ fn href_with(path: &str, q: &str, kind: Option<&str>, before: Option<u64>) -> St
 /// an identifier a phone can't fit wraps instead of widening the page. Text that
 /// already has room to wrap is left as it is.
 pub(crate) fn breakable(text: &str) -> String {
-    const RUN: usize = 24;
-    let mut out = String::with_capacity(text.len() + text.len() / 16);
+    break_runs(text, 16, 40)
+}
+
+/// [`breakable`] for text set large or in a narrow column (a heading, a row of the
+/// list), where a run has to be shorter to fit a phone.
+pub(crate) fn tight(text: &str) -> String {
+    break_runs(text, 12, 24)
+}
+
+/// Puts a break in a run of `hard` characters without a space, and after
+/// punctuation once it is `soft` long.
+fn break_runs(text: &str, soft: usize, hard: usize) -> String {
+    let mut out = String::with_capacity(text.len() + text.len() / soft);
     let mut run = 0;
     for c in text.chars() {
         out.push(c);
@@ -353,8 +364,10 @@ pub(crate) fn breakable(text: &str) -> String {
             continue;
         }
         run += 1;
-        let punctuation = matches!(c, '/' | '?' | '&' | '=' | '_' | '-' | '.' | ':' | ',' | ';');
-        if (punctuation && run >= RUN) || run >= RUN * 2 {
+        // A hyphen is a place to break already, and an identifier's hyphens are
+        // left alone so that copying one copies it whole.
+        let punctuation = matches!(c, '/' | '?' | '&' | '=' | '_' | '.' | ':' | ',' | ';');
+        if (punctuation && run >= soft) || run >= hard {
             out.push('\u{200b}');
             run = 0;
         }
@@ -924,7 +937,7 @@ impl LogbookController {
             .collect();
 
         let sections = self.sections(&base, selected, head, entries, &jobs_in_trace);
-        let timeline = timeline(head, entries);
+        let (timeline, timeline_total) = timeline(head, entries);
         let replay = match &head.content {
             Content::Request(request) if self.logbook.options().replay => {
                 let message = request.request.as_ref();
@@ -973,6 +986,7 @@ impl LogbookController {
             repeated: duplicate_rows,
             sections,
             timeline,
+            timeline_total: format_ms(timeline_total),
             replay,
         })
     }
@@ -1337,9 +1351,9 @@ fn item(base: &str, entry: &Entry, selected: bool, link: bool) -> Item {
 }
 
 /// The waterfall: every entry of the batch against the batch's duration.
-fn timeline(head: &Entry, entries: &[Entry]) -> Vec<Bar> {
+fn timeline(head: &Entry, entries: &[Entry]) -> (Vec<Bar>, f64) {
     if entries.len() < 2 && !head.kind().is_batch() {
-        return Vec::new();
+        return (Vec::new(), 0.0);
     }
     let start = head.at;
     let end_of = |e: &Entry| offset_ms(start, e.at) + e.duration_ms.unwrap_or(0.0);
@@ -1350,7 +1364,7 @@ fn timeline(head: &Entry, entries: &[Entry]) -> Vec<Bar> {
         .max(0.001);
     let mut ordered: Vec<&Entry> = entries.iter().collect();
     ordered.sort_by(|a, b| a.at.cmp(&b.at).then(a.seq.cmp(&b.seq)));
-    ordered
+    let bars = ordered
         .into_iter()
         .map(|e| {
             let left = (offset_ms(start, e.at) / total * 100.0).clamp(0.0, 100.0);
@@ -1364,7 +1378,8 @@ fn timeline(head: &Entry, entries: &[Entry]) -> Vec<Bar> {
                 duration: e.duration_ms.map(format_ms).unwrap_or_default(),
             }
         })
-        .collect()
+        .collect();
+    (bars, total)
 }
 
 fn offset_ms(start: DateTime<Utc>, at: DateTime<Utc>) -> f64 {
@@ -1406,6 +1421,20 @@ mod tests {
         let path = "/api/v1/companies/0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23/contacts/0199c1d2-6f7e";
         assert!(breakable(path).contains('\u{200b}'));
         assert!(!breakable("short/word").contains('\u{200b}'));
+        let long = format!("GET /{}", "a".repeat(160));
+        assert!(
+            tight(&long)
+                .split(|c: char| c.is_whitespace() || c == '\u{200b}')
+                .all(|run| run.chars().count() <= 24),
+            "a heading breaks within a phone's width"
+        );
+        // An identifier is copied whole.
+        for id in [
+            "01a19b71a3e975e68382cea88c0d064b",
+            "0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23",
+        ] {
+            assert_eq!(breakable(id), id);
+        }
     }
 
     #[test]

@@ -2,12 +2,14 @@
 //! thing the entry touched, and the replay form. No script of its own and no
 //! stylesheet of its own: everything on the page is the toolkit's.
 
+use navree_ui::Justify;
 use navree_ui::{
-    Badge, BadgeVariant, Button, Card, Checkbox, Empty, Field, Heading, Input, Node, Row as Layout,
-    Size, Stack, Table, TableCell, TableHead, TableRowEl, Text, Textarea, Uses, el, icons,
+    Badge, BadgeVariant, Button, Card, Checkbox, Empty, Field, Grid, Heading, Input, Node,
+    Row as Layout, Size, Stack, Table, TableCell, TableHead, TableRowEl, Text, Textarea, Uses, el,
+    icons,
 };
 
-use super::{Bar, Fact, Item, Section, breakable};
+use super::{Bar, Fact, Item, Section, breakable, tight};
 
 /// A captured request or response.
 pub(super) struct Message {
@@ -59,6 +61,8 @@ pub(super) struct Detail {
     pub(super) repeated: Vec<Repeated>,
     pub(super) sections: Vec<Section>,
     pub(super) timeline: Vec<Bar>,
+    /// How long the whole timeline is: the far end of its scale.
+    pub(super) timeline_total: String,
     pub(super) replay: Option<Replay>,
 }
 
@@ -71,16 +75,38 @@ fn block(text: String) -> Node {
     }
 }
 
-fn pairs(headers: Vec<(String, String)>) -> Node {
-    Table::new()
-        .caption("Headers")
-        .head((TableHead::new("Header"), TableHead::new("Value")))
-        .rows(
-            headers
+/// Names and values, each value under its name: two columns on a wide screen and
+/// one on a phone, where a value (an id, a token) has the whole width and nothing
+/// has to scroll sideways.
+fn pairs(pairs: Vec<(String, Node)>) -> Node {
+    Grid::cols(2)
+        .gap(3)
+        .children(
+            pairs
                 .into_iter()
-                .map(|(name, value)| TableRowEl::new((TableCell::new(name), TableCell::new(value))))
+                .map(|(name, value)| {
+                    Stack::gap(0).children((Text::muted(breakable(&name)), Text::new(value)))
+                })
                 .collect::<Vec<_>>(),
         )
+        .into()
+}
+
+/// Headers as pairs.
+fn header_pairs(headers: Vec<(String, String)>) -> Node {
+    if headers.is_empty() {
+        return Node::Empty;
+    }
+    Stack::gap(1)
+        .children((
+            Heading::h3("Headers"),
+            pairs(
+                headers
+                    .into_iter()
+                    .map(|(name, value)| (name, Node::from(breakable(&value))))
+                    .collect(),
+            ),
+        ))
         .into()
 }
 
@@ -93,7 +119,7 @@ fn message(title: &'static str, id: &'static str, message: Message) -> Node {
                 (!message.query.is_empty()).then(|| {
                     Stack::gap(1).children((Heading::h3("Query string"), block(message.query)))
                 }),
-                pairs(message.headers),
+                header_pairs(message.headers),
                 (meta.is_some() || !message.body.is_empty()).then(|| {
                     Stack::gap(1).children((Heading::h3("Body"), meta, block(message.body)))
                 }),
@@ -235,21 +261,31 @@ fn track(bar: &Bar) -> Node {
         .into()
 }
 
-fn timeline(bars: Vec<Bar>) -> Node {
-    let rows: Vec<TableRowEl> = bars
+fn timeline(bars: Vec<Bar>, total: String) -> Node {
+    let mut rows: Vec<TableRowEl> = bars
         .iter()
         .map(|bar| {
             TableRowEl::new((
                 TableCell::new(
                     el("a")
                         .href(format!("#entry-{}", bar.id))
-                        .child(breakable(&bar.label)),
+                        .child(tight(&bar.label)),
                 ),
                 TableCell::new(track(bar)),
                 TableCell::new(bar.duration.clone()).numeric(),
             ))
         })
         .collect();
+    // The scale: nought, the middle and the end of the request's own time.
+    rows.push(TableRowEl::new((
+        TableCell::new(Text::muted("Scale")),
+        TableCell::new(Layout::gap(0).justify(Justify::Between).children((
+            Text::muted("0").inline(),
+            Text::muted("½").inline(),
+            Text::muted(total).inline(),
+        ))),
+        TableCell::new(""),
+    )));
     el("section")
         .attr("id", "timeline")
         .child(
@@ -383,23 +419,20 @@ pub(super) fn pane(detail: Detail) -> Node {
         .iter()
         .map(|flag| Badge::new(*flag).variant(tone).into())
         .collect();
-    let facts = Table::new()
-        .caption("Summary")
-        .head((TableHead::new("Field"), TableHead::new("Value")))
-        .rows(
-            detail
-                .facts
-                .into_iter()
-                .map(|fact| {
-                    let value: Node = if fact.href.is_empty() {
-                        Node::from(breakable(&fact.value))
-                    } else {
-                        el("a").href(fact.href).child(breakable(&fact.value)).into()
-                    };
-                    TableRowEl::new((TableCell::new(fact.label), TableCell::new(value)))
-                })
-                .collect::<Vec<_>>(),
-        );
+    let facts = pairs(
+        detail
+            .facts
+            .into_iter()
+            .map(|fact| {
+                let value: Node = if fact.href.is_empty() {
+                    Node::from(breakable(&fact.value))
+                } else {
+                    el("a").href(fact.href).child(breakable(&fact.value)).into()
+                };
+                (fact.label.to_owned(), value)
+            })
+            .collect(),
+    );
     let tags = (!detail.tags.is_empty()).then(|| {
         Layout::gap(2).wrap().children(
             detail
@@ -439,7 +472,7 @@ pub(super) fn pane(detail: Detail) -> Node {
             detail.response.map(|m| message("Response", "response", m)),
             (!detail.statements.is_empty()).then(|| queries(detail.statements, detail.repeated)),
             Node::list(detail.sections.into_iter().map(section).collect::<Vec<_>>()),
-            (!detail.timeline.is_empty()).then(|| timeline(detail.timeline)),
+            (!detail.timeline.is_empty()).then(|| timeline(detail.timeline, detail.timeline_total)),
             detail.replay.map(replay),
         ))
         .into()
