@@ -202,6 +202,12 @@ fn metrics_recorder_installed() -> bool {
 // Request context: request id, client ip, app context, span, log, metrics
 // ---------------------------------------------------------------------------
 
+/// Where the matched route's metadata is kept for the request context. The
+/// route sets it before its handler runs, so a handler that panics (and
+/// never answers with the metadata) is still reported under its route.
+#[derive(Clone, Default)]
+pub(crate) struct MatchedRoute(pub(crate) Arc<std::sync::OnceLock<Arc<RouteMeta>>>);
+
 pub(crate) struct ContextState {
     pub(crate) ctx: AppContext,
     pub(crate) proxies: ProxyTrust,
@@ -253,6 +259,8 @@ where
     extensions.insert(telemetry_context.clone());
     // Request-scoped providers are built once per request (see `Scoped`).
     extensions.insert(RequestScope::new());
+    let matched_route = MatchedRoute::default();
+    extensions.insert(matched_route.clone());
     let path = state
         .telemetry
         .enabled(EventKind::RequestHandled)
@@ -279,7 +287,10 @@ where
     response.headers_mut().insert(X_REQUEST_ID.clone(), header);
 
     let latency = start.elapsed();
-    let matched = response.extensions().get::<Arc<RouteMeta>>();
+    let matched = response
+        .extensions()
+        .get::<Arc<RouteMeta>>()
+        .or_else(|| matched_route.0.get());
     let route = matched.map_or("unmatched", |meta| meta.full_path.as_str());
     let user = response.extensions().get::<LoggedUser>().map(|u| u.0);
     let status = response.status().as_u16();

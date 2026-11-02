@@ -632,6 +632,9 @@ async fn route_pipeline(
 ) -> Response {
     let meta = runtime.meta.clone();
     let (mut parts, body) = request.into_parts();
+    if let Some(slot) = parts.extensions.get::<pipeline::MatchedRoute>() {
+        let _ = slot.0.set(meta.clone());
+    }
     parts.extensions.insert(meta.clone());
     parts.extensions.insert(BodyLimit(runtime.body_limit));
     if let (Some(route_timeout), Some(cell)) =

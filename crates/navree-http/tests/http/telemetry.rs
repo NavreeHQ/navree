@@ -83,6 +83,34 @@ async fn every_request_is_reported_with_route_status_user_and_request_id() {
 }
 
 #[tokio::test]
+async fn a_request_whose_handler_panicked_is_reported_with_the_route_that_panicked() {
+    let recorder = TelemetryRecorder::new();
+    let app = Setup::new(vec![
+        RouteDef::on(Method::GET, "/deals/{id}", || async {
+            if true {
+                panic!("stage out of range");
+            }
+            "never"
+        })
+        .public(),
+    ])
+    .module(recorder.module())
+    .boot()
+    .await;
+
+    let response = app.get("/api/deals/42").await;
+    assert_eq!(response.status, 500);
+    let requests = recorder.requests();
+    assert_eq!(requests.len(), 1, "{requests:?}");
+    assert_eq!(requests[0].status, 500);
+    assert_eq!(
+        requests[0].route.as_deref(),
+        Some("/api/deals/{id}"),
+        "the route is known although the handler never answered"
+    );
+}
+
+#[tokio::test]
 async fn handlers_run_inside_the_request_context() {
     let app = Setup::new(vec![
         RouteDef::on(Method::GET, "/context", || async {

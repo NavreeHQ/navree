@@ -124,6 +124,26 @@ async fn panics_group_by_their_location() {
 }
 
 #[tokio::test]
+async fn a_panic_is_recorded_against_the_route_that_panicked() {
+    let app = builder().build().await;
+    app.client()
+        .get("/api/demo/panic/3")
+        .send()
+        .await
+        .assert_status(500);
+    let store = flushed(&app).await;
+    let routes = store.routes(navree_lighthouse::Period::Day).await.unwrap();
+    let names: Vec<&str> = routes.iter().map(|r| r.endpoint.as_str()).collect();
+    assert!(names.contains(&"GET /api/demo/panic/{n}"), "{names:?}");
+    assert!(!names.iter().any(|n| n.contains("unmatched")), "{names:?}");
+    let issue = &store.issues(&all()).await.unwrap().data[0].issue;
+    assert_eq!(issue.culprit, "GET /api/demo/panic/{n}");
+    let latest = store.issue_detail(issue.id).await.unwrap().latest.unwrap();
+    assert_eq!(latest.route.as_deref(), Some("/api/demo/panic/{n}"));
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn slow_requests_and_slow_queries_open_their_own_issues() {
     let app = builder()
         .config("lighthouse.thresholds.slow_request_ms", 10)
