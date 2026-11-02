@@ -6,6 +6,7 @@ use http::header::USER_AGENT;
 use http::request::Parts;
 use navree_access::{CurrentAccess, PinnedWorkspace, WorkspaceGate};
 use navree_contracts::{AuthState, RequestId};
+use navree_crypto::Encrypter;
 use navree_db::Uow;
 use navree_http::extract::FromRequestParts;
 use navree_http::{AppError, ClientIp};
@@ -73,8 +74,16 @@ async fn panel(parts: &mut Parts, enter_named: bool) -> Result<Panel, AppError> 
         // A request that is not inside a workspace may name one, and is let in
         // only if the user may work in it.
         if enter_named && uow.workspace().is_none() {
-            let named =
-                workspace::requested(&parts.headers, workspace::header_of(&app).await.as_deref());
+            let encrypter = app.try_get::<Encrypter>().await;
+            let panel_session = parts.extensions.get::<PanelSession>();
+            let sign_in = panel_session
+                .and_then(|session| session.csrf.as_deref())
+                .map(|token| (token, encrypter.as_deref()));
+            let named = workspace::requested(
+                &parts.headers,
+                workspace::header_of(&app).await.as_deref(),
+                sign_in,
+            );
             let named = match pin {
                 Some(pin) => Some(workspace::within_pin(pin, named)?),
                 None => named,

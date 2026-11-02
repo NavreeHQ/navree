@@ -13,6 +13,7 @@ use navree_workspace::{
 
 use super::*;
 
+mod cookie;
 mod demo;
 mod every_schema;
 mod oracle;

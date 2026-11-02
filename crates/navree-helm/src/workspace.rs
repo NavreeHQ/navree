@@ -41,6 +41,7 @@ use http::HeaderMap;
 use navree_access::{
     PinnedWorkspace, PrincipalAccess, WorkspaceEntry, WorkspaceGate, WorkspaceWrites,
 };
+use navree_crypto::{Encrypter, constant_time_eq};
 use navree_db::{Backend, Executor as _, Statement, Uow};
 use navree_http::AppError;
 use navree_kernel::{AppContext, BoxFuture};
@@ -50,7 +51,9 @@ use crate::core::Core;
 use crate::session::cookie;
 
 /// The cookie that holds the workspace the panel works in, set by the form
-/// in the sidebar (`POST {path}/workspace`).
+/// in the sidebar (`POST {path}/workspace`). In a signed-in browser its value is
+/// sealed to the sign-in, so that one planted at another path, or kept from
+/// another sign-in, names nothing.
 pub const WORKSPACE_COOKIE: &str = "navree_helm_workspace";
 
 /// The header an API client names its workspace with, in an app without
@@ -103,10 +106,37 @@ impl NamedBy {
     }
 }
 
+/// The value of the workspace cookie for `workspace` in the sign-in whose token is
+/// `sign_in`.
+pub(crate) fn sealed(encrypter: &Encrypter, workspace: Uuid, sign_in: &str) -> Option<String> {
+    encrypter
+        .encrypt_string(&format!("{workspace}|{sign_in}"))
+        .ok()
+}
+
+/// The workspace in the cookie value `sealed` for the sign-in whose token is `sign_in`.
+fn unsealed(encrypter: &Encrypter, value: &str, sign_in: &str) -> Option<Uuid> {
+    let plain = encrypter.decrypt_string(value).ok()?;
+    let (workspace, token) = plain.split_once('|')?;
+    if !constant_time_eq(token.as_bytes(), sign_in.as_bytes()) {
+        return None;
+    }
+    Uuid::parse_str(workspace).ok()
+}
+
+/// What a browser's workspace cookie is read with: its sign-in, and the key the
+/// cookie is sealed with (`None`, for a client that isn't signed in with the
+/// panel's session, reads the id as it is).
+pub(crate) type SignIn<'a> = Option<(&'a str, Option<&'a Encrypter>)>;
+
 /// The workspace the request names: header `header` (when requests may name
 /// one with a header), else the panel's workspace cookie. Anything but a UUID
 /// names none.
-pub(crate) fn requested(headers: &HeaderMap, header: Option<&str>) -> Option<(Uuid, NamedBy)> {
+pub(crate) fn requested(
+    headers: &HeaderMap,
+    header: Option<&str>,
+    sign_in: SignIn<'_>,
+) -> Option<(Uuid, NamedBy)> {
     let from_header = header
         .and_then(|name| headers.get(name))
         .and_then(|value| value.to_str().ok())
@@ -117,7 +147,10 @@ pub(crate) fn requested(headers: &HeaderMap, header: Option<&str>) -> Option<(Uu
             .ok()
             .map(|workspace| (workspace, NamedBy::Header)),
         None => cookie(headers, WORKSPACE_COOKIE)
-            .and_then(|value| Uuid::parse_str(value.trim()).ok())
+            .and_then(|value| match sign_in {
+                Some((token, encrypter)) => unsealed(encrypter?, value.trim(), token),
+                None => Uuid::parse_str(value.trim()).ok(),
+            })
             .map(|workspace| (workspace, NamedBy::Cookie)),
     }
 }
@@ -561,7 +594,7 @@ mod tests {
             HeaderValue::from_str(&second.to_string()).unwrap(),
         );
         assert_eq!(
-            requested(&headers, Some(WORKSPACE_HEADER)),
+            requested(&headers, Some(WORKSPACE_HEADER), None),
             Some((first, NamedBy::Header))
         );
     }
@@ -580,7 +613,7 @@ mod tests {
         let globex = Uuid::now_v7();
         let mut headers = HeaderMap::new();
         let requested = |headers: &HeaderMap| {
-            requested(headers, Some(WORKSPACE_HEADER)).map(|(workspace, _)| workspace)
+            requested(headers, Some(WORKSPACE_HEADER), None).map(|(workspace, _)| workspace)
         };
         assert_eq!(requested(&headers), None);
         headers.insert(

@@ -737,10 +737,26 @@ pub(crate) async fn choose_workspace(
         let message = error.detail.as_deref().unwrap_or(&error.title).to_owned();
         return redirect_with(&base, &message, "error", &core, &host);
     }
+    let value = match &panel.session.csrf {
+        Some(sign_in) => match panel.cx.app.try_get::<Encrypter>().await {
+            Some(encrypter) => workspace::sealed(&encrypter, workspace, sign_in),
+            None => None,
+        },
+        None => Some(workspace.to_string()),
+    };
+    let Some(value) = value else {
+        return redirect_with(
+            &base,
+            "The workspace could not be kept.",
+            "error",
+            &core,
+            &host,
+        );
+    };
     let mut response = redirect(&base);
     if let Some(header) = build_cookie(
         WORKSPACE_COOKIE,
-        workspace.to_string(),
+        value,
         &base,
         i64::try_from(core.options.session_minutes.saturating_mul(60)).unwrap_or(i64::MAX),
         &host,
