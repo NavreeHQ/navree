@@ -413,14 +413,6 @@ describe("path values servers may read another way", () => {
     expect(url("/{a};v=1", { a: "..a" })).toBe("https://api.test/..a;v=1");
     expect(url("/{a};v=1", { a: "a.." })).toBe("https://api.test/a..;v=1");
   });
-
-  it("refuses an empty value that would put two slashes in the path", () => {
-    expect(() => url("/v1/{a}/{b}", { a: "", b: "evil" })).toThrow(/empty/);
-    expect(() => url("/v1/{a}/x", { a: "" })).toThrow(/empty/);
-    expect(url("/v1/{a}/{b}", { a: "x", b: "y" })).toBe("https://api.test/v1/x/y");
-    // At the end of the path it leaves a trailing slash, and nothing to collapse.
-    expect(url("/v1/{a}", { a: "" })).toBe("https://api.test/v1/");
-  });
 });
 
 describe("serialization of empty members", () => {

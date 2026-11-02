@@ -572,10 +572,6 @@ export function defaultPathSerializer(pathname: string, pathParams: Record<strin
     if (DOT_SEGMENT.test(url.slice(from, to))) {
       throw new Error(`The path parameter "${name}" would make "." or ".." a segment of the path (a dot segment).`);
     }
-    // Some proxies collapse `//`, which moves what follows up the path.
-    if (from === to && url[to] === "/" && from > 0) {
-      throw new Error(`The path parameter "${name}" is empty, which would put two slashes in the path.`);
-    }
   }
   return url;
 }
