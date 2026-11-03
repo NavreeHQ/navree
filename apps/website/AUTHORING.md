@@ -450,3 +450,49 @@ URL, the install commands) are in `site.config.ts`.
 
 `pnpm screenshots` saves full-page screenshots of the key pages at 1440 and
 390 px to `screenshots/` (run `pnpm serve` first).
+
+## Search, AI answers and freshness
+
+Titles, descriptions, structured data, `robots.txt`, `llms.txt`, the sitemap
+and the changelog are generated from what you write and from git. You rarely
+edit them, but what you write shapes them:
+
+- **Descriptions.** Write one sentence of 70 to 160 characters that says what
+  the reader finds. A longer description is cut for the `<meta>` tag at a
+  comma and ends with an ellipsis; the page keeps the whole text.
+- **Titles.** A docs page's tab and search title is
+  `Title | Section | Navree documentation` (the longest form that fits 60
+  characters). Other pages set a title of 30 to 51 characters in
+  `pageMetadata`; the site name is added after it.
+- **A new page** (`src/app/<route>/page.tsx`) exports
+  `metadata = pageMetadata({ ... })` and renders
+  `<PageSchema path="/route/" metadata={metadata} />` at the end of its
+  markup, which writes the page's structured data and breadcrumb. The sitemap
+  finds the page by itself. `src/lib/site-pages.ts` takes a short name for
+  the breadcrumb, a parent and the files that date the page.
+- **Questions and answers.** `src/content/faq.ts` holds the questions of the
+  homepage, `/ui/`, `/ai/` and the docs introduction. Each answer is 40 to 80
+  words, starts with the answer, is plain text with `code` spans and is true
+  on `main`. A number that can change is computed from the file that owns it,
+  as the component count and the roadmap are. `<Faq name="ui" />` draws the
+  block and the `FAQPage` data from the same list; `DocFaq` does it at the end
+  of a docs page.
+- **Step pages.** `src/lib/howto.ts` turns headings of
+  `getting-started/installation` and `getting-started/your-first-app` into
+  `HowTo` data. Renaming one of those headings fails the build until the list
+  follows.
+- **The changelog** (`/changelog/` and its Atom feed) is written at build time
+  from the `feat` and `fix` commits of the branch. Write commit subjects a
+  reader can understand: they are the entries.
+
+After a build, `pnpm check` runs every check (`check:links`, `check:seo`,
+`check:geo`, `check:aeo`, `check:fresh`). `pnpm daily` runs the whole daily
+job: lint, typecheck, build, the checks and Lighthouse on four pages at its
+mobile settings, and writes `report/summary.md`. The `Site daily` workflow
+does the same every day and on every push to `main` that touches the website,
+and opens or updates one GitHub issue labelled `site-daily` when something
+fails.
+
+`deploy/navree.com/indexnow.sh` tells IndexNow-aware search engines which
+pages a deploy changed. It sends nothing unless you pass `--send`, and
+`deploy.sh` runs it only when `INDEXNOW=1` is set.
