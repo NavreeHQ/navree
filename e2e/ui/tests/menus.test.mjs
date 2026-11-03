@@ -6,6 +6,7 @@
 //   UI_BROWSERS=chromium,firefox,webkit npm test -- tests/menus.test.mjs
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { after, before, describe, test } from "node:test";
@@ -1273,6 +1274,7 @@ for (const name of NAMES) {
       const attrValue = (s) => s.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
       const cmd = (json) => `data-ui-click="${attrValue(JSON.stringify(json))}"`;
       let unique = 0;
+      let uniqueRoute = 0;
       const route = (body, headers) => {
         const path = `/r${++unique}`;
         f.routes.set(path, (req, res) => f.html(res, typeof body === "function" ? body(req) : body, headers));
@@ -1283,8 +1285,9 @@ for (const name of NAMES) {
       const stickyToast = (text, extra = {}) => cmd([["toast", { tone: "info", text, duration: "sticky", ...extra }]]);
 
       /** A page on the fixture, with problems kept as `open` keeps them. */
-      async function fixture(path, options = {}) {
+      async function fixture(path, options = {}, before) {
         const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...options });
+        if (before) await before(context);
         const page = await context.newPage();
         page.problems = [];
         page.on("pageerror", (e) => page.problems.push("pageerror: " + e.message));
@@ -1488,6 +1491,167 @@ for (const name of NAMES) {
       test("R4 the page's toaster has a name of its own", async () => {
         const page = await open("/menus");
         assert.equal(await page.locator("body > #ui-toaster[data-slot=toaster]").count(), 1);
+        await page.done();
+      });
+
+      /** A page with the page's one post form and the token cookie `t`, for post items. */
+      const withPostForm = (items, extra = "") => paged(`<main id="main">${items}${extra}</main>${TOASTER}<form id="ui-post" method="post" hidden data-ui-form><input type="hidden" name="_csrf" value="t"></form>`);
+      const post = (name, id, path) => `<button id="${id}" type="submit" form="ui-post" formaction="${path}" formmethod="post">${name}</button>`;
+      const slowOps = (path, text, ms = 700) => f.routes.set(path, (req, res, body) => setTimeout(() => f.ops(res, { build: "b1", ops: [{ op: "toast", tone: "info", text }] }), ms));
+
+      test("R5 two post items of the shared form: A then B both post, and a double click on A posts once", async () => {
+        const unique = ++uniqueRoute;
+        slowOps(`/pa${unique}`, "done A");
+        slowOps(`/pb${unique}`, "done B");
+        const path = withPostForm(post("Archive A", "a", `/pa${unique}`) + post("Archive B", "b", `/pb${unique}`));
+        const page = await fixture(path);
+        const count = (p) => f.log.filter((e) => e.method === "POST" && e.path === p).length;
+        await page.click("#a");
+        await page.click("#b");
+        await toasts(page).filter({ hasText: "done B" }).waitFor();
+        await toasts(page).filter({ hasText: "done A" }).waitFor();
+        assert.equal(count(`/pa${unique}`), 1);
+        assert.equal(count(`/pb${unique}`), 1, "B was not dropped while A was waiting");
+        // A double click on one item is one post.
+        await page.evaluate(() => { const a = document.getElementById("a"); HTMLElement.prototype.click.call(a); HTMLElement.prototype.click.call(a); });
+        await page.waitForTimeout(1000);
+        assert.equal(count(`/pa${unique}`), 2, "the second click on A, while A waited, was ignored");
+        await page.done();
+      });
+
+      test("R5 a field of the page that names the post form is not sent with a menu's post", async () => {
+        const unique = ++uniqueRoute;
+        const got = [];
+        f.routes.set(`/pf${unique}`, (req, res, body) => { got.push({ body, token: req.headers["x-xsrf-token"] || null }); f.ops(res, { build: "b1", ops: [] }); });
+        const path = withPostForm(post("Archive", "a", `/pf${unique}`), `<div class="stored"><input form="ui-post" type="hidden" name="role" value="admin"></div>`);
+        const page = await fixture(path);
+        await page.click("#a");
+        await page.waitForFunction(() => !document.querySelector("#ui-post[data-pending]"));
+        await page.waitForTimeout(300);
+        assert.equal(got.length, 1);
+        assert.equal(got[0].body, "_csrf=t", "only the token the toolkit placed");
+        await page.done();
+      });
+
+      test("R6 a Toaster drawn inside a page's layout can't take over the standing toaster on a boosted link", async () => {
+        const nested = `<div class="layout"><main id="main"><h1 id="h">B</h1></main><section data-slot="toaster" id="ui-toaster" aria-label="Notifications" data-position="top-end" data-close="Dismiss" data-ui-toaster><div data-slot="toast" id="ui-toast-1" data-tone="success" data-duration="long" role="status"><div data-slot="toast-body"><p data-slot="toast-text">flash on B</p></div><a data-slot="toast-close" role="button" href="#ui-toast-1" aria-label="Dismiss"></a></div></section></div>`;
+        const next = paged(nested);
+        const first = paged(`<main id="main"><button id="t" ${stickyToast("from A")}>t</button><a id="go" href="${next}">b</a></main>${TOASTER}`);
+        const page = await fixture(first);
+        await page.evaluate(() => { document.querySelector("[data-slot=toaster]").__standing = true; });
+        await page.click("#t");
+        await toasts(page).first().waitFor();
+        await page.click("#go");
+        await page.locator("#h").waitFor();
+        await page.waitForTimeout(300);
+        const state = await page.evaluate(() => {
+          const host = [...document.querySelectorAll("[data-slot=toaster]")].find((h) => h.__standing);
+          return { standing: !!host, popover: host?.getAttribute("popover"), open: host?.matches(":popover-open"), parent: host?.parentElement.tagName, texts: [...(host?.querySelectorAll("[data-slot=toast-text]") || [])].map((t) => t.textContent) };
+        });
+        assert.deepEqual(state, { standing: true, popover: "manual", open: true, parent: "BODY", texts: ["from A"] });
+        await page.done();
+      });
+
+      test("R6 a toaster that lost its popover gets it back with the next toast", async () => {
+        const path = paged(`<main id="main"><button id="t" ${stickyToast("after")}>t</button></main>${TOASTER}`);
+        const page = await fixture(path);
+        await page.evaluate(() => { document.querySelector("[data-slot=toaster]").removeAttribute("popover"); });
+        await page.click("#t");
+        await toasts(page).filter({ hasText: "after" }).waitFor();
+        assert.equal(await page.locator("[data-slot=toaster]").getAttribute("popover"), "manual");
+        assert.equal(await page.locator("[data-slot=toaster]").evaluate((h) => h.matches(":popover-open")), true);
+        await page.done();
+      });
+
+      test("R7 after a change of user the reply's own toast stays, even when the cookie shows late", async () => {
+        const unique = ++uniqueRoute;
+        f.routes.set(`/signin${unique}`, (req, res) => f.ops(res, { build: "b1", ops: [{ op: "toast", tone: "success", text: "Welcome back.", duration: "sticky" }] }, 200, { "set-cookie": "XSRF-TOKEN=new; Path=/" }));
+        const path = withUser("old", `<button id="raise" ${stickyToast("Old user's toast.")}>raise</button><form id="in" method="post" action="/signin${unique}" data-ui-form><button id="go">sign in</button></form>`);
+        // Some engines still show the old cookie to a script for a moment after the answer that set a new one.
+        const page = await fixture(path, {}, (context) => context.addInitScript(() => {
+          const real = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
+          let stale = null;
+          window.__lag = (ms) => { stale = real.get.call(document); setTimeout(() => { stale = null; }, ms); };
+          Object.defineProperty(Document.prototype, "cookie", { configurable: true, get() { return stale === null ? real.get.call(this) : stale; }, set: real.set });
+        }));
+        await page.click("#raise");
+        await toasts(page).filter({ hasText: "Old user's toast." }).waitFor();
+        await page.evaluate(() => window.__lag(600));
+        await page.click("#go");
+        await toasts(page).filter({ hasText: "Welcome back." }).waitFor();
+        await page.waitForTimeout(800);
+        // The runtime looks again when the tab shows, among other times.
+        await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+        await page.waitForTimeout(200);
+        const texts = await page.locator("[data-slot=toast-text]").allTextContents();
+        assert.deepEqual(texts, ["Welcome back."], "the old user's toast is gone and the answer's own stays");
+        await page.done();
+      });
+
+      test("R8 an open lazy tab that fails before the menus module has run still shows its alert", async () => {
+        const unique = ++uniqueRoute;
+        const menus = readFileSync(new URL("../../../crates/navree-ui/dist/menus.js", import.meta.url));
+        let asked = 0;
+        f.routes.set(`/slow-menus${unique}.js`, (req, res) => setTimeout(() => { res.writeHead(200, { "content-type": "text/javascript" }); res.end(menus); }, 500));
+        f.routes.set(`/lz${unique}`, (req, res) => { asked++; res.writeHead(500, { "content-type": "text/html" }); res.end("no"); });
+        const tabs = `<div data-slot="tabs" id="tt" data-ui-tabs="tab" data-orientation="horizontal" data-l="{}"><div data-slot="tabs-list" role="tablist" aria-label="T"><a role="tab" id="tt-tab-a" aria-selected="true" aria-controls="tt-panel-a" data-key="a" data-ui-noboost href="?tab=a">A</a><a role="tab" id="tt-tab-b" aria-selected="false" aria-controls="tt-panel-b" data-key="b" data-ui-noboost href="?tab=b">B</a></div><div role="tabpanel" id="tt-panel-a" aria-labelledby="tt-tab-a" tabindex="0" data-ui-region data-ui-src="/lz${unique}" data-ui-lazy data-ui-loaded aria-busy="true"><div data-slot="skeleton"></div></div><div role="tabpanel" id="tt-panel-b" aria-labelledby="tt-tab-b" tabindex="0" hidden>PB</div></div>`;
+        const path = route(`<!doctype html><html lang="en" data-build="b1"><head><meta charset="utf-8"><title>t</title><script type="module" src="/_navree/ui/core.js"></script><script type="module" src="/slow-menus${unique}.js"></script></head><body data-ui-boost><main id="main">${tabs}</main></body></html>`);
+        const page = await fixture(path);
+        await page.locator("#tt-panel-a [data-slot=tab-alert]").waitFor({ timeout: 10000 });
+        assert.equal(asked, 1);
+        assert.equal(await page.locator("#tt-panel-a").getAttribute("aria-busy"), null, "no longer busy");
+        assert.equal(await page.locator("#tt-panel-a [data-slot=skeleton]").count(), 0);
+        // Showing the tab again tries again.
+        await page.click("#tt-tab-b");
+        await page.click("#tt-tab-a");
+        await page.waitForTimeout(500);
+        assert.equal(asked, 2);
+        await page.done();
+      });
+
+      test("a toast that the address hides at load counts as dismissed: it isn't kept for the next page", async () => {
+        const path = paged(`<main id="main"><a id="go" data-ui-noboost href="${paged("<main id=\"main\"><p>Next.</p></main>")}">go</a></main><section data-slot="toaster" id="ui-toaster" aria-label="Notifications" data-position="bottom-end" data-close="Dismiss"><div data-slot="toast" id="ui-toast-1" data-tone="info" data-duration="sticky" role="status"><div data-slot="toast-body"><p data-slot="toast-text">Already closed.</p></div><a data-slot="toast-close" role="button" href="#ui-toast-1" aria-label="Dismiss"></a></div></section>`);
+        const page = await fixture(path + "#ui-toast-1");
+        await page.waitForTimeout(200);
+        assert.equal(await page.locator("[data-slot=toast]").count(), 0, "it was taken away, not just hidden");
+        await page.click("#go");
+        await page.locator("main", { hasText: "Next." }).waitFor();
+        await page.waitForTimeout(300);
+        assert.equal(await page.locator("[data-slot=toast]").count(), 0, "and it doesn't come back on the next page");
+        await page.done();
+      });
+
+      test("a toast the runtime builds takes an address that nothing in the page has", async () => {
+        const path = paged(`<main id="main"><h2 id="ui-toast-1">The page's own heading</h2><button id="t" ${stickyToast("One")}>t</button></main>${TOASTER}`);
+        const page = await fixture(path);
+        await page.click("#t");
+        await toasts(page).first().waitFor();
+        const found = await page.evaluate(() => {
+          const t = document.querySelector("[data-slot=toast]");
+          return { dupes: [...document.querySelectorAll("[id]")].map((e) => e.id).filter((id, i, all) => all.indexOf(id) !== i), own: document.querySelector("h2").id, link: t.querySelector("[data-slot=toast-close]").getAttribute("href") === "#" + t.id, taken: t.id !== "ui-toast-1" };
+        });
+        assert.deepEqual(found, { dupes: [], own: "ui-toast-1", link: true, taken: true });
+        await page.done();
+      });
+
+      test("a toast's close is a button to assistive technology, and Space and Enter close it", async () => {
+        const path = paged(`<main id="main"><button id="t" ${stickyToast("Close me")}>t</button><button id="u" ${stickyToast("And me")}>u</button></main>${TOASTER}`);
+        const page = await fixture(path);
+        await page.click("#t");
+        const toast = toasts(page).filter({ hasText: "Close me" });
+        await toast.waitFor();
+        assert.equal(await toast.locator("[data-slot=toast-close]").getAttribute("role"), "button");
+        assert.match(await page.locator("[data-slot=toaster]").ariaSnapshot(), /button "Dismiss"/);
+        await toast.locator("[data-slot=toast-close]").focus();
+        await page.keyboard.press("Space");
+        await toast.waitFor({ state: "detached" });
+        assert.equal(await page.evaluate(() => location.hash), "", "the address was left alone");
+        await page.click("#u");
+        const other = toasts(page).filter({ hasText: "And me" });
+        await other.waitFor();
+        await other.locator("[data-slot=toast-close]").focus();
+        await page.keyboard.press("Enter");
+        await other.waitFor({ state: "detached" });
         await page.done();
       });
 
