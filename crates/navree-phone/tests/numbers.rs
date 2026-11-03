@@ -211,6 +211,12 @@ fn extensions_ride_along_outside_e164() {
         parse("650 253 0000;ext=1234", Some("US")).extension(),
         Some("1234")
     );
+    // Found by fuzzing: ` x` reads at most 9 digits back, so a longer
+    // extension is written with the explicit label.
+    let long = parse("+44 808 066 8442 ext. 166066666055", None);
+    assert_eq!(long.international(), "+44 808 066 8442 ext. 166066666055");
+    assert_eq!(parse(&long.international(), None), long);
+    assert_eq!(parse(&long.national(), Some("GB")), long);
 }
 
 #[test]

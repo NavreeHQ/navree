@@ -61,9 +61,12 @@ pub(crate) fn format(code: u16, nsn: &str, extension: &str, how: PhoneFormat) ->
         if how == PhoneFormat::Rfc3966 {
             out.push_str(";ext=");
         } else {
+            // A country's own prefix (` x` in the United Kingdom) is a label
+            // that reads at most 9 digits back; a longer extension takes the
+            // explicit label, which reads 20.
             match main.extension_prefix.get() {
-                "" => out.push_str(" ext. "),
-                prefix => out.push_str(prefix),
+                prefix if !prefix.is_empty() && extension.len() <= 9 => out.push_str(prefix),
+                _ => out.push_str(" ext. "),
             }
         }
         out.push_str(extension);
