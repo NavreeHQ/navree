@@ -64,6 +64,7 @@ fn shaped() -> impl Strategy<Value = Vec<u8>> {
             Just(b"-".to_vec()),
             Just(b"Content-Disposition: form-data; name=\"a\"".to_vec()),
             Just(b"Content-Disposition: form-data; name=\"a\"; filename=\"../b\"".to_vec()),
+            Just(b"Content-Disposition: form-data; name=\"a\"; filename=\"\xfe\"".to_vec()),
             Just(b"Content-Type: text/plain; charset=utf-16".to_vec()),
             Just(
                 b"Content-Disposition: form-data; NAME=a; filename*=UTF-8''%C3%A9%2F.txt".to_vec()
@@ -95,6 +96,27 @@ fn reference(body: &[u8]) -> Option<Vec<Read>> {
             })
             .collect(),
     )
+}
+
+/// A file name that is not UTF-8 refuses the form, in the extractor and in
+/// the reference alike, with or without a `filename*` next to it.
+#[test]
+fn the_reference_refuses_a_file_name_that_is_not_utf8() {
+    for head in [
+        &b"name=\"a\"; filename=\"\xfe.txt\""[..],
+        b"name=\"a\"; filename=\xfe.txt",
+        b"name=\"\xff\"; filename=\"\xfe.txt\"",
+        b"filename=\"\xe9\"; filename*=UTF-8''a.txt",
+        b"name=\"a\"; filename=\"../../etc/pa\xd3\xb6\xf3d\"",
+    ] {
+        let mut body = format!("--{BOUNDARY}\r\nContent-Disposition: form-data; ").into_bytes();
+        body.extend_from_slice(head);
+        body.extend_from_slice(format!("\r\n\r\nvalue\r\n--{BOUNDARY}--\r\n").as_bytes());
+        let read = runtime().block_on(read(request(&body), wide()));
+        let head = String::from_utf8_lossy(head);
+        assert!(read.is_err(), "{head}");
+        assert_eq!(reference(&body), None, "{head}");
+    }
 }
 
 proptest! {

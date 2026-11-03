@@ -201,7 +201,12 @@ fn disposition(value: &[u8]) -> Option<(Option<String>, Option<String>)> {
     };
     let name = one(b"name")?.and_then(text);
     let plain_parameter = one(b"filename")?;
-    let plain = plain_parameter.and_then(text);
+    // A file name that is not UTF-8 refuses the form: read as absent, it
+    // would turn a file into a field.
+    let plain = match plain_parameter {
+        Some(parameter) => Some(text(parameter)?),
+        None => None,
+    };
     let encoded = one(b"filename*")?.map(|(_, raw, _)| extended(raw));
     // Both given: the same name, or the head can be read two ways.
     let file_name = match (plain_parameter.is_some(), encoded) {
