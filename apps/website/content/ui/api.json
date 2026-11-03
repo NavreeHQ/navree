@@ -1117,6 +1117,12 @@
         "generics": "",
         "args": "value: impl Into<String>, label: impl Into<String>",
         "doc": "A choice that posts `value` and shows `label`."
+      },
+      {
+        "name": "all_among",
+        "generics": "<V: AsRef<str>>",
+        "args": "values: impl IntoIterator<Item = V>, choices: &[Choice]",
+        "doc": "Whether every one of `values` is the value of one of `choices` that isn't disabled: the check of a handler for a fixed list, since nothing a browser sends is known to be one of the options it was given. An empty value is no choice and passes; whether one is needed is the field's own rule. For a list that comes from the database, see `OptionSource::all_pickable`."
       }
     ],
     "methods": [
@@ -1533,7 +1539,7 @@
         "name": "csrf",
         "generics": "",
         "args": "token: impl Into<String>",
-        "doc": "Sets the token the posting items send when the page runs with no script."
+        "doc": "Puts the session's CSRF token in the form the posting items send, as the field `_csrf`. With script on, the form runtime sends the token itself, as the `x-xsrf-token` header from the `XSRF-TOKEN` cookie, as it does for every form; this is for a page that runs with no script, where a post carries nothing else and an app that checks the token refuses it."
       }
     ],
     "variants": [],
@@ -3055,7 +3061,7 @@
         "name": "max",
         "generics": "",
         "args": "n: u32",
-        "doc": "Allows at most `n` choices. The other options are switched off at the limit."
+        "doc": "Allows at most `n` choices. The other options are switched off at the limit, and so is making a new one. This is the browser's help only: with JavaScript off, or from a hand-made post, more can arrive. In a derived form, `#[form(max = n)]` on the field holds the post to the limit too; otherwise check the count in the handler."
       },
       {
         "name": "summary_after",

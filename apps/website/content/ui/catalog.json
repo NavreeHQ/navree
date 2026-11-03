@@ -2457,8 +2457,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
-        "select-c26c8c04100e.js"
+        "overlay-e302c03dc72e.js",
+        "select-04b01eb49aed.js"
       ],
       "captions": [],
       "slots": [
@@ -2550,8 +2550,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
-        "select-c26c8c04100e.js"
+        "overlay-e302c03dc72e.js",
+        "select-04b01eb49aed.js"
       ],
       "captions": [],
       "slots": [
@@ -2656,8 +2656,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
-        "select-c26c8c04100e.js"
+        "overlay-e302c03dc72e.js",
+        "select-04b01eb49aed.js"
       ],
       "captions": [],
       "slots": [
@@ -2762,8 +2762,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
-        "select-c26c8c04100e.js"
+        "overlay-e302c03dc72e.js",
+        "select-04b01eb49aed.js"
       ],
       "captions": [],
       "slots": [
@@ -2875,8 +2875,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
-        "select-c26c8c04100e.js"
+        "overlay-e302c03dc72e.js",
+        "select-04b01eb49aed.js"
       ],
       "captions": [],
       "slots": [
@@ -3032,8 +3032,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
-        "select-c26c8c04100e.js"
+        "overlay-e302c03dc72e.js",
+        "select-04b01eb49aed.js"
       ],
       "captions": [
         "Clearable",
@@ -3059,8 +3059,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
-        "select-c26c8c04100e.js"
+        "overlay-e302c03dc72e.js",
+        "select-04b01eb49aed.js"
       ],
       "captions": [],
       "slots": [
@@ -3152,8 +3152,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
-        "select-c26c8c04100e.js"
+        "overlay-e302c03dc72e.js",
+        "select-04b01eb49aed.js"
       ],
       "captions": [],
       "slots": [
@@ -3271,8 +3271,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
-        "select-c26c8c04100e.js"
+        "overlay-e302c03dc72e.js",
+        "select-04b01eb49aed.js"
       ],
       "captions": [],
       "slots": [
@@ -3377,8 +3377,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
-        "select-c26c8c04100e.js"
+        "overlay-e302c03dc72e.js",
+        "select-04b01eb49aed.js"
       ],
       "captions": [],
       "slots": [
@@ -3489,8 +3489,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
-        "select-c26c8c04100e.js"
+        "overlay-e302c03dc72e.js",
+        "select-04b01eb49aed.js"
       ],
       "captions": [
         "Invalid",
@@ -3514,8 +3514,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
-        "select-c26c8c04100e.js"
+        "overlay-e302c03dc72e.js",
+        "select-04b01eb49aed.js"
       ],
       "captions": [],
       "slots": [
@@ -3673,8 +3673,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
-        "select-c26c8c04100e.js"
+        "overlay-e302c03dc72e.js",
+        "select-04b01eb49aed.js"
       ],
       "captions": [],
       "slots": [
@@ -3845,8 +3845,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
-        "select-c26c8c04100e.js"
+        "overlay-e302c03dc72e.js",
+        "select-04b01eb49aed.js"
       ],
       "captions": [],
       "slots": [
@@ -4017,8 +4017,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
-        "select-c26c8c04100e.js"
+        "overlay-e302c03dc72e.js",
+        "select-04b01eb49aed.js"
       ],
       "captions": [
         "At most three",
@@ -4042,8 +4042,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
-        "select-c26c8c04100e.js"
+        "overlay-e302c03dc72e.js",
+        "select-04b01eb49aed.js"
       ],
       "captions": [],
       "slots": [
@@ -4151,7 +4151,7 @@
       "slug": "default",
       "title": "A command palette",
       "kind": "single",
-      "code": "Command::new(\"palette\")\n    .placeholder(\"Type a command or search…\")\n    .recent(4)\n    .group(\n        CommandGroup::new(\"Go to\")\n            .item(\n                CommandItem::link(\"Deals\", \"/deals\")\n                    .icon(icons::HANDSHAKE)\n                    .shortcut(\"alt+d\"),\n            )\n            .item(CommandItem::link(\"New deal\", \"/deals/new\").icon(icons::CIRCLE_PLUS))\n            .item(\n                CommandItem::link(\"Contacts\", \"/contacts\")\n                    .icon(icons::USER)\n                    .keywords([\"people\"]),\n            ),\n    )\n    .group(\n        CommandGroup::new(\"Account\")\n            .item(CommandItem::post(\"Sign out\", \"/sign-out\").not_recent())\n            .item(CommandItem::disabled(\n                \"Billing\",\n                \"Only owners can open billing.\",\n            )),\n    )",
+      "code": "Command::new(\"palette\")\n    .placeholder(\"Type a command or search…\")\n    .recent(4)\n    .group(\n        CommandGroup::new(\"Go to\")\n            .item(\n                CommandItem::link(\"Deals\", \"/deals\")\n                    .icon(icons::HANDSHAKE)\n                    .shortcut(\"alt+d\"),\n            )\n            .item(CommandItem::link(\"New deal\", \"/deals/new\").icon(icons::CIRCLE_PLUS))\n            .item(\n                CommandItem::link(\"Contacts\", \"/contacts\")\n                    .icon(icons::USER)\n                    .keywords([\"people\"]),\n            ),\n    )\n    .group(\n        CommandGroup::new(\"Account\")\n            .item(CommandItem::post(\"Sign out\", \"/sign-out\").not_recent())\n            .item(CommandItem::disabled(\n                \"Billing\",\n                \"Only owners can open billing.\",\n            )),\n    )\n    .csrf(\"session-token\")",
       "src": "/ui-preview/command/default.html",
       "height": 420,
       "layout": "center",
@@ -4160,8 +4160,8 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
-        "select-c26c8c04100e.js"
+        "overlay-e302c03dc72e.js",
+        "select-04b01eb49aed.js"
       ],
       "captions": [],
       "slots": [
@@ -6732,7 +6732,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js"
+        "overlay-e302c03dc72e.js"
       ],
       "captions": [],
       "slots": [
@@ -6772,7 +6772,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js"
+        "overlay-e302c03dc72e.js"
       ],
       "captions": [],
       "slots": [
@@ -6838,7 +6838,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js"
+        "overlay-e302c03dc72e.js"
       ],
       "captions": [
         "Top",
@@ -6863,7 +6863,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js"
+        "overlay-e302c03dc72e.js"
       ],
       "captions": [],
       "slots": [
@@ -6910,7 +6910,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js"
+        "overlay-e302c03dc72e.js"
       ],
       "captions": [],
       "slots": [
@@ -6990,7 +6990,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js"
+        "overlay-e302c03dc72e.js"
       ],
       "captions": [],
       "slots": [
@@ -7030,7 +7030,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js"
+        "overlay-e302c03dc72e.js"
       ],
       "captions": [],
       "slots": [
@@ -7865,8 +7865,8 @@
       "live": false,
       "width": 1100,
       "scripts": [
-        "sidebar-be39798e378b.js",
-        "overlay-67279efcb892.js"
+        "sidebar-e5b4eff2733d.js",
+        "overlay-e302c03dc72e.js"
       ],
       "captions": [],
       "slots": [
@@ -8441,7 +8441,7 @@
       "live": false,
       "width": 720,
       "scripts": [
-        "overlay-67279efcb892.js",
+        "overlay-e302c03dc72e.js",
         "table-4f81fade135f.js"
       ],
       "captions": [],
@@ -9071,7 +9071,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
+        "overlay-e302c03dc72e.js",
         "table-4f81fade135f.js"
       ],
       "captions": [],
@@ -9753,7 +9753,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
+        "overlay-e302c03dc72e.js",
         "table-4f81fade135f.js"
       ],
       "captions": [],
@@ -10538,7 +10538,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
+        "overlay-e302c03dc72e.js",
         "table-4f81fade135f.js"
       ],
       "captions": [],
@@ -11220,7 +11220,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
+        "overlay-e302c03dc72e.js",
         "table-4f81fade135f.js"
       ],
       "captions": [],
@@ -11850,7 +11850,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-67279efcb892.js",
+        "overlay-e302c03dc72e.js",
         "table-4f81fade135f.js"
       ],
       "captions": [
@@ -12586,7 +12586,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-312f5e455708.js"
+        "core-3b8019551d99.js"
       ],
       "captions": [],
       "slots": [
@@ -12626,7 +12626,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-312f5e455708.js"
+        "core-3b8019551d99.js"
       ],
       "captions": [],
       "slots": [
