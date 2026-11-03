@@ -446,7 +446,7 @@ async fn thousand(
                     RowAction::post("Archive", format!("/thousand/{}/archive", row.id))
                         .icon(icons::ARCHIVE),
                     RowAction::post("Delete", format!("/thousand/{}/delete", row.id))
-                        .icon(icons::TRASH_2)
+                        .icon(icons::TRASH)
                         .destructive(),
                 ]
             })
