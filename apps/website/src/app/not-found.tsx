@@ -2,13 +2,10 @@ import type { Metadata } from "next";
 
 import { ArrowLink, PrimaryCta, SecondaryCta } from "@/components/home/parts";
 import { GridPattern } from "@/components/magicui/grid-pattern";
+import { site } from "@site";
 
-const elsewhere = [
-  { href: "/ecosystem/", label: "Ecosystem" },
-  { href: "/architecture/", label: "Architecture" },
-  { href: "/ai/", label: "Navree for AI" },
-  { href: "/performance/", label: "Performance" },
-];
+/** The rest of the main navigation: the docs and the homepage are the buttons above it. */
+const elsewhere = site.nav.filter((item) => item.href !== "/docs/");
 
 export const metadata: Metadata = {
   title: "Page not found",
