@@ -398,6 +398,11 @@ function collect(ctx: Ctx, node: MdNode, edits: Edit[]): void {
 }
 
 /** Root-relative links become absolute; docs pages link their Markdown. */
+/** Every `](/...)` link in generated Markdown, made absolute. */
+function absoluteLinks(markdown: string): string {
+  return markdown.replace(/\]\((\/[^)\s]*)\)/g, (_, url: string) => `](${absoluteUrl(url)})`);
+}
+
 export function absoluteUrl(url: string): string {
   if (!url.startsWith("/") || url.startsWith("//")) return url;
   const doc = /^\/docs\/([a-z0-9-]+)\/([a-z0-9-]+)\/?(#.*)?$/.exec(url);
@@ -543,9 +548,9 @@ function element(ctx: Ctx, node: MdNode, mode: "flow" | "text"): string {
     case "UiAnatomy":
       return anatomyMarkdown(attr(node, "component") ?? "");
     case "UiChoose":
-      return chooseMarkdown(attr(node, "name") ?? "");
+      return absoluteLinks(chooseMarkdown(attr(node, "name") ?? ""));
     case "UiGrid":
-      return gridMarkdown();
+      return absoluteLinks(gridMarkdown());
     case "UiAssets":
       return assetsMarkdown();
     case "UiTokens":

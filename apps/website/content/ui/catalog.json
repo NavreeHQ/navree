@@ -4959,7 +4959,7 @@
       "slug": "default",
       "title": "A tooltip",
       "kind": "single",
-      "code": "Row::gap(2).children((\n    Tooltip::new(\n        \"tip-copy\",\n        Button::icon_only(icons::COPY, \"Copy link\").variant(ButtonVariant::Outline),\n        \"Copy link\",\n    ),\n    Tooltip::new(\n        \"tip-archive\",\n        Button::icon_only(icons::ARCHIVE, \"Archive\").variant(ButtonVariant::Outline),\n        \"Archive, then find it under Archived\",\n    )\n    .side(Side::Bottom),\n))",
+      "code": "Row::gap(2).wrap().children((\n    Tooltip::new(\n        \"tip-copy\",\n        Button::icon_only(icons::COPY, \"Copy link\").variant(ButtonVariant::Outline),\n        \"Copy link\",\n    ),\n    Tooltip::new(\n        \"tip-archive\",\n        Button::icon_only(icons::ARCHIVE, \"Archive\").variant(ButtonVariant::Outline),\n        \"Archive, then find it under Archived\",\n    )\n    .side(Side::Bottom),\n))",
       "src": "/ui-preview/tooltip/default.html",
       "height": 160,
       "layout": "center",

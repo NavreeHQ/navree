@@ -94,7 +94,7 @@ export function anatomyMarkdown(id: string): string {
 export function chooseMarkdown(name: string): string {
   const spec = (choices as Record<string, Choose>)[name];
   if (!spec) return "";
-  return `*${spec.title}. ${spec.question}*\n\n${spec.options.map((o) => `- [${o.name}](${o.href}): ${o.when}.`).join("\n")}`;
+  return `*${spec.title.replace(/\?$/, "")}: ${spec.question}*\n\n${spec.options.map((o) => `- [${o.name}](${o.href}): ${o.when}.`).join("\n")}`;
 }
 
 /** `<UiGrid>`: every component, by group. */

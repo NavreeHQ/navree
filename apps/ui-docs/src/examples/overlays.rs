@@ -255,7 +255,7 @@ fn tooltip_thumb() -> Tooltip {
 }
 
 fn tooltip_default() -> Row {
-    Row::gap(2).children((
+    Row::gap(2).wrap().children((
         Tooltip::new(
             "tip-copy",
             Button::icon_only(icons::COPY, "Copy link").variant(ButtonVariant::Outline),
