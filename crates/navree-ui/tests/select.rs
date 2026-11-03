@@ -326,6 +326,28 @@ fn a_searched_combobox_names_its_endpoint_and_carries_only_the_chosen_option() {
 }
 
 #[test]
+fn no_wait_is_written_as_zero_and_the_default_is_left_to_the_runtime() {
+    let none = html(Combobox::new("o").search("/o").debounce(0));
+    assert_eq!(
+        attr_of(&none, "data-ui-picker", "data-ui-debounce"),
+        Some("0"),
+        "a zero wait is kept, not turned into the default: {none}"
+    );
+    let default = html(Combobox::new("o").search("/o"));
+    assert_eq!(
+        attr_of(&default, "data-ui-picker", "data-ui-debounce"),
+        None,
+        "{default}"
+    );
+    let long = html(MultiSelect::new("o").search("/o").debounce(u32::MAX));
+    assert_eq!(
+        attr_of(&long, "data-ui-picker", "data-ui-debounce"),
+        Some("5000"),
+        "a wait is capped: {long}"
+    );
+}
+
+#[test]
 fn the_search_url_goes_through_the_href_check() {
     let out = html(Combobox::new("o").search("javascript:alert(1)"));
     assert!(!out.contains("javascript"), "{out}");

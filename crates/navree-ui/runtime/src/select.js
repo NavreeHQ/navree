@@ -41,6 +41,8 @@ const EN = {
 };
 
 const SHOWN = 200;
+// How long typing waits for a pause before a search goes out. Choosing never waits.
+const WAIT = 100;
 const ROWS = 500;
 const PAGE = 10;
 const OPTION = "[role=option]";
@@ -55,6 +57,11 @@ const fmt = (s, v = {}) => s.replace(/\{(\w+)\}/g, (_, k) => (k in v ? v[k] : ""
 const $ = (e, q) => /** @type {HTMLElement | null} */ (e.querySelector(q));
 /** @param {Element} e @param {string} name @param {boolean} on */
 const flag = (e, name, on) => e.toggleAttribute(name, on);
+/** The wait after the last key, in ms: the picker's own (0 is none), or the default. @param {Element} root */
+const waitOf = (root) => {
+  const v = root.getAttribute("data-ui-debounce"), n = v === null || v === "" ? NaN : Number(v);
+  return Number.isFinite(n) && n >= 0 ? Math.min(n, 5000) : WAIT;
+};
 
 /** @typedef {{open: boolean, active: HTMLElement | null, seq: number, ctrl: AbortController | null, cache: Map<string, string>, buffer: string, q: string, n: number, timer: number, busy: number, more: string, failed: boolean, creating: boolean, said: number, hold: number, words: Record<string, string> | null, index: {el: HTMLElement, t: string | null}[] | null, count: number}} State */
 /** @type {WeakMap<Element, State>} */
@@ -308,6 +315,9 @@ function choose(root, o) {
     say(root, fmt(words(root)[on ? "added" : "removed"], { label }));
     p.control.value = "";
     s.q = "";
+    // A search typed ahead of this pick is of no use now, and its answer must not
+    // replace the list the pick was made from.
+    halt(root);
     if (s.open) view(root);
     return;
   }
@@ -329,6 +339,7 @@ function clear(root) {
   sync(root);
   changed(root);
   say(root, words(root).cleared);
+  halt(root);
   if (stateOf(root).open) view(root);
   p.control?.focus();
 }
@@ -362,9 +373,7 @@ function close(root, refocus) {
   const p = parts(root), s = stateOf(root);
   if (!s.open) return;
   s.open = false;
-  clearTimeout(s.timer);
-  s.ctrl?.abort();
-  s.seq++;
+  halt(root);
   s.cache.clear();
   root.removeAttribute("data-open");
   p.control?.setAttribute("aria-expanded", "false");
@@ -544,7 +553,20 @@ function actions(root, q, found) {
 
 // -------------------------------------------------------------- the server
 
-/** @param {Element} root @param {string} q @param {number} wait */
+/**
+ * Drops a search that is waiting or on its way: what was typed ahead of a choice, or
+ * of closing. Its answer never lands.
+ * @param {Element} root
+ */
+function halt(root) {
+  const s = stateOf(root);
+  clearTimeout(s.timer);
+  s.ctrl?.abort();
+  s.seq++;
+  parts(root).list?.removeAttribute("aria-busy");
+}
+
+/** Searches for `q` after `wait` ms, or at once for 0. @param {Element} root @param {string} q @param {number} wait */
 function queue(root, q, wait) {
   const s = stateOf(root);
   clearTimeout(s.timer);
@@ -568,7 +590,8 @@ function queue(root, q, wait) {
     land(root, cached, q);
     return;
   }
-  s.timer = setTimeout(() => find(root, q, 0), wait);
+  if (wait > 0) s.timer = setTimeout(() => find(root, q, 0), wait);
+  else find(root, q, 0);
 }
 
 const TAGS = new Set(["DIV", "SPAN", "A", "IMG", "KBD", "svg", "path", "circle", "rect", "line", "polyline", "polygon", "g"]);
@@ -989,12 +1012,12 @@ on(document, "input", (e) => {
   const s = stateOf(root);
   s.q = t.value;
   if (root.hasAttribute("data-ui-palette")) {
-    if (root.getAttribute("data-ui-search")) queue(root, t.value, 200);
+    if (root.getAttribute("data-ui-search")) queue(root, t.value, waitOf(root));
     view(root);
     return;
   }
   if (!s.open) open(root, "none");
-  if (searched(root)) queue(root, t.value, Number(root.getAttribute("data-ui-debounce")) || 200);
+  if (searched(root)) queue(root, t.value, waitOf(root));
   else view(root);
 });
 
@@ -1108,7 +1131,12 @@ on(document, "reset", (e) => {
 
 on(document, "close", (e) => {
   const dlg = /** @type {Element} */ (e.target);
-  if (dlg.matches?.("dialog[data-ui-palette]")) prepare(dlg);
+  if (dlg.matches?.("dialog[data-ui-palette]")) {
+    // An item picked while a search was typed ahead: nothing is asked after the palette is gone.
+    halt(dlg);
+    stateOf(dlg).cache.clear();
+    prepare(dlg);
+  }
 }, true);
 
 /** Starts what a page's pickers need: the values the browser restored, the palettes. */

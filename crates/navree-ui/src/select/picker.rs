@@ -620,7 +620,8 @@ macro_rules! typed_methods {
                 self
             }
 
-            /// Waits this many milliseconds after the last key before searching.
+            /// Waits this many milliseconds after the last key before searching: 100 by
+            /// default, 0 for no wait. Choosing an option never waits.
             pub fn debounce(mut self, milliseconds: u32) -> Self {
                 self.picker.debounce = Some(milliseconds.min(5000));
                 self

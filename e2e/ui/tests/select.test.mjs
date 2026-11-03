@@ -845,6 +845,122 @@ for (const browserName of browsers) {
       await close();
     });
 
+    // ------------------------------------------------ Waiting: typing, and picking
+
+    /** Notes when each input happened and when each fetch to `part` started, on the page's own clock. */
+    async function clock(page, part) {
+      await page.evaluate((part) => {
+        window.__clock = { input: [], enter: [], fetches: [] };
+        document.addEventListener("input", () => window.__clock.input.push(performance.now()), true);
+        document.addEventListener("keydown", (e) => { if (e.key === "Enter") window.__clock.enter.push(performance.now()); }, true);
+        new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) if (entry.name.includes(part)) window.__clock.fetches.push({ at: entry.startTime, url: entry.name });
+        }).observe({ type: "resource" });
+      }, part);
+    }
+
+    test("Server search goes out 100 ms after the last key, and debounce(0) goes at once", async () => {
+      const { page, close } = await open("/select");
+      await page.locator("#f-combo-search").click();
+      await page.waitForFunction(() => document.querySelectorAll("#combo-search-list [role=option]:not([data-action])").length === 20);
+      await clock(page, "/select/people");
+      await page.locator("#f-combo-search").fill("");
+      await page.keyboard.type("ada", { delay: 30 });
+      await page.waitForFunction(() => window.__clock.fetches.length >= 1);
+      const first = await page.evaluate(() => {
+        const last = window.__clock.input.at(-1);
+        return { wait: window.__clock.fetches[0].at - last, count: window.__clock.fetches.length };
+      });
+      assert.equal(first.count, 1, "three quick keys, one request");
+      assert.ok(first.wait >= 90 && first.wait <= 160, `the request went ${first.wait} ms after the last key`);
+      // Zero means no wait at all.
+      await page.locator("#combo-search").evaluate((root) => root.setAttribute("data-ui-debounce", "0"));
+      await page.evaluate(() => { window.__clock.fetches.length = 0; window.__clock.input.length = 0; });
+      await page.keyboard.type("g");
+      await page.waitForFunction(() => window.__clock.fetches.length >= 1);
+      const now = await page.evaluate(() => window.__clock.fetches[0].at - window.__clock.input.at(-1));
+      assert.ok(now < 40, `with no debounce the request went ${now} ms after the key`);
+      await close();
+    });
+
+    test("Picking sends its change at once: a Select, a Combobox and a filter form that listens", async () => {
+      const { page, close } = await open("/select");
+      await page.evaluate(() => {
+        window.__picks = [];
+        document.addEventListener("keydown", (e) => { if (e.key === "Enter") window.__picks.push({ key: performance.now() }); }, true);
+        document.addEventListener("change", () => { const p = window.__picks.at(-1); if (p && p.change === undefined) p.change = performance.now(); }, true);
+      });
+      await page.locator("#f-select-basic").focus();
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("Enter");
+      await page.locator("#f-combo-basic").click();
+      await page.keyboard.type("fr");
+      await page.keyboard.press("Enter");
+      const picks = await page.evaluate(() => window.__picks);
+      assert.ok(picks.length >= 2 && picks.every((p) => p.change !== undefined), JSON.stringify(picks));
+      for (const p of picks) assert.ok(p.change - p.key < 30, `a pick took ${p.change - p.key} ms`);
+      await close();
+
+      const filter = await open("/select/filter");
+      await clock(filter.page, "/select/filter?");
+      await filter.page.locator("#filter-select-trigger").click();
+      await filter.page.keyboard.press("ArrowDown");
+      await filter.page.keyboard.press("Enter");
+      await filter.page.waitForFunction(() => document.querySelector("#filter-result").textContent === "Stage: qualified");
+      await filter.page.waitForTimeout(500);
+      const sent = await filter.page.evaluate(() => ({ enter: window.__clock.enter.at(-1), fetches: window.__clock.fetches.map((f) => f.at) }));
+      // The first request is the pick's own `change`, with no wait. Whatever the form
+      // runtime adds for the `input` that comes before it is that runtime's.
+      assert.ok(sent.fetches.length >= 1 && sent.fetches[0] - sent.enter < 60, `the request went ${sent.fetches[0] - sent.enter} ms after the pick`);
+      await filter.close();
+    });
+
+    test("A pick cancels the search it was typed ahead of, in a Combobox, a MultiSelect and the palette", async () => {
+      const { page, close } = await open("/select");
+      const searches = [];
+      page.on("request", (r) => { if (/\/select\/(people|palette-search)\?/.test(r.url())) searches.push(new URL(r.url()).searchParams.get("q")); });
+
+      // A Combobox: type, move to a row of the list that is shown, pick, all within the wait.
+      await page.locator("#f-combo-search").click();
+      await page.waitForFunction(() => document.querySelectorAll("#combo-search-list [role=option]:not([data-action])").length === 20);
+      await page.locator("#f-combo-search").fill("");
+      searches.length = 0;
+      await page.keyboard.type("zq");
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("Enter");
+      await page.waitForTimeout(400);
+      assert.deepEqual(searches, [], "no request for 'zq' after the pick");
+      assert.match(String(await page.locator("#combo-search [data-slot=select-native]").inputValue()), /^\d+$/);
+
+      // A MultiSelect stays open after a pick, so a search typed ahead is cancelled, and
+      // a reply on its way never replaces what the pick was made from.
+      await page.route("**/select/people?q=zq*", async (route) => { await new Promise((r) => setTimeout(r, 700)); await route.continue(); });
+      await page.locator("#f-multi-search").click();
+      await page.waitForFunction(() => document.querySelectorAll("#multi-search-list [role=option]:not([data-action])").length >= 5);
+      const before = await page.locator("#multi-search-list [role=option]:not([hidden])").allInnerTexts();
+      searches.length = 0;
+      await page.keyboard.type("zq");
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("Enter");
+      await page.waitForTimeout(1200);
+      assert.equal(await page.locator("#multi-search [data-slot=chip]").count() >= 2, true, "the pick was made at once");
+      assert.deepEqual(searches, [], "no request for 'zq' after the pick");
+      const after = await page.locator("#multi-search-list [role=option]:not([hidden])").allInnerTexts();
+      assert.deepEqual(after.slice(0, 5), before.slice(0, 5), "the list the pick was made from stays");
+
+      // The palette: an item picked within the wait closes it, and nothing is asked after.
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("Control+k");
+      searches.length = 0;
+      await page.keyboard.type("open the");
+      await page.keyboard.press("Enter");
+      await page.waitForTimeout(400);
+      assert.equal(await page.locator("#palette").evaluate((d) => d.open), false);
+      assert.deepEqual(searches, [], "no request for 'open the' after the item was picked");
+      await close();
+    });
+
     // ----------------------------------------- Where they are: dialog, card, phone
 
     test("A popup inside a dialog sits above it, Esc closes the popup first and the dialog second", async () => {
