@@ -2,8 +2,9 @@
 //! and [`Submit`] (reads it back).
 //!
 //! The struct is the one source: its doc comments are the labels, its types
-//! pick the widgets, and its `#[validate]` rules set `required`, `maxlength`
-//! and `min` in the browser and run again on the server.
+//! pick the widgets, and its `#[validate]` rules set `required`, `maxlength`,
+//! `min` and, when a rule says `browser`, `pattern` in the browser, and run again on
+//! the server.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -396,6 +397,7 @@ struct Native {
     min: Option<&'static str>,
     max: Option<&'static str>,
     kind: Option<InputKind>,
+    pattern: Option<&'static str>,
 }
 
 fn native<T: Form>(field: &FormField) -> Native {
@@ -444,7 +446,10 @@ fn native<T: Form>(field: &FormField) -> Native {
             }
             Rule::Format("email") => out.kind = Some(InputKind::Email),
             Rule::Format("url") => out.kind = Some(InputKind::Url),
-            // A Rust regex isn't always a browser's: `pattern` stays on the server.
+            // Only a pattern whose rule says `browser` reaches the page: a Rust regex
+            // isn't always a browser's, and a pattern can say more than a page should.
+            // The server checks every pattern again.
+            Rule::BrowserPattern(pattern) => out.pattern = Some(pattern),
             _ => {}
         }
     }
@@ -746,6 +751,9 @@ impl<T: Form> FormView<T> {
         }
         if let Some(max) = rules.max {
             input = input.attr("max", max);
+        }
+        if let Some(pattern) = rules.pattern {
+            input = input.attr("pattern", pattern);
         }
         input
     }

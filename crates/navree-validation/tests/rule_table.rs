@@ -24,6 +24,8 @@ struct Deal {
     email: Option<String>,
     #[validate(pattern("^[a-z]+$"), starts_with("x"))]
     slug: String,
+    #[validate(pattern("^[a-z_]+$", browser))]
+    handle: String,
     #[validate(skip)]
     note: String,
     #[validate(rename = "zip_code", length(bytes, max = 8))]
@@ -154,4 +156,30 @@ enum Choice {
 #[test]
 fn enums_have_no_field_table() {
     assert!(Choice::FIELDS.is_empty());
+}
+
+/// A pattern reaches a page only when its rule says so, and the server checks it
+/// either way.
+#[test]
+fn a_pattern_is_stated_for_the_browser_only_when_its_rule_asks() {
+    assert_eq!(rules("slug")[0], Rule::Pattern("^[a-z]+$"));
+    assert_eq!(rules("handle"), [Rule::BrowserPattern("^[a-z_]+$")]);
+    let deal = |handle: &str| Deal {
+        title: Some("t".into()),
+        code: String::new(),
+        percent: 1,
+        tilt: 0.0,
+        email: None,
+        slug: "xa".into(),
+        note: String::new(),
+        zip: String::new(),
+        tags: Vec::new(),
+        other: String::new(),
+        handle: handle.into(),
+    };
+    assert!(deal("ada_l").validate().is_ok());
+    let errors = deal("Ada L")
+        .validate()
+        .expect_err("checked on the server too");
+    assert!(format!("{errors:?}").contains("handle"), "{errors:?}");
 }

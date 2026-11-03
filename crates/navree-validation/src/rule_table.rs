@@ -33,8 +33,11 @@ pub enum Rule {
     StartsWith(&'static str),
     /// `ends_with("...")`.
     EndsWith(&'static str),
-    /// `pattern("...")`.
+    /// `pattern("...")`: checked on the server only. The pattern never reaches a page.
     Pattern(&'static str),
+    /// `pattern("...", browser)`: a pattern the page may state, so the browser checks it
+    /// before anything is sent. The server checks it again, as it checks every rule.
+    BrowserPattern(&'static str),
     /// `same_as(other)`: the other field's name.
     SameAs(&'static str),
     /// `custom(...)`.

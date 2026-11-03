@@ -597,3 +597,23 @@ fn a_refusal_after_decoding_keeps_what_was_sent_and_shows_the_errors() {
         .to_owned();
     assert!(kind.contains("ops+json"), "{kind}");
 }
+
+#[derive(Debug, Deserialize, Validate, Form)]
+struct Handles {
+    /// Handle
+    #[validate(pattern("^[a-z_]+$", browser))]
+    handle: String,
+    /// Secret code
+    #[validate(pattern("^SECRET-[0-9]{4}$"))]
+    code: String,
+}
+
+/// A pattern reaches the page only when its rule says `browser`: the browser checks
+/// that one before anything is sent, and the other stays on the server.
+#[test]
+fn only_a_pattern_marked_browser_reaches_the_page() {
+    let html = render(&FormView::<Handles>::new().post("/handles").into());
+    assert!(html.contains(r#"pattern="^[a-z_]+$""#), "{html}");
+    assert!(!html.contains("SECRET"), "{html}");
+    assert_eq!(html.matches("pattern=").count(), 1, "{html}");
+}

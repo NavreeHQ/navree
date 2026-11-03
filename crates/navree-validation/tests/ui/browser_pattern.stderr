@@ -1,0 +1,23 @@
+error: the only option is `browser`: `pattern("^[a-z]+$", browser)`
+ --> tests/ui/browser_pattern.rs:5:36
+  |
+5 |     #[validate(pattern("^[a-z]+$", client))]
+  |                                    ^^^^^^
+
+error: a browser reads `(?` groups other than `(?:` differently: write the pattern without inline flags or named groups, or leave out `browser`
+  --> tests/ui/browser_pattern.rs:11:24
+   |
+11 |     #[validate(pattern("(?i)^[a-z]+$", browser))]
+   |                        ^^^^^^^^^^^^^^
+
+error: a browser reads `(?` groups other than `(?:` differently: write the pattern without inline flags or named groups, or leave out `browser`
+  --> tests/ui/browser_pattern.rs:17:24
+   |
+17 |     #[validate(pattern("^(?P<word>[a-z]+)$", browser))]
+   |                        ^^^^^^^^^^^^^^^^^^^^
+
+error: `\A`, `\z` and `[[:class:]]` don't exist in a browser's patterns: use `^`, `$` and a class like `[a-z]`, or leave out `browser`
+  --> tests/ui/browser_pattern.rs:23:24
+   |
+23 |     #[validate(pattern("\\A[a-z]+\\z", browser))]
+   |                        ^^^^^^^^^^^^^^

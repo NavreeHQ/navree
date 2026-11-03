@@ -52,7 +52,9 @@ pub(crate) enum Kind {
     /// A rule on text with a string argument (`contains`, `starts_with`,
     /// `ends_with`).
     TextWith(&'static str, LitStr),
-    Pattern(LitStr),
+    /// The regular expression, and whether the page may state it so the browser checks
+    /// it too (`pattern("...", browser)`).
+    Pattern(LitStr, bool),
     SameAs(Ident),
     Custom(Expr),
     Nested,
@@ -67,7 +69,7 @@ impl Kind {
             Kind::Length { .. } => "length",
             Kind::Range { .. } => "range",
             Kind::Text(name) | Kind::TextWith(name, _) => name,
-            Kind::Pattern(_) => "pattern",
+            Kind::Pattern(..) => "pattern",
             Kind::SameAs(_) => "same_as",
             Kind::Custom(_) => "custom",
             Kind::Nested => "nested",
@@ -253,6 +255,19 @@ fn parse_rules(input: ParseStream, level: Level) -> syn::Result<Parsed> {
             "pattern" => {
                 let content = arguments(input, span, "pattern(\"^[a-z]+$\")")?;
                 let pattern: LitStr = content.parse()?;
+                let browser = if content.peek(Token![,]) {
+                    content.parse::<Token![,]>()?;
+                    let flag = content.call(Ident::parse_any)?;
+                    if flag != "browser" {
+                        return Err(syn::Error::new(
+                            flag.span(),
+                            "the only option is `browser`: `pattern(\"^[a-z]+$\", browser)`",
+                        ));
+                    }
+                    true
+                } else {
+                    false
+                };
                 no_more(&content)?;
                 if let Err(error) = regex::Regex::new(&pattern.value()) {
                     return Err(syn::Error::new(
@@ -260,7 +275,10 @@ fn parse_rules(input: ParseStream, level: Level) -> syn::Result<Parsed> {
                         format!("invalid regular expression: {error}"),
                     ));
                 }
-                Some(Kind::Pattern(pattern))
+                if browser && let Some(problem) = browser_problem(&pattern.value()) {
+                    return Err(syn::Error::new(pattern.span(), problem));
+                }
+                Some(Kind::Pattern(pattern, browser))
             }
             "same_as" => {
                 if level == Level::Each {
@@ -362,6 +380,27 @@ fn no_arguments(input: ParseStream, rule: &str) -> syn::Result<()> {
 }
 
 /// Nothing follows the argument.
+/// Why a Rust pattern can't be stated to a browser as it is: its syntax means something
+/// else, or nothing, in the browser's dialect. `None` when it can.
+fn browser_problem(pattern: &str) -> Option<&'static str> {
+    if pattern.contains("(?") && pattern.replace("(?:", "").contains("(?") {
+        return Some(
+            "a browser reads `(?` groups other than `(?:` differently: write the pattern \
+             without inline flags or named groups, or leave out `browser`",
+        );
+    }
+    if ["\\A", "\\z", "\\Z", "[[:"]
+        .iter()
+        .any(|part| pattern.contains(part))
+    {
+        return Some(
+            "`\\A`, `\\z` and `[[:class:]]` don't exist in a browser's patterns: use `^`, `$` \
+             and a class like `[a-z]`, or leave out `browser`",
+        );
+    }
+    None
+}
+
 fn no_more(content: ParseStream) -> syn::Result<()> {
     if content.is_empty() {
         Ok(())

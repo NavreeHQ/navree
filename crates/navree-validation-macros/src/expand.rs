@@ -128,7 +128,8 @@ fn rule_list(nv: &TokenStream, rules: &[Rule]) -> Vec<TokenStream> {
                 "starts_with" => quote!(#nv::Rule::StartsWith(#text)),
                 _ => quote!(#nv::Rule::EndsWith(#text)),
             },
-            Kind::Pattern(pattern) => quote!(#nv::Rule::Pattern(#pattern)),
+            Kind::Pattern(pattern, false) => quote!(#nv::Rule::Pattern(#pattern)),
+            Kind::Pattern(pattern, true) => quote!(#nv::Rule::BrowserPattern(#pattern)),
             Kind::SameAs(other) => {
                 let other = other.unraw().to_string();
                 quote!(#nv::Rule::SameAs(#other))
@@ -325,7 +326,7 @@ fn check(
             let function = Ident::new(name, span);
             quote_spanned!(span=> #private::#function(__navree_value, #text))
         }
-        Kind::Pattern(pattern) => {
+        Kind::Pattern(pattern, _) => {
             return Ok(quote_spanned! {span=>
                 {
                     static __NAVREE_PATTERN: #private::Pattern = #private::Pattern::new(#pattern);
