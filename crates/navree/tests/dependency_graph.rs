@@ -207,11 +207,12 @@ const HIERARCHY: &[Rule] = &[
     // optional feature `access`): models as subjects, abilities as query
     // filters. navree-testing (optional feature `testing`): `TestApp`
     // seeding. navree-validation (optional feature `validation`): rules
-    // that query models.
+    // that query models. navree-phone (optional feature `phone`): phone
+    // numbers as fields.
     rule("navree-orm", 4, &["navree-openapi", 
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
         "navree-db", "navree-events", "navree-crypto", "navree-api", "navree-orm-macros",
-        "navree-access", "navree-testing", "navree-validation",
+        "navree-access", "navree-testing", "navree-validation", "navree-phone",
     ]),
     // Browser testing: a dev-dependency crate that serves an app's router
     // (navree-http) on a real port and drives Chrome over the DevTools

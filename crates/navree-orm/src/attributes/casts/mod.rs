@@ -12,6 +12,8 @@ mod encrypted;
 mod hashed;
 mod inbound;
 mod multi;
+#[cfg(feature = "phone")]
+mod phone;
 mod url;
 mod vector;
 

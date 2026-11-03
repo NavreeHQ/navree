@@ -31,6 +31,10 @@ testing = ["dep:navree-testing"]
 ## `validation::exists`) for navree-validation's `ValidAsync`. The facade
 ## turns it on when both `orm` and `validation` are on.
 validation = ["dep:navree-validation"]
+## Phone numbers as fields, stored as E.164 text: navree-phone's
+## `PhoneNumber` and, with `validation`, navree-validation's `Phone`. The
+## facade turns it on when both `orm` and `validation-phone` are on.
+phone = ["dep:navree-phone", "navree-validation?/phone"]
 
 [dependencies]
 # PHC-string parsing for hashed attributes (hashing itself is navree-crypto's).
@@ -43,6 +47,7 @@ heck = { workspace = true }
 http = { workspace = true }
 indexmap = { workspace = true }
 navree-access = { workspace = true, optional = true }
+navree-phone = { workspace = true, optional = true }
 navree-api = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
