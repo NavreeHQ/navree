@@ -10,7 +10,7 @@
 use navree::db::Executor as _;
 use navree::db::{Db, DbOptions};
 use navree::mongo::{MongoDb, MongoOptions};
-use navree::orm::{Builder, Executor, Model, Record, Value};
+use navree::orm::{Builder, Executor, Model, Record, Value, col};
 use navree::ui::{Choice, OptionQuery, OptionSource};
 use uuid::Uuid;
 
@@ -55,6 +55,8 @@ person!(
 
 const PEOPLE: OptionSource = OptionSource::new("id", "name").search_in(&["name", "email"]);
 const BY_NAME: OptionSource = OptionSource::new("id", "name");
+/// A value column that isn't unique: two people can have one name.
+const NAME_IS_THE_VALUE: OptionSource = OptionSource::new("name", "name");
 
 /// The rows: 400 people alternating between workspaces A (even ids) and B (odd), and
 /// the awkward ones.
@@ -78,6 +80,9 @@ fn seed<P: Person>(a: Uuid, b: Uuid) -> Vec<P> {
     for n in (2001..=2010_i64).rev() {
         rows.push(P::make(n, a, "Same Name", &format!("same{n}@example.com")));
     }
+    // Two people with one name, for a value column that repeats a value.
+    rows.push(P::make(3001, a, "Twin", "twin1@example.com"));
+    rows.push(P::make(3002, a, "Twin", "twin2@example.com"));
     rows
 }
 
@@ -156,7 +161,10 @@ async fn scenario<P: Person>(exec: &impl Executor, a: Uuid, store: &str) {
     for id in values(&big) {
         let id: i64 = id.parse().unwrap();
         assert!(
-            id % 2 == 0 || [1001, 1002, 1004].contains(&id) || (2001..=2010).contains(&id),
+            id % 2 == 0
+                || [1001, 1002, 1004].contains(&id)
+                || (2001..=2010).contains(&id)
+                || [3001, 3002].contains(&id),
             "{store}: {id} belongs to the other workspace"
         );
     }
@@ -257,13 +265,13 @@ async fn scenario<P: Person>(exec: &impl Executor, a: Uuid, store: &str) {
     }
     assert_eq!(
         seen.len(),
-        213,
-        "{store}: 200 people and the thirteen odd ones of workspace A"
+        215,
+        "{store}: 200 people and the fifteen odd ones of workspace A"
     );
     let mut sorted = seen.clone();
     sorted.sort();
     sorted.dedup();
-    assert_eq!(sorted.len(), 213, "{store}: no row twice");
+    assert_eq!(sorted.len(), 215, "{store}: no row twice");
 
     // What a handler asks of what a browser posted: is each value pickable by this caller?
     let pickable = |values: &'static [&'static str]| {
@@ -305,6 +313,34 @@ async fn scenario<P: Person>(exec: &impl Executor, a: Uuid, store: &str) {
         "{store}: text that isn't a number"
     );
     assert!(!pickable(&["2", "2; DROP"]).await, "{store}: nor is SQL");
+
+    // A value column that repeats a value: the check is about values, not rows. One name on
+    // two rows is one value, and it can't carry another workspace's name along.
+    let by_value = |values: &'static [&'static str]| {
+        let scope = mine();
+        async move {
+            NAME_IS_THE_VALUE
+                .all_pickable(scope, values.iter().copied(), exec, OptionSource::as_text)
+                .await
+                .unwrap_or_else(|error| panic!("{store}: {values:?}: {error}"))
+        }
+    };
+    assert!(
+        by_value(&["Twin"]).await,
+        "{store}: one name on two rows is one value"
+    );
+    assert!(
+        by_value(&["Twin", "Same Name"]).await,
+        "{store}: two names, three rows and more"
+    );
+    assert!(
+        !by_value(&["Twin", "Secret of B"]).await,
+        "{store}: the other workspace's name isn't carried by one that repeats"
+    );
+    assert!(
+        !by_value(&["Twin", "Same Name", "Secret of B"]).await,
+        "{store}: nor by two"
+    );
 
     // The same twice, in the same order.
     let again = ask("limit=50").await;
@@ -365,6 +401,63 @@ async fn run_sql(db: &Db, schema: &str, a: Uuid, b: Uuid, store: &str) {
         .await
         .unwrap_or_else(|error| panic!("{store}: the rows: {error}"));
     scenario::<SqlPerson>(db, a, store).await;
+    joined(db, a, store).await;
+}
+
+/// A scoped query that repeats a row, as a join does: person 2 is in two of the
+/// caller's projects, 4 in none of them, and 3 (of the other workspace) in one.
+async fn joined(db: &Db, a: Uuid, store: &str) {
+    let _ = db
+        .pool()
+        .execute_script("DROP TABLE IF EXISTS opt_members")
+        .await;
+    for statement in [
+        "CREATE TABLE opt_members (person_id BIGINT NOT NULL, project VARCHAR(50) NOT NULL)",
+        "INSERT INTO opt_members VALUES (2, 'p1'), (2, 'p2'), (4, 'other'), (3, 'p1')",
+    ] {
+        db.pool()
+            .execute_script(statement)
+            .await
+            .unwrap_or_else(|error| panic!("{store}: {statement}: {error}"));
+    }
+    let people_in_my_projects = || {
+        SqlPerson::query()
+            .for_workspace(a)
+            .join(
+                "opt_members",
+                col("opt_people.id"),
+                "=",
+                col("opt_members.person_id"),
+            )
+            .where_(col("opt_members.project").is_in(vec![Value::from("p1"), Value::from("p2")]))
+    };
+    let source = OptionSource::new("opt_people.id", "opt_people.name");
+    let pickable = |values: &'static [&'static str]| {
+        let scope = people_in_my_projects();
+        let source = &source;
+        async move {
+            source
+                .all_pickable(scope, values.iter().copied(), db, OptionSource::as_int)
+                .await
+                .unwrap_or_else(|error| panic!("{store}: {values:?}: {error}"))
+        }
+    };
+    assert!(
+        pickable(&["2"]).await,
+        "{store}: a person on two rows is one value"
+    );
+    assert!(
+        !pickable(&["4"]).await,
+        "{store}: 4 is in none of the caller's projects"
+    );
+    assert!(
+        !pickable(&["2", "4"]).await,
+        "{store}: a repeated row doesn't make up for a missing one"
+    );
+    assert!(
+        !pickable(&["2", "3"]).await,
+        "{store}: nor for a row of the other workspace"
+    );
 }
 
 #[tokio::test]

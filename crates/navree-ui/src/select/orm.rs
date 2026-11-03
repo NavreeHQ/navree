@@ -124,6 +124,9 @@ impl OptionSource {
     /// builder it answers searches with: a value from another workspace, one the
     /// caller may not see, or one that never existed is not pickable.
     ///
+    /// The count is of different values, so a query that repeats a row (a join) or a value
+    /// column that repeats a value does not change the answer.
+    ///
     /// An empty value is no choice and is passed over: whether one is needed is the
     /// field's own rule. `as_value` turns the text of a value into what the column
     /// holds; [`as_int`](Self::as_int), [`as_uuid`](Self::as_uuid) and
@@ -167,11 +170,14 @@ impl OptionSource {
         if wanted.is_empty() {
             return Ok(true);
         }
+        // How many different values the query has among those posted: not how many rows,
+        // which a join repeats and a value column that isn't unique repeats.
+        let column = column_of::<M>(self.value);
         let distinct = wanted.len() as u64;
         let found = builder
             .reorder()
-            .where_(col(column_of::<M>(self.value)).is_in(wanted))
-            .count(exec)
+            .where_(col(column).is_in(wanted))
+            .count_distinct(exec, column)
             .await?;
         Ok(found == distinct)
     }
