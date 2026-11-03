@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense, type ReactNode } from "react";
 
+import { Faq } from "@/components/faq";
 import { AiSection } from "@/components/home/ai-section";
 import { ArchitectureSection } from "@/components/home/architecture-section";
 import { CrmSection } from "@/components/home/crm-section";
@@ -85,6 +86,9 @@ export default function Home() {
       </Part>
       <Part>
         <FinalCta />
+      </Part>
+      <Part>
+        <Faq name="home" />
       </Part>
       <PageSchema path="/" metadata={metadata} />
     </>
