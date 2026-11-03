@@ -206,6 +206,12 @@ fn toggles(query: &[(String, String)]) -> Element {
                         "Settings",
                     ))
                     .value("list"),
+                ToggleGroup::multiple("stacked", "Stacked days")
+                    .vertical()
+                    .variant(ToggleVariant::Outline)
+                    .item(ToggleItem::new("early", "Early"))
+                    .item(ToggleItem::new("late", "Late"))
+                    .values(["late"]),
                 ToggleGroup::single("all-off", "All disabled")
                     .disabled(true)
                     .item(ToggleItem::new("x", "X"))
@@ -218,7 +224,6 @@ fn toggles(query: &[(String, String)]) -> Element {
 fn basic_menu() -> DropdownMenu {
     DropdownMenu::new("m-basic", "Actions")
         .caret()
-        .csrf("proof-token")
         .item(
             MenuItem::link("Edit", "/menus?edited=1")
                 .icon(icons::PENCIL)
@@ -328,6 +333,21 @@ fn menus() -> Element {
                     .attr("action", "/menus/echo")
                     .flag("data-ui-form", true)
                     .children((view_menu(), Button::primary("Save view").submit())),
+                el("form")
+                    .attr("id", "m-post-form")
+                    .attr("method", "post")
+                    .attr("action", "/menus/echo")
+                    .flag("data-ui-form", true)
+                    .children((
+                        el("input")
+                            .attr("type", "hidden")
+                            .attr("name", "note")
+                            .attr("value", "outer"),
+                        DropdownMenu::new("m-post", "Row actions")
+                            .item(MenuItem::post("Archive", "/menus/archive"))
+                            .item(MenuItem::link("Open", "/menus?open=9")),
+                        Button::primary("Save outer").submit(),
+                    )),
                 sub_menu(),
                 long_menu(),
                 DropdownMenu::icon("m-right", icons::ELLIPSIS_VERTICAL, "Menu at the edge")
@@ -341,16 +361,31 @@ fn menus() -> Element {
             Dialog::new("m-dialog-box", "Rename deal")
                 .description("A menu item opened this.")
                 .body(
-                    Row::gap(2).children((
-                        DropdownMenu::new("m-in-dialog", "Menu in a dialog")
-                            .item(
-                                MenuItem::action("One")
-                                    .on_click(Cmd::toast(ToastTone::Info, "From the dialog.")),
-                            )
-                            .item(MenuItem::action("Two")),
-                        Button::outline("Raise a toast")
-                            .attr("id", "m-dialog-toast")
-                            .on_click(Cmd::toast(ToastTone::Success, "Raised over the dialog.")),
+                    Stack::gap(3).children((
+                        Row::gap(2).children((
+                            DropdownMenu::new("m-in-dialog", "Menu in a dialog")
+                                .item(
+                                    MenuItem::action("One")
+                                        .on_click(Cmd::toast(ToastTone::Info, "From the dialog.")),
+                                )
+                                .item(MenuItem::action("Two")),
+                            Button::outline("Raise a toast")
+                                .attr("id", "m-dialog-toast")
+                                .on_click(Cmd::toast(
+                                    ToastTone::Success,
+                                    "Raised over the dialog.",
+                                )),
+                        )),
+                        el("form")
+                            .attr("id", "m-dialog-form")
+                            .attr("method", "post")
+                            .attr("action", "/menus/leave")
+                            .flag("data-ui-form", true)
+                            .child(
+                                Button::primary("Save and leave")
+                                    .attr("id", "m-dialog-save")
+                                    .submit(),
+                            ),
                     )),
                 )
                 .footer(Button::outline("Close").closes_dialog("m-dialog-box")),
@@ -569,6 +604,23 @@ impl Controller for MenuPages {
             .public(),
             RouteDef::on(Method::POST, "!/menus/redirect", || async {
                 Reply::redirect("/menus?landed=1").toast(ToastTone::Success, "Saved, and moved on.")
+            })
+            .public(),
+            RouteDef::on(Method::POST, "!/menus/leave", || async {
+                Reply::redirect("/menus/plain?landed=1").toast_with(
+                    Toast::new(ToastTone::Success, "Saved, and moved on.")
+                        .duration(ToastDuration::Sticky),
+                )
+            })
+            .public(),
+            RouteDef::on(Method::POST, "!/menus/archive", || async {
+                Reply::ops_or_redirect("/menus").toast(ToastTone::Success, "Archived by the item.")
+            })
+            .public(),
+            RouteDef::on(Method::GET, "!/menus/plain", |shell: AppShell| async move {
+                shell
+                    .page("A page without the dialog")
+                    .body(Text::new("This page has no dialog."))
             })
             .public(),
             RouteDef::on(Method::POST, "!/menus/reload", || async {

@@ -10,6 +10,7 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { after, before, describe, test } from "node:test";
 import { chromium, firefox, webkit } from "playwright";
+import { page as doc, start } from "./support/fixture.mjs";
 
 const BASE = process.env.UI_PROOF_URL || "http://127.0.0.1:8090";
 const require = createRequire(import.meta.url);
@@ -41,7 +42,7 @@ for (const name of NAMES) {
      * kept in `page.problems`, and each test ends by asserting there are none.
      */
     async function open(path, options = {}) {
-      const { light, ...rest } = options;
+      const { light, before, ...rest } = options;
       const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, bypassCSP: !!light, ...rest });
       const page = await context.newPage();
       page.problems = [];
@@ -55,6 +56,7 @@ for (const name of NAMES) {
           (window.__csp ||= []).push(e.violatedDirective + " " + e.blockedURI);
         });
       });
+      if (before) await before(page);
       await page.goto(BASE + path);
       if (light) {
         await page.addStyleTag({ content: LIGHT });
@@ -1232,7 +1234,7 @@ for (const name of NAMES) {
         const shape = (html) => page.evaluate((markup) => {
           const doc = new DOMParser().parseFromString(markup, "text/html");
           const walk = (node) => {
-            const attrs = [...node.attributes].filter((a) => a.name !== "data-toast-id").map((a) => `${a.name}=${a.name === "href" || a.name === "action" ? a.value : /^(data-|role|type|aria-label)/.test(a.name) ? a.value : ""}`).sort().join(" ");
+            const attrs = [...node.attributes].filter((a) => a.name !== "data-toast-id").map((a) => `${a.name}=${a.name === "href" && a.value.startsWith("#ui-toast-") ? "#" : a.name === "href" || a.name === "action" ? a.value : /^(data-|role|type|aria-label)/.test(a.name) ? a.value : ""}`).sort().join(" ");
             const kids = [...node.children].map(walk).join("");
             return `<${node.tagName.toLowerCase()} ${attrs}>${kids}</>`;
           };
@@ -1250,6 +1252,411 @@ for (const name of NAMES) {
         const fromOp = toasts(page).filter({ hasText: "Archived" });
         await fromOp.waitFor();
         assert.equal(await shape(await fromOp.evaluate((t) => t.outerHTML)), rich, "a rich toast");
+        await page.done();
+      });
+    });
+
+    // ---- The reviewer's findings ------------------------------------------
+
+    describe("review fixes", () => {
+      let f;
+      before(async () => {
+        f = await start();
+      });
+      after(() => f.close());
+
+      const TOASTER = `<section data-slot="toaster" aria-label="Notifications" data-position="bottom-end" data-close="Dismiss"></section>`;
+      const attrValue = (s) => s.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+      const cmd = (json) => `data-ui-click="${attrValue(JSON.stringify(json))}"`;
+      let unique = 0;
+      const route = (body, headers) => {
+        const path = `/r${++unique}`;
+        f.routes.set(path, (req, res) => f.html(res, typeof body === "function" ? body(req) : body, headers));
+        return path;
+      };
+      /** A page document of the fixture: the runtime, and the menus module when asked. */
+      const paged = (body, options) => route(doc(body, { css: true, ...options }));
+      const stickyToast = (text, extra = {}) => cmd([["toast", { tone: "info", text, duration: "sticky", ...extra }]]);
+
+      /** A page on the fixture, with problems kept as `open` keeps them. */
+      async function fixture(path, options = {}) {
+        const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...options });
+        const page = await context.newPage();
+        page.problems = [];
+        page.on("pageerror", (e) => page.problems.push("pageerror: " + e.message));
+        await page.goto(f.origin + path);
+        // The page may carry names that shadow the document's own, so it is read through the prototypes.
+        await page.waitForFunction(() => {
+          const root = Object.getOwnPropertyDescriptor(Document.prototype, "documentElement").get.call(document);
+          const host = Document.prototype.querySelector.call(document, "[data-slot=toaster]");
+          return Element.prototype.hasAttribute.call(root, "data-build") && !!host && Element.prototype.hasAttribute.call(host, "popover");
+        });
+        page.done = async () => {
+          await context.close();
+          assert.deepEqual(page.problems, []);
+        };
+        return page;
+      }
+
+      test("R1 a toast raised by a form in an open dialog survives the redirect to a page without it", async () => {
+        const page = await open("/menus");
+        await page.locator("#m-basic-trigger").click();
+        await page.getByRole("menuitem", { name: "Rename" }).click();
+        await page.locator("#m-dialog-box[open]").waitFor();
+        await page.locator("#m-dialog-save").click();
+        await page.waitForURL(/\/menus\/plain\?landed=1/);
+        const toast = toasts(page).filter({ hasText: "Saved, and moved on." });
+        await toast.waitFor();
+        assert.equal(await page.locator("[data-slot=toaster]").count(), 1);
+        assert.equal(await page.locator("[data-slot=toaster]").evaluate((e) => e.parentElement.tagName), "BODY");
+        const box = await toast.boundingBox();
+        const top = await page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest("[data-slot=toast]"), { x: box.x + 10, y: box.y + 10 });
+        assert.equal(top, true, "the toast is showing, above the page");
+        await toast.locator("[data-slot=toast-close]").click();
+        assert.equal(await toasts(page).count(), 0);
+        await page.done();
+      });
+
+      test("R1 an op that takes the dialog away puts the toaster back in the page first", async () => {
+        const path = paged(`<main id="main"><button id="open" ${cmd([["open", "d"]])}>open</button></main><dialog id="d"><form id="go" method="post" action="/swap" data-ui-form><button id="save">Save</button></form></dialog>${TOASTER}`);
+        f.routes.set("/swap", (req, res) => f.ops(res, { build: "b1", ops: [
+          { op: "toast", tone: "success", text: "Saved.", duration: "sticky" },
+          { op: "replace", target: "d", html: '<p id="d">The dialog is gone.</p>' },
+        ] }));
+        const page = await fixture(path);
+        await page.click("#open");
+        await page.click("#save");
+        await page.locator("#d", { hasText: "The dialog is gone." }).waitFor();
+        const toast = toasts(page).filter({ hasText: "Saved." });
+        await toast.waitFor();
+        assert.equal(await page.locator("[data-slot=toaster]").evaluate((e) => e.parentElement.tagName), "BODY");
+        await toast.locator("[data-slot=toast-close]").click();
+        assert.equal(await toasts(page).count(), 0);
+        await page.done();
+      });
+
+      test("R2 a post item in a form posts on its own and leaves the form alone", async () => {
+        const page = await open("/menus");
+        const sent = [];
+        page.on("request", (r) => r.method() === "POST" && sent.push(new URL(r.url()).pathname));
+        const shape = await page.evaluate(() => {
+          const item = document.querySelector("#m-post [role=menuitem][formaction]");
+          return { form: item.getAttribute("form"), nested: document.querySelectorAll("#m-post form").length, owner: item.form?.id, inside: !!item.closest("#m-post-form") };
+        });
+        assert.deepEqual(shape, { form: "ui-post", nested: 0, owner: "ui-post", inside: true }, "inside the page form, owned by the post form");
+        await page.locator("#m-post-trigger").click();
+        await page.getByRole("menuitem", { name: "Archive" }).click();
+        await toasts(page).filter({ hasText: "Archived by the item." }).waitFor();
+        assert.deepEqual(sent, ["/menus/archive"], "only the item's post went");
+        assert.equal(await page.locator("#m-post-form [name=note]").inputValue(), "outer");
+        await page.locator("#m-post-form").getByRole("button", { name: "Save outer" }).click();
+        await toasts(page).filter({ hasText: "Posted: note=outer" }).waitFor();
+        assert.deepEqual(sent, ["/menus/archive", "/menus/echo"], "the form's own button still posts the form");
+        await page.done();
+      });
+
+      test("R2 with JavaScript off the item posts on its own", async () => {
+        const page = await open("/menus", { javaScriptEnabled: false });
+        const sent = [];
+        page.on("request", (r) => r.method() === "POST" && sent.push(new URL(r.url()).pathname));
+        await page.locator("#m-post-trigger").click();
+        await page.getByRole("menuitem", { name: "Archive" }).click();
+        await page.locator("[data-slot=toast]", { hasText: "Archived by the item." }).waitFor();
+        assert.deepEqual(sent, ["/menus/archive"], "the post went alone, and its flash is the toast on the page it came back to");
+        await page.done();
+      });
+
+      test("R2 an item whose page has no post form gets one from the runtime", async () => {
+        const path = paged(`<main id="main"><form method="post" action="/outer" data-ui-form><button id="item" type="submit" form="ui-post" formaction="/item" formmethod="post">Item</button><button id="whole">Whole</button></form></main>${TOASTER}`);
+        f.routes.set("/item", (req, res) => f.ops(res, { build: "b1", ops: [{ op: "toast", tone: "success", text: "The item." }] }));
+        f.routes.set("/outer", (req, res) => f.ops(res, { build: "b1", ops: [{ op: "toast", tone: "success", text: "The form." }] }));
+        const page = await fixture(path);
+        const before = f.log.length;
+        await page.click("#item");
+        await toasts(page).filter({ hasText: "The item." }).waitFor();
+        const posts = f.log.slice(before).filter((e) => e.method === "POST").map((e) => e.path);
+        assert.deepEqual(posts, ["/item"]);
+        assert.equal(await page.locator("#ui-post").count(), 1);
+        await page.done();
+      });
+
+      /** A page that sets the token cookie `token`: the session's identity, as the runtime sees it. */
+      const withUser = (token, body) => route(doc(`<main id="main">${body}</main>${TOASTER}`, { css: true }), { "set-cookie": `XSRF-TOKEN=${token}; Path=/` });
+
+      test("R3 a change of user in the tab drops the toasts and their posts", async () => {
+        const next = withUser("two", `<p>Signed out.</p>`);
+        const same = withUser("one", `<p>Same user.</p>`);
+        const first = withUser("one", `<button id="raise" ${stickyToast("Deleted.", { action: { label: "Undo", href: "/undo", post: true } })}>raise</button><a id="out" href="${next}">sign out</a><a id="stay" href="${same}">stay</a>`);
+        const page = await fixture(first);
+        await page.click("#raise");
+        await toasts(page).first().waitFor();
+        await page.click("#stay");
+        await page.locator("main", { hasText: "Same user." }).waitFor();
+        assert.equal(await toasts(page).count(), 1, "the same user keeps it through a boosted navigation");
+        await page.goBack();
+        await page.locator("#out").waitFor();
+        await page.click("#out");
+        await page.locator("main", { hasText: "Signed out." }).waitFor();
+        assert.equal(await toasts(page).count(), 0, "another user's toast and its Undo are gone");
+        await page.done();
+      });
+
+      test("R3 a toast carried over a real page load is dropped when the user changed, kept when not", async () => {
+        const other = withUser("two", `<p>Another user.</p>`);
+        const sameUser = withUser("one", `<p>Same user.</p>`);
+        const first = withUser("one", `<button id="raise" ${stickyToast("Deleted.", { action: { label: "Undo", href: "/undo", post: true } })}>raise</button><a id="out" data-ui-noboost href="${other}">other</a><a id="stay" data-ui-noboost href="${sameUser}">stay</a>`);
+        const page = await fixture(first);
+        await page.click("#raise");
+        await toasts(page).first().waitFor();
+        await page.click("#stay");
+        await page.locator("main", { hasText: "Same user." }).waitFor();
+        await toasts(page).first().waitFor();
+        await page.goBack();
+        await page.locator("#raise").waitFor();
+        await page.click("#raise");
+        await toasts(page).first().waitFor();
+        await page.click("#out");
+        await page.locator("main", { hasText: "Another user." }).waitFor();
+        await page.waitForTimeout(400);
+        assert.equal(await toasts(page).count(), 0, "not shown to the next user");
+        assert.equal(await page.evaluate(() => sessionStorage.getItem("navree-ui-toasts")), null, "and not left in the tab");
+        await page.done();
+      });
+
+      test("R3 a stored toast has the life of the flash cookie: 30 seconds", async () => {
+        const target = withUser("one", `<p>Next.</p>`);
+        const first = withUser("one", `<button id="raise" ${stickyToast("Old news.")}>raise</button><a id="go" data-ui-noboost href="${target}">go</a>`);
+        const page = await fixture(first);
+        await page.context().addInitScript(() => {
+          // Time passes between the pages: what was stored a minute ago is read now.
+          try {
+            const raw = sessionStorage.getItem("navree-ui-toasts");
+            const stored = raw && JSON.parse(raw);
+            if (stored && !Array.isArray(stored)) {
+              stored.at -= 60000;
+              sessionStorage.setItem("navree-ui-toasts", JSON.stringify(stored));
+            }
+          } catch {}
+        });
+        await page.click("#raise");
+        await toasts(page).first().waitFor();
+        await page.click("#go");
+        await page.locator("main", { hasText: "Next." }).waitFor();
+        await page.waitForTimeout(400);
+        assert.equal(await toasts(page).count(), 0, "a minute old: gone");
+        await page.done();
+      });
+
+      test("R4 a section of the page is never mistaken for the toaster", async () => {
+        const next = paged(`<main id="main"><p>Two.</p></main><section><p>Page content</p></section>`);
+        const first = paged(`<main id="main"><button id="raise" ${stickyToast("Still here.")}>raise</button><a id="go" href="${next}">go</a></main>${TOASTER}`);
+        const page = await fixture(first);
+        await page.evaluate(() => { document.querySelector("[data-slot=toaster]").__same = true; });
+        await page.click("#raise");
+        await toasts(page).first().waitFor();
+        await page.click("#go");
+        await page.locator("main", { hasText: "Two." }).waitFor();
+        const found = await page.evaluate(() => ({
+          toasters: document.querySelectorAll("[data-slot=toaster]").length,
+          same: !!document.querySelector("[data-slot=toaster]").__same,
+          toasts: document.querySelectorAll("[data-slot=toaster] [data-slot=toast]").length,
+          section: [...document.querySelectorAll("section:not([data-slot])")].map((s) => s.textContent),
+          inside: document.querySelector("[data-slot=toaster]").textContent.includes("Page content"),
+        }));
+        assert.deepEqual(found, { toasters: 1, same: true, toasts: 1, section: ["Page content"], inside: false });
+        await page.done();
+      });
+
+      test("R4 the page's toaster has a name of its own", async () => {
+        const page = await open("/menus");
+        assert.equal(await page.locator("body > #ui-toaster[data-slot=toaster]").count(), 1);
+        await page.done();
+      });
+
+      test("hostile markup can't break the menus module: names that shadow the document", async () => {
+        // What the module and the runtime read off the document, and more: a form or an image named like it stands in for it.
+        const names = ["documentElement", "activeElement", "createElement", "querySelector", "querySelectorAll", "getElementById", "dispatchEvent", "addEventListener", "body"];
+        const hostile = names.map((n) => `<img name="${n}" alt=""><form name="${n}-f"></form>`).join("") + names.map((n) => `<form name="${n}"></form>`).join("");
+        f.routes.set("/hs/tab/b", (req, res) => { res.writeHead(500, { "content-type": "text/plain" }); res.end("no"); });
+        f.routes.set("/hs/swap", (req, res) => f.ops(res, { build: "b1", ops: [{ op: "replace", target: "swapped", html: '<p id="swapped">Swapped.</p>' }] }));
+        const path = paged(`${hostile}<main id="main">
+          <div id="t" data-ui-tabs="tab"><div role="tablist" aria-label="Tabs"><a role="tab" id="t-tab-a" href="?tab=a" aria-selected="true" tabindex="0" aria-controls="t-panel-a" data-key="a">A</a><a role="tab" id="t-tab-b" href="?tab=b" aria-selected="false" tabindex="-1" aria-controls="t-panel-b" data-key="b">B</a></div>
+          <div role="tabpanel" id="t-panel-a" aria-labelledby="t-tab-a" tabindex="0">Panel A</div>
+          <div role="tabpanel" id="t-panel-b" aria-labelledby="t-tab-b" tabindex="0" hidden data-ui-region data-ui-src="/hs/tab/b" data-ui-lazy>Panel B</div></div>
+          <button id="opener" popovertarget="menu" aria-haspopup="menu" aria-expanded="false" data-ui-keep-attrs="aria-expanded">Menu</button>
+          <div id="menu" popover="auto" role="menu" data-ui-menu aria-labelledby="opener"><button role="menuitem" data-slot="menu-item" type="button" id="one">One</button><button role="menuitem" data-slot="menu-item" type="button">Two</button></div>
+          <p id="swapped">Before.</p>
+          <form id="sw" method="post" action="/hs/swap" data-ui-form><button id="swap">Swap</button></form>
+          <button id="raise" ${stickyToast("Raised.")}>raise</button></main>${TOASTER}`, { menus: true });
+        const page = await fixture(path);
+        await page.waitForTimeout(150);
+        // The page's names shadow what the test driver itself reads off the document in some engines, so the
+        // steps are taken through the prototypes, with real key presses; locators are not used here.
+        const click = (id) => page.evaluate((i) => HTMLElement.prototype.click.call(Document.prototype.getElementById.call(document, i)), id);
+        const has = (selector) => page.waitForFunction((sel) => !!Document.prototype.querySelector.call(document, sel), selector);
+        // Tabs: the arrow key moves the selection through the module.
+        await page.evaluate(() => HTMLElement.prototype.focus.call(Document.prototype.getElementById.call(document, "t-tab-a")));
+        await page.keyboard.press("ArrowRight");
+        await page.waitForFunction(() => Element.prototype.getAttribute.call(Document.prototype.getElementById.call(document, "t-tab-b"), "aria-selected") === "true");
+        // The lazy panel failed: its alert is built by the module.
+        await has("#t-panel-b [data-slot=tab-alert]");
+        // A menu opens by its button and Escape returns focus there.
+        await click("opener");
+        await page.waitForFunction(() => Element.prototype.matches.call(Document.prototype.getElementById.call(document, "menu"), ":popover-open"));
+        await page.keyboard.press("Escape");
+        await page.waitForFunction(() => Object.getOwnPropertyDescriptor(Document.prototype, "activeElement").get.call(document)?.id === "opener");
+        // A toast, an op that swaps, and the toast closed by its link.
+        await click("raise");
+        await has("[data-slot=toaster] [data-slot=toast]");
+        await click("swap");
+        await page.waitForFunction(() => Node.prototype.textContent && Object.getOwnPropertyDescriptor(Node.prototype, "textContent").get.call(Document.prototype.getElementById.call(document, "swapped")) === "Swapped.");
+        await page.evaluate(() => HTMLElement.prototype.click.call(Document.prototype.querySelector.call(document, "[data-slot=toast-close]")));
+        await page.waitForFunction(() => !Document.prototype.querySelector.call(document, "[data-slot=toaster] [data-slot=toast]"));
+        await page.done();
+      });
+
+      test("the toast hover pause is for a pointer that hovers", async () => {
+        const page = await open("/menus");
+        const rules = await page.evaluate(() => {
+          const found = [];
+          const walk = (list, within) => {
+            for (const rule of list) {
+              if (rule instanceof CSSStyleRule) {
+                if (rule.selectorText.includes(":hover") && rule.selectorText.includes("toaster")) found.push({ within, text: rule.selectorText });
+                walk(rule.cssRules || [], within);
+              } else if (rule.cssRules) walk(rule.cssRules, rule instanceof CSSMediaRule ? rule.conditionText || rule.media.mediaText : within);
+            }
+          };
+          for (const sheet of document.styleSheets) { try { walk(sheet.cssRules, ""); } catch {} }
+          return found;
+        });
+        assert.ok(rules.length >= 1, "the hover rule is there");
+        for (const rule of rules) assert.match(rule.within, /hover:\s*hover/, rule.text + " is inside a (hover: hover) query");
+        // On a phone the same hover is a tap left behind: it must not hold the clock.
+        if (name !== "firefox") {
+          const context = await browser.newContext({ viewport: { width: 390, height: 800 }, hasTouch: true, isMobile: true });
+          const touch = await context.newPage();
+          await touch.goto(BASE + "/menus");
+          assert.equal(await touch.evaluate(() => matchMedia("(hover: hover)").matches), false, "the device doesn't hover");
+          await touch.locator("#n-info").click();
+          const toast = touch.locator("[data-slot=toaster] [data-slot=toast]").first();
+          await toast.waitFor();
+          await toast.hover();
+          assert.equal(await toast.evaluate((t) => getComputedStyle(t).animationPlayState.split(",")[0].trim()), "running", "a hover that a touch screen leaves behind doesn't pause it");
+          await context.close();
+        }
+        await page.done();
+      });
+
+      test("Escape on a toast inside a dialog dismisses the toast and keeps the dialog", async () => {
+        const page = await open("/menus");
+        await page.locator("#m-basic-trigger").click();
+        await page.getByRole("menuitem", { name: "Rename" }).click();
+        await page.locator("#m-dialog-box[open]").waitFor();
+        await page.locator("#m-dialog-toast").click();
+        const toast = toasts(page).filter({ hasText: "Raised over the dialog." });
+        await toast.waitFor();
+        await toast.locator("[data-slot=toast-close]").focus();
+        await page.keyboard.press("Escape");
+        await toast.waitFor({ state: "detached" });
+        assert.equal(await page.locator("#m-dialog-box").evaluate((e) => e.open), true, "the dialog stays");
+        await page.keyboard.press("Escape");
+        assert.equal(await page.locator("#m-dialog-box").evaluate((e) => e.open), false, "a second Escape closes it");
+        await page.done();
+      });
+
+      test("with dialogs stacked the toaster stands in the top one, and a toast already showing is reachable", async () => {
+        const path = paged(`<main id="main"><button id="raise" ${stickyToast("Before any dialog.")}>raise</button><button id="openA" ${cmd([["open", "A"]])}>edit</button></main>
+<dialog id="A"><p>Edit</p><button id="openB" ${cmd([["open", "B"]])}>delete</button><button id="closeA" ${cmd([["close", "A"]])}>close A</button></dialog>
+<dialog id="B"><p>Sure?</p><button id="yes" ${stickyToast("Deleted.", { action: { label: "Undo", href: "/undo", post: true } })}>yes</button><button id="closeB" ${cmd([["close", "B"]])}>close B</button></dialog>${TOASTER}`);
+        f.routes.set("/undo", (req, res) => f.ops(res, { build: "b1", ops: [{ op: "toast", tone: "info", text: "Undone." }] }));
+        const page = await fixture(path);
+        const where = () => page.evaluate(() => document.querySelector("[data-slot=toaster]").parentElement.id || document.querySelector("[data-slot=toaster]").parentElement.tagName);
+        await page.click("#raise");
+        await toasts(page).first().waitFor();
+        await page.click("#openA");
+        await page.waitForFunction(() => document.querySelector("[data-slot=toaster]").parentElement.id === "A");
+        await toasts(page).first().locator("[data-slot=toast-close]").click({ timeout: 3000 });
+        assert.equal(await toasts(page).count(), 0, "the toast that was showing before the dialog opened could be closed");
+        await page.click("#openB");
+        await page.click("#yes");
+        await toasts(page).filter({ hasText: "Deleted." }).waitFor();
+        assert.equal(await where(), "B", "the top dialog holds the toaster");
+        await page.locator("[data-slot=toast-action]").click({ timeout: 3000 });
+        await toasts(page).filter({ hasText: "Undone." }).waitFor();
+        await page.click("#closeB");
+        await page.waitForFunction(() => document.querySelector("[data-slot=toaster]").parentElement.id === "A");
+        assert.equal(await where(), "A", "when the top one closes the toaster goes to the one below");
+        await page.click("#closeA");
+        await page.waitForFunction(() => document.querySelector("[data-slot=toaster]").parentElement.tagName === "BODY");
+        await page.done();
+      });
+
+      test("a lazy tab that failed isn't fetched again by every form sent after it", async () => {
+        let asked = 0;
+        // The slow tab is the open one when the page loads, so it is asked for as the page starts.
+        const page = await open("/menus?lz=slow", {
+          before: (p) => p.route("**/menus/tab/slow", (route) => { asked++; return route.fulfill({ status: 500, body: "no" }); }),
+        });
+        await page.locator("#t-lazy-panel-slow [data-slot=tab-alert]").waitFor();
+        assert.equal(asked, 1);
+        for (let n = 0; n < 2; n++) {
+          await page.locator("#n-form-plain button").click();
+          await toasts(page).filter({ hasText: "Saved from the server." }).first().waitFor();
+          await page.waitForTimeout(200);
+        }
+        assert.equal(asked, 1, "the failed tab wasn't asked for again");
+        // Showing the tab again still tries again.
+        await page.locator("#t-lazy-tab-fresh").click();
+        await page.locator("#t-lazy-tab-slow").click();
+        await page.waitForTimeout(300);
+        assert.equal(asked, 2, "showing it again is a new try");
+        await page.done();
+      });
+
+      test("a multiple toggle group laid out vertically is a plain group: no orientation on it", async () => {
+        const page = await open("/menus");
+        const found = await page.evaluate(() => ({
+          group: [...document.querySelectorAll("[role=group][data-slot=toggle-group]")].filter((g) => g.hasAttribute("aria-orientation")).length,
+          vertical: document.querySelector("[aria-label='Stacked days']").getAttribute("data-orientation"),
+          radios: [...document.querySelectorAll("[role=radiogroup][data-orientation=vertical]")].every((g) => g.getAttribute("aria-orientation") === "vertical"),
+        }));
+        assert.equal(found.group, 0, "no group carries aria-orientation");
+        assert.equal(found.vertical, "vertical");
+        assert.equal(found.radios, true, "a vertical radio group keeps it");
+        assert.deepEqual(await axe(page), []);
+        await page.done();
+      });
+
+      test("a toast's close works with JavaScript off", async () => {
+        const page = await open("/menus/server-toast", { javaScriptEnabled: false });
+        const toast = page.locator("[data-slot=toast]");
+        await toast.waitFor();
+        await toast.locator("[data-slot=toast-close]").click();
+        assert.equal(await toast.isVisible(), false, "the close took it away");
+        await page.done();
+      });
+
+      test("the page that adopts a flash toast takes the region's translated label too", async () => {
+        const next = paged(`<main id="main"><p>Zwei.</p></main><section data-slot="toaster" aria-label="Benachrichtigungen" data-position="bottom-end" data-close="Schließen"><div data-slot="toast" data-tone="success" data-duration="sticky" role="status" id="ui-toast-1"><div data-slot="toast-body"><p data-slot="toast-text">Gespeichert.</p></div><a data-slot="toast-close" href="#ui-toast-1" aria-label="Schließen"></a></div></section>`);
+        const first = paged(`<main id="main"><a id="go" href="${next}">go</a></main>${TOASTER}`);
+        const page = await fixture(first);
+        await page.click("#go");
+        await toasts(page).filter({ hasText: "Gespeichert." }).waitFor();
+        assert.equal(await page.locator("[data-slot=toaster]").getAttribute("aria-label"), "Benachrichtigungen");
+        assert.equal(await page.locator("[data-slot=toast-close]").getAttribute("aria-label"), "Schließen");
+        await page.done();
+      });
+
+      test("a sticky toast that asks for no close button still has one", async () => {
+        f.routes.set("/sticky", (req, res) => f.ops(res, { build: "b1", ops: [{ op: "toast", tone: "danger", text: "Import failed.", duration: "sticky", closable: false }] }));
+        const path = paged(`<main id="main"><form method="post" action="/sticky" data-ui-form><button id="go">go</button></form></main>${TOASTER}`);
+        const page = await fixture(path);
+        await page.click("#go");
+        const toast = toasts(page).first();
+        await toast.waitFor();
+        await toast.locator("[data-slot=toast-close]").click();
+        assert.equal(await toasts(page).count(), 0);
         await page.done();
       });
     });

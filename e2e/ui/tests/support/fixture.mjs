@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const crate = join(dirname(fileURLToPath(import.meta.url)), "../../../../crates/navree-ui");
 const file = (name) => readFileSync(join(crate, "dist", name));
-const FILES = { "/_navree/ui/core.js": file("core.js"), "/_navree/ui/overlay.js": file("overlay.js") };
+const FILES = { "/_navree/ui/core.js": file("core.js"), "/_navree/ui/overlay.js": file("overlay.js"), "/_navree/ui/menus.js": file("menus.js"), "/_navree/ui/navree-ui.css": file("navree-ui.css") };
 
 /** The policy the crate sends, read from its source. */
 export const CSP = /PAGE_CSP: &str = "([^"]+)"/.exec(readFileSync(join(crate, "src/view.rs"), "utf8"))[1];
@@ -17,9 +17,11 @@ export const BUILD = "b1";
 
 const MARKER = (name) => `document.documentElement.setAttribute("${name}", "1");`;
 
-/** A page with the core runtime, as `View` writes one. */
-export function page(body, { title = "t", build = BUILD, head = "" } = {}) {
-  return `<!doctype html><html lang="en" data-build="${build}"><head><meta charset="utf-8"><title>${title}</title><script type="module" src="/_navree/ui/core.js"></script>${head}</head><body data-ui-boost>${body}</body></html>`;
+/** A page with the core runtime, as `View` writes one; `menus` adds the menus module, `css` the stylesheet. */
+export function page(body, { title = "t", build = BUILD, head = "", menus = false, css = false } = {}) {
+  const module = menus ? `<script type="module" src="/_navree/ui/menus.js"></script>` : "";
+  const sheet = css ? `<link rel="stylesheet" href="/_navree/ui/navree-ui.css">` : "";
+  return `<!doctype html><html lang="en" data-build="${build}"><head><meta charset="utf-8"><title>${title}</title>${sheet}<script type="module" src="/_navree/ui/core.js"></script>${module}${head}</head><body data-ui-boost>${body}</body></html>`;
 }
 
 export async function start() {
@@ -35,7 +37,7 @@ export async function start() {
       const body = Buffer.concat(chunks).toString();
       log.push({ method: req.method, path: url.pathname + url.search, headers: req.headers, body });
       if (FILES[url.pathname]) {
-        res.writeHead(200, { "content-type": "text/javascript" });
+        res.writeHead(200, { "content-type": url.pathname.endsWith(".css") ? "text/css" : "text/javascript" });
         return res.end(FILES[url.pathname]);
       }
       if (url.pathname === "/attacker.js" || url.pathname === "/_navree/ui/stand-in.js") {
