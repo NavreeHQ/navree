@@ -37,6 +37,7 @@ import { GridPattern } from "@/components/magicui/grid-pattern";
 import { CopyButton } from "@/components/mdx/copy-button";
 import { categories, ecosystem, entriesIn, entry, type EcosystemCategory } from "@/content/ecosystem";
 import { pageMetadata } from "@/lib/metadata";
+import { PageSchema } from "@/lib/structured-data";
 import { cn } from "@/lib/utils";
 import { site } from "@site";
 
@@ -285,6 +286,7 @@ export default function EcosystemPage() {
         ))}
       </div>
       <Closing />
+      <PageSchema path="/ecosystem/" metadata={metadata} />
     </>
   );
 }

@@ -17,7 +17,7 @@ import { UiSection } from "@/components/home/ui-section";
 import { WhatIs } from "@/components/home/what-is";
 import { Workspaces } from "@/components/home/workspaces";
 import { pageMetadata } from "@/lib/metadata";
-import { JsonLd, softwareData } from "@/lib/structured-data";
+import { PageSchema } from "@/lib/structured-data";
 import { site } from "@site";
 
 export const metadata: Metadata = pageMetadata({
@@ -86,7 +86,7 @@ export default function Home() {
       <Part>
         <FinalCta />
       </Part>
-      <JsonLd data={softwareData()} />
+      <PageSchema path="/" metadata={metadata} />
     </>
   );
 }

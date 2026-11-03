@@ -5,6 +5,7 @@ import { ArrowRightIcon } from "@/components/icons";
 import { InlineMarkdown } from "@/components/inline-markdown";
 import { navigation, sectionIndexes } from "@/lib/docs";
 import { pageMetadata } from "@/lib/metadata";
+import { PageSchema } from "@/lib/structured-data";
 import { site } from "@site";
 
 export const metadata: Metadata = pageMetadata({
@@ -103,6 +104,7 @@ export default function DocsIndex() {
           </section>
         ))}
       </div>
+      <PageSchema path="/docs/" metadata={metadata} />
     </div>
   );
 }

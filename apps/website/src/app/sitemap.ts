@@ -1,35 +1,24 @@
 import type { MetadataRoute } from "next";
 
 import { allDocs, sectionIndexes } from "@/lib/docs";
-import { lastModified, lastModifiedUnder } from "@/lib/last-modified";
+import { lastModified } from "@/lib/last-modified";
+import { pageModified, pageRoutes, sectionModified } from "@/lib/site-pages";
 import { site } from "@site";
 
 export const dynamic = "force-static";
 
 /**
  * `/sitemap.xml`: every public page, with the date its content last changed
- * (from git). Leaves out the styleguide (an authoring preview), the
- * `/benchmarks/` redirect and anything else marked noindex.
+ * (from git). The pages that are not docs pages are found by walking
+ * `src/app` (`pageRoutes`), so a new one needs no edit here; a page marked
+ * noindex (the styleguide, the `/benchmarks/` redirect) is left out. Docs
+ * pages and the page of each docs section come from the manifest.
  */
 export default function sitemap(): MetadataRoute.Sitemap {
   const url = (path: string) => `${site.url}${path}`;
-  const pages: [string, string[]][] = [
-    ["/", ["src/app/page.tsx", "src/components/home", "src/content", "site.config.ts"]],
-    ["/docs/", ["src/app/docs/page.tsx", "content/docs/manifest.ts"]],
-    ["/ecosystem/", ["src/app/ecosystem", "src/components/ecosystem", "src/content/ecosystem.ts"]],
-    ["/architecture/", ["src/app/architecture", "src/components/diagrams"]],
-    ["/ai/", ["src/app/ai", "src/components/ai"]],
-    ["/ui/", ["src/app/ui", "src/components/ui-docs", "src/lib/ui-page-data.ts", "content/ui", "content/docs/ui/coming-next.mdx"]],
-    ["/performance/", ["src/app/performance", "src/components/bench", "src/lib/bench.ts"]],
-    ["/showcase/", ["src/app/showcase/page.tsx"]],
-    ["/showcase/crm/", ["src/app/showcase/crm", "src/components/showcase", "public/images/crm"]],
-  ];
   return [
-    ...pages.map(([path, sources]) => ({ url: url(path), lastModified: lastModifiedUnder(...sources) })),
-    ...sectionIndexes().map((section) => ({
-      url: url(section.href),
-      lastModified: lastModifiedUnder("content/docs/manifest.ts", `content/docs/${section.slug}`, "src/components/docs/section-index.tsx"),
-    })),
+    ...pageRoutes().map((route) => ({ url: url(route), lastModified: pageModified(route) })),
+    ...sectionIndexes().map((section) => ({ url: url(section.href), lastModified: sectionModified(section.slug) })),
     ...allDocs().map((doc) => ({ url: url(doc.href), lastModified: lastModified(`content/docs/${doc.file}`) })),
   ];
 }

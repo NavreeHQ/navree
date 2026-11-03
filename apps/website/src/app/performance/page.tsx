@@ -30,6 +30,7 @@ import {
 } from "@/lib/bench";
 import { highlight } from "@/lib/mdx";
 import { pageMetadata } from "@/lib/metadata";
+import { PageSchema } from "@/lib/structured-data";
 import { repoBlob, repoTree, site } from "@site";
 
 const r = perf.results;
@@ -1060,6 +1061,7 @@ export default async function PerformancePage() {
           </div>
         </div>
       </section>
+      <PageSchema path="/performance/" metadata={metadata} />
     </>
   );
 }

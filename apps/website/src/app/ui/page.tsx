@@ -4,6 +4,7 @@ import { Suspense, type ReactNode } from "react";
 import { HomeSection, SectionHeading } from "@/components/home/parts";
 import { TableShowcase } from "@/components/ui-docs/table-showcase";
 import { pageMetadata } from "@/lib/metadata";
+import { PageSchema } from "@/lib/structured-data";
 
 import { ChooseFrontEnd } from "./choose";
 import { UiClosing } from "./closing";
@@ -70,6 +71,7 @@ export default function UiPage() {
       <Part>
         <UiClosing />
       </Part>
+      <PageSchema path="/ui/" metadata={metadata} />
     </>
   );
 }

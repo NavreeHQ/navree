@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { pageMetadata } from "@/lib/metadata";
+import { PageSchema } from "@/lib/structured-data";
 
 import { AgentsHalf } from "./agents-half";
 import { AiClosing } from "./closing";
@@ -19,6 +20,7 @@ export default function AiPage() {
       <AgentsHalf />
       <ProductHalf />
       <AiClosing />
+      <PageSchema path="/ai/" metadata={metadata} />
     </>
   );
 }

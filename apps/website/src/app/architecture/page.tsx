@@ -10,6 +10,7 @@ import { GrowThumb, PatternThumb } from "@/components/diagrams/thumbs";
 import { InlineMarkdown } from "@/components/inline-markdown";
 import { CopyButton } from "@/components/mdx/copy-button";
 import { pageMetadata } from "@/lib/metadata";
+import { PageSchema } from "@/lib/structured-data";
 import { cn } from "@/lib/utils";
 
 import { CodeExcerpt } from "./code-excerpt";
@@ -362,6 +363,7 @@ export default function ArchitecturePage() {
       ))}
       <Grow />
       <Kits />
+      <PageSchema path="/architecture/" metadata={metadata} />
     </>
   );
 }

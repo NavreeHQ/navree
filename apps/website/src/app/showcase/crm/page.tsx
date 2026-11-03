@@ -11,6 +11,7 @@ import { crmCrates, crmFrontEnds } from "@/components/showcase/crm-diagrams";
 import { CrmGallery } from "@/components/showcase/crm-gallery";
 import { BrowserFrame, PhoneFrame, ShotImage } from "@/components/showcase/frames";
 import { pageMetadata } from "@/lib/metadata";
+import { PageSchema } from "@/lib/structured-data";
 import { cn } from "@/lib/utils";
 import { site } from "@site";
 
@@ -638,6 +639,7 @@ export default function CrmShowcasePage() {
       <FrontEnds />
       <StartYourOwn />
       <Run />
+      <PageSchema path="/showcase/crm/" metadata={metadata} />
     </>
   );
 }

@@ -54,3 +54,18 @@ export function lastModifiedUnder(...dirs: string[]): string {
   }
   return latest || new Date().toISOString();
 }
+
+/** The date of the newest commit in the repository (the changelog changes with every one), or now where there is no git history. */
+export function latestCommit(): string {
+  try {
+    const date = execFileSync("git", ["log", "-1", "--format=%cI"], {
+      cwd: WEBSITE,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (date) return date;
+  } catch {
+    // No git: fall through.
+  }
+  return new Date().toISOString();
+}

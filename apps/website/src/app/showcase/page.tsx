@@ -7,6 +7,7 @@ import { CommandLine } from "@/components/showcase/code-panel";
 import { frontEnds } from "@/components/showcase/crm-data";
 import { BrowserFrame, PhoneFrame, ShotImage } from "@/components/showcase/frames";
 import { pageMetadata } from "@/lib/metadata";
+import { PageSchema } from "@/lib/structured-data";
 
 export const metadata: Metadata = pageMetadata({
   title: "Showcase",
@@ -128,6 +129,7 @@ export default function ShowcasePage() {
           </div>
         </div>
       </section>
+      <PageSchema path="/showcase/" metadata={metadata} />
     </>
   );
 }
