@@ -41,7 +41,7 @@ The first line reads `recording to memory` when Logbook keeps its entries in mem
 
 ## The timeline
 
-The page is a shell with the entry types down the side, the list in a pane, and the open entry in the pane beside it.
+The pages are drawn with [Navree UI](/docs/ui/overview/) and served by your app. The page is a shell with the entry types down the side, the list in a pane, and the open entry in the pane beside it.
 
 - **The entry types.** The sidebar lists every type (requests, queries, jobs, mail, events, cache, logs, exceptions, outgoing HTTP, notifications, data changes, scheduled tasks, dumps), each with how many entries of it there are, and **All** for the default list. A type keeps the text of the search box. The sidebar collapses to its icons.
 - **The list.** Entries, newest first, arriving live. Requests, jobs and scheduled tasks are **batches**: one row each, with the method and path or the job type, the status or outcome, the duration, and small counters for the queries, events, jobs, mail, cache calls, log lines, exceptions and outgoing calls inside. Failed batches are marked in amber, and so are batches with slow or [duplicate queries](#duplicate-queries). The search box in the top bar takes [filter terms](#filtering).

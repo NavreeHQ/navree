@@ -126,7 +126,7 @@ Every service takes `image`, `version`, `port` (the host port of its main port) 
 
 Users, passwords and keys may use letters, digits, `.`, `_`, `~` and `-`, so they go into URLs and commands as they are.
 
-Every port is bound to `127.0.0.1` only, so nothing on your network can reach the services, and the passwords are development defaults. Dock is for your machine and CI, never for a server: [Harbor](/docs/tools/harbor/) provisions the production equivalents.
+Every port is bound to `127.0.0.1` only, so nothing on your network can reach the services, and the passwords are development defaults. Dock is for your machine and CI, never for a server: [Harbor](/docs/tools/harbor/) provisions PostgreSQL and Redis on your servers, and [the database in production](/docs/getting-started/deployment/#the-database-in-production) says what to do about TimescaleDB there.
 
 ### PostgreSQL and TimescaleDB
 
@@ -351,6 +351,6 @@ fn main() -> Result<(), navree::dock::DockError> {
     TimescaleDB, PostgreSQL, MySQL and SQLite.
   </LinkCard>
   <LinkCard href="/docs/tools/harbor/" title="Harbor">
-    The same services, provisioned on your servers.
+    PostgreSQL and Redis provisioned on your servers.
   </LinkCard>
 </LinkCards>

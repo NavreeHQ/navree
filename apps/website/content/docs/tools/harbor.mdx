@@ -36,7 +36,7 @@ navree harbor:init
   updated  .gitignore        # ignores harbor.key
 ```
 
-A [starter kit](/docs/getting-started/starter-kits/) already has a `harbor.toml`, and `navree new` writes its `harbor.key`. If you have the file but not the key, `navree harbor:init` leaves `harbor.toml` alone and writes just the key (it refuses when the file holds encrypted secrets, because a new key could not decrypt them).
+A [starter kit](/docs/getting-started/starter-kits/) already has a `harbor.toml`, and `navree new` writes its `harbor.key`. If you have the file but not the key, `navree harbor:init` leaves `harbor.toml` alone and writes only the key (it refuses when the file holds encrypted secrets, because a new key could not decrypt them).
 
 </Step>
 <Step title="Describe your server">
@@ -198,7 +198,7 @@ Each area is one bash script, rendered from a template and sent over SSH to `bas
 | SSH | Password logins off; `root` may log in by key only. The host key is recorded in `harbor.toml` as `host_key`, and every later connection checks it. |
 | Firewall | `ufw`, denying all incoming traffic except SSH, and on `web` servers ports 80 and 443 (TCP, and UDP for HTTP/3). On `postgres` and `redis` servers, ports 5432 and 6379 open to your other servers only. On a `web` server with a `private_ip`, port 8079 (the [internal entry](#the-caddy-site)) open to the private addresses of your servers that run workers or the scheduler without the `web` role. `fail2ban` watches SSH. |
 | Caddy (`web`) | Caddy 2 from Caddy's apt repository: the reverse proxy in front of your app, with a certificate from Let's Encrypt for `domain`, renewed automatically; HTTP redirected to HTTPS; HTTP/2 and HTTP/3; compression; WebSocket upgrades for [broadcasting](/docs/digging-deeper/broadcasting/). `aliases` redirect to `domain`. `/metrics` answers only the addresses in `web.metrics_allow`, and 404 to everyone else. With `[web.custom_domains]`, workspaces' verified domains too, each with its own certificate ([custom domains](#custom-domains)). |
-| PostgreSQL (`postgres`) | PostgreSQL 17 (`postgres.version`) from the PostgreSQL project's apt repository, a database and a user for the app with a generated password, `scram-sha-256` authentication, connections from your servers only, and a daily `pg_dump` (a systemd timer) kept for `postgres.backup_days` (7) in `/var/backups/postgresql/<app>`. |
+| PostgreSQL (`postgres`) | PostgreSQL 17 (`postgres.version`) from the PostgreSQL project's apt repository, without TimescaleDB (a migration's hypertables are regular tables there: see [the database in production](/docs/getting-started/deployment/#the-database-in-production)), a database and a user for the app with a generated password, `scram-sha-256` authentication, connections from your servers only, and a daily `pg_dump` (a systemd timer) kept for `postgres.backup_days` (7) in `/var/backups/postgresql/<app>`. |
 | Redis (`redis`) | Redis from Ubuntu's own packages (7.0 on 24.04 LTS, 6.0 on 22.04 LTS), a generated password, `maxmemory` (`redis.maxmemory_mb`, 256 MB) with `allkeys-lru`, listening on loopback, and on the private network when other servers use it. |
 | Node.js (`web`, with a [front end](#a-front-end-next-to-your-api)) | Node.js `frontend.node_version` (24) from NodeSource, and pnpm or Yarn through Corepack when the front end's lockfile asks for one. |
 | systemd | Units for the app's processes, below. |
