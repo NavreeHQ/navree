@@ -82,14 +82,17 @@ export function noteWrite(begins) {
  * or out, those toasts and the posts they offer go: they are not this user's. A change
  * seen soon after a write is that write's: some engines show the new cookie to a script a
  * moment after the answer that set it, so what the answer itself raised is the new user's
- * and stays, and only what was showing before the write goes.
+ * and stays, and only what was showing before the write goes. That grace is for a boosted
+ * reply, which raises toasts in the page it answers; `strict` leaves it out, for the page
+ * being left, whose toasts no answer of the next page ever raised.
+ * @param {boolean} [strict]
  */
-export function sameUser() {
+export function sameUser(strict = false) {
   const now = who();
   if (user === null) user = now;
   if (now === user) return true;
   user = now;
-  const cutoff = performance.now() - wrote.end < 3000 ? wrote.start : Infinity;
+  const cutoff = !strict && performance.now() - wrote.end < 3000 ? wrote.start : Infinity;
   for (const t of host?.querySelectorAll("[data-slot=toast]") || []) {
     if ((placedAt.get(t) ?? 0) < cutoff) t.remove();
   }
@@ -346,7 +349,8 @@ function specOf(t) {
  */
 function handOff() {
   if (!host?.isConnected) return;
-  sameUser();
+  // A real page load follows: nothing its answer did was raised in this page, so no grace.
+  sameUser(true);
   const list = [];
   for (const t of host.querySelectorAll("[data-slot=toast]")) {
     list.push({ ...specOf(t), elapsed: Number(lifeOf(t)?.currentTime) || 0 });
