@@ -40,15 +40,17 @@ against the code.
 | A server-side list (API) | a route taking `PageQuery`, a filter type through `Valid<Query<T>>` and `Accessible<M, Read>`; the query with `when_some`, `order_by`, `with(..)`, `paginate`; returns `Page<T>` (`{data, meta}`) | `navree-controllers-and-routing`, `navree-orm`, `navree-access-control` |
 | Cursor paging for feeds and very large tables | `cursor_paginate` and `CursorPage` | `navree-database` |
 | Related columns, counts, sums | `with("relation")`, `load_count`, `load_sum` | `navree-orm` |
-| The list on a web front end | `@navree/next` `DataTable` with `useListQuery`; `@navree/nuxt` `<NavreeDataTable>` with `useListQuery` <!-- ui-toolkit:list --> | `navree-frontend-next`, `navree-frontend-nuxt` |
+| The list on a page rendered on the server | navree-ui: `#[derive(TableRow)]`, `TableQuery<R>` and `DataTable`; search, filters, sort, pages, bulk actions and export from one definition | `navree-design-to-ui` |
+| The list on a web front end | `@navree/next` `DataTable` with `useListQuery`; `@navree/nuxt` `<NavreeDataTable>` with `useListQuery` | `navree-frontend-next`, `navree-frontend-nuxt` |
 | A back-office list | a Helm resource: search, filter chips, sort, pages, bulk actions, CSV export | `navree-helm` |
 | Options of a select | the enum; or a lookup endpoint | `navree-controllers-and-routing` |
-| A combobox over a large table | an options route searching on the server (`mistakes.md`, entry 2); Helm's `Field::belongs_to` and `Filter::belongs_to` <!-- ui-toolkit:combobox --> | `navree-controllers-and-routing`, `navree-helm` |
-| Form errors under fields | the 400 `errors` shape; `applyFieldErrors` in `@navree/next` <!-- ui-toolkit:form --> | `navree-validation`, `navree-frontend-next` |
+| A combobox over a large table | an options route searching on the server (`mistakes.md`, entry 2); Helm's `Field::belongs_to` and `Filter::belongs_to`; in navree-ui pages a select from `FormView::options` for a small set, the combobox is coming | `navree-controllers-and-routing`, `navree-helm` |
+| A form on a page rendered on the server | navree-ui: `#[derive(Validate, Form)]`, `FormView`, `Submit<T>`; the type picks the control, errors land under fields, with or without JavaScript | `navree-design-to-ui`, `navree-validation` |
+| Form errors under fields | the 400 `errors` shape; `applyFieldErrors` in `@navree/next` | `navree-validation`, `navree-frontend-next` |
 | Bulk actions | a route taking ids, checking each record (`Authorized` or the ability), saving each through the unit of work; queued with progress when large (operations); Helm actions | `navree-access-control`, `navree-queues-and-scheduling`, `navree-helm` |
 | Exports | `navree-sheets`: `Download::csv`/`xlsx`, named exports queued with a signed link | `navree-sheets` |
 | Imports of spreadsheets | `navree-sheets` importers: mapping, staging preview, duplicate modes, error files | `navree-sheets` |
-| Screens and their states | the front end (`@navree/next`, `@navree/nuxt`) or Helm pages (`HelmPage`) <!-- ui-toolkit:screen --> | `navree-frontend-next`, `navree-frontend-nuxt`, `navree-helm` |
+| Screens and their states | navree-ui pages in the app shell (`AppShell`, components, `Empty`, `Skeleton`, `Region`), built from a design or the old screens; or the front end (`@navree/next`, `@navree/nuxt`); or Helm pages (`HelmPage`) | `navree-design-to-ui`, `navree-frontend-next`, `navree-frontend-nuxt`, `navree-helm` |
 | What a role may see in the page | `GET /api/me/abilities` (the user's rules, in the CASL format front ends read), `AbilityProvider`/`<Can>`, `useAbility` | `navree-access-control`, `navree-frontend-next` |
 | Translated texts | `navree-i18n` (Fluent, `t!`, translated validation) | `navree-i18n` |
 | Files on records | `navree-storage` disks, `navree-media` collections | `navree-storage`, `navree-media` |
@@ -139,5 +141,6 @@ against the code.
 5. Workers and schedules; workflows and timers.
 6. Integrations, with fakes in the tests.
 7. Reports and exports.
-8. Screens: the front end or Helm.
+8. Screens: navree-ui pages (the `navree-design-to-ui` skill, phases 3 to 6),
+   the front end, or Helm.
 9. The isolation suite, `navree check`, `navree gate`.

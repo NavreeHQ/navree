@@ -36,6 +36,8 @@ task.
    them fail for the right reason.
 3. Build with the generators (`navree make:*`) and the skill the task
    names, following `navree-mapping.md`. Keep the module's layer order.
+   Screens rendered on the server follow the `navree-design-to-ui`
+   skill's page specs and briefs.
 4. Run the tests until they pass. Never change a test's expected value to
    make it pass; if the spec is wrong, raise a question the same way.
 5. Run `navree check` and `navree gate`. Fix every failure at its cause:

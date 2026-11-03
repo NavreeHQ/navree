@@ -237,7 +237,10 @@ Build in Navree in module order, each module layer by layer (schema and
 models, services, CRUD and lists, workers, workflows, integrations,
 reports, screens), test first, loading the Navree skill that each task
 names. Each task ends green on `navree gate`; its commit goes in
-`BUILD_LOG.md`.
+`BUILD_LOG.md`. For screens rendered on the server with navree-ui, the
+`navree-design-to-ui` skill takes the module's `screens.md`, `crud.md`
+and `lists.md` as its input, with the old product's screenshots or a new
+design as the look.
 
 ### 10. Verify
 
@@ -383,7 +386,8 @@ The briefs, in phase order:
 [`builder`](references/agents/builder.md),
 [`verifier`](references/agents/verifier.md).
 Load the `navree` skill before phase 9; each task names the other skill
-it needs.
+it needs. The `navree-design-to-ui` skill covers moving a design (a
+mock-up, a design-tool export, screenshots) into navree-ui pages.
 
 ## Docs
 

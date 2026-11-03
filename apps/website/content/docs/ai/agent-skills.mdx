@@ -82,6 +82,7 @@ Start with **`navree`**. It explains what a Navree app is, how one is laid out, 
 | `navree-module-conformity` | Audit a module: `navree check` (routes documented, entities classified, workspace data through `WorkspaceRepo`), cross-workspace isolation suites, custom checks and `navree gate` |
 | `navree-navigator` | Connect a coding agent to [Navigator](/docs/ai/navigator/) (`navree mcp`), use its tools before changing routes, providers or the schema, and install the skills |
 | `navree-reverse-engineering` | Reverse-engineer an old product in any stack into specs with evidence (map, schema and data profile, CRUD, lists, screens, services, workers, workflows, reports, integrations, roles, tenancy, data migration), a task list and test cases, then rebuild it in Navree and verify it against the specs and the old product |
+| `navree-design-to-ui` | Turn a design (an HTML and CSS mock-up, a design-tool export, a handoff bundle or screenshots) into navree-ui pages rendered on the server: inventory, token mapping, an element-by-element component map with gaps named, page specs, pages built with `AppShell`, `#[derive(Form)]` and `#[derive(TableRow)]`, and verification beside the design at 1440 and 390 pixels with axe and the keyboard |
 
 The [`skills/README.md`](https://github.com/NavreeHQ/navree/blob/main/skills/README.md) in the repository lists the same set. It grows with the framework, and `navree skills:install` always installs the skills of your Navree version.
 

@@ -94,10 +94,12 @@ size (`CAP-`).
 
 **Navree form:** the list endpoint takes the page, the filters and the sort
 in the query string, applies the user's access and the workspace, and
-returns one page with a total (`spec-list.md`). Front ends draw it with
+returns one page with a total (`spec-list.md`). Pages rendered on the
+server draw it with navree-ui's `#[derive(TableRow)]` and `DataTable`,
+whose one definition drives the query, the URL and the drawing
+(the `navree-design-to-ui` skill). Front ends draw it with
 `@navree/next`'s `DataTable` and `useListQuery`, `@navree/nuxt`'s
 `<NavreeDataTable>`, or a Helm resource for back-office lists.
-<!-- ui-toolkit:list -->
 
 ```rust
 use chrono::NaiveDate;
@@ -254,8 +256,10 @@ impl CustomerOptionsController {
 
 In Helm, `Field::belongs_to::<CustomerResource>("customer_id")` and
 `Filter::belongs_to` already search on the server
-(`/admin/api/resources/{r}/options?search=`).
-<!-- ui-toolkit:combobox -->
+(`/admin/api/resources/{r}/options?search=`). In navree-ui pages, a select
+whose choices come from the server is `FormView::options` for a small set;
+a combobox that searches on the server is still coming, so a large set is
+a gap for the owner (the `navree-design-to-ui` skill).
 
 ## 3. The wrong control for the type
 
@@ -279,8 +283,10 @@ Rust type deciding what the server accepts: `NaiveDate` for a day,
 `DateTime<Utc>` for an instant, minor units for money, `Phone` for a phone
 number (E.164), an enum for a status, a `Uuid` reference checked with
 `exists`. Helm fields follow the same types (`Field::date`, `money`,
-`select`, `belongs_to`, `email`, `textarea`, `file`).
-<!-- ui-toolkit:form -->
+`select`, `belongs_to`, `email`, `textarea`, `file`). In navree-ui pages
+the same type picks the control: a `#[derive(Validate, Form)]` struct
+draws the form, runs its rules in the browser and again on the server, and
+shows each error under its field (`navree-design-to-ui`).
 
 ## 4. Validation only in the browser
 
