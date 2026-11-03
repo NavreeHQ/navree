@@ -41,7 +41,7 @@ Here `NewDeal` is the struct from [Forms](/docs/ui/forms/):
 
 ```rust
 async fn update(Submit(deal): Submit<NewDeal>) -> Reply {
-    Reply::redirect("/deals/42")
+    Reply::ops_or_redirect("/deals/42")
         .morph("deal-title", Heading::h1(deal.title.clone()))
         .toast(ToastTone::Success, "Saved")
 }
@@ -53,6 +53,8 @@ async fn update(Submit(deal): Submit<NewDeal>) -> Reply {
   {"op":"toast","tone":"success","text":"Saved"}
 ]}
 ```
+
+`Reply::ops_or_redirect(href)` applies the ops you add and, with JavaScript off, redirects to `href`. `Reply::redirect(href)` also adds a `navigate` op, so the runtime goes to `href` after the other ops. `Reply::ops(ops)` answers `204` with JavaScript off, and `Reply::view(view)` shows its page.
 
 | Op | Does |
 |---|---|

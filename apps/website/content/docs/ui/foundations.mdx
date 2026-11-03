@@ -35,11 +35,11 @@ Controls are 32 px tall by default, on a 4 px grid. `Size::Xs`, `Sm` and `Lg` ma
 
 ## Type
 
-Body text is 14 px Geist, secondary text 13 px, headings 20 to 24 px semibold. Geist is the toolkit's one web font, self-hosted, preloaded and shown with `font-display: optional`, so text never reflows when it arrives. Code and other monospace text use the system's monospace font, which costs no download. See [Heading and Text](/docs/components/typography/).
+Body text is 14 px Geist and secondary text 13 px. Headings are semibold: `h1` is 24 px, `h2` 20 px, `h3` 16 px and `h4` 14 px. Geist is the toolkit's one web font, self-hosted, preloaded and shown with `font-display: optional`, so text never reflows when it arrives. Code and other monospace text use the system's monospace font, which costs no download. See [Heading and Text](/docs/components/typography/).
 
 ## Density
 
-Table rows are 40 px with 12 px cell padding, and pages have 24 px of padding. A [DataTable](/docs/ui/data-table/) can be made compact by the reader, from its own controls.
+A [Table](/docs/components/table/) row is 40 px tall with 12 px of cell padding. A [DataTable](/docs/ui/data-table/) row is 48 px; the reader can make rows compact (36 px) or spacious (60 px) from the table's own controls. Pages have 24 px of padding.
 
 ## Layout and the shell
 
@@ -52,3 +52,5 @@ Change the table in `crates/navree-ui/src/tokens.rs`, then write every file made
 ```sh
 cargo test -p navree-ui --lib tokens::tests::write_generated_files -- --ignored
 ```
+
+Next, the [layout primitives](/docs/ui/layout/) place components on the 4 px grid, and the [components](/docs/components/overview/) show the tokens at work.

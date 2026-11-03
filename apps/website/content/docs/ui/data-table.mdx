@@ -26,7 +26,7 @@ pub struct Deal {
 }
 ```
 
-In a handler, `TableQuery<Deal>` is an extractor and `query.load` runs it on your model (the `orm` feature):
+In a handler, `TableQuery<Deal>` is an extractor. With the `ui` and `orm` features of `navree` (both on by default), `query.load` runs it on a model that derives `TableRow` itself. `query.load_as` maps each model record to a separate row type when the rows join or rename fields:
 
 ```rust title="src/deals/pages.rs"
 async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<AppPage> {
@@ -49,9 +49,9 @@ The previews on this page draw five rows from memory with `TablePage::new(rows, 
 
 | Column option | Means |
 |---|---|
-| `sortable`, `search`, `filter = text\|range\|date\|select\|multi\|boolean\|relation` | what can be done with it; `kind = int` when the cell shows something other than the column queried; `source = "companies.name"` when the column has another name |
+| `sortable`, `search`, `filter = text\|range\|date\|select\|multi\|boolean\|relation` | what can be done with it; `kind = int` (or `text`, `money`, `float`, `decimal`, `date`, `datetime`, `bool`, `uuid`) when filter values bind as another type than the field's; `source = "companies.name"` when the column has another name |
 | `sticky`, `sticky_end`, `hidden`, `locked`, `hide_on_mobile`, `width = 240`, `group = "Address"` | where it sits |
-| `numeric`, `align = center`, `strong`, `truncate`, `wrap`, `link = "..."`, `badge = tone`, `options = LIST` | how it reads |
+| `numeric`, `align = center`, `strong`, `truncate`, `wrap`, `link = "..."`, `badge = tone`, `options = LIST` | how it reads; `badge = tone` names a function that takes `&value` and returns the badge's `BadgeVariant`, and `options = LIST` shows the label of the matching `(value, label)` pair |
 
 | On the table | Means |
 |---|---|

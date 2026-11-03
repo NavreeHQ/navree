@@ -43,7 +43,7 @@ Region::new("activity")
 
 ## A feed
 
-`.feed(into, after, empty)` asks the source only for what is newer than a cursor, and adds it at the start of the element `into`. The source answers the new rows as HTML (nothing when there are none) and the newest cursor in the `X-UI-Cursor` header. `empty` names an element to remove when the first row arrives, such as a "nothing yet" message. A [Table](/docs/components/table/) with `.body_id(id)` takes a feed's rows.
+`.feed(into, after, empty)` asks the source only for what is newer than a cursor, and adds it at the start of the element `into`, which must be inside the region. `after` is the cursor to start from; the runtime sends the current cursor to the source as the `after` query parameter. The source answers the new rows as HTML (nothing when there are none) and the newest cursor in the `X-UI-Cursor` header. `empty` is the id of an element to remove when the first row arrives, such as a "nothing yet" message, or `None`. A [Table](/docs/components/table/) with `.body_id(id)` takes a feed's rows.
 
 ## Refetched by an action
 
