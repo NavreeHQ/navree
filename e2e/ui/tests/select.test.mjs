@@ -883,6 +883,22 @@ for (const browserName of browsers) {
       await close();
     });
 
+    test("The first key typed in a closed searched list sends one search, not two", async () => {
+      const { page, close } = await open("/select");
+      const asked = [];
+      page.on("request", (r) => { if (r.url().includes("/select/people?")) asked.push(new URL(r.url()).searchParams.get("q")); });
+      // A slow answer, so the one that waits out the debounce isn't served from what the first brought.
+      await page.route("**/select/people?*", async (route) => { await new Promise((r) => setTimeout(r, 350)); await route.continue(); });
+      await page.locator("#f-multi-search").focus();
+      await page.keyboard.type("g");
+      await page.waitForTimeout(900);
+      assert.deepEqual(asked, ["g"], "the key that opened the list asked once");
+      await page.keyboard.type("r");
+      await page.waitForTimeout(900);
+      assert.deepEqual(asked, ["g", "gr"], "and the next key asks for its text after the wait");
+      await close();
+    });
+
     test("Picking sends its change at once: a Select, a Combobox and a filter form that listens", async () => {
       const { page, close } = await open("/select");
       await page.evaluate(() => {

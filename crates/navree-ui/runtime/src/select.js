@@ -1053,8 +1053,10 @@ on(document, "input", (e) => {
     view(root);
     return;
   }
-  if (!s.open) open(root, "none");
-  if (searched(root)) queue(root, t.value, waitOf(root));
+  // The key that opens the list is asked for by the opening, once; the next ones wait.
+  const opening = !s.open;
+  if (opening) open(root, "none");
+  if (searched(root)) { if (!opening) queue(root, t.value, waitOf(root)); }
   else view(root);
 });
 
