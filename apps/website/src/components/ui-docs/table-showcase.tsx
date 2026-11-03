@@ -9,7 +9,7 @@ import { PreviewFrame } from "./preview-frame";
 /**
  * One real example from the UI docs, `data-table/default`: its Rust (the
  * example's body, compiled by `apps/ui-docs`) beside the page navree-ui
- * renders from it, live in a frame. Used by the homepage and `/ui/`.
+ * renders from it, framed as a still. Used by the homepage and `/ui/`.
  */
 export async function TableShowcase({ className }: { className?: string }) {
   const table = example("data-table/default");
@@ -35,7 +35,8 @@ export async function TableShowcase({ className }: { className?: string }) {
       </figure>
 
       <figure className="bezel min-w-0 lg:col-span-7">
-        <div className="bezel-core overflow-hidden">
+        {/* A still of the docs' preview page: it has no server behind it, so its links and search have nowhere to go. */}
+        <div className="bezel-core overflow-hidden" inert>
           <PreviewFrame
             src={table.src}
             title="A data table of deals with search, columns, export and paging, rendered by navree-ui"
@@ -45,8 +46,8 @@ export async function TableShowcase({ className }: { className?: string }) {
         </div>
         <figcaption className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 px-3 pt-3 pb-1.5 text-sm leading-relaxed text-fg-3">
           <span>
-            Rendered by <span className="font-mono text-[0.8125rem] text-fg-2">navree-ui</span> from that Rust, as a static page
-            with no server behind it: the columns menu opens here, and search and paging run in your app.
+            Rendered by <span className="font-mono text-[0.8125rem] text-fg-2">navree-ui</span> from that Rust. In your app, the
+            search, sort, filters and pages answer from the server.
           </span>
           <Link href="/docs/ui/data-table/" className="link shrink-0">
             DataTable

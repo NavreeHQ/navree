@@ -29,7 +29,7 @@ const choices = [
 
 /**
  * "Navree UI": one real example from the UI docs, its Rust beside the page
- * navree-ui renders from it (the docs' preview file, live in a frame), then
+ * navree-ui renders from it (the docs' preview file, framed), then
  * the three ways to draw screens and what is still to come. Its links lead
  * to `/ui/`, the page about the toolkit.
  */
