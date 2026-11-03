@@ -1048,7 +1048,10 @@
       "anatomy": null,
       "examples": [
         "commands/toggle",
-        "commands/open"
+        "commands/open",
+        "commands/text",
+        "commands/count",
+        "commands/fill"
       ]
     },
     {
@@ -8472,7 +8475,7 @@
       "width": 720,
       "scripts": [
         "overlay-e302c03dc72e.js",
-        "table-4f81fade135f.js"
+        "table-b01452996568.js"
       ],
       "captions": [],
       "slots": [
@@ -9102,7 +9105,7 @@
       "width": null,
       "scripts": [
         "overlay-e302c03dc72e.js",
-        "table-4f81fade135f.js"
+        "table-b01452996568.js"
       ],
       "captions": [],
       "slots": [
@@ -9784,7 +9787,7 @@
       "width": null,
       "scripts": [
         "overlay-e302c03dc72e.js",
-        "table-4f81fade135f.js"
+        "table-b01452996568.js"
       ],
       "captions": [],
       "slots": [
@@ -10569,7 +10572,7 @@
       "width": null,
       "scripts": [
         "overlay-e302c03dc72e.js",
-        "table-4f81fade135f.js"
+        "table-b01452996568.js"
       ],
       "captions": [],
       "slots": [
@@ -11251,7 +11254,7 @@
       "width": null,
       "scripts": [
         "overlay-e302c03dc72e.js",
-        "table-4f81fade135f.js"
+        "table-b01452996568.js"
       ],
       "captions": [],
       "slots": [
@@ -11881,7 +11884,7 @@
       "width": null,
       "scripts": [
         "overlay-e302c03dc72e.js",
-        "table-4f81fade135f.js"
+        "table-b01452996568.js"
       ],
       "captions": [
         "No rows",
@@ -12389,7 +12392,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-3b8019551d99.js"
+        "core-dd67b02be39c.js"
       ],
       "captions": [],
       "slots": [
@@ -12429,7 +12432,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-3b8019551d99.js"
+        "core-dd67b02be39c.js"
       ],
       "captions": [],
       "slots": [
@@ -12482,6 +12485,186 @@
                   ]
                 }
               ]
+            },
+            {
+              "slot": "dialog-close",
+              "tag": "button",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commands/text",
+      "component": "commands",
+      "slug": "text",
+      "title": "Text set by a choice",
+      "kind": "single",
+      "code": "Stack::gap(3).align(Align::Center).children((\n    Row::gap(2).children((\n        Button::outline(\"Monthly\").on_click(Cmd::text(\"plan-price\", \"$12 a month\")),\n        Button::outline(\"Yearly\").on_click(Cmd::text(\"plan-price\", \"$120 a year\")),\n    )),\n    Heading::h3(\"$12 a month\").id(\"plan-price\"),\n))",
+      "src": "/ui-preview/commands/text.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": true,
+      "width": null,
+      "scripts": [
+        "core-dd67b02be39c.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stack",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "row",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 2,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "heading",
+              "tag": "h3",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commands/count",
+      "component": "commands",
+      "slug": "count",
+      "title": "A counter as you type",
+      "kind": "single",
+      "code": "Stack::gap(1).children((\n    Field::new(\"bio\", \"Bio\").control(\n        Textarea::new(\"bio\")\n            .attr(\"maxlength\", 160_u32)\n            .on(Trigger::Input, Cmd::count(\"bio-count\", 160)),\n    ),\n    Text::muted(\"0/160\").id(\"bio-count\"),\n))",
+      "src": "/ui-preview/commands/count.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": true,
+      "width": null,
+      "scripts": [
+        "core-dd67b02be39c.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stack",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "field",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "label",
+                  "tag": "label",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "textarea",
+                  "tag": "textarea",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "text",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commands/fill",
+      "component": "commands",
+      "slug": "fill",
+      "title": "A row's details",
+      "kind": "single",
+      "code": "let row = |key: &'static str, title: &'static str, amount: &'static str| {\n    el(\"tr\").attr(\"data-key\", key).children((\n        el(\"td\").child(title),\n        el(\"td\").child(amount),\n        el(\"td\").child(\n            Button::ghost(\"Details\")\n                .size(Size::Sm)\n                .on_click(Cmd::fill(\"deal-details-dialog\")),\n        ),\n    ))\n};\n(\n    Table::new()\n        .head((\n            el(\"th\").attr(\"data-col\", \"title\").child(\"Deal\"),\n            el(\"th\").attr(\"data-col\", \"amount\").child(\"Amount\"),\n            el(\"th\").child(\"\"),\n        ))\n        .rows((\n            row(\"7\", \"Acme renewal\", \"12,500\"),\n            row(\"8\", \"Globex expansion\", \"48,000\"),\n        )),\n    Dialog::new(\"deal-details-dialog\", \"Deal\").body(el(\"p\").children((\n        el(\"strong\").fill_cell(\"title\"),\n        \", worth \",\n        el(\"span\").fill_cell(\"amount\"),\n        \".\",\n    ))),\n)",
+      "src": "/ui-preview/commands/fill.html",
+      "height": 360,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": true,
+      "width": null,
+      "scripts": [
+        "core-dd67b02be39c.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "table-container",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "table",
+              "tag": "table",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 2,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "dialog",
+          "tag": "dialog",
+          "count": 1,
+          "children": [
+            {
+              "slot": "dialog-header",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "dialog-title",
+                  "tag": "h2",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "dialog-body",
+              "tag": "div",
+              "count": 1,
+              "children": []
             },
             {
               "slot": "dialog-close",

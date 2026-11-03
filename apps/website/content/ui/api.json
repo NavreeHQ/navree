@@ -2599,6 +2599,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
