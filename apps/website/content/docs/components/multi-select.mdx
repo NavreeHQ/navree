@@ -1,0 +1,87 @@
+---
+title: "MultiSelect"
+description: "Many choices, shown as chips with a 4 px corner, with a limit, select all, searching on the server and keys to take one off."
+---
+
+<UiPreview example="multi-select/default" />
+
+`MultiSelect` is a [Combobox](/docs/components/combobox/) that keeps what you pick. Each choice is a chip; a pick clears the text and leaves the list open, so several can be added in a row. Every chosen value posts under the one name, from a `<select multiple>`.
+
+```rust
+use navree::ui::*;
+
+Field::new("deal-markets", "Markets").control(
+    MultiSelect::new("markets")
+        .placeholder("Add a market")
+        .options([("fr", "France"), ("de", "Germany"), ("jp", "Japan")])
+        .selected_values(["fr", "de"]),
+)
+```
+
+## When to use it
+
+Use it for any number of choices out of a list too long to show as checkboxes. Up to a handful, a group of [Checkbox](/docs/components/checkbox/) controls shows everything at once. For exactly one choice, a [Combobox](/docs/components/combobox/) or a [Select](/docs/components/select/).
+
+<UiChoose name="pick-one" current="MultiSelect" />
+
+## Anatomy
+
+<UiAnatomy component="multi-select" />
+
+## The list
+
+The list shows a box for each option. A chosen option is checked, and picking it again takes it off. Text matches as in a Combobox: the label, keywords, any case, any accents, words in any order.
+
+<UiPreview example="multi-select/open" />
+
+## Limits
+
+`.max(n)` allows at most `n`: at the limit the other options are switched off, and picking one says so. `.summary_after(n)` shows one "N selected" chip instead of the chips once more than `n` are chosen. `.select_all()` adds a row that chooses every option the text matches, and takes them all off again; it is for lists in the page, since a searched list is never all there.
+
+<UiPreview example="multi-select/limits" />
+
+`.clearable()` adds a button that takes everything off. `.creatable()`, `.create_url(url)`, `.search(url)`, `.min_chars(n)` and `.debounce(ms)` work as they do in a [Combobox](/docs/components/combobox/#making-a-new-option).
+
+## In a form
+
+A field of the type `Many<T>` is a multi-select. The form reads every value posted under its name, in order, up to a thousand, and nothing posted is an empty list:
+
+```rust
+use navree::ui::form::Many;
+
+#[derive(Deserialize, Validate, Form)]
+struct NewDeal {
+    /// Markets
+    #[validate(skip)]
+    markets: Many<String>,
+}
+
+FormView::<NewDeal>::new()
+    .options("markets", [("fr".into(), "France".into()), ("de".into(), "Germany".into())])
+```
+
+The values are read as text: strings, enums with `#[derive(Options)]`, UUIDs and dates. A `Many<Stage>` of an enum takes its options from the enum.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| Typing, `↓`, `↑`, `Enter`, `Esc` | As in a [Combobox](/docs/components/combobox/#keyboard-and-accessibility). `Enter` adds the active option and leaves the list open. |
+| `Backspace` in an empty input | Moves to the last chip. The first press only moves. |
+| `Backspace`, `Delete` on a chip | Takes it off, and moves to the next chip, or the input. |
+| `←`, `→` on a chip | Move between chips, in reading direction: they swap in a right-to-left page. |
+| `Esc`, `Enter` on a chip | Back to the input. |
+
+- The chips are a list. Each has a button named "Remove" and its label, but it is the keys above that a keyboard uses: the buttons are for the pointer.
+- Adding, removing, reaching a limit and moving to a chip are announced ("France removed", "You can choose at most 3").
+- The list is `aria-multiselectable`. A removed chip never takes focus with it: it moves on.
+
+</UiA11y>
+
+## API
+
+### MultiSelect
+
+<UiProps type="MultiSelect" />

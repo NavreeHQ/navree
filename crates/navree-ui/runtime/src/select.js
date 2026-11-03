@@ -56,7 +56,7 @@ const $ = (e, q) => /** @type {HTMLElement | null} */ (e.querySelector(q));
 /** @param {Element} e @param {string} name @param {boolean} on */
 const flag = (e, name, on) => e.toggleAttribute(name, on);
 
-/** @typedef {{open: boolean, active: HTMLElement | null, seq: number, ctrl: AbortController | null, cache: Map<string, string>, buffer: string, q: string, n: number, timer: number, busy: number, more: string, failed: boolean, creating: boolean, said: number, words: Record<string, string> | null, index: {el: HTMLElement, t: string}[] | null, count: number}} State */
+/** @typedef {{open: boolean, active: HTMLElement | null, seq: number, ctrl: AbortController | null, cache: Map<string, string>, buffer: string, q: string, n: number, timer: number, busy: number, more: string, failed: boolean, creating: boolean, said: number, hold: number, words: Record<string, string> | null, index: {el: HTMLElement, t: string}[] | null, count: number}} State */
 /** @type {WeakMap<Element, State>} */
 const states = new WeakMap();
 
@@ -64,7 +64,7 @@ const states = new WeakMap();
 function stateOf(root) {
   let s = states.get(root);
   if (!s) {
-    s = { open: false, active: null, seq: 0, ctrl: null, cache: new Map(), buffer: "", q: "", n: 0, timer: 0, busy: 0, more: "", failed: false, creating: false, said: 0, words: null, index: null, count: 0 };
+    s = { open: false, active: null, seq: 0, ctrl: null, cache: new Map(), buffer: "", q: "", n: 0, timer: 0, busy: 0, more: "", failed: false, creating: false, said: 0, hold: 0, words: null, index: null, count: 0 };
     states.set(root, s);
   }
   return s;
@@ -101,11 +101,18 @@ function parts(root) {
   };
 }
 
-/** Tells assistive technology `text`, after `wait` ms; a newer message replaces one that hasn't been said. @param {Element} root @param {string} text @param {number} [wait] */
-function say(root, text, wait = 0) {
+/**
+ * Tells assistive technology `text`, after `wait` ms; a newer message replaces one that
+ * hasn't been said. A `soft` message (a count of results) gives way to one said in the
+ * last 1.5 s about what the person just did.
+ * @param {Element} root @param {string} text @param {number} [wait] @param {boolean} [soft]
+ */
+function say(root, text, wait = 0, soft = false) {
   const live = $(root, "[data-slot=select-status]");
   if (!live) return;
   const s = stateOf(root);
+  if (soft && performance.now() < s.hold) return;
+  if (!soft) s.hold = performance.now() + 1500;
   clearTimeout(s.said);
   s.said = setTimeout(() => {
     live.textContent = "";
@@ -420,14 +427,14 @@ function view(root) {
   const total = found;
   let text = "", say_ = "";
   if (s.failed) text = say_ = words(root).failed;
-  else if (!total && !live(root).length) text = say_ = words(root)[rows.length || server ? "empty" : "none"];
+  else if (!total) text = say_ = words(root)[rows.length || server ? "empty" : "none"];
   else if (shown < total) text = fmt(words(root).shown, { n: shown.toLocaleString("en-US"), total: total.toLocaleString("en-US") });
   if (!text && total) say_ = fmt(words(root)[total === 1 ? "result" : "results"], { n: total.toLocaleString("en-US") });
   if (p.note) {
     p.note.textContent = text;
     p.note.hidden = !text;
   }
-  if (say_) say(root, say_, 250);
+  if (say_) say(root, say_, 250, true);
   highlight(root, tokens);
   // The list got taller or shorter: the popup follows, on the side it opened on.
   if (s.open) p.popup?.dispatchEvent(new Event("ui:place"));

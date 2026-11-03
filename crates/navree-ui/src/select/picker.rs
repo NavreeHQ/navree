@@ -271,13 +271,12 @@ impl Picker {
             .child(icon(icons::X))
     }
 
-    fn input(&self, base: &str, popup_id: &str, list_id: &str, slot: &'static str) -> Element {
+    fn input(&self, base: &str, list_id: &str, slot: &'static str) -> Element {
         let value = if self.kind == Kind::Combobox {
             self.shown()
         } else {
             None
         };
-        let _ = popup_id;
         el("input")
             .slot(slot)
             .attr("type", "text")
@@ -369,7 +368,7 @@ impl Picker {
             .attr("data-ui-anchor", popup_id.to_owned())
             .children((
                 chips,
-                self.input(base, popup_id, list_id, input_slot),
+                self.input(base, list_id, input_slot),
                 self.clearable
                     .then(|| self.clear_button("combobox-clear", has_value)),
                 self.toggle_button(),

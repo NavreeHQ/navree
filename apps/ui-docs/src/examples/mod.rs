@@ -12,12 +12,14 @@ mod layout;
 mod navigation;
 mod overlays;
 mod patterns;
+mod pickers;
 
 /// Every example, in the order the docs list them.
 pub fn all() -> Vec<Example> {
     let mut all = Vec::new();
     all.extend(actions::all());
     all.extend(inputs::all());
+    all.extend(pickers::all());
     all.extend(display::all());
     all.extend(feedback::all());
     all.extend(overlays::all());

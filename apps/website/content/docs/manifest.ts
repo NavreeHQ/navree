@@ -224,6 +224,9 @@ export const sections: DocsSection[] = [
       "input-group",
       "textarea",
       "native-select",
+      "select",
+      "combobox",
+      "multi-select",
       "checkbox",
       "switch",
       "radio-group",
@@ -260,6 +263,7 @@ export const sections: DocsSection[] = [
       // Navigation
       "breadcrumb",
       "pagination",
+      "command",
       // Data
       "table",
       "stat",

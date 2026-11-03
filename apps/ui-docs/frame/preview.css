@@ -15,6 +15,8 @@ body[data-preview-show] [data-preview-stage]{flex-direction:column}
 [data-preview-show] :is([data-slot=dialog],[data-slot=alert-dialog],[data-slot=sheet],[data-slot=drawer]):not([open]){display:flex;flex-direction:column;position:relative;inset:auto;margin:0;width:100%;max-width:32rem;height:auto;max-height:none;border-width:1px;border-radius:var(--radius-lg)}
 [data-preview-show] [data-slot=alert-dialog]:not([open]){max-width:26rem}
 [data-preview-show] [data-slot=sheet]:not([open]){max-width:24rem}
+[data-preview-show] [data-slot=select-popup]:not(:popover-open){display:flex;flex-direction:column;position:relative;inset:auto;margin:6px 0 0;width:100%;max-width:none;height:auto}
+[data-preview-show] [data-slot=command-dialog]:not([open]){display:flex;flex-direction:column;position:relative;inset:auto;margin:0;width:100%;max-width:36rem;height:auto;max-height:none}
 [data-preview-show] :is([data-slot=popover-content],[data-slot=hover-card-content],[data-slot=tooltip-content]):not(:popover-open){display:block;position:relative;inset:auto;margin:0;height:auto}
 
 /* Galleries: one captioned cell per variant or state. */

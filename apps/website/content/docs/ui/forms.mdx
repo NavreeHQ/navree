@@ -63,9 +63,10 @@ FormView::<NewDeal>::new()
 | `NaiveDate`, `NaiveTime`, `NaiveDateTime` | a date, time or date-and-time input |
 | `Money` | an amount typed like `12,500.50`, stored in its smallest unit |
 | an enum with `#[derive(Options)]` | a select of its variants |
+| `Many<T>` | a [MultiSelect](/docs/components/multi-select/): every value posted under the name, in order |
 | `Option<T>` | the same widget, and it may be left empty |
 
-`#[form(widget = ...)]` picks another: `text`, `email`, `url`, `tel`, `password`, `search`, `number`, `date`, `time`, `datetime`, `hidden`, `textarea`, `select`, `radio`, `checkbox`, `switch` or `money`. A select whose choices come from the database takes them from `FormView::options(field, choices)`.
+`#[form(widget = ...)]` picks another: `text`, `email`, `url`, `tel`, `password`, `search`, `number`, `date`, `time`, `datetime`, `hidden`, `textarea`, `select`, `listbox`, `combobox`, `multiselect`, `radio`, `checkbox`, `switch` or `money`. A select whose choices come from the database takes them from `FormView::options(field, choices)`. `select` is the browser's own; `listbox` is a styled [Select](/docs/components/select/), and `combobox` a [Combobox](/docs/components/combobox/), whose options come from the same place or are searched on the server with `FormView::search(field, url)`.
 
 | `#[form(...)]` | Means |
 |---|---|

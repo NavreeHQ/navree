@@ -1,0 +1,142 @@
+---
+title: "Combobox"
+description: "One choice, found by typing: options in the page, or searched on the server, with a way to make a new one."
+---
+
+<UiPreview example="combobox/default" />
+
+`Combobox` is an input with a list. Typing narrows the list, `Enter` picks the highlighted option, and the chosen label stays in the input. A hidden `<select>` posts the value; the text in the input is only what was typed.
+
+```rust
+use navree::ui::*;
+
+Field::new("deal-country", "Country").control(
+    Combobox::new("country")
+        .placeholder("Search countries")
+        .options([("in", "India"), ("fr", "France"), ("jp", "Japan")])
+        .selected("in")
+        .clearable(),
+)
+```
+
+## When to use it
+
+Use it for one choice out of many, where typing is faster than scrolling: people, companies, countries. For a short fixed list use a [Select](/docs/components/select/); for several choices, a [MultiSelect](/docs/components/multi-select/).
+
+<UiChoose name="pick-one" current="Combobox" />
+
+## Anatomy
+
+<UiAnatomy component="combobox" />
+
+## Finding an option
+
+Text matches in the label and in `Choice::keywords`, whatever the case or the accents, with the words in any order: `zea new` finds New Zealand and `turkiye` finds Türkiye. The matching text is marked, and the first match is active, so `Enter` takes it.
+
+<UiPreview example="combobox/open" />
+
+`Esc` closes the list and puts the chosen label back in the input. So does leaving the input: what was typed is a search, not the value, until an option is picked. With `.clearable()`, `Esc` on a closed list clears the choice.
+
+A list in the page can be long. The page holds every option, the filter runs over all of them, and at most 200 matches are drawn at a time, with a note that says how many there are. Ten thousand options open in a quarter of a second and filter in under 30 ms. Past a thousand, search on the server instead.
+
+## Making a new option
+
+`.creatable()` offers `Create “text”` when nothing matches the text exactly. Choosing it makes the trimmed text the value. The server decides what to do with a value it doesn't know.
+
+<UiPreview example="combobox/create" />
+
+`.create_url(url)` has the server make the record: the runtime posts `name=text` and the answer, a [ChoiceList](#choicelist) holding the new option, is chosen. One post goes out however often the row is clicked, and a refusal (any status of 400 or more) changes nothing and says so. `.create_denied(reason)` shows the row switched off with the reason, for someone who may not create.
+
+<UiPreview example="combobox/states" />
+
+## Searching on the server
+
+For a list too long to send, name an endpoint:
+
+```rust
+Combobox::new("owner_id")
+    .placeholder("Search people")
+    .search("/people/options")
+    .min_chars(2)
+    .selected_choice(("7", "Grace Hopper"))
+```
+
+The endpoint reads an `OptionQuery` and answers a `ChoiceList`. With `navree-orm`, `OptionSource` does the query:
+
+```rust
+use navree::ui::*;
+
+const PEOPLE: OptionSource = OptionSource::new("id", "name").search_in(&["name", "email"]);
+
+async fn people(query: OptionQuery, uow: Uow) -> Result<ChoiceList> {
+    PEOPLE
+        .find(Person::query(), &query, &uow, "/people/options", |record| {
+            let person = record.into_inner();
+            Choice::new(person.id.to_string(), person.name)
+        })
+        .await
+}
+```
+
+- **What is asked.** `GET /people/options?q=text`. `OptionQuery` clips the text to 256 bytes, caps the limit at 50 (20 by default) and the offset at a million, and never fails: a value that doesn't parse is dropped.
+- **What is searched.** The columns come from the `OptionSource` in your code, never from the request. The text is bound, so `%`, `_` and quotes are data. The builder you pass is your own scoped query: workspace scoping and row-level security hold, and a narrowed query shows only what it was narrowed to.
+- **Order and pages.** Options come ordered by the label, then the value, so paging neither skips nor repeats a row. A full page ends with **Show more**, which asks for the next one.
+- **What the runtime does.** It waits 200 ms after the last key (`.debounce(ms)`), cancels the request before, and uses only the newest answer: a slow reply to an earlier text never replaces a later one. After 150 ms it marks the list busy and says "Searching…", keeping the old rows until the new ones come. Nothing is filtered again in the browser, because the server may have matched what the label doesn't show.
+- **When it fails.** The text and the choice stay, the list says it couldn't load, and `Enter` tries again. A `401` or `403` says the person no longer has access, with no stale rows. An answer that redirects, as a session that has ended does, goes to that page.
+- **What it accepts.** Only options. The answer's markup is rebuilt from the elements and attributes a list is drawn with, so a reply can't bring a script, a form, an `id` that takes over the page's, or a link off the site.
+- **Before the minimum.** With `.min_chars(2)` nothing is asked until two characters are typed, and the list says so.
+
+`selected_choice` gives the label of the value already chosen, for an edit form. With JavaScript off a searched combobox shows its chosen option and can't change it: there is nothing to ask.
+
+## In a form
+
+```rust
+#[derive(Deserialize, Validate, Form)]
+struct NewDeal {
+    /// Owner
+    #[validate(skip)]
+    #[form(widget = combobox, placeholder = "Search people")]
+    owner_id: Option<String>,
+}
+
+FormView::<NewDeal>::new()
+    .search("owner_id", "/people/options")
+    .options("owner_id", [("7".into(), "Grace Hopper".into())])
+```
+
+Without `.search`, `.options` are the whole list. With it, they are only the labels of what is chosen.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| Typing | Opens the list and narrows it. The first match is active. |
+| `↓` | Opens the list; in it, moves to the next option. |
+| `↑` | Opens it with the last option active; in it, moves up. |
+| `Alt+↓`, `Alt+↑` | Open the list without choosing a row; close it. |
+| `Page Down`, `Page Up` | Move by ten. |
+| `Enter` | Chooses the active option. With the list open and nothing active it does nothing, so a half-typed word never submits the form. |
+| `Esc` | Closes the list and restores the label. Inside a dialog it leaves the dialog open. |
+| `Tab` | Closes the list and restores the label. Nothing is chosen. |
+
+- The input has `role="combobox"`, `aria-autocomplete="list"`, `aria-expanded` and `aria-controls`. Focus stays in the input; the active option is `aria-activedescendant`. How many options match is said politely when the typing stops.
+- Choosing, clearing and a failed search are announced. The text is shown in its own direction.
+- On a phone the input is 16 px, so the browser doesn't zoom, and the rows are taller.
+
+</UiA11y>
+
+## API
+
+### Combobox
+
+<UiProps type="Combobox" />
+
+### OptionQuery
+
+<UiProps type="OptionQuery" />
+
+### ChoiceList
+
+<UiProps type="ChoiceList" />

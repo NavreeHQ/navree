@@ -210,8 +210,10 @@ fn clearable_adds_a_clear_button_that_is_hidden_until_there_is_a_value() {
 
 #[test]
 fn the_labels_travel_to_the_runtime_as_json_in_the_pages_language() {
-    let mut labels = SelectLabels::default();
-    labels.clear = "Effacer".into();
+    let labels = SelectLabels {
+        clear: "Effacer".into(),
+        ..SelectLabels::default()
+    };
     let out = html(stages().clearable().labels(&labels));
     assert!(out.contains("Effacer"), "{out}");
     assert!(out.contains("data-l="));

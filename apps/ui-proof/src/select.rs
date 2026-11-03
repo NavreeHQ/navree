@@ -695,7 +695,7 @@ fn form_page(shell: &AppShell) -> AppPage {
                         .control(Input::text("note").value("kept")),
                     Row::gap(2).children((
                         Button::primary("Send").submit(),
-                        el("button").attr("type", "reset").child("Reset"),
+                        Button::outline("Reset").kind(ButtonKind::Reset),
                     )),
                 )),
         ),
@@ -792,13 +792,14 @@ fn filter_page(shell: &AppShell, pairs: &[(String, String)]) -> AppPage {
 
 /// The words of a page in French, for the runtime to use.
 fn french() -> SelectLabels {
-    let mut labels = SelectLabels::default();
-    labels.empty = "Aucun résultat".into();
-    labels.clear = "Effacer".into();
-    labels.results = "{n} résultats disponibles".into();
-    labels.result = "1 résultat disponible".into();
-    labels.create = "Créer « {q} »".into();
-    labels
+    SelectLabels {
+        empty: "Aucun résultat".into(),
+        clear: "Effacer".into(),
+        results: "{n} résultats disponibles".into(),
+        result: "1 résultat disponible".into(),
+        create: "Créer « {q} »".into(),
+        ..SelectLabels::default()
+    }
 }
 
 fn french_page(shell: &AppShell) -> AppPage {

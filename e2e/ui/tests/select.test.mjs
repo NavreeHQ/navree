@@ -98,6 +98,8 @@ for (const browserName of browsers) {
       const s = picker("select-basic");
       const trigger = page.locator("#f-select-basic");
       assert.equal(await trigger.getAttribute("role"), "combobox");
+      assert.equal(await page.getByRole("combobox", { name: "Stage", exact: true }).count(), 1, "the label names the button");
+      assert.equal(await page.getByRole("combobox", { name: "Country", exact: true }).count(), 1, "and the input of a combobox");
       assert.equal(await trigger.getAttribute("aria-haspopup"), "listbox");
       assert.equal(await trigger.getAttribute("aria-expanded"), "false");
       assert.equal(await s.list.getAttribute("role"), "listbox");
@@ -1002,7 +1004,6 @@ for (const browserName of browsers) {
       const requests = [];
       page.on("request", (r) => { if (r.url().includes("/select/filter?")) requests.push(r.url()); });
       await page.locator("#filter-select-trigger").click();
-      await page.keyboard.press("ArrowDown");
       await page.keyboard.press("ArrowDown");
       await page.keyboard.press("Enter");
       await page.waitForFunction(() => document.querySelector("#filter-result").textContent === "Stage: qualified");

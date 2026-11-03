@@ -5,7 +5,8 @@
 
 use navree_ui::assets::{self, Asset, get};
 use navree_ui::{
-    Button, Card, Dialog, Grid, NavGroup, NavItem, Shell, Stat, Uses, View, icons, measure,
+    Button, Card, Combobox, Dialog, Grid, NavGroup, NavItem, Select, Shell, Stat, Uses, View,
+    icons, measure,
 };
 
 fn gzip(asset: &Asset) -> usize {
@@ -24,6 +25,26 @@ fn the_core_runtime_is_at_most_12_kb_gzip() {
 #[test]
 fn the_table_module_is_at_most_5_kb_gzip() {
     assert!(size("table") <= 5 * 1024, "{}", size("table"));
+}
+
+#[test]
+fn the_select_module_is_at_most_9_kb_gzip() {
+    assert!(size("select") <= 9 * 1024, "{}", size("select"));
+}
+
+#[test]
+fn a_page_with_a_picker_loads_the_select_and_overlay_modules_and_nothing_else() {
+    for page in [
+        View::new("x").body(Select::new("s").option("a", "A")),
+        View::new("x").body(Combobox::new("c").option("a", "A")),
+    ] {
+        assert_eq!(page.uses(), Uses::OVERLAY.with(Uses::SELECT));
+        let html = page.to_html();
+        assert!(html.contains(assets::SELECT_URL), "{html}");
+        assert!(html.contains(assets::OVERLAY_URL));
+        assert!(!html.contains(assets::CORE_URL));
+        assert!(!html.contains(assets::TABLE_URL));
+    }
 }
 
 #[test]

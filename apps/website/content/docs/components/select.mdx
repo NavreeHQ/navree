@@ -1,0 +1,119 @@
+---
+title: "Select"
+description: "One choice from a small, fixed list, in a styled listbox over a real select that posts with no script."
+---
+
+<UiPreview example="select/default" />
+
+`Select` is a button that opens a list. A real `<select>` carries the value, so a form posts as it does with any select, `required` and Reset work, and with JavaScript off that `<select>` is what the person sees.
+
+```rust
+use navree::ui::*;
+
+Field::new("deal-stage", "Stage").control(
+    Select::new("stage")
+        .placeholder("Choose a stage")
+        .option("lead", "Lead")
+        .option("qualified", "Qualified")
+        .option("won", "Won")
+        .option("lost", "Lost"),
+)
+```
+
+## When to use it
+
+Use it for one choice out of a short list you wrote down, when the browser's own picker would look out of place. For a list people search, or one with hundreds of options, use a [Combobox](/docs/components/combobox/). For several choices at once, a [MultiSelect](/docs/components/multi-select/). With five choices or fewer that are worth seeing at once, a [RadioGroup](/docs/components/radio-group/) is quicker to read, and a [NativeSelect](/docs/components/native-select/) gives a phone its system picker.
+
+<UiChoose name="pick-one" current="Select" />
+
+## Anatomy
+
+<UiAnatomy component="select" />
+
+## The list
+
+The list opens below the button, at least as wide as it, and flips above when there is no room. It sits in the top layer, so a dialog or a card that scrolls never clips it. The list follows the page as it scrolls, and keeps the side it opened on.
+
+<UiPreview example="select/open" />
+
+The chosen option is marked with a check mark and starts out active. `Esc` closes the list and changes nothing.
+
+## Groups and disabled options
+
+`.group(label, options)` draws a labelled group, announced as one, and `.separator()` a line between. A disabled option is shown and can't be reached by the arrow keys or picked.
+
+<UiPreview example="select/groups" />
+
+## A line under the label, and an icon
+
+A [Choice](#choice) can carry a description, an icon or a picture. They show in the list; the button shows the label, or `.selected_label()` when that is shorter.
+
+<UiPreview example="select/rich" />
+
+## States
+
+`.clearable()` adds a clear button, and lets `Delete` and `Backspace` clear the choice. `.invalid(true)` marks it, and a [Field](/docs/components/field/) does so for you when it has an error. `.disabled(true)` posts nothing; `.readonly()` shows the value and posts it, but won't open.
+
+<UiPreview example="select/states" />
+
+## In a form
+
+Put it in a [Field](/docs/components/field/): the label points at the button, and the error and help are tied to it. In a form drawn from a struct, name the widget:
+
+```rust
+#[derive(Deserialize, Validate, Form)]
+struct NewDeal {
+    /// Stage
+    #[validate(length(min = 1))]
+    #[form(widget = listbox, prompt = "Choose a stage")]
+    stage: String,
+}
+
+FormView::<NewDeal>::new()
+    .options("stage", [("lead".into(), "Lead".into()), ("won".into(), "Won".into())])
+```
+
+A field whose type derives `Options` takes its options from the type. A required select that is left empty says so under itself, takes focus, and the form is not sent.
+
+When the value changes the runtime fires `input` and `change` on the select, so a form with `data-ui-target`, or an element with `data-ui-change`, reacts as it would to any select.
+
+## Words
+
+`.labels(&SelectLabels)` sets the words for another language. English needs nothing: the runtime has it, and a page in English carries none of the words.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `↓`, `Alt+↓`, `Enter`, `Space` | Opens the list with the chosen option active. |
+| `↑`, `Home`, `End` | Opens it with the first or last option active. |
+| A letter | Opens it and jumps to the next option that starts with it. Typed quickly, the letters make a word; the same letter again cycles. |
+| `↓`, `↑`, `Home`, `End` | In the list: move the active option. |
+| `Page Down`, `Page Up` | Move by ten. |
+| `Enter`, `Space` | Choose the active option and close. |
+| `Alt+↑` | Choose it and close. |
+| `Tab` | Choose it, close, and move on. |
+| `Esc` | Close, with no change. Inside a dialog it closes the list and leaves the dialog open. |
+| `Delete`, `Backspace` | Clear the choice, when clearable. |
+
+- The button has `role="combobox"` and keeps focus. The list is a `listbox` and the active option is named by `aria-activedescendant`, as the WAI-ARIA select-only combobox says. The list takes its name from the field's label.
+- A required select that is left empty marks the button `aria-invalid` and adds the browser's message under the field.
+- Option text is shown in its own direction, so Arabic text in an English page reads right, and a long label is cut at its end with an ellipsis in the button and wraps in the list.
+
+</UiA11y>
+
+## API
+
+### Select
+
+<UiProps type="Select" />
+
+### Choice
+
+<UiProps type="Choice" />
+
+### SelectLabels
+
+<UiProps type="SelectLabels" />

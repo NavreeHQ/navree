@@ -63,11 +63,13 @@ export const choices = {
   },
   "pick-one": {
     title: "Which choice control?",
-    question: "How many choices?",
+    question: "What is being chosen?",
     options: [
       c("RadioGroup", "Two to five, all worth seeing", "/docs/components/radio-group/"),
-      c("NativeSelect", "Six or more, or little room", "/docs/components/native-select/"),
-      c("Checkbox", "Any number of them, not one", "/docs/components/checkbox/"),
+      c("NativeSelect", "One, in the system's picker", "/docs/components/native-select/"),
+      c("Select", "One of a fixed list, styled", "/docs/components/select/"),
+      c("Combobox", "One of many, found by typing", "/docs/components/combobox/"),
+      c("MultiSelect", "Several, kept as chips", "/docs/components/multi-select/"),
     ],
   },
   text: {

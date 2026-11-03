@@ -26,6 +26,9 @@ pub const GROUPS: &[Group] = &[
             "input-group",
             "textarea",
             "native-select",
+            "select",
+            "combobox",
+            "multi-select",
             "checkbox",
             "switch",
             "radio-group",
@@ -80,7 +83,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "navigation",
         title: "Navigation",
-        components: &["app-shell", "breadcrumb", "pagination"],
+        components: &["app-shell", "breadcrumb", "pagination", "command"],
     },
     Group {
         id: "data",
@@ -167,6 +170,21 @@ pub const COMPONENTS: &[Component] = &[
         "default",
     )
     .parts("default"),
+    component(
+        "select",
+        "Select",
+        &["Select", "Choice", "SelectLabels"],
+        "thumb",
+    )
+    .parts("default"),
+    component(
+        "combobox",
+        "Combobox",
+        &["Combobox", "OptionQuery", "ChoiceList"],
+        "thumb",
+    )
+    .parts("default"),
+    component("multi-select", "MultiSelect", &["MultiSelect"], "thumb").parts("default"),
     component("checkbox", "Checkbox", &["Checkbox"], "default").parts("default"),
     component("switch", "Switch", &["Switch"], "thumb").parts("default"),
     component("radio-group", "RadioGroup", &["RadioGroup"], "thumb").parts("default"),
@@ -259,6 +277,13 @@ pub const COMPONENTS: &[Component] = &[
     .parts("default"),
     component("breadcrumb", "Breadcrumb", &["Breadcrumb"], "default").parts("default"),
     component("pagination", "Pagination", &["Pagination"], "default").parts("default"),
+    component(
+        "command",
+        "Command",
+        &["Command", "CommandGroup", "CommandItem"],
+        "thumb",
+    )
+    .parts("default"),
     // Data
     component(
         "table",
