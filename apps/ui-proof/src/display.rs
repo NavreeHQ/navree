@@ -261,13 +261,17 @@ impl Hub {
         self.with(|state| state.events.clone())
     }
 
-    fn add(&self, count: u32) {
+    fn add(&self, count: u32, scanner: bool) {
         use Kind::*;
         self.with(|state| {
             for _ in 0..count {
                 let id = state.events.last().map_or(1, |event| event.id + 1);
                 let at = state.events.last().map_or(T0, |event| event.at) + 45;
-                let kind = [Opened, Clicked, Delivered, Replied, Bounced][(id % 5) as usize];
+                let kind = if scanner {
+                    Scanner
+                } else {
+                    [Opened, Clicked, Delivered, Replied, Bounced][(id % 5) as usize]
+                };
                 state.events.push(Ev {
                     id,
                     person: ((id * 3) % 8) as usize,
@@ -485,8 +489,12 @@ async fn fragment(Query(after): Query<After>) -> Response {
 
 // The stream
 
-/// `GET /display/events`.
-async fn events() -> Response {
+/// `GET /display/events`. A probe from the runtime (`x-ui-probe`, which asks only what the
+/// stream answers) is answered with an empty stream and counted as nothing.
+async fn events(headers: http::HeaderMap) -> Response {
+    if headers.contains_key("x-ui-probe") {
+        return ([(CONTENT_TYPE, "text/event-stream")], "").into_response();
+    }
     HUB.attempts.fetch_add(1, Ordering::SeqCst);
     let refused = HUB.with(|state| {
         let refused = state.refuse > 0;
@@ -542,6 +550,9 @@ fn hostile_events() -> Vec<Event> {
             .event("__proto__")
             .data("{\"op\":\"remove\",\"target\":\"activity\"}"),
         Event::default().event("constructor").data("1"),
+        // The connection's own names, said as events by a stream that wants to be taken for it.
+        Event::default().event("open").data("1"),
+        Event::default().event("error").data("1"),
         Event::default()
             .event("activity-region")
             .data("<p id=activity-region>taken over</p>"),
@@ -962,15 +973,20 @@ async fn person(shell: AppShell, Path(n): Path<usize>) -> AppPage {
 #[derive(Deserialize, Default)]
 struct Count {
     n: Option<u32>,
+    /// `kind=scanner` adds a machine's visit, which a feed leaves out until asked.
+    kind: Option<String>,
 }
 
 async fn emit() -> Reply {
-    HUB.add(1);
+    HUB.add(1, false);
     Reply::ops(Vec::new()).toast(ToastTone::Success, "Activity added")
 }
 
 async fn test_emit(Query(count): Query<Count>) -> Response {
-    HUB.add(count.n.unwrap_or(1).min(200));
+    HUB.add(
+        count.n.unwrap_or(1).min(200),
+        count.kind.as_deref() == Some("scanner"),
+    );
     StatusCode::NO_CONTENT.into_response()
 }
 

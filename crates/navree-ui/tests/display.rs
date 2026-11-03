@@ -332,11 +332,11 @@ fn filtered_events_are_in_the_page_with_a_notice_that_counts_them() {
 #[test]
 fn the_notice_dismisses_with_a_command_and_loads_the_runtime_only_for_that() {
     let with = html(Timeline::new("t", "t").event(TimelineEvent::new("x").at(T0).filtered()));
-    assert!(
-        with.contains(r#"data-ui-click="[[&quot;hide&quot;,&quot;t-hidden&quot;]]""#)
-            || with.contains("data-ui-click"),
-        "{with}"
-    );
+    // Dismissing hides the notice and remembers it was dismissed, so a row that arrives later
+    // doesn't bring it back.
+    assert!(with.contains("data-ui-click"), "{with}");
+    assert!(with.contains("data-dismissed"), "{with}");
+    assert!(with.contains("t-hidden"), "{with}");
     let view = View::new("x")
         .body(Timeline::new("t", "t").event(TimelineEvent::new("x").at(T0).filtered()));
     assert!(view.uses().has(Uses::CORE));
@@ -466,11 +466,38 @@ fn a_javascript_url_on_a_row_goes_nowhere() {
 #[test]
 fn the_live_dot_has_a_word_for_every_state() {
     let out = html(ActivityFeed::new("a", "t").live());
-    for word in ["Live", "Reconnecting", "Paused"] {
+    for word in ["Connecting", "Live", "Reconnecting", "Paused", "Not live"] {
         assert!(out.contains(&format!(">{word}</span>")), "{word}: {out}");
     }
     assert!(out.contains(r#"role="status""#), "{out}");
     assert!(!html(ActivityFeed::new("a", "t")).contains("live-state"));
+}
+
+#[test]
+fn a_live_feed_keeps_its_notice_even_with_nothing_left_out_so_a_row_that_arrives_can_use_it() {
+    let live = html(ActivityFeed::new("a", "t").live().item(row("x")));
+    assert!(live.contains(r#"data-slot="hidden-notice""#), "{live}");
+    assert!(
+        live.contains(r#"id="a-hidden" hidden"#) || live.contains(" hidden>"),
+        "{live}"
+    );
+    assert!(
+        live.contains(r#"data-ui-one="1 item was hidden.""#),
+        "{live}"
+    );
+    assert!(
+        live.contains(r#"data-ui-many="{n} items were hidden.""#),
+        "{live}"
+    );
+    // Not live, and nothing left out: no notice, and so no script for its dismiss button.
+    let plain = html(ActivityFeed::new("a", "t").item(row("x")));
+    assert!(!plain.contains("hidden-notice"), "{plain}");
+    let view = View::new("x").body(ActivityFeed::new("a", "t").item(row("x")));
+    assert_eq!(view.uses(), Uses::NONE);
+    // With rows left out, it shows, counting them.
+    let some = html(ActivityFeed::new("a", "t").item(row("x").filtered()));
+    assert!(some.contains("1 item was hidden."), "{some}");
+    assert!(!some.contains(r#"id="a-hidden" hidden"#), "{some}");
 }
 
 #[test]
@@ -604,6 +631,13 @@ fn an_event_name_is_checked_and_a_bad_one_is_dropped() {
             "{ok}"
         );
     }
+    // The connection's own event names are its, not a stream's.
+    for own in ["open", "error"] {
+        assert!(
+            !html(Region::new("r").live_event(own)).contains("data-ui-live-event"),
+            "{own}"
+        );
+    }
     for bad in [
         "",
         "a b",
@@ -636,6 +670,21 @@ fn feed_limit_and_announcements_are_attributes() {
     assert!(out.contains(r#"data-ui-feed-max="50""#), "{out}");
     assert!(out.contains(r#"data-ui-feed-say="{n} new""#), "{out}");
     assert!(out.contains(r#"data-ui-feed-say-one="one new""#), "{out}");
+}
+
+#[test]
+fn a_feed_limit_of_zero_means_the_default_and_the_most_is_five_thousand() {
+    let zero = html(Region::new("r").feed("list", "0", None).feed_limit(0));
+    assert!(
+        !zero.contains("data-ui-feed-max"),
+        "no limit is not offered: {zero}"
+    );
+    let huge = html(
+        Region::new("r")
+            .feed("list", "0", None)
+            .feed_limit(1_000_000),
+    );
+    assert!(huge.contains(r#"data-ui-feed-max="5000""#), "{huge}");
 }
 
 // FactCard and FactGrid

@@ -32,7 +32,7 @@ const LIGHT =
   [...tokensRs.matchAll(/t\("([a-z0-9-]+)",\s*"(#[0-9a-f]{6})",\s*"(#[0-9a-f]{6})"\)/g)].map((m) => `;--${m[1]}:${m[3]}`).join("") +
   "}body{background:var(--ink-0)}";
 
-/** Parts of the display module that are round on purpose; every other corner is 2, 4 or 6 px. */
+/** Round on purpose: status dots (the timeline dot, the live dot, the badge dot) and the feed's icon container are not pills and not letter tiles. Every other corner is 2, 4 or 6 px. */
 const ROUND = new Set(["timeline-dot", "live-dot", "badge-dot", "activity-icon", "radio", "spinner"]);
 
 async function axe(page) {
@@ -561,7 +561,8 @@ for (const name of NAMES) {
         const page = await open("/display/live");
         await waitLive(page, "on");
         const times = [];
-        page.on("request", (r) => r.url().includes("/display/events") && times.push(Date.now()));
+        // The runtime's one probe of a failed stream (`x-ui-probe`) is not a retry.
+        page.on("request", (r) => r.url().includes("/display/events") && !r.headers()["x-ui-probe"] && times.push(Date.now()));
         await post("/display/test/refuse?n=2");
         const cut = Date.now();
         await post("/display/test/drop");
@@ -761,6 +762,44 @@ for (const name of NAMES) {
         await sleep(900);
         assert.equal(await page.locator("#activity [data-slot=reveal]").isChecked(), true);
         assert.ok((await page.locator("#activity-list [data-filtered]").evaluateAll((all) => all.filter((e) => e.getBoundingClientRect().height > 0).length)) > 0, "the scanner row is still shown");
+        await page.done();
+      });
+
+      test("a row left out that arrives on a feed with none opens the notice and counts, and a dismissed one stays dismissed", async () => {
+        const page = await open("/display/live?window=5");
+        await waitLive(page, "on");
+        const notice = page.locator("#activity [data-slot=hidden-notice]");
+        assert.equal(await notice.count(), 1, "the notice is in the page with nothing left out");
+        assert.equal(await notice.isHidden(), true);
+        await post("/display/test/emit?n=1&kind=scanner");
+        await page.waitForFunction(() => /1 item was hidden/.test(document.querySelector("#activity [data-slot=hidden-notice-text]").textContent));
+        assert.equal(await notice.isVisible(), true);
+        assert.equal(await page.locator("#activity-list [data-filtered]").count(), 1);
+        assert.equal(await page.locator("#activity-list [data-filtered]").first().isVisible(), false, "left out until asked");
+        await post("/display/test/emit?n=2&kind=scanner");
+        await page.waitForFunction(() => /3 items were hidden/.test(document.querySelector("#activity [data-slot=hidden-notice-text]").textContent));
+        await page.locator("#activity [data-slot=reveal]").check();
+        assert.equal(await page.locator("#activity-list [data-filtered]").first().isVisible(), true, "ticking shows them in place");
+        await page.locator("#activity [data-slot=hidden-notice-dismiss]").click();
+        assert.equal(await notice.isHidden(), true);
+        await post("/display/test/emit?n=1&kind=scanner");
+        await page.waitForFunction(() => document.querySelectorAll("#activity-list [data-filtered]").length === 4);
+        await sleep(300);
+        assert.equal(await notice.isHidden(), true, "dismissed means dismissed");
+        await page.done();
+      });
+
+      test("a missed outcome chip keeps its dashed look whatever tone it is given", async () => {
+        const page = await open("/display");
+        const looks = await page.evaluate(() => {
+          const chip = document.querySelector("[data-slot=badge][data-state=missed]");
+          const read = () => ({ border: getComputedStyle(chip).borderTopStyle, background: getComputedStyle(chip).backgroundColor });
+          const plain = read();
+          chip.setAttribute("data-tone", "success");
+          return { plain, toned: read() };
+        });
+        assert.deepEqual(looks.toned, looks.plain);
+        assert.equal(looks.toned.border, "dashed");
         await page.done();
       });
 

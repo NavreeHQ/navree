@@ -459,7 +459,7 @@ impl Timeline {
             .attr_opt("aria-busy", self.loading.then_some("true"))
             .children((
                 note,
-                hidden_notice(&self.id, hidden, &self.labels),
+                hidden_notice(&self.id, hidden, &self.labels, false),
                 body,
                 loading,
                 self.notes

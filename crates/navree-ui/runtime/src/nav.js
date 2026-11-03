@@ -1,6 +1,6 @@
 // Link boosting and regions: fetch a page, morph what changed, keep the shell
 // alive. A failed fetch falls back to a real navigation.
-import { all, body, byId, clean, closest, cookies, emit, every, head, hidden, make, on, one, ownModule, root, sameOrigin, setTitle, titleOf } from "./dom.js";
+import { active, all, body, byId, clean, closest, cookies, emit, every, head, hidden, make, on, one, ownModule, root, sameOrigin, setTitle, titleOf } from "./dom.js";
 import { morph, pieces } from "./morph.js";
 import { adoptToasts, announce, noteWrite, sameUser } from "./ui.js";
 
@@ -250,9 +250,62 @@ function takes(response) {
   return response.ok && (response.headers.get("content-type") || "").startsWith("text/html");
 }
 
+/** How many rows a feed keeps: its own limit, or 200 when it has none that makes sense. @param {Element} el */
+function keeps(el) {
+  const n = Number(el.getAttribute("data-ui-feed-max"));
+  return Number.isFinite(n) && n >= 1 ? Math.min(Math.floor(n), 5000) : 200;
+}
+
+/** Drops the oldest rows past `most`, but never the one the reader is in. @param {Element} into @param {number} most */
+function trim(into, most) {
+  const keep = active();
+  for (let row = into.lastElementChild; row && into.childElementCount > most; ) {
+    const before = row.previousElementSibling;
+    if (!(keep && row.contains(keep))) row.remove();
+    row = before;
+  }
+}
+
+/** Writes how many rows are left out into the notice over a feed, and shows it only when there are some. @param {Element} el @param {Element} into */
+function notice(el, into) {
+  const box = all(el, "[data-slot=hidden-notice]")[0];
+  const text = box && all(box, "[data-slot=hidden-notice-text]")[0];
+  if (!box || !text) return;
+  const n = all(into, "[data-filtered]").length;
+  const words = (n === 1 && text.getAttribute("data-ui-one")) || text.getAttribute("data-ui-many") || "";
+  if (words) text.textContent = words.replace("{n}", String(n));
+  box.toggleAttribute("hidden", n === 0 || box.hasAttribute("data-dismissed"));
+}
+
+/** What a feed has to say, and has not said yet: one announcement once rows stop coming. @type {WeakMap<Element, {n: number, soon: number, late: number}>} */
+const saying = new WeakMap();
+
+/** Says that `n` rows came, once they have stopped coming (or five seconds have passed). @param {Element} el @param {number} n */
+function say(el, n) {
+  if (!n || !(el.getAttribute("data-ui-feed-say") || el.getAttribute("data-ui-feed-say-one"))) return;
+  const mine = saying.get(el) || { n: 0, soon: 0, late: 0 };
+  saying.set(el, mine);
+  mine.n += n;
+  const flush = () => {
+    clearTimeout(mine.soon);
+    clearTimeout(mine.late);
+    mine.soon = mine.late = 0;
+    const total = mine.n;
+    mine.n = 0;
+    const words = (total === 1 && el.getAttribute("data-ui-feed-say-one")) || el.getAttribute("data-ui-feed-say");
+    if (total && words) announce(words.replace("{n}", String(total)));
+  };
+  clearTimeout(mine.soon);
+  mine.soon = /** @type {any} */ (setTimeout(flush, 1000));
+  if (!mine.late) mine.late = /** @type {any} */ (setTimeout(flush, 5000));
+}
+
 /**
  * A feed region asks for what is newer than its cursor and adds it at the start
  * of its container. The rows are the server's own markup, as in an `append` op.
+ * Only elements are added, and one the list already has (by id, among its own rows)
+ * is not added twice, whatever the cursor said. An answer for a source the region
+ * has since left (the reader changed the period) is dropped.
  * @param {Element} el @param {string} src @param {() => boolean} current
  */
 async function feed(el, src, current) {
@@ -260,26 +313,34 @@ async function feed(el, src, current) {
   if (!into || !el.contains(into)) return;
   const url = new URL(src, location.href);
   url.searchParams.set("after", el.getAttribute("data-ui-after") || "0");
+  const stale = () => !current() || el.getAttribute("data-ui-src") !== src;
   const response = await fetch(url, { headers: HEADER });
-  if (!current() || !takes(response)) return;
+  if (stale() || !takes(response)) return;
   const html = await response.text();
-  if (!current()) return;
+  if (stale()) return;
   if (html.trim()) {
-    const rows = pieces(html);
-    // A row the page already has is not added twice, whatever the cursor said.
-    let added = 0;
-    for (const row of [...rows.children]) {
-      if (row.id && byId(row.id)) row.remove();
-      else added++;
+    const have = new Set();
+    for (const row of into.children) if (row.id) have.add(row.id);
+    /** @type {Element[]} */
+    const fresh = [];
+    for (const row of pieces(html).children) {
+      if (row.id) {
+        if (have.has(row.id)) continue;
+        have.add(row.id);
+      }
+      // A row may not bring an id the page already answers to: a lookup by it would find the row.
+      const inside = [...all(row, "[id]")];
+      if (inside.some((el) => byId(el.id) || have.has(el.id))) continue;
+      for (const el of inside) have.add(el.id);
+      fresh.push(row);
     }
-    if (added) {
-      into.prepend(rows);
+    if (fresh.length) {
+      into.prepend(...fresh);
       byId(el.getAttribute("data-ui-feed-empty") || "")?.remove();
       // A feed that runs for days keeps its newest rows only.
-      const most = Number(el.getAttribute("data-ui-feed-max")) || 200;
-      while (into.children.length > most) into.lastElementChild?.remove();
-      const say = (added === 1 && el.getAttribute("data-ui-feed-say-one")) || el.getAttribute("data-ui-feed-say");
-      if (say) announce(say.replace("{n}", String(added)));
+      trim(into, keeps(el));
+      notice(el, into);
+      say(el, fresh.filter((row) => !row.hasAttribute("data-filtered")).length);
     }
   }
   const cursor = response.headers.get("x-ui-cursor");

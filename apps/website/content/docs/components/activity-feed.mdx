@@ -51,7 +51,7 @@ The feed is plain markup. On its own it ships no script. Put it in a [Region](/d
 
 ## Rows left out
 
-Mark a row `.filtered()` and it stays in the page, out of sight. The feed shows a notice: "2 items were hidden. Show them". Ticking the box shows the rows in place with no script and no request; a close button dismisses the notice when the runtime is present.
+Mark a row `.filtered()` and it stays in the page, out of sight. The feed shows a notice: "2 items were hidden. Show them". Ticking the box shows the rows in place with no script and no request; a close button dismisses the notice when the runtime is present. A live feed keeps the notice in the page even when nothing is left out (hidden), so a filtered row that arrives later is counted in it: the count follows the rows, and a notice the reader dismissed stays dismissed.
 
 <UiPreview example="activity-feed/hidden" />
 
@@ -71,10 +71,11 @@ Mark a row `.filtered()` and it stays in the page, out of sight. The feed shows 
 
 | State | Dot | Word |
 |---|---|---|
-| Connecting | grey | Live |
+| Connecting | grey | Connecting |
 | Connected | green, pulsing | Live |
 | Connection lost, trying again | amber | Reconnecting |
 | Page hidden | grey | Paused |
+| The stream said stop (`204`, `401`, `403`) | grey | Not live |
 
 Without the runtime nothing is connected, so the dot is not shown at all.
 
@@ -93,7 +94,7 @@ The words the feed prints are in `DisplayLabels`: pass your own with `.labels(..
 - The feed is a group named by its title, not a landmark region, so a page can hold several. The rows are an ordered list.
 - A linked row is a link on the actor's name, so Tab reaches it and Enter opens it. The whole row is its click target, and its focus ring surrounds the row.
 - The icon is hidden from assistive technology. The verb says what happened, so the tone's colour is never the only signal.
-- The live word is a status, so a change from "Live" to "Reconnecting" is announced once. New rows can be announced too: a feed made with `in_region` says "3 new items" politely.
+- The live word is a status, so a change from "Live" to "Reconnecting" is announced once. New rows are announced too, once they stop coming and with the total: a feed made with `in_region` says "3 new items" politely, not once a row.
 - The hidden-items checkbox is a real checkbox, reached by Tab and toggled with Space.
 
 </UiA11y>

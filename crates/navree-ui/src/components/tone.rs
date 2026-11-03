@@ -148,9 +148,18 @@ pub(crate) fn meta_list(items: Vec<Meta>) -> Option<Node> {
 
 /// The notice over a list that has rows left out: "3 items were hidden. Show them".
 /// Ticking its box shows the rows with no script, and a dismiss button (shown when
-/// the runtime is there) removes the notice.
-pub(crate) fn hidden_notice(id: &str, count: usize, words: &DisplayLabels) -> Option<Node> {
-    if count == 0 {
+/// the runtime is there) removes the notice. It is in the page even with nothing
+/// left out, hidden, when `always` says the list is live: a live feed that brings a
+/// filtered row can then say so, as the runtime writes the count into it from the
+/// rows marked `filtered`. A list that isn't live has no notice when it has no rows
+/// left out, so a page of them still ships no script.
+pub(crate) fn hidden_notice(
+    id: &str,
+    count: usize,
+    words: &DisplayLabels,
+    always: bool,
+) -> Option<Node> {
+    if count == 0 && !always {
         return None;
     }
     let notice = format!("{id}-hidden");
@@ -159,10 +168,13 @@ pub(crate) fn hidden_notice(id: &str, count: usize, words: &DisplayLabels) -> Op
         el("div")
             .slot("hidden-notice")
             .id(notice.clone())
+            .flag("hidden", count == 0)
             .children((
                 el("p")
                     .slot("hidden-notice-text")
                     .id(text.clone())
+                    .attr("data-ui-one", words.hidden_one.to_string())
+                    .attr("data-ui-many", words.hidden_many.to_string())
                     .child(words.hidden(count)),
                 el("label").slot("hidden-notice-toggle").children((
                     el("input")
@@ -180,7 +192,10 @@ pub(crate) fn hidden_notice(id: &str, count: usize, words: &DisplayLabels) -> Op
                     .slot("hidden-notice-dismiss")
                     .attr("type", "button")
                     .attr("aria-label", words.dismiss.to_string())
-                    .on_click_one(Cmd::hide(notice))
+                    .on_click(vec![
+                        Cmd::set_attr(notice.clone(), "data-dismissed", ""),
+                        Cmd::hide(notice),
+                    ])
                     .child(icon(icons::X)),
             ))
             .into(),
@@ -205,9 +220,11 @@ pub struct DisplayLabels {
     pub show_hidden: Cow<'static, str>,
     pub hide_hidden: Cow<'static, str>,
     pub dismiss: Cow<'static, str>,
+    pub connecting: Cow<'static, str>,
     pub live: Cow<'static, str>,
     pub reconnecting: Cow<'static, str>,
     pub paused: Cow<'static, str>,
+    pub closed: Cow<'static, str>,
     pub times_in: Cow<'static, str>,
     pub timeline_empty: Cow<'static, str>,
     pub feed_empty: Cow<'static, str>,
@@ -236,9 +253,11 @@ impl Default for DisplayLabels {
             show_hidden: "Show them".into(),
             hide_hidden: "Hide them".into(),
             dismiss: "Dismiss".into(),
+            connecting: "Connecting".into(),
             live: "Live".into(),
             reconnecting: "Reconnecting".into(),
             paused: "Paused".into(),
+            closed: "Not live".into(),
             times_in: "Times in {zone}".into(),
             timeline_empty: "No events yet".into(),
             feed_empty: "Nothing yet".into(),

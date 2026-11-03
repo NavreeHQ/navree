@@ -84,9 +84,13 @@ impl Region {
     }
 
     /// Trims a feed to its newest `most` rows as new ones arrive, so a page left
-    /// open for days doesn't grow without end. The default is 200.
+    /// open for days doesn't grow without end. The default is 200, which `0` also
+    /// means (a feed with no limit is not offered); the most is 5,000. The row the
+    /// reader is in is never taken out.
     pub fn feed_limit(mut self, most: u32) -> Self {
-        self.el = self.el.attr("data-ui-feed-max", most);
+        if most > 0 {
+            self.el = self.el.attr("data-ui-feed-max", most.min(5000));
+        }
         self
     }
 
@@ -108,8 +112,14 @@ impl Region {
     /// same stream. The connection closes while the page is hidden and opens again,
     /// with one fetch to catch up, when it shows. A connection that drops reconnects
     /// after 1 s, 2 s, 4 s and so on up to 30 s. The stream must be on this site.
-    /// While it runs, the region carries `data-live` as `connecting`, `on`, `retry`
-    /// or `paused`, which a live dot reads.
+    /// While it runs, the region carries `data-live` as `connecting`, `on`, `retry`,
+    /// `paused` or `closed`, which a live dot reads. A stream that answers `204`,
+    /// `401` or `403` is not tried again (`closed`). A `retry:` line in the stream
+    /// is not read: the schedule above is the same in every browser.
+    ///
+    /// A region has one fetch of its own in flight at a time. Events that come
+    /// within 300 ms of the first cost one fetch; events that come while that fetch
+    /// is out cost one more after it lands, however many there were.
     ///
     /// ```
     /// use navree_ui::{Region, render};
@@ -125,6 +135,7 @@ impl Region {
     /// Listens for the stream's events called `name` instead of its unnamed ones
     /// (`event: name` on the wire), so one stream can feed several regions. A name
     /// of letters, digits and `_ . : -`, at most 64 long; any other is ignored.
+    /// `open` and `error` are the connection's own events, so they are ignored too.
     pub fn live_event(mut self, name: &'static str) -> Self {
         if valid_event_name(name) {
             self.el = self.el.attr("data-ui-live-event", name);
@@ -153,9 +164,12 @@ impl Region {
     }
 }
 
-/// Whether `name` can be an event name the runtime listens for.
+/// Whether `name` can be an event name the runtime listens for. `open` and
+/// `error` can't: a browser reports the connection opening or failing under those
+/// names, and a stream's own events of the same name would be taken for them.
 pub(crate) fn valid_event_name(name: &str) -> bool {
-    (1..=64).contains(&name.len())
+    !matches!(name, "open" | "error")
+        && (1..=64).contains(&name.len())
         && name
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-'))

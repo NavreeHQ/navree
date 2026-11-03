@@ -305,9 +305,10 @@ impl ActivityFeed {
         }
     }
 
-    /// Shows the live dot. It is grey until a stream is connected, then green; amber
-    /// while it reconnects; and "Paused" while the page is hidden. Without the
-    /// runtime it is not shown.
+    /// Shows the live dot. It says "Connecting" in grey until a stream is open, then
+    /// "Live" in green; "Reconnecting" in amber while it comes back; "Paused" while
+    /// the page is hidden; and "Not live" when the stream refused for good. Without
+    /// the runtime it is not shown.
     pub fn live(mut self) -> Self {
         self.live = true;
         self
@@ -506,6 +507,9 @@ impl ActivityFeed {
                 .children((
                     el("span").slot("live-dot").attr("aria-hidden", "true"),
                     el("span")
+                        .attr("data-for", "connecting")
+                        .child(self.labels.connecting.to_string()),
+                    el("span")
                         .attr("data-for", "on")
                         .child(self.labels.live.to_string()),
                     el("span")
@@ -514,6 +518,9 @@ impl ActivityFeed {
                     el("span")
                         .attr("data-for", "paused")
                         .child(self.labels.paused.to_string()),
+                    el("span")
+                        .attr("data-for", "closed")
+                        .child(self.labels.closed.to_string()),
                 ))
         });
         let note = self.zone_note.then(|| {
@@ -594,7 +601,7 @@ impl ActivityFeed {
             .attr_opt("aria-busy", busy.then_some("true"))
             .children((
                 header,
-                hidden_notice(&self.id, hidden, &self.labels),
+                hidden_notice(&self.id, hidden, &self.labels, self.live),
                 el("ol")
                     .slot("activity-list")
                     .id(list_id)

@@ -178,7 +178,8 @@ test("the design rules hold on every page", { timeout: 60000 }, async () => {
         const style = getComputedStyle(el);
         const slot = el.getAttribute("data-slot") || el.tagName;
         const radius = parseFloat(style.borderTopLeftRadius);
-        // Radio dots and spinners are round, and so are the display module's dot, live dot, badge dot and tone icon.
+        // Round on purpose: radio dots and spinners, the display module's status dots (the timeline dot, the live dot, the badge dot)
+        // and the feed's round icon container. Dots and an icon container are not pills and not letter tiles; every chip, button and card stays 4 or 6 px.
         const round = ["radio", "spinner", "timeline-dot", "live-dot", "badge-dot", "activity-icon"].includes(slot) || el.closest("[data-slot=spinner]");
         if (radius && ![2, 4, 6].includes(radius) && !round) bad.push(`radius ${radius}px on ${slot}`);
         if (style.boxShadow !== "none") bad.push(`shadow on ${slot}: ${style.boxShadow}`);
