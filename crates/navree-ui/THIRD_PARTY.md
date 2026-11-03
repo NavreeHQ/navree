@@ -24,6 +24,20 @@ HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTIO
 CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+## Unicode CLDR
+
+`src/dates/data.rs` takes the first day of the week for each region from the Unicode CLDR's week
+data. The names of months and weekdays, the order of a typed date and the words on the controls
+are written for Navree.
+
+Unicode License v3. Copyright (c) 1991-2025 Unicode, Inc. Data files and software are provided
+"AS IS", without warranty of any kind; see https://www.unicode.org/license.txt.
+
+## WAI-ARIA Authoring Practices
+
+The date grid's keys and roles follow the ARIA Authoring Practices Guide's date picker dialog and
+grid patterns (W3C Software and Document License). The code is Navree's own.
+
 ## Lucide
 
 `src/icons/lucide.rs` holds the shapes of every icon in lucide-static 1.67.0 (2,019

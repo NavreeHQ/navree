@@ -61,6 +61,16 @@ export const choices = {
       c("Toggle", "A pressed button in a toolbar", "/docs/components/toggle/"),
     ],
   },
+  "date-time": {
+    title: "Which date or time control?",
+    question: "What is being chosen?",
+    options: [
+      c("DatePicker", "One day, in a form", "/docs/components/date-picker/"),
+      c("DateRangePicker", "A window, for a report", "/docs/components/date-range-picker/"),
+      c("TimePicker", "A time of day", "/docs/components/time-picker/"),
+      c("Calendar", "Days to look at or pick in place", "/docs/components/calendar/"),
+    ],
+  },
   "pick-one": {
     title: "Which choice control?",
     question: "What is being chosen?",

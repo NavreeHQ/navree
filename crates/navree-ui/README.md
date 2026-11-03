@@ -33,6 +33,7 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
   RadioGroup, Separator, Skeleton, Spinner, Switch, Table, Textarea, Toggle, Heading,
   Text. Pickers: Select, Combobox, MultiSelect and Command. Native overlays: Accordion, AlertDialog, Collapsible, Dialog, Drawer,
   HoverCard, Popover, ScrollArea, Sheet, Tooltip. Layout: Stack, Row, Grid, Container.
+  Dates (`navree_ui::dates`): Calendar, DatePicker, DateRangePicker, TimePicker.
   Shell: `Shell`, `AppShell`, `Page`. Components carry no outer margin: layout
   belongs to the layout primitives.
 - **A shell for a module's own pages.** A module that serves pages and must not register
@@ -78,6 +79,8 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 | A form, a region, a command | `core`: delegation, commands, ops, morph, boosted links, pending states. |
 | A select, combobox, multi-select or command palette | `overlay`, `select`. |
 | A data table | `core`, `table`, `overlay`. |
+| A calendar | `dates`. |
+| A date or range picker, a time picker | `dates` and `overlay`: placing the popup. |
 | The app shell | `core`, `sidebar`. |
 
 Everything is delegated from `document`, so a morph or a swap needs no re-wiring.
@@ -221,6 +224,30 @@ behave as for any select, and with JavaScript off the `<select>` is what shows.
 - **Palette.** Items are links, posted forms or browser commands, with icons, keywords,
   shortcuts (a chord needs a modifier), recent items kept in the browser and a server
   source. The page builds only the items the person may use.
+
+## Dates and times
+
+```rust
+use navree::ui::dates::*;
+
+Field::new("due", "Due date").control(DatePicker::new("due").today(today).clearable())
+
+DateRangePicker::new("from", "to").today(today).title("Created") // in a GET form: the window is the query
+
+Field::new("starts", "Starts at").control(TimePicker::new("starts").step_minutes(15))
+```
+
+- **A day is three integers.** The browser module counts days from 1970-01-01 and never builds a `Date`,
+  so no zone or clock moves a day. `.today(date)` is the page's own idea of today.
+- **The server decides.** A picker posts an ISO date or `HH:MM`; `DateRules` and `TimeRules` draw the
+  calendar and check every value that comes back. In a `#[derive(Form)]`, `widget = date_picker` and
+  `widget = time_picker` draw the pickers.
+- **JavaScript off.** A native `date` or `time` field stands in and posts the same value; `@media (scripting: none)` picks.
+- **Languages.** `DateLocale` holds names, the order of a typed date, the first weekday, the clock and
+  the words on the controls, for 19 locales; `DateLocale::custom` takes any other.
+- **A window is whole days.** `DateRange::utc_bounds(zone)` gives `[start, end)` right across 23- and 25-hour days.
+- **A time is on a wall.** `dates::zoned::resolve(date, time, &zone)` turns it into an instant and says
+  when clock changes make it absent or doubled.
 
 ## Fetching ahead of a click
 

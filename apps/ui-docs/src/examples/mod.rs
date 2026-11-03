@@ -5,6 +5,7 @@ use crate::catalog::Example;
 
 mod actions;
 mod data;
+mod dates;
 mod display;
 mod feedback;
 mod icons;
@@ -21,6 +22,7 @@ pub fn all() -> Vec<Example> {
     all.extend(actions::all());
     all.extend(inputs::all());
     all.extend(pickers::all());
+    all.extend(dates::all());
     all.extend(display::all());
     all.extend(feedback::all());
     all.extend(overlays::all());

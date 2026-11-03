@@ -1,0 +1,122 @@
+---
+title: "TimePicker"
+description: "A time of day, typed or chosen from a list, on a 12 or 24 hour clock. It posts hours and minutes, and says plainly that it holds no zone."
+---
+
+<UiPreview example="time-picker/default" />
+
+`TimePicker` is a text box with a button that opens a list of times. A person types a time, or chooses one. It posts `HH:MM`, or `HH:MM:SS` when seconds are on.
+
+```rust
+use navree::ui::dates::*;
+use navree::ui::*;
+
+Field::new("starts", "Starts at")
+    .control(TimePicker::new("starts").value(starts))
+```
+
+## A time on a wall
+
+A TimePicker holds the time on a wall: `09:30`. It has no date and no zone, so it is whatever 09:30 means where the person is. That is the honest value of a time field, and it is what posts. To store *when* something happens, combine the time with a date and the zone it was meant in, and keep the UTC instant.
+
+`dates::zoned::resolve(date, time, &zone)` does that, and tells you what the clocks did to the time. Twice a year, in many zones, a wall time can't give one answer.
+
+| Result | When | What it holds |
+|---|---|---|
+| `Single(instant)` | Almost always. | The one instant. |
+| `Ambiguous { first, second }` | When clocks go back: 01:30 on 1 November 2026 in New York happens twice. | Both instants, the earlier first. |
+| `Gap { transition, shifted }` | When clocks go forward: 02:30 on 8 March 2026 in New York never happens. | The first instant after the jump, and the time read with the old offset. |
+
+```rust
+use navree::ui::dates::zoned::{resolve, Resolved};
+
+match resolve(date, time, &zone) {
+    Resolved::Single(at) => store(at),
+    Resolved::Ambiguous { first, second } => ask_which(first, second),
+    Resolved::Gap { transition, shifted } => explain_the_gap(transition, shifted),
+}
+```
+
+`.instant()` picks the first of two, and the shifted time for a gap, when you don't want to ask. `resolve` works with any `chrono` time zone: a fixed offset, UTC, or a named zone from the time zone data your app already has. `.zone_note(text)` writes the zone under the picker, so a person knows which clock they are choosing on.
+
+<UiPreview example="time-picker/zone" />
+
+## When to use it
+
+Use it for a time of day: an opening hour, a send window, a meeting. It is not for a duration, such as a timer.
+
+<UiChoose name="date-time" current="TimePicker" />
+
+## Anatomy
+
+<UiAnatomy component="time-picker" />
+
+## Twelve and twenty-four hours
+
+The clock comes from the locale: 12 hours with AM and PM in the United States, Korea and India, and 24 hours in Germany. `.clock(Clock::H24)` overrides it. The markers are the locale's own: `午後` in Japanese, `م` in Arabic, `오후` in Korean.
+
+<UiPreview example="time-picker/clocks" />
+
+## Typing a time
+
+| Typed | Read as |
+|---|---|
+| `9`, `15` | 09:00, 15:00. With no marker, the hour is read on the 24 hour clock in every locale. |
+| `9:30`, `9.30`, `930`, `0930`, `9h30` | 09:30. |
+| `9:30 pm`, `9:30pm`, `9.30 P.M.`, `9p` | 21:30. A marker makes it a 12 hour time. |
+| `12 am`, `12 pm` | 00:00 and 12:00. |
+| `21:30:15` | With seconds. |
+| `٩:٣٠`, `午後3:05` | Digits and markers of the locale. |
+| `24:00`, `9:60`, `13 pm` | Refused. |
+
+The box then shows the time back in the locale's own form, so a person sees how it was read.
+
+## The list, the step and the limits
+
+The list offers every multiple of the step in the day that can be chosen. `.step_minutes(15)` sets the step; it has to divide a day, such as 1, 5, 10, 15, 20, 30 or 60, and anything else is ignored. A time typed off the step is accepted when it is otherwise allowed; `TimeRules::strict_step()` refuses it. A step below five minutes has no list, since it would hold hundreds of times: the up and down keys step the time instead.
+
+`.min(t)`, `.max(t)` and `TimeRules::unavailable(from, to)` take times out of the list and refuse them when typed. The server holds the same rules.
+
+<UiPreview example="time-picker/rules" />
+
+`.seconds()` adds seconds to the box and the field.
+
+## States
+
+<UiPreview example="time-picker/states" />
+
+## JavaScript off
+
+A native `<input type="time">` stands in and posts `HH:MM`. A native step is set only when the rules are strict or seconds are on, so a typed 10:07 isn't called a mismatch by the browser. In a form, a time that arrives as `14:30` is read as `14:30:00`.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves from the box to the button. |
+| `↓` in the box | Opens the list on the chosen time. With no list, steps the time down. |
+| `↑` in the box | With no list, steps the time up. |
+| `↑`, `↓`, `Home`, `End`, `Page Up`, `Page Down` in the list | Moves through the times. |
+| `Enter`, `Space` in the list | Chooses the time and closes the list. |
+| `Esc` | Closes the list. |
+
+- The list is a `listbox` of `option`s, with `aria-activedescendant` on the list.
+- A wrong box has `aria-invalid="true"` and its message is announced.
+
+</UiA11y>
+
+## API
+
+### TimePicker
+
+<UiProps type="TimePicker" />
+
+### TimeRules
+
+<UiProps type="TimeRules" />
+
+### Clock
+
+<UiProps type="Clock" />

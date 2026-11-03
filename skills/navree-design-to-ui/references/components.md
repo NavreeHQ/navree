@@ -109,7 +109,10 @@ form can't be a struct.
 | Long text | textarea | `#[form(widget = textarea, rows = 5)]` |
 | Whole number, decimal | number input | an integer or float type; `range` rules set `min`, `max` |
 | Money | amount input, typed `12,500.50` | `Money` (minor units); its currency in an `addon` |
-| Calendar day, time, both | native date, time, date-time inputs | `NaiveDate`; `widget = time \| datetime` |
+| Calendar day | date picker: a typed date or a calendar, a native date field with JavaScript off | `NaiveDate` with `widget = date_picker` (the plain `date` widget is the browser's own) |
+| Time of day | time picker: typed or from a list, a native time field with JavaScript off | `NaiveTime` with `widget = time_picker` |
+| Day and time together | a date picker and a time picker side by side, or the browser's own input | two fields; `widget = datetime` for the native one |
+| A window of days, for a report | date range picker with presets, its two dates in the address | `DateRangePicker` in a `GET` form, read back with `DateRangeQuery` |
 | Yes or no | checkbox, or switch | `bool`; `widget = switch` |
 | One of a small fixed set | radio buttons when all of them are worth seeing, else a select | an enum with `#[derive(Options)]`: `widget = radio`; with no hint, the browser's select (`NativeSelect`); `widget = listbox`, the styled `Select` |
 | One of a short list the server holds (a few dozen at most) | select | `String` with `widget = select` or `listbox`; choices from `FormView::options(field, ..)` |
@@ -210,8 +213,7 @@ row in `GAPS.md` with an interim form the owner picks, or it waits.
 | Theme system and theme builder | a light theme, brand colours, other radii or fonts, other sidebar layouts, user themes | Navree's dark theme and tokens (`tokens.md`) |
 | Toast as a module | toasts with actions or that stay | `Reply::toast` (text and tone, shown on the next page or by the runtime) |
 | Tabs, DropdownMenu, ToggleGroup | tabs, menus from a button, segmented controls | tabs as links to separate URLs, `Popover` with buttons, `ButtonGroup` |
-| Charts and DateRange | line, area, pie and stacked charts, date-range pickers | `Stat` and `Bars`; two date inputs |
-| DatePicker, Calendar, TimePicker | calendar pop-ups, month views | native date and time inputs |
+| Charts | line, area, pie and stacked charts | `Stat` and `Bars` |
 | Wizard and Stepper | multi-step forms with a step bar | one page per step, each a form |
 | Rich text | a formatted text editor | a textarea |
 | Toolbar, TreeView, Slider, ContextMenu, Menubar, NavigationMenu | those | none |

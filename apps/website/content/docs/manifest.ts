@@ -223,6 +223,7 @@ export const sections: DocsSection[] = [
       "app-shell",
       "forms",
       "data-table",
+      "dates",
       "commands-and-ops",
       "regions",
       "coming-next",
@@ -250,6 +251,11 @@ export const sections: DocsSection[] = [
       "checkbox",
       "switch",
       "radio-group",
+      // Date and time
+      "calendar",
+      "date-picker",
+      "date-range-picker",
+      "time-picker",
       // Display
       "card",
       "badge",

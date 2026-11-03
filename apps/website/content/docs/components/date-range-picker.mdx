@@ -1,0 +1,131 @@
+---
+title: "DateRangePicker"
+description: "A window of whole days: one button, presets beside a calendar of two months, and a value a report can put in its address and its query."
+---
+
+<UiPreview example="date-range-picker/default" />
+
+`DateRangePicker` is one button that shows the window, and a popover with presets beside a [Calendar](/docs/components/calendar/) of two months. It posts two ISO dates, the first day and the last, both days included.
+
+```rust
+use navree::ui::dates::*;
+use navree::ui::*;
+
+DateRangePicker::new("from", "to")
+    .today(today)
+    .week_start(Weekday::Mon)
+    .title("Created")
+```
+
+`.title("Created")` names what the window is for, in front of the dates. Press the button in the preview to open it.
+
+## When to use it
+
+Use it for the window of a report or a log: the days a table or a chart covers. To choose one day, use a [DatePicker](/docs/components/date-picker/). To choose days in place, use a [Calendar](/docs/components/calendar/).
+
+<UiChoose name="date-time" current="DateRangePicker" />
+
+## Anatomy
+
+<UiAnatomy component="date-range-picker" />
+
+## Presets
+
+A preset fills the window and closes the popover. Each is counted from `today`, which the page names in the zone its days are counted in. A workspace in Dubai counts Today as Dubai's today for everyone who looks at it.
+
+| Preset | Days |
+|---|---|
+| Today, Yesterday | One day. |
+| This week, This month, This quarter, This year | From the start of the period to today. |
+| Last week, Last month, Last quarter, Last year | The whole of the period before. |
+| Last 7, 14, 30 days | The days up to and including today. |
+| All time | From the picker's `min` to today. Needs a `min`. |
+
+The default list is Today, Yesterday, Last 7 days, Last 30 days, This month and Last month. `.presets([...])` picks the list and the order, `.preset_label(preset, text)` sets a button's words, and `.presets([])` shows none. A preset whose days fall outside the limits is off. The preset that matches the window is pressed, and *Custom range* is pressed when none does.
+
+<UiPreview example="date-range-picker/presets" />
+
+## Choosing days by hand
+
+The first click in the calendar starts a range and the second ends it, in either order. Nothing posts while it is half picked. Escape, or a click outside, puts the old window back.
+
+## Apply and Cancel
+
+`.confirm()` holds a choice until Apply is pressed. Cancel, Escape and a click outside drop it. Clear empties the window at once.
+
+<UiPreview example="date-range-picker/confirm" />
+
+## Limits
+
+`.min(day)` and `.max(day)` bound the window, and `.min_days(n)` and `.max_days(n)` bound its length. While a range is half picked, the days that would break a limit look off. `.rules(DateRules)` adds weekdays and lists; a range may not hold a day that is off.
+
+<UiPreview example="date-range-picker/limits" />
+
+## A report's window in the address
+
+Put the picker in a `GET` form. Its two fields are the query, so back, forward, reload and a shared link show the same window, and nothing needs the script to work. A form with `data-ui-target` refetches its [region](/docs/ui/regions/) when the window changes, and morphs it in. A [DataTable](/docs/ui/data-table/) on the same page can read the same address.
+
+<UiPreview example="date-range-picker/report" />
+
+On the server, `DateRangeQuery` reads the two parameters back. A value that doesn't parse drops the whole window rather than failing the request, and a pair given backwards is put right.
+
+```rust
+async fn report(
+    shell: AppShell,
+    Query(query): Query<DateRangeQuery>,
+    zone: CurrentZone, // navree-time: the person's or the workspace's zone
+) -> Result<AppPage> {
+    let range = query.range(); // Option<DateRange>
+    if let Some(range) = range {
+        let (start, end) = range.utc_bounds(&zone.zone().tz()); // [start, end)
+        // WHERE created_at >= start AND created_at < end
+    }
+    let picker = DateRangePicker::new("from", "to")
+        .today(zone.today().date())
+        .value_opt(range);
+    // ...
+}
+```
+
+## The shape of a window
+
+A `DateRange` is whole days: from the first moment of `from` to the last moment of `to`. `utc_bounds(zone)` turns it into the two instants a query needs, `[start, end)`, where `end` is the start of the day after `to`. That counts the last day whole, and a day of 23 or 25 hours, when clocks change, counts as the one day it is. A range that is turned into local midnights drops its last day from an inclusive comparison. A range is never stored that way.
+
+## JavaScript off
+
+Two native date fields stand in, with labels, and post the same two parameters. The presets and the calendar need the script; the form posts and the server counts the window as usual.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Enter`, `Space` on the button | Opens the popover on the first day of the window, or today. |
+| `Tab` | Moves through the presets, then the calendar's one tab stop, then Clear, Cancel and Apply. |
+| Calendar keys | See [Calendar](/docs/components/calendar/#keyboard-and-accessibility). |
+| `Esc` | Closes the popover and drops a half-picked range. |
+
+- The button's text is its name: the title and the window. Its `title` holds the whole window, as typed in the locale.
+- The presets are a group of buttons, each with `aria-pressed`.
+- Below 640 pixels the popover shows one month and the presets stack above it.
+
+</UiA11y>
+
+## API
+
+### DateRangePicker
+
+<UiProps type="DateRangePicker" />
+
+### DatePreset
+
+<UiProps type="DatePreset" />
+
+### DateRange
+
+<UiProps type="DateRange" />
+
+### DateRangeQuery
+
+<UiProps type="DateRangeQuery" />

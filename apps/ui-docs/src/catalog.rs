@@ -36,6 +36,16 @@ pub const GROUPS: &[Group] = &[
         ],
     },
     Group {
+        id: "dates",
+        title: "Date and time",
+        components: &[
+            "calendar",
+            "date-picker",
+            "date-range-picker",
+            "time-picker",
+        ],
+    },
+    Group {
         id: "display",
         title: "Display",
         components: &[
@@ -189,6 +199,40 @@ pub const COMPONENTS: &[Component] = &[
     component("switch", "Switch", &["Switch"], "thumb").parts("default"),
     component("radio-group", "RadioGroup", &["RadioGroup"], "thumb").parts("default"),
     component("forms", "Forms", &["FormView"], "thumb").page("/docs/ui/forms/"),
+    // Date and time
+    component(
+        "calendar",
+        "Calendar",
+        &["Calendar", "CalendarMode", "CaptionLayout", "DateRules"],
+        "thumb",
+    )
+    .parts("default"),
+    component(
+        "date-picker",
+        "DatePicker",
+        &["DatePicker", "PickerStyle", "DateLocale"],
+        "thumb",
+    )
+    .parts("default"),
+    component(
+        "date-range-picker",
+        "DateRangePicker",
+        &[
+            "DateRangePicker",
+            "DatePreset",
+            "DateRange",
+            "DateRangeQuery",
+        ],
+        "thumb",
+    )
+    .parts("default"),
+    component(
+        "time-picker",
+        "TimePicker",
+        &["TimePicker", "TimeRules", "Clock"],
+        "thumb",
+    )
+    .parts("default"),
     // Display
     component("card", "Card", &["Card"], "thumb").parts("default"),
     component("badge", "Badge", &["Badge", "BadgeVariant"], "default").parts("default"),
