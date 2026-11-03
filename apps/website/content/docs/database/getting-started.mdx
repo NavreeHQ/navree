@@ -140,7 +140,7 @@ On PostgreSQL, Navree behaves differently in a few places:
 - Each unit-of-work transaction sets two transaction-local settings, `navree.actor` (the signed-in user's id, or an empty string) and `navree.request_id`, with one `SELECT set_config(..)` right after `BEGIN`. Triggers and row-level security policies can read them with `current_setting('navree.actor', true)`. With `transaction_settings = false` the statement isn't sent and the settings stay unset.
 - `Uow::lock_for_update()` is true, so queries that call `lock_for_update()` and the record checks of `#[can(.., from = "id")]` routes read rows with `SELECT ... FOR UPDATE`. See [locking rows](/docs/database/unit-of-work/#locking-rows).
 - `migrate:fresh` drops every table of the current schema with `CASCADE`.
-- The case-insensitive search helpers use `LOWER(..) LIKE` ([below](#searching-text)).
+- The case-insensitive search helpers use `LOWER(..) LIKE` for ASCII terms and a regular expression for the rest ([below](#searching-text)).
 
 <Callout type="warning" title="What has been run on PostgreSQL">
 
@@ -321,7 +321,7 @@ Every unit-of-work transaction starts with `BEGIN IMMEDIATE`, which takes SQLite
 
 <Callout type="warning" title="Don't use in-memory SQLite">
 
-An in-memory database (`sqlite::memory:`) is private to one connection, so every connection in the pool would see a different, empty database. Tests use a temporary file instead; see [database tests](/docs/testing/database-tests/).
+An in-memory database (`sqlite::memory:`) is private to one connection, so every connection in the pool would see a different, empty database. Tests use a temporary file instead; see [database tests](/docs/testing/database-tests/). The one exception is `TestApp`'s `memory_database()`, which keeps the pool to a single connection.
 
 </Callout>
 
@@ -454,7 +454,7 @@ let companies = Company::query()
     .await?;
 ```
 
-On SQLite they build a `GLOB` pattern listing every case variant of each letter (`*[éÉ][qQ][uU][iI][pP][eE]*`); on PostgreSQL they use `LOWER(..) LIKE`. On MySQL and MariaDB they compare the lower-cased column byte for byte (`INSTR(CAST(LOWER(name) AS BINARY), CAST('équipe' AS BINARY)) > 0`), which ignores case under any collation, `_bin` and `_cs` ones included; the column must be `utf8mb4`, the connection's character set. Wildcards in the term (`%`, `_`, `*`, `?`) match themselves. Like any "contains" search, `contains_ignore_case` can't use an index, so it reads the whole table. The query builder's own `like` and `ilike` conditions ([conditions](/docs/orm/query-builder/#conditions)) fold case as each database does.
+On SQLite they build a `GLOB` pattern listing every case variant of each letter (`*[éÉ][qQ][uU][iI][pP][eE]*`). On PostgreSQL a term whose cased letters are all ASCII uses `LOWER(..) LIKE`; a term with other letters becomes a regular expression that lists every case variant of each letter, so the result doesn't depend on the database's locale. On MySQL and MariaDB they compare the lower-cased column byte for byte (`INSTR(CAST(LOWER(name) AS BINARY), CAST('équipe' AS BINARY)) > 0`), which ignores case under any collation, `_bin` and `_cs` ones included; the column must be `utf8mb4`, the connection's character set. Wildcards in the term (`%`, `_`, `*`, `?`, `[`, `\`) match themselves. Like any "contains" search, `contains_ignore_case` can't use an index, so it reads the whole table. The query builder's own `like` and `ilike` conditions ([conditions](/docs/orm/query-builder/#conditions)) fold case as each database does.
 
 ## Database errors
 

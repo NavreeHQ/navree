@@ -1,6 +1,6 @@
 ---
 title: "TimescaleDB"
-description: "Navree's default database: why it is the default, running it locally and in production, which tables to make hypertables (Navree's own included), keys and ids, chunks, compression, retention, continuous aggregates and time-bucket queries."
+description: "Navree's default database: why, how to run it locally and in production, which tables to make hypertables, and compression, retention, continuous aggregates and time-bucket queries."
 ---
 
 TimescaleDB is Navree's default database: PostgreSQL with an extension for time-series data. Its central idea is the **hypertable**, a table PostgreSQL stores as many chunks, each holding one span of time. Queries over a recent window read only the chunks they need, old chunks can be compressed to a fraction of their size or dropped whole, and continuous aggregates keep rollups (events per day, revenue per hour) up to date incrementally. To your queries a hypertable is an ordinary table.

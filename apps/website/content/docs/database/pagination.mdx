@@ -1,12 +1,12 @@
 ---
 title: "Pagination"
-description: "Offset pages in a `{data, meta}` response with `PageQuery` and `Page`, your own page parameters, shaping the items, and cursor pagination over UUID v7 keys."
+description: "Offset pages in a `{data, meta}` response with `PageQuery` and `Page`, your own page parameters, shaping the items, and cursor pagination for feeds."
 ---
 
 Lists should come back a page at a time. `navree-db` gives you two kinds of pagination:
 
 - **Offset pagination**, `?page=2&per_page=15`, with the total and the number of pages in a `{data, meta}` response. Use it for tables a user pages through.
-- **Cursor pagination**, `?cursor=...&limit=15`, which only knows "the next page". Use it for feeds and infinite scrolling, where rows arrive while people read.
+- **Cursor pagination**, `?cursor=...&limit=15`, which has no page numbers and no total, only the pages before and after the cursor. Use it for feeds and infinite scrolling, where rows arrive while people read.
 
 A model query paginates itself, `Deal::query().latest().paginate(&uow, page)`, and answers with navree-db's `PageQuery`, `Page` and the `{data, meta}` response. This page covers those types and what an API does with them; [pagination and streaming](/docs/orm/pagination-and-streaming/) covers the query side (simple pages, cursors, chunks and streams).
 
@@ -157,30 +157,27 @@ async fn index(
         .order_by_desc(Deal::ID)
         .paginate(&uow, page)
         .await?;
-    Ok(deals.map(|deal| DealResource::from(&*deal)))
+    Ok(deals.map(|deal| deal.to_resource::<DealResource>()))
 }
 ```
 
-A failed rule is a 400 in the same format, from [validation](/docs/basics/validation/). `PageQuery::new` still caps `per_page` at 100, so raising the limit above 100 isn't possible with `paginate`.
+A failed rule is a 400 in the same format, from [validation](/docs/basics/validation/). `PageQuery::new` still caps `per_page` at 100. To allow bigger pages, pass a `(page, per_page)` pair to `paginate` instead of a `PageQuery`: the pair is not capped, so validate the size yourself.
 
 ## Shaping the items
 
-`page.map(f)` converts every item and keeps `meta`, which is how you turn records into the resources your API returns (above, `DealResource::from`). When the conversion needs a related record, for example each deal's company, load the relation with the query so the whole page costs one more query, and read it from the records:
+`page.map(f)` converts every item and keeps `meta`, which is how you turn records into the resources your API returns (above, `to_resource`). A resource implements `Resource<Deal>`, and `record.to_resource::<DealResource>()` builds it from a record ([responses and API resources](/docs/basics/responses/)). When the conversion needs a related record, for example each deal's company, load the relations with the query, which costs one more query per relation for the whole page, and let `from_record` read them with `deal.loaded(Deal::company)`:
 
 ```rust
 let page = Deal::query()
-    .with("company")
+    .with_all(DealResource::EMBEDS)
     .order_by_desc(Deal::CREATED_AT)
     .order_by_desc(Deal::ID)
     .paginate(&uow, page)
     .await?;
-Ok(page.map(|deal| {
-    let company = deal.loaded(Deal::company).and_then(Option::as_ref);
-    DealResource::new(&deal, company)
-}))
+Ok(page.map(|deal| deal.to_resource::<DealResource>()))
 ```
 
-`with("company:id,name")` selects only those columns of the related model. [Eager loading](/docs/orm/eager-loading/) covers nested loads, constrained loads and counts.
+`DealResource::EMBEDS` is a constant of the resource that lists its relations (`["company", "contact", "owner"]` in the CRM). `with("company:id,name")` selects only those columns of the related model. [Eager loading](/docs/orm/eager-loading/) covers nested loads, constrained loads and counts.
 
 When the rows don't come from a model query (raw SQL, another service), build the page yourself with `Page::new(data, query, total)`, which computes `meta` from the query and the total.
 
@@ -218,6 +215,7 @@ The client asks for the next page with `?cursor=` and the `next_cursor` it got, 
 - `CursorRequest` reads `cursor` (absent for the first page) and `limit` (default: the model's page size, at most 100). A malformed cursor or a `limit` that isn't a positive integer is a 400.
 - The query's order decides the direction: `order_by_desc(Deal::ID)` is newest first, `order_by(Deal::ID)` oldest first. The key is added as a tie-breaker.
 - There is no total. The cursor encodes the order's columns and the last row's values; treat it as opaque. A cursor that doesn't match the query is refused.
+- Take `CursorRequest` and `CursorPage` from `navree::orm`. `navree::db` has types of nearly the same names (`CursorQuery`, `CursorPage`) for code below the ORM; they page by a UUID key alone and carry no `prev_cursor`.
 
 ## Documenting pages in OpenAPI
 

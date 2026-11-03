@@ -1,6 +1,6 @@
 ---
 title: "Columns"
-description: "Every column type of the schema builder and the SQL it writes on PostgreSQL, MySQL, MariaDB and SQLite; the helpers for keys, timestamps and polymorphic columns; modifiers, defaults, generated columns; and changing, renaming and dropping columns."
+description: "The schema builder's column types and the SQL each writes on PostgreSQL, MySQL, MariaDB and SQLite, plus modifiers, defaults, generated columns and changing columns."
 ---
 
 Column methods of the [schema builder](/docs/database/schema-builder/) add a column to the table a blueprint describes, and return a builder for its modifiers:
@@ -28,7 +28,7 @@ Columns are `NOT NULL` unless you say `.nullable()`. A type a database doesn't h
 | Method | PostgreSQL | MySQL | SQLite |
 |---|---|---|---|
 | `id()` | `BIGINT` identity primary key | `BIGINT UNSIGNED AUTO_INCREMENT` primary key | `INTEGER PRIMARY KEY AUTOINCREMENT` |
-| `uuid_primary()` | `UUID` primary key `id` | `CHAR(36)` (`UUID` on MariaDB) | `VARCHAR` |
+| `uuid_primary()` | `UUID` primary key `id` | `CHAR(36)` (`UUID` on MariaDB 10.7 and later) | `VARCHAR` |
 | `ulid_primary()` | `CHAR(26)` primary key `id` | `CHAR(26)` | `VARCHAR` |
 | `increments(name)`, `big_increments`, `small_increments`, `tiny_increments`, `medium_increments`, `integer_increments` | identity columns | `AUTO_INCREMENT` | `AUTOINCREMENT` |
 | `string(name)` | `VARCHAR(255)`, or `.length(n)` | `VARCHAR(255)` | `VARCHAR` |
@@ -49,16 +49,16 @@ Columns are `NOT NULL` unless you say `.nullable()`. A type a database doesn't h
 | `year(name)` | `INTEGER` | `YEAR` | `INTEGER` |
 | `json`, `jsonb` | `JSON`, `JSONB` | `JSON` | `TEXT` |
 | `binary(name)` | `BYTEA` | `BLOB`; `VARBINARY(n)` with `.length(n)`, `BINARY(n)` with `.fixed()` | `BLOB` |
-| `uuid(name)`, `ulid(name)` | `UUID`, `CHAR(26)` | `CHAR(36)` (`UUID` on MariaDB), `CHAR(26)` | `VARCHAR` |
+| `uuid(name)`, `ulid(name)` | `UUID`, `CHAR(26)` | `CHAR(36)` (`UUID` on MariaDB 10.7 and later), `CHAR(26)` | `VARCHAR` |
 | `ip_address`, `mac_address` | `INET`, `MACADDR` | `VARCHAR(45)`, `VARCHAR(17)` | `VARCHAR` |
 | `enumeration(name, [values])` | `VARCHAR(255)` with a `CHECK` | `ENUM(..)` | `VARCHAR` with a `CHECK` |
 | `set(name, [values])` | not supported | `SET(..)` | not supported |
-| `geometry`, `geography` | PostGIS `GEOMETRY`, `GEOGRAPHY(POINT, 4326)` | `GEOMETRY`, `POINT SRID 4326` | `GEOMETRY` |
+| `geometry`, `geography` | PostGIS `GEOMETRY`, `GEOGRAPHY` | `GEOMETRY`, `GEOMETRY SRID 4326` | `GEOMETRY` |
 | `vector(name, dimensions)` | pgvector `VECTOR(n)` | `VECTOR(n)` on MySQL 9 and MariaDB 11.7 | not supported |
 | `tsvector(name)` | `TSVECTOR` | not supported | not supported |
 | `raw_column(name, "SMALLINT CHECK (..)")` | as written | as written | as written |
 
-Time columns keep six fractional digits (microseconds) by default: set `.precision(p)` per column, `.default_precision()` for the database's own default, or `schema.default_time_precision` for all. On PostgreSQL six is the default precision, so the SQL doesn't repeat it. `.subtype("point")` and `.srid(4326)` refine geometry and geography columns.
+Time columns keep six fractional digits (microseconds) by default: set `.precision(p)` per column, `.default_precision()` for the database's own default, or `schema.default_time_precision` for all. On PostgreSQL six is the default precision, so the SQL doesn't repeat it. `.subtype("point")` and `.srid(4326)` refine geometry and geography columns: `t.geometry("spot").subtype("point").srid(4326)` is `GEOMETRY(POINT, 4326)` on PostgreSQL and `POINT SRID 4326` on MySQL (`REF_SYSTEM_ID=4326` on MariaDB). A `geography` column has SRID 4326 unless you set another.
 
 ### Matching model fields
 

@@ -1,6 +1,6 @@
 ---
 title: "Models and records"
-description: "How a table maps to a `#[derive(Model)]` struct: UUID v7 keys, relations and eager loading, creating, saving and deleting records through a unit of work, the change events those writes record, soft deletes, mass writes and raw statements."
+description: "How a table maps to a `#[derive(Model)]` struct and what a write through the unit of work records: UUID v7 keys, relations, change events, soft deletes and raw statements."
 ---
 
 A table is a Rust struct with `#[derive(Model)]`. Reading it gives you `Record<M>` values, and writing a record through the request's [unit of work](/docs/database/unit-of-work/) records a change event for the [audit log](/docs/security/audit-log/). This page is the database-side view of that: how tables map to models, what a write records, and how to drop to SQL when a model is the wrong tool. The [ORM section](/docs/orm/getting-started/) is the full reference for the query builder, relationships, casts and events.
@@ -69,7 +69,7 @@ Navree apps use UUID v7 keys that the app generates: the field is `pub id: Uuid`
 - [cursor pagination](/docs/database/pagination/#cursor-pagination) can page by the key;
 - the app knows the id before the row exists, and ids don't reveal how many records there are.
 
-Generating them needs the `v7` feature of the `uuid` crate. Integer keys work too (`pub id: i64`, assigned by the database), but cursor pagination needs a UUID column. [Primary keys](/docs/orm/models/#primary-keys) lists every key type.
+Generating them needs the `v7` feature of the `uuid` crate. Integer keys work too (`pub id: i64`, assigned by the database); cursor pagination works with either. [Primary keys](/docs/orm/models/#primary-keys) lists every key type.
 
 ## Relations
 
@@ -99,7 +99,7 @@ impl Company {
 
 ### Eager loading
 
-Whatever you choose, load related records for a whole page at once rather than querying inside a loop over it. `with` loads a relation for every record of a query in one more query (`WHERE id IN (..)`), and the results come back attached to their parents:
+Load related records for a whole page at once rather than querying inside a loop over it. `with` loads a relation for every record of a query in one more query (`WHERE id IN (..)`), and the results come back attached to their parents:
 
 ```rust
 let deals = Deal::query()
@@ -111,11 +111,9 @@ let deals = Deal::query()
 
 [Eager loading](/docs/orm/eager-loading/) covers nested paths, constrained loads, counts and how to make lazy loading an error.
 
-When a response embeds only a few fields of a related record, such as `"company": {"id", "name"}`, the CRM loads every company the page names in one query and looks them up in a map:
+When a response embeds only a few fields of a related record, such as `"company": {"id", "name"}`, keep the embed in a small struct and build it from the relation the query loaded. The CRM loads `company`, `contact` and `owner` with `with_all`, one query each for a whole page, and reads them with `loaded`:
 
-```rust title="src/modules/companies/embeds.rs"
-use std::collections::{BTreeSet, HashMap};
-
+```rust title="src/models/embeds.rs"
 use navree::prelude::*;
 use serde::Serialize;
 use uuid::Uuid;
@@ -128,30 +126,20 @@ pub struct CompanyRef {
 }
 
 impl CompanyRef {
-    /// The companies with `ids`, by id: one query for any number of ids.
-    pub async fn load(
-        uow: &Uow,
-        ids: impl IntoIterator<Item = Uuid>,
-    ) -> navree::orm::Result<HashMap<Uuid, CompanyRef>> {
-        let ids: BTreeSet<Uuid> = ids.into_iter().collect();
-        if ids.is_empty() {
-            return Ok(HashMap::new());
-        }
-        let companies = Company::query().where_key_in(ids).get(uow).await?;
-        Ok(companies
-            .iter()
-            .map(|company| {
-                (
-                    company.id,
-                    CompanyRef { id: company.id, name: company.name.clone() },
-                )
-            })
-            .collect())
+    /// The embed of company `id` from a record's loaded relation
+    /// (`deal.loaded(Deal::company)`); an empty name if it is missing.
+    pub fn loaded(company: Option<&Option<Record<Company>>>, id: Uuid) -> Self {
+        company
+            .and_then(Option::as_ref)
+            .map_or_else(
+                || CompanyRef { id, name: String::new() },
+                |company| CompanyRef { id: company.id, name: company.name.clone() },
+            )
     }
 }
 ```
 
-A list endpoint then calls `CompanyRef::load(&uow, page.data.iter().map(|d| d.company_id))` once per page. Because `Company` is a model, its [global scopes](/docs/orm/scopes-and-soft-deletes/#global-scopes) apply: a soft-deleted company is left out of the map.
+A list endpoint loads the relations with the page (`Deal::query().with_all(["company", "contact", "owner"])`) and builds each item with `CompanyRef::loaded(deal.loaded(Deal::company), deal.company_id)`. The relation's own scopes apply: the CRM's `company` relation calls `with_trashed()`, so a deal keeps naming a company that was soft-deleted.
 
 ## Writing records
 
@@ -195,6 +183,8 @@ impl DealService {
 The controller passes the request's unit of work and answers 201:
 
 ```rust title="src/modules/deals/controller.rs"
+use navree::http::CurrentPrincipal;
+
 #[post("/")]
 #[authenticated]
 async fn store(
