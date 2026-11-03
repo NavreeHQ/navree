@@ -10,7 +10,7 @@ use navree::db::Executor as _;
 use navree::db::{Db, DbOptions};
 use navree::mongo::{MongoDb, MongoOptions};
 use navree::orm::{Builder, Executor, Model, Value};
-use navree::ui::table::{BulkMode, NoFilter, TableRow as _};
+use navree::ui::table::{BulkMode, NoFilter};
 use navree::ui::{BulkRequest, TablePage, TableQuery, TableRow};
 
 macro_rules! deal {
