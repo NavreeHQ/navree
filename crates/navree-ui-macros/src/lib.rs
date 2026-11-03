@@ -29,8 +29,8 @@ mod table;
 /// On the type: `id = "..."`. On a field: `label`, `placeholder`, `help`,
 /// `prompt` and `error` (text), `rows` (a number), `addon = "other_field"`,
 /// `widget = text | email | url | tel | password | search | number | date |
-/// time | datetime | textarea | select | radio | checkbox | switch | hidden |
-/// money`, and the flags `autofocus`, `wide` and `skip`.
+/// time | datetime | date_picker | time_picker | textarea | select | radio | checkbox |
+/// switch | hidden | money`, and the flags `autofocus`, `wide` and `skip`.
 #[proc_macro_derive(Form, attributes(form))]
 pub fn derive_form(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);

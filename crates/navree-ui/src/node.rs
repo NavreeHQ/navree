@@ -225,6 +225,8 @@ impl Uses {
     pub const TABLE: Self = Self(1 << 3);
     /// The select module: Select, Combobox, MultiSelect and the command palette.
     pub const SELECT: Self = Self(1 << 4);
+    /// The dates module: calendars, date and time pickers.
+    pub const DATES: Self = Self(1 << 7);
 
     /// Both sets together.
     #[must_use]

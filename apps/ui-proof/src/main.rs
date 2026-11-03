@@ -29,6 +29,7 @@ use navree::ui::{NavGroup, NavItem, Shell, UiModule, UserMenu, icons};
 
 mod bench;
 mod dashboard;
+mod dates;
 mod deal_form;
 mod deals;
 mod gallery;
@@ -47,7 +48,8 @@ fn shell() -> Shell {
                         .icon(icons::HANDSHAKE)
                         .count("1000"),
                 )
-                .item(NavItem::new("New deal", "/deals/new").icon(icons::CIRCLE_PLUS)),
+                .item(NavItem::new("New deal", "/deals/new").icon(icons::CIRCLE_PLUS))
+                .item(NavItem::new("Dates", "/dates").icon(icons::CALENDAR)),
         )
         .group(
             NavGroup::new("System")
@@ -82,7 +84,8 @@ impl Module for ProofModule {
             .controller::<dashboard::DashboardPages>()
             .controller::<gallery::GalleryPages>()
             .controller::<select::SelectPages>()
-            .controller::<icons_flags::IconPages>();
+            .controller::<icons_flags::IconPages>()
+            .controller::<dates::DatePages>();
     }
 }
 

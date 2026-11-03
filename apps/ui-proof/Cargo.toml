@@ -17,6 +17,7 @@ unsafe_code = "forbid"
 
 [dependencies]
 chrono = { workspace = true }
+chrono-tz = { workspace = true }
 http = { workspace = true }
 navree = { workspace = true, default-features = false, features = ["ui"] }
 serde = { workspace = true }

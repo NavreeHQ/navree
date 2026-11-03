@@ -28,6 +28,7 @@ use crate::components::{
     Alert, AlertTone, Button, Checkbox, Field, Input, InputGroup, InputKind, NativeSelect,
     RadioGroup, Switch, Textarea,
 };
+use crate::dates::{DateLocale, DatePicker, TimePicker};
 use crate::html::Href;
 use crate::node::{Element, Node, Uses, el};
 use crate::op::{Envelope, Op, UI_HEADER};
@@ -62,6 +63,12 @@ pub enum Widget {
     Switch,
     /// An amount of money, typed like `12,500.50`.
     Money,
+    /// A date from a calendar in a popover, typed by the locale's rules; a native
+    /// date field with JavaScript off.
+    DatePicker,
+    /// A time of day typed or chosen from a list; a native time field with
+    /// JavaScript off.
+    TimePicker,
 }
 
 /// One field of a [`Form`]. The derive writes these.
@@ -474,6 +481,8 @@ pub struct FormView<T> {
     searches: BTreeMap<&'static str, Href>,
     columns: bool,
     csrf: Option<String>,
+    date_locale: DateLocale,
+    today: Option<chrono::NaiveDate>,
     marker: PhantomData<fn() -> T>,
 }
 
@@ -491,6 +500,8 @@ impl<T: Form> FormView<T> {
             searches: BTreeMap::new(),
             columns: true,
             csrf: None,
+            date_locale: DateLocale::english(),
+            today: None,
             marker: PhantomData,
         }
     }
@@ -508,6 +519,15 @@ impl<T: Form> FormView<T> {
     /// JavaScript on.
     pub fn csrf(mut self, token: impl Into<String>) -> Self {
         self.csrf = Some(token.into());
+        self
+    }
+
+    /// Names the days and times of the form's date and time pickers after a
+    /// language and region, and says what today is. Without a day, today is the day
+    /// in UTC.
+    pub fn dates(mut self, locale: DateLocale, today: chrono::NaiveDate) -> Self {
+        self.date_locale = locale;
+        self.today = Some(today);
         self
     }
 
@@ -620,6 +640,52 @@ impl<T: Form> FormView<T> {
                     input = input.attr("step", "any");
                 }
                 self.finish_input(input, field, &rules, value).into()
+            }
+            Widget::DatePicker => {
+                let mut picker = DatePicker::new(field.name)
+                    .locale(self.date_locale.clone())
+                    .invalid(invalid);
+                if let Some(today) = self.today {
+                    picker = picker.today(today);
+                }
+                picker = match value {
+                    Some(text) => picker.value_text(text),
+                    None => picker,
+                };
+                if let Some(day) = rules.min.and_then(|min| min.parse().ok()) {
+                    picker = picker.min(day);
+                }
+                if let Some(day) = rules.max.and_then(|max| max.parse().ok()) {
+                    picker = picker.max(day);
+                }
+                if let Some(text) = field.placeholder {
+                    picker = picker.placeholder(text);
+                }
+                if rules.required {
+                    picker = picker.required();
+                }
+                picker.into()
+            }
+            Widget::TimePicker => {
+                let mut picker = TimePicker::new(field.name)
+                    .locale(self.date_locale.clone())
+                    .invalid(invalid);
+                if let Some(text) = value {
+                    picker = picker.value_text(text);
+                }
+                if let Some(time) = rules.min.and_then(|min| min.parse().ok()) {
+                    picker = picker.min(time);
+                }
+                if let Some(time) = rules.max.and_then(|max| max.parse().ok()) {
+                    picker = picker.max(time);
+                }
+                if let Some(text) = field.placeholder {
+                    picker = picker.placeholder(text);
+                }
+                if rules.required {
+                    picker = picker.required();
+                }
+                picker.into()
             }
             Widget::Money => self
                 .finish_input(
@@ -1008,6 +1074,27 @@ fn echo<T: Form>(values: Vec<(String, String)>) -> Vec<(String, String)> {
         .collect()
 }
 
+/// A time posted as hours and minutes, with its seconds: `14:30` is `14:30:00`.
+fn clock_text<T: Form>(name: &str, value: &str) -> String {
+    let is_time = T::FIELDS.iter().any(|field| {
+        field.name == name
+            && matches!(
+                field.widget,
+                Widget::TimePicker | Widget::Input(InputKind::Time)
+            )
+    });
+    let bytes = value.as_bytes();
+    if is_time
+        && bytes.len() == 5
+        && bytes[2] == b':'
+        && bytes[..2].iter().chain(&bytes[3..]).all(u8::is_ascii_digit)
+    {
+        format!("{value}:00")
+    } else {
+        value.to_owned()
+    }
+}
+
 /// Decodes submitted pairs into `T` and runs its rules: what [`Submit`] and
 /// tests share. Empty values of optional fields are absent, an unchecked box
 /// is `false`, and a missing text field is empty. A pair that isn't one of `T`'s
@@ -1062,6 +1149,11 @@ fn decode_values<T>(pairs: &[(String, String)]) -> Result<T, FieldErrors>
 where
     T: Form + DeserializeOwned + Validate,
 {
+    // A browser's time field posts `14:30`; the type reads `14:30:00`.
+    let pairs: Vec<(String, String)> = pairs
+        .iter()
+        .map(|(name, value)| (name.clone(), clock_text::<T>(name, value)))
+        .collect();
     // A list field's values are read together: the deserializer takes a name once.
     let lists: Vec<(&'static str, String)> = T::FIELDS
         .iter()
@@ -1086,7 +1178,7 @@ where
         })
         .collect();
     let mut kept: Vec<(&str, &str)> = Vec::with_capacity(pairs.len() + T::FIELDS.len());
-    for (name, value) in pairs {
+    for (name, value) in &pairs {
         let Some(field) = T::FIELDS.iter().find(|field| field.name == name) else {
             continue;
         };
@@ -1115,6 +1207,8 @@ where
             | Widget::Listbox
             | Widget::Combobox
             | Widget::Radio
+            | Widget::DatePicker
+            | Widget::TimePicker
             | Widget::Money => kept.push((field.name, "")),
             // Read above, with the values it has.
             Widget::Multi => {}
@@ -1197,10 +1291,15 @@ fn type_error<T: Form>(error: &serde_path_to_error::Error<urlencoded::Error>) ->
             ..
         }) => format!("{label}: enter a number."),
         Some(FormField {
-            widget: Widget::Input(InputKind::Date),
+            widget: Widget::Input(InputKind::Date) | Widget::DatePicker,
             label,
             ..
         }) => format!("{label}: enter a date."),
+        Some(FormField {
+            widget: Widget::Input(InputKind::Time) | Widget::TimePicker,
+            label,
+            ..
+        }) => format!("{label}: enter a time."),
         Some(FormField {
             widget:
                 Widget::Select | Widget::Listbox | Widget::Combobox | Widget::Multi | Widget::Radio,

@@ -7,18 +7,24 @@
 //! browser only helps the person get there. See [`zoned`] for turning a time on a
 //! wall into an instant.
 
+mod calendar;
 mod data;
 mod format;
 pub mod grid;
 mod locale;
 mod parse;
+mod picker;
 mod range;
 mod rules;
 mod time;
+mod time_picker;
 pub mod zoned;
 
+pub use calendar::{Calendar, CalendarMode, CaptionLayout};
 pub use locale::{Clock, DateLabels, DateLocale, DateOrder, LocaleData};
 pub use parse::{DateParseError, TimeParseError};
+pub use picker::{DatePicker, DateRangePicker, PickerStyle};
 pub use range::{DatePreset, DateRange, DateRangeQuery};
 pub use rules::{DateError, DateRules};
 pub use time::{TimeError, TimeRules};
+pub use time_picker::TimePicker;

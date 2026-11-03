@@ -377,6 +377,38 @@ impl DateLocale {
     pub fn weekday_short(&self, day: Weekday) -> &str {
         &self.weekdays_short[day.num_days_from_sunday() as usize]
     }
+
+    /// The locale as the browser module reads it: the same names, patterns and
+    /// words the server drew from.
+    pub(crate) fn client(&self) -> serde_json::Value {
+        let names = |list: &[Cow<'static, str>]| -> Vec<String> {
+            list.iter().map(ToString::to_string).collect()
+        };
+        let mut out = serde_json::json!({
+            "t": &*self.tag,
+            "m": names(&self.months),
+            "ms": names(&self.months_short),
+            "w": names(&self.weekdays),
+            "ws": names(&self.weekdays_short),
+            "o": self.order.code(),
+            "s": &*self.separator,
+            "x": &*self.suffix,
+            "lp": &*self.long_pattern,
+            "cp": &*self.caption_pattern,
+            "sp": &*self.short_pattern,
+            "yp": &*self.short_year_pattern,
+            "c": if self.clock == Clock::H12 { 12 } else { 24 },
+            "am": &*self.am,
+            "pm": &*self.pm,
+            "mf": u8::from(self.marker_first),
+            "rtl": u8::from(self.rtl),
+            "L": self.labels.as_list(),
+        });
+        if let Some(in_date) = &self.months_in_date {
+            out["md"] = serde_json::json!(names(in_date));
+        }
+        out
+    }
 }
 
 /// The language and the region of a tag, lower and upper case. Script and variant

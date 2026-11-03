@@ -1,0 +1,100 @@
+/*
+ * navree-ui's stylesheet: Calendar, DatePicker, DateRangePicker and TimePicker. Provenance:
+ * structure, slot names and variant names follow shadcn/ui's style layer (MIT, Copyright
+ * (c) 2023 shadcn), compact "Nova" style; the values, the 4px and 6px corners and the app
+ * rules are Navree's own. See THIRD_PARTY.md.
+ */
+/* A calendar: one cell is a button, a month is a table. */
+[data-slot=calendar]{--cell:2.25rem;--band:color-mix(in oklab,var(--accent) 16%,transparent);position:relative;display:inline-block;padding:.5rem;color:var(--fg-1);font-size:14px;line-height:1.25;
+  &[data-size=sm]{--cell:2rem;font-size:13px}
+  &[data-size=lg]{--cell:2.5rem}
+}
+[data-slot=calendar-months]{display:flex;flex-wrap:wrap;gap:1rem}
+[data-slot=calendar-month]{display:flex;flex-direction:column;gap:.25rem}
+[data-slot=calendar-head]{display:flex;align-items:center;justify-content:center;height:var(--cell);padding-inline:calc(var(--cell) + .25rem)}
+[data-slot=calendar-caption]{color:var(--fg);font-weight:500;text-align:center;
+  &[data-layout=dropdowns]{display:flex;gap:.375rem;& [data-slot=native-select]{width:auto;font-weight:400}}
+}
+[data-slot=calendar-nav]{position:absolute;inset:.5rem .5rem auto;display:flex;justify-content:space-between;pointer-events:none;
+  & > *{pointer-events:auto;flex:none}
+  & [data-slot=icon]{width:1rem;height:1rem}
+}
+[dir=rtl] [data-slot=calendar-nav] [data-slot=icon]{scale:-1 1}
+[data-slot=calendar-grid]{border-collapse:collapse;table-layout:fixed;width:calc(var(--cell)*7)}
+[data-slot=calendar][data-week-numbers] [data-slot=calendar-grid]{width:calc(var(--cell)*7.75)}
+[data-slot=calendar-grid] th,[data-slot=calendar-grid] td{padding:0;text-align:center;font-weight:400}
+[data-slot=calendar-weekday]{height:calc(var(--cell)*.8);color:var(--fg-3);font-size:12px}
+[data-slot=calendar-weeknum]{width:calc(var(--cell)*.75);color:var(--fg-3);font-size:11px;font-variant-numeric:tabular-nums}
+[data-slot=calendar-grid] td{position:relative;height:var(--cell)}
+[data-slot=calendar-day]{display:inline-flex;align-items:center;justify-content:center;width:var(--cell);height:var(--cell);margin:0;padding:0;border:0;border-radius:var(--radius);background:transparent;color:inherit;font:inherit;font-variant-numeric:tabular-nums;cursor:pointer;user-select:none;
+  &:hover{background:var(--ink-3);color:var(--fg)}
+  &:focus-visible{outline:2px solid var(--accent);outline-offset:1px;position:relative;z-index:1}
+  &[data-today]{box-shadow:inset 0 0 0 1px var(--fg-3);color:var(--fg)}
+  &[data-selected],&[data-range-start],&[data-range-end]{background:var(--accent);color:var(--accent-ink);font-weight:600;&:hover{background:var(--accent);color:var(--accent-ink)}&:focus-visible{outline-color:var(--fg)}}
+  &[data-range-middle],&[data-preview]:not([data-range-start],[data-range-end]){border-radius:0;background:var(--band);color:var(--fg);&:hover{background:var(--band)}}
+  &[data-pending]{background:var(--accent);color:var(--accent-ink)}
+  &[aria-disabled=true]{color:var(--fg-3);opacity:.5;cursor:not-allowed;&:hover{background:transparent;color:var(--fg-3)}}
+  &[data-disabled]{text-decoration:line-through}
+  &[data-outside]{color:var(--fg-3);opacity:.45;cursor:default;&:hover{background:transparent}}
+}
+/* The band behind a range runs from the middle of its first day to the middle of its last. */
+[data-slot=calendar-grid] td:has([data-range-start]:not([data-range-end])){background:linear-gradient(to right,transparent 50%,var(--band) 50%)}
+[data-slot=calendar-grid] td:has([data-range-end]:not([data-range-start])){background:linear-gradient(to left,transparent 50%,var(--band) 50%)}
+[dir=rtl] [data-slot=calendar-grid] td:has([data-range-start]:not([data-range-end])){background:linear-gradient(to left,transparent 50%,var(--band) 50%)}
+[dir=rtl] [data-slot=calendar-grid] td:has([data-range-end]:not([data-range-start])){background:linear-gradient(to right,transparent 50%,var(--band) 50%)}
+[data-slot=calendar-grid] td:has([data-range-middle]){background:var(--band)}
+[data-slot=calendar-grid] td:has([data-preview]:not([data-range-start],[data-range-end])){background:var(--band)}
+[data-slot=calendar-foot]{display:flex;justify-content:center;padding-top:.5rem}
+[data-slot=calendar][data-disabled]{opacity:.55}
+
+/* A picker: a box with a button, a popover holding the calendar. */
+[data-slot=date-picker],[data-slot=time-picker],[data-slot=date-range-picker]{position:relative;display:block;min-width:0}
+[data-slot=date-range-picker]{display:inline-block}
+[data-slot=date-picker-buttons],[data-slot=date-range-buttons]{display:inline-flex;align-items:center;gap:.25rem}
+[data-slot=date-picker] [data-slot=input-group-addon],[data-slot=time-picker] [data-slot=input-group-addon]{padding-inline:.125rem}
+[data-slot=date-picker] [data-slot=input-group-addon] [data-slot=button],[data-slot=time-picker] [data-slot=input-group-addon] [data-slot=button]{--b:1.5rem;width:var(--b);height:var(--b)}
+[data-ui-dates]:not([data-has-value]) [data-ui-act=clear]{display:none}
+[data-slot=date-picker][data-invalid] [data-slot=button][data-variant=outline],[data-slot=date-range-picker][data-invalid] [data-slot=button][data-variant=outline]{border-color:var(--danger)}
+[data-slot=date-picker] [data-slot=field-error],[data-slot=time-picker] [data-slot=field-error]{margin:.375rem 0 0}
+[data-slot=range-label]{display:inline-flex;align-items:baseline;gap:.375rem;min-width:0}
+[data-slot=range-title]{font-weight:500;&::after{content:"·";margin-inline-start:.375rem;color:var(--fg-3);font-weight:400}}
+[data-ui-label]{overflow:hidden;text-overflow:ellipsis;color:var(--fg-2)}
+[data-ui-dates][data-has-value] [data-ui-label]{color:var(--fg)}
+
+/* The popups. The overlay module places them. */
+[data-slot=popover-content][data-variant=calendar],[data-slot=popover-content][data-variant=range],[data-slot=popover-content][data-variant=times]{padding:.25rem;width:max-content;max-width:calc(100vw - 1rem);max-height:calc(100dvh - 1rem);overflow:auto}
+[data-slot=popover-content][data-variant=times]{padding:0}
+[data-slot=date-picker-foot],[data-slot=range-foot]{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.25rem .5rem .5rem}
+[data-slot=range-foot]{border-top:1px solid var(--line);padding-top:.5rem}
+[data-slot=range-foot-actions]{display:flex;gap:.5rem;margin-inline-start:auto}
+[data-slot=range-body]{display:flex;align-items:flex-start;gap:.25rem}
+[data-slot=range-presets]{display:flex;flex-direction:column;gap:.125rem;min-width:9.5rem;padding:.25rem;border-inline-end:1px solid var(--line);align-self:stretch;
+  & [data-slot=button]{justify-content:flex-start;width:100%}
+  & [data-slot=button][data-active],& [data-slot=button][aria-pressed=true]{background:var(--ink-3);color:var(--fg)}
+}
+@media (max-width:639px){
+  [data-slot=range-body]{flex-direction:column;align-items:stretch}
+  [data-slot=range-presets]{flex-direction:row;flex-wrap:wrap;min-width:0;border-inline-end:0;border-bottom:1px solid var(--line);padding-bottom:.5rem;& [data-slot=button]{width:auto}}
+  [data-slot=range-body] [data-slot=calendar]{align-self:center}
+}
+
+/* The list of times. */
+[data-slot=time-list]{list-style:none;margin:0;padding:.25rem;min-width:8rem;max-height:min(16rem,calc(100dvh - 2rem));overflow:auto;scrollbar-width:thin;font-variant-numeric:tabular-nums;
+  &:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  & [role=option]{padding:.375rem .625rem;border-radius:var(--radius);color:var(--fg-1);cursor:pointer;white-space:nowrap}
+  & [role=option]:hover{background:var(--ink-3);color:var(--fg)}
+  & [role=option][aria-selected=true]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+  & [role=option][data-active]:not([aria-selected=true]){background:var(--ink-3);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line-3)}
+  &:focus-visible [role=option][data-active][aria-selected=true]{outline:2px solid var(--fg);outline-offset:-3px}
+}
+
+/* With JavaScript off the native fields do the work. */
+[data-slot=range-native]{display:flex;flex-wrap:wrap;gap:.5rem}
+[data-slot=range-native-field]{display:flex;flex-direction:column;gap:.25rem;color:var(--fg-2);font-size:13px}
+@media (scripting:none){
+  [data-slot=date-picker-ui],[data-slot=time-picker-ui],[data-slot=date-range-ui]{display:none}
+}
+@media (scripting:enabled){
+  [data-ui-dates=picker] > [data-ui-native],[data-ui-dates=time] > [data-ui-native]{position:absolute;inset-block-start:0;inset-inline-start:0;width:1px;height:1px;margin:0;padding:0;border:0;opacity:0;overflow:hidden;pointer-events:none}
+  [data-slot=range-native]{display:none}
+}

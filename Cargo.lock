@@ -9971,6 +9971,7 @@ name = "ui-proof"
 version = "1.0.0"
 dependencies = [
  "chrono",
+ "chrono-tz",
  "http",
  "navree",
  "serde",

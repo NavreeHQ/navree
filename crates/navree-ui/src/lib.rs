@@ -24,6 +24,7 @@
 /// What pages import: every component, the shell, forms, tables and the wire.
 pub mod prelude {
     pub use crate::components::*;
+    pub use crate::dates::{Calendar, DatePicker, DateRangePicker, TimePicker};
     pub use crate::form::{
         Form as FormFields, FormView, Many, Money, Options as OptionList, Rejected, Submit,
     };

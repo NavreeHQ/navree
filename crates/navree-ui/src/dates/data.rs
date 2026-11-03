@@ -1303,6 +1303,7 @@ static ID: LocaleData = LocaleData {
 };
 
 /// Every built-in row.
+#[cfg(test)]
 pub(super) fn all() -> [&'static LocaleData; 19] {
     [
         &EN, &EN_GB, &DE, &FR, &ES, &IT, &PT, &NL, &SV, &PL, &RU, &TR, &JA, &ZH, &KO, &AR, &HE,

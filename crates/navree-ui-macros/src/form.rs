@@ -75,6 +75,8 @@ fn named_widget(ui: &TokenStream, widget: &Ident, rows: u32) -> syn::Result<Toke
         "date" => input("Date"),
         "time" => input("Time"),
         "datetime" => input("DateTime"),
+        "date_picker" | "datepicker" => quote!(#ui::form::Widget::DatePicker),
+        "time_picker" | "timepicker" => quote!(#ui::form::Widget::TimePicker),
         "hidden" => input("Hidden"),
         "textarea" => quote!(#ui::form::Widget::Textarea { rows: #rows }),
         "select" => quote!(#ui::form::Widget::Select),
@@ -89,7 +91,7 @@ fn named_widget(ui: &TokenStream, widget: &Ident, rows: u32) -> syn::Result<Toke
             return Err(syn::Error::new(
                 widget.span(),
                 format!(
-                    "unknown widget `{other}`: expected text, email, url, tel, password, search, number, date, time, datetime, hidden, textarea, select, listbox, combobox, multiselect, radio, checkbox, switch or money"
+                    "unknown widget `{other}`: expected text, email, url, tel, password, search, number, date, time, datetime, date_picker, time_picker, hidden, textarea, select, listbox, combobox, multiselect, radio, checkbox, switch or money"
                 ),
             ));
         }
