@@ -626,10 +626,6 @@ criteria = "safe-to-deploy"
 version = "11.0.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.fast-cat]]
-version = "0.1.1"
-criteria = "safe-to-deploy"
-
 [[exemptions.fast_image_resize]]
 version = "6.1.0"
 criteria = "safe-to-deploy"
@@ -1159,23 +1155,11 @@ version = "0.4.34"
 criteria = "safe-to-deploy"
 
 [[exemptions.logos]]
-version = "0.15.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.logos]]
 version = "0.16.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.logos-codegen]]
-version = "0.15.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.logos-codegen]]
 version = "0.16.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.logos-derive]]
-version = "0.15.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.logos-derive]]
@@ -1583,16 +1567,8 @@ version = "0.14.4"
 criteria = "safe-to-deploy"
 
 [[exemptions.protox]]
-version = "0.9.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.protox]]
 version = "0.10.0"
 criteria = "safe-to-run"
-
-[[exemptions.protox-parse]]
-version = "0.9.0"
-criteria = "safe-to-deploy"
 
 [[exemptions.protox-parse]]
 version = "0.10.0"
@@ -2378,10 +2354,6 @@ criteria = "safe-to-deploy"
 version = "0.1.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.uniprops-gen]]
-version = "0.3.5"
-criteria = "safe-to-deploy"
-
 [[exemptions.universal-hash]]
 version = "0.6.1"
 criteria = "safe-to-deploy"
@@ -2594,10 +2566,6 @@ criteria = "safe-to-deploy"
 version = "0.18.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.xml]]
-version = "1.4.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.xmlwriter]]
 version = "0.1.0"
 criteria = "safe-to-deploy"
@@ -2628,10 +2596,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.zerocopy-derive]]
 version = "0.8.63"
-criteria = "safe-to-deploy"
-
-[[exemptions.zeroes_itoa]]
-version = "0.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.zerofrom]]
