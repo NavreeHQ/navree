@@ -7,8 +7,8 @@ use syn::ext::IdentExt;
 use syn::{Data, DeriveInput, Fields, Ident, LitInt, LitStr};
 
 use crate::shared::{
-    apply_case, doc_line, named_fields, option_inner, serde_rename, serde_rename_all, type_name,
-    many_inner, ui_path, words,
+    apply_case, doc_line, many_inner, named_fields, option_inner, serde_rename, serde_rename_all,
+    type_name, ui_path, words,
 };
 
 /// What `#[form(...)]` says about a field.
@@ -179,8 +179,7 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
                     w.to_string().as_str(),
                     "select" | "radio" | "listbox" | "combobox" | "multiselect"
                 )
-            })
-        {
+            }) {
             quote!(<#element as #ui::form::Options>::OPTIONS)
         } else {
             quote!(&[])
