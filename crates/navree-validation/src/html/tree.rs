@@ -17,8 +17,11 @@ use html5ever::{Attribute, ParseOpts, QualName, local_name, ns, parse_fragment};
 
 use super::HtmlError;
 
-/// How much of the input goes to the parser between looks at the budget.
-const PIECE: usize = 4096;
+/// How much of the input goes to the parser between looks at the budget. Once
+/// a limit is passed the parser still reads to the end of its piece, and each
+/// block in it can have the parser copy every formatting element still open,
+/// attributes and all, so the piece is kept small.
+const PIECE: usize = 512;
 
 /// How much text goes to the serializer at a time (see [`write_text`]).
 const TEXT_PIECE: usize = 1024;
@@ -250,10 +253,13 @@ pub(crate) enum Event<'a> {
     Other,
 }
 
-// How many parses this thread has begun: the tests count what an input costs.
+// How many parses this thread has begun, and what the parser did after a limit
+// was passed (each node and attribute it made, each name it read): the tests
+// count what an input costs.
 #[cfg(test)]
 thread_local! {
     pub(crate) static PARSES: Cell<usize> = const { Cell::new(0) };
+    static AFTER_LIMIT: Cell<usize> = const { Cell::new(0) };
 }
 
 impl Tree {
@@ -514,6 +520,14 @@ impl Sink {
         id
     }
 
+    /// Notes `work` the parser did once a limit was passed (for the tests).
+    fn after_limit(&self, work: usize) {
+        #[cfg(test)]
+        AFTER_LIMIT.with(|done| done.set(done.get().saturating_add(work)));
+        #[cfg(not(test))]
+        let _ = work;
+    }
+
     fn spent(&self) -> bool {
         self.exceeded.get().is_some()
     }
@@ -586,6 +600,7 @@ impl Sink {
 
     fn push(&self, data: Data) -> Id {
         if !self.charge(1) {
+            self.after_limit(1);
             return self.phantom();
         }
         let mut nodes = self.nodes.borrow_mut();
@@ -656,10 +671,15 @@ impl TreeSink for Sink {
     }
 
     /// Every scan of the parser's stack of open elements asks for the names.
+    /// Once a limit is passed nothing is charged: the limit passed first is
+    /// the one reported.
     fn elem_name<'a>(&'a self, target: &'a Handle) -> &'a QualName {
-        match self.steps_left.get().checked_sub(1) {
-            Some(left) => self.steps_left.set(left),
-            None => self.too_many_nodes(),
+        if self.spent() {
+            self.after_limit(1);
+        } else if let Some(left) = self.steps_left.get().checked_sub(1) {
+            self.steps_left.set(left);
+        } else {
+            self.too_many_nodes();
         }
         &target.name
     }
@@ -672,6 +692,7 @@ impl TreeSink for Sink {
             .sum();
         let cost = 1 + usize::from(flags.template) + attrs.len() + bytes / BYTES_PER_NODE;
         if !self.charge(cost) || !self.charge_writing(&attrs) {
+            self.after_limit(1 + attrs.len());
             return Handle {
                 id: self.phantom(),
                 name,
@@ -843,5 +864,82 @@ impl TreeSink for Sink {
                 ..
             })
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AFTER_LIMIT, Cell, HtmlError, Limits, Tree};
+
+    const DEFAULT: Limits = Limits {
+        max_input_bytes: 512 * 1024,
+        max_nodes: 128 * 1024,
+        max_depth: 128,
+    };
+
+    /// What parsing `html` gives, and the work the parser did after a limit
+    /// was passed.
+    fn parse(html: &str, limits: Limits) -> (Option<HtmlError>, usize) {
+        AFTER_LIMIT.with(|done| done.set(0));
+        let error = Tree::parse(html, limits).err();
+        (error, AFTER_LIMIT.with(Cell::get))
+    }
+
+    /// 16 KB that pass the depth limit at the first byte of a piece (of 4 KiB
+    /// or of any size that divides it),
+    /// and then close a paragraph and open new ones to its end: for each
+    /// `<p>x` the parser copies every formatting element still open, 14 of
+    /// them with 256 attributes.
+    fn reopening_bomb() -> String {
+        const ALIGN: usize = 4096;
+        let names: Vec<String> = (b'a'..=b'z')
+            .flat_map(|a| (b'a'..=b'z').map(move |b| format!("{}{}", char::from(a), char::from(b))))
+            .take(255)
+            .collect();
+        let names = names.join(" ");
+        let heavy = 14;
+        let mut html = String::from("<p>");
+        for id in 0..heavy {
+            html.push_str(&format!("<b id={id} {names}>"));
+        }
+        html.push_str(&"<i>".repeat(128 - heavy - 1));
+        // The `>` of the last `<i>` starts a piece.
+        let before_end = html.len() + "<i".len();
+        html.push_str(&"y".repeat((ALIGN - before_end % ALIGN) % ALIGN));
+        html.push_str("<i>");
+        assert_eq!((html.len() - 1) % ALIGN, 0);
+        let end = (html.len() - 1 + ALIGN).min(16_300);
+        html.push_str("</p>");
+        while html.len() + 4 <= end {
+            html.push_str("<p>x");
+        }
+        html
+    }
+
+    /// Once a limit is passed the parser goes on to the end of the piece it
+    /// has, so the piece is what bounds the work the parse wastes: here about
+    /// 3,600 nodes and attributes for each `<p>x`, 460,000 in all for a piece
+    /// of 512 bytes, 3.7 million for one of 4 KiB.
+    #[test]
+    fn little_is_parsed_after_a_limit() {
+        let html = reopening_bomb();
+        let (error, work) = parse(&html, DEFAULT);
+        assert_eq!(error, Some(HtmlError::TooDeep { max: 128 }));
+        assert!(work <= 1_000_000, "{work}");
+    }
+
+    /// The first limit passed is the one reported: after the depth limit,
+    /// the end tags scan the parser's stack of open elements (as deep as the
+    /// spans the parser still opens) until the budget for scans is gone too.
+    #[test]
+    fn the_first_limit_passed_is_reported() {
+        let limits = Limits {
+            max_input_bytes: 1 << 20,
+            max_nodes: 16,
+            max_depth: 4,
+        };
+        let html = format!("{}{}", "<span>".repeat(40), "</zz>".repeat(54));
+        assert!(html.len() <= 512);
+        assert_eq!(parse(&html, limits).0, Some(HtmlError::TooDeep { max: 4 }));
     }
 }
