@@ -353,35 +353,29 @@ function sortHere(root, url) {
   const heads = [...root.querySelectorAll("[data-slot=table] > thead th[data-col]")];
   if (!body || !root.hasAttribute("data-ui-local") || !onlySort(new URL(root.getAttribute("data-ui-src") || "", location.href), url)) return false;
   const sort = url.searchParams.get("sort") ?? root.getAttribute("data-ui-sort-default") ?? "";
-  /** Column, kind and direction of each term. @type {[number, string | null, boolean][]} */
-  const terms = [];
-  /** @type {Map<string, boolean>} */
-  const sorted = new Map();
-  for (const term of sort.split(",").filter(Boolean)) {
-    const down = term[0] === "-", name = down ? term.slice(1) : term;
-    const th = /** @type {HTMLTableCellElement | undefined} */ (heads.find((cell) => cell.getAttribute("data-col") === name));
-    if (!th) return false;
-    terms.push([th.cellIndex, th.getAttribute("data-kind"), down]);
-    sorted.set(name, down);
-  }
-  /** Each row with what it sorts by, and its details row, which moves with it. @type {any[][]} */
+  // One column, or none (the key's order). An order by several shows ranks, and is the
+  // server's to draw.
+  if (sort.includes(",")) return false;
+  const down = sort[0] === "-", name = down ? sort.slice(1) : sort;
+  const th = /** @type {HTMLTableCellElement | undefined} */ (heads.find((cell) => cell.getAttribute("data-col") === name));
+  if (name && !th) return false;
+  const kind = th?.getAttribute("data-kind") ?? null;
+  /** Each row's key, what it sorts by, the row and its details row, which moves with it. @type {any[][]} */
   const groups = [];
   for (const row of body.rows) {
     const key = row.getAttribute("data-key");
     if (!key) return false;
     if (row.getAttribute("data-slot") === "row-detail" && groups.length) groups[groups.length - 1].push(row);
-    else groups.push([key, terms.map(([at, kind]) => valueOf(row, at, kind)), row]);
+    else groups.push([key, th ? valueOf(row, th.cellIndex, kind) : null, row]);
   }
-  // Ties go by key, in the last term's direction, as the server orders them.
-  const last = terms.length ? terms[terms.length - 1][2] : false;
-  groups.sort((a, b) => {
-    for (let i = 0; i < terms.length; i++) {
-      const order = compare(a[1][i], b[1][i], terms[i][1]);
-      if (order) return terms[i][2] ? -order : order;
-    }
-    return (last ? -1 : 1) * compare(a[0], b[0], "k");
-  });
-  /** @type {any} */ (root).uiBefore = [[...body.rows], heads.map((th) => [th, th.getAttribute("aria-sort")])];
+  // Ties go by key, in the column's direction, as the server orders them.
+  groups.sort((a, b) => (down ? -1 : 1) * (compare(a[1], b[1], kind) || compare(a[0], b[0], "k")));
+  // What the headings show now, to put back if the server can't confirm: their state and
+  // their links' content, arrow and rank.
+  const links = heads.map((cell) => cell.querySelector("[data-slot=sort-link]"));
+  /** @type {any} */ (root).uiBefore = [[...body.rows], heads.map((cell, i) => [cell, cell.getAttribute("aria-sort"), links[i], [...(links[i]?.childNodes || [])]])];
+  /** An arrow for each state shown now: the icons are copied, never drawn here. */
+  const arrows = new Map(heads.map((cell, i) => [cell.getAttribute("aria-sort") || "", links[i]?.querySelector("svg")]));
   let at = body.firstElementChild;
   for (const row of groups.flatMap((group) => group.slice(2))) {
     if (row === at) at = row.nextElementSibling;
@@ -393,11 +387,21 @@ function sortHere(root, url) {
       }
     }
   }
-  for (const th of heads) {
-    const down = sorted.get(th.getAttribute("data-col") || "");
-    if (down === undefined) th.removeAttribute("aria-sort");
-    else th.setAttribute("aria-sort", down ? "descending" : "ascending");
-  }
+  heads.forEach((cell, i) => {
+    const state = cell === th ? (down ? "descending" : "ascending") : "";
+    const was = cell.getAttribute("aria-sort") || "";
+    if (state) cell.setAttribute("aria-sort", state);
+    else cell.removeAttribute("aria-sort");
+    const link = links[i], icon = link?.querySelector("svg");
+    // One column has no rank to show.
+    link?.querySelector("[data-slot=sort-rank]")?.remove();
+    // The arrow says the new state: one shown elsewhere, or the opposite one mirrored.
+    const from = arrows.get(state) || (state && arrows.get(down ? "ascending" : "descending"));
+    if (!icon || state === was || !from) return;
+    const arrow = /** @type {Element} */ (from.cloneNode(true));
+    arrow.toggleAttribute("data-flip", from.hasAttribute("data-flip") !== !arrows.has(state));
+    icon.replaceWith(arrow);
+  });
   const field = /** @type {HTMLInputElement | null} */ (root.querySelector("form[data-ui-target] input[type=hidden][name=sort]"));
   if (field) field.value = sort;
   // The rows are right already: the server's answer only confirms them.
@@ -414,9 +418,10 @@ document.addEventListener("ui:failed", (e) => {
   if (!rows) return;
   root.uiBefore = null;
   rows[0]?.parentNode?.append(...rows);
-  for (const [th, sort] of sorts) {
+  for (const [th, sort, link, nodes] of sorts) {
     if (sort === null) th.removeAttribute("aria-sort");
     else th.setAttribute("aria-sort", sort);
+    link?.replaceChildren(...nodes);
   }
 });
 

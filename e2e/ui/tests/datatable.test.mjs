@@ -121,12 +121,22 @@ for (const browserName of browsers) {
         });
         await page.locator(`#sized thead th[data-col=${column}] [data-slot=sort-link]`).click();
         await page.waitForTimeout(150);
-        const meanwhile = await page.evaluate(() => ({
-          busy: document.getElementById("sized").hasAttribute("data-pending"),
-          sort: document.querySelector(`#sized thead th[aria-sort]`)?.getAttribute("data-col"),
-        }));
+        const meanwhile = await page.evaluate((column) => {
+          // Which way the heading's arrow points: lucide's up arrow starts "m5 12", its down
+          // arrow "M12 5"; a mirrored one points the other way.
+          const icon = document.querySelector(`#sized thead th[data-col=${column}] [data-slot=sort-link] svg`);
+          const up = icon?.querySelector("path")?.getAttribute("d")?.startsWith("m5 12");
+          return {
+            busy: document.getElementById("sized").hasAttribute("data-pending"),
+            sort: [...document.querySelectorAll("#sized thead th[aria-sort]")].map((th) => th.getAttribute("data-col")).join(),
+            arrow: icon?.querySelectorAll("path").length === 2 ? (up !== icon.hasAttribute("data-flip") ? "up" : "down") : "none",
+            ranks: document.querySelectorAll("#sized thead [data-slot=sort-rank]").length,
+          };
+        }, column);
         assert.equal(meanwhile.busy, false, `${sort}: not busy, the answer is showing`);
         assert.equal(meanwhile.sort, column, sort);
+        assert.equal(meanwhile.arrow, sort.startsWith("-") ? "down" : "up", `${sort}: the heading's arrow moved with the rows`);
+        assert.equal(meanwhile.ranks, 0, `${sort}: no rank of the old order is left`);
         if (column !== "title") assert.deepEqual(await keys(page, "sized"), expected, `${sort}: values and NULLs sort as the server sorts`);
         release();
         await page.waitForURL(new RegExp(`sort=${sort.replace("-", "\\-")}(&|$)`));
@@ -148,6 +158,8 @@ for (const browserName of browsers) {
       await page.locator("#sized [data-slot=table-alert]:not([hidden])").waitFor();
       assert.deepEqual(await keys(page, "sized"), before, "the rows the address says");
       assert.equal(await page.locator("#sized thead th[data-col=amount][aria-sort]").count(), 0);
+      assert.equal(await page.locator("#sized thead [data-slot=sort-rank]").count(), 2, "the old order's ranks are back");
+      assert.equal(await page.locator("#sized thead [data-flip]").count(), 0);
       assert.ok(!/sort=amount/.test(page.url()));
       await close();
     });
