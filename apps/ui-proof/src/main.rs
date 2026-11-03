@@ -15,6 +15,7 @@
 //! | `/plain` | a page with nothing interactive: no script at all |
 //! | `/gallery` | every component in its states |
 //! | `/menus` | tabs, toggle groups, dropdown menus and toasts in their states |
+//! | `/phone` | a contact form with phone numbers, and the phone input in its states |
 #![forbid(unsafe_code)]
 
 use std::sync::Arc;
@@ -36,6 +37,7 @@ mod deals;
 mod gallery;
 mod icons_flags;
 mod menus;
+mod phone;
 mod select;
 
 /// The app's one shell.
@@ -51,7 +53,8 @@ fn shell() -> Shell {
                         .count("1000"),
                 )
                 .item(NavItem::new("New deal", "/deals/new").icon(icons::CIRCLE_PLUS))
-                .item(NavItem::new("Dates", "/dates").icon(icons::CALENDAR)),
+                .item(NavItem::new("Dates", "/dates").icon(icons::CALENDAR))
+                .item(NavItem::new("Phone numbers", "/phone").icon(icons::PHONE)),
         )
         .group(
             NavGroup::new("System")
@@ -89,7 +92,8 @@ impl Module for ProofModule {
             .controller::<select::SelectPages>()
             .controller::<icons_flags::IconPages>()
             .controller::<dates::DatePages>()
-            .controller::<menus::MenuPages>();
+            .controller::<menus::MenuPages>()
+            .controller::<phone::PhonePages>();
     }
 }
 

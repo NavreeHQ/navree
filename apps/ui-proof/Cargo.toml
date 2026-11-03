@@ -19,7 +19,7 @@ unsafe_code = "forbid"
 chrono = { workspace = true }
 chrono-tz = { workspace = true }
 http = { workspace = true }
-navree = { workspace = true, default-features = false, features = ["ui"] }
+navree = { workspace = true, default-features = false, features = ["ui", "validation-phone"] }
 serde = { workspace = true }
 
 [dev-dependencies]
