@@ -32,6 +32,7 @@ mod dashboard;
 mod deal_form;
 mod deals;
 mod gallery;
+mod select;
 
 /// The app's one shell.
 fn shell() -> Shell {
@@ -50,7 +51,8 @@ fn shell() -> Shell {
         .group(
             NavGroup::new("System")
                 .item(NavItem::new("Plain page", "/plain").icon(icons::FILE))
-                .item(NavItem::new("Gallery", "/gallery").icon(icons::LAYOUT_GRID)),
+                .item(NavItem::new("Gallery", "/gallery").icon(icons::LAYOUT_GRID))
+                .item(NavItem::new("Select", "/select").icon(icons::LIST)),
         )
         .user(
             UserMenu::new("Ada Lovelace", "ada@navree.test")
@@ -72,7 +74,8 @@ impl Module for ProofModule {
         ));
         m.controller::<deals::DealPages>()
             .controller::<dashboard::DashboardPages>()
-            .controller::<gallery::GalleryPages>();
+            .controller::<gallery::GalleryPages>()
+            .controller::<select::SelectPages>();
     }
 }
 

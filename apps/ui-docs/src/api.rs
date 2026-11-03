@@ -22,6 +22,14 @@ pub const FILES: &[&str] = &[
     "form.rs",
     "table/view.rs",
     "table/region.rs",
+    "select/choice.rs",
+    "select/combobox.rs",
+    "select/command.rs",
+    "select/labels.rs",
+    "select/multi.rs",
+    "select/picker.rs",
+    "select/query.rs",
+    "select/single.rs",
     "cmd.rs",
     "op.rs",
 ];
@@ -70,6 +78,8 @@ pub fn read(source: impl Fn(&str) -> String) -> BTreeMap<String, TypeDoc> {
     let mut impls: Vec<(String, Vec<Method>, Vec<Method>)> = Vec::new();
     let mut rooted: Vec<String> = Vec::new();
     let mut shared: Vec<Method> = Vec::new();
+    let mut macros: BTreeMap<String, String> = BTreeMap::new();
+    let mut users: Vec<(String, String)> = Vec::new();
     for file in FILES {
         let text = source(file);
         let path = format!("crates/navree-ui/src/{file}");
@@ -102,45 +112,33 @@ pub fn read(source: impl Fn(&str) -> String) -> BTreeMap<String, TypeDoc> {
                     let Some(name) = type_name(&item.self_ty) else {
                         continue;
                     };
-                    let mut constructors = Vec::new();
-                    let mut methods = Vec::new();
-                    for item in item.items {
-                        let ImplItem::Fn(function) = item else {
-                            continue;
-                        };
-                        if !public(&function.vis) || hidden(&function.attrs) {
-                            continue;
-                        }
-                        let method = Method {
-                            name: function.sig.ident.to_string(),
-                            generics: if function.sig.generics.params.is_empty() {
-                                String::new()
-                            } else {
-                                tidy(&function.sig.generics.to_token_stream().to_string())
-                            },
-                            args: function
-                                .sig
-                                .inputs
-                                .iter()
-                                .filter_map(|arg| match arg {
-                                    FnArg::Typed(arg) => Some(format!(
-                                        "{}: {}",
-                                        tidy(&arg.pat.to_token_stream().to_string()),
-                                        tidy(&arg.ty.to_token_stream().to_string())
-                                    )),
-                                    FnArg::Receiver(_) => None,
-                                })
-                                .collect::<Vec<_>>()
-                                .join(", "),
-                            doc: summary(&function.attrs),
-                        };
-                        if function.sig.receiver().is_some() {
-                            methods.push(method);
-                        } else {
-                            constructors.push(method);
-                        }
-                    }
+                    let (constructors, methods) = impl_methods(&item);
                     impls.push((name, constructors, methods));
+                }
+                // The builder methods several types share are written once, in a macro:
+                // its definition is read, with the type put in, for each type that uses it.
+                Item::Macro(item)
+                    if item.mac.path.is_ident("macro_rules")
+                        && item.ident.as_ref().is_some_and(|name| {
+                            SHARED_MACROS.contains(&name.to_string().as_str())
+                        }) =>
+                {
+                    if let Some(name) = &item.ident {
+                        macros.insert(name.to_string(), item.mac.tokens.to_string());
+                    }
+                }
+                Item::Macro(item)
+                    if SHARED_MACROS
+                        .iter()
+                        .any(|name| item.mac.path.is_ident(name)) =>
+                {
+                    let kind = item
+                        .mac
+                        .path
+                        .get_ident()
+                        .map(ToString::to_string)
+                        .unwrap_or_default();
+                    users.push((kind, item.mac.tokens.to_string().trim().to_owned()));
                 }
                 Item::Macro(item) if item.mac.path.is_ident("root_methods") => {
                     rooted.extend(
@@ -156,6 +154,15 @@ pub fn read(source: impl Fn(&str) -> String) -> BTreeMap<String, TypeDoc> {
             }
         }
     }
+    for (kind, name) in users {
+        let Some(definition) = macros.get(&kind) else {
+            continue;
+        };
+        if let Some(item) = shared_impl(definition, &name) {
+            let (constructors, methods) = impl_methods(&item);
+            impls.push((name, constructors, methods));
+        }
+    }
     for (name, constructors, methods) in impls {
         if let Some(doc) = types.get_mut(&name) {
             doc.constructors.extend(constructors);
@@ -168,6 +175,68 @@ pub fn read(source: impl Fn(&str) -> String) -> BTreeMap<String, TypeDoc> {
         }
     }
     types
+}
+
+/// The macros that write builder methods for several types.
+const SHARED_MACROS: &[&str] = &["picker_methods", "typed_methods"];
+
+/// The public methods of an `impl` block: constructors (no `self`) and builders.
+fn impl_methods(item: &syn::ItemImpl) -> (Vec<Method>, Vec<Method>) {
+    let mut constructors = Vec::new();
+    let mut methods = Vec::new();
+    for item in &item.items {
+        let ImplItem::Fn(function) = item else {
+            continue;
+        };
+        if !public(&function.vis) || hidden(&function.attrs) {
+            continue;
+        }
+        let method = Method {
+            name: function.sig.ident.to_string(),
+            generics: if function.sig.generics.params.is_empty() {
+                String::new()
+            } else {
+                tidy(&function.sig.generics.to_token_stream().to_string())
+            },
+            args: function
+                .sig
+                .inputs
+                .iter()
+                .filter_map(|arg| match arg {
+                    FnArg::Typed(arg) => Some(format!(
+                        "{}: {}",
+                        tidy(&arg.pat.to_token_stream().to_string()),
+                        tidy(&arg.ty.to_token_stream().to_string())
+                    )),
+                    FnArg::Receiver(_) => None,
+                })
+                .collect::<Vec<_>>()
+                .join(", "),
+            doc: summary(&function.attrs),
+        };
+        if function.sig.receiver().is_some() {
+            methods.push(method);
+        } else {
+            constructors.push(method);
+        }
+    }
+    (constructors, methods)
+}
+
+/// The `impl` a `macro_rules!` writes for the type `name`: the macro's one arm, with
+/// `$type` and `$crate` put in.
+fn shared_impl(definition: &str, name: &str) -> Option<syn::ItemImpl> {
+    let body = definition.split_once("=>")?.1;
+    let open = body.find('{')?;
+    let close = body.rfind('}')?;
+    let text = body[open + 1..close]
+        .replace("$type", name)
+        .replace("$crate", "crate");
+    let file = syn::parse_file(&text).ok()?;
+    file.items.into_iter().find_map(|item| match item {
+        Item::Impl(item) => Some(item),
+        _ => None,
+    })
 }
 
 impl TypeDoc {
@@ -301,6 +370,10 @@ pub fn tidy(tokens: &str) -> String {
     text.replace(")->", ") ->")
         .replace("->", " -> ")
         .replace("  ", " ")
+        .replace("crate::components::", "")
+        .replace("crate::select::", "")
+        .replace("crate::node::", "")
+        .replace("crate::html::", "")
 }
 
 /// The methods `root_methods!` adds, read from its definition in
