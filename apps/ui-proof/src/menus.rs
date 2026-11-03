@@ -340,17 +340,19 @@ fn menus() -> Element {
             table,
             Dialog::new("m-dialog-box", "Rename deal")
                 .description("A menu item opened this.")
-                .body((
-                    DropdownMenu::new("m-in-dialog", "Menu in a dialog")
-                        .item(
-                            MenuItem::action("One")
-                                .on_click(Cmd::toast(ToastTone::Info, "From the dialog.")),
-                        )
-                        .item(MenuItem::action("Two")),
-                    Button::outline("Raise a toast")
-                        .attr("id", "m-dialog-toast")
-                        .on_click(Cmd::toast(ToastTone::Success, "Raised over the dialog.")),
-                ))
+                .body(
+                    Row::gap(2).children((
+                        DropdownMenu::new("m-in-dialog", "Menu in a dialog")
+                            .item(
+                                MenuItem::action("One")
+                                    .on_click(Cmd::toast(ToastTone::Info, "From the dialog.")),
+                            )
+                            .item(MenuItem::action("Two")),
+                        Button::outline("Raise a toast")
+                            .attr("id", "m-dialog-toast")
+                            .on_click(Cmd::toast(ToastTone::Success, "Raised over the dialog.")),
+                    )),
+                )
                 .footer(Button::outline("Close").closes_dialog("m-dialog-box")),
             Button::outline("Open a sheet").opens_dialog("m-sheet-box"),
             Sheet::new("m-sheet-box", "Menu in a sheet").body(

@@ -869,6 +869,32 @@ for (const name of NAMES) {
         await page.done();
       });
 
+      test("N2 a hidden tab pauses the toasts and showing it again lets them run", async () => {
+        const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+        // The runtime reads the page's visibility through the prototype when it starts, so the page is told what to say first.
+        await context.addInitScript(() => {
+          window.__hidden = false;
+          Object.defineProperty(Document.prototype, "hidden", { get: () => window.__hidden, configurable: true });
+        });
+        const page = await context.newPage();
+        await page.goto(BASE + "/menus");
+        await page.locator("#n-info").click();
+        const toast = toasts(page).first();
+        await toast.waitFor();
+        const time = () => toast.evaluate((t) => t.getAnimations().find((a) => a.animationName === "ui-toast-life").currentTime);
+        await page.evaluate(() => { window.__hidden = true; document.dispatchEvent(new Event("visibilitychange")); });
+        assert.equal(await page.locator("[data-slot=toaster]").getAttribute("data-paused"), "");
+        const a = await time();
+        await page.waitForTimeout(500);
+        assert.ok((await time()) - a < 60, "the clock stood still while the tab was hidden");
+        await page.evaluate(() => { window.__hidden = false; document.dispatchEvent(new Event("visibilitychange")); });
+        assert.equal(await page.locator("[data-slot=toaster]").getAttribute("data-paused"), null);
+        const b = await time();
+        await page.waitForTimeout(400);
+        assert.ok((await time()) - b > 300, "and ran again when it came back");
+        await context.close();
+      });
+
       test("N3 a toast swiped sideways with a touch goes; a short drag springs back", async () => {
         const context = await browser.newContext({ viewport: { width: 390, height: 800 }, hasTouch: true });
         const page = await context.newPage();
