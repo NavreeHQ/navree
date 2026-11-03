@@ -81,6 +81,222 @@
     ],
     "shared": []
   },
+  "ActivityFeed": {
+    "name": "ActivityFeed",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/activity.rs",
+    "summary": "What people did lately, newest first.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, title: impl Into<Node>",
+        "doc": "A feed with this `id`, called `title`. The id builds the ids of the list, the notice and the empty message."
+      },
+      {
+        "name": "rows",
+        "generics": "",
+        "args": "items: impl IntoIterator<Item = ActivityItem>, offset_seconds: i32",
+        "doc": "Just the rows, with no header and no list: what the source of a live feed answers with, to be added at the top of the feed's list. `offset_seconds` is the feed's own time zone offset, so a clock time reads the same in a row that arrives later."
+      }
+    ],
+    "methods": [
+      {
+        "name": "live",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the live dot. It says \"Connecting\" in grey until a stream is open, then \"Live\" in green; \"Reconnecting\" in amber while it comes back; \"Paused\" while the page is hidden; and \"Not live\" when the stream refused for good. Without the runtime it is not shown."
+      },
+      {
+        "name": "summary",
+        "generics": "",
+        "args": "summary: impl Into<Node>",
+        "doc": "Writes one line under the title: \"10:30 to 11:30 · 14 events\"."
+      },
+      {
+        "name": "period",
+        "generics": "",
+        "args": "control: impl Into<Node>",
+        "doc": "Puts any control at the end of the header: a period select, a switch."
+      },
+      {
+        "name": "period_select",
+        "generics": "",
+        "args": "action: impl Into<Href>, region_id: &str, select: NativeSelect",
+        "doc": "Puts a period select at the end of the header. Choosing an option asks `action` for the page again with the choice in the query (`?window=15`) and morphs the region `region_id` in place; with JavaScript off, an Apply button does the same as a plain form. Give the region's source the same choice, so a live feed keeps to the period. `select` needs a name and an `aria-label`."
+      },
+      {
+        "name": "item",
+        "generics": "",
+        "args": "item: ActivityItem",
+        "doc": "Adds a row."
+      },
+      {
+        "name": "items",
+        "generics": "",
+        "args": "items: impl IntoIterator<Item = ActivityItem>",
+        "doc": "Adds rows."
+      },
+      {
+        "name": "time_zone",
+        "generics": "",
+        "args": "name: impl Into<String>, offset_seconds: i32",
+        "doc": "Sets the zone the clock times are shown in, by name and offset from UTC in seconds, and writes \"Times in Asia/Kolkata (GMT+05:30)\" under the title."
+      },
+      {
+        "name": "height",
+        "generics": "",
+        "args": "height: FeedHeight",
+        "doc": "Sets how tall the list grows before it scrolls."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Sets the level of the title. The default is 3."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: DisplayLabels",
+        "doc": "Replaces the words."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows placeholder rows: the first load is on its way."
+      },
+      {
+        "name": "failed",
+        "generics": "",
+        "args": "message: impl Into<String>",
+        "doc": "Says the rows couldn't be loaded, keeping the header so the reader can still change the period."
+      },
+      {
+        "name": "retry",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Adds a \"Try again\" link to a failed feed."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "empty: Empty",
+        "doc": "Sets what shows when there are no rows."
+      },
+      {
+        "name": "list_id",
+        "generics": "",
+        "args": "",
+        "doc": "The id of the list that rows are added to: a `Region`'s feed target."
+      },
+      {
+        "name": "empty_id",
+        "generics": "",
+        "args": "",
+        "doc": "The id of the empty message, which a feed removes when the first row comes."
+      },
+      {
+        "name": "in_region",
+        "generics": "",
+        "args": "region_id: &str, src: impl Into<Href>, stream: impl Into<Href>, cursor: impl Into<String>",
+        "doc": "Wraps the feed in a `Region` that fetches new rows from `src` (with `after=<cursor>`) whenever the server-sent event stream at `stream` speaks, and adds them at the top. `cursor` is the newest row's cursor. The feed shows its live dot."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "ActivityItem": {
+    "name": "ActivityItem",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/activity.rs",
+    "summary": "One row of a feed: who did what.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "actor: impl Into<Node>, verb: impl Into<Node>",
+        "doc": "`actor` did `verb`: \"Maya Patel\" \"opened\"."
+      }
+    ],
+    "methods": [
+      {
+        "name": "object",
+        "generics": "",
+        "args": "object: impl Into<Node>",
+        "doc": "What it was done to, after the verb."
+      },
+      {
+        "name": "tag",
+        "generics": "",
+        "args": "tag: impl Into<Node>",
+        "doc": "Adds a small tag at the end of the line."
+      },
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "Colours the icon and the verb."
+      },
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Sets the icon in the round marker."
+      },
+      {
+        "name": "at",
+        "generics": "",
+        "args": "unix_seconds: i64",
+        "doc": "Says when, in unix seconds. The feed prints the clock time in its zone."
+      },
+      {
+        "name": "time_text",
+        "generics": "",
+        "args": "text: impl Into<Cow<'static, str>>",
+        "doc": "Prints this instead of the clock time: \"2 min ago\"."
+      },
+      {
+        "name": "meta",
+        "generics": "",
+        "args": "meta: Meta",
+        "doc": "Adds a fact on the meta line: a browser, a place, an email."
+      },
+      {
+        "name": "metas",
+        "generics": "",
+        "args": "metas: impl IntoIterator<Item = Meta>",
+        "doc": "Adds several facts."
+      },
+      {
+        "name": "href",
+        "generics": "",
+        "args": "href: impl Into<Href>",
+        "doc": "Makes the actor a link and the whole row a click target. Point it at a page or at a page that opens a `Sheet`."
+      },
+      {
+        "name": "muted",
+        "generics": "",
+        "args": "",
+        "doc": "Quieter, for work a machine did."
+      },
+      {
+        "name": "filtered",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves it out until the reader ticks the notice that says some rows were hidden. It is still in the page."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets its `id`. A row whose id is already on the page is not added again when a live feed brings it a second time."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Alert": {
     "name": "Alert",
     "kind": "struct",
@@ -492,9 +708,21 @@
         "generics": "",
         "args": "text: impl Into<Node>",
         "doc": "A badge saying `text`."
+      },
+      {
+        "name": "outcome",
+        "generics": "",
+        "args": "text: impl Into<Node>, reached: bool",
+        "doc": "A chip for something that did or didn't happen: \"Opened\", \"Clicked\". When it did, it carries a check and its tone; when it didn't, a dash and a quiet, dashed look. A screen reader hears \"yes\" or \"no\" after the label (change the words with `outcome_words`)."
       }
     ],
     "methods": [
+      {
+        "name": "outcome_words",
+        "generics": "",
+        "args": "yes: impl Into<String>, no: impl Into<String>",
+        "doc": "Sets the words a screen reader hears after an outcome chip."
+      },
       {
         "name": "variant",
         "generics": "",
@@ -502,10 +730,28 @@
         "doc": "Sets the look."
       },
       {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "Colours it. A `Tone::Named` colour comes from the stylesheet."
+      },
+      {
+        "name": "dot",
+        "generics": "",
+        "args": "",
+        "doc": "Adds a small dot before the text, in the badge's colour."
+      },
+      {
         "name": "icon",
         "generics": "",
         "args": "glyph: Icon",
-        "doc": "Adds an icon."
+        "doc": "Adds an icon before the text."
+      },
+      {
+        "name": "icon_end",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Adds an icon after the text."
       }
     ],
     "variants": [],
@@ -2308,6 +2554,12 @@
         "doc": "Fetches the table's own links (sort, page, filter chips, details) when the pointer rests on one or it takes focus, so the next state is often there before the click. Off unless asked. They change nothing, but each fetch costs a page of rows; a cell's own link, such as a row's page, is never fetched this way."
       },
       {
+        "name": "live_event",
+        "generics": "",
+        "args": "name: &'static str",
+        "doc": "Listens for the stream's events called `name` instead of its unnamed ones. See `Region::live_event`."
+      },
+      {
         "name": "refreshable",
         "generics": "",
         "args": "",
@@ -3510,6 +3762,159 @@
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "FactCard": {
+    "name": "FactCard",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/fact.rs",
+    "summary": "One fact about something: a small label, a value and the details under it.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "label: impl Into<Node>, value: impl Into<Node>",
+        "doc": "The fact `value`, called `label`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Adds an icon beside the label."
+      },
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "Colours the icon."
+      },
+      {
+        "name": "detail",
+        "generics": "",
+        "args": "detail: impl Into<Node>",
+        "doc": "Adds a line under the value. Call it again for more lines."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "FactGrid": {
+    "name": "FactGrid",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/fact.rs",
+    "summary": "Cards side by side: as many columns as fit, one on a phone.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "An empty grid."
+      }
+    ],
+    "methods": [
+      {
+        "name": "card",
+        "generics": "",
+        "args": "card: FactCard",
+        "doc": "Adds a card."
+      },
+      {
+        "name": "cards",
+        "generics": "",
+        "args": "cards: impl IntoIterator<Item = FactCard>",
+        "doc": "Adds cards."
+      },
+      {
+        "name": "cols",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Fixes the number of columns (2 to 6) from 768 px wide; narrower, it is one. Without this the grid fits as many as the width allows."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "FeedHeight": {
+    "name": "FeedHeight",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/activity.rs",
+    "summary": "How tall a feed grows before it scrolls inside itself.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Auto",
+        "doc": "As tall as its rows.",
+        "default": true
+      },
+      {
+        "name": "Sm",
+        "doc": "About 16 rem.",
+        "default": false
+      },
+      {
+        "name": "Md",
+        "doc": "About 27 rem.",
+        "default": false
+      },
+      {
+        "name": "Lg",
+        "doc": "About 40 rem.",
+        "default": false
+      }
+    ],
+    "shared": []
   },
   "Field": {
     "name": "Field",
@@ -4905,6 +5310,48 @@
       }
     ]
   },
+  "Meta": {
+    "name": "Meta",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/tone.rs",
+    "summary": "One small fact under a title: an icon or a flag and some text, such as a device or a place.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "text: impl Into<Node>",
+        "doc": "Some text."
+      },
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon, text: impl Into<Node>",
+        "doc": "An icon, then some text."
+      },
+      {
+        "name": "flag",
+        "generics": "",
+        "args": "flag: impl Into<Node>, text: impl Into<Node>",
+        "doc": "A flag (or any small picture), then some text."
+      }
+    ],
+    "methods": [
+      {
+        "name": "start",
+        "generics": "",
+        "args": "start: impl Into<Node>",
+        "doc": "Puts any node before the text."
+      },
+      {
+        "name": "ltr",
+        "generics": "",
+        "args": "",
+        "doc": "Reads the text left to right whatever the page's direction: an email address, an IP address."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "MultiSelect": {
     "name": "MultiSelect",
     "kind": "struct",
@@ -5890,6 +6337,30 @@
         "generics": "",
         "args": "into: impl Into<AttrValue>, after: impl Into<AttrValue>, empty: Option<&str>",
         "doc": "Makes it a feed: each poll asks the source for what is newer than a cursor and adds it at the start of the element `into` inside the region, instead of fetching the whole region again."
+      },
+      {
+        "name": "feed_limit",
+        "generics": "",
+        "args": "most: u32",
+        "doc": "Trims a feed to its newest `most` rows as new ones arrive, so a page left open for days doesn't grow without end. The default is 200, which `0` also means (a feed with no limit is not offered); the most is 5,000. The row the reader is in is never taken out."
+      },
+      {
+        "name": "announce_new",
+        "generics": "",
+        "args": "many: impl Into<String>, one: impl Into<String>",
+        "doc": "Announces new feed rows to assistive technology: `many` with `{n}` filled in, or `one` when a single row came. Without this a feed adds rows silently."
+      },
+      {
+        "name": "live_from",
+        "generics": "",
+        "args": "url: impl Into<Href>",
+        "doc": "Refetches the region whenever this server-sent event stream says something, or, with a feed, asks the source for what is new. Needs `src`."
+      },
+      {
+        "name": "live_event",
+        "generics": "",
+        "args": "name: &'static str",
+        "doc": "Listens for the stream's events called `name` instead of its unnamed ones (`event: name` on the wire), so one stream can feed several regions. A name of letters, digits and `_ . : -`, at most 64 long; any other is ignored. `open` and `error` are the connection's own events, so they are ignored too."
       },
       {
         "name": "children",
@@ -7485,6 +7956,229 @@
     "variants": [],
     "shared": []
   },
+  "Timeline": {
+    "name": "Timeline",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/timeline.rs",
+    "summary": "Events on a rail.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>, label: impl Into<Node>",
+        "doc": "A timeline with this `id` (the notice and the day headings build on it), named `label` for assistive technology."
+      }
+    ],
+    "methods": [
+      {
+        "name": "time_zone",
+        "generics": "",
+        "args": "name: impl Into<String>, offset_seconds: i32",
+        "doc": "Sets the zone the times are shown in, by its name and its offset from UTC in seconds, and writes \"Times in Asia/Kolkata (GMT+05:30)\" above the events."
+      },
+      {
+        "name": "event",
+        "generics": "",
+        "args": "event: TimelineEvent",
+        "doc": "Adds an event."
+      },
+      {
+        "name": "events",
+        "generics": "",
+        "args": "events: impl IntoIterator<Item = TimelineEvent>",
+        "doc": "Adds events."
+      },
+      {
+        "name": "day",
+        "generics": "",
+        "args": "heading: impl Into<Node>, events: impl IntoIterator<Item = TimelineEvent>",
+        "doc": "Adds events under a heading you write, for times that are not unix seconds."
+      },
+      {
+        "name": "block",
+        "generics": "",
+        "args": "content: impl IntoNodes",
+        "doc": "Adds a full-width item with no dot: a callout, a progress bar."
+      },
+      {
+        "name": "note",
+        "generics": "",
+        "args": "note: impl Into<Node>",
+        "doc": "Adds a dashed note after the events: \"Nothing else happened.\""
+      },
+      {
+        "name": "newest_first",
+        "generics": "",
+        "args": "",
+        "doc": "Says the events run from the newest to the oldest, so a gap is measured to the event below, not the one above."
+      },
+      {
+        "name": "heading",
+        "generics": "",
+        "args": "level: u8",
+        "doc": "Sets the level of the day headings. The default is 3."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: DisplayLabels",
+        "doc": "Replaces the words."
+      },
+      {
+        "name": "loading",
+        "generics": "",
+        "args": "",
+        "doc": "Shows that events are on their way."
+      },
+      {
+        "name": "empty",
+        "generics": "",
+        "args": "empty: Empty",
+        "doc": "Sets what shows when there are no events."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "TimelineEvent": {
+    "name": "TimelineEvent",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/timeline.rs",
+    "summary": "One thing that happened.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "title: impl Into<Node>",
+        "doc": "An event called `title`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "at",
+        "generics": "",
+        "args": "unix_seconds: i64",
+        "doc": "Says when it happened, in unix seconds. Events with a time are grouped by day and get a gap chip."
+      },
+      {
+        "name": "time_text",
+        "generics": "",
+        "args": "text: impl Into<Cow<'static, str>>",
+        "doc": "Prints this in the time column instead of the clock time: \"just now\", or the only time there is for an event with no moment."
+      },
+      {
+        "name": "detail",
+        "generics": "",
+        "args": "detail: impl Into<Node>",
+        "doc": "Adds a line under the title."
+      },
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "Colours the dot."
+      },
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "glyph: Icon",
+        "doc": "Puts an icon in a larger round indicator instead of a dot."
+      },
+      {
+        "name": "state",
+        "generics": "",
+        "args": "state: TimelineState",
+        "doc": "Sets where it stands."
+      },
+      {
+        "name": "current",
+        "generics": "",
+        "args": "",
+        "doc": "The step happening now."
+      },
+      {
+        "name": "upcoming",
+        "generics": "",
+        "args": "",
+        "doc": "A step that has not happened."
+      },
+      {
+        "name": "muted",
+        "generics": "",
+        "args": "",
+        "doc": "An event set aside, such as work a machine did."
+      },
+      {
+        "name": "gap",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Writes the gap chip by hand (`+2 min after the reminder`) instead of working it out."
+      },
+      {
+        "name": "no_gap",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves the gap chip out."
+      },
+      {
+        "name": "meta",
+        "generics": "",
+        "args": "meta: Meta",
+        "doc": "Adds a fact under it: a device, a place."
+      },
+      {
+        "name": "metas",
+        "generics": "",
+        "args": "metas: impl IntoIterator<Item = Meta>",
+        "doc": "Adds several facts under it."
+      },
+      {
+        "name": "filtered",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves it out until the reader ticks the notice that says some events were hidden. It is still in the page, so this needs no request and no script."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets its `id`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "TimelineState": {
+    "name": "TimelineState",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/timeline.rs",
+    "summary": "Where an event stands on the rail.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Done",
+        "doc": "It happened: a filled dot.",
+        "default": true
+      },
+      {
+        "name": "Current",
+        "doc": "It is happening now: a ring, and the event is the current step.",
+        "default": false
+      },
+      {
+        "name": "Upcoming",
+        "doc": "It has not happened: an empty ring.",
+        "default": false
+      },
+      {
+        "name": "Muted",
+        "doc": "It happened but is set aside, such as work a machine did: a dashed ring and quieter text.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "Toast": {
     "name": "Toast",
     "kind": "struct",
@@ -7885,6 +8579,54 @@
       {
         "name": "Outline",
         "doc": "A line round each item.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "Tone": {
+    "name": "Tone",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/tone.rs",
+    "summary": "What a dot, an icon or a badge means by its colour.",
+    "constructors": [
+      {
+        "name": "named",
+        "generics": "",
+        "args": "name: &'static str",
+        "doc": "The colour called `name` in the stylesheet."
+      }
+    ],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Neutral",
+        "doc": "No colour: the default.",
+        "default": true
+      },
+      {
+        "name": "Info",
+        "doc": "Something to know.",
+        "default": false
+      },
+      {
+        "name": "Success",
+        "doc": "Good news.",
+        "default": false
+      },
+      {
+        "name": "Warning",
+        "doc": "Needs attention.",
+        "default": false
+      },
+      {
+        "name": "Danger",
+        "doc": "Bad news.",
+        "default": false
+      },
+      {
+        "name": "Named",
+        "doc": "A colour the stylesheet names: `violet`, `cyan` and `rose` ship, and an app adds its own as `[data-tone=brand]{--tone:#7c5cff}`. A name that is not lowercase letters, digits and hyphens, at most 32 long, is neutral.",
         "default": false
       }
     ],

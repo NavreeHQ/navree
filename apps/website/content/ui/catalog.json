@@ -52,7 +52,10 @@
         "typography",
         "kbd",
         "attachment",
-        "message"
+        "message",
+        "timeline",
+        "activity-feed",
+        "fact-card"
       ]
     },
     {
@@ -585,14 +588,18 @@
       "group": "display",
       "types": [
         "Badge",
-        "BadgeVariant"
+        "BadgeVariant",
+        "Tone"
       ],
       "thumb": "badge/default",
       "anatomy": "badge/default",
       "examples": [
         "badge/default",
         "badge/variants",
-        "badge/icon"
+        "badge/icon",
+        "badge/dot",
+        "badge/tones",
+        "badge/outcome"
       ]
     },
     {
@@ -699,6 +706,69 @@
         "message/thumb",
         "message/default",
         "message/markers"
+      ]
+    },
+    {
+      "id": "timeline",
+      "name": "Timeline",
+      "url": "/docs/components/timeline/",
+      "summary": "Events on a rail.",
+      "group": "display",
+      "types": [
+        "Timeline",
+        "TimelineEvent",
+        "TimelineState",
+        "Meta"
+      ],
+      "thumb": "timeline/thumb",
+      "anatomy": "timeline/default",
+      "examples": [
+        "timeline/thumb",
+        "timeline/default",
+        "timeline/tones",
+        "timeline/states",
+        "timeline/meta",
+        "timeline/hidden",
+        "timeline/empty",
+        "timeline/text"
+      ]
+    },
+    {
+      "id": "activity-feed",
+      "name": "ActivityFeed",
+      "url": "/docs/components/activity-feed/",
+      "summary": "What people did lately, newest first.",
+      "group": "display",
+      "types": [
+        "ActivityFeed",
+        "ActivityItem",
+        "FeedHeight"
+      ],
+      "thumb": "activity-feed/thumb",
+      "anatomy": "activity-feed/default",
+      "examples": [
+        "activity-feed/thumb",
+        "activity-feed/default",
+        "activity-feed/hidden",
+        "activity-feed/states"
+      ]
+    },
+    {
+      "id": "fact-card",
+      "name": "FactCard and FactGrid",
+      "url": "/docs/components/fact-card/",
+      "summary": "One fact about something: a small label, a value and the details under it.",
+      "group": "display",
+      "types": [
+        "FactCard",
+        "FactGrid"
+      ],
+      "thumb": "fact-card/thumb",
+      "anatomy": "fact-card/default",
+      "examples": [
+        "fact-card/thumb",
+        "fact-card/default",
+        "fact-card/single"
       ]
     },
     {
@@ -1294,6 +1364,7 @@
       "thumb": "regions/lazy",
       "anatomy": null,
       "examples": [
+        "regions/live",
         "regions/lazy",
         "regions/poll"
       ]
@@ -9046,6 +9117,1717 @@
       "slots": []
     },
     {
+      "id": "timeline/thumb",
+      "component": "timeline",
+      "slug": "thumb",
+      "title": "A timeline",
+      "kind": "single",
+      "code": "Timeline::new(\"thumb\", \"Message\")\n    .event(\n        TimelineEvent::new(\"Sent\")\n            .at(1_793_592_667)\n            .tone(Tone::Success),\n    )\n    .event(\n        TimelineEvent::new(\"Opened\")\n            .at(1_793_592_727)\n            .tone(Tone::Info),\n    )\n    .event(TimelineEvent::new(\"Clicked a link\").at(1_793_592_787))",
+      "src": "/ui-preview/timeline/thumb.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "timeline",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "timeline-day",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "timeline-day-title",
+                  "tag": "h3",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "timeline-list",
+                  "tag": "ol",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "timeline-event",
+                      "tag": "li",
+                      "count": 3,
+                      "children": [
+                        {
+                          "slot": "timeline-time",
+                          "tag": "time",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "timeline-dot",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "timeline-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "timeline-head",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "timeline-title",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "timeline-gap",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "timeline/default",
+      "component": "timeline",
+      "slug": "default",
+      "title": "Days, times and gaps",
+      "kind": "single",
+      "code": "Timeline::new(\"message\", \"Autumn launch email to Maya Patel\")\n    .time_zone(\"Asia/Kolkata\", 19_800)\n    .event(\n        TimelineEvent::new(\"Queued\")\n            .at(1_793_592_667)\n            .tone(Tone::Neutral),\n    )\n    .event(\n        TimelineEvent::new(\"Delivered\")\n            .at(1_793_592_668)\n            .tone(Tone::Success)\n            .detail(\"Accepted by the recipient's mail server\"),\n    )\n    .event(\n        TimelineEvent::new(\"Opened\")\n            .at(1_793_592_788)\n            .tone(Tone::Info)\n            .meta(Meta::icon(icons::MONITOR, \"Safari on macOS\"))\n            .meta(Meta::flag(flag(\"IN\"), \"Mumbai\")),\n    )\n    .event(\n        TimelineEvent::new(\"Clicked the pricing link\")\n            .at(1_793_593_100)\n            .tone(Tone::Success)\n            .meta(Meta::icon(icons::LINK, \"autumn.example.com/pricing\")),\n    )\n    .event(\n        TimelineEvent::new(\"Unsubscribed\")\n            .at(1_793_679_700)\n            .tone(Tone::Warning)\n            .detail(\"From the footer link\")\n            .meta(Meta::flag(flag(\"DE\"), \"Berlin\")),\n    )",
+      "src": "/ui-preview/timeline/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "timeline",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "timeline-zone",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "timeline-day",
+              "tag": "div",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "timeline-day-title",
+                  "tag": "h3",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "timeline-list",
+                  "tag": "ol",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "timeline-event",
+                      "tag": "li",
+                      "count": 4,
+                      "children": [
+                        {
+                          "slot": "timeline-time",
+                          "tag": "time",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "timeline-dot",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "timeline-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "timeline-head",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "timeline-title",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "timeline-gap",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "meta",
+                              "tag": "ul",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "meta-item",
+                                  "tag": "li",
+                                  "count": 2,
+                                  "children": [
+                                    {
+                                      "slot": "meta-start",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "meta-text",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "timeline/tones",
+      "component": "timeline",
+      "slug": "tones",
+      "title": "Tones",
+      "kind": "gallery",
+      "code": "[\n    (\"Neutral\", Tone::Neutral),\n    (\"Info\", Tone::Info),\n    (\"Success\", Tone::Success),\n    (\"Warning\", Tone::Warning),\n    (\"Danger\", Tone::Danger),\n    (\"Violet\", Tone::named(\"violet\")),\n]\n.map(|(name, tone)| {\n    (\n        name,\n        Timeline::new(name, name)\n            .event(TimelineEvent::new(\"An event\").time_text(\"09:41\").tone(tone)),\n    )\n})",
+      "src": "/ui-preview/timeline/tones.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "wide",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [
+        "Neutral",
+        "Info",
+        "Success",
+        "Warning",
+        "Danger",
+        "Violet"
+      ],
+      "slots": []
+    },
+    {
+      "id": "timeline/states",
+      "component": "timeline",
+      "slug": "states",
+      "title": "Where an event stands",
+      "kind": "single",
+      "code": "Timeline::new(\"states\", \"Where each step stands\")\n    .event(\n        TimelineEvent::new(\"Brief approved\")\n            .time_text(\"Mon\")\n            .tone(Tone::Success),\n    )\n    .event(\n        TimelineEvent::new(\"Audience built\")\n            .time_text(\"Tue\")\n            .tone(Tone::Success)\n            .icon(icons::USERS),\n    )\n    .event(TimelineEvent::new(\"Sending\").time_text(\"Now\").current())\n    .event(\n        TimelineEvent::new(\"Reminder to openers\")\n            .time_text(\"Thu\")\n            .upcoming(),\n    )\n    .event(\n        TimelineEvent::new(\"Link check by a mail scanner\")\n            .time_text(\"Mon\")\n            .muted()\n            .icon(icons::BOT),\n    )",
+      "src": "/ui-preview/timeline/states.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "timeline",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "timeline-day",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "timeline-list",
+                  "tag": "ol",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "timeline-event",
+                      "tag": "li",
+                      "count": 5,
+                      "children": [
+                        {
+                          "slot": "timeline-time",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "timeline-dot",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "timeline-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "timeline-head",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "timeline-title",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "timeline/meta",
+      "component": "timeline",
+      "slug": "meta",
+      "title": "Facts under an event",
+      "kind": "single",
+      "code": "Timeline::new(\"meta\", \"A click\")\n    .time_zone(\"Europe/Berlin\", 3600)\n    .event(\n        TimelineEvent::new(\"Clicked the pricing link\")\n            .at(1_793_592_667)\n            .tone(Tone::Success)\n            .meta(Meta::icon(icons::MONITOR, \"Firefox on Windows\"))\n            .meta(Meta::flag(flag(\"DE\"), \"Berlin, Germany\"))\n            .meta(Meta::icon(icons::GLOBE, \"Telekom\"))\n            .meta(Meta::icon(icons::MAIL, \"anna@example.com\").ltr()),\n    )",
+      "src": "/ui-preview/timeline/meta.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "timeline",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "timeline-zone",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "timeline-day",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "timeline-day-title",
+                  "tag": "h3",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "timeline-list",
+                  "tag": "ol",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "timeline-event",
+                      "tag": "li",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "timeline-time",
+                          "tag": "time",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "timeline-dot",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "timeline-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "timeline-head",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "timeline-title",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "meta",
+                              "tag": "ul",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "meta-item",
+                                  "tag": "li",
+                                  "count": 4,
+                                  "children": [
+                                    {
+                                      "slot": "meta-start",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "meta-text",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "timeline/hidden",
+      "component": "timeline",
+      "slug": "hidden",
+      "title": "Events set aside",
+      "kind": "single",
+      "code": "Timeline::new(\"hidden\", \"Recent steps\")\n    .event(TimelineEvent::new(\"Sent\").at(1_793_592_667))\n    .event(\n        TimelineEvent::new(\"Opened by a mail scanner\")\n            .at(1_793_592_668)\n            .muted()\n            .filtered(),\n    )\n    .event(\n        TimelineEvent::new(\"Link checked by a mail scanner\")\n            .at(1_793_592_669)\n            .muted()\n            .filtered(),\n    )\n    .event(\n        TimelineEvent::new(\"Opened\")\n            .at(1_793_592_900)\n            .tone(Tone::Info),\n    )",
+      "src": "/ui-preview/timeline/hidden.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "timeline",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "hidden-notice",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "hidden-notice-text",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "hidden-notice-toggle",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "reveal",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "hidden-notice-dismiss",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "timeline-day",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "timeline-day-title",
+                  "tag": "h3",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "timeline-list",
+                  "tag": "ol",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "timeline-event",
+                      "tag": "li",
+                      "count": 4,
+                      "children": [
+                        {
+                          "slot": "timeline-time",
+                          "tag": "time",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "timeline-dot",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "timeline-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "timeline-head",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "timeline-title",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "timeline-gap",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "timeline/empty",
+      "component": "timeline",
+      "slug": "empty",
+      "title": "Empty and loading",
+      "kind": "gallery",
+      "code": "[\n    (\"Empty\", Timeline::new(\"none\", \"Steps\")),\n    (\"Loading\", Timeline::new(\"wait\", \"Steps\").loading()),\n]",
+      "src": "/ui-preview/timeline/empty.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "wide",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [
+        "Empty",
+        "Loading"
+      ],
+      "slots": []
+    },
+    {
+      "id": "timeline/text",
+      "component": "timeline",
+      "slug": "text",
+      "title": "Times written by hand",
+      "kind": "single",
+      "code": "Timeline::new(\"text\", \"Project history\")\n    .day(\n        \"Last week\",\n        [\n            TimelineEvent::new(\"Kick-off\").time_text(\"Mon\"),\n            TimelineEvent::new(\"Design review\").time_text(\"Wed\"),\n        ],\n    )\n    .day(\n        \"This week\",\n        [TimelineEvent::new(\"Launch\").time_text(\"Tue\").current()],\n    )\n    .note(\"Nothing else is planned.\")",
+      "src": "/ui-preview/timeline/text.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "timeline",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "timeline-day",
+              "tag": "div",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "timeline-day-title",
+                  "tag": "h3",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "timeline-list",
+                  "tag": "ol",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "timeline-event",
+                      "tag": "li",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "timeline-time",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "timeline-dot",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "timeline-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "timeline-head",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "timeline-title",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "timeline-note",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "activity-feed/thumb",
+      "component": "activity-feed",
+      "slug": "thumb",
+      "title": "A feed",
+      "kind": "single",
+      "code": "ActivityFeed::new(\"thumb\", \"Recent activity\")\n    .item(\n        ActivityItem::new(\"Maya Patel\", \"opened\")\n            .tone(Tone::Info)\n            .icon(icons::MAIL)\n            .time_text(\"2 min ago\"),\n    )\n    .item(\n        ActivityItem::new(\"Tomás García\", \"clicked\")\n            .tone(Tone::Success)\n            .icon(icons::LINK)\n            .time_text(\"5 min ago\"),\n    )",
+      "src": "/ui-preview/activity-feed/thumb.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "activity-feed",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "activity-header",
+              "tag": "header",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "activity-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "activity-title",
+                      "tag": "h3",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "activity-list",
+              "tag": "ol",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "activity-item",
+                  "tag": "li",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "activity-icon",
+                      "tag": "span",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "activity-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "activity-line",
+                          "tag": "p",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "activity-actor",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "activity-verb",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "activity-time",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "activity-feed/default",
+      "component": "activity-feed",
+      "slug": "default",
+      "title": "Recent activity",
+      "kind": "single",
+      "code": "ActivityFeed::new(\"activity\", \"Recent activity\")\n    .live()\n    .summary(\"09:30 to 10:30 · 4 events\")\n    .time_zone(\"Asia/Kolkata\", 19_800)\n    .period_select(\n        \"/activity\",\n        \"activity-region\",\n        NativeSelect::new(\"window\")\n            .attr(\"aria-label\", \"Period\")\n            .option(\"15\", \"Last 15 minutes\")\n            .option(\"60\", \"Last hour\")\n            .option(\"all\", \"Since launch\")\n            .selected(\"60\"),\n    )\n    .height(FeedHeight::Md)\n    .items(feed_rows())",
+      "src": "/ui-preview/activity-feed/default.html",
+      "height": 420,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "activity-feed",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "activity-header",
+              "tag": "header",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "activity-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "activity-title",
+                      "tag": "h3",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "live-state",
+                      "tag": "span",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "live-dot",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "activity-summary",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "activity-zone",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "activity-period",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "native-select",
+                      "tag": "select",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "hidden-notice",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "hidden-notice-text",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "hidden-notice-toggle",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "reveal",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "hidden-notice-dismiss",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "activity-list",
+              "tag": "ol",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "activity-item",
+                  "tag": "li",
+                  "count": 4,
+                  "children": [
+                    {
+                      "slot": "activity-icon",
+                      "tag": "span",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "activity-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "activity-line",
+                          "tag": "p",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "activity-actor",
+                              "tag": "a",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "activity-verb",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "activity-object",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "activity-tag",
+                              "tag": "span",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "badge",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "meta",
+                          "tag": "ul",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "meta-item",
+                              "tag": "li",
+                              "count": 2,
+                              "children": [
+                                {
+                                  "slot": "meta-start",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "meta-text",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "activity-time",
+                      "tag": "time",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "activity-feed/hidden",
+      "component": "activity-feed",
+      "slug": "hidden",
+      "title": "Rows left out",
+      "kind": "single",
+      "code": "ActivityFeed::new(\"hidden\", \"Recent activity\")\n    .summary(\"3 events\")\n    .item(\n        ActivityItem::new(\"Maya Patel\", \"opened\")\n            .tone(Tone::Info)\n            .icon(icons::MAIL)\n            .time_text(\"2 min ago\"),\n    )\n    .item(\n        ActivityItem::new(\"A mail scanner\", \"checked a link in\")\n            .object(\"Autumn launch\")\n            .icon(icons::BOT)\n            .time_text(\"3 min ago\")\n            .muted()\n            .filtered(),\n    )\n    .item(\n        ActivityItem::new(\"A mail scanner\", \"opened\")\n            .object(\"Autumn launch\")\n            .icon(icons::BOT)\n            .time_text(\"4 min ago\")\n            .muted()\n            .filtered(),\n    )",
+      "src": "/ui-preview/activity-feed/hidden.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "activity-feed",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "activity-header",
+              "tag": "header",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "activity-heading",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "activity-title",
+                      "tag": "h3",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "activity-summary",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "hidden-notice",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "hidden-notice-text",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "hidden-notice-toggle",
+                  "tag": "label",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "reveal",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "hidden-notice-dismiss",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "activity-list",
+              "tag": "ol",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "activity-item",
+                  "tag": "li",
+                  "count": 3,
+                  "children": [
+                    {
+                      "slot": "activity-icon",
+                      "tag": "span",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "activity-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "activity-line",
+                          "tag": "p",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "activity-actor",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "activity-verb",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "activity-object",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "activity-time",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "activity-feed/states",
+      "component": "activity-feed",
+      "slug": "states",
+      "title": "Loading, failed and empty",
+      "kind": "gallery",
+      "code": "[\n    (\n        \"Loading\",\n        ActivityFeed::new(\"loading\", \"Recent activity\").loading(),\n    ),\n    (\n        \"Failed\",\n        ActivityFeed::new(\"failed\", \"Recent activity\")\n            .failed(\"The activity could not load.\")\n            .retry(\"/activity\"),\n    ),\n    (\n        \"Empty\",\n        ActivityFeed::new(\"empty\", \"Recent activity\").empty(\n            Empty::new(\"Quiet for the last hour\")\n                .description(\"Try a longer period.\")\n                .icon(icons::ACTIVITY),\n        ),\n    ),\n]",
+      "src": "/ui-preview/activity-feed/states.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "wide",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [
+        "Loading",
+        "Failed",
+        "Empty"
+      ],
+      "slots": []
+    },
+    {
+      "id": "fact-card/thumb",
+      "component": "fact-card",
+      "slug": "thumb",
+      "title": "A fact card",
+      "kind": "single",
+      "code": "FactCard::new(\"Device\", \"iPhone 15\")\n    .icon(icons::MONITOR)\n    .detail(\"Safari 18 on iOS 19\")",
+      "src": "/ui-preview/fact-card/thumb.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "fact-card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "fact-icon",
+              "tag": "span",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "fact-body",
+              "tag": "dl",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "fact-label",
+                  "tag": "dt",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "fact-value",
+                  "tag": "dd",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "fact-detail",
+                  "tag": "dd",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fact-card/default",
+      "component": "fact-card",
+      "slug": "default",
+      "title": "A grid of facts",
+      "kind": "single",
+      "code": "FactGrid::new().cols(2).cards([\n    FactCard::new(\"Outcome\", Badge::new(\"Clicked\").tone(Tone::Success).dot())\n        .icon(icons::CHECK_CHECK)\n        .tone(Tone::Success)\n        .detail(\"After 5 min 33 s\"),\n    FactCard::new(\"Device\", \"MacBook Air\")\n        .icon(icons::MONITOR)\n        .tone(Tone::Info)\n        .detail(\"Safari 18 on macOS\")\n        .detail(\"1440 x 900\"),\n    FactCard::new(\"Place\", \"Mumbai, India\")\n        .icon(icons::MAP_PIN)\n        .tone(Tone::named(\"violet\"))\n        .detail(\"Jio Fiber\"),\n    FactCard::new(\"Speed\", \"5 min 33 s\")\n        .icon(icons::GAUGE)\n        .tone(Tone::Warning)\n        .detail(\"Faster than 72% of recipients\"),\n])",
+      "src": "/ui-preview/fact-card/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "fact-grid",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "fact-card",
+              "tag": "div",
+              "count": 4,
+              "children": [
+                {
+                  "slot": "fact-icon",
+                  "tag": "span",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "fact-body",
+                  "tag": "dl",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "fact-label",
+                      "tag": "dt",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "fact-value",
+                      "tag": "dd",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "badge",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "badge-dot",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "fact-detail",
+                      "tag": "dd",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fact-card/single",
+      "component": "fact-card",
+      "slug": "single",
+      "title": "One card",
+      "kind": "single",
+      "code": "FactCard::new(\"Delivery\", \"Delivered\")\n    .icon(icons::SEND)\n    .tone(Tone::Success)\n    .detail(\"Sent 09:41:07\")\n    .detail(\"Accepted 09:41:08\")",
+      "src": "/ui-preview/fact-card/single.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "fact-card",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "fact-icon",
+              "tag": "span",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "fact-body",
+              "tag": "dl",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "fact-label",
+                  "tag": "dt",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "fact-value",
+                  "tag": "dd",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "fact-detail",
+                  "tag": "dd",
+                  "count": 2,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "badge/dot",
+      "component": "badge",
+      "slug": "dot",
+      "title": "A dot and a tone",
+      "kind": "single",
+      "code": "Row::gap(2).wrap().children((\n    Badge::new(\"Delivered\").tone(Tone::Success).dot(),\n    Badge::new(\"Opened\").tone(Tone::Info).dot(),\n    Badge::new(\"Bounced\").tone(Tone::Danger).dot(),\n    Badge::new(\"Queued\").dot(),\n))",
+      "src": "/ui-preview/badge/dot.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "badge",
+              "tag": "span",
+              "count": 4,
+              "children": [
+                {
+                  "slot": "badge-dot",
+                  "tag": "span",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "badge/tones",
+      "component": "badge",
+      "slug": "tones",
+      "title": "Tones",
+      "kind": "gallery",
+      "code": "[\n    (\"Neutral\", Badge::new(\"Queued\")),\n    (\"Info\", Badge::new(\"Opened\").tone(Tone::Info)),\n    (\"Success\", Badge::new(\"Clicked\").tone(Tone::Success)),\n    (\"Warning\", Badge::new(\"Delayed\").tone(Tone::Warning)),\n    (\"Danger\", Badge::new(\"Bounced\").tone(Tone::Danger)),\n    (\"Violet\", Badge::new(\"Replied\").tone(Tone::named(\"violet\"))),\n    (\"Cyan\", Badge::new(\"Forwarded\").tone(Tone::named(\"cyan\"))),\n    (\"Rose\", Badge::new(\"Complained\").tone(Tone::named(\"rose\"))),\n]",
+      "src": "/ui-preview/badge/tones.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [
+        "Neutral",
+        "Info",
+        "Success",
+        "Warning",
+        "Danger",
+        "Violet",
+        "Cyan",
+        "Rose"
+      ],
+      "slots": []
+    },
+    {
+      "id": "badge/outcome",
+      "component": "badge",
+      "slug": "outcome",
+      "title": "Outcome chips",
+      "kind": "single",
+      "code": "Row::gap(2).wrap().children((\n    Badge::outcome(\"Delivered\", true).tone(Tone::Success),\n    Badge::outcome(\"Opened\", true).tone(Tone::Info),\n    Badge::outcome(\"Clicked\", false),\n    Badge::outcome(\"Replied\", false),\n))",
+      "src": "/ui-preview/badge/outcome.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "badge",
+              "tag": "span",
+              "count": 4,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regions/live",
+      "component": "regions",
+      "slug": "live",
+      "title": "A feed fed by a stream",
+      "kind": "single",
+      "code": "ActivityFeed::new(\"live-activity\", \"Live activity\")\n    .summary(\"New rows arrive as the stream speaks\")\n    .item(\n        ActivityItem::new(\"Maya Patel\", \"opened\")\n            .tone(Tone::Info)\n            .icon(icons::MAIL)\n            .time_text(\"just now\")\n            .id(\"event-41\"),\n    )\n    .in_region(\n        \"live-region\",\n        \"/fragments/activity\",\n        \"/events/activity\",\n        \"41\",\n    )",
+      "src": "/ui-preview/regions/live.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "live-ca16cf63e586.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "region",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "activity-feed",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "activity-header",
+                  "tag": "header",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "activity-heading",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "activity-title",
+                          "tag": "h3",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "live-state",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "live-dot",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "activity-summary",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "hidden-notice",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "hidden-notice-text",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "hidden-notice-toggle",
+                      "tag": "label",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "reveal",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "hidden-notice-dismiss",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "activity-list",
+                  "tag": "ol",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "activity-item",
+                      "tag": "li",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "activity-icon",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "activity-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "activity-line",
+                              "tag": "p",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "activity-actor",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "activity-verb",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "activity-time",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "alert/default",
       "component": "alert",
       "slug": "default",
@@ -13365,7 +15147,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-6a7c572913de.js"
+        "core-29082436af26.js"
       ],
       "captions": [],
       "slots": [
@@ -13523,7 +15305,7 @@
       "width": 720,
       "scripts": [
         "overlay-ef4718e7fbcd.js",
-        "table-b01452996568.js"
+        "table-89cd45739353.js"
       ],
       "captions": [],
       "slots": [
@@ -14153,7 +15935,7 @@
       "width": null,
       "scripts": [
         "overlay-ef4718e7fbcd.js",
-        "table-b01452996568.js"
+        "table-89cd45739353.js"
       ],
       "captions": [],
       "slots": [
@@ -14835,7 +16617,7 @@
       "width": null,
       "scripts": [
         "overlay-ef4718e7fbcd.js",
-        "table-b01452996568.js"
+        "table-89cd45739353.js"
       ],
       "captions": [],
       "slots": [
@@ -15620,7 +17402,7 @@
       "width": null,
       "scripts": [
         "overlay-ef4718e7fbcd.js",
-        "table-b01452996568.js"
+        "table-89cd45739353.js"
       ],
       "captions": [],
       "slots": [
@@ -16302,7 +18084,7 @@
       "width": null,
       "scripts": [
         "overlay-ef4718e7fbcd.js",
-        "table-b01452996568.js"
+        "table-89cd45739353.js"
       ],
       "captions": [],
       "slots": [
@@ -16932,7 +18714,7 @@
       "width": null,
       "scripts": [
         "overlay-ef4718e7fbcd.js",
-        "table-b01452996568.js"
+        "table-89cd45739353.js"
       ],
       "captions": [
         "No rows",
@@ -17440,7 +19222,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-6a7c572913de.js"
+        "core-29082436af26.js"
       ],
       "captions": [],
       "slots": [
@@ -17480,7 +19262,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-6a7c572913de.js"
+        "core-29082436af26.js"
       ],
       "captions": [],
       "slots": [
@@ -17566,7 +19348,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-6a7c572913de.js"
+        "core-29082436af26.js"
       ],
       "captions": [],
       "slots": [
@@ -17613,7 +19395,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-6a7c572913de.js"
+        "core-29082436af26.js"
       ],
       "captions": [],
       "slots": [
@@ -17666,7 +19448,7 @@
       "live": true,
       "width": null,
       "scripts": [
-        "core-6a7c572913de.js"
+        "core-29082436af26.js"
       ],
       "captions": [],
       "slots": [
