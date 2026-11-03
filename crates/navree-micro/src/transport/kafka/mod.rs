@@ -38,7 +38,7 @@ use crate::transport::LocalRetry;
 use crate::transport::broker::{client_config, reconnect_delay};
 use crate::{
     DeadLetter, Delivery, DeliveryActions, Envelope, MicroError, MicroTransport, PatternKind,
-    Subscription, TlsOptions, has_wildcard,
+    Subscribed, Subscription, TlsOptions, has_wildcard,
 };
 
 /// How long one fetch waits for records.
@@ -339,6 +339,19 @@ impl MicroTransport for KafkaTransport {
         subscriptions: Vec<Subscription>,
         deliveries: mpsc::Sender<Delivery>,
     ) -> BoxFuture<'_, Result<(), MicroError>> {
+        self.listen_subscribed(subscriptions, deliveries, Subscribed::detached())
+    }
+
+    /// Signals once the topics exist and where each new group starts is
+    /// read, so an event published after the signal is delivered. While the
+    /// broker can't be reached it signals at once (nothing can be published
+    /// then either) and keeps trying in the background.
+    fn listen_subscribed(
+        &self,
+        subscriptions: Vec<Subscription>,
+        deliveries: mpsc::Sender<Delivery>,
+        subscribed: Subscribed,
+    ) -> BoxFuture<'_, Result<(), MicroError>> {
         Box::pin(async move {
             if let Some(wild) = subscriptions.iter().find(|s| has_wildcard(&s.pattern)) {
                 return Err(MicroError::transport(format!(
@@ -362,12 +375,16 @@ impl MicroTransport for KafkaTransport {
             topics.extend(retry_topic.clone());
             topics.sort();
             topics.dedup();
+            let mut subscribed = Some(subscribed);
             let mut attempt = 0u32;
             loop {
                 match self.ensure_topics(&topics).await {
                     Ok(_) => break,
                     Err(error) => {
                         tracing::warn!(target: "navree::micro", %error, "preparing the Kafka topics failed; retrying");
+                        if let Some(subscribed) = subscribed.take() {
+                            subscribed.signal();
+                        }
                         attempt = attempt.saturating_add(1);
                         tokio::select! {
                             () = tokio::time::sleep(reconnect_delay(attempt)) => {}
@@ -405,6 +422,9 @@ impl MicroTransport for KafkaTransport {
                 tasks.spawn(group.clone().run_fetching(stop.clone()));
                 Some(group)
             };
+            if let Some(subscribed) = subscribed {
+                subscribed.signal();
+            }
             tokio::select! {
                 () = deliveries.closed() => {}
                 () = self.closed.cancelled() => {}

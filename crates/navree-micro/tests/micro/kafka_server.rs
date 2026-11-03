@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 
 use bytes::{Bytes, BytesMut};
 use futures_util::{SinkExt, StreamExt};
+use kafka_protocol::messages::consumer_group_heartbeat_request::TopicPartitions as OwnedPartitions;
 use kafka_protocol::messages::consumer_group_heartbeat_response::{Assignment, TopicPartitions};
 use kafka_protocol::messages::create_topics_response::CreatableTopicResult;
 use kafka_protocol::messages::fetch_response::{FetchableTopicResponse, PartitionData};
@@ -33,7 +34,7 @@ use kafka_protocol::messages::produce_response::{PartitionProduceResponse, Topic
 use kafka_protocol::messages::{
     ApiKey, BrokerId, ConsumerGroupHeartbeatRequest, ConsumerGroupHeartbeatResponse,
     CreateTopicsRequest, CreateTopicsResponse, FetchRequest, FetchResponse, FindCoordinatorRequest,
-    FindCoordinatorResponse, ListOffsetsRequest, ListOffsetsResponse, MetadataRequest,
+    FindCoordinatorResponse, GroupId, ListOffsetsRequest, ListOffsetsResponse, MetadataRequest,
     MetadataResponse, OffsetCommitRequest, OffsetCommitResponse, OffsetFetchRequest,
     OffsetFetchResponse, ProduceRequest, ProduceResponse, RequestHeader, ResponseHeader,
     SaslAuthenticateRequest, SaslAuthenticateResponse, SaslHandshakeRequest, SaslHandshakeResponse,
@@ -281,6 +282,11 @@ impl MiniKafka {
             .map_or(0, |group| group.members.len())
     }
 
+    /// Answers every ListOffsets request `delay` late (a slow broker).
+    pub fn delay_list_offsets(&self, delay: Duration) {
+        self.state.lock().list_offsets_delay = delay;
+    }
+
     /// Requests the broker did not understand, or refused to serve.
     pub fn problems(&self) -> Vec<String> {
         self.state.lock().problems.clone()
@@ -314,6 +320,8 @@ struct Inner {
     topics: BTreeMap<String, Topic>,
     groups: HashMap<String, Group>,
     problems: Vec<String>,
+    /// How late ListOffsets is answered.
+    list_offsets_delay: Duration,
 }
 
 struct Topic {
@@ -332,7 +340,11 @@ struct Group {
 
 struct Member {
     topics: Vec<String>,
+    /// What the member reported owning in its last heartbeat.
     owned: BTreeSet<(String, i32)>,
+    /// What the coordinator last assigned it (it may not have reported
+    /// owning it yet).
+    assigned: BTreeSet<(String, i32)>,
     seen: Instant,
 }
 
@@ -467,6 +479,8 @@ async fn handle(
         }
         RequestKind::Produce(request) => Some(ResponseKind::Produce(produce(state, request))),
         RequestKind::ListOffsets(request) => {
+            let delay = state.lock().list_offsets_delay;
+            tokio::time::sleep(delay).await;
             Some(ResponseKind::ListOffsets(list_offsets(state, request)))
         }
         RequestKind::Fetch(request) => Some(ResponseKind::Fetch(fetch(state, request).await)),
@@ -765,8 +779,8 @@ fn find_coordinator(addr: SocketAddr, request: FindCoordinatorRequest) -> FindCo
 
 /// KIP-848: members join with epoch 0 and leave with -1; each topic's
 /// partitions are spread over the members subscribed to it, and a
-/// partition another member still owns is held back until it reports it
-/// released.
+/// partition another member was assigned or still owns is held back until
+/// that member reports it released.
 fn heartbeat(
     state: &State,
     request: ConsumerGroupHeartbeatRequest,
@@ -802,6 +816,7 @@ fn heartbeat(
             Member {
                 topics: Vec::new(),
                 owned: BTreeSet::new(),
+                assigned: BTreeSet::new(),
                 seen: now,
             },
         );
@@ -853,14 +868,21 @@ fn heartbeat(
                 continue;
             }
             let key = (topic_name.clone(), len_i32(partition));
-            let held = group
-                .members
-                .iter()
-                .any(|(id, member)| *id != member_id && member.owned.contains(&key));
+            let held = group.members.iter().any(|(id, member)| {
+                *id != member_id && (member.owned.contains(&key) || member.assigned.contains(&key))
+            });
             if !held {
                 assigned.entry(topic_name.clone()).or_default().push(key.1);
             }
         }
+    }
+    if let Some(member) = group.members.get_mut(&member_id) {
+        member.assigned = assigned
+            .iter()
+            .flat_map(|(topic_name, partitions)| {
+                partitions.iter().map(move |p| (topic_name.clone(), *p))
+            })
+            .collect();
     }
     let assignment = Assignment::default().with_topic_partitions(
         assigned
@@ -958,4 +980,64 @@ fn offset_fetch(state: &State, request: OffsetFetchRequest) -> OffsetFetchRespon
         })
         .collect();
     OffsetFetchResponse::default().with_groups(groups)
+}
+
+/// The coordinator never gives a partition to a second member while the
+/// member it was assigned to has not reported it released, even before that
+/// member's first heartbeat after the assignment.
+#[test]
+fn a_partition_moves_only_once_its_owner_released_it() {
+    let state = State {
+        sasl: None,
+        inner: Mutex::default(),
+        produced: Notify::new(),
+    };
+    let id = Uuid::new_v4();
+    state.lock().topics.insert(
+        "deals".to_owned(),
+        Topic {
+            id,
+            partitions: vec![Vec::new(), Vec::new()],
+            replication_factor: 1,
+            retention_ms: None,
+        },
+    );
+    let beat = |member: &str, epoch: i32, owned: &[i32]| {
+        let response = heartbeat(
+            &state,
+            ConsumerGroupHeartbeatRequest::default()
+                .with_group_id(GroupId(StrBytes::from_static_str("deals-service")))
+                .with_member_id(StrBytes::from_string(member.to_owned()))
+                .with_member_epoch(epoch)
+                .with_subscribed_topic_names(Some(vec![name("deals")]))
+                .with_topic_partitions(Some(vec![
+                    OwnedPartitions::default()
+                        .with_topic_id(id)
+                        .with_partitions(owned.to_vec()),
+                ])),
+        );
+        let assigned: Vec<i32> = response
+            .assignment
+            .map(|assignment| {
+                assignment
+                    .topic_partitions
+                    .into_iter()
+                    .flat_map(|topic| topic.partitions)
+                    .collect()
+            })
+            .unwrap_or_default();
+        (response.member_epoch, assigned)
+    };
+    let (epoch_a, assigned) = beat("a", 0, &[]);
+    assert_eq!(assigned, [0, 1], "the only member gets every partition");
+    // "b" joins before "a" heartbeats again: "a" still has both partitions.
+    let (epoch_b, assigned) = beat("b", 0, &[]);
+    assert_eq!(assigned, Vec::<i32>::new(), "partition 1 is still a's");
+    let (epoch_a, assigned) = beat("a", epoch_a, &[0, 1]);
+    assert_eq!(assigned, [0], "a gives partition 1 up");
+    let (epoch_b, assigned) = beat("b", epoch_b, &[]);
+    assert_eq!(assigned, Vec::<i32>::new(), "a has not released it yet");
+    beat("a", epoch_a, &[0]);
+    let (_, assigned) = beat("b", epoch_b, &[]);
+    assert_eq!(assigned, [1], "released, it moves");
 }

@@ -199,6 +199,31 @@ async fn events_published_while_a_service_is_away_wait_for_it() {
     back.stop().await;
 }
 
+/// A new group starts at the end of the topics as they were when the
+/// listener started: an event published once the listener says it is
+/// subscribed is delivered, however slowly the broker answers.
+#[tokio::test]
+async fn an_event_published_once_the_listener_is_subscribed_is_delivered() {
+    let broker = MiniKafka::start().await;
+    broker.delay_list_offsets(Duration::from_millis(500));
+    let shop = transport(broker.url(), &options(), "shop");
+    let mut listening = Listening::start(
+        Arc::new(transport(broker.url(), &options(), "ledger")),
+        vec![event("refund.issued", "ledger")],
+    )
+    .await;
+    shop.publish(published("refund.issued", "first"))
+        .await
+        .unwrap();
+    let delivery = listening
+        .next(Duration::from_secs(5))
+        .await
+        .expect("the event published after the listener subscribed");
+    assert_eq!(delivery.envelope().payload().as_ref(), b"first");
+    delivery.ack().await.unwrap();
+    listening.stop().await;
+}
+
 #[tokio::test]
 async fn earliest_reads_a_new_group_from_the_start() {
     let broker = MiniKafka::start().await;
@@ -401,6 +426,34 @@ async fn the_unreachable_broker_fails_calls() {
     // Refused at once, or (Windows retries refused connections) the connect
     // timeout.
     assert!(error.to_string().contains("Kafka at"), "{error}");
+}
+
+/// A listener whose broker can't be reached doesn't hold the app back: it
+/// says it is subscribed at once and keeps trying.
+#[tokio::test]
+async fn a_listener_goes_on_while_the_broker_is_unreachable() {
+    let unused = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap();
+    let billing = KafkaTransport::new(
+        unused.to_string(),
+        &options(),
+        "billing",
+        "billing-1",
+        Duration::from_millis(300),
+    )
+    .unwrap();
+    let started = std::time::Instant::now();
+    let listening =
+        Listening::start(Arc::new(billing), vec![event("invoice.paid", "billing")]).await;
+    // Listening::start waits up to 5 s for the signal.
+    assert!(
+        started.elapsed() < Duration::from_secs(3),
+        "{:?}",
+        started.elapsed()
+    );
+    listening.stop().await;
 }
 
 #[tokio::test]
