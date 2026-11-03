@@ -127,23 +127,23 @@ storage/
 | Option | What it does |
 |---|---|
 | `--kit <saas\|api\|micro>` | Creates the app from a [starter kit](/docs/getting-started/starter-kits/) instead of the minimal app. |
-| `--database <db>` | The database: `timescaledb` (the default; PostgreSQL with hypertables, run by `navree dock up`), `postgres` (plain PostgreSQL, also run by Dock), `mysql` (MySQL or MariaDB, a server of yours) or `sqlite` (a file in `storage/`). `timescale`, `postgresql` and `mariadb` are accepted as aliases. It sets `database.url`, the driver feature of the `navree` dependency (`postgres`, `mysql` or `sqlite`: only that driver is compiled into the app) and, for the first two, `dock.toml`. The tests run on SQLite, so `[dev-dependencies]` turns `sqlite` on in every app. The [starter kits](/docs/getting-started/starter-kits/) run on `timescaledb` or `postgres`. |
-| `--ui next` | Also creates `web/`, a Next.js front end that talks to the API through its own server and keeps the tokens in httpOnly cookies, like the [CRM's](/docs/example-app/crm-tour/#the-web-app). `navree dev` starts it. Default: `--ui none`, API only. |
+| `--database <db>` | The database: `timescaledb` (the default; PostgreSQL with hypertables, run by `navree dock up`), `postgres` (plain PostgreSQL, also run by Dock), `mysql` (MySQL or MariaDB, a server of yours) or `sqlite` (a file in `storage/`). `timescale`, `postgresql` and `mariadb` are accepted as aliases. It sets `database.url`, the driver feature of the `navree` dependency (`postgres`, `mysql` or `sqlite`: only that driver is compiled into the app) and, for the first two, `dock.toml`. The tests run on SQLite, so `[dev-dependencies]` turns `sqlite` on in every app. The [starter kits](/docs/getting-started/starter-kits/) run on `timescaledb` or `postgres` and refuse the other two. |
+| `--ui <next\|none>` | `next` also creates `web/`, a Next.js front end that talks to the API through its own server and keeps the tokens in httpOnly cookies, like the [CRM's](/docs/example-app/crm-tour/#the-web-app). `navree dev` starts it. Default: `none`, API only. With a kit, only `saas` has a front end (`--kit saas --ui next` is the same as `--kit saas`); the `api` and `micro` kits refuse `--ui next`. |
 | `--navree-path <path>` | Depend on a local checkout (the repository or its `crates/navree`). Without it, the app gets a `path` dependency on the checkout the CLI was built from when it still exists (after `cargo install --git`, Cargo's own copy of the repository), else `navree = "1.0.0"` (the CLI's own version), which won't build until the crate is on crates.io. |
 
-The name may use lower-case letters, digits, `-` and `_`. `navree new` refuses a directory that exists and isn't empty, formats the generated code with `rustfmt` when it is installed, and runs `git init` (nothing is committed) unless the app is inside a repository already or Git is missing. For the starter kits, which ship a `harbor.toml`, it also writes `harbor.key` and keeps it out of Git. The app is its own Cargo workspace; remove the `[workspace]` table from its `Cargo.toml` to make it a member of an enclosing one. See [Your first app](/docs/getting-started/your-first-app/) for a walk through it.
+The name starts with a lower-case letter and uses lower-case letters and digits, with single `-` or `_` between words (`my-shop`). Rust keywords, Windows device names and `navree` itself are refused. `navree new` refuses a directory that exists and isn't empty, formats the generated code with `rustfmt` when it is installed, and runs `git init` (nothing is committed) unless the app is inside a repository already or Git is missing. For the starter kits, which ship a `harbor.toml`, it also writes `harbor.key` and keeps it out of Git. The app is its own Cargo workspace; remove the `[workspace]` table from its `Cargo.toml` to make it a member of an enclosing one. See [Your first app](/docs/getting-started/your-first-app/) for a walk through it.
 
 ## Generators
 
-Run generators anywhere inside your app: the CLI finds the package from the current directory. They never overwrite a file (`refusing to overwrite` stops them before anything is written), and they register what they create by editing your code only at marker comments:
+Run generators anywhere inside your app: the CLI finds the package from the current directory. They never overwrite a file (`refusing to overwrite` stops them before anything is written). They register what they create by adding `mod` declarations, adding a `.migration(..)` call to a module's migration set and inserting lines above marker comments:
 
 | Marker | In | Where generators add |
 |---|---|---|
 | `// navree:modules` | `src/app.rs` | `.module(...)` lines for new modules |
-| `// navree:wire` | a module's `wire` method | registrations: controllers, providers, jobs, listeners, templates, commands, migrations |
+| `// navree:wire` | a module's `wire` method | registrations: controllers, providers, jobs, listeners, templates, commands, migrations, seeders, models, agents, MCP servers and Helm resources |
 | `// navree:policies` | `src/abilities.rs` | calls to new policies |
 
-When a marker is missing (in code you wrote by hand), the generator prints the line to add as a `next` hint instead. Names are `snake_case`; anything else fails with a suggestion (`blog_posts` for `BlogPosts`).
+When a marker is missing (in code you wrote by hand), the generator prints the line to add as a `next` hint instead. Names are `snake_case`; anything else fails with a suggestion (`blog_posts` for `BlogPosts`). `make:model`, `make:factory`, `make:seeder` and `make:resource` also take a model's name as `Deal` or `deal`.
 
 ### make:module
 
@@ -189,11 +189,11 @@ The report lists a file once per edit: here `mod.rs` gets the `pub mod jobs;` de
 |---|---|---|
 | `make:controller posts admin` | `controllers/admin.rs`, `AdminController` | the controller, in `wire` |
 | `make:service posts pricing` | `services/pricing.rs`, `PricingService` | `m.provider::<..>()`, in `wire` |
-| `make:model posts Tag` | `models/tag.rs`, an [ORM model](/docs/orm/models/) for `tags`; `--migration`, `--factory`, `--seeder`, `--controller` and `--policy` (or `--all`) add those, each referring to the others; `--pivot` makes the table of a many-to-many between the two models its name joins (`post_tag`) | `m.model::<..>()` and each companion's registration, in `wire` |
-| `make:factory posts tag` | `factories/tag.rs`, a [model factory](/docs/orm/factories/) (`--model <model>` when its name differs) | nothing; `#[model(factory = ..)]` links it |
-| `make:seeder posts demo_data` | `seeders/demo_data.rs`, a [seeder](/docs/database/seeding-and-factories/) named `demo_data` | the seeder, in `wire` |
+| `make:model posts Tag` | `models/tag.rs`, an [ORM model](/docs/orm/models/) for `tags`. The name may be `tag` or `Tag`. Options: `--migration` (`-m`), `--factory` (`-f`), `--seeder` (`-s`), `--controller` (`-c`), `--policy` and `--all` (`-a`) add the companions, each referring to the others; `--pivot` (`-p`) makes the table of a many-to-many between the two models its name joins (`post_tag`), and with `--all` adds a migration, a factory and a seeder only | `m.model::<..>()` and each companion's registration, in `wire`; with `--policy`, also `m.import(AccessModule::for_feature::<..>())` |
+| `make:factory posts tag` | `factories/tag.rs`, a [model factory](/docs/orm/factories/) (`--model <model>` when its name differs from the model's; the model must exist) | nothing; `#[model(factory = ..)]` links it, and the command prints the line to add |
+| `make:seeder posts demo_data` | `seeders/demo_data.rs`, a [seeder](/docs/database/seeding-and-factories/) named `demo_data` | the seeder, in `wire`; prints `navree db:seed demo_data` |
 | `make:entity posts tag` | `entities/tag.rs`, a minimal [ORM model](/docs/orm/models/) for `tags` (an id and the two timestamps) | nothing; prints the `make:migration` to run next |
-| `make:migration posts create_tags_table` | `migrations/m<timestamp>_create_tags_table.rs` | adds it to the module's migration set. A `create_<table>_table` name generates a table-creating migration |
+| `make:migration posts create_tags_table` | `migrations/m<timestamp>_create_tags_table.rs` | adds it to the module's migration set. A `create_<table>_table` name generates a table-creating migration; an `add_stage_to_deals` or `remove_notes_from_deals_table` name (the last `_to_`, `_from_` or `_in_` names the table) generates an alter-table one |
 | `make:job posts publish_post` | `jobs/publish_post.rs`, a job named `posts.publish_post` | the job, in `wire` |
 | `make:event posts post_published` | `events/post_published.rs` | nothing (events need no registration) |
 | `make:listener posts notify_followers --event post_published` | `listeners/notify_followers.rs` | `listen::<PostPublished, NotifyFollowers>`, in `wire`. Without `--event`, prints the line to add |
@@ -230,21 +230,47 @@ Two limits: the listening socket isn't kept across restarts, so requests fail fo
 
 ## Ecosystem commands
 
-The tools of the ecosystem add their own commands to the CLI:
+The tools of the ecosystem add their own commands to the CLI. They run in the CLI itself, not in your app. In a workspace whose `default-members` is the app (the `micro` kit), they run on that app.
 
-| Command | What it does |
-|---|---|
-| `navree new <name> --kit saas` | Creates an app from a [starter kit](/docs/getting-started/starter-kits/) (`saas`, `api` or `micro`). |
-| `navree dock up`, `navree dock down`, `navree dock:add <service>` | Start, stop and add the app's local services with [Dock](/docs/tools/dock/) (also `dock status`, `dock logs`, `dock env`, `dock shell` and `dock:remove`). |
-| `navree openapi:client [--out DIR] [--input FILE]` | Exports the OpenAPI document and writes `schema.d.ts` from it, for the [typed client](/docs/frontend/typed-client/#generating-the-schema). The generator is part of `navree`; `--input` reads a JSON document and needs no app. |
-| `navree harbor:init`, `harbor:provision`, `harbor:secrets`, `deploy`, `deploy:rollback`, `deploy:releases`, `harbor:status`, `harbor:logs`, `harbor:run`, `harbor:ssh`, `harbor:backup`, `harbor:ci`, `build:image` | Prepare servers, keep their secrets and ship releases with [Harbor](/docs/tools/harbor/). |
-| `navree fleet` | Runs queue workers under [Fleet](/docs/tools/fleet/)'s supervisor. |
-| `navree make:resource <module> <Model>` | Generates a [Helm](/docs/tools/helm/) admin resource for a model of the module (`models/<model>.rs`), with a field per column a user may see (none for a column the model hides or one named like a secret), and registers it in the module's `wire`. |
-| `navree mcp` | Starts [Navigator](/docs/ai/navigator/), the MCP server for your coding agent. |
-| `navree skills:install` | Installs the [agent skills](/docs/ai/agent-skills/) into the project. |
-| `navree check` | Validates the module graph, then runs the app's [conformity checks](/docs/testing/conformity-checks/) (`--only`, `--json`). |
-| `navree gate` | Runs fmt, clippy, the tests, `navree check` and the front end's typecheck, tests and build, [one gate at a time](/docs/testing/conformity-checks/#the-gate) on the machine. |
-| `navree browser:install` | Downloads Chrome for Testing into Navree's cache for [browser tests](/docs/packages/browser-testing/) (`--version <version>`, `--force`). |
+| Command | Options | What it does |
+|---|---|---|
+| `navree check` | `--graph`, `--json`, `--only <check,...>` | Validates the module graph, then runs the app's [conformity checks](/docs/testing/conformity-checks/): routes documented, entities classified, workspace isolation, translations, migrations. `--graph` prints the module tree and stops. `--json` prints the conformity report as JSON. `--only` runs the named checks or prefixes (`api.docs`, `workspace`). |
+| `navree gate` | `--only <step,...>`, `--skip <step,...>`, `--keep-going`, `--no-lock`, `--web <dir>` | Runs fmt, clippy, the tests, `navree check` and the front end's typecheck, tests and build, [one gate at a time](/docs/testing/conformity-checks/#the-gate) on the machine. The steps are `fmt`, `clippy`, `test`, `check`, `web:typecheck`, `web:test` and `web:build`; `web` selects every web step. |
+| `navree dock up` | `[service...]` | Starts the app's local services with [Dock](/docs/tools/dock/), or the ones named. |
+| `navree dock down` | `[service...]`, `--volumes` | Stops and removes the containers. `--volumes` also deletes their data. |
+| `navree dock status` | | Each service's state, image and address. |
+| `navree dock logs` | `<service>`, `--follow` (`-f`) | A service's output. |
+| `navree dock env` | `--export` | Prints the settings your app gets as `NAME=value` lines. `--export` starts each line with `export`. |
+| `navree dock shell` | `<service>` | Opens the service's client: `psql`, `redis-cli`, the `nats` CLI or a shell. |
+| `navree dock:add` | `<service>` | Adds `postgres`, `redis`, `meilisearch`, `mailpit`, `minio` or `nats` to `dock.toml`. |
+| `navree dock:remove` | `<service>`, `--volumes` | Stops a service and removes it from `dock.toml`. |
+| `navree mcp` | `--path <dir>`, `--no-build`, `--allow-remote-database`, `--docs-offline` | Starts [Navigator](/docs/ai/navigator/), the MCP server for your coding agent, on standard input and output. `--path` serves another app than the current directory. `--no-build` never runs `cargo build`. `--allow-remote-database` lets Navigator's database tools (`query_database`, `describe_schema`) reach a database that is not on this machine. `--docs-offline` never downloads docs. |
+| `navree skills:install` | `--path <dir>` | Installs the [agent skills](/docs/ai/agent-skills/) into `.claude/skills` and `.agents/skills` of the project (the current directory, or `--path`). |
+| `navree browser:install` | `--version <version>`, `--force` | Downloads Chrome for Testing into Navree's cache for [browser tests](/docs/packages/browser-testing/). `--version` picks another version than the pinned one. `--force` downloads again. |
+| `navree openapi:client` | `--out <dir>` (default `web/src/lib/api`), `--input <file>` | Exports the OpenAPI document and writes `schema.d.ts` from it, for the [typed client](/docs/frontend/typed-client/#generating-the-schema). The generator is part of the CLI. `--input` reads a JSON document and needs no app; `--out` is then relative to the current directory. |
+| `navree make:resource` | `<module> <Model>`, `--path` | Generates a [Helm](/docs/tools/helm/) admin resource for a model of the module (`models/<model>.rs`), with a field per column a user may see (none for a column the model hides or one named like a secret), and registers it in the module's `wire`. |
+
+[Harbor](/docs/tools/harbor/) adds the commands that prepare servers, keep their secrets and ship releases. Every one takes `--env <name>`, which uses `harbor.<name>.toml` instead of `harbor.toml` (the default comes from `NAVREE_HARBOR_ENV`):
+
+| Command | Options | What it does |
+|---|---|---|
+| `navree harbor:init` | | Writes `harbor.toml` and `harbor.key`, and ignores the key in Git. |
+| `navree harbor:provision` | `[server]` | Prepares every server, or one, for its roles. Safe to run again. |
+| `navree harbor:secrets set` | `<NAME>`, `--generate` or `--stdin` | Encrypts and stores a secret. With neither option it asks for the value without echo. `--generate` stores a new application key. |
+| `navree harbor:secrets list`, `export`, `rotate-key` | | Lists the names, prints `[env]` and the decrypted secrets as an env file, or re-encrypts every secret under a new key. |
+| `navree harbor:secrets reveal`, `unset` | `<NAME>` | Prints one value, or removes one secret. |
+| `navree deploy` | `--server <name>`, `--no-migrate`, `--maintenance`, `--release <id>` | Builds, uploads, migrates, health-checks and switches to a new release. `--maintenance` turns [maintenance mode](/docs/digging-deeper/maintenance-mode/) on before the migrations and off after the switch. `--release` deploys a release already uploaded, without building. |
+| `navree deploy:rollback` | `--to <id>` | Switches back to the previous release, or to the one you name. |
+| `navree deploy:releases` | `--server <name>` | Lists the releases on the servers. |
+| `navree harbor:status` | `--server <name>` | Each server's roles, processes, current release, disk and memory. |
+| `navree harbor:logs` | `--server <name>`, `--process <name>`, `--lines <n>` (default 100), `--follow` | The app's log lines from journald, merged across servers. The process is `web`, `frontend`, `worker` or `scheduler`. |
+| `navree harbor:run` | `--server <name>`, `<command> [args...]` | Runs an app command on a server (the first web server by default), from the current release with its environment. |
+| `navree harbor:ssh` | `[server]` | Opens a shell on a server as the deploy user. |
+| `navree harbor:backup` | `--download` | Runs the PostgreSQL backup now. `--download` also copies it to the current directory. |
+| `navree harbor:ci` | `github`, `--branch <name>` (default `main`) | Writes the GitHub Actions workflow that tests and deploys every push to the branch. |
+| `navree build:image` | `--tag <tag>`, `--push`, `--platform <platform>`, `--dockerfile` | Builds an OCI image of the app with Docker or Podman. `--dockerfile` writes the Dockerfile and ignore file instead of building. |
+
+[Fleet](/docs/tools/fleet/) has no CLI command of its own: `navree fleet` is forwarded to your app, where `FleetModule` registers it (with `fleet:status`, `fleet:pause`, `fleet:continue`, `fleet:terminate`, `fleet:forget` and `fleet:work`), and it runs queue workers under Fleet's supervisor.
 
 ## Running your app's commands
 
@@ -270,7 +296,7 @@ fn main() -> Result<(), navree::kernel::BoxError> {
 - Every other command **boots the whole app** (configuration, database, every module), runs, then shuts the app down gracefully. A command therefore needs a working configuration and database, even `key:generate`.
 - An unknown command fails before the app boots. A failing command prints its error and exits with status 1. The error is printed in its `Debug` form, because `main` returns it (`Error: UnknownCommand { name: "x" }`). Ctrl-C (and `SIGTERM` on Unix) stops long-running commands such as `serve` and `queue:work` gracefully.
 
-This is `list` in the reference CRM, which uses most modules:
+This is an excerpt of `list` in the reference CRM, which uses most modules:
 
 ```text
 Usage: <command> [args...]
@@ -294,7 +320,7 @@ Commands:
   migrate:fresh       Drop every table and run every migration ([--seed] [--drop-views] [--drop-types] [--force])
   migrate:status      Show which migrations have run ([--pending] [--json])
   schema:dump         Write the schema and the migrations table to database/schema/<driver>-schema.sql ([--path <path>])
-  db:seed             Run the seeders ([name...] to run only some)
+  db:seed             Run the seeders: the root seeders, or every seeder ([name...] to run only some) ([--database <name>] [--force])
   cache:clear         Remove every entry from the cache store
   queue:work          Run queued jobs until shutdown ([--queue a,b] [--once] [--stop-when-empty] [--max-jobs N])
   queue:failed        List the failed jobs
@@ -308,6 +334,7 @@ Commands:
   access:explain      Show the rule deciding a check: access:explain <user> <action> <subject> [id]
   audit:prune         Delete audit entries older than the retention period ([--days N])
   openapi:export      Write the OpenAPI document to a file ([path], default openapi.json)
+  ...
   crm:task-reminders  Notify everyone of their open tasks due today (UTC)
 ```
 
@@ -327,7 +354,7 @@ module graph OK: 33 modules, 84 providers
 
 `introspect --json` prints the same graph as JSON for tools, again without constructing anything: the Navree version, every module (dependency order, the implicit root `App` last) with `global`, `imports`, `exports`, its `providers` (`type`, `scope`, `exported`, `multi`, `dependencies`) and `commands`, then every command with its module. [Navigator](/docs/ai/navigator/) reads it.
 
-`navree check` runs this `check` first, then the app's `conformity:check` command when a module registers it (`ApiModule` and `WorkspaceModule` do): it boots the app once and verifies that every route is documented and that workspace data stays in its workspace. See [Conformity checks](/docs/testing/conformity-checks/).
+`navree check` runs this `check` first, then the app's `conformity:check` command when a module registers it (`ApiModule` and `WorkspaceModule` do). It boots the app once and runs every check: routes documented, models classified, workspace isolation, translations and migrations. See [Conformity checks](/docs/testing/conformity-checks/).
 
 ### Commands by module
 
@@ -341,16 +368,49 @@ Each module registers its own commands, so `list` shows only those of the module
 | `key:generate` | `CryptoModule` | Prints a new `base64:...` key for `APP_KEY`. See [Encryption and hashing](/docs/security/encryption-and-hashing/). |
 | `migrate`, `migrate:install`, `migrate:rollback`, `migrate:reset`, `migrate:refresh`, `migrate:status`, `schema:dump` | `DatabaseModule` | See [Migrations](/docs/database/migrations/). |
 | `migrate:fresh [--seed] [--drop-views] [--drop-types]` | `DatabaseModule` | Drops every table, then migrates (and seeds). |
-| `db:seed [name...]` | `DatabaseModule` | Runs every seeder, or only the named ones. See [Seeding](/docs/database/seeding-and-factories/). |
+| `db:seed [name...] [--database <name>] [--force]` | `DatabaseModule` | Runs every seeder, or only the named ones, on the default database or the one named. In production it needs `--force`. See [Seeding](/docs/database/seeding-and-factories/). |
 | `cache:clear` | `CacheModule` | See [Cache](/docs/digging-deeper/cache/). |
 | `queue:work [--queue a,b] [--once] [--stop-when-empty] [--max-jobs N]` | `QueueModule` | See [Queues](/docs/digging-deeper/queues/). |
 | `queue:failed`, `queue:retry <id or all>`, `queue:flush` | `QueueModule` | Inspect, retry or delete failed jobs. |
+| `queue:batches [--limit N]`, `queue:watchdog`, `queue:prune [--hours N]` | `QueueModule` | See [Batches and operations](/docs/digging-deeper/batches-and-operations/). |
 | `schedule:run`, `schedule:work`, `schedule:list` | `ScheduleModule` | See [Task scheduling](/docs/digging-deeper/scheduling/). |
 | `access:role`, `access:grant`, `access:explain` | `AccessModule` | See [Authorization](/docs/security/authorization/). |
 | `audit:prune [--days N]` | `AuditModule` | See [The audit log](/docs/security/audit-log/). |
 | `openapi:export [path]` | `ApiModule` | See [OpenAPI](/docs/digging-deeper/openapi/#exporting-the-document). |
 | `mcp:serve --user <email or id>` | `McpModule` | Serves the app's MCP server on stdin and stdout as that user; logs go to stderr. See [MCP servers](/docs/ai/mcp-servers/#stdio). |
 | `conformity:check [--json] [--root DIR] [--only a,b]` | `ApiModule`, `WorkspaceModule` | Runs the [conformity checks](/docs/testing/conformity-checks/); `navree check` runs it for you. |
+
+The other modules register commands of their own. Each is documented with its module:
+
+| Commands | Module | See |
+|---|---|---|
+| `model:show`, `model:prune` | `OrmModule` | [Getting started with the ORM](/docs/orm/getting-started/) |
+| `db:monitor`, `db` | `DatabaseModule` | [Connections and transactions](/docs/orm/connections-and-transactions/) |
+| `mongo:migrate`, `mongo:migrate:rollback`, `mongo:migrate:reset`, `mongo:migrate:refresh`, `mongo:migrate:fresh`, `mongo:migrate:status` | `MongoModule` | [MongoDB](/docs/orm/mongodb/) |
+| `storage:sync` | `StorageModule` | [File storage](/docs/digging-deeper/storage/) |
+| `mail:test`, `mail:suppressions`, `mail:domains` | `MailModule` | [Mail delivery](/docs/digging-deeper/mail-delivery/) |
+| `time:zones` | `TimeModule` | [Time zones](/docs/digging-deeper/time-zones/) |
+| `notify:vapid`, `notify:release` | `NotifyModule` | [Notification channels](/docs/digging-deeper/notification-channels/), [Notification preferences](/docs/digging-deeper/notification-preferences/) |
+| `i18n:check`, `i18n:missing`, `i18n:publish` | `I18nModule` | [Localization](/docs/packages/localization/) |
+| `fleet`, `fleet:status`, `fleet:pause`, `fleet:continue`, `fleet:terminate`, `fleet:forget`, `fleet:work` | `FleetModule` | [Fleet](/docs/tools/fleet/) |
+| `lighthouse:prune`, `lighthouse:test-alerts` | `LighthouseModule` | [Lighthouse](/docs/tools/lighthouse/) |
+| `logbook:clear` | `LogbookModule` | [Logbook](/docs/tools/logbook/) |
+| `ai:prune` | `AiModule` | [Agents and tools](/docs/ai/agents-and-tools/) |
+| `graphql:schema` | `GraphqlModule` | [GraphQL](/docs/microservices/graphql/) |
+| `search:import`, `search:flush`, `search:settings`, `search:status` | `SearchModule` | [Search](/docs/packages/search/) |
+| `settings:list`, `settings:show`, `settings:set`, `settings:inherit` | `SettingsModule` | [Settings](/docs/packages/settings/) |
+| `flags:list`, `flags:on`, `flags:off`, `flags:forget`, `flags:rollout`, `flags:kill`, `flags:revive`, `flags:purge` | `FlagsModule` | [Feature flags](/docs/packages/feature-flags/) |
+| `webhooks:endpoints`, `webhooks:test`, `webhooks:retry`, `webhooks:prune` | `WebhooksModule` | [Webhooks](/docs/packages/webhooks/) |
+| `workflows:list`, `workflows:show`, `workflows:cancel`, `workflows:retry`, `workflows:tick`, `workflows:prune`, `automations:list`, `automations:catalog` | `WorkflowsModule` | [Workflows](/docs/packages/workflows/), [Automations](/docs/packages/automations/) |
+| `workspace:migrate`, `workspace:prune-invitations`, `workspace:demo-create`, `workspace:demo-reset` | `WorkspaceModule` | [Data isolation](/docs/workspaces/isolation/), [Invitations](/docs/workspaces/invitations/), [Demo workspaces](/docs/workspaces/demo-workspaces/) |
+| `oauth:client`, `oauth:clients`, `oauth:client:secret`, `oauth:client:revoke`, `oauth:keys`, `oauth:prune` | `OAuthServerModule` | [OAuth server](/docs/packages/oauth-server/) |
+| `billing:plans`, `billing:webhook`, `billing:report-usage`, `billing:sync`, `billing:events`, `billing:prune-events` | `BillingModule` | [Billing](/docs/packages/billing/) |
+| `directory:sync`, `directory:runs`, `directory:connections`, `directory:token`, `directory:prune` | `DirectoryModule` | [Directory sync](/docs/packages/directory-sync/) |
+| `documents:render`, `documents:fonts` | `DocumentsModule` | [Documents](/docs/packages/documents/) |
+| `domains:list`, `domains:verify`, `domains:transfer`, `domains:certificates` | `DomainsModule` | [Custom domains](/docs/packages/custom-domains/) |
+| `integrations:check`, `integrations:list`, `integrations:mailboxes` | `IntegrationsModule` | [Integrations](/docs/packages/integrations/) |
+| `media:regenerate` | `MediaModule` | [Media](/docs/packages/media/) |
+| `sheets:prune` | `SheetsModule` | [Imports and exports](/docs/packages/imports-and-exports/) |
 
 A few of them in the CRM, against a freshly seeded database:
 
@@ -391,10 +451,10 @@ navree queue:work --stop-when-empty
 ```text
 Seeded: crm-roles
 Seeded: crm-demo
-Expression  Next run              Task
-0 8 * * *   2026-10-27 08:00 UTC  crm:task-reminders (without overlapping)
-0 3 * * *   2026-10-27 03:00 UTC  audit:prune (without overlapping)
-Processed 0 job attempt(s): 0 succeeded, 0 released for retry, 0 failed.
+Expression  Zone  Next run              Task
+0 8 * * *   UTC   2026-10-27 08:00 UTC  crm:task-reminders (without overlapping)
+0 3 * * *   UTC   2026-10-27 03:00 UTC  audit:prune (without overlapping)
+Processed 0 job attempt(s): 0 succeeded, 0 released for retry, 0 failed, 0 cancelled.
 ```
 
 ## Writing commands

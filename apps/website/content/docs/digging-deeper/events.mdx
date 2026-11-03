@@ -175,7 +175,7 @@ Subscribe listeners in a module's `register` hook with the `ModuleBuilderEventsE
 - `m.listen::<E, L>()` registers `L` as a provider of the module and subscribes it to `E`;
 - `m.on::<E, L>()` subscribes a provider the module can already see (its own, one exported by a module it imports, or a global one) to another event.
 
-This is the CRM's `DealsModule`:
+This is the CRM's `DealsModule`, leaving out the line that registers its MCP server:
 
 ```rust title="crm-deals/src/lib.rs"
 #[module(
@@ -348,27 +348,53 @@ The payload is deserialized into every event type that has listeners under that 
 
 ## Testing
 
-Sync listeners run during `emit`, so emit the event and assert on the effect. For queued listeners, you can check that the job was dispatched with the [queue fake](/docs/digging-deeper/queues/#testing): install `QueueFake` in place of the queue and look for the listener's job name.
+Sync listeners run during `emit`, so emit the event and assert on the effect. A queued listener's job is only dispatched, so to check that, install the [queue fake](/docs/digging-deeper/queues/#faking-the-queue) and look for the listener's job name. In an app without `QueueModule`, that is `override_value(fake.dispatcher())`; with `QueueModule`, use `override_value(Arc::new(fake.queue()))`.
+
+This test wires `CountWins` (from [defining listeners](#defining-listeners)) and a queued listener of its own to `DealWon`, then checks that the first ran and the second was queued:
 
 ```rust title="tests/deal_events.rs"
+use navree::BoxFuture;
 use navree::cache::Cache;
-use navree::events::{EventBus, listener_job_name};
+use navree::events::{EventBus, Listener, listener_job_name};
 use navree::prelude::*;
 use navree::queue::QueueFake;
 use navree::testing::TestApp;
 use uuid::Uuid;
 
+/// A queued listener. The fake queue records its job and never runs it.
+#[injectable]
+struct MailOwner;
+
+impl Listener<DealWon> for MailOwner {
+    fn handle<'a>(
+        &'a self,
+        _event: &'a DealWon,
+        _ctx: &'a AppContext,
+    ) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn queued(&self) -> bool {
+        true
+    }
+}
+
+struct WinsModule;
+
+impl Module for WinsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.listen::<DealWon, CountWins>().listen::<DealWon, MailOwner>();
+    }
+}
+
 #[tokio::test]
-async fn winning_a_deal_counts_it_and_queues_the_owner_notification() {
+async fn winning_a_deal_counts_it_and_queues_the_owner_mail() {
     let fake = QueueFake::new();
     let app = TestApp::builder()
-        .temp_database()
-        .module(DatabaseModule::from_config())
         .module(CacheModule::from_config())
-        .module(QueueModule::from_config())
         .module(EventsModule::for_root())
-        .module(DealsModule)
-        .override_value(Arc::new(fake.queue()))
+        .module(WinsModule)
+        .override_value(fake.dispatcher())
         .build()
         .await;
 
@@ -384,7 +410,7 @@ async fn winning_a_deal_counts_it_and_queues_the_owner_notification() {
     app.get::<EventBus>().await.emit(won).await.unwrap();
 
     // The queued listener was dispatched, not run.
-    let job = listener_job_name::<DealWon, NotifyDealOwner>();
+    let job = listener_job_name::<DealWon, MailOwner>();
     assert!(fake.envelopes().iter().any(|e| e.job_type == job));
     // The sync listener ran.
     let wins: Option<i64> = app
@@ -397,8 +423,6 @@ async fn winning_a_deal_counts_it_and_queues_the_owner_notification() {
     app.shutdown().await.unwrap();
 }
 ```
-
-`temp_database()` gives each test its own SQLite file, so the app's tests need the `sqlite` Cargo feature (see [database tests](/docs/testing/database-tests/)).
 
 To test what a queued listener does, keep the real queue and run it: the CRM's tests change a deal over HTTP, then run every pending job with `crm.run_queue()` (which calls `Queue::run_pending`) and assert on the notifications and mail that result. See `crm-deals/tests/deals/notifications.rs` and [fakes](/docs/testing/fakes/).
 

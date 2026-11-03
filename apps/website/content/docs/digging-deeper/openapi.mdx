@@ -39,6 +39,8 @@ servers = ["https://crm.example.com"]
 # Serve the document and the reference page in production too.
 openapi_json = true
 docs_ui = true
+# Refuse to boot while a route has no #[api] documentation.
+require_docs = false
 ```
 
 | Key | Default | What it does |
@@ -48,6 +50,8 @@ docs_ui = true
 | `api.servers` | `[]` | Server URLs listed in the document. Without any, clients use the URL they loaded the document from. From the environment, comma-separated: `APP_API__SERVERS=https://a.example,https://b.example`. |
 | `api.docs_ui` | unset: off in `production`, on elsewhere | Serve the API reference page at `{api_prefix}/docs`, when the document is served too. Public: no sign-in. |
 | `api.openapi_json` | unset: off in `production`, on elsewhere | Serve the document at `{api_prefix}/openapi.json`. Public: anyone can read every documented route. Off, nothing of it is served: not this route and not the reference page. `openapi:export` writes the document either way. |
+| `api.require_docs` | `false` | Refuse to boot while a route has no `#[api]` documentation. `navree check` reports undocumented routes either way; see [conformity checks](/docs/testing/conformity-checks/). |
+| `api.undocumented` | `[]` | Routes allowed without documentation, as `"METHOD /path"` or `"/path"` for every method; a trailing `*` matches the rest of the path. From the environment, comma-separated. |
 
 Unset, both follow the environment: off when `env` (`APP_ENV`, else `app.env`) is `production` (in any letter case), on in any other named environment, and with no environment on in a debug build and off in a release build. To publish the reference page in production, set both: `APP_API__OPENAPI_JSON=true` and `APP_API__DOCS_UI=true`. `docs_ui` alone isn't enough, because the page needs the document.
 

@@ -123,6 +123,8 @@ impl InvoiceText {
 
 A name without a template extension tries `.html`, `.txt` and `.j2`, in that order, then the bare name: `render("mail/invoice", ..)` finds `mail/invoice.html`. Use the full name to pick one (`mail/invoice.txt`). `views.exists(name)` tells you whether a name resolves, for example to send a plain-text part only when one exists.
 
+To render template text that isn't in a file (kept in your database or in settings), call `views.render_source(name, source, context)`. The `name` stands for the file it would be: its extension picks the [escaping](#escaping), and errors name it. The text sees the same filters, the same undefined-variable rule and the registered templates, so it can `{% extends "layouts/mail.html" %}`.
+
 `{% extends %}`, `{% include %}` and `{% import %}` take full names:
 
 ```jinja title="resources/views/mail/invoice.html"
@@ -179,7 +181,7 @@ Messages never contain context values, since a context may hold tokens or other 
 
 ## Syntax
 
-`{{ expression }}` prints, `{% statement %}` runs a statement and `{# ... #}` is a comment. A `-` just inside a delimiter removes the whitespace on that side (`{%- if x -%}`).
+`{{ expression }}` prints, `{% statement %}` runs a statement and `{# ... #}` is a comment. A `-` directly inside a delimiter removes the whitespace on that side (`{%- if x -%}`).
 
 | | |
 |---|---|

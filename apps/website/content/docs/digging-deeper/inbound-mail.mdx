@@ -1,6 +1,6 @@
 ---
 title: "Inbound mail"
-description: "Receive mail: messages parsed with every header, body and attachment, sources for Amazon SES, Mailgun, Postmark, raw MIME and watched Microsoft 365 and Gmail mailboxes, mailboxes routed by address, signed reply addresses and the raw .eml kept on a disk."
+description: "Receive mail from SES, Mailgun, Postmark, raw MIME, Microsoft 365 or Gmail: parse each message, route it to a handler by address, sign reply addresses and keep the raw .eml."
 ---
 
 ## Introduction
@@ -101,7 +101,8 @@ The first mailbox that matches one of them takes the message. It is handled once
 A mailbox that needs services is an `#[injectable]` type that implements `MailboxHandler`. Register it with `mailbox_with`, which also registers it as a provider of the module:
 
 ```rust title="src/modules/tickets/mailbox.rs"
-use navree::mail::{InboundMail, MailboxContext, MailboxHandler, Verdict};
+use navree::mail::inbound::Verdict;
+use navree::mail::{InboundMail, MailboxContext, MailboxHandler};
 use navree::prelude::*;
 use navree::BoxFuture;
 

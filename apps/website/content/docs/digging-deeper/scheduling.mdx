@@ -1,6 +1,6 @@
 ---
 title: "Task scheduling"
-description: "Schedules on cron expressions, declared in modules: commands, jobs and functions, overlap prevention, single-node runs, `schedule:work` and `schedule:run`, in UTC, a time zone or each workspace's local time."
+description: "Run commands, jobs and functions on cron schedules declared in your modules, once across all servers, in UTC, a time zone or each workspace's local time."
 ---
 
 ## Introduction
@@ -28,7 +28,7 @@ The module is global and collects every module's schedule at boot. The scheduler
 
 ## Defining schedules
 
-Declare tasks in a module's `register` hook with `m.schedule` (the prelude brings it into scope). These are the CRM's two daily tasks, from `crm-activities/src/lib.rs`:
+Declare tasks in a module's `register` hook with `m.schedule` (the prelude brings it into scope). These are the CRM's two daily tasks, from `crm-activities/src/lib.rs`, leaving out the line that registers its MCP server:
 
 ```rust title="crm-activities/src/lib.rs"
 /// When `audit:prune` runs every day (UTC).

@@ -79,6 +79,9 @@ Navree's modules register these checks when you add them:
 | `database` | `DatabaseModule` | Pings the connection pool. |
 | `cache` | `CacheModule` | Writes, reads back and forgets a key. |
 | `storage` | `StorageModule` | Writes, reads back and deletes a small file on every disk. |
+| `redis` | `RedisModule` | Every connection answers `PING`. |
+| `mongodb` | `MongoModule` | The server answers `ping`. |
+| `micro` | `MicroModule` | Down while the transport is disconnected. |
 
 <Callout type="warning" title="The readiness report is public">
 
@@ -277,7 +280,7 @@ With `observe.metrics = false`, no recorder is installed and `/metrics` isn't mo
 | `LogRecord` | `LoggerModule` | a log line passed the level filter | `level`, `target`, `message`, `fields` (redacted, as in the output) |
 | `EventEmitted` | `EventsModule` | an event was emitted or published, and every listener ran or was queued | `name`, `payload` (JSON), `listeners` (the ones that ran), `queued` (the ones whose job was dispatched), `failed`, `duration` |
 
-A sink receives each one as a `TelemetryRecord`: the `event` (a `TelemetryEvent`), the time it was emitted (`at`) and its `context`, an `EventContext` with the request id or job id, the trace, the user id and the workspace id of the request or job it happened in. Records serialize to JSON with a `type` tag (`{"type": "query_executed", "sql": ...}`) and durations in milliseconds, ready to store or send.
+A sink receives each one as a `TelemetryRecord`: the `event` (a `TelemetryEvent`), the time it was emitted (`at`) and its `context`, an `EventContext` with the request id, job id or scheduled task, the trace, the user id and the workspace id of the request, job or task it happened in. Records serialize to JSON with a `type` tag (`{"type": "query_executed", "sql": ...}`) and durations in milliseconds, ready to store or send.
 
 ### Writing a sink
 
@@ -380,7 +383,7 @@ async fn the_rates_call_happens_inside_the_request() {
 }
 ```
 
-The recorder has one accessor per event: `requests()`, `queries()`, `jobs_processed()`, `jobs_failed()`, `scheduled_tasks()`, `mails()`, `notifications()`, `cache_events()`, `http_client_requests()`, `exceptions()` and `logs()`. `records()` returns every record with its context, `events()` every event, `of_kind(kind)` the records of one kind, and `clear()` forgets them. For events emitted by background work, such as a queued job, `recorder.wait_for(EventKind::JobProcessed, Duration::from_secs(5)).await` waits until one arrives and returns whether it did. `TelemetryRecorder::only([EventKind::QueryExecuted])` records only those kinds.
+The recorder has one accessor per event: `requests()`, `queries()`, `jobs_processed()`, `jobs_failed()`, `scheduled_tasks()`, `mails()`, `notifications()`, `cache_events()`, `http_client_requests()`, `exceptions()`, `logs()` and `emitted_events()`. `records()` returns every record with its context, `events()` every event, `of_kind(kind)` the records of one kind, and `clear()` forgets them. For events emitted by background work, such as a queued job, `recorder.wait_for(EventKind::JobProcessed, Duration::from_secs(5)).await` waits until one arrives and returns whether it did. `TelemetryRecorder::only([EventKind::QueryExecuted])` records only those kinds.
 
 ## Monitoring with Lighthouse
 

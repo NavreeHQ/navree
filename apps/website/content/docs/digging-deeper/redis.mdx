@@ -228,7 +228,7 @@ Everything the drivers write starts with `redis.prefix`:
 
 - **Eviction.** When Redis reaches its `maxmemory`, its `maxmemory-policy` decides what goes. `allkeys-lru` may evict queued jobs, sessions and locks along with cache entries. With the queue or sessions on Redis, use `volatile-lru` (only keys with an expiry are evicted: cache entries, sessions and locks have one, jobs don't) or `noeviction`, or give the cache its own server with `redis.connections.cache` and let that one evict.
 - **Persistence.** Jobs only survive a Redis restart if Redis saves them: turn on the append-only file (`appendonly yes`) on the server that holds the queue.
-- **Supported servers.** One Redis server (Redis 6 or later, or a compatible server such as Valkey), or a primary with replicas behind one address. Redis Cluster is not supported: the queue's Lua scripts touch keys that are only known while the script runs.
+- **Supported servers.** One Redis server, or a primary with replicas behind one address. [Dock](/docs/tools/dock/) runs Redis 7, and the driver's own tests run against Redis 8. Redis Cluster is not supported: the queue's Lua scripts touch keys that are only known while the script runs.
 
 ## Testing
 

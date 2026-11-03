@@ -1,6 +1,6 @@
 ---
 title: "Mail delivery"
-description: "Email APIs (SES, Mailgun, Postmark, Resend), transports per domain, workspace and organization, a delivery log fed by provider webhooks, suppressions, mail held for approval, open and click tracking, DKIM signing and sending-domain checks."
+description: "Send mail for your customers: email API transports, a transport per domain or workspace, a delivery log, suppressions, approval holds, tracking, DKIM and domain checks."
 ---
 
 ## Introduction
@@ -75,7 +75,7 @@ mailer.via("campaigns").queue(&newsletter).await?;
 
 ### What a send reports
 
-`send` and `queue` return `()`, as before. `deliver` does what `send` does and returns a `SendReport`:
+`send` and `queue` return `()`. `deliver` does what `send` does and returns a `SendReport`:
 
 ```rust
 let report = mailer.deliver(&mail).await?;
@@ -482,8 +482,11 @@ Each `RecordCheck` has a `status` (`pass`, `warn` or `fail`), the `name` looked 
 
 The command does the same from a terminal:
 
-```console
-$ navree mail:domains acme.test --selector mail --spf-include amazonses.com
+```sh
+navree mail:domains acme.test --selector mail --spf-include amazonses.com
+```
+
+```text
 acme.test
   SPF          pass  acme.test
                v=spf1 include:amazonses.com ~all

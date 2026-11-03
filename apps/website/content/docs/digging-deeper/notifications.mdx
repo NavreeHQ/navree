@@ -48,7 +48,7 @@ deliveries = true  # record Slack, Teams, SMS, WhatsApp and web push deliveries
 | Key | Default | Meaning |
 |---|---|---|
 | `notify.queue` | `false` | Queue each channel as a job instead of delivering it during `send`; see [queueing](#queueing-notifications). |
-| `notify.routes` | `true` | Serve the signed-in user's notifications and push subscriptions under the API prefix. These routes need authentication: in an app without a `dyn Authenticator` (no `AuthModule`), set this to `false`, or the router rejects them ("requires authentication but no `dyn Authenticator` is registered"). |
+| `notify.routes` | `true` | Serve the signed-in user's notifications, push subscriptions and preferences under the API prefix. These routes need authentication: in an app without a `dyn Authenticator` (no `AuthModule`), set this to `false`, or the router rejects them ("requires authentication but no `dyn Authenticator` is registered"). |
 | `notify.deliveries` | `true` | Record every delivery over the Slack, Teams, SMS, WhatsApp and web push channels; see [the delivery log](/docs/digging-deeper/notification-channels/#the-delivery-log). |
 
 Those channels' drivers and credentials have tables of their own (`notify.sms`, `notify.twilio`, `notify.web_push`...), described in [notification channels](/docs/digging-deeper/notification-channels/#configuration); preferences, digests and held deliveries have `notify.preferences`, `notify.digest` and `notify.deferred`, described in [notification preferences](/docs/digging-deeper/notification-preferences/#configuration).
@@ -268,7 +268,7 @@ async fn notify<K: DealNotice>(
 Inside a [unit of work](/docs/database/unit-of-work/), a request handler's or `Db::transaction`'s, `send` ties the notification to it:
 
 - the database row is written in the transaction, so it exists only if the request commits;
-- mail and broadcast go out only after the commit, and not at all on a rollback. Their errors are then logged at target `navree::notify`, not returned.
+- the other channels (mail, broadcast and the rest) go out only after the commit, and not at all on a rollback. Their errors are then logged at target `navree::notify`, not returned.
 
 `send_in(&uow, &user, notification)` does the same with a unit of work you pass explicitly. Elsewhere, in a job, a command or a scheduled task, every channel is delivered during `send`.
 

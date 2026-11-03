@@ -108,6 +108,8 @@ navree up
 
 `down` writes to the working directory of the command, so run it where `serve` runs, or set `http.maintenance_file` to an absolute path in both. See [Deployment](/docs/getting-started/deployment/) for the rest of the process.
 
+With [Harbor](/docs/tools/harbor/), `navree deploy --maintenance` runs `down` on every web server before the migrations and `up` after the switch.
+
 ## Testing
 
 `run_command` runs `down` and `up` against a test app. Point the maintenance file at a temporary directory (a `TempDirGuard` from the testing kit, deleted when it drops) so tests don't share it:

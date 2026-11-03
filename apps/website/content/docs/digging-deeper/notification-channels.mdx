@@ -1,6 +1,6 @@
 ---
 title: "Notification channels"
-description: "Slack, Microsoft Teams, SMS, WhatsApp and browser push for notifications: routes, drivers for Twilio, Vonage, Amazon SNS and the WhatsApp Cloud API, VAPID keys, the delivery log, STOP opt-outs, provider callbacks and a fake per channel."
+description: "Send notifications over Slack, Teams, SMS, WhatsApp and web push: drivers, VAPID keys, the delivery log, STOP opt-outs, provider callbacks and test fakes."
 ---
 
 ## Introduction
@@ -378,9 +378,13 @@ navree notify:vapid
 public_key = "BGp8...Q"
 private_key = "q1dX...4"
 subject = "mailto:you@example.com"
+
+# or as environment variables:
+# APP_NOTIFY__WEB_PUSH__PUBLIC_KEY=BGp8...Q
+# APP_NOTIFY__WEB_PUSH__PRIVATE_KEY=q1dX...4
 ```
 
-Keep the private key secret. A new pair invalidates every subscription, so generate it once per app.
+Set `subject` to a `mailto:` or `https:` contact for your app. Keep the private key secret. A new pair invalidates every subscription, so generate it once per app.
 
 </Step>
 <Step title="Subscribe in the browser">

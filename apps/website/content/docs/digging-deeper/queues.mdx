@@ -446,7 +446,7 @@ TimeoutStopSec=180
 WantedBy=multi-user.target
 ```
 
-- **Restart workers after every deploy.** A worker keeps running the code it started with. There is no `queue:restart` command yet; restart the processes with your process manager.
+- **Restart workers after every deploy.** A worker keeps running the code it started with. `queue:work` has no restart command: restart the processes with your process manager. With [Fleet](/docs/tools/fleet/), `navree fleet:terminate` makes every master finish its jobs and exit, and its process manager starts it again.
 - **Scale by adding processes** or raising `queue.workers`. Workers on several servers can share the database or the Redis driver.
 - **Dedicate workers to queues.** `queue:work --queue mail` on its own process keeps slow exports from delaying mail.
 - **Recycle long-running workers** with `--max-jobs N` and a process manager that restarts them.
