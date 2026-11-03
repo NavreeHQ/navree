@@ -184,6 +184,11 @@ async fn scenario<P: Person>(exec: &impl Executor, a: Uuid, store: &str) {
         ("q=%C3%A9quipe", "1004", "small é"),
         ("q=%C3%B6lwechsel", "1004", "ö finds Ö"),
         ("q=PERSON+10", "10", "case doesn't matter"),
+        (
+            "q=PER%00SON+10",
+            "10",
+            "a NUL is dropped, not sent to the store",
+        ),
     ] {
         let found = ask(query).await;
         assert!(
@@ -259,6 +264,47 @@ async fn scenario<P: Person>(exec: &impl Executor, a: Uuid, store: &str) {
     sorted.sort();
     sorted.dedup();
     assert_eq!(sorted.len(), 213, "{store}: no row twice");
+
+    // What a handler asks of what a browser posted: is each value pickable by this caller?
+    let pickable = |values: &'static [&'static str]| {
+        let scope = mine();
+        async move {
+            PEOPLE
+                .all_pickable(scope, values.iter().copied(), exec, OptionSource::as_int)
+                .await
+                .unwrap_or_else(|error| panic!("{store}: {values:?}: {error}"))
+        }
+    };
+    assert!(
+        pickable(&["2", "4", "1001", "2005"]).await,
+        "{store}: its own rows"
+    );
+    assert!(
+        pickable(&["2", "2", "02"]).await,
+        "{store}: one row said three ways"
+    );
+    assert!(
+        pickable(&[""]).await,
+        "{store}: an empty value is no choice"
+    );
+    assert!(pickable(&[]).await, "{store}: nothing picked");
+    assert!(
+        !pickable(&["2", "3"]).await,
+        "{store}: 3 belongs to the other workspace"
+    );
+    assert!(
+        !pickable(&["1003"]).await,
+        "{store}: nor does 1003, the secret one"
+    );
+    assert!(
+        !pickable(&["999999"]).await,
+        "{store}: a row that isn't there"
+    );
+    assert!(
+        !pickable(&["2", "x"]).await,
+        "{store}: text that isn't a number"
+    );
+    assert!(!pickable(&["2", "2; DROP"]).await, "{store}: nor is SQL");
 
     // The same twice, in the same order.
     let again = ask("limit=50").await;

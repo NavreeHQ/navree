@@ -5,11 +5,12 @@
 use std::sync::{Arc, LazyLock};
 
 use http::Method;
+use http::request::Parts;
 use navree::http::extract::Form;
 use navree::http::response::IntoResponse;
 use navree::http::{Controller, RouteDef};
 use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
-use navree::ui::form::{FormView, Many, Rejected};
+use navree::ui::form::{FieldErrors, FormView, Many, Rejected};
 use navree::ui::*;
 use serde::Deserialize;
 
@@ -83,6 +84,14 @@ static PEOPLE: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
         people.push((format!("{}", 10_001 + n), (*name).to_owned()));
     }
     people
+});
+
+/// Every person a search can find, as choices: what a post's value is checked against.
+static PEOPLE_CHOICES: LazyLock<Vec<Choice>> = LazyLock::new(|| {
+    PEOPLE
+        .iter()
+        .map(|(id, name)| Choice::new(id.as_str(), name.as_str()))
+        .collect()
 });
 
 fn stages() -> Vec<Choice> {
@@ -470,6 +479,28 @@ fn multis() -> Element {
                     .selected_choices([Choice::new("1", "Ada Lovelace 1")]),
             ),
             field(
+                "f-multi-cap",
+                "At most two, found on the server",
+                MultiSelect::new("cap")
+                    .id("multi-cap")
+                    .placeholder("Search people")
+                    .search("/select/people-off")
+                    .create_url("/select/teams")
+                    .max(2)
+                    .selected_choices([Choice::new("1", "Ada Lovelace 1")]),
+            ),
+            field(
+                "f-multi-cap-free",
+                "At most two, any text",
+                MultiSelect::new("capfree")
+                    .id("multi-cap-free")
+                    .placeholder("Pick or type")
+                    .options(stages())
+                    .creatable()
+                    .max(2)
+                    .selected_values(["lead"]),
+            ),
+            field(
                 "f-multi-create",
                 "Tags (any text)",
                 MultiSelect::new("tags")
@@ -495,6 +526,7 @@ fn palette() -> Command {
     Command::new("palette")
         .placeholder("Type a command or search…")
         .recent(4)
+        .csrf("palette-token")
         .source("/select/palette-search")
         .group(
             CommandGroup::new("Navigate")
@@ -724,6 +756,7 @@ struct Derived {
     person: Option<String>,
     /// Markets
     #[validate(skip)]
+    #[form(max = 2)]
     countries: Many<String>,
     /// Note
     #[validate(skip)]
@@ -751,10 +784,30 @@ fn derived_page(shell: &AppShell, form: FormView<Derived>) -> AppPage {
 
 fn derived_store(
     shell: &AppShell,
+    parts: &Parts,
     submit: Result<Submit<Derived>, Rejected<Derived>>,
 ) -> navree::http::response::Response {
     match submit {
         Ok(Submit(sent)) => {
+            // A browser can send any value: each must be one of the options this page offers.
+            let wrong = || vec!["Choose one of the options.".to_owned()];
+            let mut errors = FieldErrors::new();
+            if !Choice::all_among([sent.stage.as_str()], &stages()) {
+                errors.insert("stage".to_owned(), wrong());
+            }
+            if !Choice::all_among([sent.owner.as_str()], &countries()) {
+                errors.insert("owner".to_owned(), wrong());
+            }
+            if !Choice::all_among(sent.person.iter(), &PEOPLE_CHOICES) {
+                errors.insert("person".to_owned(), wrong());
+            }
+            if !Choice::all_among(sent.countries.iter(), &countries()) {
+                errors.insert("countries".to_owned(), wrong());
+            }
+            if !errors.is_empty() {
+                return Rejected::after_decode(&sent, errors, parts)
+                    .respond(|form| derived_page(shell, form));
+            }
             let mut pairs = vec![
                 ("stage".to_owned(), sent.stage),
                 ("owner".to_owned(), sent.owner),
@@ -775,6 +828,12 @@ fn derived_store(
 
 /// The answer to a search, as `ChoiceList`.
 fn people(query: &OptionQuery) -> ChoiceList {
+    people_list(query, "/select/people", false)
+}
+
+/// The same answer, from `path`, with the second option disabled when `off_second`: a
+/// server that refuses one of its own options.
+fn people_list(query: &OptionQuery, path: &str, off_second: bool) -> ChoiceList {
     let needle = query.text().to_lowercase();
     let mut found = PEOPLE
         .iter()
@@ -782,11 +841,11 @@ fn people(query: &OptionQuery) -> ChoiceList {
         .skip(usize::try_from(query.offset()).unwrap_or(usize::MAX));
     let page: Vec<&(String, String)> = found.by_ref().take(query.limit()).collect();
     let mut list = ChoiceList::new();
-    for (id, name) in &page {
-        list = list.choice(Choice::new(id.as_str(), name.as_str()));
+    for (at, (id, name)) in page.iter().enumerate() {
+        list = list.choice(Choice::new(id.as_str(), name.as_str()).disabled(off_second && at == 1));
     }
     if found.next().is_some() {
-        list = list.more(query.next_url("/select/people", page.len()));
+        list = list.more(query.next_url(path, page.len()));
     }
     list
 }
@@ -963,8 +1022,10 @@ impl Controller for SelectPages {
             RouteDef::on(
                 Method::POST,
                 "!/select/derive",
-                |shell: AppShell, sent: Result<Submit<Derived>, Rejected<Derived>>| async move {
-                    derived_store(&shell, sent)
+                |shell: AppShell,
+                 parts: Parts,
+                 sent: Result<Submit<Derived>, Rejected<Derived>>| async move {
+                    derived_store(&shell, &parts, sent)
                 },
             )
             .public(),
@@ -997,6 +1058,14 @@ impl Controller for SelectPages {
                             .into_response();
                     }
                     people(&query).into_response()
+                },
+            )
+            .public(),
+            RouteDef::on(
+                Method::GET,
+                "!/select/people-off",
+                |query: OptionQuery| async move {
+                    people_list(&query, "/select/people-off", true).into_response()
                 },
             )
             .public(),

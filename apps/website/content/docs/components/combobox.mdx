@@ -45,7 +45,7 @@ A list in the page can be long. The page holds every option, the filter runs ove
 
 <UiPreview example="combobox/create" />
 
-`.create_url(url)` has the server make the record: the runtime posts `name=text` and the answer, a [ChoiceList](#choicelist) holding the new option, is chosen. One post goes out however often the row is clicked, and a refusal (any status of 400 or more) changes nothing and says so. `.create_denied(reason)` shows the row switched off with the reason, for someone who may not create.
+`.create_url(url)` has the server make the record: the runtime posts `name=text` and the answer, a [ChoiceList](#choicelist) holding the new option, is chosen. One post goes out however often the row is clicked, and a refusal (any status of 400 or more) changes nothing and says so. `.create_denied(reason)` shows the row switched off with the reason, for someone who may not create. It is a hint to the person and stops nobody: the route behind `.create_url` must check that the caller may create, and what the text is, as it does for any other post. A browser can post to it whether the row is on or off.
 
 <UiPreview example="combobox/states" />
 
@@ -79,7 +79,7 @@ async fn people(query: OptionQuery, uow: Uow) -> Result<ChoiceList> {
 ```
 
 - **What is asked.** `GET /people/options?q=text`. `OptionQuery` clips the text to 256 bytes, caps the limit at 50 (20 by default) and the offset at a million, and never fails: a value that doesn't parse is dropped.
-- **What is searched.** The columns come from the `OptionSource` in your code, never from the request. The text is bound, so `%`, `_` and quotes are data. The builder you pass is your own scoped query: workspace scoping and row-level security hold, and a narrowed query shows only what it was narrowed to. The same code answers the same on PostgreSQL, MySQL, SQLite and MongoDB; a field a store keeps under another name can be named by the field, so `id` is `_id` on MongoDB.
+- **What is searched.** The columns come from the `OptionSource` in your code, never from the request. Control characters in the text are dropped. The text is bound, so `%`, `_` and quotes are data. The builder you pass is your own scoped query: workspace scoping and row-level security hold, and a narrowed query shows only what it was narrowed to. The same code answers the same on PostgreSQL, MySQL, SQLite and MongoDB; a field a store keeps under another name can be named by the field, so `id` is `_id` on MongoDB.
 - **Order and pages.** Options come ordered by the label, then the value, so paging neither skips nor repeats a row. A full page ends with **Show more**, which asks for the next one.
 - **What the runtime does.** It waits 100 ms after the last key (`.debounce(ms)`; 0 is no wait), cancels the request before, and uses only the newest answer: a slow reply to an earlier text never replaces a later one. After 150 ms it marks the list busy and says "Searching…", keeping the old rows until the new ones come. Nothing is filtered again in the browser, because the server may have matched what the label doesn't show. Choosing an option never waits: it is made at once, and a search typed ahead of it is dropped.
 - **When it fails.** The text and the choice stay, the list says it couldn't load, and `Enter` tries again. A `401` or `403` says the person no longer has access, with no stale rows. An answer that redirects, as a session that has ended does, goes to that page.
@@ -103,6 +103,23 @@ FormView::<NewDeal>::new()
     .search("owner_id", "/people/options")
     .options("owner_id", [("7".into(), "Grace Hopper".into())])
 ```
+
+## Check what was picked
+
+Nothing a browser sends is known to be one of the options it was given: a hand-made post can name any value. The form reads the text and leaves it at that (`#[validate(skip)]` is what it says to the rules), so the handler checks every picked value against the options **this caller** may pick, with the same scoped query the search answers with. `OptionSource::all_pickable` asks the database in one query, and a value from another workspace, one the caller may not see, or one that never existed is not pickable:
+
+```rust
+async fn store(parts: Parts, Submit(deal): Submit<NewDeal>, uow: Uow) -> Result<Response> {
+    let picked = deal.owner_id.iter();
+    if !PEOPLE.all_pickable(Person::query(), picked, &uow, OptionSource::as_int).await? {
+        let errors = FieldErrors::from([("owner_id".to_owned(), vec!["Choose someone from the list.".to_owned()])]);
+        return Ok(Rejected::after_decode(&deal, errors, &parts).into_response());
+    }
+    // …
+}
+```
+
+`as_int`, `as_uuid` and `as_text` turn the posted text into what the column holds; any function from text to a `Value` works, and a value that doesn't turn into one is not pickable. An empty value is no choice and passes: whether one is needed is the field's own rule. `Rejected::after_decode` answers as a failed rule does: ops that show the message under the field, or, with script off, the form again with what was sent. For a list that is fixed in the page, `Choice::all_among(values, &choices)` is the same check without a database, and a disabled choice is not pickable.
 
 Without `.search`, `.options` are the whole list. With it, they are only the labels of what is chosen.
 

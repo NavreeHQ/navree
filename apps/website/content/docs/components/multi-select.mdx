@@ -36,7 +36,7 @@ The list shows a box for each option. A chosen option is checked, and picking it
 
 ## Limits
 
-`.max(n)` allows at most `n`: at the limit the other options are switched off, and picking one says so. `.summary_after(n)` shows one "N selected" chip instead of the chips once more than `n` are chosen. `.select_all()` adds a row that chooses every option the text matches, and takes them all off again; it is for lists in the page, since a searched list is never all there.
+`.max(n)` allows at most `n`: at the limit the other options are switched off, and picking one says so. So is making a new one, and a list from a new search comes in switched off too, though a row the server drew as disabled stays disabled when the limit lets go. This is the browser's help only: with script off or a hand-made post, more arrive, so hold the post to the limit as well (below). `.summary_after(n)` shows one "N selected" chip instead of the chips once more than `n` are chosen. `.select_all()` adds a row that chooses every option the text matches, and takes them all off again; it is for lists in the page, since a searched list is never all there.
 
 <UiPreview example="multi-select/limits" />
 
@@ -53,6 +53,7 @@ use navree::ui::form::Many;
 struct NewDeal {
     /// Markets
     #[validate(skip)]
+    #[form(max = 3)]
     markets: Many<String>,
 }
 
@@ -61,6 +62,10 @@ FormView::<NewDeal>::new()
 ```
 
 The values are read as text: strings, enums with `#[derive(Options)]`, UUIDs and dates. A `Many<Stage>` of an enum takes its options from the enum.
+
+`#[form(max = 3)]` gives the multi-select `.max(3)` and holds the post to it: with more than three values the form is refused with "Choose at most 3." under the field, with script on or off. Empty values and values the form can't read are not counted.
+
+Like a [Combobox](/docs/components/combobox/#check-what-was-picked), a form doesn't know that a picked value is one the caller may pick. After decoding, check every value with `OptionSource::all_pickable` (a list from the database) or `Choice::all_among` (a list in the page), and answer a failure with `Rejected::after_decode`.
 
 ## Keyboard and accessibility
 

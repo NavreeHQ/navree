@@ -23,6 +23,7 @@ Command::new("palette")
             .item(CommandItem::post("Sign out", "/sign-out").not_recent())
             .item(CommandItem::disabled("Billing", "Only owners can open billing.")),
     )
+    .csrf(session.csrf_token())
 ```
 
 ## Putting it on a page
@@ -45,11 +46,13 @@ Shell::new("Acme")
 | Item | Does | Needs script |
 |---|---|---|
 | `CommandItem::link(label, href)` | Goes to a page. | No |
-| `CommandItem::post(label, action)` | Posts a form to `action`. Give the palette `.csrf(token)` for a page without script. | No |
+| `CommandItem::post(label, action)` | Posts a form to `action`. With script the post goes through the form runtime, which sends the session's CSRF token as the `x-xsrf-token` header, as for every form, so a route behind the session check accepts it. Without script a post carries nothing else, so give the palette `.csrf(token)`: it is put in the form as `_csrf`. | No |
 | `CommandItem::run(label, cmd)` | Runs a browser [Cmd](/docs/ui/commands-and-ops/#commands): opens a dialog, copies text. | Yes |
 | `CommandItem::disabled(label, reason)` | Shows the item and says why it can't be used. | No |
 
 An item can have an icon, a description, `keywords` that find it though the label doesn't hold them, and a shortcut.
+
+The palette only decides what to show. Leaving an item out of it protects nothing: the route behind a `post` item, and the page behind a `link`, check who is asking, as they do when the address is typed.
 
 ## Finding an item
 

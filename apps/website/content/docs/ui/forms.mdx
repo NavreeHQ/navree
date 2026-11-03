@@ -66,7 +66,7 @@ FormView::<NewDeal>::new()
 | `Many<T>` | a [MultiSelect](/docs/components/multi-select/): every value posted under the name, in order |
 | `Option<T>` | the same widget, and it may be left empty |
 
-`#[form(widget = ...)]` picks another: `text`, `email`, `url`, `tel`, `password`, `search`, `number`, `date`, `time`, `datetime`, `hidden`, `textarea`, `select`, `listbox`, `combobox`, `multiselect`, `radio`, `checkbox`, `switch` or `money`. A select whose choices come from the database takes them from `FormView::options(field, choices)`. `select` is the browser's own; `listbox` is a styled [Select](/docs/components/select/), and `combobox` a [Combobox](/docs/components/combobox/), whose options come from the same place or are searched on the server with `FormView::search(field, url)`.
+`#[form(widget = ...)]` picks another: `text`, `email`, `url`, `tel`, `password`, `search`, `number`, `date`, `time`, `datetime`, `hidden`, `textarea`, `select`, `listbox`, `combobox`, `multiselect`, `radio`, `checkbox`, `switch` or `money`. A select whose choices come from the database takes them from `FormView::options(field, choices)`. `select` is the browser's own; `listbox` is a styled [Select](/docs/components/select/), and `combobox` a [Combobox](/docs/components/combobox/), whose options come from the same place or are searched on the server with `FormView::search(field, url)`. The form reads what a picker posts as text and doesn't know the value is one of the options: check it in the handler with `OptionSource::all_pickable` or `Choice::all_among`, and answer a failure with `Rejected::after_decode` ([how](/docs/components/combobox/#check-what-was-picked)). `#[form(max = n)]` on a `Many<T>` field limits a multi-select and holds the post to the limit.
 
 | `#[form(...)]` | Means |
 |---|---|
@@ -75,6 +75,7 @@ FormView::<NewDeal>::new()
 | `error = "..."` | the message for any failed rule, in place of the rule's own |
 | `addon = "field"` | draws another field (a currency) inside this one's input group |
 | `rows = 4` | a textarea's height |
+| `max = 3` | the most values a `Many<T>` field takes: the multi-select stops there, and a post with more is refused |
 | `autofocus`, `wide` | takes focus on load; takes the form's whole width |
 | `skip` | not drawn and never read from the request |
 

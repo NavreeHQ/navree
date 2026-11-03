@@ -155,6 +155,37 @@ async fn a_searched_list_stays_in_its_workspace_binds_its_text_and_pages_without
     let by_email = find(&uow, OptPerson::query().for_workspace(a), "q=bsecret%40").await;
     assert!(values(&by_email).is_empty(), "{by_email}");
 
+    // What a handler asks of a posted value: pickable by this caller, by the ORM's scope
+    // and by the policy alike, and not by a caller who entered no workspace.
+    let ask = |scope: navree::orm::Builder<OptPerson>, values: &'static [&'static str]| {
+        let uow = &uow;
+        async move {
+            PEOPLE
+                .all_pickable(scope, values.iter().copied(), uow, OptionSource::as_int)
+                .await
+                .unwrap()
+        }
+    };
+    assert!(ask(OptPerson::query().for_workspace(a), &["2", "4", "1001"]).await);
+    assert!(!ask(OptPerson::query().for_workspace(a), &["2", "3"]).await);
+    assert!(!ask(OptPerson::query().for_workspace(a), &["1003"]).await);
+    assert!(
+        !ask(OptPerson::query().without_workspace_scope(), &["2", "3"]).await,
+        "the policy holds when the ORM's scope is left out"
+    );
+    assert!(
+        !PEOPLE
+            .all_pickable(
+                OptPerson::query().without_workspace_scope(),
+                ["2"],
+                &db,
+                OptionSource::as_int,
+            )
+            .await
+            .unwrap(),
+        "with no workspace entered nothing is pickable"
+    );
+
     // Text is data: a percent sign, an underscore, a quote and a backslash match themselves.
     let percent = find(&uow, OptPerson::query().for_workspace(a), "q=%25").await;
     assert_eq!(

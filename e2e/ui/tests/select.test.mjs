@@ -961,6 +961,210 @@ for (const browserName of browsers) {
       await close();
     });
 
+    // -------------------------------------------- What a page may not take on trust
+
+    test("Palette: a post item goes through the form runtime with the CSRF header, and with script off it carries the token", async () => {
+      const { page, context, close } = await open("/select");
+      await context.addCookies([{ name: "XSRF-TOKEN", value: "cookie-token-123", url: BASE }]);
+      const posted = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith("/select/echo"));
+      await page.keyboard.press("Control+k");
+      await page.keyboard.type("post an");
+      await page.keyboard.press("Enter");
+      const request = await posted;
+      assert.equal(request.headers()["x-xsrf-token"], "cookie-token-123", "the cookie's token goes as the header");
+      assert.equal(request.headers()["x-navree-ui"], "1", "it went through the form runtime");
+      await page.waitForURL("**/select/echo");
+      await close();
+
+      const off = await open("/select", { js: false });
+      await off.page.locator("button[commandfor=palette]").click();
+      await off.page.locator("#palette button", { hasText: "Post an action" }).click();
+      await off.page.waitForURL("**/select/echo");
+      assert.match(await off.page.locator("[data-echo]").innerText(), /_csrf = palette-token/, "with no script the token rides in the body");
+      await off.close();
+    });
+
+    test("MultiSelect max: a new search's rows are off at the limit, a row the server disabled stays off, and making a new one stops", async () => {
+      const { page, picker, close } = await open("/select");
+      const m = picker("multi-cap");
+      const posts = [];
+      page.on("request", (r) => { if (r.method() === "POST" && r.url().includes("/select/teams")) posts.push(r.url()); });
+      const state = () => page.locator("#multi-cap-list [role=option]:not([data-action])").evaluateAll((rows) => rows.map((r) => ({ text: r.textContent.slice(0, 14), selected: r.getAttribute("aria-selected"), off: r.getAttribute("aria-disabled") === "true", ours: r.hasAttribute("data-limit-off") })));
+      await page.locator("#f-multi-cap").click();
+      await page.waitForFunction(() => document.querySelectorAll("#multi-cap-list [role=option]:not([data-action])").length >= 5);
+      let rows = await state();
+      assert.equal(rows[1].off, true, "the server disabled the second row");
+      assert.equal(rows[1].ours, false);
+      assert.equal(rows[2].off, false);
+      // The third row makes two of two.
+      await page.locator("#multi-cap-list [role=option]:not([data-action])").nth(2).click();
+      assert.equal(await m.chips.count(), 2);
+      rows = await state();
+      for (const r of rows) if (r.selected === "false") assert.equal(r.off, true, JSON.stringify(r));
+      assert.equal(rows[1].ours, false, "the server's own switch is not the limit's");
+      assert.equal(rows[3].ours, true);
+      // Taking a chip off lets the limit go: the rows come back on, and the one the server disabled stays off.
+      await page.locator("#multi-cap [data-slot=chip]").nth(1).locator("[data-slot=chip-remove]").click();
+      rows = await state();
+      assert.equal(rows[1].off, true, "still off, as the server drew it");
+      assert.equal(rows[3].off, false);
+      // Opened again, the list comes in the same way: the server's switch stays, the limit's is gone.
+      await page.locator("#f-multi-cap").click();
+      await page.waitForFunction(() => document.querySelector("#multi-cap-list")?.closest("[data-open]") && document.querySelectorAll("#multi-cap-list [role=option]:not([data-action])").length >= 5);
+      rows = await state();
+      assert.equal(rows[1].off, true);
+      assert.equal(rows[2].off, false);
+      // At the limit again, the rows of a new search come in off.
+      await page.locator("#multi-cap-list [role=option]:not([data-action])").nth(2).click();
+      await page.locator("#f-multi-cap").focus();
+      await page.keyboard.type("grace");
+      await page.waitForFunction(() => document.querySelector("#multi-cap-list [role=option]")?.textContent.startsWith("Grace"));
+      rows = await state();
+      assert.ok(rows.length > 3, JSON.stringify(rows));
+      for (const r of rows) if (r.selected === "false") assert.equal(r.off, true, `a row of the new answer is on at the limit: ${JSON.stringify(r)}`);
+      // Making a new one is off too: the row is, the keys never reach it, and a click does nothing.
+      await page.keyboard.type(" zzqq");
+      await page.waitForFunction(() => document.querySelector("#multi-cap-list [data-action=create]"));
+      assert.equal(await page.locator("#multi-cap-list [data-action=create]").getAttribute("aria-disabled"), "true");
+      assert.equal(await page.locator("#multi-cap-list [data-action=create][data-active]").count(), 0);
+      await page.locator("#multi-cap-list [data-action=create]").click({ force: true });
+      await page.waitForTimeout(300);
+      assert.equal(posts.length, 0, "nothing was created");
+      assert.equal(await m.chips.count(), 2);
+      assert.match(await m.status.innerText(), /at most 2/i);
+      await close();
+    });
+
+    test("MultiSelect max with any text: a new tag is made below the limit and not at it", async () => {
+      const { page, picker, close } = await open("/select");
+      const m = picker("multi-cap-free");
+      await page.locator("#f-multi-cap-free").click();
+      await page.keyboard.type("Warm lead");
+      await page.locator("#multi-cap-free-list [data-action=create]").click();
+      assert.equal(await m.chips.count(), 2);
+      await page.keyboard.type("Another one");
+      await page.waitForFunction(() => document.querySelector("#multi-cap-free-list [data-action=create]"));
+      assert.equal(await page.locator("#multi-cap-free-list [data-action=create]").getAttribute("aria-disabled"), "true");
+      await page.locator("#multi-cap-free-list [data-action=create]").click({ force: true });
+      await page.keyboard.press("Enter");
+      assert.equal(await m.chips.count(), 2);
+      assert.deepEqual((await m.value()).sort(), ["Warm lead", "lead"]);
+      await close();
+    });
+
+    test("A form the server checks: a value that is not one of the options is refused, and so are too many", async () => {
+      const post = (page, body) => page.request.post(BASE + "/select/derive", { data: body, headers: { origin: BASE, "content-type": "application/x-www-form-urlencoded" } });
+      const { page, close } = await open("/select/derive");
+      // Straight from a hand-made post.
+      const good = await post(page, "stage=lead&owner=it&person=2&countries=fr");
+      assert.equal(good.status(), 200);
+      assert.match(await good.text(), /<code>stage<\/code> = <code>lead<\/code>/);
+      for (const [name, body, field] of [
+        ["a stage that isn't one", "stage=forged&owner=it&countries=fr", "stage"],
+        ["a country that isn't one", "stage=lead&owner=xx&countries=fr", "owner"],
+        ["a person nobody searched for", "stage=lead&owner=it&person=99999999&countries=fr", "person"],
+        ["a market that isn't one", "stage=lead&owner=it&countries=fr&countries=zz", "countries"],
+      ]) {
+        const refused = await post(page, body);
+        assert.equal(refused.status(), 422, name);
+        assert.match(await refused.text(), /Choose one of the options\./, `${name} (${field})`);
+      }
+      const many = await post(page, "stage=lead&owner=it&countries=fr&countries=de&countries=jp");
+      assert.equal(many.status(), 422, "three markets of at most two");
+      assert.match(await many.text(), /Choose at most 2\./);
+
+      // From the page, with script: the runtime shows the message under the field.
+      await page.evaluate(() => {
+        const stage = document.querySelector("#derived-stage-picker [data-slot=select-native]");
+        stage.append(new Option("Forged", "forged"));
+        stage.value = "forged";
+        document.querySelector("#derived-owner-picker [data-slot=select-native]").value = "it";
+      });
+      await page.locator("#derived button[type=submit]").click();
+      await page.waitForFunction(() => document.querySelector("#derived-stage")?.getAttribute("aria-invalid") === "true");
+      assert.match(await page.locator("[data-slot=field]", { has: page.locator("#derived-stage") }).innerText(), /Choose one of the options\./);
+      await close();
+
+      // With script off the form comes back with what was sent and the message.
+      const off = await open("/select/derive", { js: false });
+      await off.page.locator("#derived-stage-picker [data-slot=select-native]").selectOption("won");
+      await off.page.locator("#derived-owner-picker [data-slot=select-native]").selectOption("it");
+      await off.page.locator("#derived-countries-picker [data-slot=select-native]").selectOption(["fr", "de", "jp"]);
+      await off.page.locator("#derived button[type=submit]").click();
+      await off.page.waitForFunction(() => /Choose at most 2\./.test(document.body.innerText));
+      assert.match(await off.page.locator("#derived").innerText(), /Choose at most 2\./);
+      assert.equal(await off.page.locator("#derived-stage-picker [data-slot=select-native]").inputValue(), "won", "what was sent is kept");
+      await off.close();
+    });
+
+    test("A reply from the server can't bind a shortcut or paint with a url()", async () => {
+      const { page, close } = await open("/select");
+      await page.route("**/select/palette-search?*", (route) => route.fulfill({
+        status: 200,
+        contentType: "text/html; charset=utf-8",
+        body: '<div data-slot="option-page"><a role="option" href="/gallery" data-slot="command-item" data-value="x" data-shortcut="ctrl+shift+y">Evil<svg><path fill="url(#x)" stroke="url( &quot;http://evil.example/a.svg#b&quot; )" stroke-width="2" d="M0 0"/><circle fill="red" stroke="u\\72l(#y)" cx="1" cy="1" r="1"/></svg></a></div>',
+      }));
+      await page.keyboard.press("Control+k");
+      await page.keyboard.type("evil");
+      await page.waitForFunction(() => document.querySelector("#palette [data-slot=command-remote] [role=option]"));
+      const out = await page.evaluate(() => {
+        const row = document.querySelector("#palette [data-slot=command-remote] [role=option]");
+        const path = row.querySelector("path"), circle = row.querySelector("circle");
+        return { shortcut: row.hasAttribute("data-shortcut"), pathFill: path?.getAttribute("fill"), pathStroke: path?.getAttribute("stroke"), width: path?.getAttribute("stroke-width"), circleFill: circle?.getAttribute("fill"), circleStroke: circle?.getAttribute("stroke") };
+      });
+      assert.deepEqual(out, { shortcut: false, pathFill: null, pathStroke: null, width: "2", circleFill: "red", circleStroke: null });
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("Control+Shift+Y");
+      await page.waitForTimeout(300);
+      assert.ok(page.url().endsWith("/select"), `the chord went to ${page.url()}`);
+      await close();
+    });
+
+    test("A palette that was closed starts again: what the server answered for the last text is gone", async () => {
+      const { page, close } = await open("/select");
+      await page.keyboard.press("Control+k");
+      await page.keyboard.type("grace");
+      await page.waitForFunction(() => document.querySelector("#palette [data-slot=command-remote] [role=option]"));
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("Control+k");
+      assert.equal(await page.locator("#palette [data-slot=command-remote] [role=option]").count(), 0);
+      await close();
+    });
+
+    test("The select module reads the page through the prototype: a named element can't stop it", async () => {
+      const { page, problems, close } = await open("/select");
+      // Elements named like the properties the module reads would shadow them on the document.
+      await page.evaluate(() => {
+        for (const name of ["querySelector", "querySelectorAll", "activeElement"]) {
+          const img = Document.prototype.createElement.call(document, "img");
+          Element.prototype.setAttribute.call(img, "name", name);
+          document.body.append(img);
+        }
+        Document.prototype.getElementById.call(document, "f-combo-basic").focus();
+      });
+      await page.keyboard.type("fra");
+      await page.keyboard.press("Enter");
+      const shown = await page.evaluate(() => Document.prototype.getElementById.call(document, "f-combo-basic").value);
+      assert.match(shown, /France/);
+      await page.keyboard.press("Control+k");
+      assert.equal(await page.evaluate(() => Document.prototype.getElementById.call(document, "palette").open), true);
+      assert.deepEqual(problems, []);
+      await close();
+
+      // And a form with a field named like the method the module calls on it.
+      const form = await open("/select/form");
+      await form.page.evaluate(() => {
+        const f = Document.prototype.getElementById.call(document, "pick-form");
+        const i = Document.prototype.createElement.call(document, "input");
+        Element.prototype.setAttribute.call(i, "name", "querySelectorAll");
+        f.append(i);
+        HTMLFormElement.prototype.reset.call(f);
+      });
+      await form.page.waitForTimeout(100);
+      assert.deepEqual(form.problems, []);
+      await form.close();
+    });
+
     // ----------------------------------------- Where they are: dialog, card, phone
 
     test("A popup inside a dialog sits above it, Esc closes the popup first and the dialog second", async () => {

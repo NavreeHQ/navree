@@ -516,3 +516,84 @@ fn a_form_reads_back_what_the_pickers_post_and_a_multi_select_with_nothing_posts
     let wrong = decode::<Pick>(&pairs(&[("stage", "won"), ("stages", "nonsense")])).unwrap_err();
     assert!(wrong.contains_key("stages"), "{wrong:?}");
 }
+
+#[derive(Debug, Deserialize, Validate, Form)]
+struct Capped {
+    #[validate(skip)]
+    #[form(max = 2)]
+    tags: Many<String>,
+}
+
+#[test]
+fn a_post_with_more_values_than_a_multi_select_allows_is_refused_with_script_off_too() {
+    let pairs = |list: &[(&str, &str)]| -> Vec<(String, String)> {
+        list.iter()
+            .map(|(a, b)| ((*a).to_owned(), (*b).to_owned()))
+            .collect()
+    };
+    assert_eq!(Capped::FIELDS[0].max, Some(2));
+    let two: Capped = decode(&pairs(&[("tags", "a"), ("tags", "b")])).unwrap();
+    assert_eq!(two.tags.0, ["a", "b"]);
+    let errors =
+        decode::<Capped>(&pairs(&[("tags", "a"), ("tags", "b"), ("tags", "c")])).unwrap_err();
+    assert_eq!(errors["tags"], ["Choose at most 2."], "{errors:?}");
+    // Empty values and values with the separator are not counted: they are not read.
+    let counted: Capped = decode(&pairs(&[
+        ("tags", "a"),
+        ("tags", ""),
+        ("tags", "b"),
+        ("tags", "x\u{1f}y"),
+    ]))
+    .unwrap();
+    assert_eq!(counted.tags.0, ["a", "b"]);
+    // The browser is told too.
+    let out = render(&FormView::<Capped>::new().post("/t").into());
+    assert!(out.contains(r#"data-ui-max="2""#), "{out}");
+}
+
+#[test]
+fn a_refusal_after_decoding_keeps_what_was_sent_and_shows_the_errors() {
+    use navree_ui::form::{FieldErrors, Rejected};
+    let value = Pick {
+        stage: "won".to_owned(),
+        owner: Some("7".to_owned()),
+        tags: vec!["a".to_owned()].into(),
+        stages: Vec::new().into(),
+    };
+    let errors =
+        FieldErrors::from([("owner".to_owned(), vec!["Choose from the list.".to_owned()])]);
+    let (parts, ()) = http::Request::builder()
+        .method("POST")
+        .uri("/pick?x=1")
+        .body(())
+        .unwrap()
+        .into_parts();
+    let refused = Rejected::<Pick>::after_decode(&value, errors.clone(), &parts);
+    assert_eq!(refused.errors()["owner"], ["Choose from the list."]);
+    // Drawn as a page it is a 422 holding what was sent and the message.
+    let page = refused.respond(|form| {
+        View::new("Pick").body(navree_ui::Node::from(
+            form.options("owner", [("7".to_owned(), "Grace".to_owned())]),
+        ))
+    });
+    assert_eq!(page.status(), http::StatusCode::UNPROCESSABLE_ENTITY);
+    // From the runtime it is ops, also a 422.
+    let (parts, ()) = http::Request::builder()
+        .method("POST")
+        .uri("/pick")
+        .header("x-navree-ui", "1")
+        .body(())
+        .unwrap()
+        .into_parts();
+    let ops = Rejected::<Pick>::after_decode(&value, errors, &parts)
+        .respond(|form| View::new("Pick").body(navree_ui::Node::from(form)));
+    assert_eq!(ops.status(), http::StatusCode::UNPROCESSABLE_ENTITY);
+    let kind = ops
+        .headers()
+        .get("content-type")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_owned();
+    assert!(kind.contains("ops+json"), "{kind}");
+}

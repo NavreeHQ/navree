@@ -640,3 +640,66 @@ fn a_more_link_must_stay_on_this_site() {
     let out = ChoiceList::new().more("https://evil.example/x").to_html();
     assert!(!out.contains("evil.example"), "{out}");
 }
+
+#[test]
+fn control_characters_are_taken_out_of_a_search_text() {
+    for (query, text) in [
+        ("q=a%00b", "ab"),
+        ("q=%00", ""),
+        ("q=%00%00x%00", "x"),
+        ("q=a%0Ab%09c%1Fd%7F", "abcd"),
+        ("q=%C2%85gr%C2%9Dace", "grace"),
+        ("q=+%00+ada+%00+", "ada"),
+    ] {
+        assert_eq!(OptionQuery::parse(query).text(), text, "{query}");
+    }
+    assert!(OptionQuery::parse("q=%00").is_empty());
+    let next = OptionQuery::parse("q=a%00b").next_url("/people", 20);
+    assert!(!next.contains("%00"), "{next}");
+}
+
+#[test]
+fn a_palette_with_a_post_item_posts_through_the_form_runtime_and_one_without_loads_nothing_more() {
+    let with_post = || {
+        Command::new("palette")
+            .group(
+                CommandGroup::new("Actions")
+                    .item(CommandItem::post("Sign out", "/sign-out"))
+                    .item(CommandItem::link("Home", "/")),
+            )
+            .csrf("page-token")
+    };
+    let out = html(with_post());
+    let form_at = out.find(r#"id="palette-post""#).expect("the hidden form");
+    let form_tag =
+        &out[out[..form_at].rfind('<').unwrap()..form_at + out[form_at..].find('>').unwrap()];
+    assert!(
+        form_tag.contains("data-ui-form"),
+        "the runtime sends it: {form_tag}"
+    );
+    assert!(
+        out.contains(r#"name="_csrf" value="page-token""#),
+        "and with script off the token rides in the body: {out}"
+    );
+    let uses = View::new("t").body(with_post()).uses();
+    assert!(
+        uses.has(Uses::CORE),
+        "the form runtime is loaded for a post item"
+    );
+    assert!(uses.has(Uses::SELECT) && uses.has(Uses::OVERLAY));
+
+    let only_links = || {
+        Command::new("palette").group(CommandGroup::new("Go").item(CommandItem::link("Home", "/")))
+    };
+    let out = html(only_links());
+    assert!(!out.contains("data-ui-form"), "{out}");
+    assert!(!View::new("t").body(only_links()).uses().has(Uses::CORE));
+}
+
+#[test]
+fn the_link_to_the_next_page_goes_on_a_query_the_path_already_has() {
+    let plain = OptionQuery::parse("q=ada").next_url("/people", 20);
+    assert_eq!(plain, "/people?q=ada&limit=20&after=20");
+    let with_query = OptionQuery::parse("q=ada").next_url("/people?team=7", 20);
+    assert_eq!(with_query, "/people?team=7&q=ada&limit=20&after=20");
+}
