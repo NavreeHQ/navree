@@ -114,7 +114,7 @@ form can't be a struct.
 | One of a set the server holds | select | `String` with `widget = select`; choices from `FormView::options(field, ..)` |
 | One of a large or growing set | combobox | **gap**: Combobox is coming (see below) |
 | Something with a prefix or unit | input group | `#[form(addon = "other_field")]`, or `InputGroup::new(input).start(..).end(..)` |
-| A file | file input | `InputKind::File` with a hand-built form; uploads in `navree-storage` |
+| A file | file input | `Input::new(InputKind::File, name)` in a form of your own that posts `multipart/form-data` to an upload route (`navree-storage`): `Submit<T>` reads only urlencoded forms |
 | A hidden value | hidden input | `widget = hidden`, or `#[form(skip)]` to keep it off the client |
 
 By hand, when a form isn't a struct: `Field::new(id, label).help(..)
