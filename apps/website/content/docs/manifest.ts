@@ -19,7 +19,7 @@ export type DocsSection = {
   slug: string;
   /** The heading shown in the sidebar. */
   title: string;
-  /** What the section covers, in one or two sentences: the section page's lead and meta description. */
+  /** What the section covers, in one or two sentences of 70 to 160 characters: the section page's lead and meta description. */
   description: string;
   /** Page slugs in order: `content/docs/<section>/<page>.mdx`. */
   pages: string[];
@@ -301,7 +301,7 @@ export const sections: DocsSection[] = [
   {
     slug: "frontend",
     title: "Front end",
-    description: "Draw your screens in Next.js (React) or Nuxt (Vue) beside the same API: the typed client, sign-in through a backend for the front end, tables, theming and translations.",
+    description: "Draw your screens in Next.js (React) or Nuxt (Vue) beside the same API: the typed client, sign-in, tables, theming and translations.",
     pages: [
       "introduction",
       "typed-client",
@@ -380,7 +380,7 @@ export const sections: DocsSection[] = [
   {
     slug: "example-app",
     title: "Example application",
-    description: "A tour of the example CRM: its modules, routes, front ends and tests.",
+    description: "A tour of the example CRM: its modules, roles, routes, real-time updates, front ends and tests.",
     pages: ["crm-tour"],
   },
 ];

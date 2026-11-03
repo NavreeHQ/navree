@@ -46,7 +46,9 @@ const report = (file: string, msg: string) => {
 for (const section of sections) {
   const where = path.join(docsDir, "manifest.ts");
   if (!section.description) report(where, `section "${section.slug}" has no description`);
-  else if (section.description.length > 200) report(where, `section "${section.slug}": description is ${section.description.length} characters (200 at most)`);
+  else if (section.description.replace(/`/g, "").length < 70 || section.description.replace(/`/g, "").length > 160) {
+    report(where, `section "${section.slug}": description is ${section.description.replace(/`/g, "").length} characters (70 to 160, as it is the section page's meta description)`);
+  }
   for (const group of section.groups ?? []) {
     if (!section.pages.includes(group.from)) report(where, `section "${section.slug}": group "${group.title}" starts at "${group.from}", which is not one of its pages`);
   }
