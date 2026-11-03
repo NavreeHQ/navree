@@ -130,10 +130,14 @@ impl<'a> Reader<'a> {
     fn name(&mut self) -> Result<String, String> {
         let end = self
             .rest()
-            .find(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == ':' || c == '_' || c == '.'))
+            .find(|c: char| {
+                !(c.is_ascii_alphanumeric() || c == '-' || c == ':' || c == '_' || c == '.')
+            })
             .unwrap_or(self.rest().len());
         let name = &self.rest()[..end];
-        if name.is_empty() || !name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_' || c == ':') {
+        if name.is_empty()
+            || !name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_' || c == ':')
+        {
             return self.fail("a name cannot be read here");
         }
         self.at += end;
@@ -216,7 +220,8 @@ impl<'a> Reader<'a> {
                 self.at += 1;
                 break;
             } else if self.rest().starts_with("<!") || self.rest().starts_with("<?") {
-                return self.fail("a DOCTYPE, CDATA section or processing instruction is not allowed");
+                return self
+                    .fail("a DOCTYPE, CDATA section or processing instruction is not allowed");
             } else {
                 let child = self.element(depth + 1)?;
                 node.children.push(child);
@@ -258,7 +263,10 @@ fn decode(raw: &str) -> Result<String, String> {
             "lt" => '<',
             "gt" => '>',
             _ => {
-                let code = if let Some(hex) = entity.strip_prefix("#x").or_else(|| entity.strip_prefix("#X")) {
+                let code = if let Some(hex) = entity
+                    .strip_prefix("#x")
+                    .or_else(|| entity.strip_prefix("#X"))
+                {
                     u32::from_str_radix(hex, 16).ok()
                 } else if let Some(decimal) = entity.strip_prefix('#') {
                     decimal.parse::<u32>().ok()
@@ -266,10 +274,14 @@ fn decode(raw: &str) -> Result<String, String> {
                     None
                 };
                 // No NUL or other control characters, however they are spelled.
-                let allowed = |c: &u32| (*c >= 0x20 || matches!(*c, 9 | 10 | 13)) && !(0x7f..=0x9f).contains(c);
+                let allowed = |c: &u32| {
+                    (*c >= 0x20 || matches!(*c, 9 | 10 | 13)) && !(0x7f..=0x9f).contains(c)
+                };
                 match code.filter(allowed).and_then(char::from_u32) {
                     Some(c) => c,
-                    None => return Err(format!("the entity &{entity}; is not one an icon may use")),
+                    None => {
+                        return Err(format!("the entity &{entity}; is not one an icon may use"));
+                    }
                 }
             }
         };
@@ -282,14 +294,26 @@ fn decode(raw: &str) -> Result<String, String> {
 
 // ----------------------------------------------------------------- checking
 
-const SHAPES: [&str; 7] = ["path", "circle", "ellipse", "rect", "line", "polyline", "polygon"];
+const SHAPES: [&str; 7] = [
+    "path", "circle", "ellipse", "rect", "line", "polyline", "polygon",
+];
 
 /// Attributes that are dropped: they cannot change what is drawn or are the page's business.
 fn is_dropped(name: &str) -> bool {
     matches!(
         name,
-        "class" | "id" | "role" | "focusable" | "tabindex" | "xml:space" | "version" | "xmlns:xlink"
-            | "xmlns:svg" | "preserveAspectRatio" | "baseProfile" | "shape-rendering"
+        "class"
+            | "id"
+            | "role"
+            | "focusable"
+            | "tabindex"
+            | "xml:space"
+            | "version"
+            | "xmlns:xlink"
+            | "xmlns:svg"
+            | "preserveAspectRatio"
+            | "baseProfile"
+            | "shape-rendering"
             | "enable-background"
     ) || name.starts_with("data-")
         || name.starts_with("aria-")
@@ -299,21 +323,35 @@ fn is_dropped(name: &str) -> bool {
 fn is_inherited(name: &str) -> bool {
     matches!(
         name,
-        "fill" | "stroke" | "stroke-width" | "stroke-linecap" | "stroke-linejoin" | "stroke-miterlimit"
-            | "stroke-dasharray" | "stroke-dashoffset" | "stroke-opacity" | "fill-opacity" | "fill-rule"
-            | "clip-rule" | "opacity"
+        "fill"
+            | "stroke"
+            | "stroke-width"
+            | "stroke-linecap"
+            | "stroke-linejoin"
+            | "stroke-miterlimit"
+            | "stroke-dasharray"
+            | "stroke-dashoffset"
+            | "stroke-opacity"
+            | "fill-opacity"
+            | "fill-rule"
+            | "clip-rule"
+            | "opacity"
     )
 }
 
 fn hint(name: &str) -> &'static str {
     match name {
         "script" => " (scripts cannot run in an icon)",
-        "style" => " (the content security policy blocks styles: use attributes such as fill and stroke)",
+        "style" => {
+            " (the content security policy blocks styles: use attributes such as fill and stroke)"
+        }
         "use" | "symbol" | "image" | "a" | "foreignObject" | "iframe" => {
             " (an icon cannot refer to another file or embed one)"
         }
-        "defs" | "clipPath" | "mask" | "filter" | "linearGradient" | "radialGradient" | "pattern"
-        | "marker" => " (an icon is plain shapes: draw it with currentColor or a hex colour)",
+        "defs" | "clipPath" | "mask" | "filter" | "linearGradient" | "radialGradient"
+        | "pattern" | "marker" => {
+            " (an icon is plain shapes: draw it with currentColor or a hex colour)"
+        }
         "text" | "tspan" => " (convert text to outlines first)",
         n if n.starts_with("animate") || n == "set" => " (an icon does not animate)",
         _ => "",
@@ -341,22 +379,29 @@ fn is_number(text: &str) -> bool {
 }
 
 fn is_length(text: &str) -> bool {
-    let t = text.strip_suffix("px").or_else(|| text.strip_suffix('%')).unwrap_or(text);
+    let t = text
+        .strip_suffix("px")
+        .or_else(|| text.strip_suffix('%'))
+        .unwrap_or(text);
     is_number(t.trim())
 }
 
 fn is_number_list(text: &str) -> bool {
-    text.bytes()
-        .all(|b| b.is_ascii_digit() || matches!(b, b'.' | b',' | b'+' | b'-' | b'e' | b'E' | b' ' | b'\t' | b'\r' | b'\n'))
+    text.bytes().all(|b| {
+        b.is_ascii_digit()
+            || matches!(
+                b,
+                b'.' | b',' | b'+' | b'-' | b'e' | b'E' | b' ' | b'\t' | b'\r' | b'\n'
+            )
+    })
 }
 
 fn is_colour(text: &str) -> bool {
     match text {
         "none" | "currentColor" => true,
-        _ => {
-            text.strip_prefix('#')
-                .is_some_and(|hex| matches!(hex.len(), 3 | 4 | 6 | 8) && hex.bytes().all(|b| b.is_ascii_hexdigit()))
-        }
+        _ => text.strip_prefix('#').is_some_and(|hex| {
+            matches!(hex.len(), 3 | 4 | 6 | 8) && hex.bytes().all(|b| b.is_ascii_hexdigit())
+        }),
     }
 }
 
@@ -370,7 +415,10 @@ fn is_transform(text: &str) -> bool {
             return false;
         };
         let name = rest[..open].trim();
-        if !matches!(name, "translate" | "scale" | "rotate" | "skewX" | "skewY" | "matrix") {
+        if !matches!(
+            name,
+            "translate" | "scale" | "rotate" | "skewX" | "skewY" | "matrix"
+        ) {
             return false;
         }
         let Some(close) = rest[open..].find(')') else {
@@ -393,7 +441,9 @@ fn check_attr(element: &str, name: &str, value: &str) -> Result<bool, String> {
         return Err(format!("{name} is an event handler; icons cannot run code"));
     }
     if matches!(name, "href" | "xlink:href") {
-        return Err(format!("{name} refers to something else; an icon cannot link or include"));
+        return Err(format!(
+            "{name} refers to something else; an icon cannot link or include"
+        ));
     }
     if name == "style" {
         return Err("style is blocked by the content security policy: use attributes such as fill and stroke".to_owned());
@@ -404,14 +454,41 @@ fn check_attr(element: &str, name: &str, value: &str) -> Result<bool, String> {
                 && value.bytes().all(|b| {
                     b.is_ascii_digit()
                         || b.is_ascii_whitespace()
-                        || matches!(b, b'M' | b'm' | b'L' | b'l' | b'H' | b'h' | b'V' | b'v' | b'C' | b'c'
-                            | b'S' | b's' | b'Q' | b'q' | b'T' | b't' | b'A' | b'a' | b'Z' | b'z' | b'.'
-                            | b',' | b'+' | b'-' | b'e' | b'E')
+                        || matches!(
+                            b,
+                            b'M' | b'm'
+                                | b'L'
+                                | b'l'
+                                | b'H'
+                                | b'h'
+                                | b'V'
+                                | b'v'
+                                | b'C'
+                                | b'c'
+                                | b'S'
+                                | b's'
+                                | b'Q'
+                                | b'q'
+                                | b'T'
+                                | b't'
+                                | b'A'
+                                | b'a'
+                                | b'Z'
+                                | b'z'
+                                | b'.'
+                                | b','
+                                | b'+'
+                                | b'-'
+                                | b'e'
+                                | b'E'
+                        )
                 })
         }
         "points" => is_number_list(value),
-        "cx" | "cy" | "r" | "rx" | "ry" | "x" | "y" | "x1" | "y1" | "x2" | "y2" | "width" | "height"
-        | "stroke-width" | "stroke-miterlimit" | "stroke-dashoffset" | "pathLength" => is_length(value),
+        "cx" | "cy" | "r" | "rx" | "ry" | "x" | "y" | "x1" | "y1" | "x2" | "y2" | "width"
+        | "height" | "stroke-width" | "stroke-miterlimit" | "stroke-dashoffset" | "pathLength" => {
+            is_length(value)
+        }
         "opacity" | "fill-opacity" | "stroke-opacity" => is_length(value),
         "fill" | "stroke" => is_colour(value),
         "stroke-linecap" => matches!(value, "butt" | "round" | "square"),
@@ -421,7 +498,9 @@ fn check_attr(element: &str, name: &str, value: &str) -> Result<bool, String> {
         "vector-effect" => matches!(value, "none" | "non-scaling-stroke"),
         "transform" => is_transform(value),
         _ => {
-            return Err(format!("the attribute {name} is not allowed on <{element}>"));
+            return Err(format!(
+                "the attribute {name} is not allowed on <{element}>"
+            ));
         }
     };
     if !ok {
@@ -431,7 +510,9 @@ fn check_attr(element: &str, name: &str, value: &str) -> Result<bool, String> {
         } else {
             ""
         };
-        return Err(format!("{name}=\"{shown}\" is not a value an icon may have{advice}"));
+        return Err(format!(
+            "{name}=\"{shown}\" is not a value an icon may have{advice}"
+        ));
     }
     Ok(true)
 }
@@ -453,8 +534,16 @@ fn write_shape(node: &Node, out: &mut String) -> Result<(), String> {
             hint(name)
         ));
     }
-    if !is_group && !node.children.iter().all(|c| matches!(c.name.as_str(), "title" | "desc")) {
-        return Err(format!("line {}: <{name}> has an element inside it", node.line));
+    if !is_group
+        && !node
+            .children
+            .iter()
+            .all(|c| matches!(c.name.as_str(), "title" | "desc"))
+    {
+        return Err(format!(
+            "line {}: <{name}> has an element inside it",
+            node.line
+        ));
     }
     out.push('<');
     out.push_str(name);
@@ -480,16 +569,18 @@ fn draws(node: &Node) -> bool {
     SHAPES.contains(&node.name.as_str()) || node.children.iter().any(draws)
 }
 
-/// Whether any element in the tree has the attribute.
-fn mentions(node: &Node, attr: &str) -> bool {
-    node.attrs.iter().any(|(name, _)| name == attr) || node.children.iter().any(|c| mentions(c, attr))
-}
-
 fn view_box(root: &Node) -> Result<String, String> {
-    let attr = |name: &str| root.attrs.iter().find(|(n, _)| n == name).map(|(_, v)| v.as_str());
+    let attr = |name: &str| {
+        root.attrs
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, v)| v.as_str())
+    };
     let plain = |s: &str| {
         let t = s.trim_start_matches(['-', '+']);
-        !t.is_empty() && t.bytes().all(|b| b.is_ascii_digit() || b == b'.') && t.matches('.').count() <= 1
+        !t.is_empty()
+            && t.bytes().all(|b| b.is_ascii_digit() || b == b'.')
+            && t.matches('.').count() <= 1
     };
     let numbers: Vec<String> = if let Some(value) = attr("viewBox") {
         value
@@ -504,54 +595,64 @@ fn view_box(root: &Node) -> Result<String, String> {
         return Err("the <svg> has no viewBox (or width and height to make one from)".to_owned());
     };
     if numbers.len() != 4 || !numbers.iter().all(|n| plain(n)) {
-        return Err(format!("the viewBox is not four plain numbers: {numbers:?}"));
+        return Err(format!(
+            "the viewBox is not four plain numbers: {numbers:?}"
+        ));
     }
     let size = |s: &str| s.parse::<f64>().unwrap_or(0.0);
     let (width, height) = (size(&numbers[2]), size(&numbers[3]));
     if !(width > 0.0 && height > 0.0 && width <= MAX_BOX && height <= MAX_BOX) {
-        return Err(format!("the viewBox must be wider and taller than 0 and at most {MAX_BOX}"));
+        return Err(format!(
+            "the viewBox must be wider and taller than 0 and at most {MAX_BOX}"
+        ));
     }
     Ok(numbers.join(" "))
 }
 
 fn build(root: &Node) -> Result<Sanitised, String> {
     if root.name != "svg" {
-        return Err(format!("line {}: the root is <{}>, not <svg>", root.line, root.name));
+        return Err(format!(
+            "line {}: the root is <{}>, not <svg>",
+            root.line, root.name
+        ));
     }
     if let Some((_, ns)) = root.attrs.iter().find(|(n, _)| n == "xmlns")
         && ns != "http://www.w3.org/2000/svg"
     {
-        return Err(format!("line {}: xmlns is {ns:?}, not the SVG namespace", root.line));
+        return Err(format!(
+            "line {}: xmlns is {ns:?}, not the SVG namespace",
+            root.line
+        ));
     }
     let view_box = view_box(root).map_err(|e| format!("line {}: {e}", root.line))?;
 
     // The root's own presentation attributes apply to everything inside it, so they
     // move to a <g> around the children. Anything else on the root is refused.
-    let mut inherited = Vec::new();
+    // SVG's defaults are a black fill and no stroke; here black is the text colour,
+    // so a drawing follows light and dark themes unless it says otherwise.
+    let mut inherited: Vec<(String, String)> = vec![
+        ("fill".to_owned(), "currentColor".to_owned()),
+        ("stroke".to_owned(), "none".to_owned()),
+    ];
     for (name, value) in &root.attrs {
-        if matches!(name.as_str(), "viewBox" | "width" | "height" | "xmlns" | "x" | "y") || is_dropped(name) {
+        if matches!(
+            name.as_str(),
+            "viewBox" | "width" | "height" | "xmlns" | "x" | "y"
+        ) || is_dropped(name)
+        {
             continue;
         }
         if !is_inherited(name) {
-            let reason = check_attr("svg", name, value).err().unwrap_or_else(|| {
-                format!("the attribute {name} is not allowed on <svg>")
-            });
+            let reason = check_attr("svg", name, value)
+                .err()
+                .unwrap_or_else(|| format!("the attribute {name} is not allowed on <svg>"));
             return Err(format!("line {}: <svg> {reason}", root.line));
         }
         check_attr("svg", name, value).map_err(|e| format!("line {}: <svg> {e}", root.line))?;
-        inherited.push((name.clone(), value.clone()));
-    }
-
-    // Plain shapes with no paint are filled black in SVG. Here that is the text
-    // colour. A drawing that sets only a fill gets no stroke; one that sets only a
-    // stroke gets no fill, which is the toolkit's default for icons.
-    let stroke = mentions(root, "stroke");
-    let fill = mentions(root, "fill");
-    if !stroke && !inherited.iter().any(|(n, _)| n == "stroke") {
-        inherited.push(("stroke".to_owned(), "none".to_owned()));
-    }
-    if !fill && !stroke {
-        inherited.push(("fill".to_owned(), "currentColor".to_owned()));
+        match inherited.iter_mut().find(|(known, _)| known == name) {
+            Some(slot) => slot.1 = value.clone(),
+            None => inherited.push((name.clone(), value.clone())),
+        }
     }
 
     let mut body = String::new();
@@ -561,16 +662,11 @@ fn build(root: &Node) -> Result<Sanitised, String> {
     if !root.children.iter().any(draws) {
         return Err("the file draws nothing".to_owned());
     }
-    let shapes = if inherited.is_empty() {
-        body
-    } else {
-        let mut group = String::from("<g");
-        for (name, value) in &inherited {
-            let _ = write!(group, " {name}=\"{value}\"");
-        }
-        let _ = write!(group, ">{body}</g>");
-        group
-    };
+    let mut shapes = String::from("<g");
+    for (name, value) in &inherited {
+        let _ = write!(shapes, " {name}=\"{value}\"");
+    }
+    let _ = write!(shapes, ">{body}</g>");
     if shapes.len() > MAX_BYTES {
         return Err("the icon is larger than an icon should be".to_owned());
     }
@@ -603,10 +699,14 @@ fn inside(relative: &LitStr) -> syn::Result<PathBuf> {
 }
 
 /// The tokens for one checked icon, which also make cargo rebuild when the file changes.
-fn icon_tokens(ui: &TokenStream, absolute: &Path, source: &[u8], span: Span) -> syn::Result<TokenStream> {
-    let icon = sanitize(source).map_err(|reason| {
-        syn::Error::new(span, format!("{}: {reason}", absolute.display()))
-    })?;
+fn icon_tokens(
+    ui: &TokenStream,
+    absolute: &Path,
+    source: &[u8],
+    span: Span,
+) -> syn::Result<TokenStream> {
+    let icon = sanitize(source)
+        .map_err(|reason| syn::Error::new(span, format!("{}: {reason}", absolute.display())))?;
     let file = absolute.to_string_lossy().into_owned();
     let (shapes, view_box) = (icon.shapes, icon.view_box);
     Ok(quote! {
@@ -618,7 +718,11 @@ fn icon_tokens(ui: &TokenStream, absolute: &Path, source: &[u8], span: Span) -> 
     })
 }
 
-pub(crate) fn file(ui: &TokenStream, manifest: &Path, relative: &LitStr) -> syn::Result<TokenStream> {
+pub(crate) fn file(
+    ui: &TokenStream,
+    manifest: &Path,
+    relative: &LitStr,
+) -> syn::Result<TokenStream> {
     let absolute = manifest.join(inside(relative)?);
     let source = std::fs::read(&absolute)
         .map_err(|e| syn::Error::new(relative.span(), format!("{}: {e}", absolute.display())))?;
@@ -638,7 +742,11 @@ fn const_name(stem: &str) -> Option<String> {
     name.filter(|n| n.starts_with(|c: char| c.is_ascii_uppercase()) && n != "ALL")
 }
 
-pub(crate) fn set(ui: &TokenStream, manifest: &Path, relative: &LitStr) -> syn::Result<TokenStream> {
+pub(crate) fn set(
+    ui: &TokenStream,
+    manifest: &Path,
+    relative: &LitStr,
+) -> syn::Result<TokenStream> {
     let dir = manifest.join(inside(relative)?);
     let span = relative.span();
     let entries = std::fs::read_dir(&dir)
@@ -655,15 +763,26 @@ pub(crate) fn set(ui: &TokenStream, manifest: &Path, relative: &LitStr) -> syn::
         .collect();
     files.sort();
     if files.is_empty() {
-        return Err(syn::Error::new(span, format!("{} holds no .svg files", dir.display())));
+        return Err(syn::Error::new(
+            span,
+            format!("{} holds no .svg files", dir.display()),
+        ));
     }
 
     let mut seen = std::collections::BTreeSet::new();
     let mut items = Vec::new();
     let mut table = Vec::new();
     for path in files {
-        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or_default().to_owned();
-        let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or_default().to_owned();
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default()
+            .to_owned();
+        let file_name = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default()
+            .to_owned();
         let Some(name) = const_name(&stem) else {
             return Err(syn::Error::new(
                 span,
@@ -674,7 +793,10 @@ pub(crate) fn set(ui: &TokenStream, manifest: &Path, relative: &LitStr) -> syn::
             ));
         };
         if !seen.insert(name.clone()) {
-            return Err(syn::Error::new(span, format!("{}: another file gives the constant {name}", path.display())));
+            return Err(syn::Error::new(
+                span,
+                format!("{}: another file gives the constant {name}", path.display()),
+            ));
         }
         let source = std::fs::read(&path)
             .map_err(|e| syn::Error::new(span, format!("{}: {e}", path.display())))?;
@@ -729,28 +851,53 @@ mod tests {
 
     #[test]
     fn a_filled_glyph_takes_the_text_colour_and_no_stroke() {
-        let icon = ok(r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M0 0h512v512H0z"/></svg>"#);
+        let icon = ok(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M0 0h512v512H0z"/></svg>"#,
+        );
         assert_eq!(icon.view_box, "0 0 512 512");
         assert_eq!(
             icon.shapes,
-            r#"<g stroke="none" fill="currentColor"><path d="M0 0h512v512H0z"/></g>"#
+            r#"<g fill="currentColor" stroke="none"><path d="M0 0h512v512H0z"/></g>"#
         );
     }
 
     #[test]
-    fn a_fill_only_drawing_gets_no_stroke() {
-        let icon = ok(r##"<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="#1a73e8"/></svg>"##);
-        assert!(icon.shapes.starts_with(r#"<g stroke="none">"#), "{}", icon.shapes);
-        assert!(!icon.shapes.contains("currentColor"));
+    fn a_shape_with_its_own_colour_keeps_it_and_the_rest_follow_the_text() {
+        let icon = ok(
+            r##"<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="#1a73e8"/><path d="M1 1h4"/></svg>"##,
+        );
+        assert!(
+            icon.shapes
+                .starts_with(r#"<g fill="currentColor" stroke="none">"#),
+            "{}",
+            icon.shapes
+        );
+        assert!(
+            icon.shapes.contains(r##"fill="#1a73e8""##),
+            "{}",
+            icon.shapes
+        );
     }
 
     #[test]
     fn other_viewboxes_are_kept_and_width_and_height_make_one() {
         for (svg, want) in [
-            (r#"<svg viewBox="0 0 16 16"><path d="M1 1"/></svg>"#, "0 0 16 16"),
-            (r#"<svg viewBox="0,0,20,20"><path d="M1 1"/></svg>"#, "0 0 20 20"),
-            (r#"<svg viewBox="-2 -2 36 36"><path d="M1 1"/></svg>"#, "-2 -2 36 36"),
-            (r#"<svg width="32px" height="32"><path d="M1 1"/></svg>"#, "0 0 32 32"),
+            (
+                r#"<svg viewBox="0 0 16 16"><path d="M1 1"/></svg>"#,
+                "0 0 16 16",
+            ),
+            (
+                r#"<svg viewBox="0,0,20,20"><path d="M1 1"/></svg>"#,
+                "0 0 20 20",
+            ),
+            (
+                r#"<svg viewBox="-2 -2 36 36"><path d="M1 1"/></svg>"#,
+                "-2 -2 36 36",
+            ),
+            (
+                r#"<svg width="32px" height="32"><path d="M1 1"/></svg>"#,
+                "0 0 32 32",
+            ),
         ] {
             assert_eq!(ok(svg).view_box, want);
         }
@@ -835,9 +982,13 @@ mod tests {
 
     #[test]
     fn markup_hidden_in_a_comment_or_text_is_not_carried() {
-        let icon = ok(r#"<svg viewBox="0 0 24 24"><!-- <script>alert(1)</script> --><path d="M1 1"/></svg>"#);
+        let icon = ok(
+            r#"<svg viewBox="0 0 24 24"><!-- <script>alert(1)</script> --><path d="M1 1"/></svg>"#,
+        );
         assert!(!icon.shapes.contains("script"));
-        let icon = ok(r#"<svg viewBox="0 0 24 24"><title>&lt;script&gt;</title><desc>x</desc><path d="M1 1"/></svg>"#);
+        let icon = ok(
+            r#"<svg viewBox="0 0 24 24"><title>&lt;script&gt;</title><desc>x</desc><path d="M1 1"/></svg>"#,
+        );
         assert!(!icon.shapes.contains("script"));
         refused(r#"<svg viewBox="0 0 24 24">hello<path d="M1 1"/></svg>"#);
         refused(r#"<svg viewBox="0 0 24 24"><path d="M1 1">text</path></svg>"#);
@@ -846,7 +997,9 @@ mod tests {
 
     #[test]
     fn attributes_that_cannot_draw_are_dropped_not_kept() {
-        let icon = ok(r##"<svg viewBox="0 0 24 24" class="x" id="y" role="img" aria-label="z" data-a="b"><path class="c" id="d" data-e="f" d="M1 1" fill="#fff" stroke="none"/></svg>"##);
+        let icon = ok(
+            r##"<svg viewBox="0 0 24 24" class="x" id="y" role="img" aria-label="z" data-a="b"><path class="c" id="d" data-e="f" d="M1 1" fill="#fff" stroke="none"/></svg>"##,
+        );
         assert!(!icon.shapes.contains("class"));
         assert!(!icon.shapes.contains("aria"));
         assert!(!icon.shapes.contains("data-"));
@@ -877,7 +1030,10 @@ mod tests {
 
     #[test]
     fn size_and_depth_are_limited() {
-        let big = format!(r#"<svg viewBox="0 0 24 24"><path d="{}"/></svg>"#, "M1 1 ".repeat(100_000));
+        let big = format!(
+            r#"<svg viewBox="0 0 24 24"><path d="{}"/></svg>"#,
+            "M1 1 ".repeat(100_000)
+        );
         assert!(refused(&big).contains("bytes"));
         let deep = format!(
             r#"<svg viewBox="0 0 24 24">{}<path d="M1 1"/>{}</svg>"#,
@@ -885,14 +1041,19 @@ mod tests {
             "</g>".repeat(20)
         );
         assert!(refused(&deep).contains("nested"));
-        let many = format!(r#"<svg viewBox="0 0 24 24">{}</svg>"#, r#"<path d="M1 1"/>"#.repeat(3000));
+        let many = format!(
+            r#"<svg viewBox="0 0 24 24">{}</svg>"#,
+            r#"<path d="M1 1"/>"#.repeat(3000)
+        );
         assert!(refused(&many).contains("elements"));
     }
 
     #[test]
     fn bytes_that_are_not_text_are_refused() {
         assert!(sanitize(&[0xff, 0xfe, 0x00]).unwrap_err().contains("UTF-8"));
-        assert!(sanitize(b"\xEF\xBB\xBF<svg viewBox=\"0 0 24 24\"><path d=\"M1 1\"/></svg>").is_ok());
+        assert!(
+            sanitize(b"\xEF\xBB\xBF<svg viewBox=\"0 0 24 24\"><path d=\"M1 1\"/></svg>").is_ok()
+        );
     }
 
     #[test]
@@ -900,7 +1061,19 @@ mod tests {
         for good in ["1", "-1", "+1.5", ".5", "1.", "1e3", "1E-3", "10px", "50%"] {
             assert!(is_length(good), "{good}");
         }
-        for bad in ["", "-", ".", "e3", "1e", "1..2", "1,2", "1 2", "calc(1px)", "NaN", "1em"] {
+        for bad in [
+            "",
+            "-",
+            ".",
+            "e3",
+            "1e",
+            "1..2",
+            "1,2",
+            "1 2",
+            "calc(1px)",
+            "NaN",
+            "1em",
+        ] {
             assert!(!is_length(bad), "{bad}");
         }
         assert!(is_transform("translate(1 2) rotate(45)"));
@@ -924,7 +1097,13 @@ mod tests {
         let lit = |s: &str| LitStr::new(s, Span::call_site());
         assert!(inside(&lit("assets/icons/a.svg")).is_ok());
         assert!(inside(&lit("./a.svg")).is_ok());
-        for bad in ["", "../a.svg", "a/../../b.svg", "/etc/passwd", "C:\\x\\a.svg"] {
+        for bad in [
+            "",
+            "../a.svg",
+            "a/../../b.svg",
+            "/etc/passwd",
+            "C:\\x\\a.svg",
+        ] {
             assert!(inside(&lit(bad)).is_err(), "{bad}");
         }
     }
@@ -958,7 +1137,9 @@ mod tests {
     #[test]
     fn a_file_expands_to_a_checked_icon_and_names_the_file_for_cargo() {
         let root = dir(&[("a.svg", GOOD)]);
-        let tokens = file(&quote!(::navree_ui), &root, &lit("icons/a.svg")).unwrap().to_string();
+        let tokens = file(&quote!(::navree_ui), &root, &lit("icons/a.svg"))
+            .unwrap()
+            .to_string();
         assert!(tokens.contains("__checked"), "{tokens}");
         assert!(tokens.contains("include_str"), "{tokens}");
         assert!(tokens.contains("0 0 24 24"), "{tokens}");
@@ -967,23 +1148,40 @@ mod tests {
     #[test]
     fn a_bad_file_is_an_error_naming_the_file_and_the_reason() {
         let root = dir(&[("bad.svg", BAD)]);
-        let error = file(&quote!(::navree_ui), &root, &lit("icons/bad.svg")).unwrap_err().to_string();
-        assert!(error.contains("bad.svg") && error.contains("<script>") && error.contains("line 1"), "{error}");
+        let error = file(&quote!(::navree_ui), &root, &lit("icons/bad.svg"))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("bad.svg") && error.contains("<script>") && error.contains("line 1"),
+            "{error}"
+        );
     }
 
     #[test]
     fn a_missing_file_and_a_path_out_of_the_crate_are_errors() {
         let root = dir(&[]);
         for path in ["icons/nope.svg", "../x.svg", "/etc/passwd", ""] {
-            assert!(file(&quote!(::navree_ui), &root, &lit(path)).is_err(), "{path}");
+            assert!(
+                file(&quote!(::navree_ui), &root, &lit(path)).is_err(),
+                "{path}"
+            );
         }
     }
 
     #[test]
     fn a_set_makes_a_constant_for_every_svg_and_a_table_of_them() {
-        let root = dir(&[("arrow-left.svg", GOOD), ("Brand Mark.SVG", GOOD), ("notes.txt", "not an icon")]);
-        let tokens = set(&quote!(::navree_ui), &root, &lit("icons")).unwrap().to_string();
-        assert!(tokens.contains("ARROW_LEFT") && tokens.contains("BRAND_MARK"), "{tokens}");
+        let root = dir(&[
+            ("arrow-left.svg", GOOD),
+            ("Brand Mark.SVG", GOOD),
+            ("notes.txt", "not an icon"),
+        ]);
+        let tokens = set(&quote!(::navree_ui), &root, &lit("icons"))
+            .unwrap()
+            .to_string();
+        assert!(
+            tokens.contains("ARROW_LEFT") && tokens.contains("BRAND_MARK"),
+            "{tokens}"
+        );
         assert!(tokens.contains("ALL"), "{tokens}");
         assert!(!tokens.contains("NOTES"), "{tokens}");
     }
@@ -999,7 +1197,9 @@ mod tests {
         ];
         for (files, wanted) in cases {
             let root = dir(&files);
-            let error = set(&quote!(::navree_ui), &root, &lit("icons")).unwrap_err().to_string();
+            let error = set(&quote!(::navree_ui), &root, &lit("icons"))
+                .unwrap_err()
+                .to_string();
             assert!(error.contains(wanted), "{files:?}: {error}");
         }
     }

@@ -254,8 +254,26 @@ node build.mjs            # --check fails when the committed output is stale
 ```
 
 `src/tokens.rs` is the design tokens' one source, and a test fails when
-`styles/tokens.css` differs from it. `runtime/icons.mjs` generates `src/icons.rs` from
-lucide-react.
+`styles/tokens.css` differs from it.
+
+## Icons and flags
+
+Every Lucide icon and every flag is a constant (`icons::MAIL_OPEN`, `flags::AE`), so a
+binary holds the ones its code names. `lucide!("mail-open")` and `flag!("AE")` check a
+name while the app compiles; `icon_file!` and `icon_set!` turn your own SVG files into
+icons the same way, refusing anything but shapes.
+
+The artwork is generated, never edited. `icons.lock.json` pins each source release by
+its SHA-512 and records the checksum of each generated file:
+
+```sh
+node runtime/icons.mjs            # fetch, verify, regenerate
+node runtime/icons.mjs --check    # fails when a generated file differs from a fresh one
+node runtime/icons.mjs pin lucide 1.68.0   # pin another release, then regenerate
+```
+
+`cargo build` needs neither Node nor the network. A test fails when a generated file
+differs from the checksum in the lock.
 
 ## Editing fast
 

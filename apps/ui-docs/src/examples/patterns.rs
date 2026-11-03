@@ -27,8 +27,6 @@ pub fn all() -> Vec<Example> {
             "Green for the one main action",
             foundations_colour
         ),
-        crate::icons::all_icons(),
-        single!("icons", "usage", "Icons in components", icons_usage),
         single!("forms", "thumb", "A form", forms_thumb).start(),
         single!("forms", "default", "A form from a struct", forms_default)
             .start()
@@ -84,15 +82,6 @@ fn foundations_colour() -> Row {
         Button::primary("Save changes"),
         Button::new("Preview"),
         Badge::new("Won").variant(BadgeVariant::Success),
-    ))
-}
-
-fn icons_usage() -> Row {
-    Row::gap(3).children((
-        Button::primary("New deal").icon(icons::PLUS),
-        Button::icon_only(icons::SETTINGS, "Settings"),
-        Badge::new("Synced").icon(icons::CHECK),
-        components::icon(icons::INBOX),
     ))
 }
 

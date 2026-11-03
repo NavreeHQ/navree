@@ -266,12 +266,14 @@ impl<'de> Deserialize<'de> for CountryCode {
 #[macro_export]
 macro_rules! flag {
     ($code:literal) => {
-        $crate::Flag::new(const {
-            match $crate::flags::CountryCode::parse($code) {
-                Some(code) => code,
-                None => panic!(concat!("no flag has the code ", $code)),
-            }
-        })
+        $crate::Flag::new(
+            const {
+                match $crate::flags::CountryCode::parse($code) {
+                    Some(code) => code,
+                    None => panic!(concat!("no flag has the code ", $code)),
+                }
+            },
+        )
     };
 }
 
@@ -298,15 +300,25 @@ mod tests {
     #[test]
     fn every_iso_country_and_the_extra_places_are_there() {
         assert_eq!(CountryCode::countries().count(), 250);
-        for code in ["AE", "US", "IN", "GB", "DE", "FR", "JP", "BR", "ZW", "AX", "XK"] {
+        for code in [
+            "AE", "US", "IN", "GB", "DE", "FR", "JP", "BR", "ZW", "AX", "XK",
+        ] {
             let found = CountryCode::parse(code).expect(code);
             assert_eq!(found.kind(), CodeKind::Country, "{code}");
         }
         for code in ["EU", "UN", "ASEAN"] {
-            assert_eq!(CountryCode::parse(code).expect(code).kind(), CodeKind::Organisation);
+            assert_eq!(
+                CountryCode::parse(code).expect(code).kind(),
+                CodeKind::Organisation
+            );
         }
-        for code in ["GB-SCT", "GB-ENG", "GB-WLS", "GB-NIR", "ES-CT", "ES-GA", "ES-PV"] {
-            assert_eq!(CountryCode::parse(code).expect(code).kind(), CodeKind::Region);
+        for code in [
+            "GB-SCT", "GB-ENG", "GB-WLS", "GB-NIR", "ES-CT", "ES-GA", "ES-PV",
+        ] {
+            assert_eq!(
+                CountryCode::parse(code).expect(code).kind(),
+                CodeKind::Region
+            );
         }
     }
 
@@ -350,7 +362,10 @@ mod tests {
         assert_eq!("ae".parse::<CountryCode>(), Ok(AE));
         assert!("zz".parse::<CountryCode>().is_err());
         assert_eq!(serde_json::to_string(&GB_SCT).unwrap(), "\"GB-SCT\"");
-        assert_eq!(serde_json::from_str::<CountryCode>("\"gb-sct\"").unwrap(), GB_SCT);
+        assert_eq!(
+            serde_json::from_str::<CountryCode>("\"gb-sct\"").unwrap(),
+            GB_SCT
+        );
         assert!(serde_json::from_str::<CountryCode>("\"nope\"").is_err());
         assert!(serde_json::from_str::<CountryCode>("7").is_err());
     }

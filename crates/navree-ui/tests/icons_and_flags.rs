@@ -7,8 +7,7 @@ use navree_ui::components::{icon, icon_labelled};
 use navree_ui::flags::{self, CodeKind, CountryCode};
 use navree_ui::icons::{self, Icon};
 use navree_ui::{
-    Badge, Flag, FlagShape, FlagSize, Node, Row, TableCell, el, flag, icon_file, lucide,
-    render,
+    Badge, Flag, FlagShape, FlagSize, Node, Row, TableCell, el, flag, icon_file, lucide, render,
 };
 use sha2::{Digest, Sha256};
 
@@ -48,11 +47,20 @@ fn every_source_is_pinned_by_version_and_checksum() {
     for name in ["lucide", "flags", "cldr-territories", "cldr-subdivisions"] {
         let pin = &sources[name];
         let integrity = pin["integrity"].as_str().expect(name);
-        assert!(integrity.starts_with("sha512-") && integrity.len() > 80, "{name}");
-        let version = pin["version"].as_str().expect(name);
-        assert!(version.chars().next().is_some_and(|c| c.is_ascii_digit()), "{name}");
         assert!(
-            pin["url"].as_str().expect(name).starts_with("https://registry.npmjs.org/"),
+            integrity.starts_with("sha512-") && integrity.len() > 80,
+            "{name}"
+        );
+        let version = pin["version"].as_str().expect(name);
+        assert!(
+            version.chars().next().is_some_and(|c| c.is_ascii_digit()),
+            "{name}"
+        );
+        assert!(
+            pin["url"]
+                .as_str()
+                .expect(name)
+                .starts_with("https://registry.npmjs.org/"),
             "{name}"
         );
         assert!(
@@ -72,7 +80,10 @@ fn third_party_names_the_pinned_versions_and_licences() {
         ("cldr-territories", &["CLDR", "Unicode"][..]),
     ] {
         let version = lock["sources"][name]["version"].as_str().expect(name);
-        assert!(notices.contains(version), "THIRD_PARTY.md does not name {name} {version}");
+        assert!(
+            notices.contains(version),
+            "THIRD_PARTY.md does not name {name} {version}"
+        );
         for needle in needles {
             assert!(notices.contains(needle), "THIRD_PARTY.md lacks {needle}");
         }
@@ -83,8 +94,23 @@ fn third_party_names_the_pinned_versions_and_licences() {
 
 /// Everything in the shipped artwork that could run, load or style something.
 const FORBIDDEN: [&str; 17] = [
-    "<script", "<style", "style=", "<foreignObject", "<image", "<a ", "<iframe", "<text", "<animate",
-    "javascript:", "data:", "http:", "https:", "xlink:", "onload", "onclick", "<!",
+    "<script",
+    "<style",
+    "style=",
+    "<foreignObject",
+    "<image",
+    "<a ",
+    "<iframe",
+    "<text",
+    "<animate",
+    "javascript:",
+    "data:",
+    "http:",
+    "https:",
+    "xlink:",
+    "onload",
+    "onclick",
+    "<!",
 ];
 
 /// Element names in some markup.
@@ -101,7 +127,9 @@ fn tags(markup: &str) -> BTreeSet<String> {
         .collect()
 }
 
-const SHAPE_TAGS: [&str; 8] = ["path", "circle", "rect", "line", "ellipse", "polyline", "polygon", "g"];
+const SHAPE_TAGS: [&str; 8] = [
+    "path", "circle", "rect", "line", "ellipse", "polyline", "polygon", "g",
+];
 
 #[test]
 fn every_icon_is_shapes_and_nothing_that_loads_or_runs() {
@@ -119,19 +147,38 @@ fn every_icon_is_shapes_and_nothing_that_loads_or_runs() {
 }
 
 const FLAG_TAGS: [&str; 15] = [
-    "path", "circle", "rect", "line", "ellipse", "polyline", "polygon", "g", "use", "defs",
-    "clipPath", "linearGradient", "radialGradient", "stop", "marker",
+    "path",
+    "circle",
+    "rect",
+    "line",
+    "ellipse",
+    "polyline",
+    "polygon",
+    "g",
+    "use",
+    "defs",
+    "clipPath",
+    "linearGradient",
+    "radialGradient",
+    "stop",
+    "marker",
 ];
 
 #[test]
 fn every_flag_is_shapes_and_nothing_that_loads_or_runs() {
     for code in flags::ALL {
-        for (shape, markup) in [("rect", code.rect_shapes()), ("square", code.square_shapes())] {
+        for (shape, markup) in [
+            ("rect", code.rect_shapes()),
+            ("square", code.square_shapes()),
+        ] {
             for needle in FORBIDDEN {
                 assert!(!markup.contains(needle), "{code} {shape} contains {needle}");
             }
             for tag in tags(markup) {
-                assert!(FLAG_TAGS.contains(&tag.as_str()), "{code} {shape} has <{tag}>");
+                assert!(
+                    FLAG_TAGS.contains(&tag.as_str()),
+                    "{code} {shape} has <{tag}>"
+                );
             }
         }
     }
@@ -167,14 +214,23 @@ fn ids_inside_flags_belong_to_one_flag_and_one_shape() {
     let mut every_id = BTreeSet::new();
     for code in flags::ALL {
         let lower = code.as_str().to_ascii_lowercase();
-        for (prefix, markup) in [(format!("f4-{lower}-"), code.rect_shapes()), (format!("f1-{lower}-"), code.square_shapes())] {
+        for (prefix, markup) in [
+            (format!("f4-{lower}-"), code.rect_shapes()),
+            (format!("f1-{lower}-"), code.square_shapes()),
+        ] {
             let own = ids(markup);
             for id in &own {
-                assert!(id.starts_with(&prefix), "{code}: id {id} should start with {prefix}");
+                assert!(
+                    id.starts_with(&prefix),
+                    "{code}: id {id} should start with {prefix}"
+                );
                 assert!(every_id.insert((*id).to_owned()), "id {id} is in two flags");
             }
             for reference in references(markup) {
-                assert!(own.contains(&reference), "{code}: a reference to {reference} that nothing defines");
+                assert!(
+                    own.contains(&reference),
+                    "{code}: a reference to {reference} that nothing defines"
+                );
             }
         }
     }
@@ -185,11 +241,21 @@ fn ids_inside_flags_belong_to_one_flag_and_one_shape() {
 fn the_set_has_every_iso_country_and_the_regions_it_promises() {
     assert_eq!(flags::ALL.len(), 270);
     assert_eq!(CountryCode::countries().count(), 250);
-    let regions: Vec<_> = flags::ALL.iter().filter(|c| c.kind() == CodeKind::Region).map(|c| c.as_str()).collect();
-    for code in ["GB-ENG", "GB-NIR", "GB-SCT", "GB-WLS", "ES-CT", "ES-GA", "ES-PV", "IC", "CP", "DG"] {
+    let regions: Vec<_> = flags::ALL
+        .iter()
+        .filter(|c| c.kind() == CodeKind::Region)
+        .map(|c| c.as_str())
+        .collect();
+    for code in [
+        "GB-ENG", "GB-NIR", "GB-SCT", "GB-WLS", "ES-CT", "ES-GA", "ES-PV", "IC", "CP", "DG",
+    ] {
         assert!(regions.contains(&code), "{code} is not among {regions:?}");
     }
-    let bodies: Vec<_> = flags::ALL.iter().filter(|c| c.kind() == CodeKind::Organisation).map(|c| c.as_str()).collect();
+    let bodies: Vec<_> = flags::ALL
+        .iter()
+        .filter(|c| c.kind() == CodeKind::Organisation)
+        .map(|c| c.as_str())
+        .collect();
     assert_eq!(bodies, ["ARAB", "ASEAN", "CEFTA", "EAC", "EU", "PC", "UN"]);
 }
 
@@ -198,17 +264,26 @@ fn the_set_has_every_iso_country_and_the_regions_it_promises() {
 #[test]
 fn an_icon_draws_as_a_hidden_svg_with_its_box() {
     let html = render(&icon(icons::MAIL_OPEN));
-    assert!(html.starts_with(r#"<svg data-slot="icon" viewBox="0 0 24 24" aria-hidden="true">"#), "{html}");
+    assert!(
+        html.starts_with(r#"<svg data-slot="icon" viewBox="0 0 24 24" aria-hidden="true">"#),
+        "{html}"
+    );
     assert!(html.ends_with("</svg>"));
 }
 
 #[test]
 fn a_lone_icon_can_carry_a_name() {
     let html = render(&icon_labelled(icons::CIRCLE_CHECK, "Delivered"));
-    assert!(html.contains(r#"role="img""#) && html.contains(r#"aria-label="Delivered""#), "{html}");
+    assert!(
+        html.contains(r#"role="img""#) && html.contains(r#"aria-label="Delivered""#),
+        "{html}"
+    );
     assert!(!html.contains("aria-hidden"), "{html}");
     let html = render(&icon_labelled(icons::CIRCLE_CHECK, r#"a "quoted" <name>"#));
-    assert!(html.contains("&quot;") && html.contains("&lt;name"), "{html}");
+    assert!(
+        html.contains("&quot;") && html.contains("&lt;name"),
+        "{html}"
+    );
 }
 
 #[test]
@@ -227,7 +302,10 @@ fn an_old_name_still_compiles_and_draws_the_new_icon() {
 
 #[test]
 fn a_page_of_every_icon_stays_small() {
-    let all: Vec<Node> = icons::ALL.iter().map(|(_, shipped)| icon(*shipped)).collect();
+    let all: Vec<Node> = icons::ALL
+        .iter()
+        .map(|(_, shipped)| icon(*shipped))
+        .collect();
     let html = render(&Node::list(all));
     assert!(html.len() < 1_100_000, "{}", html.len());
     assert!(!html.contains("style="));
@@ -240,18 +318,39 @@ fn a_flag_is_an_image_with_the_countrys_name() {
     let html = render(&Flag::new(flags::AE).into());
     assert!(html.starts_with(r#"<svg data-slot="flag" viewBox="0 0 640 480" focusable="false" role="img" aria-label="United Arab Emirates">"#), "{html}");
     assert!(html.contains(r##"fill="#00732f""##));
-    assert!(!html.contains("data-size") && !html.contains("data-shape"), "{html}");
+    assert!(
+        !html.contains("data-size") && !html.contains("data-shape"),
+        "{html}"
+    );
 }
 
 #[test]
 fn sizes_and_shapes_are_attributes() {
-    let html = render(&Flag::new(flags::US).size(FlagSize::Xl).shape(FlagShape::Square).into());
-    assert!(html.contains(r#"data-size="xl""#) && html.contains(r#"data-shape="square""#), "{html}");
+    let html = render(
+        &Flag::new(flags::US)
+            .size(FlagSize::Xl)
+            .shape(FlagShape::Square)
+            .into(),
+    );
+    assert!(
+        html.contains(r#"data-size="xl""#) && html.contains(r#"data-shape="square""#),
+        "{html}"
+    );
     assert!(html.contains(r#"viewBox="0 0 512 512""#), "{html}");
     let html = render(&Flag::new(flags::US).round().into());
-    assert!(html.contains(r#"data-shape="round""#) && html.contains(r#"viewBox="0 0 512 512""#), "{html}");
-    for (size, name) in [(FlagSize::Xs, "xs"), (FlagSize::Md, "md"), (FlagSize::Lg, "lg")] {
-        assert!(render(&Flag::new(flags::US).size(size).into()).contains(&format!(r#"data-size="{name}""#)));
+    assert!(
+        html.contains(r#"data-shape="round""#) && html.contains(r#"viewBox="0 0 512 512""#),
+        "{html}"
+    );
+    for (size, name) in [
+        (FlagSize::Xs, "xs"),
+        (FlagSize::Md, "md"),
+        (FlagSize::Lg, "lg"),
+    ] {
+        assert!(
+            render(&Flag::new(flags::US).size(size).into())
+                .contains(&format!(r#"data-size="{name}""#))
+        );
     }
     assert!(!render(&Flag::new(flags::US).size(FlagSize::Sm).into()).contains("data-size"));
 }
@@ -259,7 +358,12 @@ fn sizes_and_shapes_are_attributes() {
 #[test]
 fn a_flag_beside_its_name_can_be_hidden_or_renamed() {
     let html = render(&flag!("de").decorative().into());
-    assert!(html.contains(r#"aria-hidden="true""#) && !html.contains("aria-label") && !html.contains("role="), "{html}");
+    assert!(
+        html.contains(r#"aria-hidden="true""#)
+            && !html.contains("aria-label")
+            && !html.contains("role="),
+        "{html}"
+    );
     let html = render(&flag!("de").label("Deutschland").into());
     assert!(html.contains(r#"aria-label="Deutschland""#), "{html}");
 }
@@ -271,19 +375,42 @@ fn a_code_from_data_finds_its_flag_or_draws_a_placeholder() {
     }
     assert_eq!(Flag::country("gb_sct").code(), Some(flags::GB_SCT));
     let unknown = render(&Flag::country("zz").into());
-    assert!(unknown.contains(r#"data-state="unknown""#) && unknown.contains(r#"aria-label="Unknown country""#), "{unknown}");
+    assert!(
+        unknown.contains(r#"data-state="unknown""#)
+            && unknown.contains(r#"aria-label="Unknown country""#),
+        "{unknown}"
+    );
     assert!(unknown.contains("currentColor"));
     let shaped = render(&Flag::country("zz").round().label("Elsewhere").into());
-    assert!(shaped.contains(r#"viewBox="0 0 512 512""#) && shaped.contains("Elsewhere"), "{shaped}");
+    assert!(
+        shaped.contains(r#"viewBox="0 0 512 512""#) && shaped.contains("Elsewhere"),
+        "{shaped}"
+    );
 }
 
 #[test]
 fn hostile_codes_never_panic_and_never_reach_the_page() {
     let long = "AE".repeat(50_000);
-    for text in ["", "\0", "<script>", "\"><img src=x onerror=alert(1)>", "../../etc", "🇦🇪", &long, "ae\n", "a\u{0}e"] {
+    for text in [
+        "",
+        "\0",
+        "<script>",
+        "\"><img src=x onerror=alert(1)>",
+        "../../etc",
+        "🇦🇪",
+        &long,
+        "ae\n",
+        "a\u{0}e",
+    ] {
         let html = render(&Flag::country(text).into());
-        assert!(html.contains(r#"data-state="unknown""#) || text.trim() == "ae", "{text:.10?}");
-        assert!(!html.contains("<img") && !html.contains("<script"), "{text:.10?}");
+        assert!(
+            html.contains(r#"data-state="unknown""#) || text.trim() == "ae",
+            "{text:.10?}"
+        );
+        assert!(
+            !html.contains("<img") && !html.contains("<script"),
+            "{text:.10?}"
+        );
         assert!(html.len() < 2_000, "{}", html.len());
     }
 }
@@ -291,11 +418,24 @@ fn hostile_codes_never_panic_and_never_reach_the_page() {
 #[test]
 fn a_flag_sits_in_a_badge_a_row_and_a_table_cell() {
     let badge = render(&Badge::new(Row::gap(2).children((flag!("AE").decorative(), "UAE"))).into());
-    assert!(badge.contains(r#"data-slot="badge""#) && badge.contains(r#"data-slot="flag""#) && badge.contains("UAE"), "{badge}");
-    let cell = render(&TableCell::new(Row::gap(2).children((Flag::new(flags::FR).decorative(), "France"))).into());
-    assert!(cell.contains(r#"data-slot="flag""#) && cell.contains("France"), "{cell}");
+    assert!(
+        badge.contains(r#"data-slot="badge""#)
+            && badge.contains(r#"data-slot="flag""#)
+            && badge.contains("UAE"),
+        "{badge}"
+    );
+    let cell = render(
+        &TableCell::new(Row::gap(2).children((Flag::new(flags::FR).decorative(), "France"))).into(),
+    );
+    assert!(
+        cell.contains(r#"data-slot="flag""#) && cell.contains("France"),
+        "{cell}"
+    );
     let wrapped = render(&el("li").children((Flag::country("jp"), " Japan")).into());
-    assert!(wrapped.contains("Japan") && wrapped.contains("aria-label=\"Japan\""), "{wrapped}");
+    assert!(
+        wrapped.contains("Japan") && wrapped.contains("aria-label=\"Japan\""),
+        "{wrapped}"
+    );
 }
 
 #[test]
@@ -313,7 +453,10 @@ fn a_flag_page_keeps_the_strict_content_security_policy() {
 
 #[test]
 fn the_heaviest_flags_are_known() {
-    let mut weights: Vec<(usize, &str)> = flags::ALL.iter().map(|c| (c.rect_shapes().len(), c.as_str())).collect();
+    let mut weights: Vec<(usize, &str)> = flags::ALL
+        .iter()
+        .map(|c| (c.rect_shapes().len(), c.as_str()))
+        .collect();
     weights.sort_unstable_by(|a, b| b.cmp(a));
     let names: Vec<_> = weights.iter().take(3).map(|(_, n)| *n).collect();
     assert_eq!(names, ["RS", "BO", "MX"], "{:?}", &weights[..5]);
@@ -344,8 +487,14 @@ fn own_icons_are_sanitised_and_draw_like_built_in_ones() {
     );
     let html = render(&icon(brand::BRAND_MARK));
     assert!(html.contains(r#"viewBox="0 0 512 512""#), "{html}");
-    assert!(html.contains(r##"fill="#ffffff""##) && html.contains("fill-opacity"), "{html}");
-    assert!(!html.contains("<title") && !html.contains("<svg xmlns"), "{html}");
+    assert!(
+        html.contains(r##"fill="#ffffff""##) && html.contains("fill-opacity"),
+        "{html}"
+    );
+    assert!(
+        !html.contains("<title") && !html.contains("<svg xmlns"),
+        "{html}"
+    );
 }
 
 #[test]

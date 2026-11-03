@@ -993,14 +993,44 @@
       "id": "icons",
       "name": "Icons",
       "url": "/docs/ui/icons/",
-      "summary": "",
+      "summary": "An icon: its SVG shapes and the box they are drawn in. Compile-time data, so no icon comes from a request.",
       "group": null,
-      "types": [],
-      "thumb": "icons/all",
+      "types": [
+        "Icon"
+      ],
+      "thumb": "icons/usage",
       "anatomy": null,
       "examples": [
         "icons/all",
-        "icons/usage"
+        "icons/usage",
+        "icons/names",
+        "icons/alone",
+        "icons/own"
+      ]
+    },
+    {
+      "id": "flags",
+      "name": "Flags",
+      "url": "/docs/ui/flags/",
+      "summary": "A flag, drawn inline from the code of a country, a region or a body.",
+      "group": null,
+      "types": [
+        "Flag",
+        "FlagShape",
+        "FlagSize",
+        "CountryCode",
+        "CodeKind"
+      ],
+      "thumb": "flags/usage",
+      "anatomy": null,
+      "examples": [
+        "flags/all",
+        "flags/usage",
+        "flags/sizes",
+        "flags/shapes",
+        "flags/places",
+        "flags/in-components",
+        "flags/from-data"
       ]
     },
     {
@@ -1210,7 +1240,7 @@
       "slug": "icon-only",
       "title": "Icon only",
       "kind": "single",
-      "code": "Row::gap(2).children((\n    Button::icon_only(icons::SETTINGS, \"Settings\"),\n    Button::icon_only(icons::PENCIL, \"Edit\").variant(ButtonVariant::Outline),\n    Button::icon_only(icons::TRASH_2, \"Delete\").variant(ButtonVariant::Ghost),\n))",
+      "code": "Row::gap(2).children((\n    Button::icon_only(icons::SETTINGS, \"Settings\"),\n    Button::icon_only(icons::PENCIL, \"Edit\").variant(ButtonVariant::Outline),\n    Button::icon_only(icons::TRASH, \"Delete\").variant(ButtonVariant::Ghost),\n))",
       "src": "/ui-preview/button/icon-only.html",
       "height": 120,
       "layout": "center",
@@ -12159,233 +12189,6 @@
       ]
     },
     {
-      "id": "icons/all",
-      "component": "icons",
-      "slug": "all",
-      "title": "Every icon",
-      "kind": "gallery",
-      "code": "use navree::ui::icons;\n\n// Each icon is a constant: pass it to a component.\nButton::primary(\"New deal\").icon(icons::PLUS)",
-      "src": "/ui-preview/icons/all.html",
-      "height": 600,
-      "layout": "start",
-      "cells": "icon",
-      "show": false,
-      "live": false,
-      "width": null,
-      "scripts": [],
-      "captions": [
-        "ACTIVITY",
-        "ANCHOR",
-        "APP_WINDOW",
-        "ARCHIVE",
-        "ARROW_DOWN",
-        "ARROW_LEFT",
-        "ARROW_RIGHT",
-        "ARROW_UP",
-        "ARROW_UP_DOWN",
-        "ARROW_UP_RIGHT",
-        "BADGE_CHECK",
-        "BAN",
-        "BELL",
-        "BOOK_OPEN",
-        "BOOK_TEXT",
-        "BOT",
-        "BOX",
-        "BOXES",
-        "BUG",
-        "BUILDING",
-        "BUILDING_2",
-        "CALENDAR",
-        "CHART_COLUMN",
-        "CHART_LINE",
-        "CHART_NO_AXES_COLUMN",
-        "CHECK",
-        "CHECK_CHECK",
-        "CHEVRON_DOWN",
-        "CHEVRON_LEFT",
-        "CHEVRON_RIGHT",
-        "CHEVRON_UP",
-        "CHEVRONS_LEFT",
-        "CHEVRONS_RIGHT",
-        "CHEVRONS_UP_DOWN",
-        "CIRCLE",
-        "CIRCLE_ALERT",
-        "CIRCLE_CHECK",
-        "CIRCLE_DASHED",
-        "CIRCLE_HELP",
-        "CIRCLE_PLUS",
-        "CIRCLE_X",
-        "CLOCK",
-        "CLOUD",
-        "CODE",
-        "COLUMNS_3",
-        "COMMAND",
-        "COMPASS",
-        "COPY",
-        "CPU",
-        "CREDIT_CARD",
-        "DATABASE",
-        "DOWNLOAD",
-        "ELLIPSIS",
-        "ELLIPSIS_VERTICAL",
-        "EXTERNAL_LINK",
-        "EYE",
-        "EYE_OFF",
-        "FILE",
-        "FILE_TEXT",
-        "FILTER",
-        "FLAG",
-        "FOLDER",
-        "GAUGE",
-        "GIT_BRANCH",
-        "GLOBE",
-        "GRIP_VERTICAL",
-        "HANDSHAKE",
-        "HARD_DRIVE",
-        "HASH",
-        "HISTORY",
-        "HOUSE",
-        "INBOX",
-        "INFO",
-        "KANBAN",
-        "KEY",
-        "KEY_ROUND",
-        "KEYBOARD",
-        "LAYERS",
-        "LAYOUT_DASHBOARD",
-        "LAYOUT_GRID",
-        "LIFE_BUOY",
-        "LINK",
-        "LIST",
-        "LIST_CHECKS",
-        "LIST_FILTER",
-        "LOADER_CIRCLE",
-        "LOCK",
-        "LOG_IN",
-        "LOG_OUT",
-        "LOGS",
-        "MAIL",
-        "MAP_PIN",
-        "MENU",
-        "MESSAGE_SQUARE",
-        "MINUS",
-        "MONITOR",
-        "MOON",
-        "NETWORK",
-        "NOTEBOOK_PEN",
-        "PACKAGE",
-        "PANEL_LEFT",
-        "PAUSE",
-        "PENCIL",
-        "PHONE",
-        "PLAY",
-        "PLUG",
-        "PLUS",
-        "RADIO",
-        "RECEIPT",
-        "REFRESH_CW",
-        "ROCKET",
-        "ROTATE_CCW",
-        "SCROLL_TEXT",
-        "SEARCH",
-        "SEND",
-        "SERVER",
-        "SETTINGS",
-        "SETTINGS_2",
-        "SHIELD",
-        "SHIELD_CHECK",
-        "SHIP",
-        "SHIP_WHEEL",
-        "SLIDERS_HORIZONTAL",
-        "SPARKLES",
-        "SQUARE_KANBAN",
-        "SQUARE_TERMINAL",
-        "STAR",
-        "STORE",
-        "SUN",
-        "TABLE",
-        "TAG",
-        "TERMINAL",
-        "TIMER",
-        "TRASH_2",
-        "TRENDING_DOWN",
-        "TRENDING_UP",
-        "TRIANGLE_ALERT",
-        "UNDO_2",
-        "UPLOAD",
-        "USER",
-        "USER_PLUS",
-        "USER_ROUND",
-        "USERS",
-        "WALLET",
-        "WAYPOINTS",
-        "WEBHOOK",
-        "WORKFLOW",
-        "WRENCH",
-        "X",
-        "ZAP"
-      ],
-      "slots": []
-    },
-    {
-      "id": "icons/usage",
-      "component": "icons",
-      "slug": "usage",
-      "title": "Icons in components",
-      "kind": "single",
-      "code": "Row::gap(3).children((\n    Button::primary(\"New deal\").icon(icons::PLUS),\n    Button::icon_only(icons::SETTINGS, \"Settings\"),\n    Badge::new(\"Synced\").icon(icons::CHECK),\n    components::icon(icons::INBOX),\n))",
-      "src": "/ui-preview/icons/usage.html",
-      "height": 120,
-      "layout": "center",
-      "cells": "narrow",
-      "show": false,
-      "live": false,
-      "width": null,
-      "scripts": [],
-      "captions": [],
-      "slots": [
-        {
-          "slot": "row",
-          "tag": "div",
-          "count": 1,
-          "children": [
-            {
-              "slot": "button",
-              "tag": "button",
-              "count": 2,
-              "children": [
-                {
-                  "slot": "icon",
-                  "tag": "svg",
-                  "count": 1,
-                  "children": []
-                }
-              ]
-            },
-            {
-              "slot": "badge",
-              "tag": "span",
-              "count": 1,
-              "children": [
-                {
-                  "slot": "icon",
-                  "tag": "svg",
-                  "count": 1,
-                  "children": []
-                }
-              ]
-            },
-            {
-              "slot": "icon",
-              "tag": "svg",
-              "count": 1,
-              "children": []
-            }
-          ]
-        }
-      ]
-    },
-    {
       "id": "forms/thumb",
       "component": "forms",
       "slug": "thumb",
@@ -12817,6 +12620,471 @@
                   ]
                 }
               ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "icons/all",
+      "component": "icons",
+      "slug": "all",
+      "title": "Every icon",
+      "kind": "search",
+      "code": "use navree::ui::{icons, lucide};\n\n// A constant, completed by your editor:\nButton::primary(\"New deal\").icon(icons::MAIL_OPEN)\n\n// The name as lucide.dev writes it, checked while your app compiles:\nButton::primary(\"New deal\").icon(lucide!(\"mail-open\"))",
+      "src": "/ui-preview/icons/all.html",
+      "height": 640,
+      "layout": "fill",
+      "cells": "icon",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": []
+    },
+    {
+      "id": "icons/usage",
+      "component": "icons",
+      "slug": "usage",
+      "title": "Icons in components",
+      "kind": "single",
+      "code": "Row::gap(3).children((\n    Button::primary(\"New deal\").icon(icons::PLUS),\n    Button::icon_only(icons::SETTINGS, \"Settings\"),\n    Badge::new(\"Synced\").icon(icons::CHECK),\n    components::icon(icons::INBOX),\n))",
+      "src": "/ui-preview/icons/usage.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "button",
+              "tag": "button",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "badge",
+              "tag": "span",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "icon",
+              "tag": "svg",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "icons/names",
+      "component": "icons",
+      "slug": "names",
+      "title": "Three ways to name an icon",
+      "kind": "single",
+      "code": "Row::gap(3).children((\n    // A constant: your editor completes it.\n    Button::outline(\"Open\").icon(icons::MAIL_OPEN),\n    // The name as lucide.dev writes it, checked while your app compiles.\n    Button::outline(\"Open\").icon(lucide!(\"mail-open\")),\n    // A name that arrives at run time. This is the one way that puts every\n    // icon into your binary.\n    Button::outline(\"Open\").icon(Icon::lookup(\"mail-open\").unwrap_or(icons::CIRCLE_QUESTION_MARK)),\n))",
+      "src": "/ui-preview/icons/names.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "button",
+              "tag": "button",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "icons/alone",
+      "component": "icons",
+      "slug": "alone",
+      "title": "An icon that stands alone",
+      "kind": "single",
+      "code": "Row::gap(3).children((\n    // Hidden from assistive technology: the text beside it says what it means.\n    Badge::new(\"Delivered\").icon(icons::CIRCLE_CHECK),\n    // Alone, it needs a name.\n    components::icon_labelled(icons::CIRCLE_CHECK, \"Delivered\"),\n))",
+      "src": "/ui-preview/icons/alone.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "badge",
+              "tag": "span",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "icon",
+              "tag": "svg",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "icons/own",
+      "component": "icons",
+      "slug": "own",
+      "title": "Your own icons",
+      "kind": "single",
+      "code": "// Each file is read and checked while your app compiles. A script, a style,\n// a link or anything but shapes stops the build.\nconst PENNANT: Icon = icon_file!(\"icons/pennant.svg\");\nconst ORBIT: Icon = icon_file!(\"icons/orbit.svg\");\nconst SEAL: Icon = icon_file!(\"icons/seal.svg\");\nRow::gap(3).children((\n    Button::primary(\"Launch\").icon(PENNANT),\n    Button::outline(\"Orbit\").icon(ORBIT),\n    Badge::new(\"Verified\").icon(SEAL),\n))",
+      "src": "/ui-preview/icons/own.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "button",
+              "tag": "button",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "badge",
+              "tag": "span",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "flags/all",
+      "component": "flags",
+      "slug": "all",
+      "title": "Every flag",
+      "kind": "search",
+      "code": "use navree::ui::{Flag, flag, flags};\n\n// A constant, completed by your editor:\nFlag::new(flags::AE)\n\n// The code as a person writes it, checked while your app compiles:\nflag!(\"gb-sct\")\n\n// A code that comes from data: any case, and an unknown code draws a placeholder.\nFlag::country(code)",
+      "src": "/ui-preview/flags/all.html",
+      "height": 640,
+      "layout": "fill",
+      "cells": "flag",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": []
+    },
+    {
+      "id": "flags/usage",
+      "component": "flags",
+      "slug": "usage",
+      "title": "A flag beside its name",
+      "kind": "single",
+      "code": "Row::gap(6).children((\n    Row::gap(2).children((flag!(\"AE\").decorative(), \"United Arab Emirates\")),\n    Row::gap(2).children((Flag::new(flags::IN).decorative(), \"India\")),\n    Row::gap(2).children((flag!(\"gb-sct\").decorative(), \"Scotland\")),\n))",
+      "src": "/ui-preview/flags/usage.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "row",
+              "tag": "div",
+              "count": 3,
+              "children": [
+                {
+                  "slot": "flag",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "flags/sizes",
+      "component": "flags",
+      "slug": "sizes",
+      "title": "Sizes",
+      "kind": "gallery",
+      "code": "vec![\n    (\"Xs, 20 px\", vec![flag!(\"BR\").size(FlagSize::Xs)]),\n    (\"Sm, 24 px (default)\", vec![flag!(\"BR\")]),\n    (\"Md, 32 px\", vec![flag!(\"BR\").size(FlagSize::Md)]),\n    (\"Lg, 40 px\", vec![flag!(\"BR\").size(FlagSize::Lg)]),\n    (\"Xl, 48 px\", vec![flag!(\"BR\").size(FlagSize::Xl)]),\n]",
+      "src": "/ui-preview/flags/sizes.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [
+        "Xs, 20 px",
+        "Sm, 24 px (default)",
+        "Md, 32 px",
+        "Lg, 40 px",
+        "Xl, 48 px"
+      ],
+      "slots": []
+    },
+    {
+      "id": "flags/shapes",
+      "component": "flags",
+      "slug": "shapes",
+      "title": "Shapes",
+      "kind": "gallery",
+      "code": "vec![\n    (\"Rect, 4 by 3\", vec![flag!(\"CH\").size(FlagSize::Lg)]),\n    (\n        \"Square\",\n        vec![flag!(\"CH\").size(FlagSize::Lg).shape(FlagShape::Square)],\n    ),\n    (\"Round\", vec![flag!(\"CH\").size(FlagSize::Lg).round()]),\n]",
+      "src": "/ui-preview/flags/shapes.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [
+        "Rect, 4 by 3",
+        "Square",
+        "Round"
+      ],
+      "slots": []
+    },
+    {
+      "id": "flags/places",
+      "component": "flags",
+      "slug": "places",
+      "title": "Regions and bodies",
+      "kind": "single",
+      "code": "Row::gap(3).children((\n    flag!(\"EU\").size(FlagSize::Lg),\n    flag!(\"UN\").size(FlagSize::Lg),\n    flag!(\"GB-ENG\").size(FlagSize::Lg),\n    flag!(\"ES-CT\").size(FlagSize::Lg),\n    flag!(\"XK\").size(FlagSize::Lg),\n))",
+      "src": "/ui-preview/flags/places.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "flag",
+              "tag": "svg",
+              "count": 5,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "flags/in-components",
+      "component": "flags",
+      "slug": "in-components",
+      "title": "In other components",
+      "kind": "single",
+      "code": "Stack::gap(4).children((\n    Row::gap(2).children((\n        Badge::new(Row::gap(1).children((flag!(\"DE\").decorative(), \"Germany\"))),\n        Badge::new(Row::gap(1).children((flag!(\"JP\").decorative(), \"Japan\")))\n            .variant(BadgeVariant::Outline),\n    )),\n    Table::new()\n        .head((TableHead::new(\"Country\"), TableHead::new(\"Opens\").numeric()))\n        .rows((\n            TableRowEl::new((\n                TableCell::new(Row::gap(2).children((flag!(\"FR\").decorative(), \"France\"))),\n                TableCell::new(\"12,480\").numeric(),\n            )),\n            TableRowEl::new((\n                TableCell::new(Row::gap(2).children((flag!(\"BR\").decorative(), \"Brazil\"))),\n                TableCell::new(\"9,215\").numeric(),\n            )),\n        )),\n))",
+      "src": "/ui-preview/flags/in-components.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stack",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "row",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "badge",
+                  "tag": "span",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "row",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "flag",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "table-container",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "table",
+                  "tag": "table",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "table-head",
+                      "tag": "th",
+                      "count": 2,
+                      "children": []
+                    },
+                    {
+                      "slot": "row",
+                      "tag": "div",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "flag",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "flags/from-data",
+      "component": "flags",
+      "slug": "from-data",
+      "title": "A code from data",
+      "kind": "single",
+      "code": "// A code that comes from data: any case, `gb-sct` or `GB_SCT`. One no flag\n// has draws a neutral placeholder, and never panics.\nlet codes = [\"us\", \"GB-SCT\", \"xx-unknown\"];\nRow::gap(4).children(\n    codes\n        .iter()\n        .map(|code| Flag::country(code).size(FlagSize::Lg))\n        .collect::<Vec<_>>(),\n)",
+      "src": "/ui-preview/flags/from-data.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "flag",
+              "tag": "svg",
+              "count": 3,
+              "children": []
             }
           ]
         }

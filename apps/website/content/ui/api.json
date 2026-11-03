@@ -1388,6 +1388,32 @@
     ],
     "shared": []
   },
+  "CodeKind": {
+    "name": "CodeKind",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/flags/mod.rs",
+    "summary": "What a `CountryCode` names.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Country",
+        "doc": "A country: ISO 3166-1, and Kosovo (`XK`).",
+        "default": false
+      },
+      {
+        "name": "Region",
+        "doc": "A place that is not a country: a nation of the United Kingdom, a region of Spain, an island group.",
+        "default": false
+      },
+      {
+        "name": "Organisation",
+        "doc": "A body: the European Union, the United Nations, ASEAN and the like.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "Collapsible": {
     "name": "Collapsible",
     "kind": "struct",
@@ -1725,6 +1751,60 @@
         "default": false
       }
     ],
+    "shared": []
+  },
+  "CountryCode": {
+    "name": "CountryCode",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/flags/mod.rs",
+    "summary": "The code of a flag: an ISO 3166-1 alpha-2 country code such as `AE`, or the code of a region or body that has a flag, such as `EU` or `GB-SCT`.",
+    "constructors": [
+      {
+        "name": "parse",
+        "generics": "",
+        "args": "text: &str",
+        "doc": "The code written in `text`, in capitals or not, with `_` or `-` between the parts of `GB-SCT`. `None` when no flag has it."
+      },
+      {
+        "name": "countries",
+        "generics": "",
+        "args": "",
+        "doc": "The countries, in code order: every code whose `kind` is `CodeKind::Country`. A country picker starts here. This puts every flag into the binary."
+      }
+    ],
+    "methods": [
+      {
+        "name": "as_str",
+        "generics": "",
+        "args": "",
+        "doc": "The code in capitals: `AE`, `GB-SCT`."
+      },
+      {
+        "name": "name",
+        "generics": "",
+        "args": "",
+        "doc": "The English name from Unicode CLDR: `United Arab Emirates`."
+      },
+      {
+        "name": "kind",
+        "generics": "",
+        "args": "",
+        "doc": "Whether this is a country, a region or a body."
+      },
+      {
+        "name": "rect_shapes",
+        "generics": "",
+        "args": "",
+        "doc": "The artwork for a 4 by 3 flag: shapes in a `0 0 640 480` box."
+      },
+      {
+        "name": "square_shapes",
+        "generics": "",
+        "args": "",
+        "doc": "The artwork for a square or round flag: shapes in a `0 0 512 512` box."
+      }
+    ],
+    "variants": [],
     "shared": []
   },
   "DataTable": {
@@ -2241,6 +2321,147 @@
       }
     ]
   },
+  "Flag": {
+    "name": "Flag",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/components/flag.rs",
+    "summary": "A flag, drawn inline from the code of a country, a region or a body.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "code: CountryCode",
+        "doc": "The flag of `code`: `Flag::new(flags::AE)`."
+      },
+      {
+        "name": "country",
+        "generics": "",
+        "args": "code: impl AsRef<str>",
+        "doc": "The flag of a code that comes from data, such as `\"ae\"` or `\"GB-SCT\"`. A code no flag has draws a neutral placeholder and never panics."
+      }
+    ],
+    "methods": [
+      {
+        "name": "code",
+        "generics": "",
+        "args": "",
+        "doc": "The code this draws, or `None` for the placeholder."
+      },
+      {
+        "name": "shape",
+        "generics": "",
+        "args": "shape: FlagShape",
+        "doc": "Sets the shape."
+      },
+      {
+        "name": "round",
+        "generics": "",
+        "args": "",
+        "doc": "Shorthand for `FlagShape::Round`."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: FlagSize",
+        "doc": "Sets the width."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "label: impl Into<Cow<'static, str>>",
+        "doc": "Replaces the accessible name, which is the country's name."
+      },
+      {
+        "name": "decorative",
+        "generics": "",
+        "args": "",
+        "doc": "Hides the flag from assistive technology, for when the country's name is written beside it."
+      }
+    ],
+    "variants": [],
+    "shared": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<AttrValue>",
+        "doc": "Sets the root element's `id`."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "span",
+        "generics": "",
+        "args": "columns: u8",
+        "doc": "Takes `columns` columns of a `Grid`."
+      }
+    ]
+  },
+  "FlagShape": {
+    "name": "FlagShape",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/flag.rs",
+    "summary": "The shape of a `Flag`.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Rect",
+        "doc": "Four by three: how a flag is drawn. The default.",
+        "default": true
+      },
+      {
+        "name": "Square",
+        "doc": "Square, from the artwork drawn for a square.",
+        "default": false
+      },
+      {
+        "name": "Round",
+        "doc": "Square art cropped to a circle.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "FlagSize": {
+    "name": "FlagSize",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/components/flag.rs",
+    "summary": "How wide a `Flag` is. A rectangle is a quarter shorter than it is wide; a square or round flag is as tall as it is wide.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Xs",
+        "doc": "20 px wide.",
+        "default": false
+      },
+      {
+        "name": "Sm",
+        "doc": "24 px wide: the default.",
+        "default": true
+      },
+      {
+        "name": "Md",
+        "doc": "32 px wide.",
+        "default": false
+      },
+      {
+        "name": "Lg",
+        "doc": "40 px wide.",
+        "default": false
+      },
+      {
+        "name": "Xl",
+        "doc": "48 px wide.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "FormView": {
     "name": "FormView",
     "kind": "struct",
@@ -2464,6 +2685,36 @@
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "Icon": {
+    "name": "Icon",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/icons/mod.rs",
+    "summary": "An icon: its SVG shapes and the box they are drawn in. Compile-time data, so no icon comes from a request.",
+    "constructors": [
+      {
+        "name": "lookup",
+        "generics": "",
+        "args": "name: &str",
+        "doc": "The icon with this Lucide name, such as `mail-open`, or an old name Lucide has renamed. `None` when there is none."
+      }
+    ],
+    "methods": [
+      {
+        "name": "shapes",
+        "generics": "",
+        "args": "",
+        "doc": "The SVG shapes, without an `<svg>` around them."
+      },
+      {
+        "name": "view_box",
+        "generics": "",
+        "args": "",
+        "doc": "The `viewBox` the shapes are drawn in, such as `0 0 24 24`."
+      }
+    ],
+    "variants": [],
+    "shared": []
   },
   "Input": {
     "name": "Input",

@@ -303,11 +303,30 @@ pub const COMPONENTS: &[Component] = &[
     component("stat", "Stat and Bars", &["Stat", "Bars"], "thumb").parts("default"),
     // Pages that aren't components
     component("foundations", "Foundations", &["Size"], "radius").page("/docs/ui/foundations/"),
-    component("icons", "Icons", &[], "all").page("/docs/ui/icons/"),
+    component("icons", "Icons", &["Icon"], "usage").page("/docs/ui/icons/"),
+    component(
+        "flags",
+        "Flags",
+        &["Flag", "FlagShape", "FlagSize", "CountryCode", "CodeKind"],
+        "usage",
+    )
+    .page("/docs/ui/flags/"),
     component("commands", "Commands", &["Cmd", "Op", "Reply"], "toggle")
         .page("/docs/ui/commands-and-ops/"),
     component("regions", "Regions", &["Region"], "lazy").page("/docs/ui/regions/"),
 ];
+
+/// One cell of a searchable gallery.
+pub struct Entry {
+    /// The first line under the cell: a name or a code.
+    pub caption: String,
+    /// A second, quieter line.
+    pub detail: Option<String>,
+    /// What a search matches, in lower case.
+    pub terms: String,
+    /// What the cell shows.
+    pub node: Node,
+}
 
 /// How an example is drawn.
 pub enum Kind {
@@ -315,6 +334,14 @@ pub enum Kind {
     Single(fn() -> Node),
     /// Several trees, each with a caption.
     Gallery(fn() -> Vec<(&'static str, Node)>),
+    /// Many cells and a search box that filters them. For galleries too long to scan.
+    Search {
+        /// The search box's name for assistive technology and its placeholder.
+        label: &'static str,
+        /// What one match is called, to say how many there are: `icons`.
+        noun: &'static str,
+        draw: fn() -> Vec<Entry>,
+    },
 }
 
 /// How the preview frame places what it shows.
@@ -349,6 +376,8 @@ pub enum Cells {
     Wide,
     /// About 96px: icons.
     Icon,
+    /// About 150px: flags with a name under them.
+    Flag,
 }
 
 impl Cells {
@@ -358,6 +387,7 @@ impl Cells {
             Self::Medium => "medium",
             Self::Wide => "wide",
             Self::Icon => "icon",
+            Self::Flag => "flag",
         }
     }
 }

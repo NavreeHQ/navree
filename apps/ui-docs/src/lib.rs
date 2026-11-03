@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 pub mod api;
 pub mod catalog;
 mod examples;
+pub mod flags;
 pub mod icons;
 pub mod output;
 

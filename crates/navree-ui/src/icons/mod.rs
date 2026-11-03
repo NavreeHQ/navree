@@ -180,10 +180,20 @@ mod tests {
     #[test]
     fn the_table_is_sorted_so_the_search_finds_every_icon() {
         for pair in ALL.windows(2) {
-            assert_eq!(compare(pair[0].0, pair[1].0), Ordering::Less, "{}", pair[1].0);
+            assert_eq!(
+                compare(pair[0].0, pair[1].0),
+                Ordering::Less,
+                "{}",
+                pair[1].0
+            );
         }
         for pair in RENAMED.windows(2) {
-            assert_eq!(compare(pair[0].0, pair[1].0), Ordering::Less, "{}", pair[1].0);
+            assert_eq!(
+                compare(pair[0].0, pair[1].0),
+                Ordering::Less,
+                "{}",
+                pair[1].0
+            );
         }
         for (name, icon) in ALL {
             assert_eq!(Icon::lookup(name), Some(*icon), "{name}");
@@ -197,7 +207,16 @@ mod tests {
 
     #[test]
     fn a_name_that_is_not_an_icon_is_none() {
-        for name in ["", "nope", "Mail-Open", "mail_open", "mail-open ", "mail-opne", "\0", "é"] {
+        for name in [
+            "",
+            "nope",
+            "Mail-Open",
+            "mail_open",
+            "mail-open ",
+            "mail-opne",
+            "\0",
+            "é",
+        ] {
             assert_eq!(Icon::lookup(name), None, "{name:?}");
         }
     }

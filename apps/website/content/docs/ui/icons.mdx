@@ -1,24 +1,81 @@
 ---
 title: "Icons"
-description: "The lucide icons the toolkit ships, each a constant in `navree::ui::icons`, compiled into your binary."
+description: "Every Lucide icon as a constant, checked while your app compiles, and your own SVG files the same way. Only the icons your code names go into your binary."
 ---
-
-Each icon is a constant in `navree::ui::icons`, holding its SVG shapes at compile time, so no icon comes from a request and none costs a download. Pass one to a component, or draw one on its own with `components::icon`.
 
 <UiPreview example="icons/usage" />
 
-## Every icon
+Navree UI ships every icon of [Lucide](https://lucide.dev): 2,019 of them, under the ISC licence. Each one is a constant in `navree::ui::icons`. Pass it to a component, or draw it on its own with `components::icon`. No icon comes from a request and none costs a download: the shapes are in your binary, drawn as inline SVG.
 
-The names are the constants'; `TRASH_2` is `icons::TRASH_2`.
+## Find an icon
+
+Type a name or a word. The search matches Lucide's names and its tags, so `email` finds `mail`, and `trash` finds `trash`, `delete` and `bin`. Names are lucide.dev's; the constant is the name in capitals with `_` for `-`, so `mail-open` is `icons::MAIL_OPEN`.
 
 <UiPreview example="icons/all" />
 
+## Name an icon
+
+There are three ways, and they find the same icon.
+
+<UiPreview example="icons/names" />
+
+- **A constant**, `icons::MAIL_OPEN`. Your editor completes it, and a name that does not exist does not compile. Use this by default.
+- **`lucide!("mail-open")`** takes the name as lucide.dev writes it, so you can copy it from the site. It is checked while your app compiles: a typo stops the build and names the icon it could not find. It also accepts the names Lucide has renamed, such as `alert-circle` for `circle-alert`.
+- **`Icon::lookup("mail-open")`** is for a name that arrives at run time, from a database or a config file. It returns `None` for a name that is not an icon.
+
+Renamed icons keep their old constants too, with a warning that names the new one: `icons::ALERT_CIRCLE` still compiles and says to use `CIRCLE_ALERT`.
+
+## Only what you use ships
+
+An icon is a `const`, and Rust writes a `const` into a binary only where something uses it. So an app that names three icons has three icons in its binary, whether the toolkit ships 150 or 2,019. The same holds for the page: an icon is its shapes, a few hundred bytes, written where you put it.
+
+The one exception is `Icon::lookup`. A name from outside could be any of them, so calling it puts all of them in the binary. Keep it for the places that need it.
+
+## An icon on its own
+
+An icon beside text is decoration: the text says what it means, so the toolkit hides the icon from assistive technology. An icon that stands alone, such as a status mark in a table cell, needs a name. `components::icon_labelled` gives it a role and a label.
+
+<UiPreview example="icons/alone" />
+
+A button with only an icon takes its label as an argument, `Button::icon_only(icons::SETTINGS, "Settings")`, so it can't be nameless.
+
+## Your own icons
+
+Put SVG files in your crate and name them in code. `icon_file!` reads one; `icon_set!` reads every `.svg` file in a directory and makes a constant for each, named after the file (`arrow-left.svg` is `ARROW_LEFT`), with `ALL` listing them. The paths are relative to your crate's `Cargo.toml`.
+
+<UiPreview example="icons/own" />
+
+```rust
+mod brand {
+    navree::ui::icon_set!("assets/icons");
+}
+
+Button::primary("Launch").icon(brand::PENNANT)
+```
+
+The files are read and sanitised while your app compiles, not at run time. Only shapes survive: `path`, `circle`, `ellipse`, `rect`, `line`, `polyline`, `polygon` and `g`, with plain drawing attributes. Anything else stops the build, and the message names the file, the line and the reason:
+
+- scripts, event handlers (`onclick`), `style` attributes and `<style>` (the content security policy blocks them anyway);
+- `use`, `image`, `a`, `foreignObject` and any `href`: an icon cannot refer to another file or the web;
+- gradients, clip paths, masks, filters and text: draw the icon with one or two colours, and turn text into outlines;
+- a DOCTYPE, CDATA section or entity, which is where files hide other files.
+
+A shape with no paint is drawn in the text colour, so your icon follows light and dark themes. `fill` and `stroke` take `none`, `currentColor` or a hex colour such as `#1a73e8`, which stays that colour in every theme. The `viewBox` can be any size up to 4,096: a 16 px, 20 px, 32 px or 512 px icon draws at the same 16 px as the rest.
+
+Cargo notices when a file changes. It does not notice a file you add to a directory: add `println!("cargo::rerun-if-changed=assets/icons");` to a `build.rs`, or save the file that calls `icon_set!`.
+
 ## How they're drawn
 
-An icon is an inline `<svg>` with `data-slot="icon"`, 16 px, a 1.75 stroke in the current text colour, and `aria-hidden="true"`: what it means is in the text beside it. A button with only an icon takes its label as an argument, `Button::icon_only(icons::SETTINGS, "Settings")`, so it can't be nameless.
+An icon is an inline `<svg>` with `data-slot="icon"`, 16 px, a 1.75 stroke in the current text colour, and `aria-hidden="true"`. There is no request, no sprite file and no inline style, so the strict content security policy holds. The shapes use `currentColor`, so an icon follows the text around it in any theme.
 
 ## Where they come from
 
-The icons are [lucide](https://lucide.dev)'s, under the ISC licence. `crates/navree-ui/runtime/icons.mjs` writes `src/icons.rs` from lucide-react; to add one, add its name there and run it.
+The icons are Lucide's, from a pinned release (lucide-static 1.67.0, recorded with its SHA-512 in `crates/navree-ui/icons.lock.json`). `node crates/navree-ui/runtime/icons.mjs` fetches the release, refuses it unless the checksum matches, and writes the Rust. `--check` fails when the files on disk are not what a fresh run writes, and a test fails when a generated file is changed by hand. Lucide is under the ISC licence; the icons it took from Feather are MIT. Both notices are in `THIRD_PARTY.md`.
+
+## API
+
+### Icon
+
+<UiProps type="Icon" />
 
 Next, put an icon in a [Button](/docs/components/button/#with-an-icon), a [Badge](/docs/components/badge/#with-an-icon) or an [Empty](/docs/components/empty/) state.

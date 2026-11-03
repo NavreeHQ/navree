@@ -18,7 +18,7 @@ export type UiExample = {
   component: string;
   slug: string;
   title: string;
-  kind: "single" | "gallery";
+  kind: "single" | "gallery" | "search";
   code: string;
   src: string;
   height: number;
@@ -81,6 +81,7 @@ export const toolkitInfo = toolkit as {
   assets: ToolkitAsset[];
   tokens: { name: string; value: string }[];
   icons: number;
+  flags: number;
 };
 
 /** An example by `component/slug`; a typo fails the build. */

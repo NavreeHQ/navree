@@ -127,7 +127,11 @@ pub fn icon_set(input: TokenStream) -> TokenStream {
 /// Runs an icon macro with the paths it needs.
 fn expand(
     path: &syn::LitStr,
-    make: fn(&proc_macro2::TokenStream, &std::path::Path, &syn::LitStr) -> syn::Result<proc_macro2::TokenStream>,
+    make: fn(
+        &proc_macro2::TokenStream,
+        &std::path::Path,
+        &syn::LitStr,
+    ) -> syn::Result<proc_macro2::TokenStream>,
 ) -> TokenStream {
     let result = shared::ui_path(path.span()).and_then(|ui| {
         let manifest = icon::manifest_dir(path.span())?;

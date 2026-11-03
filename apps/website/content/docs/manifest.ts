@@ -218,6 +218,7 @@ export const sections: DocsSection[] = [
       "overview",
       "foundations",
       "icons",
+      "flags",
       "layout",
       "app-shell",
       "forms",
