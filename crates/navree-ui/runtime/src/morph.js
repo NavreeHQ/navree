@@ -194,7 +194,10 @@ function morphChildren(a, b, ids) {
           cur = nextOf(gone);
           removeOld(gone);
         }
-        morphNode(match, next, ids);
+        // The same skip for an element matched by position: a cell that didn't change,
+        // a closed menu, is passed over at the browser's speed, and the walk goes on
+        // only where something differs.
+        if (typeOf(match) !== 1 || !NP.isEqualNode.call(match, next)) morphNode(match, next, ids);
         placed = match;
       } else placed = insertNew(a, next, cur, ids);
     }
