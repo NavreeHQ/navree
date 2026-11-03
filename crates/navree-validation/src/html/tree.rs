@@ -480,10 +480,11 @@ struct Sink {
     steps_left: Cell<u64>,
     /// The limit that was passed.
     exceeded: Cell<Option<HtmlError>>,
+    /// The id of the next node made once a limit is passed: counted down
+    /// from the top, so it is in no arena, and each is its own node to the
+    /// tree builder, which goes on until the end of the piece it has.
+    next_phantom: Cell<Id>,
 }
-
-/// The node every handle points to once the budget is gone. Never attached.
-const SPENT: Id = 1;
 
 /// How deep the root's children are in the arena: the document, then the root.
 const TOP_DEPTH: usize = 2;
@@ -495,14 +496,22 @@ impl Sink {
             .unwrap_or(u64::MAX)
             .saturating_mul(STEPS_PER_NODE);
         Sink {
-            // The document, and the node of a spent budget.
-            nodes: RefCell::new(vec![Node::new(Data::Document), Node::new(Data::Document)]),
+            nodes: RefCell::new(vec![Node::new(Data::Document)]),
             unnamed: Rc::new(QualName::new(None, ns!(), local_name!(""))),
             limits,
             nodes_left: Cell::new(nodes_left),
             steps_left: Cell::new(steps),
             exceeded: Cell::new(None),
+            next_phantom: Cell::new(Id::MAX),
         }
+    }
+
+    /// A node made once a limit is passed: held nowhere, and never the same
+    /// node as another.
+    fn phantom(&self) -> Id {
+        let id = self.next_phantom.get();
+        self.next_phantom.set(id.saturating_sub(1));
+        id
     }
 
     fn spent(&self) -> bool {
@@ -577,7 +586,7 @@ impl Sink {
 
     fn push(&self, data: Data) -> Id {
         if !self.charge(1) {
-            return SPENT;
+            return self.phantom();
         }
         let mut nodes = self.nodes.borrow_mut();
         nodes.push(Node::new(data));
@@ -663,7 +672,10 @@ impl TreeSink for Sink {
             .sum();
         let cost = 1 + usize::from(flags.template) + attrs.len() + bytes / BYTES_PER_NODE;
         if !self.charge(cost) || !self.charge_writing(&attrs) {
-            return Handle { id: SPENT, name };
+            return Handle {
+                id: self.phantom(),
+                name,
+            };
         }
         let mut nodes = self.nodes.borrow_mut();
         let template = flags.template.then(|| {

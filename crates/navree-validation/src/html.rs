@@ -651,6 +651,21 @@ mod tests {
         );
     }
 
+    /// Formatting elements reopened over and over until a limit is passed:
+    /// what the parser makes after that is never confused with what it made
+    /// before, so the input is refused and nothing underneath trips.
+    #[cfg(feature = "html")]
+    #[test]
+    fn a_limit_passed_inside_formatting_elements_refuses_the_input() {
+        let html = "\x00\x00\x00<b>>3<(>0<b/3<>a>3<(/b>\x15\x00\x00\x00\x00\x00\x00\x00Flspa\x06\x0c\x16\x15n<a>0(th>/\x0fW\x0e\x05\x07\x08\x02\x00\x0e6666666666666666\x00\x5c66666666666<b\x09><a><p></<ba><b><b>>>3<(>0<b/3<>a>3<(/b>\x15\x00\x00\x00\x00\x00\x00\x00Flspa\x06\x0c\x16\x15n<a>0(th>/\x0fW\x0e\x05\x07\x08\x02\x00\x0e6666666666666666\x00\x5c66666666666<b\x09><a><<a><p></a>";
+        for policy in [HtmlPolicy::text_only(), HtmlPolicy::default()] {
+            let policy = policy.limits(1024, 64, 8);
+            assert!(policy.try_clean(html).is_err());
+            let clean = policy.clean(html);
+            assert!(!clean.contains('<'), "{clean:?}");
+        }
+    }
+
     #[cfg(feature = "html")]
     #[test]
     fn safe_html_sanitizes_with_the_scope_policy() {
