@@ -24,6 +24,15 @@ export const choices = {
       c("Nuxt (Vue)", "A Vue app beside the API", "/docs/frontend/nuxt/", false),
     ],
   },
+  "front-end": {
+    title: "Which front end?",
+    question: "What fits your team?",
+    options: [
+      c("Navree UI", "You want one language, one binary", "/docs/ui/overview/", false),
+      c("Next.js (React)", "Your team builds in React", "/docs/frontend/nextjs/", false),
+      c("Nuxt (Vue)", "Your team builds in Vue", "/docs/frontend/nuxt/", false),
+    ],
+  },
   "two-ways": {
     title: "Which way in?",
     question: "What do you bring?",

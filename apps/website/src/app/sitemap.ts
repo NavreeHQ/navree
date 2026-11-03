@@ -19,6 +19,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ["/ecosystem/", ["src/app/ecosystem", "src/components/ecosystem", "src/content/ecosystem.ts"]],
     ["/architecture/", ["src/app/architecture", "src/components/diagrams"]],
     ["/ai/", ["src/app/ai", "src/components/ai"]],
+    ["/ui/", ["src/app/ui", "src/components/ui-docs", "src/lib/ui-page-data.ts", "content/ui", "content/docs/ui/coming-next.mdx"]],
     ["/performance/", ["src/app/performance", "src/components/bench", "src/lib/bench.ts"]],
     ["/showcase/", ["src/app/showcase/page.tsx"]],
     ["/showcase/crm/", ["src/app/showcase/crm", "src/components/showcase", "public/images/crm"]],
