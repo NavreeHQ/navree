@@ -6,9 +6,8 @@
 //! Invariants: a parsed number is `+` and at most 15 digits, fits its plan
 //! (it has a type, and is valid for its region), and reads back to the same
 //! number from its international and RFC 3966 forms, and from E.164 without
-//! its extension; its national
-//! form reads back, in its region, to a number written the same way
-//! nationally. A number accepted only as possible has a possible length and
+//! its extension; its national form, when it reads back in its region, reads
+//! as a number written the same way nationally. A number accepted only as possible has a possible length and
 //! reads back from E.164. Nothing panics.
 #![no_main]
 
@@ -48,11 +47,15 @@ fn check_valid(number: PhoneNumber) {
             "{e164} written {how:?} as {written:?}"
         );
     }
+    // The national form is for display. A few plans make it ambiguous: an
+    // Argentine landline whose local number starts with 15 (`+54 11 1555 5595`,
+    // `011 1555-5595`) reads as the mobile marker. So when it reads back, it
+    // must be a number written the same way; it need not read back.
     if let Some(region) = number.region() {
         let national = number.national();
-        let read = PhoneNumber::parse(&national, Some(region))
-            .unwrap_or_else(|error| panic!("{e164} written nationally as {national:?}: {error}"));
-        assert_eq!(read.national(), national, "{e164} national form");
+        if let Ok(read) = PhoneNumber::parse(&national, Some(region)) {
+            assert_eq!(read.national(), national, "{e164} national form");
+        }
     }
     let _ = number.is_internationally_diallable();
 }

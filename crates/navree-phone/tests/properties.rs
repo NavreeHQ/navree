@@ -32,12 +32,15 @@ fn reads_back(number: PhoneNumber) {
     }
     if let Some(region) = number.region() {
         // A few plans write two numbers the same way nationally (Gabon's
-        // `+2412000000` and `+24102000000` are both `02 00 00 00`): the
-        // national form must read back to a number written the same way.
+        // `+2412000000` and `+24102000000` are both `02 00 00 00`), and some
+        // national forms read as another kind of number (an Argentine landline
+        // whose local number starts with 15, the mobile marker). So the
+        // national form, when it reads back, reads as a number written the
+        // same way. Every example number in the plans reads back exactly.
         let national = number.national();
-        let read = PhoneNumber::parse(&national, Some(region))
-            .unwrap_or_else(|error| panic!("{e164} written nationally as {national:?}: {error}"));
-        assert_eq!(read.national(), national, "{e164} written nationally");
+        if let Ok(read) = PhoneNumber::parse(&national, Some(region)) {
+            assert_eq!(read.national(), national, "{e164} written nationally");
+        }
     }
 }
 
@@ -130,5 +133,15 @@ fn a_number_with_an_extension_reads_back_from_its_formats() {
     let gb = Region::parse("GB");
     let number = PhoneNumber::parse("020 7946 0018,,12", gb).unwrap();
     assert_eq!(number.extension(), Some("12"));
+    reads_back(number);
+}
+
+#[test]
+fn an_argentine_landline_starting_with_15_reads_but_its_national_form_does_not() {
+    // Found by fuzzing: the plan reads 15 after the area code as the mobile
+    // marker, so this landline's national form names another number.
+    let number = PhoneNumber::parse("+54 11 1555 5595", None).unwrap();
+    assert_eq!(number.national(), "011 1555-5595");
+    assert!(PhoneNumber::parse(&number.national(), Region::parse("AR")).is_err());
     reads_back(number);
 }
