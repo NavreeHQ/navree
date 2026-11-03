@@ -92,7 +92,6 @@ skip = [
     { crate = "skrifa@0.42.1", reason = "Pulled in only by krilla@0.8.2, subsetter@0.2.6; the rest of the tree is on 0.49.0." },
     { crate = "skrifa@0.44.0", reason = "Pulled in only by usvg@0.49.0; the rest of the tree is on 0.49.0." },
     { crate = "spin@0.9.9", reason = "Pulled in only by flume@0.11.1, flume@0.12.0, multer@3.1.0; the rest of the tree is on 0.10.1." },
-    { crate = "strum@0.27.2", reason = "Pulled in only by async-graphql-derive@7.2.1; the rest of the tree is on 0.28.0." },
     { crate = "syn@2.0.119", reason = "Pulled in only by asn1-rs-derive@0.6.0, asn1-rs-impl@0.2.0, async-graphql-derive@7.2.1, cssparser-macros@0.7.1 and 30 more; the rest of the tree is on 3.0.9." },
     { crate = "synstructure@0.13.2", reason = "Pulled in only by asn1-rs-derive@0.6.0; the rest of the tree is on 0.14.0." },
     { crate = "unicode-width@0.1.14", reason = "Pulled in only by miette@7.6.0; the rest of the tree is on 0.2.2." },

@@ -6,7 +6,7 @@ Tests of the toolkit that only a browser can settle.
 cargo run --release -p ui-proof -- serve &   # http://127.0.0.1:8090
 cd e2e/ui
 npm ci
-npx playwright install chromium firefox
+npx playwright install chromium firefox webkit
 npm test
 ```
 
@@ -26,6 +26,7 @@ UI_LOGBOOK_URL=http://127.0.0.1:8092 npm test
 | `tests/logbook.test.mjs` | Logbook in Chromium and Firefox, against the proof app with Logbook on: the list and an entry side by side at 1440px and one at a time at 390px, an address for every entry with the back button and forward, the entry types and their counts in the sidebar and its icon rail, no sideways scroll at 390px with very long and hostile requests recorded, dark colours whatever the system asks for, the empty, bad-filter and missing-entry states, axe, the app rules, the filter keeping focus beside an open entry, Replay and Clear. Needs `UI_LOGBOOK_URL`. |
 | `tests/icons-flags.test.mjs` | Icons and flags in Chromium and Firefox (`ICON_BROWSERS="chromium firefox webkit"` adds WebKit), against the proof app's `/icons-flags`: every icon and flag drawn, no policy report, axe clean in dark and light, a hidden copy of a flag changing no pixel of the visible ones, names for assistive technology, own icons, 390 px, right to left. |
 | `tests/menus.test.mjs` | Tabs, toggle groups, dropdown menus and toasts in Chromium, Firefox and WebKit (`UI_BROWSERS`), against `/menus` of the proof app: the keys of each pattern, the address and history, tabs that load on demand and fail, JavaScript off, placement at the edges and at 390px, submenus by key and pointer, every way a toast is raised, a flash across a redirect, swipe, pause and the live region, the content security policy, and axe in every state in dark, light and on a phone. |
+| `tests/phone.test.mjs` | The phone input in Chromium, Firefox and WebKit, against the proof app's `/phone`: labels and roles, formatting as typed with the caret kept, a pasted international number choosing its country and announcing it, keyboard only through the country list, the server's answer with JavaScript on and off, an error on the field, 390px and 1440px in light and dark with axe open and closed, right to left. `PHONE_BROWSERS` picks browsers, `PHONE_SHOTS` a folder for screenshots. |
 | `tests/conformance.test.mjs` | axe in every state with no violation and no CSP report, the app design rules on every page, keyboard reach and a visible focus ring. |
 
 `UI_PROOF_URL` points the suites at another server.
