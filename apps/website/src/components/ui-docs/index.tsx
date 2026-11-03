@@ -11,6 +11,7 @@
  * - `<UiGrid />`: every component as a small live preview, by group.
  * - `<UiAssets />`: what ships to the browser, measured from the files.
  * - `<UiTokens />`: the colour tokens as swatches.
+ * - `<UiFlagWeights />`: what the flags weigh, from the committed artwork.
  *
  * Everything they show comes from `content/ui/`, which `cargo run -p ui-docs`
  * writes from the toolkit.
@@ -42,6 +43,7 @@ import {
 } from "./data";
 import { PreviewCard } from "./preview-card";
 import { PreviewFrame } from "./preview-frame";
+import { flagWeightsText } from "./weights";
 
 // ------------------------------------------------------------------ preview
 
@@ -388,6 +390,11 @@ const loadedWhen: Record<string, string> = {
   sidebar: "The app shell",
   table: "A data table",
 };
+
+/** `<UiFlagWeights />`: the weights of the flags, written from the measured numbers. */
+export function UiFlagWeights() {
+  return <p>{flagWeightsText(toolkitInfo.flag_weights)}</p>;
+}
 
 /** `<UiAssets />`: the toolkit's files, measured from the files themselves. */
 export function UiAssets() {

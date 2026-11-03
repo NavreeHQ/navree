@@ -10,6 +10,7 @@ import path from "node:path";
 
 import { ownSlots } from "../components/ui-docs/anatomy.ts";
 import { choices, type Choose } from "../components/ui-docs/choices.ts";
+import { flagWeightsText, type FlagWeights } from "../components/ui-docs/weights.ts";
 
 type Slot = { slot: string; tag: string; count: number; children: Slot[] };
 type Example = { id: string; title: string; code: string; slots: Slot[]; captions: string[] };
@@ -29,6 +30,7 @@ type Toolkit = {
   csp: string;
   assets: { name: string; ext: string; bytes: number; gzip: number | null; brotli: number | null }[];
   tokens: { name: string; value: string }[];
+  flag_weights: FlagWeights;
 };
 
 const dir = () => path.join(process.cwd(), "content", "ui");
@@ -121,6 +123,11 @@ export function assetsMarkdown(): string {
     if (a) rows.push(`| \`${a.name}.${a.ext}\` | ${kb(a.brotli)} | ${kb(a.gzip)} | ${kb(a.bytes)} |`);
   }
   return rows.join("\n");
+}
+
+/** `<UiFlagWeights>`: what the flags weigh. */
+export function flagWeightsMarkdown(): string {
+  return flagWeightsText(data().toolkit.flag_weights);
 }
 
 /** `<UiCsp>`: the policy. */

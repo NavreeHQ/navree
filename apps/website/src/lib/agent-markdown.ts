@@ -25,7 +25,7 @@
  * | `<UiProps type>` | the type's table |
  * | `<UiAnatomy component>` | the parts as a nested list |
  * | `<UiChoose name>` | the question and a list of the answers |
- * | `<UiGrid>`, `<UiAssets>`, `<UiTokens>`, `<UiCsp>` | lists and tables of the same data |
+ * | `<UiGrid>`, `<UiAssets>`, `<UiTokens>`, `<UiCsp>`, `<UiFlagWeights>` | lists, tables and a paragraph of the same data |
  * | `<UiA11y>` | its Markdown |
  *
  * Links to other docs pages point at their `.md` files, and every other
@@ -49,6 +49,7 @@ import {
   assetsMarkdown,
   chooseMarkdown,
   cspMarkdown,
+  flagWeightsMarkdown,
   gridMarkdown,
   previewMarkdown,
   propsMarkdown,
@@ -659,6 +660,8 @@ function element(ctx: Ctx, node: MdNode, mode: "flow" | "text"): string {
       return assetsMarkdown();
     case "UiTokens":
       return tokensMarkdown();
+    case "UiFlagWeights":
+      return flagWeightsMarkdown();
     case "UiCsp":
       return cspMarkdown();
     case "br":

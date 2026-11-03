@@ -11,6 +11,8 @@ import api from "@content/ui/api.json";
 import catalog from "@content/ui/catalog.json";
 import toolkit from "@content/ui/toolkit.json";
 
+import type { FlagWeights } from "./weights";
+
 export type Slot = { slot: string; tag: string; count: number; children: Slot[] };
 
 export type UiExample = {
@@ -82,6 +84,7 @@ export const toolkitInfo = toolkit as {
   tokens: { name: string; value: string }[];
   icons: number;
   flags: number;
+  flag_weights: FlagWeights;
 };
 
 /** An example by `component/slug`; a typo fails the build. */

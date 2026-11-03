@@ -2369,7 +2369,7 @@
         "name": "label",
         "generics": "",
         "args": "label: impl Into<Cow<'static, str>>",
-        "doc": "Replaces the accessible name, which is the country's name."
+        "doc": "Replaces the accessible name, which is the country's name. A label with nothing in it is no label: the country's name stays."
       },
       {
         "name": "decorative",
