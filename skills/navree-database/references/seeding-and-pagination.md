@@ -9,7 +9,7 @@ named ones; `navree migrate:fresh --seed` starts over. `navree make:seeder
 posts demo_posts` writes and registers one (`make:model --seeder` writes one
 that uses the model's factory).
 
-```rust
+```rust,ignore
 use navree::BoxFuture;
 use navree::db::{Db, Seeder};
 use navree::orm::OrmError;
@@ -71,7 +71,7 @@ A model factory is a `navree::orm::factory::ModelFactory`, linked to its
 model with `#[model(factory = PostFactory)]` (the `navree-orm` skill has
 the whole API: states, sequences, relations, `make`, `create`):
 
-```rust
+```rust,ignore
 use navree::orm::factory::{FactoryContext, ModelFactory};
 
 /// Posts with fake names.
@@ -97,7 +97,7 @@ impl PostFactory {
 }
 ```
 
-```rust
+```rust,ignore
 let db = app.get::<Db>().await;
 let first = Post::factory().create_one(&*db).await?;
 let posts = Post::factory().state(PostFactory::published).count(10).create(&*db).await?;
@@ -110,7 +110,7 @@ Post --factory` links one to a new model. In the prelude the trait is
 
 ## Offset pagination
 
-```rust
+```rust,ignore
 use navree::db::{Page, PageQuery};
 use navree::orm::Record;
 
@@ -133,7 +133,7 @@ limits, validate a query DTO and build `PageQuery::new(page, per_page)`.
 
 ## Cursor pagination
 
-```rust
+```rust,ignore
 use navree::orm::{CursorPage, CursorRequest, Record};
 
 #[get("/feed")]

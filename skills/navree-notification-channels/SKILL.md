@@ -84,7 +84,7 @@ send with an integrations connection's token: `IntegrationsModule` registers
 
 ## Test
 
-```rust
+```rust,ignore
 let sms = SmsFake::new();
 let app = TestApp::builder()
     .temp_database()

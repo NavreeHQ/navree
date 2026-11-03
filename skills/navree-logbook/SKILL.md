@@ -17,7 +17,7 @@ when in doubt.
 1. Register the module in the app root (an app from `navree new` already
    has it). It needs `HttpModule`; every other module it watches is optional:
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(HttpModule::from_config())
@@ -57,7 +57,7 @@ Navree::app()
 
 Tag the running batch and dump a value (both do nothing when Logbook is off):
 
-```rust
+```rust,ignore
 use navree::logbook::Logbook;
 use navree::prelude::*;
 
@@ -78,7 +78,7 @@ impl ContactImport {
 
 Assert what a request did in a test:
 
-```rust
+```rust,ignore
 let app = TestApp::builder()
     .temp_database()
     .config("logbook.enabled", true)

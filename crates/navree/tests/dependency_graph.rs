@@ -531,6 +531,8 @@ const HIERARCHY: &[Rule] = &[
     // The toolkit's proof pages: one binary on the `navree` facade.
     rule("ui-proof", 9, &["navree"]),
     rule("ui-table-proof", 9, &["navree"]),
+    // The skills' Rust blocks, compiled against the facade.
+    rule("skill-snippets", 9, &["navree"]),
 ];
 
 /// What the crm-api binary may depend on: the facade and the CRM crates.

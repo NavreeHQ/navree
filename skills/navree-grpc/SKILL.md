@@ -43,7 +43,7 @@ prost = "0.14"
 3. Generate in `build.rs`. Write the descriptor set to `OUT_DIR` (reflection
    and Connect JSON read it):
 
-```rust
+```rust,ignore
 // build.rs
 use std::{env, fs, path::PathBuf};
 
@@ -67,7 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-```rust
+```rust,ignore
 // src/grpc/pb.rs
 tonic::include_proto!("crm.deals.v1");
 
@@ -77,7 +77,7 @@ pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("deal
 4. Implement the generated trait on an `#[injectable]` struct, marked
    `#[grpc_service(server = <Name>Server)]`:
 
-```rust
+```rust,ignore
 // src/grpc/mod.rs
 pub mod pb;
 
@@ -154,7 +154,7 @@ impl Deals for DealsGrpc {
 5. Register it and its descriptors in the feature module, and add
    `GrpcModule` to the app root **after `DatabaseModule`**:
 
-```rust
+```rust,ignore
 #[module(providers = [DealService], register = Self::wire)]
 pub struct DealsModule;
 
@@ -206,7 +206,7 @@ In code: `GrpcModule::for_root(GrpcOptions { addr: Some("0.0.0.0:50051".parse()?
 
 Interceptor (runs before authentication; any tonic `Interceptor`):
 
-```rust
+```rust,ignore
 fn require_client_version(request: Request<()>) -> std::result::Result<Request<()>, Status> {
     match request.metadata().get("x-client-version") {
         Some(_) => Ok(request),
@@ -222,7 +222,7 @@ impl Deals for DealsGrpc { /* ... */ }
 
 Server stream from the event bus (`events: Arc<EventBus>` field):
 
-```rust
+```rust,ignore
 type DealEvents = Pin<Box<dyn Stream<Item = std::result::Result<pb::DealEvent, Status>> + Send>>;
 
 // inside the #[grpc_service] impl:
@@ -248,7 +248,7 @@ async fn watch_deals(
 Calling another service (forwards request id, trace context, authorization,
 workspace and the remaining deadline):
 
-```rust
+```rust,ignore
 #[injectable]
 pub struct DealLookup {
     channels: Arc<GrpcChannels>,
@@ -267,7 +267,7 @@ Test (in-process, whole pipeline, no port). `temp_database()` is a SQLite file
 per test, so an app that runs on PostgreSQL turns on the `sqlite` feature of
 `navree` in its `[dev-dependencies]`:
 
-```rust
+```rust,ignore
 use navree::grpc::Code;
 use navree::grpc::testing::TestChannel;
 use navree::prelude::*;

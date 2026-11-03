@@ -179,7 +179,7 @@ reads and validates `harbor.toml`; `HarborConfig::parse(text, path)` and
 machine (`deploy::Deployer`) runs against the `Host` trait (`SshHost`, or
 `fake::FakeHost` in memory).
 
-```rust
+```rust,ignore
 use navree_harbor::exec::{Cmd, Executor, FakeExecutor, Output};
 use navree_harbor::{HarborConfig, Role};
 

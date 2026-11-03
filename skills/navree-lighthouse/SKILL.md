@@ -29,7 +29,7 @@ facade). The docs page is `apps/website/content/docs/tools/lighthouse.mdx`.
 2. Add the module after the ones it builds on. `navree new` apps already
    have it in `src/app.rs`:
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(CryptoModule::from_config())     // the dashboard's session cookie
@@ -58,7 +58,7 @@ Navree::app()
 
 ## Reporting errors you handle
 
-```rust
+```rust,ignore
 use navree::lighthouse::{Level, Lighthouse, Report};
 use navree::prelude::*;
 
@@ -249,7 +249,7 @@ app's MCP server at `/mcp`. Nothing to write:
 navree = { git = "https://github.com/NavreeHQ/navree", features = ["mcp"] }
 ```
 
-```rust
+```rust,ignore
 Navree::app()
     // ... DatabaseModule, AuthModule, AccessModule
     .module(LighthouseModule::from_config())
@@ -282,7 +282,7 @@ or `lighthouse.store = "off"` offers nothing.
 
 Test with `navree::mcp::testing::McpTestClient`:
 
-```rust
+```rust,ignore
 let mcp = McpTestClient::new(app.client()).bearer(token).initialize().await;
 mcp.call_tool("lighthouse_resolve_issue",
         json!({ "issue_id": id, "in_next_release": true, "comment": "fixed in #812" }))
@@ -293,7 +293,7 @@ mcp.call_tool("lighthouse_resolve_issue",
 
 ## Tests
 
-```rust
+```rust,ignore
 use navree::lighthouse::{Level, LighthouseFake};
 
 let fake = LighthouseFake::new();

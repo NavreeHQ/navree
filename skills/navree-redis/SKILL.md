@@ -25,7 +25,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", features = ["redis"] }
 2. Add `RedisModule` (global; in the prelude with `redis`) and switch the
    drivers you want in configuration:
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(ConfigSources::defaults()))
     .module(CryptoModule::from_config())
@@ -99,7 +99,7 @@ impl Preferences {
 A limit shared by every process (same rule as the per-IP limit: a burst of
 `limit`, then one every `per / limit`, on Redis's clock):
 
-```rust
+```rust,ignore
 use std::time::Duration;
 use navree::redis::{RateLimit, RateLimiter};
 
@@ -113,7 +113,7 @@ if let RateLimit::Limited { retry_after } =
 
 Two apps in one test sharing a real-time backplane (no Redis needed):
 
-```rust
+```rust,ignore
 use navree::realtime::{Backplane, MemoryBackplane};
 
 let backplane = MemoryBackplane::new();

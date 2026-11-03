@@ -2,7 +2,7 @@
 
 ## A factory
 
-```rust
+```rust,ignore
 // src/modules/deals/factories/deal.rs
 use navree::orm::factory::{FactoryContext, ModelFactory};
 
@@ -59,7 +59,7 @@ scale)`, `boolean`, `pick(&items)`, `past(within)`, `future(within)`,
 
 ## A test with its own database
 
-```rust
+```rust,ignore
 use navree::BoxError;
 use navree::orm::prelude::*;
 use navree::orm::testing::database::{Template, TestDb};

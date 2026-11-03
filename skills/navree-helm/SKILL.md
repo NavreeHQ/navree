@@ -25,7 +25,7 @@ page's examples through the facade). The page is
 1. The app root needs `DatabaseModule`, `CryptoModule` (the session cookie),
    `AuthModule` (sign-in) and `AccessModule` (every check). Add Helm last:
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(CryptoModule::from_config())
@@ -77,7 +77,7 @@ navree make:resource deals Deal          # module, model (Deal or deal); --path 
 
 ## Resource template
 
-```rust
+```rust,ignore
 use navree::helm::{Action, ActionResult, Field, Filter, Metric, Resource};
 use navree::orm::Builder;
 use navree::prelude::*;
@@ -216,7 +216,7 @@ these writes; each records its change event with the record's serialized
 form, so `#[model(hidden)]` and `#[serde(skip_serializing)]` fields never
 reach observers or the audit log. Override to run your service and DTO:
 
-```rust
+```rust,ignore
 use navree::BoxFuture;
 use navree::helm::{FormData, RecordOf, SaveContext};
 
@@ -238,7 +238,7 @@ errors shows under the fields; others as a message.
 
 ## Custom pages
 
-```rust
+```rust,ignore
 m.helm_page(
     HelmPage::new("pipeline", "Pipeline board")
         .group("Sales").icon("kanban")
@@ -254,7 +254,7 @@ from the app's origin only.
 
 ## Testing template
 
-```rust
+```rust,ignore
 use navree::prelude::*;
 use navree::testing::{TestApp, principal};
 use serde_json::json;

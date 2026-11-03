@@ -23,7 +23,7 @@ workspace or organization.
 1. Add the module (needs Config, Crypto with `APP_KEY`, Database;
    HttpClient, Cache, Workspace, Events, Schedule are used when present):
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(CryptoModule::from_config())
@@ -89,7 +89,7 @@ health_url = "/v1/health"
 
 ## Scope sets (least privilege)
 
-```rust
+```rust,ignore
 pub struct DirectoryRead;
 impl ScopeSet for DirectoryRead {
     const NAME: &'static str = "directory";          // [a-z0-9_]
@@ -114,7 +114,7 @@ impl ScopeSet for DirectoryRead {
 
 ## Calling APIs
 
-```rust
+```rust,ignore
 async fn users(&self, graph: Connection<MicrosoftGraph, DirectoryRead>) -> Result<Json<Vec<User>>> {
     Ok(Json(graph.paginate("/users?$select=id,mail").await?))
 }
@@ -172,7 +172,7 @@ sends with a `microsoft` connection's app-only token (scope set asking for
 
 ## Tests
 
-```rust
+```rust,ignore
 let (integrations, fake) = Integrations::fake();
 // ... .override_value(Arc::new(integrations)) ...
 fake.on_code("slack", "code", FakeGrant::new().access_token("xoxb-1").never_expires().external_id("T1"));

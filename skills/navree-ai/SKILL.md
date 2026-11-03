@@ -32,7 +32,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", features = ["ai"] }
    memory and pgvector; `CacheModule` shares budgets and the embeddings cache
    between processes; agents also need `AuthModule` and `AccessModule`:
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(DatabaseModule::from_config())
@@ -96,7 +96,7 @@ APP_AI__PROVIDERS__OPENAI__API_KEY=sk-proj-...
 
 Text, with options:
 
-```rust
+```rust,ignore
 let response = self
     .ai
     .text(format!("Summarize:\n{timeline}"))     // or vec![Message::user(..), Message::assistant(..)]
@@ -110,7 +110,7 @@ let response = self
 Structured output (`T: Deserialize + ToSchema`; `.validated()` needs
 `Validate`):
 
-```rust
+```rust,ignore
 use navree::openapi::ToSchema;
 use navree::validation::Validate;
 use serde::Deserialize;
@@ -131,7 +131,7 @@ let email = self.ai.structured::<FollowUpEmail>(prompt).model("fast").validated(
 
 Streaming to the browser (a `TextStream` is a response):
 
-```rust
+```rust,ignore
 #[get("/{id}/summary/stream")]
 #[can(Read, Deal, from = "id")]
 async fn summary_stream(&self, deal: Authorized<Deal, Read>) -> Result<TextStream> {
@@ -143,7 +143,7 @@ async fn summary_stream(&self, deal: Authorized<Deal, Read>) -> Result<TextStrea
 
 An agent (generate one with `navree make:agent <module> <name>`):
 
-```rust
+```rust,ignore
 use navree::ai::{Agent, AgentOptions, AgentRun, agent};
 use navree::prelude::*;
 
@@ -203,7 +203,7 @@ Tool arguments: one struct deriving `Deserialize`, `ToSchema` and
 
 RAG:
 
-```rust
+```rust,ignore
 m.vector_collection(VectorCollection::new("activity_notes")); // created at boot (pgvector, Qdrant)
 
 let chunks = Chunker::new().max_tokens(300).overlap(40).split(&text);
@@ -220,7 +220,7 @@ let best = ai.rerank(question, hits).model("fast").top(6).await?;
 
 Tests:
 
-```rust
+```rust,ignore
 let app = TestApp::builder()
     .temp_database()            // SQLite: needs navree's `sqlite` feature in [dev-dependencies]
     .config("ai.fake", true)

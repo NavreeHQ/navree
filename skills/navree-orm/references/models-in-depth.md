@@ -29,6 +29,10 @@ Hide secrets from JSON with `hidden(api_token)`.
 ## Accessors and mutators
 
 ```rust
+use navree::orm::prelude::*;
+use serde::Serialize;
+use uuid::Uuid;
+
 #[derive(Model, Clone, Debug, Default, Serialize)]
 #[model(table = "people", appends(initials))]
 pub struct Person {
@@ -70,7 +74,7 @@ may cancel (`Ok(Flow::Cancel)`; `save` and `delete` then return `false`).
 Inside a unit of work the "-ed" ones run after commit, unless the observer
 sets `const IN_TRANSACTION: bool = true`.
 
-```rust
+```rust,ignore
 #[injectable]
 pub struct WonDealMailer {
     mailer: Arc<Mailer>,
@@ -96,7 +100,7 @@ Quiet writes skip events: `save_quietly`, `delete_quietly`,
 
 ## Scopes
 
-```rust
+```rust,ignore
 #[scopes]
 impl Deal {
     #[scope]
@@ -125,7 +129,7 @@ run `navree model:prune` (chunked by `[orm] prune_chunk`).
 
 ## Route model binding
 
-```rust
+```rust,ignore
 use navree::orm::binding::{Bound, BoundChild, WithTrashed};
 
 #[get("/{company}")]

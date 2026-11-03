@@ -28,7 +28,7 @@ directory sync creates, updates and deactivates people before they sign in.
    or organization owners; Access + an authenticator for the routes
    (`directory.routes = false` without them).
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(CryptoModule::from_config())
@@ -47,7 +47,7 @@ Navree::app()
 2. Write the sink (a provider: `#[injectable]`). Write through
    `ctx.uow()`: the directory row, your rows and the event commit together.
 
-```rust
+```rust,ignore
 impl DirectorySink for RecipientSink {
     fn upsert_user<'a>(&'a self, ctx: &'a SinkContext, change: &'a UserChange)
         -> navree::BoxFuture<'a, Result<Option<String>, BoxError>> {
@@ -185,7 +185,7 @@ impl DirectorySink for RecipientSink {
 
 ## Tests
 
-```rust
+```rust,ignore
 let (directory, fake) = Directory::fake();
 // TestApp::builder().temp_database().config("directory.routes", false)
 //   .module(DatabaseModule::from_config()).module(DirectoryModule::from_config())

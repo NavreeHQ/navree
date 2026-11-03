@@ -49,7 +49,7 @@ impl Onboarding {
 Templates come from `resources/views/` files (`resources/views/mail/welcome.html`
 is `mail/welcome.html`) or are embedded by a module:
 
-```rust
+```rust,ignore
 pub const TEMPLATES: &[(&str, &str)] = &[
     ("mail/welcome.html", include_str!("welcome.html")),
     ("mail/welcome.txt", include_str!("welcome.txt")),
@@ -192,7 +192,7 @@ see `navree-events-and-broadcasting`).
 
 ## Test
 
-```rust
+```rust,ignore
 let app = TestApp::builder()
     .config("mail.transport", "array")
     .module(ViewModule::from_config())

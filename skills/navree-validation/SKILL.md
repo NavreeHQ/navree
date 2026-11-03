@@ -76,7 +76,7 @@ pub struct CreateDeal {
 }
 ```
 
-```rust
+```rust,ignore
 #[post("/")]
 #[authenticated]
 async fn store(&self, Valid(Json(input)): Valid<Json<CreateContact>>) -> Created<Value> { /* ... */ }
@@ -237,7 +237,7 @@ messages as `ValidationErrors`, use `validate_in(&value, Some(&ctx)).await`.
 
 ## Database rules
 
-```rust
+```rust,ignore
 use navree::validation::{AsyncRule, AsyncRules};
 
 impl AsyncRules for UpdateUser {
@@ -269,6 +269,7 @@ is `RuleError::Database` holding a boxed `DbError`.
 ## Validating in a service
 
 ```rust
+use navree::http::Result;
 use navree::validation::ValidationErrors;
 
 pub fn check_dates(starts_on: &str, ends_on: &str) -> Result<()> {
@@ -306,7 +307,7 @@ message table per app, in English.
 
 ## Test
 
-```rust
+```rust,ignore
 app.acting_as(principal(Uuid::now_v7()))
     .post("/api/v1/contacts")
     .json(&json!({ "first_name": "", "email": "ada@", "tags": [], "status": "lead", "stage": "lead" }))

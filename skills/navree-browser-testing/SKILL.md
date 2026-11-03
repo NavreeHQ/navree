@@ -32,7 +32,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 3. Put the tests in their own file (`tests/browser.rs`), each
    `#[tokio::test]` returning `Result<(), BrowserError>`:
 
-```rust
+```rust,ignore
 use navree_browser::{Browser, BrowserError, TestServer};
 use navree_testing::TestApp;
 
@@ -57,7 +57,7 @@ async fn a_rep_signs_in() -> Result<(), BrowserError> {
    `FrontEnd`; it gets the address of navree-browser's proxy in its API
    variable, and `serve` points the proxy at this test's app:
 
-```rust
+```rust,ignore
 use navree_browser::FrontEnd;
 
 fn crm_web() -> FrontEnd {
@@ -81,7 +81,7 @@ let page = browser.visit(web.url("/login")).await?;
 
 Targets (only visible elements match; first match wins):
 
-```rust
+```rust,ignore
 use navree_browser::Target;
 
 page.click("#deal-title").await?;          // CSS: starts with #, . or [, or "css=..."
@@ -97,7 +97,7 @@ let text = cards[0].inner_text().await?;
 
 Actions, assertions, waits and reads:
 
-```rust
+```rust,ignore
 page.append("Notes", " Call back Monday.").await?;
 page.select("Stage", "Negotiation").await?;           // <select> by text or value; or a combobox + option
 page.check("Send me a summary").await?;               // clicks the label when the input is hidden
@@ -115,7 +115,7 @@ page.screenshot("board-after-move").await?;           // NN-board-after-move.png
 
 Viewports and options:
 
-```rust
+```rust,ignore
 use navree_browser::Viewport;
 
 let page = browser.visit_with(url, Viewport::phone()).await?; // 390x844, ratio 3, touch, Android UA
@@ -130,7 +130,7 @@ let browser = Browser::builder()
 
 Skip on machines without a browser:
 
-```rust
+```rust,ignore
 if let Err(error) = Browser::find_chrome() {
     eprintln!("skipped: {error}");
     return Ok(());

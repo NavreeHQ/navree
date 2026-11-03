@@ -1,0 +1,34 @@
+[package]
+name = "skill-snippets"
+description = "Compiles the Rust code blocks of the agent skills in `skills/` against the current `navree` crate, and checks the skills' links and line endings."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+# Writes every compiled block of `skills/**/*.md` to OUT_DIR as a module.
+build = "build.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+# What the skills' compiled blocks use, as an app would depend on it: the
+# facade with the features they name, and the libraries they import. A block
+# that needs more (another feature, a crate by its own name) adds it here.
+[dependencies]
+chrono = { workspace = true }
+http = { workspace = true }
+navree = { workspace = true, features = [
+    "full",
+    "documents",
+    "flags",
+    "redis",
+    "search",
+    "social",
+    "sqlite",
+] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }

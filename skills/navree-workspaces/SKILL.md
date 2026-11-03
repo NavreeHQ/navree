@@ -19,7 +19,7 @@ on by default). Everything below is in the code; when in doubt read
    (`AuthModule`); `EventsModule` and `MailModule` (+ `ViewModule`) are
    optional:
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(CryptoModule::from_config())
@@ -38,7 +38,7 @@ Navree::app()
    migration after the `workspace` set, and add the RLS policy on
    PostgreSQL. Migrations are navree-schema migrations (`navree::schema`):
 
-```rust
+```rust,ignore
 m.migrations(MigrationSet::new("deals").after(["workspace"]).migration(
     SchemaMigration::new("m20261026_000001_create_deals", CreateDeals),
 ));
@@ -62,7 +62,7 @@ async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
 3. Make the table a navree-orm model (the access subject comes from the
    attribute), mark it `WorkspaceScoped` and register it as workspace-scoped:
 
-```rust
+```rust,ignore
 #[derive(Model, Clone, Debug, Default, Serialize)]
 #[model(table = "deals", subject = "Deal", permission_prefix = "deals")]
 pub struct Deal {
@@ -93,7 +93,7 @@ impl DealsModule {
 
 4. Guard the controller and go through `WorkspaceRepo`:
 
-```rust
+```rust,ignore
 use navree::prelude::*;
 
 #[injectable]
@@ -188,7 +188,7 @@ of this workspace.`
 
 ## Services (writes take `&Uow` first, emit events after commit)
 
-```rust
+```rust,ignore
 let ws = workspaces.create(&uow, owner_id, NewWorkspace::named("Acme Inc.")).await?; // slug "acme-inc"
 workspaces.rename(&uow, ws.id, "Acme Corp").await?;          // slug unchanged
 workspaces.set_time_zone(&uow, ws.id, Some("Asia/Calcutta"), Some("in")).await?; // stored Asia/Kolkata, IN
@@ -253,7 +253,7 @@ permissions = ["reports.read"]       # extra org permissions
 workspace_role = "viewer"            # the workspace role it gives (default: same name, must exist)
 ```
 
-```rust
+```rust,ignore
 let acme = organizations.create(&uow, owner, NewOrganization::named("Acme Group").country("gb")).await?;
 organizations.attach(&uow, acme.id, ws.id).await?;   // 409 if attached elsewhere
 org_members.add(&uow, acme.id, grace, OrgRole::Admin, WorkspaceSelector::All).await?;
@@ -292,7 +292,7 @@ access_requests.approve(&uow, acme.id, request_id, Some(admin), Approval::defaul
 enabled = true          # resolvers header (X-Partition), path (/p), claim; no subdomain
 ```
 
-```rust
+```rust,ignore
 impl WorkspaceScoped for Contact {}
 impl PartitionScoped for Contact {}   // Contact: a #[derive(Model)]; column `partition_id` (PARTITION_COLUMN)
 
@@ -330,7 +330,7 @@ rest. `navree::workspace::library`.
    `organization_id`, `workspace_id`, `cloned_from_id`, their indexes and
    the CHECK `<table>_library_owner_check`:
 
-```rust
+```rust,ignore
 let library = LibraryColumns::new(schema.target().await?.dialect());
 schema.create("templates", |t| {
     library.uuid(t, "id").primary();   // BINARY(16) on MySQL, uuid elsewhere
@@ -343,7 +343,7 @@ schema.create("templates", |t| {
 
 2. Model + registration:
 
-```rust
+```rust,ignore
 #[derive(Model, Clone, Debug, Default, Serialize)]
 #[model(table = "templates", timestamps)]   // NOT #[model(workspace)]
 pub struct Template {
@@ -364,7 +364,7 @@ m.migrations(MigrationSet::new("templates").after(["workspace"]).migration(Schem
 
 3. Use it:
 
-```rust
+```rust,ignore
 Template::query().get(&uow).await?;                          // in a workspace request: global + its org's + its own; no workspace: global only
 LibraryRepo::<Template>::visible_to(&ws).get(&uow).await?;    // explicit viewer (&CurrentWorkspace, &Workspace, &CurrentOrganization)
 LibraryRepo::<Template>::owned_by(LibraryOwner::Organization(org.id())).get(&uow).await?;
@@ -395,7 +395,7 @@ A demo is a workspace with `kind = "demo"` (`Workspace::kind()`,
 1. One seeder per module with demo data (`navree::workspace::{DemoSeed,
    DemoSeeder}`), registered next to its migrations:
 
-```rust
+```rust,ignore
 #[injectable]
 pub struct CrmDemo;
 
@@ -451,7 +451,7 @@ plus `app.get::<Scheduler>().await.tick(at)`.
 
 ## Testing template
 
-```rust
+```rust,ignore
 let app = TestApp::from_builder(TestAuthenticator::install(app(sources))).await;
 let auth = app.get::<AuthService>().await;
 let ada = auth.create_user("Ada", "ada@example.com", "secret-password").await.unwrap();
@@ -476,7 +476,7 @@ Every workspace module gets an isolation suite: cross-workspace tests for
 each of its routes, from the route table and a model factory (skill
 `navree-module-conformity`):
 
-```rust
+```rust,ignore
 use navree::workspace::testing::IsolationSuiteExt;
 
 app.isolation_suite::<DealsModule>()

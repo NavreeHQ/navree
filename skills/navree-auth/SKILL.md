@@ -28,7 +28,7 @@ Routes stay denied until they declare access (see `navree-access-control`).
 
 A new app already has it. Otherwise add, once, in the root:
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(ConfigSources::defaults()))
     .module(CryptoModule::from_config())   // required: Argon2id, APP_KEY
@@ -71,7 +71,7 @@ step-up, impersonation, passwordless, platform and token exchange:
 
 ## Sensitive routes: step-up and impersonation guards
 
-```rust
+```rust,ignore
 #[controller("/account", version = "1")]
 #[authenticated]
 impl AccountController {
@@ -139,7 +139,7 @@ the user JSON of `/api/auth/*` with a `UserResourceExtension` registered by
 
 Inject `Arc<AuthService>` (global):
 
-```rust
+```rust,ignore
 let user = auth.create_user("Ada Lovelace", "ada@example.com", &password).await?; // no password policy
 let user = auth.register(&uow, NewUser { name, email, password }).await?;          // with the policy, in your uow
 let token = auth.jwt().sign_access(user.id)?;
@@ -303,7 +303,7 @@ and list the BFF in `http.trusted_proxies` so throttles see real client IPs.
 
 ## Test
 
-```rust
+```rust,ignore
 use navree::auth::AuthService;
 use navree::crypto::generate_key;
 use navree::prelude::*;

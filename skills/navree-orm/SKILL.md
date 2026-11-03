@@ -43,7 +43,7 @@ The app's root needs `OrmModule::from_config()` after `DatabaseModule`
 
 ## Model
 
-```rust
+```rust,ignore
 use chrono::{DateTime, Utc};
 use navree::orm::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -139,7 +139,7 @@ first.
 
 ## Service
 
-```rust
+```rust,ignore
 use navree::orm::attributes::Attributes;
 use navree::prelude::*;
 use uuid::Uuid;
@@ -189,7 +189,7 @@ navree-db's `Value` (`navree::orm::Value`): `Value::I64(7)`,
 
 ## Controller
 
-```rust
+```rust,ignore
 use navree::orm::attributes::Attributes;
 use navree::orm::binding::Bound;
 use navree::prelude::*;

@@ -67,7 +67,7 @@ Match the model (on MySQL a `Uuid` the model writes needs
 
 ## Alter a table
 
-```rust
+```rust,ignore
 schema
     .table("posts", |t| {
         t.string("stage").default("draft").index();     // add
@@ -88,7 +88,7 @@ them before committing). Read the live schema with `schema.has_table`,
 
 ## Foreign keys
 
-```rust
+```rust,ignore
 t.foreign_uuid("company_id").constrained().cascade_on_delete();     // companies.id
 t.foreign("currency").references("code").on("currencies").restrict_on_delete();
 ```

@@ -39,7 +39,7 @@ Typed columns build conditions from values of the column's type:
 | `eq_column(&other)`, `op_column(op, &other)` | two columns |
 | `contains(v)`, `contained_by(v)`, `overlaps(vs)`, `has_key(k)` | JSON |
 
-```rust
+```rust,ignore
 Deal::query()
     .where_(Deal::CLOSED_AT.is_null())
     .where_group(|q| {
@@ -72,7 +72,7 @@ Deal::query()
 
 ## Selecting, joining, grouping, ordering
 
-```rust
+```rust,ignore
 Deal::query().select([Deal::ID.expr(), Deal::TITLE.expr()]);
 Deal::query().select_expr(Expr::col("amount_cents").mul(2), "doubled");
 Deal::query()
@@ -105,7 +105,7 @@ rereads a record under a lock.
 
 ## Writing many rows (no model events, no audit changes)
 
-```rust
+```rust,ignore
 let lost: u64 = Deal::query()
     .where_(Deal::STAGE.eq(Stage::Lead))
     .where_(Deal::UPDATED_AT.lt(cutoff))
@@ -123,7 +123,7 @@ bind limit is split and run in one transaction.
 
 ## Without a model, and raw SQL
 
-```rust
+```rust,ignore
 use navree::orm::{Row, affecting_statement, raw, scalar, select};
 
 let rows: Vec<Row> = table("deal_tag").where_(col("deal_id").eq(deal_id)).get(&db).await?;

@@ -27,7 +27,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", features = ["i18n"] }
 2. Add the module to the app root, before `ValidationModule`, `ViewModule`
    and `MailModule`:
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(HttpModule::from_config())
@@ -72,7 +72,7 @@ login = Log in
 
 5. Translate:
 
-```rust
+```rust,ignore
 use navree::i18n::{I18n, Locale, Money, args, t};
 
 let text = t!("deal-created", count = 3);                     // current locale
@@ -104,7 +104,7 @@ let explicit = i18n.t("pt-BR", "deal-created", args!(count = 2))?; // Arc<I18n>
 
 ## Formatting
 
-```rust
+```rust,ignore
 locale.format_money(4_200_000, "EUR");   // en "€42,000.00", fr "42 000,00 €" (U+202F, U+00A0)
 locale.format_date(chrono::Utc::now());  // en "Oct 26, 2026", fr "26 oct. 2026"
 locale.format_date_with(day, DateStyle::Long);
@@ -120,7 +120,7 @@ arguments are literals), `NUMBER($year, useGrouping: "false")`;
 
 ## Saved locales
 
-```rust
+```rust,ignore
 i18n.set_user_locale(&uow, user_id, "fr").await?;          // stores the matched supported tag
 i18n.set_workspace_locale(&uow, workspace_id, "de").await?;
 let locale = i18n.user_locale(user_id).await?;              // saved, else default
@@ -155,7 +155,7 @@ Routes (when `i18n.routes`): `GET /api/i18n/locales` (public, `{data:
 
 ## Testing templates
 
-```rust
+```rust,ignore
 let app = TestApp::builder()
     .config("i18n.locales", json!(["en", "fr"]))
     .config("i18n.missing", "error")          // a missing message fails (t! panics)

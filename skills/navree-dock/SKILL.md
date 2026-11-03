@@ -146,7 +146,7 @@ this; hypertables become regular tables). For a test that needs TimescaleDB
 (`first`/`last`, month buckets, continuous aggregates), pass the URL
 yourself and skip when there is none:
 
-```rust
+```rust,ignore
 let Ok(url) = std::env::var("APP_DATABASE__URL") else {
     eprintln!("skipped: no APP_DATABASE__URL");
     return;
@@ -171,7 +171,7 @@ ProcessExecutor::new(root))` with `up`, `down`, `status`, `logs`, `shell`.
 Tests drive `Dock` with `FakeExecutor` (records commands, scripted answers,
 virtual clock) instead of Docker:
 
-```rust
+```rust,ignore
 use navree_dock::{CmdOutput, Dock, DockFile, FakeExecutor};
 
 let file = DockFile::parse("[services.postgres]\n", "crm-api")?;

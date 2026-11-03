@@ -29,7 +29,7 @@ async-graphql = { version = "7.2", default-features = false, features = ["chrono
    need `DatabaseModule`; `EventStream` needs `EventsModule`. A missing one
    fails the boot naming the field.
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(HttpModule::from_config())
@@ -43,7 +43,7 @@ Navree::app()
 
 3. Types are plain async-graphql types:
 
-```rust
+```rust,ignore
 use async_graphql::{ComplexObject, Enum, InputObject, SimpleObject};
 use navree::validation::Validate;
 
@@ -68,7 +68,7 @@ pub struct MoveDealInput {
 4. Write the resolver. Every field declares access (deny by default: no
    declaration does not compile):
 
-```rust
+```rust,ignore
 use async_graphql::Context;
 use navree::graphql::{ContextExt, Result, resolver};
 use navree::prelude::*;
@@ -112,7 +112,7 @@ impl DealResolver {
 
 5. Register it (and loaders) in the module's `register` hook:
 
-```rust
+```rust,ignore
 #[module(register = Self::wire)]
 pub struct DealsModule;
 
@@ -159,7 +159,7 @@ impl DealsModule {
 
 ## Dataloaders
 
-```rust
+```rust,ignore
 #[injectable]
 pub struct CompanyLoader {
     db: Arc<Db>,
@@ -193,7 +193,7 @@ do **not** check access.
 
 ## Subscriptions
 
-```rust
+```rust,ignore
 #[subscription]
 #[can(Read, Deal)]
 async fn deal_updated(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = DealUpdatedObject>> {
@@ -247,7 +247,7 @@ document that does not parse, breaks the schema or a limit (no `data`);
 PostgreSQL needs `navree = { git = "...", features = ["sqlite"] }` in its
 `[dev-dependencies]`; without it the test fails at boot asking for the feature.
 
-```rust
+```rust,ignore
 let app = TestApp::builder()
     .temp_database()
     .module(DatabaseModule)

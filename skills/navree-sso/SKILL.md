@@ -22,7 +22,7 @@ The docs page is `apps/website/content/docs/security/single-sign-on.mdx`.
 2. Modules, after `AuthModule` (and `WorkspaceModule` for tenant-owned
    connections):
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(CryptoModule::from_config())      // encrypts OIDC client secrets
@@ -136,7 +136,7 @@ enforce_for_verified_domains = true                     # refuse passwords for v
 
 ## Testing
 
-```rust
+```rust,ignore
 let idp = SsoFake::new();                       // SAML IdP whose responses pass every check
 let sso = app.get::<Sso>().await;
 let uow = app.get::<navree::db::Db>().await.uow(None, None).await;

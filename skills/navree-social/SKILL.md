@@ -20,7 +20,7 @@ in `crates/navree-social/tests/social/` (fake and wiremock providers) and
 2. Add the module after `AuthModule` (it needs Crypto, Database and Auth;
    HttpClient and Cache are used when present):
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(CryptoModule::from_config())     // APP_KEY seals states and encrypts tokens
@@ -159,7 +159,7 @@ scopes = ["https://www.googleapis.com/auth/calendar.readonly"]
 params = { access_type = "offline", prompt = "consent" }
 ```
 
-```rust
+```rust,ignore
 let google = social.token(user.id, "google").await?; // Secret<String>, refreshed when expiring within 60 s
 http.get(url).bearer(google.expose()).send().await?;
 ```
@@ -169,7 +169,7 @@ user through `?intent=link` again. `NoToken`: `store_tokens` was off.
 
 ## A custom provider
 
-```rust
+```rust,ignore
 #[injectable]
 pub struct Zoho { http: Arc<navree::http_client::HttpClient> }
 
@@ -194,7 +194,7 @@ impl SocialProvider for Zoho {
 
 ## Test
 
-```rust
+```rust,ignore
 let (social, fake) = Social::fake();
 fake.on_code("github", "code-ada",
     SocialUser::new("github", "583231").name("Ada").email(Some("ada@example.com"), true));

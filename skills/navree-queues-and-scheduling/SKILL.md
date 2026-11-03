@@ -148,7 +148,7 @@ batch of jobs and give it an operation the client follows.
 3. In the handler, start the operation and dispatch the batch in the
    request's unit of work, and return the operation:
 
-```rust
+```rust,ignore
 let op = self.operations.start(&uow, Operation::new("contacts.import")
     .owner(me.user_id).workspace(ws.id()).note("Waiting for a worker")).await?;
 let batch = Batch::new("contacts.import")
@@ -183,7 +183,7 @@ then `queue.find_batch(&id)`, `queue.cancel_batch(&id)`.
 
 ## Schedules
 
-```rust
+```rust,ignore
 fn wire(&self, m: &mut ModuleBuilder) {
     m.command(clear_command());
     m.schedule(|s| {
@@ -210,7 +210,7 @@ Frequencies: `every_minute()` (default), `every_five_minutes()`,
 fields). Times are **UTC** unless the task says otherwise (needs
 `TimeModule`, feature `time`):
 
-```rust
+```rust,ignore
 s.command("reports:close-day", &[]).daily_at("02:00").in_zone("Europe/London");
 s.command("crm:task-reminders", &[]).daily_at("08:00").in_default_zone(); // time.default_zone
 s.job_with(|run: &LocalRun| SendDigest { workspace_id: run.owner.unwrap_or_default() })

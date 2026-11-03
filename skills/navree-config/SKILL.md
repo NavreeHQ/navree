@@ -162,7 +162,7 @@ after them. Each module's skill lists its keys.
 `TestApp::builder()` reads **no** sources (no `.env`, no TOML, no
 environment). Set what the test needs:
 
-```rust
+```rust,ignore
 let app = TestApp::builder()
     .config("billing.trial_days", 30)
     .module(BillingModule)

@@ -60,7 +60,7 @@ Helpers: `timestamps_tz()` (nullable `created_at`, `updated_at`),
 
 ## Indexes
 
-```rust
+```rust,ignore
 t.unique(["workspace_id", "email"]).name("members_email");
 t.index(["stage", "created_at"]);
 t.unique(["email"]).where_raw("deleted_at IS NULL");   // partial (PostgreSQL, SQLite)
@@ -77,7 +77,7 @@ with a hash past 63 bytes; drops by columns find them.
 
 ## Foreign keys
 
-```rust
+```rust,ignore
 t.foreign_uuid("company_id").constrained().cascade_on_delete();    // companies.id
 t.foreign_id("user_id").nullable().constrained().null_on_delete(); // users.id
 t.foreign_uuid("owner_id").constrained_on("users", "id");

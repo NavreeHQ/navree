@@ -14,7 +14,7 @@ is delivered at once.
 
 1. Set the category, digest and urgency on the impl block:
 
-   ```rust
+   ```rust,ignore
    use navree::notify::{Channel, Notifiable, Notification, notification};
 
    #[notification(category = "deals", digest = "daily")]
@@ -54,7 +54,7 @@ override with `views/notify/digest.html`/`.txt`).
 
 ## Send windows and quiet hours
 
-```rust
+```rust,ignore
 fn send_window(&self, _n: &dyn Notifiable) -> Option<SendWindow> {
     Some(SendWindow::weekdays().between("09:00", "17:00"))
 }
@@ -94,7 +94,7 @@ workspace (404 outside one; `PATCH` needs
 
 In code (`Arc<NotificationPreferences>`):
 
-```rust
+```rust,ignore
 let owner = PreferenceOwner::user(user_id); // or ::workspace(id), ::of(&notifiable)
 preferences.update(&owner, &json!({"channels": {"sms": false}})).await?;
 let resolved = preferences.resolve(&member, Some(workspace_id)).await?;
@@ -134,7 +134,7 @@ through the workspace's mail transport. Elsewhere, register your own
 
 ## Test
 
-```rust
+```rust,ignore
 let clock = Arc::new(FixedClock::new("2026-10-28T20:00:00Z".parse()?)); // 01:30 in Kolkata
 let app = TestApp::builder()
     .temp_database()

@@ -15,7 +15,7 @@ mail is in `navree-mail-and-notifications` and `navree-mail-delivery`.
    `EventsModule` for `InboundMailReceived`.
 2. Register a mailbox in a module's `register` (`#[module(register = Self::wire)]`):
 
-   ```rust
+   ```rust,ignore
    m.mailbox("support@acme.test", |mail: InboundMail, ctx: MailboxContext| async move {
        ctx.get::<SupportInbox>().await?.open_conversation(&mail).await?;
        Ok(())
@@ -63,7 +63,7 @@ mail is in `navree-mail-and-notifications` and `navree-mail-delivery`.
 
 ## Reply tokens
 
-```rust
+```rust,ignore
 let reply_to = tokens.address_for("reply+{token}@in.acme.test", ticket.id)?; // Arc<ReplyTokens>
 Message::new().to(email).reply_to(reply_to).subject("Re: ...").text(body);
 // in the mailbox:
@@ -108,7 +108,7 @@ check) and `/api/mail/inbound/gmail?token=` (Pub/Sub push).
 
 ## Test
 
-```rust
+```rust,ignore
 let fake = MailFake::new();
 let received = fake
     .receive(app.ctx(), Incoming::compose().from("ada@example.com").to(address).text("Thanks").build())

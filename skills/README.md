@@ -8,8 +8,9 @@ description up front and reads the body only when the task matches, so a
 project can carry all of them at little cost.
 
 Every skill describes features that exist in the framework, and every API it
-names is checked against the code. The code templates compile against the
-current `navree` crate.
+names is checked against the code. Every Rust block not marked
+`rust,ignore` compiles against the current `navree` crate:
+`cargo test -p skill-snippets` builds them.
 
 ## The skills
 
@@ -118,3 +119,13 @@ exactly when to use it, with the words a user would say. The body gives the
 steps in order, the commands, a template that compiles, the checks to run,
 the mistakes to avoid and links to the docs. Name only APIs that exist:
 grep for each one in `crates/` before writing it down.
+
+Then run `cargo test -p skill-snippets`. It compiles every ` ```rust ` block
+of every skill as a module, and checks that fences close, local links and
+links to navree.com/docs resolve, and line endings are LF. A page's blocks
+see `navree::prelude::*` and the imports and items of the blocks above
+them, as a reader does; tests in a block are compiled, never run. A block
+that can't compile on its own (a few lines from inside a function, a
+method without its `impl`, code that names the app's own modules or
+types) is fenced ` ```rust,ignore `. Write imports into a block rather than
+marking it.

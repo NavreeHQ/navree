@@ -6,7 +6,7 @@ method's) is what `with`, `has`, `where_has` and `load` take. Foreign keys
 are typed columns, so a key of the wrong model doesn't compile. A model
 with relations derives `Default`.
 
-```rust
+```rust,ignore
 #[relations]
 impl Deal {
     pub fn company(&self) -> BelongsTo<Deal, Company> {
@@ -59,7 +59,7 @@ save.
 
 ## Eager loading (one query per relation)
 
-```rust
+```rust,ignore
 let deals = Deal::query()
     .with(Deal::company)             // a method: a typo doesn't compile
     .with("contact.company")         // nested: one query per level
@@ -86,7 +86,7 @@ let count: Option<i64> = deals[0].extra("activities_count")?;
 
 ## Filtering by relations
 
-```rust
+```rust,ignore
 Deal::query().has("activities");
 Deal::query().has_count("activities", ">=", 3);
 Deal::query().doesnt_have("activities");
@@ -102,7 +102,7 @@ polymorphic targets.
 
 ## Writing through relations
 
-```rust
+```rust,ignore
 let call = deal.activities().create(&uow, Activity { kind: "call".into(), ..Default::default() }).await?;
 deal.activities().save(&uow, &mut task).await?;      // sets deal_id, saves
 

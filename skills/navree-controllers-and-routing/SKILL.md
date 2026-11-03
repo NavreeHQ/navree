@@ -26,7 +26,7 @@ injected services.
 
 ## Template
 
-```rust
+```rust,ignore
 use std::sync::Arc;
 
 use navree::access::{Accessible, Authorized, Create, Delete, Read, Update};
@@ -213,7 +213,7 @@ refuses to boot with an undeclared hand-written route.
 
 ## Test
 
-```rust
+```rust,ignore
 use navree::prelude::*;
 use navree::testing::{TestApp, principal};
 use serde_json::{Value, json};

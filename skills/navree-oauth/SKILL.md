@@ -19,7 +19,7 @@ is in the code; when in doubt read `crates/navree-oauth/src` and the tests in
    `DatabaseModule`, `AuthModule`; `AccessModule` turns scopes into
    abilities):
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(CryptoModule::from_config())
@@ -60,7 +60,7 @@ permissions = ["deals.read"]         # navree-access permission strings, `deals.
    `--device`, `--trusted`, `--workspace <slug>`, `--introspect`,
    `--logo-url`, `--website`). Or from code:
 
-```rust
+```rust,ignore
 use navree::oauth::{NewClient, OAuthClients};
 
 let created = clients
@@ -123,7 +123,7 @@ The `oauth` strategy (after JWT) takes `Bearer nva_...` and `Bearer nvp_...`,
 sets `Principal::token_abilities` to the scopes' permissions, so existing
 `#[can]`, `#[permissions]`, `Accessible` checks narrow automatically.
 
-```rust
+```rust,ignore
 use navree::oauth::OAuthToken;
 
 #[post("/export")]
@@ -149,7 +149,7 @@ code: `pats.create(&uow, user_id, "CI", ["deals:read"], Some(Duration::from_secs
 
 ## Testing template
 
-```rust
+```rust,ignore
 use navree::oauth::testing::{authorize, pkce_pair, AuthorizeFlow};
 
 // Public client with one redirect URI; user_token is a first-party JWT.

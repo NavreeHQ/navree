@@ -20,7 +20,7 @@ facade). The docs page is
 1. Describe a row. Fields become columns in order:
 
 ```rust
-use navree::sheets::Exportable;
+use navree::sheets::{Cell, Exportable};
 
 #[derive(Exportable)]
 #[export(sheet = "Contacts")]              // the XLSX sheet name (default Sheet1)
@@ -37,6 +37,10 @@ struct ContactRow {
     #[export(skip)]
     internal_note: String,
 }
+
+fn cents_to_cell(cents: &i64) -> Cell {
+    Cell::Float(*cents as f64 / 100.0) // shown with two decimals; stored as cents
+}
 ```
 
    `IntoCell` covers strings, integers, floats, `bool`, chrono dates and
@@ -45,7 +49,7 @@ struct ContactRow {
 
 2. Return a `Download` from a handler:
 
-```rust
+```rust,ignore
 #[get("/export.csv")]
 #[permissions("contacts.export")]
 async fn export_csv(&self) -> Result<Download> {
@@ -66,7 +70,7 @@ async fn export_csv(&self) -> Result<Download> {
 3. For big exports, or ones a front end lists and runs by name, implement
    `Export` and register it with `m.export::<ContactsExport>()`:
 
-```rust
+```rust,ignore
 impl Export for ContactsExport {
     const NAME: &'static str = "contacts";       // GET/POST /api/exports/contacts
     type Row = ContactRow;
@@ -99,6 +103,10 @@ impl Export for ContactsExport {
    columns.
 
 ```rust
+use navree::sheets::Importable;
+use navree::validation::Validate;
+use serde::Deserialize;
+
 #[derive(Deserialize, Validate, Importable)]
 struct ContactInput {
     #[import(header = "Email", aliases = ["E-mail", "Email address"])]
@@ -117,7 +125,7 @@ struct ContactInput {
 2. Implement `Import` and register it with `m.importer::<ContactsImport>()`
    (it is a provider of your module, so it can hold `Arc<Db>` and services):
 
-```rust
+```rust,ignore
 impl Import for ContactsImport {
     const NAME: &'static str = "contacts";     // `importer` of uploads; permission "contacts.import"
     type Row = ContactInput;
@@ -183,7 +191,7 @@ impl Import for ContactsImport {
 
 ## Testing templates
 
-```rust
+```rust,ignore
 let app = TestApp::builder()
     .temp_database()
     .config("queue.driver", "memory")

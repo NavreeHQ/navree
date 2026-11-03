@@ -26,7 +26,7 @@ anything, and refuses to start with an error naming the module and type.
 
 ## Define a module
 
-```rust
+```rust,ignore
 use navree::prelude::*;
 
 use crate::modules::companies::{CompaniesModule, CompanyService};
@@ -83,7 +83,7 @@ infrastructure.
 
 ## Providers
 
-```rust
+```rust,ignore
 #[injectable]
 pub struct ReportService {
     repo: Arc<ReportRepository>,                 // dependency: the provider of the type
@@ -108,7 +108,7 @@ pub struct RequestCache {
   request-scoped provider (boot error "scope inversion").
 - Register other kinds in `wire`:
 
-```rust
+```rust,ignore
 fn wire(&self, m: &mut ModuleBuilder) {
     m.value(DefaultCurrency("EUR"))                              // an existing value
         .value_arc::<dyn Clock>(Arc::new(SystemClock))           // a trait object
@@ -136,7 +136,7 @@ instance has the same identity as `X` and wins everywhere, so **configure
 each module once, in the root, and import it by type elsewhere**. Writing
 your own:
 
-```rust
+```rust,ignore
 use navree::ModuleId;
 use navree::config::ConfigSection;
 use navree::prelude::*;
@@ -219,7 +219,7 @@ register something with module `X`, as in
 
 ## Test
 
-```rust
+```rust,ignore
 #[test]
 fn the_graph_is_valid() {
     let report = Navree::app().module(DealsModule).validate().expect("valid graph");

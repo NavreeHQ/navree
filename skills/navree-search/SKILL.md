@@ -19,7 +19,7 @@ Everything below is in the code; when in doubt read
 navree = { git = "https://github.com/NavreeHQ/navree", features = ["search"] }
 ```
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(DatabaseModule::from_config())
@@ -42,7 +42,10 @@ sync = "queued"            # queued | inline | off
    `Serialize` and have a single-column primary key):
 
 ```rust
+use chrono::{DateTime, Utc};
 use navree::search::Searchable;
+use serde::Serialize;
+use uuid::Uuid;
 
 #[derive(Model, Searchable, Clone, Debug, Default, Serialize)]
 #[model(table = "contacts", subject = "Contact")]
@@ -86,7 +89,7 @@ pub struct ContactsModule;
 A `Record<M>` dereferences to the model (`deal.title`). Read related rows
 through `ctx.uow()`, the unit of work the sync reads in.
 
-```rust
+```rust,ignore
 use navree::orm::{Model, Record};
 
 impl Searchable for Deal {
@@ -132,7 +135,7 @@ When the related row changes (a company rename), re-sync the dependents:
 
 ## Template: a search endpoint
 
-```rust
+```rust,ignore
 #[injectable]
 pub struct ContactSearchController {
     search: Arc<Search>,
@@ -163,7 +166,7 @@ Other terminal calls: `.hits(page)` (a `Page<Hit<Record<M>>>`: records with
 filters: `.filter`, `.filter_not`, `.filter_in`, `.range(field, 10..)`,
 `.filter_null`, `.filter_by(Filter::Any(..))`. Several indexes at once:
 
-```rust
+```rust,ignore
 let hits = search
     .across("ada")
     .include::<Contact>(contacts_scope)
@@ -182,7 +185,7 @@ column; `#[searchable(workspace = "..")]` overrides it; by hand use
 it fails with
 `SearchError::WorkspaceRequired`:
 
-```rust
+```rust,ignore
 search.query::<Company>("acme").workspace(ws.id()).paginate(page).await?;
 ```
 
@@ -200,7 +203,7 @@ metric = "cosine"    # cosine | dot | euclidean
 
 Register an embeddings provider or the boot fails:
 
-```rust
+```rust,ignore
 impl Embeddings for MyEmbeddings {
     fn embed<'a>(&'a self, texts: &'a [String]) -> BoxFuture<'a, Result<Vec<Vec<f32>>, BoxError>> {
         Box::pin(async move { /* one vector of `dimensions` per text */ todo!() })
@@ -215,7 +218,7 @@ Then `search.similar::<M>(text).filter(..).limit(10).run()`,
 
 ## Testing
 
-```rust
+```rust,ignore
 let app = TestApp::builder()
     .temp_database()
     .config("search.engine", "memory")

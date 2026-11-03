@@ -60,7 +60,7 @@ pub fn partner_assertion(pem: &str, key_id: &str, now: i64) -> Result<String, Jo
    not checked: trust it for where it came from.
 2. Parse, verify, then read the claims, in that order:
 
-```rust
+```rust,ignore
 let jws = Jws::parse(token)?;            // refuses `none`, unknown algs, `crit`
 jws.verify(&key)?;                       // NoKey (wrong key type/alg) or BadSignature
 let claims: MyClaims = jws.claims()?;    // Payload when the JSON does not fit

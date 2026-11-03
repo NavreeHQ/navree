@@ -28,7 +28,7 @@ Everything below is in the code: when in doubt read
    lookups, request scopes, slugs in commands) and `AccessModule` (the
    `settings.manage` check on global writes) are picked up when present:
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(DatabaseModule::from_config())
@@ -80,7 +80,7 @@ impl Default for PortalSettings {
 
 4. Register it in the module that owns it:
 
-```rust
+```rust,ignore
 #[module(
     imports = [SettingsModule::for_feature::<PortalSettings>()],
     providers = [PortalService],
@@ -93,7 +93,7 @@ pub struct PortalModule;
 
 ## Reading
 
-```rust
+```rust,ignore
 // In a handler: resolved for the request's user, workspace and its organization.
 #[get("/home")]
 #[authenticated]
@@ -121,7 +121,7 @@ none, gives guests the global values, and checks no permission.
 
 ## Writing
 
-```rust
+```rust,ignore
 settings.update::<PortalSettings>(&uow, Scope::workspace(acme.id), json!({"welcome_text": "Hi"})).await?;
 settings.inherit::<PortalSettings>(&uow, Scope::workspace(acme.id), "welcome_text").await?;
 settings.reset::<PortalSettings>(&uow, Scope::workspace(acme.id)).await?;
@@ -178,7 +178,7 @@ edits a level named by id or slug, saves only the changed fields, and has an
 
 App test on the database store:
 
-```rust
+```rust,ignore
 let app = TestApp::builder()
     .temp_database()
     .module(DatabaseModule::from_config())
@@ -195,7 +195,7 @@ uow.commit().await.unwrap();
 Unit test with the fake (real resolution and validation, in memory, no
 registration):
 
-```rust
+```rust,ignore
 let fake = SettingsFake::new().attach(acme, holding);      // workspace → organization
 fake.set::<PortalSettings>(Scope::organization(holding), json!({"show_leaderboard": true}))
     .await

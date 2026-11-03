@@ -21,7 +21,7 @@ facade). The docs pages are
    `EventsModule`; `QueueModule` and `ScheduleModule` in production).
 2. Write the input type and the function:
 
-```rust
+```rust,ignore
 use std::time::Duration;
 
 use navree::prelude::*;
@@ -53,7 +53,7 @@ pub async fn onboarding(ctx: WorkflowCtx, input: Onboarding) -> Result<bool, Box
 
 3. Register it and the events it waits for, in the owning module:
 
-```rust
+```rust,ignore
 #[module(imports = [WorkflowsModule::for_feature::<Onboarding>()], register = Self::workflows)]
 pub struct LearningModule;
 
@@ -102,7 +102,7 @@ has runs waiting.
 
 ## Steps: add automation blocks
 
-```rust
+```rust,ignore
 use navree::workflows::{AutomationCtx, action, condition, trigger};
 use navree::openapi::ToSchema;
 

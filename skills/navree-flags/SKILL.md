@@ -33,7 +33,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", features = ["flags"] }
    (audit entries), `EventsModule` (`flag.changed`) and `WorkspaceModule`
    (request workspaces, slugs in commands) are picked up when present:
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(DatabaseModule::from_config())
@@ -67,7 +67,7 @@ pub struct DealExport;
 
 4. Register each flag in the module that owns it:
 
-```rust
+```rust,ignore
 #[module(
     imports = [
         FlagsModule::for_feature::<NewPipeline>(),
@@ -87,7 +87,7 @@ pub struct DealsModule;
 In a handler, take `CurrentFlags` (the signed-in user and, when the request
 names a workspace the user belongs to, that workspace; memoized per request):
 
-```rust
+```rust,ignore
 use navree::flags::CurrentFlags;
 
 #[get("/board")]
@@ -108,7 +108,7 @@ answers 404 (or 403 with `status = 403`) before `#[can]`, other guards,
 extractors and the handler; authentication still runs first, so a guest on an
 authenticated route gets 401. OpenAPI shows `x-navree-flag: new-pipeline`.
 
-```rust
+```rust,ignore
 #[get("/forecast")]
 #[can(Read, Deal)]
 #[requires_flag(NewPipeline)]            // or #[requires_flag(NewPipeline, status = 403)]
@@ -120,7 +120,7 @@ On a hand-written `RouteDef`: `navree::flags::requires_flag::<NewPipeline>(route
 
 Anywhere else, inject `Arc<Flags>` and pass a scope:
 
-```rust
+```rust,ignore
 use navree::flags::{FlagScope, Flags};
 
 #[injectable]
@@ -162,7 +162,7 @@ neither (jobs, commands) is decided by 1, 4 and 6 only; with
 
 ## Changing flags
 
-```rust
+```rust,ignore
 use navree::flags::{FlagScope, Flags, Rollout};
 
 flags.activate::<NewPipeline>(FlagScope::workspace(acme.id)).await?;   // override
@@ -193,7 +193,7 @@ let state = flags.state::<NewPipeline>().await?; // FlagState { everyone, rollou
   outside. With billing, read the workspace's local subscription copy (the
   same code runs in `crates/navree/tests/flags.rs`, `with_billing`):
 
-```rust
+```rust,ignore
 use navree::BoxFuture;
 use navree::billing::{BillableRef, Billing, Subscription, WORKSPACE_BILLABLE};
 use navree::flags::PlanResolver;
@@ -238,7 +238,7 @@ m.plan_resolver::<SubscriptionPlans>();
 
 The memory store, with the flags each test needs:
 
-```rust
+```rust,ignore
 use navree::access::AccessService;
 use navree::db::Db;
 use navree::flags::{FlagScope, Flags};
@@ -277,7 +277,7 @@ async fn the_forecast_is_hidden_until_the_new_pipeline_is_on() {
 
 A `FlagsFake` answers what it is told, whatever the scope, and records checks:
 
-```rust
+```rust,ignore
 use navree::flags::FlagsFake;
 
 let fake = FlagsFake::new().on::<NewPipeline>().off::<AiSummaries>();

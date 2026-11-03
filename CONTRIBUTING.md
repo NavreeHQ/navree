@@ -518,6 +518,7 @@ allowlisted: revoke and rotate it, then tell security@navree.com.
 | `apps/website` | navree.com and the documentation |
 | `packages/js` | The front-end npm packages: `@navree/client`, `@navree/bff`, `@navree/next`, `@navree/nuxt`, `@navree/theme` |
 | `skills/` | The agent skills, one `SKILL.md` per directory |
+| `crates/skill-snippets` | Compiles the skills' Rust blocks against the current `navree` crate and checks their fences, links and line endings (`cargo test -p skill-snippets`) |
 | `bench/` | The performance harness behind navree.com/performance |
 | `fuzz/` | Fuzz targets for the parsers of untrusted input (its own workspace) |
 | `supply-chain/`, `deny.toml`, `.semgrep/`, `.github/` | The supply-chain, static-analysis and CI configuration |

@@ -20,6 +20,12 @@ use std::time::Duration;
 use navree::cache::{Cache, CacheError, Ttl};
 use navree::prelude::*;
 
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct Totals {
+    pub open_deals: u64,
+    pub pipeline_cents: i64,
+}
+
 #[injectable]
 pub struct PipelineService {
     cache: Arc<Cache>,
@@ -54,7 +60,7 @@ impl PipelineService {
 Values must be `Serialize + Deserialize`. Errors are `CacheError` (a 500 via
 `?`). A per-user limit with counters:
 
-```rust
+```rust,ignore
 let key = format!("exports:{user_id}");
 cache.add(&key, &0, Duration::from_secs(86_400)).await?; // opens a 24-hour window
 if cache.increment(&key, 1).await? > 10 {
@@ -64,7 +70,7 @@ if cache.increment(&key, 1).await? > 10 {
 
 ## Locks
 
-```rust
+```rust,ignore
 use navree::cache::Locks;
 
 let lock = self.locks.lock("imports:acme", Duration::from_secs(120)); // TTL longer than the work
@@ -99,7 +105,7 @@ For per-process data on a hot path, use `navree::bounded::Cache<K, V>`
 (`V: Clone`; store an `Arc` for large values). It is always bounded, sharded,
 and needs no module:
 
-```rust
+```rust,ignore
 use navree::bounded::Cache;
 
 let rates: Cache<String, Rate> = Cache::builder(1_000) // capacity: required
@@ -121,7 +127,7 @@ stored). There is no iteration and no eviction listener.
 
 ## HTTP client
 
-```rust
+```rust,ignore
 use std::time::Duration;
 
 use http::StatusCode;
@@ -189,7 +195,7 @@ endpoint) against the SSRF policy without sending anything.
 
 ## Test with the fake
 
-```rust
+```rust,ignore
 use http::Method;
 use navree::http_client::{FakeResponse, HttpClient};
 use navree::prelude::*;

@@ -8,7 +8,7 @@ keys) as regular tables.
 
 ## In a migration
 
-```rust
+```rust,ignore
 schema
     .create_hypertable("events", "occurred_at", |t| {
         t.uuid_primary();                       // widened to (id, occurred_at)
@@ -61,7 +61,7 @@ whole chunks. Tune them in an app migration:
 
 ## Pruning in code
 
-```rust
+```rust,ignore
 use navree::db::prune_time_series;
 
 // Inside a transaction: count, drop the chunks before the cutoff, delete the rest.
@@ -73,7 +73,7 @@ ones. On anything but a TimescaleDB hypertable it is one `DELETE`.
 
 ## Queries
 
-```rust
+```rust,ignore
 use navree::orm::{Expr, col, table};
 
 let points = table("readings")
@@ -91,7 +91,7 @@ aligned like TimescaleDB's (Monday 2000-01-03).
 
 ## Continuous aggregates
 
-```rust
+```rust,ignore
 schema
     .create_continuous_aggregate(
         ContinuousAggregate::over("events_daily", "events")

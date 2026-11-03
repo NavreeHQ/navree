@@ -43,7 +43,7 @@ captured from the current `TelemetryContext`. Records serialize with a
 1. Implement `TelemetrySink`. Declare the kinds you want in `interest`
    (default: all); `record` gets each record:
 
-```rust
+```rust,ignore
 use navree::prelude::*;
 use navree::telemetry::{EventKind, Interest, TelemetryEvent, TelemetryRecord, TelemetrySink};
 
@@ -75,7 +75,7 @@ impl TelemetrySink for JobFailureMetrics {
    Each imports `TelemetryModule` (global) for you; the trait comes with
    `navree::prelude::*`:
 
-```rust
+```rust,ignore
 #[module(register = Self::wire)]
 pub struct MonitoringModule;
 
@@ -91,7 +91,7 @@ impl MonitoringModule {
    task. `record` runs on the emitting task, inside a request, a query or
    a log call:
 
-```rust
+```rust,ignore
 use tokio::sync::mpsc;
 
 /// Hands every record but log lines to a background task; never blocks.
@@ -126,7 +126,7 @@ Inside a request, job or scheduled task, `Telemetry::current()` is the app's
 registry. `report_exception` records the error, its source chain and the
 caller's `file:line:column`:
 
-```rust
+```rust,ignore
 use navree::telemetry::Telemetry;
 
 if let Err(error) = sync_calendar(&user).await {
@@ -167,7 +167,7 @@ kept), and queued jobs store the dispatching span in `jobs.trace_parent`
 `TelemetryContext` is task-local. Wrap spawned work so its queries, calls
 and log lines stay in the request's trace and carry its request id:
 
-```rust
+```rust,ignore
 use navree::telemetry::TelemetryContext;
 
 tokio::spawn(TelemetryContext::propagate(async move {
@@ -183,7 +183,7 @@ context.
 
 Events, with `TelemetryRecorder` (from `navree::telemetry`):
 
-```rust
+```rust,ignore
 use http::Method;
 use navree::http_client::{FakeResponse, HttpClient};
 use navree::prelude::*;

@@ -182,7 +182,7 @@ builds from them. The schema's `paths` type goes to
 
 ## Test
 
-```rust
+```rust,ignore
 #[tokio::test]
 async fn notes_are_documented() {
     let app = TestApp::builder()

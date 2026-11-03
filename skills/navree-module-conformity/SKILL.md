@@ -22,7 +22,7 @@ workspace's records. Three tools prove it:
 
 1. Classify every workspace table (model) in the module's `register`:
 
-   ```rust
+   ```rust,ignore
    m.workspace_scoped::<Deal>()        // workspace model and access subject (record checks by id)
        .workspace_entity::<DealNote>()  // workspace model, not an access subject
        .global_entity::<Currency>()     // one set of rows for every workspace
@@ -88,7 +88,7 @@ only looks for code that leaves its scope.
 
 ## Isolation suites
 
-```rust
+```rust,ignore
 use navree::testing::TestApp;
 use navree::workspace::testing::IsolationSuiteExt;
 use serde_json::json;
@@ -139,7 +139,7 @@ a valid `.body`) or a 401 (no test authenticator) fails the route, and
 
 ## A check of your own
 
-```rust
+```rust,ignore
 use navree::contracts::{CheckOutcome, ConformityCheck, Finding, ModuleBuilderConformityExt};
 
 m.conformity_check(ConformityCheck::new(

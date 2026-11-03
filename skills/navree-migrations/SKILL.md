@@ -122,7 +122,7 @@ impl navree::schema::Migration for Migration {
 
 ## The module's set
 
-```rust
+```rust,ignore
 // src/modules/deals/migrations/mod.rs
 use navree::db::MigrationSet;
 use navree::schema::migration;
@@ -158,7 +158,7 @@ change per migration or make `up` re-runnable. Statements that can't run in
 a transaction (an index's `.online()`, `CREATE INDEX CONCURRENTLY`;
 refreshing a continuous aggregate) need:
 
-```rust
+```rust,ignore
 impl navree::schema::Migration for Migration {
     fn within_transaction(&self) -> bool {
         false
@@ -204,7 +204,7 @@ builder.
 
 ## In tests
 
-```rust
+```rust,ignore
 use navree::db::{MigrateOptions, Migrator};
 
 let report = Migrator::run(app.ctx(), &MigrateOptions { pretend: true, ..Default::default() }).await?;

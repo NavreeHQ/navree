@@ -28,7 +28,7 @@ Navigator (`navree mcp`), configured by nothing in the app.
 2. Add the module in `src/app.rs` (after `HttpModule`, `DatabaseModule`,
    `AuthModule`, `AccessModule`):
 
-   ```rust
+   ```rust,ignore
    .module(McpModule::from_config()) // section `mcp`; serves /mcp and mcp:serve
    ```
 
@@ -53,7 +53,7 @@ prompt), `apps/crm-api/crates/crm-activities/src/mcp.rs` (`ActivitiesMcp`:
 below calls service methods of your own (`DealService::list`, `rename`,
 `pdf`):
 
-```rust
+```rust,ignore
 use navree::mcp::{McpContext, PromptMessage, ResourceContents, mcp_server};
 use navree::prelude::*;
 use serde::Deserialize;
@@ -161,7 +161,7 @@ client cancelled; the call's future is also dropped at its next `.await`).
 
 Inject `Arc<McpNotifier>`:
 
-```rust
+```rust,ignore
 self.notifier.resource_updated(format!("crm://deals/{}", deal.id)).await; // subscribed sessions
 self.notifier.tools_changed().await; // every open session; also resources_changed(), prompts_changed()
 ```
@@ -199,7 +199,7 @@ Code: `McpModule::for_root(McpOptions { name: Some("crm".into()), ..McpOptions::
 
 ## Testing
 
-```rust
+```rust,ignore
 use navree::mcp::testing::McpTestClient;
 use navree::testing::{TestApp, principal};
 use serde_json::json;

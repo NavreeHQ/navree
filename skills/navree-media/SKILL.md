@@ -30,7 +30,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", features = ["media"] } # 
    database). `QueueModule` makes conversions run on a worker; without it
    they run while the file is added:
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(HttpModule::from_config())
@@ -44,7 +44,7 @@ Navree::app()
 
 3. Implement `HasMedia` on the model and declare its collections:
 
-```rust
+```rust,ignore
 use navree::media::{Conversion, Fit, HasMedia, MediaCollections, OutputFormat};
 
 impl HasMedia for Course {
@@ -77,7 +77,7 @@ impl HasMedia for Course {
 
 5. Add files from a handler with `Arc<Media>` and the request's `Uow`:
 
-```rust
+```rust,ignore
 let field = form.next_field().await?.ok_or_else(|| AppError::bad_request("thumbnail should not be empty"))?;
 let file_name = field.file_name().unwrap_or("thumbnail").to_owned();
 let bytes = field.bytes().await?;
@@ -191,7 +191,7 @@ below its width), `nonqueued()` / `queued()`, and with `media-ffmpeg`
 
 ## Testing
 
-```rust
+```rust,ignore
 let fake = MediaFake::new().register::<Course>(); // memory disk `media`, memory rows, conversions at once
 let app = TestApp::builder()
     .temp_database()

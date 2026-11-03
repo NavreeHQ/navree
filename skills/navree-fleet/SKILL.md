@@ -20,7 +20,7 @@ with `FakeSpawner`, in-process workers, dashboard, commands, gauges) and
 1. Add the module after `QueueModule` (database driver; `fleet` refuses
    `queue.driver = "memory"`):
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(HttpModule::from_config())
@@ -93,7 +93,7 @@ mail = 30
 
 ## The Fleet service
 
-```rust
+```rust,ignore
 use navree::fleet::{Fleet, MetricsPeriod};
 
 let fleet = ctx.get::<Fleet>().await?;
@@ -139,7 +139,7 @@ let charts = fleet.metrics(MetricsPeriod::Hour).await?;
 
 ## Long-wait alerts
 
-```rust
+```rust,ignore
 #[injectable]
 pub struct PageOnCall { /* ... */ }
 
@@ -166,7 +166,7 @@ A running master emits it (needs `EventsModule`) at most once per queue per
   avg_runtime_ms)` and `Supervisor::resolve(name, &SupervisorOptions, &queue_options)`.
 - A master without processes:
 
-```rust
+```rust,ignore
 use navree::fleet::testing::FakeSpawner;
 use navree::fleet::{ExitReason, Master, MasterSettings, WorkerCommand};
 

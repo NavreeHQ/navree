@@ -47,7 +47,7 @@ their customers. All of it is in the `mail` facade feature.
 
 ## Tenant transports
 
-```rust
+```rust,ignore
 use navree::mail::{TransportConfig, TransportOwner, TransportResolver};
 
 // body: a transport's table form, e.g. {"type": "smtp", "url": "smtps://..."}
@@ -104,7 +104,7 @@ networks. Also `get`, `list`, `config(id)`, `set_enabled`, `remove`,
 
 ## Test
 
-```rust
+```rust,ignore
 let fake = MailFake::new();
 let app = TestApp::builder()
     .temp_database()

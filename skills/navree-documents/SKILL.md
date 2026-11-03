@@ -30,7 +30,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", features = ["documents"] 
    `queue`; `QueueModule` makes `queue` run on a worker (without it `queue`
    renders at once):
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(HttpModule::from_config())
@@ -50,6 +50,7 @@ Navree::app()
 
 ```rust
 use navree::documents::{Documents, Download};
+use serde_json::json;
 
 #[injectable]
 pub struct CertificatesController {
@@ -150,7 +151,7 @@ line breaking, krilla PDF). It reads this subset and skips everything else:
 
 ## Building a PDF in code
 
-```rust
+```rust,ignore
 use navree::documents::native::{Align, Cell, List, Paragraph, Run, Table};
 use navree::documents::PdfDocument;
 
@@ -211,7 +212,7 @@ renders templates (`render`, `render_html`) and documents (`render_document`).
 
 ## Editing PDFs and reading them
 
-```rust
+```rust,ignore
 use navree::documents::{Pages, Pdf, Position, Render, Stamp};
 
 let both = Pdf::merge([&invoice, &terms])?;                          // page by page
@@ -288,7 +289,7 @@ structure), so many ordinary files merge and a few near the limit do not.
 
 ## Word documents
 
-```rust
+```rust,ignore
 use navree::documents::Docx;
 use navree::documents::docx::{Align, Image, Paragraph, Run, Table};
 
@@ -323,7 +324,7 @@ synchronous CPU work, seconds at the limits: run a client's file with
 
 ## Saving and queueing
 
-```rust
+```rust,ignore
 let stored = documents.save(&render, "reports/q3.pdf").await?;          // documents.disk or the default disk
 let link = stored.temporary_url(Utc::now() + Duration::hours(1)).await?;
 
@@ -346,7 +347,7 @@ match documents.status(&queued).await? {
 
 ### Behind an operation (what users follow)
 
-```rust
+```rust,ignore
 // needs QueueModule + DatabaseModule; facade: `documents` (opt-in) + `queue` (in `full`)
 #[post("/audit")]
 #[authenticated]
@@ -372,7 +373,7 @@ async fn export(&self, uow: Uow, CurrentPrincipal(me): CurrentPrincipal, Json(in
 
 ## Templates shipped by a module
 
-```rust
+```rust,ignore
 #[module(controllers = [CertificatesController], register = Self::wire)]
 pub struct CertificatesModule;
 
@@ -393,7 +394,7 @@ A file at the same path in a template directory overrides the embedded one.
 Assert on the text; the native engine renders fast enough for unit and HTTP
 tests:
 
-```rust
+```rust,ignore
 let response = app.client().get("/api/v1/certificates/Ada").send().await.assert_status(200);
 let pdf = Pdf::from_bytes(response.bytes().clone()).unwrap();
 assert!(pdf.text().unwrap().contains("Ada"));
@@ -402,7 +403,7 @@ assert!(pdf.text().unwrap().contains("Ada"));
 For RTL output compare `pdf.text()` with a golden file. When the document is
 not under test, install the fake:
 
-```rust
+```rust,ignore
 use navree::documents::DocumentsFake;
 
 let fake = DocumentsFake::new(); // with_templates(templates) to require existing names

@@ -9,7 +9,7 @@ A coding agent knows Rust. It doesn't know that a Navree route without an access
 
 A skill is a folder with a `SKILL.md` file: YAML front-matter with a `name` and a `description` that says when to use it, then the steps, the commands, a code template, the checks to run and the mistakes to avoid for one task. Agents that support skills, Claude Code and a growing list of others, read every skill's description when a session starts and load a skill's body only when the task matches. A project can carry every Navree skill for the cost of a few lines each.
 
-The skills live in the [`skills/`](https://github.com/NavreeHQ/navree/tree/main/skills) directory of the Navree repository. Every API a skill names exists in the framework, and its code templates compile against the current `navree` crate.
+The skills live in the [`skills/`](https://github.com/NavreeHQ/navree/tree/main/skills) directory of the Navree repository. Every API a skill names exists in the framework, and every Rust block not marked `rust,ignore` compiles against the current `navree` crate: a test in the repository builds them.
 
 ## The skills
 

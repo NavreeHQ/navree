@@ -34,7 +34,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", features = ["micro", "mic
 
 3. Write the handlers:
 
-```rust
+```rust,ignore
 use navree::micro::MessageContext;
 use navree::prelude::*;
 
@@ -86,7 +86,7 @@ impl DealsHandlers {
 4. Register in the feature module, and add `MicroModule` to the root
    (global: modules inject `Arc<ServiceClient>` without importing it):
 
-```rust
+```rust,ignore
 impl DealsModule {
     fn wire(&self, m: &mut ModuleBuilder) {
         m.message_handlers::<DealsHandlers>()
@@ -142,7 +142,7 @@ timeout_secs = 120
 
 Calling another service from a route or a handler:
 
-```rust
+```rust,ignore
 let deal: DealView = self.client.send("deals.get", &GetDeal { id }).await?;   // MicroError -> AppError via ?
 let quote: Value = self.client
     .send("pricing.quote", &input)
@@ -156,7 +156,7 @@ self.client.emit("security.login_failed", &alert).immediately().await?; // skip 
 
 Matching remote failures:
 
-```rust
+```rust,ignore
 match self.client.send::<_, DealView>("deals.get", &GetDeal { id }).await {
     Ok(deal) => Some(deal),
     Err(MicroError::Remote(e)) if e.status() == StatusCode::NOT_FOUND => None, // e.message(), e.errors(), e.body()
@@ -173,7 +173,7 @@ url = "billing.internal:4000"
 request_timeout_ms = 2000
 ```
 
-```rust
+```rust,ignore
 Navree::app().module(MicroModule::from_config().client("billing")) // for_root registers options.clients itself
 #[injectable]
 pub struct InvoiceService {
@@ -184,7 +184,7 @@ pub struct InvoiceService {
 
 Tests with `MicroFake` (in-memory broker, instant retries):
 
-```rust
+```rust,ignore
 use navree::micro::{MicroFake, Reply};
 use navree::testing::{TestApp, principal};
 

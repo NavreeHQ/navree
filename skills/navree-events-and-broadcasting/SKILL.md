@@ -82,7 +82,7 @@ impl Listener<DealWon> for NotifyOwner {
 }
 ```
 
-```rust
+```rust,ignore
 impl DealsModule {
     fn wire(&self, m: &mut ModuleBuilder) {
         m.listen::<DealWon, CountWins>()       // registers the provider and subscribes it
@@ -95,7 +95,7 @@ impl DealsModule {
 
 Emit (never from a constructor):
 
-```rust
+```rust,ignore
 self.events.emit(DealWon { deal_id, title, owner_id }).await?; // events: Arc<EventBus>
 ```
 
@@ -192,7 +192,7 @@ pusher.subscribe("private-deals").bind("deal.updated", (payload) => { /* ... */ 
 
 ## Test
 
-```rust
+```rust,ignore
 let fake = QueueFake::new();
 let app = TestApp::builder()
     .temp_database()                       // a SQLite file: needs the `sqlite` feature in dev-dependencies

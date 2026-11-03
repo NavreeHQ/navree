@@ -186,7 +186,7 @@ url = "mysql://reader:secret@127.0.0.1:3307/old_app_copy"
 max_connections = 2
 ```
 
-```rust
+```rust,ignore
 use std::collections::HashMap;
 
 use chrono::{DateTime, NaiveDate, Utc};

@@ -36,7 +36,7 @@ An unknown zone or country fails the boot naming the key.
 
 ## Zones
 
-```rust
+```rust,ignore
 use navree::time::Zone;
 
 let zone = Zone::parse("Asia/Calcutta")?;          // any case, trimmed
@@ -55,7 +55,7 @@ let at = zone.to_utc(naive_local);                 // gap: moves forward; repeat
 
 ## The request's zone
 
-```rust
+```rust,ignore
 #[get("/reports/signups")]
 #[authenticated]
 async fn signups(
@@ -87,7 +87,7 @@ async fn signups(
 
 ## Users' zones (a source)
 
-```rust
+```rust,ignore
 impl ZoneSource for UserZones {
     fn level(&self) -> ZoneLevel { ZoneLevel::User }
     fn zone_of_request<'a>(&'a self, request: &'a mut ZoneRequest<'_>)
@@ -111,7 +111,7 @@ Return the raw stored values (`ZoneOwner { id, zone, country }`);
 
 ## Reports in SQL
 
-```rust
+```rust,ignore
 use navree::db::{Executor, Statement};
 
 let sql = zone.sql(Executor::backend(&db)).within(from, to);
@@ -136,7 +136,7 @@ inlined as a literal (safe: checked name), so the expression can repeat in
 
 ## Send windows and holidays
 
-```rust
+```rust,ignore
 let window = SendWindow::weekdays()            // or working_days_in("SA"), on(&[..]), always()
     .between("09:00", "17:00")                 // panics on bad literals; try_between for input
     .except(zones.holidays());                 // Holidays::for_country("GB"), with_days([..])
@@ -150,7 +150,7 @@ only; lunar and one-off holidays are not computed). Add days with
 
 ## Schedules on local clocks
 
-```rust
+```rust,ignore
 m.schedule(|s| {
     s.command("reports:close-day", &[]).daily_at("02:00").in_zone("Europe/London");
     s.command("crm:task-reminders", &[]).daily_at("08:00").in_default_zone();
@@ -178,7 +178,7 @@ A workspace without either follows its organization's zone.
 
 ## Testing
 
-```rust
+```rust,ignore
 let users = ZonesFake::new(ZoneLevel::User).owner(ZoneOwner::new(user).zone("Asia/Kolkata"));
 let workspaces = ZonesFake::new(ZoneLevel::Workspace)
     .header("X-Workspace")                    // request owner id from this header

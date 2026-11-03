@@ -140,7 +140,7 @@ Three requests: the browser declares type and size, the app signs a link;
 the browser `PUT`s the file to it; the browser reports it done, the app
 checks it.
 
-```rust
+```rust,ignore
 use chrono::Duration;
 use navree::http::CurrentPrincipal;
 use navree::prelude::*;
@@ -192,7 +192,7 @@ async fn complete(&self, CurrentPrincipal(me): CurrentPrincipal, Json(done): Jso
 
 ## Serve files
 
-```rust
+```rust,ignore
 use navree::http::body::Body;
 use navree::http::response::{IntoResponse, Response};
 
@@ -227,7 +227,7 @@ returns a `SyncReport` (`copied`, `deleted`, `unchanged`, `bytes`,
 
 ## Test
 
-```rust
+```rust,ignore
 use navree::prelude::*;
 use navree::storage::{DiskConfig, Storage, StorageOptions};
 use navree::testing::TestApp;

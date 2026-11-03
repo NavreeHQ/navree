@@ -22,13 +22,13 @@ to users, an **ability** is one user's compiled rules.
    `navree make:module` already does both). A navree-orm model is a subject
    through its attribute (`policy = ..` adds its rules and implies `subject`):
 
-```rust
+```rust,ignore
 #[derive(Model, Clone, Debug, Default, Serialize)]
 #[model(table = "posts", subject = "Post", permission_prefix = "posts")] // rules and __type name it; posts.read, posts.*, ...
 pub struct Post { /* columns */ }       // `#[can(Read, Post)]`, `Authorized<Post, Update>`
 ```
 
-```rust
+```rust,ignore
 #[module(
     imports = [AccessModule::for_feature::<Post>()], // record loading + prefix mapping
     providers = [PostService],
@@ -57,7 +57,7 @@ pub struct PostsModule;
 
 ## Routes
 
-```rust
+```rust,ignore
 #[controller("/posts", version = "1")]
 impl PostController {
     #[get("/")]
@@ -117,7 +117,7 @@ impl Subject for Report {
 
 ## The abilities function (`src/abilities.rs`)
 
-```rust
+```rust,ignore
 use navree::access::{AbilityCtx, CREATE, DELETE, READ, Rules, UPDATE, field};
 
 use crate::modules::posts::PUBLISH;
@@ -175,7 +175,7 @@ navree access:explain <user-id> publish Post [post-id]   # which rule decides
 
 In code (seeders, commands, admin screens), with a unit of work:
 
-```rust
+```rust,ignore
 let uow = db.uow(None, None).await;
 access.create_role(&uow, "editor", Some("Publishes anyone's posts")).await?;
 access.grant(&uow, "editor", "posts.publish").await?;
@@ -193,7 +193,7 @@ aren't seen until `AbilityFactory::clear_cache()` or a restart.
 
 ## Test the rules as a function
 
-```rust
+```rust,ignore
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;

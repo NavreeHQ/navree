@@ -23,7 +23,7 @@ Stripe and Paddle against a mock server).
 navree = { git = "https://github.com/NavreeHQ/navree", features = ["billing"] }
 ```
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(CryptoModule::from_config())
@@ -66,7 +66,7 @@ APP_BILLING__STRIPE__WEBHOOK_SECRET=whsec_...
 3. Register the billable in the module that owns billing, and write the
    upgrade route (or use the built-in `POST /api/billing/checkout`):
 
-```rust
+```rust,ignore
 use navree::billing::{Billing, CheckoutUrl};
 use navree::prelude::*;
 use navree::workspace::{CurrentWorkspace, Workspace};
@@ -113,7 +113,7 @@ impl UpgradeController {
    valid subscription or trial) or `billing.subscribed(&ws, "pro").await?`.
    The front end maps the error body's `code` to its upgrade prompt.
 
-```rust
+```rust,ignore
 #[post("/{id}/summary")]
 #[authenticated]
 async fn summarize(&self, subscription: Subscribed, Path(id): Path<Uuid>) -> Result<Json<Summary>> {
@@ -133,7 +133,7 @@ it on routes.
 
 ## The service (`Arc<Billing>`; every method takes `&impl AsBillable`)
 
-```rust
+```rust,ignore
 billing.checkout(&ws, "pro")            // builder: yearly() monthly() interval(i) trial_days(n)
     .quantity(3).coupon("LAUNCH")       //   allow_promotion_codes() customer_email(e)
     .metadata("source", "pricing")      //   success_url(u) cancel_url(u)
@@ -202,7 +202,7 @@ the workspace (owner has it; grant admins via
 
 ## Testing template
 
-```rust
+```rust,ignore
 let app = TestApp::builder()
     .temp_database()
     .fake_auth()

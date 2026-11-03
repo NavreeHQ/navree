@@ -20,7 +20,7 @@ when in doubt read `crates/navree-webhooks/src` and its tests in
    secrets at rest (without it they are stored as they are, with a warning).
    The routes (on by default) need `AccessModule` and an authenticator:
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(CryptoModule::from_config())
@@ -38,7 +38,7 @@ Navree::app()
 2. Implement `WebhookEvent` for the event (it already implements
    `navree::events::Event`; its `NAME` is the webhook type):
 
-```rust
+```rust,ignore
 use navree::BoxFuture;
 use navree::prelude::*;
 use navree::webhooks::{WebhookContext, WebhookEvent};
@@ -65,7 +65,7 @@ impl WebhookEvent for DealWon {
 
 3. Register it in the module that owns the event:
 
-```rust
+```rust,ignore
 #[module(imports = [WebhooksModule::for_feature::<DealWon>()], providers = [DealService])]
 pub struct DealsModule;
 ```
@@ -79,7 +79,7 @@ pub struct DealsModule;
 
 5. Webhooks that are not events: register the name, then dispatch by name.
 
-```rust
+```rust,ignore
 impl ExportsModule {
     fn wire(&self, m: &mut ModuleBuilder) {
         m.webhook_type("export.ready", "A CSV export finished.");
@@ -95,7 +95,7 @@ let message_id = webhooks
 
 ## Endpoints
 
-```rust
+```rust,ignore
 use navree::webhooks::{EndpointChanges, NewEndpoint, Webhooks};
 
 let created = webhooks
@@ -182,7 +182,7 @@ false` or the boot fails.
 2. Take `VerifiedWebhook<S>` as the **last** argument of a `#[public]`
    route; dedupe with `mark_processed` in the same unit of work:
 
-```rust
+```rust,ignore
 use navree::webhooks::{GitHub, VerifiedWebhook};
 
 #[post("/")]
@@ -201,7 +201,7 @@ async fn receive(&self, uow: Uow, hook: VerifiedWebhook<GitHub>) -> Result<NoCon
 
 3. A sender of your own:
 
-```rust
+```rust,ignore
 pub struct MailEvents;
 impl WebhookSource for MailEvents {
     const NAME: &'static str = "mail_events"; // webhooks.incoming.mail_events.secret
@@ -268,7 +268,7 @@ service_account = "gmail-push@project.iam.gserviceaccount.com"
 audience = "https://api.example.com/api/v1/mail/gmail-push" # default: public URL (`url`, else rebuilt)
 ```
 
-```rust
+```rust,ignore
 let message: SnsMessage = hook.json()?;           // SES event: message.message_json::<SesEvent>()
 let push: PubSubPush = hook.json()?;               // Gmail: push.message.data_json::<GmailChange>()
 let batch: GraphNotifications = hook.json()?;      // batch.value[i].resource / lifecycle_event
@@ -295,7 +295,7 @@ let status: TwilioStatus = hook.form()?;           // form bodies: Twilio, Slack
 
 Outgoing (fake client + memory queue + fixed clock):
 
-```rust
+```rust,ignore
 let (client, server) = HttpClient::fake();
 server.on(Method::POST, "https://hooks.example.com/*", FakeResponse::new(500));
 let clock = Arc::new(FixedClock::new(start));
@@ -326,7 +326,7 @@ Without sending: `override_value(Arc::new(fake.queue()))` with a
 
 Incoming: sign like the sender does, then post.
 
-```rust
+```rust,ignore
 .config("webhooks.incoming.github.secret", "test-secret")
 // ...
 app.client().post("/api/v1/integrations/github")
@@ -342,7 +342,7 @@ Pub/Sub: serve an RSA test key as Google's JWKS and sign tokens with it
 (`SigningKey::from_pem(rsa_pem)?.with_kid("k")`, then `key.sign_jwt(&claims)`
 with `iss`, `aud`, `email`, `email_verified`, `iat` and `exp`):
 
-```rust
+```rust,ignore
 let (client, server) = HttpClient::fake();
 let keys: JwkSet = key.public_jwk().into_iter().collect();
 server.on(Method::GET, GooglePubSub::KEYS_URL, FakeResponse::new(200).json(&keys));

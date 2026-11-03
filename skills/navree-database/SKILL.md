@@ -67,7 +67,7 @@ Relations, scopes, casts and soft deletes are declared on the model (the
 
 ## Service: reads and writes in the unit of work
 
-```rust
+```rust,ignore
 use navree::access::{Accessible, Read};
 use navree::db::{Page, PageQuery, Uow};
 use navree::injectable;
@@ -137,7 +137,7 @@ audited.
 
 Raw SQL takes the same executors, as `navree::db::Statement`s:
 
-```rust
+```rust,ignore
 use navree::db::{Executor as _, ExecutorExt as _, Statement};
 
 // `?` placeholders on every database; values are bound, never formatted in.
@@ -161,7 +161,7 @@ on the request's own write lock ("database is locked" after 5 s).
 
 ## Outside a request
 
-```rust
+```rust,ignore
 // A command or job: open a unit of work, run the work in its scope, then
 // commit or roll back. The actor is who the audit log records.
 let db = ctx.get::<Db>().await?;               // in a job: ctx.app.get::<Db>()

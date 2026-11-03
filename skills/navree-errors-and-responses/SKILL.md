@@ -24,7 +24,7 @@ details go to the log, never to the client. Navree never answers 422 or
 
 Handlers return `Result<T>` (the prelude's `navree::Result<T, AppError>`):
 
-```rust
+```rust,ignore
 use navree::prelude::*;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -66,7 +66,7 @@ records the cause (logged for 5xx, never sent). `StatusCode` is
 Give every refusal a user can see its own code, naming what happened (not
 the status), in lower snake case:
 
-```rust
+```rust,ignore
 return Err(AppError::conflict("The campaign is already running.")
     .with_code("campaign_already_running"));
 ```
@@ -95,7 +95,7 @@ compile**; map your error types instead.
 
 ## Map your own error type
 
-```rust
+```rust,ignore
 use std::fmt;
 
 use http::StatusCode;
@@ -182,7 +182,7 @@ so a failed request leaves no partial writes.
 | `String`, `&'static str` | 200 `text/plain` |
 | `navree::http::response::Response` | anything, built with `.into_response()` |
 
-```rust
+```rust,ignore
 use http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
 use navree::http::response::{IntoResponse, Response};
 
@@ -212,7 +212,7 @@ each model a `*Resource` struct with `From<&Model>`, a `"__type"` field
 holding the subject name (front ends use it for CASL checks) and, for the
 OpenAPI document, `ToSchema`:
 
-```rust
+```rust,ignore
 #[derive(Clone, Debug, Serialize, ToSchema)]
 #[schema(as = Note)]
 pub struct NoteResource {
@@ -230,7 +230,7 @@ fields for resources built at run time.
 
 ## Test
 
-```rust
+```rust,ignore
 response.assert_error(404, "Note not found");    // status, shape, message, X-Request-Id
 response.assert_error(409, None);                 // any message
 response.assert_error_code(409, "campaign_already_running"); // and the code

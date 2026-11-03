@@ -57,7 +57,7 @@ at the root, `BoxFuture`, `KernelError`, `ModuleId`, `ProviderKey` and
 `navree new` writes this `src/app.rs` (the kernel orders modules by their
 imports and dependencies, so a module never runs before what it uses):
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(LoggerModule::from_config())

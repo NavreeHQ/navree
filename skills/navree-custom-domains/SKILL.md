@@ -28,7 +28,7 @@ facade). The page is `docs/packages/custom-domains`.
    Access + an authenticator for the routes (`domains.routes = false`
    without them).
 
-```rust
+```rust,ignore
 Navree::app()
     .module(ConfigModule::for_root(sources))
     .module(CryptoModule::from_config())
@@ -162,7 +162,7 @@ their CNAME (or A/AAAA) through the API and are verified at once
 
 ## Tests
 
-```rust
+```rust,ignore
 let dns = DnsFake::new().with_address("domains.example.com", "203.0.113.10");
 let ca = AcmeFake::new();
 let app = TestApp::builder()

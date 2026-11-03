@@ -28,7 +28,7 @@ for it.
 
 ## A module test
 
-```rust
+```rust,ignore
 use navree::access::{AccessModule, AccessOptions};
 use navree::db::DatabaseModule;
 use navree::testing::{TestApp, principal};
@@ -111,7 +111,7 @@ Set `hashing.memory_kib = 1024` and `hashing.iterations = 1` for fast hashes.
 
 ## Boot the whole app
 
-```rust
+```rust,ignore
 use navree::config::ConfigSources;
 use navree::crypto::generate_key;
 use navree::testing::{TempDirGuard, TestApp, TestAuthenticator, principal, temp_sqlite_url};
@@ -151,7 +151,7 @@ async fn the_app_boots() {
 
 ## Data and the database
 
-```rust
+```rust,ignore
 use navree::db::Db;
 
 let db = app.get::<Db>().await;
