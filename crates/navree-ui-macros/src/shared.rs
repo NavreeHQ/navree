@@ -141,9 +141,19 @@ pub(crate) fn apply_case(name: &str, case: Option<&str>) -> String {
 
 /// The type inside `Option<...>`, when it is one.
 pub(crate) fn option_inner(ty: &Type) -> Option<&Type> {
+    generic_inner(ty, "Option")
+}
+
+/// The type inside `Many<...>`, when it is one.
+pub(crate) fn many_inner(ty: &Type) -> Option<&Type> {
+    generic_inner(ty, "Many")
+}
+
+/// The type inside `name<...>`, when `ty` is that.
+fn generic_inner<'a>(ty: &'a Type, name: &str) -> Option<&'a Type> {
     let Type::Path(path) = ty else { return None };
     let segment = path.path.segments.last()?;
-    if segment.ident != "Option" {
+    if segment.ident != name {
         return None;
     }
     let PathArguments::AngleBracketed(args) = &segment.arguments else {

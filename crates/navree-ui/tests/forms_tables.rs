@@ -1,7 +1,7 @@
 //! The derives, end to end: a validated struct draws its form and reads it
 //! back; a row struct draws its table with sort, filter and page in the URL.
 
-use navree_ui::form::{Form, FormView, Money, Widget, decode};
+use navree_ui::form::{Form, FormView, Many, Money, Widget, decode};
 use navree_ui::table::{Direction, TableRow};
 use navree_ui::test_view::Clicked;
 use navree_ui::{
@@ -415,4 +415,104 @@ fn a_form_carries_the_csrf_token_first_and_escaped() {
     assert!(!html.contains("<script>"), "{html}");
     // Without a token there is no field.
     assert!(!render(&FormView::<NewDeal>::new().post("/deals").into()).contains("_csrf"));
+}
+
+#[derive(Debug, Deserialize, Validate, Form)]
+struct Pick {
+    #[validate(length(min = 1))]
+    #[form(widget = listbox, prompt = "Choose a stage", error = "Choose a stage.")]
+    stage: String,
+    #[validate(skip)]
+    #[form(widget = combobox, placeholder = "Search people")]
+    owner: Option<String>,
+    #[validate(skip)]
+    tags: Many<String>,
+    #[validate(skip)]
+    stages: Many<Stage>,
+}
+
+#[test]
+fn a_form_can_pick_with_a_listbox_a_combobox_and_a_multi_select() {
+    assert_eq!(Pick::FIELDS[0].widget, Widget::Listbox);
+    assert_eq!(Pick::FIELDS[1].widget, Widget::Combobox);
+    assert_eq!(
+        Pick::FIELDS[2].widget,
+        Widget::Multi,
+        "a Many is a multi-select"
+    );
+    assert_eq!(
+        Pick::FIELDS[3].options.len(),
+        2,
+        "a list of an enum takes the enum's options"
+    );
+    let value = Pick {
+        stage: "won".to_owned(),
+        owner: Some("7".to_owned()),
+        tags: vec!["a".to_owned(), "b".to_owned()].into(),
+        stages: vec![Stage::ClosedWon].into(),
+    };
+    let out = render(
+        &FormView::<Pick>::new()
+            .post("/pick")
+            .of(&value)
+            .options("stage", [("won".to_owned(), "Won".to_owned())])
+            .options("owner", [("7".to_owned(), "Grace Hopper".to_owned())])
+            .options(
+                "tags",
+                [
+                    ("a".to_owned(), "Alpha".to_owned()),
+                    ("b".to_owned(), "Beta".to_owned()),
+                ],
+            )
+            .search("owner", "/people/options")
+            .into(),
+    );
+    assert!(out.contains(r#"data-slot="select-trigger""#), "{out}");
+    assert!(
+        out.contains(">Won</span>"),
+        "the listbox shows the chosen label"
+    );
+    assert!(
+        out.contains(r#"value="Grace Hopper""#),
+        "the combobox shows the label of the chosen one"
+    );
+    assert!(out.contains(r#"data-ui-search="/people/options""#));
+    // Three chips in all (two tags, one stage) and a template in each of the two lists.
+    assert_eq!(out.matches(r#"aria-label="Remove "#).count(), 5, "{out}");
+    assert!(out.contains(r#"<option value="a" selected>Alpha</option>"#));
+    assert!(
+        out.contains(r#"<option value="closed_won" selected>Closed won</option>"#),
+        "{out}"
+    );
+    assert!(
+        out.contains(r#"for="pick-stage""#),
+        "the label points at the trigger"
+    );
+    assert!(out.contains(r#"id="pick-stage""#));
+}
+
+#[test]
+fn a_form_reads_back_what_the_pickers_post_and_a_multi_select_with_nothing_posts_nothing() {
+    let pairs = |list: &[(&str, &str)]| -> Vec<(String, String)> {
+        list.iter()
+            .map(|(a, b)| ((*a).to_owned(), (*b).to_owned()))
+            .collect()
+    };
+    let got: Pick = decode(&pairs(&[
+        ("stage", "won"),
+        ("tags", "x"),
+        ("tags", "y"),
+        ("stages", "lead"),
+        ("owner", ""),
+    ]))
+    .unwrap();
+    assert_eq!(got.tags.0, ["x", "y"]);
+    assert_eq!(got.stages.0, [Stage::Lead]);
+    assert_eq!(got.owner, None, "an empty optional is none");
+    let none: Pick = decode(&pairs(&[("stage", "won")])).unwrap();
+    assert!(none.tags.is_empty() && none.stages.is_empty());
+    let errors = decode::<Pick>(&pairs(&[("stage", "")])).unwrap_err();
+    assert_eq!(errors["stage"], ["Choose a stage."]);
+    let wrong = decode::<Pick>(&pairs(&[("stage", "won"), ("stages", "nonsense")])).unwrap_err();
+    assert!(wrong.contains_key("stages"), "{wrong:?}");
 }

@@ -25,7 +25,7 @@
 pub mod prelude {
     pub use crate::components::*;
     pub use crate::form::{
-        Form as FormFields, FormView, Money, Options as OptionList, Rejected, Submit,
+        Form as FormFields, FormView, Many, Money, Options as OptionList, Rejected, Submit,
     };
     pub use crate::icons;
     pub use crate::op::{Op, Reply, ToastTone, UrlMode};

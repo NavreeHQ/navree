@@ -8,7 +8,7 @@ use syn::{Data, DeriveInput, Fields, Ident, LitInt, LitStr};
 
 use crate::shared::{
     apply_case, doc_line, named_fields, option_inner, serde_rename, serde_rename_all, type_name,
-    ui_path, words,
+    many_inner, ui_path, words,
 };
 
 /// What `#[form(...)]` says about a field.
@@ -76,6 +76,9 @@ fn named_widget(ui: &TokenStream, widget: &Ident, rows: u32) -> syn::Result<Toke
         "hidden" => input("Hidden"),
         "textarea" => quote!(#ui::form::Widget::Textarea { rows: #rows }),
         "select" => quote!(#ui::form::Widget::Select),
+        "listbox" => quote!(#ui::form::Widget::Listbox),
+        "combobox" => quote!(#ui::form::Widget::Combobox),
+        "multiselect" => quote!(#ui::form::Widget::Multi),
         "radio" => quote!(#ui::form::Widget::Radio),
         "checkbox" => quote!(#ui::form::Widget::Checkbox),
         "switch" => quote!(#ui::form::Widget::Switch),
@@ -84,7 +87,7 @@ fn named_widget(ui: &TokenStream, widget: &Ident, rows: u32) -> syn::Result<Toke
             return Err(syn::Error::new(
                 widget.span(),
                 format!(
-                    "unknown widget `{other}`: expected text, email, url, tel, password, search, number, date, time, datetime, hidden, textarea, select, radio, checkbox, switch or money"
+                    "unknown widget `{other}`: expected text, email, url, tel, password, search, number, date, time, datetime, hidden, textarea, select, listbox, combobox, multiselect, radio, checkbox, switch or money"
                 ),
             ));
         }
@@ -159,20 +162,26 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
             Some(rows) => rows.base10_parse()?,
             None => 3,
         };
-        let inferred = inferred_widget(&ui, type_name(inner).as_deref());
+        // A `Many<T>` is a multi-select; its options come from the element's type.
+        let many = many_inner(inner);
+        let element = many.unwrap_or(inner);
+        let inferred = inferred_widget(&ui, type_name(element).as_deref());
         let widget = match &hint.widget {
             Some(widget) => named_widget(&ui, widget, rows)?,
+            None if many.is_some() => quote!(#ui::form::Widget::Multi),
             None => inferred
                 .clone()
                 .unwrap_or_else(|| quote!(#ui::form::Widget::Select)),
         };
         let options = if inferred.is_none()
-            && hint
-                .widget
-                .as_ref()
-                .is_none_or(|w| matches!(w.to_string().as_str(), "select" | "radio"))
+            && hint.widget.as_ref().is_none_or(|w| {
+                matches!(
+                    w.to_string().as_str(),
+                    "select" | "radio" | "listbox" | "combobox" | "multiselect"
+                )
+            })
         {
-            quote!(<#inner as #ui::form::Options>::OPTIONS)
+            quote!(<#element as #ui::form::Options>::OPTIONS)
         } else {
             quote!(&[])
         };
@@ -201,7 +210,7 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
             },
         });
         values.push(quote! {
-            if let ::core::option::Option::Some(value) = #ui::form::FieldValue::field_value(&self.#ident) {
+            for value in #ui::form::FieldValue::field_values(&self.#ident) {
                 out.push((#name, value));
             }
         });

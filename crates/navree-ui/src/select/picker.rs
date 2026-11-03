@@ -550,6 +550,12 @@ macro_rules! picker_methods {
                 self
             }
 
+            /// Requires a choice when `required` is true.
+            pub fn required_if(mut self, required: bool) -> Self {
+                self.picker.required = required;
+                self
+            }
+
             /// Marks it invalid.
             pub fn invalid(mut self, invalid: bool) -> Self {
                 self.picker.invalid = invalid;

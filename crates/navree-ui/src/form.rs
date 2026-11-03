@@ -19,7 +19,7 @@ use navree_http::response::{IntoResponse, Response};
 use navree_kernel::AppContext;
 use navree_validation::{Messages, Rule, Validate};
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
 pub use navree_validation::{FieldRules, RuleTable};
 
@@ -45,6 +45,14 @@ pub enum Widget {
     },
     /// The browser's select.
     Select,
+    /// A styled listbox over a native select ([`Select`](crate::Select)).
+    Listbox,
+    /// A searchable list ([`Combobox`](crate::Combobox)): the options are the form's
+    /// options, or are searched on the server with [`FormView::search`].
+    Combobox,
+    /// Many choices as chips ([`MultiSelect`](crate::MultiSelect)), for a field of the
+    /// type [`Many`].
+    Multi,
     /// Radio buttons.
     Radio,
     /// A checkbox.
@@ -111,11 +119,115 @@ pub trait Options {
 pub trait FieldValue {
     /// The text of the value.
     fn field_value(&self) -> Option<String>;
+
+    /// The texts of a value that is several: one for each. A single value gives its own.
+    fn field_values(&self) -> Vec<String> {
+        self.field_value().into_iter().collect()
+    }
 }
 
 impl<T: FieldValue> FieldValue for Option<T> {
     fn field_value(&self) -> Option<String> {
         self.as_ref().and_then(FieldValue::field_value)
+    }
+
+    fn field_values(&self) -> Vec<String> {
+        self.as_ref()
+            .map(FieldValue::field_values)
+            .unwrap_or_default()
+    }
+}
+
+/// What separates the values of a [`Many`] while a form is read: a control character
+/// no person types, so no value can hold it. A value that does is left out.
+const SEPARATOR: char = '\u{1f}';
+
+/// The most values one list field takes from a post.
+pub const MAX_MANY: usize = 1000;
+
+/// A field with several values, for a [`MultiSelect`](crate::MultiSelect): the form
+/// reads every value posted under the field's name, in order, up to [`MAX_MANY`].
+/// Nothing posted is an empty list, so no `#[serde(default)]` is needed.
+///
+/// The values are read as text: strings, enums with `#[derive(Options)]`, UUIDs and
+/// dates. A list of numbers is a list of strings you parse.
+///
+/// ```
+/// use navree_ui::form::Many;
+///
+/// let tags: Many<String> = vec!["a".to_owned(), "b".to_owned()].into();
+/// assert_eq!(tags.len(), 2);
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Many<T>(pub Vec<T>);
+
+impl<T> Default for Many<T> {
+    fn default() -> Self {
+        Self(Vec::new())
+    }
+}
+
+impl<T> From<Vec<T>> for Many<T> {
+    fn from(values: Vec<T>) -> Self {
+        Self(values)
+    }
+}
+
+impl<T> std::ops::Deref for Many<T> {
+    type Target = Vec<T>;
+
+    fn deref(&self) -> &Vec<T> {
+        &self.0
+    }
+}
+
+impl<T> std::ops::DerefMut for Many<T> {
+    fn deref_mut(&mut self) -> &mut Vec<T> {
+        &mut self.0
+    }
+}
+
+impl<T> IntoIterator for Many<T> {
+    type Item = T;
+    type IntoIter = std::vec::IntoIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<T: FieldValue> FieldValue for Many<T> {
+    fn field_value(&self) -> Option<String> {
+        None
+    }
+
+    fn field_values(&self) -> Vec<String> {
+        self.0.iter().flat_map(FieldValue::field_values).collect()
+    }
+}
+
+impl<T: Serialize> Serialize for Many<T> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de, T: serde::de::DeserializeOwned> Deserialize<'de> for Many<T> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::{Error as _, IntoDeserializer};
+        let text = String::deserialize(deserializer)?;
+        if text.is_empty() {
+            return Ok(Self(Vec::new()));
+        }
+        text.split(SEPARATOR)
+            .map(|piece| {
+                T::deserialize(
+                    IntoDeserializer::<serde::de::value::Error>::into_deserializer(piece),
+                )
+                .map_err(D::Error::custom)
+            })
+            .collect::<Result<Vec<T>, D::Error>>()
+            .map(Self)
     }
 }
 
@@ -263,6 +375,7 @@ fn native<T: Form>(field: &FormField) -> Native {
             field.widget,
             Widget::Checkbox
                 | Widget::Switch
+                | Widget::Multi
                 | Widget::Textarea { .. }
                 | Widget::Input(
                     InputKind::Text
@@ -323,6 +436,7 @@ pub struct FormView<T> {
     values: Vec<(String, String)>,
     errors: BTreeMap<String, Vec<String>>,
     options: BTreeMap<&'static str, Vec<(String, String)>>,
+    searches: BTreeMap<&'static str, Href>,
     columns: bool,
     csrf: Option<String>,
     marker: PhantomData<fn() -> T>,
@@ -339,6 +453,7 @@ impl<T: Form> FormView<T> {
             values: Vec::new(),
             errors: BTreeMap::new(),
             options: BTreeMap::new(),
+            searches: BTreeMap::new(),
             columns: true,
             csrf: None,
             marker: PhantomData,
@@ -405,10 +520,47 @@ impl<T: Form> FormView<T> {
         self
     }
 
+    /// Searches a combobox or multi-select field on the server: the runtime asks `url`
+    /// with `?q=text` and shows the answer, a [`ChoiceList`](crate::ChoiceList). Give
+    /// the field's current choices with [`options`](Self::options), so an edit form can
+    /// show their labels.
+    pub fn search(mut self, field: &'static str, url: impl Into<Href>) -> Self {
+        self.searches.insert(field, url.into());
+        self
+    }
+
     /// Puts every field on its own line.
     pub fn one_column(mut self) -> Self {
         self.columns = false;
         self
+    }
+
+    /// Every value the form holds for `name`: a field that is a list has several.
+    fn values_of(&self, name: &str) -> Vec<String> {
+        self.values
+            .iter()
+            .filter(|(field, _)| field == name)
+            .map(|(_, value)| value.clone())
+            .collect()
+    }
+
+    /// The choices of a field: the form's own, or the ones the field's type lists.
+    fn choices(&self, field: &FormField) -> Vec<crate::select::Choice> {
+        match self.options.get(field.name) {
+            Some(options) => options
+                .iter()
+                .map(|(value, label)| crate::select::Choice::new(value.clone(), label.clone()))
+                .collect(),
+            None => field
+                .options
+                .iter()
+                .map(|(value, label)| crate::select::Choice::new(*value, *label))
+                .collect(),
+        }
+    }
+
+    fn picker_id(field: &FormField) -> String {
+        format!("{}-{}-picker", T::ID, field.name)
     }
 
     fn value_of(&self, name: &str) -> Option<&str> {
@@ -459,6 +611,52 @@ impl<T: Form> FormView<T> {
                 area.into()
             }
             Widget::Select => self.select(field, rules.required, value).into(),
+            Widget::Listbox => {
+                let mut select = crate::select::Select::new(field.name)
+                    .id(Self::picker_id(field))
+                    .options(self.choices(field))
+                    .required_if(rules.required)
+                    .invalid(invalid);
+                if let Some(prompt) = field.prompt.or(field.placeholder) {
+                    select = select.placeholder(prompt);
+                }
+                if let Some(value) = value {
+                    select = select.selected(value.to_owned());
+                }
+                select.into()
+            }
+            Widget::Combobox => {
+                let mut combo = crate::select::Combobox::new(field.name)
+                    .id(Self::picker_id(field))
+                    .options(self.choices(field))
+                    .required_if(rules.required)
+                    .invalid(invalid);
+                if let Some(prompt) = field.placeholder.or(field.prompt) {
+                    combo = combo.placeholder(prompt);
+                }
+                if let Some(url) = self.searches.get(field.name) {
+                    combo = combo.search(url.clone());
+                }
+                if let Some(value) = value {
+                    combo = combo.selected(value.to_owned());
+                }
+                combo.into()
+            }
+            Widget::Multi => {
+                let mut multi = crate::select::MultiSelect::new(field.name)
+                    .id(Self::picker_id(field))
+                    .options(self.choices(field))
+                    .required_if(rules.required)
+                    .invalid(invalid)
+                    .selected_values(self.values_of(field.name));
+                if let Some(prompt) = field.placeholder.or(field.prompt) {
+                    multi = multi.placeholder(prompt);
+                }
+                if let Some(url) = self.searches.get(field.name) {
+                    multi = multi.search(url.clone());
+                }
+                multi.into()
+            }
             Widget::Radio => {
                 let mut group = RadioGroup::new(field.name, field.label).options(
                     field
@@ -777,15 +975,46 @@ pub fn decode<T>(pairs: &[(String, String)]) -> Result<T, FieldErrors>
 where
     T: Form + DeserializeOwned + Validate,
 {
+    // A list field's values are read together: the deserializer takes a name once.
+    let lists: Vec<(&'static str, String)> = T::FIELDS
+        .iter()
+        .filter(|field| field.widget == Widget::Multi)
+        .map(|field| {
+            let mut joined = String::new();
+            let mut count = 0;
+            for (_, value) in pairs.iter().filter(|(name, _)| name == field.name) {
+                if value.is_empty() || value.contains(SEPARATOR) {
+                    continue;
+                }
+                if count == MAX_MANY {
+                    break;
+                }
+                if count > 0 {
+                    joined.push(SEPARATOR);
+                }
+                joined.push_str(value);
+                count += 1;
+            }
+            (field.name, joined)
+        })
+        .collect();
     let mut kept: Vec<(&str, &str)> = Vec::with_capacity(pairs.len() + T::FIELDS.len());
     for (name, value) in pairs {
         let Some(field) = T::FIELDS.iter().find(|field| field.name == name) else {
             continue;
         };
+        if field.widget == Widget::Multi {
+            continue;
+        }
         if value.is_empty() && field.optional {
             continue;
         }
         kept.push((name, value));
+    }
+    for (name, joined) in &lists {
+        if !(joined.is_empty() && T::FIELDS.iter().any(|f| f.name == *name && f.optional)) {
+            kept.push((name, joined));
+        }
     }
     for field in T::FIELDS {
         if kept.iter().any(|(name, _)| *name == field.name) || field.optional {
@@ -796,8 +1025,12 @@ where
             Widget::Input(_)
             | Widget::Textarea { .. }
             | Widget::Select
+            | Widget::Listbox
+            | Widget::Combobox
             | Widget::Radio
             | Widget::Money => kept.push((field.name, "")),
+            // Read above, with the values it has.
+            Widget::Multi => {}
         }
     }
     // Serde stops at the first value of the wrong type. To name every such field,
@@ -882,7 +1115,8 @@ fn type_error<T: Form>(error: &serde_path_to_error::Error<urlencoded::Error>) ->
             ..
         }) => format!("{label}: enter a date."),
         Some(FormField {
-            widget: Widget::Select | Widget::Radio,
+            widget:
+                Widget::Select | Widget::Listbox | Widget::Combobox | Widget::Multi | Widget::Radio,
             label,
             ..
         }) => format!("{label}: choose one of the options."),
