@@ -251,6 +251,37 @@ inBrowsers(({ open }) => {
     await close();
   });
 
+  test("the list shows the chosen time when it opens, the keys keep their option in view, and the page stays put", async () => {
+    const { page, close } = await open("/dates");
+    await page.locator("#tp-twelve").scrollIntoViewIfNeeded();
+    const top = await page.evaluate(() => scrollY);
+    await page.locator("#tp-twelve [data-ui-act=open]").click();
+    assert.equal(await isOpen(page, "tp-twelve-pop"), true);
+    // Whether an option is inside the box of the list, as seen on screen.
+    const inView = (selector) =>
+      page.evaluate((s) => {
+        const ul = document.querySelector("#tp-twelve-pop [data-slot=time-list]");
+        const a = ul.getBoundingClientRect();
+        const b = ul.querySelector(s).getBoundingClientRect();
+        return b.height > 0 && b.top >= a.top - 1 && b.bottom <= a.bottom + 1;
+      }, selector);
+    await page.waitForFunction(() => {
+      const ul = document.querySelector("#tp-twelve-pop [data-slot=time-list]");
+      return ul && ul.scrollTop > 0;
+    });
+    assert.equal(await inView("[aria-selected=true]"), true, "2:30 PM is in view, though it is 29 rows down");
+    assert.equal(await inView("[data-active]"), true);
+    await page.keyboard.press("End");
+    assert.equal(await inView("[data-t='84600']"), true, "11:30 PM, the last, scrolled into view");
+    await page.keyboard.press("Home");
+    assert.equal(await inView("[data-t='0']"), true, "12:00 AM, the first");
+    await page.keyboard.press("PageDown");
+    await page.keyboard.press("PageDown");
+    assert.equal(await inView("[data-active]"), true, "the active option stays in view");
+    assert.equal(await page.evaluate(() => scrollY), top, "the page did not scroll");
+    await close();
+  });
+
   test("a time picker on a 24 hour clock lists and posts the same way", async () => {
     const { page, close } = await open("/dates");
     assert.equal(await page.locator("#tp-h24 [data-ui-text]").inputValue(), "14:30");

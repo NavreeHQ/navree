@@ -1141,7 +1141,18 @@ function activate(ul, at) {
   }
   li.setAttribute("data-active", "");
   set(ul, "aria-activedescendant", li.id);
-  li.scrollIntoView({ block: "nearest" });
+  reveal(ul, li, false);
+}
+/**
+ * Scrolls the list, never the page, until the option shows: the least that does it, or with
+ * `middle` the option in the middle. A list that is not shown has no size and stays as it is.
+ * @param {Element} ul @param {Element} li @param {boolean} middle
+ */
+function reveal(ul, li, middle) {
+  const a = ul.getBoundingClientRect(), b = li.getBoundingClientRect();
+  if (middle) ul.scrollTop += b.top - a.top - (a.height - b.height) / 2;
+  else if (b.top < a.top) ul.scrollTop += b.top - a.top;
+  else if (b.bottom > a.bottom) ul.scrollTop += b.bottom - a.bottom;
 }
 /** @param {KeyboardEvent} e @param {Element} ul */
 function listKey(e, ul) {
@@ -1178,7 +1189,13 @@ on(document, "toggle", (e) => {
   if (!h) return;
   const kind = attr(h, "data-ui-dates"), open = /** @type {ToggleEvent} */ (e).newState === "open";
   if (kind === "time") {
-    if (open) /** @type {HTMLElement | null} */ (q(h, "[data-slot=time-list]"))?.focus({ preventScroll: true });
+    const ul = /** @type {HTMLElement | null} */ (q(h, "[data-slot=time-list]"));
+    const current = ul && q(ul, "[data-active]");
+    if (open && ul) {
+      ul.focus({ preventScroll: true });
+      // The list had no size when it was filled: now it is shown, bring the value into view.
+      if (current) reveal(ul, current, true);
+    }
     return;
   }
   const cal = calOf(h);
