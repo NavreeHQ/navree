@@ -61,7 +61,11 @@ export function readFlags(flagFiles, territoryFiles, subdivisionFiles) {
       name = entry.name;
       fromFlagIcons.push(code);
     }
-    if (!name || /["\\]/.test(name)) throw new Error(`flags: ${code} has no usable name`);
+    // A name goes into a Rust string and an attribute: no quote, backslash or control character
+    // (a newline included), and no space at either end.
+    if (!name || name !== name.trim() || /["\\\u0000-\u001f\u007f-\u009f]/.test(name)) {
+      throw new Error(`flags: ${code} has no usable name: ${JSON.stringify(name)}`);
+    }
 
     const kind = ORGANISATIONS.has(entry.code)
       ? "Organisation"

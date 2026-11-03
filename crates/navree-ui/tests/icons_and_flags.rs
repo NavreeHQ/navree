@@ -542,3 +542,35 @@ fn a_single_file_is_a_constant_too() {
     const ARROW: Icon = icon_file!("tests/own-icons/arrow-left.svg");
     assert_eq!(ARROW, brand::ARROW_LEFT);
 }
+
+#[test]
+fn an_empty_label_falls_back_to_the_countrys_name() {
+    for label in ["", " ", "   ", "\n", "\t \r\n"] {
+        let named = render(&Flag::new(flags::AE).label(label).into());
+        assert!(
+            named.contains(r#"aria-label="United Arab Emirates""#),
+            "{label:?}: {named:.120}"
+        );
+        let unknown = render(&Flag::country("zz").label(label).into());
+        assert!(
+            unknown.contains(r#"aria-label="Unknown country""#),
+            "{label:?}: {unknown:.120}"
+        );
+    }
+    // A label with something in it still wins.
+    let renamed = render(&Flag::new(flags::AE).label("Emirates").into());
+    assert!(renamed.contains(r#"aria-label="Emirates""#));
+    // And no flag ever has an empty name.
+    assert!(!render(&Flag::new(flags::AE).label("").into()).contains(r#"aria-label="""#));
+}
+
+#[test]
+fn no_flag_name_holds_a_newline_or_other_control_character() {
+    for code in flags::ALL {
+        let name = code.name();
+        assert!(!name.is_empty(), "{code}");
+        assert_eq!(name, name.trim(), "{code}");
+        assert!(!name.chars().any(char::is_control), "{code}: {name:?}");
+        assert!(!name.contains(['"', '\\']), "{code}: {name:?}");
+    }
+}

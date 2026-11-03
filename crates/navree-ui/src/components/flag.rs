@@ -149,9 +149,11 @@ impl Flag {
         self
     }
 
-    /// Replaces the accessible name, which is the country's name.
+    /// Replaces the accessible name, which is the country's name. A label with nothing
+    /// in it is no label: the country's name stays.
     pub fn label(mut self, label: impl Into<Cow<'static, str>>) -> Self {
-        self.label = Some(label.into());
+        let label = label.into();
+        self.label = (!label.trim().is_empty()).then_some(label);
         self
     }
 

@@ -13,7 +13,7 @@
 //   becomes a nested <svg>, which clips to its box.
 // - A marker drawn at the vertices of a path becomes a copy of the marker at each
 //   vertex.
-// - A gradient becomes the colour it averages to. This is the one loss: seven coats
+// - A gradient becomes the colour it averages to. This is the one loss: five coats
 //   of arms are shaded by gradients, and at the sizes a flag is drawn they read the
 //   same flat.
 //
