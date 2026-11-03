@@ -174,23 +174,40 @@ for (const browserName of browsers) {
     test("a tick in a filter's list applies at once; typing waits for a pause", async () => {
       await reset();
       const { page, close } = await open("/deals?per=10");
-      const asked = [];
-      page.on("request", (request) => {
-        if (request.headers()["x-navree-ui"] && /\/deals\?/.test(request.url())) asked.push({ at: Date.now(), url: request.url() });
+      // By the page's own clock: when an input happened, and when the runtime asked.
+      await page.evaluate(() => {
+        const original = window.fetch;
+        window.asked = [];
+        window.inputs = [];
+        window.fetch = function (input, init) {
+          window.asked.push({ at: performance.now(), url: String(input) });
+          return original.call(this, input, init);
+        };
+        document.addEventListener("input", (e) => window.inputs.push({ at: performance.now(), name: e.target.name }), true);
       });
       await page.locator("[popovertarget=deals-m-stage]").click();
-      const ticked = Date.now();
       await page.locator("#deals-m-stage input[name='f.stage'][value=won]").check();
-      await page.waitForTimeout(60);
-      assert.ok(asked.some((ask) => /f\.stage=won/.test(ask.url) && ask.at - ticked < 60), JSON.stringify(asked));
+      await page.waitForFunction(() => window.asked.some((ask) => /f\.stage=won/.test(ask.url)));
+      const tick = await page.evaluate(() => {
+        const input = window.inputs.findLast((item) => item.name === "f.stage");
+        const ask = window.asked.find((item) => /f\.stage=won/.test(item.url));
+        return ask.at - input.at;
+      });
+      assert.ok(tick < 50, `the tick asked ${tick} ms after it happened`);
       await page.keyboard.press("Escape");
       await settled(page);
-      asked.length = 0;
       const search = page.locator("#deals input[name=q]");
       await search.click();
       await search.pressSequentially("acme", { delay: 20 });
-      await page.waitForTimeout(400);
-      assert.equal(asked.filter((ask) => /q=/.test(ask.url)).length, 1, `one request after the pause: ${JSON.stringify(asked)}`);
+      await page.waitForTimeout(500);
+      // Each request waited for a pause: the last keystroke before it was 100 ms back.
+      const waits = await page.evaluate(() =>
+        window.asked
+          .filter((item) => /[?&]q=/.test(item.url))
+          .map((ask) => ask.at - window.inputs.filter((item) => item.name === "q" && item.at < ask.at).at(-1).at),
+      );
+      assert.ok(waits.length >= 1 && waits.length < 4, `one request per pause, not per key: ${waits}`);
+      assert.ok(waits.every((wait) => wait >= 95), `typing waited ${waits} ms`);
       await close();
     });
 
