@@ -1,11 +1,11 @@
 ---
 title: "Release notes"
-description: "Navree 1.0.0, the first release: the framework with its own router, extractors, validation, data layer on sqlx, ORM and schema builder, SQLite as an opt-in feature, security limits, the first-party ecosystem, the CLI and starter kits, and supply-chain checks and fuzzing."
+description: "Navree 1.0.0, the first release: the framework with its own router, extractors, validation, data layer, ORM and schema builder, Navree UI for screens rendered on the server, the first-party tools, agent skills with two ways in from an existing product or design, the CLI and starter kits, security limits, and supply-chain checks and fuzzing."
 ---
 
 ## Navree 1.0.0
 
-Navree 1.0.0 is Navree's first release. It ships the framework (the kernel, the shared contracts, the module crates, the `navree` facade that re-exports them, the attribute macros and the `navree` CLI) together with the first-party ecosystem: tools for monitoring, debugging, queues, administration, deployment and local services, and packages for search, AI, microservices, OAuth, billing and more. Everything shares one version number: the crates, the `navree` CLI, the starter kits and the `@navree/*` npm packages are all 1.0.0. Navree is open source under MIT or Apache-2.0 and free to self-host, and from 1.0 it follows semantic versioning (see the [roadmap](/docs/prologue/roadmap/)).
+Navree 1.0.0 is Navree's first release. It ships the framework (the kernel, the shared contracts, the module crates, the `navree` facade that re-exports them, the attribute macros and the `navree` CLI) with [Navree UI](#navree-ui), a toolkit for drawing an app's screens in Rust, and the first-party ecosystem: tools for monitoring, debugging, queues, administration, deployment and local services, packages for search, AI, microservices, OAuth, billing and more, and [agent skills](#ai-native) for your coding agent, two of which bring an existing product or design into Navree. Everything shares one version number: the crates, the `navree` CLI, the starter kits and the `@navree/*` npm packages are all 1.0.0. Navree is open source under MIT or Apache-2.0 and free to self-host, and from 1.0 it follows semantic versioning (see the [roadmap](/docs/prologue/roadmap/)).
 
 <Callout type="note" title="Installing from Git">
 
@@ -85,6 +85,23 @@ The `serve` command runs on `navree::http::serve`, which bounds what a client ca
 
 - **`navree-testing`**: `TestApp` to boot an app or a few modules on a temporary database, an in-process `TestClient` with cookies, `acting_as`, JSON assertions and validation-error assertions, and fakes.
 
+## Navree UI
+
+[Navree UI](/docs/ui/overview/) draws an app's screens in Rust: the toolkit in `navree::ui` (the `navree-ui` crate). It is the `ui` feature of `navree`, on by default, and `UiModule::from_config()` serves its files and picks ops or a page for each reply.
+
+- **Typed components, rendered on the server.** A handler returns components. Each is a struct with builder methods that turns into one `Node`, variants are Rust enums, and `render` writes the tree to HTML in one pass. The browser's own elements do what they already know: dialogs are `<dialog>`, accordions `<details>`, popovers `popover`, and they work with no script.
+- **[The components](/docs/components/overview/)**, in eight groups (actions, inputs, display, feedback, overlays, layout, navigation and data). Each has a live preview rendered by the toolkit, an anatomy of its `data-slot` parts, its variants and states, its API read from the code, and keyboard notes. `cargo test -p ui-docs` fails when the docs fall behind the code.
+- **[Forms](/docs/ui/forms/)** from a validated struct. `Submit<T>` reads only the struct's own fields and refuses a body from another site (403), a body that isn't a form (415) and more than 1,000 fields (413).
+- **[The app shell](/docs/ui/app-shell/)**: a sidebar with groups, items, counts and a user menu, collapsed with `Ctrl+B` and remembered in a cookie, and a top bar with the breadcrumb.
+- **[DataTable](/docs/ui/data-table/)**: one `#[derive(TableRow)]` definition drives the URL, the query through navree-orm with an allow-list, the drawing, the CSV export and the bulk actions. Sort, filters, the page and the columns live in the URL, so a reload or a shared link restores them, and it all works with JavaScript off.
+- **[Commands and ops](/docs/ui/commands-and-ops/)** and **[regions](/docs/ui/regions/)**: a form or a command posts to a handler, which answers with a `Reply`: ops for the runtime (morph this element, show a toast, close this dialog), or a redirect or a full page when JavaScript is off.
+- **Little in the browser.** Every page loads one stylesheet, and script only for what its markup uses (`core`, `overlay`, `sidebar`, `table`); a page with nothing interactive has no `<script>` at all. The files are embedded in the binary and served at content-hash URLs under `/_navree/ui/`. `tests/budgets.rs` holds the ceilings: the `core` runtime 12 KB gzip, the stylesheet 25 KB, every module together under 60 KB.
+- **A strict content security policy.** Scripts, styles, fonts and requests from the page's own origin only, no inline script or style, and no framing. Text goes through one escaper, every URL through `Href`, which refuses `javascript:`, and `Reply::redirect` refuses a URL that leaves the site.
+- **`TestView`** drives a page in a plain test, with no browser: check what it shows, click by name, fill a form and read it back as your struct.
+- **Still to come.** Navree UI grows one module at a time. A searchable select, tabs, menus, charts and date pickers aren't in 1.0; [Coming next](/docs/ui/coming-next/) lists what comes, in order.
+
+You can also draw the screens in JavaScript, beside the same API: `navree new <name> --ui next` creates a Next.js app with `@navree/next`, and `@navree/nuxt` is the module for a Nuxt app you create yourself (there is no Nuxt starter kit). [Choosing a UI](/docs/ui/choosing-a-ui/) says what each costs and gives. [Logbook](/docs/tools/logbook/)'s pages are drawn with Navree UI.
+
 ## The ecosystem
 
 ### Tools
@@ -125,7 +142,9 @@ The `serve` command runs on `navree::http::serve`, which bounds what a client ca
 
 ### AI-native
 
-- **[Agent skills](/docs/ai/agent-skills/)** for every common task, installed into a project with `navree skills:install`.
+- **[Agent skills](/docs/ai/agent-skills/)** for every common task. `navree skills:install` copies them into `.claude/skills/` and `.agents/skills/`, in an app or any other directory, and the test suite compiles their Rust blocks against the `navree` crate.
+- **[Bring your product](/docs/getting-started/bring-your-product/)**: the `navree-reverse-engineering` skill rebuilds a product you already run, with its data, as a Navree app. Your coding agent reads the old product and writes down what it does as specs, with evidence for every line, plans tasks and tests from them, rebuilds the product module by module, moves the data field by field with cleaning rules, and rehearses the import until it reconciles. It stops five times for your decision.
+- **[Bring your design](/docs/getting-started/bring-your-design/)**: the `navree-design-to-ui` skill turns an HTML mock-up, a design-tool export or screenshots into Navree UI pages. It maps every element to Navree UI, writes a spec per page, builds the pages and checks them beside the design. It stops three times for your decision.
 - **`AGENTS.md`**: `navree new` writes the project's conventions for coding agents, and a `CLAUDE.md` that points at it.
 - **[Docs for agents](/docs/ai/docs-for-agents/)**: `/llms.txt`, `/llms-full.txt` and every docs page as Markdown.
 
