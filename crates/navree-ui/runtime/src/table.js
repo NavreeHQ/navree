@@ -297,6 +297,129 @@ function gridKey(e, cell) {
   moveTo(cell, /** @type {HTMLElement | undefined} */ (to));
 }
 
+/* Sorting the rows the page holds */
+
+// A table that holds every row of its result (`data-ui-local`, which the server sets
+// on one complete page) sorts them here at once. The link is still followed, so the
+// server's answer comes after and has the last word: it confirms the order, or puts
+// it right, and it redraws everything else the sort changes.
+
+/** Whether `to` asks for the same rows as `from`, in another order. @param {URL} from @param {URL} to */
+function onlySort(from, to) {
+  const rest = (/** @type {URL} */ url) => {
+    const params = new URLSearchParams(url.search);
+    params.delete("sort");
+    params.sort();
+    return url.origin + url.pathname + "?" + params;
+  };
+  return rest(from) === rest(to);
+}
+
+const collator = new Intl.Collator(undefined, { sensitivity: "base" });
+const digits = /^\d{1,15}$/;
+
+/**
+ * A cell's value for sorting: what the server wrote in `data-v`, or the cell's text, as
+ * a number in a column of numbers. Empty is NULL, the smallest value, as on every store.
+ * @param {HTMLTableRowElement} row @param {number} at @param {string | null} kind
+ */
+function valueOf(row, at, kind) {
+  const cell = row.cells[at];
+  const raw = (cell?.getAttribute("data-v") ?? cell?.textContent ?? "").trim();
+  const number = kind === "n" ? Number(raw.replace(/[^\d.eE+-]/g, "")) : 0;
+  return raw === "" || Number.isNaN(number) ? null : kind === "n" ? number : raw;
+}
+
+/**
+ * Orders two values: NULL first, numbers as numbers, dates (written ISO) and keys of
+ * digits by their text or number, the rest as words.
+ * @param {any} a @param {any} b @param {string | null} [kind]
+ */
+function compare(a, b, kind) {
+  if (a === null || b === null) return a === b ? 0 : a === null ? -1 : 1;
+  if (typeof a === "number") return a - b;
+  if (kind === "k" && digits.test(a) && digits.test(b)) return a - b;
+  if (kind === "d" || kind === "k") return a < b ? -1 : a > b ? 1 : 0;
+  return collator.compare(a, b);
+}
+
+/**
+ * Puts the rows in the order `url` asks for, here, when the page holds all of them and
+ * only the order changes. False when it can't: the server's answer does it all.
+ * @param {HTMLElement} root @param {URL} url
+ */
+function sortHere(root, url) {
+  const body = /** @type {HTMLTableSectionElement | null} */ (root.querySelector("[data-slot=table] > tbody"));
+  const heads = [...root.querySelectorAll("[data-slot=table] > thead th[data-col]")];
+  if (!body || !root.hasAttribute("data-ui-local") || !onlySort(new URL(root.getAttribute("data-ui-src") || "", location.href), url)) return false;
+  const sort = url.searchParams.get("sort") ?? root.getAttribute("data-ui-sort-default") ?? "";
+  /** Column, kind and direction of each term. @type {[number, string | null, boolean][]} */
+  const terms = [];
+  /** @type {Map<string, boolean>} */
+  const sorted = new Map();
+  for (const term of sort.split(",").filter(Boolean)) {
+    const down = term[0] === "-", name = down ? term.slice(1) : term;
+    const th = /** @type {HTMLTableCellElement | undefined} */ (heads.find((cell) => cell.getAttribute("data-col") === name));
+    if (!th) return false;
+    terms.push([th.cellIndex, th.getAttribute("data-kind"), down]);
+    sorted.set(name, down);
+  }
+  /** Each row with what it sorts by, and its details row, which moves with it. @type {any[][]} */
+  const groups = [];
+  for (const row of body.rows) {
+    const key = row.getAttribute("data-key");
+    if (!key) return false;
+    if (row.getAttribute("data-slot") === "row-detail" && groups.length) groups[groups.length - 1].push(row);
+    else groups.push([key, terms.map(([at, kind]) => valueOf(row, at, kind)), row]);
+  }
+  // Ties go by key, in the last term's direction, as the server orders them.
+  const last = terms.length ? terms[terms.length - 1][2] : false;
+  groups.sort((a, b) => {
+    for (let i = 0; i < terms.length; i++) {
+      const order = compare(a[1][i], b[1][i], terms[i][1]);
+      if (order) return terms[i][2] ? -order : order;
+    }
+    return (last ? -1 : 1) * compare(a[0], b[0], "k");
+  });
+  /** @type {any} */ (root).uiBefore = [[...body.rows], heads.map((th) => [th, th.getAttribute("aria-sort")])];
+  let at = body.firstElementChild;
+  for (const row of groups.flatMap((group) => group.slice(2))) {
+    if (row === at) at = row.nextElementSibling;
+    else {
+      try {
+        /** @type {any} */ (body).moveBefore(row, at);
+      } catch {
+        body.insertBefore(row, at);
+      }
+    }
+  }
+  for (const th of heads) {
+    const down = sorted.get(th.getAttribute("data-col") || "");
+    if (down === undefined) th.removeAttribute("aria-sort");
+    else th.setAttribute("aria-sort", down ? "descending" : "ascending");
+  }
+  const field = /** @type {HTMLInputElement | null} */ (root.querySelector("form[data-ui-target] input[type=hidden][name=sort]"));
+  if (field) field.value = sort;
+  // The rows are right already: the server's answer only confirms them.
+  root.setAttribute("data-ui-confirm", "");
+  return true;
+}
+
+// The server couldn't confirm: what was done here is undone, and the table shows what
+// its URL says.
+document.addEventListener("ui:failed", (e) => {
+  const root = /** @type {any} */ (/** @type {Element} */ (e.target).closest?.("[data-ui-table]"));
+  const [rows, sorts] = root?.uiBefore || [];
+  root?.removeAttribute("data-ui-confirm");
+  if (!rows) return;
+  root.uiBefore = null;
+  rows[0]?.parentNode?.append(...rows);
+  for (const [th, sort] of sorts) {
+    if (sort === null) th.removeAttribute("aria-sort");
+    else th.setAttribute("aria-sort", sort);
+  }
+});
+
 /* Wiring */
 
 /** @type {HTMLInputElement | null} */
@@ -360,6 +483,13 @@ document.addEventListener("click", (e) => {
   if (sort && e.shiftKey) {
     e.preventDefault();
     visit(root, sort.getAttribute("data-ui-add-sort") || sort.href);
+    return;
+  }
+  // A plain click on a link of the table that only changes the order: the rows move
+  // here at once, and the runtime still follows the link to confirm.
+  const link = /** @type {HTMLAnchorElement | null} */ (target.closest("a[data-ui-in-region][href]"));
+  if (link && !e.defaultPrevented && !e.button && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+    sortHere(/** @type {HTMLElement} */ (root), new URL(link.href));
     return;
   }
   const row = target.closest("tr[data-ui-row-href]");

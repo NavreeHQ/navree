@@ -99,6 +99,78 @@ for (const browserName of browsers) {
       await close();
     });
 
+    /** The keys the server draws for `path`, in order. */
+    const serverKeys = async (path, id) => {
+      const html = await get(path);
+      const body = html.slice(html.indexOf(`id="${id}"`)).split("</tbody>")[0];
+      return [...body.matchAll(/<tr data-key="([^"]+)"/g)].map((m) => m[1]).filter((key) => !key.endsWith("-detail"));
+    };
+
+    test("a page that holds every row sorts in the browser at once, and the server confirms", async () => {
+      await reset();
+      const { page, close, problems } = await open("/exact");
+      assert.equal(await page.locator("#sized[data-ui-local]").count(), 1);
+      for (const [column, sort] of [["amount", "amount"], ["amount", "-amount"], ["closed_on", "closed_on"], ["title", "title"]]) {
+        const expected = await serverKeys(`/exact?sort=${sort}`, "sized");
+        // The server's answer is held back: what shows meanwhile was sorted here.
+        let release;
+        const held = new Promise((resolve) => (release = resolve));
+        await page.route(/\/exact\?/, async (route) => {
+          await held;
+          await route.continue();
+        });
+        await page.locator(`#sized thead th[data-col=${column}] [data-slot=sort-link]`).click();
+        await page.waitForTimeout(150);
+        const meanwhile = await page.evaluate(() => ({
+          busy: document.getElementById("sized").hasAttribute("data-pending"),
+          sort: document.querySelector(`#sized thead th[aria-sort]`)?.getAttribute("data-col"),
+        }));
+        assert.equal(meanwhile.busy, false, `${sort}: not busy, the answer is showing`);
+        assert.equal(meanwhile.sort, column, sort);
+        if (column !== "title") assert.deepEqual(await keys(page, "sized"), expected, `${sort}: values and NULLs sort as the server sorts`);
+        release();
+        await page.waitForURL(new RegExp(`sort=${sort.replace("-", "\\-")}(&|$)`));
+        await settled(page, "sized");
+        await page.unroute(/\/exact\?/);
+        // Text may compare otherwise in the database; the server's order stands.
+        assert.deepEqual(await keys(page, "sized"), expected, `${sort}: the server's order after its answer`);
+      }
+      assert.deepEqual(problems, []);
+      await close();
+    });
+
+    test("a sort here that the server can't confirm goes back", async () => {
+      await reset();
+      const { page, close } = await open("/exact");
+      const before = await keys(page, "sized");
+      await page.route(/\/exact\?sort=amount/, (route) => route.abort());
+      await page.locator("#sized thead th[data-col=amount] [data-slot=sort-link]").click();
+      await page.locator("#sized [data-slot=table-alert]:not([hidden])").waitFor();
+      assert.deepEqual(await keys(page, "sized"), before, "the rows the address says");
+      assert.equal(await page.locator("#sized thead th[data-col=amount][aria-sort]").count(), 0);
+      assert.ok(!/sort=amount/.test(page.url()));
+      await close();
+    });
+
+    test("a page that holds part of the result asks the server to sort", async () => {
+      await reset();
+      const { page, close } = await open("/deals?per=10");
+      assert.equal(await page.locator("#deals[data-ui-local]").count(), 0);
+      const before = await keys(page);
+      await page.route(/sort=amount/, async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        await route.continue();
+      });
+      await page.locator("#deals thead th[data-col=amount] [data-slot=sort-link]").click();
+      await page.waitForTimeout(150);
+      assert.equal(await page.locator("#deals[data-pending]").count(), 1, "busy while the server sorts");
+      assert.deepEqual(await keys(page), before, "nothing moved yet");
+      await page.waitForURL(/sort=amount/);
+      await settled(page);
+      assert.deepEqual(await keys(page), await serverKeys("/deals?per=10&sort=amount", "deals"));
+      await close();
+    });
+
     test("a tick in a filter's list applies at once; typing waits for a pause", async () => {
       await reset();
       const { page, close } = await open("/deals?per=10");

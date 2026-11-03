@@ -705,3 +705,52 @@ fn typing_waits_as_long_as_the_table_says() {
         "capped: {html}"
     );
 }
+
+#[test]
+fn a_page_that_holds_every_row_can_sort_them_in_the_browser() {
+    let rows: Vec<Deal> = (1..=3).map(deal).collect();
+    let html = draw(&q(""), &rows, 3);
+    assert!(html.contains("data-ui-local"), "{html}");
+    assert!(
+        html.contains(r#"data-ui-sort-default="-amount,title""#),
+        "the order with no sort in the URL: {html}"
+    );
+    assert!(
+        html.contains(r#"data-col="amount" data-numeric data-kind="n""#),
+        "{html}"
+    );
+    assert!(
+        html.contains(r#"data-col="closed" data-kind="d""#),
+        "{html}"
+    );
+    assert!(
+        !html.contains(r#"data-col="title" data-kind"#),
+        "text compares as text: {html}"
+    );
+    // A cell the page draws itself carries its value.
+    let page = TablePage::new(rows.clone(), 3);
+    let html = render(
+        &DataTable::new("deals", &q(""), &page)
+            .cell("amount", |row| {
+                navree_ui::el("strong").child(format!("about {}", row.id))
+            })
+            .into(),
+    );
+    assert!(html.contains(r#"data-v="100""#), "{html}");
+    assert!(
+        !html.contains(r#"data-v="Deal"#),
+        "only drawn cells: {html}"
+    );
+}
+
+#[test]
+fn a_page_that_holds_part_of_the_result_asks_the_server() {
+    let rows: Vec<Deal> = (1..=3).map(deal).collect();
+    for (query, total) in [("", 30), ("page=2", 28), ("per=10", 11)] {
+        let html = draw(&q(query), &rows, total);
+        assert!(!html.contains("data-ui-local"), "{query}: {html}");
+        assert!(!html.contains("data-kind"), "{query}: {html}");
+    }
+    let html = draw(&q(""), &[], 0);
+    assert!(!html.contains("data-ui-local"), "no rows: {html}");
+}

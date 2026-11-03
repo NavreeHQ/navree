@@ -153,6 +153,16 @@ pub struct TableData<'a, R> {
     version: Option<&'a str>,
 }
 
+/// How a column's values compare in the browser: as numbers, as ISO dates, or (with
+/// no code) as text.
+fn kind_code(kind: ValueKind) -> Option<&'static str> {
+    match kind {
+        ValueKind::Int | ValueKind::Money | ValueKind::Float | ValueKind::Decimal => Some("n"),
+        ValueKind::Date | ValueKind::DateTime => Some("d"),
+        _ => None,
+    }
+}
+
 impl<'a, R> From<&'a [R]> for TableData<'a, R> {
     fn from(rows: &'a [R]) -> Self {
         Self {
@@ -825,6 +835,39 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         self.row_actions.is_some()
     }
 
+    /// Whether this page holds every row of its result: the first page, with no more
+    /// after it. Then the browser can sort the rows itself, and the server's answer to
+    /// the same link only confirms the order.
+    fn holds_all(&self) -> bool {
+        let state = &self.query.state;
+        if self.loading || self.failed.is_some() || self.data.rows.is_empty() {
+            return false;
+        }
+        if state.after.is_some() || state.before.is_some() || self.query.offset() != 0 {
+            return false;
+        }
+        let shown = self.data.rows.len() as u64;
+        match self.data.total {
+            Total::Exact(total) => total == shown,
+            Total::AtLeast(_) | Total::Unknown => shown < u64::from(self.query.per_page()),
+        }
+    }
+
+    /// The default order, spelled as the URL spells a sort.
+    fn default_sort() -> String {
+        let mut out = String::new();
+        for (at, (name, direction)) in R::CONFIG.sort.iter().enumerate() {
+            if at > 0 {
+                out.push(',');
+            }
+            if *direction == Direction::Desc {
+                out.push('-');
+            }
+            out.push_str(name);
+        }
+        out
+    }
+
     fn has_detail(&self) -> bool {
         self.detail.is_some()
     }
@@ -1222,7 +1265,13 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .flag("data-numeric", column.numeric)
             .flag("data-hide-mobile", column.hide_on_mobile)
             .attr_opt("data-align", align_str(column.align))
-            .attr_opt("data-sticky", sticky_at.map(str::to_owned));
+            .attr_opt("data-sticky", sticky_at.map(str::to_owned))
+            .attr_opt(
+                "data-kind",
+                (column.sortable && self.holds_all())
+                    .then(|| kind_code(column.kind))
+                    .flatten(),
+            );
         if let Some(direction) = sorted {
             th = th.attr(
                 "aria-sort",
@@ -2123,6 +2172,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         let selectable = self.selectable();
         let form = self.bulk_id();
         let span = self.span();
+        let local = self.holds_all();
         let mut out = String::new();
         let mut label = String::new();
         for (index, row) in self.data.rows.iter().enumerate() {
@@ -2174,6 +2224,15 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                     .find(|(name, _)| *name == TableQuery::<R, F>::column(*at).name)
                     .map(|(_, draw)| draw);
                 out.push_str(open);
+                // A cell drawn by the page shows what it likes: its value, for a sort
+                // in the browser, goes with it.
+                if local && draw.is_some() && TableQuery::<R, F>::column(*at).sortable {
+                    out.push_str(" data-v=\"");
+                    label.clear();
+                    row.write_text(*at, &mut label);
+                    escape_into(&mut out, &label);
+                    out.push('"');
+                }
                 if TableQuery::<R, F>::column(*at).truncate {
                     out.push_str(" title=\"");
                     label.clear();
@@ -2531,6 +2590,11 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .attr_opt("data-ui-live-src", self.live_from.clone())
             .attr("data-l", self.runtime_labels())
             .uses(Uses::CORE.with(Uses::TABLE));
+        if self.holds_all() {
+            root = root
+                .flag("data-ui-local", true)
+                .attr("data-ui-sort-default", Self::default_sort());
+        }
         if let Total::Exact(total) = self.data.total {
             root = root.attr("data-total", i64::try_from(total).unwrap_or(i64::MAX));
             if self.select_all_matching && self.selectable() {

@@ -147,6 +147,8 @@ export async function showPage(response, how = {}) {
 
 /** A table whose fetch failed keeps its rows and says so. @param {Element} table @param {string} url @param {number} status */
 function tableFailed(table, url, status) {
+  // What was done here ahead of the answer is undone: the table shows what the URL says.
+  table.dispatchEvent(new CustomEvent("ui:failed", { bubbles: true }));
   const alert = table.querySelector("[data-slot=table-alert]");
   if (!alert) return;
   let words = {};
@@ -159,8 +161,13 @@ function tableFailed(table, url, status) {
   alert.removeAttribute("hidden");
 }
 
-/** Marks a table busy, within the frame of the request. @param {Element | null} table @param {boolean} on */
+/**
+ * Marks a table busy, within the frame of the request. A table that already shows the
+ * answer, sorted here, isn't busy: the request only confirms it.
+ * @param {Element | null} table @param {boolean} on
+ */
 function tablePending(table, on) {
+  if (on && table?.hasAttribute("data-ui-confirm")) return;
   table?.toggleAttribute("data-pending", on);
   if (on) table?.setAttribute("aria-busy", "true");
   else table?.removeAttribute("aria-busy");
@@ -172,9 +179,10 @@ export async function go(url, how = {}) {
   if (!sameOrigin(url)) return;
   const mine = ++generation;
   const html = root();
-  html.setAttribute("data-ui-loading", "");
   const region = how.region ? document.getElementById(how.region) : null;
   const table = region?.hasAttribute("data-ui-table") ? region : null;
+  // A table sorted here already shows the answer: the request only confirms it.
+  if (!table?.hasAttribute("data-ui-confirm")) html.setAttribute("data-ui-loading", "");
   tablePending(table, true);
   try {
     const response = await fetchPage(url);
