@@ -210,7 +210,7 @@ impl From<Href> for AttrValue {
 /// What a page must load for the elements in it: a small set of bits, so
 /// finding out allocates nothing.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Uses(pub(crate) u8);
+pub struct Uses(pub(crate) u16);
 
 impl Uses {
     /// Nothing: the page ships no script.
@@ -230,6 +230,9 @@ impl Uses {
     /// The menus module: the keys of tabs, toggle groups and dropdown menus, and
     /// tab switching in the page.
     pub const MENUS: Self = Self(1 << 5);
+    /// The phone module: the country list, formatting as you type and the
+    /// number in E.164.
+    pub const PHONE: Self = Self(1 << 8);
 
     /// Both sets together.
     #[must_use]

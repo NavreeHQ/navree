@@ -16,11 +16,16 @@ default = []
 ## and stored views, through navree-orm. The facade turns it on when both `ui`
 ## and `orm` are on.
 orm = ["dep:navree-orm", "dep:futures-util", "dep:tokio", "dep:base64"]
+## `PhoneInput` and the phone widget of forms: a country picker, formatting
+## as you type and E.164, on navree-phone. The facade turns it on when both
+## `ui` and `validation-phone` are on.
+phone = ["dep:navree-phone", "navree-validation/phone"]
 
 [dependencies]
 base64 = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
 navree-orm = { workspace = true, optional = true }
+navree-phone = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 brotli = { workspace = true }
 bytes = { workspace = true }
@@ -41,6 +46,8 @@ chrono-tz = { workspace = true }
 serde_urlencoded = { workspace = true }
 sha2 = { workspace = true }
 http-body-util = { workspace = true }
+# Its own `phone` feature, for the tests of the phone input.
+navree-ui = { workspace = true, features = ["phone"] }
 navree-testing = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }

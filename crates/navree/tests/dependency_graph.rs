@@ -199,7 +199,9 @@ const HIERARCHY: &[Rule] = &[
     // come from navree-ui-macros.
     // The table's backend goes through the ORM (same layer, optional; the ORM never
     // depends on the UI).
-    rule("navree-ui", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-validation", "navree-ui-macros", "navree-orm"]),
+    // Its phone input (optional feature `phone`) reads and writes numbers with
+    // navree-phone.
+    rule("navree-ui", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-validation", "navree-ui-macros", "navree-orm", "navree-phone"]),
     // The ORM: models on navree-db's pool and unit of work. Model events go
     // through navree-events, encrypted and hashed casts through
     // navree-crypto, records as API resources (`__type`, field masks)

@@ -35,7 +35,9 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
   HoverCard, Popover, ScrollArea, Sheet, Tooltip. Menus and messages: Tabs, ToggleGroup,
   DropdownMenu, Toast and Toaster. Layout: Stack, Row, Grid, Container.
   Dates (`navree_ui::dates`): Calendar, DatePicker, DateRangePicker, TimePicker.
-  Shell: `Shell`, `AppShell`, `Page`. Components carry no outer margin: layout
+  Shell: `Shell`, `AppShell`, `Page`. With the `phone` feature, `PhoneInput`: a country
+  list and the number, formatted as typed, read on the server in the country chosen.
+  Components carry no outer margin: layout
   belongs to the layout primitives.
 - **A shell for a module's own pages.** A module that serves pages and must not register
   a `Shell` for the whole app (a debugging tool) builds its own and applies it with
@@ -84,6 +86,7 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 | A data table | `core`, `table`, `overlay`. |
 | A calendar | `dates`. |
 | A date or range picker, a time picker | `dates` and `overlay`: placing the popup. |
+| A phone input | `phone`, `overlay`; the numbering plans on first focus. |
 | The app shell | `core`, `sidebar`. |
 
 Everything is delegated from `document`, so a morph or a swap needs no re-wiring.

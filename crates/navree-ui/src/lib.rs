@@ -34,6 +34,8 @@ pub mod prelude {
         Choice, ChoiceList, Combobox, Command, CommandGroup, CommandItem, MultiSelect, OptionQuery,
         Select, SelectLabels,
     };
+    #[cfg(feature = "phone")]
+    pub use crate::phone::{PhoneInput, PhoneLabels};
     pub use crate::table::{
         BulkAction, BulkRequest, DataTable, FilterOption, Region, RowAction, TableDensity,
         TableHeight, TableLabels, TablePage, TableQuery,
@@ -58,6 +60,8 @@ pub mod icons;
 mod module;
 pub mod node;
 pub mod op;
+#[cfg(feature = "phone")]
+pub mod phone;
 pub mod render;
 pub mod select;
 pub mod shell;
@@ -75,6 +79,8 @@ pub use navree_ui_macros::{FilterBar, Form, Options, TableRow, icon_file, icon_s
 pub use navree_validation::Validate;
 pub use node::{Attr, AttrValue, Element, IntoNodes, Node, Uses, el};
 pub use op::{Envelope, Op, Reply, ToastTone, UrlMode, is_prefetch};
+#[cfg(feature = "phone")]
+pub use phone::{PhoneInput, PhoneLabels};
 pub use render::{Measure, measure, render, render_into};
 #[cfg(feature = "orm")]
 pub use select::OptionSource;

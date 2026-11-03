@@ -66,6 +66,8 @@ pub fn scripts(uses: Uses) -> impl Iterator<Item = &'static str> {
         (Uses::SELECT, SELECT_URL),
         (Uses::DATES, DATES_URL),
         (Uses::MENUS, MENUS_URL),
+        #[cfg(feature = "phone")]
+        (Uses::PHONE, PHONE_URL),
     ]
     .into_iter()
     .filter(move |(bit, _)| uses.has(*bit))

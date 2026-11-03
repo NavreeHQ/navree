@@ -70,6 +70,11 @@ pub enum Widget {
     /// A time of day typed or chosen from a list; a native time field with
     /// JavaScript off.
     TimePicker,
+    /// A phone number with a country picker (a [`PhoneInput`](crate::PhoneInput)
+    /// with the `phone` feature, else a `tel` input). It posts the number as
+    /// typed and the country as `{name}_country`, and the server reads the
+    /// number in that country.
+    Phone,
 }
 
 /// One field of a [`Form`]. The derive writes these.
@@ -307,6 +312,20 @@ display_values!(
     chrono::NaiveTime,
 );
 
+#[cfg(feature = "phone")]
+impl FieldValue for navree_validation::Phone {
+    fn field_value(&self) -> Option<String> {
+        Some(self.as_str().to_owned())
+    }
+}
+
+#[cfg(feature = "phone")]
+impl FieldValue for navree_phone::PhoneNumber {
+    fn field_value(&self) -> Option<String> {
+        Some(self.as_str().to_owned())
+    }
+}
+
 impl FieldValue for chrono::NaiveDateTime {
     fn field_value(&self) -> Option<String> {
         Some(self.format("%Y-%m-%dT%H:%M").to_string())
@@ -423,6 +442,7 @@ fn native<T: Form>(field: &FormField) -> Native {
             Widget::Checkbox
                 | Widget::Switch
                 | Widget::Multi
+                | Widget::Phone
                 | Widget::Textarea { .. }
                 | Widget::Input(
                     InputKind::Text
@@ -460,6 +480,7 @@ fn native<T: Form>(field: &FormField) -> Native {
                 out.max = *max;
             }
             Rule::Format("email") => out.kind = Some(InputKind::Email),
+            Rule::Format("phone") => out.kind = Some(InputKind::Tel),
             Rule::Format("url") => out.kind = Some(InputKind::Url),
             // Only a pattern whose rule says `browser` reaches the page: a Rust regex
             // isn't always a browser's, and a pattern can say more than a page should.
@@ -491,6 +512,8 @@ pub struct FormView<T> {
     csrf: Option<String>,
     date_locale: DateLocale,
     today: Option<chrono::NaiveDate>,
+    #[cfg(feature = "phone")]
+    phone_region: Option<navree_phone::Region>,
     marker: PhantomData<fn() -> T>,
 }
 
@@ -510,8 +533,18 @@ impl<T: Form> FormView<T> {
             csrf: None,
             date_locale: DateLocale::english(),
             today: None,
+            #[cfg(feature = "phone")]
+            phone_region: None,
             marker: PhantomData,
         }
+    }
+
+    /// The country a phone field starts on when its number has none: the
+    /// workspace's or the user's (feature `phone`).
+    #[cfg(feature = "phone")]
+    pub fn phone_region(mut self, region: Option<navree_phone::Region>) -> Self {
+        self.phone_region = region;
+        self
     }
 
     /// Posts to `action`.
@@ -787,7 +820,40 @@ impl<T: Form> FormView<T> {
                 .checked(is_on(value))
                 .label(field.label)
                 .into(),
+            Widget::Phone => self.phone(field, &rules, value, invalid),
         }
+    }
+
+    #[cfg(feature = "phone")]
+    fn phone(&self, field: &FormField, rules: &Native, value: Option<&str>, invalid: bool) -> Node {
+        let country = self
+            .value_of(&format!("{}{}", field.name, crate::phone::COUNTRY_SUFFIX))
+            .and_then(navree_phone::Region::parse)
+            .or(self.phone_region);
+        let mut input = crate::phone::PhoneInput::new(field.name)
+            .region(country)
+            .invalid(invalid);
+        if let Some(value) = value {
+            input = input.text(value);
+        }
+        if let Some(placeholder) = field.placeholder {
+            input = input.placeholder(placeholder);
+        }
+        if rules.required {
+            input = input.required();
+        }
+        if field.autofocus {
+            input = input.autofocus();
+        }
+        input.into()
+    }
+
+    #[cfg(not(feature = "phone"))]
+    fn phone(&self, field: &FormField, rules: &Native, value: Option<&str>, invalid: bool) -> Node {
+        let input = Input::new(InputKind::Tel, field.name)
+            .autocomplete("tel")
+            .invalid(invalid);
+        self.finish_input(input, field, rules, value).into()
     }
 
     fn finish_input(
@@ -1052,11 +1118,55 @@ fn read_pairs<T: Form>(bytes: &[u8]) -> Option<Vec<(String, String)>> {
         if count >= MAX_PAIRS {
             return None;
         }
-        if T::FIELDS.iter().any(|field| field.name == name) {
+        if T::FIELDS.iter().any(|field| field.name == name) || is_phone_country::<T>(&name) {
             kept.push((name.into_owned(), value.into_owned()));
         }
     }
     Some(kept)
+}
+
+/// Whether `name` is the country posted with one of `T`'s phone fields.
+fn is_phone_country<T: Form>(name: &str) -> bool {
+    name.strip_suffix("_country").is_some_and(|field| {
+        T::FIELDS
+            .iter()
+            .any(|f| f.name == field && f.widget == Widget::Phone)
+    })
+}
+
+/// The pairs with each phone field's number read in the country posted with
+/// it: written in E.164 when it is valid there, and as a value no region
+/// reads when it is not, so the field reports it.
+#[cfg(feature = "phone")]
+fn read_phones<T: Form>(pairs: &[(String, String)]) -> Vec<(String, String)> {
+    use navree_phone::{PhoneNumber, Region};
+    pairs
+        .iter()
+        .map(|(name, value)| {
+            let phone = T::FIELDS
+                .iter()
+                .any(|field| field.name == name && field.widget == Widget::Phone);
+            if !phone || value.trim().is_empty() {
+                return (name.clone(), value.clone());
+            }
+            let country = format!("{name}{}", crate::phone::COUNTRY_SUFFIX);
+            let region = pairs
+                .iter()
+                .find(|(other, _)| *other == country)
+                .and_then(|(_, code)| Region::parse(code));
+            let Some(region) = region else {
+                return (name.clone(), value.clone());
+            };
+            let read = match PhoneNumber::parse(value, Some(region)) {
+                Ok(number) => match number.extension() {
+                    Some(extension) => format!("{number} ext. {extension}"),
+                    None => number.as_str().to_owned(),
+                },
+                Err(_) => String::from("+"),
+            };
+            (name.clone(), read)
+        })
+        .collect()
 }
 
 /// What a rejected form may show again: never a password, and a bounded amount.
@@ -1227,6 +1337,10 @@ fn read<T>(pairs: &[(String, String)]) -> Result<T, FieldErrors>
 where
     T: Form + DeserializeOwned + Validate,
 {
+    #[cfg(feature = "phone")]
+    let phones = read_phones::<T>(pairs);
+    #[cfg(feature = "phone")]
+    let pairs = phones.as_slice();
     // A list field's values are read together: the deserializer takes a name once.
     let lists: Vec<(&'static str, String)> = T::FIELDS
         .iter()
@@ -1282,7 +1396,8 @@ where
             | Widget::Radio
             | Widget::DatePicker
             | Widget::TimePicker
-            | Widget::Money => kept.push((field.name, "")),
+            | Widget::Money
+            | Widget::Phone => kept.push((field.name, "")),
             // Read above, with the values it has.
             Widget::Multi => {}
         }
@@ -1379,6 +1494,11 @@ fn type_error<T: Form>(error: &serde_path_to_error::Error<urlencoded::Error>) ->
             label,
             ..
         }) => format!("{label}: choose one of the options."),
+        Some(FormField {
+            widget: Widget::Phone,
+            label,
+            ..
+        }) => format!("{label}: enter a phone number, with its country."),
         Some(FormField { label, .. }) => format!("{label} is not valid."),
         None => "This form could not be read.".to_owned(),
     };

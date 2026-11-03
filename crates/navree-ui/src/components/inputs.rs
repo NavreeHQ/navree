@@ -664,6 +664,15 @@ impl Field {
 fn tie_control(node: &mut Node, id: &str, invalid: bool, described: Option<String>) -> bool {
     match node {
         Node::Element(element) => {
+            if element.get("data-field-skip").is_some()
+                || (element.tag == "input"
+                    && element
+                        .get("type")
+                        .and_then(AttrValue::as_text)
+                        .is_some_and(|kind| kind == "hidden"))
+            {
+                return false;
+            }
             // A select, combobox or multi-select marks its focusable control, so the
             // hidden `<select>` that carries its value doesn't take the id.
             if element.get("data-field-control").is_some()

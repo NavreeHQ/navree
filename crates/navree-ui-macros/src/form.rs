@@ -91,11 +91,12 @@ fn named_widget(ui: &TokenStream, widget: &Ident, rows: u32) -> syn::Result<Toke
         "checkbox" => quote!(#ui::form::Widget::Checkbox),
         "switch" => quote!(#ui::form::Widget::Switch),
         "money" => quote!(#ui::form::Widget::Money),
+        "phone" => quote!(#ui::form::Widget::Phone),
         other => {
             return Err(syn::Error::new(
                 widget.span(),
                 format!(
-                    "unknown widget `{other}`: expected text, email, url, tel, password, search, number, date, time, datetime, date_picker, time_picker, hidden, textarea, select, listbox, combobox, multiselect, radio, checkbox, switch or money"
+                    "unknown widget `{other}`: expected text, email, url, tel, password, search, number, date, time, datetime, date_picker, time_picker, hidden, textarea, select, listbox, combobox, multiselect, radio, checkbox, switch, money or phone"
                 ),
             ));
         }
@@ -117,6 +118,7 @@ fn inferred_widget(ui: &TokenStream, name: Option<&str>) -> Option<TokenStream> 
         "NaiveTime" => input("Time"),
         "NaiveDateTime" | "DateTime" => input("DateTime"),
         "Money" => quote!(#ui::form::Widget::Money),
+        "Phone" | "PhoneNumber" => quote!(#ui::form::Widget::Phone),
         _ => return None,
     })
 }

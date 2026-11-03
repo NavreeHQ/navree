@@ -53,6 +53,20 @@ fn the_menus_module_is_at_most_5_kb_gzip() {
 }
 
 #[test]
+fn the_phone_module_is_at_most_5_kb_gzip() {
+    assert!(size("phone") <= 5 * 1024, "{}", size("phone"));
+}
+
+/// The numbering plans the phone module formats with: fetched once, on the
+/// first focus of a phone field, never with the page.
+#[test]
+fn the_phone_plans_are_at_most_20_kb_brotli() {
+    let plans = get("phone-data").unwrap();
+    let brotli = plans.brotli.map_or(plans.bytes.len(), <[u8]>::len);
+    assert!(brotli <= 20 * 1024, "{brotli}");
+}
+
+#[test]
 fn the_stylesheet_is_at_most_25_kb_gzip() {
     assert!(size("navree-ui") <= 25 * 1024, "{}", size("navree-ui"));
 }
