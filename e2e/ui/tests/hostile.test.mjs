@@ -97,11 +97,14 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
         f.routes.set(`/${path}-post`, (req, res) => f.ops(res, { ops: [{ op: "toast", tone: "info", text: "done" }] }));
         const { context, page, errors } = await fresh(`/${path}`);
         await page.click("#go");
+        // The answer shows, however slow the machine (its toast lasts 4 s): then nothing
+        // more may come.
+        await page.locator("[data-slot=toast]", { hasText: "done" }).waitFor({ timeout: 15000 });
         await sleep(200);
         assert.equal(hits(`/${path}-post`).length, 1, value);
         assert.equal(hits(`/${path}-post`)[0].headers["x-xsrf-token"], undefined, value);
         assert.equal(await page.evaluate(() => document.getElementById("f").hasAttribute("data-pending")), false, value);
-        assert.deepEqual(await toasts(page), ["done"], value);
+        assert.deepEqual((await toasts(page)).filter((text) => text !== "done"), [], value);
         assert.deepEqual(errors, [], value);
         await context.close();
       }
