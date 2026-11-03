@@ -1,6 +1,6 @@
 // Link boosting and regions: fetch a page, morph what changed, keep the shell
 // alive. A failed fetch falls back to a real navigation.
-import { body, byId, clean, cookies, every, head, hidden, make, on, one, ownModule, root, sameOrigin, setTitle, titleOf } from "./dom.js";
+import { body, byId, clean, closest, cookies, every, head, hidden, make, on, one, ownModule, root, sameOrigin, setTitle, titleOf } from "./dom.js";
 import { morph, pieces } from "./morph.js";
 import { adoptToasts, announce } from "./ui.js";
 
@@ -416,7 +416,7 @@ export function startNav() {
   }, { passive: true });
   // A component that wants its region fetched again (a tab shown for the first time).
   on(document, "ui:refresh", (e) => {
-    const region = /** @type {Element} */ (e.target).closest?.("[data-ui-region]");
+    const region = closest(e.target, "[data-ui-region]");
     if (region?.id) refresh(region.id);
   });
   on(document, "click", (e) => {

@@ -3,7 +3,7 @@
 // A toast lives in a CSS animation (`ui-toast-life`, as long as its `data-duration`)
 // and ends on `animationend`; pausing under the pointer or focus is
 // `animation-play-state`, so there is no timer to lose and nothing that can stick.
-import { body, hidden, make, on, one, persistent } from "./dom.js";
+import { attr, body, closest, hidden, holds, make, on, one, persistent } from "./dom.js";
 
 /** @param {Element} el */
 export function openTarget(el) {
@@ -53,7 +53,7 @@ let returnTo = null;
 function toaster() {
   if (host?.isConnected) return host;
   // Only the page's own, a direct child of the body: stored markup can't stand in for it.
-  host = /** @type {HTMLElement | undefined} */ ([...body().children].find((el) => el.getAttribute("data-slot") === "toaster"));
+  host = /** @type {HTMLElement | undefined} */ ([...body().children].find((el) => attr(el, "data-slot") === "toaster"));
   if (!host) {
     host = make("section");
     host.setAttribute("data-slot", "toaster");
@@ -132,7 +132,7 @@ function build(spec) {
     const close = make("button");
     close.setAttribute("data-slot", "toast-close");
     close.setAttribute("type", "button");
-    close.setAttribute("aria-label", toaster().getAttribute("data-close") || "Dismiss");
+    close.setAttribute("aria-label", attr(toaster(), "data-close") || "Dismiss");
     el.append(close);
   }
   return el;
@@ -141,8 +141,8 @@ function build(spec) {
 /** Puts `el` in the standing toaster, in place of a toast with its name. @param {HTMLElement} el @param {number} [elapsed] */
 function place(el, elapsed) {
   const box = toaster();
-  const id = el.getAttribute("data-toast-id");
-  const old = id && [...box.children].find((t) => t.getAttribute("data-toast-id") === id);
+  const id = attr(el, "data-toast-id");
+  const old = id && [...box.children].find((t) => attr(t, "data-toast-id") === id);
   if (old) old.replaceWith(el);
   else box.append(el);
   show(box);
@@ -160,7 +160,7 @@ function place(el, elapsed) {
 function show(box) {
   const modal = one("dialog:modal");
   try {
-    if (modal && !modal.contains(box)) {
+    if (modal && !holds(modal, box)) {
       modal.append(box);
     } else if (!modal && box.parentNode !== body()) {
       body().append(box);
@@ -171,7 +171,7 @@ function show(box) {
 
 /** Takes a toast away, and focus with it to where it came from. @param {Element} t */
 function dismiss(t) {
-  const held = t.contains(document.activeElement);
+  const held = holds(t, document.activeElement);
   t.remove();
   if (held && returnTo?.isConnected) /** @type {HTMLElement} */ (returnTo).focus({ preventScroll: true });
   if (host && !host.querySelector("[data-slot=toast]")) {
@@ -193,14 +193,14 @@ export function toast(tone, text) {
  * @param {Document} doc
  */
 export function adoptToasts(doc) {
-  const from = [...body(doc).children].find((el) => el.getAttribute("data-slot") === "toaster");
+  const from = [...body(doc).children].find((el) => attr(el, "data-slot") === "toaster");
   if (!from) return;
   const box = toaster();
-  const position = from.getAttribute("data-position");
+  const position = attr(from, "data-position");
   if (position) box.setAttribute("data-position", position);
-  const close = from.getAttribute("data-close");
+  const close = attr(from, "data-close");
   if (close) box.setAttribute("data-close", close);
-  const kids = [...from.children].filter((t) => t.getAttribute("data-slot") === "toast");
+  const kids = [...from.children].filter((t) => attr(t, "data-slot") === "toast");
   from.remove();
   for (const kid of kids) place(/** @type {HTMLElement} */ (kid));
 }
@@ -211,14 +211,14 @@ function specOf(t) {
   const link = t.querySelector("a[data-slot=toast-action]");
   const form = t.querySelector("form");
   const action = link
-    ? { label: link.textContent || "", href: link.getAttribute("href") || "" }
-    : form ? { label: form.textContent || "", href: form.getAttribute("action") || "", post: true } : undefined;
+    ? { label: link.textContent || "", href: attr(link, "href") || "" }
+    : form ? { label: form.textContent || "", href: attr(form, "action") || "", post: true } : undefined;
   return {
-    tone: t.getAttribute("data-tone"),
+    tone: attr(t, "data-tone"),
     text: text("[data-slot=toast-text]"),
     title: text("[data-slot=toast-title]"),
-    id: t.getAttribute("data-toast-id") || undefined,
-    duration: t.getAttribute("data-duration"),
+    id: attr(t, "data-toast-id") || undefined,
+    duration: attr(t, "data-duration"),
     closable: !!t.querySelector("[data-slot=toast-close]"),
     action,
   };
@@ -255,22 +255,22 @@ export function startToasts() {
   if (box.querySelector("[data-slot=toast]")) show(box);
   on(document, "animationend", (e) => {
     const t = /** @type {Element} */ (e.target);
-    if (e.animationName === LIFE && t.getAttribute?.("data-slot") === "toast" && host?.contains(t)) dismiss(t);
+    if (e.animationName === LIFE && t instanceof Element && attr(t, "data-slot") === "toast" && holds(host, t)) dismiss(t);
   });
   on(document, "click", (e) => {
-    const t = /** @type {Element} */ (e.target).closest?.("[data-slot=toast]");
-    if (!t || !host?.contains(t)) return;
-    if (/** @type {Element} */ (e.target).closest("[data-slot=toast-close],a[data-slot=toast-action]")) dismiss(t);
+    const t = closest(e.target, "[data-slot=toast]");
+    if (!t || !holds(host, t)) return;
+    if (closest(e.target, "[data-slot=toast-close],a[data-slot=toast-action]")) dismiss(t);
   });
   // A post action is over when the server has answered; the answer may be a new toast.
   on(document, "ui:sent", (e) => {
     const t = e.detail?.form instanceof Element ? Element.prototype.closest.call(e.detail.form, "[data-slot=toast]") : null;
-    if (t && host?.contains(t)) dismiss(t);
+    if (t && holds(host, t)) dismiss(t);
   });
   on(document, "visibilitychange", () => host?.toggleAttribute("data-paused", hidden()));
   // A dialog that closes takes the toaster with it, so it goes back to the page.
   on(document, "close", (e) => {
-    if (host && e.target instanceof HTMLDialogElement && e.target.contains(host)) {
+    if (host && e.target instanceof HTMLDialogElement && holds(e.target, host)) {
       body().append(host);
       if (host.querySelector("[data-slot=toast]")) show(host);
     }
@@ -281,11 +281,11 @@ export function startToasts() {
       const first = /** @type {HTMLElement | null} */ (host?.querySelector("[data-slot=toast] button,[data-slot=toast] a"));
       if (!first) return;
       e.preventDefault();
-      if (!host?.contains(document.activeElement)) returnTo = document.activeElement;
+      if (!holds(host, document.activeElement)) returnTo = document.activeElement;
       first.focus();
     } else if (e.key === "Escape") {
-      const t = /** @type {Element} */ (e.target).closest?.("[data-slot=toast]");
-      if (t && host?.contains(t)) dismiss(t);
+      const t = closest(e.target, "[data-slot=toast]");
+      if (t && holds(host, t)) dismiss(t);
     }
   });
   swipe();
@@ -297,8 +297,8 @@ function swipe() {
   let drag = null;
   on(document, "pointerdown", (e) => {
     if (e.pointerType === "mouse" || !e.isPrimary) return;
-    const t = /** @type {HTMLElement | null} */ (/** @type {Element} */ (e.target).closest?.("[data-slot=toast]"));
-    if (!t || !host?.contains(t)) return;
+    const t = /** @type {HTMLElement | null} */ (closest(e.target, "[data-slot=toast]"));
+    if (!t || !holds(host, t)) return;
     drag = { t, x: e.clientX, dx: 0, at: e.timeStamp, id: e.pointerId };
     t.setAttribute("data-dragging", "");
   });

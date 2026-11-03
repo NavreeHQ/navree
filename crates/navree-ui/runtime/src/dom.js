@@ -89,6 +89,10 @@ export const ownModule = (url) => {
 
 /** @param {Element} el @param {string} name */
 export const attr = (el, name) => E.getAttribute.call(el, name);
+/** The nearest ancestor of `node` (or itself) that matches, or null: safe on anything an event can name. @param {any} node @param {string} selector @returns {Element | null} */
+export const closest = (node, selector) => (node instanceof Element ? E.closest.call(node, selector) : null);
+/** Whether `a` holds `b`. @param {Node | null | undefined} a @param {Node | null | undefined} b */
+export const holds = (a, b) => !!(a && b) && Node.prototype.contains.call(a, b);
 /** @param {Element} el @param {string} name */
 export const has = (el, name) => E.hasAttribute.call(el, name);
 /** @param {Element} el @param {string} name @param {string} value */

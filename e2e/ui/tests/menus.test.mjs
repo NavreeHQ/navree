@@ -1156,6 +1156,34 @@ for (const name of NAMES) {
         await page.done();
       });
 
+      test("N10 fields named like methods can't break the toasts, the tabs or the menus", async () => {
+        const page = await open("/menus");
+        await page.evaluate(() => {
+          const make = () => {
+            const form = document.createElement("form");
+            form.innerHTML = '<input name="getAttribute"><input name="closest"><input name="contains"><input name="matches"><input name="querySelector"><input name="id"><input name="children">';
+            return form;
+          };
+          document.body.prepend(make());
+          document.querySelector("main").prepend(make());
+        });
+        await page.locator("#n-info").click();
+        await toasts(page).first().waitFor();
+        // Pointer, key and animation events whose target is such a form.
+        await page.evaluate(() => {
+          const form = document.querySelector("main form");
+          form.dispatchEvent(new PointerEvent("pointerdown", { pointerType: "touch", isPrimary: true, bubbles: true }));
+          form.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+          form.dispatchEvent(new AnimationEvent("animationend", { animationName: "ui-toast-life", bubbles: true }));
+        });
+        await page.locator("#t-line-tab-activity").click();
+        await page.locator("#m-basic-trigger").click();
+        await page.locator("#m-basic").waitFor();
+        await page.keyboard.press("Escape");
+        assert.equal(await toasts(page).count() >= 1, true);
+        await page.done();
+      });
+
       test("N12 a toast from a command is in the page by the end of the click", async () => {
         const page = await open("/menus");
         const at = await page.evaluate(() => {
