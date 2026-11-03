@@ -324,6 +324,11 @@ function Kits() {
           </h2>
           <p className="mt-6 max-w-2xl text-lg leading-relaxed text-pretty text-fg-2">
             Each starter kit is a working app in one of these shapes, built from the same modules as everything on this page.
+            Whatever the shape, you choose how to draw its screens:{" "}
+            <Link href="/ui/#choose" className="link">
+              Navree UI, Next.js or Nuxt
+            </Link>
+            .
           </p>
         </div>
         <ul className="mt-12 grid grid-cols-1 gap-3 lg:grid-cols-3">
