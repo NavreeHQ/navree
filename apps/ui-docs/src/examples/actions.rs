@@ -87,7 +87,7 @@ fn button_icon_only() -> Row {
     Row::gap(2).children((
         Button::icon_only(icons::SETTINGS, "Settings"),
         Button::icon_only(icons::PENCIL, "Edit").variant(ButtonVariant::Outline),
-        Button::icon_only(icons::TRASH_2, "Delete").variant(ButtonVariant::Ghost),
+        Button::icon_only(icons::TRASH, "Delete").variant(ButtonVariant::Ghost),
     ))
 }
 

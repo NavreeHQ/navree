@@ -1,94 +1,112 @@
-// Generates src/icons.rs: the lucide icons the toolkit ships, as constants.
+// Generates the toolkit's icons and flags from pinned releases.
 //
-//   node crates/navree-ui/runtime/icons.mjs <path to node_modules/lucide-react>
+//   node icons.mjs            fetch the pinned sources, check them against icons.lock.json,
+//                             and write src/icons/lucide.rs, src/flags/data.rs and the
+//                             icon tags for the docs
+//   node icons.mjs --check    do the same in memory and fail when a file on disk differs
+//   node icons.mjs pin <source> <version>
+//                             pin another release of one source (lucide, flags,
+//                             cldr-territories or cldr-subdivisions); the registry's
+//                             checksum is recorded, then run the generator again
 //
-// The website's lucide-react (apps/website/node_modules/lucide-react) is the
-// source, so the toolkit draws the very icons the site does. The output is
-// committed: building the crate never needs Node.
+// The sources are npm tarballs. Each is refused unless its SHA-512 is the one
+// in icons.lock.json, before any file inside it is read. The generated files
+// are committed, so building the crate never needs Node or the network.
 
-import { readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { packageFiles, registryPin, sha256 } from "./icons/fetch.mjs";
+import { flagsRust, readFlags } from "./icons/flags.mjs";
+import { lucideRust, readLucide } from "./icons/lucide.mjs";
+
 const here = dirname(fileURLToPath(import.meta.url));
-const crate = join(here, "..");
-const lucide = process.argv[2];
-if (!lucide) {
-  console.error("usage: node icons.mjs <path to lucide-react>");
+const crate = resolve(here, "..");
+const lockPath = join(crate, "icons.lock.json");
+const lock = JSON.parse(readFileSync(lockPath, "utf8"));
+
+const PACKAGES = {
+  lucide: "lucide-static",
+  flags: "flag-icons",
+  "cldr-territories": "cldr-localenames-full",
+  "cldr-subdivisions": "cldr-subdivisions-full",
+};
+
+const args = process.argv.slice(2);
+
+if (args[0] === "pin") {
+  const [, source, version] = args;
+  if (!(source in PACKAGES) || !version) {
+    console.error(`usage: node icons.mjs pin <${Object.keys(PACKAGES).join("|")}> <version>`);
+    process.exit(2);
+  }
+  lock.sources[source] = await registryPin(PACKAGES[source], version);
+  writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+  console.log(`${source} pinned to ${PACKAGES[source]}@${version}. Run: node icons.mjs`);
+  process.exit(0);
+}
+
+const check = args.includes("--check");
+if (args.some((arg) => arg !== "--check")) {
+  console.error("usage: node icons.mjs [--check | pin <source> <version>]");
   process.exit(2);
 }
 
-/** The icons the kit ships, sorted. Add a name here and rerun the script. */
-const NAMES = [
-  "activity", "anchor", "app-window", "archive", "arrow-down", "arrow-left", "arrow-right",
-  "arrow-up", "arrow-up-down", "arrow-up-right", "badge-check", "ban", "bell", "book-open",
-  "book-text", "bot", "box", "boxes", "bug", "building", "building-2", "calendar",
-  "chart-column", "chart-line", "chart-no-axes-column", "check", "check-check", "chevron-down",
-  "chevron-left", "chevron-right", "chevron-up", "chevrons-left", "chevrons-right",
-  "chevrons-up-down", "circle", "circle-alert", "circle-check", "circle-dashed", "circle-help",
-  "circle-plus", "circle-x", "clock", "cloud", "code", "columns-3", "command", "compass", "copy",
-  "cpu", "credit-card", "database", "download", "ellipsis", "ellipsis-vertical",
-  "external-link", "eye", "eye-off", "file", "file-text", "filter", "flag", "folder", "gauge",
-  "git-branch", "globe", "grip-vertical", "handshake", "hard-drive", "hash", "history", "house",
-  "inbox", "info", "kanban", "key", "key-round", "keyboard", "layers", "layout-dashboard",
-  "layout-grid", "life-buoy", "link", "list", "list-checks", "list-filter", "loader-circle",
-  "lock", "log-in", "log-out", "logs", "mail", "map-pin", "menu", "message-square", "minus",
-  "monitor", "moon", "network", "notebook-pen", "package", "panel-left", "pause", "pencil",
-  "phone", "play", "plug", "plus", "radio", "receipt", "refresh-cw", "rocket", "rotate-ccw",
-  "scroll-text", "search", "send", "server", "settings", "settings-2", "shield", "shield-check",
-  "ship", "ship-wheel", "sliders-horizontal", "sparkles", "square-kanban", "square-terminal",
-  "star", "store", "sun", "table", "tag", "terminal", "timer", "trash-2", "trending-down",
-  "trending-up", "triangle-alert", "undo-2", "upload", "user", "user-plus", "user-round",
-  "users", "wallet", "waypoints", "webhook", "workflow", "wrench", "x", "zap",
-];
+const sources = {};
+for (const [name, pin] of Object.entries(lock.sources)) sources[name] = await packageFiles(pin);
 
-/** `["path", { d: "...", key: "..." }]` entries of one lucide-react icon module. */
-function nodes(name) {
-  const source = readFileSync(join(lucide, "dist/esm/icons", `${name}.mjs`), "utf8");
-  // A renamed icon re-exports its new name: `export { default } from './trash.mjs';`
-  const alias = source.match(/export \{ default \} from '\.\/([a-z0-9-]+)\.mjs';/);
-  if (alias) return nodes(alias[1]);
-  const match = source.match(/const __iconData = (\{[\s\S]*?\});\s*\n__iconData\.node;/);
-  if (!match) throw new Error(`cannot read the nodes of ${name}`);
-  // The icon data is a JS literal of strings, arrays and plain objects.
-  return Function(`"use strict"; return (${match[1]});`)().node;
-}
+const lucide = readLucide(sources.lucide);
+const flags = readFlags(sources.flags, sources["cldr-territories"], sources["cldr-subdivisions"]);
 
-function element([tag, attrs]) {
-  const parts = Object.entries(attrs)
-    .filter(([key]) => key !== "key")
-    .map(([key, value]) => `${key}="${String(value).replace(/"/g, "&quot;")}"`);
-  return `<${tag} ${parts.join(" ")}/>`;
-}
+if (lucide.version !== lock.sources.lucide.version) throw new Error("the lucide package's version is not the pin's");
+if (flags.version !== lock.sources.flags.version) throw new Error("the flag-icons package's version is not the pin's");
 
-const version = JSON.parse(readFileSync(join(lucide, "package.json"), "utf8")).version;
-const missing = [];
-const entries = [];
-for (const name of [...new Set(NAMES)].sort()) {
-  try {
-    const markup = nodes(name).map(element).join("");
-    if (markup.includes("'")) throw new Error(`${name} has a single quote`);
-    entries.push([name, markup]);
-  } catch (error) {
-    missing.push(`${name}: ${error.message.split("\n")[0]}`);
+const tagsJson = `{\n${Object.entries(lucide.tags)
+  .map(([name, tags]) => `  ${JSON.stringify(name)}: ${JSON.stringify(tags)}`)
+  .join(",\n")}\n}\n`;
+
+/** Output path (from the crate's root) and its text. */
+const outputs = {
+  "src/icons/lucide.rs": lucideRust(lucide),
+  "src/flags/data.rs": flagsRust(flags),
+  "../../apps/ui-docs/data/lucide-tags.json": tagsJson,
+};
+
+let stale = 0;
+const hashes = {};
+for (const [path, text] of Object.entries(outputs)) {
+  const full = join(crate, path);
+  hashes[path] = sha256(text);
+  if (check) {
+    const onDisk = existsSync(full) ? readFileSync(full, "utf8").replace(/\r\n/g, "\n") : null;
+    if (onDisk !== text) {
+      console.error(`${path}: differs from a fresh generation`);
+      stale += 1;
+    }
+    if (lock.outputs?.[path] !== hashes[path]) {
+      console.error(`${path}: icons.lock.json records another checksum`);
+      stale += 1;
+    }
+  } else {
+    mkdirSync(dirname(full), { recursive: true });
+    writeFileSync(full, text);
   }
 }
-if (missing.length) {
-  console.error(`missing or unreadable icons:\n  ${missing.join("\n  ")}`);
-  process.exit(1);
+
+if (check) {
+  if (stale) {
+    console.error("Run: node crates/navree-ui/runtime/icons.mjs");
+    process.exit(1);
+  }
+  console.log("icons and flags are current");
+} else {
+  lock.outputs = hashes;
+  writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+  const kb = (text) => `${(Buffer.byteLength(text) / 1024).toFixed(0)} KB`;
+  console.log(
+    `lucide ${lucide.version}: ${lucide.icons.length} icons, ${lucide.renamed.length} old names (${kb(outputs["src/icons/lucide.rs"])})\n` +
+      `flag-icons ${flags.version}: ${flags.flags.length} flags (${kb(outputs["src/flags/data.rs"])}); ` +
+      `names: ${flags.fromCldr.length} from CLDR ${flags.cldrVersion}, ${flags.fromFlagIcons.length} from flag-icons (${flags.fromFlagIcons.join(", ")})`,
+  );
 }
-
-const constants = entries
-  .map(([name, markup]) => `/// \`${name}\`.\npub const ${name.toUpperCase().replace(/-/g, "_")}: Icon = Icon(r##"${markup}"##);`)
-  .join("\n");
-const rust = `//! The lucide icons the toolkit ships (generated by \`runtime/icons.mjs\` from
-//! lucide-react ${version}; do not edit by hand). Lucide is under the ISC licence,
-//! with the MIT licence for icons derived from Feather: see THIRD_PARTY.md.
-
-/// An icon: its SVG shapes. Compile-time data, so no icon comes from a request.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Icon(pub(crate) &'static str);
-
-${constants}
-`;
-writeFileSync(join(crate, "src/icons.rs"), rust.replace(/\r\n/g, "\n"));

@@ -8,6 +8,7 @@
 
 mod actions;
 mod display;
+mod flag;
 mod inputs;
 mod layout;
 mod overlays;
@@ -19,6 +20,7 @@ pub use display::{
     MarkerVariant, Message, Pagination, Progress, Ratio, Separator, Skeleton, SkeletonShape,
     Spinner, Stat, Table, TableCell, TableHead, TableRowEl, Text, TextVariant,
 };
+pub use flag::{Flag, FlagShape, FlagSize};
 pub use inputs::{
     Checkbox, Field, FieldSet, Input, InputGroup, InputKind, Label, NativeSelect, OptionItem,
     RadioGroup, Switch, Textarea,
@@ -59,15 +61,28 @@ impl Size {
 }
 
 /// An icon as a node, hidden from assistive technology: what it means is in
-/// the text beside it.
+/// the text beside it. When an icon stands alone, use [`icon_labelled`].
 #[inline]
 pub fn icon(icon: Icon) -> Node {
     Node::Element(
         el("svg")
             .slot("icon")
-            .attr("viewBox", "0 0 24 24")
+            .attr("viewBox", icon.view_box())
             .attr("aria-hidden", "true")
-            .child(Node::Static(icon.0)),
+            .child(Node::Static(icon.shapes())),
+    )
+}
+
+/// An icon that stands alone and means something, such as a status mark in a
+/// table cell: an image with `label` as its accessible name.
+pub fn icon_labelled(icon: Icon, label: impl Into<std::borrow::Cow<'static, str>>) -> Node {
+    Node::Element(
+        el("svg")
+            .slot("icon")
+            .attr("viewBox", icon.view_box())
+            .attr("role", "img")
+            .attr("aria-label", label.into())
+            .child(Node::Static(icon.shapes())),
     )
 }
 

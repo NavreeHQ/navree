@@ -195,7 +195,7 @@ fn deal_actions(row: &DealRow) -> Vec<RowAction> {
         RowAction::link("View", format!("/deal/{}", row.id)).icon(icons::EYE),
         RowAction::post("Archive", format!("/deal/{}/archive", row.id)).icon(icons::ARCHIVE),
         RowAction::post("Delete", format!("/deal/{}/delete", row.id))
-            .icon(icons::TRASH_2)
+            .icon(icons::TRASH)
             .destructive(),
     ]
 }
@@ -237,7 +237,7 @@ async fn deals_page(
             [
                 BulkAction::new("archive", "Archive").icon(icons::ARCHIVE),
                 BulkAction::new("delete", "Delete")
-                    .icon(icons::TRASH_2)
+                    .icon(icons::TRASH)
                     .destructive()
                     .confirm("Delete {n} deals? This can't be undone."),
             ],

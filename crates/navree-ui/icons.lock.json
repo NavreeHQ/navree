@@ -1,0 +1,37 @@
+{
+  "sources": {
+    "lucide": {
+      "package": "lucide-static",
+      "version": "1.67.0",
+      "url": "https://registry.npmjs.org/lucide-static/-/lucide-static-1.67.0.tgz",
+      "integrity": "sha512-Lu/Ntwfw1GOQiNgTC2iHd/PC4QbqzwktLVFHTB84tldlfUjFgQ+EBWiZc/UPrlNdX97O/KXWRn792hIdQh6nhA==",
+      "licence": "ISC"
+    },
+    "flags": {
+      "package": "flag-icons",
+      "version": "7.6.0",
+      "url": "https://registry.npmjs.org/flag-icons/-/flag-icons-7.6.0.tgz",
+      "integrity": "sha512-hir/PsXwr0EESyizKrXJzmkzpLIMf+1vlNKLqAfvdh+bsU94a7LYWTiubkHKqptGoCPzOUGcm6c4PfC9/BaGSQ==",
+      "licence": "MIT"
+    },
+    "cldr-territories": {
+      "package": "cldr-localenames-full",
+      "version": "49.0.0",
+      "url": "https://registry.npmjs.org/cldr-localenames-full/-/cldr-localenames-full-49.0.0.tgz",
+      "integrity": "sha512-nTBCysDVK+JHb2hPhb26fJGp9+Lw0mOiqVsJ/9aTEQIduBTnghTSLgZitsM7FLa1Vjr0K0hfBQMdBgoyDxK0nQ==",
+      "licence": "Unicode-3.0"
+    },
+    "cldr-subdivisions": {
+      "package": "cldr-subdivisions-full",
+      "version": "49.0.0",
+      "url": "https://registry.npmjs.org/cldr-subdivisions-full/-/cldr-subdivisions-full-49.0.0.tgz",
+      "integrity": "sha512-4Yd6odsg4rsh5+s9jFyS80xUQuwOkidaIcDj69iKHKtBqKQjzVd3QcKHaXFX76qFRtkg2JmjonN1/H0rhI8KmA==",
+      "licence": "Unicode-3.0"
+    }
+  },
+  "outputs": {
+    "src/icons/lucide.rs": "5194b834262254ab0cc8aa208512175660b49230f884dfbf4f7915ceacaf7e6e",
+    "src/flags/data.rs": "88ed48a1c3b5bc3848b8a8dce5c912a84d6e11464fde195b8f66e5009f9dde84",
+    "../../apps/ui-docs/data/lucide-tags.json": "30ac203e6f2bdc7c5e8f1ba2ad99f9f5ef05a8042a875169b61f52f71465a221"
+  }
+}

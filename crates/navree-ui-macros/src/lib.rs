@@ -1,12 +1,13 @@
 //! # navree-ui-macros
 //!
-//! The derives of navree-ui, re-exported by it (and through it by the `navree`
+//! The derives and icon macros of navree-ui, re-exported by it (and through it by the `navree`
 //! facade as `navree::ui`): depend on `navree-ui` or `navree`, not on this crate.
 #![forbid(unsafe_code)]
 
 use proc_macro::TokenStream;
 
 mod form;
+mod icon;
 mod shared;
 mod table;
 
@@ -80,4 +81,57 @@ pub fn derive_filter_bar(input: TokenStream) -> TokenStream {
     table::filter_bar(input)
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
+}
+
+/// Your own SVG file as an `Icon`, checked while the app compiles. The path is
+/// relative to your crate's `Cargo.toml`.
+///
+/// ```ignore
+/// const LOGO: Icon = icon_file!("assets/icons/logo.svg");
+/// Button::new("Home").icon(LOGO)
+/// ```
+///
+/// Only shape elements (`path`, `circle`, `ellipse`, `rect`, `line`, `polyline`,
+/// `polygon`, `g`) and plain drawing attributes survive. Scripts, styles, links,
+/// `use`, images, gradients, event handlers and anything else stop the build with
+/// the file, the line and the reason. A shape with no paint is drawn in the text
+/// colour, so the icon follows light and dark themes; `fill` and `stroke` take
+/// `none`, `currentColor` or a hex colour. Cargo rebuilds when the file changes.
+#[proc_macro]
+pub fn icon_file(input: TokenStream) -> TokenStream {
+    let path = syn::parse_macro_input!(input as syn::LitStr);
+    expand(&path, icon::file)
+}
+
+/// Every `.svg` file in a directory as constants, in the module where it is
+/// written. The directory is relative to your crate's `Cargo.toml`.
+///
+/// ```ignore
+/// mod brand {
+///     navree::ui::icon_set!("assets/icons");
+/// }
+/// // assets/icons/logo.svg is brand::LOGO; brand::ALL lists them all.
+/// Button::new("Home").icon(brand::LOGO)
+/// ```
+///
+/// Each file is checked as `icon_file!` checks it. A file name becomes a constant
+/// name: `arrow-left.svg` is `ARROW_LEFT`. Cargo notices a file that changes but
+/// not one that is added: add `println!("cargo::rerun-if-changed=assets/icons");`
+/// to a `build.rs`, or touch the file that calls this macro.
+#[proc_macro]
+pub fn icon_set(input: TokenStream) -> TokenStream {
+    let path = syn::parse_macro_input!(input as syn::LitStr);
+    expand(&path, icon::set)
+}
+
+/// Runs an icon macro with the paths it needs.
+fn expand(
+    path: &syn::LitStr,
+    make: fn(&proc_macro2::TokenStream, &std::path::Path, &syn::LitStr) -> syn::Result<proc_macro2::TokenStream>,
+) -> TokenStream {
+    let result = shared::ui_path(path.span()).and_then(|ui| {
+        let manifest = icon::manifest_dir(path.span())?;
+        make(&ui, &manifest, path)
+    });
+    result.unwrap_or_else(syn::Error::into_compile_error).into()
 }
