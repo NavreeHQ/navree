@@ -44,7 +44,7 @@ The browser posts the email and password to the BFF's `/api/auth/login`. The BFF
 ```ts title="apps/crm-web/src/lib/bff/bff.ts"
 /** `POST /api/auth/login`: keeps the tokens, returns `{user}`. */
 async function login(request: Request): Promise<Response> {
-  if (!originAllowed(request)) return errorResponse(403, "Invalid origin");
+  if (!originAllowed(request)) return errorResponse(403, "invalid_origin", "Invalid origin");
   let upstream: Response;
   try {
     upstream = await upstreamFetch(`${apiUrl}/api/auth/login`, {
@@ -66,7 +66,8 @@ async function login(request: Request): Promise<Response> {
     const body = { two_factor_required: true, expires_in: data.expires_in ?? 300 };
     return new Response(JSON.stringify(body), { status: 200, headers });
   }
-  if (!isTokenPair(data)) return errorResponse(502, "Unexpected login response from the API");
+  if (!isTokenPair(data))
+    return errorResponse(502, "unexpected_api_response", "Unexpected login response from the API");
   return signedIn(upstream, data);
 }
 ```
@@ -144,6 +145,8 @@ export default defineEventHandler((event) => {
 - `Authorization: Bearer` and the access token from `navree_at`;
 - an allow-list of request headers: `accept`, `accept-language`, `content-type`, `if-none-match`, `if-modified-since`, `user-agent` and `x-request-id`. Cookies never leave the BFF;
 - the body, buffered so it can be replayed after a refresh.
+
+The CRM is not multi-tenant, so its copy of the BFF does not forward a workspace. In a [multi-tenant](/docs/patterns/multi-tenancy/) app, use [`@navree/bff`](/docs/frontend/auth-and-bff/): it also forwards `X-Workspace` (or the current-workspace cookie), `if-match` and `last-event-id`.
 
 The API's response comes back with its status, its body (streamed, so a CSV export isn't buffered) and an allow-list of headers, including `etag`, `location`, `retry-after`, `x-request-id` and the `x-ratelimit-*` headers. Authenticated responses are fetched with `cache: "no-store"`, so they never land in a shared cache.
 
@@ -229,7 +232,7 @@ The BFF can name the browser in `X-Forwarded-For`, but only when it can trust th
 
 - The browser's own `X-Forwarded-For` and `X-Real-IP` are never passed on: anyone can forge them.
 - Put the Next.js server behind a reverse proxy that appends the client to `X-Forwarded-For`, make Next.js reachable only through it, and set `NAVREE_TRUSTED_PROXY_HOPS` to the number of such proxies. The BFF then sends the API one `X-Forwarded-For` entry: the address the outermost proxy saw.
-- Or, when the proxy sets a header to the bare client address and overwrites the browser's (`x-real-ip`, `cf-connecting-ip`), set `NAVREE_CLIENT_IP_HEADER` to its name. The BFF believes that header first.
+- Or, when the proxy sets a header to the bare client address and overwrites the browser's (`x-real-ip`, `cf-connecting-ip`), name that header with `clientIpHeader`, or with `NAVREE_CLIENT_IP_HEADER` where `@navree/next` or `@navree/nuxt` mounts the BFF. `@navree/bff` believes that header first. The CRM's own copy of the BFF has only the hop count.
 
 On the API side, list the BFF's address in `http.trusted_proxies`, so the API believes the header only from the BFF:
 
@@ -274,7 +277,7 @@ The WebSocket goes straight from the browser to Navree's WebSocket server: it ca
 ```ts title="apps/crm-web/src/app/broadcasting/auth/route.ts"
 import { bff } from "@/lib/bff/server";
 
-/** Private-channel authorization: forwarded to Navree with the bearer token. */
+/** Private-channel authorisation for the Pusher client: forwarded to Navree with the bearer token. */
 export function POST(request: Request): Promise<Response> {
   return bff.proxy(request, "/broadcasting/auth");
 }

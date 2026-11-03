@@ -28,7 +28,7 @@ One deployable binary, divided into modules with explicit boundaries. Calls betw
 
 ### Microservices
 
-Some modules run as services of their own, deployed and scaled independently, talking through request-response messages and events over NATS, Kafka, RabbitMQ, Redis Streams, MQTT, TCP or gRPC. A message handler is written like a route, so a module moves into a service without being rewritten.
+Some modules run as services of their own, deployed and scaled independently, talking through request-response messages and events over NATS, Kafka, RabbitMQ, Redis Streams, MQTT or TCP, and through gRPC for callers outside your team. A message handler is written like a route, so a module moves into a service without being rewritten.
 
 <Diagram name="microservices" />
 

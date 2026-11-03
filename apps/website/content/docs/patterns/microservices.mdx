@@ -1,6 +1,6 @@
 ---
 title: "Microservices"
-description: "Split modules into services that talk over NATS, Kafka, RabbitMQ, Redis Streams, MQTT, TCP or gRPC, with the same module code, guards and tests."
+description: "Split modules into services that talk over NATS, Kafka, RabbitMQ, Redis Streams, MQTT or TCP, and serve gRPC, with the same module code, guards and tests."
 ---
 
 ## Introduction
@@ -158,6 +158,8 @@ service = "deals"
 transport = "nats"
 url = "nats://127.0.0.1:4222"
 ```
+
+The `micro` feature of `navree` and the feature of the transport (`micro-nats` here) are not on by default: add them to the service's dependency, as [Installation](/docs/microservices/introduction/#installation) shows. `navree new deals --kit micro` writes a service, a shared contracts crate and a NATS setup for development.
 
 </Step>
 <Step title="Answer messages with the services the module exported">

@@ -73,13 +73,13 @@ function rowTrace(x: number, y: number, w: number) {
 }
 
 /**
- * Services split from modules: request-response over gRPC, events over a
+ * Services split from modules: request-response messages and events over a
  * broker, a database per service and one trace across all of them. The
  * broker is the accent.
  */
 export const microservices: DiagramSpec = {
   title: "Microservices",
-  desc: "A web app calls crm-api, the HTTP gateway. crm-api asks the deals service for a deal over gRPC (deals.get). When a deal is won, the deals service emits deal.won to a broker (NATS, Kafka, RabbitMQ or Redis Streams), which delivers it to the notifications and activities services. Each service owns its database. One OpenTelemetry trace follows the request through crm-api, deals, notifications and activities.",
+  desc: "A web app calls crm-api, the HTTP gateway. crm-api asks the deals service for a deal with a request-response message (deals.get). When a deal is won, the deals service emits deal.won to a broker (NATS, Kafka, RabbitMQ or Redis Streams), which delivers it to the notifications and activities services. Each service owns its database. One OpenTelemetry trace follows the request through crm-api, deals, notifications and activities.",
   legend: [
     { kind: "flow", label: "request-response" },
     { kind: "async", label: "event" },
@@ -140,7 +140,7 @@ export const microservices: DiagramSpec = {
     ],
     edges: [
       { from: "web.right", to: "api.left", label: "HTTPS", at: [188, 20], anchor: "middle", step: 0 },
-      { from: "api.bottom", to: "deals.top", label: "gRPC · deals.get", at: [304, 96], step: 1 },
+      { from: "api.bottom", to: "deals.top", label: "send · deals.get", at: [304, 96], step: 1 },
       { from: "deals.bottom", to: "broker.top", kind: "async", label: "emit deal.won", at: [304, 260], step: 2 },
       { from: "broker.left", to: "notifications.top", kind: "async", label: "deal.won", at: [96, 364], step: 3 },
       { from: "broker.right", to: "activities.top", kind: "async", label: "deal.won", at: [512, 364], step: 3 },
@@ -170,7 +170,7 @@ export const microservices: DiagramSpec = {
     ],
     edges: [
       { from: "web.bottom", to: "api.top", label: "HTTPS", at: [144, 88], step: 0 },
-      { from: "api.bottom", to: "deals.top", label: "gRPC · deals.get", at: [144, 200], step: 1 },
+      { from: "api.bottom", to: "deals.top", label: "send · deals.get", at: [144, 200], step: 1 },
       { from: "deals.bottom", to: "broker.top", kind: "async", label: "emit deal.won", at: [144, 316], step: 2 },
       { from: "broker.bottom", to: "notifications.top", kind: "async", bend: 432, label: "deal.won", at: [144, 420], step: 3 },
       { from: "broker.bottom", to: "activities.top", kind: "async", bend: 432, step: 3 },

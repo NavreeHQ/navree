@@ -23,7 +23,7 @@ The user is identified from the bearer token or the session, as on any route.
 </Step>
 <Step title="Resolve the workspace">
 
-The resolvers run in the configured order until one finds a workspace slug or id: the `X-Workspace` header, a path segment (`/api/w/acme/...`), a subdomain (`acme.app.example.com`), a claim of the bearer token or the workspace's own verified domain. A request that names no workspace is a 400, and an unknown workspace a 404.
+The resolvers run in the configured order until one finds a workspace slug or id: the `X-Workspace` header, a path segment (`/api/w/acme/...`), a subdomain (`acme.app.example.com`) or a claim of the bearer token. These four are the default list. With [custom domains](/docs/packages/custom-domains/) and `domain` in the list, a workspace's own verified domain names it too. A request that names no workspace is a 400, and an unknown workspace a 404.
 
 </Step>
 <Step title="Check membership">

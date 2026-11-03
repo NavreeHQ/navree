@@ -90,7 +90,7 @@ A few conventions keep resources predictable across an API:
 - **`#[schema(as = Deal)]` sets the public schema name.** The Rust type can be `DealResource` while clients see `Deal`.
 - **Money is an integer in minor units with a currency code**, never a float.
 - **Ids are UUID v7 strings** and timestamps are RFC 3339 in UTC.
-- **Embeds are loaded in batches** (`DealResource::load_many` runs one query per kind of embed), so a page of 100 deals costs a handful of queries, not 300.
+- **Embeds are loaded in batches** (`Deal::query().with_all(DealResource::EMBEDS)` runs one query per relation for the whole page), so a page of 100 deals costs a handful of queries, not 300.
 
 See [Responses and API resources](/docs/basics/responses/).
 
@@ -165,6 +165,7 @@ Every error a Navree app sends has the same JSON body: a 404 from a missing rout
 | `statusCode` | Yes | The HTTP status. |
 | `message` | Yes | The detail, or, for validation errors, every field message as a list. |
 | `error` | Yes | The status's reason phrase. |
+| `code` | Yes (unless `http.errors.code` is `false`) | A stable machine-readable code in lower snake case (`not_found`, `validation_failed`) that a client maps to its own text. |
 | `errors` | Validation only | Field paths mapped to their messages. |
 
 The request id travels in the `X-Request-Id` header, never in the body, and internal details go to the log, never to the client. Input errors are always 400, never 422.
@@ -328,6 +329,8 @@ Navree::app()
 |---|---|
 | `GET /api/openapi.json` | The OpenAPI 3.1 document. |
 | `GET /api/docs` | An interactive docs UI reading it. |
+
+Both routes are on in development and off when the environment is `production`. To publish them in production too, set `api.openapi_json` and `api.docs_ui` to `true`; `openapi:export` writes the document in every environment, so clients can still be generated from CI.
 
 The document is built at boot from every route: its path with prefix and version, its path parameters, its security (bearer token or session cookie), the `401` and `403` responses its access rule implies, and what `#[api(...)]` adds: `summary`, `description`, `tag`, `request`, `response`, `status` and the error statuses in `responses(...)`. Error statuses reference one `HttpError` schema, the error shape above. Name the API in the `api` section:
 

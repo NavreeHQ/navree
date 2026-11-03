@@ -294,8 +294,23 @@ async fn boots_and_check_passes() {
         .validate()
         .expect("every import and provider lines up");
     let modules: BTreeSet<&str> = report.modules.iter().map(|m| m.name).collect();
-    for module in ["CrmCoreModule", "UsersModule", "DealsModule", "ActivitiesModule"] {
-        assert!(modules.contains(module), "{module} is missing from {modules:?}");
+    for module in [
+        "CrmCoreModule",
+        "UsersModule",
+        "CompaniesModule",
+        "ContactsModule",
+        "DealsModule",
+        "ActivitiesModule",
+        "DashboardModule",
+        "DemoModule",
+        "AuthModule",
+        "AccessModule",
+        "RealtimeModule",
+    ] {
+        assert!(
+            modules.contains(module),
+            "{module} is missing from {modules:?}"
+        );
     }
     crm_api::app(sources(url))
         .run_with_args(vec!["check".to_owned()])
