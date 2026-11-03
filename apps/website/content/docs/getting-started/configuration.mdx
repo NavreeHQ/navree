@@ -145,7 +145,7 @@ Set it as `APP_KEY` in `.env` or in the environment; Navree reads `app.key`, fal
 - `HttpModule` derives the key for signed URLs from it, unless you set `http.signing_key`.
 - `RealtimeModule` derives the key that signs broadcasts relayed between processes, unless you set `realtime.secret`.
 
-Without a key the app still boots, so that `key:generate` can run, and logs a warning. Encryption then fails, and JWTs and signed URLs use a random key per process: every restart signs everyone out and breaks every signed link. Every process of an app (the server, queue workers, the scheduler) needs the same key.
+Without a key the app still boots, so that `key:generate` can run, and logs a warning. Encryption then fails, and JWTs and signed URLs use a random key per process: every restart invalidates the access tokens already issued (clients ask for new ones with their refresh tokens) and breaks every signed link. Every process of an app (the server, queue workers, the scheduler) needs the same key.
 
 A malformed key fails the boot, naming `app.key`.
 
@@ -158,7 +158,7 @@ APP_KEY=base64:cAExPfRNoefxdVB2pZ7oA34O4hGgWrsD9ShGdZRVrRM=
 APP_PREVIOUS_KEYS=base64:G60q3lWREHaFECJUwNhN58ArvmrSl0sptSaOEWgeBLk=
 ```
 
-Previous keys don't apply to the keys derived for JWTs, signed URLs and relayed broadcasts: rotating `APP_KEY` signs every user out and invalidates outstanding signed links, unless those features have their own secrets. [Encryption and hashing](/docs/security/encryption-and-hashing/) has the details.
+Previous keys don't apply to the keys derived for JWTs, signed URLs and relayed broadcasts: rotating `APP_KEY` invalidates the access tokens already issued (clients ask for new ones with their refresh tokens) and outstanding signed links, unless those features have their own secrets. [Encryption and hashing](/docs/security/encryption-and-hashing/) has the details.
 
 ## Typed configuration sections
 
@@ -339,9 +339,15 @@ fn sources() -> ConfigSources {
 
 ## Environments
 
-Navree has no environment switch: nothing reads an `APP_ENV` variable or an `app.env` key, and there are no per-environment files by default. Each machine's settings come from its own `.env` file and environment variables.
+There are no per-environment files by default: each machine's settings come from its own `.env` file and environment variables. One setting names the environment: `env`, set with the `APP_ENV` variable or with `app.env` in a file. These modules read it, and `production` (in any letter case) changes what they do:
 
-Two defaults depend on how the binary was built:
+| Module | In production |
+|---|---|
+| Database and MongoDB | `migrate:rollback`, `migrate:reset`, `migrate:refresh` and `migrate:fresh` refuse to run without `--force`. See [Running migrations](/docs/database/running-migrations/#in-production). |
+| ORM | The strict modes are off unless you set `orm.strict`. See [the ORM's options](/docs/orm/getting-started/). |
+| API | The OpenAPI document and the docs UI are off unless you set `api.openapi_json` and `api.docs_ui`. See [OpenAPI](/docs/digging-deeper/openapi/). |
+
+Two defaults depend on how the binary was built, not on `env`:
 
 | Setting | Debug build (`cargo run`, `navree dev`) | Release build (`cargo build --release`) |
 |---|---|---|
@@ -365,7 +371,7 @@ pub fn sources() -> ConfigSources {
 }
 ```
 
-A missing `config/<env>.toml` is skipped like any missing file, and `config/<env>.json` works the same way. `APP_ENV` here is read from the process environment, not from `.env`, and it also lands in the tree as the top-level key `env`, which nothing uses.
+A missing `config/<env>.toml` is skipped like any missing file, and `config/<env>.json` works the same way. `APP_ENV` here is read from the process environment, not from `.env`. The `.env` file and the `APP_*` variables do set the `env` key, so the modules above see it either way.
 
 ## Limits
 
@@ -431,3 +437,15 @@ assert_eq!(app.get::<InvoiceService>().await.trial_days(), 30);
 ```
 
 To boot a whole app the way `main` does, build the sources with `ConfigSources::new()` and `.set(...)` rather than `ConfigSources::defaults()`, which reads the real `APP_*` variables of the machine running the tests. [Your first app](/docs/getting-started/your-first-app/#write-a-feature-test) shows the pattern, and [Testing](/docs/testing/getting-started/) covers the rest.
+
+<LinkCards>
+  <LinkCard href="/docs/getting-started/deployment/" title="Deployment">
+    The settings production needs, the processes to run and a reverse proxy.
+  </LinkCard>
+  <LinkCard href="/docs/security/encryption-and-hashing/" title="Encryption and hashing">
+    What the application key protects, and how hashing is tuned.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/directory-structure/" title="Directory structure">
+    Where `config/app.toml`, `.env` and the rest of a new app live.
+  </LinkCard>
+</LinkCards>

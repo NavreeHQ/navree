@@ -13,7 +13,7 @@ Navree is a Rust framework, so you need a Rust toolchain and the `navree` comman
 | A C compiler | the one your Rust toolchain links with | The `navree` tool and any build with the `sqlite` feature compile SQLite from source (the bundled `libsqlite3-sys`); a PostgreSQL or MySQL build of your app compiles none (its `cargo test` does, because the tests run on SQLite files). On Windows, a C compiler means the MSVC build tools. |
 | `rustfmt` | any | Optional. When it is installed, the generators format the code they write. |
 | Docker or Podman | Docker with Compose v2, or Podman with a compose provider | Runs the app's database, TimescaleDB, with `navree dock up` ([Dock](/docs/tools/dock/)). Not needed for an app made with `--database sqlite`. |
-| Node.js and npm | Node.js 20.9 or newer | Only for the optional Next.js front end (`navree new --ui next`). |
+| Node.js and npm | Node.js 20.9 or newer | Only for the optional Next.js front end (`navree new --ui next`). The `saas` [starter kit](/docs/getting-started/starter-kits/) needs Node.js 22 or newer and pnpm. |
 
 You don't need OpenSSL, CMake or NASM: TLS is rustls with the `ring` provider everywhere. You don't need to install a database server either: new apps use [TimescaleDB](/docs/database/timescaledb/), Navree's default database, and Dock runs it in a container. `navree new --database sqlite` makes an app that needs nothing at all (see [Database: getting started](/docs/database/getting-started/)).
 
@@ -100,6 +100,8 @@ Next steps:
   navree dock up             # TimescaleDB on 127.0.0.1:5432
   navree key:generate        # then set APP_KEY in .env
   navree dev                 # http://127.0.0.1:8080/api/docs
+
+Initialized a Git repository (nothing committed yet).
 ```
 
 The name must start with a lower-case letter and use lower-case letters and digits separated by single `-` or `_`; Rust keywords and names such as `std`, `test` and `navree` are refused. The directory must not exist, or must be empty. `navree new` doesn't run Cargo. It runs `git init` (nothing is committed) unless the directory is inside a repository already or Git isn't installed, and for an app that ships a `harbor.toml` (the starter kits) it writes the secrets key `harbor.key` and keeps it out of Git.
@@ -140,7 +142,7 @@ When your app also uses Redis, Meilisearch, Mailpit, MinIO or NATS, `navree dock
 
 ## Running the application
 
-With the database running, generate an application key. It encrypts data and signs tokens; without it, every restart signs every user out.
+With the database running, generate an application key. It encrypts data and signs tokens; without it, every restart invalidates the access tokens already issued.
 
 ```sh
 navree key:generate
@@ -162,7 +164,7 @@ Then start the development server:
 navree dev
 ```
 
-`navree dev` builds the app, starts its `serve` command and watches the code. When a file in `src/`, `config/` or `migrations/` changes, or `Cargo.toml`, `.env` or `build.rs` does, it rebuilds and restarts the server. If a build fails, the previous build keeps serving. With a `web/` front end it also runs `npm run dev` there (or `pnpm`/`yarn`, chosen by the lockfile).
+`navree dev` builds the app, starts its `serve` command and watches the code. When a file in `src/`, `config/`, `migrations/` or `crates/` changes, or `Cargo.toml`, `.env` or `build.rs` does, it rebuilds and restarts the server. If a build fails, the previous build keeps serving. With a `web/` front end it also runs `npm run dev` there (or `pnpm` or `yarn`, chosen by the lockfile or the `packageManager` field of `web/package.json`).
 
 The API listens on `http://127.0.0.1:8080`. Open `http://127.0.0.1:8080/api/docs` for the generated API reference, or check the health endpoint:
 
@@ -190,7 +192,7 @@ The listening socket isn't kept open across restarts, so requests fail for the m
 
 ## Running the app's own commands
 
-Every command other than `new`, `make:*` and `dev` belongs to your app's binary. `navree <command>` runs `cargo run --quiet -- <command>` in the app, so these are the same:
+The CLI has a few commands of its own: `new`, `make:*`, `dev`, `check`, `gate`, `dock`, `dock:add`, `dock:remove`, Harbor's commands (`deploy`, `deploy:rollback`, `deploy:releases`, `build:image` and `harbor:*`), `mcp`, `skills:install`, `browser:install` and `openapi:client`. Every other command belongs to your app's binary. `navree <command>` runs `cargo run --quiet -- <command>` in the app, so these are the same:
 
 ```sh
 navree migrate

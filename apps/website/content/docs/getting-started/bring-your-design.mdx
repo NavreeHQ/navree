@@ -1,6 +1,6 @@
 ---
 title: "Bring your design"
-description: "Turn an HTML mock-up, a design-tool export or screenshots into Navree UI pages with an agent skill: the phases and stop points, keeping the look, the components still coming, and verification beside the design."
+description: "Turn an HTML mock-up, a design-tool export or screenshots into Navree UI pages with an agent skill: phases and stop points, keeping the look, what is still coming, and verification."
 ---
 
 There are two ways into Navree from something you already have. You can bring a product: an app that runs today, with its code, its rules and years of data. Or you can bring a design: a mock-up, a design-tool export or screenshots. Each way is an [agent skill](/docs/ai/agent-skills/) that your coding agent follows from start to finish, and you decide at fixed stop points. This page is the second way. [Bring your product](/docs/getting-started/bring-your-product/) is the first.
@@ -90,12 +90,13 @@ source/                      # the design exactly as received, never edited
 03-mapping/
   COMPONENTS.md              # every repeated component, in Navree UI
   pages/                     # one page spec per screen
-04-reconcile/                # QUESTIONS.md, DEVIATIONS.md, GAPS.md
+04-reconcile/                # refutations/, QUESTIONS.md, DEVIATIONS.md, GAPS.md
 05-build/BUILD_LOG.md        # per page: commit, tests, gate
 06-verify/
   VERIFY.md                  # every page row, closed with evidence
   shots/                     # APP-*: the pages at 1440 and 390 pixels
   compare.html               # the design and the pages side by side
+  logs/                      # the output of every command the verifier ran
 `}</FileTree>
 
 By default `design/` is committed with the app. Leave `design/source/` out when the design contains material you can't share, such as client data or third-party assets. The agent then keeps it beside the repository and writes down where.
@@ -136,17 +137,19 @@ When no component fits an element, the agent records a gap instead of improvisin
 
 | Coming | Covers in a design | Interim form, if you accept one |
 |---|---|---|
-| Theme system and theme builder | a light theme, brand colors, other radii or fonts, other sidebar layouts | Navree's dark theme and tokens |
-| Toast as a module | toasts with actions, or toasts that stay | `Reply::toast` |
-| Tabs, DropdownMenu, ToggleGroup | tabs, menus from a button, segmented controls | tabs as links to separate URLs, `Popover` with buttons, `ButtonGroup` |
-| Charts and DateRange | line, area, pie and stacked charts, date-range pickers | `Stat` and `Bars`; two date inputs |
-| DatePicker, Calendar, TimePicker | calendar pop-ups, month views | native date and time inputs |
+| Tabs, DropdownMenu and ToggleGroup | tabs, menus from a button, segmented controls | tabs as links to separate URLs, `Popover` with buttons, `ButtonGroup` |
+| Toast as a component | toasts with actions, or toasts that stay | `Reply::toast` |
+| Calendar, DatePicker, DateRangePicker and TimePicker | calendar pop-ups, month views, date-range and time pickers | native date and time inputs; two date inputs for a range |
+| Themes and a theme builder | a light theme, brand colors, other radii or fonts, other sidebar layouts | Navree's dark theme and tokens |
+| Error and sign-in pages | HTML sign-in and error screens for page routes | none: a page route's 401, 403 and 404 come back as Navree's JSON errors |
+| Charts | line, area, pie and stacked charts | `Stat` and `Bars` |
 | Wizard and Stepper | multi-step forms with a step bar | one page per step, each a form |
-| Rich text | a formatted text editor | a textarea |
-| Toolbar, TreeView, Slider, ContextMenu, Menubar, NavigationMenu | those | none |
+| Toolbar, TreeView and Slider | those | none |
+| ContextMenu, Menubar and NavigationMenu | those | none |
+| Rich text editing | a formatted text editor | a textarea |
 | Islands | a client-side widget of your own | none |
 
-Also not there yet: HTML error and sign-in pages for page routes (a page route's 401, 403 and 404 come back as Navree's JSON errors), an app's own stylesheet or static files, and web fonts other than Geist and the system monospace stack.
+Also not there yet: an app's own stylesheet or static files, and web fonts other than Geist and the system monospace stack.
 
 ## Verification
 

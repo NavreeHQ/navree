@@ -102,7 +102,7 @@ The `make:<kind>` generators add files in a directory per kind, inside the modul
 | `navree make:mcp tasks board` | `mcp/board.rs`: an MCP server with one tool |
 | `navree make:test tasks completing` | `tests/completing.rs` |
 
-Every generator also declares the new file's module and, where the item must be registered, adds the registration. [Console commands and the CLI](/docs/digging-deeper/cli/) covers each one.
+The first item of a kind also creates the directory's `mod.rs` (`make:policy tasks task` writes `policies/task.rs` and `policies/mod.rs`). Every generator also declares the new file's module and, where the item must be registered, adds the registration. [Console commands and the CLI](/docs/digging-deeper/cli/) covers each one.
 
 ### Generator markers
 
@@ -169,7 +169,7 @@ The browser only talks to the Next.js server, which talks to the API. The tokens
 Navree is developed in one repository, [NavreeHQ/navree](https://github.com/NavreeHQ/navree): the framework's crates, the CLI, the agent skills, reference applications, the JavaScript packages, the performance harness, the evidence harness, the fuzz targets and this website.
 
 <FileTree title="navree/">{`
-Cargo.toml            # the workspace: crates/*, apps/crm-api, apps/crm-api/crates/*, apps/evidence-app
+Cargo.toml            # the workspace: crates/*, apps/crm-api, apps/crm-api/crates/*, apps/evidence-app, apps/ui-docs, apps/ui-proof, apps/ui-table-proof
 Cargo.lock
 rustfmt.toml
 deny.toml             # cargo-deny: licenses, bans, advisories, sources
@@ -188,8 +188,11 @@ apps/
   crm-web/            # the CRM front end (Next.js), Vitest and Playwright
   crm-nuxt/           # the CRM front end (Nuxt)
   evidence-app/       # the app the evidence harness runs under load
+  ui-docs/            # writes the Navree UI reference data for this website
+  ui-proof/           # Navree UI's proof pages: a dashboard, a large table, forms, a gallery
+  ui-table-proof/     # the DataTable on a real database
   website/            # navree.com and these docs
-packages/js/          # @navree/client, bff, next, nuxt and theme (pnpm workspace)
+packages/js/          # @navree/client, bff, next, nuxt, theme and deepmerge (pnpm workspace)
 skills/               # the agent skills, one SKILL.md per directory
 bench/                # the performance harness: SPEC.md, the load runner, results
 e2e/                  # the evidence harness: Docker Compose, k6 scenarios, checks
@@ -205,3 +208,15 @@ deploy/               # scripts that deploy navree.com
 Each framework crate has the usual `src/`, and most keep their integration tests in one binary under `tests/<name>/`, such as `crates/navree-config/tests/config/main.rs`. `crates/navree-cli/templates/` holds the templates behind `navree new` and the generators, so it is the reference for what a new app contains.
 
 The crates form nine layers (L0 to L8), from the kernel up to the facade and the CLI, and a test checks every dependency between them against the allowed edges. [The crate hierarchy](/docs/architecture/crate-hierarchy/) explains them, and [Contributing](/docs/prologue/contributing/) explains how to build and test the repository.
+
+<LinkCards>
+  <LinkCard href="/docs/getting-started/your-first-app/" title="Your first app">
+    Generate a module, add a model, protect the routes and test them.
+  </LinkCard>
+  <LinkCard href="/docs/architecture/modules/" title="Modules">
+    How a module declares its providers, controllers, imports and exports.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/configuration/" title="Configuration">
+    `.env`, `config/app.toml` and `APP_*` variables.
+  </LinkCard>
+</LinkCards>

@@ -106,16 +106,20 @@ The model is the Rust shape of a row. It is also what the API returns, since the
 #[derive(Model, Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[model(table = "tasks", timestamps, subject)]
 pub struct Task {
-    /// A UUID v7, generated when the task is created.
+    /// A UUID v7, generated when the record is created, so ids sort by
+    /// creation time.
     pub id: Uuid,
     /// The user who created it (abilities can test `owner_id`).
     pub owner_id: Option<Uuid>,
+    /// The name. // [!code --]
     pub name: String, // [!code --]
     /// What needs doing. // [!code ++]
     pub title: String, // [!code ++]
     /// Whether it is done. // [!code ++]
     pub done: bool, // [!code ++]
+    /// When the record was created.
     pub created_at: DateTime<Utc>,
+    /// When the record last changed.
     pub updated_at: DateTime<Utc>,
 }
 ```
@@ -174,7 +178,8 @@ Every field needs a rule, so `done` says `#[validate(skip)]`; serde already guar
 The service does the work. Change the two methods that set columns:
 
 ```rust title="src/modules/tasks/service.rs"
-/// Creates a task owned by the acting user.
+/// Creates a task owned by the acting user. The ORM generates the id
+/// (a UUID v7) and sets the timestamps.
 pub async fn create(&self, uow: &Uow, input: CreateTask) -> Result<Record<Task>, OrmError> {
     Task::create(
         uow,
@@ -204,6 +209,8 @@ pub async fn update(
     if let Some(done) = input.done { // [!code ++]
         task.done = done; // [!code ++]
     } // [!code ++]
+    // Writes only the changed columns, sets `updated_at` and records the
+    // change.
     task.save(uow).await?;
     Ok(task)
 }
@@ -222,6 +229,7 @@ impl TaskController {
     /// (`?page=2&per_page=50`).
     #[get("/")]
     #[can(Read, Task)]
+    #[api(summary = "List tasks", tag = "Task")]
     async fn index(
         &self,
         uow: Uow,
@@ -234,6 +242,7 @@ impl TaskController {
     /// Creates a task owned by the caller.
     #[post("/")]
     #[can(Create, Task)]
+    #[api(summary = "Create a task", tag = "Task", status = 201)]
     async fn store(
         &self,
         uow: Uow,
@@ -246,6 +255,7 @@ impl TaskController {
     /// Updates the fields present in the body.
     #[patch("/{id}")]
     #[can(Update, Task, from = "id")]
+    #[api(summary = "Update a task", tag = "Task")]
     async fn update(
         &self,
         uow: Uow,
@@ -481,6 +491,7 @@ async fn app() -> (TestApp, TempDirGuard) {
         .set("http.per_ip_rate_limit", Value::Null)
         .set("mail.transport", "array")
         .set("observe.metrics", false)
+        .set("logbook.enabled", false)
         .set("hashing.memory_kib", 1024)
         .set("hashing.iterations", 1);
     let app = TestApp::from_builder(planner::app(sources)).await;
@@ -600,6 +611,7 @@ A few things make this test fast and hermetic:
 
 - `ConfigSources::new()` starts empty, so the test never reads `.env`, `config/app.toml` or your environment. Each `.set` supplies a setting the app needs.
 - `temp_sqlite_url()` gives each test its own SQLite file, deleted when the `TempDirGuard` drops.
+- `logbook.enabled` set to `false` keeps [Logbook](/docs/tools/logbook/), which is on in debug builds, out of the tests.
 - `hashing.memory_kib` and `hashing.iterations` make Argon2id cheap. Keep the defaults in production.
 - `http.per_ip_rate_limit` set to null turns off the 600-requests-a-minute limit, which every in-process request would share.
 - `TestApp::from_builder(planner::app(sources))` boots exactly what `main` boots, and the client calls it in-process, without a network socket.
