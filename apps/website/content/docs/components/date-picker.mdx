@@ -91,7 +91,7 @@ When the text can't be read, or the day can't be chosen, the box is marked `aria
 #[derive(Deserialize, Validate, Form)]
 struct Booking {
     /// Start date
-    #[validate(custom(open_day))]
+    #[validate(skip)]
     #[form(widget = date_picker, date_rules = open_days, help = "A weekday in the next three months.")]
     start: NaiveDate,
     /// End date
@@ -103,13 +103,11 @@ struct Booking {
 fn open_days() -> DateRules {
     DateRules::new().min(today).disable_weekdays([Weekday::Sat, Weekday::Sun])
 }
-
-fn open_day(day: &NaiveDate) -> Result<(), String> {
-    open_days().check(*day).map_err(|e| e.message(&DateLocale::english()))
-}
 ```
 
-`date_rules = open_days` gives the picker the same rules the `custom` rule holds the value to: the calendar draws the weekends off, and the server refuses one that is posted anyway. The function is written once and named twice. `time_rules = ...` does the same for a time picker.
+`date_rules = open_days` names the rules once. The picker is drawn with them, so the calendar shows the weekends off, and the server holds the posted value to them: a Saturday posted by hand is refused under the field with "That date isn't available." The words are English, or the field's own `error = "..."`. `time_rules = ...` does the same for a time picker. A `#[validate(custom(...))]` rule is for what the rules can't say, such as a rule that depends on another field, or a message in another language.
+
+With rules or without, the server always refuses a date outside the years 1 to 9999, and a time with a leap second (`16:59:60`) or a fraction of a second.
 
 The server's message sits under the field, and the cursor goes to the box. A form sent back keeps what was typed, whether the browser sent the page again or the runtime added the errors.
 

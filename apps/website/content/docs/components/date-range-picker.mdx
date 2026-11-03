@@ -72,7 +72,7 @@ let picker = DateRangePicker::new("from", "to").limits(window_limits()); // the 
 let range = query.checked(&window_limits());                              // the server holds the request to it
 ```
 
-`.limits(...)` sets the rules and both lengths in one call (a `Calendar` in range mode takes it too), and `least_days()` and `most_days()` read them back. A request that does not come from the picker is held to the same limits, because the browser's checks only help.
+`.limits(...)` sets the rules and both lengths in one call (a `Calendar` in range mode takes it too), and `least_days()` and `most_days()` read them back. A window the limits refuse has its own words in every language, from `DateError::message(&locale)`: "Choose at most 90 days.", "Choose at least 2 days." or "The range includes a day that isn't available."; any other reason is "That date isn't available." A request that does not come from the picker is held to the same limits, because the browser's checks only help.
 
 <UiPreview example="date-range-picker/limits" />
 
@@ -82,7 +82,7 @@ Put the picker in a `GET` form. Its two fields are the query, so back, forward, 
 
 <UiPreview example="date-range-picker/report" />
 
-On the server, `DateRangeQuery` reads the two parameters back. A value that doesn't parse, or a year outside 1 to 9999, drops the whole window rather than failing the request, a pair given backwards is put right, and a key sent twice (`?from=a&from=b`) is read as its first value, so a request can't make the extractor fail by repeating itself.
+On the server, `DateRangeQuery` reads the two parameters back. A value that doesn't parse, or a year outside 1 to 9999, drops the whole window rather than failing the request, a pair given backwards is put right, and a key sent twice (`?from=a&from=b`) is read as its first value, so a request can't make the extractor fail by repeating itself. Mind the other extractor: `Query<HashMap<String, String>>` keeps the last value of a repeated key, so a page that reads one address both ways sees two windows. Read it one way.
 
 `checked(&limits)` also holds the window to the limits the picker was given: it returns `Ok(None)` when there is no window, `Ok(Some(range))` when there is one the limits allow, and the reason in `Err` when there is one they refuse. `range_within(&limits)` is the same without the reason, for a page that would rather show its default window.
 
