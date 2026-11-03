@@ -29,6 +29,10 @@ pub mod prelude {
     };
     pub use crate::icons;
     pub use crate::op::{Op, Reply, ToastTone, UrlMode};
+    pub use crate::select::{
+        Choice, ChoiceList, Combobox, Command, CommandGroup, CommandItem, MultiSelect, OptionQuery,
+        Select, SelectLabels,
+    };
     pub use crate::table::{
         BulkAction, BulkRequest, DataTable, FilterOption, Region, RowAction, TableDensity,
         TableHeight, TableLabels, TablePage, TableQuery,
@@ -53,6 +57,7 @@ mod module;
 pub mod node;
 pub mod op;
 pub mod render;
+pub mod select;
 pub mod shell;
 pub mod table;
 pub mod test_view;
@@ -69,6 +74,10 @@ pub use navree_validation::Validate;
 pub use node::{Attr, AttrValue, Element, IntoNodes, Node, Uses, el};
 pub use op::{Envelope, Op, Reply, ToastTone, UrlMode, is_prefetch};
 pub use render::{Measure, measure, render, render_into};
+pub use select::{
+    Choice, ChoiceList, Combobox, Command, CommandGroup, CommandItem, MultiSelect, OptionQuery,
+    Select, SelectLabels,
+};
 pub use shell::{AppPage, AppShell, NavGroup, NavItem, Shell, UserMenu};
 pub use table::{
     BulkAction, BulkRequest, DataTable, FilterOption, Region, RowAction, TableDensity, TableHeight,

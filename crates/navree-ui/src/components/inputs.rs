@@ -657,7 +657,11 @@ impl Field {
 fn tie_control(node: &mut Node, id: &str, invalid: bool, described: Option<String>) -> bool {
     match node {
         Node::Element(element) => {
-            if matches!(element.tag, "input" | "select" | "textarea") {
+            // A select, combobox or multi-select marks its focusable control, so the
+            // hidden `<select>` that carries its value doesn't take the id.
+            if element.get("data-field-control").is_some()
+                || matches!(element.tag, "input" | "select" | "textarea")
+            {
                 element.attrs.retain(|attr| attr.name != "id");
                 element.attrs.push(Attr {
                     name: "id",
