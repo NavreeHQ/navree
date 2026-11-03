@@ -13,7 +13,10 @@ function showErrors(form, fields) {
   let first = null;
   let count = 0;
   for (const name in fields) {
-    const input = /** @type {HTMLElement | undefined} */ (field(form, name));
+    const named = /** @type {HTMLElement | undefined} */ (field(form, name));
+    // The value of a select, combobox or multi-select is in a hidden select: the error
+    // belongs on the control a person uses.
+    const input = named?.matches?.("[data-slot=select-native]") ? /** @type {HTMLElement | undefined} */ (named.closest("[data-ui-picker]")?.querySelector("[data-field-control]") || named) : named;
     const box = input?.closest?.("[data-slot=field]");
     const radio = input?.getAttribute?.("type") === "radio";
     const text = fields[name].join(" ");

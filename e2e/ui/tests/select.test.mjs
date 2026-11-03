@@ -1092,6 +1092,102 @@ for (const browserName of browsers) {
       await close();
     });
 
+    test("A form drawn from a struct: the derive's pickers post, and a Many reads every value", async () => {
+      const { page, picker, problems, close } = await open("/select/derive");
+      await page.locator("#derived button[type=submit]").click();
+      assert.ok(page.url().endsWith("/select/derive"), "an empty required picker blocks the send");
+      assert.equal(await page.evaluate(() => document.activeElement.id), "derived-stage");
+      await page.locator("#derived-stage").click();
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("Enter");
+      await page.locator("#derived-owner").fill("ger");
+      await picker("derived-owner-picker").rows.first().click();
+      await page.locator("#derived-person").fill("alan");
+      await page.waitForFunction(() => document.querySelector("#derived-person-picker-list [role=option]")?.textContent.startsWith("Alan"));
+      await page.keyboard.press("Enter");
+      await page.locator("#derived-countries").click();
+      await page.keyboard.type("fra");
+      await page.keyboard.press("Enter");
+      await page.keyboard.type("jap");
+      await page.keyboard.press("Enter");
+      await page.keyboard.press("Escape");
+      await page.locator("#derived button[type=submit]").click();
+      await page.waitForSelector("[data-echo]");
+      const sent = await page.locator("[data-echo]").innerText();
+      assert.match(sent, /stage = qualified/);
+      assert.match(sent, /owner = de/);
+      assert.match(sent, /person = 2/);
+      assert.match(sent, /countries = fr/);
+      assert.match(sent, /countries = jp/);
+      assert.deepEqual(problems, []);
+      await close();
+    });
+
+    test("A form drawn from a struct with JavaScript off posts the same", async () => {
+      const { page, close } = await open("/select/derive", { js: false });
+      await page.locator("#derived-stage-picker [data-slot=select-native]").selectOption("won");
+      await page.locator("#derived-owner-picker [data-slot=select-native]").selectOption("it");
+      await page.locator("#derived-countries-picker [data-slot=select-native]").selectOption(["fr", "de"]);
+      await page.locator("#derived button[type=submit]").click();
+      await page.waitForSelector("[data-echo]");
+      const sent = await page.locator("[data-echo]").innerText();
+      assert.match(sent, /stage = won/);
+      assert.match(sent, /owner = it/);
+      assert.match(sent, /countries = fr/);
+      assert.match(sent, /countries = de/);
+      await close();
+    });
+
+    test("A form the server refuses: the errors land on the pickers the person uses, and the first takes focus", async () => {
+      const { page, close } = await open("/select/derive");
+      // Take the browser's own check away, so the server is the one to say no.
+      await page.evaluate(() => document.querySelector("#derived").setAttribute("novalidate", ""));
+      await page.locator("#derived button[type=submit]").click();
+      await page.waitForFunction(() => document.querySelector("#derived-stage")?.getAttribute("aria-invalid") === "true");
+      assert.equal(await page.locator("#derived-owner").getAttribute("aria-invalid"), "true");
+      assert.match(await page.locator("[data-slot=field]", { has: page.locator("#derived-stage") }).innerText(), /Choose a stage\./);
+      // The first of the fields in the answer takes focus: the controls a person uses, not the hidden selects.
+      assert.ok(["derived-owner", "derived-stage"].includes(await page.evaluate(() => document.activeElement.id)));
+      await page.waitForTimeout(300);
+      assert.equal(await page.locator("#derived-stage").evaluate((e) => getComputedStyle(e).borderColor), await page.locator("#derived-owner").evaluate((e) => getComputedStyle(e.closest("[data-slot=combobox-control]")).borderColor), "the same red on both");
+      await close();
+    });
+
+    test("Tabbing through a form opens no list", async () => {
+      const { page, close } = await open("/select/form");
+      await page.locator("h1").first().click();
+      for (let i = 0; i < 7; i++) {
+        await page.keyboard.press("Tab");
+        assert.equal(await page.locator("[data-open]").count(), 0, "a list opened on focus");
+      }
+      await close();
+    });
+
+    test("MultiSelect: a clear button takes every chip off", async () => {
+      const { page, picker, close } = await open("/select");
+      const m = picker("multi-summary");
+      assert.deepEqual((await m.value()).length, 3);
+      await page.locator("#multi-summary [data-slot=combobox-clear]").click();
+      assert.deepEqual(await m.value(), []);
+      assert.equal(await m.chips.count(), 0);
+      assert.equal(await page.locator("#multi-summary [data-slot=chip-summary]").count(), 0);
+      await close();
+    });
+
+    test("Palette: Down at the last item wraps to the first, and the pointer makes an item active", async () => {
+      const { page, close } = await open("/select");
+      await page.keyboard.press("Control+k");
+      await page.keyboard.press("ArrowUp");
+      const last = await page.locator("#palette-list [data-active]").innerText();
+      assert.match(last, /New deal|Gallery|Open the dialog|Post an action/, last);
+      assert.ok(!/Billing/.test(last), "a disabled item is never active");
+      await page.keyboard.press("ArrowDown");
+      assert.match(await page.locator("#palette-list [data-active]").innerText(), /^Deals/);
+      await page.locator("#palette-list [role=option]", { hasText: "Gallery" }).hover();
+      assert.match(await page.locator("#palette-list [data-active]").innerText(), /^Gallery/);
+      await close();
+    });
+
     // ------------------------------------------------------------ axe, every state
 
     /** Each state is what a person sees at one moment: a list open, an error, a hint. */

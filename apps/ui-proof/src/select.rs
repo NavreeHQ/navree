@@ -9,10 +9,12 @@ use navree::http::extract::Form;
 use navree::http::response::IntoResponse;
 use navree::http::{Controller, RouteDef};
 use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
+use navree::ui::form::{FormView, Many, Rejected};
 use navree::ui::*;
+use serde::Deserialize;
 
-/// A little picture, as a data URL, so no request is made for it.
-const PICTURE: &str = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Crect width='20' height='20' fill='%233dff8f'/%3E%3C/svg%3E";
+/// A little picture from this site.
+const PICTURE: &str = navree::ui::assets::FAVICON_URL;
 
 const FIRST: [&str; 20] = [
     "Ada",
@@ -446,6 +448,7 @@ fn multis() -> Element {
                     .placeholder("Add")
                     .options(countries())
                     .summary_after(2)
+                    .clearable()
                     .selected_values(["fr", "de", "jp"]),
             ),
             field(
@@ -702,6 +705,74 @@ fn form_page(shell: &AppShell) -> AppPage {
     )
 }
 
+/// A form drawn from a struct: the derive picks the listbox, the comboboxes and the
+/// multi-select, and reads every value back.
+#[derive(Debug, Deserialize, Validate, Form)]
+#[form(id = "derived")]
+struct Derived {
+    /// Stage
+    #[validate(length(min = 1))]
+    #[form(widget = listbox, prompt = "Choose a stage", error = "Choose a stage.")]
+    stage: String,
+    /// Country
+    #[validate(length(min = 1))]
+    #[form(widget = combobox, placeholder = "Search countries", error = "Choose a country.")]
+    owner: String,
+    /// Person
+    #[validate(skip)]
+    #[form(widget = combobox, placeholder = "Search people")]
+    person: Option<String>,
+    /// Markets
+    #[validate(skip)]
+    countries: Many<String>,
+    /// Note
+    #[validate(skip)]
+    note: Option<String>,
+}
+
+fn derived_page(shell: &AppShell, form: FormView<Derived>) -> AppPage {
+    let pairs = |items: Vec<Choice>| -> Vec<(String, String)> {
+        items
+            .into_iter()
+            .map(|choice| (choice.value().to_owned(), choice.label().to_owned()))
+            .collect()
+    };
+    shell.page("A form from a struct").body(
+        Card::new().body(
+            form.post("/select/derive")
+                .submit("Send")
+                .options("stage", pairs(stages()))
+                .options("owner", pairs(countries()))
+                .options("countries", pairs(countries()))
+                .search("person", "/select/people"),
+        ),
+    )
+}
+
+fn derived_store(
+    shell: &AppShell,
+    submit: Result<Submit<Derived>, Rejected<Derived>>,
+) -> navree::http::response::Response {
+    match submit {
+        Ok(Submit(sent)) => {
+            let mut pairs = vec![
+                ("stage".to_owned(), sent.stage),
+                ("owner".to_owned(), sent.owner),
+                ("person".to_owned(), sent.person.unwrap_or_default()),
+                ("note".to_owned(), sent.note.unwrap_or_default()),
+            ];
+            pairs.extend(
+                sent.countries
+                    .0
+                    .into_iter()
+                    .map(|c| ("countries".to_owned(), c)),
+            );
+            echo(shell, &pairs).into_response()
+        }
+        Err(rejected) => rejected.respond(|form| derived_page(shell, form)),
+    }
+}
+
 /// The answer to a search, as `ChoiceList`.
 fn people(query: &OptionQuery) -> ChoiceList {
     let needle = query.text().to_lowercase();
@@ -882,6 +953,18 @@ impl Controller for SelectPages {
                 "!/select/filter",
                 |shell: AppShell, query: navree::http::extract::Query<Vec<(String, String)>>| async move {
                     filter_page(&shell, &query.0)
+                },
+            )
+            .public(),
+            RouteDef::on(Method::GET, "!/select/derive", |shell: AppShell| async move {
+                derived_page(&shell, FormView::new())
+            })
+            .public(),
+            RouteDef::on(
+                Method::POST,
+                "!/select/derive",
+                |shell: AppShell, sent: Result<Submit<Derived>, Rejected<Derived>>| async move {
+                    derived_store(&shell, sent)
                 },
             )
             .public(),

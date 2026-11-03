@@ -54,7 +54,8 @@ impl Choice {
         self
     }
 
-    /// A small round-free picture before the label (a URL on this site or a data URL).
+    /// A small picture before the label: a URL on this site (the content security policy
+    /// allows no other).
     pub fn avatar(mut self, src: impl Into<String>) -> Self {
         self.avatar = Some(src.into());
         self
@@ -83,6 +84,16 @@ impl Choice {
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
+    }
+
+    /// The value that is posted.
+    pub fn value(&self) -> &str {
+        &self.value
+    }
+
+    /// The label that is shown.
+    pub fn label(&self) -> &str {
+        &self.label
     }
 
     /// What the control shows when this is chosen.
