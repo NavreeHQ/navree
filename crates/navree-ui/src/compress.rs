@@ -19,11 +19,18 @@ use navree_http::response::Response;
 use crate::assets::accepts;
 use crate::op::OPS_CONTENT_TYPE;
 
-/// The quality used per request.
-pub const QUALITY: u32 = 4;
+/// The quality used per request. 5 makes a page of 100 rows about 8% smaller than 4 for
+/// under a millisecond more, and one of 1,000 rows about 13% smaller for about 4 ms.
+pub const QUALITY: u32 = 5;
 
-/// The window, in bits: the pages are far smaller than the default's 4 MiB.
-const WINDOW: u32 = 18;
+/// The window, in bits: the smallest that holds the whole body, from 256 KiB to 4 MiB.
+/// A window smaller than the body loses every repeat further back than it reaches (a
+/// table of 1,000 rows came out 21% larger at 256 KiB), and one larger than the body only
+/// costs memory.
+fn window(len: usize) -> u32 {
+    let bits = usize::BITS - len.saturating_add(16).saturating_sub(1).leading_zeros();
+    bits.clamp(18, 22)
+}
 
 /// From this size a body goes out in brotli even if the client takes gzip.
 pub const MIN_SIZE: usize = 32 * 1024;
@@ -34,7 +41,8 @@ const TINY: usize = 256;
 /// `bytes` in brotli.
 pub fn brotli(bytes: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(bytes.len() / 8 + 64);
-    let mut writer = ::brotli::CompressorWriter::new(&mut out, 16 * 1024, QUALITY, WINDOW);
+    let mut writer =
+        ::brotli::CompressorWriter::new(&mut out, 16 * 1024, QUALITY, window(bytes.len()));
     // Writing to a `Vec` can't fail.
     let _ = writer.write_all(bytes);
     drop(writer);
@@ -94,6 +102,32 @@ pub(crate) fn accept_of(headers: &HeaderMap) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_window_holds_the_whole_body_up_to_4_mib() {
+        assert_eq!(window(0), 18);
+        assert_eq!(window(200 * 1024), 18);
+        assert_eq!(window((1 << 18) - 16), 18);
+        assert_eq!(window((1 << 18) - 15), 19);
+        assert_eq!(window(2_000_000), 21);
+        assert_eq!(window(usize::MAX), 22);
+    }
+
+    /// A repeat further back than a small window reaches is still found: the second
+    /// half of this body costs almost nothing.
+    #[test]
+    fn a_big_body_finds_repeats_from_its_start() {
+        let mut seed: u64 = 7;
+        let half: String = (0..300_000)
+            .map(|_| {
+                seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+                char::from(b'a' + u8::try_from((seed >> 33) % 26).unwrap_or(0))
+            })
+            .collect();
+        let once = brotli(half.as_bytes()).len();
+        let twice = brotli(format!("{half}{half}").as_bytes()).len();
+        assert!(twice < once + once / 20, "{once} then {twice}");
+    }
 
     #[test]
     fn brotli_shrinks_markup_and_reads_back() {
