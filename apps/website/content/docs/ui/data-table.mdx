@@ -39,7 +39,7 @@ The previews on this page draw five rows from memory with `TablePage::new(rows, 
 
 ## Pages, not thousands of rows
 
-Keep a table paged. 25 rows to a page is the default, and `per_pages` lets a reader choose another size. Each sort, filter or page is then one small request, and the browser redraws 25 rows. Measured on a slow phone (4x CPU, Slow 4G), a sort of a 25-row page took about 310 ms, the request included. A page holding 1,000 rows took 1.6 s to sort, though it sorted them in the browser with no request: that time is the browser laying out a thousand rows, and nothing makes it shorter but fewer rows. The numbers, and how they were taken, are under [Speed](#speed).
+Keep a table paged. 25 rows to a page is the default, and `per_pages` lets a reader choose another size. Each sort, filter or page is then one small request, and the browser redraws 25 rows. Measured on a slow phone (4x CPU, Slow 4G), a sort of a 25-row page took about 310 ms, the request included. A page holding 1,000 rows took 1.2 s to sort by a column of numbers, though it sorted them in the browser with no request: that time is the browser laying out a thousand rows, and nothing makes it shorter but fewer rows. The numbers, and how they were taken, are under [Speed](#speed).
 
 ## When to use it
 
@@ -100,9 +100,9 @@ async fn bulk(uow: Uow, request: BulkRequest<Deal>) -> Result<Reply> {
 
 ## Sorting in the browser
 
-When a page holds every row of its result (the first page, with nothing after it), a click on a column's heading sorts the rows in the browser at once, and the heading's arrow moves with them. The runtime still follows the link, and the server's answer has the last word: it confirms the order and redraws the rest of the table. While it is on its way the table isn't marked busy, since it already shows the answer.
+When a page holds every row of its result (the first page, with nothing after it), a click on the heading of a column of numbers or dates sorts the rows in the browser at once, and the heading's arrow moves with them. The runtime still follows the link, and the server's answer has the last word: it confirms the order and redraws the rest of the table. While it is on its way the table isn't marked busy, since it already shows the answer.
 
-The browser orders rows the way the server does: numbers and dates as values, text as words, empty cells first, ties by key in the column's direction. A database can order text differently (by case, by accents); then the server's answer moves the rows it disagrees on. A cell drawn with `.cell(name, fn)` carries its value, so it sorts by the value and not by what it shows. An order by several columns, filters and search always ask the server. If the server can't answer, the rows and headings go back to what the address says.
+The browser sorts only what it can order exactly as the database does: numbers and dates whose cells show the value the column holds, empty cells first, ties by key in the column's direction. Every cell of such a column carries its value, so a cell drawn with `.cell(name, fn)` sorts by the value, not by what it shows. Text asks the server, since a database orders it by its own collation (case, accents), and so does a column that shows something other than what it sorts by, such as a company's name for a company id. An order by several columns, filters and search always ask the server. If the server can't answer, the rows, the headings and the table's form go back to the last order it confirmed.
 
 ## Typing and choosing
 
@@ -136,10 +136,10 @@ Measured on the proof app's table, with a box, a menu of two actions and details
 |---|---:|---:|---:|---:|---:|
 | 25, paged (the default) | 314 ms | 309 ms | 398 ms | 327 ms | 279 ms |
 | 100, paged | 533 ms | 582 ms | 409 ms | 493 ms | 340 ms |
-| 1,000, all of them, sorted in the browser | 1.6 s | 1.3 s | 409 ms | | 526 ms |
-| 11, all of them, sorted in the browser | 48 ms | | | | |
+| 1,000, all of them, sorted by a number in the browser | 1.2 s | 1.3 s | 409 ms | | 526 ms |
+| 11, all of them, sorted by a number in the browser | 37 ms | | | | |
 
-On a desktop with no throttling, a 25-row page sorts in 43 ms, a tick filters it in 44 ms, the last key of a search shows its result in 153 ms (100 of them the pause the table waits for), and a page of 1,000 rows sorts in 271 ms.
+On a desktop with no throttling, a 25-row page sorts in 43 ms, a tick filters it in 44 ms, the last key of a search shows its result in 153 ms (100 of them the pause the table waits for), and a page of 1,000 rows sorts by a number in 228 ms.
 
 ## Keyboard and accessibility
 

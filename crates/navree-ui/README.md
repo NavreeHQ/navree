@@ -53,7 +53,7 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
   drawing, the export and bulk actions. See [The data table](#the-data-table).
 - **The wire.** `Cmd` is the closed list of what an element does in the browser with
   no request: show, hide, open, focus, submit, copy, set a state attribute, and write
-  text (`text`, `count`, `value` for a hidden field, `fill` a dialog from a row). The
+  text (`text`, `count`, `value` for a hidden field marked `settable`, `fill` a dialog from a row). The
   text commands set `textContent`, so nothing they write is read as markup, and they
   refuse scripts, styles and the fields a user types in. `Op` is the closed list of what
   a server action sends back, with rendered HTML as payload. `Reply` carries ops and a
@@ -148,8 +148,9 @@ async fn bulk(uow: Uow, request: BulkRequest<Deal>) -> Result<Reply> {
 **The URL holds everything but the selection:** `q`, `sort=-amount,title`, `page`, `per`, `after`, `before`, `f.<col>`, `f.<col>.min`, `.max`, `.empty`, `cols`, `w`, `density`, `open`. Back, forward, reload and a shared link restore it, and it all works with JavaScript off. Bad values are ignored one at a time; sort and filter columns come only from the definition; values always bind, typed by the column.
 
 **Speed.** Keep a table paged: 25 rows a page is the default. A page that holds every
-row of its result sorts them in the browser at once, and the server's answer to the same
-link confirms the order and redraws the rest. Ticks and choices filter at once; typing
+row of its result sorts a column of numbers or dates in the browser at once, and the
+server's answer to the same link confirms the order and redraws the rest; text and
+relations, which the database orders by its own rules, ask the server. Ticks and choices filter at once; typing
 waits for a 100 ms pause, or `.debounce(wait)`. A row's actions are links or one small
 form each: a submit button in every row tied to one form by `form=` costs Chromium work
 across the whole page for each row moved.
