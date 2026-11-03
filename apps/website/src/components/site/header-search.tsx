@@ -11,7 +11,8 @@ const isMac = () => /Mac|iPhone|iPad/.test(navigator.platform || navigator.userA
 
 /**
  * The header's search trigger: an icon button on phones, a compact field
- * with the shortcut from `sm` up. Opens the site search dialog.
+ * with the shortcut from `sm` up, and an icon button again from `lg` to
+ * `xl`, where the main navigation needs the room. Opens the site search dialog.
  */
 export function HeaderSearch({ className }: { className?: string }) {
   const mac = useSyncExternalStore(subscribe, isMac, () => true);
@@ -21,15 +22,15 @@ export function HeaderSearch({ className }: { className?: string }) {
       onClick={() => window.dispatchEvent(new Event(OPEN_SEARCH_EVENT))}
       className={cn(
         "group inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border border-line-2 bg-ink-1/80 text-sm text-fg-3 transition-colors duration-200 hover:border-fg-3 hover:text-fg",
-        "w-9 justify-center max-sm:border-transparent max-sm:bg-transparent max-sm:text-fg-1 sm:w-44 sm:justify-start sm:pr-1.5 sm:pl-3 xl:w-56",
+        "w-9 justify-center max-sm:border-transparent max-sm:bg-transparent max-sm:text-fg-1 sm:w-44 sm:justify-start sm:pr-1.5 sm:pl-3 lg:max-xl:w-9 lg:max-xl:justify-center lg:max-xl:px-0 xl:w-56",
         className,
       )}
       aria-label="Search the docs"
       aria-keyshortcuts={mac ? "Meta+K" : "Control+K"}
     >
       <SearchIcon className="size-4 shrink-0" />
-      <span className="hidden flex-1 text-left sm:inline">Search</span>
-      <span className="hidden items-center gap-0.5 sm:inline-flex" aria-hidden>
+      <span className="hidden flex-1 text-left sm:inline lg:max-xl:hidden">Search</span>
+      <span className="hidden items-center gap-0.5 sm:inline-flex lg:max-xl:hidden" aria-hidden>
         <kbd className="kbd">{mac ? "⌘" : "Ctrl"}</kbd>
         <kbd className="kbd">K</kbd>
       </span>
