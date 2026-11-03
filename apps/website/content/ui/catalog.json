@@ -550,7 +550,7 @@
         "Dialog"
       ],
       "thumb": "dialog/thumb",
-      "anatomy": "dialog/default",
+      "anatomy": "dialog/thumb",
       "examples": [
         "dialog/thumb",
         "dialog/default",
@@ -567,7 +567,7 @@
         "AlertDialog"
       ],
       "thumb": "alert-dialog/thumb",
-      "anatomy": "alert-dialog/default",
+      "anatomy": "alert-dialog/thumb",
       "examples": [
         "alert-dialog/thumb",
         "alert-dialog/default"
@@ -584,7 +584,7 @@
         "SheetSide"
       ],
       "thumb": "sheet/thumb",
-      "anatomy": "sheet/default",
+      "anatomy": "sheet/thumb",
       "examples": [
         "sheet/thumb",
         "sheet/default",
@@ -601,7 +601,7 @@
         "Drawer"
       ],
       "thumb": "drawer/thumb",
-      "anatomy": "drawer/default",
+      "anatomy": "drawer/thumb",
       "examples": [
         "drawer/thumb",
         "drawer/default"
@@ -636,7 +636,7 @@
         "Tooltip"
       ],
       "thumb": "tooltip/thumb",
-      "anatomy": "tooltip/default",
+      "anatomy": "tooltip/thumb",
       "examples": [
         "tooltip/thumb",
         "tooltip/default"
@@ -1669,7 +1669,7 @@
       "cells": "narrow",
       "show": false,
       "live": false,
-      "width": null,
+      "width": 820,
       "scripts": [],
       "captions": [],
       "slots": [
@@ -2528,7 +2528,7 @@
       "cells": "narrow",
       "show": false,
       "live": false,
-      "width": null,
+      "width": 820,
       "scripts": [],
       "captions": [],
       "slots": [
@@ -5335,7 +5335,7 @@
       "cells": "narrow",
       "show": false,
       "live": false,
-      "width": null,
+      "width": 820,
       "scripts": [],
       "captions": [],
       "slots": [
@@ -5380,7 +5380,7 @@
       "cells": "narrow",
       "show": false,
       "live": false,
-      "width": null,
+      "width": 820,
       "scripts": [],
       "captions": [],
       "slots": [
@@ -9975,7 +9975,7 @@
       "cells": "narrow",
       "show": false,
       "live": false,
-      "width": null,
+      "width": 820,
       "scripts": [],
       "captions": [],
       "slots": [

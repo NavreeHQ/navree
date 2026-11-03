@@ -53,7 +53,9 @@ pub fn all() -> Vec<Example> {
         .wide()
         .height(600),
         single!("stat", "thumb", "A figure", stat_thumb),
-        single!("stat", "default", "Figures", stat_default).start(),
+        single!("stat", "default", "Figures", stat_default)
+            .start()
+            .width(820),
         single!("stat", "bars", "Bars", stat_bars).start(),
     ]
 }

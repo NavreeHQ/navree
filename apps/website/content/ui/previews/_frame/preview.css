@@ -22,6 +22,7 @@ body[data-preview-show] [data-preview-stage]{flex-direction:column}
 [data-preview-gallery=narrow]{--cell:140px}
 [data-preview-gallery=wide]{--cell:100%}
 [data-preview-gallery=icon]{--cell:112px;gap:8px}
+@media (min-width:481px){[data-preview-cols="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}[data-preview-cols="3"]{grid-template-columns:repeat(3,minmax(0,1fr))}[data-preview-cols="4"]{grid-template-columns:repeat(4,minmax(0,1fr))}[data-preview-cols="5"]{grid-template-columns:repeat(5,minmax(0,1fr))}}
 [data-preview-cell]{margin:0;display:flex;flex-direction:column;gap:12px;min-width:0;padding:16px;border:1px solid var(--line);border-radius:var(--radius-lg)}
 [data-preview-cell-body]{flex:1;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;min-width:0;min-height:40px}
 [data-preview-gallery=wide] [data-preview-cell-body]{display:block}

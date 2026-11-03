@@ -8,6 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { ownSlots } from "../components/ui-docs/anatomy.ts";
 import { choices, type Choose } from "../components/ui-docs/choices.ts";
 
 type Slot = { slot: string; tag: string; count: number; children: Slot[] };
@@ -72,8 +73,6 @@ export function propsMarkdown(type: string): string {
   return `${doc.summary}\n\n${rows.join("\n")}${shared}`;
 }
 
-const LAYOUT = new Set(["row", "stack", "grid", "container"]);
-
 function slotLines(slots: Slot[], depth: number, out: string[]): string[] {
   for (const s of slots) {
     out.push(`${"  ".repeat(depth)}- \`${s.slot}\` (\`<${s.tag}>\`)${s.count > 1 && depth > 0 ? ` × ${s.count}` : ""}`);
@@ -87,8 +86,7 @@ export function anatomyMarkdown(id: string): string {
   const component = data().components.find((c) => c.id === id);
   const example = data().examples.find((e) => e.id === component?.anatomy);
   if (!component || !example) return "";
-  let parts = example.slots;
-  while (id !== "layout" && parts.length && parts.every((p) => LAYOUT.has(p.slot))) parts = parts.flatMap((p) => p.children);
+  const parts = ownSlots(example.slots, id);
   return `The parts of ${component.name}, each an element with \`data-slot\`:\n\n${slotLines(parts, 0, []).join("\n")}`;
 }
 

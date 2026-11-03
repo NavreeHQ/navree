@@ -25,6 +25,7 @@ import { InlineMarkdown } from "@/components/inline-markdown";
 import { highlight } from "@/lib/mdx";
 import { cn } from "@/lib/utils";
 
+import { ownSlots } from "./anatomy";
 import { choices, type Choose, type ChooseName } from "./choices";
 import {
   asset,
@@ -69,19 +70,6 @@ export async function UiPreview({ example: id }: { example: string }) {
 }
 
 // ------------------------------------------------------------------ anatomy
-
-const LAYOUT_SLOTS = new Set(["row", "stack", "grid", "container"]);
-
-/** The component's own parts: wrappers from the example's layout are left out. */
-function ownSlots(slots: Slot[], id: string): Slot[] {
-  let parts = slots;
-  if (id === "layout") return parts;
-  while (parts.length > 0 && parts.every((p) => LAYOUT_SLOTS.has(p.slot))) {
-    parts = parts.flatMap((p) => p.children);
-  }
-  // Several of the component side by side: one is enough to show its parts.
-  return parts.map((p) => ({ ...p, count: 1 }));
-}
 
 function SlotBox({ slot, depth }: { slot: Slot; depth: number }) {
   return (

@@ -204,10 +204,10 @@ pub const COMPONENTS: &[Component] = &[
     .parts("default"),
     component("spinner", "Spinner", &["Spinner"], "default").parts("default"),
     // Overlays
-    component("dialog", "Dialog", &["Dialog"], "thumb").parts("default"),
-    component("alert-dialog", "AlertDialog", &["AlertDialog"], "thumb").parts("default"),
-    component("sheet", "Sheet", &["Sheet", "SheetSide"], "thumb").parts("default"),
-    component("drawer", "Drawer", &["Drawer"], "thumb").parts("default"),
+    component("dialog", "Dialog", &["Dialog"], "thumb").parts("thumb"),
+    component("alert-dialog", "AlertDialog", &["AlertDialog"], "thumb").parts("thumb"),
+    component("sheet", "Sheet", &["Sheet", "SheetSide"], "thumb").parts("thumb"),
+    component("drawer", "Drawer", &["Drawer"], "thumb").parts("thumb"),
     component(
         "popover",
         "Popover",
@@ -215,7 +215,7 @@ pub const COMPONENTS: &[Component] = &[
         "thumb",
     )
     .parts("default"),
-    component("tooltip", "Tooltip", &["Tooltip"], "thumb").parts("default"),
+    component("tooltip", "Tooltip", &["Tooltip"], "thumb").parts("thumb"),
     component("hover-card", "HoverCard", &["HoverCard"], "thumb").parts("default"),
     // Layout
     component(

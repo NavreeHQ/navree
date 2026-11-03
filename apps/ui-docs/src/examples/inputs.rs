@@ -14,6 +14,7 @@ pub fn all() -> Vec<Example> {
         single!("field", "required", "Required", field_required).start(),
         single!("field", "set", "A field set", field_set)
             .start()
+            .width(820)
             .height(220),
         single!("field", "label", "A label on its own", field_label).start(),
         single!("input", "default", "An input", input_default).start(),

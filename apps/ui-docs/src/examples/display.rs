@@ -12,7 +12,9 @@ pub fn all() -> Vec<Example> {
         single!("card", "default", "A card", card_default)
             .start()
             .height(220),
-        single!("card", "stats", "Cards in a grid", card_grid).start(),
+        single!("card", "stats", "Cards in a grid", card_grid)
+            .start()
+            .width(820),
         single!("card", "plain", "Body only", card_plain).start(),
         single!("badge", "default", "Badges", badge_default),
         gallery!("badge", "variants", "Variants", badge_variants).narrow(),

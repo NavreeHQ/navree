@@ -8,7 +8,7 @@ use navree::ui::{Node, PAGE_CSP, el, measure, render, tokens};
 use serde::Serialize;
 
 use crate::api::TypeDoc;
-use crate::catalog::{COMPONENTS, Component, Example, GROUPS, Kind, Layout};
+use crate::catalog::{COMPONENTS, Cells, Component, Example, GROUPS, Kind, Layout};
 
 /// Where the preview documents are served from, under the site's root.
 pub const PREVIEW_ROOT: &str = "/ui-preview";
@@ -131,10 +131,11 @@ fn stage(example: &Example) -> (Node, Vec<String>) {
         ),
         Kind::Gallery(draw) => {
             let cells = draw();
-            let captions = cells
+            let captions: Vec<String> = cells
                 .iter()
                 .map(|(caption, _)| (*caption).to_owned())
                 .collect();
+            let captions_len = captions.len();
             let figures: Vec<Node> = cells
                 .into_iter()
                 .map(|(caption, node)| {
@@ -153,12 +154,27 @@ fn stage(example: &Example) -> (Node, Vec<String>) {
                     .child(
                         el("div")
                             .attr("data-preview-gallery", example.cells.as_str())
+                            .attr("data-preview-cols", columns(example.cells, captions_len))
                             .child(figures),
                     )
                     .into(),
                 captions,
             )
         }
+    }
+}
+
+/// How many columns a gallery of `n` cells takes on a wide screen: full rows
+/// where it can, so no cell is left alone on the last one.
+fn columns(cells: Cells, n: usize) -> i64 {
+    let n = i64::try_from(n).unwrap_or(1).max(1);
+    match cells {
+        Cells::Wide => 1,
+        Cells::Icon => 0,
+        Cells::Narrow if n <= 5 => n,
+        Cells::Medium if n <= 4 => n,
+        Cells::Narrow | Cells::Medium if n <= 6 => 3,
+        Cells::Narrow | Cells::Medium => 4,
     }
 }
 

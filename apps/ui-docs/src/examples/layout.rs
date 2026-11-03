@@ -13,8 +13,12 @@ pub fn all() -> Vec<Example> {
         single!("layout", "stack", "A stack", layout_stack).start(),
         single!("layout", "row", "A row", layout_row).start(),
         gallery!("layout", "justify", "Sharing the space", layout_justify).wide(),
-        single!("layout", "grid", "A grid", layout_grid).start(),
-        single!("layout", "span", "Spanning columns", layout_span).start(),
+        single!("layout", "grid", "A grid", layout_grid)
+            .start()
+            .width(820),
+        single!("layout", "span", "Spanning columns", layout_span)
+            .start()
+            .width(820),
         single!("layout", "container", "A container", layout_container).start(),
         single!("accordion", "default", "An accordion", accordion_default)
             .start()
