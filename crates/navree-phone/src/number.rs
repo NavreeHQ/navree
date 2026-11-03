@@ -396,6 +396,39 @@ impl PhoneNumber {
         }
     }
 
+    /// Reads a number stored in E.164 (`+447400123456`) exactly as it was
+    /// written, without checking it against the plans compiled in, so a
+    /// number saved under older plans still reads after an update. Only `+`,
+    /// a calling code that exists and at most 15 digits in all are accepted;
+    /// read what people type with [`parse`](Self::parse).
+    ///
+    /// ```
+    /// use navree_phone::PhoneNumber;
+    ///
+    /// let stored = PhoneNumber::from_e164("+447400123456").unwrap();
+    /// assert_eq!(stored.international(), "+44 7400 123456");
+    /// assert!(PhoneNumber::from_e164("+44 7400 123456").is_err());
+    /// ```
+    pub fn from_e164(text: &str) -> Result<PhoneNumber, ParseError> {
+        let digits = text.strip_prefix('+').ok_or(ParseError::NotANumber)?;
+        if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(ParseError::NotANumber);
+        }
+        if digits.len() > MAX_E164_DIGITS {
+            return Err(ParseError::TooLong);
+        }
+        let (code, nsn) =
+            parse::split_country_code(digits).ok_or(ParseError::InvalidCountryCode)?;
+        if nsn.len() < 2 {
+            return Err(ParseError::TooShort);
+        }
+        PhoneNumber::from_parsed(&Parsed {
+            code,
+            nsn: nsn.to_owned(),
+            extension: String::new(),
+        })
+    }
+
     fn from_parsed(parsed: &Parsed) -> Result<PhoneNumber, ParseError> {
         let code = parsed.code.to_string();
         let digits = code.len() + parsed.nsn.len();

@@ -213,7 +213,7 @@ fn strip_international_prefix(
 }
 
 /// A calling code at the start of `digits`, and what follows it.
-fn split_country_code(digits: &str) -> Option<(u16, &str)> {
+pub(crate) fn split_country_code(digits: &str) -> Option<(u16, &str)> {
     if digits.starts_with('0') {
         return None;
     }

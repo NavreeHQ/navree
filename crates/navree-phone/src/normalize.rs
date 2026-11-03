@@ -334,9 +334,9 @@ fn lower(c: char) -> char {
 /// `start` to the end.
 fn extension_at(chars: &[char], start: usize) -> Option<String> {
     let rest = chars.get(start..)?;
-    // `;ext=` then up to 20 digits.
+    // `;ext=` then up to 20 digits, and nothing after them.
     if let Some(digits) = rest.strip_prefix(&[';', 'e', 'x', 't', '='])
-        && let Some(found) = digits_to_end(digits, 20, false)
+        && let Some(found) = digits_to_end(digits, 20, Hash::Never)
     {
         return Some(found);
     }
@@ -356,7 +356,7 @@ fn extension_at(chars: &[char], start: usize) -> Option<String> {
     // The American style: `- 503#`.
     let after_dashes = skip(rest, |c| matches!(c, '-' | ' '));
     if after_dashes.len() < rest.len()
-        && let Some(found) = digits_to_end(after_dashes, 6, true)
+        && let Some(found) = digits_to_end(after_dashes, 6, Hash::Required)
     {
         return Some(found);
     }
@@ -445,18 +445,26 @@ fn after_label(chars: &[char], limit: usize) -> Option<String> {
         _ => chars,
     };
     let rest = skip(rest, |c| matches!(c, ' ' | '\u{00A0}' | '\t' | ',' | '-'));
-    digits_to_end(rest, limit, false)
+    digits_to_end(rest, limit, Hash::Optional)
 }
 
-/// 1 to `limit` digits, then `#` (required or optional), then the end.
-fn digits_to_end(chars: &[char], limit: usize, hash_required: bool) -> Option<String> {
+/// Whether a `#` may close an extension.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Hash {
+    Never,
+    Optional,
+    Required,
+}
+
+/// 1 to `limit` digits, then `#` as `hash` allows, then the end.
+fn digits_to_end(chars: &[char], limit: usize, hash: Hash) -> Option<String> {
     let count = chars.iter().take_while(|c| c.is_ascii_digit()).count();
     if count == 0 || count > limit {
         return None;
     }
     let ok = match chars.get(count..).unwrap_or(&[]) {
-        [] => !hash_required,
-        ['#' | '\u{FF03}'] => true,
+        [] => hash != Hash::Required,
+        ['#' | '\u{FF03}'] => hash != Hash::Never,
         _ => false,
     };
     ok.then(|| chars.iter().take(count).collect())

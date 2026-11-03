@@ -260,6 +260,13 @@ fn errors_say_why() {
         ("+44 7400 123456 789 012", None, ParseError::TooLong),
         ("+49 917 834 278 342 582", None, ParseError::TooLong),
         ("0044", gb, ParseError::TooShortAfterIdd),
+        // RFC 3966 extensions take digits only, as in the reference library.
+        ("+376 712 345;ext=206#", None, ParseError::NotANumber),
+        (
+            "+971 50 123 4567;ext=395004797#",
+            None,
+            ParseError::NotANumber,
+        ),
     ] {
         assert_eq!(PhoneNumber::parse(input, code), Err(error), "{input}");
     }
@@ -323,4 +330,36 @@ fn the_type_is_small_and_copy() {
     fn copy<T: Copy + Send + Sync + 'static>() {}
     copy::<PhoneNumber>();
     assert!(std::mem::size_of::<PhoneNumber>() <= 40);
+}
+
+#[test]
+fn stored_e164_reads_back_as_written_whatever_the_plans_say() {
+    // What a column holds reads back exactly, even a number the plans compiled
+    // in no longer accept (a range withdrawn, a length changed).
+    let valid = PhoneNumber::from_e164("+447400123456").unwrap();
+    assert_eq!(valid, parse("+44 7400 123456", None));
+    let unassigned = PhoneNumber::from_e164("+441000000000").unwrap();
+    assert_eq!(unassigned.as_str(), "+441000000000");
+    assert_eq!(unassigned.number_type(), None);
+    assert_eq!(
+        PhoneNumber::from_e164("+390612345678")
+            .unwrap()
+            .national_number(),
+        "0612345678"
+    );
+    for bad in [
+        "",
+        "+",
+        "447400123456",
+        "+44 7400 123456",
+        "+999123456",
+        "+0123456",
+        "+4",
+        "+44",
+        "+1234567890123456",
+        "+44740012345x",
+        "\u{ff0b}447400123456",
+    ] {
+        assert!(PhoneNumber::from_e164(bad).is_err(), "{bad}");
+    }
 }
