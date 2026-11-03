@@ -912,7 +912,10 @@ fn a_two_month_calendar_renders_in_well_under_a_millisecond() {
         .len();
     }
     let each = start.elapsed() / 500;
-    println!("a two-month calendar with rules and a choice: {each:?} each, {} bytes", bytes / 500);
+    println!(
+        "a two-month calendar with rules and a choice: {each:?} each, {} bytes",
+        bytes / 500
+    );
     assert!(
         each < std::time::Duration::from_micros(1500),
         "{each:?} for {bytes} bytes"
