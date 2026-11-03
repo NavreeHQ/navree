@@ -692,16 +692,45 @@ for (const name of NAMES) {
         assert.ok(tall.scroll > tall.client, "it scrolls inside");
         await page.keyboard.press("End");
         assert.equal(await focused(page), "Item 60");
-        const inView = await page.evaluate(() => {
+        // A browser may scroll to a focused item a frame later.
+        await page.waitForFunction(() => {
           const m = document.querySelector("#m-long").getBoundingClientRect();
           const i = document.activeElement.getBoundingClientRect();
           return i.top >= m.top - 1 && i.bottom <= m.bottom + 1;
-        });
-        assert.equal(inView, true, "the focused item was scrolled into the menu's box");
+        }, null, { timeout: 3000 });
         await page.setViewportSize({ width: 1280, height: 600 });
         await page.waitForTimeout(150);
         const after = await page.locator("#m-long").boundingBox();
         assert.ok(after.y >= 0 && after.y + after.height <= 600, "placed again after a resize: " + JSON.stringify(after));
+        await page.done();
+      });
+
+      test("M5 in a right-to-left page the menu lines up with the end of its button and a submenu opens toward the end", async () => {
+        const page = await open("/menus");
+        await page.evaluate(() => { document.documentElement.dir = "rtl"; });
+        await page.locator("#m-row-1-trigger").scrollIntoViewIfNeeded();
+        await page.locator("#m-row-1-trigger").click();
+        const menu = await page.locator("#m-row-1").boundingBox();
+        const trigger = await page.locator("#m-row-1-trigger").boundingBox();
+        assert.ok(Math.abs(menu.x - trigger.x) < 2 || menu.x >= 8, "end is the left edge in right-to-left: " + JSON.stringify({ menu, trigger }));
+        assert.ok(Math.abs(menu.x - trigger.x) < 2, "aligned with the button's left edge: " + JSON.stringify({ menu, trigger }));
+        await page.keyboard.press("Escape");
+        await page.locator("#m-sub-trigger").scrollIntoViewIfNeeded();
+        await page.locator("#m-sub-trigger").click();
+        const parent = await page.locator("#m-sub").boundingBox();
+        await page.getByRole("menuitem", { name: "Move to" }).hover();
+        await page.locator("#m-sub-s1").waitFor();
+        const sub = await page.locator("#m-sub-s1").boundingBox();
+        assert.ok(sub.x + sub.width <= parent.x + 8, "the submenu is on the left of its parent: " + JSON.stringify({ parent, sub }));
+        // The keys swap too: Left opens, Right closes.
+        await page.keyboard.press("Escape");
+        await page.locator("#m-sub-trigger").focus();
+        await page.keyboard.press("ArrowDown");
+        await page.keyboard.press("ArrowDown");
+        await page.keyboard.press("ArrowLeft");
+        await page.locator("#m-sub-s1").waitFor();
+        await page.keyboard.press("ArrowRight");
+        await page.locator("#m-sub-s1").waitFor({ state: "hidden" });
         await page.done();
       });
 
@@ -1097,6 +1126,25 @@ for (const name of NAMES) {
         assert.equal(await page.locator("body > [data-slot=toaster] [data-slot=toast]").count(), 1);
         await page.locator("#fake-close").click();
         assert.equal(await page.locator("#fake-toast").count(), 1, "a toast of stored markup isn't the runtime's to close");
+        await page.done();
+      });
+
+      test("N10 a hostile op makes only a text toast: no script link, no post to another site, an unknown tone is info", async () => {
+        const page = await open("/menus");
+        const build = await page.evaluate(() => document.documentElement.getAttribute("data-build"));
+        const ops = [
+          { op: "toast", tone: "danger", text: "Script link", action: { label: "Go", href: "javascript:alert(1)" } },
+          { op: "toast", tone: "success", text: "Post elsewhere", action: { label: "Pay", href: "https://evil.example/pay", post: true } },
+          { op: "toast", tone: "<img src=x>", text: "Odd tone", title: "<b>t</b>", duration: "forever", id: "x\"><i>" },
+          { op: "toast", tone: "info", text: { not: "text" }, closable: 1 },
+        ];
+        await page.route("**/menus/toast", (route) => route.fulfill({ status: 200, contentType: "application/vnd.navree.ops+json", body: JSON.stringify({ build, ops }) }));
+        await page.locator("#n-form-plain button").click();
+        await toasts(page).nth(3).waitFor({ state: "attached" });
+        assert.equal(await page.locator("[data-slot=toast-action]").count(), 0, "neither action was drawn");
+        assert.equal(await page.locator("[data-slot=toast] img, [data-slot=toast] b, [data-slot=toast] i").count(), 0, "everything is text");
+        const tones = await toasts(page).evaluateAll((all) => all.map((t) => t.getAttribute("data-tone") + "/" + t.getAttribute("data-duration")));
+        assert.deepEqual(tones, ["danger/long", "success/normal", "info/normal", "info/normal"]);
         await page.done();
       });
 

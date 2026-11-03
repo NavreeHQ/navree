@@ -504,12 +504,14 @@ impl DropdownMenu {
             .attr("id", trigger_id.clone())
             .attr("popovertarget", self.id.clone())
             .attr("aria-haspopup", "menu")
-            .attr("aria-expanded", "false");
+            .attr("aria-expanded", "false")
+            // The runtime keeps it true while the menu is open, through a morph.
+            .attr("data-ui-keep-attrs", "aria-expanded");
         let menu = menu_element(
             &self.id,
             &trigger_id,
             self.label,
-            self.side,
+            self.side.as_str(),
             self.align,
             false,
         )
@@ -540,7 +542,7 @@ fn menu_element(
     id: &str,
     labelled_by: &str,
     label: Option<String>,
-    side: Side,
+    side: &'static str,
     align: PopupAlign,
     sub: bool,
 ) -> Element {
@@ -555,7 +557,7 @@ fn menu_element(
         .flag("data-sub", sub)
         .flag("data-ui-menu", true)
         .flag("data-ui-place", true)
-        .attr("data-side", side.as_str())
+        .attr("data-side", side)
         .attr_opt("data-align", align.as_str())
         .uses(Uses::MENUS.with(Uses::OVERLAY))
 }
@@ -660,6 +662,7 @@ fn entry_node(entry: &Entry, cx: &mut Cx<'_>) -> Node {
                 .attr("aria-haspopup", "menu")
                 .attr("aria-expanded", "false")
                 .flag("data-sub-trigger", true)
+                .attr("data-ui-keep-attrs", "aria-expanded")
                 .children((
                     sub.start.map(icon),
                     el("span").slot("menu-text").child(sub.label.clone()),
@@ -672,16 +675,9 @@ fn entry_node(entry: &Entry, cx: &mut Cx<'_>) -> Node {
             } else {
                 trigger
             };
-            let menu = menu_element(
-                &sub_id,
-                &trigger_id,
-                None,
-                Side::Right,
-                PopupAlign::Start,
-                true,
-            )
-            .flag("data-keep-open", cx.keep_open)
-            .child(inner);
+            let menu = menu_element(&sub_id, &trigger_id, None, "end", PopupAlign::Start, true)
+                .flag("data-keep-open", cx.keep_open)
+                .child(inner);
             Node::list((trigger, menu))
         }
     }
@@ -921,7 +917,7 @@ mod tests {
             "{out}"
         );
         assert!(out.contains(r#"popovertarget="m-s2""#), "{out}");
-        assert!(out.contains(r#"data-side="right""#), "{out}");
+        assert!(out.contains(r#"data-side="end""#), "{out}");
         // The submenu stands inside its parent, which keeps the parent open.
         let parent_end = out.rfind("</div>").unwrap();
         assert!(out.find(r#"id="m-s1""#).unwrap() < parent_end);

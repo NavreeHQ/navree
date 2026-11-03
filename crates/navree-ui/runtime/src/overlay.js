@@ -21,9 +21,11 @@ function place(pop, anchor, again) {
   if (fit) pop.style.maxHeight = "";
   // Layout sizes, not the box as drawn: a popup that is fading in is a little scaled.
   const p = { width: pop.offsetWidth, height: pop.offsetHeight };
-  const side = pop.getAttribute("data-side") || "bottom";
-  const vw = innerWidth, vh = Math.min(innerHeight, visualViewport ? visualViewport.height : innerHeight);
+  // `start` and `end` follow the text's direction (a submenu opens toward the end); the rest are screen sides.
   const rtl = getComputedStyle(anchor).direction === "rtl";
+  const named = pop.getAttribute("data-side") || "bottom";
+  const side = named === "end" ? (rtl ? "left" : "right") : named === "start" ? (rtl ? "right" : "left") : named;
+  const vw = innerWidth, vh = Math.min(innerHeight, visualViewport ? visualViewport.height : innerHeight);
   let top, left;
   if (side === "left" || side === "right") {
     const room = side === "right" ? vw - a.right : a.left;

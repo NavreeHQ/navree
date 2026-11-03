@@ -87,7 +87,7 @@ function build(spec) {
   const href = action ? safe(action.href, !!action.post) : "";
   const duration = DURATIONS.includes(/** @type {string} */ (spec.duration))
     ? /** @type {string} */ (spec.duration)
-    : action || tone === "warning" || tone === "danger" ? "long" : "normal";
+    : (action && href) || tone === "warning" || tone === "danger" ? "long" : "normal";
   const el = make("div");
   el.setAttribute("data-slot", "toast");
   el.setAttribute("data-tone", tone);
