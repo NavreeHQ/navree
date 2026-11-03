@@ -890,7 +890,7 @@ fn the_markup_of_each_component_stays_small() {
 }
 
 #[test]
-fn the_dates_module_is_small_and_a_calendar_draws_fast() {
+fn the_dates_module_stays_under_its_size_budget() {
     let size = assets::get("dates").unwrap().gzip.unwrap().len();
     // 10.7 KB today: the calendar, the pickers and the reading of typed dates and times in 19 locales.
     assert!(size <= 11 * 1024, "{size}");
@@ -912,6 +912,7 @@ fn a_two_month_calendar_renders_in_well_under_a_millisecond() {
         .len();
     }
     let each = start.elapsed() / 500;
+    println!("a two-month calendar with rules and a choice: {each:?} each, {} bytes", bytes / 500);
     assert!(
         each < std::time::Duration::from_micros(1500),
         "{each:?} for {bytes} bytes"

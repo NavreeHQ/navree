@@ -1141,18 +1141,19 @@ function activate(ul, at) {
   }
   li.setAttribute("data-active", "");
   set(ul, "aria-activedescendant", li.id);
-  reveal(ul, li, false);
+  reveal(/** @type {HTMLElement} */ (ul), /** @type {HTMLElement} */ (li), false);
 }
 /**
  * Scrolls the list, never the page, until the option shows: the least that does it, or with
- * `middle` the option in the middle. A list that is not shown has no size and stays as it is.
- * @param {Element} ul @param {Element} li @param {boolean} middle
+ * `middle` the option in the middle. It counts in the list's own units, so a popover that is
+ * still growing into place doesn't skew it. A list that is not shown has no size and stays
+ * as it is. @param {HTMLElement} ul @param {HTMLElement} li @param {boolean} middle
  */
 function reveal(ul, li, middle) {
-  const a = ul.getBoundingClientRect(), b = li.getBoundingClientRect();
-  if (middle) ul.scrollTop += b.top - a.top - (a.height - b.height) / 2;
-  else if (b.top < a.top) ul.scrollTop += b.top - a.top;
-  else if (b.bottom > a.bottom) ul.scrollTop += b.bottom - a.bottom;
+  const top = li.offsetTop, h = li.offsetHeight, view = ul.clientHeight;
+  if (middle) ul.scrollTop = top - (view - h) / 2;
+  else if (top < ul.scrollTop) ul.scrollTop = top;
+  else if (top + h > ul.scrollTop + view) ul.scrollTop = top + h - view;
 }
 /** @param {KeyboardEvent} e @param {Element} ul */
 function listKey(e, ul) {
@@ -1194,7 +1195,7 @@ on(document, "toggle", (e) => {
     if (open && ul) {
       ul.focus({ preventScroll: true });
       // The list had no size when it was filled: now it is shown, bring the value into view.
-      if (current) reveal(ul, current, true);
+      if (current) reveal(ul, /** @type {HTMLElement} */ (current), true);
     }
     return;
   }

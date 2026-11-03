@@ -89,7 +89,7 @@
 }
 
 /* The list of times. */
-[data-slot=time-list]{list-style:none;margin:0;padding:.25rem;min-width:8rem;max-height:min(16rem,calc(100dvh - 2rem));overflow:auto;scrollbar-width:thin;font-variant-numeric:tabular-nums;
+[data-slot=time-list]{position:relative;list-style:none;margin:0;padding:.25rem;min-width:8rem;max-height:min(16rem,calc(100dvh - 2rem));overflow:auto;scrollbar-width:thin;font-variant-numeric:tabular-nums;
   &:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
   & [role=option]{padding:.375rem .625rem;border-radius:var(--radius);color:var(--fg-1);cursor:pointer;white-space:nowrap}
   & [role=option]:hover{background:var(--ink-3);color:var(--fg)}
