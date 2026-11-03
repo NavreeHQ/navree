@@ -1557,6 +1557,37 @@ for (const name of NAMES) {
         await page.done();
       });
 
+      test("R5 a field of the page that names the post form and isn't valid doesn't stop a menu's post", async () => {
+        const page = await open("/menus");
+        const sent = [];
+        page.on("request", (r) => r.method() === "POST" && sent.push(new URL(r.url()).pathname));
+        // Elsewhere in the page, an input that belongs to the post form and can't be submitted empty.
+        await page.evaluate(() => {
+          const input = document.createElement("input");
+          input.setAttribute("form", "ui-post");
+          input.setAttribute("name", "x");
+          input.required = true;
+          document.querySelector("main").append(input);
+        });
+        assert.equal(await page.evaluate(() => document.getElementById("ui-post").checkValidity()), false, "the post form is not valid, as it stands");
+        await page.locator("#m-post-trigger").click();
+        await page.getByRole("menuitem", { name: "Archive" }).click();
+        await toasts(page).filter({ hasText: "Archived by the item." }).waitFor({ timeout: 10000 });
+        assert.deepEqual(sent, ["/menus/archive"]);
+        await page.done();
+      });
+
+      test("R5 the same for the post form the runtime makes when the page has none", async () => {
+        const unique = ++uniqueRoute;
+        f.routes.set(`/pn${unique}`, (req, res) => f.ops(res, { build: "b1", ops: [{ op: "toast", tone: "success", text: "Posted alone." }] }));
+        const path = paged(`<main id="main">${post("Archive", "a", `/pn${unique}`)}<input form="ui-post" name="x" required></main>${TOASTER}`);
+        const page = await fixture(path);
+        await page.click("#a");
+        await toasts(page).filter({ hasText: "Posted alone." }).waitFor({ timeout: 10000 });
+        assert.equal(await page.locator("#ui-post[novalidate]").count(), 1);
+        await page.done();
+      });
+
       test("R6 a Toaster drawn inside a page's layout can't take over the standing toaster on a boosted link", async () => {
         const nested = `<div class="layout"><main id="main"><h1 id="h">B</h1></main><section data-slot="toaster" id="ui-toaster" aria-label="Notifications" data-position="top-end" data-close="Dismiss" data-ui-toaster><div data-slot="toast" id="ui-toast-1" data-tone="success" data-duration="long" role="status"><div data-slot="toast-body"><p data-slot="toast-text">flash on B</p></div><a data-slot="toast-close" role="button" href="#ui-toast-1" aria-label="Dismiss"></a></div></section></div>`;
         const next = paged(nested);

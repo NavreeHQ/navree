@@ -177,6 +177,8 @@ export function startForms() {
     const form = make("form");
     set(form, "id", "ui-post");
     set(form, "method", "post");
+    // Not validated: a field elsewhere that names it, and isn't valid, must not hold back a post.
+    set(form, "novalidate", "");
     set(form, "hidden", "");
     set(form, "data-ui-form", "");
     body().append(form);

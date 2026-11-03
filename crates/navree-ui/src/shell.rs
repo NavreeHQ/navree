@@ -943,7 +943,7 @@ mod tests {
         let html = page(Some("tok"), form.into());
         assert_eq!(html.matches(r#"<form id="ui-post""#).count(), 1, "{html}");
         assert!(
-            html.contains(r#"<form id="ui-post" method="post" hidden data-ui-form><input type="hidden" name="_csrf" value="tok"></form>"#),
+            html.contains(r#"<form id="ui-post" method="post" novalidate hidden data-ui-form><input type="hidden" name="_csrf" value="tok"></form>"#),
             "{html}"
         );
         // After everything else, outside every form of the page.

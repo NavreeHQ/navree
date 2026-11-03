@@ -155,9 +155,12 @@ impl View {
         render_into(out, &self.body);
         if found.posts {
             // The one form every post item names: outside any form of the page, so none nests.
+            // It is never validated: a field elsewhere that names it, and isn't valid, must not hold
+            // back a post that carries none of it.
             let form: Node = el("form")
                 .attr("id", POST_FORM)
                 .attr("method", "post")
+                .flag("novalidate", true)
                 .flag("hidden", true)
                 .flag("data-ui-form", true)
                 .children(
@@ -398,13 +401,15 @@ mod tests {
             .to_html();
         assert_eq!(html.matches("id=\"ui-post\"").count(), 1, "{html}");
         assert!(
-            html.contains(r#"<form id="ui-post" method="post" hidden data-ui-form><input type="hidden" name="_csrf" value="tok&quot;&gt;&lt;x&gt;"></form></body>"#),
+            html.contains(r#"<form id="ui-post" method="post" novalidate hidden data-ui-form><input type="hidden" name="_csrf" value="tok&quot;&gt;&lt;x&gt;"></form></body>"#),
             "{html}"
         );
         // Without a token the form is there and carries none.
         let bare = View::new("x").body(menu("one")).to_html();
         assert!(
-            bare.contains(r#"<form id="ui-post" method="post" hidden data-ui-form></form></body>"#),
+            bare.contains(
+                r#"<form id="ui-post" method="post" novalidate hidden data-ui-form></form></body>"#
+            ),
             "{bare}"
         );
         // A page with no post item draws no form.
