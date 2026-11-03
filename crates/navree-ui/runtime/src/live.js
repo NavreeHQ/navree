@@ -11,6 +11,8 @@
 // schedule is the same in every browser. A region that may have missed something
 // fetches again once when its stream is back, and never has more than one fetch
 // of its own in flight: events that come while it waits cost one more fetch after it lands.
+// A fetch is given up on after 15 s (in nav.js); one that somehow is still out after 20 s
+// is left behind and the next event fetches anew.
 import { cookies, every, hidden, on, sameOrigin } from "./dom.js";
 import { refresh } from "./nav.js";
 
@@ -22,6 +24,12 @@ const LONGEST = 30000;
 const STEADY = 5000;
 /** How long a tab shown again waits for its stream before it catches up anyway. */
 const CATCH_WAIT = 2500;
+/** A region's fetch still out after this long is not waited for any more. More than the fetch's own limit. */
+const STALL = 20000;
+/** How long the question to a stream that failed to open may take. */
+const PROBE_LIMIT = 10000;
+/** A stream is reopened for a changed session no more often than this: a server that sets a new token on every answer is no loop. */
+const SESSION_GAP = 5000;
 /** Event names a region may listen for. `open` and `error` are the connection's own. */
 const NAME = /^[\w.:-]{1,64}$/;
 const OWN = new Set(["open", "error"]);
@@ -29,8 +37,8 @@ const OWN = new Set(["open", "error"]);
 const FINAL = new Set([204, 401, 403]);
 
 /**
- * @typedef {{name: string, timer: number, busy: boolean, dirty: boolean}} Sub
- * @typedef {{url: string, es: EventSource | null, subs: Map<Element, Sub>, failed: number, retry: number, steady: number, wait: number, listening: Set<string>, state: string, missed: boolean, opened: boolean, probed: boolean, stopped: boolean, token: string}} Stream
+ * @typedef {{name: string, timer: number, busy: boolean, dirty: boolean, since: number, run: number}} Sub
+ * @typedef {{url: string, es: EventSource | null, subs: Map<Element, Sub>, failed: number, retry: number, steady: number, wait: number, listening: Set<string>, state: string, missed: boolean, opened: boolean, probed: boolean, stopped: boolean, token: string, changed: number}} Stream
  */
 
 /** One stream per address. @type {Map<string, Stream>} */
@@ -48,6 +56,11 @@ function paint(s, state) {
   for (const el of s.subs.keys()) el.setAttribute("data-live", state);
 }
 
+/** Whether a region's fetch has been out so long that it is not waited for. @param {Sub} sub */
+function stalled(sub) {
+  return sub.busy && performance.now() - sub.since > STALL;
+}
+
 /** Fetches `el` again now, or, if its last fetch is still out, once more when it lands. @param {Stream} s @param {Element} el */
 function fire(s, el) {
   const sub = s.subs.get(el);
@@ -58,15 +71,19 @@ function fire(s, el) {
     return;
   }
   if (hidden() || !el.id) return;
-  if (sub.busy) {
+  if (sub.busy && !stalled(sub)) {
     sub.dirty = true;
     return;
   }
+  // A fetch left behind (stalled) no longer owns the flags: its answer would be dropped as an older one.
+  const mine = ++sub.run;
   sub.busy = true;
-  const started = performance.now();
+  sub.dirty = false;
+  const started = (sub.since = performance.now());
   refresh(el.id)
     .catch(() => {})
     .finally(() => {
+      if (sub.run !== mine) return;
       sub.busy = false;
       if (sub.dirty && s.subs.get(el) === sub) {
         // Exactly one more, and no sooner than a quiet time after the last began: a fast answer
@@ -81,7 +98,7 @@ function fire(s, el) {
 function heard(s, name) {
   for (const [el, sub] of s.subs) {
     if (sub.name !== name) continue;
-    if (sub.busy) sub.dirty = true;
+    if (sub.busy && !stalled(sub)) sub.dirty = true;
     else if (!sub.timer) sub.timer = /** @type {any} */ (setTimeout(() => fire(s, el), QUIET));
   }
 }
@@ -110,8 +127,10 @@ function listen(s) {
 /** Asks once what a stream that never opened answers: the browser says only that it failed. @param {Stream} s */
 async function probe(s) {
   s.probed = true;
+  const stop = new AbortController();
+  // A stream that answers nothing at all holds the question open: it is let go of.
+  const giveUp = setTimeout(() => stop.abort(), PROBE_LIMIT);
   try {
-    const stop = new AbortController();
     const response = await fetch(s.url, { headers: { accept: "text/event-stream", "x-ui-probe": "1" }, signal: stop.signal, cache: "no-store" });
     stop.abort();
     // A 204 is the stream's way of saying "stop"; a 401 or 403 says the reader may not have it.
@@ -120,7 +139,9 @@ async function probe(s) {
       s.stopped = true;
       paint(s, "closed");
     }
-  } catch {}
+  } catch {} finally {
+    clearTimeout(giveUp);
+  }
 }
 
 /** @param {Stream} s */
@@ -151,7 +172,7 @@ function open(s) {
     es.close();
     s.es = null;
     clearTimeout(s.steady);
-    clearTimeout(s.wait);
+    // A tab just shown keeps its catch-up (s.wait) though the stream is down: the region need not wait for the stream.
     const reached = s.opened;
     s.opened = false;
     s.failed++;
@@ -233,24 +254,46 @@ export function scanLive() {
   for (const [el, { url, name }] of wanted) {
     let s = streams.get(url);
     if (!s) {
-      s = { url, es: null, subs: new Map(), failed: 0, retry: 0, steady: 0, wait: 0, listening: new Set(), state: "connecting", missed: false, opened: false, probed: false, stopped: false, token: token() };
+      s = { url, es: null, subs: new Map(), failed: 0, retry: 0, steady: 0, wait: 0, listening: new Set(), state: "connecting", missed: false, opened: false, probed: false, stopped: false, token: token(), changed: -Infinity };
       streams.set(url, s);
     }
-    if (!s.subs.has(el)) s.subs.set(el, { name, timer: 0, busy: false, dirty: false });
+    if (!s.subs.has(el)) s.subs.set(el, { name, timer: 0, busy: false, dirty: false, since: 0, run: 0 });
     el.setAttribute("data-live", hidden() ? "paused" : s.state);
     open(s);
     listen(s);
   }
-  // A session that changed under a stream that stayed open: the stream is the old reader's.
-  for (const s of streams.values()) {
-    if (s.es && s.token !== token()) {
-      close(s);
-      s.failed = 0;
-      s.missed = true;
-      open(s);
-    }
-  }
+  session();
   watch();
+}
+
+let rechecking = 0;
+
+/**
+ * A session that changed: an open stream is the old reader's, and a stopped one (refused with a 401 or
+ * a 403) may be allowed now. Each is started again as the new reader, but no more often than every
+ * SESSION_GAP, and a change that comes sooner is looked at again when the gap is over.
+ */
+function session() {
+  clearTimeout(rechecking);
+  rechecking = 0;
+  const now = performance.now();
+  let later = 0;
+  for (const s of streams.values()) {
+    if (!(s.es || s.stopped) || s.token === token()) continue;
+    const wait = SESSION_GAP - (now - s.changed);
+    if (wait > 0) {
+      later = later ? Math.min(later, wait) : wait;
+      continue;
+    }
+    s.changed = now;
+    close(s);
+    s.stopped = false;
+    s.failed = 0;
+    s.missed = true;
+    if (hidden()) paint(s, "paused");
+    open(s);
+  }
+  if (later) rechecking = /** @type {any} */ (setTimeout(session, later + 50));
 }
 
 /** The page is out of sight: no connection is held for it. */

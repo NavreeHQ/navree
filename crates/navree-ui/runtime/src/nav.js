@@ -236,6 +236,12 @@ export function setUrl(href, mode) {
 /** The newest fetch of each region: an older answer is dropped. @type {Map<string, number>} */
 const regions = new Map();
 
+/** How long a region's fetch may take, its answer's body included, before the page gives up on it. */
+const FETCH_LIMIT = 15000;
+
+/** A signal that ends a fetch that takes too long. */
+const withinLimit = () => (typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(FETCH_LIMIT) : undefined);
+
 /**
  * Whether a region can use this answer. A redirect means the place moved, as when
  * a session ends and the answer is the login page: the user goes there, and its
@@ -303,8 +309,8 @@ function say(el, n) {
 /**
  * A feed region asks for what is newer than its cursor and adds it at the start
  * of its container. The rows are the server's own markup, as in an `append` op.
- * Only elements are added, and one the list already has (by id, among its own rows)
- * is not added twice, whatever the cursor said. An answer for a source the region
+ * Only elements are added, and one whose id the page already has is not added,
+ * whatever the cursor said. A fetch that takes longer than the limit is given up on. An answer for a source the region
  * has since left (the reader changed the period) is dropped.
  * @param {Element} el @param {string} src @param {() => boolean} current
  */
@@ -314,7 +320,7 @@ async function feed(el, src, current) {
   const url = new URL(src, location.href);
   url.searchParams.set("after", el.getAttribute("data-ui-after") || "0");
   const stale = () => !current() || el.getAttribute("data-ui-src") !== src;
-  const response = await fetch(url, { headers: HEADER });
+  const response = await fetch(url, { headers: HEADER, signal: withinLimit() });
   if (stale() || !takes(response)) return;
   const html = await response.text();
   if (stale()) return;
@@ -324,11 +330,11 @@ async function feed(el, src, current) {
     /** @type {Element[]} */
     const fresh = [];
     for (const row of pieces(html).children) {
+      // A row may not bring an id the page already answers to, anywhere in it: a lookup by it would find the row.
       if (row.id) {
-        if (have.has(row.id)) continue;
+        if (have.has(row.id) || byId(row.id)) continue;
         have.add(row.id);
       }
-      // A row may not bring an id the page already answers to: a lookup by it would find the row.
       const inside = [...all(row, "[id]")];
       if (inside.some((el) => byId(el.id) || have.has(el.id))) continue;
       for (const el of inside) have.add(el.id);
@@ -358,7 +364,7 @@ export async function refresh(id) {
   const table = el.hasAttribute("data-ui-table") ? el : null;
   try {
     if (el.hasAttribute("data-ui-feed")) return await feed(el, src, () => regions.get(id) === mine);
-    const response = await fetch(src, { headers: HEADER });
+    const response = await fetch(src, { headers: HEADER, signal: withinLimit() });
     if (regions.get(id) !== mine) return;
     // The user moved on while this was on its way: it answers a state that's gone.
     if (table && (el.getAttribute("data-ui-src") !== src || el.hasAttribute("data-pending"))) return;
