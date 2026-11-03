@@ -103,7 +103,8 @@ export function EcosystemSection() {
           <Tile slug="fleet" className="lg:col-span-3">
             <FleetMini />
           </Tile>
-          <Tile slug="harbor" className="lg:col-span-3">
+          {/* On phones the deploy is shown once, by the Ship section that follows. */}
+          <Tile slug="harbor" phone={false} className="lg:col-span-3">
             <HarborMini />
           </Tile>
           <Tile slug="helm" phone={false} className="lg:col-span-2">

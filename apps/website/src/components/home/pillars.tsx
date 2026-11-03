@@ -90,9 +90,22 @@ const P: Record<string, Pillar> = {
 /**
  * One bento tile. The title is the link and stretches over the tile, so
  * the whole tile is one target with one accessible name. Wide tiles put
- * the copy beside the visual from `lg`.
+ * the copy beside the visual from `lg`. `phone={false}` drops the visual on
+ * phones, for the pillars whose own section further down shows it in full.
  */
-function Tile({ pillar, visual, wide, className }: { pillar: Pillar; visual: ReactNode; wide?: boolean; className?: string }) {
+function Tile({
+  pillar,
+  visual,
+  wide,
+  phone = true,
+  className,
+}: {
+  pillar: Pillar;
+  visual: ReactNode;
+  wide?: boolean;
+  phone?: boolean;
+  className?: string;
+}) {
   return (
     <GlowCard className={cn("rounded-[1.25rem] shadow-bezel", className)}>
       <div className={cn("flex h-full flex-col", wide && "lg:flex-row")}>
@@ -108,7 +121,9 @@ function Tile({ pillar, visual, wide, className }: { pillar: Pillar; visual: Rea
           </h3>
           <p className="mt-2.5 text-[0.9375rem] leading-relaxed text-pretty text-fg-2">{pillar.text}</p>
         </div>
-        <div className={cn("mt-auto p-2", wide && "lg:mt-0 lg:flex lg:min-w-0 lg:flex-1 lg:flex-col lg:justify-center")}>{visual}</div>
+        <div className={cn("mt-auto p-2", wide && "lg:mt-0 lg:flex lg:min-w-0 lg:flex-1 lg:flex-col lg:justify-center", !phone && "max-sm:hidden")}>
+          {visual}
+        </div>
       </div>
     </GlowCard>
   );
@@ -139,11 +154,16 @@ export async function Pillars() {
         <Tile pillar={P.api} visual={<ApiDocument errorHtml={errorHtml} />} wide className="md:col-span-2 lg:col-span-4" />
         <Tile pillar={P.typed} visual={<TypedList />} className="lg:col-span-2" />
         <Tile pillar={P.secure} visual={<SecureList />} className="lg:col-span-2" />
-        <Tile pillar={P.workspaces} visual={<SwitcherMock />} className="lg:col-span-2" />
-        <Tile pillar={P.ai} visual={<AgentMock />} className="lg:col-span-2" />
+        <Tile pillar={P.workspaces} visual={<SwitcherMock />} phone={false} className="lg:col-span-2" />
+        <Tile pillar={P.ai} visual={<AgentMock />} phone={false} className="lg:col-span-2" />
         <Tile pillar={P.observable} visual={<LogMock />} className="lg:col-span-2" />
         <Tile pillar={P.scales} visual={<TransportChips />} className="lg:col-span-2" />
-        <Tile pillar={P.fast} visual={<FrugalStats peakMb={mb(perf.peakMemMb)} startupMs={perf.startupMs} />} className="lg:col-span-2" />
+        <Tile
+          pillar={P.fast}
+          visual={<FrugalStats peakMb={mb(perf.peakMemMb)} startupMs={perf.startupMs} />}
+          phone={false}
+          className="lg:col-span-2"
+        />
       </div>
     </HomeSection>
   );
