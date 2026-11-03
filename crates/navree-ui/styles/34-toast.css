@@ -40,11 +40,15 @@
   &:hover{background:var(--ink-3)}
   &[data-pending]{opacity:.6;pointer-events:none}
 }
-[data-slot=toast-close]{flex:none;display:flex;align-items:center;justify-content:center;width:1.5rem;height:1.5rem;margin-block:-.125rem;margin-inline:0 -.375rem;padding:0;border:0;border-radius:var(--radius);background:transparent;color:var(--fg-3);cursor:pointer;
+[data-slot=toast-close]{flex:none;display:flex;text-decoration:none;align-items:center;justify-content:center;width:1.5rem;height:1.5rem;margin-block:-.125rem;margin-inline:0 -.375rem;padding:0;border:0;border-radius:var(--radius);background:transparent;color:var(--fg-3);cursor:pointer;
   &::before{content:"";width:14px;height:14px;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E") center/contain no-repeat}
   &:hover{background:var(--ink-3);color:var(--fg)}
 }
-[data-slot=toaster]:hover > [data-slot=toast],[data-slot=toaster]:focus-within > [data-slot=toast],[data-slot=toaster][data-paused] > [data-slot=toast],[data-slot=toast][data-dragging]{animation-play-state:paused}
+/* A pointer that hovers pauses the clock; a touch screen leaves a hover behind after a tap, which must not. */
+[data-slot=toaster]:focus-within > [data-slot=toast],[data-slot=toaster][data-paused] > [data-slot=toast],[data-slot=toast][data-dragging]{animation-play-state:paused}
+@media (hover:hover){[data-slot=toaster]:hover > [data-slot=toast]{animation-play-state:paused}}
+/* With no script the close link goes to its toast's address, and the toast that is the target goes. */
+[data-slot=toast]:target{display:none}
 @keyframes ui-toast-life{0%,94%{opacity:1;visibility:visible}100%{opacity:0;visibility:hidden}}
 @keyframes ui-toast-in{from{opacity:0;translate:0 var(--toast-from)}}
 @media (prefers-reduced-motion:reduce){

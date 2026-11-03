@@ -1,8 +1,8 @@
 // Link boosting and regions: fetch a page, morph what changed, keep the shell
 // alive. A failed fetch falls back to a real navigation.
-import { body, byId, clean, closest, cookies, every, head, hidden, make, on, one, ownModule, root, sameOrigin, setTitle, titleOf } from "./dom.js";
+import { all, body, byId, clean, closest, cookies, emit, every, head, hidden, make, on, one, ownModule, root, sameOrigin, setTitle, titleOf } from "./dom.js";
 import { morph, pieces } from "./morph.js";
-import { adoptToasts, announce } from "./ui.js";
+import { adoptToasts, announce, sameUser } from "./ui.js";
 
 const HEADER = { "x-navree-ui": "1" };
 // `Sec-Purpose` can't be set from `fetch`, so a prefetch says so itself.
@@ -37,6 +37,8 @@ on(window, "pageshow", (/** @type {PageTransitionEvent} */ e) => { if (e.persist
 export function forget() {
   drop();
   tabs?.postMessage(0);
+  // Another user's toasts, and the posts they offer, don't stay for this one.
+  sameUser();
 }
 
 /** Runs `write`, with no prefetch standing or started until it's over. @template T @param {() => Promise<T>} write */
@@ -187,7 +189,7 @@ export async function go(url, how = {}) {
   const mine = ++generation;
   if (!how.region) swaps++;
   const html = root();
-  const region = how.region ? document.getElementById(how.region) : null;
+  const region = how.region ? byId(how.region) : null;
   const table = region?.hasAttribute("data-ui-table") ? region : null;
   // A table sorted here already shows the answer: the request only confirms it.
   if (!table?.hasAttribute("data-ui-confirm")) html.setAttribute("data-ui-loading", "");
@@ -306,6 +308,8 @@ export async function refresh(id) {
       }
       to = /** @type {HTMLElement} */ (el.cloneNode(false));
       to.append(...body(doc).childNodes);
+      // The page has its post form already: a second one would only share its name.
+      if (byId("ui-post")) for (const form of all(to, "#ui-post")) form.remove();
     }
     to.removeAttribute("data-ui-lazy");
     to.removeAttribute("aria-busy");
@@ -319,6 +323,8 @@ export async function refresh(id) {
 
 /** Says a region could not be fetched, to whatever draws that region. @param {Element} el @param {number} status */
 function failed(el, status) {
+  // A lazy region is asked for once; with Retry it can be asked again, but a later swap doesn't.
+  el.removeAttribute("data-ui-lazy");
   el.dispatchEvent(new CustomEvent("ui:region-error", { bubbles: true, detail: { status } }));
 }
 
@@ -337,7 +343,7 @@ export function startRegions() {
 
 /** @param {EventTarget | null} target */
 function linkOf(target) {
-  const a = /** @type {HTMLAnchorElement | null} */ (/** @type {Element} */ (target)?.closest?.("a[href]"));
+  const a = /** @type {HTMLAnchorElement | null} */ (closest(target, "a[href]"));
   if (!a || a.origin !== location.origin || a.target || a.hasAttribute("download") || a.hasAttribute("data-ui-noboost")) return null;
   if (!body().hasAttribute("data-ui-boost")) return null;
   // A link to a place on this page is the browser's.
@@ -405,7 +411,7 @@ export function startNav() {
     e.preventDefault();
     // The press focused the link: its intent is spent, not a reason to fetch again.
     clearTimeout(intent);
-    const region = a.closest("[data-ui-region]");
+    const region = closest(a, "[data-ui-region]");
     go(a.href, region && a.hasAttribute("data-ui-in-region") ? { region: region.id } : {}).then(startRegions);
   });
   on(document, "mouseover", onIntent, { passive: true });
@@ -420,15 +426,15 @@ export function startNav() {
     if (region?.id) refresh(region.id);
   });
   on(document, "click", (e) => {
-    const button = /** @type {Element} */ (e.target).closest?.("[data-ui-refresh]");
-    const region = button?.closest("[data-ui-region]");
+    const button = closest(e.target, "[data-ui-refresh]");
+    const region = button && closest(button, "[data-ui-region]");
     if (region) refresh(region.id);
   });
   on(window, "popstate", () => {
     // A component may claim an entry it made itself (tabs): it says so by cancelling this.
-    if (!document.dispatchEvent(new CustomEvent("ui:popstate", { cancelable: true }))) return;
+    if (!emit(new CustomEvent("ui:popstate", { cancelable: true }))) return;
     // Back within a table's own states changes the table, not the page.
-    const table = document.querySelector("[data-ui-table]");
+    const table = one("[data-ui-table]");
     const same = table && new URL(table.getAttribute("data-ui-src") || "", location.href).pathname === location.pathname;
     go(location.href, same ? { push: false, region: table.id } : { push: false }).then(startRegions);
   });

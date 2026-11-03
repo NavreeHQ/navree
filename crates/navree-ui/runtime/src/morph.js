@@ -4,7 +4,7 @@
 // semantics do the value work: a changed `value` attribute reaches an input
 // only if the user has not typed in it.
 
-import { active as activeElement, clean, make, on, persistent } from "./dom.js";
+import { active as activeElement, clean, emit, make, on, persistent, rescue } from "./dom.js";
 
 /** The element being composed in, if any. @type {Element | null} */
 let composing = null;
@@ -87,6 +87,8 @@ function sameField(a, b) {
 
 /** Whether two nodes can become one another without replacing. @param {Node} a @param {Node} b */
 function same(a, b) {
+  // What the runtime keeps is no page's content, whatever tag the page uses.
+  if (persistent.has(a) || persistent.has(b)) return false;
   if (typeOf(a) !== typeOf(b) || nameOf(a) !== nameOf(b)) return false;
   if (typeOf(a) !== 1) return true;
   if (!sameField(a, b)) return false;
@@ -130,6 +132,8 @@ function morphNode(a, b, ids) {
  */
 function removeOld(node) {
   if (persistent.has(node)) return;
+  // The toaster stands in an open dialog: the dialog may go, the toaster stays in the page.
+  rescue(node);
   const parent = parentOf(node);
   if (parent) NP.removeChild.call(parent, node);
 }
@@ -273,7 +277,7 @@ export function morph(from, to, how = {}) {
       try { active.setSelectionRange(start, end, direction || undefined); } catch {}
     }
   }
-  document.dispatchEvent(new Event("ui:swap"));
+  emit(new Event("ui:swap"));
 }
 
 /** Parses the server's `html`, with nothing left in it that acts by being there. @param {string} html */

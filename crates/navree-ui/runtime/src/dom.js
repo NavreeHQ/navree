@@ -54,6 +54,8 @@ export const every = (selector, doc = document) => D.querySelectorAll.call(doc, 
 export const make = (tag) => D.createElement.call(document, tag);
 /** @param {EventTarget} target @param {string} type @param {(e: any) => void} listener @param {boolean | AddEventListenerOptions} [options] */
 export const on = (target, type, listener, options) => T.addEventListener.call(target, type, listener, options);
+/** Fires `event` at the document. @param {Event} event */
+export const emit = (event) => T.dispatchEvent.call(document, event);
 
 /**
  * Takes out what acts by being in a page and that no content security policy
@@ -76,6 +78,24 @@ export const sameOrigin = (url) => {
 
 /** What the runtime made and keeps on every page. An attribute would let stored markup ask for the same. @type {WeakSet<Node>} */
 export const persistent = new WeakSet();
+
+/**
+ * The persistent nodes that stand in the page now, which a removal must not take
+ * along inside something else (the toaster stands in an open dialog).
+ * @type {Set<HTMLElement>}
+ */
+export const keeping = new Set();
+
+/**
+ * Before `node` goes, takes out of it what the runtime keeps and puts it back in the page.
+ * @param {Node} node
+ */
+export const rescue = (node) => {
+  for (const kept of keeping) {
+    if (!kept.isConnected) keeping.delete(kept);
+    else if (kept !== node && holds(node, kept)) body().append(kept);
+  }
+};
 
 /** Whether `url` is one of the toolkit's own modules. @param {string} url */
 export const ownModule = (url) => {

@@ -1,7 +1,7 @@
 // The op applier: the closed list the server sends. Nothing here runs code from
 // the wire but the toolkit's own modules; the HTML in an op is rendered by the server.
 import { morph, parse, pieces } from "./morph.js";
-import { all, byId, field, make, ownModule, root } from "./dom.js";
+import { all, byId, emit, field, make, ownModule, rescue, root } from "./dom.js";
 import { announce, toast, openTarget, closeTarget } from "./ui.js";
 import { forget, go, leave, setUrl, refresh } from "./nav.js";
 
@@ -51,12 +51,17 @@ function apply(op, how) {
       break;
     }
     case "replace":
+      if (target) rescue(target);
       target?.replaceWith(pieces(op.html));
-      document.dispatchEvent(new Event("ui:swap"));
+      emit(new Event("ui:swap"));
       break;
-    case "append": target?.append(pieces(op.html)); document.dispatchEvent(new Event("ui:swap")); break;
-    case "prepend": target?.prepend(pieces(op.html)); document.dispatchEvent(new Event("ui:swap")); break;
-    case "remove": target?.remove(); break;
+    case "append": target?.append(pieces(op.html)); emit(new Event("ui:swap")); break;
+    case "prepend": target?.prepend(pieces(op.html)); emit(new Event("ui:swap")); break;
+    case "remove":
+      if (target) rescue(target);
+      target?.remove();
+      emit(new Event("ui:swap"));
+      break;
     case "errors": {
       const form = byId(op.form);
       if (form) showErrors(/** @type {HTMLFormElement} */ (form), op.fields, how.focus !== false);

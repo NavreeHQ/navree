@@ -1,6 +1,6 @@
 // Overlays: placing popovers next to what opens them (one code path), and the
 // hover and focus behaviour of tooltips and hover cards.
-import { byId, on, one } from "./dom.js";
+import { byId, closest, on, one } from "./dom.js";
 
 const GAP = 4;
 const MARGIN = 8;
@@ -123,14 +123,13 @@ function hover(trigger, show) {
 
 for (const [event, show] of /** @type {[string, boolean][]} */ ([["mouseover", true], ["focusin", true], ["mouseout", false], ["focusout", false]])) {
   on(document, event, (e) => {
-    const target = /** @type {Element} */ (e.target);
-    const trigger = target.closest?.("[data-ui-hover]");
+    const trigger = closest(e.target, "[data-ui-hover]");
     if (trigger) {
       hover(trigger, show);
       return;
     }
     // Moving onto an open hover card keeps it open.
-    const card = target.closest?.("[data-slot=hover-card-content]");
+    const card = closest(e.target, "[data-slot=hover-card-content]");
     const opener = card && one(`[data-ui-hover="${CSS.escape(card.id)}"]`);
     if (opener) hover(opener, show);
   }, { passive: true });

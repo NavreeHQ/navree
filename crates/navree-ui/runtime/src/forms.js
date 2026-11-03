@@ -2,7 +2,7 @@
 // `data-ui-form`, a fetch whose answer is ops or a page.
 import { applyEnvelope } from "./ops.js";
 import { forget, go, pageSwaps, showPage, startRegions, whileWriting } from "./nav.js";
-import { active, attr, cookies, has, on, set, unset, toggle } from "./dom.js";
+import { active, attr, body, byId, closest, cookies, emit, has, make, on, set, unset, toggle } from "./dom.js";
 import { toast } from "./ui.js";
 
 const OPS = "application/vnd.navree.ops+json";
@@ -102,7 +102,7 @@ async function send(form, submitter) {
     answered = true;
     const type = response.headers.get("content-type") || "";
     pending(form, submitter, false);
-    document.dispatchEvent(new CustomEvent("ui:sent", { detail: { form, ok: response.ok } }));
+    emit(new CustomEvent("ui:sent", { detail: { form, ok: response.ok } }));
     // Errors take focus only for a save the user asked for, and only if the user is
     // still where the save left them: never from a field they moved to, or typed on in.
     if (type.startsWith(OPS)) kept = !applyEnvelope(await response.json(), { focus: !!submitter && active() === before });
@@ -111,7 +111,7 @@ async function send(form, submitter) {
     startRegions();
   } catch {
     pending(form, submitter, false);
-    document.dispatchEvent(new CustomEvent("ui:sent", { detail: { form, ok: false } }));
+    emit(new CustomEvent("ui:sent", { detail: { form, ok: false } }));
     toast("danger", answered ? "That didn't work. Try again." : "No connection. Try again.");
     told = true;
   } finally {
@@ -151,6 +151,18 @@ function filter(form) {
 
 /** Wires up forms. */
 export function startForms() {
+  // A menu's post item belongs to the page's one post form, `ui-post`, and says where to post.
+  // A page that doesn't have it (the item came in with a fragment) gets it now, ahead of the
+  // click's own submit: the runtime posts it with the session's token in the header.
+  on(document, "click", (e) => {
+    if (!closest(e.target, "button[form=ui-post]") || byId("ui-post")) return;
+    const form = make("form");
+    set(form, "id", "ui-post");
+    set(form, "method", "post");
+    set(form, "hidden", "");
+    set(form, "data-ui-form", "");
+    body().append(form);
+  }, true);
   on(document, "submit", (e) => {
     const form = /** @type {HTMLFormElement} */ (e.target);
     if (e.defaultPrevented) return;

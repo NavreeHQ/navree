@@ -1,6 +1,6 @@
 // The command interpreter: closed verbs from `data-ui-click`, `data-ui-change`
 // and `data-ui-input`. Commands need no network and no expression language.
-import { all, attr, byId, has, on } from "./dom.js";
+import { all, attr, byId, closest, has, on } from "./dom.js";
 import { openTarget, closeTarget, announce, toast } from "./ui.js";
 
 // What a command may touch: state, never where a thing points or what it runs. The
@@ -106,10 +106,10 @@ function run(cmd, from) {
 
 /** @param {Event} e @param {string} attribute */
 function handle(e, attribute) {
-  const el = /** @type {Element} */ (e.target).closest?.(`[${attribute}]`);
+  const el = closest(e.target, `[${attribute}]`);
   if (!el || /** @type {any} */ (el).disabled) return;
   try {
-    for (const cmd of JSON.parse(el.getAttribute(attribute) || "[]")) run(cmd, el);
+    for (const cmd of JSON.parse(attr(el, attribute) || "[]")) run(cmd, el);
   } catch {}
 }
 

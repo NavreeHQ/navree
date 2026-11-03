@@ -24,6 +24,20 @@ const unset = (node, name) => E.removeAttribute.call(node, name);
 const on = (target, type, listener, options) => EventTarget.prototype.addEventListener.call(target, type, listener, options);
 /** @param {string | null} id @returns {HTMLElement | null} */
 const byId = (id) => (id ? Document.prototype.getElementById.call(document, id) : null);
+/** The document's own members, through the prototypes: a form named like one can't stand in for it. */
+const D = Document.prototype;
+const gRoot = /** @type {() => HTMLElement} */ (Object.getOwnPropertyDescriptor(D, "documentElement")?.get);
+const gActive = /** @type {() => Element | null} */ (Object.getOwnPropertyDescriptor(D, "activeElement")?.get);
+/** The root element. */
+const docEl = () => gRoot.call(document);
+/** The element in focus. */
+const active = () => gActive.call(document);
+/** @param {string} tag @returns {HTMLElement} */
+const make = (tag) => D.createElement.call(document, tag);
+/** @param {EventTarget} target @param {Event} event */
+const fire = (target, event) => EventTarget.prototype.dispatchEvent.call(target, event);
+/** Whether `a` holds `b`. @param {Node | null} a @param {unknown} b */
+const holds = (a, b) => !!a && b instanceof Node && Node.prototype.contains.call(a, b);
 /** @param {Element} node */
 const rtl = (node) => getComputedStyle(node).direction === "rtl";
 /** @param {Element} node @param {string} state */
@@ -76,7 +90,7 @@ function rove(root, focused) {
 function load(panel) {
   set(panel, "data-ui-loaded", "");
   set(panel, "aria-busy", "true");
-  panel.dispatchEvent(new CustomEvent("ui:refresh", { bubbles: true }));
+  fire(panel, new CustomEvent("ui:refresh", { bubbles: true }));
 }
 
 /** Puts the open tab in the address. @param {Element} root @param {Element} tab @param {string} mode */
@@ -124,7 +138,7 @@ function select(root, tab, url) {
 /** The page without its tabs' parameters: when it stays the same, back and forward only switch tabs. */
 function pageKey() {
   const url = new URL(location.href);
-  const mine = new Set(all(document.documentElement, "[data-ui-tabs]").map((r) => get(r, "data-ui-tabs")));
+  const mine = new Set(all(docEl(), "[data-ui-tabs]").map((r) => get(r, "data-ui-tabs")));
   const rest = [...url.searchParams].filter(([k]) => !mine.has(k)).map(([k, v]) => k + "=" + v).sort();
   return url.pathname + "?" + rest.join("&");
 }
@@ -160,14 +174,14 @@ on(document, "keydown", (e) => {
 on(document, "focusout", (e) => {
   const tab = closest(e.target, "[role=tab]");
   const root = tab && closest(tab, "[data-ui-tabs]");
-  if (root && !(e.relatedTarget instanceof Node && tablist(root).contains(e.relatedTarget))) rove(root);
+  if (root && !holds(tablist(root), e.relatedTarget)) rove(root);
 });
 
 // Back and forward within one page's tabs need no request: the entry is ours when only the
 // tabs' parameters differ from the page that is showing.
 function claim() {
   const now = pageKey();
-  const roots = all(document.documentElement, "[data-ui-tabs]");
+  const roots = all(docEl(), "[data-ui-tabs]");
   if (now !== here || !roots.length) {
     here = now;
     return false;
@@ -183,7 +197,7 @@ function claim() {
 }
 // With the core runtime, the page's own handler asks first; without it nothing else would answer.
 on(document, "ui:popstate", (e) => { if (claim()) e.preventDefault(); });
-on(window, "popstate", () => { if (!has(document.documentElement, "data-build")) claim(); });
+on(window, "popstate", () => { if (!has(docEl(), "data-build")) claim(); });
 
 // Find-in-page matched text in a panel that is not showing.
 on(document, "beforematch", (e) => {
@@ -204,12 +218,12 @@ on(document, "ui:region-error", (e) => {
   let words = /** @type {{failed?: string, retry?: string}} */ ({});
   try { words = JSON.parse(get(root, "data-l") || "{}"); } catch {}
   for (const old of all(panel, "[data-slot=tab-alert]")) old.remove();
-  const alert = document.createElement("div");
+  const alert = make("div");
   set(alert, "data-slot", "tab-alert");
   set(alert, "role", "alert");
-  const text = document.createElement("p");
+  const text = make("p");
   text.textContent = words.failed || "This tab didn't load.";
-  const retry = document.createElement("button");
+  const retry = make("button");
   set(retry, "type", "button");
   set(retry, "data-slot", "button");
   set(retry, "data-variant", "outline");
@@ -280,8 +294,8 @@ on(document, "click", (e) => {
   if (get(group, "data-ui-value") === input.value) {
     input.checked = false;
     set(group, "data-ui-value", "");
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new Event("change", { bubbles: true }));
+    fire(input, new Event("input", { bubbles: true }));
+    fire(input, new Event("change", { bubbles: true }));
   }
 });
 on(document, "change", (e) => {
@@ -358,7 +372,7 @@ on(document, "beforetoggle", (e) => {
   const trigger = menu.hasAttribute?.("data-ui-menu") && byId(get(menu, "aria-labelledby"));
   if (!trigger) return;
   set(trigger, "aria-expanded", String(e.newState === "open"));
-  if (e.newState !== "open" && menu.contains(document.activeElement)) trigger.focus({ preventScroll: true });
+  if (e.newState !== "open" && holds(menu, active())) trigger.focus({ preventScroll: true });
 }, true);
 
 on(document, "toggle", (e) => {
@@ -524,19 +538,19 @@ function fade(list) {
   list.toggleAttribute("data-fade-r", max > 1 && (flip ? x > 1 : x < max - 1));
 }
 on(document, "scroll", (e) => { if (closest(e.target, "[role=tablist]")) fade(/** @type {HTMLElement} */ (e.target)); }, { capture: true, passive: true });
-on(window, "resize", () => { for (const list of all(document.documentElement, "[role=tablist]")) fade(list); });
-on(window, "load", () => { for (const list of all(document.documentElement, "[role=tablist]")) fade(list); });
+on(window, "resize", () => { for (const list of all(docEl(), "[role=tablist]")) fade(list); });
+on(window, "load", () => { for (const list of all(docEl(), "[role=tablist]")) fade(list); });
 
 // ---- Start ---------------------------------------------------------------
 
 function enhance() {
-  for (const root of all(document.documentElement, "[data-ui-tabs]")) {
+  for (const root of all(docEl(), "[data-ui-tabs]")) {
     // Markup that claims to be tabs and has no list is left alone.
     if (!tablist(root)) continue;
     rove(root);
     fade(tablist(root));
   }
-  for (const group of all(document.documentElement, "[data-ui-toggle-group]")) {
+  for (const group of all(docEl(), "[data-ui-toggle-group]")) {
     if (get(group, "role") === "group") roveGroup(group);
     if (has(group, "data-ui-deselect")) remember(group);
   }

@@ -3,7 +3,7 @@
 // A toast lives in a CSS animation (`ui-toast-life`, as long as its `data-duration`)
 // and ends on `animationend`; pausing under the pointer or focus is
 // `animation-play-state`, so there is no timer to lose and nothing that can stick.
-import { attr, body, closest, hidden, holds, make, on, one, persistent } from "./dom.js";
+import { active, attr, body, closest, cookies, every, has, hidden, holds, keeping, make, on, one, persistent, root, set } from "./dom.js";
 
 /** @param {Element} el */
 export function openTarget(el) {
@@ -43,11 +43,42 @@ const TONES = ["info", "success", "warning", "danger"];
 const DURATIONS = ["brief", "normal", "long", "sticky"];
 const KEY = "navree-ui-toasts";
 const LIFE = "ui-toast-life";
+/** How long a toast waits in the tab for the next page: the flash cookie's life. */
+const KEPT_MS = 30000;
 
 /** @type {HTMLElement | undefined} */
 let host;
 /** Where focus was before a hotkey took it into the toasts. @type {Element | null} */
 let returnTo = null;
+/** The user the toasts on show were raised for: a short hash of the session's token. @type {string | null} */
+let user = null;
+let serial = 0;
+
+/**
+ * Who is signed in, as far as a script can tell: the session's token cookie, as a
+ * short hash so the token itself is never kept. No token, no session: nothing to tell apart.
+ */
+function who() {
+  let token = "";
+  for (const part of cookies().split("; ")) if (part.startsWith("XSRF-TOKEN=")) token = part.slice(11);
+  let hash = 5381;
+  for (let i = 0; i < token.length; i++) hash = ((hash * 33) ^ token.charCodeAt(i)) >>> 0;
+  return token ? hash.toString(36) : "";
+}
+
+/**
+ * Whether the user is the one the toasts on show were raised for. If another signed in
+ * or out, those toasts and the posts they offer go: they are not this user's.
+ */
+export function sameUser() {
+  const now = who();
+  if (user === null) user = now;
+  if (now === user) return true;
+  user = now;
+  for (const t of host?.querySelectorAll("[data-slot=toast]") || []) t.remove();
+  try { host?.hidePopover(); } catch {}
+  return false;
+}
 
 /** The toasts' one standing place: the page's own, or one made now. It stays put through every navigation. */
 function toaster() {
@@ -61,8 +92,10 @@ function toaster() {
     host.setAttribute("data-position", "bottom-end");
     host.setAttribute("data-close", "Dismiss");
   }
+  if (!has(host, "id")) host.setAttribute("id", "ui-toaster");
   if (!host.parentNode) body().append(host);
   persistent.add(host);
+  keeping.add(host);
   // A popover is in the top layer, so a toast shows above an open dialog. Without the
   // runtime the same element is a fixed box.
   if (!host.hasAttribute("popover")) host.setAttribute("popover", "manual");
@@ -128,50 +161,106 @@ function build(spec) {
       el.append(link);
     }
   }
-  if (spec.closable !== false) {
-    const close = make("button");
+  // A toast that stays has to be able to go: the close button is not optional for a sticky one.
+  if (spec.closable !== false || duration === "sticky") {
+    const close = make("a");
     close.setAttribute("data-slot", "toast-close");
-    close.setAttribute("type", "button");
+    close.setAttribute("href", "#");
     close.setAttribute("aria-label", attr(toaster(), "data-close") || "Dismiss");
     el.append(close);
   }
   return el;
 }
 
+/**
+ * Gives a toast an address of its own, and its close link the same. With no script the
+ * link goes to the address and the page hides the toast that is the target; here the
+ * click is the runtime's, and a fresh address keeps toasts taken in from other pages from clashing.
+ * @param {Element} el
+ */
+function name(el) {
+  const id = "ui-toast-" + ++serial;
+  set(el, "id", id);
+  const close = el.querySelector("[data-slot=toast-close]");
+  if (close) set(close, "href", "#" + id);
+}
+
+/** The animation that is a toast's time, if it has one. @param {Element} t */
+const lifeOf = (t) => t.getAnimations().find((a) => /** @type {CSSAnimation} */ (a).animationName === LIFE);
+
 /** Puts `el` in the standing toaster, in place of a toast with its name. @param {HTMLElement} el @param {number} [elapsed] */
 function place(el, elapsed) {
+  sameUser();
   const box = toaster();
   const id = attr(el, "data-toast-id");
   const old = id && [...box.children].find((t) => attr(t, "data-toast-id") === id);
+  name(el);
   if (old) old.replaceWith(el);
   else box.append(el);
-  show(box);
+  reseat();
   if (elapsed) {
-    const life = el.getAnimations().find((a) => /** @type {CSSAnimation} */ (a).animationName === LIFE);
+    const life = lifeOf(el);
     if (life) life.currentTime = elapsed;
   }
 }
 
 /**
- * Opens the toaster. While a modal dialog is open, everything outside it is inert, so the
- * toaster stands inside the dialog to stay above it and usable, and comes back out when it closes.
- * @param {HTMLElement} box
+ * The dialogs open as modals, in the order they opened: the last is on top. The page
+ * outside the top one is inert, so that is where the toaster has to stand to be used.
+ * @type {HTMLDialogElement[]}
  */
-function show(box) {
-  const modal = one("dialog:modal");
+let modals = [];
+/** @type {MutationObserver | undefined} */
+let watcher;
+
+/** @param {MutationRecord[]} records */
+function noted(records) {
+  for (const record of records) {
+    const dialog = record.target;
+    if (!(dialog instanceof HTMLDialogElement)) continue;
+    modals = modals.filter((d) => d !== dialog);
+    if (has(dialog, "open") && dialog.matches(":modal")) modals.push(dialog);
+  }
+  modals = modals.filter((d) => d.isConnected && d.matches(":modal"));
+}
+
+/** The modal dialog on top, if one is open. */
+function topModal() {
+  if (watcher) noted(watcher.takeRecords());
+  return /** @type {HTMLDialogElement | null} */ (modals[modals.length - 1] || one("dialog:modal"));
+}
+
+/**
+ * Sets the toaster where it can be used and shows it if it has toasts: in the top
+ * modal dialog while one is open, otherwise in the page. Moving it restarts what is
+ * animated in it, so each toast's time carries across.
+ */
+function reseat() {
+  if (!host?.isConnected) return;
+  const toasts = [...host.querySelectorAll("[data-slot=toast]")];
+  let want;
+  if (toasts.length) want = topModal() || body();
+  else {
+    // With nothing to show it stays where it is while that is a modal still open, and goes home otherwise.
+    const inside = closest(host, "dialog");
+    want = inside && inside.matches(":modal") ? inside : body();
+  }
   try {
-    if (modal && !holds(modal, box)) {
-      modal.append(box);
-    } else if (!modal && box.parentNode !== body()) {
-      body().append(box);
+    if (host.parentNode !== want) {
+      const times = toasts.map((t) => Number(lifeOf(t)?.currentTime) || 0);
+      want.append(host);
+      toasts.forEach((t, i) => {
+        const life = times[i] ? lifeOf(t) : undefined;
+        if (life) life.currentTime = times[i];
+      });
     }
-    if (!box.matches(":popover-open")) box.showPopover();
+    if (toasts.length && !host.matches(":popover-open")) host.showPopover();
   } catch {}
 }
 
 /** Takes a toast away, and focus with it to where it came from. @param {Element} t */
 function dismiss(t) {
-  const held = holds(t, document.activeElement);
+  const held = holds(t, active());
   t.remove();
   if (held && returnTo?.isConnected) /** @type {HTMLElement} */ (returnTo).focus({ preventScroll: true });
   if (host && !host.querySelector("[data-slot=toast]")) {
@@ -195,11 +284,13 @@ export function toast(tone, text) {
 export function adoptToasts(doc) {
   const from = [...body(doc).children].find((el) => attr(el, "data-slot") === "toaster");
   if (!from) return;
+  sameUser();
   const box = toaster();
-  const position = attr(from, "data-position");
-  if (position) box.setAttribute("data-position", position);
-  const close = attr(from, "data-close");
-  if (close) box.setAttribute("data-close", close);
+  // What the page says about the region itself: where it stands, and its words, in the page's language.
+  for (const field of ["data-position", "data-close", "aria-label"]) {
+    const value = attr(from, field);
+    if (value) box.setAttribute(field, value);
+  }
   const kids = [...from.children].filter((t) => attr(t, "data-slot") === "toast");
   from.remove();
   for (const kid of kids) place(/** @type {HTMLElement} */ (kid));
@@ -224,35 +315,52 @@ function specOf(t) {
   };
 }
 
-/** Writes the toasts still showing, with the time they have left, for the page that comes next. */
+/**
+ * Writes the toasts still showing, with the time they have left, for the page that comes
+ * next: for whom they were raised and when, so they go stale like a flash does.
+ */
 function handOff() {
   if (!host?.isConnected) return;
+  sameUser();
   const list = [];
   for (const t of host.querySelectorAll("[data-slot=toast]")) {
-    const life = t.getAnimations().find((a) => /** @type {CSSAnimation} */ (a).animationName === LIFE);
-    list.push({ ...specOf(t), elapsed: life ? Number(life.currentTime) || 0 : 0 });
+    list.push({ ...specOf(t), elapsed: Number(lifeOf(t)?.currentTime) || 0 });
   }
   try {
-    if (list.length) sessionStorage.setItem(KEY, JSON.stringify(list));
+    if (list.length) sessionStorage.setItem(KEY, JSON.stringify({ at: Date.now(), who: user, toasts: list }));
   } catch {}
 }
 
 /** Starts the toasts: marks the page's own toaster, shows what the last page left, and listens. */
 export function startToasts() {
   const box = toaster();
-  /** @type {any[]} */
-  let left = [];
+  user = who();
+  for (const t of box.querySelectorAll("[data-slot=toast]")) name(t);
+  /** @type {any} */
+  let left = null;
   try {
-    left = JSON.parse(sessionStorage.getItem(KEY) || "[]");
+    left = JSON.parse(sessionStorage.getItem(KEY) || "null");
     sessionStorage.removeItem(KEY);
   } catch {}
   const back = /** @type {PerformanceNavigationTiming | undefined} */ (performance.getEntriesByType("navigation")[0])?.type === "back_forward";
-  if (Array.isArray(left) && !back) {
-    for (const spec of left.slice(0, 5)) {
+  // What is carried over is for the same user, within a flash cookie's life.
+  const age = left && typeof left.at === "number" ? Date.now() - left.at : -1;
+  if (!back && age >= 0 && age < KEPT_MS && left.who === user && Array.isArray(left.toasts)) {
+    for (const spec of left.toasts.slice(0, 5)) {
       if (spec && typeof spec === "object") place(build(spec), Number(spec.elapsed) || 0);
     }
   }
-  if (box.querySelector("[data-slot=toast]")) show(box);
+  // Modals open and close around the toaster: it follows the top one.
+  if (typeof MutationObserver === "function") {
+    watcher = new MutationObserver((records) => {
+      noted(records);
+      reseat();
+    });
+    watcher.observe(root(), { subtree: true, attributes: true, attributeFilter: ["open"] });
+  }
+  modals = /** @type {HTMLDialogElement[]} */ ([...every("dialog:modal")]);
+  reseat();
+  on(document, "ui:swap", reseat);
   on(document, "animationend", (e) => {
     const t = /** @type {Element} */ (e.target);
     if (e.animationName === LIFE && t instanceof Element && attr(t, "data-slot") === "toast" && holds(host, t)) dismiss(t);
@@ -260,32 +368,40 @@ export function startToasts() {
   on(document, "click", (e) => {
     const t = closest(e.target, "[data-slot=toast]");
     if (!t || !holds(host, t)) return;
-    if (closest(e.target, "[data-slot=toast-close],a[data-slot=toast-action]")) dismiss(t);
+    const close = closest(e.target, "[data-slot=toast-close]");
+    // The close link would go to its toast's address; here the runtime takes the toast away.
+    if (close) e.preventDefault();
+    if (close || closest(e.target, "a[data-slot=toast-action]")) dismiss(t);
   });
   // A post action is over when the server has answered; the answer may be a new toast.
   on(document, "ui:sent", (e) => {
+    sameUser();
     const t = e.detail?.form instanceof Element ? Element.prototype.closest.call(e.detail.form, "[data-slot=toast]") : null;
     if (t && holds(host, t)) dismiss(t);
   });
-  on(document, "visibilitychange", () => host?.toggleAttribute("data-paused", hidden()));
+  on(document, "visibilitychange", () => {
+    host?.toggleAttribute("data-paused", hidden());
+    if (!hidden()) sameUser();
+  });
   // A dialog that closes takes the toaster with it, so it goes back to the page.
   on(document, "close", (e) => {
-    if (host && e.target instanceof HTMLDialogElement && holds(e.target, host)) {
-      body().append(host);
-      if (host.querySelector("[data-slot=toast]")) show(host);
-    }
+    if (host && e.target instanceof HTMLDialogElement) reseat();
   }, true);
   on(window, "pagehide", handOff);
   on(document, "keydown", (e) => {
     if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyT") {
-      const first = /** @type {HTMLElement | null} */ (host?.querySelector("[data-slot=toast] button,[data-slot=toast] a"));
+      const first = /** @type {HTMLElement | null} */ (host?.querySelector("[data-slot=toast] a,[data-slot=toast] button"));
       if (!first) return;
       e.preventDefault();
-      if (!holds(host, document.activeElement)) returnTo = document.activeElement;
+      if (!holds(host, active())) returnTo = active();
       first.focus();
     } else if (e.key === "Escape") {
       const t = closest(e.target, "[data-slot=toast]");
-      if (t && holds(host, t)) dismiss(t);
+      // Inside a dialog the same key would close the dialog too: it has done its work here.
+      if (t && holds(host, t)) {
+        e.preventDefault();
+        dismiss(t);
+      }
     }
   });
   swipe();
