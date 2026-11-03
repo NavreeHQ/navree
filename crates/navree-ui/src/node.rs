@@ -443,12 +443,32 @@ impl Element {
 
     /// Runs `commands` in the browser when `trigger` happens on this element.
     #[must_use]
+    ///
+    /// Called again for the same trigger, or after [`on_click`](Self::on_click), it adds to
+    /// the list: every command runs, in the order given.
     pub fn on(mut self, trigger: crate::cmd::Trigger, commands: impl Into<Commands>) -> Self {
         self.uses = self.uses.with(Uses::CORE);
-        let commands: Commands = commands.into();
+        let json = commands.into().to_json();
+        let name = trigger.attribute();
+        if let Some(attr) = self.attrs.iter_mut().find(|attr| attr.name == name) {
+            // Two lists the same code wrote, so one list is the first's items and then
+            // the second's.
+            let old = attr
+                .value
+                .as_text()
+                .map(|text| text.into_owned())
+                .unwrap_or_default();
+            let merged = match (old.as_str(), json.as_str()) {
+                ("" | "[]", _) => json,
+                (_, "[]") => old,
+                (old, new) => format!("{},{}", &old[..old.len() - 1], &new[1..]),
+            };
+            attr.value = AttrValue::Text(merged.into_boxed_str());
+            return self;
+        }
         self.attrs.push(Attr {
-            name: trigger.attribute(),
-            value: AttrValue::Text(commands.to_json().into_boxed_str()),
+            name,
+            value: AttrValue::Text(json.into_boxed_str()),
         });
         self
     }

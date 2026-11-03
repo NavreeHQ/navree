@@ -1165,6 +1165,34 @@ fn a_page_past_the_end_says_so_in_the_footer() {
     assert!(!html.contains("4294967294001"), "{html}");
 }
 
+/// Commands set on one element twice, or by `on_click` and `on`, all run: the browser
+/// reads only the first of two attributes with one name.
+#[test]
+fn commands_on_one_trigger_are_one_list() {
+    use navree_ui::{Button, Cmd, Trigger};
+    let html = render(
+        &navree_ui::el("button")
+            .on_click(Cmd::show("a"))
+            .on(Trigger::Click, vec![Cmd::hide("b"), Cmd::focus("c")])
+            .on(Trigger::Change, Cmd::show("d"))
+            .into(),
+    );
+    assert_eq!(html.matches("data-ui-click=").count(), 1, "{html}");
+    assert!(
+        html.contains(r#"data-ui-click="[[&quot;show&quot;,&quot;a&quot;],[&quot;hide&quot;,&quot;b&quot;],[&quot;focus&quot;,&quot;c&quot;]]""#),
+        "{html}"
+    );
+    assert!(html.contains("data-ui-change="), "{html}");
+    let html = render(
+        &Button::outline("x")
+            .on_click(Cmd::show("a"))
+            .on_click(Cmd::hide("b"))
+            .into(),
+    );
+    assert_eq!(html.matches("data-ui-click=").count(), 1, "{html}");
+    assert!(html.contains("&quot;hide&quot;"), "{html}");
+}
+
 /// `Cmd::value` reaches only a hidden field the page opens to commands: a form's token
 /// or method, or any other hidden field, stays as the server wrote it.
 #[test]
