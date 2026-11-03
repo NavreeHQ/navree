@@ -4,6 +4,8 @@
 
 use serde_json::{Value, json};
 
+use crate::op::ToastTone;
+
 /// One browser-side command.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -99,6 +101,13 @@ pub enum Cmd {
     /// post it. Everything is copied as text. A key posted this way is a request like
     /// any other: the handler checks the user may act on that row.
     Fill(String),
+    /// Shows a toast, with no request.
+    Toast {
+        /// Its meaning.
+        tone: ToastTone,
+        /// Its text.
+        text: String,
+    },
 }
 
 impl Cmd {
@@ -188,6 +197,14 @@ impl Cmd {
         }
     }
 
+    /// Shows a toast saying `text`.
+    pub fn toast(tone: ToastTone, text: impl Into<String>) -> Self {
+        Self::Toast {
+            tone,
+            text: text.into(),
+        }
+    }
+
     /// Writes how many characters this field holds into `id`, after a slash `max`
     /// when there is one: `Cmd::count("bio-count", 160)`, `Cmd::count("words", None)`.
     pub fn count(id: impl Into<String>, max: impl Into<Option<u32>>) -> Self {
@@ -240,6 +257,7 @@ impl Cmd {
             Self::Count { target, max } => json!(["count", target, max]),
             Self::Value { target, value } => json!(["value", target, value]),
             Self::Fill(id) => json!(["fill", id]),
+            Self::Toast { tone, text } => json!(["toast", tone.as_str(), text]),
         })
     }
 }
@@ -352,10 +370,11 @@ mod tests {
             Cmd::open("d1"),
             Cmd::set_attr("x", "data-open", "1"),
             Cmd::copy("a\"b"),
+            Cmd::toast(ToastTone::Success, "Saved"),
         ]);
         assert_eq!(
             commands.to_json(),
-            r#"[["open","d1"],["set_attr","x","data-open","1"],["copy","a\"b"]]"#
+            r#"[["open","d1"],["set_attr","x","data-open","1"],["copy","a\"b"],["toast","success","Saved"]]"#
         );
     }
 }

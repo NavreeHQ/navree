@@ -222,6 +222,46 @@ fn all() -> Vec<(&'static str, Node)> {
             .children("x")
             .into(),
     ));
+    out.push((
+        "tabs",
+        Tabs::new("t", "Sections")
+            .variant(TabsVariant::Segmented)
+            .tab(Tab::new("a", "A").icon(icons::STAR).count("3").panel("x"))
+            .tab(Tab::new("b", "B").lazy("/b"))
+            .tab(Tab::new("c", "C").disabled(true))
+            .into(),
+    ));
+    out.push((
+        "toggle-group",
+        ToggleGroup::multiple("days", "Days")
+            .item(ToggleItem::new("mon", "Mon"))
+            .item(ToggleItem::icon_only("tue", icons::STAR, "Tuesday"))
+            .values(["mon"])
+            .variant(ToggleVariant::Outline)
+            .into(),
+    ));
+    out.push((
+        "dropdown-menu",
+        DropdownMenu::new("m", "Actions")
+            .item(MenuItem::link("Edit", "/e").icon(icons::STAR).shortcut("E"))
+            .item(MenuItem::post("Delete", "/d").destructive())
+            .separator()
+            .group(MenuGroup::new("View").item(MenuItem::action("Copy").disabled(true)))
+            .checkbox(MenuCheckbox::new("a", "Archived").checked(true))
+            .radios(MenuRadios::new("s", "Sort").option("n", "Name").value("n"))
+            .submenu(MenuSub::new("Move").item(MenuItem::link("Inbox", "/i")))
+            .into(),
+    ));
+    out.push((
+        "toaster",
+        Toaster::new()
+            .toast(
+                Toast::new(ToastTone::Danger, "No")
+                    .title("T")
+                    .action(ToastAction::post("Retry", "/r")),
+            )
+            .into(),
+    ));
     out
 }
 
@@ -346,6 +386,34 @@ fn pagination_shows_the_near_pages_and_is_safe_at_the_edges() {
     );
     assert!(
         html.contains(r#"aria-label="Next page" role="link" aria-disabled="true""#),
+        "{html}"
+    );
+}
+
+#[test]
+fn menus_ask_for_their_module_and_a_plain_tab_asks_for_nothing_more() {
+    let uses = |node: Node| View::new("x").body(node).uses();
+    assert!(uses(Tabs::new("t", "T").tab(Tab::new("a", "A")).into()).has(Uses::MENUS));
+    assert!(uses(ToggleGroup::single("v", "V").into()).has(Uses::MENUS));
+    let menu = uses(
+        DropdownMenu::new("m", "A")
+            .item(MenuItem::link("x", "/x"))
+            .into(),
+    );
+    assert!(menu.has(Uses::MENUS) && menu.has(Uses::OVERLAY));
+}
+
+#[test]
+fn a_menu_is_a_popover_of_the_menu_role_and_a_tab_list_is_a_tablist() {
+    let html = render(
+        &DropdownMenu::new("m", "A")
+            .item(MenuItem::link("x", "/x"))
+            .into(),
+    );
+    assert!(html.contains(r#"popover="auto" role="menu""#), "{html}");
+    let html = render(&Tabs::new("t", "T").tab(Tab::new("a", "A")).into());
+    assert!(
+        html.contains(r#"role="tablist""#) && html.contains(r#"role="tab""#),
         "{html}"
     );
 }

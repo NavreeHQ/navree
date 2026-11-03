@@ -2,7 +2,7 @@
 // alive. A failed fetch falls back to a real navigation.
 import { body, byId, clean, cookies, every, head, hidden, make, on, one, ownModule, root, sameOrigin, setTitle, titleOf } from "./dom.js";
 import { morph, pieces } from "./morph.js";
-import { announce } from "./ui.js";
+import { adoptToasts, announce } from "./ui.js";
 
 const HEADER = { "x-navree-ui": "1" };
 // `Sec-Purpose` can't be set from `fetch`, so a prefetch says so itself.
@@ -134,6 +134,8 @@ export async function showPage(response, how = {}) {
   if (how.push !== false && url !== location.href) history.pushState(null, "", url);
   clean(body(doc));
   if (!how.region) swaps++;
+  // A toast the last request left joins the standing toaster; the page's own is never morphed.
+  adoptToasts(doc);
   if (how.region) {
     const from = byId(how.region), to = byId(how.region, doc);
     if (from && to) {
@@ -284,7 +286,10 @@ export async function refresh(id) {
       tableFailed(table, src, response.status);
       return;
     }
-    if (!takes(response)) return;
+    if (!takes(response)) {
+      if (!response.redirected) failed(el, response.status);
+      return;
+    }
     const doc = new DOMParser().parseFromString(await response.text(), "text/html");
     const build = root(doc).getAttribute("data-build");
     if (build && build !== root().getAttribute("data-build")) {
@@ -306,8 +311,15 @@ export async function refresh(id) {
     to.removeAttribute("aria-busy");
     morph(el, to);
   } catch {
-    if (table && regions.get(id) === mine) tableFailed(table, src, 0);
+    if (regions.get(id) !== mine) return;
+    if (table) tableFailed(table, src, 0);
+    else failed(el, 0);
   }
+}
+
+/** Says a region could not be fetched, to whatever draws that region. @param {Element} el @param {number} status */
+function failed(el, status) {
+  el.dispatchEvent(new CustomEvent("ui:region-error", { bubbles: true, detail: { status } }));
 }
 
 /** Starts lazy and polling regions, on load and after each swap. */
@@ -402,6 +414,11 @@ export function startNav() {
     const a = safeLinkOf(e.target);
     if (a) prefetch(a.href);
   }, { passive: true });
+  // A component that wants its region fetched again (a tab shown for the first time).
+  on(document, "ui:refresh", (e) => {
+    const region = /** @type {Element} */ (e.target).closest?.("[data-ui-region]");
+    if (region?.id) refresh(region.id);
+  });
   on(document, "click", (e) => {
     const button = /** @type {Element} */ (e.target).closest?.("[data-ui-refresh]");
     const region = button?.closest("[data-ui-region]");

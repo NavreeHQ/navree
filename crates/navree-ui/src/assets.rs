@@ -65,6 +65,7 @@ pub fn scripts(uses: Uses) -> impl Iterator<Item = &'static str> {
         (Uses::TABLE, TABLE_URL),
         (Uses::SELECT, SELECT_URL),
         (Uses::DATES, DATES_URL),
+        (Uses::MENUS, MENUS_URL),
     ]
     .into_iter()
     .filter(move |(bit, _)| uses.has(*bit))

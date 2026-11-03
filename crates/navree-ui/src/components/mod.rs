@@ -8,10 +8,14 @@
 
 mod actions;
 mod display;
+mod dropdown;
 mod flag;
 mod inputs;
 mod layout;
 mod overlays;
+mod tabs;
+mod toast;
+mod toggle_group;
 
 pub use actions::{Button, ButtonGroup, ButtonKind, ButtonVariant, Toggle};
 pub use display::{
@@ -20,6 +24,7 @@ pub use display::{
     MarkerVariant, Message, Pagination, Progress, Ratio, Separator, Skeleton, SkeletonShape,
     Spinner, Stat, Table, TableCell, TableHead, TableRowEl, Text, TextVariant,
 };
+pub use dropdown::{DropdownMenu, MenuCheckbox, MenuGroup, MenuItem, MenuRadios, MenuSub};
 pub use flag::{Flag, FlagShape, FlagSize};
 pub use inputs::{
     Checkbox, Field, FieldSet, Input, InputGroup, InputKind, Label, NativeSelect, OptionItem,
@@ -30,6 +35,9 @@ pub use overlays::{
     Accordion, AlertDialog, Collapsible, Dialog, Drawer, HoverCard, Popover, PopupAlign,
     ScrollArea, Sheet, SheetSide, Side, Tooltip,
 };
+pub use tabs::{Activation, Orientation, Tab, Tabs, TabsVariant};
+pub use toast::{Toast, ToastAction, ToastDuration, ToastPosition, Toaster};
+pub use toggle_group::{ToggleGroup, ToggleItem, ToggleVariant};
 
 use crate::icons::Icon;
 use crate::node::{Node, el};

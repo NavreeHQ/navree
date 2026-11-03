@@ -52,16 +52,17 @@ function apply(op, how) {
     }
     case "replace":
       target?.replaceWith(pieces(op.html));
+      document.dispatchEvent(new Event("ui:swap"));
       break;
-    case "append": target?.append(pieces(op.html)); break;
-    case "prepend": target?.prepend(pieces(op.html)); break;
+    case "append": target?.append(pieces(op.html)); document.dispatchEvent(new Event("ui:swap")); break;
+    case "prepend": target?.prepend(pieces(op.html)); document.dispatchEvent(new Event("ui:swap")); break;
     case "remove": target?.remove(); break;
     case "errors": {
       const form = byId(op.form);
       if (form) showErrors(/** @type {HTMLFormElement} */ (form), op.fields, how.focus !== false);
       break;
     }
-    case "toast": toast(op.tone, op.text); break;
+    case "toast": toast(op); break;
     case "open": if (target) openTarget(target); break;
     case "close": if (target) closeTarget(target); break;
     case "focus": target?.focus(); break;

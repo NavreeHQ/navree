@@ -48,13 +48,18 @@ fn a_page_with_a_picker_loads_the_select_and_overlay_modules_and_nothing_else() 
 }
 
 #[test]
+fn the_menus_module_is_at_most_5_kb_gzip() {
+    assert!(size("menus") <= 5 * 1024, "{}", size("menus"));
+}
+
+#[test]
 fn the_stylesheet_is_at_most_25_kb_gzip() {
     assert!(size("navree-ui") <= 25 * 1024, "{}", size("navree-ui"));
 }
 
 #[test]
 fn a_typical_crud_page_loads_at_most_30_kb_gzip_of_script() {
-    let total: usize = ["core", "sidebar", "overlay", "table"]
+    let total: usize = ["core", "sidebar", "overlay", "table", "menus"]
         .iter()
         .map(|name| size(name))
         .sum();

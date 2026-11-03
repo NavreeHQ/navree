@@ -15,7 +15,7 @@ use navree_http::extract::{FromRequestParts, Scoped};
 use navree_http::response::{IntoResponse, Response};
 
 use crate::components::{
-    Alert, AlertTone, Avatar, Breadcrumb, Button, ButtonVariant, Separator, Size, icon,
+    Avatar, Breadcrumb, Button, ButtonVariant, Separator, Size, Toast, Toaster, icon,
 };
 use crate::form::csrf_field;
 use crate::html::Href;
@@ -78,12 +78,12 @@ pub(crate) fn flash_cookie_toned(
 }
 
 /// A flash cookie's tone and text.
-fn read_flash(value: &str) -> Option<(AlertTone, String)> {
+fn read_flash(value: &str) -> Option<(ToastTone, String)> {
     let (tone, text) = match value.split_once(':') {
-        Some(("info", text)) => (AlertTone::Neutral, text),
-        Some(("warning", text)) => (AlertTone::Warning, text),
-        Some(("danger", text)) => (AlertTone::Danger, text),
-        _ => (AlertTone::Success, value),
+        Some(("info", text)) => (ToastTone::Info, text),
+        Some(("warning", text)) => (ToastTone::Warning, text),
+        Some(("danger", text)) => (ToastTone::Danger, text),
+        _ => (ToastTone::Success, value),
     };
     let (_, text) = urlencoded::parse(format!("x={text}").as_bytes())
         .next()
@@ -549,7 +549,7 @@ pub struct AppPage {
     title: Cow<'static, str>,
     path: String,
     collapsed: bool,
-    flash: Option<(AlertTone, String)>,
+    flash: Option<(ToastTone, String)>,
     csrf: Option<String>,
     crumbs: Vec<(Cow<'static, str>, Href)>,
     prefetch_crumbs: bool,
@@ -563,7 +563,7 @@ impl AppPage {
         title: Cow<'static, str>,
         path: String,
         collapsed: bool,
-        flash: Option<(AlertTone, String)>,
+        flash: Option<(ToastTone, String)>,
         csrf: Option<String>,
     ) -> Self {
         Self {
@@ -632,7 +632,13 @@ impl AppPage {
             shell.search.clone(),
         ));
         let had_flash = self.flash.is_some();
-        let flash = self.flash.map(|(tone, text)| Alert::new(tone).title(text));
+        let mut toaster = Toaster::new();
+        if let Some((tone, text)) = self.flash {
+            toaster = toaster.toast(Toast::new(tone, text));
+        }
+        if let Some(token) = &self.csrf {
+            toaster = toaster.csrf(token.clone());
+        }
         let heading = el("div").slot("page-header").children((
             el("h1").slot("page-title").child(self.title.clone()),
             (!self.actions.is_empty()).then(|| el("div").slot("page-actions").child(self.actions)),
@@ -641,7 +647,7 @@ impl AppPage {
             .slot("page")
             .attr("id", "main")
             .attr("tabindex", -1_i64)
-            .children((flash, heading, self.body));
+            .children((heading, self.body));
         let wrapper = el("div")
             .slot("sidebar-wrapper")
             .attr("data-ui-keep-attrs", "data-collapsed data-mobile-open")
@@ -652,7 +658,7 @@ impl AppPage {
                 el("div").slot("sidebar-overlay"),
                 el("div").slot("sidebar-inset").children((topbar, main)),
             ));
-        let mut view = View::new(self.title).body(wrapper);
+        let mut view = View::new(self.title).body((wrapper, toaster));
         if had_flash
             && let Ok(clear) = HeaderValue::from_str(&format!(
                 "{FLASH_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax; HttpOnly"
@@ -683,7 +689,7 @@ pub struct AppShell {
     shell: Arc<Shell>,
     path: String,
     collapsed: bool,
-    flash: Option<(AlertTone, String)>,
+    flash: Option<(ToastTone, String)>,
     csrf: Option<String>,
 }
 
@@ -829,23 +835,23 @@ mod tests {
     fn a_flash_reads_back_with_its_tone() {
         assert_eq!(
             read_flash("Done"),
-            Some((AlertTone::Success, "Done".to_owned()))
+            Some((ToastTone::Success, "Done".to_owned()))
         );
         assert_eq!(
             read_flash("danger:Payment%20failed"),
-            Some((AlertTone::Danger, "Payment failed".to_owned()))
+            Some((ToastTone::Danger, "Payment failed".to_owned()))
         );
         assert_eq!(
             read_flash("warning:a%3Ab"),
-            Some((AlertTone::Warning, "a:b".to_owned()))
+            Some((ToastTone::Warning, "a:b".to_owned()))
         );
         assert_eq!(
             read_flash("info:x"),
-            Some((AlertTone::Neutral, "x".to_owned()))
+            Some((ToastTone::Info, "x".to_owned()))
         );
         assert_eq!(
             read_flash("forged:x"),
-            Some((AlertTone::Success, "forged:x".to_owned())),
+            Some((ToastTone::Success, "forged:x".to_owned())),
             "any other value is just text"
         );
     }
@@ -871,6 +877,38 @@ mod tests {
                 .to_str()
                 .unwrap()
                 .contains("Max-Age=0")
+        );
+    }
+
+    #[test]
+    fn every_page_has_the_toaster_and_a_flash_is_a_toast_in_it() {
+        let html = shell().page("x", "/").to_view().to_html();
+        assert!(
+            html.contains(r#"<section data-slot="toaster" aria-label="Notifications""#),
+            "{html}"
+        );
+        assert!(!html.contains(r#"data-slot="toast""#), "{html}");
+        let flash = AppPage::new(
+            Arc::new(shell()),
+            "x".into(),
+            "/".to_owned(),
+            false,
+            read_flash("warning:Almost%20full"),
+            None,
+        )
+        .to_view()
+        .to_html();
+        let toaster = flash.split(r#"data-slot="toaster""#).nth(1).unwrap();
+        assert!(toaster.contains(r#"data-tone="warning""#), "{flash}");
+        assert!(toaster.contains(r#"role="status""#), "{flash}");
+        assert!(toaster.contains("Almost full"), "{flash}");
+        // It stands after the page, so it is the last thing a keyboard reaches.
+        assert!(
+            flash.find("sidebar-wrapper").unwrap() < flash.find(r#"data-slot="toaster""#).unwrap()
+        );
+        assert!(
+            flash.trim_end().ends_with("</section></body></html>"),
+            "{flash}"
         );
     }
 

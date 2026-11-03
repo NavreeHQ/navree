@@ -3,8 +3,10 @@
 import { startCommands } from "./commands.js";
 import { startForms } from "./forms.js";
 import { startNav, startRegions } from "./nav.js";
+import { startToasts } from "./ui.js";
 
 startCommands();
 startForms();
 startNav();
 startRegions();
+startToasts();

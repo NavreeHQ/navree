@@ -1,7 +1,7 @@
 // The command interpreter: closed verbs from `data-ui-click`, `data-ui-change`
 // and `data-ui-input`. Commands need no network and no expression language.
 import { all, attr, byId, has, on } from "./dom.js";
-import { openTarget, closeTarget, announce } from "./ui.js";
+import { openTarget, closeTarget, announce, toast } from "./ui.js";
 
 // What a command may touch: state, never where a thing points or what it runs. The
 // `data-ui-*` hooks are the runtime's. `Cmd` in Rust holds the same list.
@@ -100,6 +100,7 @@ function run(cmd, from) {
     // its method, any other hidden field stays as the server wrote it.
     case "value": if (hiddenField(target) && has(/** @type {Element} */ (target), "data-ui-value") && typeof b === "string") inputValue.set?.call(target, b); break;
     case "fill": fill(target, from); break;
+    case "toast": toast(a, b); break;
   }
 }
 

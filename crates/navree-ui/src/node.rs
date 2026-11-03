@@ -227,6 +227,9 @@ impl Uses {
     pub const SELECT: Self = Self(1 << 4);
     /// The dates module: calendars, date and time pickers.
     pub const DATES: Self = Self(1 << 7);
+    /// The menus module: the keys of tabs, toggle groups and dropdown menus, and
+    /// tab switching in the page.
+    pub const MENUS: Self = Self(1 << 5);
 
     /// Both sets together.
     #[must_use]

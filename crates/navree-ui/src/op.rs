@@ -23,6 +23,7 @@ use navree_http::response::{IntoResponse, Response};
 use serde::Serialize;
 
 use crate::assets;
+use crate::components::Toast;
 use crate::html::{Href, LocalHref};
 use crate::node::Node;
 use crate::render::render;
@@ -63,6 +64,18 @@ pub enum ToastTone {
     Warning,
     /// It failed.
     Danger,
+}
+
+impl ToastTone {
+    /// The tone as the runtime and the flash cookie name it.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Info => "info",
+            Self::Success => "success",
+            Self::Warning => "warning",
+            Self::Danger => "danger",
+        }
+    }
 }
 
 /// How a URL change enters history.
@@ -123,12 +136,7 @@ pub enum Op {
         fields: BTreeMap<String, Vec<String>>,
     },
     /// Shows a toast, and announces it to assistive technology.
-    Toast {
-        /// Its meaning.
-        tone: ToastTone,
-        /// Its text.
-        text: String,
-    },
+    Toast(Toast),
     /// Opens the dialog, popover or details `target`.
     Open {
         /// The element's id.
@@ -209,10 +217,12 @@ impl Op {
 
     /// A toast.
     pub fn toast(tone: ToastTone, text: impl Into<String>) -> Self {
-        Self::Toast {
-            tone,
-            text: text.into(),
-        }
+        Self::Toast(Toast::new(tone, text))
+    }
+
+    /// A toast with a title, an action, a name or a time of its own.
+    pub fn toast_with(toast: Toast) -> Self {
+        Self::Toast(toast)
     }
 
     /// Goes to `href`, on this site: a URL that would leave it goes nowhere.
@@ -394,16 +404,21 @@ impl Reply {
     }
 
     /// Adds a toast. With JavaScript off, the next page shows it.
-    pub fn toast(mut self, tone: ToastTone, text: impl Into<String>) -> Self {
-        let text = text.into();
-        self.flash = Some((tone, text.clone()));
+    pub fn toast(self, tone: ToastTone, text: impl Into<String>) -> Self {
+        self.toast_with(Toast::new(tone, text))
+    }
+
+    /// Adds a toast with a title, an action, a name or a time of its own. With
+    /// JavaScript off, the next page shows its tone and text.
+    pub fn toast_with(mut self, toast: Toast) -> Self {
+        self.flash = Some((toast.tone(), toast.text().to_owned()));
         // A toast shows before a navigation that follows it.
         let at = self
             .ops
             .iter()
             .position(|op| matches!(op, Op::Navigate { .. } | Op::NavigateExternal { .. }))
             .unwrap_or(self.ops.len());
-        self.ops.insert(at, Op::Toast { tone, text });
+        self.ops.insert(at, Op::Toast(toast));
         self
     }
 
@@ -502,6 +517,40 @@ mod tests {
                 r#"{"op":"reload"},"#,
                 r#"{"op":"invalidate","target":"kpis"}]"#,
             )
+        );
+    }
+
+    #[test]
+    fn a_rich_toast_goes_on_the_wire_with_only_what_it_has() {
+        use crate::components::{ToastAction, ToastDuration};
+        let op = Op::toast_with(
+            Toast::new(ToastTone::Success, "Archived")
+                .title("Done")
+                .id("a")
+                .duration(ToastDuration::Long)
+                .action(ToastAction::post("Undo", "/undo")),
+        );
+        assert_eq!(
+            serde_json::to_string(&op).unwrap(),
+            concat!(
+                r#"{"op":"toast","tone":"success","text":"Archived","title":"Done","id":"a","#,
+                r#""duration":"long","action":{"label":"Undo","href":"/undo","post":true}}"#
+            )
+        );
+    }
+
+    #[test]
+    fn a_rich_toast_leaves_its_tone_and_text_for_the_next_page() {
+        let reply = Reply::redirect("/x")
+            .toast_with(Toast::new(ToastTone::Warning, "Almost full").title("Storage"));
+        assert!(matches!(reply.ops[0], Op::Toast(_)));
+        assert!(matches!(reply.ops[1], Op::Navigate { .. }));
+        let response = reply.into_response();
+        assert!(
+            response.headers()[header::SET_COOKIE]
+                .to_str()
+                .unwrap()
+                .starts_with("navree_ui_flash=warning:Almost%20full;")
         );
     }
 

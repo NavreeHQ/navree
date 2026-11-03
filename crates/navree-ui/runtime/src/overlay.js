@@ -29,7 +29,9 @@ function place(pop, anchor, again) {
     const room = side === "right" ? vw - a.right : a.left;
     const flip = room < p.width + GAP && (side === "right" ? a.left : vw - a.right) > room;
     left = (side === "right") !== flip ? a.right + GAP : a.left - p.width - GAP;
-    top = a.top + (a.height - p.height) / 2;
+    // A submenu lines its first item up with the item that opened it (less the menu's padding).
+    const align = pop.getAttribute("data-align");
+    top = align === "start" ? a.top - GAP : align === "end" ? a.bottom - p.height + GAP : a.top + (a.height - p.height) / 2;
   } else {
     const below = vh - a.bottom, above = a.top;
     const room = side === "bottom" ? below : above;
@@ -91,7 +93,7 @@ function follow(e) {
   frame = requestAnimationFrame(() => {
     frame = 0;
     for (const pop of shown) {
-      const anchor = pop.matches(":popover-open") ? anchorOf(pop) : null;
+      const anchor = pop.isConnected && pop.matches(":popover-open") ? anchorOf(pop) : null;
       if (anchor) place(pop, anchor, true);
       else shown.delete(pop);
     }

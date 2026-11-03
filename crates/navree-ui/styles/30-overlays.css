@@ -1,5 +1,5 @@
 /*
- * navree-ui's stylesheet: Dialogs, drawers and sheets, popovers, tooltips, hover cards, accordions, collapsibles, scroll areas and toasts. Provenance: structure, slot names and
+ * navree-ui's stylesheet: Dialogs, drawers and sheets, popovers, tooltips, hover cards, accordions, collapsibles and scroll areas. Provenance: structure, slot names and
  * variant names derive from shadcn/ui's style layer (MIT, Copyright (c) 2023 shadcn),
  * compact "Nova" style; the values, the 4px and 6px corners and the app rules are
  * Navree's own. See THIRD_PARTY.md.
@@ -38,8 +38,6 @@
 [data-slot=menu-link]{display:flex;align-items:center;gap:.5rem;width:100%;height:2rem;padding:0 .5rem;border:0;border-radius:var(--radius);background:none;color:var(--fg-1);font:inherit;text-align:start;text-decoration:none;cursor:pointer;&:hover,&:focus-visible{background:var(--ink-2);color:var(--fg)}}
 [data-slot=tooltip-content]{position:fixed;inset:auto;margin:0;padding:.25rem .5rem;width:max-content;max-width:18rem;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--ink-3);color:var(--fg);font-size:12px;pointer-events:none}
 [data-slot=tooltip-trigger],[data-slot=hover-card-trigger]{display:inline-flex}
-[data-slot=toaster]{position:fixed;inset:auto 1rem 1rem auto;margin:0;padding:0;border:0;background:transparent;display:none;flex-direction:column;gap:.5rem;width:min(22rem,calc(100vw - 2rem));overflow:visible;&:popover-open{display:flex}}
-[data-slot=toast]{padding:.625rem .75rem;border:1px solid var(--line-2);border-radius:var(--radius-lg);background:var(--ink-2);color:var(--fg);animation:ui-in .1s ease-out;&[data-tone=success]{border-color:color-mix(in oklab,var(--accent) 36%,transparent)}&[data-tone=warning]{border-color:color-mix(in oklab,var(--amber) 36%,transparent)}&[data-tone=danger]{border-color:color-mix(in oklab,var(--danger) 40%,transparent);color:var(--danger)}}
 
 /* Details */
 [data-slot=accordion]{display:flex;flex-direction:column}

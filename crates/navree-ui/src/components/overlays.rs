@@ -318,7 +318,7 @@ pub enum Side {
 }
 
 impl Side {
-    const fn as_str(self) -> &'static str {
+    pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Self::Top => "top",
             Self::Bottom => "bottom",
@@ -342,7 +342,7 @@ pub enum PopupAlign {
 }
 
 impl PopupAlign {
-    const fn as_str(self) -> Option<&'static str> {
+    pub(crate) const fn as_str(self) -> Option<&'static str> {
         match self {
             Self::Start => Some("start"),
             Self::Center => None,

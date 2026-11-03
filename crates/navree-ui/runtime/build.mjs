@@ -85,6 +85,7 @@ const FILES = [
   ["table", "js", "text/javascript; charset=utf-8", await js("table.js")],
   ["select", "js", "text/javascript; charset=utf-8", await js("select.js")],
   ["dates", "js", "text/javascript; charset=utf-8", await js("dates.js")],
+  ["menus", "js", "text/javascript; charset=utf-8", await js("menus.js")],
   ["navree-ui", "css", "text/css; charset=utf-8", Buffer.from((await css()).toString().replaceAll("geist.woff2", `geist-${FONT}.woff2`))],
   ["speculation", "json", "application/speculationrules+json", speculation],
 ];
