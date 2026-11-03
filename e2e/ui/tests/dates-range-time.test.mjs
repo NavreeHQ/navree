@@ -370,7 +370,7 @@ inBrowsers(({ open }) => {
     await close();
   });
 
-  test("a strict step refuses a time off it, and the native field carries the step", async () => {
+  test("a strict step refuses a time off it, at the box, and the hidden field carries no step of its own", async () => {
     const { page, close } = await open("/dates");
     const text = page.locator("#tp-strict [data-ui-text]");
     await text.fill("10:10");
@@ -379,7 +379,8 @@ inBrowsers(({ open }) => {
     await text.fill("10:15");
     await text.blur();
     assert.equal(await val(page, "strict"), "10:15");
-    assert.equal(await page.locator("#tp-strict input[type=time]").getAttribute("step"), "900");
+    // With the script on the box holds the step: the hidden field would count it from another start.
+    assert.equal(await page.locator("#tp-strict input[type=time]").getAttribute("step"), null);
     await close();
   });
 

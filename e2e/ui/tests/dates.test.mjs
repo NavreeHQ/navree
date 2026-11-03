@@ -462,20 +462,40 @@ for (const browserName of browsers) {
       await close();
     });
 
-    test("a form: the server accepts a good booking and refuses a bad one in words", async () => {
+    test("a form: the box holds back what the rules refuse, and the server accepts a good booking", async () => {
       const { page, close } = await open("/dates/form");
       await page.locator("#dp-start [data-ui-text]").fill("11/09/2026");
-      await page.locator("#tp-arrives [data-ui-text]").fill("12:30 pm"); // lunch: the server says so
+      await page.locator("#tp-arrives [data-ui-text]").fill("12:30 pm"); // lunch: the rules the form gave the picker say so
       await page.getByRole("button", { name: "Book" }).click();
       await page.locator("[data-slot=field-error]").first().waitFor();
       assert.match(await page.locator("[data-slot=field-error]").first().innerText(), /isn't available/);
+      assert.equal(new URL(page.url()).pathname, "/dates/form", "nothing was sent");
       await page.locator("#tp-arrives [data-ui-text]").fill("2:15 pm");
+      // Leaving the box takes its message away, and the button moves up: click it where it now is.
+      await page.locator("#tp-arrives [data-ui-text]").blur();
       await page.getByRole("button", { name: "Book" }).click();
       await page.locator("[data-saved]").waitFor();
       assert.match(page.url(), /\/dates\/booked/);
       assert.equal(await page.locator("[data-field=start]").innerText(), "2026-11-09");
       assert.equal(await page.locator("[data-field=arrives]").innerText(), "14:15:00");
       assert.equal(await page.locator("[data-field=end]").innerText(), "");
+      await close();
+    });
+
+    test("JavaScript off: the server refuses a Saturday and lunchtime in words, and takes a good booking", async () => {
+      const { page, close } = await open("/dates/form", { js: false });
+      await page.locator("#dp-start input[type=date]").fill("2026-11-07"); // a Saturday
+      await page.locator("#tp-arrives input[type=time]").fill("12:30");
+      await page.getByRole("button", { name: "Book" }).click();
+      await page.locator("[data-slot=field-error]").first().waitFor();
+      const messages = await page.locator("[data-slot=field-error]").allInnerTexts();
+      assert.equal(messages.length, 2);
+      assert.ok(messages.every((text) => /isn't available/.test(text)), messages.join(" | "));
+      await page.locator("#dp-start input[type=date]").fill("2026-11-09");
+      await page.locator("#tp-arrives input[type=time]").fill("14:15");
+      await page.getByRole("button", { name: "Book" }).click();
+      await page.locator("[data-saved]").waitFor();
+      assert.equal(await page.locator("[data-field=start]").innerText(), "2026-11-09");
       await close();
     });
 
