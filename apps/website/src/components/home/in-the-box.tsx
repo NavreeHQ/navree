@@ -130,19 +130,25 @@ export function InTheBox() {
                 <span className={cn("font-mono text-xs numeric", isBase ? "text-accent" : "text-fg-3")}>L{layer}</span>
                 <span className="text-[0.9375rem] font-medium text-fg-1">{layerNames[layer]}</span>
               </div>
-              <ul className="grid gap-x-2 p-2 sm:grid-cols-2 md:p-3 xl:grid-cols-3">
+              {/* Phones show each crate as a short chip, names only: one row per crate ran to about 3,000 px. */}
+              <ul className="flex flex-wrap gap-1.5 px-5 pt-3 pb-5 sm:grid sm:grid-cols-2 sm:gap-x-2 sm:gap-y-0 sm:p-2 md:p-3 xl:grid-cols-3">
                 {members.map((c) => (
-                  <li key={c.name}>
+                  <li key={c.name} className="min-w-0">
                     <Link
                       href={docs[c.name] ?? "/docs/architecture/crate-hierarchy/"}
-                      className="group block h-full rounded-xl px-3 py-2.5 transition-colors duration-200 hover:bg-ink-2"
+                      prefetch={false}
+                      className="group inline-flex rounded-lg border border-line bg-ink-0 px-2 py-1 transition-colors duration-200 hover:bg-ink-2 sm:block sm:h-full sm:rounded-xl sm:border-0 sm:bg-transparent sm:px-3 sm:py-2.5"
                     >
                       <span className="flex items-baseline justify-between gap-3">
-                        <span className="font-mono text-[0.84rem] text-fg transition-colors group-hover:text-accent">{c.name}</span>
-                        {c.module ? <span className="truncate font-mono text-[0.6875rem] text-fg-3">{c.module}</span> : null}
+                        <span className="font-mono text-[0.8125rem] text-fg transition-colors group-hover:text-accent sm:text-[0.84rem]">
+                          {c.name}
+                        </span>
+                        {c.module ? <span className="truncate font-mono text-[0.6875rem] text-fg-3 max-sm:hidden">{c.module}</span> : null}
                       </span>
-                      {/* Phones list names only: every description would run to many screens. */}
-                      <span className="mt-1 block text-[0.8125rem] leading-relaxed text-fg-3 max-sm:sr-only">{c.description}</span>
+                      {/* Two lines each on wider screens, so the grid stays even; the whole description is still in the page. */}
+                      <span title={c.description} className="mt-1 block text-[0.8125rem] leading-relaxed text-fg-3 max-sm:sr-only sm:line-clamp-2">
+                        {c.description}
+                      </span>
                     </Link>
                   </li>
                 ))}
