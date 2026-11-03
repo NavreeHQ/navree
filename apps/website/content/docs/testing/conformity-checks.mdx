@@ -1,6 +1,6 @@
 ---
 title: "Conformity checks"
-description: "`navree check` verifies what the compiler can't: every route documented, every workspace table indexed and protected, translations and migrations. `navree gate` runs it with fmt, clippy, the tests and the front end in one command."
+description: "`navree check` verifies what the compiler can't: documented routes, indexed workspace tables, translations and migrations. `navree gate` runs it with fmt, clippy, tests and the front end."
 ---
 
 The compiler checks types and the container checks the module graph, but some rules of a well-built app live between modules: every route documented in the API, every workspace table with its workspace column, an index and row-level security. `navree check` verifies those rules in one command, and `navree gate` runs it together with formatting, lints, tests and the front end's checks before you push.
@@ -76,7 +76,7 @@ You can run the app command directly too, which is what a deployment pipeline do
 | `workspace.repo` | `WorkspaceModule` | Code reaches a workspace model that doesn't scope itself only through `WorkspaceRepo`, and nothing leaves a scoped model's workspace filter |
 | `workspace.tables` | `WorkspaceModule` | Each workspace table has its workspace column, an index that starts with it and, on PostgreSQL, row-level security |
 | `i18n.translations` | Built in | Runs the app's `i18n:check` command when a module registers it |
-| `db.migrations` | Built in | Runs the app's `migrate:lint` command when a module registers it |
+| `db.migrations` | Built in | Runs the app's `migrate:lint` command when a module registers it. No Navree module registers one, so the check is skipped until your app adds it |
 
 ### Routes documented
 
@@ -111,7 +111,7 @@ Apps made with `navree new` list the Lighthouse and Logbook dashboards there (`u
 | Helm | the admin panel, its assets and the JSON calls behind it | `"/admin*"` (or your `helm.path`) |
 | Fleet | the dashboard and the JSON calls behind it | `"/_fleet*"` (or your `fleet.path`) |
 | GraphQL | the endpoint, GraphiQL and the subscriptions socket | `"/graphql*"` (or your `graphql.path`) |
-| UI | the component assets and the gallery | `"/_navree/ui*"` (or your `ui.mount`) |
+| UI | the toolkit's files (stylesheet and scripts) | `"/_navree/ui*"` |
 
 `navree check` names the module of every undocumented route, so a module missing from the list shows up the first time it runs.
 
