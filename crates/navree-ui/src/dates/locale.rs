@@ -583,13 +583,19 @@ mod tests {
         assert_eq!(&*english.labels.custom_range, "Custom range");
         for locale in data::all() {
             let name = &locale.tag;
-            assert!(!locale.labels.custom_range.is_empty(), "{name} custom range");
+            assert!(
+                !locale.labels.custom_range.is_empty(),
+                "{name} custom range"
+            );
             assert!(!locale.labels.presets.is_empty(), "{name} presets");
             let mut seen = std::collections::HashSet::new();
             for preset in super::DatePreset::ALL {
                 let text = locale.labels.preset(preset);
                 assert!(!text.is_empty(), "{name} {preset:?}");
-                assert!(seen.insert(text.to_owned()), "{name}: two presets read {text:?}");
+                assert!(
+                    seen.insert(text.to_owned()),
+                    "{name}: two presets read {text:?}"
+                );
             }
             if !name.starts_with("en") {
                 assert_ne!(

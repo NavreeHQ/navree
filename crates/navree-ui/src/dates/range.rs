@@ -431,7 +431,11 @@ mod tests {
         assert_eq!(parse_list("2026-11-03,2026-11-04", 1), None, "over the cap");
         assert_eq!(parse_list("2026-11-03,", 5), None, "an empty entry");
         assert_eq!(parse_list("2026-02-30", 5), None);
-        assert_eq!(parse_list("2026-11-3", 5), Some(vec![day(3)]), "a day without its zero");
+        assert_eq!(
+            parse_list("2026-11-3", 5),
+            Some(vec![day(3)]),
+            "a day without its zero"
+        );
         // A hostile list is refused before it is read: no work, no allocation of any size.
         let huge = vec!["2026-11-03"; 100_000].join(",");
         assert_eq!(parse_list(&huge, 366), None);

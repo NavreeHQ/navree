@@ -797,12 +797,27 @@ fn random_text_never_panics_and_never_reads_as_an_impossible_day() {
 
 #[test]
 fn a_range_picker_names_its_presets_in_its_locale() {
-    let german = html(DateRangePicker::new("from", "to").today(today()).locale(DateLocale::of("de")));
-    for word in ["Heute", "Gestern", "Letzte 7 Tage", "Dieser Monat", "Eigener Zeitraum", "Schnellauswahl"] {
+    let german = html(
+        DateRangePicker::new("from", "to")
+            .today(today())
+            .locale(DateLocale::of("de")),
+    );
+    for word in [
+        "Heute",
+        "Gestern",
+        "Letzte 7 Tage",
+        "Dieser Monat",
+        "Eigener Zeitraum",
+        "Schnellauswahl",
+    ] {
         assert!(german.contains(word), "{word}");
     }
     assert!(!german.contains("Yesterday") && !german.contains("Custom range"));
-    let arabic = html(DateRangePicker::new("from", "to").today(today()).locale(DateLocale::of("ar")));
+    let arabic = html(
+        DateRangePicker::new("from", "to")
+            .today(today())
+            .locale(DateLocale::of("ar")),
+    );
     assert!(arabic.contains("اليوم") && arabic.contains("نطاق مخصص"));
     // English is the default and the words of a page win over the locale's.
     let english = html(DateRangePicker::new("from", "to").today(today()));
@@ -831,20 +846,42 @@ fn very_large_rules_cost_a_bounded_page() {
         .disable_if(|d| d.day() % 2 == 0);
     let big = html(Calendar::new("c").today(today()).rules(many.clone()));
     let plain = html(Calendar::new("c").today(today()));
-    assert!(big.len() < plain.len() + 70_000, "{} against {}", big.len(), plain.len());
+    assert!(
+        big.len() < plain.len() + 70_000,
+        "{} against {}",
+        big.len(),
+        plain.len()
+    );
     let json = json_attr(&big, "data-ui-dates=\"calendar\"", "data-ui-rules");
     assert!(json["r"].as_array().unwrap().len() <= 1000);
     // The server's check still knows every one of them.
-    assert!(many.check(start + chrono::Duration::days(9_999 * 3)).is_err());
+    assert!(
+        many.check(start + chrono::Duration::days(9_999 * 3))
+            .is_err()
+    );
 }
 
 #[test]
 fn the_markup_of_each_component_stays_small() {
-    let calendar = html(Calendar::new("c").today(today()).selected(day(2026, 11, 12)));
+    let calendar = html(
+        Calendar::new("c")
+            .today(today())
+            .selected(day(2026, 11, 12)),
+    );
     let picker = html(DatePicker::new("d").today(today()).value(day(2026, 11, 12)));
-    let range = html(DateRangePicker::new("a", "b").today(today()).value(DateRange::new(day(2026, 11, 1), day(2026, 11, 3))));
+    let range = html(
+        DateRangePicker::new("a", "b")
+            .today(today())
+            .value(DateRange::new(day(2026, 11, 1), day(2026, 11, 3))),
+    );
     let clock = html(TimePicker::new("t").value(time(14, 30)));
-    println!("calendar {} B, date picker {} B, range picker {} B, time picker {} B", calendar.len(), picker.len(), range.len(), clock.len());
+    println!(
+        "calendar {} B, date picker {} B, range picker {} B, time picker {} B",
+        calendar.len(),
+        picker.len(),
+        range.len(),
+        clock.len()
+    );
     // A picker sends a shell, not a month: the browser draws the months when it opens.
     assert!(picker.len() < 6 * 1024, "{}", picker.len());
     assert!(clock.len() < 6 * 1024, "{}", clock.len());
