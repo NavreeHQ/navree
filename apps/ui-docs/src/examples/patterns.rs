@@ -44,6 +44,11 @@ pub fn all() -> Vec<Example> {
         single!("commands", "open", "Open and focus", commands_open)
             .live()
             .height(320),
+        single!("commands", "text", "Text set by a choice", commands_text).live(),
+        single!("commands", "count", "A counter as you type", commands_count).live(),
+        single!("commands", "fill", "A row's details", commands_fill)
+            .live()
+            .height(360),
         single!(
             "regions",
             "lazy",
@@ -162,6 +167,59 @@ fn commands_open() -> (Button, Dialog) {
         Dialog::new("rename", "Rename deal").body(
             Field::new("rename-name", "Name").control(Input::text("title").value("Acme renewal")),
         ),
+    )
+}
+
+fn commands_text() -> Stack {
+    Stack::gap(3).align(Align::Center).children((
+        Row::gap(2).children((
+            Button::outline("Monthly").on_click(Cmd::text("plan-price", "$12 a month")),
+            Button::outline("Yearly").on_click(Cmd::text("plan-price", "$120 a year")),
+        )),
+        Heading::h3("$12 a month").id("plan-price"),
+    ))
+}
+
+fn commands_count() -> Stack {
+    Stack::gap(1).children((
+        Field::new("bio", "Bio").control(
+            Textarea::new("bio")
+                .attr("maxlength", 160_u32)
+                .on(Trigger::Input, Cmd::count("bio-count", 160)),
+        ),
+        Text::muted("0/160").id("bio-count"),
+    ))
+}
+
+fn commands_fill() -> (Table, Dialog) {
+    let row = |key: &'static str, title: &'static str, amount: &'static str| {
+        el("tr").attr("data-key", key).children((
+            el("td").child(title),
+            el("td").child(amount),
+            el("td").child(
+                Button::ghost("Details")
+                    .size(Size::Sm)
+                    .on_click(Cmd::fill("deal-details-dialog")),
+            ),
+        ))
+    };
+    (
+        Table::new()
+            .head((
+                el("th").attr("data-col", "title").child("Deal"),
+                el("th").attr("data-col", "amount").child("Amount"),
+                el("th").child(""),
+            ))
+            .rows((
+                row("7", "Acme renewal", "12,500"),
+                row("8", "Globex expansion", "48,000"),
+            )),
+        Dialog::new("deal-details-dialog", "Deal").body(el("p").children((
+            el("strong").fill_cell("title"),
+            ", worth ",
+            el("span").fill_cell("amount"),
+            ".",
+        ))),
     )
 }
 

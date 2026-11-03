@@ -47,6 +47,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -102,6 +108,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -149,6 +161,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -301,6 +319,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -362,6 +386,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -411,6 +441,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -458,6 +494,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -532,6 +574,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -587,6 +635,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -621,6 +675,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -774,6 +834,12 @@
         "doc": "Says this link may be fetched ahead of a click (see `Element::prefetch`). Only for a link whose `GET` changes nothing."
       },
       {
+        "name": "prefetch_eager",
+        "generics": "",
+        "args": "",
+        "doc": "Says this link is fetched as soon as the page is quiet (see `Element::prefetch_eager`)."
+      },
+      {
         "name": "submit",
         "generics": "",
         "args": "",
@@ -843,6 +909,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -890,6 +962,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -1038,6 +1116,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -1097,6 +1181,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -1290,19 +1380,19 @@
         "name": "set_attr",
         "generics": "",
         "args": "target: impl Into<String>, name: &'static str, value: impl Into<String>",
-        "doc": "Sets attribute `name` of `target`."
+        "doc": "Sets attribute `name` of `target`. A name a command may not touch is a mistake in the page's code: a debug build stops on it here, and a release build sends nothing."
       },
       {
         "name": "remove_attr",
         "generics": "",
         "args": "target: impl Into<String>, name: &'static str",
-        "doc": "Removes attribute `name` of `target`."
+        "doc": "Removes attribute `name` of `target`, under the same rule as `Cmd::set_attr`."
       },
       {
         "name": "toggle_attr",
         "generics": "",
         "args": "target: impl Into<String>, name: &'static str",
-        "doc": "Toggles attribute `name` of `target`."
+        "doc": "Toggles attribute `name` of `target`, under the same rule as `Cmd::set_attr`."
       },
       {
         "name": "dispatch",
@@ -1321,6 +1411,30 @@
         "generics": "",
         "args": "id: impl Into<String>",
         "doc": "Submits the form `id`."
+      },
+      {
+        "name": "text",
+        "generics": "",
+        "args": "id: impl Into<String>, text: impl Into<String>",
+        "doc": "Sets the text of `id` to `text`, as text."
+      },
+      {
+        "name": "count",
+        "generics": "",
+        "args": "id: impl Into<String>, max: impl Into<Option<u32>>",
+        "doc": "Writes how many characters this field holds into `id`, after a slash `max` when there is one: `Cmd::count(\"bio-count\", 160)`, `Cmd::count(\"words\", None)`."
+      },
+      {
+        "name": "value",
+        "generics": "",
+        "args": "id: impl Into<String>, value: impl Into<String>",
+        "doc": "Sets the hidden field `id` to `value`."
+      },
+      {
+        "name": "fill",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Fills the dialog `id` from the row this element sits in, and opens it."
       }
     ],
     "methods": [],
@@ -1383,6 +1497,26 @@
       {
         "name": "Submit",
         "doc": "Submits the form with this id.",
+        "default": false
+      },
+      {
+        "name": "Text",
+        "doc": "Sets the text of the element with this id: a price when a plan changes, a label when a choice is made.",
+        "default": false
+      },
+      {
+        "name": "Count",
+        "doc": "Writes how many characters the element's own value holds into the element with this id, as `12`, or `12/160` with a most. For a field's counter, on `Trigger::Input`.",
+        "default": false
+      },
+      {
+        "name": "Value",
+        "doc": "Sets the value of a hidden field: the state a form carries, such as the column a set of buttons sorts by.",
+        "default": false
+      },
+      {
+        "name": "Fill",
+        "doc": "Fills the dialog, popover or details with this id from the row the element sits in, and opens it: a row's details with no request.",
         "default": false
       }
     ],
@@ -1454,6 +1588,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -1715,6 +1855,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -1838,6 +1984,12 @@
         "generics": "",
         "args": "url: impl Into<Href>",
         "doc": "Refetches the table whenever this server-sent event stream says something."
+      },
+      {
+        "name": "debounce",
+        "generics": "",
+        "args": "wait: std::time::Duration",
+        "doc": "How long typing in the search or a text filter waits for a pause before the table asks again: 100 ms unless this says otherwise, up to 5 s. A tick or a choice applies at once. A longer wait suits a search the database is slow to answer."
       },
       {
         "name": "refreshable",
@@ -2071,6 +2223,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -2111,6 +2269,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -2204,6 +2368,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -2271,6 +2441,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -2312,6 +2488,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -2588,6 +2770,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -2642,6 +2830,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -2683,6 +2877,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -2842,6 +3042,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -2889,6 +3095,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -3029,6 +3241,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -3122,6 +3340,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -3158,6 +3382,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -3192,6 +3422,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -3279,6 +3515,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -3402,6 +3644,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -3464,6 +3712,12 @@
         "generics": "",
         "args": "",
         "doc": "Keeps this link from being fetched ahead of a click. A sidebar item is navigation and is fetched on hover or focus, so an item whose `GET` isn't safe to repeat needs this."
+      },
+      {
+        "name": "prefetch_eager",
+        "generics": "",
+        "args": "",
+        "doc": "Fetches this link as soon as the page is quiet, with no hover: for the page users almost always open next. See `Element::prefetch_eager` for what it costs."
       },
       {
         "name": "icon",
@@ -3716,6 +3970,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -3789,6 +4049,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -3857,6 +4123,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -3922,6 +4194,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -4130,6 +4408,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -4207,6 +4491,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -4289,6 +4579,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -4522,6 +4818,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -4584,6 +4886,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -4633,6 +4941,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -4674,6 +4988,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -4729,6 +5049,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -4792,6 +5118,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -4839,6 +5171,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -4896,6 +5234,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -4943,6 +5287,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -5004,6 +5354,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",
@@ -5104,6 +5460,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -5165,6 +5527,12 @@
         "doc": "Sets an attribute on the root element."
       },
       {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
+      },
+      {
         "name": "span",
         "generics": "",
         "args": "columns: u8",
@@ -5206,6 +5574,12 @@
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
         "doc": "Sets an attribute on the root element."
+      },
+      {
+        "name": "on",
+        "generics": "",
+        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
+        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
       },
       {
         "name": "span",

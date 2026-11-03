@@ -24,14 +24,53 @@ Button::outline("Show details").on_click(Cmd::toggle("deal-details"))
 | `Cmd::focus(id)` | moves focus |
 | `Cmd::submit(id)` | submits a form |
 | `Cmd::copy(text)` | copies text to the clipboard |
+| `Cmd::text(id, text)` | sets an element's text |
+| `Cmd::count(id, max)` | writes how many characters the element's own field holds, as `12` or `12/160` |
+| `Cmd::value(id, value)` | sets the value of a hidden field |
+| `Cmd::fill(id)` | fills a dialog from the row the element sits in, and opens it |
 | `Cmd::set_attr`, `remove_attr`, `toggle_attr` | changes a state attribute: `data-*` (not the runtime's own `data-ui-*`), `aria-*`, `hidden`, `open` or `disabled` |
 | `Cmd::dispatch(name)` | sends a custom event from the element |
 
-A command can't change where something points or what it runs: any other attribute is refused, in Rust and again in the runtime. Triggers are `Trigger::Click`, `Change` and `Input`.
+A command can't change where something points or what it runs. `set_attr` and its two siblings refuse any other attribute: a debug build stops where the command is built, and the runtime refuses it again. Triggers are `Trigger::Click`, `Change` and `Input`, on a button with `.on_click` and on any component or element with `.on(trigger, commands)`.
 
 Several commands run in order. This button opens a dialog, then moves focus to its field:
 
 <UiPreview example="commands/open" />
+
+## Text, counts and values with no request
+
+A price that changes with a plan, a counter under a field, a row's details in a dialog: each is something the page already knows, so nothing is asked of the server.
+
+<UiPreview example="commands/text" />
+
+```rust
+Button::outline("Yearly").on_click(Cmd::text("plan-price", "$120 a year"))
+```
+
+`Cmd::count` counts characters the way the server's `length` rule does, so `12/160` in the browser means what the rule means. Put it on the field, on `Trigger::Input`:
+
+<UiPreview example="commands/count" />
+
+```rust
+Textarea::new("bio")
+    .attr("maxlength", 160_u32)
+    .on(Trigger::Input, Cmd::count("bio-count", 160))
+```
+
+`Cmd::fill` copies a row's text into a dialog and opens it. The row is the nearest element with `data-key`; a [DataTable](/docs/ui/data-table/) row has one. In the dialog, `.fill_cell("title")` marks where a column's text goes and `.fill_key()` where the row's key goes. A hidden field marked either way gets it as its value, so a form in the dialog can post which row it acts on:
+
+<UiPreview example="commands/fill" />
+
+```rust
+Button::ghost("Details").on_click(Cmd::fill("deal-details"))
+// In the dialog:
+el("strong").fill_cell("title")
+el("input").attr("type", "hidden").attr("name", "id").fill_key()
+```
+
+`Cmd::value` sets a hidden field: the column a set of buttons sorts by, the intent of a form a command submits. Only a hidden field takes it, so a field the user types in keeps what was typed.
+
+**What these can't do.** They write text. The runtime sets `textContent`, so a value holding `<img src=x onerror=...>` shows those characters and builds nothing. They refuse a `<script>` or `<style>` element, whose text would be code, and a field the user types in or picks from. `fill` reads cells as text too. The key a dialog's form posts is a request like any other: the handler checks the user may act on that row.
 
 ## Replies and ops
 
@@ -80,6 +119,18 @@ An envelope names the build of the toolkit it belongs to. A page from an older b
 ## Links and forms, boosted
 
 With the runtime, links on the site and forms load without a full page reload: the runtime fetches the next page and morphs it in. A form shows the pending state on its submit button and sets `aria-busy` while it posts. `data-ui-noboost` keeps a link out of this: it loads for real.
+
+A form on its way ignores a second submit that would send the same thing: a double click or `Enter` twice writes once. A submit that sends something new, such as a field check sent on every keystroke, waits and goes when the first answer is back. Only the latest waits, so typing faster than the server answers loses nothing and sends no backlog. If the first answer leaves the page, what waited is dropped.
+
+Field errors in an answer take focus only for a save the user asked for and is still waiting on. A check a command sent while the user types, or a save the user clicked and then moved on from, shows its errors and leaves focus where the user is.
+
+In a filter form that updates a region, such as a [DataTable](/docs/ui/data-table/)'s toolbar, a tick, a radio or a select applies at once. Text waits for a pause in the typing: 100 ms, or what the table's `.debounce(wait)` says.
+
+## Fetching ahead of a click
+
+A link the toolkit knows is navigation (a sidebar item, a breadcrumb, a table's sort and page links) and a link marked with `.prefetch()` is fetched when the pointer rests on it or it takes focus, so the page is often there before the click. Only mark a link whose `GET` changes nothing.
+
+Nothing is fetched with no hover unless a link asks: `.prefetch_eager()` on an element, a `Button` or a `NavItem` fetches it as soon as the page is quiet. It costs that page's bytes on every visit, so keep it for the one or two places users almost always go next. The runtime takes at most four such links a page, and none on a slow or data-saving connection. It pays most for a page that is the same for every user and says so with `View::cache("public, max-age=60")`. A page that differs per user stays `no-store`: what was fetched stands in for a click for only a few seconds, and a write in any tab drops it.
 
 ## API
 

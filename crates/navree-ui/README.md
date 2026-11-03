@@ -44,18 +44,25 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
   `data-pane` keeps a pane of a two-pane page in view on wide screens and scrolls it on its own.
 - **Forms.** `#[derive(Validate, Form)]` on one struct: doc comments are labels, types
   pick widgets, rules set `required`, `maxlength` and `min` in the browser and run
-  again on the server. `FormView` draws it, `Submit<T>` reads it back and answers
-  field errors under the inputs, or the page again with JavaScript off.
+  again on the server. A `pattern` reaches the page only when its rule says
+  `pattern("...", browser)`. `FormView` draws it, `Submit<T>` reads it back and answers
+  field errors under the inputs, or the page again with JavaScript off. A form on its
+  way ignores a second submit that sends the same thing, and sends the latest one that
+  differs when the first answer is back.
 - **Tables.** One definition, `#[derive(TableRow)]`, drives the URL, the query, the
   drawing, the export and bulk actions. See [The data table](#the-data-table).
 - **The wire.** `Cmd` is the closed list of what an element does in the browser with
-  no request. `Op` is the closed list of what a server action sends back, with
-  rendered HTML as payload. `Reply` carries ops and a fallback for JavaScript off.
+  no request: show, hide, open, focus, submit, copy, set a state attribute, and write
+  text (`text`, `count`, `value` for a hidden field, `fill` a dialog from a row). The
+  text commands set `textContent`, so nothing they write is read as markup, and they
+  refuse scripts, styles and the fields a user types in. `Op` is the closed list of what
+  a server action sends back, with rendered HTML as payload. `Reply` carries ops and a
+  fallback for JavaScript off.
   `Reply::redirect` and `Op::navigate` stay on this site, so a `next` from a request
   can't send a user away; `redirect_external` and `navigate_external` leave by name.
 - **Assets.** One stylesheet and the runtime's modules, embedded with brotli and gzip
   forms, at content-hash URLs, immutable. Rendered pages of 32 KiB or more go out in
-  brotli quality 4; smaller ones in the HTTP pipeline's gzip.
+  brotli quality 5, with a window that holds the whole page; smaller ones in the HTTP pipeline's gzip.
 - **Tests.** `TestView` drives a page in a plain test. `e2e/ui` runs morph properties,
   axe in every state, keyboard scripts and a hostile suite in real browsers.
 
@@ -140,6 +147,13 @@ async fn bulk(uow: Uow, request: BulkRequest<Deal>) -> Result<Reply> {
 
 **The URL holds everything but the selection:** `q`, `sort=-amount,title`, `page`, `per`, `after`, `before`, `f.<col>`, `f.<col>.min`, `.max`, `.empty`, `cols`, `w`, `density`, `open`. Back, forward, reload and a shared link restore it, and it all works with JavaScript off. Bad values are ignored one at a time; sort and filter columns come only from the definition; values always bind, typed by the column.
 
+**Speed.** Keep a table paged: 25 rows a page is the default. A page that holds every
+row of its result sorts them in the browser at once, and the server's answer to the same
+link confirms the order and redraws the rest. Ticks and choices filter at once; typing
+waits for a 100 ms pause, or `.debounce(wait)`. A row's actions are links or one small
+form each: a submit button in every row tied to one form by `form=` costs Chromium work
+across the whole page for each row moved.
+
 **Selection** is per tab, in `sessionStorage`. Ticked keys survive pages, sort and filter changes. "All that match" survives pages and sort, ends on any filter change, and takes exclusions. Actions post the state, the exclusions and the count the user saw; `resolve` runs the same definition on your scoped query and refuses if the count, or the version, differs. Nothing a hover can fire changes anything: whatever writes is a POST.
 
 **NULL is the smallest value on every store.** Ascending NULLs first, descending NULLs last, because that's what MySQL, SQLite and MongoDB do by themselves and one index serves both directions. On PostgreSQL write the index as `(col NULLS FIRST, id)`. Ties go by key, in the direction of the last term. Text sorts by the column's collation, so accents and punctuation order as the database says.
@@ -213,6 +227,10 @@ breadcrumbs, the app's name, sort and page links, and any link you mark with
 `Element::prefetch` or `Button::prefetch`. `NavItem::no_prefetch` turns it off for one
 item, and `data-ui-noboost` keeps a link out of boosting altogether: it loads for real.
 
+- Nothing is fetched with no hover unless a link asks: `prefetch_eager()` on an element, a
+  `Button` or a `NavItem` fetches it as soon as the page is quiet, at most four a page, and
+  none on a slow or data-saving connection. It costs that page's bytes on every visit, and
+  pays most for a page the same for every user, served with `max-age`.
 - Pages with the runtime fetch on hover, focus or touch, and send `x-navree-prefetch: 1`.
   Pages with no script use Speculation Rules, where the browser sends `Sec-Purpose: prefetch`
   and Firefox and Safari do nothing. `navree_ui::is_prefetch(&headers)` is true for both.
