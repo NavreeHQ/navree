@@ -13,6 +13,10 @@ use super::query::{ChoiceList, OptionQuery};
 
 /// Where a searched list's options come from.
 ///
+/// Columns are named as the model has them. A field the store keeps under another
+/// name can be named by the field instead: `id` on a MongoDB model, whose column is
+/// `_id`, means that column, so a list is ordered by its key on every store.
+///
 /// ```ignore
 /// const PEOPLE: OptionSource = OptionSource::new("id", "name").search_in(&["name", "email"]);
 ///
@@ -85,14 +89,15 @@ impl OptionSource {
                 self.search
             };
             builder = builder.where_(Filter::any(columns.iter().map(|column| {
-                col_as::<String>(*column).contains_ignore_case(query.text().to_owned())
+                col_as::<String>(column_of::<M>(column))
+                    .contains_ignore_case(query.text().to_owned())
             })));
         }
         let limit = query.limit();
         let rows = builder
             .reorder()
-            .order_by(self.order)
-            .order_by(self.value)
+            .order_by(column_of::<M>(self.order))
+            .order_by(column_of::<M>(self.value))
             .offset(query.offset())
             .limit(limit as u64 + 1)
             .get(exec)
@@ -109,4 +114,18 @@ impl OptionSource {
             list
         })
     }
+}
+
+/// The model's column for `name`: `name` itself when the model has such a column, the
+/// column of the field called `name` when there is one (`id` is `_id` on MongoDB), and
+/// `name` as written otherwise (a column of a joined table, say).
+fn column_of<M: Model>(name: &'static str) -> &'static str {
+    let meta = M::meta();
+    if meta.has_column(name) {
+        return name;
+    }
+    meta.all_columns()
+        .iter()
+        .find(|column| column.field() == name)
+        .map_or(name, |column| column.name())
 }
