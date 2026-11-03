@@ -227,7 +227,6 @@ function sync(root) {
   measureSticky(root);
   drawSelection(root);
   if (root.hasAttribute("data-ui-grid")) setupGrid(root);
-  listen(root);
   const place = location.search.replace(/.*\b(page|after|before)=([^&]*).*/, "$2");
   const scroll = root.getAttribute("data-scroll-to");
   if (scroll && /** @type {any} */ (root).uiPlace !== undefined && /** @type {any} */ (root).uiPlace !== place) document.getElementById(scroll)?.scrollIntoView();
@@ -601,28 +600,6 @@ document.addEventListener("keydown", (e) => {
     control.blur();
   }
 });
-
-/** The event streams live tables listen to. @type {Map<Element, EventSource>} */
-const streams = new Map();
-
-/** Refreshes a table when its stream speaks, at most every 300 ms. @param {HTMLElement} root */
-function listen(root) {
-  const url = root.getAttribute("data-ui-live-src");
-  for (const [other, stream] of streams) {
-    if (!other.isConnected) {
-      stream.close();
-      streams.delete(other);
-    }
-  }
-  if (!url || streams.has(root)) return;
-  const stream = new EventSource(url);
-  let timer = 0;
-  stream.onmessage = () => {
-    clearTimeout(timer);
-    timer = /** @type {any} */ (setTimeout(() => /** @type {HTMLElement | null} */ (root.querySelector("[data-ui-refresh]"))?.click(), 300));
-  };
-  streams.set(root, stream);
-}
 
 document.addEventListener("ui:sent", (e) => {
   const { form, ok } = /** @type {CustomEvent} */ (e).detail;

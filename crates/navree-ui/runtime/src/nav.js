@@ -265,8 +265,22 @@ async function feed(el, src, current) {
   const html = await response.text();
   if (!current()) return;
   if (html.trim()) {
-    into.prepend(pieces(html));
-    byId(el.getAttribute("data-ui-feed-empty") || "")?.remove();
+    const rows = pieces(html);
+    // A row the page already has is not added twice, whatever the cursor said.
+    let added = 0;
+    for (const row of [...rows.children]) {
+      if (row.id && byId(row.id)) row.remove();
+      else added++;
+    }
+    if (added) {
+      into.prepend(rows);
+      byId(el.getAttribute("data-ui-feed-empty") || "")?.remove();
+      // A feed that runs for days keeps its newest rows only.
+      const most = Number(el.getAttribute("data-ui-feed-max")) || 200;
+      while (into.children.length > most) into.lastElementChild?.remove();
+      const say = (added === 1 && el.getAttribute("data-ui-feed-say-one")) || el.getAttribute("data-ui-feed-say");
+      if (say) announce(say.replace("{n}", String(added)));
+    }
   }
   const cursor = response.headers.get("x-ui-cursor");
   if (cursor) el.setAttribute("data-ui-after", cursor);
