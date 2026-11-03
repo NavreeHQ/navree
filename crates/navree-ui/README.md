@@ -85,6 +85,7 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 | Tabs, a toggle group, a dropdown menu | `menus`: the keys of each pattern, switching tabs in the page, submenus. A menu also loads `overlay`. |
 | A toast | `core`: the toaster, its time, pause and swipe are a CSS animation and a few lines. |
 | A data table | `core`, `table`, `overlay`. |
+| A live region, or a table that follows a stream | `core` and `live`: the stream, its reconnects and the fetches. |
 | A calendar | `dates`. |
 | A date or range picker, a time picker | `dates` and `overlay`: placing the popup. |
 | A phone input | `phone`, `overlay`; the numbering plans on first focus. |
@@ -317,7 +318,8 @@ node build.mjs            # --check fails when the committed output is stale
 ```
 
 A module reaches the core runtime through three events on `document`, not through new
-commands: `ui:refresh` asks it to fetch a region again (a tab shown for the first time),
+commands: `ui:refresh` asks it to fetch a region again (a tab shown for the first time; a
+`detail` object on the event gets `done`, a promise that settles when the fetch has),
 `ui:region-error` says a region could not be fetched, and `ui:popstate`, which can be
 cancelled, lets a module claim a history entry it made itself (tabs). Everything a module
 reads from the page goes through the prototypes, so a field named like a method can't

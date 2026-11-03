@@ -2673,6 +2673,9 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .attr_opt("data-ui-live-event", self.live_event)
             .attr("data-l", self.runtime_labels())
             .uses(Uses::CORE.with(Uses::TABLE));
+        if self.live_from.is_some() {
+            root = root.uses(Uses::LIVE);
+        }
         if self.local.contains(&true) {
             root = root
                 .flag("data-ui-local", true)

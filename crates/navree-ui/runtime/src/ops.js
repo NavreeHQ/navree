@@ -4,7 +4,6 @@ import { morph, parse, pieces } from "./morph.js";
 import { all, byId, emit, field, make, ownModule, rescue, root } from "./dom.js";
 import { announce, toast, openTarget, closeTarget } from "./ui.js";
 import { forget, go, leave, setUrl, refresh } from "./nav.js";
-import { scanLive } from "./live.js";
 
 /** @param {HTMLFormElement} form @param {Record<string, string[]>} fields @param {boolean} focus */
 function showErrors(form, fields, focus) {
@@ -104,7 +103,5 @@ export function applyEnvelope(envelope, how = {}) {
       apply(op, how);
     } catch {}
   }
-  // An op may have added a live region, or taken one away.
-  scanLive();
   return left;
 }

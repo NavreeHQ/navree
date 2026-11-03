@@ -611,13 +611,15 @@ fn the_rows_alone_are_what_a_live_source_answers() {
 // Region
 
 #[test]
-fn live_from_names_a_stream_and_loads_the_core_runtime() {
+fn live_from_names_a_stream_and_loads_the_core_and_live_modules() {
     let region = Region::new("deals")
         .src("/fragments/deals")
         .live_from("/events")
         .live_event("deals");
     let view = View::new("x").body(region.clone());
     assert!(view.uses().has(Uses::CORE));
+    assert!(view.uses().has(Uses::LIVE));
+    assert!(!view.uses().has(Uses::TABLE));
     let out = html(region);
     assert!(out.contains(r#"data-ui-live-src="/events""#), "{out}");
     assert!(out.contains(r#"data-ui-live-event="deals""#), "{out}");

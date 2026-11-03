@@ -225,6 +225,9 @@ impl Uses {
     pub const TABLE: Self = Self(1 << 3);
     /// The select module: Select, Combobox, MultiSelect and the command palette.
     pub const SELECT: Self = Self(1 << 4);
+    /// The live module: regions and tables that fetch themselves again when a
+    /// server-sent event stream speaks.
+    pub const LIVE: Self = Self(1 << 6);
     /// The dates module: calendars, date and time pickers.
     pub const DATES: Self = Self(1 << 7);
     /// The menus module: the keys of tabs, toggle groups and dropdown menus, and

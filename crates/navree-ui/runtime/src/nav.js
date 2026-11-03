@@ -509,7 +509,11 @@ export function startNav() {
   // A component that wants its region fetched again (a tab shown for the first time).
   on(document, "ui:refresh", (e) => {
     const region = closest(e.target, "[data-ui-region]");
-    if (region?.id) refresh(region.id);
+    if (!region?.id) return;
+    const done = refresh(region.id);
+    // A module that wants to know when the fetch is over gives a `detail` for it.
+    const detail = /** @type {CustomEvent} */ (e).detail;
+    if (detail && typeof detail === "object") detail.done = done;
   });
   on(document, "click", (e) => {
     const button = closest(e.target, "[data-ui-refresh]");

@@ -88,6 +88,7 @@ const FILES = [
   ["sidebar", "js", "text/javascript; charset=utf-8", await js("sidebar.js")],
   ["overlay", "js", "text/javascript; charset=utf-8", await js("overlay.js")],
   ["table", "js", "text/javascript; charset=utf-8", await js("table.js")],
+  ["live", "js", "text/javascript; charset=utf-8", await js("live.js")],
   ["select", "js", "text/javascript; charset=utf-8", await js("select.js")],
   ["dates", "js", "text/javascript; charset=utf-8", await js("dates.js")],
   ["menus", "js", "text/javascript; charset=utf-8", await js("menus.js")],

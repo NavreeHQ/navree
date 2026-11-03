@@ -48,6 +48,70 @@ fn a_page_with_a_picker_loads_the_select_and_overlay_modules_and_nothing_else() 
 }
 
 #[test]
+fn the_live_module_is_at_most_3_kb_gzip() {
+    assert!(size("live") <= 3 * 1024, "{}", size("live"));
+}
+
+/// The live module is for a region or a table that follows an event stream; a page
+/// with neither never loads it, and a live region needs no table module.
+#[test]
+fn a_page_loads_the_live_module_only_for_a_live_region_or_a_live_table() {
+    use navree_ui::{DataTable, Node, Region, TableQuery, TableRow};
+    use std::time::Duration;
+
+    #[derive(Clone, TableRow)]
+    struct Row {
+        #[col(skip)]
+        id: i64,
+        #[col(sortable)]
+        title: String,
+    }
+
+    let rows = vec![Row {
+        id: 1,
+        title: "A".to_owned(),
+    }];
+    let query = TableQuery::<Row>::parse("/deals", "");
+    let table = || DataTable::new("deals", &query, &rows);
+    let page = |body: Node| View::new("x").body(body);
+
+    // A live region, and no table.
+    let region = page(Region::new("feed").src("/fragments/feed").live_from("/events").into());
+    assert_eq!(region.uses(), Uses::CORE.with(Uses::LIVE));
+    let html = region.to_html();
+    assert!(html.contains(assets::CORE_URL), "{html}");
+    assert!(html.contains(assets::LIVE_URL), "{html}");
+    assert!(!html.contains(assets::TABLE_URL), "{html}");
+
+    // A live table loads the table module and the live one.
+    let live = page(table().live_from("/events").into());
+    for module in [Uses::CORE, Uses::TABLE, Uses::LIVE] {
+        assert!(live.uses().has(module));
+    }
+    let html = live.to_html();
+    for url in [assets::CORE_URL, assets::TABLE_URL, assets::LIVE_URL] {
+        assert!(html.contains(url), "{url} in {html}");
+    }
+
+    // A table that only polls, a table that is not live, and a region that is not on a stream.
+    for plain in [
+        page(table().into()),
+        page(table().live(Duration::from_secs(5)).into()),
+        page(Region::new("feed").src("/fragments/feed").into()),
+    ] {
+        assert!(!plain.uses().has(Uses::LIVE));
+        let html = plain.to_html();
+        assert!(html.contains(assets::CORE_URL), "{html}");
+        assert!(!html.contains(assets::LIVE_URL), "{html}");
+    }
+
+    // A page with neither loads no script at all.
+    let none = page(navree_ui::el("p").child("Nothing live here").into());
+    assert!(!none.uses().has(Uses::LIVE));
+    assert!(!none.to_html().contains(assets::LIVE_URL));
+}
+
+#[test]
 fn the_menus_module_is_at_most_5_kb_gzip() {
     assert!(size("menus") <= 5 * 1024, "{}", size("menus"));
 }

@@ -128,7 +128,10 @@ impl Region {
     /// assert!(html.contains(r#"data-ui-live-src="/events""#));
     /// ```
     pub fn live_from(mut self, url: impl Into<Href>) -> Self {
-        self.el = self.el.attr("data-ui-live-src", url.into());
+        self.el = self
+            .el
+            .attr("data-ui-live-src", url.into())
+            .uses(Uses::LIVE);
         self
     }
 

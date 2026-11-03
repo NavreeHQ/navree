@@ -14,7 +14,18 @@
 // A fetch is given up on after 15 s (in nav.js); one that somehow is still out after 20 s
 // is left behind and the next event fetches anew.
 import { cookies, every, hidden, on, sameOrigin } from "./dom.js";
-import { refresh } from "./nav.js";
+
+/**
+ * Asks the core runtime to fetch a region again, as a tab shown for the first time does. The
+ * answer is the fetch: it ends when the region has been drawn, or when it could not be.
+ * @param {Element} el
+ * @returns {Promise<unknown>}
+ */
+function refresh(el) {
+  const detail = /** @type {{done?: Promise<unknown>}} */ ({});
+  el.dispatchEvent(new CustomEvent("ui:refresh", { bubbles: true, detail }));
+  return Promise.resolve(detail.done);
+}
 
 /** Quiet time before a refresh, so a burst of events costs one fetch. */
 const QUIET = 300;
@@ -80,7 +91,7 @@ function fire(s, el) {
   sub.busy = true;
   sub.dirty = false;
   const started = (sub.since = performance.now());
-  refresh(el.id)
+  refresh(el)
     .catch(() => {})
     .finally(() => {
       if (sub.run !== mine) return;
@@ -235,7 +246,7 @@ function watch() {
 }
 
 /** Joins every region on the page to its stream, and lets go of those that left. */
-export function scanLive() {
+function scanLive() {
   /** @type {Map<Element, {url: string, name: string}>} */
   const wanted = new Map();
   for (const el of every("[data-ui-live-src]")) {
@@ -319,7 +330,7 @@ function resume() {
 }
 
 /** Starts watching the page for live regions. */
-export function startLive() {
+function startLive() {
   on(document, "ui:swap", scanLive);
   on(document, "visibilitychange", () => (hidden() ? pause() : resume()));
   // A page kept for the back button holds no connection either.
@@ -329,3 +340,5 @@ export function startLive() {
   });
   scanLive();
 }
+
+startLive();
