@@ -44,13 +44,13 @@ export function FinalCta() {
           Build the product, not the plumbing.
         </h2>
         <p className="mt-6 max-w-xl text-lg leading-relaxed text-pretty text-fg-2">
-          Install the CLI and create an app: a working API with auth, workspaces, OpenAPI docs and tests, ready to change. Or
+          Install the CLI and create an app: a working API with sign-in, OpenAPI docs, monitoring and tests, ready to change. Or
           bring{" "}
-          <Link href="/docs/getting-started/bring-your-product/" className="link">
+          <Link href="/docs/getting-started/bring-your-product/" className="link whitespace-nowrap">
             a product
           </Link>{" "}
           or{" "}
-          <Link href="/docs/getting-started/bring-your-design/" className="link">
+          <Link href="/docs/getting-started/bring-your-design/" className="link whitespace-nowrap">
             a design
           </Link>{" "}
           you already have.
