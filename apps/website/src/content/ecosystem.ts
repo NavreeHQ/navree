@@ -299,10 +299,10 @@ export const ecosystem: EcosystemEntry[] = [
       "Let third-party apps act on behalf of your users with authorization code and PKCE, client credentials and device flows, scopes, a consent screen and personal access tokens.",
     features: ["Authorization code with PKCE", "Client credentials and device flow", "Scopes and consent", "Personal access tokens"],
     crate: "navree-oauth",
-    command: "navree oauth:client \"Acme mobile\"",
+    command: "navree oauth:client \"Acme mobile\" --public --redirect-uri com.acme.mobile:/callback",
     href: "/docs/packages/oauth-server/",
     status: "stable",
-    signature: "navree oauth:client \"Zapier\" --scopes deals:read",
+    signature: "navree oauth:client \"Partner app\" --redirect-uri https://partner.example.com/callback --scopes deals:read",
   },
   {
     slug: "social",
@@ -429,8 +429,8 @@ export const ecosystem: EcosystemEntry[] = [
     category: "capabilities",
     tagline: "CSV and Excel exports and imports from typed rows",
     summary:
-      "Export typed rows as CSV with a byte-order mark and escaped formulas or as XLSX, streamed or queued to a disk with a signed link. Import files in any encoding with header mapping, row validation, a staging preview, duplicate handling and error files.",
-    features: ["#[derive(Exportable)] and #[derive(Importable)]", "CSV, XLSX, XLS and ODS", "Encoding detection (UTF-16, Windows-1256)", "Staging preview and duplicate modes", "Batched apply and error files"],
+      "Export typed rows as CSV with a byte-order mark and escaped formulas or as XLSX, streamed or queued to a disk with a signed link. Import CSV, TSV, XLSX, XLSB, XLS or ODS files in any encoding with header mapping, row validation, a staging preview, duplicate handling and error files.",
+    features: ["#[derive(Exportable)] and #[derive(Importable)]", "Imports CSV, TSV, XLSX, XLSB, XLS and ODS", "Encoding detection (UTF-16, Windows-1256)", "Staging preview and duplicate modes", "Batched apply and error files"],
     crate: "navree-sheets",
     command: "cargo add --git https://github.com/NavreeHQ/navree navree --features sheets",
     href: "/docs/packages/imports-and-exports/",
