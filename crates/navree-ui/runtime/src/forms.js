@@ -51,6 +51,20 @@ function said(form, submitter) {
   return JSON.stringify(parts);
 }
 
+const gElements = /** @type {(this: HTMLFormElement) => HTMLFormControlsCollection} */ (Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, "elements")?.get);
+
+/**
+ * Which record a form edits: its row's key and its hidden fields, the token aside. A list
+ * without keys reuses a form for another row when it is drawn again.
+ * @param {HTMLFormElement} form
+ */
+function recordOf(form) {
+  const row = Element.prototype.closest.call(form, "[data-key]");
+  const parts = [row && attr(row, "data-key")];
+  for (const field of gElements.call(form)) if (field instanceof HTMLInputElement && field.type === "hidden" && field.name !== "_csrf") parts.push(field.name, field.value);
+  return JSON.stringify(parts);
+}
+
 /**
  * Forms on their way, with what they sent. The fetch of a write can't be taken back, so
  * a second submit that says the same is ignored. One that says something new, typed
@@ -59,7 +73,7 @@ function said(form, submitter) {
  * @type {WeakMap<HTMLFormElement, string>}
  */
 const sending = new WeakMap();
-/** @type {WeakMap<HTMLFormElement, {said: string, submitter: HTMLElement | null, page: number, href: string, target: string, token: string}>} */
+/** @type {WeakMap<HTMLFormElement, {said: string, submitter: HTMLElement | null, page: number, href: string, target: string, token: string, record: string}>} */
 const waiting = new WeakMap();
 
 /** @param {HTMLFormElement} form @param {HTMLElement | null} submitter */
@@ -69,6 +83,8 @@ async function send(form, submitter) {
   let answered = false;
   /** Whether the answer left this page as it was: ops that don't lead away. */
   let kept = false;
+  /** Whether the user was told the save failed. */
+  let told = false;
   try {
     const action = (submitter && attr(submitter, "formaction")) || attr(form, "action") || location.href;
     const method = ((submitter && attr(submitter, "formmethod")) || attr(form, "method") || "get").toUpperCase();
@@ -97,6 +113,7 @@ async function send(form, submitter) {
     pending(form, submitter, false);
     document.dispatchEvent(new CustomEvent("ui:sent", { detail: { form, ok: false } }));
     toast("danger", answered ? "That didn't work. Try again." : "No connection. Try again.");
+    told = true;
   } finally {
     sending.delete(form);
     const next = waiting.get(form);
@@ -104,15 +121,15 @@ async function send(form, submitter) {
     const by = next?.submitter?.isConnected ? next.submitter : null;
     // What was typed meanwhile goes now, from the form as it is, only where it was typed:
     // after ops that left the page alone, on the same page and address, to the same
-    // place, for the same user. A redirect, a page, a swap, a new action or a sign-out
-    // drops it.
-    if (next && kept && form.isConnected && next.page === pageSwaps() && next.href === location.href && next.target === targetOf(form, by) && next.token === cookie("XSRF-TOKEN")) {
+    // place and record, for the same user. A redirect, a page, a swap, a new action, a
+    // form drawn again for another record or a sign-out drops it, and the user is told.
+    if (next && kept && form.isConnected && next.page === pageSwaps() && next.href === location.href && next.target === targetOf(form, by) && next.token === cookie("XSRF-TOKEN") && next.record === recordOf(form)) {
       try {
         form.requestSubmit(/** @type {HTMLButtonElement | null} */ (by));
       } catch {
         form.requestSubmit();
       }
-    }
+    } else if (next && !told) toast("warning", "Your latest change wasn't saved. Check it and save again.");
   }
 }
 
@@ -147,7 +164,7 @@ export function startForms() {
     if (out !== undefined) {
       e.preventDefault();
       const now = said(form, submitter);
-      if (now !== out) waiting.set(form, { said: now, submitter, page: pageSwaps(), href: location.href, target: targetOf(form, submitter), token: cookie("XSRF-TOKEN") });
+      if (now !== out) waiting.set(form, { said: now, submitter, page: pageSwaps(), href: location.href, target: targetOf(form, submitter), token: cookie("XSRF-TOKEN"), record: recordOf(form) });
       else waiting.delete(form);
       return;
     }

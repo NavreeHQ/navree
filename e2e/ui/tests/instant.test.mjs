@@ -208,5 +208,70 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox], 
       assert.deepEqual(out, { title: "Acme", amount: "70", key: "7" });
       await context.close();
     });
+
+    /** An inline-edit list: each row a small form posting to one address, the record's id hidden. Saving moves the row to the top. */
+    const notes = (name, items, keyed) => `<ul id="list">${items.map(([id, note]) => `<li${keyed ? ` data-key="${id}"` : ""}><form data-ui-form method="post" action="/${name}-save"><input type="hidden" name="id" value="${id}"><input name="note" value="${note}"><button>Save</button></form></li>`).join("")}</ul>`;
+    const saveMovesToTop = (name, items, keyed) => (req, res, body) => {
+      const sent = new URLSearchParams(body);
+      const [row] = items.splice(items.findIndex(([id]) => id === sent.get("id")), 1);
+      row[1] = sent.get("note");
+      items.unshift(row);
+      setTimeout(() => f.ops(res, { ops: [{ op: "morph", target: "list", html: notes(name, items, keyed) }] }), 300);
+    };
+    /** Saves the third row's note, then types more and saves again while the first is on its way. */
+    const editThird = (page) => page.evaluate(() => {
+      const form = document.querySelectorAll("form")[2];
+      form.querySelector("[name=note]").value = "charlie 2";
+      form.requestSubmit();
+      form.querySelector("[name=note]").value = "charlie 3";
+      form.requestSubmit();
+    });
+
+    test(`what waited is dropped, and said so, when the answer put another record in its form (${engine})`, async () => {
+      const name = key("record");
+      const items = [["A", "alpha"], ["B", "bravo"], ["C", "charlie"]];
+      route(`/${name}`, () => doc(notes(name, items, false)));
+      f.routes.set(`/${name}-save`, saveMovesToTop(name, items, false));
+      const { context, page } = await fresh(`/${name}`);
+      await editThird(page);
+      // The list has no keys: after the answer, the third form is B's.
+      await page.locator("[data-slot=toast][data-tone=warning]").waitFor({ timeout: LONG });
+      await sleep(600);
+      assert.deepEqual(hits(`/${name}-save`).map((hit) => hit.body), ["id=C&note=charlie+2"], "nothing written to B");
+      await context.close();
+    });
+
+    test(`what waited goes to its own record when the list is keyed and moves it (${engine})`, async () => {
+      const name = key("keyed");
+      const items = [["A", "alpha"], ["B", "bravo"], ["C", "charlie"]];
+      route(`/${name}`, () => doc(notes(name, items, true)));
+      f.routes.set(`/${name}-save`, saveMovesToTop(name, items, true));
+      const { context, page } = await fresh(`/${name}`);
+      await editThird(page);
+      await until(() => hits(`/${name}-save`).length >= 2, LONG);
+      await sleep(600);
+      assert.deepEqual(hits(`/${name}-save`).map((hit) => hit.body), ["id=C&note=charlie+2", "id=C&note=charlie+3"]);
+      assert.equal(await page.locator("[data-slot=toast][data-tone=warning]").count(), 0);
+      await context.close();
+    });
+
+    test(`what waited is dropped, and said so, when the answer is this page again; the typed text stays (${engine})`, async () => {
+      const name = key("again");
+      let saved = "one";
+      f.routes.set(`/${name}`, (req, res, body) => {
+        const answer = () => f.html(res, doc(`<form data-ui-form method="post" action="/${name}"><input id="i" name="title" value="${saved}"><button id="go">Save</button></form>`));
+        if (req.method !== "POST") return answer();
+        saved = new URLSearchParams(body).get("title");
+        setTimeout(answer, 300);
+      });
+      const { context, page } = await fresh(`/${name}`);
+      await twice(page);
+      await page.locator("[data-slot=toast][data-tone=warning]").waitFor({ timeout: LONG });
+      await sleep(600);
+      assert.deepEqual(hits(`/${name}`).filter((hit) => hit.method === "POST").map((hit) => hit.body), ["title=one"]);
+      assert.equal(await page.inputValue("#i"), "two", "what the user typed is still there to save");
+      await context.close();
+    });
+
   });
 }
