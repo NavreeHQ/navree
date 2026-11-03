@@ -121,3 +121,43 @@ export function documentTitle(doc: DocMeta): string {
   const shared = allDocs().filter((d) => d.title === doc.title).length > 1;
   return shared && doc.sectionTitle !== doc.title ? `${doc.title} (${doc.sectionTitle})` : doc.title;
 }
+
+export type SectionIndex = {
+  slug: string;
+  title: string;
+  /** `/docs/database/`. */
+  href: string;
+  description: string;
+  /** The `<title>`: unique across the site, since section and page titles can match. */
+  documentTitle: string;
+  pages: DocMeta[];
+  /** The pages in order, cut into the manifest's groups; the first group may have no title. */
+  groups: { title: string | null; pages: DocMeta[] }[];
+};
+
+/** Every section's own page (`/docs/<section>/`), in navigation order. */
+export function sectionIndexes(): SectionIndex[] {
+  const docs = allDocs();
+  return sections.map((section) => {
+    const pages = docs.filter((doc) => doc.section === section.slug).map(meta);
+    const groups: SectionIndex["groups"] = [];
+    for (const page of pages) {
+      const start = section.groups?.find((group) => group.from === page.page);
+      if (start || groups.length === 0) groups.push({ title: start?.title ?? null, pages: [] });
+      groups[groups.length - 1].pages.push(page);
+    }
+    return {
+      slug: section.slug,
+      title: section.title,
+      href: `/docs/${section.slug}/`,
+      description: section.description,
+      documentTitle: `${section.title} (docs)`,
+      pages,
+      groups,
+    };
+  });
+}
+
+export function findSection(slug: string): SectionIndex | null {
+  return sectionIndexes().find((section) => section.slug === slug) ?? null;
+}

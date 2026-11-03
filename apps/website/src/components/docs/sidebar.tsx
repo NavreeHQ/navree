@@ -42,7 +42,9 @@ export function Sidebar({ nav, onNavigate }: { nav: SidebarNav; onNavigate?: () 
   // the current section is open, the others closed.
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
 
-  const currentSection = nav.sections.find((section) => section.pages.some((page) => normalise(page.href) === pathname))?.slug;
+  const currentSection = nav.sections.find(
+    (section) => pathname === `/docs/${section.slug}/` || section.pages.some((page) => normalise(page.href) === pathname),
+  )?.slug;
 
   // Bring the current page into view inside the sidebar (not the window).
   useEffect(() => {

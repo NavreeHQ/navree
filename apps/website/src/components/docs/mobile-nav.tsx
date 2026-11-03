@@ -21,6 +21,8 @@ export function MobileDocsNav({ nav }: { nav: SidebarNav }) {
     .flatMap((section) => section.pages.map((page) => ({ section, page })))
     .find(({ page }) => normalise(page.href) === pathname);
 
+  const sectionPage = nav.sections.find((section) => pathname === `/docs/${section.slug}/`);
+
   useEffect(() => {
     dialog.current?.close();
   }, [pathname]);
@@ -53,6 +55,14 @@ export function MobileDocsNav({ nav }: { nav: SidebarNav }) {
                 /
               </span>
               <span className="text-fg">{current.page.title}</span>
+            </>
+          ) : sectionPage ? (
+            <>
+              <span className="text-fg-3">Docs</span>
+              <span className="mx-1.5 text-fg-3" aria-hidden>
+                /
+              </span>
+              <span className="text-fg">{sectionPage.title}</span>
             </>
           ) : (
             <span className="text-fg">Documentation</span>

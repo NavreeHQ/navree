@@ -19,8 +19,15 @@ export type DocsSection = {
   slug: string;
   /** The heading shown in the sidebar. */
   title: string;
+  /** What the section covers, in one or two sentences: the section page's lead and meta description. */
+  description: string;
   /** Page slugs in order: `content/docs/<section>/<page>.mdx`. */
   pages: string[];
+  /**
+   * Headings for the section page: each group starts at the page `from` and
+   * runs to the next group. Pages before the first group have no heading.
+   */
+  groups?: { title: string; from: string }[];
 };
 
 /** A sidebar entry that links outside the docs content, e.g. `/performance/`. */
@@ -33,11 +40,13 @@ export const sections: DocsSection[] = [
   {
     slug: "prologue",
     title: "Prologue",
+    description: "What Navree is, what 1.0 ships, what comes next, and how to report a bug or send a change.",
     pages: ["introduction", "release-notes", "roadmap", "contributing"],
   },
   {
     slug: "getting-started",
     title: "Getting started",
+    description: "Install the CLI, build your first app, and learn how an app is configured, laid out, started and deployed, or bring an existing product or design.",
     pages: [
       "installation",
       "your-first-app",
@@ -54,6 +63,7 @@ export const sections: DocsSection[] = [
   {
     slug: "architecture",
     title: "Architecture concepts",
+    description: "How a request travels through a Navree app, and how modules, providers, lifecycle hooks and crates fit together.",
     pages: [
       "request-lifecycle",
       "modules",
@@ -66,6 +76,7 @@ export const sections: DocsSection[] = [
   {
     slug: "patterns",
     title: "Architecture patterns",
+    description: "Choose a shape for your application: a modular monolith, microservices, multi-tenancy, events, API first or a backend for a front end.",
     pages: [
       "overview",
       "modular-monolith",
@@ -79,6 +90,7 @@ export const sections: DocsSection[] = [
   {
     slug: "basics",
     title: "The basics",
+    description: "Routes, requests, validation, responses, errors, middleware, logging and sessions: the parts every HTTP app uses.",
     pages: [
       "routing",
       "access-control",
@@ -96,6 +108,7 @@ export const sections: DocsSection[] = [
   {
     slug: "security",
     title: "Security",
+    description: "Sign-in, sessions, passwordless and single sign-on, authorization, encryption, signatures and the audit log.",
     pages: [
       "authentication",
       "account-flows",
@@ -112,6 +125,7 @@ export const sections: DocsSection[] = [
   {
     slug: "workspaces",
     title: "Workspaces",
+    description: "Give each customer, team or organization its own space: how a workspace is found, who can join it and how its data stays apart.",
     pages: [
       "introduction",
       "resolution",
@@ -127,6 +141,7 @@ export const sections: DocsSection[] = [
   {
     slug: "database",
     title: "Database",
+    description: "Entities, repositories, migrations, the schema builder, TimescaleDB, seeding and pagination on PostgreSQL, MySQL, MariaDB and SQLite.",
     pages: [
       "getting-started",
       "entities-and-repositories",
@@ -145,6 +160,7 @@ export const sections: DocsSection[] = [
   {
     slug: "orm",
     title: "ORM",
+    description: "Models, the query builder, relationships, eager loading, events, soft deletes and factories, on SQL databases and MongoDB.",
     pages: [
       "getting-started",
       "models",
@@ -168,6 +184,7 @@ export const sections: DocsSection[] = [
   {
     slug: "digging-deeper",
     title: "Digging deeper",
+    description: "Cache, events, queues, scheduling, mail, notifications, storage, real time, OpenAPI, health checks and the command line.",
     pages: [
       "cache",
       "redis",
@@ -195,6 +212,7 @@ export const sections: DocsSection[] = [
   {
     slug: "ui",
     title: "UI",
+    description: "Navree UI draws your screens as typed Rust components on the server: foundations, the app shell, forms, the DataTable and what is still to come.",
     pages: [
       "choosing-a-ui",
       "overview",
@@ -212,6 +230,7 @@ export const sections: DocsSection[] = [
   {
     slug: "components",
     title: "UI components",
+    description: "Every Navree UI component with a live preview, its parts, its options and its keyboard behavior.",
     pages: [
       "overview",
       // Actions
@@ -268,10 +287,21 @@ export const sections: DocsSection[] = [
       "table",
       "stat",
     ],
+    groups: [
+      { title: "Actions", from: "button" },
+      { title: "Inputs", from: "field" },
+      { title: "Display", from: "card" },
+      { title: "Feedback", from: "alert" },
+      { title: "Overlays", from: "dialog" },
+      { title: "Layout", from: "accordion" },
+      { title: "Navigation", from: "breadcrumb" },
+      { title: "Data", from: "table" },
+    ],
   },
   {
     slug: "frontend",
     title: "Front end",
+    description: "Draw your screens in Next.js (React) or Nuxt (Vue) beside the same API: the typed client, sign-in through a backend for the front end, tables, theming and translations.",
     pages: [
       "introduction",
       "typed-client",
@@ -286,11 +316,13 @@ export const sections: DocsSection[] = [
   {
     slug: "microservices",
     title: "Microservices",
+    description: "Split an app into services that talk over message transports, gRPC and GraphQL, with one trace across them.",
     pages: ["introduction", "transports", "request-response", "events", "grpc", "graphql", "tracing"],
   },
   {
     slug: "ai",
     title: "AI",
+    description: "Skills, the Navigator MCP server and Markdown docs for your coding agent, and the SDK, agents, embeddings and MCP servers for your app.",
     pages: [
       "introduction",
       "agent-skills",
@@ -305,6 +337,7 @@ export const sections: DocsSection[] = [
   {
     slug: "packages",
     title: "Packages",
+    description: "Add-ons for real products: search, billing, feature flags, settings, OAuth, webhooks, integrations, documents, media, workflows and more.",
     pages: [
       "search",
       "billing",
@@ -328,11 +361,13 @@ export const sections: DocsSection[] = [
   {
     slug: "tools",
     title: "Tools",
+    description: "The first-party tools: Lighthouse, Logbook, Fleet and Helm run inside your app, Harbor deploys it and Dock runs its local services.",
     pages: ["lighthouse", "logbook", "fleet", "helm", "harbor", "dock"],
   },
   {
     slug: "testing",
     title: "Testing",
+    description: "Test routes, the database and workspace isolation with fakes, and run the conformity checks that keep an app consistent.",
     pages: [
       "getting-started",
       "http-tests",
@@ -345,13 +380,17 @@ export const sections: DocsSection[] = [
   {
     slug: "example-app",
     title: "Example application",
+    description: "A tour of the example CRM: its modules, routes, front ends and tests.",
     pages: ["crm-tour"],
   },
 ];
 
 /** Links shown after the sections in the sidebar. */
 export const links: DocsLink[] = [
+  { title: "UI", href: "/ui/" },
   { title: "Ecosystem", href: "/ecosystem/" },
-  { title: "Architectures", href: "/architecture/" },
+  { title: "Architecture", href: "/architecture/" },
+  { title: "AI", href: "/ai/" },
   { title: "Performance", href: "/performance/" },
+  { title: "Showcase", href: "/showcase/" },
 ];

@@ -25,7 +25,12 @@ const LANGUAGES = new Set([
 
 const root = path.resolve(import.meta.dirname, "..");
 const docsDir = path.join(root, "content", "docs");
-const pages = new Set(sections.flatMap((s) => s.pages.map((p) => `/docs/${s.slug}/${p}/`)));
+// Every page, each section's own page (`/docs/<section>/`) and the docs index.
+const pages = new Set([
+  "/docs/",
+  ...sections.map((s) => `/docs/${s.slug}/`),
+  ...sections.flatMap((s) => s.pages.map((p) => `/docs/${s.slug}/${p}/`)),
+]);
 
 const files = process.argv.length > 2
   ? process.argv.slice(2).map((f) => path.resolve(f))
@@ -36,6 +41,16 @@ const report = (file: string, msg: string) => {
   problems++;
   console.log(`${path.relative(root, file)}: ${msg}`);
 };
+
+// Every section has the description its own page (`/docs/<section>/`) shows.
+for (const section of sections) {
+  const where = path.join(docsDir, "manifest.ts");
+  if (!section.description) report(where, `section "${section.slug}" has no description`);
+  else if (section.description.length > 200) report(where, `section "${section.slug}": description is ${section.description.length} characters (200 at most)`);
+  for (const group of section.groups ?? []) {
+    if (!section.pages.includes(group.from)) report(where, `section "${section.slug}": group "${group.title}" starts at "${group.from}", which is not one of its pages`);
+  }
+}
 
 for (const file of files) {
   if (!fs.existsSync(file)) {

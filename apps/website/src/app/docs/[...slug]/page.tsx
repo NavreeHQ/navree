@@ -3,11 +3,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { PageActions } from "@/components/docs/page-actions";
+import { SectionIndexPage } from "@/components/docs/section-index";
 import { Toc } from "@/components/docs/toc";
 import { ArrowLeftIcon, ArrowRightIcon, EditIcon } from "@/components/icons";
 import { InlineMarkdown } from "@/components/inline-markdown";
 import { PlannedBadge } from "@/components/site/planned-badge";
-import { allDocs, documentTitle, findDoc, neighbours, plain } from "@/lib/docs";
+import { allDocs, documentTitle, findDoc, findSection, neighbours, plain, sectionIndexes } from "@/lib/docs";
 import { lastModified } from "@/lib/last-modified";
 import { renderMdx } from "@/lib/mdx";
 import { pageMetadata } from "@/lib/metadata";
@@ -21,12 +22,20 @@ type Props = { params: Promise<{ slug: string[] }> };
 
 export const dynamicParams = false;
 
+/** The pages (`/docs/<section>/<page>/`) and each section's own page (`/docs/<section>/`). */
 export function generateStaticParams() {
-  return allDocs().map((doc) => ({ slug: doc.slug.split("/") }));
+  return [
+    ...sectionIndexes().map((section) => ({ slug: [section.slug] })),
+    ...allDocs().map((doc) => ({ slug: doc.slug.split("/") })),
+  ];
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
+  const section = slug.length === 1 ? findSection(slug[0]) : null;
+  if (section) {
+    return pageMetadata({ title: section.documentTitle, description: plain(section.description), path: section.href });
+  }
   const doc = findDoc(slug);
   if (!doc) return {};
   return pageMetadata({
@@ -40,6 +49,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function DocPage({ params }: Props) {
   const { slug } = await params;
+  const section = slug.length === 1 ? findSection(slug[0]) : null;
+  if (section) return <SectionIndexPage section={section} />;
   const doc = findDoc(slug);
   if (!doc) notFound();
 
@@ -62,7 +73,11 @@ export default async function DocPage({ params }: Props) {
                   </Link>
                 </li>
                 <li aria-hidden>/</li>
-                <li>{doc.sectionTitle}</li>
+                <li>
+                  <Link href={`/docs/${doc.section}/`} className="transition-colors hover:text-fg">
+                    {doc.sectionTitle}
+                  </Link>
+                </li>
               </ol>
             </nav>
             <PageActions

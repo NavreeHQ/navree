@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { ArrowRightIcon } from "@/components/icons";
 import { InlineMarkdown } from "@/components/inline-markdown";
-import { navigation } from "@/lib/docs";
+import { navigation, sectionIndexes } from "@/lib/docs";
 import { pageMetadata } from "@/lib/metadata";
 import { site } from "@site";
 
@@ -25,6 +25,7 @@ const startHere = [
 
 export default function DocsIndex() {
   const nav = navigation();
+  const hrefs = new Map(sectionIndexes().map((section) => [section.slug, section.href]));
   const first = nav.sections[0]?.pages[0];
   return (
     <div className="max-w-[60rem] py-9 lg:py-12">
@@ -75,7 +76,13 @@ export default function DocsIndex() {
         {nav.sections.map((section) => (
           <section key={section.slug} aria-labelledby={`section-${section.slug}`}>
             <h2 id={`section-${section.slug}`} className="border-b border-line pb-3 text-lg font-semibold text-fg">
-              {section.title}
+              <Link href={hrefs.get(section.slug) ?? "/docs/"} className="group/section flex items-center justify-between gap-3 transition-colors hover:text-accent">
+                {section.title}
+                <ArrowRightIcon
+                  aria-hidden
+                  className="size-4 shrink-0 text-fg-3 transition-[transform,color] duration-300 ease-(--ease-out-quint) group-hover/section:translate-x-0.5 group-hover/section:text-accent"
+                />
+              </Link>
             </h2>
             <ul className="mt-2">
               {section.pages.map((page) => (

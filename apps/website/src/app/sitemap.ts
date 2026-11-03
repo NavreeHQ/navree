@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-import { allDocs } from "@/lib/docs";
+import { allDocs, sectionIndexes } from "@/lib/docs";
 import { lastModified, lastModifiedUnder } from "@/lib/last-modified";
 import { site } from "@site";
 
@@ -26,6 +26,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
   ];
   return [
     ...pages.map(([path, sources]) => ({ url: url(path), lastModified: lastModifiedUnder(...sources) })),
+    ...sectionIndexes().map((section) => ({
+      url: url(section.href),
+      lastModified: lastModifiedUnder("content/docs/manifest.ts", `content/docs/${section.slug}`, "src/components/docs/section-index.tsx"),
+    })),
     ...allDocs().map((doc) => ({ url: url(doc.href), lastModified: lastModified(`content/docs/${doc.file}`) })),
   ];
 }
