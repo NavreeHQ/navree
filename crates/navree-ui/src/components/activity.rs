@@ -281,7 +281,11 @@ impl ActivityFeed {
     pub fn new(id: impl Into<String>, title: impl Into<Node>) -> Self {
         let id = id.into();
         Self {
-            el: el("section").slot("activity-feed").id(id.clone()),
+            // A group, not a landmark region: a page may hold several feeds.
+            el: el("div")
+                .slot("activity-feed")
+                .attr("role", "group")
+                .id(id.clone()),
             id,
             title: title.into(),
             live: false,

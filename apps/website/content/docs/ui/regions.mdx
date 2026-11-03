@@ -75,7 +75,7 @@ The server side is any endpoint that answers with `text/event-stream`. With `nav
 use std::convert::Infallible;
 use std::time::Duration;
 
-use futures_util::stream::{self, Stream};
+use futures_util::stream::{self, Stream, StreamExt};
 use navree::http::response::sse::{Event, KeepAlive, Sse};
 
 // `changes` is a tokio broadcast channel your code sends on when a deal changes.
@@ -86,11 +86,13 @@ async fn events() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
             (Ok(Event::default().event("deals").data("changed")), rx)
         })
     });
-    Sse::new(nudges).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
+    // A first comment goes out at once, so every browser sees the stream open.
+    let ready = stream::once(async { Ok(Event::default().comment("ready")) });
+    Sse::new(ready.chain(nudges)).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
 }
 ```
 
-The keep-alive comment keeps proxies from closing a quiet stream. Each open stream costs the server one connection and one task, and no per-tab state.
+Send a comment first. Firefox reports a stream as open only when the first bytes arrive, not when the headers do, so without it a quiet stream stays "connecting" there. The keep-alive comment keeps proxies from closing a quiet stream. Each open stream costs the server one connection and one task, and no per-tab state.
 
 ### A feed that grows
 

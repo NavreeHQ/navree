@@ -519,7 +519,9 @@ impl Open {
                 .id(heading_id.clone())
                 .child(label)
         });
-        let section = el("section").slot("timeline-day");
+        // A group, not a landmark: a page with two timelines on the same day would
+        // otherwise hold two regions of one name.
+        let section = el("div").slot("timeline-day").attr("role", "group");
         let section = if heading.is_some() {
             section.attr("aria-labelledby", heading_id)
         } else {

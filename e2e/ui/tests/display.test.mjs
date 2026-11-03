@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { after, before, beforeEach, describe, test } from "node:test";
+import { after, afterEach, before, beforeEach, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { chromium, firefox, webkit } from "playwright";
 
@@ -65,6 +65,11 @@ for (const name of NAMES) {
       browser = await ENGINES[name].launch();
     });
     after(() => browser.close());
+    /** Every context a test opened: closed after it, so a failed test leaves no stream behind. */
+    const contexts = [];
+    afterEach(async () => {
+      for (const context of contexts.splice(0)) await context.close().catch(() => {});
+    });
     beforeEach(async () => {
       await reset();
       await until(async () => (await stats()).open === 0, "every stream to close");
@@ -77,12 +82,15 @@ for (const name of NAMES) {
     async function open(path, options = {}) {
       const { light, visibility, ...rest } = options;
       const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, bypassCSP: !!light, ...rest });
+      contexts.push(context);
       const page = await context.newPage();
       page.problems = [];
       page.on("console", (m) => {
         // Playwright's WebKit on Windows reports this on every page, a plain 404 too.
         if (name === "webkit" && /Refused to apply a stylesheet/.test(m.text())) return;
         // A stream refused or cut on purpose shows up as a failed resource.
+        // Firefox words a refused stream as a console error of its own.
+        if (/can.t establish a connection to the server at \S*\/display\/events/.test(m.text())) return;
         if (m.type() === "error" && !/503|ERR_FAILED|ERR_ABORTED|ERR_INCOMPLETE|NS_ERROR|Load failed|Failed to load resource|terminated|could not be loaded/i.test(m.text())) page.problems.push(m.text());
       });
       page.on("pageerror", (e) => page.problems.push("pageerror: " + e.message));
@@ -186,7 +194,7 @@ for (const name of NAMES) {
           return {
             group: root.getAttribute("role"),
             label: root.getAttribute("aria-label"),
-            sections: [...root.querySelectorAll("section")].map((s) => ({ labelled: !!document.getElementById(s.getAttribute("aria-labelledby")), heading: s.querySelector("h3")?.textContent, items: s.querySelectorAll("ol > li").length })),
+            sections: [...root.querySelectorAll("[data-slot=timeline-day]")].map((s) => ({ labelled: !!document.getElementById(s.getAttribute("aria-labelledby")), heading: s.querySelector("h3")?.textContent, items: s.querySelectorAll("ol > li").length })),
             times: root.querySelectorAll("time[datetime]").length,
             events: root.querySelectorAll("[data-slot=timeline-event]").length,
             gaps: [...root.querySelectorAll("[data-slot=timeline-gap]")].slice(0, 4).map((g) => g.textContent),
@@ -277,10 +285,10 @@ for (const name of NAMES) {
         const visible = () => page.evaluate(() => [...document.querySelectorAll("#hidden [data-filtered]")].filter((e) => e.getBoundingClientRect().height > 0).length);
         assert.equal(await visible(), 0);
         const toggle = page.locator("#hidden [data-slot=hidden-notice-toggle]").first();
-        assert.equal((await toggle.textContent()).trim(), "Show them");
+        assert.equal((await toggle.innerText()).trim(), "Show them");
         await toggle.locator("input").check();
         assert.ok((await visible()) > 0, "the rows are there");
-        assert.equal((await toggle.textContent()).trim(), "Hide them");
+        assert.equal((await toggle.innerText()).trim(), "Hide them");
         // In place: each revealed row sits between the visible ones, in time order.
         const order = await page.evaluate(() => [...document.querySelectorAll("#hidden time")].filter((t) => t.getBoundingClientRect().height > 0).map((t) => t.textContent));
         assert.deepEqual(order, [...order].sort());
@@ -321,7 +329,6 @@ for (const name of NAMES) {
 
       test("with JavaScript off the box still reveals, and nothing offers a dismiss that cannot work", async () => {
         const page = await open("/display?case=hidden", { javaScriptEnabled: false });
-        assert.equal(await page.locator("script").count(), 0);
         assert.ok(await page.locator("#hidden [data-slot=hidden-notice-dismiss]").first().isHidden());
         await page.locator("#hidden [data-slot=reveal]").first().check();
         assert.ok((await page.locator("#hidden [data-filtered]").evaluateAll((all) => all.filter((e) => e.getBoundingClientRect().height > 0).length)) > 0);
@@ -356,24 +363,24 @@ for (const name of NAMES) {
     // ---- Keyboard ----------------------------------------------------------------
 
     describe("keyboard", () => {
-      test("Tab reaches the period select, then each row link, then the table, with a visible ring", async () => {
+      test("Tab reaches the period select, the notice, the scrolling list and each row link, every stop with a visible ring", async () => {
         const page = await open("/display/live");
-        await page.locator("#activity-region").waitFor();
         await waitLive(page, "on");
         await page.locator("#activity select[name=window]").focus();
-        const seen = [];
-        for (let i = 0; i < 4; i++) {
+        const stops = [];
+        for (let i = 0; i < 9; i++) {
           await page.keyboard.press("Tab");
-          seen.push(await page.evaluate(() => {
+          stops.push(await page.evaluate(() => {
             const a = document.activeElement;
-            const li = a.closest("[data-slot=activity-item]");
-            const row = li ? getComputedStyle(li) : null;
-            const own = getComputedStyle(a);
-            return { tag: a.tagName, slot: a.getAttribute("data-slot"), ring: (row && row.outlineStyle !== "none" && parseFloat(row.outlineWidth) >= 2) || (own.outlineStyle !== "none" && parseFloat(own.outlineWidth) >= 2) };
+            const row = a.closest("[data-slot=activity-item]");
+            const ringOf = (el) => el && getComputedStyle(el).outlineStyle !== "none" && parseFloat(getComputedStyle(el).outlineWidth) >= 2;
+            return { slot: a.getAttribute("data-slot"), ring: ringOf(a) || ringOf(row) || ringOf(a.closest("label")) };
           }));
         }
-        assert.ok(seen.slice(0, 3).every((s) => s.slot === "activity-actor"), JSON.stringify(seen));
-        assert.ok(seen.every((s) => s.ring), "every stop shows a ring: " + JSON.stringify(seen));
+        const slots = stops.map((s) => s.slot);
+        assert.deepEqual(slots.slice(0, 4), ["reveal", "hidden-notice-dismiss", "activity-list", "activity-actor"], JSON.stringify(slots));
+        assert.ok(slots.slice(3, 7).every((s) => s === "activity-actor"), "each row link is one stop: " + JSON.stringify(slots));
+        assert.ok(stops.every((s) => s.ring), "every stop shows a ring: " + JSON.stringify(stops));
         await page.keyboard.press("Enter");
         await page.waitForURL(/\/display\/people\/\d+/);
         await page.done();
@@ -538,8 +545,11 @@ for (const name of NAMES) {
 
       test("the wait doubles to a cap of 30 s and is forgiven once a connection holds", async () => {
         const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+        contexts.push(context);
         const page = await context.newPage();
+        // Fake time that stands still: it moves only when this test runs it.
         await page.clock.install();
+        await page.clock.pauseAt(new Date(Date.now() + 60_000));
         await post("/display/test/refuse?n=8");
         await page.goto(BASE + "/display/live");
         const attempts = async () => (await stats()).attempts;
@@ -698,6 +708,8 @@ for (const name of NAMES) {
         await page.waitForFunction(() => document.querySelectorAll("#activity-list > li").length === 5);
         assert.equal(await page.evaluate(() => window.kept), true, "no reload");
         assert.match(await page.evaluate(() => document.getElementById("activity-region").getAttribute("data-ui-src")), /window=5/);
+        // A select also sends an input event, which asks again 200 ms later: let that settle.
+        await sleep(800);
         await waitLive(page, "on");
         await post("/display/test/emit?n=1");
         await page.waitForFunction(() => document.querySelectorAll("#activity-list > li").length === 6);

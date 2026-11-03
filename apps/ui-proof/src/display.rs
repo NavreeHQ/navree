@@ -498,7 +498,13 @@ async fn events() -> Response {
     }
     let rx = HUB.tx.subscribe();
     let stream = futures_util::stream::unfold(
-        (rx, Open::new(), VecDeque::<Event>::new()),
+        // A first comment goes out at once: Firefox reports a stream open only when
+        // the first bytes arrive, not when the headers do.
+        (
+            rx,
+            Open::new(),
+            VecDeque::from([Event::default().comment("ready")]),
+        ),
         |(mut rx, open, mut queue)| async move {
             loop {
                 if let Some(event) = queue.pop_front() {
@@ -708,6 +714,7 @@ fn long_feed() -> ActivityFeed {
 
 fn many_feed() -> ActivityFeed {
     ActivityFeed::new("many-feed", "Sixty rows")
+        .time_zone(ZONE, OFFSET)
         .height(FeedHeight::Sm)
         .items((0..60).map(|n| {
             ActivityItem::new(PEOPLE[n % 8].name, "opened")

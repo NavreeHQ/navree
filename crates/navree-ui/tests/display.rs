@@ -62,7 +62,7 @@ fn events_are_grouped_by_day_in_the_zone_and_keep_their_order() {
         TimelineEvent::new("Tuesday").at(T0 + day),
         TimelineEvent::new("Thursday").at(T0 + 3 * day),
     ]);
-    assert_eq!(count(&out, "<section"), 3, "{out}");
+    assert_eq!(count(&out, r#"data-slot="timeline-day""#), 3, "{out}");
     let monday = out.find("Monday, November 2, 2026").unwrap();
     let tuesday = out.find("Tuesday, November 3, 2026").unwrap();
     let thursday = out.find("Thursday, November 5, 2026").unwrap();
@@ -73,7 +73,7 @@ fn events_are_grouped_by_day_in_the_zone_and_keep_their_order() {
         TimelineEvent::new("a").at(1_793_644_199),
         TimelineEvent::new("b").at(1_793_644_200),
     ]);
-    assert_eq!(count(&late, "<section"), 2, "{late}");
+    assert_eq!(count(&late, r#"data-slot="timeline-day""#), 2, "{late}");
 }
 
 #[test]
@@ -570,7 +570,7 @@ fn the_rows_alone_are_what_a_live_source_answers() {
     ));
     assert!(out.starts_with("<li"), "{out}");
     assert_eq!(count(&out, "<li"), 2, "{out}");
-    assert!(!out.contains("<ol") && !out.contains("<section"), "{out}");
+    assert!(!out.contains("<ol") && !out.contains("data-slot=\"activity-feed\""), "{out}");
     assert!(
         out.contains(">09:41:07</time>"),
         "the zone is the feed's own: {out}"
