@@ -269,9 +269,9 @@ fn commands_fill() -> (Table, Dialog) {
         Dialog::new("g-fill", "Deal").body(
             el("form").attr("method", "dialog").children((
                 el("p").children((
-                    el("strong").attr("id", "g-fill-title").fill_cell("title"),
+                    el("strong").attr("id", "g-fill-name").fill_cell("title"),
                     ", worth ",
-                    el("span").attr("id", "g-fill-amount").fill_cell("amount"),
+                    el("span").attr("id", "g-fill-sum").fill_cell("amount"),
                     ".",
                 )),
                 el("input")

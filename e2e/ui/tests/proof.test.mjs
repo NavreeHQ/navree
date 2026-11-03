@@ -349,7 +349,7 @@ test("text, a counter and a row's details need no request either", async () => {
   assert.equal(await page.textContent("#g-bio-count"), "7/160");
   await page.locator("#g-fill-8").click();
   await page.locator("#g-fill[open]").waitFor();
-  assert.deepEqual(await page.evaluate(() => [document.getElementById("g-fill-title").textContent, document.getElementById("g-fill-amount").textContent, document.getElementById("g-fill-key").value]), ["Globex expansion", "48,000", "8"]);
+  assert.deepEqual(await page.evaluate(() => [document.getElementById("g-fill-name").textContent, document.getElementById("g-fill-sum").textContent, document.getElementById("g-fill-key").value]), ["Globex expansion", "48,000", "8"]);
   await page.keyboard.press("Escape");
   assert.equal(requests.length, before, "no network");
   assert.deepEqual(problems, []);
