@@ -331,6 +331,65 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       await context.close();
     });
 
+    test(`only a link marked eager is fetched with no hover, at most four a page (${engine})`, async () => {
+      const name = key("eager");
+      const links = [1, 2, 3, 4, 5].map((n) => `<a id="e${n}" data-ui-prefetch="eager" href="/${name}-e${n}">e${n}</a>`).join("");
+      route(`/${name}`, doc(`<a id="hover" data-ui-prefetch href="/${name}-hover">hover</a><a id="plain" href="/${name}-plain">plain</a><a id="off" data-ui-prefetch="eager" data-ui-noboost href="/${name}-off">off</a><a id="away" data-ui-prefetch="eager" href="${E()}/eager">away</a>${links}`));
+      for (const path of ["hover", "plain", "off", "e1", "e2", "e3", "e4", "e5"]) route(`/${name}-${path}`, doc(`<h1 id="h">${path}</h1>`), { "cache-control": "private, max-age=10" });
+      f.evil.length = 0;
+      const { context, page } = await fresh(`/${name}`);
+      await sleep(1200);
+      const fetched = (path) => hits(`/${name}-${path}`);
+      for (const path of ["e1", "e2", "e3", "e4"]) {
+        assert.equal(fetched(path).length, 1, path);
+        assert.equal(fetched(path)[0].headers["x-navree-prefetch"], "1", path);
+      }
+      for (const path of ["e5", "hover", "plain", "off"]) assert.equal(fetched(path).length, 0, path);
+      assert.deepEqual(f.evil, []);
+      await page.click("#e2");
+      await page.waitForSelector("#h");
+      assert.equal(await page.textContent("#h"), "e2");
+      assert.equal(fetched("e2").length, 1, "the click used what was fetched");
+      await context.close();
+    });
+
+    test(`an eager prefetch waits out a write and is never shown after one (${engine})`, async () => {
+      const name = key("eagerwrite");
+      const state = { user: "alice" };
+      route(`/${name}`, doc(`<a id="link" data-ui-prefetch="eager" href="/${name}-private">account</a><form id="f" data-ui-form method="post" action="/${name}-write"><button id="go">go</button></form>`));
+      // A user's own page is no-store: the HTTP cache, which no guard of the runtime's
+      // reaches, never holds it.
+      route(`/${name}-private`, () => doc(`<h1 id="who">${state.user}</h1>`));
+      f.routes.set(`/${name}-write`, (req, res) => {
+        state.user = "bob";
+        f.ops(res, { ops: [{ op: "toast", tone: "success", text: "saved" }] });
+      });
+      const { context, page } = await fresh(`/${name}`);
+      await sleep(1200);
+      assert.equal(hits(`/${name}-private`).length, 1);
+      await page.click("#go");
+      await sleep(250);
+      await page.click("#link");
+      await page.waitForSelector("#who");
+      assert.equal(await page.textContent("#who"), "bob");
+      await context.close();
+    });
+
+    test(`a page reached by a boosted link fetches its own eager links (${engine})`, async () => {
+      const name = key("eagerswap");
+      route(`/${name}`, doc(`<a id="next" href="/${name}-next">next</a>`));
+      route(`/${name}-next`, doc(`<h1 id="h">next</h1><a data-ui-prefetch="eager" href="/${name}-later">later</a>`));
+      route(`/${name}-later`, doc(`<h1>later</h1>`));
+      const { context, page } = await fresh(`/${name}`);
+      await sleep(600);
+      assert.equal(hits(`/${name}-later`).length, 0);
+      await page.click("#next");
+      await page.waitForSelector("#h");
+      await sleep(1200);
+      assert.equal(hits(`/${name}-later`).length, 1);
+      await context.close();
+    });
+
     test(`a click with no hover carries no prefetch mark (${engine})`, async () => {
       const name = key("noprefetch");
       route(`/${name}`, doc(`<a id="link" href="/${name}-next">next</a>`));

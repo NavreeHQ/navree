@@ -419,6 +419,21 @@ impl Element {
         self.flag("data-ui-prefetch", true)
     }
 
+    /// Says this link is fetched as soon as the page is quiet, with no hover: for the
+    /// one or two places a user almost always goes next. It costs that page's bytes on
+    /// every visit, so nothing is fetched this way unless a link asks; the runtime takes
+    /// at most four a page, and none on a slow or data-saving connection.
+    ///
+    /// It pays most for a page that is the same for every user and says so with
+    /// `View::cache("public, max-age=60")`. A page that differs per user stays
+    /// `no-store`, and what was fetched for it stands in for a click only for a few
+    /// seconds. Only mark a link whose `GET` changes nothing.
+    #[inline]
+    #[must_use]
+    pub fn prefetch_eager(self) -> Self {
+        self.attr("data-ui-prefetch", "eager")
+    }
+
     /// Runs `commands` in the browser when this element is clicked, with no
     /// request to the server.
     #[must_use]

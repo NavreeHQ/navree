@@ -99,8 +99,19 @@ pub struct NavItem {
     glyph: Option<Icon>,
     count: Option<Cow<'static, str>>,
     sub: Vec<NavItem>,
-    prefetch: bool,
+    prefetch: Prefetch,
     current: Option<bool>,
+}
+
+/// When a sidebar link is fetched ahead of a click.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Prefetch {
+    /// Never.
+    No,
+    /// When the pointer rests on it or it takes focus.
+    Intent,
+    /// As soon as the page is quiet.
+    Eager,
 }
 
 impl NavItem {
@@ -113,7 +124,7 @@ impl NavItem {
             glyph: None,
             count: None,
             sub: Vec::new(),
-            prefetch: true,
+            prefetch: Prefetch::Intent,
             current: None,
         }
     }
@@ -132,7 +143,16 @@ impl NavItem {
     /// safe to repeat needs this.
     #[must_use]
     pub fn no_prefetch(mut self) -> Self {
-        self.prefetch = false;
+        self.prefetch = Prefetch::No;
+        self
+    }
+
+    /// Fetches this link as soon as the page is quiet, with no hover: for the page
+    /// users almost always open next. See
+    /// [`Element::prefetch_eager`](crate::Element::prefetch_eager) for what it costs.
+    #[must_use]
+    pub fn prefetch_eager(mut self) -> Self {
+        self.prefetch = Prefetch::Eager;
         self
     }
 
@@ -195,7 +215,11 @@ impl NavItem {
             .href(self.href.clone())
             .attr("title", self.label.clone())
             .attr_opt("aria-current", active.then_some("page"))
-            .flag("data-ui-prefetch", self.prefetch)
+            .flag("data-ui-prefetch", self.prefetch == Prefetch::Intent)
+            .attr_opt(
+                "data-ui-prefetch",
+                (self.prefetch == Prefetch::Eager).then_some("eager"),
+            )
             .children((
                 self.glyph.map(icon),
                 el("span").slot("sidebar-label").child(self.label.clone()),

@@ -142,6 +142,7 @@ export async function showPage(response, how = {}) {
   if (how.push !== false) scrollTo(0, 0);
   /** @type {HTMLElement | null} */ (one("main"))?.focus({ preventScroll: true });
   announce(titleOf(doc));
+  whenQuiet();
 }
 
 /** A table whose fetch failed keeps its rows and says so. @param {Element} table @param {string} url @param {number} status */
@@ -329,6 +330,35 @@ function safeLinkOf(target) {
   return a && (a.hasAttribute("data-ui-prefetch") || a.hasAttribute("data-ui-in-region")) ? a : null;
 }
 
+/** How many links a page may have fetched as soon as it is quiet. */
+const EAGER_MOST = 4;
+
+/**
+ * Fetches ahead the links marked `data-ui-prefetch="eager"`, as soon as the page is
+ * quiet, with no hover. Only a link the page marks this way, at most four per page, never
+ * while a write is on its way or the connection is slow or saving data. It pays most for a
+ * page that is the same for every user and says so with `max-age`: a `no-store` answer
+ * stands in for only a few seconds.
+ */
+function eager() {
+  const connection = /** @type {any} */ (navigator).connection;
+  if (/(^|-)2g$/.test(connection?.effectiveType || "")) return;
+  let left = EAGER_MOST;
+  for (const a of every("a[data-ui-prefetch=eager]")) {
+    const link = safeLinkOf(a);
+    if (!link) continue;
+    prefetch(link.href);
+    if (--left === 0) break;
+  }
+}
+
+/** Runs `eager` once the page has nothing better to do. */
+function whenQuiet() {
+  if (!one("a[data-ui-prefetch=eager]")) return;
+  if ("requestIdleCallback" in window) requestIdleCallback(eager, { timeout: 2000 });
+  else setTimeout(eager, 500);
+}
+
 let intent = 0;
 /** @param {Event} e */
 function onIntent(e) {
@@ -340,6 +370,7 @@ function onIntent(e) {
 
 /** Wires up links. */
 export function startNav() {
+  whenQuiet();
   on(document, "click", (e) => {
     if (e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const a = linkOf(e.target);

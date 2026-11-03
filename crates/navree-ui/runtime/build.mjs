@@ -56,13 +56,20 @@ async function css() {
   return Buffer.from(out.outputFiles[0].contents);
 }
 
+// A page with no script: the browser fetches links marked safe when the pointer rests
+// on them, and those marked eager as soon as it can.
 const speculation = Buffer.from(
   JSON.stringify({
     prefetch: [
       {
         source: "document",
-        where: { and: [{ href_matches: "/*" }, { selector_matches: "[data-ui-prefetch]" }, { not: { selector_matches: "[data-ui-noboost],[download]" } }] },
+        where: { and: [{ href_matches: "/*" }, { selector_matches: "[data-ui-prefetch]" }, { not: { selector_matches: "[data-ui-noboost],[download],[data-ui-prefetch=eager]" } }] },
         eagerness: "moderate",
+      },
+      {
+        source: "document",
+        where: { and: [{ href_matches: "/*" }, { selector_matches: "[data-ui-prefetch=eager]" }, { not: { selector_matches: "[data-ui-noboost],[download]" } }] },
+        eagerness: "eager",
       },
     ],
   }),

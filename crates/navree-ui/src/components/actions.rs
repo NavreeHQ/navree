@@ -151,6 +151,13 @@ impl Button {
         self
     }
 
+    /// Says this link is fetched as soon as the page is quiet (see
+    /// [`Element::prefetch_eager`](crate::Element::prefetch_eager)).
+    pub fn prefetch_eager(mut self) -> Self {
+        self.el = self.el.prefetch_eager();
+        self
+    }
+
     /// Makes this submit its form.
     pub fn submit(mut self) -> Self {
         self.kind = ButtonKind::Submit;

@@ -798,6 +798,43 @@ fn only_navigation_is_marked_for_prefetch() {
     assert!(html.contains("data-ui-prefetch"), "{html}");
 }
 
+/// Fetching with no hover costs a page's bytes on every visit: no link does it unless
+/// the page asks, link by link.
+#[test]
+fn nothing_is_fetched_eagerly_unless_a_link_asks() {
+    use navree_ui::{Button, NavGroup, NavItem, Shell};
+    let shell = Shell::new("A").group(
+        NavGroup::plain()
+            .item(NavItem::new("Deals", "/deals"))
+            .item(NavItem::new("Inbox", "/inbox").prefetch_eager()),
+    );
+    let html = shell.page("Other", "/other").to_view().to_html();
+    assert_eq!(
+        html.matches(r#"data-ui-prefetch="eager""#).count(),
+        1,
+        "{html}"
+    );
+    assert!(
+        html.contains(r#"href="/inbox" title="Inbox" data-ui-prefetch="eager""#),
+        "{html}"
+    );
+    assert!(
+        html.contains(r#"href="/deals" title="Deals" data-ui-prefetch>"#),
+        "{html}"
+    );
+    let html = render(&Button::primary("Open").href("/x").prefetch_eager().into());
+    assert!(html.contains(r#"data-ui-prefetch="eager""#), "{html}");
+    let html = render(&navree_ui::el("a").href("/x").prefetch_eager().into());
+    assert!(html.contains(r#"data-ui-prefetch="eager""#), "{html}");
+    let rules = navree_ui::assets::get("speculation").expect("the rule file");
+    let text = std::str::from_utf8(rules.bytes).unwrap();
+    assert!(
+        text.contains(r#""selector_matches":"[data-ui-prefetch=eager]"},{"not""#)
+            && text.contains(r#""eagerness":"eager""#),
+        "a page with no script asks the browser the same: {text}"
+    );
+}
+
 #[test]
 fn a_request_says_when_it_is_a_prefetch() {
     let mut headers = http::HeaderMap::new();
