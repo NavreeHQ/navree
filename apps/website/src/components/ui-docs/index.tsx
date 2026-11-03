@@ -352,7 +352,7 @@ export function UiGrid() {
               const owner = findComponent(cid);
               const thumb = findExample(owner.thumb);
               return (
-                <li key={cid}>
+                <li key={cid} className="min-w-0">
                   <Link
                     href={owner.url}
                     className="group flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-ink-1 shadow-bezel transition-colors duration-200 hover:border-line-2"

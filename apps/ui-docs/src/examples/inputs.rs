@@ -45,8 +45,10 @@ pub fn all() -> Vec<Example> {
         gallery!("native-select", "states", "States", native_select_states).medium(),
         single!("checkbox", "default", "Checkboxes", checkbox_default),
         gallery!("checkbox", "states", "States", checkbox_states),
+        single!("switch", "thumb", "A switch", switch_thumb),
         single!("switch", "default", "Switches", switch_default),
         gallery!("switch", "states", "States", switch_states),
+        single!("radio-group", "thumb", "A radio group", radio_group_thumb),
         single!(
             "radio-group",
             "default",
@@ -252,6 +254,10 @@ fn checkbox_states() -> impl IntoIterator<Item = (&'static str, Checkbox)> {
     ]
 }
 
+fn switch_thumb() -> Switch {
+    Switch::new("live").label("Live updates").checked(true)
+}
+
 fn switch_default() -> Stack {
     Stack::gap(3).children((
         Switch::new("notify")
@@ -267,6 +273,13 @@ fn switch_states() -> impl IntoIterator<Item = (&'static str, Switch)> {
         ("On", Switch::new("b").label("Live").checked(true)),
         ("Disabled", Switch::new("c").label("Live").disabled(true)),
     ]
+}
+
+fn radio_group_thumb() -> RadioGroup {
+    RadioGroup::new("seats", "Seats")
+        .option("5", "5 seats")
+        .option("20", "20 seats")
+        .selected("20")
 }
 
 fn radio_group_default() -> RadioGroup {

@@ -34,7 +34,18 @@ export const navreeUi: DiagramSpec = {
       { from: "render.bottom", to: "page.top", step: 2, label: "HTML + CSP", at: [496, 176] },
       { from: "page.left", to: "css.right" },
       { from: "css.left", to: "mods.right" },
-      { from: "mods.top", to: "handler.bottom", kind: "async", label: "action → Reply, ops", at: [112, 176] },
+      // Down the left margin, clear of the groups' labels.
+      {
+        from: "mods.left",
+        to: "handler.left",
+        kind: "async",
+        via: [
+          [6, 304],
+          [6, 72],
+        ],
+        label: "an action → Reply, ops",
+        at: [16, 176],
+      },
     ],
   },
   narrow: {

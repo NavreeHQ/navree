@@ -20,7 +20,8 @@ pub fn all() -> Vec<Example> {
         .start(),
         single!("data-table", "thumb", "A data table", data_table_thumb)
             .start()
-            .height(160),
+            .width(720)
+            .height(360),
         single!("data-table", "default", "A data table", data_table_default)
             .start()
             .height(440),
@@ -51,6 +52,7 @@ pub fn all() -> Vec<Example> {
         )
         .wide()
         .height(600),
+        single!("stat", "thumb", "A figure", stat_thumb),
         single!("stat", "default", "Figures", stat_default).start(),
         single!("stat", "bars", "Bars", stat_bars).start(),
     ]
@@ -251,6 +253,10 @@ fn data_table_states() -> Vec<(&'static str, Node)> {
                 .into(),
         ),
     ]
+}
+
+fn stat_thumb() -> Stat {
+    Stat::new("Open deals", "312").trend("+12 this week", true)
 }
 
 fn stat_default() -> Grid {

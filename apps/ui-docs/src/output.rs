@@ -49,9 +49,14 @@ fn collect(node: &Node, out: &mut Vec<Slot>) {
                         count: 1,
                         children,
                     };
+                    // Siblings of one kind in a row (menu items, radios) are one
+                    // part, drawn once with the richest of their insides.
                     match out.last_mut() {
-                        Some(last) if last.slot == part.slot && last.children == part.children => {
+                        Some(last) if last.slot == part.slot => {
                             last.count += 1;
+                            if size(&part.children) > size(&last.children) {
+                                last.children = part.children;
+                            }
                         }
                         _ => out.push(part),
                     }
@@ -70,6 +75,11 @@ fn collect(node: &Node, out: &mut Vec<Slot>) {
         }
         _ => {}
     }
+}
+
+/// How many parts a list of parts holds, all the way down.
+fn size(slots: &[Slot]) -> usize {
+    slots.iter().map(|slot| 1 + size(&slot.children)).sum()
 }
 
 /// The file a toolkit asset is built from, in the repository.

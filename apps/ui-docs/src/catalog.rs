@@ -153,8 +153,8 @@ pub const COMPONENTS: &[Component] = &[
         "thumb",
     )
     .parts("icon"),
-    component("button-group", "ButtonGroup", &["ButtonGroup"], "default").parts("default"),
-    component("toggle", "Toggle", &["Toggle"], "default").parts("default"),
+    component("button-group", "ButtonGroup", &["ButtonGroup"], "thumb").parts("default"),
+    component("toggle", "Toggle", &["Toggle"], "thumb").parts("default"),
     // Inputs
     component("field", "Field", &["Field", "Label", "FieldSet"], "thumb").parts("help"),
     component("input", "Input", &["Input", "InputKind"], "default").parts("default"),
@@ -168,8 +168,8 @@ pub const COMPONENTS: &[Component] = &[
     )
     .parts("default"),
     component("checkbox", "Checkbox", &["Checkbox"], "default").parts("default"),
-    component("switch", "Switch", &["Switch"], "default").parts("default"),
-    component("radio-group", "RadioGroup", &["RadioGroup"], "default").parts("default"),
+    component("switch", "Switch", &["Switch"], "thumb").parts("default"),
+    component("radio-group", "RadioGroup", &["RadioGroup"], "thumb").parts("default"),
     component("forms", "Forms", &["FormView"], "thumb").page("/docs/ui/forms/"),
     // Display
     component("card", "Card", &["Card"], "thumb").parts("default"),
@@ -193,8 +193,8 @@ pub const COMPONENTS: &[Component] = &[
     .parts("default"),
     // Feedback
     component("alert", "Alert", &["Alert", "AlertTone"], "default").parts("default"),
-    component("empty", "Empty", &["Empty"], "default").parts("default"),
-    component("progress", "Progress", &["Progress"], "default").parts("default"),
+    component("empty", "Empty", &["Empty"], "thumb").parts("default"),
+    component("progress", "Progress", &["Progress"], "thumb").parts("default"),
     component(
         "skeleton",
         "Skeleton",
@@ -253,7 +253,7 @@ pub const COMPONENTS: &[Component] = &[
         &[
             "Shell", "NavGroup", "NavItem", "UserMenu", "AppPage", "AppShell",
         ],
-        "thumb",
+        "default",
     )
     .page("/docs/ui/app-shell/")
     .parts("default"),
@@ -275,7 +275,7 @@ pub const COMPONENTS: &[Component] = &[
     )
     .page("/docs/ui/data-table/")
     .parts("default"),
-    component("stat", "Stat and Bars", &["Stat", "Bars"], "default").parts("default"),
+    component("stat", "Stat and Bars", &["Stat", "Bars"], "thumb").parts("default"),
     // Pages that aren't components
     component("foundations", "Foundations", &["Size"], "radius").page("/docs/ui/foundations/"),
     component("icons", "Icons", &[], "all").page("/docs/ui/icons/"),

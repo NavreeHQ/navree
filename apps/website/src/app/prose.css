@@ -647,3 +647,7 @@
   background: none;
   font-size: inherit;
 }
+:is(ul, ol).not-prose {
+  padding: 0;
+  list-style: none;
+}

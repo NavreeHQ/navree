@@ -59,7 +59,7 @@ pub fn all() -> Vec<Example> {
 
 fn foundations_radius() -> Row {
     Row::gap(4).wrap().align(Align::Start).children((
-        Stack::gap(2).children((
+        Stack::gap(2).align(Align::Start).children((
             Button::primary("Button"),
             Input::text("q").placeholder("Input"),
             Badge::new("Badge"),
@@ -132,11 +132,10 @@ pub struct NewDeal {
     pub hot: bool,
 }
 
-fn forms_thumb() -> Stack {
-    Stack::gap(2).children((
-        Field::new("thumb-name", "Deal name").control(Input::text("title")),
-        Row::gap(2).children(Button::primary("Create deal").size(Size::Sm)),
-    ))
+fn forms_thumb() -> Field {
+    Field::new("thumb-name", "Deal name")
+        .error("Give the deal a name.")
+        .control(Input::text("title"))
 }
 
 fn forms_default() -> FormView<NewDeal> {

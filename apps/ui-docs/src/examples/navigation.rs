@@ -8,10 +8,6 @@ const SOURCE: &str = include_str!("navigation.rs");
 
 pub fn all() -> Vec<Example> {
     vec![
-        page!("app-shell", "thumb", "The app shell", app_shell_thumb)
-            .fill()
-            .width(1024)
-            .height(560),
         page!("app-shell", "default", "The app shell", app_shell_default)
             .fill()
             .width(1100)
@@ -26,16 +22,6 @@ pub fn all() -> Vec<Example> {
         )
         .wide(),
     ]
-}
-
-fn app_shell_thumb() -> AppPage {
-    Shell::new("Acme")
-        .group(
-            NavGroup::new("Sales")
-                .item(NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE))
-                .item(NavItem::new("Contacts", "/contacts").icon(icons::USERS)),
-        )
-        .page("Deals", "/deals")
 }
 
 fn app_shell_default() -> AppPage {

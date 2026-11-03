@@ -11,6 +11,7 @@ pub fn all() -> Vec<Example> {
         single!("alert", "default", "An alert", alert_default).start(),
         gallery!("alert", "tones", "Tones", alert_tones).wide(),
         single!("alert", "title-only", "A title alone", alert_title_only).start(),
+        single!("empty", "thumb", "Nothing yet", empty_thumb),
         single!("empty", "default", "Nothing yet", empty_default).height(240),
         single!(
             "empty",
@@ -19,6 +20,7 @@ pub fn all() -> Vec<Example> {
             empty_search
         )
         .height(200),
+        single!("progress", "thumb", "Progress", progress_thumb).start(),
         single!("progress", "default", "Progress", progress_default).start(),
         gallery!("progress", "states", "States", progress_states).wide(),
         single!("skeleton", "default", "A card loading", skeleton_default).start(),
@@ -67,6 +69,10 @@ fn alert_title_only() -> Alert {
     Alert::new(AlertTone::Warning).title("You're viewing an archived deal.")
 }
 
+fn empty_thumb() -> Empty {
+    Empty::new("No deals yet").icon(icons::INBOX)
+}
+
 fn empty_default() -> Empty {
     Empty::new("No deals yet")
         .icon(icons::INBOX)
@@ -79,6 +85,13 @@ fn empty_search() -> Empty {
         .icon(icons::SEARCH)
         .description("Check the spelling, or clear the filters.")
         .actions(Button::outline("Clear filters"))
+}
+
+fn progress_thumb() -> Stack {
+    Stack::gap(2).children((
+        Text::muted("640 of 1,000"),
+        Progress::new(640, 1000, "Importing contacts"),
+    ))
 }
 
 fn progress_default() -> Stack {

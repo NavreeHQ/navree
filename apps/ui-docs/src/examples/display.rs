@@ -220,8 +220,8 @@ fn attachment_action() -> Attachment {
 
 fn message_thumb() -> Stack {
     Stack::gap(2).children((
-        Bubble::new(BubbleSide::Start, "Can we move the call?"),
-        Bubble::new(BubbleSide::End, "Thursday at 10 works."),
+        Bubble::new(BubbleSide::Start, "Call at 10?"),
+        Bubble::new(BubbleSide::End, "Works for me."),
     ))
 }
 

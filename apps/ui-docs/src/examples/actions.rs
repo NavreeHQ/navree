@@ -22,6 +22,7 @@ pub fn all() -> Vec<Example> {
             button_link
         ),
         single!("button", "submit", "Submitting a form", button_submit),
+        single!("button-group", "thumb", "A group", button_group_thumb),
         single!("button-group", "default", "A group", button_group_default),
         single!(
             "button-group",
@@ -29,6 +30,7 @@ pub fn all() -> Vec<Example> {
             "Vertical",
             button_group_vertical
         ),
+        single!("toggle", "thumb", "Toggles", toggle_thumb),
         single!("toggle", "default", "Toggles", toggle_default),
         gallery!("toggle", "states", "States", toggle_states),
         gallery!("toggle", "sizes", "Sizes", toggle_sizes),
@@ -117,6 +119,14 @@ fn button_submit() -> Element {
         )))
 }
 
+fn button_group_thumb() -> ButtonGroup {
+    ButtonGroup::new("View").children((
+        Button::outline("List").size(Size::Sm),
+        Button::outline("Board").size(Size::Sm),
+        Button::outline("Week").size(Size::Sm),
+    ))
+}
+
 fn button_group_default() -> ButtonGroup {
     ButtonGroup::new("View").children((
         Button::outline("List").icon(icons::LIST),
@@ -129,6 +139,16 @@ fn button_group_vertical() -> ButtonGroup {
     ButtonGroup::new("Zoom").vertical().children((
         Button::icon_only(icons::PLUS, "Zoom in").variant(ButtonVariant::Outline),
         Button::icon_only(icons::MINUS, "Zoom out").variant(ButtonVariant::Outline),
+    ))
+}
+
+fn toggle_thumb() -> Row {
+    Row::gap(2).children((
+        Toggle::new("starred", "Starred")
+            .icon(icons::STAR)
+            .pressed(true)
+            .size(Size::Sm),
+        Toggle::new("flagged", "Flag").size(Size::Sm),
     ))
 }
 

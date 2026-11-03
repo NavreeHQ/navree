@@ -131,9 +131,10 @@
       "types": [
         "ButtonGroup"
       ],
-      "thumb": "button-group/default",
+      "thumb": "button-group/thumb",
       "anatomy": "button-group/default",
       "examples": [
+        "button-group/thumb",
         "button-group/default",
         "button-group/vertical"
       ]
@@ -147,9 +148,10 @@
       "types": [
         "Toggle"
       ],
-      "thumb": "toggle/default",
+      "thumb": "toggle/thumb",
       "anatomy": "toggle/default",
       "examples": [
+        "toggle/thumb",
         "toggle/default",
         "toggle/states",
         "toggle/sizes"
@@ -269,9 +271,10 @@
       "types": [
         "Switch"
       ],
-      "thumb": "switch/default",
+      "thumb": "switch/thumb",
       "anatomy": "switch/default",
       "examples": [
+        "switch/thumb",
         "switch/default",
         "switch/states"
       ]
@@ -285,9 +288,10 @@
       "types": [
         "RadioGroup"
       ],
-      "thumb": "radio-group/default",
+      "thumb": "radio-group/thumb",
       "anatomy": "radio-group/default",
       "examples": [
+        "radio-group/thumb",
         "radio-group/default",
         "radio-group/disabled"
       ]
@@ -478,9 +482,10 @@
       "types": [
         "Empty"
       ],
-      "thumb": "empty/default",
+      "thumb": "empty/thumb",
       "anatomy": "empty/default",
       "examples": [
+        "empty/thumb",
         "empty/default",
         "empty/search"
       ]
@@ -494,9 +499,10 @@
       "types": [
         "Progress"
       ],
-      "thumb": "progress/default",
+      "thumb": "progress/thumb",
       "anatomy": "progress/default",
       "examples": [
+        "progress/thumb",
         "progress/default",
         "progress/states"
       ]
@@ -786,10 +792,9 @@
         "AppPage",
         "AppShell"
       ],
-      "thumb": "app-shell/thumb",
+      "thumb": "app-shell/default",
       "anatomy": "app-shell/default",
       "examples": [
-        "app-shell/thumb",
         "app-shell/default"
       ]
     },
@@ -876,9 +881,10 @@
         "Stat",
         "Bars"
       ],
-      "thumb": "stat/default",
+      "thumb": "stat/thumb",
       "anatomy": "stat/default",
       "examples": [
+        "stat/thumb",
         "stat/default",
         "stat/bars"
       ]
@@ -975,7 +981,7 @@
             {
               "slot": "button",
               "tag": "button",
-              "count": 1,
+              "count": 2,
               "children": [
                 {
                   "slot": "icon",
@@ -984,12 +990,6 @@
                   "children": []
                 }
               ]
-            },
-            {
-              "slot": "button",
-              "tag": "button",
-              "count": 1,
-              "children": []
             }
           ]
         }
@@ -1020,7 +1020,7 @@
             {
               "slot": "button",
               "tag": "button",
-              "count": 1,
+              "count": 3,
               "children": [
                 {
                   "slot": "icon",
@@ -1029,12 +1029,6 @@
                   "children": []
                 }
               ]
-            },
-            {
-              "slot": "button",
-              "tag": "button",
-              "count": 2,
-              "children": []
             }
           ]
         }
@@ -1254,6 +1248,38 @@
       ]
     },
     {
+      "id": "button-group/thumb",
+      "component": "button-group",
+      "slug": "thumb",
+      "title": "A group",
+      "kind": "single",
+      "code": "ButtonGroup::new(\"View\").children((\n    Button::outline(\"List\").size(Size::Sm),\n    Button::outline(\"Board\").size(Size::Sm),\n    Button::outline(\"Week\").size(Size::Sm),\n))",
+      "src": "/ui-preview/button-group/thumb.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "button-group",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "button",
+              "tag": "button",
+              "count": 3,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "button-group/default",
       "component": "button-group",
       "slug": "default",
@@ -1317,6 +1343,45 @@
             {
               "slot": "button",
               "tag": "button",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toggle/thumb",
+      "component": "toggle",
+      "slug": "thumb",
+      "title": "Toggles",
+      "kind": "single",
+      "code": "Row::gap(2).children((\n    Toggle::new(\"starred\", \"Starred\")\n        .icon(icons::STAR)\n        .pressed(true)\n        .size(Size::Sm),\n    Toggle::new(\"flagged\", \"Flag\").size(Size::Sm),\n))",
+      "src": "/ui-preview/toggle/thumb.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "row",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "toggle",
+              "tag": "label",
               "count": 2,
               "children": [
                 {
@@ -1627,7 +1692,7 @@
                 {
                   "slot": "field",
                   "tag": "div",
-                  "count": 3,
+                  "count": 4,
                   "children": [
                     {
                       "slot": "label",
@@ -1638,25 +1703,6 @@
                     {
                       "slot": "input",
                       "tag": "input",
-                      "count": 1,
-                      "children": []
-                    }
-                  ]
-                },
-                {
-                  "slot": "field",
-                  "tag": "div",
-                  "count": 1,
-                  "children": [
-                    {
-                      "slot": "label",
-                      "tag": "label",
-                      "count": 1,
-                      "children": []
-                    },
-                    {
-                      "slot": "native-select",
-                      "tag": "select",
                       "count": 1,
                       "children": []
                     }
@@ -2086,6 +2132,38 @@
       "slots": []
     },
     {
+      "id": "switch/thumb",
+      "component": "switch",
+      "slug": "thumb",
+      "title": "A switch",
+      "kind": "single",
+      "code": "Switch::new(\"live\").label(\"Live updates\").checked(true)",
+      "src": "/ui-preview/switch/thumb.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "choice",
+          "tag": "label",
+          "count": 1,
+          "children": [
+            {
+              "slot": "switch",
+              "tag": "input",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "switch/default",
       "component": "switch",
       "slug": "default",
@@ -2145,6 +2223,51 @@
         "Disabled"
       ],
       "slots": []
+    },
+    {
+      "id": "radio-group/thumb",
+      "component": "radio-group",
+      "slug": "thumb",
+      "title": "A radio group",
+      "kind": "single",
+      "code": "RadioGroup::new(\"seats\", \"Seats\")\n    .option(\"5\", \"5 seats\")\n    .option(\"20\", \"20 seats\")\n    .selected(\"20\")",
+      "src": "/ui-preview/radio-group/thumb.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "radio-group",
+          "tag": "fieldset",
+          "count": 1,
+          "children": [
+            {
+              "slot": "field-legend",
+              "tag": "legend",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "choice",
+              "tag": "label",
+              "count": 2,
+              "children": [
+                {
+                  "slot": "radio",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "radio-group/default",
@@ -2376,13 +2499,7 @@
                 {
                   "slot": "button",
                   "tag": "button",
-                  "count": 1,
-                  "children": []
-                },
-                {
-                  "slot": "button",
-                  "tag": "button",
-                  "count": 1,
+                  "count": 2,
                   "children": [
                     {
                       "slot": "icon",
@@ -3156,7 +3273,7 @@
       "slug": "thumb",
       "title": "A conversation",
       "kind": "single",
-      "code": "Stack::gap(2).children((\n    Bubble::new(BubbleSide::Start, \"Can we move the call?\"),\n    Bubble::new(BubbleSide::End, \"Thursday at 10 works.\"),\n))",
+      "code": "Stack::gap(2).children((\n    Bubble::new(BubbleSide::Start, \"Call at 10?\"),\n    Bubble::new(BubbleSide::End, \"Works for me.\"),\n))",
       "src": "/ui-preview/message/thumb.html",
       "height": 120,
       "layout": "start",
@@ -3227,66 +3344,7 @@
             {
               "slot": "message",
               "tag": "div",
-              "count": 1,
-              "children": [
-                {
-                  "slot": "message-avatar",
-                  "tag": "div",
-                  "count": 1,
-                  "children": [
-                    {
-                      "slot": "avatar",
-                      "tag": "span",
-                      "count": 1,
-                      "children": [
-                        {
-                          "slot": "icon",
-                          "tag": "svg",
-                          "count": 1,
-                          "children": []
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "slot": "message-content",
-                  "tag": "div",
-                  "count": 1,
-                  "children": [
-                    {
-                      "slot": "message-header",
-                      "tag": "div",
-                      "count": 1,
-                      "children": []
-                    },
-                    {
-                      "slot": "bubble",
-                      "tag": "div",
-                      "count": 1,
-                      "children": [
-                        {
-                          "slot": "bubble-content",
-                          "tag": "div",
-                          "count": 1,
-                          "children": []
-                        }
-                      ]
-                    },
-                    {
-                      "slot": "message-footer",
-                      "tag": "div",
-                      "count": 1,
-                      "children": []
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "slot": "message",
-              "tag": "div",
-              "count": 1,
+              "count": 2,
               "children": [
                 {
                   "slot": "message-content",
@@ -3487,6 +3545,51 @@
       ]
     },
     {
+      "id": "empty/thumb",
+      "component": "empty",
+      "slug": "thumb",
+      "title": "Nothing yet",
+      "kind": "single",
+      "code": "Empty::new(\"No deals yet\").icon(icons::INBOX)",
+      "src": "/ui-preview/empty/thumb.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "empty",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "empty-media",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "icon",
+                  "tag": "svg",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "empty-title",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "empty/default",
       "component": "empty",
       "slug": "default",
@@ -3616,6 +3719,44 @@
                   "children": []
                 }
               ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "progress/thumb",
+      "component": "progress",
+      "slug": "thumb",
+      "title": "Progress",
+      "kind": "single",
+      "code": "Stack::gap(2).children((\n    Text::muted(\"640 of 1,000\"),\n    Progress::new(640, 1000, \"Importing contacts\"),\n))",
+      "src": "/ui-preview/progress/thumb.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stack",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "text",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "progress",
+              "tag": "progress",
+              "count": 1,
+              "children": []
             }
           ]
         }
@@ -5018,7 +5159,7 @@
       "slug": "thumb",
       "title": "Stack, Row and Grid",
       "kind": "single",
-      "code": "Grid::cols(3).gap(2).children((\n    Skeleton::new(SkeletonShape::Block),\n    Skeleton::new(SkeletonShape::Block),\n    Skeleton::new(SkeletonShape::Block),\n))",
+      "code": "Stack::gap(2).children((\n    Skeleton::new(SkeletonShape::Short),\n    Row::gap(2).children((Badge::new(\"One\"), Badge::new(\"Two\"), Badge::new(\"Three\"))),\n    Skeleton::new(SkeletonShape::Line),\n))",
       "src": "/ui-preview/layout/thumb.html",
       "height": 120,
       "layout": "start",
@@ -5030,14 +5171,33 @@
       "captions": [],
       "slots": [
         {
-          "slot": "grid",
+          "slot": "stack",
           "tag": "div",
           "count": 1,
           "children": [
             {
               "slot": "skeleton",
               "tag": "div",
-              "count": 3,
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "row",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "badge",
+                  "tag": "span",
+                  "count": 3,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "skeleton",
+              "tag": "div",
+              "count": 1,
               "children": []
             }
           ]
@@ -5232,7 +5392,7 @@
             {
               "slot": "card",
               "tag": "div",
-              "count": 1,
+              "count": 2,
               "children": [
                 {
                   "slot": "card-header",
@@ -5255,39 +5415,6 @@
                     {
                       "slot": "bars",
                       "tag": "svg",
-                      "count": 1,
-                      "children": []
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "slot": "card",
-              "tag": "div",
-              "count": 1,
-              "children": [
-                {
-                  "slot": "card-header",
-                  "tag": "div",
-                  "count": 1,
-                  "children": [
-                    {
-                      "slot": "card-title",
-                      "tag": "h2",
-                      "count": 1,
-                      "children": []
-                    }
-                  ]
-                },
-                {
-                  "slot": "card-content",
-                  "tag": "div",
-                  "count": 1,
-                  "children": [
-                    {
-                      "slot": "text",
-                      "tag": "p",
                       "count": 1,
                       "children": []
                     }
@@ -5782,191 +5909,6 @@
       ]
     },
     {
-      "id": "app-shell/thumb",
-      "component": "app-shell",
-      "slug": "thumb",
-      "title": "The app shell",
-      "kind": "single",
-      "code": "Shell::new(\"Acme\")\n    .group(\n        NavGroup::new(\"Sales\")\n            .item(NavItem::new(\"Deals\", \"/deals\").icon(icons::HANDSHAKE))\n            .item(NavItem::new(\"Contacts\", \"/contacts\").icon(icons::USERS)),\n    )\n    .page(\"Deals\", \"/deals\")",
-      "src": "/ui-preview/app-shell/thumb.html",
-      "height": 560,
-      "layout": "fill",
-      "cells": "narrow",
-      "show": false,
-      "live": false,
-      "width": 1024,
-      "scripts": [
-        "sidebar-be39798e378b.js"
-      ],
-      "captions": [],
-      "slots": [
-        {
-          "slot": "sidebar-wrapper",
-          "tag": "div",
-          "count": 1,
-          "children": [
-            {
-              "slot": "sidebar",
-              "tag": "aside",
-              "count": 1,
-              "children": [
-                {
-                  "slot": "sidebar-header",
-                  "tag": "div",
-                  "count": 1,
-                  "children": [
-                    {
-                      "slot": "sidebar-brand",
-                      "tag": "a",
-                      "count": 1,
-                      "children": [
-                        {
-                          "slot": "sidebar-logo",
-                          "tag": "span",
-                          "count": 1,
-                          "children": []
-                        },
-                        {
-                          "slot": "sidebar-brand-text",
-                          "tag": "span",
-                          "count": 1,
-                          "children": [
-                            {
-                              "slot": "sidebar-brand-name",
-                              "tag": "span",
-                              "count": 1,
-                              "children": []
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "slot": "sidebar-content",
-                  "tag": "nav",
-                  "count": 1,
-                  "children": [
-                    {
-                      "slot": "sidebar-group",
-                      "tag": "div",
-                      "count": 1,
-                      "children": [
-                        {
-                          "slot": "sidebar-group-label",
-                          "tag": "p",
-                          "count": 1,
-                          "children": []
-                        },
-                        {
-                          "slot": "sidebar-menu",
-                          "tag": "ul",
-                          "count": 1,
-                          "children": [
-                            {
-                              "slot": "sidebar-item",
-                              "tag": "a",
-                              "count": 2,
-                              "children": [
-                                {
-                                  "slot": "icon",
-                                  "tag": "svg",
-                                  "count": 1,
-                                  "children": []
-                                },
-                                {
-                                  "slot": "sidebar-label",
-                                  "tag": "span",
-                                  "count": 1,
-                                  "children": []
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "slot": "sidebar-overlay",
-              "tag": "div",
-              "count": 1,
-              "children": []
-            },
-            {
-              "slot": "sidebar-inset",
-              "tag": "div",
-              "count": 1,
-              "children": [
-                {
-                  "slot": "topbar",
-                  "tag": "header",
-                  "count": 1,
-                  "children": [
-                    {
-                      "slot": "button",
-                      "tag": "button",
-                      "count": 1,
-                      "children": [
-                        {
-                          "slot": "icon",
-                          "tag": "svg",
-                          "count": 1,
-                          "children": []
-                        }
-                      ]
-                    },
-                    {
-                      "slot": "separator",
-                      "tag": "div",
-                      "count": 1,
-                      "children": []
-                    },
-                    {
-                      "slot": "breadcrumb",
-                      "tag": "nav",
-                      "count": 1,
-                      "children": []
-                    },
-                    {
-                      "slot": "topbar-spacer",
-                      "tag": "div",
-                      "count": 1,
-                      "children": []
-                    }
-                  ]
-                },
-                {
-                  "slot": "page",
-                  "tag": "main",
-                  "count": 1,
-                  "children": [
-                    {
-                      "slot": "page-header",
-                      "tag": "div",
-                      "count": 1,
-                      "children": [
-                        {
-                          "slot": "page-title",
-                          "tag": "h1",
-                          "count": 1,
-                          "children": []
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
       "id": "app-shell/default",
       "component": "app-shell",
       "slug": "default",
@@ -6043,7 +5985,7 @@
                     {
                       "slot": "sidebar-group",
                       "tag": "div",
-                      "count": 1,
+                      "count": 2,
                       "children": [
                         {
                           "slot": "sidebar-group-label",
@@ -6059,26 +6001,7 @@
                             {
                               "slot": "sidebar-item",
                               "tag": "a",
-                              "count": 1,
-                              "children": [
-                                {
-                                  "slot": "icon",
-                                  "tag": "svg",
-                                  "count": 1,
-                                  "children": []
-                                },
-                                {
-                                  "slot": "sidebar-label",
-                                  "tag": "span",
-                                  "count": 1,
-                                  "children": []
-                                }
-                              ]
-                            },
-                            {
-                              "slot": "sidebar-item",
-                              "tag": "a",
-                              "count": 1,
+                              "count": 4,
                               "children": [
                                 {
                                   "slot": "icon",
@@ -6094,25 +6017,6 @@
                                 },
                                 {
                                   "slot": "sidebar-count",
-                                  "tag": "span",
-                                  "count": 1,
-                                  "children": []
-                                }
-                              ]
-                            },
-                            {
-                              "slot": "sidebar-item",
-                              "tag": "a",
-                              "count": 2,
-                              "children": [
-                                {
-                                  "slot": "icon",
-                                  "tag": "svg",
-                                  "count": 1,
-                                  "children": []
-                                },
-                                {
-                                  "slot": "sidebar-label",
                                   "tag": "span",
                                   "count": 1,
                                   "children": []
@@ -6136,45 +6040,6 @@
                                       "children": []
                                     }
                                   ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "slot": "sidebar-group",
-                      "tag": "div",
-                      "count": 1,
-                      "children": [
-                        {
-                          "slot": "sidebar-group-label",
-                          "tag": "p",
-                          "count": 1,
-                          "children": []
-                        },
-                        {
-                          "slot": "sidebar-menu",
-                          "tag": "ul",
-                          "count": 1,
-                          "children": [
-                            {
-                              "slot": "sidebar-item",
-                              "tag": "a",
-                              "count": 1,
-                              "children": [
-                                {
-                                  "slot": "icon",
-                                  "tag": "svg",
-                                  "count": 1,
-                                  "children": []
-                                },
-                                {
-                                  "slot": "sidebar-label",
-                                  "tag": "span",
-                                  "count": 1,
-                                  "children": []
                                 }
                               ]
                             }
@@ -6428,7 +6293,7 @@
             {
               "slot": "pagination-link",
               "tag": "a",
-              "count": 1,
+              "count": 2,
               "children": [
                 {
                   "slot": "icon",
@@ -6437,12 +6302,6 @@
                   "children": []
                 }
               ]
-            },
-            {
-              "slot": "pagination-link",
-              "tag": "a",
-              "count": 1,
-              "children": []
             },
             {
               "slot": "pagination-ellipsis",
@@ -6465,13 +6324,7 @@
             {
               "slot": "pagination-link",
               "tag": "a",
-              "count": 1,
-              "children": []
-            },
-            {
-              "slot": "pagination-link",
-              "tag": "a",
-              "count": 1,
+              "count": 2,
               "children": [
                 {
                   "slot": "icon",
@@ -6639,12 +6492,12 @@
       "kind": "single",
       "code": "let query = TableQuery::<Deal>::parse(\"/deals\", \"\");\nlet rows: Vec<Deal> = deals().into_iter().take(2).collect();\nDataTable::new(\"deals\", &query, &rows).into()",
       "src": "/ui-preview/data-table/thumb.html",
-      "height": 160,
+      "height": 360,
       "layout": "start",
       "cells": "narrow",
       "show": false,
       "live": false,
-      "width": null,
+      "width": 720,
       "scripts": [
         "overlay-26f00c88e5c7.js",
         "table-4f81fade135f.js"
@@ -7904,7 +7757,7 @@
                         {
                           "slot": "pagination-link",
                           "tag": "a",
-                          "count": 1,
+                          "count": 3,
                           "children": [
                             {
                               "slot": "icon",
@@ -7915,12 +7768,6 @@
                           ]
                         },
                         {
-                          "slot": "pagination-link",
-                          "tag": "a",
-                          "count": 2,
-                          "children": []
-                        },
-                        {
                           "slot": "pagination-ellipsis",
                           "tag": "span",
                           "count": 1,
@@ -7929,13 +7776,7 @@
                         {
                           "slot": "pagination-link",
                           "tag": "a",
-                          "count": 1,
-                          "children": []
-                        },
-                        {
-                          "slot": "pagination-link",
-                          "tag": "a",
-                          "count": 1,
+                          "count": 2,
                           "children": [
                             {
                               "slot": "icon",
@@ -8176,7 +8017,7 @@
                     {
                       "slot": "button",
                       "tag": "button",
-                      "count": 1,
+                      "count": 2,
                       "children": [
                         {
                           "slot": "icon",
@@ -8185,12 +8026,6 @@
                           "children": []
                         }
                       ]
-                    },
-                    {
-                      "slot": "button",
-                      "tag": "button",
-                      "count": 1,
-                      "children": []
                     }
                   ]
                 }
@@ -8707,7 +8542,7 @@
                         {
                           "slot": "pagination-link",
                           "tag": "a",
-                          "count": 1,
+                          "count": 3,
                           "children": [
                             {
                               "slot": "icon",
@@ -8718,12 +8553,6 @@
                           ]
                         },
                         {
-                          "slot": "pagination-link",
-                          "tag": "a",
-                          "count": 2,
-                          "children": []
-                        },
-                        {
                           "slot": "pagination-ellipsis",
                           "tag": "span",
                           "count": 1,
@@ -8732,13 +8561,7 @@
                         {
                           "slot": "pagination-link",
                           "tag": "a",
-                          "count": 1,
-                          "children": []
-                        },
-                        {
-                          "slot": "pagination-link",
-                          "tag": "a",
-                          "count": 1,
+                          "count": 2,
                           "children": [
                             {
                               "slot": "icon",
@@ -10096,6 +9919,50 @@
       "slots": []
     },
     {
+      "id": "stat/thumb",
+      "component": "stat",
+      "slug": "thumb",
+      "title": "A figure",
+      "kind": "single",
+      "code": "Stat::new(\"Open deals\", \"312\").trend(\"+12 this week\", true)",
+      "src": "/ui-preview/stat/thumb.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "stat",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "stat-label",
+              "tag": "span",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "stat-value",
+              "tag": "span",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "stat-trend",
+              "tag": "span",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "stat/default",
       "component": "stat",
       "slug": "default",
@@ -10204,7 +10071,7 @@
       "slug": "radius",
       "title": "4px controls, 6px surfaces",
       "kind": "single",
-      "code": "Row::gap(4).wrap().align(Align::Start).children((\n    Stack::gap(2).children((\n        Button::primary(\"Button\"),\n        Input::text(\"q\").placeholder(\"Input\"),\n        Badge::new(\"Badge\"),\n    )),\n    Card::titled(\"Card\")\n        .description(\"6px corners\")\n        .body(Text::muted(\"Surfaces\")),\n))",
+      "code": "Row::gap(4).wrap().align(Align::Start).children((\n    Stack::gap(2).align(Align::Start).children((\n        Button::primary(\"Button\"),\n        Input::text(\"q\").placeholder(\"Input\"),\n        Badge::new(\"Badge\"),\n    )),\n    Card::titled(\"Card\")\n        .description(\"6px corners\")\n        .body(Text::muted(\"Surfaces\")),\n))",
       "src": "/ui-preview/foundations/radius.html",
       "height": 120,
       "layout": "start",
@@ -10582,7 +10449,7 @@
       "slug": "thumb",
       "title": "A form",
       "kind": "single",
-      "code": "Stack::gap(2).children((\n    Field::new(\"thumb-name\", \"Deal name\").control(Input::text(\"title\")),\n    Row::gap(2).children(Button::primary(\"Create deal\").size(Size::Sm)),\n))",
+      "code": "Field::new(\"thumb-name\", \"Deal name\")\n    .error(\"Give the deal a name.\")\n    .control(Input::text(\"title\"))",
       "src": "/ui-preview/forms/thumb.html",
       "height": 120,
       "layout": "start",
@@ -10594,41 +10461,27 @@
       "captions": [],
       "slots": [
         {
-          "slot": "stack",
+          "slot": "field",
           "tag": "div",
           "count": 1,
           "children": [
             {
-              "slot": "field",
-              "tag": "div",
+              "slot": "label",
+              "tag": "label",
               "count": 1,
-              "children": [
-                {
-                  "slot": "label",
-                  "tag": "label",
-                  "count": 1,
-                  "children": []
-                },
-                {
-                  "slot": "input",
-                  "tag": "input",
-                  "count": 1,
-                  "children": []
-                }
-              ]
+              "children": []
             },
             {
-              "slot": "row",
-              "tag": "div",
+              "slot": "input",
+              "tag": "input",
               "count": 1,
-              "children": [
-                {
-                  "slot": "button",
-                  "tag": "button",
-                  "count": 1,
-                  "children": []
-                }
-              ]
+              "children": []
+            },
+            {
+              "slot": "field-error",
+              "tag": "p",
+              "count": 1,
+              "children": []
             }
           ]
         }
@@ -10664,26 +10517,7 @@
                 {
                   "slot": "field",
                   "tag": "div",
-                  "count": 1,
-                  "children": [
-                    {
-                      "slot": "label",
-                      "tag": "label",
-                      "count": 1,
-                      "children": []
-                    },
-                    {
-                      "slot": "input",
-                      "tag": "input",
-                      "count": 1,
-                      "children": []
-                    }
-                  ]
-                },
-                {
-                  "slot": "field",
-                  "tag": "div",
-                  "count": 1,
+                  "count": 5,
                   "children": [
                     {
                       "slot": "label",
@@ -10702,64 +10536,6 @@
                       "tag": "p",
                       "count": 1,
                       "children": []
-                    }
-                  ]
-                },
-                {
-                  "slot": "field",
-                  "tag": "div",
-                  "count": 1,
-                  "children": [
-                    {
-                      "slot": "label",
-                      "tag": "label",
-                      "count": 1,
-                      "children": []
-                    },
-                    {
-                      "slot": "native-select",
-                      "tag": "select",
-                      "count": 1,
-                      "children": []
-                    }
-                  ]
-                },
-                {
-                  "slot": "field",
-                  "tag": "div",
-                  "count": 1,
-                  "children": [
-                    {
-                      "slot": "label",
-                      "tag": "label",
-                      "count": 1,
-                      "children": []
-                    },
-                    {
-                      "slot": "input",
-                      "tag": "input",
-                      "count": 1,
-                      "children": []
-                    }
-                  ]
-                },
-                {
-                  "slot": "field",
-                  "tag": "div",
-                  "count": 1,
-                  "children": [
-                    {
-                      "slot": "choice",
-                      "tag": "label",
-                      "count": 1,
-                      "children": [
-                        {
-                          "slot": "checkbox",
-                          "tag": "input",
-                          "count": 1,
-                          "children": []
-                        }
-                      ]
                     }
                   ]
                 }
@@ -10812,7 +10588,7 @@
                 {
                   "slot": "field",
                   "tag": "div",
-                  "count": 1,
+                  "count": 5,
                   "children": [
                     {
                       "slot": "label",
@@ -10831,89 +10607,6 @@
                       "tag": "p",
                       "count": 1,
                       "children": []
-                    }
-                  ]
-                },
-                {
-                  "slot": "field",
-                  "tag": "div",
-                  "count": 1,
-                  "children": [
-                    {
-                      "slot": "label",
-                      "tag": "label",
-                      "count": 1,
-                      "children": []
-                    },
-                    {
-                      "slot": "input",
-                      "tag": "input",
-                      "count": 1,
-                      "children": []
-                    },
-                    {
-                      "slot": "field-description",
-                      "tag": "p",
-                      "count": 1,
-                      "children": []
-                    }
-                  ]
-                },
-                {
-                  "slot": "field",
-                  "tag": "div",
-                  "count": 1,
-                  "children": [
-                    {
-                      "slot": "label",
-                      "tag": "label",
-                      "count": 1,
-                      "children": []
-                    },
-                    {
-                      "slot": "native-select",
-                      "tag": "select",
-                      "count": 1,
-                      "children": []
-                    }
-                  ]
-                },
-                {
-                  "slot": "field",
-                  "tag": "div",
-                  "count": 1,
-                  "children": [
-                    {
-                      "slot": "label",
-                      "tag": "label",
-                      "count": 1,
-                      "children": []
-                    },
-                    {
-                      "slot": "input",
-                      "tag": "input",
-                      "count": 1,
-                      "children": []
-                    }
-                  ]
-                },
-                {
-                  "slot": "field",
-                  "tag": "div",
-                  "count": 1,
-                  "children": [
-                    {
-                      "slot": "choice",
-                      "tag": "label",
-                      "count": 1,
-                      "children": [
-                        {
-                          "slot": "checkbox",
-                          "tag": "input",
-                          "count": 1,
-                          "children": []
-                        }
-                      ]
                     }
                   ]
                 }

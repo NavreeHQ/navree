@@ -48,11 +48,11 @@ pub fn all() -> Vec<Example> {
     ]
 }
 
-fn layout_thumb() -> Grid {
-    Grid::cols(3).gap(2).children((
-        Skeleton::new(SkeletonShape::Block),
-        Skeleton::new(SkeletonShape::Block),
-        Skeleton::new(SkeletonShape::Block),
+fn layout_thumb() -> Stack {
+    Stack::gap(2).children((
+        Skeleton::new(SkeletonShape::Short),
+        Row::gap(2).children((Badge::new("One"), Badge::new("Two"), Badge::new("Three"))),
+        Skeleton::new(SkeletonShape::Line),
     ))
 }
 
