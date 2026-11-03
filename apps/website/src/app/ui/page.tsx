@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense, type ReactNode } from "react";
 
+import { Faq } from "@/components/faq";
 import { HomeSection, SectionHeading } from "@/components/home/parts";
 import { TableShowcase } from "@/components/ui-docs/table-showcase";
 import { pageMetadata } from "@/lib/metadata";
@@ -71,6 +72,7 @@ export default function UiPage() {
       <Part>
         <UiClosing />
       </Part>
+      <Faq name="ui" />
       <PageSchema path="/ui/" metadata={metadata} />
     </>
   );
