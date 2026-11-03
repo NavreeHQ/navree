@@ -114,7 +114,11 @@ for (const name of NAMES) {
         await page.waitForTimeout(300);
       }
       page.done = async () => {
-        const csp = rest.javaScriptEnabled === false ? [] : await page.evaluate(() => window.__csp || []);
+        let csp = rest.javaScriptEnabled === false ? [] : await page.evaluate(() => window.__csp || []);
+        // Playwright's WebKit on Windows reports inline styles refused on every page, a bare 404
+        // too. Chromium and Firefox check the style directives, and the DOM check below holds
+        // everywhere: no `style` attribute on a part of the display module.
+        if (name === "webkit") csp = csp.filter((line) => !/^style-src-(elem|attr) inline$/.test(line));
         await context.close();
         assert.deepEqual(csp, [], "no content security policy report");
         assert.deepEqual(page.problems, []);
@@ -378,9 +382,21 @@ for (const name of NAMES) {
           }));
         }
         const slots = stops.map((s) => s.slot);
-        assert.deepEqual(slots.slice(0, 4), ["reveal", "hidden-notice-dismiss", "activity-list", "activity-actor"], JSON.stringify(slots));
-        assert.ok(slots.slice(3, 7).every((s) => s === "activity-actor"), "each row link is one stop: " + JSON.stringify(slots));
-        assert.ok(stops.every((s) => s.ring), "every stop shows a ring: " + JSON.stringify(stops));
+        if (name === "webkit") {
+          // Safari's Tab skips links unless the user turned that on (Option+Tab reaches them), so the
+          // links are focused directly here; the rest of the order is the same.
+          assert.deepEqual(slots.slice(0, 3), ["reveal", "hidden-notice-dismiss", "activity-list"], JSON.stringify(slots));
+          assert.ok(stops.slice(0, 3).every((s) => s.ring), JSON.stringify(stops));
+          await page.locator("#activity-list [data-slot=activity-actor]").first().focus();
+          assert.ok(await page.evaluate(() => {
+            const row = document.activeElement.closest("[data-slot=activity-item]");
+            return getComputedStyle(row).outlineStyle !== "none" && parseFloat(getComputedStyle(row).outlineWidth) >= 2;
+          }), "the row shows a ring around the focused link");
+        } else {
+          assert.deepEqual(slots.slice(0, 4), ["reveal", "hidden-notice-dismiss", "activity-list", "activity-actor"], JSON.stringify(slots));
+          assert.ok(slots.slice(3, 7).every((s) => s === "activity-actor"), "each row link is one stop: " + JSON.stringify(slots));
+          assert.ok(stops.every((s) => s.ring), "every stop shows a ring: " + JSON.stringify(stops));
+        }
         await page.keyboard.press("Enter");
         await page.waitForURL(/\/display\/people\/\d+/);
         await page.done();

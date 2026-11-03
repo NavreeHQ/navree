@@ -570,7 +570,10 @@ fn the_rows_alone_are_what_a_live_source_answers() {
     ));
     assert!(out.starts_with("<li"), "{out}");
     assert_eq!(count(&out, "<li"), 2, "{out}");
-    assert!(!out.contains("<ol") && !out.contains("data-slot=\"activity-feed\""), "{out}");
+    assert!(
+        !out.contains("<ol") && !out.contains("data-slot=\"activity-feed\""),
+        "{out}"
+    );
     assert!(
         out.contains(">09:41:07</time>"),
         "the zone is the feed's own: {out}"
