@@ -316,7 +316,7 @@ A run's status is one of:
 
 | Status | Meaning |
 |---|---|
-| `pending` | Ready to run: just started, woken by a timer or an event, or retried |
+| `pending` | Ready to run: newly started, woken by a timer or an event, or retried |
 | `running` | An execution holds it, until its lease runs out |
 | `sleeping` | Waiting for a timer (`sleep`, or a step's next attempt) until `wake_at` |
 | `waiting` | Waiting for an event, until its timeout at `wake_at` (none: for good) |

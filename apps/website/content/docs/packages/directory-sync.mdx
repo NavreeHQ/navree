@@ -1,6 +1,6 @@
 ---
 title: "Directory sync"
-description: "Keep each customer's people in step with their directory: a SCIM 2.0 server for identity providers, and pull connectors for Microsoft Graph, Google Workspace, Okta, LDAP and Active Directory, synced into your model through a sink, in runs with dry runs, a deactivation limit and progress."
+description: "Keep each customer's people in step with their directory: a SCIM 2.0 server, pull connectors for Microsoft Graph, Google Workspace, Okta and LDAP, and a sink that maps people into your model."
 ---
 
 ## Introduction
@@ -70,7 +70,7 @@ max_deactivation_percent = 20          # hold runs that deactivate more...
 min_deactivations = 10                 # ...and more than this many users
 ```
 
-Each key also comes from the environment: `APP_DIRECTORY__SYNC__MAX_DEACTIVATION_PERCENT=10`. A path that does not start with `/`, a base URL that is not absolute, a chunk size of 0 or a percentage over 100 fails the boot, naming the key. `DirectoryModule::for_root(DirectoryOptions { .. })` takes the same options in code. The [reference](#reference) lists every key.
+Each key also comes from the environment: `APP_DIRECTORY__SYNC__MAX_DEACTIVATION_PERCENT=10`. A path that does not start with `/` or ends with one, a base URL that is not an absolute `http` or `https` URL, a `max_results` or `chunk_size` of 0, a percentage over 100 or a `stale_after_mins` of 60 or less fails the boot, naming the key. `DirectoryModule::for_root(DirectoryOptions { .. })` takes the same options in code. The [reference](#reference) lists every key.
 
 ## Connections
 
@@ -634,7 +634,7 @@ To test SCIM, create a `scim` connection and send requests with its token throug
 | `directory.sync.min_deactivations` | `10` | ...and more users than this |
 | `directory.sync.max_recorded_changes` | `5000` | Changes recorded per run |
 | `directory.sync.keep_runs_days` | `90` | `directory:prune` deletes older runs |
-| `directory.sync.stale_after_mins` | `120` | A queued or running run older than this is taken for a crashed worker's |
+| `directory.sync.stale_after_mins` | `120` | A queued or running run older than this is taken for a crashed worker's; must be more than 60, the sync job's time limit |
 | `directory.ldap.block_private` | `true` | LDAP hosts that resolve to loopback, private, link-local or shared addresses are refused |
 | `directory.ldap.allow_hosts` | `[]` | LDAP hosts allowed anyway (a list, or a comma-separated string) |
 

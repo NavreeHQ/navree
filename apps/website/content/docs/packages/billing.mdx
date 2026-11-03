@@ -85,7 +85,7 @@ APP_BILLING__STRIPE__SECRET_KEY=sk_live_51Q8...
 APP_BILLING__STRIPE__WEBHOOK_SECRET=whsec_Jx2...
 ```
 
-Create the webhook endpoint in the Stripe dashboard, pointing at `https://api.acme.test/api/billing/webhook`, and copy its signing secret. Select the `checkout.session.*`, `customer.*`, `customer.subscription.*` and `invoice.*` events, or run `navree billing:webhook https://api.acme.test/api/billing/webhook` to create the endpoint with the right events through the API; it prints the signing secret to put in `.env`.
+Create the webhook endpoint in the Stripe dashboard, pointing at `https://api.acme.test/api/billing/webhook`, and copy its signing secret. Select `checkout.session.completed`, `customer.subscription.created`, `.updated`, `.deleted`, `.paused`, `.resumed` and `.trial_will_end`, `invoice.paid` and `invoice.payment_failed` (the list is `navree::billing::STRIPE_EVENTS`), or run `navree billing:webhook https://api.acme.test/api/billing/webhook` to create the endpoint with the right events through the API; it prints the signing secret to put in `.env`.
 
 Every request is pinned to Stripe API version `2025-03-31.basil` (`navree::billing::STRIPE_API_VERSION`) with the `Stripe-Version` header, and `billing:webhook` creates the endpoint on the same version, so the payloads have the shape Navree reads.
 
@@ -99,7 +99,7 @@ APP_BILLING__PADDLE__WEBHOOK_SECRET=pdl_ntfset_01j...
 APP_BILLING__PADDLE__ENVIRONMENT=production
 ```
 
-`environment` is `sandbox` (the default) or `production`. Create a notification destination for `https://api.acme.test/api/billing/webhook` with the `subscription.*`, `transaction.*` and `customer.*` events, or run `navree billing:webhook <url>`. Paddle is the merchant of record, so it also handles sales tax and VAT for you.
+`environment` is `sandbox` (the default) or `production`. Create a notification destination for `https://api.acme.test/api/billing/webhook` with the `subscription.*` events (`created`, `updated`, `activated`, `trialing`, `past_due`, `paused`, `resumed`, `canceled`) and `transaction.completed` and `transaction.payment_failed` (the list is `navree::billing::PADDLE_EVENTS`), or run `navree billing:webhook <url>`. Paddle is the merchant of record, so it also handles sales tax and VAT for you.
 
 Paddle's checkout is a transaction opened on your account's default payment link, so set one in the Paddle dashboard. A few checkout options work differently on Paddle: the trial is the trial period of the price in Paddle (a checkout's `trial_days` is not sent), `coupon` is a discount id, and the customer returns to the URLs configured on the payment link rather than `success_url` and `cancel_url`.
 

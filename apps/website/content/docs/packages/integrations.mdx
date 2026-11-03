@@ -1,6 +1,6 @@
 ---
 title: "Integrations"
-description: "Connect each workspace or organization to Microsoft 365, Google Workspace, Slack, any OAuth 2.0 API or an API key: admin consent, service accounts, encrypted credentials, token refresh, least-privilege scope sets, health checks and typed clients."
+description: "Connect each workspace or organization to Microsoft 365, Google Workspace, Slack, any OAuth 2.0 API or an API key, with encrypted credentials, token refresh, scope sets and health checks."
 ---
 
 ## Introduction
@@ -405,9 +405,9 @@ A connection stops working without telling you: an admin removes your app from t
 The module schedules `integrations:check --due` every five minutes; it checks each connection whose last check is older than `integrations.check_interval_mins` (60). Add `ScheduleModule` and run `schedule:work` (or `schedule:run` from cron) to start it, and set the interval to 0 to turn scheduled checks off. A token request in normal use that the provider refuses also turns the connection unhealthy, and answers 409 `integration_reauthorization_required`.
 
 ```sh
-cargo run -- integrations:check                       # every connection now
-cargo run -- integrations:check --id 019a2b3c-4d5e-7f60-8a9b-0c1d2e3f4a5b
-cargo run -- integrations:list
+navree integrations:check                       # every connection now
+navree integrations:check --id 019a2b3c-4d5e-7f60-8a9b-0c1d2e3f4a5b
+navree integrations:list
 ```
 
 ```text

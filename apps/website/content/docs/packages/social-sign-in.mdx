@@ -73,7 +73,7 @@ APP_SOCIAL__PROVIDERS__GOOGLE__CLIENT_SECRET=GOCSPX-7Hk2...
 APP_SOCIAL__PROVIDERS__MICROSOFT__CLIENT_SECRET=Q8a8Q~mX2...
 ```
 
-A provider without a `client_id`, an unknown provider type, a `redirect_base` that isn't an absolute URL, an Apple key that can't be read or a `custom` provider that isn't registered fails the boot, naming the key. Provider keys are lower-case letters, digits, `-` and `_`. `SocialModule::for_root(SocialOptions { .. })` takes the same options in code.
+A provider without a `client_id`, an unknown provider type, a `redirect_base` that isn't an absolute URL, an Apple key that can't be read or a `custom` provider that isn't registered fails the boot, naming the key. Provider keys are lower-case letters, digits, `-` and `_`, and can't be `accounts` (that is a route). `SocialModule::for_root(SocialOptions { .. })` takes the same options in code.
 
 ### Providers
 
@@ -104,7 +104,7 @@ Each provider asks for the scopes it needs to read a name and an email. Add more
 
 How Navree reads the user:
 
-- **Google, Apple, Microsoft and `oidc` providers:** from the ID token, verified against the provider's JSON Web Key Set (RS256, PS256, ES256 or EdDSA; key sets are cached for an hour and fetched again when a new key id appears). When the ID token has no email, Google and `oidc` providers fill it in from their userinfo endpoint.
+- **Google, Apple, Microsoft and `oidc` providers:** from the ID token, verified against the provider's JSON Web Key Set (RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384 or EdDSA, never HMAC or `none`; key sets are cached for an hour and fetched again when a new key id appears). When the ID token has no email, Google and `oidc` providers fill it in from their userinfo endpoint.
 - **GitLab, Slack and LinkedIn:** from their userinfo endpoints, with the access token.
 - **GitHub, Discord and X:** from their APIs.
 

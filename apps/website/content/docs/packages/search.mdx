@@ -131,7 +131,7 @@ url = "https://search.internal:7700"
 # key: APP_SEARCH__KEY
 ```
 
-Navree creates each index on first use and pushes its settings (searchable fields, heaviest first; filterable and sortable fields; synonyms; stop words) at boot and with `search:settings`. Writes wait for their Meilisearch task, so a failed task fails the sync job, which retries. Use a key with the `indexes.*`, `documents.*`, `search`, `settings.*` and `tasks.get` actions, not the master key, in production.
+Navree creates each index on first use and pushes its settings (searchable fields, heaviest first; filterable and sortable fields; synonyms; stop words) at boot and with `search:settings`. Writes wait for their Meilisearch task, so a failed task fails the sync job, which retries. Use a key with the `indexes.*`, `documents.*`, `search`, `settings.*`, `stats.get` and `tasks.get` actions, not the master key, in production.
 
 </Tab>
 <Tab label="Typesense">
@@ -155,7 +155,7 @@ engine = "tantivy"
 
 [search.tantivy]
 path = "storage/search"     # one directory per index
-memory_budget_mb = 64       # writer buffer; less than 15 counts as 15
+memory_budget_mb = 64       # writer buffer in MB; at least 15
 ```
 
 The index lives in the process. Each index has its own directory, and a fresh import builds a new generation of it and swaps it in. Only one process may write to a Tantivy directory, so run the sync jobs in the server process (`sync = "inline"`) or on a single worker. Use it for single-server apps; switch to a server engine when you scale out.
@@ -398,7 +398,7 @@ impl ContactSearchController {
             query = query.filter("status", status);
         }
         let contacts = query.paginate(page).await?;
-        Ok(contacts.map(|contact| ContactResource::new(contact, None, None)))
+        Ok(contacts.map(|contact| contact.to_resource::<ContactResource>()))
     }
 }
 ```
@@ -531,6 +531,8 @@ impl Embeddings for ModelEmbeddings {
 m.value_arc(Arc::new(ModelEmbeddings { /* .. */ }) as Arc<dyn Embeddings>);
 ```
 
+With the `ai` feature on, the wrapper can call the `navree::ai::Embeddings` service: `embed_many(texts)` returns `Embedding`s, and `into_vec()` gives each one's `Vec<f32>`. Set `search.vectors.dimensions` to the size `ai.vectors.dimensions` names.
+
 Vectors are stored in the configured vector store:
 
 ```toml title="config/app.toml"
@@ -631,7 +633,7 @@ Every engine implements the `SearchEngine` trait, which you can implement for an
 | `search.postgres.trigram` | `false` | Typo tolerance with `pg_trgm` |
 | `search.postgres.typo_threshold` | `0.4` | How similar a word must be to match with `trigram`, above 0 and at most 1 |
 | `search.tantivy.path` | `storage/search` | Index directory |
-| `search.tantivy.memory_budget_mb` | `64` | Writer buffer in MB (less than 15 counts as 15) |
+| `search.tantivy.memory_budget_mb` | `64` | Writer buffer in MB; at least 15, or the boot fails |
 | `search.vectors.store` | none | `pgvector`, `qdrant` or `memory`; vector search is off without it |
 | `search.vectors.url`, `search.vectors.key` | none | The Qdrant server |
 | `search.vectors.dimensions` | `1536` | Vector size |

@@ -1,6 +1,6 @@
 ---
 title: "Media"
-description: "Attach files to your models in collections, convert images into thumbnails and responsive variants, download remote files safely, unpack zip archives, extract text from PDF, DOCX and HTML, and process video with FFmpeg."
+description: "Attach files to models in collections, convert images into responsive variants, download remote files safely, unpack zips, extract text from PDF and DOCX, and process video with FFmpeg."
 ---
 
 ## Introduction
@@ -338,7 +338,7 @@ collections
 | `frame_at(secs)` | For video: the frame the image is made from ([video](#video-and-audio)) |
 | `transcode(Transcode)` | For video and audio: re-encodes the file instead ([video](#video-and-audio)) |
 
-Images are decoded with a pixel limit (`media.images.max_pixels`) and their EXIF orientation applied, resized with SIMD (`fast_image_resize`, Lanczos), filtered and encoded without copying any metadata. SVGs are rendered with resvg at the conversion's size, without loading external files or URLs. Image conversions apply to JPEG, PNG, GIF (the first frame), WebP, BMP and SVG originals, and with `media-ffmpeg` to video frames; a PDF in a collection with a thumbnail conversion simply has no thumbnail.
+Images are decoded with a pixel limit (`media.images.max_pixels`) and their EXIF orientation applied, resized with SIMD (`fast_image_resize`, Lanczos), filtered and encoded without copying any metadata. SVGs are rendered with resvg at the conversion's size, without loading external files or URLs. Image conversions apply to JPEG, PNG, GIF (the first frame), WebP, BMP and SVG originals, and with `media-ffmpeg` to video frames; a PDF in a collection with a thumbnail conversion has no thumbnail.
 
 Generated files live next to the original: `{prefix}/{id}/conversions/{name of the file}-{conversion}.{ext}`, responsive copies under `{prefix}/{id}/responsive/`, on the collection's conversions disk. Each is recorded on the row with its path, type, size, width, height and variants.
 
@@ -453,7 +453,7 @@ for (number, page) in document.pages.iter().enumerate() {
 | HTML, XHTML | The visible text, blocks on their own lines, scripts and styles skipped; the `<title>` |
 | `text/*` | The text, byte-order mark and `\r\n` removed |
 
-`ExtractedText` has `text` (the whole document, whitespace collapsed, PDF pages separated by a blank line), `pages`, `title` and the `mime_type` it was read as. A type it doesn't read is sniffed from the content first; one that is still unsupported is `unsupported_media_type` (415), and a damaged document `invalid_document`. `text::supports(mime_type)` tells you in advance. Scanned PDFs have no text to extract: they need OCR, which this module doesn't do. PDFs are read with navree-documents' reader and held to the same limits (see [Reading text back](/docs/packages/documents/#reading-text-back)): the document's objects in 256 MiB, a page's content in 64 MiB and 128 MiB of work (every operation, character code and object looked up costs some), the fonts' `ToUnicode` maps capped and counted, glyph names over 127 bytes unread; a PDF over one is `invalid_document`, and so is one that needs a password to open.
+`ExtractedText` has `text` (the whole document, whitespace collapsed, PDF pages separated by a blank line), `pages`, `title` and the `mime_type` it was read as. A type it doesn't read is sniffed from the content first; one that is still unsupported is `unsupported_media_type` (415), and a damaged document `invalid_document`. `text::supports(mime_type)` tells you in advance. Scanned PDFs have no text to extract: they need OCR, which this module doesn't do. PDFs are read with the `navree-pdf` reader that `Pdf::text` uses, and held to the same limits (see [Reading text back](/docs/packages/documents/#reading-text-back)): the document's objects in 256 MiB, a page's content in 64 MiB and 128 MiB of work (every operation, character code and object looked up costs some), the fonts' `ToUnicode` maps capped and counted, glyph names over 127 bytes unread; a PDF over one is `invalid_document`, and so is one that needs a password to open.
 
 ## Video and audio
 

@@ -1,6 +1,6 @@
 ---
 title: "Webhooks"
-description: "Send HMAC-signed webhooks from your events, with queue-backed retries, a delivery log and endpoint management, and verify incoming webhooks from Stripe, GitHub, Paddle, AWS SNS, Google Pub/Sub, Microsoft Graph, Twilio, Slack, Mailgun, Postmark and any Standard Webhooks sender."
+description: "Send signed webhooks from your events with queue-backed retries and a delivery log, and verify incoming webhooks from Stripe, GitHub, Paddle, AWS SNS, Twilio, Slack and other senders."
 ---
 
 ## Introduction
@@ -9,7 +9,7 @@ description: "Send HMAC-signed webhooks from your events, with queue-backed retr
 
 **Outgoing.** Your customers register endpoint URLs and pick the events they want. When a deal is won, every subscribed endpoint receives a signed `POST` within seconds. Delivery runs on the [queue](/docs/digging-deeper/queues/), with retries for about a day, and every attempt lands in a delivery log your customers can read.
 
-**Incoming.** The `VerifiedWebhook` extractor checks that a request comes from who it claims before your handler sees it. It knows Stripe, GitHub, Paddle, AWS SNS (SES events among them), Google Pub/Sub push (Gmail notifications among them), Microsoft Graph change notifications, Twilio, Slack, Mailgun, Postmark and any sender that follows the [Standard Webhooks](https://www.standardwebhooks.com) specification, and it answers their handshakes (Graph's `validationToken`, Slack's challenge, SNS subscription confirmations) for you.
+**Incoming.** The `VerifiedWebhook` extractor checks that a request comes from who it claims before your handler sees it. It knows Stripe, GitHub, Paddle, AWS SNS (SES events among them), Google Pub/Sub push (Gmail notifications among them), Microsoft Graph change notifications, Twilio, Vonage, Meta (WhatsApp), Slack, Mailgun, Postmark and any sender that follows the [Standard Webhooks](https://www.standardwebhooks.com) specification, and it answers their handshakes (Graph's `validationToken`, Slack's challenge, SNS subscription confirmations) for you.
 
 Outgoing messages follow Standard Webhooks too, so your customers can verify them with any Standard Webhooks library, in any language.
 
@@ -366,7 +366,7 @@ What each one says about a request:
 
 GitHub, Twilio, Postmark, Graph and Meta sign no timestamp, so there is no age check for them; use `mark_processed` to drop replays. SNS retries a failed delivery for a while, so its `Timestamp` is checked only against the source's own `tolerance_secs`, when you set one.
 
-The verifiers are also plain functions that take any secret, such as `Stripe::verify(secret, headers, body, tolerance)`, `GitHub::verify(secret, headers, body)`, `Twilio::verify(auth_token, url, headers, body)`, `Slack::verify(secret, headers, body, tolerance)`, `Vonage::verify(secret, headers, body, tolerance)` or `Meta::verify(app_secret, headers, body)`, so a module that keeps its own secrets can check requests with them; [Billing](/docs/packages/billing/) uses them for its Stripe and Paddle webhooks.
+The verifiers are also plain functions that take any secret, such as `Stripe::verify(secret, headers, body, tolerance)`, `GitHub::verify(secret, headers, body)`, `Twilio::verify(auth_token, url, headers, body)`, `Slack::verify(secret, headers, body, tolerance)`, `Vonage::verify(secret, headers, body, tolerance)` or `Meta::verify(app_secret, headers, body)`, so a module that keeps its own secrets can check requests with them. [Billing](/docs/packages/billing/) verifies its own Stripe and Paddle webhooks and doesn't need this module.
 
 A source table (`[webhooks.incoming.<source>]`) with an empty secret fails the boot, naming the key, unless it sets `topics` or `service_account`. A request for a source that lacks its secret or required setting, including one with no table at all, is answered with 500, and the error log names the missing key.
 
@@ -735,6 +735,7 @@ For SNS, serve a test certificate at the message's `SigningCertURL` and sign `me
 | `webhooks.incoming.aws_sns.auto_confirm` | `true` | Confirm subscriptions without the handler |
 | `webhooks.incoming.google_pubsub.service_account` | none | The service account email of the push subscription; required |
 | `webhooks.incoming.google_pubsub.audience` | the public URL | The token's expected `aud` |
+| `webhooks.incoming.meta.verify_token` | none | The token Meta sends in its `GET` handshake |
 
 | Command | What it does |
 |---|---|
