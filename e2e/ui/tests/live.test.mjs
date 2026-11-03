@@ -436,5 +436,176 @@ for (const name of NAMES) {
         assert.deepEqual(words, ["Connecting"]);
       });
     });
+
+    // ---- Second pass: a fetch that never ends, a token that never settles, a sign-in in place -------
+
+    test("R1 a refetch that never answers is given up on, and the next event fetches again", async () => {
+      await scenario(async ({ srv, page }) => {
+        let k = 0;
+        let gaveUp = 0;
+        let t0 = Date.now();
+        srv.routes.set("/p", (req, res) => srv.html(res, shell(region())));
+        srv.routes.set("/frag", (req, res) => {
+          if (++k === 1) {
+            res.on("close", () => (gaveUp ||= Date.now() - t0)); // held for ever, until the page lets go
+            return;
+          }
+          srv.html(res, "v" + k);
+        });
+        srv.routes.set("/sse", srv.stream());
+        await page.goto(srv.origin + "/p");
+        await waitLive(page, "on");
+        t0 = Date.now();
+        for (let i = 0; i < 19; i++) {
+          srv.say("data: x\n\n");
+          await sleep(1000);
+        }
+        assert.ok(gaveUp >= 12000 && gaveUp <= 18000, `the page let go of the held fetch after ${gaveUp} ms`);
+        assert.ok(k >= 2, `fetches ${k}`);
+        assert.match(await page.locator("#r").textContent(), /^v[2-9]/, "the region follows the stream again");
+      });
+    });
+
+    test("R1 a fetch that cannot be cancelled is superseded by the next event", async () => {
+      await scenario(async ({ srv, page, context }) => {
+        // The first fetch of the fragment is a promise that never settles, whatever its signal says.
+        await context.addInitScript(() => {
+          const real = window.fetch.bind(window);
+          let first = true;
+          window.fetch = (input, init) => {
+            const url = String(input instanceof Request ? input.url : input);
+            if (first && url.includes("/frag")) {
+              first = false;
+              return new Promise(() => {});
+            }
+            return real(input, init);
+          };
+        });
+        srv.routes.set("/p", (req, res) => srv.html(res, shell(region())));
+        srv.routes.set("/frag", (req, res) => srv.html(res, "v" + Date.now()));
+        srv.routes.set("/sse", srv.stream());
+        await page.goto(srv.origin + "/p");
+        await waitLive(page, "on");
+        const t0 = Date.now();
+        let seen = 0;
+        for (let i = 0; i < 26 && !seen; i++) {
+          srv.say("data: x\n\n");
+          await sleep(1000);
+          if (srv.count("/frag")) seen = Date.now() - t0;
+        }
+        assert.ok(seen >= 15000 && seen <= 24000, `the server first saw a fetch of the fragment after ${seen} ms`);
+        await page.waitForFunction(() => /^v\d/.test(document.getElementById("r").textContent), null, { timeout: 4000 });
+      });
+    });
+
+    test("R1 the probe of a refused stream gives up when the stream says nothing", async () => {
+      await scenario(async ({ srv, page }) => {
+        let probed = 0;
+        let gaveUp = 0;
+        const t0 = Date.now();
+        srv.routes.set("/p", (req, res) => srv.html(res, shell(region())));
+        srv.routes.set("/sse", (req, res) => {
+          if ("x-ui-probe" in req.headers) {
+            probed++;
+            res.on("close", () => (gaveUp ||= Date.now() - t0)); // never answers
+            return;
+          }
+          res.writeHead(503, { "content-type": "text/plain" });
+          res.end("down");
+        });
+        await page.goto(srv.origin + "/p");
+        await sleep(13500);
+        assert.equal(probed, 1, "one probe");
+        assert.ok(gaveUp >= 8000 && gaveUp <= 13000, `the probe was let go of after ${gaveUp} ms`);
+        assert.equal(await live(page), "retry");
+      });
+    });
+
+    test("R2 a server that sets a new token on every answer does not make a loop of connections", async () => {
+      await scenario(async ({ srv, page }) => {
+        let n = 0;
+        srv.routes.set("/p", (req, res) => srv.html(res, shell(region()), { "set-cookie": "XSRF-TOKEN=t0; Path=/" }));
+        srv.routes.set("/frag", (req, res) => srv.html(res, "v" + ++n, { "set-cookie": `XSRF-TOKEN=t${n}; Path=/` }));
+        srv.routes.set("/sse", srv.stream());
+        await page.goto(srv.origin + "/p");
+        await waitLive(page, "on");
+        srv.say("data: x\n\n");
+        await sleep(4500);
+        // The first change is answered with a new connection; the rest wait for five seconds.
+        assert.ok(srv.sse.attempts === 2, `connections in 4.5 s ${srv.sse.attempts}`);
+        assert.ok(n <= 4, `fragment fetches ${n}`);
+        await sleep(4000);
+        // The change after five seconds is still answered: the last connection is the latest reader's.
+        assert.ok(srv.sse.attempts <= 3, `connections in 8.5 s ${srv.sse.attempts}`);
+        assert.equal(srv.sse.open, 1);
+      });
+    });
+
+    test("R3 a row whose id is on the page already, anywhere, is not added", async () => {
+      await scenario(async ({ srv, page }) => {
+        srv.routes.set("/p", (req, res) => srv.html(res, shell(feed(50))));
+        srv.routes.set("/rows", (req, res) => srv.html(res, `<li id="later">takes the region's name</li><li id="row-9">nine</li>`, { "x-ui-cursor": "9" }));
+        srv.routes.set("/later", (req, res) => srv.html(res, `<div id="later" data-ui-region data-ui-src="/later"><button type="button" data-ui-refresh>refresh later</button><span id="later-text">fresh</span></div>`));
+        srv.routes.set("/sse", srv.stream());
+        await page.goto(srv.origin + "/p");
+        await waitLive(page, "on", "feed");
+        srv.say("data: x\n\n");
+        await page.waitForFunction(() => document.getElementById("row-9"));
+        assert.equal(await page.evaluate(() => document.querySelectorAll("#later").length), 1, "one element has the id");
+        assert.equal(await page.locator("#list > li").count(), 2, "the other row of the answer was added");
+        await page.locator("#later button").click();
+        await page.waitForFunction(() => document.getElementById("later-text")?.textContent === "fresh");
+      });
+    });
+
+    test("R4 a stream stopped by a 401 starts again when the reader signs in in place", async () => {
+      await scenario(async ({ srv, page }) => {
+        srv.routes.set("/p", (req, res) => srv.html(res, shell(region() + `<div id="auth" data-ui-region data-ui-src="/auth"><button type="button" data-ui-refresh>sign in</button><span>signed out</span></div>`), { "set-cookie": "XSRF-TOKEN=a; Path=/" }));
+        srv.routes.set("/auth", (req, res) => srv.html(res, `<div id="auth" data-ui-region data-ui-src="/auth"><button type="button" data-ui-refresh>sign out</button><span>signed in</span></div>`, { "set-cookie": ["XSRF-TOKEN=b; Path=/", "session=B; Path=/; HttpOnly"] }));
+        srv.routes.set("/frag", (req, res) => srv.html(res, "v1"));
+        srv.routes.set("/sse", (req, res) => {
+          if (!/session=B/.test(req.headers.cookie || "")) {
+            res.writeHead(401, { "content-type": "text/plain" });
+            return res.end("sign in");
+          }
+          srv.stream()(req, res);
+        });
+        await page.goto(srv.origin + "/p");
+        await waitLive(page, "closed");
+        await page.locator("#auth button").click();
+        await waitLive(page, "on");
+        assert.equal(srv.sse.open, 1);
+        assert.match(srv.sse.cookies.at(-1), /session=B/, "opened as the reader who signed in");
+      });
+    });
+
+    test("R5 a tab shown while its stream is down is caught up without waiting for the stream", async () => {
+      await scenario(
+        async ({ srv, page }) => {
+          let down = false;
+          srv.routes.set("/p", (req, res) => srv.html(res, shell(region())));
+          srv.routes.set("/frag", (req, res) => srv.html(res, "v" + Date.now()));
+          srv.routes.set("/sse", (req, res) => {
+            if (down) {
+              res.writeHead(503, { "content-type": "text/plain" });
+              return res.end("down");
+            }
+            srv.stream()(req, res);
+          });
+          await page.goto(srv.origin + "/p");
+          await waitLive(page, "on");
+          await page.evaluate(() => { window.__hidden = true; document.dispatchEvent(new Event("visibilitychange")); });
+          down = true;
+          for (let i = 0; i < 40 && srv.sse.open; i++) await sleep(100);
+          const t = Date.now();
+          await page.evaluate(() => { window.__hidden = false; document.dispatchEvent(new Event("visibilitychange")); });
+          await sleep(4000);
+          const caught = srv.log.filter((l) => l.t >= t && l.path === "/frag").length;
+          assert.ok(caught >= 1, `fetches after the tab was shown, with the stream down: ${caught}`);
+          assert.equal(await live(page), "retry");
+        },
+        { visibility: true },
+      );
+    });
   });
 }
