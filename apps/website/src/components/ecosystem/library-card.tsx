@@ -20,8 +20,10 @@ export function LibraryCard({ entry, children, className }: { entry: EcosystemEn
   const planned = site.showPlannedBadges && entry.status === "planned";
   return (
     <SpotlightCard className={cn("h-full rounded-2xl", className)}>
+      {/* Not prefetched: the ecosystem page has a card per package, and scrolling past them would fetch every docs page. */}
       <Link
         href={entry.href}
+        prefetch={false}
         className="group flex h-full flex-col rounded-2xl p-5 focus-visible:outline-offset-[-2px] sm:p-6"
         aria-labelledby={`${entry.slug}-card-title`}
         aria-describedby={`${entry.slug}-card-desc`}

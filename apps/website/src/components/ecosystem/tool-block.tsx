@@ -45,6 +45,7 @@ function ToolCopy({ entry, wide = false }: { entry: EcosystemEntry; wide?: boole
     <div className="flex flex-wrap items-center gap-3">
         <Link
           href={entry.href}
+          prefetch={false}
           className="group inline-flex h-10 items-center gap-2 rounded-full border border-line-2 pr-1.5 pl-4 text-[0.9375rem] font-medium text-fg transition-colors duration-200 hover:border-fg-3 hover:bg-ink-2"
         >
           Read the {entry.name} docs
