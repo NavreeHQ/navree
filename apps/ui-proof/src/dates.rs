@@ -16,7 +16,7 @@ use navree::http::{Controller, RouteDef};
 use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree::ui::dates::{
     Calendar, CalendarMode, CaptionLayout, DateLocale, DatePicker, DatePreset, DateRange,
-    DateRangePicker, DateRules, PickerStyle, TimePicker, TimeRules,
+    DateRangePicker, DateRangeQuery, DateRules, PickerStyle, RangeRules, TimePicker, TimeRules,
 };
 use navree::ui::form::{FormView, Rejected};
 
@@ -310,7 +310,11 @@ pub fn page(shell: &AppShell) -> AppPage {
 pub struct Booking {
     /// Start date
     #[validate(custom(open_day))]
-    #[form(widget = date_picker, help = "A weekday in the next three months.")]
+    #[form(
+        widget = date_picker,
+        date_rules = booking_rules,
+        help = "A weekday in the next three months."
+    )]
     pub start: NaiveDate,
     /// End date
     #[validate(skip)]
@@ -318,7 +322,11 @@ pub struct Booking {
     pub end: Option<NaiveDate>,
     /// Arrives at
     #[validate(custom(open_hours))]
-    #[form(widget = time_picker, help = "Between 9:00 and 17:00, not at lunch.")]
+    #[form(
+        widget = time_picker,
+        time_rules = office_hours,
+        help = "Between 9:00 and 17:00, not at lunch."
+    )]
     pub arrives: NaiveTime,
     /// Note
     #[validate(length(max = 40))]
@@ -399,13 +407,22 @@ pub fn booked(shell: &AppShell, params: &HashMap<String, String>) -> AppPage {
         )))
 }
 
-/// `GET /dates/report`: the window is in the address.
-pub fn report(shell: &AppShell, params: &HashMap<String, String>) -> AppPage {
-    let from = params.get("from").map(String::as_str).unwrap_or_default();
-    let to = params.get("to").map(String::as_str).unwrap_or_default();
-    let range = DateRange::parse(from, to);
+/// The windows a report takes, written once: the picker draws them for the browser, and the
+/// server holds the address to the same value.
+fn window_limits() -> RangeRules {
+    RangeRules::new(DateRules::new().min(day(2020, 1, 1)).max(day(2027, 12, 31))).max_days(400)
+}
+
+/// `GET /dates/report`: the window is in the address, and a window the limits refuse is
+/// said to be refused, not drawn.
+pub fn report(shell: &AppShell, query: &DateRangeQuery) -> AppPage {
+    let limits = window_limits();
+    let (range, refused) = match query.checked(&limits) {
+        Ok(range) => (range, None),
+        Err(error) => (None, Some(error.message(&DateLocale::english()))),
+    };
     let zone: Tz = "America/New_York".parse().unwrap_or(Tz::UTC);
-    let facts: Vec<Element> = match range {
+    let mut facts: Vec<Element> = match range {
         Some(range) => {
             let (start, end) = range.utc_bounds(&zone);
             vec![
@@ -430,6 +447,10 @@ pub fn report(shell: &AppShell, params: &HashMap<String, String>) -> AppPage {
             el("dd").attr("data-report", "window").child("none"),
         ],
     };
+    if let Some(message) = refused {
+        facts.push(el("dt").child("Refused"));
+        facts.push(el("dd").attr("data-report", "refused").child(message));
+    }
     shell.page("Report").body(
         Region::new("report").children(
             el("form")
@@ -443,6 +464,7 @@ pub fn report(shell: &AppShell, params: &HashMap<String, String>) -> AppPage {
                         .today(today())
                         .week_start(Weekday::Mon)
                         .title("Created")
+                        .limits(limits)
                         .value_opt(range),
                     Button::primary("Apply").submit(),
                     el("dl").attr("data-report", "").children(facts),
@@ -527,6 +549,136 @@ pub fn probe(params: &HashMap<String, String>) -> View {
     )
 }
 
+/// An id as a page might build one from a request: it closes the attribute, then adds a tag
+/// that sends the page to another site and a field that would post a role.
+const HOSTILE: &str = "x\"><meta http-equiv=refresh content=\"0;url=https://example.com/\"><input name=role value=admin><a id=planted href=//evil.example/>x</a>";
+
+/// `GET /dates/hostile`: every kind of picker and calendar with a hostile id, for the
+/// browser to draw months and lists from.
+pub fn hostile() -> View {
+    let cal = |suffix: &str| Calendar::new(format!("{HOSTILE}{suffix}")).today(today());
+    View::new("Hostile ids").body(
+        el("main").slot("page").child(
+            el("form")
+                .attr("id", "hostile")
+                .attr("method", "get")
+                .attr("action", "/dates/hostile")
+                .children((
+                    cal("-one").name("cal_one").selected(day(2026, 11, 12)),
+                    cal("-two").name("cal_two").months(2),
+                    cal("-dd").name("cal_dd").caption(CaptionLayout::Dropdowns),
+                    cal("-range")
+                        .mode(CalendarMode::Range)
+                        .range_names("r_from", "r_to"),
+                    DatePicker::new("due")
+                        .id(HOSTILE)
+                        .today(today())
+                        .value(day(2026, 11, 12)),
+                    DateRangePicker::new("from", "to")
+                        .id(format!("{HOSTILE}-r"))
+                        .today(today()),
+                    TimePicker::new("at")
+                        .id(format!("{HOSTILE}-t"))
+                        .value(time(14, 30)),
+                    Button::primary("Send").submit(),
+                )),
+        ),
+    )
+}
+
+/// What the server says of a posted date or time under rules: `ok` or its own words.
+fn said_of(name: &str, params: &HashMap<String, String>) -> Option<(String, String)> {
+    let text = params.get(name)?;
+    let english = DateLocale::english();
+    let verdict = match name {
+        "due" => match text.parse::<NaiveDate>() {
+            Ok(day) => stale_dates().check(day).map_or_else(
+                |e| format!("refused: {}", e.message(&english)),
+                |()| "ok".to_owned(),
+            ),
+            Err(_) => "refused: not a date".to_owned(),
+        },
+        _ => match NaiveTime::parse_from_str(text, "%H:%M")
+            .or_else(|_| NaiveTime::parse_from_str(text, "%H:%M:%S"))
+        {
+            Ok(at) => (if name == "at" {
+                stale_time()
+            } else {
+                stepped_time()
+            })
+            .check(at)
+            .map_or_else(
+                |e| format!("refused: {}", e.message(&english)),
+                |()| "ok".to_owned(),
+            ),
+            Err(_) => "refused: not a time".to_owned(),
+        },
+    };
+    Some((format!("{name}={text}"), verdict))
+}
+
+fn stale_dates() -> DateRules {
+    DateRules::new().min(day(2026, 11, 3))
+}
+
+fn stale_time() -> TimeRules {
+    TimeRules::new().min(time(9, 0))
+}
+
+fn stepped_time() -> TimeRules {
+    TimeRules::new()
+        .min(time(9, 10))
+        .step_minutes(15)
+        .strict_step()
+}
+
+/// `GET /dates/stale`: values stored before their rules changed (a date before the earliest
+/// allowed, a time before the opening), and a time picker whose least time is not on its
+/// step. A form with these must say so at the box, not stop with no word said; and what it
+/// posts is checked by the server under the same rules, shown below it.
+pub fn stale(params: &HashMap<String, String>) -> View {
+    let results: Vec<Element> = ["due", "at", "stepped"]
+        .iter()
+        .filter_map(|name| said_of(name, params))
+        .map(|(posted, verdict)| {
+            el("li")
+                .attr("data-result", "")
+                .child(format!("{posted} {verdict}"))
+        })
+        .collect();
+    View::new("Stored values").body(
+        el("main").slot("page").children((
+            el("form")
+                .attr("id", "stale")
+                .attr("method", "get")
+                .attr("action", "/dates/stale")
+                .children((
+                    Field::new("fld-due", "Due").control(
+                        DatePicker::new("due")
+                            .id("dp-stale-due")
+                            .today(today())
+                            .rules(stale_dates())
+                            .value(day(2026, 10, 1)),
+                    ),
+                    Field::new("fld-at", "Opens at").control(
+                        TimePicker::new("at")
+                            .id("tp-stale-at")
+                            .rules(stale_time())
+                            .value(time(8, 0)),
+                    ),
+                    Field::new("fld-stepped", "Quarter hours from 9:10").control(
+                        TimePicker::new("stepped")
+                            .id("tp-stale-step")
+                            .rules(stepped_time())
+                            .value(time(9, 15)),
+                    ),
+                    Button::primary("Send").submit(),
+                )),
+            el("ul").attr("id", "results").children(results),
+        )),
+    )
+}
+
 /// A window a page owns: two parameters in the table's address, and a range picker in
 /// its toolbar. The table keeps them in every link and doesn't query them.
 #[derive(Default, Deserialize)]
@@ -537,7 +689,11 @@ pub struct Window {
 
 impl Window {
     fn range(&self) -> Option<DateRange> {
-        DateRange::parse(self.from.as_deref()?, self.to.as_deref()?)
+        DateRangeQuery {
+            from: self.from.clone(),
+            to: self.to.clone(),
+        }
+        .range_within(&window_limits())
     }
 }
 
@@ -559,6 +715,7 @@ impl navree::ui::table::FilterBar for Window {
                 .today(today())
                 .week_start(Weekday::Mon)
                 .title("Updated")
+                .limits(window_limits())
                 .value_opt(self.range())
                 .into(),
         ]
@@ -650,8 +807,8 @@ impl Controller for DatePages {
             RouteDef::on(
                 Method::GET,
                 "!/dates/report",
-                |shell: AppShell, Query(params): Query<HashMap<String, String>>| async move {
-                    report(&shell, &params)
+                |shell: AppShell, Query(query): Query<DateRangeQuery>| async move {
+                    report(&shell, &query)
                 },
             )
             .public(),
@@ -659,6 +816,13 @@ impl Controller for DatePages {
                 Method::GET,
                 "!/dates/probe",
                 |Query(params): Query<HashMap<String, String>>| async move { probe(&params) },
+            )
+            .public(),
+            RouteDef::on(Method::GET, "!/dates/hostile", || async move { hostile() }).public(),
+            RouteDef::on(
+                Method::GET,
+                "!/dates/stale",
+                |Query(params): Query<HashMap<String, String>>| async move { stale(&params) },
             )
             .public(),
             RouteDef::on(
