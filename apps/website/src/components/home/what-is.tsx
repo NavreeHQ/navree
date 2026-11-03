@@ -27,8 +27,8 @@ export function WhatIs() {
             </p>
             <p className="leading-relaxed text-fg-2">
               Around that structure sits everything a product needs, from routing and validation to workspaces, queues, monitoring
-              and AI, designed, documented and released together. The code stays easy to test, easy to change and easy to hand to
-              a new teammate, or to a coding agent.
+              and AI, designed, documented and released together. The code stays quick to test, safe to change and clear to whoever
+              reads it next: a new teammate, or a coding agent.
             </p>
           </div>
 
