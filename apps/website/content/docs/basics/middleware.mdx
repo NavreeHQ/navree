@@ -7,7 +7,7 @@ description: "The global Tower layers Navree installs and their order, adding yo
 
 Middleware is code that runs around your handlers: it can read and change the request before the handler, refuse it, and read and change the response after. Navree is built on Tower, so its middleware is Tower layers: write one as an async function with `navree::http::middleware::from_fn`, or use any Tower layer.
 
-Navree installs a fixed pipeline of layers for you: request ids, logging, CORS, timeouts, security headers, compression, error rendering, maintenance mode, rate limiting and body limits. On top of that you can:
+Navree installs a fixed pipeline of layers for you: request ids, logging, CORS, timeouts, security headers, compression, error rendering, maintenance mode, rate limiting, and a body limit that every route enforces. On top of that you can:
 
 - add **global layers** that run for every request, in one of five slots of the pipeline;
 - add **guards**, checks that run on chosen routes before the handler;
@@ -30,14 +30,13 @@ Every request passes through these layers, outermost first. The [request lifecyc
 | 8 | Error rendering | The JSON error shape, error mappers, 5xx logs | |
 | 9 | Maintenance mode | 503 while the maintenance file exists | `http.maintenance_file`, `http.maintenance_except` |
 | 10 | Per-IP rate limit | 429 over the limit | `http.per_ip_rate_limit` (600 per minute) |
-| 11 | Body limit | 413 over the limit | `http.body_limit_bytes` (2 MiB) |
-| 12 | `Session` slot | navree-session's layer, then yours | |
-| 13 | `AuthContext` slot | Navree's authentication, then yours | |
-| 14 | `Uow` slot | navree-db's unit of work, then yours | |
-| 15 | `Context` slot | navree-i18n's locale layer, then yours | |
-| 16 | Router and route pipeline | Per-route checks, then the handler | Route attributes |
+| 11 | `Session` slot | navree-session's layer, then yours | |
+| 12 | `AuthContext` slot | Navree's authentication, then yours | |
+| 13 | `Uow` slot | navree-db's unit of work, then yours | |
+| 14 | `Context` slot | navree-i18n's locale layer, then yours | |
+| 15 | Router and route pipeline | Per-route checks, including the body limit (413 over `http.body_limit_bytes`, 2 MiB, or the route's own), then the handler | `http.body_limit_bytes`, route attributes |
 
-Layers 2 to 11 are fixed: you can configure them (and turn some off), but you can't remove them, reorder them or put a layer between them. Your global layers go in the slots.
+Layers 2 to 10 are fixed: you can configure them (and turn some off), but you can't remove them, reorder them or put a layer between them. Your global layers go in the slots.
 
 ```toml title="config/app.toml"
 [http]
@@ -268,7 +267,7 @@ Some of the global layers have per-route settings:
 
 - **`#[throttle(limit = 5, per = "1m")]`** allows each user (each IP for guests) `limit` requests per window on that route, on top of the per-IP limit. It may sit on the impl block; a route's own replaces it. See [rate limiting](/docs/basics/rate-limiting/).
 - **`#[timeout("2m")]`** gives the route its own timeout, shorter or longer than `http.timeout_secs`. A longer one extends the global timeout for that route.
-- **A body limit** larger or smaller than `http.body_limit_bytes` is set on a hand-written route with `.body_limit(bytes)`; there's no attribute for it yet. See [requests](/docs/basics/requests/#body-limits).
+- **A body limit** larger or smaller than `http.body_limit_bytes` is set on a hand-written route with `.body_limit(bytes)`; there's no attribute for it. See [requests](/docs/basics/requests/#body-limits).
 
 ## A layer on one route
 
@@ -317,7 +316,7 @@ A layer added this way runs inside the route pipeline: after the access checks, 
 ## The order, all together
 
 ```text
-global layers (request context ... body limit)
+global layers (request context ... rate limit)
   Session slot      navree-session, then your Session layers
   AuthContext slot  Navree's authentication, then your AuthContext layers
   Uow slot          navree-db's unit of work, then your Uow layers

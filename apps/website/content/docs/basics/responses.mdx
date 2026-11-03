@@ -22,7 +22,7 @@ impl CompaniesController {
     #[get("/{id}")]
     async fn show(&self, uow: Uow, Path(id): Path<Uuid>) -> Result<Json<CompanyResource>> {
         let company = Company::find_or_fail(&uow, id).await?; // a 404 when missing
-        Ok(Json(CompanyResource::from(&*company)))
+        Ok(Json(company.to_resource::<CompanyResource>()))
     }
 }
 ```
@@ -150,18 +150,44 @@ content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'n
 x-request-id: 01a17749fe6c725e935830d1c31aba93
 ```
 
+## HTML and redirects
+
+`Html` wraps a body and sets `Content-Type: text/html; charset=utf-8`. `Redirect` answers with a status and a `Location` header: `Redirect::to` is a 303 See Other (the client follows it with a `GET`), `Redirect::temporary` a 307 and `Redirect::permanent` a 308 (the client repeats the method and the body):
+
+```rust
+use navree::http::response::{Html, Redirect};
+
+#[get("/status")]
+#[public]
+async fn status_page(&self) -> Html<&'static str> {
+    Html("<!doctype html><title>Status</title><p>All systems normal.</p>")
+}
+
+#[post("/{id}/archive")]
+#[authenticated]
+async fn archive(&self, Path(id): Path<Uuid>) -> Redirect {
+    // ...
+    Redirect::to("/archive")
+}
+```
+
+A `Location` that can't be a header value, such as one with a newline, turns the response into a 500. The default `Content-Security-Policy` allows a page no styles or scripts; a route that serves a real page sends its own, as [security headers](/docs/basics/cors-and-security-headers/#changing-a-header-for-one-response) shows.
+
 ## API resources
 
 Returning a database model as JSON ties your API to your table: a renamed column or a new private field changes what clients see. An API resource is a separate struct that decides the shape, so the table and the API can change independently.
 
 ### The resource pattern
 
-The CRM gives every model a `*Resource` struct, builds it from the model, and returns it from every route of that model:
+The CRM gives every model a `*Resource` struct that implements `Resource<Model>`, builds it from a record with `to_resource::<R>()`, and returns it from every route of that model:
 
 ```rust title="src/companies/resource.rs"
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use navree::api::ApiResource;
 use navree::openapi::ToSchema;
+use navree::orm::attributes::Resource;
+use navree::orm::Record;
+use serde::Serialize;
 use uuid::Uuid;
 
 /// A company as the API returns it.
@@ -170,6 +196,7 @@ use uuid::Uuid;
 pub struct CompanyResource {
     /// Always `"Company"`: the subject type front ends check permissions with.
     #[serde(rename = "__type")]
+    #[schema(example = "Company")]
     pub resource_type: &'static str,
     pub id: Uuid,
     pub name: String,
@@ -178,13 +205,17 @@ pub struct CompanyResource {
     pub created_at: DateTime<Utc>,
 }
 
-impl From<company::Model> for CompanyResource {
-    fn from(company: company::Model) -> Self {
+impl ApiResource for CompanyResource {
+    const TYPE: &'static str = "Company";
+}
+
+impl Resource<Company> for CompanyResource {
+    fn from_record(company: &Record<Company>) -> Self {
         CompanyResource {
             resource_type: "Company",
             id: company.id,
-            name: company.name,
-            domain: company.domain,
+            name: company.name.clone(),
+            domain: company.domain.clone(),
             owner_id: company.owner_id,
             created_at: company.created_at,
         }
@@ -205,9 +236,10 @@ impl From<company::Model> for CompanyResource {
 
 The pieces of the pattern:
 
+- **`Resource<Model>`** builds the resource from a record: `company.to_resource::<CompanyResource>()`, or `page.map(|company| company.to_resource::<CompanyResource>())` for a page. A model that names its resource with `#[model(resource = CompanyResource)]` also has `company.resource()`; see [ORM serialization](/docs/orm/serialization/#api-resources).
 - **`__type`** carries the subject type, so a front end using `@casl/ability` can check permissions on plain JSON objects (`detectSubjectType: (o) => o.__type`). The name matches the subject your [access rules](/docs/security/authorization/) use.
 - **`ToSchema`** with `#[schema(as = Company)]` puts the resource in the [OpenAPI document](/docs/digging-deeper/openapi/) under a clean name; reference it with `#[api(response = CompanyResource)]`.
-- **Embeds.** The CRM's `DealResource` embeds `company`, `contact` and `owner` objects. Its `load_many` reads them with one query per kind of embed for a whole page of deals, never one per row.
+- **Embeds.** The CRM's `DealResource` embeds `company`, `contact` and `owner` objects. The list route loads them with `Deal::query().with_all(DealResource::EMBEDS)`: one query per kind of embed for a whole page of deals, never one per row.
 - **Derived fields.** `DealResource` adds `probability`, computed from the stage, which the table doesn't store.
 
 ### Resource helpers
@@ -251,7 +283,7 @@ async fn index(&self, uow: Uow, page: PageQuery) -> Result<Page<CompanyResource>
         .order_by(Company::NAME)
         .paginate(&uow, page)
         .await?;
-    Ok(page.map(|company| CompanyResource::from(&*company)))
+    Ok(page.map(|company| company.to_resource::<CompanyResource>()))
 }
 ```
 
@@ -264,7 +296,7 @@ async fn index(&self, uow: Uow, page: PageQuery) -> Result<Page<CompanyResource>
 }
 ```
 
-`PageQuery` reads `?page=` and `?per_page=` (defaults 1 and 15; `per_page` is capped at 100) and `Page::map` turns models into resources without touching `meta`. Cursor pagination returns a `CursorPage<T>` instead: `{"data": [...], "next_cursor": "..."}`. Both are covered on the [pagination page](/docs/database/pagination/).
+`PageQuery` reads `?page=` and `?per_page=` (defaults 1 and 15; `per_page` is capped at 100) and `Page::map` turns models into resources without touching `meta`. Cursor pagination returns a `CursorPage<T>` instead: `{"data": [...], "next_cursor": "...", "prev_cursor": null}`. Both are covered on the [pagination page](/docs/database/pagination/).
 
 <Callout type="note" title="Pages in the OpenAPI document">
 
@@ -335,8 +367,29 @@ With `StorageModule` in the app, a missing file is a 404 and an invalid path a 4
 `Body::from_stream` takes any stream of `Result<Bytes, E>`, so you can stream generated data the same way. Things to know:
 
 - The request timeout (`http.timeout_secs`, 30 seconds by default) covers the time until your handler returns the response, not the time spent sending a streamed body.
-- Server-sent events work with the `Sse` type (`navree::http::response::sse`). Navree doesn't compress `text/event-stream` responses, so events reach the client as they're sent. Navree has no SSE helpers of its own.
+- Server-sent events use the `Sse` type of `navree::http::response::sse`: it takes a stream of `Event`s, sets `Content-Type: text/event-stream` and `Cache-Control: no-cache`, and `KeepAlive` sends a comment while the stream is quiet (every 15 seconds by default). Navree doesn't compress `text/event-stream` responses, so events reach the client as they're sent.
 - For pushing events to browsers, Navree's main tool is [broadcasting](/docs/digging-deeper/broadcasting/) over WebSockets.
+
+A handler returns the `Sse` as a `Response`, for the reason in the note on `impl IntoResponse` above (the example needs `futures-util` in your dependencies):
+
+```rust
+use std::convert::Infallible;
+use std::time::Duration;
+
+use futures_util::stream;
+use navree::http::response::sse::{Event, KeepAlive, Sse};
+use navree::http::response::{IntoResponse, Response};
+
+#[get("/ticks")]
+async fn ticks(&self) -> Response {
+    let events = stream::iter([Ok::<_, Infallible>(Event::default().event("tick").data("1"))]);
+    Sse::new(events)
+        .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
+        .into_response()
+}
+```
+
+An error from the stream ends the response without a final chunk, so the client sees a broken connection and reconnects.
 
 ## Testing
 

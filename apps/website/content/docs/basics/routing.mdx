@@ -219,7 +219,7 @@ Make fields `Option` or give them a serde default when they may be left out. A q
 
 ## Naming routes
 
-`#[name("deals.show")]` gives a route a name. Names show in the route table, and [`ApiModule`](/docs/digging-deeper/openapi/) uses them as OpenAPI `operationId`s. Navree doesn't generate URLs from route names yet, so build paths yourself (as `store` does above).
+`#[name("deals.show")]` gives a route a name. Names show in the route table, and [`ApiModule`](/docs/digging-deeper/openapi/) uses them as OpenAPI `operationId`s. Navree doesn't generate URLs from route names, so build paths yourself (as `store` does above).
 
 ## Other route attributes
 
@@ -236,6 +236,9 @@ More attributes sit next to the route attribute. Those marked "impl" may also go
 | `#[transactional]` | route | Marks the route as transactional in `routes --json`; informational only, since every request already runs in a unit of work | [Unit of work](/docs/database/unit-of-work/) |
 | `#[no_compression]` | route | Sends the route's responses uncompressed | [Compression and secrets](/docs/basics/responses/#compression-and-secrets-breach) |
 | `#[name("..")]` | route | The route name | Above |
+| `#[requires_flag(NewPipeline)]` | route | Answers 404 (403 with `status = 403`) while the feature flag is off | [Feature flags](/docs/packages/feature-flags/#checking-flags) |
+| `#[recent_auth(minutes = 10)]` | route, impl | Answers 403 unless the user signed in or confirmed their identity within the last `minutes` | [Sessions](/docs/security/sessions/#requiring-a-recent-sign-in) |
+| `#[not_while_impersonating]` | route, impl | Refuses the route while an administrator acts as another user | [Impersonation](/docs/security/impersonation/#guarding-risky-routes) |
 
 Durations are a whole number followed by `ms`, `s`, `m` or `h`: `"500ms"`, `"5s"`, `"1m"`, `"1h"`. A route's `#[throttle]` replaces the impl block's.
 
@@ -246,7 +249,7 @@ A `#[cfg(..)]` on a route method gates the route as well as the method.
 The `routes` command prints every route with its name, its access declaration and the module that registered it, sorted by path:
 
 ```sh
-cargo run -- routes
+navree routes
 ```
 
 ```text
@@ -268,7 +271,7 @@ POST    /webhooks/stripe                                        public  DealsMod
 13 routes
 ```
 
-`routes --json` prints the same routes as JSON, with each route's handler (`DealsController::index`, recorded by `#[controller]`), throttle, timeout, body limit, `transactional` flag, audit action and number of guards as well. In code, `navree::http::route_table(&ctx)` returns the same information as a list of `RouteMeta`.
+`routes --json` prints the same routes as JSON, with each route's handler (`DealsController::index`, recorded by `#[controller]`), throttle, timeout, body limit, `transactional` flag, audit action and number of guards as well. In code, `navree::http::route_table(&ctx).await` returns the same information as a `Vec<RouteMeta>`.
 
 ## Writing controllers by hand
 

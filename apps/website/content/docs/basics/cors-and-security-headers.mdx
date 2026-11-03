@@ -76,7 +76,7 @@ Error responses from every layer carry the CORS headers too, including panics, t
 | `http.cors.allow_credentials` | `true` | send `Access-Control-Allow-Credentials: true` |
 | `http.cors.max_age_secs` | `600` | how long browsers may cache a preflight answer |
 
-The allowed methods, request headers and exposed headers are fixed: there are no keys to change them in this release.
+The allowed methods, request headers and exposed headers are fixed: there are no keys to change them.
 
 gRPC-Web and Connect calls from browsers use the same layer and the same three options, with `POST` and `OPTIONS` as the methods and the gRPC-Web and Connect headers added to the request and exposed headers; see [gRPC](/docs/microservices/grpc/).
 
@@ -92,7 +92,7 @@ If your front end calls the API through its own server, as the CRM's Next.js bac
 
 ## Security headers
 
-Navree adds these headers to every response:
+Navree adds these headers to every response that a route or a layer inside the timeout produces, error responses included:
 
 | Header | Value | Effect |
 |---|---|---|
@@ -101,6 +101,8 @@ Navree adds these headers to every response:
 | `Referrer-Policy` | `no-referrer` | links from your responses don't leak their URL |
 | `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` | browsers use HTTPS for your domain and its subdomains for a year |
 | `Content-Security-Policy` | `default-src 'none'; frame-ancestors 'none'; base-uri 'none'` | a response opened in the browser can't load scripts, styles or anything else |
+
+Three answers are made outside the layer that adds them: a CORS preflight, the 500 for a panic and the 503 for a timeout. They carry none of these headers, except that the two errors still have `X-Content-Type-Options: nosniff`.
 
 The content security policy is strict because an API answers with JSON, not pages. Browsers ignore `Strict-Transport-Security` on plain HTTP, so it does no harm in development; once your domain is served over HTTPS with this header, browsers refuse plain HTTP to it and its subdomains for a year.
 

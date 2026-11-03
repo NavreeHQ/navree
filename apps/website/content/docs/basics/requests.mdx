@@ -241,6 +241,26 @@ async fn show(&self, CurrentUser(user): CurrentUser, meta: ClientMeta) -> Json<s
 | `Authorized<E, A>`, `Accessible<E, A>`, `Abilities`, `CurrentAccess` | The authorized record, a list filter, the user's abilities | [Authorization](/docs/security/authorization/) |
 | `Session` | The session, with navree-session | [Sessions and CSRF](/docs/basics/sessions-and-csrf/) |
 
+## Optional and fallible extractors
+
+Wrap an extractor in `Option` when its input may be missing. `Option<Json<T>>` is `None` for a request without a `Content-Type` header (another content type is still a 415), `Option<Path<T>>` is `None` on a route without path parameters, and `Option<Extension<T>>` is `None` when the pipeline put no `T` in the request. A value that is there but invalid still fails with the extractor's own error.
+
+Wrap an extractor in `Result<T, T::Rejection>` to decide what a failure does. A rejection becomes an `AppError` with `?` or `to_app_error()` and keeps its status:
+
+```rust
+use navree::http::extract::rejection::JsonRejection;
+
+#[post("/")]
+async fn store(&self, body: Result<Json<CreateNote>, JsonRejection>) -> Result<String> {
+    let Json(input) = match body {
+        Ok(json) => json,
+        Err(JsonRejection::ContentType) => return Err(AppError::bad_request("Send the note as JSON.")),
+        Err(other) => return Err(other.to_app_error()),
+    };
+    Ok(input.body)
+}
+```
+
 ## Body limits
 
 A request body may be at most `http.body_limit_bytes`, 2 MiB by default. The limit is checked twice:
@@ -255,7 +275,7 @@ A body must also keep moving. A client that stalls for `http.server.body_read_ti
 body_limit_bytes = 2097152
 ```
 
-A route that needs a different limit, larger for an import or smaller for a webhook, sets its own with `.body_limit(bytes)` on a hand-written `RouteDef`. The route attributes have no body-limit attribute yet, so such a route goes in a [hand-written controller](/docs/basics/routing/#writing-controllers-by-hand). File uploads have their own size and type rules on top; see [file storage](/docs/digging-deeper/storage/).
+A route that needs a different limit, larger for an import or smaller for a webhook, sets its own with `.body_limit(bytes)` on a hand-written `RouteDef`. The route attributes have no body-limit attribute, so such a route goes in a [hand-written controller](/docs/basics/routing/#writing-controllers-by-hand). File uploads have their own size and type rules on top; see [file storage](/docs/digging-deeper/storage/).
 
 ## Multipart forms
 

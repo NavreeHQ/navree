@@ -193,10 +193,11 @@ A browser attaches cookies to requests that other sites trigger: a form on `evil
 
 ### The rule
 
-A request with a state-changing method (anything but `GET`, `HEAD`, `OPTIONS` and `TRACE`) that carries the session cookie must send the session's CSRF token in one of two headers:
+A request with a state-changing method (anything but `GET`, `HEAD`, `OPTIONS` and `TRACE`) that carries the session cookie must send the session's CSRF token in one of these:
 
 - `X-XSRF-TOKEN`: the value of the `XSRF-TOKEN` cookie (URL-decoded by the server), as Axios sends it;
-- `X-CSRF-TOKEN`: the token as is, for example from `session.csrf_token()` rendered into a page.
+- `X-CSRF-TOKEN`: the token as is, for example from `session.csrf_token()` rendered into a page;
+- a `_csrf` field, for a plain HTML form that has no script to set a header: the token once in the body of an `application/x-www-form-urlencoded` request (`navree::session::CSRF_FIELD` is the name). Navree takes the field out before the handler reads the body. It counts only when the request sends neither header, the body is 256 KiB or less, and the field appears once; a wrong header is not rescued by the field.
 
 Otherwise it gets a 403 before any handler runs:
 
@@ -243,7 +244,7 @@ With `SameSite=Lax` (the default), browsers only send the cookies to the API whe
 
 ## Signing in with a session
 
-`AuthModule` authenticates bearer tokens only; it doesn't read the session. To sign users in with a session, register your own `Authenticator`. The session layer runs before authentication, so the authenticator finds the `Session` in the request:
+`AuthModule`'s built-in strategy authenticates bearer tokens only; it doesn't read the session. To sign users in with a session, register your own `Authenticator`. The session layer runs before authentication, so the authenticator finds the `Session` in the request:
 
 ```rust title="src/session_auth/mod.rs"
 use http::request::Parts;
@@ -324,7 +325,9 @@ impl SessionAuthModule {
 
 `check_password` is yours to write: look the user up and verify the password with the [hasher](/docs/security/encryption-and-hashing/). Every route still needs its access declaration, and `#[authenticated]` routes now accept the session. The login itself needs a CSRF token too, so the front end calls `/sanctum/csrf-cookie` first.
 
-An app has exactly one `dyn Authenticator`, and `AuthModule` registers its JWT one: with both modules in the app, the boot fails. So a session-based app uses a module like this one **instead of** `AuthModule`. To accept both cookies and bearer tokens, write one authenticator that handles both.
+An app has exactly one `dyn Authenticator`, and `AuthModule` registers its own, so a session-only app registers an authenticator like this one **instead of** `AuthModule`; never next to it.
+
+To accept sessions and bearer tokens together, keep `AuthModule` and make the session check a [strategy](/docs/security/authentication/#writing-your-own-strategy). Implement `navree::auth::Strategy` with the same body as `authenticate` above (it returns `Ok(None)` for a request without a session user), mark the struct `#[injectable]`, and register it with `m.strategy::<SessionStrategy>()`. Strategies run after the JWT strategy, so a request with a valid bearer token never reaches it, and CSRF still applies only to requests that carry the session cookie and no bearer token.
 
 ## Testing
 

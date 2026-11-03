@@ -62,7 +62,7 @@ impl ReportsController {
 | `#[roles("admin", "manager")]` | A signed-in user with **any** of the roles | The route authorizer |
 | `#[permissions("deals.export")]` | A signed-in user granted **every** listed permission | The route authorizer |
 | `#[can(Update, Deal)]` | A signed-in user whose abilities allow the action on the subject | The route authorizer |
-| `#[can(Update, Deal, from = "id")]` | The same, on the record whose id is the `{id}` path parameter | The route authorizer |
+| `#[can(Update, Deal, from = "id")]` | The same, on the record whose id is in the path parameter `from` names (`{id}` here) | The route authorizer |
 
 Every attribute except `#[public]` implies authentication: a guest is refused before any role or ability is looked at. The route authorizer is navree-access's `dyn RouteAuthorizer`, which `AccessModule` registers; [authorization](/docs/security/authorization/) covers how roles, permissions and abilities are defined.
 
@@ -218,7 +218,7 @@ error: route `show` has no access declaration: add #[public], #[authenticated], 
    |              ^^^^
 ```
 
-A `#[guard]` doesn't count as a declaration: a route with only a guard gets the same error, with a note saying so. Guards add checks to a route; they don't say who the route is for. See [guards](/docs/basics/middleware/#guards).
+A `#[guard]` doesn't count as a declaration: a route with only a guard gets the same error, with a note saying so. Guards add checks to a route; they don't say who the route is for. See [guards](/docs/basics/middleware/#guards). The same holds for `#[requires_flag]`, `#[recent_auth]` and `#[not_while_impersonating]`, which [routing](/docs/basics/routing/#other-route-attributes) lists.
 
 Routes written by hand with `RouteDef` declare access with builder methods instead: `.public()`, `.authenticated()`, `.roles(&["admin"])`, `.permissions(&["reports.export"])` and `.can("update", "Deal", Some("id"))`. They can't be checked at compile time, so `HttpModule` checks every route at boot. A route without a declaration stops the app, and the error lists every undeclared route at once:
 

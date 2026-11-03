@@ -52,7 +52,7 @@ Error responses are `application/json` with `X-Content-Type-Options: nosniff`. T
 | 500 | an unexpected error or a panic | `Internal server error` | `internal_error` |
 | 503 | [maintenance mode](/docs/digging-deeper/maintenance-mode/), or the request ran out of time | the maintenance message, or `The server did not finish the request in time.` | `maintenance`, `request_timeout` |
 
-Navree itself never answers 422 or 419: input errors are 400s and CSRF failures are 403s.
+The router, the extractors and the validated extractors never answer 422 or 419: input errors are 400s and CSRF failures are 403s. A few endpoints use 422 for their own purpose: the mail module's `mail_transport_unusable`, and the forms of [Navree UI](/docs/ui/forms/), which answer a form that failed validation with 422 and the errors to show.
 
 ## Returning errors
 
@@ -353,7 +353,7 @@ Invalid input to these modules (a taken email, an unknown role in a list) is a `
 
 ### Your own codes
 
-Give every refusal your users can see its own code with `.with_code(...)`, on any constructor. Keep codes in lower snake case: 1 to 64 ASCII letters, digits and `_`, starting with a letter. `navree::http::codes::is_valid(code)` checks one, which is handy in a test that walks your app's error mappers.
+Give every refusal your users can see its own code with `.with_code(...)`, on any constructor. Keep codes in lower snake case: 1 to 64 lower-case ASCII letters, digits and `_`, starting with a letter. `navree::http::codes::is_valid(code)` checks one, which is handy in a test that walks your app's error mappers.
 
 ```rust
 #[post("/{id}/start")]
@@ -386,7 +386,7 @@ The switch covers every error the app sends, panics and timeouts included. `AppE
 
 ## The question mark operator
 
-Any error type that converts into `BoxError` (every `std::error::Error + Send + Sync`, and strings) converts into an `AppError` with `?`. It becomes a 500, like `anyhow`:
+Any error type that converts into `BoxError` (every `std::error::Error + Send + Sync`, and strings) converts into an `AppError` with `?`. It becomes a 500:
 
 ```rust
 #[get("/{id}/total")]
