@@ -311,6 +311,21 @@ mod times {
         times[times.len() / 2]
     }
 
+    /// A page with a phone input and a saved number: the 245 countries of
+    /// its select, the number read and written in its country's format.
+    #[test]
+    fn a_page_with_a_phone_input_renders_in_under_1_ms() {
+        use navree_ui::PhoneInput;
+        let saved = navree_phone::PhoneNumber::parse("+44 7400 123456", None).unwrap();
+        let time = median(50, || {
+            View::new("Contact")
+                .body(PhoneInput::new("mobile").number(&saved))
+                .to_html()
+        });
+        println!("a page with a phone input renders in {time:?}");
+        assert!(time < Duration::from_millis(1), "{time:?}");
+    }
+
     #[test]
     fn ten_thousand_options_render_in_under_40_ms() {
         use navree_ui::{Choice, Combobox};
