@@ -318,7 +318,7 @@ fn dropdown_default() -> DropdownMenu {
         .separator()
         .item(
             MenuItem::post("Delete", "/deals/42/delete")
-                .icon(icons::TRASH_2)
+                .icon(icons::TRASH)
                 .destructive(),
         )
 }

@@ -249,7 +249,7 @@ fn basic_menu() -> DropdownMenu {
         .separator()
         .item(
             MenuItem::post("Delete", "/menus/echo")
-                .icon(icons::TRASH_2)
+                .icon(icons::TRASH)
                 .destructive(),
         )
 }
