@@ -1,0 +1,27 @@
+[package]
+name = "navree-phone"
+description = "Navree phone numbers: parsing, validation, number types and formatting (E.164, international, national, RFC 3966) on libphonenumber's numbering plans, compiled into tables."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+## `Serialize` and `Deserialize` for `PhoneNumber` (its E.164 string) and
+## `Region` (its code).
+serde = ["dep:serde"]
+
+[dependencies]
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+# Its own `serde` feature, for the tests of the serde impls.
+navree-phone = { workspace = true, features = ["serde"] }
+proptest = { workspace = true }
+serde_json = { workspace = true }
+# The digit table's test reads the Unicode general category.
+unicode-properties = { workspace = true }

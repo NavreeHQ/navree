@@ -25,6 +25,7 @@ navree-kernel = { path = "crates/navree-kernel", version = "1.0.0" }
 navree-openapi = { path = "crates/navree-openapi", version = "1.0.0" }
 navree-bounded = { path = "crates/navree-bounded", version = "1.0.0" }
 navree-glob = { path = "crates/navree-glob", version = "1.0.0" }
+navree-phone = { path = "crates/navree-phone", version = "1.0.0" }
 navree-contracts = { path = "crates/navree-contracts", version = "1.0.0" }
 navree-telemetry = { path = "crates/navree-telemetry", version = "1.0.0" }
 navree-macros = { path = "crates/navree-macros", version = "1.0.0" }

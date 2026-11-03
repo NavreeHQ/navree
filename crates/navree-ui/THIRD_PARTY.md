@@ -122,3 +122,10 @@ buttons and alerts follows the W3C's WAI-ARIA Authoring Practices Guide
 
 `assets/fonts/geist.woff2` is under the SIL Open Font License 1.1:
 `assets/fonts/LICENSE-geist.txt`.
+
+## libphonenumber's numbering plans
+
+`runtime/src/phone-data.json`, and the `phone-data` asset built from it, hold the numbering
+plans of libphonenumber, release v9.0.42, under the Apache License 2.0, Copyright (C) 2009
+The Libphonenumber Authors. `crates/navree-phone/THIRD_PARTY.md` has the notice, the
+checksum of the source file and what was changed.

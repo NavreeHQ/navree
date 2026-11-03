@@ -5741,6 +5741,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "navree-phone"
+version = "1.0.0"
+dependencies = [
+ "navree-phone",
+ "proptest",
+ "serde",
+ "serde_json",
+ "unicode-properties",
+]
+
+[[package]]
 name = "navree-queue"
 version = "1.0.0"
 dependencies = [

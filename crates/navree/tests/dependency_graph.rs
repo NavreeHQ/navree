@@ -89,6 +89,11 @@ const HIERARCHY: &[Rule] = &[
     // and fake stubs, the Logbook's ignored routes and the session layer's
     // CSRF exceptions. It depends on no navree crate.
     rule("navree-glob", 0, &[]),
+    // Phone numbers: the parser, matcher and formatter over libphonenumber's
+    // numbering plans, compiled into tables. It depends on no navree crate;
+    // navree-validation's `Phone`, navree-ui's `PhoneInput` and navree-orm's
+    // phone fields build on it.
+    rule("navree-phone", 0, &[]),
     // The template engine behind views, mail, translated messages and the
     // files the CLI and Harbor generate. It depends on no navree crate.
     rule("navree-template", 0, &[]),
@@ -555,6 +560,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-bounded",
     "navree-pdf",
     "navree-glob",
+    "navree-phone",
     "navree-template",
     "navree-macros",
     "navree-openapi",
