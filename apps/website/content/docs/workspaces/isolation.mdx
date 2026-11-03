@@ -1,6 +1,6 @@
 ---
 title: "Data isolation"
-description: "Keep each workspace's data apart by row, by schema or by database."
+description: "Keep each workspace's data apart by row, by schema or by database, and pick the strategy that fits your customers and your database."
 ---
 
 Every workspace's data must stay its own: a query in Acme never returns Globex's deals, and a request can't write into another workspace. Navree offers three strategies, chosen with `workspace.isolation`. The workspace tables themselves (`workspaces`, `workspace_members`, `workspace_invitations`, and the [organization](/docs/workspaces/organizations/) and [partition](/docs/workspaces/partitions/) tables) always live in the app's main database; the strategy decides where your workspace-owned data lives.
@@ -28,7 +28,7 @@ impl WorkspaceScoped for Deal {}
 
 `Deal` is a `#[derive(Model)]` struct. A different column name goes in the trait: `impl WorkspaceScoped for Deal { const WORKSPACE_COLUMN: &'static str = "team_id"; }`.
 
-A model declared `#[model(workspace)]` (see [workspaces and access](/docs/orm/workspaces-and-access/)) already scopes its own queries to the current workspace. `WorkspaceScoped` is for naming a workspace explicitly, as jobs, commands, seeders and cross-workspace code do, and it feeds the route record check and `navree check` below. A model that has both uses the same column for both.
+A model declared `#[model(workspace)]` (see [workspaces and access](/docs/orm/workspaces-and-access/)) already scopes its own queries to the current workspace. `WorkspaceScoped` is for naming a workspace explicitly, as jobs, commands, seeders and cross-workspace code do, and it feeds the [route record check](#records-checked-by-route) and the [`navree check` classification](/docs/testing/conformity-checks/#models-classified). A model that has both uses the same column for both.
 
 | `WorkspaceRepo::<M>::` | Does |
 |---|---|
@@ -274,9 +274,11 @@ client
     .assert_error(404, None);
 ```
 
-An [isolation suite](/docs/testing/isolation-tests/) writes those tests for every route of a module, from its route table and a model factory, under every isolation strategy:
+An [isolation suite](/docs/testing/isolation-tests/) writes those tests for every route of a module, from its route table and a model factory, under every isolation strategy. It needs the `testing` and `workspace` features, and `IsolationSuiteExt` in scope:
 
 ```rust
+use navree::workspace::testing::IsolationSuiteExt;
+
 app.isolation_suite::<DealsModule>()
     .factory(Deal::factory())
     .body("POST", "/api/v1/deals", json!({ "title": "Renewal" }))
@@ -302,6 +304,8 @@ let app = TestApp::builder()
 ```
 
 Row-level security and schema isolation need PostgreSQL; run those tests against a disposable server, connecting as a role that isn't a superuser.
+
+`navree check` covers what tests miss. It reports a model that no registration classifies (`workspace.entities`), code that reaches a workspace model without `WorkspaceRepo` (`workspace.repo`), and a workspace table without its column, an index that starts with it or, on PostgreSQL, row-level security (`workspace.tables`). See [conformity checks](/docs/testing/conformity-checks/).
 
 <LinkCards>
   <LinkCard href="/docs/database/unit-of-work/" title="Unit of work">
