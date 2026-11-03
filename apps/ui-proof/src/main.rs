@@ -123,23 +123,22 @@ fn main() -> Result<(), BoxError> {
         return Ok(());
     }
     let port = std::env::var("PORT").unwrap_or_else(|_| "8090".to_owned());
-    let sources = ConfigSources::new().env_vars(
-        "APP_",
-        [
-            ("APP_HTTP__ADDR".to_owned(), format!("127.0.0.1:{port}")),
-            // The benchmark sends every request from one address.
-            (
-                "APP_HTTP__PER_IP_RATE_LIMIT".to_owned(),
-                "100000000".to_owned(),
-            ),
-            // A browser suite keeps hundreds of idle connections open from this one address,
-            // and Firefox keeps them between pages; the default cap of 256 closes every one over it.
-            (
-                "APP_HTTP__SERVER__MAX_CONNECTIONS_PER_IP".to_owned(),
-                "100000".to_owned(),
-            ),
-        ],
-    );
+    let settings = vec![
+        ("APP_HTTP__ADDR".to_owned(), format!("127.0.0.1:{port}")),
+        // The benchmark sends every request from one address.
+        (
+            "APP_HTTP__PER_IP_RATE_LIMIT".to_owned(),
+            "100000000".to_owned(),
+        ),
+        // A browser suite keeps hundreds of idle connections open from this one address,
+        // and Firefox keeps them between pages; the default cap of 256 closes every one
+        // over it. A test of many open event streams can ask for another number.
+        (
+            "APP_HTTP__SERVER__MAX_CONNECTIONS_PER_IP".to_owned(),
+            std::env::var("UI_PROOF_CONNECTIONS_PER_IP").unwrap_or_else(|_| "100000".to_owned()),
+        ),
+    ];
+    let sources = ConfigSources::new().env_vars("APP_", settings);
     let app = Navree::app()
         .module(ConfigModule::for_root(sources))
         .module(HttpModule::from_config())
