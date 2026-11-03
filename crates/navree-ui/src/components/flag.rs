@@ -4,6 +4,7 @@ use std::borrow::Cow;
 
 use super::root_methods;
 use crate::flags::CountryCode;
+use crate::html::SafeHtml;
 use crate::node::{Element, Node, el, into_node};
 
 /// The shape of a [`Flag`].
@@ -83,6 +84,7 @@ pub struct Flag {
     shape: FlagShape,
     label: Option<Cow<'static, str>>,
     decorative: bool,
+    scope: Option<&'static str>,
 }
 
 impl Flag {
@@ -94,6 +96,7 @@ impl Flag {
             shape: FlagShape::Rect,
             label: None,
             decorative: false,
+            scope: None,
         }
     }
 
@@ -117,6 +120,7 @@ impl Flag {
             shape: FlagShape::Rect,
             label: None,
             decorative: false,
+            scope: None,
         }
     }
 
@@ -158,6 +162,21 @@ impl Flag {
         self
     }
 
+    /// Gives the ids inside the flag's artwork a prefix, so that two copies on one page
+    /// never share one. Only Anguilla, Belarus and Nicaragua need it: they cut a shape
+    /// out of their drawing with a clip, and browsers do not draw a clip that is
+    /// defined inside hidden content. Use it on the flags of a closed menu, a hidden
+    /// tab or a closed dialog that sit before the same flags in view. A scope is
+    /// letters, digits, `-` and `_`; anything else is ignored.
+    pub fn scope(mut self, scope: &'static str) -> Self {
+        let valid = !scope.is_empty()
+            && scope
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+        self.scope = valid.then_some(scope);
+        self
+    }
+
     fn into_node(self) -> Node {
         let square = self.shape != FlagShape::Rect;
         let (art, view_box) = match (self.code, square) {
@@ -185,7 +204,26 @@ impl Flag {
             };
             root.attr("role", "img").attr("aria-label", name)
         };
-        root.child(Node::Static(art)).into()
+        let art = match self.scope {
+            Some(scope) if art.contains(" id=\"") => {
+                Node::Raw(SafeHtml::trusted(scoped(art, scope)))
+            }
+            _ => Node::Static(art),
+        };
+        root.child(art).into()
+    }
+}
+
+/// The artwork with every id, and every reference to one, prefixed with `scope-`.
+fn scoped(art: &str, scope: &str) -> String {
+    art.replace(" id=\"", &format!(" id=\"{scope}-"))
+        .replace("href=\"#", &format!("href=\"#{scope}-"))
+        .replace("url(#", &format!("url(#{scope}-"))
+}
+
+impl From<CountryCode> for Flag {
+    fn from(code: CountryCode) -> Self {
+        Self::new(code)
     }
 }
 

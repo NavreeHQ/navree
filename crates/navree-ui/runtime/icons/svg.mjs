@@ -1,13 +1,14 @@
 // A strict SVG reader and writer for the artwork the toolkit ships.
 //
+import { NeedsInlineUses, flatten } from "./flatten.mjs";
+
 // Anything it does not know is an error, not something to pass through: a new
 // release of an artwork set that adds a script, a style, a link or an element
 // the toolkit has never drawn stops the generator, so a person looks first.
 
 /** Elements the shipped artwork may use. Shapes first, then what flags need. */
 export const ELEMENTS = new Set([
-  "g", "path", "circle", "ellipse", "rect", "line", "polyline", "polygon",
-  "use", "defs", "clipPath", "linearGradient", "radialGradient", "stop", "marker",
+  "g", "path", "circle", "ellipse", "rect", "line", "polyline", "polygon", "svg", "defs", "clipPath", "use",
 ]);
 
 /** Attributes kept. Presentation and geometry only. */
@@ -15,10 +16,8 @@ export const ATTRIBUTES = new Set([
   "d", "cx", "cy", "r", "rx", "ry", "x", "y", "x1", "y1", "x2", "y2", "width", "height",
   "points", "transform", "fill", "stroke", "stroke-width", "stroke-linecap",
   "stroke-linejoin", "stroke-miterlimit", "stroke-dasharray", "stroke-dashoffset",
-  "stroke-opacity", "fill-opacity", "fill-rule", "clip-rule", "opacity", "clip-path",
-  "marker-start", "marker-mid", "marker-end", "overflow", "offset", "stop-color",
-  "stop-opacity", "fx", "fy", "gradientTransform", "gradientUnits", "spreadMethod",
-  "markerHeight", "markerWidth", "markerUnits", "refX", "refY", "color", "id", "href",
+  "stroke-opacity", "fill-opacity", "fill-rule", "clip-rule", "opacity", "overflow", "color",
+  "viewBox", "id", "clip-path", "href",
 ]);
 
 /** Attributes dropped with no effect on what is drawn: no stylesheet exists, and text is never drawn. */
@@ -130,38 +129,28 @@ export function write(element) {
 }
 
 /**
- * The artwork of one flag: a parsed `<svg>` cleaned to what the toolkit draws.
- * Ids are prefixed so that two flags on one page never share one; references
- * to them follow. Returns the inner markup and the root's viewBox.
+ * The artwork of one flag: a parsed <svg> with its references resolved (see
+ * flatten.mjs) and cleaned to what the toolkit draws. Returns the inner markup, the
+ * root's viewBox and how many gradients were flattened.
  */
-export function cleanFlag(text, where, idPrefix) {
+export function cleanFlag(text, where, idPrefix, copyUses = false) {
   const root = parse(text, where);
   if (root.tag !== "svg") throw new Error(`${where}: the root is <${root.tag}>`);
   const viewBox = root.attrs.find(([name]) => name === "viewBox")?.[1];
   if (!viewBox) throw new Error(`${where}: no viewBox`);
+  // Try with the `use`s as they are; a flag that has a clip inside what a use names is drawn with copies.
+  let gradients;
+  try {
+    gradients = flatten(root, viewBox, where, idPrefix, copyUses);
+  } catch (error) {
+    if (!(error instanceof NeedsInlineUses)) throw error;
+    return cleanFlag(text, where, idPrefix, true);
+  }
 
-  const ids = new Map();
-  const collect = (element) => {
-    for (const [name, value] of element.attrs) {
-      if (name === "id" && element !== root) {
-        if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error(`${where}: odd id ${JSON.stringify(value)}`);
-        if (ids.has(value)) throw new Error(`${where}: id ${value} twice`);
-        ids.set(value, `${idPrefix}${value}`);
-      }
-    }
-    element.children.forEach(collect);
-  };
-  collect(root);
-
-  const wanted = (id) => {
-    if (!ids.has(id)) throw new Error(`${where}: a reference to #${id}, which is not defined`);
-    return ids.get(id);
-  };
   const clean = (element) => {
     if (!ELEMENTS.has(element.tag)) throw new Error(`${where}: <${element.tag}> is not an element the toolkit draws`);
     const attrs = [];
-    for (let [name, value] of element.attrs) {
-      if (name === "xlink:href") name = "href";
+    for (const [name, value] of element.attrs) {
       if (name === "style") {
         for (const declaration of value.split(";").map((d) => d.trim()).filter(Boolean)) {
           const property = declaration.split(":")[0].trim();
@@ -172,24 +161,7 @@ export function cleanFlag(text, where, idPrefix) {
       }
       if (DROPPED.has(name)) continue;
       if (!ATTRIBUTES.has(name)) throw new Error(`${where}: attribute ${name} on <${element.tag}> is not one the toolkit keeps`);
-      if (name === "id") {
-        attrs.push([name, wanted(value)]);
-        continue;
-      }
-      if (name === "href") {
-        if (!/^#[A-Za-z0-9_-]+$/.test(value)) throw new Error(`${where}: href ${JSON.stringify(value)} leaves the drawing`);
-        attrs.push([name, `#${wanted(value.slice(1))}`]);
-        continue;
-      }
       if (!SAFE_VALUE.test(value)) throw new Error(`${where}: ${name}=${JSON.stringify(value.slice(0, 40))} has characters the toolkit does not allow`);
-      if (value.includes("url(")) {
-        const rewritten = value.replace(/url\(#([A-Za-z0-9_-]+)\)/g, (_, id) => `url(#${wanted(id)})`);
-        if (/url\((?!#)/.test(rewritten) || rewritten.replace(/url\(#[A-Za-z0-9_-]+\)/g, "").includes("url(")) {
-          throw new Error(`${where}: ${name} refers outside the drawing`);
-        }
-        attrs.push([name, rewritten]);
-        continue;
-      }
       attrs.push([name, value]);
     }
     return { tag: element.tag, attrs, children: element.children.map(clean) };
@@ -203,7 +175,7 @@ export function cleanFlag(text, where, idPrefix) {
   const holder = carried.length ? { tag: "g", attrs: carried, children: root.children } : null;
   const inner = (holder ? [holder] : root.children).map(clean).map(write).join("");
   if (!inner) throw new Error(`${where}: nothing to draw`);
-  return { inner, viewBox };
+  return { inner, viewBox, gradients };
 }
 
 /** Rust's raw string literal for `text`. */

@@ -146,22 +146,9 @@ fn every_icon_is_shapes_and_nothing_that_loads_or_runs() {
     }
 }
 
-const FLAG_TAGS: [&str; 15] = [
-    "path",
-    "circle",
-    "rect",
-    "line",
-    "ellipse",
-    "polyline",
-    "polygon",
-    "g",
-    "use",
-    "defs",
-    "clipPath",
-    "linearGradient",
-    "radialGradient",
-    "stop",
-    "marker",
+const FLAG_TAGS: [&str; 12] = [
+    "path", "circle", "rect", "line", "ellipse", "polyline", "polygon", "g", "use", "defs",
+    "clipPath", "svg",
 ];
 
 #[test]
@@ -212,6 +199,7 @@ fn references(markup: &str) -> Vec<&str> {
 #[test]
 fn ids_inside_flags_belong_to_one_flag_and_one_shape() {
     let mut every_id = BTreeSet::new();
+    let mut with_ids = 0;
     for code in flags::ALL {
         let lower = code.as_str().to_ascii_lowercase();
         for (prefix, markup) in [
@@ -219,6 +207,7 @@ fn ids_inside_flags_belong_to_one_flag_and_one_shape() {
             (format!("f1-{lower}-"), code.square_shapes()),
         ] {
             let own = ids(markup);
+            with_ids += usize::from(!own.is_empty());
             for id in &own {
                 assert!(
                     id.starts_with(&prefix),
@@ -234,7 +223,58 @@ fn ids_inside_flags_belong_to_one_flag_and_one_shape() {
             }
         }
     }
-    assert!(every_id.len() > 200, "{}", every_id.len());
+    assert!(every_id.len() > 100, "{}", every_id.len());
+    assert!(with_ids > 100, "{with_ids}");
+}
+
+/// A clip, a marker or a gradient is a reference that needs a drawn element to point at,
+/// and a copy of the flag in hidden content comes first and has none. Only three flags
+/// still have a clip: a polygon cannot be written without one. Everything else was
+/// resolved when the artwork was generated.
+#[test]
+fn only_three_flags_still_depend_on_a_clip() {
+    let mut clipped: Vec<&str> = Vec::new();
+    for code in flags::ALL {
+        for markup in [code.rect_shapes(), code.square_shapes()] {
+            assert!(
+                !markup.contains("<marker")
+                    && !markup.contains("Gradient")
+                    && !markup.contains("<stop"),
+                "{code}"
+            );
+            assert!(
+                !markup.contains("marker-")
+                    && !markup.contains("fill=\"url(")
+                    && !markup.contains("stroke=\"url("),
+                "{code}"
+            );
+            if markup.contains("clip-path=") && !clipped.contains(&code.as_str()) {
+                clipped.push(code.as_str());
+            }
+        }
+    }
+    assert_eq!(clipped, ["AI", "BY", "NI"]);
+}
+
+#[test]
+fn a_scope_keeps_two_copies_of_a_clipped_flag_apart() {
+    let plain = render(&Flag::new(flags::BY).into());
+    let scoped = render(&Flag::new(flags::BY).scope("menu").into());
+    assert!(plain.contains(" id=\"f4-by-"), "{plain:.200}");
+    assert!(scoped.contains(" id=\"menu-f4-by-"), "{scoped:.300}");
+    assert!(scoped.contains("url(#menu-f4-by-"), "{scoped:.300}");
+    assert_eq!(scoped.replace("menu-", ""), plain);
+    // A flag with nothing to clash is left as it is.
+    let fr = render(&Flag::new(flags::FR).into());
+    assert_eq!(render(&Flag::new(flags::FR).scope("menu").into()), fr);
+    // A scope that is not a plain word is ignored, so it can't carry markup.
+    for bad in ["", "a b", "\"><script>", "x\"", "é"] {
+        assert_eq!(
+            render(&Flag::new(flags::BY).scope(bad).into()),
+            plain,
+            "{bad:?}"
+        );
+    }
 }
 
 #[test]

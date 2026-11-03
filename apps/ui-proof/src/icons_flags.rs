@@ -64,41 +64,43 @@ fn own_section() -> Element {
 }
 
 /// Every flag in a row of cells, in the shape given.
-fn flag_grid(id: &'static str, shape: FlagShape) -> Element {
+fn flag_grid(id: &'static str, shape: FlagShape, scope: Option<&'static str>) -> Element {
     el("div").attr("data-flags", id).children(
         flags::ALL
             .iter()
             .map(|code| {
-                el("span")
-                    .attr("data-flag-code", code.as_str())
-                    .child(Flag::new(*code).shape(shape).size(FlagSize::Md))
+                el("span").attr("data-flag-code", code.as_str()).child({
+                    let flag = Flag::new(*code).shape(shape).size(FlagSize::Md);
+                    match scope {
+                        Some(scope) => flag.scope(scope),
+                        None => flag,
+                    }
+                })
             })
             .collect::<Vec<_>>(),
     )
 }
 
 fn flags_section(hidden_first: bool) -> Element {
-    // Copies of every flag that are not drawn: a closed `details` and a `hidden`
-    // box. They come before the visible flags, so a flag whose art refers to an id
-    // would find the hidden copy's first, if ids could clash.
-    let hidden: Vec<Element> = if hidden_first {
-        vec![
-            el("details").attr("data-hidden", "details").children((
-                el("summary").child("More flags"),
-                flag_grid("details", FlagShape::Rect),
-            )),
-            el("div")
-                .attr("data-hidden", "box")
-                .flag("hidden", true)
-                .child(flag_grid("box", FlagShape::Rect)),
-            el("div")
-                .attr("data-hidden", "square")
-                .flag("hidden", true)
-                .child(flag_grid("square-hidden", FlagShape::Square)),
-        ]
-    } else {
-        Vec::new()
-    };
+    // Copies of every flag that are not drawn: a closed `details`, a `hidden` box and a
+    // closed `dialog`. They come before the visible flags, so a flag whose art refers to
+    // an id would find the hidden copy's first, if ids could clash. The three flags that
+    // clip are scoped, as an app's hidden menu should scope them. The `details` is on
+    // the page either way, so the visible flags sit in the same place and can be compared
+    // pixel for pixel.
+    let hidden: Vec<Element> = vec![
+        el("details").attr("data-hidden", "details").children((
+            el("summary").child("More flags"),
+            hidden_first.then(|| flag_grid("details", FlagShape::Rect, Some("in-details"))),
+        )),
+        el("div")
+            .attr("data-hidden", "box")
+            .flag("hidden", true)
+            .child(hidden_first.then(|| flag_grid("box", FlagShape::Rect, Some("in-box")))),
+        el("dialog")
+            .attr("data-hidden", "dialog")
+            .child(hidden_first.then(|| flag_grid("dialog", FlagShape::Square, Some("in-dialog")))),
+    ];
     let sizes: Vec<Element> = [
         FlagSize::Xs,
         FlagSize::Sm,
@@ -135,9 +137,9 @@ fn flags_section(hidden_first: bool) -> Element {
         "Flags",
         (
             hidden,
-            flag_grid("rect", FlagShape::Rect),
-            flag_grid("square", FlagShape::Square),
-            flag_grid("round", FlagShape::Round),
+            flag_grid("rect", FlagShape::Rect, None),
+            flag_grid("square", FlagShape::Square, None),
+            flag_grid("round", FlagShape::Round, None),
             Row::gap(3).wrap().children((
                 sizes,
                 Flag::country("not-a-code"),

@@ -29,6 +29,10 @@ jobs:
         working-directory: crates/navree-ui/runtime
       - run: node build.mjs --check
         working-directory: crates/navree-ui/runtime
+      # The icons and flags, fetched from the pinned releases (each refused unless its
+      # checksum matches icons.lock.json) and written again: fails on any difference.
+      - run: node icons.mjs --check
+        working-directory: crates/navree-ui/runtime
 
   docs:
     name: The website's UI docs are current

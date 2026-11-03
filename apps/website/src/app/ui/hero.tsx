@@ -8,7 +8,7 @@ function facts() {
   const components = groups.reduce((n, g) => n + g.components.length, 0);
   return [
     { value: String(components), label: "components", text: `In ${groups.length} groups, each with a live preview` },
-    { value: String(toolkitInfo.icons), label: "icons", text: "Compiled into your binary" },
+    { value: String(toolkitInfo.icons), label: "icons", text: "Only the ones you use go into your binary" },
     { value: kb(asset("core").gzip), label: "core runtime", text: "Gzip, measured from the build" },
     { value: "0", label: "scripts", text: "On a page with nothing interactive" },
     { value: "1", label: "stylesheet", text: "The same on every page" },

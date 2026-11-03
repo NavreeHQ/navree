@@ -31,7 +31,7 @@
   },
   "outputs": {
     "src/icons/lucide.rs": "ba03d15e2c55133353dc4bf23d4c16fc801fa9f07aaba7d8ac91a503db46b59d",
-    "src/flags/data.rs": "88ed48a1c3b5bc3848b8a8dce5c912a84d6e11464fde195b8f66e5009f9dde84",
+    "src/flags/data.rs": "49f0315f8a35deb93360b99f9da27862116fc95d1043386a12fe1b981e231cbb",
     "../../apps/ui-docs/data/lucide-tags.json": "30ac203e6f2bdc7c5e8f1ba2ad99f9f5ef05a8042a875169b61f52f71465a221"
   }
 }

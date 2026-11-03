@@ -51,7 +51,7 @@ Not every flag is a country's. `CodeKind` says which: `Country`, `Region` (a nat
 
 ## Beside other things
 
-A flag is a node, so it goes wherever a node does: a badge, a table cell, a row of text, a timeline's meta line, the start of a select's option.
+A flag is a node, so it goes wherever a node does: a badge, a table cell, a row of text. Where a component has a slot for a node, such as a timeline's meta line, the flag goes in it.
 
 <UiPreview example="flags/in-components" />
 
@@ -65,7 +65,7 @@ By default a flag is an image whose name is the country's English name from Unic
 
 ## What they weigh
 
-The artwork is inline, so a flag costs its bytes on every page it appears on. Most flags are small: the median is under 1 KB. A few carry a coat of arms and weigh much more: Serbia is about 180 KB, Bolivia 100 KB and Mexico 85 KB. For a page with many rows of the same country, use the plainer flags, or show the country's name in text and the flag only where it helps.
+The artwork is inline, so a flag costs its bytes on every page it appears on. The median flag is 663 bytes (France is 143, the United States 548). 86 of the 270 are over 2 KB, 47 over 10 KB, and a few carry a coat of arms: Serbia is 175 KB, Bolivia 98 KB, Mexico 82 KB and Spain 77 KB. A table of two hundred rows of Serbia would carry Serbia two hundred times. Where one country repeats down a column, show its name in text and the flag only where it helps; browsers compress the repeats well on the wire, but the page still holds every copy.
 
 ## Where they come from
 

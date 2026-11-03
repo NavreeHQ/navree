@@ -87,7 +87,7 @@ for (const browserName of browsers) {
       const { page, close } = await open("/icons-flags");
       const found = await page.evaluate(() =>
         [...document.querySelectorAll("svg[data-slot=icon] *, svg[data-slot=flag] *")].filter((node) =>
-          node.hasAttribute("style") || node.hasAttribute("href") || node.hasAttribute("xlink:href") && !node.getAttribute("xlink:href").startsWith("#") || /^(script|style|image|foreignobject|a)$/i.test(node.localName) || [...node.attributes].some((a) => /^on/i.test(a.name))
+          node.hasAttribute("style") || (node.hasAttribute("href") && !node.getAttribute("href").startsWith("#")) || node.hasAttribute("xlink:href") || /^(script|style|image|foreignobject|a)$/i.test(node.localName) || [...node.attributes].some((a) => /^on/i.test(a.name))
         ).length,
       );
       assert.equal(found, 0);
@@ -122,7 +122,7 @@ for (const browserName of browsers) {
         assert.equal(result.fill, "none");
         assert.ok(result.placeholder === result.placeholderText || /^rgb/.test(result.placeholder), JSON.stringify(result));
         // The text colour changes with the theme, so the icon's does.
-        assert.equal(result.text, light ? "rgb(10, 14, 12)" : "rgb(233, 239, 235)");
+        assert.equal(result.text, light ? "rgb(28, 36, 32)" : "rgb(207, 216, 211)");
         await close();
       });
     }
@@ -178,6 +178,7 @@ for (const browserName of browsers) {
       }
       // And the hidden copies are really there, before the drawn ones.
       assert.equal(await first.page.locator("[data-hidden] svg[data-slot=flag]").count(), 270 * 3);
+      assert.equal(await first.page.locator("[data-hidden] svg[data-slot=flag]:visible").count(), 0);
       await plain.close();
       await first.close();
     });

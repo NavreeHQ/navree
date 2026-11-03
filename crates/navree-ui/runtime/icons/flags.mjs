@@ -44,6 +44,7 @@ export function readFlags(flagFiles, territoryFiles, subdivisionFiles) {
   const flags = [];
   const fromCldr = [];
   const fromFlagIcons = [];
+  const flattened = [];
   for (const entry of list) {
     if (SKIPPED.has(entry.code)) continue;
     const code = entry.code.toUpperCase();
@@ -68,9 +69,9 @@ export function readFlags(flagFiles, territoryFiles, subdivisionFiles) {
         ? "Country"
         : "Region";
 
-    const prefix = (shape) => `f${shape}-${entry.code}-`;
-    const rect = cleanFlag(text(flagFiles, entry.flag_4x3), `${entry.flag_4x3}`, prefix(4));
-    const square = cleanFlag(text(flagFiles, entry.flag_1x1), `${entry.flag_1x1}`, prefix(1));
+    const rect = cleanFlag(text(flagFiles, entry.flag_4x3), `${entry.flag_4x3}`, `f4-${entry.code}-`);
+    const square = cleanFlag(text(flagFiles, entry.flag_1x1), `${entry.flag_1x1}`, `f1-${entry.code}-`);
+    if (rect.gradients || square.gradients) flattened.push(entry.code.toUpperCase());
     if (rect.viewBox !== "0 0 640 480") throw new Error(`flags: ${entry.flag_4x3} has viewBox ${rect.viewBox}`);
     if (square.viewBox !== "0 0 512 512") throw new Error(`flags: ${entry.flag_1x1} has viewBox ${square.viewBox}`);
     flags.push({ code, name, kind, rect: rect.inner, square: square.inner });
@@ -81,7 +82,7 @@ export function readFlags(flagFiles, territoryFiles, subdivisionFiles) {
     if (seen.has(code)) throw new Error(`flags: ${code} twice`);
     seen.add(code);
   }
-  return { version, cldrVersion, flags, fromCldr, fromFlagIcons };
+  return { version, cldrVersion, flags, fromCldr, fromFlagIcons, flattened };
 }
 
 function text(files, path) {
