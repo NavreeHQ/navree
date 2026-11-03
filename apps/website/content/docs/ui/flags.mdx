@@ -19,7 +19,7 @@ Like icons, a flag is a constant, so a binary holds the flags its code names and
 
 - **A constant**, `flags::AE`. Your editor completes it, and a code that does not exist does not compile.
 - **`flag!("ae")`** takes the code as a person writes it, in any case, with `-` or `_` in `GB-SCT`. It is checked while your app compiles, and a code no flag has stops the build.
-- **`Flag::country(code)`** is for a code that comes from data. It finds the flag in any case, and a code no flag has draws a neutral placeholder and never panics. Because the code could be any flag, this one call puts all of them in the binary.
+- **`Flag::country(code)`** is for a code that comes from data. It finds the flag in any case, and a code no flag has draws a neutral placeholder and never panics. Because the code could be any flag, this one call puts all of them in the binary: in a release build, naming two flags adds about 6 KB to a program, and calling `Flag::country` adds 3.7 MB.
 
 ```rust
 use navree::ui::{Flag, flag, flags};
@@ -33,7 +33,7 @@ A code is a `CountryCode`: a small `Copy` value that holds the code, the English
 
 ## Sizes
 
-The size is the width, on the same scale as Flux: 20, 24 (the default), 32, 40 and 48 px. A rectangle is a quarter shorter than it is wide.
+The size is the width: 20, 24 (the default), 32, 40 or 48 px. A rectangle is a quarter shorter than it is wide.
 
 <UiPreview example="flags/sizes" />
 
