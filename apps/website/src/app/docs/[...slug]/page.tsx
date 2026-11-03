@@ -5,14 +5,16 @@ import { notFound } from "next/navigation";
 import { PageActions } from "@/components/docs/page-actions";
 import { SectionIndexPage } from "@/components/docs/section-index";
 import { Toc } from "@/components/docs/toc";
+import { DocFaq } from "@/components/faq";
 import { ArrowLeftIcon, ArrowRightIcon, EditIcon } from "@/components/icons";
 import { InlineMarkdown } from "@/components/inline-markdown";
 import { PlannedBadge } from "@/components/site/planned-badge";
 import { allDocs, documentTitle, findDoc, findSection, neighbours, plain, sectionIndexes } from "@/lib/docs";
+import { howToFor } from "@/lib/howto";
 import { lastModified } from "@/lib/last-modified";
 import { renderMdx } from "@/lib/mdx";
-import { pageMetadata } from "@/lib/metadata";
-import { JsonLd, docData } from "@/lib/structured-data";
+import { docTitle, pageMetadata } from "@/lib/metadata";
+import { JsonLd, docData, howToData } from "@/lib/structured-data";
 import { editUrl, site } from "@site";
 
 /** Every page is also published as Markdown (`scripts/agent-files.ts`). */
@@ -40,9 +42,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!doc) return {};
   return pageMetadata({
     title: documentTitle(doc),
+    htmlTitle: docTitle(documentTitle(doc), doc.sectionTitle),
     description: plain(doc.description),
+    descriptionContext: `${doc.sectionTitle} in the ${site.name} documentation.`,
     path: doc.href,
     type: "article",
+    modified: lastModified(`content/docs/${doc.file}`),
+    section: doc.sectionTitle,
     extra: { alternates: { types: { "text/markdown": markdownPath(doc.slug) } } },
   });
 }
@@ -57,6 +63,7 @@ export default async function DocPage({ params }: Props) {
   const { content, headings } = await renderMdx(doc.source);
   const { previous, next } = neighbours(doc.slug);
   const edit = editUrl(doc.file);
+  const howTo = howToFor(doc.slug, doc.source);
 
   return (
     <div className="py-9 lg:py-12 xl:grid xl:grid-cols-[minmax(0,1fr)_13.5rem] xl:gap-14">
@@ -108,6 +115,8 @@ export default async function DocPage({ params }: Props) {
 
         <div className="prose-navree">{content}</div>
 
+        <DocFaq slug={doc.slug} />
+
         <footer className="mt-16 border-t border-line pt-8">
           <a href={edit} className="inline-flex items-center gap-2 text-sm text-fg-2 transition-colors hover:text-fg">
             <EditIcon className="size-4" />
@@ -156,8 +165,10 @@ export default async function DocPage({ params }: Props) {
           section: doc.section,
           sectionTitle: doc.sectionTitle,
           dateModified: lastModified(`content/docs/${doc.file}`),
+          markdown: markdownPath(doc.slug),
         })}
       />
+      {howTo ? <JsonLd data={howToData(doc.href, howTo)} /> : null}
     </div>
   );
 }
