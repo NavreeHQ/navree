@@ -28,6 +28,8 @@ diff -r /path/to/handoff design/source && echo "identical"
 
 Commit `design/` with the app unless the owner says the design is
 private; then keep it beside the repository and say where in `INTAKE.md`.
+Leave `design/source/` out of the repository when the design contains
+material the owner can't share, such as client data or third-party assets.
 
 ## Serving it in development
 
