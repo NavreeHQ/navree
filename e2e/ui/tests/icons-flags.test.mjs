@@ -66,7 +66,8 @@ for (const browserName of browsers) {
         if (message.type() === "error" && !/Failed to load resource/.test(message.text())) problems.push(message.text());
       });
       page.on("pageerror", (error) => problems.push(String(error)));
-      await page.goto(BASE + path);
+      // The proof page is 6 MB of icons and flags; a cold Firefox can need half a minute.
+      await page.goto(BASE + path, { timeout: 120000 });
       if (light) {
         await page.addStyleTag({ content: LIGHT });
         // Past the colour transitions, so that axe and the screenshots see the light colours.
