@@ -24,7 +24,7 @@ pub use calendar::{Calendar, CalendarMode, CaptionLayout};
 pub use locale::{Clock, DateLabels, DateLocale, DateOrder, LocaleData};
 pub use parse::{DateParseError, TimeParseError};
 pub use picker::{DatePicker, DateRangePicker, PickerStyle};
-pub use range::{DatePreset, DateRange, DateRangeQuery};
+pub use range::{DatePreset, DateRange, DateRangeQuery, parse_list};
 pub use rules::{DateError, DateRules};
 pub use time::{TimeError, TimeRules};
 pub use time_picker::TimePicker;

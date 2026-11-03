@@ -47,6 +47,9 @@ pub enum CaptionLayout {
     Dropdowns,
 }
 
+/// A month as `(year, month)`.
+type Month = (i32, u32);
+
 /// A calendar: one or more months, with the days that can be chosen.
 ///
 /// The server draws the first month; the browser module draws the others as a
@@ -608,7 +611,7 @@ impl Calendar {
 
     /// The first and last months navigation may reach, from the limits and, with a
     /// rule function, from the window the browser was told about.
-    pub(super) fn nav_months(&self) -> (Option<(i32, u32)>, Option<(i32, u32)>) {
+    pub(super) fn nav_months(&self) -> (Option<Month>, Option<Month>) {
         let (year, month) = self.first_month();
         let (start, end) = self.rules.window(year, month);
         let limited = self.rules.has_rule();

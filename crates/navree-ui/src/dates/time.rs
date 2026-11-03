@@ -155,7 +155,7 @@ impl TimeRules {
         {
             return Err(TimeError::Unavailable);
         }
-        if self.strict && (time.second() != 0 || minute % self.step != 0) {
+        if self.strict && (time.second() != 0 || !minute.is_multiple_of(self.step)) {
             return Err(TimeError::OffStep);
         }
         Ok(())

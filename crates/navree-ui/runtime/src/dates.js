@@ -1232,11 +1232,13 @@ function enhance(h) {
 
 /** @type {WeakMap<Element, string>} */
 const sigs = new WeakMap();
+/** What a calendar is drawn from: when the page changes any of it, the months are drawn again. */
+const SIGNED = ["data-ui-rules", "data-ui-loc", "data-today", "data-months", "data-mode", "data-week-start", "data-caption", "data-week-numbers", "data-fixed-weeks", "data-no-outside", "data-readonly", "data-disabled", "data-min-days", "data-max-days", "data-max-count"];
 /** After a morph: pickers and calendars take what the page now says. */
 function sync() {
   for (const h of /** @type {any} */ (every("[data-ui-dates=picker],[data-ui-dates=range],[data-ui-dates=time]"))) enhance(h);
   for (const root of /** @type {any} */ (every("[data-ui-dates=calendar]"))) {
-    const st = states.get(root), sig = `${attr(root, "data-ui-rules")}|${attr(root, "data-today")}|${attr(root, "data-months")}`;
+    const st = states.get(root), sig = SIGNED.map((name) => attr(root, name)).join("|");
     if (!st || !sigs.has(root)) {
       sigs.set(root, sig);
       continue;

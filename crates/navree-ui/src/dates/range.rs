@@ -90,6 +90,38 @@ impl DateRange {
     }
 }
 
+/// Reads the dates a calendar of several days posts: ISO dates joined by commas. More
+/// than `max` entries, or an entry that isn't a day, gives `None`; the same day twice
+/// counts once, and the days come back in order.
+///
+/// ```
+/// use navree_ui::dates::parse_list;
+/// use chrono::NaiveDate;
+///
+/// let day = |d| NaiveDate::from_ymd_opt(2026, 11, d).unwrap();
+/// assert_eq!(parse_list("2026-11-12,2026-11-03,2026-11-03", 10), Some(vec![day(3), day(12)]));
+/// assert_eq!(parse_list("2026-11-12,soon", 10), None);
+/// assert_eq!(parse_list("", 10), Some(vec![]));
+/// ```
+pub fn parse_list(text: &str, max: usize) -> Option<Vec<NaiveDate>> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Some(Vec::new());
+    }
+    // No list of days is this long: refuse before reading any of it.
+    if text.len() > 64 * 1024 {
+        return None;
+    }
+    let mut days = std::collections::BTreeSet::new();
+    for part in text.split(',') {
+        days.insert(part.trim().parse::<NaiveDate>().ok()?);
+        if days.len() > max {
+            return None;
+        }
+    }
+    Some(days.into_iter().collect())
+}
+
 /// The first instant of a day on a zone's clocks.
 fn start_of_day<Tz: TimeZone>(day: NaiveDate, zone: &Tz) -> DateTime<Utc> {
     match resolve(day, NaiveTime::MIN, zone) {
@@ -358,6 +390,27 @@ mod tests {
 
     fn day(y: i32, m: u32, d: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    }
+
+    #[test]
+    fn a_list_of_days_is_read_whole_or_not_at_all() {
+        let day = |d| day(2026, 11, d);
+        assert_eq!(
+            parse_list(" 2026-11-12 , 2026-11-03 ", 5),
+            Some(vec![day(3), day(12)])
+        );
+        assert_eq!(parse_list("2026-11-03,2026-11-03", 1), Some(vec![day(3)]));
+        assert_eq!(parse_list("2026-11-03,2026-11-04", 1), None, "over the cap");
+        assert_eq!(parse_list("2026-11-03,", 5), None, "an empty entry");
+        assert_eq!(parse_list("2026-02-30", 5), None);
+        assert_eq!(parse_list("2026-11-3", 5), Some(vec![day(3)]), "a day without its zero");
+        // A hostile list is refused before it is read: no work, no allocation of any size.
+        let huge = vec!["2026-11-03"; 100_000].join(",");
+        assert_eq!(parse_list(&huge, 366), None);
+        let many: Vec<String> = (0..100_000)
+            .map(|n| (day(1) + chrono::Duration::days(n)).to_string())
+            .collect();
+        assert_eq!(parse_list(&many.join(","), 366), None);
     }
 
     #[test]

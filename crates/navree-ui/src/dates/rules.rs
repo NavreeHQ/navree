@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 
 use super::grid::{self, add_months};
 use super::locale::DateLocale;
+use super::range::DateRange;
 
 /// The most day ranges one calendar sends to the browser. The server still checks
 /// every date against the whole of its rules.
@@ -31,6 +32,12 @@ pub enum DateError {
     Unavailable,
     /// Outside the years the calendar knows (1 to 9999).
     OutOfCalendar,
+    /// A range that holds fewer days than the least allowed.
+    RangeTooShort(u32),
+    /// A range that holds more days than the most allowed.
+    RangeTooLong(u32),
+    /// A range that holds a day that can't be chosen.
+    RangeBlocked,
 }
 
 impl DateError {
@@ -48,6 +55,9 @@ impl fmt::Display for DateError {
             Self::Weekday(day) => write!(f, "{day} can't be chosen"),
             Self::Unavailable => f.write_str("that date isn't available"),
             Self::OutOfCalendar => f.write_str("that year is outside the calendar"),
+            Self::RangeTooShort(days) => write!(f, "choose at least {days} days"),
+            Self::RangeTooLong(days) => write!(f, "choose at most {days} days"),
+            Self::RangeBlocked => f.write_str("the range holds a day that isn't available"),
         }
     }
 }
@@ -195,6 +205,45 @@ impl DateRules {
     /// Whether `day` can be chosen.
     pub fn allows(&self, day: NaiveDate) -> bool {
         self.check(day).is_ok()
+    }
+
+    /// Why `range` can't be chosen: an end that is off, a day between that is off, or a
+    /// length outside `min_days` and `max_days`. The same check the browser makes as a
+    /// range is picked.
+    ///
+    /// ```
+    /// use navree_ui::dates::{DateError, DateRange, DateRules};
+    /// use chrono::NaiveDate;
+    ///
+    /// let day = |d| NaiveDate::from_ymd_opt(2026, 11, d).unwrap();
+    /// let rules = DateRules::new().disable_dates([day(5)]);
+    /// let range = DateRange::new(day(3), day(7));
+    /// assert_eq!(rules.check_range(&range, None, None), Err(DateError::RangeBlocked));
+    /// assert_eq!(rules.check_range(&DateRange::new(day(6), day(9)), Some(5), None), Err(DateError::RangeTooShort(5)));
+    /// ```
+    pub fn check_range(
+        &self,
+        range: &DateRange,
+        min_days: Option<u32>,
+        max_days: Option<u32>,
+    ) -> Result<(), DateError> {
+        self.check(range.from)?;
+        self.check(range.to)?;
+        let days = range.day_count();
+        if let Some(least) = min_days
+            && days < i64::from(least)
+        {
+            return Err(DateError::RangeTooShort(least));
+        }
+        if let Some(most) = max_days
+            && days > i64::from(most)
+        {
+            return Err(DateError::RangeTooLong(most));
+        }
+        if self.blocks_span(range.from, range.to) {
+            return Err(DateError::RangeBlocked);
+        }
+        Ok(())
     }
 
     /// Whether any day from `from` to `to` can't be chosen. A span of more than
@@ -363,6 +412,42 @@ mod tests {
         assert_eq!(rules.check(day(2026, 10, 31)), Err(DateError::Unavailable));
         assert_eq!(rules.check(day(2026, 1, 10)), Ok(()));
         assert_eq!(rules.check(day(2026, 12, 18)), Ok(()));
+    }
+
+    #[test]
+    fn a_range_is_held_to_the_rules_and_its_length() {
+        let rules = DateRules::new()
+            .min(day(2026, 11, 1))
+            .max(day(2026, 11, 30))
+            .disable_dates([day(2026, 11, 11)]);
+        let range = |a, b| DateRange::new(day(2026, 11, a), day(2026, 11, b));
+        assert_eq!(rules.check_range(&range(2, 6), Some(2), Some(7)), Ok(()));
+        assert_eq!(
+            rules.check_range(&range(9, 13), None, None),
+            Err(DateError::RangeBlocked)
+        );
+        assert_eq!(
+            rules.check_range(&range(11, 12), None, None),
+            Err(DateError::Unavailable)
+        );
+        assert_eq!(
+            rules.check_range(&range(2, 3), Some(3), None),
+            Err(DateError::RangeTooShort(3))
+        );
+        assert_eq!(
+            rules.check_range(&range(2, 9), None, Some(5)),
+            Err(DateError::RangeTooLong(5))
+        );
+        assert!(matches!(
+            rules.check_range(
+                &DateRange::new(day(2026, 10, 30), day(2026, 11, 3)),
+                None,
+                None
+            ),
+            Err(DateError::TooEarly(_))
+        ));
+        // A one-day range is as long as one day.
+        assert_eq!(rules.check_range(&range(4, 4), Some(1), Some(1)), Ok(()));
     }
 
     #[test]
