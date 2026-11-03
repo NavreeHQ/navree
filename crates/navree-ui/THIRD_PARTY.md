@@ -2,7 +2,7 @@
 
 ## shadcn/ui
 
-`styles/*.css` and `src/components/*` follow the structure of shadcn/ui's style layer:
+`styles/*.css`, `src/components/*` and `src/select/*` follow the structure of shadcn/ui's style layer:
 slot names, variant names and component anatomy. The values are Navree's own.
 
 MIT License. Copyright (c) 2023 shadcn.

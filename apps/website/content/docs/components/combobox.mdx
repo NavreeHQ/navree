@@ -37,7 +37,7 @@ Text matches in the label and in `Choice::keywords`, whatever the case or the ac
 
 `Esc` closes the list and puts the chosen label back in the input. So does leaving the input: what was typed is a search, not the value, until an option is picked. With `.clearable()`, `Esc` on a closed list clears the choice.
 
-A list in the page can be long. The page holds every option, the filter runs over all of them, and at most 200 matches are drawn at a time, with a note that says how many there are. Ten thousand options open in a quarter of a second and filter in under 30 ms. Past a thousand, search on the server instead.
+A list in the page can be long. The page holds every option, the filter runs over all of them, and at most 200 matches are drawn at a time, with a note that says how many there are. Ten thousand options open in 40 to 125 ms, depending on the browser, and filter in about 30 to 40 ms. Past a thousand, search on the server instead.
 
 ## Making a new option
 

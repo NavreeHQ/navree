@@ -46,6 +46,7 @@ Every page loads one stylesheet. Script loads only for what a page's markup uses
 | A dialog, an accordion, a switch | No script: `<dialog>`, `command`, `<details>`, `<input>`. |
 | A popover, a tooltip or a hover card | `overlay`: placing the popup and the hover delay. |
 | A form, a region or a command | `core`: delegation, commands, ops, morphing, boosted links, pending states. |
+| A select, a combobox, a multi-select or a command palette | `overlay` and `select`: the keys, the search, the chips and the palette. |
 | A data table | `core`, `table` and `overlay`. |
 | The app shell | `core` and `sidebar`. |
 
@@ -63,12 +64,13 @@ The files are embedded in your binary with their brotli and gzip forms, and serv
 |---|---|
 | The `core` runtime | 12 KB |
 | The `table` module | 5 KB |
+| The `select` module | 9 KB |
 | The stylesheet | 25 KB |
 | A typical CRUD page's script (`core`, `sidebar`, `overlay`, `table`) | 30 KB |
 | Every module together | under 60 KB |
 | A page with nothing interactive | no `<script>` at all |
 
-In a release build the same file also checks that a 1,000-row data table renders in under 3 ms, as the median of 50 runs. That is a ceiling to catch a change of scale, not a measurement of your pages.
+In a release build the same file also checks that a 1,000-row data table renders in under 3 ms, as the median of 50 runs, and that a combobox of 10,000 options renders in under 40 ms, as the median of 20. That is a ceiling to catch a change of scale, not a measurement of your pages.
 
 ## Security
 

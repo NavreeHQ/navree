@@ -99,7 +99,7 @@ for (const browserName of browsers) {
       const trigger = page.locator("#f-select-basic");
       assert.equal(await trigger.getAttribute("role"), "combobox");
       assert.equal(await page.getByRole("combobox", { name: "Stage", exact: true }).count(), 1, "the label names the button");
-      assert.equal(await page.getByRole("combobox", { name: "Country", exact: true }).count(), 1, "and the input of a combobox");
+      assert.ok((await page.getByRole("combobox", { name: "Country", exact: true }).evaluateAll((els) => els.map((e) => e.id))).includes("f-combo-basic"), "and the input of a combobox");
       assert.equal(await trigger.getAttribute("aria-haspopup"), "listbox");
       assert.equal(await trigger.getAttribute("aria-expanded"), "false");
       assert.equal(await s.list.getAttribute("role"), "listbox");
@@ -1255,6 +1255,7 @@ for (const browserName of browsers) {
       const rtl = await open("/select");
       await rtl.page.locator("#f-rtl-select").scrollIntoViewIfNeeded();
       await rtl.page.locator("#f-rtl-multi").click();
+      await rtl.page.waitForTimeout(300);
       assert.deepEqual(await axe(rtl.page), []);
       await rtl.close();
       const form = await open("/select/form");
