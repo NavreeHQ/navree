@@ -9,7 +9,7 @@ import { PageSchema } from "@/lib/structured-data";
 import { site } from "@site";
 
 export const metadata: Metadata = pageMetadata({
-  title: "Documentation",
+  title: "Documentation for the Navree framework",
   description: `Everything ${site.name} does, from installation to the backend, the screens, the tools and your coding agent.`,
   path: "/docs/",
 });

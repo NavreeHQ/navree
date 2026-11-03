@@ -17,9 +17,9 @@ import { CodeExcerpt } from "./code-excerpt";
 import { PatternNav } from "./pattern-nav";
 
 export const metadata: Metadata = pageMetadata({
-  title: "Architecture",
+  title: "Architecture: from monolith to microservices",
   description:
-    "One framework, every architecture: build a modular monolith, microservices, a multi-tenant SaaS, an event-driven system, an API-first backend or a backend for frontend with Navree, and move between them without rewriting your modules.",
+    "Build a modular monolith, microservices, a multi-tenant SaaS, an event-driven system, an API-first backend or a backend for frontend with one framework.",
   path: "/architecture/",
 });
 

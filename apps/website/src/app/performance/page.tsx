@@ -37,10 +37,10 @@ const r = perf.results;
 const s = perf.settings;
 
 export const metadata: Metadata = pageMetadata({
-  title: "Performance",
-  description: `${site.name}'s own measurements on a CRM-style API: ${fmtInt(r.deals_list.rps)} authenticated, paginated lists and ${fmtInt(
+  title: "Performance: measured on a CRM-style API",
+  description: `${site.name}'s own measurements on a CRM-style API: ${fmtInt(r.deals_list.rps)} paginated lists and ${fmtInt(
     r.deals_create.rps,
-  )} validated inserts a second on ${s.app.count} CPUs, ${mb(perf.peakMemMb)} MB at peak, ready in ${perf.startupMs} ms. The workload, the method and how to reproduce it.`,
+  )} validated inserts a second on ${s.app.count} CPUs, with the workload and the method.`,
   path: "/performance/",
 });
 

@@ -42,9 +42,9 @@ import { cn } from "@/lib/utils";
 import { site } from "@site";
 
 export const metadata: Metadata = pageMetadata({
-  title: "Ecosystem",
+  title: "Ecosystem: first-party tools and packages",
   description:
-    "Everything first-party, everything included: monitoring, an admin panel, queue supervision, a debugging timeline, deployment, search, billing, OAuth, AI and more. Open source, self-hosted and released with Navree.",
+    "Monitoring, an admin panel, queue supervision, debugging, deployment, search, billing, OAuth and AI: first-party, open source and self-hosted.",
   path: "/ecosystem/",
 });
 

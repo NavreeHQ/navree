@@ -18,7 +18,7 @@ import { site } from "@site";
 export const metadata: Metadata = pageMetadata({
   title: "A real CRM, built on Navree",
   description:
-    "The reference CRM: companies, contacts, a deal pipeline, tasks and a live dashboard on a Navree API, with a Next.js and a Nuxt front end on one backend-for-frontend contract. Screens, architecture and the commands to run it.",
+    "The reference CRM on a Navree API: companies, contacts, a deal pipeline, tasks and a dashboard, with Next.js and Nuxt front ends. Screens and run commands.",
   path: "/showcase/crm/",
 });
 

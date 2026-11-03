@@ -10,9 +10,9 @@ import { pageMetadata } from "@/lib/metadata";
 import { PageSchema } from "@/lib/structured-data";
 
 export const metadata: Metadata = pageMetadata({
-  title: "Showcase",
+  title: "Showcase: a CRM and the tools built on Navree",
   description:
-    "Real applications built on Navree, with their code in the repository: the reference CRM, its Rust API and its Next.js and Nuxt front ends.",
+    "Apps built on Navree, with code in the repository: the reference CRM with Next.js and Nuxt front ends, and tools such as Logbook, drawn with Navree UI.",
   path: "/showcase/",
 });
 

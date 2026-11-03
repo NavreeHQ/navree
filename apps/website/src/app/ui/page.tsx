@@ -18,7 +18,7 @@ import { UiRoadmap } from "./roadmap";
 export const metadata: Metadata = pageMetadata({
   title: "Navree UI: your app's screens in Rust",
   description:
-    "Navree UI: typed Rust components rendered to HTML on the server, with one stylesheet, a small runtime and a strict content security policy. Every component with its live preview, the front-end choices, and what comes next.",
+    "Typed Rust components rendered to HTML on the server, with one stylesheet and a strict content security policy. A live preview of every component.",
   path: "/ui/",
 });
 
