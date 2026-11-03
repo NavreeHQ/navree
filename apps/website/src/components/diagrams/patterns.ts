@@ -1,5 +1,11 @@
 import type { DiagramName } from "@/components/mdx/diagram";
 
+/** The diagrams that draw an architecture; the others belong to docs pages. */
+export type PatternName = Exclude<
+  DiagramName,
+  "request-lifecycle" | "module-graph" | "navree-ui" | "reverse-engineering" | "design-to-ui" | "two-ways"
+>;
+
 /**
  * The six architectures, in words: the /architecture/ page and the
  * homepage section both read this. `code` spans in strings are written
@@ -7,7 +13,7 @@ import type { DiagramName } from "@/components/mdx/diagram";
  */
 export type Pattern = {
   /** Anchor on /architecture/, and the diagram's name. */
-  id: Exclude<DiagramName, "request-lifecycle" | "module-graph" | "navree-ui">;
+  id: PatternName;
   name: string;
   /** The tab label on the homepage. */
   short: string;

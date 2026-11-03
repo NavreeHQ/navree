@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 
-import type { DiagramName } from "@/components/mdx/diagram";
 import { cn } from "@/lib/utils";
+
+import type { PatternName } from "./patterns";
 
 /*
  * Small pictures of each architecture for indexes and tabs, drawn on a
@@ -43,7 +44,7 @@ function Lines({ x, y, w, accent = false }: { x: number; y: number; w: number; a
   );
 }
 
-const thumbs: Record<Exclude<DiagramName, "request-lifecycle" | "module-graph" | "navree-ui">, ReactNode> = {
+const thumbs: Record<PatternName, ReactNode> = {
   "modular-monolith": (
     <>
       <rect x={20.5} y={8.5} width={119} height={71} rx={10} className="fill-fg/[0.015] stroke-line-2" />

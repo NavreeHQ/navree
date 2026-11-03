@@ -38,7 +38,18 @@ export const sections: DocsSection[] = [
   {
     slug: "getting-started",
     title: "Getting started",
-    pages: ["installation", "your-first-app", "configuration", "directory-structure", "starter-kits", "deployment"],
+    pages: [
+      "installation",
+      "your-first-app",
+      "configuration",
+      "directory-structure",
+      "starter-kits",
+      // The two ways into Navree: from an existing product (reverse
+      // engineering) and from an existing design (to Navree UI pages).
+      "bring-your-product",
+      "bring-your-design",
+      "deployment",
+    ],
   },
   {
     slug: "architecture",
@@ -186,11 +197,6 @@ export const sections: DocsSection[] = [
     title: "UI",
     pages: [
       "choosing-a-ui",
-      // The two ways into Navree go here, after "choosing-a-ui":
-      // "bring-your-product" (from an existing product: reverse engineering)
-      // and "bring-your-design" (from an existing design: HTML, a Figma export
-      // or screenshots, converted to Navree UI pages). They are written with
-      // their skills, so the commands and skill names are exact.
       "overview",
       "foundations",
       "icons",

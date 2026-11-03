@@ -325,7 +325,8 @@ where a picture explains the page better than a paragraph:
 
 The names are `modular-monolith`, `microservices`, `multi-tenancy`,
 `event-driven`, `api-first`, `backend-for-frontend`, `request-lifecycle`,
-`module-graph` and `navree-ui`. The diagrams live in `src/components/diagrams/`, each
+`module-graph`, `navree-ui`, `reverse-engineering`, `design-to-ui` and
+`two-ways`. The diagrams live in `src/components/diagrams/`, each
 with a title and a text description for screen readers; to add one, add a
 component there and its name to `src/components/mdx/diagram.tsx`. Put the
 tag on its own line with blank lines around it, and don't repeat in prose

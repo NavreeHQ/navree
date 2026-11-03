@@ -475,6 +475,12 @@ const diagrams: Record<string, string> = {
     "The request lifecycle: a request passes through the HTTP server, global middleware, routing, guards and access rules, validation and the controller to a service, and the response or a JSON error returns the same way.",
   "module-graph":
     "The module graph: the root `AppModule` imports feature modules, each declaring the providers it registers, the modules it imports and the services it exports, and the container wires them at boot.",
+  "reverse-engineering":
+    "From an old product to a Navree app: reading the product (0 intake, 1 map), stop 1; schema and modules (2 base layer, 3 modules), stop 2; specs (4 module specs, 5 cross-cutting, 6 data migration, 7 reconcile), stop 3; plan (8 tasks and tests), stop 4; build and verify (9 build, 10 verify), stop 5; then cut-over. Phase n writes `specs/0n-*/`, and at each stop the owner confirms.",
+  "design-to-ui":
+    "From a design to Navree UI pages: reading the design (0 intake, 1 inventory), stop 1; mapping to Navree UI (2 tokens, 3 mapping, 4 reconcile), stop 2; build and verify (5 build, 6 verify), stop 3, where the owner accepts the pages seen beside the design. Phase n writes `design/0n-*/`.",
+  "two-ways":
+    "The two skills together: the old product's code and data go to navree-reverse-engineering, which builds the models, services and routes; its `screens.md`, `crud.md` and `lists.md` specs and the look (the old product's screenshots or a new design) go to navree-design-to-ui, which builds the Navree UI pages, one module at a time.",
 };
 
 /** A component as Markdown. `mode` is "flow" for blocks, "text" inside a paragraph. */

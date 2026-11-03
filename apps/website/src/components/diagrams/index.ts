@@ -2,6 +2,7 @@ import type { DiagramName } from "@/components/mdx/diagram";
 
 import { apiFirst } from "./api-first";
 import { backendForFrontend } from "./backend-for-frontend";
+import { designToUi } from "./design-to-ui";
 import { eventDriven } from "./event-driven";
 import type { DiagramSpec } from "./figure";
 import { microservices } from "./microservices";
@@ -10,6 +11,8 @@ import { moduleGraph } from "./module-graph";
 import { multiTenancy } from "./multi-tenancy";
 import { navreeUi } from "./navree-ui";
 import { requestLifecycle } from "./request-lifecycle";
+import { reverseEngineering } from "./reverse-engineering";
+import { twoWays } from "./two-ways";
 
 export { DiagramCanvas, DiagramFigure, DiagramLegend, type DiagramSpec } from "./figure";
 
@@ -24,6 +27,9 @@ export const diagrams: Record<DiagramName, DiagramSpec> = {
   "request-lifecycle": requestLifecycle,
   "module-graph": moduleGraph,
   "navree-ui": navreeUi,
+  "reverse-engineering": reverseEngineering,
+  "design-to-ui": designToUi,
+  "two-ways": twoWays,
 };
 
 /**

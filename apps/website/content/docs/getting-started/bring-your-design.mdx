@@ -1,0 +1,187 @@
+---
+title: "Bring your design"
+description: "Turn an HTML mock-up, a design-tool export or screenshots into Navree UI pages with an agent skill: the phases and stop points, keeping the look, the components still coming, and verification beside the design."
+---
+
+There are two ways into Navree from something you already have. You can bring a product: an app that runs today, with its code, its rules and years of data. Or you can bring a design: a mock-up, a design-tool export or screenshots. Each way is an [agent skill](/docs/ai/agent-skills/) that your coding agent follows from start to finish, and you decide at fixed stop points. This page is the second way. [Bring your product](/docs/getting-started/bring-your-product/) is the first.
+
+<UiChoose name="two-ways" current="Bring your design" />
+
+## Who it is for
+
+You have a design and want it as working pages. The design can be an HTML and CSS mock-up, an export from Figma, Sketch, Penpot or another design tool, a design handoff bundle, or plain screenshots.
+
+A design shows how a product should look. It rarely says where its data comes from, what a list does with ten thousand rows, or what a page shows when it is empty, fails or belongs to someone else. The `navree-design-to-ui` skill fills those gaps. It lists what the design holds, maps every value and element to what [Navree UI](/docs/ui/overview/) offers, writes a spec per page, builds the pages in Rust on the server, and proves them against the design, by eye and by tool.
+
+The skill builds Navree UI pages. For a React or Vue front end instead, see [Choosing a UI](/docs/ui/choosing-a-ui/).
+
+## Start
+
+<Steps>
+<Step title="Have a Navree app">
+
+Use your app, or create one with `navree new` (see [Installation](/docs/getting-started/installation/)). Navree UI is the `ui` feature of `navree`, which is on by default.
+
+```sh
+navree new acme
+cd acme
+```
+
+</Step>
+<Step title="Install the skills">
+
+From the app's directory:
+
+```sh
+navree skills:install
+```
+
+It copies every Navree skill into `.claude/skills/` and `.agents/skills/`. Pass `--path <dir>` to install into another directory.
+
+</Step>
+<Step title="Get the design as files">
+
+The agent copies the design and compares every page against that copy, so it needs files, not a link. From a design tool, export every frame as HTML or SVG where the tool can, and as PNG at 1440 and 390 pixels wide. Screenshots alone work too.
+
+</Step>
+<Step title="Tell your agent to start">
+
+Name the skill, the design, the app, and how much of the look to keep:
+
+```text wrap
+Use the navree-design-to-ui skill to build our CRM's pages from the design in ../handoff/crm/. The Navree app is this directory. Keep the look of the deals and contacts screens, and translate the rest. Stop at every stop point for my answers.
+```
+
+The agent loads the skill and works phase by phase. Each phase writes its files to `design/` before it ends, and `design/STATUS.md` says where the job stands, so the work survives a restart.
+
+</Step>
+</Steps>
+
+## The phases
+
+<Diagram name="design-to-ui" />
+
+Each phase has a role with a written brief in the skill (`references/agents/<role>.md`), 10 briefs in all. An agent that can start subagents runs one role per subagent, several side by side where the skill allows. An agent without subagents runs the same briefs itself, in phase order. Each phase writes to its own numbered folder: intake to `design/00-intake/` and `design/source/`, the build to `design/05-build/` and the pages.
+
+| Phase | What happens |
+|---|---|
+| 0. Intake | Copy the design byte for byte, serve the copy, record your choices |
+| 1. Inventory | List screens, components, states, values, and the data each screen implies; screenshot it all |
+| 2. Tokens | Map every value to a Navree token, or name the gap |
+| 3. Mapping | Map each element to a component, a form field or a table column; one spec per page |
+| 4. Reconcile | Refute every file; collect questions, deviations and gaps |
+| 5. Build | The shell first, then page by page, with every state and its tests |
+| 6. Verify | Screenshots beside the design, axe, keyboard, the app UI rules |
+
+The pages are Rust: [`AppShell`](/docs/ui/app-shell/) pages, [forms](/docs/ui/forms/) from `#[derive(Form)]` and server-side [tables](/docs/ui/data-table/) from `#[derive(TableRow)]`, built from the components that exist.
+
+Every row in these files says where it comes from (a design file and line, a frame, a screenshot), how it is known and how sure it is. Every guessed row is also a question for you. One role writes each file, another tries to prove it wrong, and the builder never grades its own work.
+
+## The design folder
+
+<FileTree title="design/">{`
+STATUS.md *                  # phase, state, gate, your sign-off
+source/                      # the design exactly as received, never edited
+00-intake/INTAKE.md          # format, how it is served, keep or translate
+01-inventory/
+  INVENTORY.md               # screens, components, states, tokens, data
+  shots/                     # BASE-*: the design at 1440 and 390 pixels
+02-tokens/TOKENS.md          # every design value and its Navree token
+03-mapping/
+  COMPONENTS.md              # every repeated component, in Navree UI
+  pages/                     # one page spec per screen
+04-reconcile/                # QUESTIONS.md, DEVIATIONS.md, GAPS.md
+05-build/BUILD_LOG.md        # per page: commit, tests, gate
+06-verify/
+  VERIFY.md                  # every page row, closed with evidence
+  shots/                     # APP-*: the pages at 1440 and 390 pixels
+  compare.html               # the design and the pages side by side
+`}</FileTree>
+
+By default `design/` is committed with the app. Leave `design/source/` out when the design contains material you can't share, such as client data or third-party assets. The agent then keeps it beside the repository and writes down where.
+
+## The three stop points
+
+At each stop the agent shows you a short summary with counts and waits. It records your answer and the date in `design/STATUS.md`.
+
+1. **After the inventory.** The screens, the states the design lacks, the data the screens imply, keep or translate for each screen, and anything that can't be opened.
+2. **After reconcile.** The page specs, every deviation with a picture, every gap with its interim form, and every question with options and a recommendation.
+3. **After verify.** The side-by-side page, `VERIFY.md`, and anything still open.
+
+## Keeping the look
+
+You choose per screen at intake:
+
+| | Keep | Translate |
+|---|---|---|
+| What must match | layout, order, spacing and density, type sizes and weights, colors as far as tokens allow, icons, wording | content, order, actions and states |
+| What may differ | only the deviations you approved | the look: Navree's tokens and components |
+
+Keep never means copying the design's markup. Pages are always built from components, which carry Navree's tokens, corners and accessibility. Keep means choosing the components, sizes, gaps and variants that come closest, and naming what still differs.
+
+- **The copy doesn't move.** The design goes into `design/source/` as it came and is never edited. The agent serves the copy on its own port in development, so the design and the pages are screenshotted in the same browser at the same sizes:
+
+  ```sh
+  python3 -m http.server 8091 --bind 127.0.0.1 --directory design/source
+  ```
+
+- **Navree's rules win, and you decide.** Controls have 4 px corners and surfaces 6 px. There are no pills, letter tiles or glows. No inline script and no `style=""`: the [content security policy](/docs/ui/overview/#security) refuses them. Where the design breaks a rule, the row records a deviation, and you approve it with a picture of both.
+- **One token table.** Navree UI has one table of tokens and the dark theme. A design value with no token becomes a gap or a deviation. The agent checks the contrast of every text pair with `navree::ui::tokens::contrast`.
+- **The data comes from the server.** Lists page, sort, filter and search on the server; options come from the backend; every rule runs on the server. A design that shows otherwise is a known mistake, not a requirement. The design's ten sample rows say nothing about ten thousand.
+- **The states the design forgot.** Every page gets its empty, loading, error, read-only and forbidden states, and works at 390 pixels and right to left.
+
+## What is coming
+
+When no component fits an element, the agent records a gap instead of improvising one from raw elements, a script or an inline style. You pick an interim form, or the page waits for the component. The list follows the order of [Coming next](/docs/ui/coming-next/) and shrinks as components land.
+
+| Coming | Covers in a design | Interim form, if you accept one |
+|---|---|---|
+| Theme system and theme builder | a light theme, brand colors, other radii or fonts, other sidebar layouts | Navree's dark theme and tokens |
+| Select, Combobox, Command | a styled select, a type-to-search picker over a large table, a command palette | `NativeSelect` for a small set; for a large set, wait, or a search page that links back |
+| Toast as a module | toasts with actions, or toasts that stay | `Reply::toast` |
+| Tabs, DropdownMenu, ToggleGroup | tabs, menus from a button, segmented controls | tabs as links to separate URLs, `Popover` with buttons, `ButtonGroup` |
+| Charts and DateRange | line, area, pie and stacked charts, date-range pickers | `Stat` and `Bars`; two date inputs |
+| DatePicker, Calendar, TimePicker | calendar pop-ups, month views | native date and time inputs |
+| Wizard and Stepper | multi-step forms with a step bar | one page per step, each a form |
+| Rich text | a formatted text editor | a textarea |
+| Toolbar, TreeView, Slider, ContextMenu, Menubar, NavigationMenu | those | none |
+| Islands | a client-side widget of your own | none |
+
+Also not there yet: HTML error and sign-in pages for page routes (a page route's 401, 403 and 404 come back as Navree's JSON errors), an app's own stylesheet or static files, and web fonts other than Geist and the system monospace stack.
+
+## Verification
+
+A page is done when the evidence says so, not when a tool run passes.
+
+- **Tests in the app.** Each page gets plain tests with `TestView`, which reads a page with no browser: what it shows, where a click goes, what its form posts. Routes, access and the database get HTTP tests with `TestApp`: each page answers 200, 403 or 404 for each role, as its spec says.
+- **Beside the design.** A fidelity checker screenshots every page at 1440 and 390 pixels, in every state, and builds `compare.html` with the design's screenshot beside each one. It writes down what differs, whether a deviation covers it, and whether the page looks worse. Crowded spacing, weak hierarchy and text that wraps badly at 390 are findings even when no rule names them.
+- **Everyone can use it.** An access checker runs axe in every state, with no violation allowed. It walks each page with the keyboard and checks the focus ring. It checks that search, filters, sorting, paging and forms work with JavaScript off, that nothing scrolls sideways at 390 pixels, and that one page per module mirrors right to left. It runs a script for the app UI rules (corners, no shadows, no style attributes) and reads the console for refused scripts, styles, fonts and images.
+- **The gate.** `navree check` and `navree gate` pass on the commit being verified.
+
+A verifier, never the builder, closes each page row in `VERIFY.md` with quoted evidence and reopens what fails. The pages are done when every screen has a verified page or your answer to drop it, every gap has your acceptance, every page has its five states screenshotted, you looked at `compare.html`, and you signed stop 3.
+
+## How the two work together
+
+The two skills share you as the owner and the order of work, and either runs alone.
+
+<Diagram name="two-ways" />
+
+- **After a reverse-engineering job.** Its specs already hold each page's purpose, actions, journeys and states (`screens.md`), each field with its control and option source (`crud.md`), and each table's columns, filters and sort (`lists.md`). The page specs here cite those rows instead of writing them again, and add only the look.
+- **The old look.** When you want to keep the old product's look, its screenshots are the design: the `SHOT-*` captures become `BASE-*`.
+- **Inside the build.** The rebuild's last layer in each module is its screens. For Navree UI pages, the builder runs this skill's mapping, reconcile, build and verify phases for the module, after its routes and services pass their gate.
+- **From a design alone.** The data and actions the inventory finds become the data the pages need. You settle them at stop 1, and the builder creates the models, services and routes before each page.
+
+<LinkCards>
+  <LinkCard href="/docs/getting-started/bring-your-product/" title="Bring your product">
+    Rebuild an old product, with its data, as a Navree app.
+  </LinkCard>
+  <LinkCard href="/docs/components/overview/" title="Components">
+    Every Navree UI component, rendered live.
+  </LinkCard>
+  <LinkCard href="/docs/ui/foundations/" title="Foundations">
+    Tokens, color, radius, icons and the app shell.
+  </LinkCard>
+  <LinkCard href="/docs/ui/coming-next/" title="Coming next">
+    The components and modules still to come, in order.
+  </LinkCard>
+</LinkCards>

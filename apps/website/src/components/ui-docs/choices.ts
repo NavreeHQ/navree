@@ -24,6 +24,15 @@ export const choices = {
       c("Nuxt (Vue)", "A Vue app beside the API", "/docs/frontend/nuxt/", false),
     ],
   },
+  "two-ways": {
+    title: "Which way in?",
+    question: "What do you bring?",
+    options: [
+      c("Bring your product", "Old code and data to rebuild", "/docs/getting-started/bring-your-product/", false),
+      c("Bring your design", "A mock-up, an export, screenshots", "/docs/getting-started/bring-your-design/", false),
+      c("Both", "An old product, Navree UI pages", "/docs/getting-started/bring-your-product/#how-the-two-work-together", false),
+    ],
+  },
   action: {
     title: "Which action?",
     question: "What does a click do?",

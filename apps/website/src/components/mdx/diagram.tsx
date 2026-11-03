@@ -16,6 +16,9 @@ export const diagramNames = [
   "request-lifecycle",
   "module-graph",
   "navree-ui",
+  "reverse-engineering",
+  "design-to-ui",
+  "two-ways",
 ] as const;
 
 export type DiagramName = (typeof diagramNames)[number];
