@@ -229,8 +229,13 @@ fn shared_impl(definition: &str, name: &str) -> Option<syn::ItemImpl> {
     let body = definition.split_once("=>")?.1;
     let open = body.find('{')?;
     let close = body.rfind('}')?;
+    // The paths inside the crate are shown as the name a reader writes.
     let text = body[open + 1..close]
         .replace("$type", name)
+        .replace("$crate::components::", "")
+        .replace("$crate::select::", "")
+        .replace("$crate::node::", "")
+        .replace("$crate::html::", "")
         .replace("$crate", "crate");
     let file = syn::parse_file(&text).ok()?;
     file.items.into_iter().find_map(|item| match item {
@@ -370,10 +375,6 @@ pub fn tidy(tokens: &str) -> String {
     text.replace(")->", ") ->")
         .replace("->", " -> ")
         .replace("  ", " ")
-        .replace("crate::components::", "")
-        .replace("crate::select::", "")
-        .replace("crate::node::", "")
-        .replace("crate::html::", "")
 }
 
 /// The methods `root_methods!` adds, read from its definition in

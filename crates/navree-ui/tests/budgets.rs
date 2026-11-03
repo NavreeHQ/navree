@@ -165,6 +165,23 @@ mod times {
     }
 
     #[test]
+    fn ten_thousand_options_render_in_under_40_ms() {
+        use navree_ui::{Choice, Combobox};
+        let time = median(20, || {
+            View::new("Options")
+                .body(Combobox::new("c").options((0..10_000).map(|at| {
+                    Choice::new(
+                        format!("v{at}"),
+                        format!("Choice number {at} of the long list"),
+                    )
+                })))
+                .to_html()
+        });
+        println!("ten thousand options render in {time:?}");
+        assert!(time < Duration::from_millis(40), "{time:?}");
+    }
+
+    #[test]
     fn a_thousand_rows_render_in_under_3_ms() {
         let rows: Vec<Row> = (0..1000)
             .map(|id| Row {

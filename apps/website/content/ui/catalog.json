@@ -19,6 +19,9 @@
         "input-group",
         "textarea",
         "native-select",
+        "select",
+        "combobox",
+        "multi-select",
         "checkbox",
         "switch",
         "radio-group",
@@ -82,7 +85,8 @@
       "components": [
         "app-shell",
         "breadcrumb",
-        "pagination"
+        "pagination",
+        "command"
       ]
     },
     {
@@ -244,6 +248,67 @@
       "examples": [
         "native-select/default",
         "native-select/states"
+      ]
+    },
+    {
+      "id": "select",
+      "name": "Select",
+      "url": "/docs/components/select/",
+      "summary": "One choice from a small, fixed list, in a styled listbox.",
+      "group": "inputs",
+      "types": [
+        "Select",
+        "Choice",
+        "SelectLabels"
+      ],
+      "thumb": "select/thumb",
+      "anatomy": "select/default",
+      "examples": [
+        "select/thumb",
+        "select/default",
+        "select/open",
+        "select/groups",
+        "select/rich",
+        "select/states"
+      ]
+    },
+    {
+      "id": "combobox",
+      "name": "Combobox",
+      "url": "/docs/components/combobox/",
+      "summary": "One choice, found by typing. The options are in the page, or searched on the server.",
+      "group": "inputs",
+      "types": [
+        "Combobox",
+        "OptionQuery",
+        "ChoiceList"
+      ],
+      "thumb": "combobox/thumb",
+      "anatomy": "combobox/default",
+      "examples": [
+        "combobox/thumb",
+        "combobox/default",
+        "combobox/open",
+        "combobox/create",
+        "combobox/states"
+      ]
+    },
+    {
+      "id": "multi-select",
+      "name": "MultiSelect",
+      "url": "/docs/components/multi-select/",
+      "summary": "Many choices, shown as chips with a 4 px corner.",
+      "group": "inputs",
+      "types": [
+        "MultiSelect"
+      ],
+      "thumb": "multi-select/thumb",
+      "anatomy": "multi-select/default",
+      "examples": [
+        "multi-select/thumb",
+        "multi-select/default",
+        "multi-select/open",
+        "multi-select/limits"
       ]
     },
     {
@@ -827,6 +892,24 @@
       "examples": [
         "pagination/default",
         "pagination/edges"
+      ]
+    },
+    {
+      "id": "command",
+      "name": "Command",
+      "url": "/docs/components/command/",
+      "summary": "A command palette: a modal dialog with a search box and a list of groups of items, opened by `Ctrl` or `Cmd` and `K`.",
+      "group": "navigation",
+      "types": [
+        "Command",
+        "CommandGroup",
+        "CommandItem"
+      ],
+      "thumb": "command/thumb",
+      "anatomy": "command/default",
+      "examples": [
+        "command/thumb",
+        "command/default"
       ]
     },
     {
@@ -2354,6 +2437,1865 @@
                   "children": []
                 }
               ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "select/thumb",
+      "component": "select",
+      "slug": "thumb",
+      "title": "A select",
+      "kind": "single",
+      "code": "Select::new(\"thumb-stage\")\n    .aria_label(\"Stage\")\n    .placeholder(\"Stage\")\n    .options(stages())",
+      "src": "/ui-preview/select/thumb.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-67279efcb892.js",
+        "select-37f6a617c755.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "select",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "select-control",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "select-trigger",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "select-value",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "select-native",
+              "tag": "select",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "select-popup",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "select-list",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "select-footer",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "select-note",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "select-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "select/default",
+      "component": "select",
+      "slug": "default",
+      "title": "A select",
+      "kind": "single",
+      "code": "Field::new(\"deal-stage\", \"Stage\").control(\n    Select::new(\"stage\")\n        .placeholder(\"Choose a stage\")\n        .option(\"lead\", \"Lead\")\n        .option(\"qualified\", \"Qualified\")\n        .option(\"won\", \"Won\")\n        .option(\"lost\", \"Lost\"),\n)",
+      "src": "/ui-preview/select/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-67279efcb892.js",
+        "select-37f6a617c755.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "select",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "select-control",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "select-trigger",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "select-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-native",
+                  "tag": "select",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "select-popup",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "select-list",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "select-footer",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "select-note",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-status",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "select/open",
+      "component": "select",
+      "slug": "open",
+      "title": "The list, open",
+      "kind": "single",
+      "code": "Field::new(\"open-stage\", \"Stage\").control(\n    Select::new(\"open_stage\")\n        .id(\"open-select\")\n        .options(stages())\n        .selected(\"qualified\"),\n)",
+      "src": "/ui-preview/select/open.html",
+      "height": 300,
+      "layout": "start",
+      "cells": "narrow",
+      "show": true,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-67279efcb892.js",
+        "select-37f6a617c755.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "select",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "select-control",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "select-trigger",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "select-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-native",
+                  "tag": "select",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "select-popup",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "select-list",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "select-footer",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "select-note",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-status",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "select/groups",
+      "component": "select",
+      "slug": "groups",
+      "title": "Groups and a disabled option",
+      "kind": "single",
+      "code": "Field::new(\"zone\", \"Time zone\").control(\n    Select::new(\"zone\")\n        .id(\"zone-select\")\n        .placeholder(\"Choose a zone\")\n        .group(\"Europe\", [(\"lon\", \"London\"), (\"par\", \"Paris\")])\n        .group(\n            \"Asia\",\n            [\n                Choice::new(\"tok\", \"Tokyo\"),\n                Choice::new(\"del\", \"Delhi\").disabled(true),\n                Choice::new(\"seo\", \"Seoul\"),\n            ],\n        ),\n)",
+      "src": "/ui-preview/select/groups.html",
+      "height": 360,
+      "layout": "start",
+      "cells": "narrow",
+      "show": true,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-67279efcb892.js",
+        "select-37f6a617c755.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "select",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "select-control",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "select-trigger",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "select-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-native",
+                  "tag": "select",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "select-popup",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "select-list",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "option-group-label",
+                          "tag": "div",
+                          "count": 2,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "select-footer",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "select-note",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-status",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "select/rich",
+      "component": "select",
+      "slug": "rich",
+      "title": "A line under the label, and an icon",
+      "kind": "single",
+      "code": "Field::new(\"owner\", \"Owner\").control(\n    Select::new(\"owner\")\n        .id(\"owner-select\")\n        .placeholder(\"Choose an owner\")\n        .choice(\n            Choice::new(\"ada\", \"Ada Lovelace\")\n                .description(\"Engineering\")\n                .icon(icons::USER)\n                .selected_label(\"Ada\"),\n        )\n        .choice(\n            Choice::new(\"alan\", \"Alan Turing\")\n                .description(\"Research\")\n                .icon(icons::USER),\n        ),\n)",
+      "src": "/ui-preview/select/rich.html",
+      "height": 280,
+      "layout": "start",
+      "cells": "narrow",
+      "show": true,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-67279efcb892.js",
+        "select-37f6a617c755.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "select",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "select-control",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "select-trigger",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "select-value",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-native",
+                  "tag": "select",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "select-popup",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "select-list",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "option-body",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "option-text",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "option-description",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "option-body",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "option-text",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "option-description",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "select-footer",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "select-note",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-status",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "select/states",
+      "component": "select",
+      "slug": "states",
+      "title": "States",
+      "kind": "gallery",
+      "code": "[\n    (\n        \"Clearable\",\n        Select::new(\"s1\")\n            .aria_label(\"Clearable\")\n            .options(stages())\n            .selected(\"lead\")\n            .clearable(),\n    ),\n    (\n        \"Invalid\",\n        Select::new(\"s2\")\n            .aria_label(\"Invalid\")\n            .placeholder(\"Choose\")\n            .options(stages())\n            .invalid(true),\n    ),\n    (\n        \"Disabled\",\n        Select::new(\"s3\")\n            .aria_label(\"Disabled\")\n            .options(stages())\n            .selected(\"lead\")\n            .disabled(true),\n    ),\n    (\n        \"Read only\",\n        Select::new(\"s4\")\n            .aria_label(\"Read only\")\n            .options(stages())\n            .selected(\"won\")\n            .readonly(),\n    ),\n    (\n        \"Small\",\n        Select::new(\"s5\")\n            .aria_label(\"Small\")\n            .size(Size::Sm)\n            .placeholder(\"Choose\")\n            .options(stages()),\n    ),\n]",
+      "src": "/ui-preview/select/states.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "medium",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-67279efcb892.js",
+        "select-37f6a617c755.js"
+      ],
+      "captions": [
+        "Clearable",
+        "Invalid",
+        "Disabled",
+        "Read only",
+        "Small"
+      ],
+      "slots": []
+    },
+    {
+      "id": "combobox/thumb",
+      "component": "combobox",
+      "slug": "thumb",
+      "title": "A combobox",
+      "kind": "single",
+      "code": "Combobox::new(\"thumb-country\")\n    .aria_label(\"Country\")\n    .placeholder(\"Country\")\n    .options(countries())",
+      "src": "/ui-preview/combobox/thumb.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-67279efcb892.js",
+        "select-37f6a617c755.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "combobox",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "combobox-control",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "combobox-input",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "combobox-toggle",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "select-native",
+              "tag": "select",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "select-popup",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "select-list",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "select-footer",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "select-note",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "select-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "combobox/default",
+      "component": "combobox",
+      "slug": "default",
+      "title": "A combobox",
+      "kind": "single",
+      "code": "Field::new(\"deal-country\", \"Country\").control(\n    Combobox::new(\"country\")\n        .placeholder(\"Search countries\")\n        .options(countries())\n        .selected(\"in\")\n        .clearable(),\n)",
+      "src": "/ui-preview/combobox/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-67279efcb892.js",
+        "select-37f6a617c755.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "combobox",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "combobox-control",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "combobox-input",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "combobox-clear",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "combobox-toggle",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-native",
+                  "tag": "select",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "select-popup",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "select-list",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "select-footer",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "select-note",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-status",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "combobox/open",
+      "component": "combobox",
+      "slug": "open",
+      "title": "The list, open",
+      "kind": "single",
+      "code": "Field::new(\"open-country\", \"Country\").control(\n    Combobox::new(\"open_country\")\n        .id(\"open-combobox\")\n        .placeholder(\"Search countries\")\n        .options(countries()),\n)",
+      "src": "/ui-preview/combobox/open.html",
+      "height": 360,
+      "layout": "start",
+      "cells": "narrow",
+      "show": true,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-67279efcb892.js",
+        "select-37f6a617c755.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "combobox",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "combobox-control",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "combobox-input",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "combobox-toggle",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-native",
+                  "tag": "select",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "select-popup",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "select-list",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "select-footer",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "select-note",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-status",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "combobox/create",
+      "component": "combobox",
+      "slug": "create",
+      "title": "Making a new option",
+      "kind": "single",
+      "code": "Field::new(\"deal-source\", \"Source\")\n    .help(\"Pick one, or type a new one and choose “Create”.\")\n    .control(\n        Combobox::new(\"source\")\n            .placeholder(\"Pick or type\")\n            .options([(\"web\", \"Website\"), (\"referral\", \"Referral\")])\n            .creatable(),\n    )",
+      "src": "/ui-preview/combobox/create.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-67279efcb892.js",
+        "select-37f6a617c755.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "combobox",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "combobox-control",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "combobox-input",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "combobox-toggle",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-native",
+                  "tag": "select",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "select-popup",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "select-list",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "select-footer",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "select-note",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-status",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "field-description",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "combobox/states",
+      "component": "combobox",
+      "slug": "states",
+      "title": "States",
+      "kind": "gallery",
+      "code": "[\n    (\n        \"Invalid\",\n        Combobox::new(\"c1\")\n            .aria_label(\"Invalid\")\n            .placeholder(\"Search\")\n            .options(countries())\n            .invalid(true),\n    ),\n    (\n        \"Disabled\",\n        Combobox::new(\"c2\")\n            .aria_label(\"Disabled\")\n            .options(countries())\n            .selected(\"fr\")\n            .disabled(true),\n    ),\n    (\n        \"Create not allowed\",\n        Combobox::new(\"c3\")\n            .aria_label(\"Create not allowed\")\n            .placeholder(\"Pick\")\n            .options(countries())\n            .creatable()\n            .create_denied(\"Only admins can add countries.\"),\n    ),\n]",
+      "src": "/ui-preview/combobox/states.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "medium",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-67279efcb892.js",
+        "select-37f6a617c755.js"
+      ],
+      "captions": [
+        "Invalid",
+        "Disabled",
+        "Create not allowed"
+      ],
+      "slots": []
+    },
+    {
+      "id": "multi-select/thumb",
+      "component": "multi-select",
+      "slug": "thumb",
+      "title": "A multi-select",
+      "kind": "single",
+      "code": "MultiSelect::new(\"thumb-countries\")\n    .aria_label(\"Countries\")\n    .placeholder(\"Countries\")\n    .options(countries())\n    .selected_values([\"fr\", \"de\"])",
+      "src": "/ui-preview/multi-select/thumb.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-67279efcb892.js",
+        "select-37f6a617c755.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "multiselect",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "multiselect-control",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chips",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chip",
+                      "tag": "span",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "chip-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chip-remove",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "multiselect-input",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "combobox-toggle",
+                  "tag": "button",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "select-native",
+              "tag": "select",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "select-popup",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "select-list",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "select-footer",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "select-note",
+                      "tag": "p",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "chip-template",
+              "tag": "template",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "chip",
+                  "tag": "span",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chip-text",
+                      "tag": "span",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "chip-remove",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "select-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "multi-select/default",
+      "component": "multi-select",
+      "slug": "default",
+      "title": "A multi-select",
+      "kind": "single",
+      "code": "Field::new(\"deal-markets\", \"Markets\").control(\n    MultiSelect::new(\"markets\")\n        .placeholder(\"Add a market\")\n        .options(countries())\n        .selected_values([\"fr\", \"de\"]),\n)",
+      "src": "/ui-preview/multi-select/default.html",
+      "height": 120,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-67279efcb892.js",
+        "select-37f6a617c755.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "multiselect",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "multiselect-control",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chips",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chip",
+                          "tag": "span",
+                          "count": 2,
+                          "children": [
+                            {
+                              "slot": "chip-text",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chip-remove",
+                              "tag": "button",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "multiselect-input",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "combobox-toggle",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-native",
+                  "tag": "select",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "select-popup",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "select-list",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "select-footer",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "select-note",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chip-template",
+                  "tag": "template",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chip",
+                      "tag": "span",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chip-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chip-remove",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-status",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "multi-select/open",
+      "component": "multi-select",
+      "slug": "open",
+      "title": "The list, open",
+      "kind": "single",
+      "code": "Field::new(\"open-markets\", \"Markets\").control(\n    MultiSelect::new(\"open_markets\")\n        .id(\"open-multi\")\n        .placeholder(\"Add a market\")\n        .options(countries())\n        .selected_values([\"in\"]),\n)",
+      "src": "/ui-preview/multi-select/open.html",
+      "height": 380,
+      "layout": "start",
+      "cells": "narrow",
+      "show": true,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-67279efcb892.js",
+        "select-37f6a617c755.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "multiselect",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "multiselect-control",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chips",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chip",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "chip-text",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "chip-remove",
+                              "tag": "button",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "multiselect-input",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "combobox-toggle",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-native",
+                  "tag": "select",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "select-popup",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "select-list",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "select-footer",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "select-note",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "chip-template",
+                  "tag": "template",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "chip",
+                      "tag": "span",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "chip-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "chip-remove",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-status",
+                  "tag": "div",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "multi-select/limits",
+      "component": "multi-select",
+      "slug": "limits",
+      "title": "Limits",
+      "kind": "gallery",
+      "code": "[\n    (\n        \"At most three\",\n        MultiSelect::new(\"m1\")\n            .aria_label(\"At most three\")\n            .placeholder(\"Add\")\n            .options(countries())\n            .max(3)\n            .selected_values([\"fr\", \"de\", \"jp\"]),\n    ),\n    (\n        \"One chip for many\",\n        MultiSelect::new(\"m2\")\n            .aria_label(\"One chip for many\")\n            .placeholder(\"Add\")\n            .options(countries())\n            .summary_after(2)\n            .selected_values([\"fr\", \"de\", \"jp\"]),\n    ),\n    (\n        \"Select all\",\n        MultiSelect::new(\"m3\")\n            .aria_label(\"Select all\")\n            .placeholder(\"Add\")\n            .options(stages())\n            .select_all(),\n    ),\n]",
+      "src": "/ui-preview/multi-select/limits.html",
+      "height": 140,
+      "layout": "center",
+      "cells": "medium",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-67279efcb892.js",
+        "select-37f6a617c755.js"
+      ],
+      "captions": [
+        "At most three",
+        "One chip for many",
+        "Select all"
+      ],
+      "slots": []
+    },
+    {
+      "id": "command/thumb",
+      "component": "command",
+      "slug": "thumb",
+      "title": "A command palette",
+      "kind": "single",
+      "code": "Command::new(\"thumb-palette\")\n    .placeholder(\"Type a command…\")\n    .group(\n        CommandGroup::new(\"Go to\")\n            .item(CommandItem::link(\"Deals\", \"/deals\").icon(icons::HANDSHAKE))\n            .item(CommandItem::link(\"Contacts\", \"/contacts\").icon(icons::USER)),\n    )",
+      "src": "/ui-preview/command/thumb.html",
+      "height": 250,
+      "layout": "center",
+      "cells": "narrow",
+      "show": true,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-67279efcb892.js",
+        "select-37f6a617c755.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "command-dialog",
+          "tag": "dialog",
+          "count": 1,
+          "children": [
+            {
+              "slot": "command",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "command-input-wrap",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "command-input",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "command-list",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "command-recent",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "option-group-label",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "command-item",
+                      "tag": "a",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "option-body",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "option-text",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "command-remote",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-note",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "select-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "command/default",
+      "component": "command",
+      "slug": "default",
+      "title": "A command palette",
+      "kind": "single",
+      "code": "Command::new(\"palette\")\n    .placeholder(\"Type a command or search…\")\n    .recent(4)\n    .group(\n        CommandGroup::new(\"Go to\")\n            .item(\n                CommandItem::link(\"Deals\", \"/deals\")\n                    .icon(icons::HANDSHAKE)\n                    .shortcut(\"alt+d\"),\n            )\n            .item(CommandItem::link(\"New deal\", \"/deals/new\").icon(icons::CIRCLE_PLUS))\n            .item(\n                CommandItem::link(\"Contacts\", \"/contacts\")\n                    .icon(icons::USER)\n                    .keywords([\"people\"]),\n            ),\n    )\n    .group(\n        CommandGroup::new(\"Account\")\n            .item(CommandItem::post(\"Sign out\", \"/sign-out\").not_recent())\n            .item(CommandItem::disabled(\n                \"Billing\",\n                \"Only owners can open billing.\",\n            )),\n    )",
+      "src": "/ui-preview/command/default.html",
+      "height": 420,
+      "layout": "center",
+      "cells": "narrow",
+      "show": true,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-67279efcb892.js",
+        "select-37f6a617c755.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "command-dialog",
+          "tag": "dialog",
+          "count": 1,
+          "children": [
+            {
+              "slot": "command",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "command-input-wrap",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "command-input",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "command-list",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "command-recent",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "option-group-label",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "command-item",
+                      "tag": "a",
+                      "count": 3,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "option-body",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "option-text",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "command-shortcut",
+                          "tag": "kbd",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "option-group-label",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "command-item",
+                      "tag": "button",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "option-body",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "option-text",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "command-reason",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "command-remote",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "select-note",
+                  "tag": "p",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "slot": "select-status",
+              "tag": "div",
+              "count": 1,
+              "children": []
             }
           ]
         }
@@ -4790,7 +6732,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-26f00c88e5c7.js"
+        "overlay-67279efcb892.js"
       ],
       "captions": [],
       "slots": [
@@ -4830,7 +6772,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-26f00c88e5c7.js"
+        "overlay-67279efcb892.js"
       ],
       "captions": [],
       "slots": [
@@ -4896,7 +6838,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-26f00c88e5c7.js"
+        "overlay-67279efcb892.js"
       ],
       "captions": [
         "Top",
@@ -4921,7 +6863,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-26f00c88e5c7.js"
+        "overlay-67279efcb892.js"
       ],
       "captions": [],
       "slots": [
@@ -4968,7 +6910,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-26f00c88e5c7.js"
+        "overlay-67279efcb892.js"
       ],
       "captions": [],
       "slots": [
@@ -5048,7 +6990,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-26f00c88e5c7.js"
+        "overlay-67279efcb892.js"
       ],
       "captions": [],
       "slots": [
@@ -5088,7 +7030,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-26f00c88e5c7.js"
+        "overlay-67279efcb892.js"
       ],
       "captions": [],
       "slots": [
@@ -5924,7 +7866,7 @@
       "width": 1100,
       "scripts": [
         "sidebar-be39798e378b.js",
-        "overlay-26f00c88e5c7.js"
+        "overlay-67279efcb892.js"
       ],
       "captions": [],
       "slots": [
@@ -6499,7 +8441,7 @@
       "live": false,
       "width": 720,
       "scripts": [
-        "overlay-26f00c88e5c7.js",
+        "overlay-67279efcb892.js",
         "table-4f81fade135f.js"
       ],
       "captions": [],
@@ -7129,7 +9071,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-26f00c88e5c7.js",
+        "overlay-67279efcb892.js",
         "table-4f81fade135f.js"
       ],
       "captions": [],
@@ -7811,7 +9753,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-26f00c88e5c7.js",
+        "overlay-67279efcb892.js",
         "table-4f81fade135f.js"
       ],
       "captions": [],
@@ -8596,7 +10538,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-26f00c88e5c7.js",
+        "overlay-67279efcb892.js",
         "table-4f81fade135f.js"
       ],
       "captions": [],
@@ -9278,7 +11220,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-26f00c88e5c7.js",
+        "overlay-67279efcb892.js",
         "table-4f81fade135f.js"
       ],
       "captions": [],
@@ -9908,7 +11850,7 @@
       "live": false,
       "width": null,
       "scripts": [
-        "overlay-26f00c88e5c7.js",
+        "overlay-67279efcb892.js",
         "table-4f81fade135f.js"
       ],
       "captions": [

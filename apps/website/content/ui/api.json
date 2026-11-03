@@ -1106,6 +1106,126 @@
       }
     ]
   },
+  "Choice": {
+    "name": "Choice",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/select/choice.rs",
+    "summary": "One choice in a `Select`, `Combobox` or `MultiSelect`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "value: impl Into<String>, label: impl Into<String>",
+        "doc": "A choice that posts `value` and shows `label`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "description",
+        "generics": "",
+        "args": "description: impl Into<String>",
+        "doc": "A line under the label, in the list only."
+      },
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "icon: Icon",
+        "doc": "An icon before the label, in the list and in the control."
+      },
+      {
+        "name": "avatar",
+        "generics": "",
+        "args": "src: impl Into<String>",
+        "doc": "A small round-free picture before the label (a URL on this site or a data URL)."
+      },
+      {
+        "name": "keywords",
+        "generics": "<S: Into<String>>",
+        "args": "words: impl IntoIterator<Item = S>",
+        "doc": "Words that find this choice though the label doesn't hold them."
+      },
+      {
+        "name": "selected_label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "What the control shows once this is chosen, when that is shorter than the label."
+      },
+      {
+        "name": "link",
+        "generics": "",
+        "args": "href: impl Into<String>",
+        "doc": "Makes the choice a link to a page on this site. For the results a command palette's server source answers."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Shows the choice but refuses it."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "ChoiceList": {
+    "name": "ChoiceList",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/select/query.rs",
+    "summary": "An answer to a search: options, groups and, when there are more, where to get them. The markup is the same an inline list has, so a searched list and a fixed one look and behave alike.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "An empty answer: the list shows its \"no results\" text."
+      }
+    ],
+    "methods": [
+      {
+        "name": "option",
+        "generics": "",
+        "args": "value: impl Into<String>, label: impl Into<String>",
+        "doc": "Adds an option."
+      },
+      {
+        "name": "choice",
+        "generics": "",
+        "args": "choice: Choice",
+        "doc": "Adds a choice."
+      },
+      {
+        "name": "choices",
+        "generics": "<C: Into<Choice>>",
+        "args": "choices: impl IntoIterator<Item = C>",
+        "doc": "Adds choices."
+      },
+      {
+        "name": "group",
+        "generics": "<C: Into<Choice>>",
+        "args": "label: impl Into<String>, choices: impl IntoIterator<Item = C>",
+        "doc": "Adds a labelled group."
+      },
+      {
+        "name": "more",
+        "generics": "",
+        "args": "url: impl Into<String>",
+        "doc": "Says there is a next page: the URL, on this site, that answers it. The list then ends with \"Show more\". `OptionQuery::next_url` builds it."
+      },
+      {
+        "name": "into_node",
+        "generics": "",
+        "args": "",
+        "doc": "The markup the runtime reads."
+      },
+      {
+        "name": "to_html",
+        "generics": "",
+        "args": "",
+        "doc": "The markup as text."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Cmd": {
     "name": "Cmd",
     "kind": "enum",
@@ -1298,6 +1418,216 @@
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "Combobox": {
+    "name": "Combobox",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/select/combobox.rs",
+    "summary": "One choice, found by typing. The options are in the page, or searched on the server.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "A combobox posting as `name`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "selected",
+        "generics": "",
+        "args": "value: impl Into<String>",
+        "doc": "Sets the chosen value, which is one of the options."
+      },
+      {
+        "name": "selected_choice",
+        "generics": "",
+        "args": "choice: impl Into<Choice>",
+        "doc": "Sets the chosen value when it isn't among the options in the page: the one a search found earlier, for an edit form."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "Command": {
+    "name": "Command",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/select/command.rs",
+    "summary": "A command palette: a modal dialog with a search box and a list of groups of items, opened by `Ctrl` or `Cmd` and `K`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "A palette in a dialog with the id `id`."
+      },
+      {
+        "name": "trigger",
+        "generics": "",
+        "args": "id: impl Into<String>, label: impl Into<Node>",
+        "doc": "A button that opens the palette with no script, showing the shortcut."
+      }
+    ],
+    "methods": [
+      {
+        "name": "title",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "Names the dialog for assistive technology."
+      },
+      {
+        "name": "placeholder",
+        "generics": "",
+        "args": "placeholder: impl Into<String>",
+        "doc": "Sets the hint in the search box."
+      },
+      {
+        "name": "group",
+        "generics": "",
+        "args": "group: CommandGroup",
+        "doc": "Adds a group."
+      },
+      {
+        "name": "item",
+        "generics": "",
+        "args": "item: CommandItem",
+        "doc": "Adds an item that belongs to no group."
+      },
+      {
+        "name": "recent",
+        "generics": "",
+        "args": "n: u32",
+        "doc": "Shows the last `n` items chosen (kept in this browser) while the box is empty."
+      },
+      {
+        "name": "source",
+        "generics": "",
+        "args": "url: impl Into<Href>",
+        "doc": "Adds results from the server: the runtime asks `url` with `?q=text` and shows the answer, an `ChoiceList` whose groups hold links, below the items in the page."
+      },
+      {
+        "name": "shortcut",
+        "generics": "",
+        "args": "on: bool",
+        "doc": "Whether `Ctrl` or `Cmd` and `K` open it. On by default."
+      },
+      {
+        "name": "labels",
+        "generics": "",
+        "args": "labels: &SelectLabels",
+        "doc": "Sets the words, for another language."
+      },
+      {
+        "name": "csrf",
+        "generics": "",
+        "args": "token: impl Into<String>",
+        "doc": "Sets the token the posting items send when the page runs with no script."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "CommandGroup": {
+    "name": "CommandGroup",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/select/command.rs",
+    "summary": "A titled group of items.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "A group headed `label`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "item",
+        "generics": "",
+        "args": "item: CommandItem",
+        "doc": "Adds an item."
+      },
+      {
+        "name": "items",
+        "generics": "",
+        "args": "items: impl IntoIterator<Item = CommandItem>",
+        "doc": "Adds items."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "CommandItem": {
+    "name": "CommandItem",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/select/command.rs",
+    "summary": "One item of a `Command`: a page to go to, an action to post, or a browser command.",
+    "constructors": [
+      {
+        "name": "link",
+        "generics": "",
+        "args": "label: impl Into<String>, href: impl Into<Href>",
+        "doc": "Goes to `href`."
+      },
+      {
+        "name": "post",
+        "generics": "",
+        "args": "label: impl Into<String>, action: impl Into<Href>",
+        "doc": "Posts to `action`. Without script it is an ordinary form post."
+      },
+      {
+        "name": "run",
+        "generics": "",
+        "args": "label: impl Into<String>, command: impl Into<Commands>",
+        "doc": "Runs `command` in the browser: opens a dialog, copies text."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "label: impl Into<String>, reason: impl Into<String>",
+        "doc": "Shows the item but refuses it, and says why in its line."
+      }
+    ],
+    "methods": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Names the item for the recent list; its link, action or label by default."
+      },
+      {
+        "name": "icon",
+        "generics": "",
+        "args": "icon: Icon",
+        "doc": "An icon before the label."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "description: impl Into<String>",
+        "doc": "A line under the label."
+      },
+      {
+        "name": "keywords",
+        "generics": "<S: Into<String>>",
+        "args": "words: impl IntoIterator<Item = S>",
+        "doc": "Words that find this item though the label doesn't hold them."
+      },
+      {
+        "name": "shortcut",
+        "generics": "",
+        "args": "chord: &str",
+        "doc": "A key chord that runs this item from anywhere on the page, such as `mod+shift+n` (`mod` is `Cmd` on Apple devices and `Ctrl` elsewhere). It is shown on the item. A chord needs `ctrl`, `alt`, `meta` or `mod`, and one key: a bare letter would fire while someone types, so it is refused and nothing is shown."
+      },
+      {
+        "name": "not_recent",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps this item out of the recent list (a sign-out, a delete)."
+      }
+    ],
+    "variants": [],
+    "shared": []
   },
   "Container": {
     "name": "Container",
@@ -1954,6 +2284,12 @@
         "generics": "",
         "args": "field: &'static str, options: impl IntoIterator<Item =(String, String)>",
         "doc": "Sets the choices of a select whose options come from the database."
+      },
+      {
+        "name": "search",
+        "generics": "",
+        "args": "field: &'static str, url: impl Into<Href>",
+        "doc": "Searches a combobox or multi-select field on the server: the runtime asks `url` with `?q=text` and shows the answer, a `ChoiceList`. Give the field's current choices with `options`, so an edit form can show their labels."
       },
       {
         "name": "one_column",
@@ -2677,6 +3013,54 @@
       }
     ]
   },
+  "MultiSelect": {
+    "name": "MultiSelect",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/select/multi.rs",
+    "summary": "Many choices, shown as chips with a 4 px corner.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "A multi-select posting as `name`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "selected_values",
+        "generics": "<S: Into<String>>",
+        "args": "values: impl IntoIterator<Item = S>",
+        "doc": "Sets the chosen values."
+      },
+      {
+        "name": "selected_choices",
+        "generics": "<C: Into<Choice>>",
+        "args": "choices: impl IntoIterator<Item = C>",
+        "doc": "Sets the chosen choices, for values that aren't among the options in the page: the ones a search found earlier, for an edit form."
+      },
+      {
+        "name": "max",
+        "generics": "",
+        "args": "n: u32",
+        "doc": "Allows at most `n` choices. The other options are switched off at the limit."
+      },
+      {
+        "name": "summary_after",
+        "generics": "",
+        "args": "n: u32",
+        "doc": "Shows one \"N selected\" chip instead of the chips once more than `n` are chosen."
+      },
+      {
+        "name": "select_all",
+        "generics": "",
+        "args": "",
+        "doc": "Adds \"Select all\" and \"Deselect all\" for the options the text matches. For lists in the page: a searched list is never all there."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "NativeSelect": {
     "name": "NativeSelect",
     "kind": "struct",
@@ -2977,6 +3361,54 @@
       }
     ],
     "methods": [],
+    "variants": [],
+    "shared": []
+  },
+  "OptionQuery": {
+    "name": "OptionQuery",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/select/query.rs",
+    "summary": "What the runtime asks of a searched list: `?q=text&limit=20&after=40`.",
+    "constructors": [
+      {
+        "name": "parse",
+        "generics": "",
+        "args": "query: &str",
+        "doc": "Reads a query string."
+      }
+    ],
+    "methods": [
+      {
+        "name": "text",
+        "generics": "",
+        "args": "",
+        "doc": "The text typed, trimmed. Empty when nothing was."
+      },
+      {
+        "name": "limit",
+        "generics": "",
+        "args": "",
+        "doc": "How many options to answer with, at most 50."
+      },
+      {
+        "name": "offset",
+        "generics": "",
+        "args": "",
+        "doc": "How many to skip: where the \"Show more\" of the last answer left off."
+      },
+      {
+        "name": "is_empty",
+        "generics": "",
+        "args": "",
+        "doc": "Whether nothing was typed."
+      },
+      {
+        "name": "next_url",
+        "generics": "",
+        "args": "path: &str, taken: usize",
+        "doc": "The query string for the page after this one, `offset` further on."
+      }
+    ],
     "variants": [],
     "shared": []
   },
@@ -3508,6 +3940,46 @@
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "Select": {
+    "name": "Select",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/select/single.rs",
+    "summary": "One choice from a small, fixed list, in a styled listbox.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "A select posting as `name`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "selected",
+        "generics": "",
+        "args": "value: impl Into<String>",
+        "doc": "Sets the chosen value."
+      },
+      {
+        "name": "clearable",
+        "generics": "",
+        "args": "",
+        "doc": "Adds a clear button, and lets `Delete` and `Backspace` clear the choice."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "SelectLabels": {
+    "name": "SelectLabels",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/select/labels.rs",
+    "summary": "The words of a select, combobox, multi-select or command palette. English by default; pass your own for another language. `{n}`, `{total}`, `{q}` and `{label}` are filled in.",
+    "constructors": [],
+    "methods": [],
+    "variants": [],
+    "shared": []
   },
   "Separator": {
     "name": "Separator",
