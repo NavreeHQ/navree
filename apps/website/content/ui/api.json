@@ -252,6 +252,12 @@
         "doc": "Adds a step to the breadcrumb, before this page."
       },
       {
+        "name": "prefetch_crumbs",
+        "generics": "",
+        "args": "",
+        "doc": "Fetches the breadcrumb's links when the pointer rests on one or it takes focus. Off unless asked, as for every link."
+      },
+      {
         "name": "actions",
         "generics": "",
         "args": "actions: impl IntoNodes",
@@ -618,6 +624,12 @@
         "generics": "",
         "args": "label: impl Into<Node>",
         "doc": "Adds the current page."
+      },
+      {
+        "name": "prefetch",
+        "generics": "",
+        "args": "",
+        "doc": "Fetches the trail's links when the pointer rests on one or it takes focus, so the page is often there before the click. Off unless asked, as for every link."
       }
     ],
     "variants": [],
@@ -1990,6 +2002,12 @@
         "generics": "",
         "args": "wait: std::time::Duration",
         "doc": "How long typing in the search or a text filter waits for a pause before the table asks again: 100 ms unless this says otherwise, up to 5 s. A tick or a choice applies at once. A longer wait suits a search the database is slow to answer."
+      },
+      {
+        "name": "prefetch",
+        "generics": "",
+        "args": "",
+        "doc": "Fetches the table's own links (sort, page, filter chips, details) when the pointer rests on one or it takes focus, so the next state is often there before the click. Off unless asked. They change nothing, but each fetch costs a page of rows; a cell's own link, such as a row's page, is never fetched this way."
       },
       {
         "name": "refreshable",
@@ -3708,10 +3726,16 @@
         "doc": "Says whether this is the current page, in place of what the path says. For links that differ only in their query (a list under several filters), which the path can't tell apart."
       },
       {
+        "name": "prefetch",
+        "generics": "",
+        "args": "",
+        "doc": "Fetches this link when the pointer rests on it or it takes focus, so the page is often there before the click. Nothing is fetched ahead unless asked, link by link: only ask for a page whose `GET` changes nothing."
+      },
+      {
         "name": "no_prefetch",
         "generics": "",
         "args": "",
-        "doc": "Keeps this link from being fetched ahead of a click. A sidebar item is navigation and is fetched on hover or focus, so an item whose `GET` isn't safe to repeat needs this."
+        "doc": "Fetches this link only when it is clicked, which is the default: undoes `prefetch` and `prefetch_eager`."
       },
       {
         "name": "prefetch_eager",
@@ -4681,6 +4705,12 @@
       }
     ],
     "methods": [
+      {
+        "name": "prefetch_home",
+        "generics": "",
+        "args": "",
+        "doc": "Fetches the page the app's name links to when the pointer rests on it or it takes focus. Off unless asked, as for every link."
+      },
       {
         "name": "context",
         "generics": "",
