@@ -163,15 +163,19 @@ for (const browserName of browsers) {
           await held;
           await route.continue();
         });
-        await page.locator(`#sized thead th[data-col=${column}] [data-slot=sort-link]`).click();
+        // The link says where the server goes: the page's default sort already holds title.
+        const link = page.locator(`#sized thead th[data-col=${column}] [data-slot=sort-link]`);
+        const target = new URL(await link.getAttribute("href"), page.url()).search;
+        assert.match(target, new RegExp(`sort=-?${column}(&|$)`));
+        await link.click();
         await page.waitForTimeout(200);
         assert.deepEqual(await keys(page, "sized"), before, `${column}: nothing moves before the server answers`);
         assert.equal(await page.locator("#sized[data-pending]").count(), 1, `${column}: busy`);
         release();
-        await page.waitForURL(new RegExp(`sort=${column}(&|$)`));
+        await page.waitForURL((url) => url.search === target);
         await settled(page, "sized");
         await page.unroute(/\/exact\?/);
-        assert.deepEqual(await keys(page, "sized"), await serverKeys(`/exact?sort=${column}`, "sized"), column);
+        assert.deepEqual(await keys(page, "sized"), await serverKeys(`/exact${target}`, "sized"), column);
       }
       await close();
     });

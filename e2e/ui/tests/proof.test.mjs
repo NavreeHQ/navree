@@ -152,6 +152,8 @@ test("sorting a 1,000-row table morphs it in place and keeps the URL", async () 
   assert.equal(await page.locator("tbody tr").first().getAttribute("data-key"), "1");
   await page.getByRole("link", { name: "Amount" }).click();
   await page.locator("th[aria-sort=descending]").waitFor();
+  // The rows move at once; the address moves when the server confirms.
+  await page.waitForURL("**sort=-amount**");
   await page.goBack();
   await page.locator("th[aria-sort=ascending]").waitFor();
   assert.deepEqual(problems, []);
