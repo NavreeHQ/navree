@@ -2,7 +2,7 @@
 // alive. A failed fetch falls back to a real navigation.
 import { all, body, byId, clean, closest, cookies, emit, every, head, hidden, make, on, one, ownModule, root, sameOrigin, setTitle, titleOf } from "./dom.js";
 import { morph, pieces } from "./morph.js";
-import { adoptToasts, announce, sameUser } from "./ui.js";
+import { adoptToasts, announce, noteWrite, sameUser } from "./ui.js";
 
 const HEADER = { "x-navree-ui": "1" };
 // `Sec-Purpose` can't be set from `fetch`, so a prefetch says so itself.
@@ -44,11 +44,13 @@ export function forget() {
 /** Runs `write`, with no prefetch standing or started until it's over. @template T @param {() => Promise<T>} write */
 export async function whileWriting(write) {
   writing++;
+  noteWrite(true);
   forget();
   try {
     return await write();
   } finally {
     writing--;
+    noteWrite(false);
     forget();
   }
 }
@@ -277,6 +279,7 @@ export async function refresh(id) {
   if (!el || !src) return;
   const mine = (regions.get(id) || 0) + 1;
   regions.set(id, mine);
+  el.removeAttribute("data-ui-failed");
   const table = el.hasAttribute("data-ui-table") ? el : null;
   try {
     if (el.hasAttribute("data-ui-feed")) return await feed(el, src, () => regions.get(id) === mine);
@@ -324,7 +327,9 @@ export async function refresh(id) {
 /** Says a region could not be fetched, to whatever draws that region. @param {Element} el @param {number} status */
 function failed(el, status) {
   // A lazy region is asked for once; with Retry it can be asked again, but a later swap doesn't.
+  // The mark stays for whatever draws the failure and wasn't there yet to hear the event.
   el.removeAttribute("data-ui-lazy");
+  el.setAttribute("data-ui-failed", String(status));
   el.dispatchEvent(new CustomEvent("ui:region-error", { bubbles: true, detail: { status } }));
 }
 

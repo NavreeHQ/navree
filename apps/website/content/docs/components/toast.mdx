@@ -30,7 +30,7 @@ async fn archive(uow: Uow, id: Path<i64>) -> Result<Reply> {
 
 ## Title, action and a name
 
-`.title(text)` adds a line in bold above the text. `.action(...)` offers one thing to do: `ToastAction::link(label, href)` goes somewhere, and `ToastAction::post(label, href)` posts, such as an Undo. A post's answer is ops, so it can raise a toast of its own, and the toast it came from goes. `.id(name)` names a toast: one with the same name replaces it and its time starts again, so "Saving…" can become "Saved." A toast has a close button unless you say `.closable(false)`; a sticky toast keeps its close button whatever you say, since it could not go otherwise. With JavaScript off the close button is a link to the toast's own address, and the page hides the toast that is the target.
+`.title(text)` adds a line in bold above the text. `.action(...)` offers one thing to do: `ToastAction::link(label, href)` goes somewhere, and `ToastAction::post(label, href)` posts, such as an Undo. A post's answer is ops, so it can raise a toast of its own, and the toast it came from goes. `.id(name)` names a toast: one with the same name replaces it and its time starts again, so "Saving…" can become "Saved." A toast has a close button unless you say `.closable(false)`; a sticky toast keeps its close button whatever you say, since it could not go otherwise. The close button is a link to the toast's own address with `role="button"`: with JavaScript off the page hides the toast that is the target, and with the runtime `Enter` and `Space` close it. A toast that the address already hides when a page loads counts as closed.
 
 ## How long it stays
 
@@ -85,6 +85,7 @@ Use a toast for the result of something the reader just did, that needs no answe
 |---|---|
 | `Alt` + `T` | Moves focus to the first toast's action or close button. |
 | `Tab` | Moves between a toast's action and close button, and on to the next toast. |
+| `Enter`, `Space` on the close button | Close that toast. |
 | `Esc` | Closes the toast with focus and returns focus to where it was. Inside a dialog the dialog stays open. |
 
 - The region has the name "Notifications" and is a direct child of the page's body, the last thing a keyboard reaches.

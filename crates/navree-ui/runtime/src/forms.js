@@ -2,7 +2,7 @@
 // `data-ui-form`, a fetch whose answer is ops or a page.
 import { applyEnvelope } from "./ops.js";
 import { forget, go, pageSwaps, showPage, startRegions, whileWriting } from "./nav.js";
-import { active, attr, body, byId, closest, cookies, emit, has, make, on, set, unset, toggle } from "./dom.js";
+import { active, all, attr, body, byId, closest, cookies, emit, has, make, on, set, unset, toggle } from "./dom.js";
 import { toast } from "./ui.js";
 
 const OPS = "application/vnd.navree.ops+json";
@@ -44,7 +44,7 @@ const targetOf = (form, submitter) =>
 function said(form, submitter) {
   const parts = [targetOf(form, submitter)];
   try {
-    for (const [name, value] of new FormData(form, submitter)) {
+    for (const [name, value] of fieldsOf(form, submitter)) {
       parts.push(name, typeof value === "string" ? value : value.size || value.name ? `${value.name}:${value.size}:${value.type}:${value.lastModified}` : "");
     }
   } catch {}
@@ -69,16 +69,34 @@ function recordOf(form) {
  * Forms on their way, with what they sent. The fetch of a write can't be taken back, so
  * a second submit that says the same is ignored. One that says something new, typed
  * while the first was on its way, waits: the latest only. It goes only where it was
- * typed, so it remembers the page, the address and the user it was typed for.
- * @type {WeakMap<HTMLFormElement, string>}
+ * typed, so it remembers the page, the address and the user it was typed for. A form is
+ * one send; the page's post form is shared by every post item, so there it is the item
+ * that is one.
+ * @type {WeakMap<Element, string>}
  */
 const sending = new WeakMap();
-/** @type {WeakMap<HTMLFormElement, {said: string, submitter: HTMLElement | null, page: number, href: string, target: string, token: string, record: string}>} */
+/** @type {WeakMap<Element, {said: string, submitter: HTMLElement | null, page: number, href: string, target: string, token: string, record: string}>} */
 const waiting = new WeakMap();
+
+/** What a send is counted as. @param {HTMLFormElement} form @param {Element | null} submitter */
+const sendOf = (form, submitter) => (submitter && attr(form, "id") === "ui-post" ? submitter : form);
+
+/**
+ * The fields of a send. The page's post form carries only the token it holds: another element
+ * of the page that names it with `form` joins no post.
+ * @param {HTMLFormElement} form @param {HTMLElement | null} submitter
+ */
+function fieldsOf(form, submitter) {
+  if (attr(form, "id") !== "ui-post") return new FormData(form, submitter);
+  const data = new FormData();
+  for (const input of all(form, "input[type=hidden][name=_csrf]")) data.append("_csrf", /** @type {HTMLInputElement} */ (input).value);
+  return data;
+}
 
 /** @param {HTMLFormElement} form @param {HTMLElement | null} submitter */
 async function send(form, submitter) {
-  sending.set(form, said(form, submitter));
+  const one = sendOf(form, submitter);
+  sending.set(one, said(form, submitter));
   const before = active();
   let answered = false;
   /** Whether the answer left this page as it was: ops that don't lead away. */
@@ -88,7 +106,7 @@ async function send(form, submitter) {
   try {
     const action = (submitter && attr(submitter, "formaction")) || attr(form, "action") || location.href;
     const method = ((submitter && attr(submitter, "formmethod")) || attr(form, "method") || "get").toUpperCase();
-    const data = new FormData(form, submitter);
+    const data = fieldsOf(form, submitter);
     /** @type {Record<string, string>} */
     const headers = { "x-navree-ui": "1" };
     const token = cookie("XSRF-TOKEN");
@@ -115,9 +133,9 @@ async function send(form, submitter) {
     toast("danger", answered ? "That didn't work. Try again." : "No connection. Try again.");
     told = true;
   } finally {
-    sending.delete(form);
-    const next = waiting.get(form);
-    waiting.delete(form);
+    sending.delete(one);
+    const next = waiting.get(one);
+    waiting.delete(one);
     const by = next?.submitter?.isConnected ? next.submitter : null;
     // What was typed meanwhile goes now, from the form as it is, only where it was typed:
     // after ops that left the page alone, on the same page and address, to the same
@@ -172,12 +190,13 @@ export function startForms() {
       filter(form);
       return;
     }
-    const out = sending.get(form);
+    const one = sendOf(form, submitter);
+    const out = sending.get(one);
     if (out !== undefined) {
       e.preventDefault();
       const now = said(form, submitter);
-      if (now !== out) waiting.set(form, { said: now, submitter, page: pageSwaps(), href: location.href, target: targetOf(form, submitter), token: cookie("XSRF-TOKEN"), record: recordOf(form) });
-      else waiting.delete(form);
+      if (now !== out) waiting.set(one, { said: now, submitter, page: pageSwaps(), href: location.href, target: targetOf(form, submitter), token: cookie("XSRF-TOKEN"), record: recordOf(form) });
+      else waiting.delete(one);
       return;
     }
     const method = ((submitter && attr(submitter, "formmethod")) || attr(form, "method") || "get").toLowerCase();

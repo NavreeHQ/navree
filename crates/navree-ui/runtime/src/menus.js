@@ -209,10 +209,10 @@ on(document, "beforematch", (e) => {
 });
 
 // A panel that could not be fetched says so, and tries again on Retry.
-on(document, "ui:region-error", (e) => {
-  const panel = closest(e.target, "[role=tabpanel][data-ui-src]");
-  const root = panel && closest(panel, "[data-ui-tabs]");
-  if (!panel || !root) return;
+/** @param {Element} panel */
+function failedPanel(panel) {
+  const root = closest(panel, "[data-ui-tabs]");
+  if (!root) return;
   unset(panel, "data-ui-loaded");
   unset(panel, "aria-busy");
   let words = /** @type {{failed?: string, retry?: string}} */ ({});
@@ -233,7 +233,13 @@ on(document, "ui:region-error", (e) => {
   alert.append(text, retry);
   if (one(panel, "[data-slot=skeleton]")) panel.replaceChildren(alert);
   else panel.prepend(alert);
+}
+on(document, "ui:region-error", (e) => {
+  const panel = closest(e.target, "[role=tabpanel][data-ui-src]");
+  if (panel) failedPanel(panel);
 });
+// A panel that failed before this module arrived: the event is gone, the core runtime's mark stays.
+for (const panel of all(docEl(), "[role=tabpanel][data-ui-src][data-ui-failed]")) failedPanel(panel);
 on(document, "click", (e) => {
   const retry = closest(e.target, "[data-slot=tab-alert] [data-ui-refresh]");
   const panel = retry && closest(retry, "[role=tabpanel]");

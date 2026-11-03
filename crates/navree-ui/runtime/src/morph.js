@@ -85,6 +85,16 @@ function sameField(a, b) {
   return (one && attr(one, "action")) === (other && attr(other, "action"));
 }
 
+/**
+ * Whether `node` is something the runtime keeps, or inside it: a page's element with the same
+ * id never stands in for it.
+ * @param {Node} node @param {Node} root
+ */
+function kept(node, root) {
+  for (let at = /** @type {Node | null} */ (node); at && at !== root; at = parentOf(at)) if (persistent.has(at)) return true;
+  return false;
+}
+
 /** Whether two nodes can become one another without replacing. @param {Node} a @param {Node} b */
 function same(a, b) {
   // What the runtime keeps is no page's content, whatever tag the page uses.
@@ -266,7 +276,7 @@ export function morph(from, to, how = {}) {
   const ids = new Map();
   for (const element of EP.querySelectorAll.call(from, "[id],[data-key]")) {
     const key = keyOf(element);
-    if (key) ids.set(key, element);
+    if (key && !kept(element, from)) ids.set(key, element);
   }
   morphElement(from, to, ids);
   if (resetting) resetControls(from);

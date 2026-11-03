@@ -254,6 +254,7 @@ impl Toast {
                 closable.then(|| {
                     el("a")
                         .slot("toast-close")
+                        .attr("role", "button")
                         .attr("href", format!("#{address}"))
                         .attr("aria-label", close_label.to_owned())
                 }),
@@ -438,7 +439,7 @@ mod tests {
         assert!(
             out.contains(r##"id="ui-toast-1""##)
                 && out.contains(
-                    r##"<a data-slot="toast-close" href="#ui-toast-1" aria-label="Dismiss">"##
+                    r##"<a data-slot="toast-close" role="button" href="#ui-toast-1" aria-label="Dismiss">"##
                 ),
             "{out}"
         );

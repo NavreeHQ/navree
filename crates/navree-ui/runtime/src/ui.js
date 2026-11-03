@@ -3,7 +3,7 @@
 // A toast lives in a CSS animation (`ui-toast-life`, as long as its `data-duration`)
 // and ends on `animationend`; pausing under the pointer or focus is
 // `animation-play-state`, so there is no timer to lose and nothing that can stick.
-import { active, attr, body, closest, cookies, every, has, hidden, holds, keeping, make, on, one, persistent, root, set } from "./dom.js";
+import { active, attr, body, byId, closest, cookies, every, has, hidden, holds, keeping, make, on, one, persistent, root, set } from "./dom.js";
 
 /** @param {Element} el */
 export function openTarget(el) {
@@ -66,38 +66,58 @@ function who() {
   return token ? hash.toString(36) : "";
 }
 
+/** When each toast was placed, to tell what came before a write from what the write's answer raised. @type {WeakMap<Element, number>} */
+const placedAt = new WeakMap();
+/** When the last write began and ended, in this page. */
+const wrote = { start: -Infinity, end: -Infinity };
+
+/** Notes that a write begins or ends. @param {boolean} begins */
+export function noteWrite(begins) {
+  if (begins) wrote.start = performance.now();
+  else wrote.end = performance.now();
+}
+
 /**
  * Whether the user is the one the toasts on show were raised for. If another signed in
- * or out, those toasts and the posts they offer go: they are not this user's.
+ * or out, those toasts and the posts they offer go: they are not this user's. A change
+ * seen soon after a write is that write's: some engines show the new cookie to a script a
+ * moment after the answer that set it, so what the answer itself raised is the new user's
+ * and stays, and only what was showing before the write goes.
  */
 export function sameUser() {
   const now = who();
   if (user === null) user = now;
   if (now === user) return true;
   user = now;
-  for (const t of host?.querySelectorAll("[data-slot=toast]") || []) t.remove();
-  try { host?.hidePopover(); } catch {}
+  const cutoff = performance.now() - wrote.end < 3000 ? wrote.start : Infinity;
+  for (const t of host?.querySelectorAll("[data-slot=toast]") || []) {
+    if ((placedAt.get(t) ?? 0) < cutoff) t.remove();
+  }
+  if (!host?.querySelector("[data-slot=toast]")) {
+    try { host?.hidePopover(); } catch {}
+  }
   return false;
 }
 
 /** The toasts' one standing place: the page's own, or one made now. It stays put through every navigation. */
 function toaster() {
-  if (host?.isConnected) return host;
-  // Only the page's own, a direct child of the body: stored markup can't stand in for it.
-  host = /** @type {HTMLElement | undefined} */ ([...body().children].find((el) => attr(el, "data-slot") === "toaster"));
-  if (!host) {
-    host = make("section");
-    host.setAttribute("data-slot", "toaster");
-    host.setAttribute("aria-label", "Notifications");
-    host.setAttribute("data-position", "bottom-end");
-    host.setAttribute("data-close", "Dismiss");
+  if (!host?.isConnected) {
+    // Only the page's own, a direct child of the body: stored markup can't stand in for it.
+    host = /** @type {HTMLElement | undefined} */ ([...body().children].find((el) => attr(el, "data-slot") === "toaster"));
+    if (!host) {
+      host = make("section");
+      host.setAttribute("data-slot", "toaster");
+      host.setAttribute("aria-label", "Notifications");
+      host.setAttribute("data-position", "bottom-end");
+      host.setAttribute("data-close", "Dismiss");
+    }
+    if (!has(host, "id") && !byId("ui-toaster")) host.setAttribute("id", "ui-toaster");
+    if (!host.parentNode) body().append(host);
+    persistent.add(host);
+    keeping.add(host);
   }
-  if (!has(host, "id")) host.setAttribute("id", "ui-toaster");
-  if (!host.parentNode) body().append(host);
-  persistent.add(host);
-  keeping.add(host);
   // A popover is in the top layer, so a toast shows above an open dialog. Without the
-  // runtime the same element is a fixed box.
+  // runtime the same element is a fixed box. Every use sees it is still one.
   if (!host.hasAttribute("popover")) host.setAttribute("popover", "manual");
   return host;
 }
@@ -165,6 +185,7 @@ function build(spec) {
   if (spec.closable !== false || duration === "sticky") {
     const close = make("a");
     close.setAttribute("data-slot", "toast-close");
+    close.setAttribute("role", "button");
     close.setAttribute("href", "#");
     close.setAttribute("aria-label", attr(toaster(), "data-close") || "Dismiss");
     el.append(close);
@@ -179,7 +200,9 @@ function build(spec) {
  * @param {Element} el
  */
 function name(el) {
-  const id = "ui-toast-" + ++serial;
+  let id;
+  do id = "ui-toast-" + ++serial;
+  while (byId(id));
   set(el, "id", id);
   const close = el.querySelector("[data-slot=toast-close]");
   if (close) set(close, "href", "#" + id);
@@ -195,6 +218,7 @@ function place(el, elapsed) {
   const id = attr(el, "data-toast-id");
   const old = id && [...box.children].find((t) => attr(t, "data-toast-id") === id);
   name(el);
+  placedAt.set(el, performance.now());
   if (old) old.replaceWith(el);
   else box.append(el);
   reseat();
@@ -336,7 +360,14 @@ function handOff() {
 export function startToasts() {
   const box = toaster();
   user = who();
-  for (const t of box.querySelectorAll("[data-slot=toast]")) name(t);
+  // A toast the address hides (a close link followed with no script, then this page loaded) is a dismissed one.
+  // The address is read, not `:target`: some engines have not picked the target yet when this runs.
+  let target = "";
+  try { target = decodeURIComponent(location.hash.slice(1)); } catch {}
+  for (const t of box.querySelectorAll("[data-slot=toast]")) {
+    if (target && attr(t, "id") === target) t.remove();
+    else name(t);
+  }
   /** @type {any} */
   let left = null;
   try {
@@ -396,6 +427,13 @@ export function startToasts() {
       e.preventDefault();
       if (!holds(host, active())) returnTo = active();
       first.focus();
+    } else if (e.key === " " && closest(e.target, "a[data-slot=toast-close]")) {
+      // It says it is a button: Space does what Enter does, and doesn't scroll the page.
+      const t = closest(e.target, "[data-slot=toast]");
+      if (t && holds(host, t)) {
+        e.preventDefault();
+        dismiss(t);
+      }
     } else if (e.key === "Escape") {
       const t = closest(e.target, "[data-slot=toast]");
       // Inside a dialog the same key would close the dialog too: it has done its work here.
