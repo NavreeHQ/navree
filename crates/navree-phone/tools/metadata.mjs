@@ -638,8 +638,11 @@ ${wrap(codeTerritories, 16)}
     if (byCode.get(t.code).length > 1 && !t.leading) {
       // Territories that share a code and have no leading digits of their
       // own (the United States and Canada; Australia and its islands) are
-      // told apart by their lines, tried in the server's order, main first.
-      const lines = ["fixedLine", "mobile"].map((type) => t.descs[type]?.pattern).filter(Boolean);
+      // told apart by their numbers of every type the server's check tries
+      // (all but noInternationalDialling), in the server's order, main first.
+      const lines = TYPES.filter((type) => type !== "noInternationalDialling")
+        .map((type) => t.descs[type]?.pattern)
+        .filter(Boolean);
       entry.tp = lines.map((p) => `(?:${p})`).join("|");
     }
     for (const key of Object.keys(entry)) if (entry[key] === "") delete entry[key];

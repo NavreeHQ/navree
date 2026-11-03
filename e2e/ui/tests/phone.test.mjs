@@ -164,6 +164,17 @@ for (const browserName of browsers) {
       await f.input.fill("");
       await typed(page, f, "+14169795000");
       assert.equal(await f.country(), "CA", "a Canadian number");
+      // Told apart by numbers of every type, as the server does: a 600 number
+      // is Canada's, a toll-free number goes to the United States.
+      await f.input.fill("");
+      await typed(page, f, "+16002012345");
+      assert.equal(await f.country(), "CA", "a Canadian 600 number");
+      assert.equal(await f.e164.inputValue(), "+16002012345");
+      await f.input.fill("");
+      await typed(page, f, "+18002123456");
+      assert.equal(await f.country(), "US", "a toll-free number");
+      await f.input.fill("");
+      await typed(page, f, "+14169795000");
       await shot(page, "pasted");
       assert.deepEqual(problems, []);
       await close();

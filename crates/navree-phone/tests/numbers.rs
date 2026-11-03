@@ -224,6 +224,10 @@ fn shared_calling_codes_find_their_region() {
     for (input, code) in [
         ("+1 650 253 0000", "US"),
         ("+1 416 979 5000", "CA"),
+        // Told apart by numbers of every type, not only landlines and mobiles:
+        // 600 numbers are Canada's, toll-free ones are the main plan's.
+        ("+1 600 201 2345", "CA"),
+        ("+1 800 212 3456", "US"),
         ("+1 242 357 1234", "BS"),
         ("+7 701 123 4567", "KZ"),
         ("+7 495 123 4567", "RU"),
