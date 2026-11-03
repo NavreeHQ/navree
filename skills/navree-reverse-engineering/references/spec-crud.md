@@ -69,16 +69,18 @@ entry in `mistakes.md`.
 | enum, 5 or more values, fixed | select |
 | reference to a small table that rarely grows (under ~50 rows) | select, options loaded from the server |
 | reference to a large or growing table | combobox that searches on the server as the user types |
-| several values from a fixed set | checkboxes or a multi-select |
+| several values from a fixed set | checkboxes (a handful) or a multi-select |
+| several references to a large or growing table | multi-select that searches on the server, with a limit when the old product had one |
 | file, image | file input with accepted types and a size limit |
 
-- **Options from**: where a select, radio group or combobox gets its
-  choices: `enum <Name>` (fixed in code), `lookup <table>` (a small
-  table, loaded from an endpoint), `search <endpoint>` (server-searched,
-  paged), `setting <key>` (changes per tenant), `depends on <field>`
-  (cascading: the endpoint takes the parent value). Never a list typed into
-  a template or script; if the old product did that, record the old list
-  and the catalog entry.
+- **Options from**: where a select, radio group, combobox or multi-select
+  gets its choices: `enum <Name>` (fixed in code), `lookup <table>` (a
+  small table, loaded from an endpoint), `search <endpoint>`
+  (server-searched, paged, scoped to what the caller may read; the saved
+  value is checked against the same scope), `setting <key>` (changes per
+  tenant), `depends on <field>` (cascading: the endpoint takes the parent
+  value). Never a list typed into a template or script; if the old product
+  did that, record the old list and the catalog entry.
 - **Shown in**: `list`, `detail`, `form`, `export`, `hidden` (never sent to
   the browser: secrets, internal flags).
 - **Edited by**: the roles that may change this field when it differs from
@@ -125,8 +127,8 @@ entry in `mistakes.md`.
 
 - Every column of the module's tables in `SCHEMA.md` has a field row or a
   `dropped` row with a reason.
-- Every field has a control, and every select, radio or combobox an
-  **Options from** that is not a hard-coded list.
+- Every field has a control, and every select, radio, combobox or
+  multi-select an **Options from** that is not a hard-coded list.
 - Every money field is minor units or decimal with a currency; no `float`.
 - Every required field was checked against the data profile's null rate.
 - Every client-side rule found in the old code appears as a server rule or

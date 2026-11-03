@@ -50,10 +50,10 @@ row with no test can't be verified, so it can't be done.
 
 | Spec row | Tests to write |
 |---|---|
-| CRUD field | each rule at its boundary (max length, max length + 1, empty when required); the type (a date in the old wrong formats is refused); a select's value outside its options is refused |
+| CRUD field | each rule at its boundary (max length, max length + 1, empty when required); the type (a date in the old wrong formats is refused); a select's, combobox's or multi-select's value outside what the caller may pick is refused (a made-up id, a deleted row, another workspace's row) |
 | CRUD operation | it works for an allowed role and scope; refused (403) for a role without it; 404 for a record outside the user's reach; its side effects happen (rows, events, jobs, mail in the fake) |
 | List | each filter alone and two together; each sort both ways; paging (page 2 holds the right rows, the total is right); search; the record scope per role; related columns load in a bounded number of queries |
-| Option source | the options endpoint returns matches for a search, at most a page, only rows the user may see |
+| Option source | the options endpoint returns matches for a search, at most a page, only rows the user may see; saving a value it did not offer this user (`OptionSource::all_pickable`) is refused |
 | Screen | each journey end to end (browser level for the main ones); the forbidden state; the empty state |
 | Service rule | each example from the spec as given; each refusal with its error code |
 | Calculation | each worked example, to the cent, with the spec's rounding |

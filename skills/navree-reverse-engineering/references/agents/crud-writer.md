@@ -33,9 +33,9 @@ where its options come from, and the operations on it.
    type, rules only in the browser or a hard-coded list, write the old
    behaviour in **Source**, the new one in the row, and the mistakes entry
    number.
-4. For each select, radio group or combobox, write **Options from**. Count
-   the rows behind it on the copy to choose select or server-searched
-   combobox.
+4. For each select, radio group, combobox or multi-select, write
+   **Options from**. Count the rows behind it on the copy to choose select
+   or server-searched combobox.
 5. List the operations each screen and endpoint performs on the entity,
    including custom actions, with roles and record scope as the old code
    enforces them (or doesn't).

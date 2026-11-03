@@ -207,7 +207,11 @@ For each select, find its source query and count the rows on the copy.
 - a small table that rarely grows: a select whose options come from an
   endpoint;
 - a large or growing table: a combobox that searches on the server, a page
-  of matches at a time.
+  of matches at a time (several values: a multi-select searched the same
+  way).
+
+For an API that a web front end or another client calls, the options route
+is a JSON route:
 
 ```rust
 #[derive(Debug, Deserialize, Validate)]
@@ -256,10 +260,48 @@ impl CustomerOptionsController {
 
 In Helm, `Field::belongs_to::<CustomerResource>("customer_id")` and
 `Filter::belongs_to` already search on the server
-(`/admin/api/resources/{r}/options?search=`). In navree-ui pages, a select
-whose choices come from the server is `FormView::options` for a small set;
-a combobox that searches on the server is still coming, so a large set is
-a gap for the owner (the `navree-design-to-ui` skill).
+(`/admin/api/resources/{r}/options?search=`). In navree-ui pages the
+combobox searches on the server too: the field is `widget = combobox` with
+`FormView::search(field, url)`, and the route answers `OptionQuery` with a
+`ChoiceList` that `OptionSource` builds from the caller's scoped query. The
+text is bound, the columns are named in the code, and the page is at most
+50 options:
+
+```rust
+use navree::ui::{Choice, ChoiceList, OptionQuery, OptionSource};
+
+const CUSTOMERS: OptionSource = OptionSource::new("id", "name").search_in(&["name", "billing_email"]);
+
+/// The body of a `#[get("!/customers/options")]` route with `#[can(Read, Customer)]`.
+async fn customer_choices(
+    uow: Uow,
+    scope: Accessible<Customer, Read>,
+    query: OptionQuery,
+) -> Result<ChoiceList> {
+    let choices = CUSTOMERS
+        .find(scope.query(), &query, &uow, "/customers/options", |record| {
+            let customer = record.into_inner();
+            Choice::new(customer.id.to_string(), customer.name)
+        })
+        .await?;
+    Ok(choices)
+}
+
+/// On save: the value the form posted must be a customer this user may pick.
+async fn customer_is_pickable(uow: &Uow, scope: &Accessible<Customer, Read>, posted: &str) -> Result<bool> {
+    Ok(CUSTOMERS
+        .all_pickable(scope.query(), [posted], uow, OptionSource::as_uuid)
+        .await?)
+}
+```
+
+A form reads the posted value as text and does not know it is one of the
+options: a hand-made post can name any customer, including another
+workspace's. The save handler asks `all_pickable` with the same scoped
+query the search answers with, and answers a refusal with
+`Rejected::after_decode` (`building-pages.md` in the `navree-design-to-ui`
+skill has the whole page). A small table is a select from
+`FormView::options`; several values are a `Many<T>` multi-select.
 
 ## 3. The wrong control for the type
 
