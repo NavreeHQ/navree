@@ -1239,3 +1239,63 @@ async fn a_page_fetches_at_most_four_links_with_no_hover() {
         "the first four, in the page's order: {html}"
     );
 }
+
+/// Markup the app wrote itself counts toward the four, in the page's order, whatever way
+/// it spells the mark: a browser reads `&#101;ager` as `eager` and attribute names in any
+/// case. Text, comments and a script's text that only look like the mark are left alone.
+#[tokio::test]
+async fn markup_the_app_wrote_asks_for_no_more_than_four_either() {
+    use navree_ui::{Node, SafeHtml, View};
+    let raw = SafeHtml::trusted(concat!(
+        r#"<a href="/r1" data-ui-prefetch="eager">1</a>"#,
+        r#"<!-- <a href="/c" data-ui-prefetch="eager"> -->"#,
+        r#"<a href="/r2" DATA-UI-PREFETCH='eager'>2</a>"#,
+        r#"<a href="/r3" data-ui-prefetch = eager>3</a>"#,
+        r#"<p title='x"y'>text: data-ui-prefetch="eager"</p>"#,
+        r#"<a href="/r4" data-ui-prefetch="&#101;ager">4</a>"#,
+        r#"<textarea><a data-ui-prefetch="eager"></textarea>"#,
+        r#"<a href="/r5" data-ui-prefetch="">5</a>"#,
+    ));
+    let response = View::new("t")
+        .body(navree_ui::el("nav").child(vec![
+            Node::from(navree_ui::el("a").href("/e0").prefetch_eager()),
+            Node::from(raw),
+            Node::from(navree_ui::el("a").href("/e9").prefetch_eager()),
+        ]))
+        .into_response();
+    let body = navree_http::body::read_body(response.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    for kept in [
+        r#"<a href="/e0" data-ui-prefetch="eager">"#,
+        r#"<a href="/r1" data-ui-prefetch="eager">"#,
+        r#"<a href="/r2" DATA-UI-PREFETCH='eager'>"#,
+        r#"<a href="/r3" data-ui-prefetch = eager>"#,
+    ] {
+        assert!(
+            html.contains(kept),
+            "the first four stay eager: {kept} in {html}"
+        );
+    }
+    for capped in [
+        r#"<a href="/r4" data-ui-prefetch>"#,
+        r#"<a href="/e9" data-ui-prefetch>"#,
+    ] {
+        assert!(
+            html.contains(capped),
+            "past four, on hover only: {capped} in {html}"
+        );
+    }
+    for untouched in [
+        r#"<!-- <a href="/c" data-ui-prefetch="eager"> -->"#,
+        r#"<p title='x"y'>text: data-ui-prefetch="eager"</p>"#,
+        r#"<textarea><a data-ui-prefetch="eager"></textarea>"#,
+        r#"<a href="/r5" data-ui-prefetch="">"#,
+    ] {
+        assert!(
+            html.contains(untouched),
+            "not a mark, or no value: {untouched} in {html}"
+        );
+    }
+}

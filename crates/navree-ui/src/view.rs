@@ -151,7 +151,8 @@ impl View {
 const EAGER_MOST: usize = 4;
 
 /// Keeps the first [`EAGER_MOST`] links marked `data-ui-prefetch="eager"`, in the page's
-/// order; the rest are fetched on hover or focus instead.
+/// order, markup the app wrote itself included; the rest are fetched on hover or focus
+/// instead.
 fn cap_eager(body: &mut Node) {
     let mut left = EAGER_MOST;
     let mut stack: Vec<&mut Node> = vec![body];
@@ -172,9 +173,130 @@ fn cap_eager(body: &mut Node) {
                 stack.extend(element.children.iter_mut().rev());
             }
             Node::Fragment(nodes) => stack.extend(nodes.iter_mut().rev()),
+            Node::Raw(html) => {
+                if let Some(capped) = cap_eager_markup(html.as_str(), &mut left) {
+                    *node = Node::Raw(crate::SafeHtml::trusted(capped));
+                }
+            }
+            Node::Static(html) => {
+                if let Some(capped) = cap_eager_markup(html, &mut left) {
+                    *node = Node::Raw(crate::SafeHtml::trusted(capped));
+                }
+            }
             _ => {}
         }
     }
+}
+
+/// [`cap_eager`] in markup: `None` when it stays as it is. Every `data-ui-prefetch` with
+/// a value counts, whatever the value spells (a browser reads `&#101;ager` as `eager`, a
+/// name in any case); past the cap the value goes, and the link is fetched on hover. Only
+/// tags are read: text, comments and the text of a script, a style, a title or a
+/// textarea are not.
+fn cap_eager_markup(html: &str, left: &mut usize) -> Option<String> {
+    const MARK: &str = "data-ui-prefetch";
+    // The ranges to take out: from the end of the name to the end of the value.
+    let mut cuts: Vec<(usize, usize)> = Vec::new();
+    let bytes = html.as_bytes();
+    let n = bytes.len();
+    let space = |at: usize| at < n && bytes[at].is_ascii_whitespace();
+    let mut i = 0;
+    while i < n {
+        if bytes[i] != b'<' {
+            i += 1;
+            continue;
+        }
+        if html[i..].starts_with("<!--") {
+            i = html[i + 4..].find("-->").map_or(n, |at| i + 4 + at + 3);
+            continue;
+        }
+        if !bytes.get(i + 1).is_some_and(u8::is_ascii_alphabetic) {
+            i += 1;
+            continue;
+        }
+        let mut j = i + 1;
+        while j < n && !space(j) && bytes[j] != b'>' && bytes[j] != b'/' {
+            j += 1;
+        }
+        let tag = html[i + 1..j].to_ascii_lowercase();
+        // The attributes, to the end of the tag.
+        loop {
+            while space(j) || (j < n && bytes[j] == b'/') {
+                j += 1;
+            }
+            if j >= n || bytes[j] == b'>' {
+                j += 1;
+                break;
+            }
+            let name = j;
+            while j < n && !space(j) && !matches!(bytes[j], b'=' | b'>' | b'/') {
+                j += 1;
+            }
+            let name_end = j.max(name + 1).min(n);
+            j = name_end;
+            let mut k = j;
+            while space(k) {
+                k += 1;
+            }
+            let mut value = "";
+            if k < n && bytes[k] == b'=' {
+                k += 1;
+                while space(k) {
+                    k += 1;
+                }
+                if k < n && (bytes[k] == b'"' || bytes[k] == b'\'') {
+                    let quote = bytes[k] as char;
+                    match html[k + 1..].find(quote) {
+                        Some(at) => {
+                            value = &html[k + 1..k + 1 + at];
+                            k += at + 2;
+                        }
+                        None => {
+                            value = &html[k + 1..];
+                            k = n;
+                        }
+                    }
+                } else {
+                    let start = k;
+                    while k < n && !space(k) && bytes[k] != b'>' {
+                        k += 1;
+                    }
+                    value = &html[start..k];
+                }
+                j = k;
+            }
+            if html[name..name_end].eq_ignore_ascii_case(MARK) && !value.is_empty() {
+                if *left == 0 {
+                    cuts.push((name_end, j));
+                } else {
+                    *left -= 1;
+                }
+            }
+        }
+        // Text that is never markup runs to its own end tag.
+        if matches!(
+            tag.as_str(),
+            "script" | "style" | "title" | "textarea" | "xmp" | "iframe" | "noembed" | "noframes"
+        ) {
+            let close = format!("</{tag}");
+            j = html[j.min(n)..]
+                .to_ascii_lowercase()
+                .find(&close)
+                .map_or(n, |at| j + at);
+        }
+        i = j;
+    }
+    if cuts.is_empty() {
+        return None;
+    }
+    let mut out = String::with_capacity(html.len());
+    let mut at = 0;
+    for (from, to) in cuts {
+        out.push_str(&html[at..from]);
+        at = to;
+    }
+    out.push_str(&html[at..]);
+    Some(out)
 }
 
 impl IntoResponse for View {
