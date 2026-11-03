@@ -12,4 +12,4 @@ publish = false
 [workspace]
 
 [dependencies]
-navree = { path = "{navree}" }
+navree = { path = "{navree}", features = ["sqlite"] }
