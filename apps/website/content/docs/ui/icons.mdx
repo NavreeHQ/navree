@@ -29,7 +29,7 @@ Renamed icons keep their old constants too, with a warning that names the new on
 
 An icon is a `const`, and Rust writes a `const` into a binary only where something uses it. So an app that names three icons has three icons in its binary, whether the toolkit ships 150 or 2,019. The same holds for the page: an icon is its shapes, a few hundred bytes, written where you put it.
 
-Measured on a release build: a program that names three icons is 173,056 bytes, and one that names none is 166,912. The one exception is `Icon::lookup`. A name from outside could be any of them, so calling it puts all 2,019 in the binary, which makes the same program 680,960 bytes. Keep it for the places that need it.
+Measured on a release build: a program that names three icons is 174,080 bytes, and one that names none is 166,912. The one exception is `Icon::lookup`. A name from outside could be any of them, so calling it puts all 2,019 in the binary, which makes the same program 680,960 bytes. Keep it for the places that need it.
 
 ## An icon on its own
 
