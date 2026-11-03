@@ -158,6 +158,7 @@ navree list                                 # every command of the app
 | Files on models: uploads, thumbnails and image conversions, logos from URLs, galleries with `srcset`, zip or SCORM packages, text from PDF or DOCX, video posters and transcodes | `navree-media` |
 | CSV or Excel files: export buttons, big exports queued with a download link, importing users, contacts or other records from a spreadsheet, column mapping, import previews, error files, non-UTF-8 files from Excel | `navree-sheets` |
 | Work that waits days or for an event (onboarding sequences, reminders, trials, dunning, follow-ups), multi-step processes that must survive restarts, automations or rules your users build in an editor | `navree-workflows` |
+| Reverse engineering an old product (any stack, old data) into specs, a task list and tests, then rebuilding it in Navree; porting or migrating a legacy app and its data | `navree-reverse-engineering` |
 
 ## Common mistakes
 

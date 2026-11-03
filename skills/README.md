@@ -82,6 +82,7 @@ conventions, and says which skill to load for each task.
 | [`navree-media`](navree-media/SKILL.md) | Files attached to models (`HasMedia`, collections), uploads and remote files, image conversions and `srcset`s, `media:regenerate`, zip archives, text extraction, FFmpeg video, `MediaFake` (feature `media`) |
 | [`navree-sheets`](navree-sheets/SKILL.md) | CSV and Excel exports (downloads, queued files with signed links) and imports (encoding detection, header mapping, a staging preview, duplicate modes, error files) (feature `sheets`) |
 | [`navree-workflows`](navree-workflows/SKILL.md) | Durable workflows (`#[workflow]`, steps, sleeps, event waits, versions) and end-user automations (`#[trigger]`, `#[condition]`, `#[action]`, versioned definitions, enrollments, simulation) (feature `workflows`) |
+| [`navree-reverse-engineering`](navree-reverse-engineering/SKILL.md) | Turn an old product in any stack, with old and messy data, into specs with evidence, a task list and test cases, then rebuild it in Navree and verify it against the specs and the old product |
 
 ## Installing
 
