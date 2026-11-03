@@ -9,6 +9,7 @@ import { CodePanel, CommandLine } from "@/components/showcase/code-panel";
 import { frontEnds } from "@/components/showcase/crm-data";
 import { crmCrates, crmFrontEnds } from "@/components/showcase/crm-diagrams";
 import { CrmGallery } from "@/components/showcase/crm-gallery";
+import { frameworkModuleCount } from "@/components/showcase/crm-source";
 import { BrowserFrame, PhoneFrame, ShotImage } from "@/components/showcase/frames";
 import { pageMetadata } from "@/lib/metadata";
 import { PageSchema } from "@/lib/structured-data";
@@ -68,7 +69,7 @@ const Code = ({ children }: { children: ReactNode }) => <code className="inline-
 
 const facts = [
   { value: "8", label: "CRM modules", text: "Four feature crates on one shared core" },
-  { value: "20", label: "framework modules", text: "HTTP to real time, configured once" },
+  { value: String(frameworkModuleCount()), label: "framework modules", text: "HTTP to real time, configured once" },
   { value: "3", label: "roles", text: "Checked on routes, in SQL and in the browser" },
   { value: "2", label: "front ends", text: "Next.js and Nuxt on one BFF contract" },
 ];
