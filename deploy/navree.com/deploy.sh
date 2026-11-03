@@ -53,6 +53,12 @@ main() {
   mv -Tf "$site/current.next" "$site/current"
   echo "navree.com now serves $sha from $release"
 
+  # Opt-in: tell IndexNow which pages changed (see indexnow.sh). A failed ping
+  # never fails the deploy.
+  if [ "${INDEXNOW:-}" = 1 ]; then
+    "$site/repo/deploy/navree.com/indexnow.sh" --send "$release" || true
+  fi
+
   # Keep the newest $keep releases.
   ls -1dt "$site"/releases/*/ | tail -n +$((keep + 1)) | xargs -r rm -rf
 }
