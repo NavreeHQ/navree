@@ -183,3 +183,37 @@ fn a_pattern_is_stated_for_the_browser_only_when_its_rule_asks() {
         .expect_err("checked on the server too");
     assert!(format!("{errors:?}").contains("handle"), "{errors:?}");
 }
+
+/// Patterns a browser reads exactly as the server does reach the page as written.
+#[test]
+fn patterns_a_browser_reads_the_same_way_are_stated() {
+    #[derive(Validate)]
+    #[allow(dead_code)]
+    struct Codes {
+        #[validate(pattern(r"^[a-z0-9]+(?:-[a-z0-9]+)*$", browser))]
+        slug: String,
+        #[validate(pattern(r"^[A-Z]{3}$", browser))]
+        currency: String,
+        #[validate(pattern(r"^[^@ ]+@example\.com$", browser))]
+        email: String,
+        #[validate(pattern(r"^(?:[0-9]{3}|[A-Z]{2}-[0-9]{2}|[a\-z])$", browser))]
+        code: String,
+    }
+    let rules = |name: &str| {
+        Codes::FIELDS
+            .iter()
+            .find(|field| field.name == name)
+            .map(|field| field.rules)
+            .unwrap_or_default()
+    };
+    assert_eq!(
+        rules("slug"),
+        [Rule::BrowserPattern(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")]
+    );
+    assert_eq!(rules("currency"), [Rule::BrowserPattern(r"^[A-Z]{3}$")]);
+    assert_eq!(
+        rules("email"),
+        [Rule::BrowserPattern(r"^[^@ ]+@example\.com$")]
+    );
+    assert_eq!(rules("code").len(), 1);
+}

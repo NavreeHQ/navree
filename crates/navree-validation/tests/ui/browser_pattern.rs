@@ -25,11 +25,47 @@ struct RustAnchors {
 }
 
 #[derive(Validate)]
-struct ServerOnlyFlagsAreFine {
-    #[validate(pattern("(?i)^[a-z]+$"))]
+struct UnicodeWord {
+    #[validate(pattern("^\\w+$", browser))]
+    handle: String,
+}
+
+#[derive(Validate)]
+struct UnicodeDigit {
+    #[validate(pattern("^\\d{4}$", browser))]
+    code: String,
+}
+
+#[derive(Validate)]
+struct Unanchored {
+    #[validate(pattern("[0-9]", browser))]
+    code: String,
+}
+
+#[derive(Validate)]
+struct TopLevelChoice {
+    #[validate(pattern("^a|b$", browser))]
+    code: String,
+}
+
+#[derive(Validate)]
+struct LooseDash {
+    #[validate(pattern("^[a-z_-]+$", browser))]
+    slug: String,
+}
+
+#[derive(Validate)]
+struct AnyCharacter {
+    #[validate(pattern("^.+$", browser))]
+    slug: String,
+}
+
+#[derive(Validate)]
+struct ServerOnlyIsFree {
+    #[validate(pattern("(?i)^\\w+[a-z_-]$"))]
     handle: String,
 }
 
 fn main() {
-    let _ = ServerOnlyFlagsAreFine { handle: String::new() }.validate();
+    let _ = ServerOnlyIsFree { handle: String::new() }.validate();
 }

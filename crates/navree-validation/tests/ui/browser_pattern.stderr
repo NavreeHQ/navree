@@ -4,7 +4,7 @@ error: the only option is `browser`: `pattern("^[a-z]+$", browser)`
 5 |     #[validate(pattern("^[a-z]+$", client))]
   |                                    ^^^^^^
 
-error: a browser reads `(?` groups other than `(?:` differently: write the pattern without inline flags or named groups, or leave out `browser`
+error: a browser checks a pattern against the whole value: write it the same way for the server, from `^` to `$`, or leave out `browser`
   --> tests/ui/browser_pattern.rs:11:24
    |
 11 |     #[validate(pattern("(?i)^[a-z]+$", browser))]
@@ -16,8 +16,44 @@ error: a browser reads `(?` groups other than `(?:` differently: write the patte
 17 |     #[validate(pattern("^(?P<word>[a-z]+)$", browser))]
    |                        ^^^^^^^^^^^^^^^^^^^^
 
-error: `\A`, `\z` and `[[:class:]]` don't exist in a browser's patterns: use `^`, `$` and a class like `[a-z]`, or leave out `browser`
+error: a browser checks a pattern against the whole value: write it the same way for the server, from `^` to `$`, or leave out `browser`
   --> tests/ui/browser_pattern.rs:23:24
    |
 23 |     #[validate(pattern("\\A[a-z]+\\z", browser))]
    |                        ^^^^^^^^^^^^^^
+
+error: `\w` means something else in a browser's patterns, or nothing (on the server `\w`, `\d` and `\s` take any script's letters, digits and spaces): write the characters out, like `[0-9]`, or leave out `browser`
+  --> tests/ui/browser_pattern.rs:29:24
+   |
+29 |     #[validate(pattern("^\\w+$", browser))]
+   |                        ^^^^^^^^
+
+error: `\d` means something else in a browser's patterns, or nothing (on the server `\w`, `\d` and `\s` take any script's letters, digits and spaces): write the characters out, like `[0-9]`, or leave out `browser`
+  --> tests/ui/browser_pattern.rs:35:24
+   |
+35 |     #[validate(pattern("^\\d{4}$", browser))]
+   |                        ^^^^^^^^^^
+
+error: a browser checks a pattern against the whole value: write it the same way for the server, from `^` to `$`, or leave out `browser`
+  --> tests/ui/browser_pattern.rs:41:24
+   |
+41 |     #[validate(pattern("[0-9]", browser))]
+   |                        ^^^^^^^
+
+error: a browser checks `^a|b$` as one whole choice, the server as two half-anchored ones: put the choice in a group, `^(?:a|b)$`, or leave out `browser`
+  --> tests/ui/browser_pattern.rs:47:24
+   |
+47 |     #[validate(pattern("^a|b$", browser))]
+   |                        ^^^^^^^
+
+error: in a browser's patterns a `-` in a class only joins a range, like `a-z`: write `\-` for a dash, or leave out `browser`
+  --> tests/ui/browser_pattern.rs:53:24
+   |
+53 |     #[validate(pattern("^[a-z_-]+$", browser))]
+   |                        ^^^^^^^^^^^^
+
+error: `.` matches less in a browser than on the server: write the characters it may match, like `[a-z0-9 ]`, or leave out `browser`
+  --> tests/ui/browser_pattern.rs:59:24
+   |
+59 |     #[validate(pattern("^.+$", browser))]
+   |                        ^^^^^^

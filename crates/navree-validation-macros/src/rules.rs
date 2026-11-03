@@ -380,23 +380,187 @@ fn no_arguments(input: ParseStream, rule: &str) -> syn::Result<()> {
 }
 
 /// Nothing follows the argument.
-/// Why a Rust pattern can't be stated to a browser as it is: its syntax means something
-/// else, or nothing, in the browser's dialect. `None` when it can.
-fn browser_problem(pattern: &str) -> Option<&'static str> {
-    if pattern.contains("(?") && pattern.replace("(?:", "").contains("(?") {
-        return Some(
-            "a browser reads `(?` groups other than `(?:` differently: write the pattern \
-             without inline flags or named groups, or leave out `browser`",
+/// Why a Rust pattern can't be stated to a browser as it is: the browser would accept or
+/// refuse other values than the server. `None` when it reads it the same way.
+///
+/// A browser checks `pattern` against the whole value, in JavaScript's `v` mode, where
+/// `\w`, `\d`, `\s`, `\b` and `.` mean less than in Rust's Unicode-aware syntax, a class
+/// is stricter about `-` and some punctuation, and an invalid pattern is silently
+/// ignored. So only a pattern written plainly in the syntax both read the same way gets
+/// through: anchored with `^` and `$`, choices inside a group, characters written out.
+fn browser_problem(pattern: &str) -> Option<String> {
+    // What may follow `\` outside a class, and inside one, in both dialects.
+    const SYNTAX: &str = r"^$\.*+?()[]{}|/";
+    const CLASS_ESCAPES: &str = r"^$\.*+?()[]{}|/-&!#%,:;<=>@`~";
+    // In a class, these doubled are operators in the browser's dialect.
+    const DOUBLED: &str = "&!#$%*+,.:;<=>?@^`~";
+    let leave = |why: &str| Some(format!("{why}, or leave out `browser`"));
+    let chars: Vec<char> = pattern.chars().collect();
+    let n = chars.len();
+    if n < 2 || chars[0] != '^' || chars[n - 1] != '$' || chars[n - 2] == '\\' {
+        return leave(
+            "a browser checks a pattern against the whole value: write it the same way for \
+             the server, from `^` to `$`",
         );
     }
-    if ["\\A", "\\z", "\\Z", "[[:"]
-        .iter()
-        .any(|part| pattern.contains(part))
-    {
-        return Some(
-            "`\\A`, `\\z` and `[[:class:]]` don't exist in a browser's patterns: use `^`, `$` \
-             and a class like `[a-z]`, or leave out `browser`",
-        );
+    let mut depth = 0usize;
+    // Whether what came last can take a `{n,m}`.
+    let mut atom = false;
+    let mut i = 0;
+    while i < n {
+        match chars[i] {
+            '\\' => {
+                let next = chars.get(i + 1).copied().unwrap_or(' ');
+                if !SYNTAX.contains(next) {
+                    return leave(&format!(
+                        "`\\{next}` means something else in a browser's patterns, or nothing \
+                         (on the server `\\w`, `\\d` and `\\s` take any script's letters, \
+                         digits and spaces): write the characters out, like `[0-9]`"
+                    ));
+                }
+                i += 2;
+                atom = true;
+                continue;
+            }
+            '[' => {
+                i += 1;
+                if chars.get(i) == Some(&'^') {
+                    i += 1;
+                }
+                if chars.get(i) == Some(&']') {
+                    return leave("a `]` first in a class needs a `\\` in a browser's patterns");
+                }
+                // Whether the last item can start a range.
+                let mut single = false;
+                loop {
+                    let Some(&c) = chars.get(i) else {
+                        return leave("a class needs its `]`");
+                    };
+                    match c {
+                        ']' => {
+                            i += 1;
+                            break;
+                        }
+                        '\\' => {
+                            let next = chars.get(i + 1).copied().unwrap_or(' ');
+                            if !CLASS_ESCAPES.contains(next) {
+                                return leave(&format!(
+                                    "`\\{next}` means something else in a browser's patterns, \
+                                     or nothing: write the characters out, like `[0-9]`"
+                                ));
+                            }
+                            single = true;
+                            i += 2;
+                        }
+                        '-' => {
+                            let next = chars.get(i + 1).copied();
+                            if !single || matches!(next, None | Some(']' | '-')) {
+                                return leave(
+                                    "in a browser's patterns a `-` in a class only joins a \
+                                     range, like `a-z`: write `\\-` for a dash",
+                                );
+                            }
+                            match next {
+                                Some('\\') => {
+                                    let escaped = chars.get(i + 2).copied().unwrap_or(' ');
+                                    if !CLASS_ESCAPES.contains(escaped) {
+                                        return leave("a range ends at one character");
+                                    }
+                                    i += 3;
+                                }
+                                Some(end) if "()[{}/|".contains(end) => {
+                                    return leave(
+                                        "`(`, `)`, `[`, `{`, `}`, `/` and `|` in a class need a \
+                                         `\\` in a browser's patterns",
+                                    );
+                                }
+                                _ => i += 2,
+                            }
+                            single = false;
+                        }
+                        '(' | ')' | '[' | '{' | '}' | '/' | '|' => {
+                            return leave(
+                                "`(`, `)`, `[`, `{`, `}`, `/` and `|` in a class need a `\\` in \
+                                 a browser's patterns",
+                            );
+                        }
+                        c => {
+                            if DOUBLED.contains(c) && chars.get(i + 1) == Some(&c) {
+                                return leave(&format!(
+                                    "`{c}{c}` in a class means something else in a browser's \
+                                     patterns: write one `\\{c}` and the other"
+                                ));
+                            }
+                            single = true;
+                            i += 1;
+                        }
+                    }
+                }
+                atom = true;
+                continue;
+            }
+            '(' => {
+                if chars.get(i + 1) == Some(&'?') {
+                    if chars.get(i + 2) != Some(&':') {
+                        return leave(
+                            "a browser reads `(?` groups other than `(?:` differently: write \
+                             the pattern without inline flags or named groups",
+                        );
+                    }
+                    i += 3;
+                } else {
+                    i += 1;
+                }
+                depth += 1;
+                atom = false;
+                continue;
+            }
+            ')' => {
+                depth = depth.saturating_sub(1);
+                atom = true;
+            }
+            '|' if depth == 0 => {
+                return leave(
+                    "a browser checks `^a|b$` as one whole choice, the server as two half-anchored \
+                     ones: put the choice in a group, `^(?:a|b)$`",
+                );
+            }
+            '|' => atom = false,
+            '.' => {
+                return leave(
+                    "`.` matches less in a browser than on the server: write the characters it \
+                     may match, like `[a-z0-9 ]`",
+                );
+            }
+            ']' | '}' => {
+                return leave("a `]` or `}` on its own needs a `\\` in a browser's patterns");
+            }
+            '{' => {
+                // Only a count after something to count: `{n}`, `{n,}`, `{n,m}`.
+                let close = chars[i..].iter().position(|c| *c == '}').map(|at| i + at);
+                let inner: String =
+                    close.map_or_else(String::new, |close| chars[i + 1..close].iter().collect());
+                let mut parts = inner.splitn(2, ',');
+                let first = parts.next().unwrap_or_default();
+                let second = parts.next();
+                let digits =
+                    |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit());
+                if !atom
+                    || close.is_none()
+                    || !digits(first)
+                    || second.is_some_and(|part| !part.is_empty() && !digits(part))
+                {
+                    return leave("a `{` that isn't a count, like `{3}` or `{2,5}`, needs a `\\`");
+                }
+                i = close.unwrap_or(n) + 1;
+                atom = false;
+                continue;
+            }
+            // An anchor or a count is nothing to count.
+            '*' | '+' | '?' | '^' | '$' => atom = false,
+            _ => atom = true,
+        }
+        i += 1;
     }
     None
 }
@@ -567,5 +731,52 @@ mod tests {
         assert!(error(quote!(each(skip))).contains("applies to the field"));
         assert!(error(quote!(each(same_as(x)))).contains("can't apply to items"));
         assert!(error(quote!(each(email, email))).contains("duplicate `email`"));
+    }
+}
+
+#[cfg(test)]
+mod browser_patterns {
+    use super::browser_problem;
+
+    #[test]
+    fn patterns_a_browser_reads_as_the_server_does_pass() {
+        for pattern in [
+            r"^[a-z_]+$",
+            r"^[A-Z]{3}$",
+            r"^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            r"^[^@ ]+@example\.com$",
+            r"^(?:[0-9]{3}|[A-Z]{2}-[0-9]{2}|[a\-z])$",
+            r"^[0-9]{2,}$",
+            r"^José$",
+        ] {
+            assert_eq!(browser_problem(pattern), None, "{pattern}");
+        }
+    }
+
+    #[test]
+    fn patterns_a_browser_reads_otherwise_are_refused() {
+        for pattern in [
+            r"[0-9]",
+            r"^[0-9]",
+            r"^\w+$",
+            r"^\d{4}$",
+            r"^\s*$",
+            r"^.+$",
+            r"^a|b$",
+            r"^[a-z_-]+$",
+            r"^[-a]$",
+            r"^[a(]$",
+            r"^[a&&b]$",
+            r"^(?i)a$",
+            r"^(?P<x>a)$",
+            r"^a{x}$",
+            r"^{2}$",
+            r"^a]$",
+            r"^\-$",
+            r"^[\d]$",
+            r"^a\$",
+        ] {
+            assert!(browser_problem(pattern).is_some(), "{pattern}");
+        }
     }
 }
