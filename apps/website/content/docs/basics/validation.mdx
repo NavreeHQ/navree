@@ -157,6 +157,7 @@ These are the rules `#[validate(...)]` takes, with the message Navree renders fo
 | `contains("x")`, `starts_with("x")`, `ends_with("x")` | substrings | `name must contain a x string`, `name must start with x`, `name must end with x` |
 | `ip`, `ipv4`, `ipv6` | IP addresses | `name must be an ip address`, `name must be an IPv4 address`, `name must be an IPv6 address` |
 | `credit_card` | 12 to 19 digits (spaces and hyphens allowed) with a valid check digit | `name must be a credit card` |
+| `phone` | a valid [phone number](/docs/basics/phone-numbers/), with or without its country code (feature `validation-phone`) | `name must be a valid phone number` |
 | `same_as(other_field)` | equals another field of the struct | `name must match other_field` |
 | `nested`, `each(...)` | nested structs, list items | see [nested data](#validating-nested-data) |
 | `custom(f)` | your own function | see [custom rules](#custom-rules) |
@@ -411,20 +412,22 @@ Without `Folded`, `"٦٥٤٣٢١"` has the right length but fails the pattern, w
 | `07400 123456` | none | `phone must be a valid phone number` |
 | `+44 12` | any | `phone must be a valid phone number` |
 
-Valid means the number fits its region's numbering plan (country code, length, prefixes), from libphonenumber's metadata, through the [rlibphonenumber](https://docs.rs/rlibphonenumber) crate, and fits E.164's limit of 15 digits (a longer number is invalid even where a numbering plan allows it). Nothing checks that the line is in service: send a code to it for that.
+Valid means the number fits its region's numbering plan (country code, length, leading digits), and fits E.164's limit of 15 digits (a longer number is invalid even where a numbering plan allows it). Nothing checks that the line is in service: send a code to it for that. [Phone numbers](/docs/basics/phone-numbers/) has the whole story: the parser, number types, formats, the phone input and storing numbers.
 
 | Method | Returns |
 |---|---|
 | `as_str()`, `to_string()`, `String::from(phone)` | `+447400123456` |
 | `country_code()` | `44` |
-| `national_number()` | `7400123456` |
+| `national_number()` | `"7400123456"`, with the leading zero of plans that keep one (`"0612345678"` in Italy) |
+| `number_type()` | `NumberType::Mobile`, `FixedLine`, `TollFree` and the rest |
 | `region()` | `Some(Country)` (`GB`); `None` for non-geographic numbers and areas outside ISO 3166-1, such as Kosovo |
-| `international()`, `national()` | `+44 7400 123456`, `07400 123456`, plus ` x12` when there is an extension |
+| `international()`, `national()`, `rfc3966()` | `+44 7400 123456`, `07400 123456`, `tel:+44-7400-123456`, with the extension when there is one |
+| `number()` | the `navree::phone::PhoneNumber`, with everything the parser knows |
 | `extension()` | `Some("12")` for `ext. 12` |
 
 `Phone` serializes as the E.164 string. E.164 has no room for an extension, so read `extension()` before you store the number if you keep it. Outside a request, `Phone::parse(text, region)` parses with an explicit region and `"+44 7400 123456".parse::<Phone>()` parses international numbers.
 
-To keep a field a `String` and only check it, write `#[validate(custom(rules::phone))]`. It reads numbers without a country code in the same default region.
+To keep a field a `String` and only check it, write `#[validate(phone)]` (or `#[validate(custom(rules::phone))]`). It reads numbers without a country code in the same default region.
 
 #### The default region
 

@@ -48,6 +48,7 @@ Every page loads one stylesheet. Script loads only for what a page's markup uses
 | A form, a region or a command | `core`: delegation, commands, ops, morphing, boosted links, pending states. |
 | A select, a combobox, a multi-select or a command palette | `overlay` and `select`: the keys, the search, the chips and the palette. |
 | A data table | `core`, `table` and `overlay`. |
+| A phone input | `phone` and `overlay`; the numbering plans (`phone-data`) the first time someone focuses one. |
 | The app shell | `core` and `sidebar`. |
 
 The files on this version of Navree, measured from the files themselves. The site writes this table from the toolkit's build, so it changes when they do:
@@ -65,6 +66,8 @@ The files are embedded in your binary with their brotli and gzip forms, and serv
 | The `core` runtime | 12 KB |
 | The `table` module | 5 KB |
 | The `select` module | 10 KB |
+| The `phone` module | 5 KB |
+| The numbering plans the `phone` module loads on first use | 20 KB (brotli) |
 | The stylesheet | 25 KB |
 | A typical CRUD page's script (`core`, `sidebar`, `overlay`, `table`) | 30 KB |
 | Every module together | under 60 KB |

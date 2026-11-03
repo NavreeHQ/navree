@@ -38,6 +38,7 @@ pub const GROUPS: &[Group] = &[
             "checkbox",
             "switch",
             "radio-group",
+            "phone-input",
             "forms",
         ],
     },
@@ -225,6 +226,13 @@ pub const COMPONENTS: &[Component] = &[
     component("checkbox", "Checkbox", &["Checkbox"], "default").parts("default"),
     component("switch", "Switch", &["Switch"], "thumb").parts("default"),
     component("radio-group", "RadioGroup", &["RadioGroup"], "thumb").parts("default"),
+    component(
+        "phone-input",
+        "PhoneInput",
+        &["PhoneInput", "PhoneLabels"],
+        "thumb",
+    )
+    .parts("thumb"),
     component("forms", "Forms", &["FormView"], "thumb").page("/docs/ui/forms/"),
     // Date and time
     component(

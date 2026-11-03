@@ -34,6 +34,7 @@ pub const FILES: &[&str] = &[
     "dates/range.rs",
     "dates/rules.rs",
     "dates/time.rs",
+    "phone.rs",
     "table/view.rs",
     "table/region.rs",
     "select/choice.rs",

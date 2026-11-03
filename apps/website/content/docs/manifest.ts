@@ -97,6 +97,7 @@ export const sections: DocsSection[] = [
       "middleware",
       "requests",
       "validation",
+      "phone-numbers",
       "responses",
       "errors",
       "logging",
@@ -258,6 +259,7 @@ export const sections: DocsSection[] = [
       "date-picker",
       "date-range-picker",
       "time-picker",
+      "phone-input",
       // Display
       "card",
       "badge",

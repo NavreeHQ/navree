@@ -15,6 +15,7 @@ mod menus;
 mod navigation;
 mod overlays;
 mod patterns;
+mod phone;
 mod pickers;
 
 /// Every example, in the order the docs list them.
@@ -24,6 +25,7 @@ pub fn all() -> Vec<Example> {
     all.extend(inputs::all());
     all.extend(pickers::all());
     all.extend(dates::all());
+    all.extend(phone::all());
     all.extend(display::all());
     all.extend(feedback::all());
     all.extend(overlays::all());

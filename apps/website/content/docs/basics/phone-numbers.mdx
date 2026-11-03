@@ -1,0 +1,149 @@
+---
+title: "Phone numbers"
+description: "Read phone numbers the way people type them, check them against each country's numbering plan with `Phone` and `#[validate(phone)]`, tell mobiles from landlines, write them in any format and store them in E.164."
+---
+
+People type phone numbers in every format: with spaces, dashes and brackets, with or without their country code, with an extension, in Arabic-Indic or Devanagari digits. Navree reads them all, checks each against its country's numbering plan, and gives your handler one canonical form to store and compare: E.164, such as `+447400123456`.
+
+Phone numbers come with the `validation-phone` feature of the `navree` facade, on by default. The parser is `navree::phone` (the navree-phone crate); validation wraps it as `navree::validation::Phone`.
+
+## A phone field
+
+Type a field `Phone` and the request's number arrives valid, in E.164:
+
+```rust title="src/contacts/requests.rs"
+use navree::prelude::*;
+use navree::validation::Phone;
+
+#[derive(Deserialize, Validate)]
+pub struct NewContact {
+    #[validate(length(min = 1))]
+    pub name: String,
+    pub mobile: Phone,
+    pub office: Option<Phone>,
+}
+
+async fn store(Valid(Json(contact)): Valid<Json<NewContact>>) -> Result<Json<Value>> {
+    // `contact.mobile.as_str()` is `+447400123456` however it was typed.
+    Ok(Json(json!({ "mobile": contact.mobile })))
+}
+```
+
+A number that isn't valid is a field error with the message key `phone`:
+
+```json
+{ "errors": { "mobile": ["mobile must be a valid phone number"] } }
+```
+
+To keep a field a `String` and only check it, use the `phone` rule:
+
+```rust
+#[derive(Deserialize, Validate)]
+pub struct Callback {
+    #[validate(phone)]
+    pub number: String,
+}
+```
+
+Both read a number written without its country code in the request's default region: the app's `RegionSource`, else `validation.phone.default_region`. [Validation](/docs/basics/validation/#the-default-region) explains both. A number written with its country code (`+44 ...`) needs no region.
+
+## What counts as valid
+
+A number is valid when its country calling code exists and its national number has a length and leading digits its country's plan gives to some kind of line. `+44 7400 123456` is a UK mobile; `+44 12` is too short; `+44 1000 000000` has the right length but starts with digits no UK line has.
+
+Nothing checks that a line is in service, or who has it. To know a person can receive calls or messages there, send them a code.
+
+E.164 stops at 15 digits. A few plans allow longer national numbers; Navree refuses those, since no SMS or voice provider takes them.
+
+The numbering plans are libphonenumber's, the plans Android uses, compiled into Navree's tables ahead of time; the parser that reads them is Navree's own. `navree::phone::PLANS_RELEASE` names the release.
+
+## What people type
+
+| Typed | Region | `Phone` |
+|---|---|---|
+| `+44 7400 123456`, `+44 (0) 7400 123456`, `+44-7400-123-456` | any | `+447400123456` |
+| `07400 123456` | `GB` | `+447400123456` |
+| `44 7400 123456` | `GB` | `+447400123456` |
+| `00 44 7400 123456` | `FR` (which dials `00` abroad) | `+447400123456` |
+| `011 44 7400 123456` | `US` (which dials `011`) | `+447400123456` |
+| `tel:+44-7400-123456`, `tel:7400123456;phone-context=+44` | any | `+447400123456` |
+| `＋４４ ７４００ １２３４５６`, `+٤٤ ٧٤٠٠ ١٢٣٤٥٦` | any | `+447400123456` |
+| `1-800-FLOWERS` | `US` | `+18003569377` |
+| `+44 7400 123456 ext. 12`, `... x12`, `...;ext=12` | any | `+447400123456`, extension `12` |
+| `011 15-2345-6789` | `AR` | `+5491123456789` (Argentina's mobile `9`, added) |
+| `07400 123456` | none | invalid: no country code and no region |
+
+Text longer than 250 characters is refused at once, and every step of the parser is bounded, so no input can make it slow.
+
+## Number types and regions
+
+`number_type()` says what kind of line a number reaches, as its plan tells:
+
+```rust
+use navree::phone::NumberType;
+
+match contact.mobile.number_type() {
+    NumberType::Mobile | NumberType::FixedLineOrMobile => send_sms(&contact.mobile),
+    NumberType::FixedLine => call_instead(&contact.mobile),
+    NumberType::TollFree | NumberType::PremiumRate => reject(),
+    _ => {}
+}
+```
+
+The types are `FixedLine`, `Mobile`, `FixedLineOrMobile` (some plans, such as the United States', don't tell them apart), `TollFree`, `PremiumRate`, `SharedCost`, `Voip`, `PersonalNumber`, `Pager`, `Uan` and `Voicemail`. `NumberType::may_be_mobile()` is true for `Mobile` and `FixedLineOrMobile`.
+
+`region()` is the country the number belongs to. Countries that share a calling code are told apart by their plans: `+1 650 253 0000` is the United States and `+1 416 979 5000` is Canada.
+
+## Formats
+
+| Method | `+447400123456` | `+16502530000` |
+|---|---|---|
+| `as_str()` (E.164) | `+447400123456` | `+16502530000` |
+| `international()` | `+44 7400 123456` | `+1 650-253-0000` |
+| `national()` | `07400 123456` | `(650) 253-0000` |
+| `rfc3966()` | `tel:+44-7400-123456` | `tel:+1-650-253-0000` |
+
+Write the national form for people in the number's own country, the international form for everyone else, and the `tel:` form in links. Store and compare E.164.
+
+## Storing numbers
+
+With the `orm` feature, `Phone` and `PhoneNumber` are field types, stored as their E.164 text:
+
+```rust title="src/contacts/model.rs"
+use navree::prelude::*;
+use navree::validation::Phone;
+
+#[derive(Clone, Model, Serialize)]
+pub struct Contact {
+    pub id: i64,
+    pub name: String,
+    pub mobile: Phone,
+    pub office: Option<Phone>,
+}
+```
+
+E.164 has no room for an extension. If you keep extensions, store `extension()` in a column of its own.
+
+## In forms
+
+In a [form](/docs/ui/forms/), a `Phone` field draws as a [`PhoneInput`](/docs/components/phone-input/): a searchable country list beside the number, which formats as people type and picks the country of a pasted international number. The form posts the number as typed and the country chosen, and `Submit` reads the number in that country, so a French number typed with the United Kingdom chosen is an error, not a different number. It works with JavaScript off.
+
+## Without a request
+
+`navree::phone` works anywhere, with or without the rest of Navree:
+
+```rust
+use navree::phone::{PhoneNumber, Region};
+
+let number = PhoneNumber::parse("030 123456", Region::parse("DE"))?;
+assert_eq!(number.as_str(), "+4930123456");
+assert_eq!(number.international(), "+49 30 123456");
+
+let gb = Region::parse("GB").unwrap();
+assert_eq!((gb.name(), gb.calling_code()), ("United Kingdom", 44));
+assert_eq!(gb.placeholder_example().unwrap().national(), "07400 123456");
+```
+
+`PhoneNumber::parse` checks the number against its plan. `PhoneNumber::parse_possible` only checks its length, for numbers in ranges a country opened after the plans compiled into your build: it accepts more mistakes, so prefer `parse`. `navree::validation::Phone::parse(text, region)` does the same as the extractors, with a `Country`.
+
+With the `serde` feature (on through the facade), `PhoneNumber` serializes as its E.164 string and reads any international form; `Region` serializes as its code.

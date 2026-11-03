@@ -17,7 +17,7 @@ unsafe_code = "forbid"
 
 [dependencies]
 chrono = { workspace = true }
-navree = { workspace = true, default-features = false, features = ["ui"] }
+navree = { workspace = true, default-features = false, features = ["ui", "validation-phone"] }
 proc-macro2 = { workspace = true }
 quote = { workspace = true }
 serde = { workspace = true }
