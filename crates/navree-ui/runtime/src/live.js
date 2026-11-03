@@ -63,13 +63,16 @@ function fire(s, el) {
     return;
   }
   sub.busy = true;
+  const started = performance.now();
   refresh(el.id)
     .catch(() => {})
     .finally(() => {
       sub.busy = false;
       if (sub.dirty && s.subs.get(el) === sub) {
+        // Exactly one more, and no sooner than a quiet time after the last began: a fast answer
+        // and a busy stream make a few fetches a second, not as many as the answers can take.
         sub.dirty = false;
-        fire(s, el);
+        sub.timer = /** @type {any} */ (setTimeout(() => fire(s, el), Math.max(0, QUIET - (performance.now() - started))));
       }
     });
 }

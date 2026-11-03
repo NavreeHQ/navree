@@ -120,6 +120,22 @@ for (const name of NAMES) {
       });
     });
 
+    test("H2 a busy stream with a fast answer makes a few fetches a second, not as many as the answers allow", async () => {
+      await scenario(async ({ srv, page }) => {
+        srv.routes.set("/p", (req, res) => srv.html(res, shell(region())));
+        srv.routes.set("/frag", srv.slow(40, (res, url, n) => srv.html(res, "v" + n)));
+        srv.routes.set("/sse", srv.stream());
+        await page.goto(srv.origin + "/p");
+        await waitLive(page, "on");
+        const timer = setInterval(() => srv.say("data: x\n\n"), 50);
+        await sleep(4000);
+        clearInterval(timer);
+        // One a quiet time (300 ms): about thirteen in four seconds. Unbounded it was dozens.
+        assert.ok(srv.gauge.asked >= 6 && srv.gauge.asked <= 18, `fetches in four busy seconds: ${srv.gauge.asked}`);
+        assert.equal(srv.gauge.most, 1);
+      });
+    });
+
     test("H2 a burst of events costs one fetch, and events during a fetch cost one more", async () => {
       await scenario(async ({ srv, page }) => {
         srv.routes.set("/p", (req, res) => srv.html(res, shell(region())));
