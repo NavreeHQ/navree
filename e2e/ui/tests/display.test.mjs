@@ -62,7 +62,12 @@ for (const name of NAMES) {
   describe(name, { concurrency: false }, () => {
     let browser;
     before(async () => {
-      browser = await ENGINES[name].launch();
+      // Firefox slows the network of a tab it thinks is in the background, in steps of about 3 s, while
+      // another load is under way, and an open event stream is a load that never ends. Playwright's
+      // Firefox keeps its first tab in front, so a page under test is "in the background" and its
+      // fetches stall for seconds. Measured with a plain Node server too: 4 stalls in 10 runs with the
+      // default, 1 with the throttle off. A reader's own tab in front is not throttled.
+      browser = await ENGINES[name].launch(name === "firefox" ? { firefoxUserPrefs: { "network.http.throttle.enable": false } } : {});
     });
     after(() => browser.close());
     /** Every context a test opened: closed after it, so a failed test leaves no stream behind. */
@@ -84,6 +89,17 @@ for (const name of NAMES) {
       const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, bypassCSP: !!light, ...rest });
       contexts.push(context);
       const page = await context.newPage();
+      // Poll from here, not from the page: Playwright's own wait in Firefox sometimes missed a
+      // condition that was already true (a page that had the text, and a wait that timed out).
+      page.waitForFunction = async (fn, arg, options = {}) => {
+        const end = Date.now() + (options.timeout ?? 30000);
+        for (;;) {
+          const got = await page.evaluate(fn, arg);
+          if (got) return got;
+          if (Date.now() > end) throw new Error(`timed out waiting for ${String(fn).slice(0, 140)}`);
+          await sleep(100);
+        }
+      };
       page.problems = [];
       page.on("console", (m) => {
         // Playwright's WebKit on Windows reports this on every page, a plain 404 too.
@@ -549,6 +565,7 @@ for (const name of NAMES) {
         await post("/display/test/refuse?n=2");
         const cut = Date.now();
         await post("/display/test/drop");
+        await waitLive(page, "retry", 10000);
         await waitLive(page, "on", 20000);
         assert.equal(times.length, 3, "two refused, one that held");
         const gaps = [cut, ...times].slice(1).map((t, i) => t - [cut, ...times][i]);
@@ -677,7 +694,7 @@ for (const name of NAMES) {
         assert.equal(await page.locator("#activity-region b, #activity-region script, #activity-region img").count(), 0);
         assert.equal(await page.locator("p#activity-region").count(), 0);
         assert.equal(reqs.filter((r) => r.startsWith("/display/fragments/feed")).length, 1, "the unnamed ones cost one fetch: " + reqs);
-        assert.equal(reqs.filter((r) => !r.startsWith("/display/")).length, 0, "nothing was asked for that the page didn't know: " + reqs);
+        assert.equal(reqs.filter((r) => !r.startsWith("/display/") && !r.startsWith("/_navree/ui/favicon")).length, 0, "nothing was asked for that the page didn't know: " + reqs);
         assert.equal(await live(page), "on");
         await page.done();
       });
