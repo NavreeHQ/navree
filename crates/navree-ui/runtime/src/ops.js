@@ -5,8 +5,8 @@ import { all, byId, field, make, ownModule, root } from "./dom.js";
 import { announce, toast, openTarget, closeTarget } from "./ui.js";
 import { forget, go, leave, setUrl, refresh } from "./nav.js";
 
-/** @param {HTMLFormElement} form @param {Record<string, string[]>} fields */
-function showErrors(form, fields) {
+/** @param {HTMLFormElement} form @param {Record<string, string[]>} fields @param {boolean} focus */
+function showErrors(form, fields, focus) {
   for (const old of all(form, "[data-slot=field-error]")) old.remove();
   for (const old of all(form, "[data-invalid]")) old.removeAttribute("data-invalid");
   for (const old of all(form, "[aria-invalid]")) old.removeAttribute("aria-invalid");
@@ -37,12 +37,12 @@ function showErrors(form, fields) {
     input.setAttribute("aria-describedby", described.join(" "));
     first ||= input;
   }
-  if (first) first.focus();
+  if (first && focus) first.focus();
   if (count) announce(count === 1 ? "1 field needs attention" : count + " fields need attention");
 }
 
-/** @param {any} op */
-function apply(op) {
+/** @param {any} op @param {{focus?: boolean}} how */
+function apply(op, how) {
   const target = op.target ? byId(op.target) : null;
   switch (op.op) {
     case "morph": {
@@ -58,7 +58,7 @@ function apply(op) {
     case "remove": target?.remove(); break;
     case "errors": {
       const form = byId(op.form);
-      if (form) showErrors(/** @type {HTMLFormElement} */ (form), op.fields);
+      if (form) showErrors(/** @type {HTMLFormElement} */ (form), op.fields, how.focus !== false);
       break;
     }
     case "toast": toast(op.tone, op.text); break;
@@ -73,21 +73,29 @@ function apply(op) {
   }
 }
 
-/** Applies an envelope; a build this page doesn't know means reload. @param {any} envelope */
-export function applyEnvelope(envelope) {
+/**
+ * Applies an envelope; a build this page doesn't know means reload. `focus: false`: the
+ * user has moved on, and field errors leave focus where it is. True when the envelope
+ * leaves this page.
+ * @param {any} envelope @param {{focus?: boolean}} [how] @returns {boolean}
+ */
+export function applyEnvelope(envelope, how = {}) {
   const build = root().getAttribute("data-build");
   if (envelope.build && build && envelope.build !== build) {
     location.reload();
-    return;
+    return true;
   }
   forget();
   for (const url of Array.isArray(envelope.modules) ? envelope.modules : []) {
     if (ownModule(url)) import(url).catch(() => {});
   }
   // One op that can't apply doesn't take the others with it.
+  let left = false;
   for (const op of Array.isArray(envelope.ops) ? envelope.ops : []) {
+    left ||= op?.op === "navigate" || op?.op === "navigate_external" || op?.op === "reload";
     try {
-      apply(op);
+      apply(op, how);
     } catch {}
   }
+  return left;
 }

@@ -965,6 +965,87 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       }
     });
 
+    test(`what is typed while a form is on its way is sent after it, the latest only (${engine})`, async () => {
+      const name = key("latest");
+      const bodies = [];
+      route(`/${name}`, doc(`<form id="f" data-ui-form method="post" action="/${name}-post"><input id="i" name="a" value=""><input type="hidden" name="intent" value="check"></form>`));
+      f.routes.set(`/${name}-post`, (req, res, body) => {
+        bodies.push(body);
+        setTimeout(() => f.ops(res, { ops: [] }), 300);
+      });
+      const { context, page, errors } = await fresh(`/${name}`);
+      // A field check sent on every keystroke, as `Cmd::submit` on input does.
+      await page.evaluate(() => {
+        const form = document.getElementById("f");
+        const input = document.getElementById("i");
+        for (const text of ["a", "ab", "abc"]) {
+          input.value = text;
+          form.requestSubmit();
+        }
+        // The same again: a repeat, not news.
+        form.requestSubmit();
+      });
+      await until(() => bodies.length >= 2, 3000);
+      await sleep(500);
+      assert.deepEqual(bodies, ["a=a&intent=check", "a=abc&intent=check"]);
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+
+    test(`a save's answer doesn't send what waited if it leaves the page (${engine})`, async () => {
+      const name = key("leaves");
+      const bodies = [];
+      route(`/${name}`, doc(`<form id="f" data-ui-form method="post" action="/${name}-post"><input id="i" name="a" value="one"></form>`));
+      route(`/${name}-done`, doc(`<h1 id="done">done</h1>`));
+      f.routes.set(`/${name}-post`, (req, res, body) => {
+        bodies.push(body);
+        setTimeout(() => f.ops(res, { ops: [{ op: "navigate", href: `/${name}-done` }] }), 250);
+      });
+      const { context, page } = await fresh(`/${name}`);
+      await page.evaluate(() => {
+        const form = document.getElementById("f");
+        form.requestSubmit();
+        document.getElementById("i").value = "two";
+        form.requestSubmit();
+      });
+      await page.waitForSelector("#done");
+      await sleep(400);
+      assert.deepEqual(bodies, ["a=one"]);
+      await context.close();
+    });
+
+    test(`field errors take focus only for a save the user is still waiting on (${engine})`, async () => {
+      const name = key("focus");
+      const form = `<form id="f" data-ui-form method="post" action="/${name}-post"><div data-slot="field"><input id="title" name="title"></div><div data-slot="field"><input id="email" name="email"></div><button id="save">Save</button></form>`;
+      route(`/${name}`, doc(form));
+      f.routes.set(`/${name}-post`, (req, res) => setTimeout(() => f.ops(res, { ops: [{ op: "errors", form: "f", fields: { title: ["Enter a title."] } }] }, 422), 250));
+      const focused = (page) => page.evaluate(() => document.activeElement?.id || document.activeElement?.nodeName);
+      // A check sent by a command while the user types elsewhere: errors show, focus stays.
+      let { context, page } = await fresh(`/${name}`);
+      await page.focus("#email");
+      await page.evaluate(() => document.getElementById("f").requestSubmit());
+      await page.keyboard.type("ada");
+      await page.waitForSelector("[data-slot=field-error]");
+      assert.equal(await focused(page), "email");
+      assert.equal(await page.inputValue("#email"), "ada");
+      await context.close();
+      // A save the user clicked and waited on: the first error takes focus.
+      ({ context, page } = await fresh(`/${name}`));
+      await page.click("#save");
+      await page.waitForSelector("[data-slot=field-error]");
+      await sleep(50);
+      assert.equal(await focused(page), "title");
+      await context.close();
+      // A save the user clicked and then left for another field: focus stays there.
+      ({ context, page } = await fresh(`/${name}`));
+      await page.click("#save");
+      await page.focus("#email");
+      await page.waitForSelector("[data-slot=field-error]");
+      await sleep(50);
+      assert.equal(await focused(page), "email");
+      await context.close();
+    });
+
     test(`a form works again after a failed send (${engine})`, async () => {
       const name = key("retry");
       route(`/${name}`, doc(`<form id="f" data-ui-form method="post" action="/${name}-post"><button id="go">go</button></form>`));

@@ -2,7 +2,7 @@
 // `data-ui-form`, a fetch whose answer is ops or a page.
 import { applyEnvelope } from "./ops.js";
 import { forget, go, showPage, startRegions, whileWriting } from "./nav.js";
-import { attr, cookies, has, on, set, unset, toggle } from "./dom.js";
+import { active, attr, cookies, has, on, set, unset, toggle } from "./dom.js";
 import { toast } from "./ui.js";
 
 const OPS = "application/vnd.navree.ops+json";
@@ -31,13 +31,38 @@ function pending(form, submitter, on) {
   else unset(form, "aria-busy");
 }
 
-/** Forms on their way: the fetch of a write can't be taken back, so a second submit is ignored. @type {WeakSet<HTMLFormElement>} */
-const sending = new WeakSet();
+/**
+ * What a submit would send: where, how, and every field. Two submits that say the same
+ * are one: a double click, Enter twice.
+ * @param {HTMLFormElement} form @param {HTMLElement | null} submitter
+ */
+function said(form, submitter) {
+  const parts = [(submitter && attr(submitter, "formaction")) || attr(form, "action") || "", (submitter && attr(submitter, "formmethod")) || attr(form, "method") || ""];
+  try {
+    for (const [name, value] of new FormData(form, submitter)) {
+      parts.push(name, typeof value === "string" ? value : `${value.name}:${value.size}:${value.lastModified}`);
+    }
+  } catch {}
+  return JSON.stringify(parts);
+}
+
+/**
+ * Forms on their way, with what they sent. The fetch of a write can't be taken back, so
+ * a second submit that says the same is ignored. One that says something new, typed
+ * while the first was on its way, goes after it: the latest only, never lost.
+ * @type {WeakMap<HTMLFormElement, string>}
+ */
+const sending = new WeakMap();
+/** @type {WeakMap<HTMLFormElement, {said: string, submitter: HTMLElement | null}>} */
+const waiting = new WeakMap();
 
 /** @param {HTMLFormElement} form @param {HTMLElement | null} submitter */
 async function send(form, submitter) {
-  sending.add(form);
+  sending.set(form, said(form, submitter));
+  const before = active();
   let answered = false;
+  /** Whether the answer moves the user to another page: what waits is then dropped. */
+  let left = false;
   try {
     const action = (submitter && attr(submitter, "formaction")) || attr(form, "action") || location.href;
     const method = ((submitter && attr(submitter, "formmethod")) || attr(form, "method") || "get").toUpperCase();
@@ -56,7 +81,9 @@ async function send(form, submitter) {
     const type = response.headers.get("content-type") || "";
     pending(form, submitter, false);
     document.dispatchEvent(new CustomEvent("ui:sent", { detail: { form, ok: response.ok } }));
-    if (type.startsWith(OPS)) applyEnvelope(await response.json());
+    // Errors take focus only for a save the user asked for, and only if the user is
+    // still where the save left them: never from a field they moved to, or typed on in.
+    if (type.startsWith(OPS)) left = applyEnvelope(await response.json(), { focus: !!submitter && active() === before });
     else if (type.startsWith("text/html")) await showPage(response, { url: response.url, keep: response.url === location.href });
     else if (!response.ok) toast("danger", "That didn't work. Try again.");
     startRegions();
@@ -66,6 +93,17 @@ async function send(form, submitter) {
     toast("danger", answered ? "That didn't work. Try again." : "No connection. Try again.");
   } finally {
     sending.delete(form);
+    const next = waiting.get(form);
+    waiting.delete(form);
+    // What was typed meanwhile goes now, from the form as it is, if it's still here.
+    if (next && form.isConnected && !left) {
+      const by = next.submitter?.isConnected ? next.submitter : null;
+      try {
+        form.requestSubmit(/** @type {HTMLButtonElement | null} */ (by));
+      } catch {
+        form.requestSubmit();
+      }
+    }
   }
 }
 
@@ -96,8 +134,12 @@ export function startForms() {
       filter(form);
       return;
     }
-    if (sending.has(form)) {
+    const out = sending.get(form);
+    if (out !== undefined) {
       e.preventDefault();
+      const now = said(form, submitter);
+      if (now !== out) waiting.set(form, { said: now, submitter });
+      else waiting.delete(form);
       return;
     }
     const method = ((submitter && attr(submitter, "formmethod")) || attr(form, "method") || "get").toLowerCase();
