@@ -373,7 +373,11 @@ impl Command {
         self
     }
 
-    /// Sets the token the posting items send when the page runs with no script.
+    /// Puts the session's CSRF token in the form the posting items send, as the field
+    /// `_csrf`. With script on, the form runtime sends the token itself, as the
+    /// `x-xsrf-token` header from the `XSRF-TOKEN` cookie, as it does for every form;
+    /// this is for a page that runs with no script, where a post carries nothing else
+    /// and an app that checks the token refuses it.
     pub fn csrf(mut self, token: impl Into<String>) -> Self {
         self.csrf = Some(token.into());
         self
@@ -382,6 +386,19 @@ impl Command {
     fn into_node(self) -> Node {
         let id = self.id;
         let form = format!("{id}-post");
+        // A post goes through the form runtime, which sends the CSRF header: the
+        // runtime is loaded for it. A palette of links and commands loads no more.
+        let posts = self.groups.iter().any(|group| {
+            group
+                .items
+                .iter()
+                .any(|item| matches!(item.action, Action::Post(_)))
+        });
+        let uses = if posts {
+            Uses::OVERLAY.with(Uses::SELECT).with(Uses::CORE)
+        } else {
+            Uses::OVERLAY.with(Uses::SELECT)
+        };
         let list_id = format!("{id}-list");
         let groups: Vec<Node> = self
             .groups
@@ -418,7 +435,7 @@ impl Command {
             .attr_opt("data-ui-search", self.source)
             .flag("data-ui-key", self.key)
             .attr_opt("data-l", self.labels.changed())
-            .uses(Uses::OVERLAY.with(Uses::SELECT))
+            .uses(uses)
             .children((
                 el("div").slot("command").children((
                     el("div").slot("command-input-wrap").children((
@@ -460,6 +477,7 @@ impl Command {
                     .attr("id", form)
                     .attr("method", "post")
                     .flag("hidden", true)
+                    .flag("data-ui-form", posts)
                     .child(self.csrf.map(csrf_field)),
                 el("div")
                     .slot("select-status")

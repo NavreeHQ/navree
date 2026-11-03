@@ -353,4 +353,5 @@ fn command_default() -> Command {
                     "Only owners can open billing.",
                 )),
         )
+        .csrf("session-token")
 }
