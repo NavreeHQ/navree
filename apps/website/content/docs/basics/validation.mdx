@@ -419,7 +419,7 @@ Valid means the number fits its region's numbering plan (country code, length, l
 | `as_str()`, `to_string()`, `String::from(phone)` | `+447400123456` |
 | `country_code()` | `44` |
 | `national_number()` | `"7400123456"`, with the leading zero of plans that keep one (`"0612345678"` in Italy) |
-| `number_type()` | `NumberType::Mobile`, `FixedLine`, `TollFree` and the rest |
+| `number_type()` | `Some(NumberType::Mobile)`, `FixedLine`, `TollFree` and the rest; `None` for a stored number the plans don't recognise |
 | `region()` | `Some(Country)` (`GB`); `None` for non-geographic numbers and areas outside ISO 3166-1, such as Kosovo |
 | `international()`, `national()`, `rfc3966()` | `+44 7400 123456`, `07400 123456`, `tel:+44-7400-123456`, with the extension when there is one |
 | `number()` | the `navree::phone::PhoneNumber`, with everything the parser knows |

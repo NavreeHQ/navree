@@ -46,13 +46,14 @@ fn form_card(form: FormView<NewContact>) -> Card {
         )
 }
 
-fn kind(kind: NumberType) -> &'static str {
+fn kind(kind: Option<NumberType>) -> &'static str {
     match kind {
-        NumberType::Mobile => "Mobile",
-        NumberType::FixedLine => "Landline",
-        NumberType::FixedLineOrMobile => "Landline or mobile",
-        NumberType::TollFree => "Toll free",
-        _ => "Other",
+        Some(NumberType::Mobile) => "Mobile",
+        Some(NumberType::FixedLine) => "Landline",
+        Some(NumberType::FixedLineOrMobile) => "Landline or mobile",
+        Some(NumberType::TollFree) => "Toll free",
+        Some(_) => "Other",
+        None => "Unknown",
     }
 }
 

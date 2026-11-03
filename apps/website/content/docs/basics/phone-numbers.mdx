@@ -83,12 +83,14 @@ Text longer than 250 characters is refused at once, and every step of the parser
 use navree::phone::NumberType;
 
 match contact.mobile.number_type() {
-    NumberType::Mobile | NumberType::FixedLineOrMobile => send_sms(&contact.mobile),
-    NumberType::FixedLine => call_instead(&contact.mobile),
-    NumberType::TollFree | NumberType::PremiumRate => reject(),
+    Some(NumberType::Mobile | NumberType::FixedLineOrMobile) => send_sms(&contact.mobile),
+    Some(NumberType::FixedLine) => call_instead(&contact.mobile),
+    Some(NumberType::TollFree | NumberType::PremiumRate) => reject(),
     _ => {}
 }
 ```
+
+A number parsed from what someone typed always has a type. `None` is a stored number the plans no longer recognise (read back with `from_e164` after a plans update); it claims no kind of line, so it is never taken for a mobile.
 
 The types are `FixedLine`, `Mobile`, `FixedLineOrMobile` (some plans, such as the United States', don't tell them apart), `TollFree`, `PremiumRate`, `SharedCost`, `Voip`, `PersonalNumber`, `Pager`, `Uan` and `Voicemail`. `NumberType::may_be_mobile()` is true for `Mobile` and `FixedLineOrMobile`.
 

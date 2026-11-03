@@ -104,12 +104,13 @@ impl Phone {
         Country::parse(self.number.region()?.as_str()).ok()
     }
 
-    /// The kind of line: mobile, fixed line, toll free and so on.
-    pub fn number_type(&self) -> NumberType {
-        // A parsed number fits its plan, so it always has a type.
-        self.number
-            .number_type()
-            .unwrap_or(NumberType::FixedLineOrMobile)
+    /// The kind of line: mobile, fixed line, toll free and so on. A number
+    /// from [`parse`](Phone::parse) fits its plan, so it always has one;
+    /// `None` is a stored number the plans don't recognise (one read back
+    /// with [`PhoneNumber::from_e164`] after the plans changed), which
+    /// claims no kind of line rather than passing for a mobile.
+    pub fn number_type(&self) -> Option<NumberType> {
+        self.number.number_type()
     }
 
     /// The extension (`"12"` from `ext. 12`), which E.164 leaves out.
@@ -353,7 +354,7 @@ mod tests {
         assert_eq!(phone.extension(), Some("12"));
         assert_eq!(phone.country_code(), 44);
         assert_eq!(phone.national_number(), "7400123456");
-        assert_eq!(phone.number_type(), navree_phone::NumberType::Mobile);
+        assert_eq!(phone.number_type(), Some(navree_phone::NumberType::Mobile));
         assert_eq!(phone.rfc3966(), "tel:+44-7400-123456;ext=12");
         assert_eq!(phone.region(), region("GB"));
         // The formats for people show the extension; E.164 can't.
@@ -385,6 +386,21 @@ mod tests {
             .scope(|| serde_json::from_str(r#""07400 123456""#))
             .unwrap();
         assert_eq!(phone.as_str(), "+447400123456");
+    }
+
+    #[test]
+    fn a_stored_number_the_plans_dont_know_has_no_type() {
+        // Read back from storage, a number the plans no longer recognise
+        // keeps its digits but claims no kind of line, so it can't pass for
+        // a mobile.
+        let stored = Phone::from(PhoneNumber::from_e164("+44123").unwrap());
+        assert_eq!(stored.as_str(), "+44123");
+        assert_eq!(stored.number_type(), None);
+        let parsed = Phone::parse("+1 650 253 0000", None).unwrap();
+        assert_eq!(
+            parsed.number_type(),
+            Some(navree_phone::NumberType::FixedLineOrMobile)
+        );
     }
 
     #[test]
