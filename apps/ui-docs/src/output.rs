@@ -125,6 +125,7 @@ fn stage(example: &Example) -> (Node, Vec<String>) {
         Kind::Single(draw) => (
             el("div")
                 .flag("data-preview-stage", true)
+                .attr_opt("data-live", example.streaming)
                 .child(draw())
                 .into(),
             Vec::new(),
@@ -154,6 +155,7 @@ fn stage(example: &Example) -> (Node, Vec<String>) {
             (
                 el("div")
                     .flag("data-preview-stage", true)
+                    .attr_opt("data-live", example.streaming)
                     .child(
                         el("div")
                             .attr("data-preview-gallery", example.cells.as_str())

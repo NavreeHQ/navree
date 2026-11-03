@@ -7,17 +7,23 @@
 //! (MIT, Copyright (c) 2023 shadcn). See THIRD_PARTY.md.
 
 mod actions;
+mod activity;
+mod clock;
 mod display;
 mod dropdown;
+mod fact;
 mod flag;
 mod inputs;
 mod layout;
 mod overlays;
 mod tabs;
+mod timeline;
 mod toast;
 mod toggle_group;
+mod tone;
 
 pub use actions::{Button, ButtonGroup, ButtonKind, ButtonVariant, Toggle};
+pub use activity::{ActivityFeed, ActivityItem, FeedHeight};
 pub use display::{
     Alert, AlertTone, AspectRatio, Attachment, Avatar, Badge, BadgeVariant, Bars, Breadcrumb,
     Bubble, BubbleSide, Card, Direction, Empty, Heading, Item, ItemVariant, Kbd, Marker,
@@ -25,6 +31,7 @@ pub use display::{
     Spinner, Stat, Table, TableCell, TableHead, TableRowEl, Text, TextVariant,
 };
 pub use dropdown::{DropdownMenu, MenuCheckbox, MenuGroup, MenuItem, MenuRadios, MenuSub};
+pub use fact::{FactCard, FactGrid};
 pub use flag::{Flag, FlagShape, FlagSize};
 pub use inputs::{
     Checkbox, Field, FieldSet, Input, InputGroup, InputKind, Label, NativeSelect, OptionItem,
@@ -36,8 +43,10 @@ pub use overlays::{
     ScrollArea, Sheet, SheetSide, Side, Tooltip,
 };
 pub use tabs::{Activation, Orientation, Tab, Tabs, TabsVariant};
+pub use timeline::{Timeline, TimelineEvent, TimelineState};
 pub use toast::{Toast, ToastAction, ToastDuration, ToastPosition, Toaster};
 pub use toggle_group::{ToggleGroup, ToggleItem, ToggleVariant};
+pub use tone::{DisplayLabels, Meta, Tone};
 
 use crate::icons::Icon;
 use crate::node::{Node, el};

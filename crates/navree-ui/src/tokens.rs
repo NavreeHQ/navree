@@ -45,6 +45,10 @@ pub const TOKENS: &[Token] = &[
     t("accent-ink", "#03130a", "#ffffff"),
     t("amber", "#ffbf5e", "#8a5a00"),
     t("danger", "#ff6b6b", "#b3261e"),
+    t("info", "#6cb6ff", "#0b5cad"),
+    t("violet", "#b79cff", "#6b46c1"),
+    t("cyan", "#4fd6e6", "#0a6b78"),
+    t("rose", "#ff8aa8", "#b3254f"),
     t("bar", "#5b6862", "#8a968f"),
     t("radius", "4px", "4px"),
     t("radius-lg", "6px", "6px"),
@@ -79,6 +83,10 @@ pub const TEXT_PAIRS: &[(&str, &str)] = &[
     ("danger", "ink-1"),
     ("amber", "ink-1"),
     ("accent", "ink-1"),
+    ("info", "ink-1"),
+    ("violet", "ink-1"),
+    ("cyan", "ink-1"),
+    ("rose", "ink-1"),
 ];
 
 /// The tokens `@navree/theme` and the website share, in order: the colours.

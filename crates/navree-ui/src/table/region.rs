@@ -83,6 +83,55 @@ impl Region {
         self
     }
 
+    /// Trims a feed to its newest `most` rows as new ones arrive, so a page left
+    /// open for days doesn't grow without end. The default is 200.
+    pub fn feed_limit(mut self, most: u32) -> Self {
+        self.el = self.el.attr("data-ui-feed-max", most);
+        self
+    }
+
+    /// Announces new feed rows to assistive technology: `many` with `{n}` filled in,
+    /// or `one` when a single row came. Without this a feed adds rows silently.
+    pub fn announce_new(mut self, many: impl Into<String>, one: impl Into<String>) -> Self {
+        self.el = self
+            .el
+            .attr("data-ui-feed-say", many.into())
+            .attr("data-ui-feed-say-one", one.into());
+        self
+    }
+
+    /// Refetches the region whenever this server-sent event stream says something,
+    /// or, with a feed, asks the source for what is new. Needs [`src`](Self::src).
+    ///
+    /// An event is a nudge: its payload is never read, so a stream can't put markup,
+    /// a URL or a command into the page. One connection serves every region on the
+    /// same stream. The connection closes while the page is hidden and opens again,
+    /// with one fetch to catch up, when it shows. A connection that drops reconnects
+    /// after 1 s, 2 s, 4 s and so on up to 30 s. The stream must be on this site.
+    /// While it runs, the region carries `data-live` as `connecting`, `on`, `retry`
+    /// or `paused`, which a live dot reads.
+    ///
+    /// ```
+    /// use navree_ui::{Region, render};
+    ///
+    /// let html = render(&Region::new("deals").src("/fragments/deals").live_from("/events").into());
+    /// assert!(html.contains(r#"data-ui-live-src="/events""#));
+    /// ```
+    pub fn live_from(mut self, url: impl Into<Href>) -> Self {
+        self.el = self.el.attr("data-ui-live-src", url.into());
+        self
+    }
+
+    /// Listens for the stream's events called `name` instead of its unnamed ones
+    /// (`event: name` on the wire), so one stream can feed several regions. A name
+    /// of letters, digits and `_ . : -`, at most 64 long; any other is ignored.
+    pub fn live_event(mut self, name: &'static str) -> Self {
+        if valid_event_name(name) {
+            self.el = self.el.attr("data-ui-live-event", name);
+        }
+        self
+    }
+
     /// Adds its content.
     pub fn children(mut self, children: impl IntoNodes) -> Self {
         self.el = self.el.child(children);
@@ -102,6 +151,14 @@ impl Region {
         }
         self.el.into()
     }
+}
+
+/// Whether `name` can be an event name the runtime listens for.
+pub(crate) fn valid_event_name(name: &str) -> bool {
+    (1..=64).contains(&name.len())
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-'))
 }
 
 impl From<Region> for Node {

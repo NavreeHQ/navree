@@ -64,6 +64,9 @@ pub const GROUPS: &[Group] = &[
             "kbd",
             "attachment",
             "message",
+            "timeline",
+            "activity-feed",
+            "fact-card",
         ],
     },
     Group {
@@ -271,7 +274,13 @@ pub const COMPONENTS: &[Component] = &[
     .parts("default"),
     // Display
     component("card", "Card", &["Card"], "thumb").parts("default"),
-    component("badge", "Badge", &["Badge", "BadgeVariant"], "default").parts("default"),
+    component(
+        "badge",
+        "Badge",
+        &["Badge", "BadgeVariant", "Tone"],
+        "default",
+    )
+    .parts("default"),
     component("avatar", "Avatar", &["Avatar"], "default").parts("default"),
     component("item", "Item", &["Item", "ItemVariant"], "thumb").parts("default"),
     component(
@@ -286,6 +295,27 @@ pub const COMPONENTS: &[Component] = &[
         "message",
         "Message and Bubble",
         &["Message", "Bubble", "BubbleSide", "Marker", "MarkerVariant"],
+        "thumb",
+    )
+    .parts("default"),
+    component(
+        "timeline",
+        "Timeline",
+        &["Timeline", "TimelineEvent", "TimelineState", "Meta"],
+        "thumb",
+    )
+    .parts("default"),
+    component(
+        "activity-feed",
+        "ActivityFeed",
+        &["ActivityFeed", "ActivityItem", "FeedHeight"],
+        "thumb",
+    )
+    .parts("default"),
+    component(
+        "fact-card",
+        "FactCard and FactGrid",
+        &["FactCard", "FactGrid"],
         "thumb",
     )
     .parts("default"),
@@ -509,6 +539,9 @@ pub struct Example {
     pub show: bool,
     /// Loads the core runtime: commands run in the preview.
     pub live: bool,
+    /// Draws the live dot as it is in this state (`on`, `retry`, `paused`): a
+    /// preview has no stream to follow.
+    pub streaming: Option<&'static str>,
     /// Drawn this many px wide and scaled to fit the column: for a whole page,
     /// whose layout changes below 768px.
     pub width: Option<u32>,
@@ -533,6 +566,7 @@ impl Example {
             cells: Cells::Narrow,
             show: false,
             live: false,
+            streaming: None,
             width: None,
         }
     }
@@ -584,6 +618,12 @@ impl Example {
 
     pub fn live(mut self) -> Self {
         self.live = true;
+        self
+    }
+
+    /// Shows the live dot in `state`.
+    pub fn streaming(mut self, state: &'static str) -> Self {
+        self.streaming = Some(state);
         self
     }
 }

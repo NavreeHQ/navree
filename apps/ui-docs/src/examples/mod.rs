@@ -4,6 +4,7 @@
 use crate::catalog::Example;
 
 mod actions;
+mod activity;
 mod data;
 mod dates;
 mod display;
@@ -27,6 +28,7 @@ pub fn all() -> Vec<Example> {
     all.extend(dates::all());
     all.extend(phone::all());
     all.extend(display::all());
+    all.extend(activity::all());
     all.extend(feedback::all());
     all.extend(overlays::all());
     all.extend(layout::all());

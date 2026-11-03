@@ -566,6 +566,7 @@ pub struct DataTable<'a, R, F = NoFilter> {
     cells: Vec<(&'static str, RowFn<'a, R, Node>)>,
     live: Option<Duration>,
     live_from: Option<Href>,
+    live_event: Option<&'static str>,
     refreshable: bool,
     debounce: Option<u32>,
     prefetch: bool,
@@ -616,6 +617,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             cells: Vec::new(),
             live: None,
             live_from: None,
+            live_event: None,
             refreshable: false,
             debounce: None,
             prefetch: false,
@@ -664,6 +666,15 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     /// rows; a cell's own link, such as a row's page, is never fetched this way.
     pub fn prefetch(mut self) -> Self {
         self.prefetch = true;
+        self
+    }
+
+    /// Listens for the stream's events called `name` instead of its unnamed ones.
+    /// See [`Region::live_event`].
+    pub fn live_event(mut self, name: &'static str) -> Self {
+        if super::region::valid_event_name(name) {
+            self.live_event = Some(name);
+        }
         self
     }
 
@@ -2659,6 +2670,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                     .map(|every| i64::try_from(every.as_millis()).unwrap_or(i64::MAX)),
             )
             .attr_opt("data-ui-live-src", self.live_from.clone())
+            .attr_opt("data-ui-live-event", self.live_event)
             .attr("data-l", self.runtime_labels())
             .uses(Uses::CORE.with(Uses::TABLE));
         if self.local.contains(&true) {

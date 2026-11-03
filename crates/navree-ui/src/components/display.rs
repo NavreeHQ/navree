@@ -1,5 +1,6 @@
 //! The components that show things: no behaviour, no script.
 
+use super::tone::Tone;
 use super::{Size, icon, root_methods};
 use crate::html::Href;
 use crate::icons::{self, Icon};
@@ -275,12 +276,23 @@ pub enum BadgeVariant {
 }
 
 /// A short label beside something.
+///
+/// ```
+/// use navree_ui::{Badge, Tone, render};
+///
+/// let html = render(&Badge::new("Delivered").tone(Tone::Success).dot().into());
+/// assert!(html.contains(r#"data-tone="success""#));
+/// assert!(html.contains("badge-dot"));
+/// ```
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct Badge {
     el: Element,
     text: Node,
     start: Option<Icon>,
+    end: Option<Icon>,
+    dot: bool,
+    outcome: Option<(bool, String, String)>,
 }
 
 impl Badge {
@@ -290,7 +302,42 @@ impl Badge {
             el: el("span").slot("badge"),
             text: text.into(),
             start: None,
+            end: None,
+            dot: false,
+            outcome: None,
         }
+    }
+
+    /// A chip for something that did or didn't happen: "Opened", "Clicked". When
+    /// it did, it carries a check and its tone; when it didn't, a dash and a quiet,
+    /// dashed look. A screen reader hears "yes" or "no" after the label (change
+    /// the words with [`outcome_words`](Self::outcome_words)).
+    ///
+    /// ```
+    /// use navree_ui::{Badge, Tone, render};
+    ///
+    /// let opened = render(&Badge::outcome("Opened", true).tone(Tone::Info).into());
+    /// let clicked = render(&Badge::outcome("Clicked", false).into());
+    /// assert!(opened.contains("yes"));
+    /// assert!(clicked.contains("no"));
+    /// ```
+    pub fn outcome(text: impl Into<Node>, reached: bool) -> Self {
+        let mut badge = Self::new(text);
+        badge.el = badge
+            .el
+            .attr("data-variant", "outcome")
+            .attr("data-state", if reached { "reached" } else { "missed" });
+        badge.start = Some(if reached { icons::CHECK } else { icons::MINUS });
+        badge.outcome = Some((reached, "yes".to_owned(), "no".to_owned()));
+        badge
+    }
+
+    /// Sets the words a screen reader hears after an outcome chip.
+    pub fn outcome_words(mut self, yes: impl Into<String>, no: impl Into<String>) -> Self {
+        if let Some((reached, ..)) = self.outcome {
+            self.outcome = Some((reached, yes.into(), no.into()));
+        }
+        self
     }
 
     /// Sets the look.
@@ -305,14 +352,46 @@ impl Badge {
         self
     }
 
-    /// Adds an icon.
+    /// Colours it. A [`Tone::Named`] colour comes from the stylesheet.
+    pub fn tone(mut self, tone: Tone) -> Self {
+        self.el = self.el.attr_opt("data-tone", tone.value());
+        self
+    }
+
+    /// Adds a small dot before the text, in the badge's colour.
+    pub fn dot(mut self) -> Self {
+        self.dot = true;
+        self
+    }
+
+    /// Adds an icon before the text.
     pub fn icon(mut self, glyph: Icon) -> Self {
         self.start = Some(glyph);
         self
     }
 
+    /// Adds an icon after the text.
+    pub fn icon_end(mut self, glyph: Icon) -> Self {
+        self.end = Some(glyph);
+        self
+    }
+
     fn into_node(self) -> Node {
-        self.el.children((self.start.map(icon), self.text)).into()
+        let outcome = self.outcome.map(|(reached, yes, no)| {
+            el("span")
+                .attr("data-ui-sr", "")
+                .child(if reached { yes } else { no })
+        });
+        self.el
+            .children((
+                self.dot
+                    .then(|| el("span").slot("badge-dot").attr("aria-hidden", "true")),
+                self.start.map(icon),
+                self.text,
+                outcome,
+                self.end.map(icon),
+            ))
+            .into()
     }
 }
 
