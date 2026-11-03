@@ -57,7 +57,7 @@ export const homeFaq: FaqSet = {
     {
       question: "Can I use Next.js or Nuxt with Navree?",
       answer:
-        "Yes. Draw your screens with Navree UI in Rust, or put a Next.js (React) or Nuxt (Vue) app beside the same API. `navree new --ui next` starts a Next.js app that uses `@navree/next`. Nuxt uses the `@navree/nuxt` module and has no starter kit yet.",
+        "Yes. Draw your screens with Navree UI in Rust, or put a Next.js (React) or Nuxt (Vue) app beside the same API. `navree new --ui next` writes a Next.js app in `web/` with its own sign-in. Add `@navree/next` for a typed client, a DataTable and live channels. Nuxt uses the `@navree/nuxt` module and has no starter kit yet.",
       link: { href: "/docs/ui/choosing-a-ui/", label: "Choose a UI" },
     },
     {
