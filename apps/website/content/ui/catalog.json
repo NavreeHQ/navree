@@ -29,6 +29,16 @@
       ]
     },
     {
+      "id": "dates",
+      "title": "Date and time",
+      "components": [
+        "calendar",
+        "date-picker",
+        "date-range-picker",
+        "time-picker"
+      ]
+    },
+    {
       "id": "display",
       "title": "Display",
       "components": [
@@ -376,6 +386,101 @@
         "forms/thumb",
         "forms/default",
         "forms/errors"
+      ]
+    },
+    {
+      "id": "calendar",
+      "name": "Calendar",
+      "url": "/docs/components/calendar/",
+      "summary": "A calendar: one or more months, with the days that can be chosen.",
+      "group": "dates",
+      "types": [
+        "Calendar",
+        "CalendarMode",
+        "CaptionLayout",
+        "DateRules"
+      ],
+      "thumb": "calendar/thumb",
+      "anatomy": "calendar/default",
+      "examples": [
+        "calendar/thumb",
+        "calendar/default",
+        "calendar/multiple",
+        "calendar/range",
+        "calendar/limits",
+        "calendar/weeks",
+        "calendar/dropdowns",
+        "calendar/locales",
+        "calendar/states"
+      ]
+    },
+    {
+      "id": "date-picker",
+      "name": "DatePicker",
+      "url": "/docs/components/date-picker/",
+      "summary": "A date field with a calendar.",
+      "group": "dates",
+      "types": [
+        "DatePicker",
+        "PickerStyle",
+        "DateLocale"
+      ],
+      "thumb": "date-picker/thumb",
+      "anatomy": "date-picker/default",
+      "examples": [
+        "date-picker/thumb",
+        "date-picker/default",
+        "date-picker/options",
+        "date-picker/states",
+        "date-picker/button",
+        "date-picker/locales",
+        "date-picker/birth"
+      ]
+    },
+    {
+      "id": "date-range-picker",
+      "name": "DateRangePicker",
+      "url": "/docs/components/date-range-picker/",
+      "summary": "A range of days from two dates: one button, and a popover with presets beside a calendar of two months.",
+      "group": "dates",
+      "types": [
+        "DateRangePicker",
+        "DatePreset",
+        "DateRange",
+        "DateRangeQuery",
+        "RangeRules"
+      ],
+      "thumb": "date-range-picker/thumb",
+      "anatomy": "date-range-picker/default",
+      "examples": [
+        "date-range-picker/thumb",
+        "date-range-picker/default",
+        "date-range-picker/presets",
+        "date-range-picker/confirm",
+        "date-range-picker/limits",
+        "date-range-picker/report"
+      ]
+    },
+    {
+      "id": "time-picker",
+      "name": "TimePicker",
+      "url": "/docs/components/time-picker/",
+      "summary": "A time of day: hours and minutes, and seconds if asked.",
+      "group": "dates",
+      "types": [
+        "TimePicker",
+        "TimeRules",
+        "Clock"
+      ],
+      "thumb": "time-picker/thumb",
+      "anatomy": "time-picker/default",
+      "examples": [
+        "time-picker/thumb",
+        "time-picker/default",
+        "time-picker/clocks",
+        "time-picker/rules",
+        "time-picker/states",
+        "time-picker/zone"
       ]
     },
     {
@@ -4327,6 +4432,2911 @@
             {
               "slot": "select-status",
               "tag": "div",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "calendar/thumb",
+      "component": "calendar",
+      "slug": "thumb",
+      "title": "A calendar",
+      "kind": "single",
+      "code": "Calendar::new(\"thumb\")\n    .today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default())\n    .selected(NaiveDate::from_ymd_opt(2026, 11, 12).unwrap_or_default())\n    .size(Size::Sm)",
+      "src": "/ui-preview/calendar/thumb.html",
+      "height": 300,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "calendar",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "calendar-nav",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "calendar-months",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "calendar-month",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "calendar-head",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "calendar-caption",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "calendar-grid",
+                      "tag": "table",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "calendar-weekday",
+                          "tag": "th",
+                          "count": 7,
+                          "children": []
+                        },
+                        {
+                          "slot": "calendar-day",
+                          "tag": "button",
+                          "count": 35,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "calendar/default",
+      "component": "calendar",
+      "slug": "default",
+      "title": "A calendar",
+      "kind": "single",
+      "code": "let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();\nCalendar::new(\"due\")\n    .name(\"due\")\n    .today(today)\n    .selected(NaiveDate::from_ymd_opt(2026, 11, 12).unwrap_or_default())\n    .with_today()",
+      "src": "/ui-preview/calendar/default.html",
+      "height": 340,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "calendar",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "calendar-nav",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "calendar-months",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "calendar-month",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "calendar-head",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "calendar-caption",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "calendar-grid",
+                      "tag": "table",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "calendar-weekday",
+                          "tag": "th",
+                          "count": 7,
+                          "children": []
+                        },
+                        {
+                          "slot": "calendar-day",
+                          "tag": "button",
+                          "count": 35,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "calendar-foot",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 1,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "calendar/multiple",
+      "component": "calendar",
+      "slug": "multiple",
+      "title": "Several days",
+      "kind": "single",
+      "code": "let day = |d| NaiveDate::from_ymd_opt(2026, 11, d).unwrap_or_default();\nCalendar::new(\"days\")\n    .name(\"days\")\n    .today(day(3))\n    .mode(CalendarMode::Multiple)\n    .selected_days([day(5), day(12), day(19)])\n    .max_count(4)",
+      "src": "/ui-preview/calendar/multiple.html",
+      "height": 340,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "calendar",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "calendar-nav",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "calendar-months",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "calendar-month",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "calendar-head",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "calendar-caption",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "calendar-grid",
+                      "tag": "table",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "calendar-weekday",
+                          "tag": "th",
+                          "count": 7,
+                          "children": []
+                        },
+                        {
+                          "slot": "calendar-day",
+                          "tag": "button",
+                          "count": 35,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "calendar/range",
+      "component": "calendar",
+      "slug": "range",
+      "title": "A range over two months",
+      "kind": "single",
+      "code": "let day = |d| NaiveDate::from_ymd_opt(2026, 11, d).unwrap_or_default();\nCalendar::new(\"window\")\n    .range_names(\"from\", \"to\")\n    .today(day(3))\n    .mode(CalendarMode::Range)\n    .months(2)\n    .selected_range(DateRange::new(day(9), day(17)))",
+      "src": "/ui-preview/calendar/range.html",
+      "height": 340,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "calendar",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "calendar-nav",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "calendar-months",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "calendar-month",
+                  "tag": "div",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "calendar-head",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "calendar-caption",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "calendar-grid",
+                      "tag": "table",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "calendar-weekday",
+                          "tag": "th",
+                          "count": 7,
+                          "children": []
+                        },
+                        {
+                          "slot": "calendar-day",
+                          "tag": "button",
+                          "count": 35,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "calendar/limits",
+      "component": "calendar",
+      "slug": "limits",
+      "title": "Days that can't be chosen",
+      "kind": "single",
+      "code": "let day = |m, d| NaiveDate::from_ymd_opt(2026, m, d).unwrap_or_default();\nCalendar::new(\"visit\")\n    .name(\"visit\")\n    .today(day(11, 3))\n    .rules(\n        DateRules::new()\n            .min(day(11, 2))\n            .max(day(12, 31))\n            .disable_weekdays([Weekday::Sat, Weekday::Sun])\n            .disable_dates([day(11, 11)])\n            .disable_range(day(12, 24), day(12, 26))\n            .disable_if(|date| date.day() == 13),\n    )",
+      "src": "/ui-preview/calendar/limits.html",
+      "height": 340,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "calendar",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "calendar-nav",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "calendar-months",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "calendar-month",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "calendar-head",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "calendar-caption",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "calendar-grid",
+                      "tag": "table",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "calendar-weekday",
+                          "tag": "th",
+                          "count": 7,
+                          "children": []
+                        },
+                        {
+                          "slot": "calendar-day",
+                          "tag": "button",
+                          "count": 35,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "calendar/weeks",
+      "component": "calendar",
+      "slug": "weeks",
+      "title": "Week numbers",
+      "kind": "single",
+      "code": "Calendar::new(\"weeks\")\n    .today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default())\n    .week_start(Weekday::Mon)\n    .week_numbers()\n    .fixed_weeks()",
+      "src": "/ui-preview/calendar/weeks.html",
+      "height": 340,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "calendar",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "calendar-nav",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "calendar-months",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "calendar-month",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "calendar-head",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "calendar-caption",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "calendar-grid",
+                      "tag": "table",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "calendar-weeknum",
+                          "tag": "th",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "calendar-weekday",
+                          "tag": "th",
+                          "count": 7,
+                          "children": []
+                        },
+                        {
+                          "slot": "calendar-weeknum",
+                          "tag": "th",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "calendar-day",
+                          "tag": "span",
+                          "count": 7,
+                          "children": []
+                        },
+                        {
+                          "slot": "calendar-weeknum",
+                          "tag": "th",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "calendar-day",
+                          "tag": "button",
+                          "count": 7,
+                          "children": []
+                        },
+                        {
+                          "slot": "calendar-weeknum",
+                          "tag": "th",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "calendar-day",
+                          "tag": "button",
+                          "count": 7,
+                          "children": []
+                        },
+                        {
+                          "slot": "calendar-weeknum",
+                          "tag": "th",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "calendar-day",
+                          "tag": "button",
+                          "count": 7,
+                          "children": []
+                        },
+                        {
+                          "slot": "calendar-weeknum",
+                          "tag": "th",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "calendar-day",
+                          "tag": "button",
+                          "count": 7,
+                          "children": []
+                        },
+                        {
+                          "slot": "calendar-weeknum",
+                          "tag": "th",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "calendar-day",
+                          "tag": "button",
+                          "count": 7,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "calendar/dropdowns",
+      "component": "calendar",
+      "slug": "dropdowns",
+      "title": "A date of birth",
+      "kind": "single",
+      "code": "let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();\nCalendar::new(\"born\")\n    .name(\"born\")\n    .today(today)\n    .month(NaiveDate::from_ymd_opt(1990, 5, 1).unwrap_or_default())\n    .caption(CaptionLayout::Dropdowns)\n    .max(today)",
+      "src": "/ui-preview/calendar/dropdowns.html",
+      "height": 340,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "calendar",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "calendar-nav",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "button",
+                  "tag": "button",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "icon",
+                      "tag": "svg",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "calendar-months",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "calendar-month",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "calendar-head",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "calendar-caption",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "native-select",
+                              "tag": "select",
+                              "count": 2,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "calendar-grid",
+                      "tag": "table",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "calendar-weekday",
+                          "tag": "th",
+                          "count": 7,
+                          "children": []
+                        },
+                        {
+                          "slot": "calendar-day",
+                          "tag": "span",
+                          "count": 35,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "calendar/locales",
+      "component": "calendar",
+      "slug": "locales",
+      "title": "Languages",
+      "kind": "gallery",
+      "code": "let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();\n[\n    (\n        \"de\",\n        Calendar::new(\"de\")\n            .today(today)\n            .locale(DateLocale::of(\"de\"))\n            .week_numbers(),\n    ),\n    (\n        \"ja\",\n        Calendar::new(\"ja\")\n            .today(today)\n            .locale(DateLocale::of(\"ja\")),\n    ),\n    (\n        \"ar\",\n        Calendar::new(\"ar\")\n            .today(today)\n            .locale(DateLocale::of(\"ar\")),\n    ),\n]",
+      "src": "/ui-preview/calendar/locales.html",
+      "height": 340,
+      "layout": "center",
+      "cells": "medium",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [
+        "de",
+        "ja",
+        "ar"
+      ],
+      "slots": []
+    },
+    {
+      "id": "calendar/states",
+      "component": "calendar",
+      "slug": "states",
+      "title": "States",
+      "kind": "gallery",
+      "code": "let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();\nlet chosen = NaiveDate::from_ymd_opt(2026, 11, 12).unwrap_or_default();\n[\n    (\n        \"Read only\",\n        Calendar::new(\"ro\")\n            .today(today)\n            .selected(chosen)\n            .read_only(),\n    ),\n    (\n        \"Disabled\",\n        Calendar::new(\"off\")\n            .today(today)\n            .selected(chosen)\n            .disabled(true),\n    ),\n]",
+      "src": "/ui-preview/calendar/states.html",
+      "height": 340,
+      "layout": "center",
+      "cells": "medium",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [
+        "Read only",
+        "Disabled"
+      ],
+      "slots": []
+    },
+    {
+      "id": "date-picker/thumb",
+      "component": "date-picker",
+      "slug": "thumb",
+      "title": "A date picker",
+      "kind": "single",
+      "code": "DatePicker::new(\"thumb\")\n    .today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default())\n    .value(NaiveDate::from_ymd_opt(2026, 11, 12).unwrap_or_default())\n    .label(\"Date\")",
+      "src": "/ui-preview/date-picker/thumb.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-e302c03dc72e.js",
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "date-picker",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "input",
+              "tag": "input",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "date-picker-ui",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "input-group",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "input",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "input-group-addon",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "popover-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "calendar",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "calendar-nav",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 2,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "calendar-months",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "date-picker/default",
+      "component": "date-picker",
+      "slug": "default",
+      "title": "A date picker",
+      "kind": "single",
+      "code": "Field::new(\"due\", \"Due date\")\n    .help(\"Type it as 11/30/2026, or pick it.\")\n    .control(\n        DatePicker::new(\"due\").today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default()),\n    )",
+      "src": "/ui-preview/date-picker/default.html",
+      "height": 420,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-e302c03dc72e.js",
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "date-picker",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "input",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "date-picker-ui",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "input-group",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "input",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "input-group-addon",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "calendar",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "calendar-nav",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 2,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "calendar-months",
+                              "tag": "div",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "field-description",
+              "tag": "p",
+              "count": 1,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "date-picker/options",
+      "component": "date-picker",
+      "slug": "options",
+      "title": "A value, Today and Clear",
+      "kind": "single",
+      "code": "Field::new(\"follow-up\", \"Follow up\").control(\n    DatePicker::new(\"follow_up\")\n        .today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default())\n        .value(NaiveDate::from_ymd_opt(2026, 11, 12).unwrap_or_default())\n        .clearable()\n        .with_today(),\n)",
+      "src": "/ui-preview/date-picker/options.html",
+      "height": 420,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-e302c03dc72e.js",
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "date-picker",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "input",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "date-picker-ui",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "input-group",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "input",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "input-group-addon",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 2,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "calendar",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "calendar-nav",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 2,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "calendar-months",
+                              "tag": "div",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "date-picker-foot",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 2,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "date-picker/states",
+      "component": "date-picker",
+      "slug": "states",
+      "title": "States",
+      "kind": "gallery",
+      "code": "let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();\nlet chosen = NaiveDate::from_ymd_opt(2026, 11, 12).unwrap_or_default();\n[\n    (\n        \"Invalid\",\n        Field::new(\"late\", \"Late date\")\n            .error(\"Choose a weekday.\")\n            .control(\n                DatePicker::new(\"late\")\n                    .today(today)\n                    .value_text(\"garbage\")\n                    .invalid(true),\n            ),\n    ),\n    (\n        \"Disabled\",\n        Field::new(\"off\", \"Disabled\").control(\n            DatePicker::new(\"off\")\n                .today(today)\n                .value(chosen)\n                .disabled(true),\n        ),\n    ),\n    (\n        \"Read only\",\n        Field::new(\"ro\", \"Read only\")\n            .control(DatePicker::new(\"ro\").today(today).value(chosen).read_only()),\n    ),\n]",
+      "src": "/ui-preview/date-picker/states.html",
+      "height": 140,
+      "layout": "center",
+      "cells": "medium",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-e302c03dc72e.js",
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [
+        "Invalid",
+        "Disabled",
+        "Read only"
+      ],
+      "slots": []
+    },
+    {
+      "id": "date-picker/button",
+      "component": "date-picker",
+      "slug": "button",
+      "title": "One button",
+      "kind": "single",
+      "code": "DatePicker::new(\"when\")\n    .today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default())\n    .style(PickerStyle::Button)\n    .placeholder(\"Pick a day\")\n    .clearable()\n    .label(\"When\")",
+      "src": "/ui-preview/date-picker/button.html",
+      "height": 420,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-e302c03dc72e.js",
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "date-picker",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "input",
+              "tag": "input",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "date-picker-ui",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "date-picker-buttons",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "popover-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "calendar",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "calendar-nav",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 2,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "calendar-months",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "date-picker-foot",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "date-picker/locales",
+      "component": "date-picker",
+      "slug": "locales",
+      "title": "Languages",
+      "kind": "gallery",
+      "code": "let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();\nlet chosen = NaiveDate::from_ymd_opt(2026, 11, 12).unwrap_or_default();\n[\n    (\n        \"de\",\n        DatePicker::new(\"de\")\n            .today(today)\n            .locale(DateLocale::of(\"de\"))\n            .value(chosen)\n            .label(\"Datum\"),\n    ),\n    (\n        \"ja\",\n        DatePicker::new(\"ja\")\n            .today(today)\n            .locale(DateLocale::of(\"ja\"))\n            .value(chosen)\n            .label(\"日付\"),\n    ),\n    (\n        \"ar\",\n        DatePicker::new(\"ar\")\n            .today(today)\n            .locale(DateLocale::of(\"ar\"))\n            .value(chosen)\n            .label(\"التاريخ\"),\n    ),\n]",
+      "src": "/ui-preview/date-picker/locales.html",
+      "height": 140,
+      "layout": "center",
+      "cells": "medium",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-e302c03dc72e.js",
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [
+        "de",
+        "ja",
+        "ar"
+      ],
+      "slots": []
+    },
+    {
+      "id": "date-picker/birth",
+      "component": "date-picker",
+      "slug": "birth",
+      "title": "A date of birth",
+      "kind": "single",
+      "code": "let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();\nField::new(\"born\", \"Date of birth\").control(\n    DatePicker::new(\"born\")\n        .today(today)\n        .caption(CaptionLayout::Dropdowns)\n        .max(today)\n        .value(NaiveDate::from_ymd_opt(1990, 5, 17).unwrap_or_default()),\n)",
+      "src": "/ui-preview/date-picker/birth.html",
+      "height": 440,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-e302c03dc72e.js",
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "date-picker",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "input",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "date-picker-ui",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "input-group",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "input",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "input-group-addon",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "calendar",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "calendar-nav",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 2,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "calendar-months",
+                              "tag": "div",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "date-range-picker/thumb",
+      "component": "date-range-picker",
+      "slug": "thumb",
+      "title": "A range picker",
+      "kind": "single",
+      "code": "let day = |d| NaiveDate::from_ymd_opt(2026, 11, d).unwrap_or_default();\nDateRangePicker::new(\"from\", \"to\")\n    .today(day(3))\n    .title(\"Created\")\n    .value(DateRange::new(day(1), day(3)))",
+      "src": "/ui-preview/date-range-picker/thumb.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-e302c03dc72e.js",
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "date-range-picker",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "range-native",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "range-native-field",
+                  "tag": "label",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "input",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "date-range-ui",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "date-range-buttons",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "range-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "range-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "popover-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "range-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "range-presets",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 7,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "calendar",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "calendar-nav",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 2,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "calendar-months",
+                              "tag": "div",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "range-foot",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "date-range-picker/default",
+      "component": "date-range-picker",
+      "slug": "default",
+      "title": "A range picker",
+      "kind": "single",
+      "code": "DateRangePicker::new(\"from\", \"to\")\n    .today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default())\n    .week_start(Weekday::Mon)\n    .title(\"Created\")",
+      "src": "/ui-preview/date-range-picker/default.html",
+      "height": 460,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-e302c03dc72e.js",
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "date-range-picker",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "range-native",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "range-native-field",
+                  "tag": "label",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "input",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "date-range-ui",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "date-range-buttons",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "range-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "range-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "popover-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "range-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "range-presets",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 7,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "calendar",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "calendar-nav",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 2,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "calendar-months",
+                              "tag": "div",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "range-foot",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "date-range-picker/presets",
+      "component": "date-range-picker",
+      "slug": "presets",
+      "title": "Presets",
+      "kind": "single",
+      "code": "DateRangePicker::new(\"from\", \"to\")\n    .today(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default())\n    .presets([\n        DatePreset::Today,\n        DatePreset::Last7Days,\n        DatePreset::ThisMonth,\n        DatePreset::LastMonth,\n        DatePreset::ThisQuarter,\n        DatePreset::ThisYear,\n    ])\n    .preset_label(DatePreset::Last7Days, \"The last week\")\n    .title(\"Closed\")",
+      "src": "/ui-preview/date-range-picker/presets.html",
+      "height": 460,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-e302c03dc72e.js",
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "date-range-picker",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "range-native",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "range-native-field",
+                  "tag": "label",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "input",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "date-range-ui",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "date-range-buttons",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "range-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "range-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "popover-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "range-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "range-presets",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 7,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "calendar",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "calendar-nav",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 2,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "calendar-months",
+                              "tag": "div",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "range-foot",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "date-range-picker/confirm",
+      "component": "date-range-picker",
+      "slug": "confirm",
+      "title": "Apply and Cancel",
+      "kind": "single",
+      "code": "let day = |m, d| NaiveDate::from_ymd_opt(2026, m, d).unwrap_or_default();\nDateRangePicker::new(\"from\", \"to\")\n    .today(day(11, 3))\n    .value(DateRange::new(day(10, 27), day(11, 3)))\n    .confirm()\n    .title(\"Window\")",
+      "src": "/ui-preview/date-range-picker/confirm.html",
+      "height": 500,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-e302c03dc72e.js",
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "date-range-picker",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "range-native",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "range-native-field",
+                  "tag": "label",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "input",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "date-range-ui",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "date-range-buttons",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "range-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "range-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "popover-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "range-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "range-presets",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 7,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "calendar",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "calendar-nav",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 2,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "calendar-months",
+                              "tag": "div",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "range-foot",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "range-foot-actions",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 2,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "date-range-picker/limits",
+      "component": "date-range-picker",
+      "slug": "limits",
+      "title": "Limits",
+      "kind": "single",
+      "code": "let day = |m, d| NaiveDate::from_ymd_opt(2026, m, d).unwrap_or_default();\n// The limits are one value: the same one holds the request on the server.\nlet limits = RangeRules::new(DateRules::new().min(day(10, 15)).max(day(11, 20)))\n    .min_days(2)\n    .max_days(10);\nDateRangePicker::new(\"from\", \"to\")\n    .today(day(11, 3))\n    .limits(limits)\n    .presets([\n        DatePreset::Today,\n        DatePreset::Last7Days,\n        DatePreset::AllTime,\n    ])\n    .title(\"Booking\")",
+      "src": "/ui-preview/date-range-picker/limits.html",
+      "height": 460,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-e302c03dc72e.js",
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "date-range-picker",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "range-native",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "range-native-field",
+                  "tag": "label",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "input",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "date-range-ui",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "date-range-buttons",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "range-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "range-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "popover-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "range-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "range-presets",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 4,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "calendar",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "calendar-nav",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 2,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "calendar-months",
+                              "tag": "div",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "range-foot",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "date-range-picker/report",
+      "component": "date-range-picker",
+      "slug": "report",
+      "title": "A report's window in the address",
+      "kind": "single",
+      "code": "let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();\n// The picker lives in a GET form, so the window is in the address, and the form\n// fetches its region again when the window changes.\nel(\"form\")\n    .attr(\"method\", \"get\")\n    .attr(\"action\", \"/reports\")\n    .attr(\"data-ui-target\", \"report\")\n    .children((\n        DateRangePicker::new(\"from\", \"to\")\n            .today(today)\n            .title(\"Created\")\n            .value(DateRange::new(today - chrono::Duration::days(6), today)),\n        Button::primary(\"Apply\").submit(),\n    ))\n    .into()",
+      "src": "/ui-preview/date-range-picker/report.html",
+      "height": 460,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-e302c03dc72e.js",
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "date-range-picker",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "range-native",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "range-native-field",
+                  "tag": "label",
+                  "count": 2,
+                  "children": [
+                    {
+                      "slot": "input",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "date-range-ui",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "date-range-buttons",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 2,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "range-label",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "range-title",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "popover-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "range-body",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "range-presets",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 7,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "calendar",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "calendar-nav",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 2,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "calendar-months",
+                              "tag": "div",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "range-foot",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "button",
+          "tag": "button",
+          "count": 1,
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "time-picker/thumb",
+      "component": "time-picker",
+      "slug": "thumb",
+      "title": "A time picker",
+      "kind": "single",
+      "code": "TimePicker::new(\"thumb\")\n    .value(NaiveTime::from_hms_opt(14, 30, 0).unwrap_or_default())\n    .label(\"Time\")",
+      "src": "/ui-preview/time-picker/thumb.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-e302c03dc72e.js",
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "time-picker",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "input",
+              "tag": "input",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "time-picker-ui",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "input-group",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "input",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "input-group-addon",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "popover-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "time-list",
+                      "tag": "ul",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "time-picker/default",
+      "component": "time-picker",
+      "slug": "default",
+      "title": "A time picker",
+      "kind": "single",
+      "code": "Field::new(\"starts\", \"Starts at\").control(\n    TimePicker::new(\"starts\").value(NaiveTime::from_hms_opt(14, 30, 0).unwrap_or_default()),\n)",
+      "src": "/ui-preview/time-picker/default.html",
+      "height": 380,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-e302c03dc72e.js",
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "time-picker",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "input",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "time-picker-ui",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "input-group",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "input",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "input-group-addon",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "time-list",
+                          "tag": "ul",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "time-picker/clocks",
+      "component": "time-picker",
+      "slug": "clocks",
+      "title": "12 and 24 hours",
+      "kind": "gallery",
+      "code": "let at = NaiveTime::from_hms_opt(15, 5, 0).unwrap_or_default();\n[\n    (\"en\", TimePicker::new(\"en\").value(at).label(\"Time\")),\n    (\n        \"de\",\n        TimePicker::new(\"de\")\n            .locale(DateLocale::of(\"de\"))\n            .value(at)\n            .label(\"Uhrzeit\"),\n    ),\n    (\n        \"en, 24 hour\",\n        TimePicker::new(\"en24\")\n            .clock(Clock::H24)\n            .value(at)\n            .label(\"Time\"),\n    ),\n]",
+      "src": "/ui-preview/time-picker/clocks.html",
+      "height": 140,
+      "layout": "center",
+      "cells": "medium",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-e302c03dc72e.js",
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [
+        "en",
+        "de",
+        "en, 24 hour"
+      ],
+      "slots": []
+    },
+    {
+      "id": "time-picker/rules",
+      "component": "time-picker",
+      "slug": "rules",
+      "title": "Office hours",
+      "kind": "single",
+      "code": "let at = |h| NaiveTime::from_hms_opt(h, 0, 0).unwrap_or_default();\nField::new(\"visit-time\", \"Visit\").control(\n    TimePicker::new(\"visit\").rules(\n        TimeRules::new()\n            .min(at(9))\n            .max(at(17))\n            .unavailable(\n                at(12),\n                NaiveTime::from_hms_opt(12, 59, 0).unwrap_or_default(),\n            )\n            .step_minutes(15),\n    ),\n)",
+      "src": "/ui-preview/time-picker/rules.html",
+      "height": 380,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-e302c03dc72e.js",
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "field",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "label",
+              "tag": "label",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "time-picker",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "input",
+                  "tag": "input",
+                  "count": 1,
+                  "children": []
+                },
+                {
+                  "slot": "time-picker-ui",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "input-group",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "input",
+                          "tag": "input",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "input-group-addon",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "time-list",
+                          "tag": "ul",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "time-picker/states",
+      "component": "time-picker",
+      "slug": "states",
+      "title": "States",
+      "kind": "gallery",
+      "code": "let at = NaiveTime::from_hms_opt(8, 0, 0).unwrap_or_default();\n[\n    (\n        \"Invalid\",\n        TimePicker::new(\"bad\")\n            .value_text(\"soon\")\n            .invalid(true)\n            .label(\"Time\"),\n    ),\n    (\n        \"Disabled\",\n        TimePicker::new(\"off\")\n            .value(at)\n            .disabled(true)\n            .label(\"Time\"),\n    ),\n    (\n        \"Clearable\",\n        TimePicker::new(\"clear\").value(at).clearable().label(\"Time\"),\n    ),\n]",
+      "src": "/ui-preview/time-picker/states.html",
+      "height": 140,
+      "layout": "center",
+      "cells": "medium",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-e302c03dc72e.js",
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [
+        "Invalid",
+        "Disabled",
+        "Clearable"
+      ],
+      "slots": []
+    },
+    {
+      "id": "time-picker/zone",
+      "component": "time-picker",
+      "slug": "zone",
+      "title": "The clock it counts on",
+      "kind": "single",
+      "code": "TimePicker::new(\"meeting\")\n    .value(NaiveTime::from_hms_opt(9, 0, 0).unwrap_or_default())\n    .zone_note(\"Times are in America/New_York.\")\n    .label(\"Meeting\")",
+      "src": "/ui-preview/time-picker/zone.html",
+      "height": 160,
+      "layout": "start",
+      "cells": "narrow",
+      "show": false,
+      "live": false,
+      "width": null,
+      "scripts": [
+        "overlay-e302c03dc72e.js",
+        "dates-63f74eab1b40.js"
+      ],
+      "captions": [],
+      "slots": [
+        {
+          "slot": "time-picker",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "input",
+              "tag": "input",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "time-picker-ui",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "input-group",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "input",
+                      "tag": "input",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "input-group-addon",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "button",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "popover-content",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "time-list",
+                      "tag": "ul",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "field-description",
+              "tag": "p",
               "count": 1,
               "children": []
             }

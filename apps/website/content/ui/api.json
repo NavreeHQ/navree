@@ -1056,6 +1056,251 @@
     ],
     "shared": []
   },
+  "Calendar": {
+    "name": "Calendar",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/dates/calendar.rs",
+    "summary": "A calendar: one or more months, with the days that can be chosen.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "A calendar with this id, showing the month of today."
+      }
+    ],
+    "methods": [
+      {
+        "name": "mode",
+        "generics": "",
+        "args": "mode: CalendarMode",
+        "doc": "Sets how it takes choices."
+      },
+      {
+        "name": "name",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "Names the field that posts the choice: one ISO date, or the dates of `CalendarMode::Multiple` joined by commas. For a range, the first day."
+      },
+      {
+        "name": "range_names",
+        "generics": "",
+        "args": "from: impl Into<String>, to: impl Into<String>",
+        "doc": "Names the two fields that post a range: its first and its last day."
+      },
+      {
+        "name": "selected",
+        "generics": "",
+        "args": "day: NaiveDate",
+        "doc": "The chosen day."
+      },
+      {
+        "name": "selected_days",
+        "generics": "",
+        "args": "days: impl IntoIterator<Item = NaiveDate>",
+        "doc": "The chosen days, for `CalendarMode::Multiple`."
+      },
+      {
+        "name": "selected_range",
+        "generics": "",
+        "args": "range: DateRange",
+        "doc": "The chosen range, for `CalendarMode::Range`."
+      },
+      {
+        "name": "month",
+        "generics": "",
+        "args": "day: NaiveDate",
+        "doc": "The month to open on, given as any day in it. By default the month of the choice, else the month of today."
+      },
+      {
+        "name": "months",
+        "generics": "",
+        "args": "months: u8",
+        "doc": "How many months to show side by side, 1 to 3."
+      },
+      {
+        "name": "rules",
+        "generics": "",
+        "args": "rules: DateRules",
+        "doc": "Which days can't be chosen."
+      },
+      {
+        "name": "min",
+        "generics": "",
+        "args": "day: NaiveDate",
+        "doc": "The earliest day that can be chosen."
+      },
+      {
+        "name": "max",
+        "generics": "",
+        "args": "day: NaiveDate",
+        "doc": "The latest day that can be chosen."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Names and orders the days after a language and region."
+      },
+      {
+        "name": "today",
+        "generics": "",
+        "args": "today: NaiveDate",
+        "doc": "Today, as the page counts it. The calendar marks it and the browser module never asks the clock, so a page is the same wherever it is read. Without it, today is the day in UTC."
+      },
+      {
+        "name": "week_start",
+        "generics": "",
+        "args": "day: Weekday",
+        "doc": "The first day of the week, when the locale's isn't wanted."
+      },
+      {
+        "name": "week_numbers",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the ISO-8601 week number of each row."
+      },
+      {
+        "name": "fixed_weeks",
+        "generics": "",
+        "args": "",
+        "doc": "Always draws six rows, so the calendar doesn't change height from month to month."
+      },
+      {
+        "name": "hide_outside_days",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves out the days of the neighbouring months that fill the first and last rows."
+      },
+      {
+        "name": "caption",
+        "generics": "",
+        "args": "caption: CaptionLayout",
+        "doc": "Sets how the month's heading is drawn."
+      },
+      {
+        "name": "navigation",
+        "generics": "",
+        "args": "navigation: bool",
+        "doc": "Turns the previous and next buttons off."
+      },
+      {
+        "name": "read_only",
+        "generics": "",
+        "args": "",
+        "doc": "Draws the calendar to look at only: no buttons, no tab stops."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Turns the calendar off: nothing can be chosen and nothing is posted."
+      },
+      {
+        "name": "required",
+        "generics": "",
+        "args": "",
+        "doc": "Stops a second click on the chosen day from unchoosing it."
+      },
+      {
+        "name": "size",
+        "generics": "",
+        "args": "size: Size",
+        "doc": "Sets the size of the day cells."
+      },
+      {
+        "name": "limits",
+        "generics": "",
+        "args": "limits: super::RangeRules",
+        "doc": "The days that can't be chosen and the least and most days a range may hold, as one `RangeRules` (see `DateRangePicker::limits`)."
+      },
+      {
+        "name": "min_days",
+        "generics": "",
+        "args": "days: u32",
+        "doc": "The fewest days a range may hold."
+      },
+      {
+        "name": "max_days",
+        "generics": "",
+        "args": "days: u32",
+        "doc": "The most days a range may hold."
+      },
+      {
+        "name": "max_count",
+        "generics": "",
+        "args": "count: u32",
+        "doc": "The most days `CalendarMode::Multiple` may hold."
+      },
+      {
+        "name": "with_today",
+        "generics": "",
+        "args": "",
+        "doc": "Adds a button under the grid that goes to this month, or chooses today."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "Names the calendar for assistive technology."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<crate::node::AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "CalendarMode": {
+    "name": "CalendarMode",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/dates/calendar.rs",
+    "summary": "How a calendar takes choices.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Single",
+        "doc": "One day.",
+        "default": true
+      },
+      {
+        "name": "Multiple",
+        "doc": "Any number of days, posted as one comma-separated field.",
+        "default": false
+      },
+      {
+        "name": "Range",
+        "doc": "A run of days: a click starts it and a second click ends it.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "CaptionLayout": {
+    "name": "CaptionLayout",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/dates/calendar.rs",
+    "summary": "How the month's heading is drawn.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Label",
+        "doc": "The month and year as text.",
+        "default": true
+      },
+      {
+        "name": "Dropdowns",
+        "doc": "A list of months and a list of years: the way to a date of birth in a few clicks. Only a calendar of one month has them.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "Card": {
     "name": "Card",
     "kind": "struct",
@@ -1344,6 +1589,27 @@
       }
     ],
     "variants": [],
+    "shared": []
+  },
+  "Clock": {
+    "name": "Clock",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/dates/locale.rs",
+    "summary": "How hours are counted on a clock face.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "H12",
+        "doc": "1 to 12 with a day or night marker.",
+        "default": false
+      },
+      {
+        "name": "H24",
+        "doc": "0 to 23.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "Cmd": {
@@ -2193,6 +2459,706 @@
     "variants": [],
     "shared": []
   },
+  "DateLocale": {
+    "name": "DateLocale",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/dates/locale.rs",
+    "summary": "A locale for dates and times. Cheap to clone.",
+    "constructors": [
+      {
+        "name": "english",
+        "generics": "",
+        "args": "",
+        "doc": "American English."
+      },
+      {
+        "name": "of",
+        "generics": "",
+        "args": "tag: &str",
+        "doc": "The locale for a tag such as `en`, `de-AT`, `zh-Hans-CN` or `pt_BR`. The language picks the names; the region sets the week's first day and, for a few English regions, the usual clock and the order of a date. A tag the table doesn't have falls back to English."
+      },
+      {
+        "name": "custom",
+        "generics": "",
+        "args": "data: LocaleData",
+        "doc": "A locale from data a page built itself."
+      }
+    ],
+    "methods": [
+      {
+        "name": "with_first_day",
+        "generics": "",
+        "args": "day: Weekday",
+        "doc": "This locale with the first day of the week changed."
+      },
+      {
+        "name": "with_clock",
+        "generics": "",
+        "args": "clock: Clock",
+        "doc": "This locale with its clock changed."
+      },
+      {
+        "name": "with_labels",
+        "generics": "",
+        "args": "labels: DateLabels",
+        "doc": "This locale with other words on the controls."
+      },
+      {
+        "name": "month_name",
+        "generics": "",
+        "args": "month: u32",
+        "doc": "The name of month `month`, 1 to 12, on its own. Out-of-range numbers give an empty name."
+      },
+      {
+        "name": "month_in_date",
+        "generics": "",
+        "args": "month: u32",
+        "doc": "The name of month `month` as it reads inside a date."
+      },
+      {
+        "name": "month_short",
+        "generics": "",
+        "args": "month: u32",
+        "doc": "The short name of month `month`."
+      },
+      {
+        "name": "weekday_name",
+        "generics": "",
+        "args": "day: Weekday",
+        "doc": "The name of a weekday."
+      },
+      {
+        "name": "weekday_short",
+        "generics": "",
+        "args": "day: Weekday",
+        "doc": "The short name of a weekday."
+      },
+      {
+        "name": "format_range",
+        "generics": "",
+        "args": "range: &DateRange, today: NaiveDate",
+        "doc": "A range as a chip reads it: `Nov 1 – 3`, `Nov 28 – Dec 3`, `Dec 28, 2025 – Jan 4, 2026`. The year is left out when it is the year of `today` and the range stays inside it. One day reads as that day alone."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "DatePicker": {
+    "name": "DatePicker",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/dates/picker.rs",
+    "summary": "A date field with a calendar.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "A picker that posts as `name`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the id of the picker's own element. The control a label points at is the native input inside it, which a `Field` gives its id."
+      },
+      {
+        "name": "value",
+        "generics": "",
+        "args": "day: NaiveDate",
+        "doc": "Sets the date."
+      },
+      {
+        "name": "value_opt",
+        "generics": "",
+        "args": "day: Option<NaiveDate>",
+        "doc": "Sets the date, or leaves the picker empty."
+      },
+      {
+        "name": "value_text",
+        "generics": "",
+        "args": "text: &str",
+        "doc": "Sets the value from text a form sent back: an ISO date shows as that date; anything else shows as typed, so a person sees what they sent."
+      },
+      {
+        "name": "rules",
+        "generics": "",
+        "args": "rules: DateRules",
+        "doc": "Which days can't be chosen."
+      },
+      {
+        "name": "min",
+        "generics": "",
+        "args": "day: NaiveDate",
+        "doc": "The earliest day that can be chosen."
+      },
+      {
+        "name": "max",
+        "generics": "",
+        "args": "day: NaiveDate",
+        "doc": "The latest day that can be chosen."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Names and orders the days after a language and region."
+      },
+      {
+        "name": "today",
+        "generics": "",
+        "args": "today: NaiveDate",
+        "doc": "Today, as the page counts it. Without it, today is the day in UTC."
+      },
+      {
+        "name": "week_start",
+        "generics": "",
+        "args": "day: Weekday",
+        "doc": "The first day of the week, when the locale's isn't wanted."
+      },
+      {
+        "name": "style",
+        "generics": "",
+        "args": "style: PickerStyle",
+        "doc": "Sets the control: a text box, or one button."
+      },
+      {
+        "name": "placeholder",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "The hint in an empty box, or on an empty button."
+      },
+      {
+        "name": "clearable",
+        "generics": "",
+        "args": "",
+        "doc": "Adds a button that empties the picker."
+      },
+      {
+        "name": "required",
+        "generics": "",
+        "args": "",
+        "doc": "Requires a date."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Turns the picker off: nothing can be chosen and nothing is posted."
+      },
+      {
+        "name": "read_only",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the date without letting it change. It still posts."
+      },
+      {
+        "name": "invalid",
+        "generics": "",
+        "args": "invalid: bool",
+        "doc": "Marks it invalid."
+      },
+      {
+        "name": "with_today",
+        "generics": "",
+        "args": "",
+        "doc": "Adds a Today button under the calendar."
+      },
+      {
+        "name": "caption",
+        "generics": "",
+        "args": "caption: CaptionLayout",
+        "doc": "Draws month and year lists in the calendar's heading."
+      },
+      {
+        "name": "months",
+        "generics": "",
+        "args": "months: u8",
+        "doc": "How many months the calendar shows, 1 or 2."
+      },
+      {
+        "name": "week_numbers",
+        "generics": "",
+        "args": "",
+        "doc": "Shows week numbers in the calendar."
+      },
+      {
+        "name": "fixed_weeks",
+        "generics": "",
+        "args": "",
+        "doc": "Draws six rows in every month."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "Names the picker for assistive technology, when no label points at it."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "DatePreset": {
+    "name": "DatePreset",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/dates/range.rs",
+    "summary": "A range the picker offers by name, counted from a day the app names (its idea of today, in the zone that matters). *This week*, *this month*, *this quarter* and *this year* run up to today; the *last* ones are whole periods; *last 7 days* and the like end today and count it.",
+    "constructors": [
+      {
+        "name": "from_key",
+        "generics": "",
+        "args": "key: &str",
+        "doc": "The preset with this key."
+      }
+    ],
+    "methods": [
+      {
+        "name": "key",
+        "generics": "",
+        "args": "",
+        "doc": "A stable name for the preset."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "",
+        "doc": "The words on its button, in English. The picker writes them in its locale's words (`DateLabels::preset`); a page sets its own with `DateRangePicker::preset_label`."
+      },
+      {
+        "name": "range",
+        "generics": "",
+        "args": "today: NaiveDate, week_start: Weekday, earliest: Option<NaiveDate>",
+        "doc": "The range, counted from `today`. `week_start` is the first day of the week; `earliest` is where *all time* begins (`None` makes *all time* no range)."
+      }
+    ],
+    "variants": [
+      {
+        "name": "Today",
+        "doc": "Today only.",
+        "default": false
+      },
+      {
+        "name": "Yesterday",
+        "doc": "Yesterday only.",
+        "default": false
+      },
+      {
+        "name": "ThisWeek",
+        "doc": "The start of this week to today.",
+        "default": false
+      },
+      {
+        "name": "LastWeek",
+        "doc": "The whole of last week.",
+        "default": false
+      },
+      {
+        "name": "Last7Days",
+        "doc": "The last 7 days, today included.",
+        "default": false
+      },
+      {
+        "name": "Last14Days",
+        "doc": "The last 14 days, today included.",
+        "default": false
+      },
+      {
+        "name": "Last30Days",
+        "doc": "The last 30 days, today included.",
+        "default": false
+      },
+      {
+        "name": "ThisMonth",
+        "doc": "The first of this month to today.",
+        "default": false
+      },
+      {
+        "name": "LastMonth",
+        "doc": "The whole of last month.",
+        "default": false
+      },
+      {
+        "name": "ThisQuarter",
+        "doc": "The start of this quarter to today.",
+        "default": false
+      },
+      {
+        "name": "LastQuarter",
+        "doc": "The whole of last quarter.",
+        "default": false
+      },
+      {
+        "name": "ThisYear",
+        "doc": "1 January to today.",
+        "default": false
+      },
+      {
+        "name": "LastYear",
+        "doc": "The whole of last year.",
+        "default": false
+      },
+      {
+        "name": "AllTime",
+        "doc": "From the picker's earliest day to today. Needs a `min`.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
+  "DateRange": {
+    "name": "DateRange",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/dates/range.rs",
+    "summary": "From one day to another, both included. `from` is never after `to`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "a: NaiveDate, b: NaiveDate",
+        "doc": "A range between two days, given in either order."
+      },
+      {
+        "name": "single",
+        "generics": "",
+        "args": "day: NaiveDate",
+        "doc": "A range of one day."
+      },
+      {
+        "name": "parse",
+        "generics": "",
+        "args": "from: &str, to: &str",
+        "doc": "Reads two `YYYY-MM-DD` texts. One that doesn't parse gives `None`; a pair in the wrong order is put right."
+      }
+    ],
+    "methods": [
+      {
+        "name": "day_count",
+        "generics": "",
+        "args": "",
+        "doc": "How many days it holds."
+      },
+      {
+        "name": "contains",
+        "generics": "",
+        "args": "day: NaiveDate",
+        "doc": "Whether `day` is in it."
+      },
+      {
+        "name": "utc_bounds",
+        "generics": "<Tz: TimeZone>",
+        "args": "zone: &Tz",
+        "doc": "The instants the range spans in a zone, as `[start, end)`: the first moment of `from` and the first moment of the day after `to`. A day whose midnight the zone skipped starts when the clocks jump."
+      },
+      {
+        "name": "days",
+        "generics": "",
+        "args": "",
+        "doc": "Every day in the range, in order."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "DateRangePicker": {
+    "name": "DateRangePicker",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/dates/picker.rs",
+    "summary": "A range of days from two dates: one button, and a popover with presets beside a calendar of two months.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "from_name: impl Into<String>, to_name: impl Into<String>",
+        "doc": "A picker that posts its first day as `from_name` and its last as `to_name`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the id of the picker's own element."
+      },
+      {
+        "name": "value",
+        "generics": "",
+        "args": "range: DateRange",
+        "doc": "Sets the range."
+      },
+      {
+        "name": "value_opt",
+        "generics": "",
+        "args": "range: Option<DateRange>",
+        "doc": "Sets the range, or leaves the picker empty."
+      },
+      {
+        "name": "rules",
+        "generics": "",
+        "args": "rules: DateRules",
+        "doc": "Which days can't be chosen. A range may not hold a day that can't be chosen."
+      },
+      {
+        "name": "limits",
+        "generics": "",
+        "args": "limits: RangeRules",
+        "doc": "The days that can't be chosen and the least and most days a range may hold, as one value. Hold the request to the same `RangeRules` with `DateRangeQuery::checked`: then what the browser lets a person pick is what the server accepts."
+      },
+      {
+        "name": "min",
+        "generics": "",
+        "args": "day: NaiveDate",
+        "doc": "The earliest day that can be chosen."
+      },
+      {
+        "name": "max",
+        "generics": "",
+        "args": "day: NaiveDate",
+        "doc": "The latest day that can be chosen."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Names and orders the days after a language and region."
+      },
+      {
+        "name": "today",
+        "generics": "",
+        "args": "today: NaiveDate",
+        "doc": "Today, as the page counts it: in the zone of the workspace or the person that the page's days are counted in. Every preset is counted from it."
+      },
+      {
+        "name": "week_start",
+        "generics": "",
+        "args": "day: Weekday",
+        "doc": "The first day of the week, for the calendar and for the week presets."
+      },
+      {
+        "name": "presets",
+        "generics": "",
+        "args": "presets: impl IntoIterator<Item = DatePreset>",
+        "doc": "The presets to offer, in order. An empty list shows none."
+      },
+      {
+        "name": "preset_label",
+        "generics": "",
+        "args": "preset: DatePreset, text: impl Into<String>",
+        "doc": "Words for one preset's button, in place of the English ones."
+      },
+      {
+        "name": "without_custom",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves out the \"Custom range\" entry that sends a person to the calendar."
+      },
+      {
+        "name": "months",
+        "generics": "",
+        "args": "months: u8",
+        "doc": "How many months the calendar shows, 1 or 2. Below 640 pixels it shows one."
+      },
+      {
+        "name": "min_days",
+        "generics": "",
+        "args": "days: u32",
+        "doc": "The fewest days a range may hold."
+      },
+      {
+        "name": "max_days",
+        "generics": "",
+        "args": "days: u32",
+        "doc": "The most days a range may hold."
+      },
+      {
+        "name": "placeholder",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "The words on the button while no range is chosen."
+      },
+      {
+        "name": "title",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "A title shown on the button before the range, such as \"Created\"."
+      },
+      {
+        "name": "not_clearable",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves out the button that empties the picker."
+      },
+      {
+        "name": "confirm",
+        "generics": "",
+        "args": "",
+        "doc": "Holds a choice until Apply is pressed. Cancel, Escape and a click outside drop it."
+      },
+      {
+        "name": "required",
+        "generics": "",
+        "args": "",
+        "doc": "Requires a range. The check is the server's: a hidden field can't show the browser's own message."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Turns the picker off: nothing can be chosen and nothing is posted."
+      },
+      {
+        "name": "invalid",
+        "generics": "",
+        "args": "invalid: bool",
+        "doc": "Marks it invalid."
+      },
+      {
+        "name": "week_numbers",
+        "generics": "",
+        "args": "",
+        "doc": "Shows week numbers in the calendar."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "DateRangeQuery": {
+    "name": "DateRangeQuery",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/dates/range.rs",
+    "summary": "A range as it arrives in a query string, before it is checked. Axum-style extractors fill it from `?from=2026-11-01&to=2026-11-03`.",
+    "constructors": [],
+    "methods": [
+      {
+        "name": "range",
+        "generics": "",
+        "args": "",
+        "doc": "The range, when both ends are dates. A pair in the wrong order is put right; anything else is no range, never an error."
+      },
+      {
+        "name": "checked",
+        "generics": "",
+        "args": "limits: &RangeRules",
+        "doc": "The range held to `limits`: `Ok(None)` when there is no range (an end is missing or not a date), `Ok(Some(range))` when there is one the limits allow, and the reason in `Err` when there is one they refuse. The same `RangeRules` the picker was given, so what the browser held a person to is what the server holds the request to."
+      },
+      {
+        "name": "range_within",
+        "generics": "",
+        "args": "limits: &RangeRules",
+        "doc": "The range, when it is one the limits allow; no range when it is not (a page that would rather show its default window than an error)."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "DateRules": {
+    "name": "DateRules",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/dates/rules.rs",
+    "summary": "The days a calendar will not let a person choose.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Rules that allow every day."
+      }
+    ],
+    "methods": [
+      {
+        "name": "min",
+        "generics": "",
+        "args": "day: NaiveDate",
+        "doc": "The earliest day that can be chosen."
+      },
+      {
+        "name": "max",
+        "generics": "",
+        "args": "day: NaiveDate",
+        "doc": "The latest day that can be chosen."
+      },
+      {
+        "name": "disable_weekdays",
+        "generics": "",
+        "args": "days: impl IntoIterator<Item = Weekday>",
+        "doc": "Turns weekdays off."
+      },
+      {
+        "name": "disable_dates",
+        "generics": "",
+        "args": "days: impl IntoIterator<Item = NaiveDate>",
+        "doc": "Turns single days off."
+      },
+      {
+        "name": "disable_range",
+        "generics": "",
+        "args": "from: NaiveDate, to: NaiveDate",
+        "doc": "Turns a run of days off, both ends included. Given backwards, it is put right."
+      },
+      {
+        "name": "disable_if",
+        "generics": "",
+        "args": "rule: impl Fn(NaiveDate) -> bool + Send + Sync + 'static",
+        "doc": "Turns off every day the function answers `true` for. The calendar asks it for the days it can show (three years around the month it opens on) and stops navigation at the edges of that window; the server asks it for each date that comes back."
+      },
+      {
+        "name": "earliest",
+        "generics": "",
+        "args": "",
+        "doc": "The earliest day, when set."
+      },
+      {
+        "name": "latest",
+        "generics": "",
+        "args": "",
+        "doc": "The latest day, when set."
+      },
+      {
+        "name": "has_rule",
+        "generics": "",
+        "args": "",
+        "doc": "Whether a rule function is set."
+      },
+      {
+        "name": "check",
+        "generics": "",
+        "args": "day: NaiveDate",
+        "doc": "Why `day` can't be chosen, or `Ok` when it can."
+      },
+      {
+        "name": "allows",
+        "generics": "",
+        "args": "day: NaiveDate",
+        "doc": "Whether `day` can be chosen."
+      },
+      {
+        "name": "check_range",
+        "generics": "",
+        "args": "range: &DateRange, min_days: Option<u32>, max_days: Option<u32>",
+        "doc": "Why `range` can't be chosen: an end that is off, a day between that is off, or a length outside `min_days` and `max_days`. The same check the browser makes as a range is picked."
+      },
+      {
+        "name": "blocks_span",
+        "generics": "",
+        "args": "from: NaiveDate, to: NaiveDate",
+        "doc": "Whether any day from `from` to `to` can't be chosen. The limits, the weekdays, the listed days and the listed runs are asked as ranges, so the cost is that of the rules and not of the days in the span. Only a rule function must be asked a day at a time, and for that a span of more than 40,000 days (about 110 years, more than any calendar the browser can show is given) counts as blocked."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Dialog": {
     "name": "Dialog",
     "kind": "struct",
@@ -2699,6 +3665,12 @@
         "generics": "",
         "args": "token: impl Into<String>",
         "doc": "Puts the session's CSRF token in the form as the field `_csrf`, which is how a plain form with JavaScript off proves it came from this site. The runtime sends the token as a header itself, so this costs nothing with JavaScript on."
+      },
+      {
+        "name": "dates",
+        "generics": "",
+        "args": "locale: DateLocale, today: chrono::NaiveDate",
+        "doc": "Names the days and times of the form's date and time pickers after a language and region, and says what today is. Without a day, today is the day in UTC."
       },
       {
         "name": "submit",
@@ -4019,6 +4991,27 @@
       }
     ]
   },
+  "PickerStyle": {
+    "name": "PickerStyle",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/dates/picker.rs",
+    "summary": "What a picker's control looks like.",
+    "constructors": [],
+    "methods": [],
+    "variants": [
+      {
+        "name": "Input",
+        "doc": "A text box you can type in, with a button for the calendar.",
+        "default": true
+      },
+      {
+        "name": "Button",
+        "doc": "One button that shows the date, for toolbars and filter rows. No typing.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "Popover": {
     "name": "Popover",
     "kind": "struct",
@@ -4244,6 +5237,60 @@
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "RangeRules": {
+    "name": "RangeRules",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/dates/rules.rs",
+    "summary": "The limits of a range, written once: the days that can't be chosen, and the fewest and most days a range may hold. Give it to a `DateRangePicker` with `limits` and the browser holds a person to it; give the same value to `DateRangeQuery::checked` and the server holds the request to it. Nothing is said twice, so the two can't differ.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "rules: DateRules",
+        "doc": "Limits that hold a range to `rules`: both ends and every day between."
+      }
+    ],
+    "methods": [
+      {
+        "name": "min_days",
+        "generics": "",
+        "args": "days: u32",
+        "doc": "The fewest days a range may hold (one at least)."
+      },
+      {
+        "name": "max_days",
+        "generics": "",
+        "args": "days: u32",
+        "doc": "The most days a range may hold (one at least)."
+      },
+      {
+        "name": "rules",
+        "generics": "",
+        "args": "",
+        "doc": "The days that can't be chosen."
+      },
+      {
+        "name": "least_days",
+        "generics": "",
+        "args": "",
+        "doc": "The fewest days a range may hold, when limited."
+      },
+      {
+        "name": "most_days",
+        "generics": "",
+        "args": "",
+        "doc": "The most days a range may hold, when limited."
+      },
+      {
+        "name": "check",
+        "generics": "",
+        "args": "range: &DateRange",
+        "doc": "Why `range` can't be chosen, or `Ok`: the check the browser makes as a range is picked, made again by the server."
+      }
+    ],
+    "variants": [],
+    "shared": []
   },
   "Ratio": {
     "name": "Ratio",
@@ -5514,6 +6561,216 @@
         "doc": "Takes `columns` columns of a `Grid`."
       }
     ]
+  },
+  "TimePicker": {
+    "name": "TimePicker",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/dates/time_picker.rs",
+    "summary": "A time of day: hours and minutes, and seconds if asked.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "A picker that posts as `name`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Sets the id of the picker's own element."
+      },
+      {
+        "name": "value",
+        "generics": "",
+        "args": "time: NaiveTime",
+        "doc": "Sets the time."
+      },
+      {
+        "name": "value_opt",
+        "generics": "",
+        "args": "time: Option<NaiveTime>",
+        "doc": "Sets the time, or leaves the picker empty."
+      },
+      {
+        "name": "value_text",
+        "generics": "",
+        "args": "text: &str",
+        "doc": "Sets the value from text a form sent back: `14:30` or `14:30:00` shows as that time; anything else shows as typed."
+      },
+      {
+        "name": "rules",
+        "generics": "",
+        "args": "rules: TimeRules",
+        "doc": "Which times can be chosen, and the step of the list."
+      },
+      {
+        "name": "step_minutes",
+        "generics": "",
+        "args": "minutes: u32",
+        "doc": "The minutes between the times of the list: a number that divides a day."
+      },
+      {
+        "name": "min",
+        "generics": "",
+        "args": "time: NaiveTime",
+        "doc": "The earliest time."
+      },
+      {
+        "name": "max",
+        "generics": "",
+        "args": "time: NaiveTime",
+        "doc": "The latest time."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "locale: DateLocale",
+        "doc": "Names and writes times after a language and region."
+      },
+      {
+        "name": "clock",
+        "generics": "",
+        "args": "clock: Clock",
+        "doc": "Counts hours on a 12 or 24 hour clock, when the locale's isn't wanted."
+      },
+      {
+        "name": "seconds",
+        "generics": "",
+        "args": "",
+        "doc": "Adds seconds."
+      },
+      {
+        "name": "placeholder",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "The hint in an empty box."
+      },
+      {
+        "name": "clearable",
+        "generics": "",
+        "args": "",
+        "doc": "Adds a button that empties the picker."
+      },
+      {
+        "name": "required",
+        "generics": "",
+        "args": "",
+        "doc": "Requires a time."
+      },
+      {
+        "name": "disabled",
+        "generics": "",
+        "args": "disabled: bool",
+        "doc": "Turns the picker off: nothing can be chosen and nothing is posted."
+      },
+      {
+        "name": "read_only",
+        "generics": "",
+        "args": "",
+        "doc": "Shows the time without letting it change. It still posts."
+      },
+      {
+        "name": "invalid",
+        "generics": "",
+        "args": "invalid: bool",
+        "doc": "Marks it invalid."
+      },
+      {
+        "name": "zone_note",
+        "generics": "",
+        "args": "text: impl Into<String>",
+        "doc": "Writes a note under the picker about the clock it counts on, such as `Times are in Europe/London (UTC+0)`."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "label: impl Into<String>",
+        "doc": "Names the picker for assistive technology, when no label points at it."
+      },
+      {
+        "name": "attr",
+        "generics": "",
+        "args": "name: &'static str, value: impl Into<AttrValue>",
+        "doc": "Sets an attribute on the root element."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "TimeRules": {
+    "name": "TimeRules",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/dates/time.rs",
+    "summary": "The times a picker lets a person choose, and the check that holds on the server.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every time, in a list at 30 minute steps."
+      }
+    ],
+    "methods": [
+      {
+        "name": "min",
+        "generics": "",
+        "args": "time: NaiveTime",
+        "doc": "The earliest time."
+      },
+      {
+        "name": "max",
+        "generics": "",
+        "args": "time: NaiveTime",
+        "doc": "The latest time."
+      },
+      {
+        "name": "unavailable",
+        "generics": "",
+        "args": "from: NaiveTime, to: NaiveTime",
+        "doc": "Turns off a span of times, both ends included down to the minute: `12:00` to `12:59` turns off every time until `12:59:59`."
+      },
+      {
+        "name": "step_minutes",
+        "generics": "",
+        "args": "minutes: u32",
+        "doc": "The minutes between the times of the list. It has to divide a day (1, 2, 5, 10, 15, 20, 30, 60, 120 and so on up to 12 hours); another number is ignored and the list keeps its step."
+      },
+      {
+        "name": "strict_step",
+        "generics": "",
+        "args": "",
+        "doc": "Refuses a time that is not on a multiple of the step. Without it a typed time off the step is accepted, as long as it is otherwise allowed."
+      },
+      {
+        "name": "step",
+        "generics": "",
+        "args": "",
+        "doc": "The step in minutes."
+      },
+      {
+        "name": "check",
+        "generics": "",
+        "args": "time: NaiveTime",
+        "doc": "Why `time` can't be chosen, or `Ok`."
+      },
+      {
+        "name": "allows",
+        "generics": "",
+        "args": "time: NaiveTime",
+        "doc": "Whether `time` can be chosen."
+      },
+      {
+        "name": "options",
+        "generics": "",
+        "args": "",
+        "doc": "The times of the list: every multiple of the step in the day that can be chosen."
+      }
+    ],
+    "variants": [],
+    "shared": []
   },
   "Toggle": {
     "name": "Toggle",

@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "51f42644971d";
+pub const BUILD: &str = "8c32bf14c921";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-dd67b02be39c.js";
@@ -20,8 +20,11 @@ pub const TABLE_URL: &str = "/_navree/ui/table-b01452996568.js";
 /// The URL of `select.js`.
 pub const SELECT_URL: &str = "/_navree/ui/select-da4950f69334.js";
 
+/// The URL of `dates.js`.
+pub const DATES_URL: &str = "/_navree/ui/dates-63f74eab1b40.js";
+
 /// The URL of `navree-ui.css`.
-pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-a64fe08a322a.css";
+pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-6c86994442f3.css";
 
 /// The URL of `speculation.json`.
 pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8769afc1b5fc.json";
@@ -83,9 +86,18 @@ pub static FILES: &[Asset] = &[
         brotli: Some(include_bytes!("../dist/select.js.br")),
     },
     Asset {
+        name: "dates",
+        ext: "js",
+        hash: "63f74eab1b40",
+        content_type: "text/javascript; charset=utf-8",
+        bytes: include_bytes!("../dist/dates.js"),
+        gzip: Some(include_bytes!("../dist/dates.js.gz")),
+        brotli: Some(include_bytes!("../dist/dates.js.br")),
+    },
+    Asset {
         name: "navree-ui",
         ext: "css",
-        hash: "a64fe08a322a",
+        hash: "6c86994442f3",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/navree-ui.css"),
         gzip: Some(include_bytes!("../dist/navree-ui.css.gz")),
