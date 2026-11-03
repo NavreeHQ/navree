@@ -19,6 +19,12 @@ export const metadata: Metadata = {
   },
   description: site.description,
   applicationName: site.name,
+  authors: [{ name: site.name, url: site.url }],
+  creator: site.name,
+  publisher: site.name,
+  // Search results and AI answers may quote any length of text and show a
+  // large image. A page that is not for the index sets its own `robots`.
+  robots: { index: true, follow: true, "max-snippet": -1, "max-image-preview": "large", "max-video-preview": -1 },
   // Pages set their own canonical URL and social tags (`pageMetadata` in
   // src/lib/metadata.ts); these are the defaults. The icons and the web app
   // manifest come from the file conventions in this folder: favicon.ico,
