@@ -1509,7 +1509,10 @@ for (const name of NAMES) {
         await click("raise");
         await has("[data-slot=toaster] [data-slot=toast]");
         await click("swap");
-        await page.waitForFunction(() => Node.prototype.textContent && Object.getOwnPropertyDescriptor(Node.prototype, "textContent").get.call(Document.prototype.getElementById.call(document, "swapped")) === "Swapped.");
+        await page.waitForFunction(() => {
+          const el = Document.prototype.getElementById.call(document, "swapped");
+          return !!el && Object.getOwnPropertyDescriptor(Node.prototype, "textContent").get.call(el) === "Swapped.";
+        });
         await page.evaluate(() => HTMLElement.prototype.click.call(Document.prototype.querySelector.call(document, "[data-slot=toast-close]")));
         await page.waitForFunction(() => !Document.prototype.querySelector.call(document, "[data-slot=toaster] [data-slot=toast]"));
         await page.done();
