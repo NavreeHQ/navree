@@ -13,7 +13,7 @@ const options = [
     gives:
       "Forms from a validated struct, a server-side DataTable, the app shell, and pages that work with JavaScript off. No Node at run time or in `cargo build`.",
     costs:
-      "Interactions that need data go to the server and back, so they wait on the network. Charts, a date picker, a searchable select and rich text are still to come.",
+      "Interactions that need data go to the server and back, so they wait on the network. Charts, a date picker and rich text are still to come.",
     href: "/docs/ui/overview/",
     link: "Navree UI overview",
   },

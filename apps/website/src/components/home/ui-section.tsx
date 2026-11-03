@@ -79,7 +79,7 @@ export function UiSection() {
       </div>
 
       <p className="mt-8 max-w-3xl text-[0.9375rem] leading-relaxed text-pretty text-fg-3">
-        Navree UI is new, and it grows module by module. A searchable select, tabs, menus, charts and date pickers are still
+        Navree UI is new, and it grows module by module. Tabs, menus, charts and date pickers are still
         to come, and{" "}
         <Link href="/ui/#coming-next" className="link">
           Coming next
