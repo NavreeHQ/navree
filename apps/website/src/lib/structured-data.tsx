@@ -54,7 +54,7 @@ export function siteGraph(): Json {
   };
 }
 
-/** Navree as software: the framework's source code and where it lives (homepage). */
+/** Navree as software: the application framework's source code and where it lives (homepage). */
 export function softwareData(): Json {
   return {
     "@context": "https://schema.org",
@@ -65,6 +65,18 @@ export function softwareData(): Json {
     url: site.url,
     codeRepository: site.repoUrl,
     programmingLanguage: { "@type": "ComputerLanguage", name: "Rust", url: "https://www.rust-lang.org/" },
+    keywords: [
+      "Rust",
+      "application framework",
+      "backend",
+      "server-rendered UI components",
+      "ORM",
+      "multi-tenancy",
+      "monitoring",
+      "admin panel",
+      "MCP",
+      "AI agents",
+    ],
     runtimePlatform: `Rust ${site.rustVersion} or newer`,
     license: ["https://opensource.org/licenses/MIT", "https://www.apache.org/licenses/LICENSE-2.0"],
     isAccessibleForFree: true,

@@ -3,7 +3,9 @@ title: "Introduction"
 description: "What Navree is, the ideas it is built on, what comes in the box, who it's for and how to read these docs."
 ---
 
-Navree is a framework for building efficient, secure and scalable server-side applications in Rust. It gives you an application architecture out of the box: features live in modules, modules declare what they import and export, and a dependency-injection container wires them together when the app boots, refusing to start if anything is missing. Around that structure sits a complete standard library for backends, from routing and validation to workspaces, queues, monitoring and AI, designed together, documented together and released together. The result is code that stays easy to test, easy to change and easy to hand to a new teammate, or to an AI agent.
+Navree is a framework for building complete applications in Rust: the API, the background work, the screens and the tools that keep it all running. It gives you an application architecture out of the box: features live in modules, modules declare what they import and export, and a dependency-injection container wires them together when the app boots, refusing to start if anything is missing. Around that structure sits everything a product needs, from routing and validation to workspaces, queues, monitoring and AI, designed together, documented together and released together. The result is code that stays easy to test, easy to change and easy to hand to a new teammate, or to an AI agent.
+
+You choose how to draw the screens. [Navree UI](/docs/ui/overview/) renders typed Rust components to HTML on the server, in the same binary as your API. A Next.js (React) or Nuxt (Vue) app can sit beside the API instead; [Choosing a UI](/docs/ui/choosing-a-ui/) says what each costs and gives. And if you already have a product or a design, two agent skills bring it into Navree: [Bring your product](/docs/getting-started/bring-your-product/) and [Bring your design](/docs/getting-started/bring-your-design/).
 
 Navree runs on [Tokio](https://tokio.rs), [Hyper](https://hyper.rs) and [Tower](https://docs.rs/tower), works with data through its own [ORM](/docs/orm/getting-started/), which writes its SQL and runs it on [sqlx](https://docs.rs/sqlx) connections, validates input with its own `#[derive(Validate)]` rules, speaks TLS through rustls and hashes passwords with Argon2id. A whole application compiles to one binary.
 
@@ -18,6 +20,7 @@ This documentation describes Navree 1.0. The [release notes](/docs/prologue/rele
 - **Secure by default.** Routes deny until you allow them. Rotating refresh tokens, two-factor, Argon2id, encrypted cookies, CSRF, rate limits, security headers, an audit log and an SSRF guard ship on.
 - **Workspaces built in.** Multi-tenancy at the workspace level: members, roles, invitations, and isolation by row, schema or database.
 - **AI-native.** Agent skills, an MCP server for your coding agent, docs written for models as well as people, and an AI SDK for the product itself.
+- **Screens your way.** Navree UI renders typed Rust components on the server with a strict content security policy, or a Next.js or Nuxt app sits beside the same API.
 - **Observable.** Structured logs, traces, metrics, health checks and [Lighthouse](/docs/tools/lighthouse/) monitoring, self-hosted and on by default.
 - **Scales out.** Start as one binary; split into services over NATS, Kafka, RabbitMQ, Redis Streams or gRPC without rewriting your modules.
 - **Fast and frugal.** One binary, under 40 MB of memory under load and ready in milliseconds. [Performance](/performance/) has the measurements and how to reproduce them.
@@ -101,9 +104,13 @@ Each module is its own crate, and the `navree` crate re-exports all of them, one
 | Operations | Health and readiness probes, Prometheus metrics, an OpenAPI 3.1 document with a docs UI |
 | Testing and tools | `TestApp` and an in-process test client with fakes; the `navree` CLI with `navree new`, code generators and a rebuilding dev server |
 
+### Navree UI
+
+[Navree UI](/docs/ui/overview/) is the `ui` feature of `navree`, on by default. A handler returns typed components and the toolkit renders them to HTML, with one stylesheet, a small runtime that loads only what a page uses, and a strict content security policy. It brings [forms](/docs/ui/forms/) from a validated struct, the [app shell](/docs/ui/app-shell/), a server-side [DataTable](/docs/ui/data-table/) and the [components](/docs/components/overview/), each with a live preview. It grows one module at a time: [Coming next](/docs/ui/coming-next/) lists what is still to come, in order. For a React or Vue front end, see [Next.js](/docs/frontend/nextjs/) and [Nuxt](/docs/frontend/nuxt/).
+
 ### The ecosystem
 
-Everything else a production backend needs is first-party too: open source under MIT or Apache-2.0, free and self-hosted, released with the framework.
+Everything else a production application needs is first-party too: open source under MIT or Apache-2.0, free and self-hosted, released with the framework.
 
 | Tool | What it does |
 |---|---|
@@ -132,13 +139,14 @@ The repository also holds a reference application: a CRM with an API built on Na
 
 ## Who Navree is for
 
-Navree is for teams that build back ends and want the structure decided before the first line of code:
+Navree is for teams that build applications and want the structure decided before the first line of code:
 
 - **API and product teams** building JSON APIs for web and mobile front ends, with users, permissions, background jobs, mail and real time.
 - **SaaS builders** who need workspaces, billing, feature flags and an admin panel on day one, not in month six.
 - **Systems that grow.** Start as a modular monolith and split modules into services when the load or the team calls for it. The [architecture patterns](/docs/patterns/overview/) show each shape.
 - **Rust developers** who would rather build the product than choose, wire and maintain a dozen crates for every new service.
 - **Teams that work with AI agents.** Every app has the same layout, every feature has an [agent skill](/docs/ai/agent-skills/), and [Navigator](/docs/ai/navigator/) lets the agent read your routes, modules and schema.
+- **Teams with a product or a design already.** An agent skill rebuilds an old product, with its data, as a Navree app, and another turns a design into Navree UI pages. See [Bring your product](/docs/getting-started/bring-your-product/).
 
 ## How to read these docs
 
@@ -146,6 +154,7 @@ Navree is for teams that build back ends and want the structure decided before t
 - **Architecture concepts** explains how an app is put together: the [request lifecycle](/docs/architecture/request-lifecycle/), [modules](/docs/architecture/modules/) and [providers](/docs/architecture/providers/). Read it once; everything else builds on it.
 - **Architecture patterns** shows the shapes of system you can build: modular monolith, microservices, multi-tenant SaaS, event-driven, API-first and backend-for-frontend.
 - **The basics, Security, Workspaces, Database and Digging deeper** are the reference, one page per feature. Read them when you need the feature.
+- **UI and UI components** cover Navree UI, from [choosing a UI](/docs/ui/choosing-a-ui/) to every component; **Front end** covers Next.js and Nuxt.
 - **Microservices, AI, Packages and Tools** cover the ecosystem.
 - **Testing** and the **Example application** show how it all comes together.
 

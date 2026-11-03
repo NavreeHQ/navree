@@ -1,4 +1,5 @@
 import { ArrowUpRightIcon } from "lucide-react";
+import Link from "next/link";
 
 import { CommandLine } from "@/components/ai/command-line";
 import { PageActions } from "@/components/docs/page-actions";
@@ -79,6 +80,17 @@ function SkillsBlock() {
           A skill is a folder with a <code className="inline-code">SKILL.md</code>: when to use it, then the steps, the
           commands, a template that compiles, the checks to run and the mistakes to avoid. Agents read every description up
           front and load a skill only when the task matches, so a project carries all of them for a few lines each.
+        </p>
+        <p className="mt-4 max-w-xl leading-relaxed text-pretty text-fg-2">
+          Two of them bring what you already have.{" "}
+          <Link href="/docs/getting-started/bring-your-product/" className="link">
+            Bring your product
+          </Link>{" "}
+          rebuilds an old product, with its data, as a Navree app.{" "}
+          <Link href="/docs/getting-started/bring-your-design/" className="link">
+            Bring your design
+          </Link>{" "}
+          turns a mock-up, an export or screenshots into Navree UI pages.
         </p>
 
         <dl className="mt-8 grid max-w-md grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line">

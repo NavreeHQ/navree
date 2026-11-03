@@ -9,16 +9,18 @@ import { site } from "@site";
 
 export const metadata: Metadata = pageMetadata({
   title: "Documentation",
-  description: `Everything ${site.name} does, from installation to queues, real time and testing.`,
+  description: `Everything ${site.name} does, from installation to the backend, the screens, the tools and your coding agent.`,
   path: "/docs/",
 });
 
-/** The four first steps, above the full index. */
+/** The first steps, above the full index. */
 const startHere = [
   { href: "/docs/getting-started/installation/", title: "Install the CLI", text: "Rust, the `navree` command and a new app." },
   { href: "/docs/getting-started/your-first-app/", title: "Build your first app", text: "A model, routes, auth and tests." },
+  { href: "/docs/ui/choosing-a-ui/", title: "Choose a UI", text: "Navree UI in Rust, or Next.js or Nuxt." },
   { href: "/docs/patterns/overview/", title: "Choose an architecture", text: "Monolith, services, multi-tenant and more." },
   { href: "/docs/ai/introduction/", title: "Set up your agent", text: "Skills, Navigator and docs for models." },
+  { href: "/docs/getting-started/bring-your-product/", title: "Bring what you have", text: "An old product or a design, rebuilt in Navree." },
 ];
 
 export default function DocsIndex() {
@@ -28,7 +30,8 @@ export default function DocsIndex() {
     <div className="max-w-[60rem] py-9 lg:py-12">
       <h1 className="text-[2.25rem] leading-[1.12] font-semibold tracking-[-0.03em] text-fg sm:text-[2.625rem]">Documentation</h1>
       <p className="mt-4 max-w-[40rem] text-lg leading-relaxed text-fg-2">
-        Everything {site.name} does, from installing the CLI to queues, real time and testing. New here? Start with the{" "}
+        Everything {site.name} does, from installing the CLI to queues, screens, monitoring and testing. New here? Start with
+        the{" "}
         {first ? (
           <Link href={first.href} className="link">
             {first.title.toLowerCase()}
@@ -44,7 +47,7 @@ export default function DocsIndex() {
       </p>
 
       <nav aria-label="Start here" className="mt-10">
-        <ol className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <ol className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {startHere.map((step, i) => (
             <li key={step.href}>
               <Link

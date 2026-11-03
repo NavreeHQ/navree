@@ -43,7 +43,7 @@ import { site } from "@site";
 export const metadata: Metadata = pageMetadata({
   title: "Ecosystem",
   description:
-    "Everything first-party, everything included: monitoring, deployment, an admin panel, queue supervision, search, billing, OAuth, AI and more. Open source, self-hosted and released with Navree.",
+    "Everything first-party, everything included: monitoring, an admin panel, queue supervision, a debugging timeline, deployment, search, billing, OAuth, AI and more. Open source, self-hosted and released with Navree.",
   path: "/ecosystem/",
 });
 
@@ -128,8 +128,9 @@ function Hero() {
         <div className="mt-10 grid grid-cols-1 gap-12 lg:mt-12 lg:grid-cols-12 lg:gap-x-10 lg:gap-y-12 xl:gap-x-16">
           <div className="lg:col-span-5">
             <p className="max-w-xl text-lg leading-relaxed text-pretty text-fg-2">
-              Monitoring, deployment, an admin panel, queue supervision, search, billing, OAuth, AI and more are part of {site.name}.
-              They are open source, they run on your servers, and they are designed, documented and released with the framework.
+              Monitoring, an admin panel, queue supervision, a debugging timeline, deployment, search, billing, OAuth, AI and more
+              are part of {site.name}. They are open source, they run on your servers, and they are designed, documented and
+              released with the framework.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
