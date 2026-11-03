@@ -1101,7 +1101,8 @@ for (const name of NAMES) {
         assert.equal(await toasts(page).count(), 0, "its close button works over a dialog");
         await page.locator("#m-dialog-box [data-slot=dialog-footer] button").click();
         await page.locator("#m-dialog-toast").waitFor({ state: "hidden" });
-        assert.equal(await page.locator("[data-slot=toaster]").evaluate((e) => e.parentElement.tagName), "BODY", "the toaster went back to the page");
+        // The dialog reports that it closed a task after it did.
+        await page.waitForFunction(() => document.querySelector("[data-slot=toaster]").parentElement.tagName === "BODY", null, { timeout: 3000 });
         await page.locator("#n-info").click();
         await toasts(page).first().waitFor();
         await page.done();
