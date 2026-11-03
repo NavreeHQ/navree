@@ -5,14 +5,24 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
+import { site } from "@site";
 
-/** True while `pathname` is `match` or inside it. */
-export function isCurrent(pathname: string, match: string) {
-  return pathname === match || pathname.startsWith(`${match}/`);
+/** How deep `pathname` sits in one of `match`'s sections: the longest section it is in, or 0. */
+function depth(pathname: string, match: readonly string[]) {
+  return Math.max(0, ...match.filter((m) => pathname === m || pathname.startsWith(`${m}/`)).map((m) => m.length));
+}
+
+/**
+ * True while `pathname` is in one of `match`'s sections and no other item of
+ * the main navigation matches it more closely (`/docs/ui/` is "UI", not "Docs").
+ */
+export function isCurrent(pathname: string, match: readonly string[]) {
+  const own = depth(pathname, match);
+  return own > 0 && site.nav.every((item) => depth(pathname, item.match) <= own);
 }
 
 /** A header link that marks itself current while you are in its section. */
-export function NavLink({ href, match, children }: { href: string; match: string; children: ReactNode }) {
+export function NavLink({ href, match, children }: { href: string; match: readonly string[]; children: ReactNode }) {
   const pathname = usePathname() ?? "";
   const current = isCurrent(pathname, match);
   return (

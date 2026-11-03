@@ -7,10 +7,10 @@ export const site = {
   domain: "navree.com",
   url: "https://navree.com",
   /** The category line: the homepage H1 and the default page title. */
-  headline: "The complete backend framework for Rust.",
-  tagline: "Modular, API-first and AI-native. Everything your backend needs, checked by the compiler.",
+  headline: "The complete application framework for Rust.",
+  tagline: "The backend, the screens and the tools to run them, in one modular, AI-native framework.",
   description:
-    "Navree is a batteries-included Rust framework for building secure, scalable server-side applications. Modules and dependency injection give every app the same clear structure, and auth, workspaces, an ORM, queues, search, real time, monitoring, deployment and AI come in the box.",
+    "Navree is an open-source Rust framework for complete applications. Modules and dependency injection give every app one clear structure. Auth, workspaces, an ORM, queues, search, real time and AI come in the box, with Navree UI for your screens, first-party tools for monitoring and admin, and skills for your coding agent.",
   repoUrl: "https://github.com/NavreeHQ/navree",
   /** The branch that "Edit this page" links point at. */
   repoBranch: "main",
@@ -35,14 +35,19 @@ export const site = {
    * available; set it to true to show an "In development" badge on each.
    */
   showPlannedBadges: false as boolean,
-  /** The main navigation, read by the header and the footer. */
+  /**
+   * The main navigation, read by the header and the footer. `match` is the
+   * section (or sections) an item marks as current; the most specific match
+   * wins, so the UI pages mark "UI" and not "Docs".
+   */
   nav: [
-    { label: "Docs", href: "/docs/", match: "/docs" },
-    { label: "Ecosystem", href: "/ecosystem/", match: "/ecosystem" },
-    { label: "Architecture", href: "/architecture/", match: "/architecture" },
-    { label: "AI", href: "/ai/", match: "/ai" },
-    { label: "Performance", href: "/performance/", match: "/performance" },
-    { label: "Showcase", href: "/showcase/", match: "/showcase" },
+    { label: "Docs", href: "/docs/", match: ["/docs"] },
+    { label: "UI", href: "/docs/ui/choosing-a-ui/", match: ["/docs/ui", "/docs/components"] },
+    { label: "Ecosystem", href: "/ecosystem/", match: ["/ecosystem"] },
+    { label: "Architecture", href: "/architecture/", match: ["/architecture"] },
+    { label: "AI", href: "/ai/", match: ["/ai"] },
+    { label: "Performance", href: "/performance/", match: ["/performance"] },
+    { label: "Showcase", href: "/showcase/", match: ["/showcase"] },
   ],
   /** The "Get started" button in the header. */
   getStarted: "/docs/getting-started/installation/",
