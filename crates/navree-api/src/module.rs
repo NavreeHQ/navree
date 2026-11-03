@@ -31,9 +31,12 @@ use crate::{ApiOptions, DEFAULT_SESSION_COOKIE};
 ///   built when the app boots, so a schema conflict or a missing schema
 ///   stops the boot (see [`openapi_document`](crate::openapi_document)).
 /// - Routes (public, under the API prefix, left out of the document):
-///   `GET {api_prefix}/openapi.json` and, with
+///   with [`openapi_json`](ApiOptions::openapi_json),
+///   `GET {api_prefix}/openapi.json`, and with it and
 ///   [`docs_ui`](ApiOptions::docs_ui), the API reference page at
-///   `GET {api_prefix}/docs`.
+///   `GET {api_prefix}/docs`. Unset, both are off in the `production`
+///   environment and on elsewhere (see
+///   [`serves_openapi_json_in`](ApiOptions::serves_openapi_json_in)).
 /// - Command `openapi:export [path]`: writes the document (default
 ///   `openapi.json`), creating missing directories.
 /// - The conformity check `api.docs` (`navree check`): every route has
@@ -151,6 +154,8 @@ async fn export(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
 /// schemas.
 pub struct ApiDocs {
     options: Arc<ApiOptions>,
+    /// The app's environment (`env` / `app.env`), if it names one.
+    environment: Option<String>,
     app: WeakAppContext,
     built: OnceCell<Built>,
 }
@@ -166,6 +171,19 @@ impl ApiDocs {
     /// The document and docs UI options.
     pub fn options(&self) -> &ApiOptions {
         &self.options
+    }
+
+    /// Whether this app serves `{api_prefix}/openapi.json`
+    /// ([`ApiOptions::serves_openapi_json_in`] its environment).
+    pub fn serves_openapi_json(&self) -> bool {
+        self.options
+            .serves_openapi_json_in(self.environment.as_deref())
+    }
+
+    /// Whether this app serves the reference page at `{api_prefix}/docs`
+    /// ([`ApiOptions::serves_docs_ui_in`] its environment).
+    pub fn serves_docs_ui(&self) -> bool {
+        self.options.serves_docs_ui_in(self.environment.as_deref())
     }
 
     /// The OpenAPI document.
@@ -245,13 +263,26 @@ impl Injectable for ApiDocs {
 
     fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
         Box::pin(async move {
+            let environment = r
+                .app()
+                .try_get::<Config>()
+                .await
+                .and_then(|config| environment(&config));
             Ok(Self {
                 options: r.get::<ApiOptions>().await?,
+                environment,
                 app: r.app().downgrade(),
                 built: OnceCell::new(),
             })
         })
     }
+}
+
+/// The app's environment: top-level `env` (`APP_ENV`), else `app.env`.
+fn environment(config: &Config) -> Option<String> {
+    config
+        .get_string("env")
+        .or_else(|| config.get_string("app.env"))
 }
 
 /// Builds the document at boot, so a schema conflict stops the app.

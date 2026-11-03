@@ -6,6 +6,7 @@ mod support;
 mod config;
 mod conformity;
 mod document;
+mod environment;
 mod export;
 mod routes;
 mod schemas;

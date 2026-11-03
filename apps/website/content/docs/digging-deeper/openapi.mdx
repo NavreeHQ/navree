@@ -27,13 +27,17 @@ You now have two public routes under the API prefix (`http.api_prefix`, `/api` b
 | `GET /api/openapi.json` | The document, pretty-printed JSON. |
 | `GET /api/docs` | The API reference page, rendered from that document. |
 
-Neither appears in the document itself. The `api` section is optional:
+Neither appears in the document itself. Both are served in development and not in production, unless you set `api.openapi_json` and `api.docs_ui` (below). `openapi:export` writes the document in every environment.
+
+The `api` section is optional:
 
 ```toml title="config/app.toml"
 [api]
 title = "Navree CRM API"
 version = "1.0.0"
 servers = ["https://crm.example.com"]
+# Serve the document and the reference page in production too.
+openapi_json = true
 docs_ui = true
 ```
 
@@ -42,8 +46,10 @@ docs_ui = true
 | `api.title` | `Navree API` | `info.title`, and the docs page's title. |
 | `api.version` | `1.0.0` | `info.version`, your API's version (not Navree's). |
 | `api.servers` | `[]` | Server URLs listed in the document. Without any, clients use the URL they loaded the document from. From the environment, comma-separated: `APP_API__SERVERS=https://a.example,https://b.example`. |
-| `api.docs_ui` | `true` | Serve the API reference page at `{api_prefix}/docs`, when `api.openapi_json` is on too. Public: no sign-in, in every environment. |
-| `api.openapi_json` | `true` | Serve the document at `{api_prefix}/openapi.json`. Public: anyone can read every documented route, in every environment. Off, nothing of it is served: not this route and not the reference page. `openapi:export` writes the document either way. |
+| `api.docs_ui` | unset: off in `production`, on elsewhere | Serve the API reference page at `{api_prefix}/docs`, when the document is served too. Public: no sign-in. |
+| `api.openapi_json` | unset: off in `production`, on elsewhere | Serve the document at `{api_prefix}/openapi.json`. Public: anyone can read every documented route. Off, nothing of it is served: not this route and not the reference page. `openapi:export` writes the document either way. |
+
+Unset, both follow the environment: off when `env` (`APP_ENV`, else `app.env`) is `production` (in any letter case), on in any other named environment, and with no environment on in a debug build and off in a release build. To publish the reference page in production, set both: `APP_API__OPENAPI_JSON=true` and `APP_API__DOCS_UI=true`. `docs_ui` alone isn't enough, because the page needs the document.
 
 Or configure it in code:
 
@@ -70,7 +76,7 @@ use navree::api::ApiOptions;
 
 <Callout type="note" title="The page loads nothing from a third party">
 
-The page is rendered by your app from the document, and its stylesheet and script are embedded in your binary and served at `/api/docs/assets/`, cached for a year, so the browser viewing it needs no internet access and no CDN can change what runs. The page's `Content-Security-Policy` allows styles and scripts from your own origin only, with nothing inline. Images come from your own origin or `data:` URIs only, so a remote image in a route's description (a logo, a badge) shows its alt text. Serve such images from the app, or inline them as `data:` URIs. "Try it" may call your own origin and the absolute URLs in `api.servers`; a server on another origin must allow the page with CORS. To remove the page and its assets, set `api.docs_ui = false`; the JSON document stays available.
+The page is rendered by your app from the document, and its stylesheet and script are embedded in your binary and served at `/api/docs/assets/`, cached for a year, so the browser viewing it needs no internet access and no CDN can change what runs. The page's `Content-Security-Policy` allows styles and scripts from your own origin only, with nothing inline. Images come from your own origin or `data:` URIs only, so a remote image in a route's description (a logo, a badge) shows its alt text. Serve such images from the app, or inline them as `data:` URIs. "Try it" may call your own origin and the absolute URLs in `api.servers`; a server on another origin must allow the page with CORS. To remove the page and its assets in every environment, set `api.docs_ui = false`; the JSON document stays as `api.openapi_json` says.
 
 </Callout>
 

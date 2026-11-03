@@ -9,7 +9,8 @@ description: "Documents a Navree API with the OpenAPI 3.1 document generated at 
 when the app boots: paths with prefix and version, path parameters,
 security (bearer) and the access-related error responses come for free.
 `#[api(..)]` adds summaries, tags and bodies. It is served at
-`GET /api/openapi.json` with an API reference page at `GET /api/docs`.
+`GET /api/openapi.json` with an API reference page at `GET /api/docs`
+(outside production unless configured, see Configuration).
 
 ## Steps
 
@@ -138,8 +139,16 @@ title = "My App API"
 version = "1.0.0"                     # your API's version
 servers = ["https://api.example.com"]
 docs_ui = true                        # false removes /api/docs and its embedded stylesheet and script (/api/docs/assets/)
-openapi_json = true                   # false removes /api/openapi.json and the /api/docs page; openapi:export still writes it. Both are public by default
+openapi_json = true                   # false removes /api/openapi.json and the /api/docs page; openapi:export still writes it
 ```
+
+Both routes are public. Unset, `docs_ui` and `openapi_json` follow the
+environment (`env` / `APP_ENV`, else `app.env`): off in `production`, on in
+any other environment, and with none on in a debug build and off in a release
+build. A value set in config or the environment (`APP_API__DOCS_UI`,
+`APP_API__OPENAPI_JSON`) wins everywhere. The page needs the document, so a
+production app that wants `/api/docs` sets both to `true`. In code they are
+`Option<bool>`: `ApiOptions { docs_ui: Some(true), openapi_json: Some(true), .. }`.
 
 The page's CSP allows styles and scripts from the app only, nothing inline,
 and images from the app (`'self'`) and `data:` URIs only: a remote image in a

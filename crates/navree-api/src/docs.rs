@@ -83,7 +83,7 @@ impl Injectable for DocsController {
             // The page shows what the document says, so turning the document off
             // turns it off too.
             let options = docs.options();
-            let page = (options.docs_ui && options.openapi_json).then(|| {
+            let page = docs.serves_docs_ui().then(|| {
                 let prefix = http.api_prefix.trim_end_matches('/');
                 Arc::new(DocsPage {
                     html: OnceCell::new(),
@@ -105,7 +105,7 @@ impl Controller for DocsController {
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
         let mut routes = Vec::new();
-        if self.docs.options().openapi_json {
+        if self.docs.serves_openapi_json() {
             let docs = self.docs.clone();
             routes.push(
                 RouteDef::on(Method::GET, "/openapi.json", move || {

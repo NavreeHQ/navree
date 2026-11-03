@@ -114,7 +114,7 @@ async fn the_docs_page_references_only_local_assets_and_the_app_serves_them() {
 #[tokio::test]
 async fn the_assets_go_with_the_docs_page() {
     let app = app(ApiOptions {
-        docs_ui: false,
+        docs_ui: Some(false),
         ..ApiOptions::default()
     })
     .boot()
@@ -132,8 +132,8 @@ async fn the_document_can_be_turned_off_and_still_exports() {
     let path = tempfile::tempdir().unwrap();
     let file = path.path().join("openapi.json");
     let app = app(ApiOptions {
-        docs_ui: false,
-        openapi_json: false,
+        docs_ui: Some(false),
+        openapi_json: Some(false),
         ..ApiOptions::default()
     })
     .boot()
@@ -153,7 +153,7 @@ async fn the_document_can_be_turned_off_and_still_exports() {
 #[tokio::test]
 async fn without_the_document_there_is_no_page_of_the_same_routes() {
     let app = app(ApiOptions {
-        openapi_json: false,
+        openapi_json: Some(false),
         ..ApiOptions::default()
     })
     .boot()
@@ -171,15 +171,28 @@ async fn without_the_document_there_is_no_page_of_the_same_routes() {
 }
 
 #[tokio::test]
-async fn by_default_the_document_and_the_page_are_public() {
-    assert!(ApiOptions::default().docs_ui);
-    assert!(ApiOptions::default().openapi_json);
+async fn by_default_the_document_and_the_page_are_public_outside_production() {
+    let options = ApiOptions::default();
+    assert!(options.serves_openapi_json_in(Some("development")));
+    assert!(options.serves_docs_ui_in(Some("development")));
+    assert!(!options.serves_openapi_json_in(Some("production")));
+    assert!(!options.serves_docs_ui_in(Some("production")));
+    // These tests' app names no environment: served in a debug build only.
+    let app = boot().await;
+    assert_eq!(
+        get(&app, "/api/openapi.json").await.status == StatusCode::OK,
+        cfg!(debug_assertions)
+    );
+    assert_eq!(
+        get(&app, "/api/docs").await.status == StatusCode::OK,
+        cfg!(debug_assertions)
+    );
 }
 
 #[tokio::test]
 async fn docs_ui_can_be_turned_off() {
     let app = app(ApiOptions {
-        docs_ui: false,
+        docs_ui: Some(false),
         ..ApiOptions::default()
     })
     .boot()

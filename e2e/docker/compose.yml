@@ -45,6 +45,10 @@ x-app: &app
     APP_AUTH__JWT__SECRET: ${E2E_JWT_SECRET:-evidence-jwt-secret-at-least-32-bytes-long}
     APP_DATABASE__URL: postgres://navree:navree@postgres:5432/evidence
     RUST_LOG: ${E2E_RUST_LOG:-info}
+    # The OpenAPI document and the API reference page are off in production
+    # unless asked for; the checks and the UI evidence read both.
+    APP_API__OPENAPI_JSON: "true"
+    APP_API__DOCS_UI: "true"
     # Lighthouse's detail queue and trace sampling (its defaults). A run
     # with a small queue and every trace wanted shows details sampled out
     # while the counts stay exact (see the lighthouse scenario).
