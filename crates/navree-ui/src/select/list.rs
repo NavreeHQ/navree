@@ -15,7 +15,12 @@ use crate::node::{Element, Node, el};
 /// A plain choice is one element with its label as text. A choice with a description,
 /// an icon or a picture has a body. `multiple` lists mark every row selected or not,
 /// as a checkbox list needs; a single list marks only the chosen row.
-pub(crate) fn option_element(choice: &Choice, selected: bool, multiple: bool) -> Element {
+pub(crate) fn option_element(
+    choice: &Choice,
+    selected: bool,
+    multiple: bool,
+    hidden: bool,
+) -> Element {
     let row = match &choice.href {
         Some(href) => el("a")
             .attr("role", "option")
@@ -34,7 +39,8 @@ pub(crate) fn option_element(choice: &Choice, selected: bool, multiple: bool) ->
     let row = row
         .attr_opt("aria-disabled", choice.disabled.then_some("true"))
         .attr_opt("data-keywords", choice.keyword_text())
-        .attr_opt("data-selected-label", choice.selected_label.clone());
+        .attr_opt("data-selected-label", choice.selected_label.clone())
+        .flag("hidden", hidden);
     if !choice.is_rich() {
         return row.attr("dir", "auto").child(choice.label.clone());
     }
@@ -63,22 +69,31 @@ pub(crate) fn option_element(choice: &Choice, selected: bool, multiple: bool) ->
     ))
 }
 
-/// The rows for `entries`, groups and dividers included.
-pub(crate) fn rows(entries: &Entries, chosen: &HashSet<&str>, multiple: bool) -> Vec<Node> {
+/// How many rows of a list people search are drawn at once. The runtime's number is
+/// the same: the rest wait, hidden, until the text narrows the list.
+pub(crate) const SHOWN: usize = 200;
+
+/// The rows for `entries`, groups and dividers included. With `cap`, the rows after the
+/// first `SHOWN` that aren't chosen are drawn hidden, so the browser has no work to do
+/// to show the first of a long list.
+pub(crate) fn rows(
+    entries: &Entries,
+    chosen: &HashSet<&str>,
+    multiple: bool,
+    cap: bool,
+) -> Vec<Node> {
     let mut out = Vec::with_capacity(entries.0.len());
+    let mut seen = 0_usize;
+    let mut row = |choice: &Choice| -> Node {
+        let selected = chosen.contains(choice.value.as_str());
+        seen += 1;
+        option_element(choice, selected, multiple, cap && seen > SHOWN && !selected).into()
+    };
     for entry in &entries.0 {
         match entry {
-            Entry::Choice(choice) => out.push(
-                option_element(choice, chosen.contains(choice.value.as_str()), multiple).into(),
-            ),
+            Entry::Choice(choice) => out.push(row(choice)),
             Entry::Group { label, choices } => {
-                let rows: Vec<Node> = choices
-                    .iter()
-                    .map(|choice| {
-                        option_element(choice, chosen.contains(choice.value.as_str()), multiple)
-                            .into()
-                    })
-                    .collect();
+                let rows: Vec<Node> = choices.iter().map(&mut row).collect();
                 out.push(
                     el("div")
                         .attr("role", "group")

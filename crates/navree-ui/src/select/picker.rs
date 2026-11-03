@@ -408,7 +408,12 @@ impl Picker {
                     .attr("role", "listbox")
                     .attr_opt("aria-multiselectable", multi.then_some("true"))
                     .attr_opt("aria-label", self.aria_label.clone())
-                    .child(rows(&self.entries, &chosen, multi)),
+                    .child(rows(
+                        &self.entries,
+                        &chosen,
+                        multi,
+                        self.kind != Kind::Select,
+                    )),
                 el("div").slot("select-footer").child(
                     el("p")
                         .slot("select-note")

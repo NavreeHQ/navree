@@ -199,7 +199,7 @@ impl ChoiceList {
         el("div")
             .slot("option-page")
             .attr_opt("data-more", self.more)
-            .child(rows(&self.entries, &chosen, false))
+            .child(rows(&self.entries, &chosen, false, false))
             .into()
     }
 

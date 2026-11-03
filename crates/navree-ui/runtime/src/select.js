@@ -56,7 +56,7 @@ const $ = (e, q) => /** @type {HTMLElement | null} */ (e.querySelector(q));
 /** @param {Element} e @param {string} name @param {boolean} on */
 const flag = (e, name, on) => e.toggleAttribute(name, on);
 
-/** @typedef {{open: boolean, active: HTMLElement | null, seq: number, ctrl: AbortController | null, cache: Map<string, string>, buffer: string, q: string, n: number, timer: number, busy: number, more: string, failed: boolean, creating: boolean, said: number, hold: number, words: Record<string, string> | null, index: {el: HTMLElement, t: string}[] | null, count: number}} State */
+/** @typedef {{open: boolean, active: HTMLElement | null, seq: number, ctrl: AbortController | null, cache: Map<string, string>, buffer: string, q: string, n: number, timer: number, busy: number, more: string, failed: boolean, creating: boolean, said: number, hold: number, words: Record<string, string> | null, index: {el: HTMLElement, t: string | null}[] | null, count: number}} State */
 /** @type {WeakMap<Element, State>} */
 const states = new WeakMap();
 
@@ -135,7 +135,7 @@ function index(root) {
   const { list } = parts(root), s = stateOf(root);
   const els = /** @type {HTMLElement[]} */ ([...list.querySelectorAll(ITEM)]);
   if (!s.index || s.count !== els.length || (els[0] && s.index[0]?.el !== els[0])) {
-    s.index = els.map((el) => ({ el, t: norm(labelOf(el)) + " " + norm(el.getAttribute("data-keywords") || "") }));
+    s.index = els.map((el) => ({ el, t: null }));
     s.count = els.length;
   }
   return s.index;
@@ -398,14 +398,18 @@ function view(root) {
   /** @type {{el: HTMLElement, score: number}[]} */
   const scored = [];
   const recent = pal ? recents(root) : null;
-  for (const { el, t } of rows) {
+  for (const row of rows) {
+    const { el } = row;
     let score = 1;
     const remote = pal && el.closest("[data-slot=command-remote]");
     const mine = pal && el.closest("[data-slot=command-recent]");
-    if (tokens.length) score = mine ? 0 : server || remote ? 1 : rank(t, tokens);
+    // The text to search is made the first time it is needed.
+    if (tokens.length) score = mine ? 0 : server || remote ? 1 : rank((row.t ??= norm(labelOf(el)) + " " + norm(el.getAttribute("data-keywords") || "")), tokens);
     else if (pal) score = mine ? (recent?.size ? 1 : 0) : recent?.has(valueOf(el)) ? 0 : 1;
     if (score > 0) found++;
-    const off = score <= 0 || shown >= cap;
+    // With no text, a chosen row is shown wherever it stands, so the list opens on it.
+    const keep = !tokens.length && el.getAttribute("aria-selected") === "true";
+    const off = score <= 0 || (shown >= cap && !keep);
     if (!off) shown++;
     if (el.hidden !== off) el.hidden = off;
     scored.push({ el, score });

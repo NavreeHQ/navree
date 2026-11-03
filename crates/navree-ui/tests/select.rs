@@ -248,6 +248,28 @@ fn a_page_with_ten_thousand_choices_renders_fast_enough_and_small_enough() {
     assert!(out.len() < 1_400_000, "{}", out.len());
 }
 
+#[test]
+fn a_long_list_people_search_draws_only_its_first_rows_and_the_chosen_one() {
+    let mut combo = Combobox::new("big");
+    for at in 0..10_000 {
+        combo = combo.option(format!("v{at}"), format!("Choice {at}"));
+    }
+    let out = html(combo.selected("v5000"));
+    assert_eq!(out.matches(r#"role="option""#).count(), 10_000);
+    // 200 shown, the chosen one shown wherever it stands, the rest waiting.
+    assert_eq!(
+        out.matches(r#" hidden dir="auto""#).count(),
+        10_000 - 200 - 1,
+        "{}",
+        out.len()
+    );
+    assert!(out.contains(r#"data-value="v5000" aria-selected="true" dir="auto""#));
+    // A select shows every row: it is for a short list, and typeahead needs them all.
+    let select =
+        html(Select::new("s").options((0..300).map(|n| (format!("v{n}"), format!("C{n}")))));
+    assert!(!select.contains(r#" hidden dir="auto""#));
+}
+
 // -------------------------------------------------------------- Combobox
 
 #[test]
