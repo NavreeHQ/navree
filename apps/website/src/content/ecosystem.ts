@@ -56,7 +56,7 @@ export const categories: EcosystemCategoryInfo[] = [
   {
     id: "build",
     title: "Build faster",
-    lead: "Starter kits, an admin panel, a local debugger and local services, ready on day one.",
+    lead: "Starter kits, the UI toolkit, an admin panel, a local debugger and local services, ready on day one.",
     heading: "Start with a product, not an empty directory.",
   },
   {
@@ -151,6 +151,21 @@ export const ecosystem: EcosystemEntry[] = [
     status: "stable",
     signature: "navree new acme --kit saas",
     mount: "navree new",
+  },
+  {
+    slug: "ui",
+    name: "Navree UI",
+    kind: "core",
+    category: "build",
+    tagline: "Your app's screens, in Rust",
+    summary:
+      "Typed components rendered to HTML on the server, in the same binary as your API: forms from a validated struct, a server-side DataTable and the app shell, with one stylesheet, a small runtime and a strict content security policy.",
+    features: ["Typed Rust components", "Forms and a server-side DataTable", "Pages that work with JavaScript off", "A strict content security policy"],
+    crate: "navree-ui",
+    command: "navree::ui::UiModule::from_config()",
+    href: "/docs/ui/overview/",
+    status: "stable",
+    signature: "UiModule::from_config()",
   },
   {
     slug: "helm",

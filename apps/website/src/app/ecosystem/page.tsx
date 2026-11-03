@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { DockVisual, StarterKitsVisual, WorkspacesVisual } from "@/components/ecosystem/card-visuals";
+import { DockVisual, StarterKitsVisual, UiVisual, WorkspacesVisual } from "@/components/ecosystem/card-visuals";
 import {
   AiVisual,
   BillingVisual,
@@ -62,6 +62,7 @@ const blocks: Record<string, { mock: ReactNode; layout?: "split" | "wide"; rever
 const visuals: Record<string, ReactNode> = {
   workspaces: <WorkspacesVisual />,
   "starter-kits": <StarterKitsVisual />,
+  ui: <UiVisual />,
   dock: <DockVisual />,
   search: <SearchVisual />,
   billing: <BillingVisual />,
@@ -85,7 +86,7 @@ const featured = new Set(["workspaces"]);
 /** Card grid columns per category, by how many cards it has. */
 const gridFor: Record<EcosystemCategory, string> = {
   operate: "md:grid-cols-2",
-  build: "md:grid-cols-2",
+  build: "md:grid-cols-2 lg:grid-cols-3",
   capabilities: "md:grid-cols-2 lg:grid-cols-3",
   connect: "md:grid-cols-2 xl:grid-cols-3",
   ai: "md:grid-cols-2 lg:grid-cols-3",

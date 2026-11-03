@@ -1,3 +1,4 @@
+import { groups } from "@/components/ui-docs/data";
 import { cn } from "@/lib/utils";
 
 /*
@@ -71,6 +72,20 @@ export function StarterKitsVisual() {
         <div key={k.kit} className="grid grid-cols-[5.25rem_minmax(0,1fr)] gap-3 border-b border-line px-3 py-2 last:border-b-0">
           <span className="font-mono text-xs leading-5 text-accent">--kit {k.kit}</span>
           <span className="text-xs leading-5 text-fg-2">{k.what}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Navree UI: the catalogue's groups and how many components each holds, read from `content/ui/catalog.json`. */
+export function UiVisual() {
+  return (
+    <div aria-hidden className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-line bg-line">
+      {groups.map((g) => (
+        <div key={g.id} className="flex items-center justify-between gap-2 bg-ink-0 px-3 py-1.5">
+          <span className="truncate text-xs leading-5 text-fg-2">{g.title}</span>
+          <span className="font-mono text-xs leading-5 text-fg-3 numeric">{g.components.length}</span>
         </div>
       ))}
     </div>
