@@ -1136,7 +1136,7 @@
         "name": "avatar",
         "generics": "",
         "args": "src: impl Into<String>",
-        "doc": "A small round-free picture before the label (a URL on this site or a data URL)."
+        "doc": "A small picture before the label: a URL on this site (the content security policy allows no other)."
       },
       {
         "name": "keywords",
@@ -1161,6 +1161,18 @@
         "generics": "",
         "args": "disabled: bool",
         "doc": "Shows the choice but refuses it."
+      },
+      {
+        "name": "value",
+        "generics": "",
+        "args": "",
+        "doc": "The value that is posted."
+      },
+      {
+        "name": "label",
+        "generics": "",
+        "args": "",
+        "doc": "The label that is shown."
       }
     ],
     "variants": [],
