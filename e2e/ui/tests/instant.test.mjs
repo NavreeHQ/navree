@@ -120,6 +120,34 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox], 
       await context.close();
     });
 
+    test(`a double click writes once on a form with an empty optional file field (${engine})`, async () => {
+      for (const how of ["double click", "requestSubmit twice"]) {
+        const name = key("file");
+        let writes = 0;
+        let release;
+        const held = new Promise((resolve) => (release = resolve));
+        route(`/${name}`, doc(`<form id="f" data-ui-form method="post" enctype="multipart/form-data" action="/${name}-post"><input name="title" value="Acme"><input type="file" name="attachment"><button id="go">Create</button></form>`));
+        f.routes.set(`/${name}-post`, async (req, res) => {
+          writes++;
+          await held;
+          f.ops(res, { ops: [{ op: "toast", tone: "info", text: "created" }] });
+        });
+        const { context, page } = await fresh(`/${name}`);
+        if (how === "double click") await page.dblclick("#go");
+        else await page.evaluate(async () => {
+          const form = document.getElementById("f");
+          form.requestSubmit();
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          form.requestSubmit();
+        });
+        await sleep(300);
+        release();
+        await sleep(600);
+        assert.equal(writes, 1, how);
+        await context.close();
+      }
+    });
+
     test(`text and fill never write into an option, a title or what a user types in (${engine})`, async () => {
       const name = key("closed");
       route(`/${name}`, doc(
