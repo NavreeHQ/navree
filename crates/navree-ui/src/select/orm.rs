@@ -85,7 +85,7 @@ impl OptionSource {
                 self.search
             };
             builder = builder.where_(Filter::any(columns.iter().map(|column| {
-                col_as::<String>(column).contains_ignore_case(query.text().to_owned())
+                col_as::<String>(*column).contains_ignore_case(query.text().to_owned())
             })));
         }
         let limit = query.limit();

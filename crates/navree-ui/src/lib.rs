@@ -74,6 +74,8 @@ pub use navree_validation::Validate;
 pub use node::{Attr, AttrValue, Element, IntoNodes, Node, Uses, el};
 pub use op::{Envelope, Op, Reply, ToastTone, UrlMode, is_prefetch};
 pub use render::{Measure, measure, render, render_into};
+#[cfg(feature = "orm")]
+pub use select::OptionSource;
 pub use select::{
     Choice, ChoiceList, Combobox, Command, CommandGroup, CommandItem, MultiSelect, OptionQuery,
     Select, SelectLabels,
