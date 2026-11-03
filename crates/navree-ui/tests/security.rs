@@ -1212,3 +1212,30 @@ fn a_hidden_field_says_when_a_command_may_set_it() {
     let html = render(&navree_ui::form::csrf_field("tok").into());
     assert!(!html.contains("data-ui-value"), "{html}");
 }
+
+/// A page asks for at most four links to be fetched as soon as it is quiet, with script
+/// or without: the rest are fetched when the pointer rests on them.
+#[tokio::test]
+async fn a_page_fetches_at_most_four_links_with_no_hover() {
+    use navree_ui::View;
+    let links: Vec<navree_ui::Element> = (0..8)
+        .map(|n| navree_ui::el("a").href(format!("/e{n}")).prefetch_eager())
+        .collect();
+    let response = View::new("t")
+        .body(navree_ui::el("nav").child(links))
+        .into_response();
+    let body = navree_http::body::read_body(response.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert_eq!(
+        html.matches(r#"data-ui-prefetch="eager""#).count(),
+        4,
+        "{html}"
+    );
+    assert!(
+        html.contains(r#"<a href="/e3" data-ui-prefetch="eager">"#)
+            && html.contains(r#"<a href="/e4" data-ui-prefetch>"#),
+        "the first four, in the page's order: {html}"
+    );
+}

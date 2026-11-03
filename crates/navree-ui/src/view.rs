@@ -145,8 +145,41 @@ impl View {
     }
 }
 
+/// How many links a page asks to have fetched as soon as it is quiet. The runtime takes
+/// no more, and a page with no script, whose browser follows Speculation Rules, is never
+/// asked for more.
+const EAGER_MOST: usize = 4;
+
+/// Keeps the first [`EAGER_MOST`] links marked `data-ui-prefetch="eager"`, in the page's
+/// order; the rest are fetched on hover or focus instead.
+fn cap_eager(body: &mut Node) {
+    let mut left = EAGER_MOST;
+    let mut stack: Vec<&mut Node> = vec![body];
+    while let Some(node) = stack.pop() {
+        match node {
+            Node::Element(element) => {
+                for attr in &mut element.attrs {
+                    if attr.name == "data-ui-prefetch"
+                        && attr.value.as_text().is_some_and(|value| value == "eager")
+                    {
+                        if left == 0 {
+                            attr.value = crate::node::AttrValue::Flag;
+                        } else {
+                            left -= 1;
+                        }
+                    }
+                }
+                stack.extend(element.children.iter_mut().rev());
+            }
+            Node::Fragment(nodes) => stack.extend(nodes.iter_mut().rev()),
+            _ => {}
+        }
+    }
+}
+
 impl IntoResponse for View {
-    fn into_response(self) -> Response {
+    fn into_response(mut self) -> Response {
+        cap_eager(&mut self.body);
         let uses = self.uses();
         let html = self.to_html();
         let mut response = (
