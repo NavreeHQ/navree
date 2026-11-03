@@ -137,6 +137,7 @@ An app is built from root modules. This is the CRM's root, `apps/crm-api/src/app
 ```rust title="src/app.rs"
 pub fn app(sources: ConfigSources) -> AppBuilder {
     platform(Navree::app(), sources)
+        .module(McpModule::from_config()) // section `mcp`; serves /mcp
         .module(CrmCoreModule)
         .module(UsersModule)
         .module(CompaniesModule)
@@ -149,7 +150,7 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
 }
 ```
 
-`platform` adds the framework modules the CRM uses (`ConfigModule::for_root(sources)`, `LoggerModule::from_config()`, `HttpModule::from_config()`, `DatabaseModule::from_config()` and so on) to the same builder. Every `.module(..)` call adds a root module. The kernel wraps them in an implicit root module named `App`, which imports them all. `navree make:module` adds new modules at the `// navree:modules` marker.
+`platform` adds the framework modules the CRM uses (`ConfigModule::for_root(sources)`, `LoggerModule::from_config()`, `HttpModule::from_config()`, `DatabaseModule::from_config()` and so on) to the same builder, and `McpModule` serves the CRM's MCP server. Every `.module(..)` call adds a root module. The kernel wraps them in an implicit root module named `App`, which imports them all. `navree make:module` adds new modules at the `// navree:modules` marker.
 
 Import a module where you use its exports, even if it's also a root module. Importing the same module from several places is fine: the kernel registers each module once.
 

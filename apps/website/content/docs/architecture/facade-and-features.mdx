@@ -65,6 +65,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::crypto` | navree-crypto | `crypto` | `CryptoModule`: encryption, Argon2id hashing, the app key; `jose` (JWS and JWK), `totp` and `qr` |
 | `navree::events` | navree-events | `events` | `EventsModule`: events and queued listeners |
 | `navree::view` | navree-view | `view` | `ViewModule`: templates |
+| `navree::template` | navree-template | `template` (`view`, `i18n` and `harbor` turn it on) | The template engine under views, mail and translated messages: the Jinja syntax, HTML autoescaping, a sandboxed value model, caps on depth, loops, work and output |
 | `navree::cache` | navree-cache | `cache` | `CacheModule`: cache stores and locks |
 | `navree::http_client` | navree-http-client | `http-client` | `HttpClientModule`: outgoing HTTP with fakes |
 | `navree::schema` | navree-schema | `schema` | The [schema builder](/docs/database/schema-builder/): tables, columns, indexes, foreign keys, [TimescaleDB](/docs/database/timescaledb/) hypertables, schema dumps |
@@ -139,6 +140,7 @@ The `http` crate's types (`StatusCode`, `HeaderMap`, `Method`) come from `http`,
 | Macros | `module`, `injectable`, `controller` |
 | Kernel | `Navree`, `AppBuilder`, `AppContext`, `Module`, `ModuleBuilder`, `Injectable`, `Factory`, `Lazy`, `Resolver`, `BoxError` |
 | Config | `ConfigModule`, `ConfigSources` |
+| OpenAPI | `ToSchema` |
 | HTTP | `Result`, `AppError`, `Json`, `Created`, `NoContent`, `Scoped`, `Path`, `Query`, `HttpModule` |
 | Database (`db`) | `DatabaseModule`, `Uow`, `Page`, `PageQuery`, `MigrationSet` |
 | ORM (`orm`) | `Model` (the trait and the derive), `Record`, `Collection`, `Builder`, `OrmModule`, `ModelFactory`, `Attributes`, `accessors`, `attrs`; the model lifecycle methods are in scope. `navree::orm::prelude` has the rest of the ORM's names |
@@ -196,7 +198,9 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 
 | Feature | Also turns on |
 |---|---|
-| `crypto`, `view`, `schema`, `telemetry` | Nothing else |
+| `crypto`, `schema`, `telemetry`, `template` | Nothing else |
+| `pdf` (opt-in; `documents` and `media` turn it on) | Nothing else |
+| `view` | `template` |
 | `http` | `telemetry` |
 | `log`, `events`, `cache`, `http-client` | `telemetry` |
 | `db` | `http`, `schema` |
@@ -211,7 +215,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `queue` | `http`, `db`, `realtime`, `schedule`, `orm` |
 | `schedule` | `db`, `time` |
 | `notify` | `http`, `db`, `mail`, `view`, `orm`, `crypto`, `http-client`, `validation`, `time`, `schedule`; with `webhooks`, `integrations` or `settings` on too, their notification features |
-| `ui` | `http`, `view` |
+| `ui` | `http`, `validation`; with `orm` on too, the data table's backend |
 | `orm` | `db`, `events`, `http`, `telemetry`, `crypto`, `api` |
 | `auth` | `http`, `db`, `crypto`, `validation`, `cache`, `mail`, `access`, `http-client`, `orm` |
 | `workspace` | `http`, `db`, `crypto`, `events`, `mail`, `access`, `time`, `schedule`, `orm` |
@@ -233,10 +237,11 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `search-tantivy` (opt-in) | `search`, and its embedded Tantivy engine |
 | `mcp` (opt-in, not in `full`) | `http`, `cache`, `db`, `testing`, `validation`, `access`, `auth`; with `lighthouse` on too, navree-lighthouse's `mcp` feature ([Lighthouse's MCP tools](/docs/tools/lighthouse/#mcp-tools-for-agents)) |
 | `ai` (opt-in, not in `full`) | `http`, `http-client`, `cache`, `db`, `storage`, `validation`, `access`, `auth` |
-| `i18n` (opt-in, not in `full`) | `http`, `view`, `db`, `validation`, `notify`, `workspace` |
+| `i18n` (opt-in, not in `full`) | `template`, `http`, `view`, `db`, `validation`, `notify`, `workspace`; with `sheets` on too, translated export headers |
 | `lighthouse` | `telemetry`, `http`, `crypto`, `view`, `http-client`, `db`, `mail`, `schedule`, `access`, `auth`, `orm`; with `domains` on too, certificates close to expiry become issues |
 | `redis` (opt-in, not in `full`) | `cache`, `queue`, `session`, `realtime` |
-| `mongo`, `mongodb` (opt-in, not in `full`) | `telemetry`, `schema`, `db`, `orm` |
+| `mongo` (opt-in, not in `full`) | `telemetry`, `schema`, `db`, `orm` |
+| `mongodb` (opt-in) | `mongo`, the same feature by the database's name |
 | `logbook` | `telemetry`, `http`, `view`, `db`, `auth` |
 | `micro` (opt-in, not in `full`) | `http`, `events`, `db`, `testing`, `validation` |
 | `micro-nats`, `micro-kafka`, `micro-rabbitmq`, `micro-redis`, `micro-mqtt` (opt-in) | `micro`, and that transport's client |
@@ -254,7 +259,8 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `storage-gcs`, `storage-azure` (opt-in) | `storage`, and navree-storage's Google Cloud Storage or Azure Blob Storage driver |
 | `otel` (opt-in) | `observe`, and navree-observe's OTLP exporter for the spans of `observe.tracing` |
 | `browser` (opt-in) | `http` |
-| `dock`, `harbor` (opt-in) | Nothing else |
+| `dock` (opt-in) | Nothing else |
+| `harbor` (opt-in) | `template` |
 | `navigator` (opt-in) | `dock` |
 
 `validation-phone` and `validation-html` are part of `full`. They add the [international types](/docs/basics/validation/#international-input) that need a dependency of their own; names, digits, countries and locales come with `validation` alone.

@@ -5,15 +5,15 @@ description: "The layers of Navree crates, the rule that a crate depends only on
 
 ## Introduction
 
-Navree isn't one big crate. It's a workspace of small crates, one per module, arranged in layers from L0 (the kernel and the macros) through the ecosystem libraries (L6), such as [feature flags](/docs/packages/feature-flags/), and the packages built on them (L7), such as [Helm](/docs/tools/helm/), to L8 (the `navree` facade and the CLI), with applications on top. A crate may depend only on crates in lower layers, and only on the ones its layer is allowed to use. A test checks every dependency edge in the workspace each time the tests run.
+Navree isn't one big crate. It's a workspace of small crates, one per module, arranged in layers from L0 (the kernel and the macros) through the ecosystem libraries (L6), such as [feature flags](/docs/packages/feature-flags/), and the packages built on them (L7), such as [Helm](/docs/tools/helm/), to L8 (the `navree` facade and the CLI), with applications on top. A crate may depend only on crates in lower layers, plus a few listed crates of its own layer, and only on the ones its row allows. A test checks every dependency edge in the workspace each time the tests run.
 
 This keeps the framework honest: the kernel knows nothing about HTTP, HTTP knows nothing about databases, and authentication builds on everything else rather than the other way round. You can read, test or use any crate with only what's below it. Most apps never see the split, because they depend on the facade, but it explains why things are where they are.
 
 ## The layers
 
 ```text
-L9+ apps/crm-api (Navree app)  apps/evidence-app (Navree app, e2e)  apps/crm-web (Next.js 16)
-L8  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps, uses the tool crates navree-dock, navree-harbor and navree-navigator)
+L9+ crm-api (L12)  crm-users  crm-companies  crm-deals  crm-activities (L11)  crm-testkit (L10)  crm-core  evidence-app  ui-docs  ui-proof  ui-table-proof  skill-snippets (L9)
+L8  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps, uses the tool crates navree-dock, navree-harbor and navree-navigator, and navree-template)
 L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-fleet  navree-helm  navree-workflows  navree-media  navree-directory  navree-domains (packages built on other packages)
 L6  navree-social  navree-sso  navree-oauth  navree-webhooks  navree-integrations  navree-sheets  navree-flags  navree-settings  navree-graphql  navree-grpc  navree-micro  navree-mcp  navree-ai  navree-i18n  navree-documents (ecosystem libraries)
 L5  navree-auth  navree-workspace  navree-redis  navree-mongo
@@ -21,7 +21,7 @@ L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage  navree-time
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-schema  navree-navigator (tool)
 L1  navree-contracts  navree-config  navree-telemetry
-L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PDF reading, writing and text)  navree-glob (the glob matcher)  navree-openapi (the OpenAPI document model and `ToSchema`)   navree-macros, navree-i18n-macros, navree-orm-macros, navree-validation-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (dev and deploy tools; no navree deps)
+L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PDF reading, writing and text)  navree-glob (the glob matcher)  navree-template (the template engine)  navree-openapi (the OpenAPI document model and `ToSchema`)   navree-macros, navree-i18n-macros, navree-orm-macros, navree-ui-macros, navree-validation-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (dev and deploy tools)   navree-template-peak (memory tests of the template engine)
 ```
 
 | Layer | Crate | What it provides |
@@ -36,8 +36,10 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 | L0 | `navree-i18n-macros` | `embed_locales!`: Fluent files embedded in the binary, checked at compile time (through navree-i18n) |
 | L0 | `navree-validation-macros` | `#[derive(Validate)]` and its `#[validate(...)]` field rules (re-exported by navree-validation) |
 | L0 | `navree-orm-macros` | `#[derive(Model)]`, `#[relations]`, `#[scopes]`, `#[accessors]` and `#[test]` (re-exported by navree-orm) |
+| L0 | `navree-ui-macros` | `#[derive(Form)]`, `#[derive(TableRow)]`, `#[derive(FilterBar)]` and `#[derive(Options)]` (re-exported by navree-ui) |
+| L0 | `navree-template-peak` | Tests that measure the heap a navree-template render uses, with a counting allocator. Nothing depends on it |
 | L0 | `navree-dock` | [Dock](/docs/tools/dock/): `dock.toml`, local services through `docker compose` or `podman compose`, the app's `.env` settings |
-| L0 | `navree-harbor` | [Harbor](/docs/tools/harbor/): `harbor.toml`, server provisioning over SSH, zero-downtime releases with rollbacks, encrypted secrets, container images |
+| L0 | `navree-harbor` | [Harbor](/docs/tools/harbor/): `harbor.toml`, server provisioning over SSH, zero-downtime releases with rollbacks, encrypted secrets, container images. It builds its files on navree-template |
 | L1 | `navree-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs, `Clock`, `CredentialRevoker` |
 | L1 | `navree-config` | Typed configuration from `.env`, TOML and JSON files and `APP_*` variables |
 | L1 | `navree-telemetry` | Typed telemetry events (requests, queries, jobs, mail, cache, outgoing HTTP, exceptions, logs) delivered to registered sinks, and W3C trace context |
@@ -98,7 +100,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 | L7 | `navree-directory` | [Directory sync](/docs/packages/directory-sync/): a SCIM 2.0 server and pull connectors for Microsoft Graph, Google Workspace, Okta, LDAP and Active Directory, synced into your model through a sink, with dry runs and a deactivation limit |
 | L7 | `navree-domains` | [Custom domains](/docs/packages/custom-domains/): workspaces on their own domains, verified through DNS, with automatic TLS (an on-demand proxy's ask endpoint, or ACME certificates served by a rustls resolver), the `domain` workspace resolver, managed Cloudflare zones and certificate expiry reports |
 | L8 | `navree` | The facade: re-exports every module crate and the macros |
-| L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock`, Harbor's deploy commands, `navree mcp` |
+| L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree check`, `navree gate`, `navree dock`, Harbor's deploy commands, `navree mcp`, `navree skills:install` |
 
 ## The allowed edges
 
@@ -106,63 +108,68 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 
 | Crate | May depend on |
 |---|---|
-| `navree-kernel`, `navree-bounded`, `navree-pdf`, `navree-glob`, `navree-openapi` (only `navree-macros`), `navree-macros`, `navree-orm-macros`, `navree-i18n-macros`, `navree-validation-macros`, `navree-dock`, `navree-harbor` | No Navree crate |
+| `navree-kernel`, `navree-bounded`, `navree-pdf`, `navree-glob`, `navree-template`, `navree-macros`, `navree-orm-macros`, `navree-i18n-macros`, `navree-ui-macros`, `navree-validation-macros`, `navree-dock` | No Navree crate |
+| `navree-openapi` | macros |
+| `navree-harbor`, `navree-template-peak` | template |
 | `navree-contracts` | kernel |
 | `navree-config`, `navree-telemetry` | kernel, contracts |
-| `navree-crypto`, `navree-view`, `navree-schema` | kernel, contracts, config |
-| `navree-http`, `navree-log`, `navree-events` | kernel, contracts, config, telemetry |
+| `navree-crypto`, `navree-schema` | kernel, contracts, config |
+| `navree-view` | kernel, contracts, config, template |
+| `navree-http` | openapi, kernel, contracts, config, telemetry |
+| `navree-log`, `navree-events` | kernel, contracts, config, telemetry |
 | `navree-http-client` | kernel, contracts, config, telemetry, glob |
 | `navree-cache` | kernel, bounded, contracts, config, telemetry |
 | `navree-navigator` | kernel, contracts, config, dock |
 | `navree-db` | kernel, contracts, config, telemetry, http, schema |
-| `navree-testing`, `navree-api` | kernel, contracts, config, http |
+| `navree-testing` | kernel, contracts, config, http |
+| `navree-api` | openapi, kernel, contracts, config, http |
 | `navree-observe` | kernel, contracts, config, telemetry, http |
-| `navree-mail` | kernel, contracts, config, telemetry, view, http, crypto, events, http-client, db (a same-layer edge: the delivery tables), storage (a same-layer edge, feature `inbound`: raw messages on disks), testing (a same-layer edge, for its tests) |
+| `navree-mail` | openapi, kernel, contracts, config, telemetry, view, http, crypto, events, http-client, db (a same-layer edge: the delivery tables), storage (a same-layer edge, feature `inbound`: raw messages on disks), testing (a same-layer edge, for its tests) |
 | `navree-realtime`, `navree-storage` | kernel, contracts, config, http, crypto |
-| `navree-time` | kernel, contracts, config, http, db (a same-layer edge: local-time SQL) |
+| `navree-time` | openapi, kernel, contracts, config, http, db (a same-layer edge: local-time SQL) |
 | `navree-session` | kernel, contracts, config, http, crypto, db, glob |
 | `navree-validation` | kernel, contracts, config, http, db, validation-macros, time (for the optional `time` feature) |
 | `navree-audit` | kernel, contracts, config, http, db, orm (a same-layer edge: the audit trail is an ORM model) |
-| `navree-queue` | kernel, contracts, config, telemetry, http, db, realtime, schedule (a same-layer edge: the operations watchdog), orm (a same-layer edge: failed jobs are ORM models) |
+| `navree-queue` | openapi, kernel, contracts, config, telemetry, http, db, realtime, schedule (a same-layer edge: the operations watchdog), orm (a same-layer edge: failed jobs are ORM models) |
 | `navree-schedule` | kernel, contracts, config, telemetry, db, time |
 | `navree-access` | kernel, bounded, contracts, config, http, db, cache |
 | `navree-notify` | kernel, contracts, config, telemetry, http, db, mail, orm, crypto, http-client, validation, time, schedule, view, macros |
-| `navree-ui` | kernel, contracts, config, http, validation, ui-macros |
-| `navree-orm` | kernel, contracts, config, telemetry, http, db, events, crypto, api, orm-macros; access, testing and validation behind features |
+| `navree-ui` | kernel, contracts, config, http, validation, ui-macros; orm (a same-layer edge, behind a feature: the data table's backend) |
+| `navree-orm` | openapi, kernel, contracts, config, telemetry, http, db, events, crypto, api, orm-macros; access, testing and validation behind features |
 | `navree-browser` | kernel, contracts, config, http, testing, glob |
-| `navree-auth` | kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access, http-client, orm |
-| `navree-workspace` | kernel, contracts, config, telemetry, http, db, crypto, events, mail, access, time, schedule, orm; testing behind its `testing` feature |
+| `navree-auth` | openapi, kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access, http-client, orm |
+| `navree-workspace` | openapi, kernel, contracts, config, telemetry, http, db, crypto, events, mail, access, time, schedule, orm; testing behind its `testing` feature |
 | `navree-redis` | kernel, contracts, config, http, cache, db, queue, session, realtime |
 | `navree-mongo` | kernel, contracts, config, telemetry, schema, db, orm |
-| `navree-social` | kernel, contracts, config, http, crypto, cache, events, http-client, db, audit, auth, orm |
-| `navree-sso` | kernel, contracts, config, http, crypto, cache, events, http-client, db, auth, workspace, orm |
-| `navree-webhooks` | kernel, contracts, config, http, crypto, events, http-client, db, queue, access, workspace, orm; notify (feature `notify`) |
-| `navree-integrations` | kernel, contracts, config, http, crypto, cache, events, http-client, db, schedule, workspace, orm, notify (feature `notify`), mail (feature `mail`: watched mailboxes) |
-| `navree-oauth` | kernel, bounded, contracts, config, http, crypto, db, access, auth, workspace, orm, testing |
-| `navree-flags` | kernel, contracts, config, http, cache, db, events, audit, access, auth, workspace, orm |
-| `navree-settings` | kernel, contracts, config, macros, http, cache, events, db, validation, audit, access, workspace, orm; notify (feature `notify`) |
+| `navree-social` | openapi, kernel, contracts, config, http, crypto, cache, events, http-client, db, audit, auth, orm |
+| `navree-sso` | openapi, kernel, contracts, config, http, crypto, cache, events, http-client, db, auth, workspace, orm |
+| `navree-webhooks` | openapi, kernel, contracts, config, http, crypto, events, http-client, db, queue, access, workspace, orm; notify (feature `notify`) |
+| `navree-integrations` | openapi, kernel, contracts, config, http, crypto, cache, events, http-client, db, schedule, workspace, orm, notify (feature `notify`), mail (feature `mail`: watched mailboxes) |
+| `navree-oauth` | openapi, kernel, bounded, contracts, config, http, crypto, db, access, auth, workspace, orm, testing |
+| `navree-flags` | openapi, kernel, contracts, config, http, cache, db, events, audit, access, auth, workspace, orm |
+| `navree-settings` | openapi, kernel, contracts, config, macros, http, cache, events, db, validation, audit, access, workspace, orm; notify (feature `notify`) |
 | `navree-graphql` | kernel, contracts, config, http, events, db, validation, access, auth, workspace |
 | `navree-grpc` | kernel, contracts, config, macros, http, db, validation; testing (feature `testing`) |
-| `navree-mcp` | kernel, contracts, config, http, cache, db, testing, validation, access, auth |
+| `navree-mcp` | openapi, kernel, contracts, config, http, cache, db, testing, validation, access, auth |
 | `navree-search` | kernel, contracts, config, macros, http, http-client, db, orm, queue, access, workspace |
 | `navree-documents` | kernel, contracts, config, http, view, storage, pdf, db and queue (with its `operations` feature) |
-| `navree-sheets` | kernel, contracts, config, macros, http, db, storage, validation, queue, workspace; i18n with its `i18n` feature |
-| `navree-billing` | kernel, contracts, config, http, cache, events, http-client, db, queue, schedule, access, auth, workspace, orm |
-| `navree-ai` | kernel, contracts, config, macros, http, http-client, cache, db, storage, validation, access, auth |
+| `navree-sheets` | openapi, kernel, contracts, config, macros, http, db, storage, validation, queue, workspace; i18n with its `i18n` feature |
+| `navree-billing` | openapi, kernel, contracts, config, http, cache, events, http-client, db, queue, schedule, access, auth, workspace, orm |
+| `navree-ai` | openapi, kernel, contracts, config, macros, http, http-client, cache, db, storage, validation, access, auth |
 | `navree-micro` | kernel, contracts, config, telemetry, http, events, db, testing, validation |
-| `navree-i18n` | kernel, contracts, config, http, view, db, validation, notify, workspace, i18n-macros |
-| `navree-lighthouse` | kernel, contracts, config, telemetry, http, crypto, view, http-client, db, mail, schedule, access, auth, orm; mcp (with its `mcp` feature) |
-| `navree-logbook` | kernel, contracts, config, telemetry, http, view, db, auth, glob |
+| `navree-i18n` | openapi, kernel, contracts, config, http, view, db, validation, notify, workspace, i18n-macros, template |
+| `navree-lighthouse` | openapi, kernel, contracts, config, telemetry, http, crypto, view, http-client, db, mail, schedule, access, auth, orm, validation; mcp (with its `mcp` feature) |
+| `navree-logbook` | kernel, contracts, config, telemetry, http, ui, view, db, auth, glob |
 | `navree-fleet` | kernel, contracts, config, telemetry, http, events, view, db, observe, queue, access |
 | `navree-helm` | kernel, bounded, contracts, config, http, view, cache, crypto, db, storage, queue, validation, audit, access, auth, workspace, orm; settings (with its `settings` feature) |
-| `navree-workflows` | kernel, contracts, config, macros, http, events, db, schedule, workspace |
-| `navree-media` | kernel, contracts, config, http, http-client, db, orm, storage, queue, pdf |
-| `navree-directory` | kernel, contracts, config, http, crypto, events, db, orm, queue, schedule, workspace, integrations |
-| `navree-domains` | kernel, bounded, contracts, config, http, crypto, events, db, orm, schedule, workspace; lighthouse (feature `lighthouse`) |
+| `navree-workflows` | openapi, kernel, contracts, config, macros, http, events, db, schedule, workspace |
+| `navree-media` | openapi, kernel, contracts, config, http, http-client, db, orm, storage, queue, pdf |
+| `navree-directory` | openapi, kernel, contracts, config, http, crypto, events, db, orm, queue, schedule, workspace, integrations |
+| `navree-domains` | openapi, kernel, bounded, contracts, config, http, crypto, events, db, orm, schedule, workspace; lighthouse (feature `lighthouse`) |
 | `navree` | Every runtime crate, the macros and the tool crates |
-| `navree-cli` | `navree-dock`, `navree-harbor` and `navree-navigator` only (the tool crates behind `navree dock`, Harbor's commands and `navree mcp`): everything else it knows about the framework is in the code it generates |
+| `navree-cli` | `navree-dock`, `navree-harbor`, `navree-navigator` and `navree-template` only (the tool crates behind `navree dock`, Harbor's commands and `navree mcp`, and the template engine behind the files it generates): everything else it knows about the framework is in the code it generates |
 
-The lists are what's allowed; some crates use less (`navree-access` doesn't use the cache today, and `navree-auth` doesn't use sessions). A few edges join crates of one layer, each listed on purpose: `navree-config` to `navree-contracts` (L1), `navree-mail` to `navree-db` (L3), `navree-audit` to `navree-orm` (L4). The table never points upwards and has no cycles.
+The lists are what's allowed; some crates use less (`navree-access` doesn't use the cache today, and `navree-auth` doesn't use sessions). Some edges join crates of one layer, each listed on purpose, such as `navree-config` to `navree-contracts` (L1), `navree-mail` to `navree-db` (L3) and `navree-audit` to `navree-orm` (L4). The table never points upwards and has no cycles.
 
 Three exceptions apply to dev-dependencies, so tests can boot what they need:
 
@@ -184,8 +191,8 @@ Instead, the shared shape lives in `navree-contracts` (L1) as a trait. One modul
 | `Broadcaster` | navree-realtime | navree-notify, navree-access, navree-auth (ending a user's subscriptions) |
 | `EventSink` | navree-events | Modules that publish events by name |
 | `Dispatcher`, `Job`, `JobRegistration`, `JobOptions` | navree-queue | navree-events (queued listeners), navree-mail (queued mail), navree-notify, navree-schedule |
-| `HealthCheck`, `HealthStatus` | navree-db, navree-cache, navree-storage, navree-mongo, navree-micro (as multi-bindings) | navree-observe (readiness) |
-| `SessionStore`, `SessionRecord` | navree-session's memory and database stores | The session layer |
+| `HealthCheck`, `HealthStatus` | navree-db, navree-cache, navree-storage, navree-redis, navree-mongo, navree-micro (as multi-bindings) | navree-observe (readiness) |
+| `SessionStore`, `SessionRecord` | navree-session's memory and database stores, navree-redis's store | The session layer |
 | `Principal`, `AuthState`, `AuthVia` | navree-auth (through navree-http's `Authenticator`) | Every module that needs the current user |
 | `CredentialRevoker`, `RevokedByKind` | Modules that issue credentials to users, such as navree-oauth, as multi-bindings (`m.credential_revoker::<R>()`) | navree-auth (`revoke_credentials_of_domain`, `revoke_all_credentials`) |
 | `Clock` | `SystemClock`, `FixedClock` (tests), registered by your app | Modules that need "now" and tests that fix it |
@@ -249,17 +256,18 @@ It reads the workspace with `cargo metadata` and checks that:
 - the table itself never points upwards and has no cycles;
 - `Cargo.lock` contains none of `aws-lc-sys`, `aws-lc-rs`, `aws-lc-fips-sys`, `openssl`, `openssl-sys`, `native-tls` or `cmake`: TLS is rustls with the `ring` provider everywhere, so building needs no CMake, NASM or OpenSSL;
 - `Cargo.lock` contains none of `rsa`, `p256`, `p384` or `ed25519-dalek`: RSA, ECDSA and Ed25519 signatures go through `ring`, wrapped in `navree_crypto::jose`;
-- `Cargo.lock` contains no `sea-*` package, and no workspace crate declares one: the data layer is navree-db, navree-orm and navree-schema;
+- `Cargo.lock` contains no other data layer's packages, and no workspace crate declares one: the data layer is navree-db, navree-orm and navree-schema;
+- `Cargo.lock` contains no other HTTP router: navree-http matches routes itself, on `hyper` and `tower`;
 - a build of `navree` with `postgres` or `mysql` and without `sqlite` compiles no `libsqlite3-sys` or `sqlx-sqlite`, and a build with `sqlite` alone compiles neither `sqlx-postgres` nor `sqlx-mysql`.
 
 A forbidden edge fails with a message that says what the crate may use instead:
 
 ```text wrap
 crate hierarchy violations:
-  navree-http (L2) -> navree-crypto (L2) (Normal) is not an allowed edge; navree-http may depend on: [navree-kernel, navree-contracts, navree-config, navree-telemetry]
+  navree-http (L2) -> navree-crypto (L2) (Normal) is not an allowed edge; navree-http may depend on: [navree-openapi, navree-kernel, navree-contracts, navree-config, navree-telemetry]
 ```
 
-The CRM is in the table too: `crm-core` at L9, `crm-testkit` at L10, the feature crates (`crm-users`, `crm-companies`, `crm-deals`, `crm-activities`) at L11 and the `crm-api` binary at L12. They may depend only on the `navree` facade and the CRM crates below them. The `evidence-app` binary, which the Docker evidence harness in `e2e/` runs under load, is at L9 and depends only on the facade.
+The applications are in the table too. The CRM has `crm-core` at L9, `crm-testkit` at L10, the feature crates (`crm-users`, `crm-companies`, `crm-deals`, `crm-activities`) at L11 and the `crm-api` binary at L12. They may depend only on the `navree` facade and the CRM crates below them. The `evidence-app` binary, which the Docker evidence harness in `e2e/` runs under load, and the Navree UI binaries `ui-docs`, `ui-proof` and `ui-table-proof` are at L9, as is `skill-snippets`, which compiles the Rust blocks of the agent skills. Each depends only on the facade.
 
 The tests in `crates/navree/tests/facade.rs` keep the facade's [features](/docs/architecture/facade-and-features/) in step with the hierarchy.
 
