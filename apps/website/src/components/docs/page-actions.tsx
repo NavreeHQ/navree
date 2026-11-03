@@ -10,7 +10,7 @@ type State = "idle" | "copied" | "failed";
 
 /** The prompt "Open in Claude" and "Open in ChatGPT" start with. */
 export function pagePrompt(title: string, markdownUrl: string): string {
-  return `Read ${markdownUrl} first. It is the "${title}" page of the Navree docs (Navree is the complete backend framework for Rust). Then answer my questions about it and help me use it in my project.`;
+  return `Read ${markdownUrl} first. It is the "${title}" page of the Navree docs (Navree is the complete application framework for Rust). Then answer my questions about it and help me use it in my project.`;
 }
 
 /**

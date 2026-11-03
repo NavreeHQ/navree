@@ -1,19 +1,22 @@
 ---
 name: navree
-description: "Navree, the complete backend framework for Rust: what it is, how a Navree app is laid out, the rules every change follows, and which navree-* skill to load for each task. Use when working in any project whose Cargo.toml depends on `navree` or whose code uses `navree::prelude`, `#[module]`, `#[injectable]` or `#[controller]`, or when the user mentions Navree."
+description: "Navree, the complete application framework for Rust: what it is, how a Navree app is laid out, the rules every change follows, and which navree-* skill to load for each task. Use when working in any project whose Cargo.toml depends on `navree` or whose code uses `navree::prelude`, `#[module]`, `#[injectable]` or `#[controller]`, or when the user mentions Navree."
 ---
 
 # Navree
 
-Navree is a framework for building secure, scalable server-side applications
-in Rust, on Tokio and hyper. Features live in **modules**; modules declare
+Navree is a framework for building complete applications in Rust, on Tokio
+and hyper: the API, the background work, the screens and the tools to run
+them. Features live in **modules**; modules declare
 what they import, provide and export; a **dependency-injection** container
 wires them when the app boots and refuses to start if anything is missing.
 Around that structure sits a standard library for backends: routing,
 validation, an ORM (`#[derive(Model)]` models, typed queries,
 relationships) with migrations on a schema builder, JWT auth, roles and
 abilities, queues, scheduling, mail, notifications, storage, real time,
-OpenAPI, health checks and a CLI with generators.
+OpenAPI, health checks and a CLI with generators. Screens are drawn with
+Navree UI (`navree::ui`: typed components rendered to HTML on the server)
+or by a Next.js or Nuxt app beside the API.
 
 ## Recognize a Navree app
 

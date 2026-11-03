@@ -1,7 +1,7 @@
 //! # navree
 //!
-//! Navree: the complete backend framework for Rust, modular, API-first and
-//! AI-native, on Tokio. This facade is the one dependency an app needs: it re-exports
+//! Navree: the complete application framework for Rust, modular, API-first
+//! and AI-native, on Tokio. This facade is the one dependency an app needs: it re-exports
 //! every module crate (one Cargo feature each, all on by default except the
 //! opt-in ecosystem libraries), the attribute macros and a [`prelude`].
 //!

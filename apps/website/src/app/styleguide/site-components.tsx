@@ -62,7 +62,7 @@ export function SiteComponents() {
 
       <Demo name="Type" file="font-display / font-sans / font-mono">
         <div className="flex flex-col gap-3">
-          <p className="font-display text-display-xl font-semibold text-fg">The complete backend framework.</p>
+          <p className="font-display text-display-xl font-semibold text-fg">The complete application framework.</p>
           <p className="font-display text-display-md font-semibold text-fg">Modules wired by dependency injection.</p>
           <p className="text-lg text-fg-2">Geist for body copy and UI. Short sentences, concrete numbers.</p>
           <p className="font-mono text-sm text-fg-1">navree new blog --kit saas</p>
