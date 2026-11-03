@@ -54,8 +54,9 @@ pub enum Cmd {
     /// Sets the text of the element with this id: a price when a plan changes, a
     /// label when a choice is made.
     ///
-    /// It is text. The runtime sets `textContent`, so nothing in it is read as markup,
-    /// and it refuses a `<script>` or `<style>` target, whose text would be code.
+    /// It is text. The runtime sets `textContent`, so nothing in it is read as markup. It
+    /// refuses a `<script>` or `<style>` (whose text would be code), the page's `<title>`,
+    /// an `<option>` (whose text is its select's value), a field, and anything editable.
     Text {
         /// The target's id.
         target: String,
@@ -77,9 +78,11 @@ pub enum Cmd {
     /// Sets the value of a hidden field: the state a form carries, such as the column
     /// a set of buttons sorts by.
     ///
-    /// Only `<input type="hidden">` takes it. A field the user types in keeps what was
-    /// typed, and a hidden field points at nothing and runs nothing. The value is posted
-    /// like any other, so the handler checks it like any other.
+    /// Only an `<input type="hidden">` the page opened to commands with
+    /// [`Element::settable`](crate::Element::settable) takes it: a form's token, its
+    /// method or any other hidden field stays as the server wrote it, and a field the user
+    /// types in keeps what was typed. The value is posted like any other, so the handler
+    /// checks it like any other.
     Value {
         /// The field's id.
         target: String,

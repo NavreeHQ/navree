@@ -772,7 +772,7 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       commandPage(name,
         `<p id="t">start</p><a id="a1" href="/ok">a</a><script id="s">/* old */</script><svg><script id="svgs">/* old */</script></svg>` +
         `<input id="vis" name="vis" value="typed"><textarea id="ta" name="ta">area</textarea><select id="se" name="se"><option>one</option></select>` +
-        `<input type="hidden" id="h" name="h" value="old"><input type="HIDDEN" id="h2" name="h2" value="old"><div id="d">div</div>` +
+        `<input type="hidden" id="h" name="h" value="old" data-ui-value><input type="HIDDEN" id="h2" name="h2" value="old" data-ui-value><div id="d">div</div>` +
         `<textarea id="bio" name="bio" data-ui-input='[["count","n",10],["count","h",null],["count","vis",null]]'></textarea><span id="n">0/10</span>`,
         [
           ["b1", [["text", "t", markup]]],

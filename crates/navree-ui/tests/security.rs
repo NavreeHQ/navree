@@ -1164,3 +1164,23 @@ fn a_page_past_the_end_says_so_in_the_footer() {
     );
     assert!(!html.contains("4294967294001"), "{html}");
 }
+
+/// `Cmd::value` reaches only a hidden field the page opens to commands: a form's token
+/// or method, or any other hidden field, stays as the server wrote it.
+#[test]
+fn a_hidden_field_says_when_a_command_may_set_it() {
+    use navree_ui::{Input, InputKind};
+    let html = render(
+        &navree_ui::el("input")
+            .attr("type", "hidden")
+            .settable()
+            .into(),
+    );
+    assert!(html.contains("data-ui-value"), "{html}");
+    let html = render(&Input::new(InputKind::Hidden, "sort").settable().into());
+    assert!(html.contains("data-ui-value"), "{html}");
+    let html = render(&Input::new(InputKind::Hidden, "sort").into());
+    assert!(!html.contains("data-ui-value"), "{html}");
+    let html = render(&navree_ui::form::csrf_field("tok").into());
+    assert!(!html.contains("data-ui-value"), "{html}");
+}

@@ -17,23 +17,21 @@ const inputValue = prop(I, "value"), inputType = prop(I, "type"), areaValue = pr
 /** The text of a control, or nothing for anything else. @param {Element} el */
 const valueOf = (el) => (el instanceof HTMLInputElement ? inputValue.get?.call(el) : el instanceof HTMLTextAreaElement ? areaValue.get?.call(el) : "") || "";
 
-/** Whether `el` is a hidden field, the one kind of field a command may set. @param {Element | null} el */
+/** Whether `el` is a hidden field. @param {Element | null} el */
 const hiddenField = (el) => el instanceof HTMLInputElement && inputType.get?.call(el) === "hidden";
 
 /**
- * What a command never writes text into: code (a script's text runs, a style's
- * text styles) and the fields a user types in or picks from.
+ * What a command never writes text into: code (a script's text runs, a style's text
+ * styles), the page's title, an option (its text is a select's value), and whatever a
+ * user types in or picks from: a field, or anything editable.
  * @param {Element} el
  */
-const closed = (el) => /^(script|style)$/i.test(el.localName) || el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement;
+const closed = (el) =>
+  /^(script|style|title|option)$/i.test(el.localName) || el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement || /** @type {HTMLElement} */ (el).isContentEditable;
 
-/**
- * Writes `text` into `el` as text, or as the value of a hidden field.
- * @param {Element} el @param {string} text
- */
+/** Writes `text` into `el` as text, unless it is closed to commands. @param {Element} el @param {string} text */
 function write(el, text) {
-  if (hiddenField(el)) inputValue.set?.call(el, text);
-  else if (!closed(el)) el.textContent = text;
+  if (!closed(el)) el.textContent = text;
 }
 
 /**
@@ -60,8 +58,10 @@ function fill(target, from) {
   const row = Element.prototype.closest.call(from, "[data-key]");
   if (!target || !row) return;
   for (const slot of all(target, "[data-ui-cell],[data-ui-row-key]")) {
-    const text = has(slot, "data-ui-row-key") ? attr(row, "data-key") : cellText(row, attr(slot, "data-ui-cell") || "");
-    write(slot, (text || "").trim());
+    const text = ((has(slot, "data-ui-row-key") ? attr(row, "data-key") : cellText(row, attr(slot, "data-ui-cell") || "")) || "").trim();
+    // A hidden field the page marked as a slot takes it as its value, so a form posts it.
+    if (hiddenField(slot)) inputValue.set?.call(slot, text);
+    else write(slot, text);
   }
   openTarget(target);
 }
@@ -91,10 +91,12 @@ function run(cmd, from) {
     case "text": if (target && typeof b === "string") write(target, b); break;
     case "count": {
       const n = [...valueOf(from)].length;
-      if (target && !hiddenField(target)) write(target, typeof b === "number" ? n + "/" + b : String(n));
+      if (target) write(target, typeof b === "number" ? n + "/" + b : String(n));
       break;
     }
-    case "value": if (hiddenField(target) && typeof b === "string") inputValue.set?.call(target, b); break;
+    // Only a hidden field the page opened to commands (`data-ui-value`): a form's token,
+    // its method, any other hidden field stays as the server wrote it.
+    case "value": if (hiddenField(target) && has(/** @type {Element} */ (target), "data-ui-value") && typeof b === "string") inputValue.set?.call(target, b); break;
     case "fill": fill(target, from); break;
   }
 }

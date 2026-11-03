@@ -468,6 +468,14 @@ impl Element {
         self.attr("data-ui-cell", column)
     }
 
+    /// Lets [`Cmd::value`] set this hidden field: the state a set of buttons changes, such
+    /// as the column a form sorts by. A hidden field without it, such as a form's token or
+    /// method, can't be changed by a command.
+    #[must_use]
+    pub fn settable(self) -> Self {
+        self.flag("data-ui-value", true)
+    }
+
     /// Says [`Cmd::fill`] writes the row's key here. A hidden field gets it as its value,
     /// so a form in the dialog posts which row it acts on.
     #[must_use]

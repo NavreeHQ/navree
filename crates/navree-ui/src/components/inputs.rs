@@ -79,6 +79,13 @@ impl Input {
         }
     }
 
+    /// Lets [`Cmd::value`](crate::Cmd::value) set this field, when it is hidden (see
+    /// [`Element::settable`](crate::Element::settable)).
+    pub fn settable(mut self) -> Self {
+        self.el = self.el.settable();
+        self
+    }
+
     /// A text input.
     pub fn text(name: impl Into<String>) -> Self {
         Self::new(InputKind::Text, name)
