@@ -106,6 +106,17 @@ regexes = [
 
 [[allowlists]]
 description = """
+The test services' fixed keys in scripts/ci-services.sh: the master key the
+search engines start with and the Stripe test key that stripe-mock accepts
+(it accepts any key). The services listen on 127.0.0.1 inside a CI runner or a
+developer machine and hold only test data."""
+regexes = [
+  '''navree-test-key-0123456789''',
+  '''sk_test_123''',
+]
+
+[[allowlists]]
+description = """
 Placeholder PEM bodies in the key-parsing tests ("AAAA", and "U0VDUkVU", which
 is base64 for the word SECRET): malformed keys on purpose, to test the error
 path and that errors never echo the input."""
