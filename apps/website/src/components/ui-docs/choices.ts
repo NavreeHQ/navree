@@ -124,8 +124,28 @@ export const choices = {
     options: [
       c("Alert", "Something about this page", "/docs/components/alert/"),
       c("Empty", "A list has nothing in it", "/docs/components/empty/"),
-      c("Reply::toast", "An action just finished", "/docs/ui/commands-and-ops/#toasts"),
+      c("Toast", "An action just finished", "/docs/components/toast/"),
       c("AlertDialog", "It must be answered first", "/docs/components/alert-dialog/"),
+    ],
+  },
+  "switch-view": {
+    title: "Which way to switch views?",
+    question: "What changes?",
+    options: [
+      c("Tabs", "Views of one thing, one page", "/docs/components/tabs/"),
+      c("ToggleGroup", "How one set of data shows", "/docs/components/toggle-group/"),
+      c("Pagination", "Which part of a long list", "/docs/components/pagination/"),
+      c("Accordion", "Sections of one long page", "/docs/components/accordion/"),
+    ],
+  },
+  menu: {
+    title: "Which popup?",
+    question: "What does it hold?",
+    options: [
+      c("DropdownMenu", "Actions and choices by name", "/docs/components/dropdown-menu/"),
+      c("Popover", "A few controls: a quick edit", "/docs/components/popover/"),
+      c("Tooltip", "A few words on a control", "/docs/components/tooltip/"),
+      c("Dialog", "A task that holds focus", "/docs/components/dialog/"),
     ],
   },
   loading: {

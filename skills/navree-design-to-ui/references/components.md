@@ -78,8 +78,10 @@ a gap: the set grows in the toolkit, not in the app.
 | Button that opens a dialog | `.opens_dialog(id)`, `.closes_dialog(id)` |
 | Button group | `ButtonGroup::new(label).children(..)`, `.vertical()` |
 | Two-state button | `Toggle::new(name, label).pressed(..)`: a checkbox underneath, so it posts |
-| Behaviour with no request (show, hide, copy, focus) | `.on_click(Cmd::toggle(id))` and the rest of `Cmd`: a closed list, no script |
-| Answer from a server action | `Reply::redirect(..)`, `Reply::ops(..)`, `.morph(target, node)`, `.toast(ToastTone, text)` |
+| Segmented control, view switch | `ToggleGroup::single(name, label).item(ToggleItem::new(value, label))`, `.value(..)`, `.variant(ToggleVariant::Outline)`, `.joined()`; `ToggleGroup::multiple(..)` for several on. Radios and checkboxes underneath, so it posts |
+| Menu from a button | `DropdownMenu::new(id, label).item(MenuItem::link(..) \| action(..) \| post(..))`, `.separator()`, `.group(MenuGroup::new(..))`, `.checkbox(..)`, `.radios(..)`, `.submenu(MenuSub::new(..))`; `DropdownMenu::icon(id, icon, label)` for a row's menu, `.align(PopupAlign::End)` |
+| Behaviour with no request (show, hide, copy, focus, toast) | `.on_click(Cmd::toggle(id))` and the rest of `Cmd`: a closed list, no script |
+| Answer from a server action | `Reply::redirect(..)`, `Reply::ops(..)`, `.morph(target, node)`, `.toast(ToastTone, text)`, `.toast_with(Toast::new(tone, text).title(..).action(ToastAction::post(label, url)))` |
 
 ## Overlays
 
@@ -92,6 +94,8 @@ a gap: the set grows in the toolkit, not in the app.
 | Popover | `Popover::new(id, trigger).side(..).align(..).body(..)` |
 | Tooltip | `Tooltip::new(id, trigger, text).side(..)` |
 | Hover card | `HoverCard::new(id, trigger).body(..)` |
+| Tabs | `Tabs::new(id, label).tab(Tab::new(key, label).panel(..))`, `.active_from(query.tab)`, `.variant(TabsVariant::Segmented)`, `.vertical()`; `Tab::lazy(src)` loads a panel when first shown |
+| Toast | `Toast`, `Toaster` and `Reply::toast`; four tones, a title, one action, a time, a stack |
 | Accordion, disclosure | `Accordion::new().item(..).open_item(..).exclusive(name)`, `Collapsible::new(title).open(..).body(..)` |
 | Scrolling panel | `ScrollArea::new(label).children(..)` |
 | Command palette (Ctrl or Cmd and K) | `Command::new(id).placeholder(..).recent(n).group(CommandGroup::new(label).item(..))`; items are `CommandItem::link`, `post`, `run` and `disabled`, each with `.icon(..)`, `.shortcut("mod+shift+n")` and `.keywords(..)`; `Command::trigger(id, label)` is its button; `.source(url)` adds results from the server; `.csrf(token)` for posted items with script off |
@@ -211,8 +215,6 @@ row in `GAPS.md` with an interim form the owner picks, or it waits.
 | Module (standard's order) | Covers in a design | Interim form, if the owner accepts one |
 |---|---|---|
 | Theme system and theme builder | a light theme, brand colours, other radii or fonts, other sidebar layouts, user themes | Navree's dark theme and tokens (`tokens.md`) |
-| Toast as a module | toasts with actions or that stay | `Reply::toast` (text and tone, shown on the next page or by the runtime) |
-| Tabs, DropdownMenu, ToggleGroup | tabs, menus from a button, segmented controls | tabs as links to separate URLs, `Popover` with buttons, `ButtonGroup` |
 | Charts | line, area, pie and stacked charts | `Stat` and `Bars` |
 | Wizard and Stepper | multi-step forms with a step bar | one page per step, each a form |
 | Rich text | a formatted text editor | a textarea |

@@ -18,6 +18,10 @@ body[data-preview-show] [data-preview-stage]{flex-direction:column}
 [data-preview-show] [data-slot=select-popup]:not(:popover-open){display:flex;flex-direction:column;position:relative;inset:auto;margin:6px 0 0;width:100%;max-width:none;height:auto}
 [data-preview-show] [data-slot=command-dialog]:not([open]){display:flex;flex-direction:column;position:relative;inset:auto;margin:0;width:100%;max-width:36rem;height:auto;max-height:none}
 [data-preview-show] :is([data-slot=popover-content],[data-slot=hover-card-content],[data-slot=tooltip-content]):not(:popover-open){display:block;position:relative;inset:auto;margin:0;height:auto}
+[data-preview-show] [data-slot=dropdown-menu]:not([data-sub]):not(:popover-open){display:block;position:relative;inset:auto;margin:.25rem 0 0;height:auto}
+/* A toaster drawn in place, with its toasts staying: a preview is a picture, not a page that fades them. */
+[data-preview] [data-slot=toaster]{position:static;translate:none;width:100%;max-width:24rem}
+[data-preview] [data-slot=toast]{animation:none}
 
 /* Galleries: one captioned cell per variant or state. */
 [data-preview-gallery]{--cell:220px;display:grid;gap:12px;width:100%;grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--cell)),1fr))}

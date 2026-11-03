@@ -3,7 +3,7 @@
 // A toast lives in a CSS animation (`ui-toast-life`, as long as its `data-duration`)
 // and ends on `animationend`; pausing under the pointer or focus is
 // `animation-play-state`, so there is no timer to lose and nothing that can stick.
-import { body, every, hidden, make, on, one, persistent } from "./dom.js";
+import { body, hidden, make, on, one, persistent } from "./dom.js";
 
 /** @param {Element} el */
 export function openTarget(el) {
@@ -52,7 +52,8 @@ let returnTo = null;
 /** The toasts' one standing place: the page's own, or one made now. It stays put through every navigation. */
 function toaster() {
   if (host?.isConnected) return host;
-  host = /** @type {HTMLElement | undefined} */ (one("[data-slot=toaster]") || undefined);
+  // Only the page's own, a direct child of the body: stored markup can't stand in for it.
+  host = /** @type {HTMLElement | undefined} */ ([...body().children].find((el) => el.getAttribute("data-slot") === "toaster"));
   if (!host) {
     host = make("section");
     host.setAttribute("data-slot", "toaster");
@@ -192,7 +193,7 @@ export function toast(tone, text) {
  * @param {Document} doc
  */
 export function adoptToasts(doc) {
-  const from = every("[data-slot=toaster]", doc)[0];
+  const from = [...body(doc).children].find((el) => el.getAttribute("data-slot") === "toaster");
   if (!from) return;
   const box = toaster();
   const position = from.getAttribute("data-position");
@@ -254,17 +255,17 @@ export function startToasts() {
   if (box.querySelector("[data-slot=toast]")) show(box);
   on(document, "animationend", (e) => {
     const t = /** @type {Element} */ (e.target);
-    if (e.animationName === LIFE && t.getAttribute?.("data-slot") === "toast") dismiss(t);
+    if (e.animationName === LIFE && t.getAttribute?.("data-slot") === "toast" && host?.contains(t)) dismiss(t);
   });
   on(document, "click", (e) => {
     const t = /** @type {Element} */ (e.target).closest?.("[data-slot=toast]");
-    if (!t) return;
+    if (!t || !host?.contains(t)) return;
     if (/** @type {Element} */ (e.target).closest("[data-slot=toast-close],a[data-slot=toast-action]")) dismiss(t);
   });
   // A post action is over when the server has answered; the answer may be a new toast.
   on(document, "ui:sent", (e) => {
     const t = e.detail?.form instanceof Element ? Element.prototype.closest.call(e.detail.form, "[data-slot=toast]") : null;
-    if (t) dismiss(t);
+    if (t && host?.contains(t)) dismiss(t);
   });
   on(document, "visibilitychange", () => host?.toggleAttribute("data-paused", hidden()));
   // A dialog that closes takes the toaster with it, so it goes back to the page.
@@ -284,7 +285,7 @@ export function startToasts() {
       first.focus();
     } else if (e.key === "Escape") {
       const t = /** @type {Element} */ (e.target).closest?.("[data-slot=toast]");
-      if (t) dismiss(t);
+      if (t && host?.contains(t)) dismiss(t);
     }
   });
   swipe();
@@ -297,7 +298,7 @@ function swipe() {
   on(document, "pointerdown", (e) => {
     if (e.pointerType === "mouse" || !e.isPrimary) return;
     const t = /** @type {HTMLElement | null} */ (/** @type {Element} */ (e.target).closest?.("[data-slot=toast]"));
-    if (!t) return;
+    if (!t || !host?.contains(t)) return;
     drag = { t, x: e.clientX, dx: 0, at: e.timeStamp, id: e.pointerId };
     t.setAttribute("data-dragging", "");
   });

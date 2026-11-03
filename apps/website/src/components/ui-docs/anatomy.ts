@@ -24,7 +24,7 @@ const COMPONENT_ROOTS = new Set([
 ]);
 
 /** Components whose outer element, with a label, has another slot. */
-const OWN_ROOT: Record<string, string> = { checkbox: "choice", switch: "choice" };
+const OWN_ROOT: Record<string, string> = { checkbox: "choice", switch: "choice", toast: "toaster" };
 
 function trim(slots: Slot[]): Slot[] {
   const out: Slot[] = [];
@@ -56,7 +56,7 @@ export function ownSlots(slots: Slot[], id: string): Slot[] {
   // a label; a row beside its caption): start from the component itself.
   const root = OWN_ROOT[id] ?? id;
   // A popover draws its own button.
-  const mine = (p: Slot) => p.slot === root || p.slot.startsWith(`${root}-`) || (id === "popover" && p.slot === "button");
+  const mine = (p: Slot) => p.slot === root || p.slot.startsWith(`${root}-`) || ((id === "popover" || id === "dropdown-menu") && p.slot === "button");
   if (id !== "field" && parts.some(mine)) {
     parts = parts.filter(mine);
   } else if (id !== "field") {

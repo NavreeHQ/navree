@@ -129,9 +129,9 @@ test("the form works with JavaScript off", async () => {
   await page.getByRole("button", { name: "Create deal" }).click();
   await page.waitForURL("**/deals?per=1000");
   assert.equal(await page.locator("tbody tr").count(), 1000);
-  assert.match(await page.locator("[data-slot=alert]").textContent(), /Acme created/, "the toast comes through the redirect");
+  assert.match(await page.locator("[data-slot=toaster] [data-slot=toast]").textContent(), /Acme created/, "the toast comes through the redirect");
   await page.reload();
-  assert.equal(await page.locator("[data-slot=alert]").count(), 0, "and only once");
+  assert.equal(await page.locator("[data-slot=toaster] [data-slot=toast]").count(), 0, "and only once");
   // Sorting is a plain link.
   await page.getByRole("link", { name: "Amount" }).click();
   await page.waitForURL("**sort=amount**");

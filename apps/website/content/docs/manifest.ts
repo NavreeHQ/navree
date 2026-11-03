@@ -239,6 +239,8 @@ export const sections: DocsSection[] = [
       "button",
       "button-group",
       "toggle",
+      "toggle-group",
+      "dropdown-menu",
       // Inputs
       "field",
       "input",
@@ -267,6 +269,7 @@ export const sections: DocsSection[] = [
       "message",
       // Feedback
       "alert",
+      "toast",
       "empty",
       "progress",
       "skeleton",
@@ -287,6 +290,7 @@ export const sections: DocsSection[] = [
       "aspect-ratio",
       "direction",
       // Navigation
+      "tabs",
       "breadcrumb",
       "pagination",
       "command",

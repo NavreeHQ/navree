@@ -11,6 +11,7 @@ mod feedback;
 mod icons;
 mod inputs;
 mod layout;
+mod menus;
 mod navigation;
 mod overlays;
 mod patterns;
@@ -28,6 +29,7 @@ pub fn all() -> Vec<Example> {
     all.extend(overlays::all());
     all.extend(layout::all());
     all.extend(navigation::all());
+    all.extend(menus::all());
     all.extend(data::all());
     all.extend(patterns::all());
     all.extend(icons::all());

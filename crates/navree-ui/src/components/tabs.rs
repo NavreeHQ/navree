@@ -644,7 +644,10 @@ mod tests {
         let bare = html(Tabs::new("t", "T").tab(Tab::new("a", "A").lazy("/a")));
         assert!(bare.contains("data-ui-lazy"), "{bare}");
         assert!(bare.contains("aria-busy"), "{bare}");
-        assert!(bare.contains("data-ui-loaded"), "it is being loaded: {bare}");
+        assert!(
+            bare.contains("data-ui-loaded"),
+            "it is being loaded: {bare}"
+        );
         let given = html(Tabs::new("t", "T").tab(Tab::new("a", "A").lazy("/a").panel("Ready")));
         assert!(!given.contains("data-ui-lazy"), "{given}");
         assert!(given.contains("data-ui-loaded"), "{given}");

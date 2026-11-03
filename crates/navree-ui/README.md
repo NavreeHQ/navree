@@ -32,7 +32,8 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
   InputGroup, Item, Kbd, Label, Marker, Message, NativeSelect, Pagination, Progress,
   RadioGroup, Separator, Skeleton, Spinner, Switch, Table, Textarea, Toggle, Heading,
   Text. Pickers: Select, Combobox, MultiSelect and Command. Native overlays: Accordion, AlertDialog, Collapsible, Dialog, Drawer,
-  HoverCard, Popover, ScrollArea, Sheet, Tooltip. Layout: Stack, Row, Grid, Container.
+  HoverCard, Popover, ScrollArea, Sheet, Tooltip. Menus and messages: Tabs, ToggleGroup,
+  DropdownMenu, Toast and Toaster. Layout: Stack, Row, Grid, Container.
   Dates (`navree_ui::dates`): Calendar, DatePicker, DateRangePicker, TimePicker.
   Shell: `Shell`, `AppShell`, `Page`. Components carry no outer margin: layout
   belongs to the layout primitives.
@@ -78,6 +79,8 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 | A popover, tooltip or hover card | `overlay`: placing and hover delay. |
 | A form, a region, a command | `core`: delegation, commands, ops, morph, boosted links, pending states. |
 | A select, combobox, multi-select or command palette | `overlay`, `select`. |
+| Tabs, a toggle group, a dropdown menu | `menus`: the keys of each pattern, switching tabs in the page, submenus. A menu also loads `overlay`. |
+| A toast | `core`: the toaster, its time, pause and swipe are a CSS animation and a few lines. |
 | A data table | `core`, `table`, `overlay`. |
 | A calendar | `dates`. |
 | A date or range picker, a time picker | `dates` and `overlay`: placing the popup. |
@@ -378,5 +381,12 @@ cargo run --release -p ui-proof -- bench    # render times, no server
   value reports the type errors (all of them) first and the rules after the fix.
 - `Toggle` is a checkbox underneath rather than a button with `aria-pressed`, so that
   it posts and keeps state with no script.
+- `ToggleGroup` is radios or checkboxes in a labelled group, for the same reason: a screen
+  reader says "checked", not "pressed".
+- A toast raised while a modal dialog is open stands inside the dialog until it closes,
+  since the page behind a modal is inert. A hidden tab pauses toasts by a runtime
+  listener, which the browser suite doesn't drive.
+- A tab that fails to load a panel on demand says so with an alert and Retry; with
+  JavaScript off a lazy tab is only a link, so draw the open tab's panel with the page.
 
 See `THIRD_PARTY.md` for where the structure, the icons and the font come from.

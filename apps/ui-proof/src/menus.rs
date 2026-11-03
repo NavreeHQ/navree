@@ -36,12 +36,10 @@ fn section(id: &'static str, title: &'static str, content: impl IntoNodes) -> El
 fn line_tabs(query: &[(String, String)]) -> Tabs {
     Tabs::new("t-line", "Deal sections")
         .active_from(first(query, "tab"))
-        .tab(
-            Tab::new("overview", "Overview").panel((
-                Text::new("The overview panel."),
-                Button::outline("A button in the panel"),
-            )),
-        )
+        .tab(Tab::new("overview", "Overview").panel((
+            Text::new("The overview panel."),
+            Button::outline("A button in the panel"),
+        )))
         .tab(
             Tab::new("activity", "Activity")
                 .count("12")
@@ -99,7 +97,11 @@ fn tabs(query: &[(String, String)]) -> Element {
                         .panel(Text::new("A day.")),
                 )
                 .tab(Tab::new("week", "Week").panel(Text::new("A week.")))
-                .tab(Tab::new("month", "Month").count("3").panel(Text::new("A month."))),
+                .tab(
+                    Tab::new("month", "Month")
+                        .count("3")
+                        .panel(Text::new("A month.")),
+                ),
             Tabs::new("t-vert", "Settings sections")
                 .param("v")
                 .vertical()
@@ -114,7 +116,9 @@ fn tabs(query: &[(String, String)]) -> Element {
                 .findable()
                 .active_from(first(query, "f"))
                 .tab(Tab::new("a", "First").panel(Text::new("The first panel.")))
-                .tab(Tab::new("b", "Second").panel(Text::new("A pineapple is in the second panel."))),
+                .tab(
+                    Tab::new("b", "Second").panel(Text::new("A pineapple is in the second panel.")),
+                ),
             Tabs::new("t-stretch", "Stretched")
                 .param("s")
                 .stretch()
@@ -191,8 +195,16 @@ fn toggles(query: &[(String, String)]) -> Element {
                     .joined()
                     .variant(ToggleVariant::Outline)
                     .item(ToggleItem::icon_only("list", icons::LIST, "As a list"))
-                    .item(ToggleItem::icon_only("grid", icons::LAYOUT_GRID, "As a grid"))
-                    .item(ToggleItem::icon_only("settings", icons::SETTINGS, "Settings"))
+                    .item(ToggleItem::icon_only(
+                        "grid",
+                        icons::LAYOUT_GRID,
+                        "As a grid",
+                    ))
+                    .item(ToggleItem::icon_only(
+                        "settings",
+                        icons::SETTINGS,
+                        "Settings",
+                    ))
                     .value("list"),
                 ToggleGroup::single("all-off", "All disabled")
                     .disabled(true)
@@ -223,7 +235,10 @@ fn basic_menu() -> DropdownMenu {
         .separator()
         .group(
             MenuGroup::new("Share")
-                .item(MenuItem::action("Copy link").on_click(Cmd::toast(ToastTone::Info, "Link copied.")))
+                .item(
+                    MenuItem::action("Copy link")
+                        .on_click(Cmd::toast(ToastTone::Info, "Link copied.")),
+                )
                 .item(MenuItem::link("Email", "/menus?mail=1")),
         )
         .separator()
@@ -253,15 +268,25 @@ fn sub_menu() -> DropdownMenu {
         .submenu(
             MenuSub::new("Move to")
                 .icon(icons::FOLDER)
-                .item(MenuItem::action("Inbox").on_click(Cmd::toast(ToastTone::Info, "Moved to Inbox.")))
+                .item(
+                    MenuItem::action("Inbox")
+                        .on_click(Cmd::toast(ToastTone::Info, "Moved to Inbox.")),
+                )
                 .item(MenuItem::action("Archive"))
                 .submenu(
                     MenuSub::new("Label as")
-                        .item(MenuItem::action("Urgent").on_click(Cmd::toast(ToastTone::Info, "Labelled Urgent.")))
+                        .item(
+                            MenuItem::action("Urgent")
+                                .on_click(Cmd::toast(ToastTone::Info, "Labelled Urgent.")),
+                        )
                         .item(MenuItem::action("Later")),
                 ),
         )
-        .submenu(MenuSub::new("Disabled submenu").disabled(true).item(MenuItem::action("x")))
+        .submenu(
+            MenuSub::new("Disabled submenu")
+                .disabled(true)
+                .item(MenuItem::action("x")),
+        )
         .item(MenuItem::action("Delete").destructive())
 }
 
@@ -279,11 +304,15 @@ fn menus() -> Element {
             TableRowEl::new((
                 TableCell::new(format!("Deal {n}")),
                 TableCell::new(
-                    DropdownMenu::icon(format!("m-row-{n}"), icons::ELLIPSIS, format!("Actions for deal {n}"))
-                        .align(PopupAlign::End)
-                        .size(Size::Sm)
-                        .item(MenuItem::link("Open", format!("/menus?open={n}")))
-                        .item(MenuItem::post("Remove", "/menus/echo").destructive()),
+                    DropdownMenu::icon(
+                        format!("m-row-{n}"),
+                        icons::ELLIPSIS,
+                        format!("Actions for deal {n}"),
+                    )
+                    .align(PopupAlign::End)
+                    .size(Size::Sm)
+                    .item(MenuItem::link("Open", format!("/menus?open={n}")))
+                    .item(MenuItem::post("Remove", "/menus/echo").destructive()),
                 ),
             ))
         }));
@@ -303,7 +332,9 @@ fn menus() -> Element {
                 long_menu(),
                 DropdownMenu::icon("m-right", icons::ELLIPSIS_VERTICAL, "Menu at the edge")
                     .align(PopupAlign::Start)
-                    .item(MenuItem::action("Wide item with a long label that needs room"))
+                    .item(MenuItem::action(
+                        "Wide item with a long label that needs room",
+                    ))
                     .item(MenuItem::action("Another")),
             )),
             table,
@@ -311,7 +342,10 @@ fn menus() -> Element {
                 .description("A menu item opened this.")
                 .body((
                     DropdownMenu::new("m-in-dialog", "Menu in a dialog")
-                        .item(MenuItem::action("One").on_click(Cmd::toast(ToastTone::Info, "From the dialog.")))
+                        .item(
+                            MenuItem::action("One")
+                                .on_click(Cmd::toast(ToastTone::Info, "From the dialog.")),
+                        )
                         .item(MenuItem::action("Two")),
                     Button::outline("Raise a toast")
                         .attr("id", "m-dialog-toast")
@@ -329,14 +363,23 @@ fn menus() -> Element {
 }
 
 fn toasts() -> Element {
-    let form = |id: &'static str, action: &'static str, label: &'static str, js: bool, fields: Vec<(&'static str, &'static str)>| {
+    let form = |id: &'static str,
+                action: &'static str,
+                label: &'static str,
+                js: bool,
+                fields: Vec<(&'static str, &'static str)>| {
         let mut form = el("form")
             .attr("id", id)
             .attr("method", "post")
             .attr("action", action)
             .flag("data-ui-form", js);
         for (name, value) in fields {
-            form = form.child(el("input").attr("type", "hidden").attr("name", name).attr("value", value));
+            form = form.child(
+                el("input")
+                    .attr("type", "hidden")
+                    .attr("name", name)
+                    .attr("value", value),
+            );
         }
         form.child(Button::outline(label).submit())
     };
@@ -387,9 +430,12 @@ fn toasts() -> Element {
 
 fn page(shell: &AppShell, query: &str) -> AppPage {
     let query = pairs(query);
-    shell
-        .page("Menus and toasts")
-        .body(Stack::gap(8).children((tabs(&query), toggles(&query), menus(), toasts())))
+    shell.page("Menus and toasts").body(Stack::gap(8).children((
+        tabs(&query),
+        toggles(&query),
+        menus(),
+        toasts(),
+    )))
 }
 
 pub struct MenuPages;
@@ -407,7 +453,9 @@ impl Injectable for MenuPages {
 /// A lazy tab's page: a fragment that says which tab it is and how often it was asked for.
 fn fragment(name: &str) -> View {
     let count = {
-        let mut hits = HITS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut hits = HITS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let count = hits.entry(name.to_owned()).or_insert(0);
         *count += 1;
         *count
@@ -419,7 +467,9 @@ fn fragment(name: &str) -> View {
 }
 
 fn hits() -> Response {
-    let hits = HITS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let hits = HITS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let body = hits
         .iter()
         .map(|(name, count)| format!("\"{name}\":{count}"))
@@ -499,9 +549,14 @@ impl Controller for MenuPages {
             )
             .public(),
             RouteDef::on(Method::GET, "!/menus/hits", || async { hits() }).public(),
-            RouteDef::on(Method::GET, "!/menus/server-toast", || async { server_toast() }).public(),
-            RouteDef::on(Method::POST, "!/menus/echo", |body: String| async move { echo(&body) })
-                .public(),
+            RouteDef::on(Method::GET, "!/menus/server-toast", || async {
+                server_toast()
+            })
+            .public(),
+            RouteDef::on(Method::POST, "!/menus/echo", |body: String| async move {
+                echo(&body)
+            })
+            .public(),
             RouteDef::on(Method::POST, "!/menus/toast", |body: String| async move {
                 toast_post(&body)
             })

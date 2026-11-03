@@ -363,7 +363,7 @@ pub struct DropdownMenu {
     label: Option<String>,
 }
 
-entries!(DropdownMenu, MenuGroup, MenuSub);
+entries!(MenuGroup, MenuSub);
 
 impl DropdownMenu {
     /// A menu with the id `id`, opened by an outline button reading `label`.
@@ -445,6 +445,42 @@ impl DropdownMenu {
     /// Adds something before the items that is not one: a name and an address.
     pub fn header(mut self, header: impl Into<Node>) -> Self {
         self.entries.push(Entry::Header(header.into()));
+        self
+    }
+
+    /// Adds an item.
+    pub fn item(mut self, item: MenuItem) -> Self {
+        self.entries.push(Entry::Item(item));
+        self
+    }
+
+    /// Adds a line between items.
+    pub fn separator(mut self) -> Self {
+        self.entries.push(Entry::Separator);
+        self
+    }
+
+    /// Adds a group of items under a heading.
+    pub fn group(mut self, group: MenuGroup) -> Self {
+        self.entries.push(Entry::Group(group));
+        self
+    }
+
+    /// Adds a choice that is on or off.
+    pub fn checkbox(mut self, checkbox: MenuCheckbox) -> Self {
+        self.entries.push(Entry::Checkbox(checkbox));
+        self
+    }
+
+    /// Adds a set of choices of which one is on.
+    pub fn radios(mut self, radios: MenuRadios) -> Self {
+        self.entries.push(Entry::Radios(radios));
+        self
+    }
+
+    /// Adds a submenu.
+    pub fn submenu(mut self, sub: MenuSub) -> Self {
+        self.entries.push(Entry::Sub(sub));
         self
     }
 

@@ -30,6 +30,7 @@ Button::outline("Show details").on_click(Cmd::toggle("deal-details"))
 | `Cmd::fill(id)` | fills a dialog from the row the element sits in, and opens it |
 | `Cmd::set_attr`, `remove_attr`, `toggle_attr` | changes a state attribute: `data-*` (not the runtime's own `data-ui-*`), `aria-*`, `hidden`, `open` or `disabled` |
 | `Cmd::dispatch(name)` | sends a custom event from the element |
+| `Cmd::toast(tone, text)` | shows a [toast](/docs/components/toast/) |
 
 A command can't change where something points or what it runs. `set_attr` and its two siblings refuse any other attribute: a debug build stops where the command is built, and the runtime refuses it again. Triggers are `Trigger::Click`, `Change` and `Input`, on a button with `.on_click` and on any component or element with `.on(trigger, commands)`.
 
@@ -100,7 +101,7 @@ async fn update(Submit(deal): Submit<NewDeal>) -> Reply {
 | `morph` | morphs an element into new HTML, keeping focus, caret, selection, composition and typed values |
 | `replace`, `append`, `prepend`, `remove` | replaces an element, adds to it, or removes it |
 | `errors` | shows field errors under a form's inputs, or clears them |
-| `toast` | shows a toast, and announces it to assistive technology |
+| `toast` | shows a [toast](/docs/components/toast/), with its title, action and time if it has them, and announces it to assistive technology |
 | `open`, `close`, `focus` | opens or closes a dialog, popover or details; moves focus |
 | `url` | changes the address bar without loading anything, on this site |
 | `navigate` | goes to another page of this site, the way a boosted link does |
@@ -114,7 +115,7 @@ An envelope names the build of the toolkit it belongs to. A page from an older b
 
 ## Toasts
 
-`Reply::toast(tone, text)` shows a short message after an action: "Saved", "Deleted 3 deals". With the runtime it appears at once and is announced; with JavaScript off it travels in a cookie and the next page shows it at the top, in the [app shell](/docs/ui/app-shell/). The tones are `ToastTone::Info`, `Success`, `Warning` and `Danger`.
+`Reply::toast(tone, text)` shows a short message after an action: "Saved", "Deleted 3 deals". With the runtime it appears at once and is announced; with JavaScript off it travels in a cookie and the next page shows it as a toast, in the [app shell](/docs/ui/app-shell/). The tones are `ToastTone::Info`, `Success`, `Warning` and `Danger`. `Reply::toast_with(Toast)` adds a title, an action, a name or a time; the [Toast page](/docs/components/toast/) has all of it.
 
 ## Links and forms, boosted
 

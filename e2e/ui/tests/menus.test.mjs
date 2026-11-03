@@ -1058,6 +1058,33 @@ for (const name of NAMES) {
         await page.done();
       });
 
+      test("N10 stored markup can't stand in for the toaster, or be closed as a toast", async () => {
+        const page = await open("/menus");
+        await page.evaluate(() => {
+          const fake = document.createElement("div");
+          fake.innerHTML = '<section data-slot="toaster" id="fake-toaster"></section><div data-slot="toast" id="fake-toast"><button data-slot="toast-close" id="fake-close">x</button></div>';
+          document.querySelector("main").prepend(fake);
+        });
+        await page.locator("#n-info").click();
+        await toasts(page).first().waitFor();
+        assert.equal(await page.locator("#fake-toaster [data-slot=toast]").count(), 0, "the real toaster took it");
+        assert.equal(await page.locator("body > [data-slot=toaster] [data-slot=toast]").count(), 1);
+        await page.locator("#fake-close").click();
+        assert.equal(await page.locator("#fake-toast").count(), 1, "a toast of stored markup isn't the runtime's to close");
+        await page.done();
+      });
+
+      test("N12 a toast from a command is in the page by the end of the click", async () => {
+        const page = await open("/menus");
+        const at = await page.evaluate(() => {
+          const button = document.querySelector("#n-success");
+          button.click();
+          return !!document.querySelector("[data-slot=toaster] [data-slot=toast]");
+        });
+        assert.equal(at, true, "no request and no frame between the click and the toast");
+        await page.done();
+      });
+
       test("N9 the six positions", async () => {
         const page = await open("/menus");
         await page.locator("#n-info").click();

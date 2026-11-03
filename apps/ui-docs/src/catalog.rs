@@ -15,7 +15,13 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "actions",
         title: "Actions",
-        components: &["button", "button-group", "toggle"],
+        components: &[
+            "button",
+            "button-group",
+            "toggle",
+            "toggle-group",
+            "dropdown-menu",
+        ],
     },
     Group {
         id: "inputs",
@@ -62,7 +68,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "feedback",
         title: "Feedback",
-        components: &["alert", "empty", "progress", "skeleton", "spinner"],
+        components: &["alert", "toast", "empty", "progress", "skeleton", "spinner"],
     },
     Group {
         id: "overlays",
@@ -93,7 +99,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "navigation",
         title: "Navigation",
-        components: &["app-shell", "breadcrumb", "pagination", "command"],
+        components: &["app-shell", "tabs", "breadcrumb", "pagination", "command"],
     },
     Group {
         id: "data",
@@ -168,6 +174,27 @@ pub const COMPONENTS: &[Component] = &[
     .parts("icon"),
     component("button-group", "ButtonGroup", &["ButtonGroup"], "thumb").parts("default"),
     component("toggle", "Toggle", &["Toggle"], "thumb").parts("default"),
+    component(
+        "toggle-group",
+        "ToggleGroup",
+        &["ToggleGroup", "ToggleItem", "ToggleVariant", "Orientation"],
+        "thumb",
+    )
+    .parts("default"),
+    component(
+        "dropdown-menu",
+        "DropdownMenu",
+        &[
+            "DropdownMenu",
+            "MenuItem",
+            "MenuCheckbox",
+            "MenuRadios",
+            "MenuGroup",
+            "MenuSub",
+        ],
+        "thumb",
+    )
+    .parts("default"),
     // Inputs
     component("field", "Field", &["Field", "Label", "FieldSet"], "thumb").parts("help"),
     component("input", "Input", &["Input", "InputKind"], "default").parts("default"),
@@ -256,6 +283,19 @@ pub const COMPONENTS: &[Component] = &[
     .parts("default"),
     // Feedback
     component("alert", "Alert", &["Alert", "AlertTone"], "default").parts("default"),
+    component(
+        "toast",
+        "Toast",
+        &[
+            "Toast",
+            "ToastAction",
+            "ToastDuration",
+            "ToastPosition",
+            "Toaster",
+        ],
+        "thumb",
+    )
+    .parts("action"),
     component("empty", "Empty", &["Empty"], "thumb").parts("default"),
     component("progress", "Progress", &["Progress"], "thumb").parts("default"),
     component(
@@ -319,6 +359,13 @@ pub const COMPONENTS: &[Component] = &[
         "default",
     )
     .page("/docs/ui/app-shell/")
+    .parts("default"),
+    component(
+        "tabs",
+        "Tabs",
+        &["Tabs", "Tab", "TabsVariant", "Activation", "Orientation"],
+        "thumb",
+    )
     .parts("default"),
     component("breadcrumb", "Breadcrumb", &["Breadcrumb"], "default").parts("default"),
     component("pagination", "Pagination", &["Pagination"], "default").parts("default"),

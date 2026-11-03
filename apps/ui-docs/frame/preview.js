@@ -5,7 +5,8 @@ addEventListener(
   "click",
   (event) => {
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest("a[href]")) event.preventDefault();
+    // A tab is a link the toolkit switches in place, so its click is left alone.
+    if (target?.closest("a[href]:not([role=tab])")) event.preventDefault();
   },
   true,
 );
