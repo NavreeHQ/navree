@@ -16,8 +16,9 @@ test can check it.
 
 ## Outputs
 
-- `specs/04-specs/<module>/reports.md`
-- The reports line of `MODULE.md`
+- `specs/04-specs/<module>/reports.md`, rows `draft` or `question`, with
+  its closing sections (questions, deliberate changes, new map rows;
+  `spec-module.md`)
 
 ## Method
 

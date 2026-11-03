@@ -14,7 +14,8 @@ settings, files, search, languages and time zones.
 
 ## Outputs
 
-- `specs/05-cross/CROSS_CUTTING.md`
+- `specs/05-cross/CROSS_CUTTING.md`, rows `draft` or `question`, with its
+  closing sections (`spec-module.md`)
 
 ## Method
 

@@ -112,3 +112,6 @@ encodings | outliers
 - Every finding has a measure and a query id, and its query is saved with
   its output.
 - No personal data copied into the spec: counts and shapes, not values.
+- Each file ends with `## Questions`, `## Deliberate changes` and
+  `## New map rows` (formats in `spec-module.md`); an empty one says
+  "none".

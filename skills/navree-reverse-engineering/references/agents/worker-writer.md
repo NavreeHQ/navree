@@ -15,8 +15,9 @@ manual scripts, and how each must behave when it runs twice.
 
 ## Outputs
 
-- `specs/04-specs/<module>/workers.md`
-- The workers line of `MODULE.md`
+- `specs/04-specs/<module>/workers.md`, rows `draft` or `question`, with
+  its closing sections (questions, deliberate changes, new map rows;
+  `spec-module.md`)
 
 ## Method
 

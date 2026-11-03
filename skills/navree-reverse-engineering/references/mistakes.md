@@ -504,8 +504,10 @@ condition. In the data, count references to rows that no longer exist
 (orphans) and rows flagged deleted that are still referenced.
 
 **Navree form:** `#[model(soft_deletes)]` with `deleted_at` (the
-`Customer` model above): every query leaves trashed rows out unless it asks
-for them, and record checks treat them as missing. Records that must never
+`Customer` model above): queries leave trashed rows out unless they ask
+for them (`with_trashed()`, `only_trashed()`). Test that each record route
+answers 404 for a trashed row, and check `deleted_at` where a rule loads a
+record another way. Records that must never
 go (invoices) have no delete at all: a status (`void`) instead, and the
 spec says so. Skill: `navree-orm`.
 
@@ -636,11 +638,15 @@ rg -n "webhook|callback|notify_url|ipn" -i
 For each incoming endpoint, look for a signature or token check before the
 body is used.
 
-**Navree form:** outgoing calls through `HttpClient` (timeouts, retries of
-safe methods, an SSRF guard, a fake for tests), queued when they can wait;
-calls that change something on the other side carry an idempotency key the
-other system accepts. Incoming webhooks through `VerifiedWebhook<S>`, with
-the provider's signature checked and duplicates ignored. Customers'
+**Navree form:** outgoing calls through `HttpClient`: timeouts; retries of
+methods that are safe to repeat (GET, PUT, DELETE and the like) on
+connection errors, 5xx and 429, never of POST or PATCH and never after a
+time-out; a guard that refuses calls to private and internal addresses;
+a fake for tests. A call that changes something on the other side (a POST)
+runs in a job, whose retries resend it with an idempotency key the other
+system accepts. Incoming webhooks through `VerifiedWebhook<S>`, with
+the provider's signature checked, and `mark_processed` in the same unit of
+work as the handler's writes so a repeated event is handled once. Customers'
 accounts on other systems through `navree-integrations` connections.
 Skills: `navree-cache-and-http-client`, `navree-webhooks`,
 `navree-integrations`.
@@ -717,11 +723,15 @@ or internal notes, and the page hides the columns.
 powerful role and search it for the sensitive fields in `ROLES.md`
 (`CAP-`).
 
-**Navree form:** fields a role may not read are never serialized for it:
-`#[model(hidden)]` for what nobody reads, `cannot(READ, ..).fields([..])`
-rules for what some roles may not read (Helm and exports honour them),
-response types that list only what the screen needs. Skills:
-`navree-access-control`, `navree-errors-and-responses` (API resources).
+**Navree form:** fields a role may not read are not in the response at
+all: `#[model(hidden)]` for what nobody reads; for what some roles may not
+read, a `cannot(READ, ..).fields([..])` rule, which Helm (its pages and its
+CSV export) applies by itself, and which your own routes apply by
+returning a response type with only the fields the screen needs, or by
+dropping the fields the user can't read (`ability.permitted_fields(..)`,
+`navree::api::mask_fields`). Spreadsheet exports you write yourself must
+do the same. Skills: `navree-access-control`,
+`navree-errors-and-responses` (API resources).
 
 ## 18. Exports that ignore the screen
 
@@ -733,9 +743,10 @@ Excel; Arabic or accented text is garbled.
 the rows with the screen.
 
 **Navree form:** the export runs the list's own query (same filters, same
-access), through `navree-sheets` (byte-order mark, formula escaping,
-queued with a signed link above a size); Helm's export reads the user's
-access again for every chunk.
+access), through `navree-sheets`: a byte-order mark, formula escaping, a
+download in the request for small files and a queued export with a signed
+link for big ones (the caller chooses: `GET` or `POST` on a named export).
+Helm's export reads the user's access again for every chunk.
 
 ## 19. Status values as free text or magic numbers
 

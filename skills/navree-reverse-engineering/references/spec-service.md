@@ -67,3 +67,6 @@ the server, once.
 - Every rule cites every place it lives, and contradictions are flagged.
 - Every calculation has rounding, units and at least one real example.
 - Every refusal has an error code.
+- The file ends with `## Questions`, `## Deliberate changes` and
+  `## New map rows` (formats in `spec-module.md`); an empty one says
+  "none".

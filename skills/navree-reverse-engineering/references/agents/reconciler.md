@@ -13,8 +13,12 @@ only the owner can answer.
 ## Outputs
 
 - `specs/07-reconcile/RECONCILE.md`
-- `specs/07-reconcile/QUESTIONS.md`
-- `MAP.md` statuses: `owned` for rows covered by confirmed spec rows
+- `specs/07-reconcile/QUESTIONS.md`, collected from every spec file's
+  `## Questions` and from every row left `question`
+- Each module's `MODULE.md`: the layers table (status, rows, questions)
+  and the deliberate changes, collected from the layer files
+- `MAP.md`: the rows from every `## New map rows`, under "Added later";
+  `owned` for rows covered by confirmed spec rows
 
 ```text
 # RECONCILE.md

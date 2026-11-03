@@ -72,3 +72,6 @@ another tenant's rows.
 - Every leak has evidence and was shown to the owner.
 - Membership and any division below the tenant are spelled out, since they
   drive the record scopes in `ROLES.md`.
+- The file ends with `## Questions`, `## Deliberate changes` and
+  `## New map rows` (formats in `spec-module.md`); an empty one says
+  "none".

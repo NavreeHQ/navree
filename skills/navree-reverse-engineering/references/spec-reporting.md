@@ -71,3 +71,6 @@ test can compare it with the old number.
 - Two reports that show the same metric use the same metric row.
 - Every report has at least one known old number from a closed period, or
   a reason it can't (the old report is broken: then a question).
+- The file ends with `## Questions`, `## Deliberate changes` and
+  `## New map rows` (formats in `spec-module.md`); an empty one says
+  "none".

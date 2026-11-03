@@ -6,8 +6,9 @@ never refute a file you wrote.
 
 ## Inputs
 
-- Scope: one spec file (`04-specs/<module>/<layer>.md`, a `05-cross` file,
-  or a `06-migration` file).
+- Scope: one spec file (`02-base/SCHEMA.md` or `DATA_PROFILE.md`,
+  `04-specs/<module>/<layer>.md`, a `05-cross` file, or a `06-migration`
+  file).
 - The writer's brief for that file (its **Refuter** section lists the
   checks specific to it).
 - The files the writer read, the old code and the running copy.
@@ -16,7 +17,8 @@ never refute a file you wrote.
 ## Outputs
 
 - `specs/07-reconcile/refutations/<module>-<layer>.md` (or
-  `cross-<name>.md`, `migration-<name>.md`)
+  `base-schema.md`, `base-profile.md`, `cross-<name>.md`,
+  `migration-<name>.md`)
 - Each row's **Status** in the spec file set to `confirmed`, `refuted` or
   `question`
 

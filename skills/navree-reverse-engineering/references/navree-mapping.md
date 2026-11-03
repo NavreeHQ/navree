@@ -11,7 +11,7 @@ against the code.
 
 | Spec item | Navree | Skill |
 |---|---|---|
-| A module | `navree make:module <name>` (`--crud` for five JSON routes, DTOs and tests) | `navree-cli-generators`, `navree-modules-and-di` |
+| A module | `navree make:module <name>` (`--crud` for five JSON routes, request types and tests) | `navree-cli-generators`, `navree-modules-and-di` |
 | An entity | a `#[derive(Model)]` struct and its migration: `navree make:model <module> <Model> --migration --factory --policy` | `navree-orm`, `navree-migrations` |
 | Key | `id: Uuid` (a UUID v7 on create); old key in `legacy_id`, unique per workspace | `navree-orm` |
 | Text, long text | `String`; `length` rules | `navree-validation` |
@@ -49,7 +49,7 @@ against the code.
 | Exports | `navree-sheets`: `Download::csv`/`xlsx`, named exports queued with a signed link | `navree-sheets` |
 | Imports of spreadsheets | `navree-sheets` importers: mapping, staging preview, duplicate modes, error files | `navree-sheets` |
 | Screens and their states | the front end (`@navree/next`, `@navree/nuxt`) or Helm pages (`HelmPage`) <!-- ui-toolkit:screen --> | `navree-frontend-next`, `navree-frontend-nuxt`, `navree-helm` |
-| What a role may see in the page | `GET /api/me/abilities` (CASL rules), `AbilityProvider`/`<Can>`, `useAbility` | `navree-access-control`, `navree-frontend-next` |
+| What a role may see in the page | `GET /api/me/abilities` (the user's rules, in the CASL format front ends read), `AbilityProvider`/`<Can>`, `useAbility` | `navree-access-control`, `navree-frontend-next` |
 | Translated texts | `navree-i18n` (Fluent, `t!`, translated validation) | `navree-i18n` |
 | Files on records | `navree-storage` disks, `navree-media` collections | `navree-storage`, `navree-media` |
 | Search box | `#[derive(Searchable)]` and an engine; or a `like` filter for small tables | `navree-search` |
@@ -77,7 +77,7 @@ against the code.
 | Spec item | Navree | Skill |
 |---|---|---|
 | A metric | an aggregate query (`count`, `sum`, `avg` on columns; `Statement` for raw SQL) in a service | `navree-orm`, `navree-database` |
-| By local day, week, month | the workspace's zone, `DayRange` and report windows; `AT TIME ZONE` with a checked zone | `navree-time-zones` |
+| By local day, week, month | the workspace's zone, `LocalDay` and `DayRange` turned into UTC bounds; `AT TIME ZONE` with a checked zone | `navree-time-zones` |
 | Large time series | TimescaleDB hypertables (the default database) | `navree-database` |
 | Back-office figures and charts | Helm `Metric::value`, `trend`, `partition` | `navree-helm` |
 | PDF reports | `navree-documents` (HTML templates or `PdfDocument`) | `navree-documents` |
@@ -88,7 +88,7 @@ against the code.
 
 | Spec item | Navree | Skill |
 |---|---|---|
-| Calls to another API | `HttpClient`: timeouts, retries of safe methods, SSRF guard, `HttpClient::fake()` | `navree-cache-and-http-client` |
+| Calls to another API | `HttpClient`: timeouts, retries of GET, PUT, DELETE and the like (never POST or PATCH), a guard against calls to internal addresses, `HttpClient::fake()`; a POST that must be retried runs in a job with an idempotency key | `navree-cache-and-http-client` |
 | A tenant's account on another system | `navree-integrations` connections (Microsoft 365, Google Workspace, Slack, OAuth 2.0 APIs, API keys) | `navree-integrations` |
 | Webhooks we send | `navree-webhooks` outgoing: signed, retried, delivery log | `navree-webhooks` |
 | Webhooks we receive | `VerifiedWebhook<S>` (Stripe, GitHub, Paddle, Standard Webhooks, ... or `Hmac`, or a verifier of your own) | `navree-webhooks` |
@@ -118,7 +118,7 @@ against the code.
 |---|---|---|
 | Reading the old database | a named connection (`[database.connections.legacy]`, `db.connection("legacy")`) and `Statement`s | `navree-database` |
 | The import | console commands per table, batched, writing through units of work (`data-migration.md`) | `navree-cli-generators`, `navree-database` |
-| Writing into a workspace from a command or job | `navree::orm::workspace::scope(workspace_id, ..)` | `navree-orm` |
+| Writing into a workspace from a command or job | `navree::orm::workspace::scope(workspace_id, ..)` (documented in `crates/navree-orm/src/workspace.rs`; `data-migration.md` shows it) | `navree-workspaces` |
 | Spreadsheet data | `navree-sheets` importers | `navree-sheets` |
 | Test data | factories and seeders | `navree-orm`, `navree-database` |
 | Acceptance tests | `TestApp`, HTTP tests, acting as users, fakes | `navree-testing` |

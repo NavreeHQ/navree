@@ -48,16 +48,17 @@ never verify code you built.
 - A row is `verified` only with a quoted result line from a command run
   on the recorded commit. A test reported passing by the builder doesn't
   count.
-- `NOT RUN` blocks done unless the owner accepted it in writing.
+- `NOT RUN` blocks done. Only the owner can turn a case into `N/A`, in
+  writing, with the reason.
 - A change after verification makes the rows it touches stale: re-run
   them.
 
 ## Refuter
 
 The owner, at stop 5, reads `VERIFY.md`, `PARITY.md` and the last
-`MIGRATION_RUN.md`. Before that, check the counts: every spec row is
-`verified` or `dropped`, every map row `closed` or `dropped`, no `FAIL`,
-no unaccepted `NOT RUN`.
+`MIGRATION_RUN.md`. Before that, check the counts: every spec row in
+`04-specs`, `05-cross` and `06-migration` is `verified` or `dropped`,
+every map row `closed` or `dropped`, no `FAIL`, no `NOT RUN`.
 
 ## Return
 

@@ -11,9 +11,9 @@ columns, keys, the relations the code relies on, enums and lookups.
 
 ## Outputs
 
-- `specs/02-base/SCHEMA.md`
+- `specs/02-base/SCHEMA.md`, with its closing sections (`spec-module.md`)
 - `specs/02-base/queries/SQL-*.sql` for every query you ran
-- New `TB` rows in `MAP.md` under "Added later", if any table was missed
+- Tables the map missed, in `SCHEMA.md`'s `## New map rows`
 
 ## Method
 

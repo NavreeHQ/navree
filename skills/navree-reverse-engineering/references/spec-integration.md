@@ -44,7 +44,7 @@ happens when it fails.
 - **Timeout and Retries**: how long to wait; what to retry (network
   errors, 5xx, 429 with its wait) and what never (4xx validation errors).
   Calls that change something on the other side retry only with an
-  idempotency key.
+  idempotency key, and from a job rather than in the request.
 - **On failure**: who learns of it; what the user sees; what is left to
   do later (a queued retry, a "needs attention" status).
 - **Verified by**: how an incoming call proves it came from the system: a
@@ -66,7 +66,7 @@ happens when it fails.
 | Environments | sandbox account exists, owner has access | owner, stop 1 | running | high | confirmed |
 
 ### Exchanges
-| invoices.integration.1 | Create payment link | out | Send action when the customer pays by card | invoice number, amount in cents, currency, return URL | link URL, provider id | provider idempotency key = invoice id + attempt | 10 s | 2, on network errors and 5xx | invoice sent without link; accountant sees "link missing", can retry | payments/link.php:20 | code | high | confirmed |
+| invoices.integration.1 | Create payment link | out | Send action when the customer pays by card | invoice number, amount in cents, currency, return URL | link URL, provider id | provider idempotency key = invoice id + attempt | 10 s | the job retries 2 times on network errors and 5xx, same key | invoice sent without link; accountant sees "link missing", can retry | payments/link.php:20 | code | high | confirmed |
 
 ### Incoming events
 | invoices.integration.5 | payment succeeded | signature header with the endpoint secret (old: none) | event id stored once; 5-minute timestamp window | record payment (invoices.service.9) | duplicates ignored by event id; a payment for a void invoice is refunded and flagged | hooks/pay.php | code | high | confirmed |
@@ -80,3 +80,6 @@ happens when it fails.
   finding.
 - Every credential's current location is recorded, none is copied.
 - Every exchange has a captured example or a reason there is none.
+- The file ends with `## Questions`, `## Deliberate changes` and
+  `## New map rows` (formats in `spec-module.md`); an empty one says
+  "none".

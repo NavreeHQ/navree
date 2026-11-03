@@ -83,3 +83,6 @@ every move not in the table must be refused.
   went backwards, by code: no check) is a question or a deliberate change.
 - Every timer names its zone and what happens if the record moved on
   before it fires.
+- The file ends with `## Questions`, `## Deliberate changes` and
+  `## New map rows` (formats in `spec-module.md`); an empty one says
+  "none".

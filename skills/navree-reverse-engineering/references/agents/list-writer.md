@@ -16,9 +16,10 @@ server: columns, filters, sort, search, paging, bulk actions, export.
 
 ## Outputs
 
-- `specs/04-specs/<module>/lists.md`
-- The lists line of `MODULE.md`, and a deliberate change for every list
-  that paged, sorted or filtered in the browser
+- `specs/04-specs/<module>/lists.md`, rows `draft` or `question`, with
+  its closing sections (questions, deliberate changes, new map rows;
+  `spec-module.md`); every list that paged, sorted or filtered in the
+  browser is a deliberate change
 
 ## Method
 

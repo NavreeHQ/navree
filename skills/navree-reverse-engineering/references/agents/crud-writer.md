@@ -16,10 +16,9 @@ where its options come from, and the operations on it.
 
 ## Outputs
 
-- `specs/04-specs/<module>/crud.md`
-- The CRUD line of `MODULE.md` (status, row count, questions), and any
-  deliberate change in its table
-- Questions in `specs/07-reconcile/QUESTIONS.md`
+- `specs/04-specs/<module>/crud.md`, rows `draft` or `question`, with
+  its closing sections (questions, deliberate changes, new map rows;
+  `spec-module.md`)
 
 ## Method
 

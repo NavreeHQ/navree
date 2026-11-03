@@ -16,7 +16,8 @@ is cleaned and how, what happens to bad rows, and how to prove the result.
 - `specs/06-migration/MIGRATION.md`
 - `specs/06-migration/CLEANING.md`
 - The **Becomes** column of `SCHEMA.md` filled in
-- Questions for every cleaning rule that changes meaning
+- Each file's closing sections (`spec-module.md`): a question for every
+  cleaning rule that changes meaning
 
 ## Method
 

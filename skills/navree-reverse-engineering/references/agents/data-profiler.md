@@ -13,7 +13,8 @@ specs and the migration are built on numbers, not hopes.
 
 ## Outputs
 
-- `specs/02-base/DATA_PROFILE.md`
+- `specs/02-base/DATA_PROFILE.md`, with its closing sections
+  (`spec-module.md`)
 - `specs/02-base/queries/SQL-*.sql`, each with its output pasted below it
   as a comment
 

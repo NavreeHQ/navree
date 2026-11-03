@@ -83,3 +83,6 @@ journeys that pass through it.
 - Every screen has loading, empty and error states and a forbidden state.
 - Every action names its operation and the state that enables it.
 - Every journey ends with something checkable (a status, a row, a mail).
+- The file ends with `## Questions`, `## Deliberate changes` and
+  `## New map rows` (formats in `spec-module.md`); an empty one says
+  "none".

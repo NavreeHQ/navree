@@ -94,3 +94,6 @@ matrix test proves each cell.
 - Every sensitive field has a row.
 - Every `template` or `none` enforcement the owner wants enforced is listed
   as a deliberate change.
+- The file ends with `## Questions`, `## Deliberate changes` and
+  `## New map rows` (formats in `spec-module.md`); an empty one says
+  "none".

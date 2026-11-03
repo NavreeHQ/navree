@@ -15,7 +15,7 @@ order the modules by dependency.
 - `specs/04-specs/<module>/MODULE.md` for every module (layers listed,
   files not yet written)
 - The **Owner** column of every row in `MAP.md`
-- Questions in `specs/07-reconcile/QUESTIONS.md` for disputed rows
+- Disputed rows in `MODULES.md`, shown to the owner at stop 2
 
 ## Method
 

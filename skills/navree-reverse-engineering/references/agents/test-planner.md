@@ -32,8 +32,10 @@ into the task list and the test cases that define done.
    `navree-mapping.md`. Each task names the spec rows it builds, the tests
    it makes pass and the Navree skill to load. Keep tasks small enough to
    review in one sitting.
-7. Check coverage both ways: every spec row is in at least one test and
-   one task; every test and task names a spec row.
+7. Check coverage both ways: every spec row in `04-specs`, `05-cross` and
+   `06-migration` is in at least one test and one task; every test and
+   task names a spec row. Base rows are covered through the CRUD and
+   migration rows that cite them.
 
 ## Evidence rules
 
@@ -44,8 +46,9 @@ into the task list and the test cases that define done.
 
 ## Refuter
 
-Count spec rows without a test or a task: zero. Pick ten tests at random:
-could someone write the test from the case alone, with no other context?
+Count spec rows (outside `02-base`) without a test or a task: zero. Pick
+ten tests at random: could someone write the test from the case alone,
+with no other context?
 Check the task order respects the module dependencies.
 
 ## Return

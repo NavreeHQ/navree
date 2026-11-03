@@ -109,3 +109,6 @@ page.
 - Every related column is loaded with the rows, not one query per row.
 - Every computed column cites its service row.
 - Export uses the same filters and access as the screen.
+- The file ends with `## Questions`, `## Deliberate changes` and
+  `## New map rows` (formats in `spec-module.md`); an empty one says
+  "none".

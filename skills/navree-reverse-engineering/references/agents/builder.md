@@ -23,18 +23,21 @@ task.
 | TK-031 | 4e5f6a7 | T-031, T-032 | cargo test invoices -> 14 passed | navree gate: all steps passed | |
 ```
 
-- The task's status set to `built` in `TASKS.md`.
+- The task's status set to `built` in `TASKS.md`, and its spec rows'
+  status set to `built`.
 
 ## Method
 
 1. Read the task's spec rows and test cases. If a row is unclear or
-   contradicts the code you find, stop and add a question; don't guess.
+   contradicts the code you find, stop: write the question in the task's
+   Notes in `BUILD_LOG.md` and hand it to the agent running the job; don't
+   guess.
 2. Write the tests first, from the cases as written. Run them and see
    them fail for the right reason.
 3. Build with the generators (`navree make:*`) and the skill the task
    names, following `navree-mapping.md`. Keep the module's layer order.
 4. Run the tests until they pass. Never change a test's expected value to
-   make it pass; if the spec is wrong, raise a question.
+   make it pass; if the spec is wrong, raise a question the same way.
 5. Run `navree check` and `navree gate`. Fix every failure at its cause:
    no `#[allow]` to silence a warning, no skipped test, no route made
    public to get past a 401 or 403.

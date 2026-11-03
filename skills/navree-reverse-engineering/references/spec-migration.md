@@ -51,7 +51,7 @@ What a second run does; the freeze; the final delta; the rollback.
   table, a constant, or `generated`.
 - **Transform**: exact and testable: "trim, lower case", "parse with the
   branch's date format, then the branch's zone to UTC", "FLOAT pounds x 100,
-  rounded half up to an integer of pence", "map via lookup
+  rounded half away from zero to an integer of pence", "map via lookup
   `order_status_map`".
 - **Cleaning rule**: the `CLEANING.md` id.
 - **If it fails**: `reject the row`, `set default <x> and flag`, `set null
@@ -79,15 +79,15 @@ What a second run does; the freeze; the final delta; the rollback.
 ```text
 ## Load order
 | 1 | Workspace | branches | | 3 | 3 | 0 |
-| 2 | Customer | customers | 1 | 9 811 | 9 642 | 0 (169 merged as duplicates, M-3) |
-| 3 | Invoice | invoices | 2 | 61 204 | 61 204 | 0; 311 flagged status-unknown |
-| 4 | Payment | payments | 3 | 58 870 | 58 802 | 68 (orphans, M-7) |
+| 2 | Customer | customers | 1 | 9 811 | 9 642 | 0 (169 merged as duplicates, C-3) |
+| 3 | Invoice | invoices | 2 | 61 204 | 61 204 | 0 (311 blank statuses become draft, C-2) |
+| 4 | Payment | payments | 3 | 58 870 | 58 802 | 68 (orphans, C-7) |
 
 ## Invoice (from invoices)
 | migration.20 | number | invoices.inv_no | trim; prefix branch code when it clashes inside the branch | C-4 | reject the row | SQL-031 | data | high | confirmed |
 | migration.21 | issued_on | invoices.idate | parse 'Y-m-d', 'd/m/Y' (North, South) or 'm/d/Y' (West) | C-6 | reject the row | SQL-019 | data | medium | question Q-009 |
-| migration.22 | total_cents | invoices.total | round(total x 100), half up | C-8 | stop the run (a total can't be guessed) | SQL-022 | data | high | confirmed |
-| migration.23 | status | invoices.status | lower, trim, map via order_status_map; '' -> draft and flag | C-2 | set draft and flag | SQL-033 | data | high | confirmed |
+| migration.22 | total_cents | invoices.total | round(total x 100), half away from zero | C-8 | reject the row (a total can't be guessed) | SQL-022 | data | high | confirmed |
+| migration.23 | status | invoices.status | lower, trim, map via order_status_map; '' -> draft | C-2 | any other value: reject the row | SQL-033 | data | high | confirmed |
 
 ## Checks after each run
 | migration.60 | invoices per branch | SELECT branch_id, COUNT(*) FROM invoices GROUP BY branch_id | per workspace count of invoices | exactly | 0 |
@@ -109,3 +109,6 @@ What a second run does; the freeze; the final delta; the rollback.
   silently.
 - Expected counts in, out and rejected are filled in before the first run.
 - Every check has an old query and a new query that can run as written.
+- Each file ends with `## Questions`, `## Deliberate changes` and
+  `## New map rows` (formats in `spec-module.md`); an empty one says
+  "none".

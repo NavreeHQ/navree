@@ -15,8 +15,9 @@ exchange with another system and what happens when it fails.
 
 ## Outputs
 
-- `specs/04-specs/<module>/integrations.md`
-- The integrations line of `MODULE.md`
+- `specs/04-specs/<module>/integrations.md`, rows `draft` or
+  `question`, with its closing sections (questions, deliberate changes,
+  new map rows; `spec-module.md`)
 - `evidence/CAP-*` for captured exchanges (secrets and personal data
   removed)
 

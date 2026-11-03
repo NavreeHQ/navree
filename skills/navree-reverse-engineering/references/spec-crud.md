@@ -39,7 +39,8 @@ entry in `mistakes.md`.
 - **Field**: the new name, snake case. **Old column**: `table.column`, or
   `computed`, or `none` for a new field.
 - **Type**: the new type in plain words: `text(200)`, `long text`,
-  `integer`, `money (minor units, currency field <x>)`, `decimal(10,4)`,
+  `integer`, `money (minor units, currency field <x>)` (minor units are
+  whole cents or pence, so sums are exact), `decimal(10,4)`,
   `date`, `date-time (UTC)`, `boolean`, `enum <Name>`, `reference to
   <Entity>`, `file`, `json`. Never `float` for money or quantities that must
   add up.
@@ -132,3 +133,6 @@ entry in `mistakes.md`.
   a service rule.
 - Every operation names roles and record scope, and every one of those
   appears in `ROLES.md`.
+- The file ends with `## Questions`, `## Deliberate changes` and
+  `## New map rows` (formats in `spec-module.md`); an empty one says
+  "none".

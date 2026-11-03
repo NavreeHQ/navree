@@ -16,8 +16,9 @@ test can check it.
 
 ## Outputs
 
-- `specs/04-specs/<module>/service.md`
-- The service line of `MODULE.md`
+- `specs/04-specs/<module>/service.md`, rows `draft` or `question`, with
+  its closing sections (questions, deliberate changes, new map rows;
+  `spec-module.md`)
 - Contradictions noted for the reconciler (in the rule's row: "also at
   <file:line>, which differs: ...")
 

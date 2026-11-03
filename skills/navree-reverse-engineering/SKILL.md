@@ -21,17 +21,19 @@ second agent whose only job is to prove it wrong.
 
 1. **Files, not memory.** Every phase writes its files before it ends. A
    phase with no files did not happen. `specs/STATUS.md` says where to
-   resume.
+   resume; the agent running the whole job keeps it, roles don't edit it.
 2. **Evidence on every row.** Each spec row says where it comes from (a
    `file:line`, a `table.column`, a query, a captured request), how it is
    known (`code`, `data`, `running`, `inferred`) and how sure you are
-   (`high`, `medium`, `low`). Every `inferred` row also goes to the
-   questions file.
+   (`high`, `medium`, `low`). Every `inferred` row is also a question for
+   the owner.
 3. **Read-only on the old product.** Work on a copy of its code and a copy
    of its database. Never the live database, never outbound mail, payments
    or webhooks. Intake records how.
-4. **One owner per file.** One role writes a file. Another role refutes it.
-   The agent that builds never grades its own work.
+4. **One owner per file.** One role owns each file; another role may fill
+   only the columns its brief names (the module planner fills `MAP.md`'s
+   Owner column). Another role refutes it. The agent that builds never
+   grades its own work.
 5. **Done means evidence.** A row closes only with the test, command or
    query that proves it, quoted. "Looks done" is not a status.
 6. **Keep the behaviour, fix the mistakes.** The new product does what the
@@ -79,11 +81,18 @@ specs/
   10-verify/VERIFY.md           every spec row and test case, closed with evidence
   10-verify/PARITY.md           old against new, per parity test
   10-verify/MIGRATION_RUN.md    rehearsals: counts, totals, rejected rows
+  10-verify/logs/               the output of every command the verifier ran
   evidence/                     captures (CAP-*), screenshots (SHOT-*), query outputs
 ```
 
 A module writes only the layer files it has. `MODULE.md` lists every layer
 and says "none" with a reason for the ones it lacks.
+
+Writers that run side by side never share a file. Each spec file in
+`02-base`, `04-specs`, `05-cross` and `06-migration` ends with the same
+three sections, and the reconciler collects them: `## Questions` (into
+`QUESTIONS.md`), `## Deliberate changes` (into the module's `MODULE.md`)
+and `## New map rows` (into `MAP.md`, under "Added later").
 
 ## Ids and the row format
 
@@ -92,6 +101,7 @@ and says "none" with a reason for the ones it lacks.
 | Map rows | `RT` route, `SC` screen, `EP` endpoint, `TB` table, `JB` job, `SH` schedule, `IN` integration, `RL` role, `RP` report or export, `NT` notification, `FL` file store, `ST` setting | `EP-031` |
 | Spec rows | `<module>.<layer>.<n>`; cross-cutting `roles.<n>`, `tenancy.<n>`, `cross.<n>`; base `schema.<n>`, `profile.<n>`; migration `migration.<n>` | `invoices.crud.7` |
 | Evidence | `SQL-` query, `CAP-` captured request and response, `SHOT-` screenshot | `CAP-012` |
+| Cleaning rules | `C-` | `C-7` |
 | Questions, tasks, tests | `Q-`, `TK-`, `T-` | `Q-004` |
 
 Every spec row ends with the same columns:
@@ -101,11 +111,16 @@ Every spec row ends with the same columns:
 | ... | app/Http/InvoiceController.php:88, CAP-012 | running  | high   | confirmed |
 ```
 
-Status moves `draft` → `confirmed` (the refuter could not break it), or
-`refuted` / `question` → `planned` (tasks and tests exist) → `built` →
-`verified` (the verifier quoted the evidence). `dropped` needs the owner's
-answer in `QUESTIONS.md`. A map row is `open`, then `owned` (spec rows
-cover it), then `closed` (all of them verified) or `dropped`.
+A writer sets its rows to `draft`, or `question` when only the owner can
+settle them. Then a row moves `draft` → `confirmed` (the refuter could not
+break it) or `refuted` (back to its writer) → `planned` (tasks and tests
+exist) → `built` (the builder's task passed its gate) → `verified` (the
+verifier quoted the evidence). `dropped` needs the owner's answer in
+`QUESTIONS.md`. The worked examples in the templates show rows after
+refutation. Base rows (`schema.`, `profile.`) are evidence, not
+requirements: they stop at `confirmed`. A map row is `open`, gets an owner
+module in phase 3, becomes `owned` when confirmed spec rows cover it, then
+`closed` (all of them verified) or `dropped`.
 
 ## The phases
 
@@ -115,12 +130,12 @@ cover it), then `closed` (all of them verified) or `dropped`.
 | 1 | Map | `cartographer` | `01-map/MAP.md` | in the brief |
 | | **Stop 1: the owner confirms the map** | | | |
 | 2 | Base layer | `schema-reader`, `data-profiler` | `02-base/*` | `spec-base.md` |
-| 3 | Modules | `module-planner` | `03-modules/MODULES.md`, `04-specs/*/MODULE.md` | `spec-module.md` |
+| 3 | Modules | `module-planner` | `03-modules/MODULES.md`, `04-specs/*/MODULE.md`, the Owner column of `MAP.md` | `spec-module.md` |
 | | **Stop 2: the owner confirms modules and order** | | | |
 | 4 | Specs per module and layer | `crud-writer`, `list-writer`, `screen-writer`, `service-writer`, `worker-writer`, `workflow-writer`, `metrics-writer`, `integration-writer` | `04-specs/<module>/*.md` | one per layer, below |
 | 5 | Cross-cutting | `access-writer`, `cross-cutting-writer` | `05-cross/*` | `spec-roles.md`, `spec-tenancy.md`, `spec-cross-cutting.md` |
 | 6 | Data migration | `migration-writer` | `06-migration/*` | `spec-migration.md` |
-| 7 | Reconcile | `refuter` (every spec file), `reconciler` | `07-reconcile/*` | in the briefs |
+| 7 | Reconcile | `refuter` (every spec file, base files included), `reconciler` | `07-reconcile/*`; collects questions, deliberate changes and new map rows | in the briefs |
 | | **Stop 3: the owner answers the questions** | | | |
 | 8 | Task list and tests | `test-planner` | `08-plan/TASKS.md`, `TESTS.md` | `tests.md` |
 | | **Stop 4: the owner approves the plan** | | | |
@@ -177,7 +192,7 @@ most, so be exact:
 | Lists | `list-writer` | `lists.md` | `spec-list.md` | columns, filters, sort, search, paging, bulk actions, export, all on the server |
 | Screens | `screen-writer` | `screens.md` | `spec-screen.md` | what each page shows, its actions, its empty, loading, error and forbidden states, the journeys |
 | Service | `service-writer` | `service.md` | `spec-service.md` | every business rule and calculation, including the ones hidden in the browser |
-| Workers | `worker-writer` | `workers.md` | `spec-worker.md` | trigger, input, idempotency, retries, schedule and zone, side effects |
+| Workers | `worker-writer` | `workers.md` | `spec-worker.md` | trigger, input, idempotency (a second run changes nothing), retries, schedule and zone, side effects |
 | Workflows | `workflow-writer` | `workflows.md` | `spec-workflow.md` | states, transitions, who may move them, timers |
 | Reports | `metrics-writer` | `reports.md` | `spec-reporting.md` | metrics, dimensions, source, time grain, time zone, known old numbers |
 | Integrations | `integration-writer` | `integrations.md` | `spec-integration.md` | the other system, direction, auth, payloads, failure, retries, webhooks |
@@ -205,14 +220,16 @@ cited source, looks for contrary evidence, checks the map for rows nobody
 covered and the mistakes catalog for old bugs copied as rules. Then the
 `reconciler` reads everything and writes contradictions, unmapped items and
 guesses to `RECONCILE.md`, and every open point to `QUESTIONS.md`, each
-with the options and a recommendation.
+with the options and a recommendation. It also fills each module's
+`MODULE.md` from the layer files and adds the new map rows to `MAP.md`.
 
 ### 8. Task list and tests
 
 `test-planner` turns confirmed specs into tasks in build order and test
-cases: acceptance tests per spec row, parity tests against the old product
-where it runs, a role matrix test, tenancy isolation, migration counts and
-totals. `references/tests.md` has the formats.
+cases: acceptance tests per spec row, parity tests (the same case on the
+old and the new product, compared) where the old one runs, a role matrix
+test, tenancy isolation, migration counts and totals. `references/tests.md`
+has the formats.
 
 ### 9. Build
 
@@ -289,11 +306,14 @@ The product is done when every box holds, each with its evidence in
 `VERIFY.md`:
 
 - [ ] Every map row is `closed`, or `dropped` with the owner's answer.
-- [ ] Every spec row is `verified` and cites the test that proves it.
+- [ ] Every spec row in `04-specs`, `05-cross` and `06-migration` is
+      `verified` and cites the test that proves it; base rows are
+      `confirmed`.
 - [ ] `QUESTIONS.md` has no open question.
 - [ ] Every test case in `TESTS.md` passed on the final commit; parity
       tests passed, or each difference is a deliberate change the owner
-      approved, or is `N/A` with the owner's acceptance.
+      approved, or is `N/A` with the owner's acceptance. Nothing is
+      `NOT RUN`: only the owner can turn a case into `N/A`, in writing.
 - [ ] The role matrix test covers every role, action and record scope in
       `ROLES.md`.
 - [ ] Every workspace-owned module has an isolation suite that passes, and

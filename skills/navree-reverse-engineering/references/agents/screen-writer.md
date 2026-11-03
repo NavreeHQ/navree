@@ -15,9 +15,9 @@ sees it, and the journeys through it.
 
 ## Outputs
 
-- `specs/04-specs/<module>/screens.md`
-- New journeys added to the module's screens and, for each journey that
-  spans modules, a note in `MODULES.md`
+- `specs/04-specs/<module>/screens.md`, rows `draft` or `question`, with
+  its closing sections (questions, deliberate changes, new map rows;
+  `spec-module.md`); a journey that spans modules names them in its row
 
 ## Method
 

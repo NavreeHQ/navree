@@ -16,8 +16,8 @@ the isolation suites prove.
 
 ## Outputs
 
-- `specs/05-cross/ROLES.md`
-- `specs/05-cross/TENANCY.md`
+- `specs/05-cross/ROLES.md` and `specs/05-cross/TENANCY.md`, rows `draft`
+  or `question`, each with its closing sections (`spec-module.md`)
 - `evidence/CAP-*` for every leak shown on the copy
 
 ## Method

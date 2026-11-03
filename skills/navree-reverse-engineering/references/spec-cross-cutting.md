@@ -93,3 +93,6 @@ the zone per tenant and per user, business days and holidays.
 - Every `NT`, `FL` and `ST` map row is owned by a row here or in a module.
 - The password hash scheme and the old server's time zone are known, not
   guessed.
+- The file ends with `## Questions`, `## Deliberate changes` and
+  `## New map rows` (formats in `spec-module.md`); an empty one says
+  "none".

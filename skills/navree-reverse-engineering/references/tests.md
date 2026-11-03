@@ -31,7 +31,8 @@ row with no test can't be verified, so it can't be done.
 
 - **Kind:** `acceptance`, `parity`, `role`, `tenancy`, `migration`, `edge`.
 - **Covers:** the spec row ids (and journey ids) this test proves. Every
-  spec row is covered by at least one test.
+  spec row in `04-specs`, `05-cross` and `06-migration` is covered by at
+  least one test.
 - **Level:** `unit` (a pure function: a cleaning rule, a calculation),
   `service` (a service on a test database), `http` (`TestApp`, acting as a
   user), `browser` (a journey through the front end), `sql` (a query pair
@@ -59,7 +60,7 @@ row with no test can't be verified, so it can't be done.
 | Worker | runs once and does its effects; runs twice and the second run changes nothing; a failure retries and then lands in failed jobs; the schedule's next run in the right zone |
 | Workflow | every allowed transition by the allowed role; every move not in the table refused; guards; timers fire, and do nothing if the record moved on |
 | Report | each known old number for its closed period, exactly; the scope per role; day boundaries in the tenant's zone |
-| Integration | success with the HTTP fake; time-out and 5xx retried; 4xx not retried; an incoming event with a bad signature refused; a duplicate event ignored |
+| Integration | success with the HTTP fake; a GET retried on 5xx; a POST not retried by the client but by its job, with the same idempotency key; 4xx not retried; an incoming event with a bad signature refused; a duplicate event handled once |
 | Role cell | one `role` test per matrix cell and per sensitive field |
 | Tenancy | the module's isolation suite; any old leak from `TENANCY.md` as its own test |
 | Migration rule | the cleaning function on real old rows (one per rule); the full run's checks from `MIGRATION.md`; a second run changes nothing |

@@ -55,3 +55,6 @@ one must be safe to repeat.
 - Every worker has an idempotency rule that is not `none`, or a question.
 - Every schedule names its time zone.
 - Every external side effect has its own guard against repeats.
+- The file ends with `## Questions`, `## Deliberate changes` and
+  `## New map rows` (formats in `spec-module.md`); an empty one says
+  "none".

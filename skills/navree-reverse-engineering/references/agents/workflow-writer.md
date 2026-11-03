@@ -14,8 +14,9 @@ what it does, and the timers.
 
 ## Outputs
 
-- `specs/04-specs/<module>/workflows.md`
-- The workflows line of `MODULE.md`
+- `specs/04-specs/<module>/workflows.md`, rows `draft` or `question`,
+  with its closing sections (questions, deliberate changes, new map rows;
+  `spec-module.md`)
 
 ## Method
 

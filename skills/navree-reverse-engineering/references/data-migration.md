@@ -119,13 +119,13 @@ Write one rule per finding in `CLEANING.md`. The usual kinds:
 
 | Finding | Usual rule | Needs the owner? |
 |---|---|---|
-| Spelling variants of an enum | map each variant; unknown values to a flagged default | only for unknown values |
+| Spelling variants of an enum | map each variant; unknown values rejected, or set to a default and flagged | only for unknown values |
 | Blank strings meaning "none" | blank to null | no |
 | Values with spaces or case drift | trim; lower case for emails and codes | no |
 | Phone numbers in many formats | parse to E.164 with the tenant's country; unparseable kept in a note and flagged | yes, the default country |
 | Dates in several formats | parse by a known format per source (branch, user, era); ambiguous ones rejected | yes, when ambiguous |
 | Local times without a zone | read in the old server's zone (or the tenant's), store UTC | yes, confirm the zone |
-| Money as floating point | multiply to minor units and round half up; recompute totals from lines where lines exist and compare | yes, when stored and computed totals differ |
+| Money as floating point | multiply to minor units and round (say how: half away from zero, half even); recompute totals from lines where lines exist and compare | yes, when stored and computed totals differ |
 | Duplicates by natural key | merge into one row, repoint references, keep every old id | yes |
 | Orphans | quarantine, or attach to a placeholder parent | yes |
 | Free text that should be a lookup | build the lookup from the distinct values; map the text; the rest to "Other" with the original kept | yes, the list |
@@ -189,10 +189,10 @@ max_connections = 2
 ```rust
 use std::collections::HashMap;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use navree::db::{Db, Executor as _, Row, Statement};
 use navree::kernel::{AppContext, BoxError, CommandSpec};
-use navree::orm::Model;
+use navree::orm::{Decimal, Model};
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -220,10 +220,10 @@ pub struct LegacyId {
     pub new_id: Uuid,
 }
 
-/// `legacy:import-invoices [--dry-run]`.
+/// `invoices:import-legacy [--dry-run]`.
 pub fn import_invoices_command() -> CommandSpec {
     CommandSpec::new(
-        "legacy:import-invoices",
+        "invoices:import-legacy",
         "Copy invoices from the legacy database ([--dry-run])",
         import_invoices,
     )
@@ -236,31 +236,42 @@ async fn import_invoices(ctx: AppContext, args: Vec<String>) -> Result<(), BoxEr
     }
     let db = ctx.get::<Db>().await?;
     let legacy = db.connection("legacy").await?;
-    // Branches became workspaces in an earlier step, which filled legacy_ids.
-    let branches: HashMap<i64, Uuid> = LegacyId::query()
-        .where_(LegacyId::SOURCE_TABLE.eq("branches"))
-        .get(&db)
-        .await?
-        .into_models()
-        .into_iter()
-        .map(|row| (row.legacy_id, row.new_id))
-        .collect();
+    // Branches and customers were imported in earlier steps, which filled legacy_ids.
+    let branches = id_map(&db, "branches").await?;
+    let customers = id_map(&db, "customers").await?;
     for (branch, workspace) in branches {
         // Workspace-owned models (`#[model(workspace)]`) read and write in this workspace.
-        let (created, rejected) =
-            navree::orm::workspace::scope(workspace, copy_branch(&db, &legacy, branch, dry_run))
-                .await?;
+        let copy = copy_branch(&db, &legacy, branch, &customers, dry_run);
+        let (created, rejected) = navree::orm::workspace::scope(workspace, copy).await?;
         println!("branch {branch}: {created} created, {rejected} rejected");
     }
     Ok(())
 }
 
-async fn copy_branch(db: &Db, legacy: &Db, branch: i64, dry_run: bool) -> Result<(u64, u64), BoxError> {
+async fn id_map(db: &Db, table: &str) -> Result<HashMap<i64, Uuid>, BoxError> {
+    Ok(LegacyId::query()
+        .where_(LegacyId::SOURCE_TABLE.eq(table))
+        .get(db)
+        .await?
+        .into_models()
+        .into_iter()
+        .map(|row| (row.legacy_id, row.new_id))
+        .collect())
+}
+
+async fn copy_branch(
+    db: &Db,
+    legacy: &Db,
+    branch: i64,
+    customers: &HashMap<i64, Uuid>,
+    dry_run: bool,
+) -> Result<(u64, u64), BoxError> {
     let (mut after, mut created, mut rejected) = (0_i64, 0_u64, 0_u64);
     loop {
         let rows = legacy
             .fetch_all(&Statement::portable(
-                "SELECT id, inv_no, total, status FROM invoices WHERE branch_id = ? AND id > ? ORDER BY id LIMIT 500",
+                "SELECT id, cust, inv_no, idate, due, total, vat_rate, status FROM invoices \
+                 WHERE branch_id = ? AND id > ? ORDER BY id LIMIT 500",
                 [branch.into(), after.into()],
             ))
             .await?;
@@ -275,7 +286,7 @@ async fn copy_branch(db: &Db, legacy: &Db, branch: i64, dry_run: bool) -> Result
                     if Invoice::query().where_(Invoice::LEGACY_ID.eq(legacy_id)).exists(&uow).await? {
                         continue; // imported by an earlier run
                     }
-                    match invoice_from(row) {
+                    match invoice_from(row, customers) {
                         Ok(invoice) => {
                             Invoice::create(&uow, invoice).await?;
                             made += 1;
@@ -315,20 +326,34 @@ async fn copy_branch(db: &Db, legacy: &Db, branch: i64, dry_run: bool) -> Result
     Ok((created, rejected))
 }
 
+type Rejection = (&'static str, String);
+
 /// The cleaning rules of CLEANING.md for one old row: a new invoice, or the rule it broke.
-fn invoice_from(row: &Row) -> Result<Invoice, (&'static str, String)> {
+fn invoice_from(row: &Row, customers: &HashMap<i64, Uuid>) -> Result<Invoice, Rejection> {
+    let text = |column: &str, rule: &'static str| -> Result<String, Rejection> {
+        let value = row.get::<Option<String>>(column).map_err(|e| (rule, e.to_string()))?;
+        Ok(value.unwrap_or_default().trim().to_owned())
+    };
     let legacy_id = row.get::<i64>("id").map_err(|e| ("C-0", e.to_string()))?;
-    let number = row
-        .get::<Option<String>>("inv_no")
-        .map_err(|e| ("C-4", e.to_string()))?
-        .map(|n| n.trim().to_owned())
-        .filter(|n| !n.is_empty())
-        .ok_or(("C-4", "no invoice number".to_owned()))?;
+    let customer = row.get::<Option<i64>>("cust").map_err(|e| ("C-5", e.to_string()))?;
+    let customer_id = customer
+        .and_then(|old| customers.get(&old).copied())
+        .ok_or(("C-5", format!("customer {customer:?} was not imported")))?;
+    let number = text("inv_no", "C-4")?;
+    if number.is_empty() {
+        return Err(("C-4", "no invoice number".to_owned()));
+    }
+    let issued_on = parse_day(&text("idate", "C-6")?).ok_or(("C-6", "issue date unreadable".to_owned()))?;
+    let due_on = parse_day(&text("due", "C-6")?).ok_or(("C-6", "due date unreadable".to_owned()))?;
     let total = row
         .get::<Option<f64>>("total")
         .map_err(|e| ("C-8", e.to_string()))?
         .ok_or(("C-8", "no total".to_owned()))?;
-    let status = match row.get::<Option<String>>("status").ok().flatten().unwrap_or_default().trim().to_lowercase().as_str() {
+    let tax_rate = row
+        .get::<Option<Decimal>>("vat_rate")
+        .map_err(|e| ("C-9", e.to_string()))?
+        .ok_or(("C-9", "no tax rate".to_owned()))?;
+    let status = match text("status", "C-2")?.to_lowercase().as_str() {
         "" | "new" => InvoiceStatus::Draft,
         "sent" | "open" => InvoiceStatus::Sent,
         "paid" | "done" => InvoiceStatus::Paid,
@@ -336,18 +361,30 @@ fn invoice_from(row: &Row) -> Result<Invoice, (&'static str, String)> {
         other => return Err(("C-2", format!("unknown status `{other}`"))),
     };
     Ok(Invoice {
+        customer_id,
         legacy_id: Some(legacy_id),
         number,
-        total_cents: (total * 100.0).round() as i64, // C-8: half away from zero, to pence
-        currency: "GBP".into(),
         status,
-        ..Invoice::default()
+        total_cents: (total * 100.0).round() as i64, // C-8: half away from zero, to pence
+        currency: "GBP".into(),                      // C-10: every branch invoices in pounds
+        tax_rate,
+        issued_on,
+        due_on,
+        ..Invoice::default() // id, workspace_id and timestamps are filled on create
     })
+}
+
+/// C-6: the formats the branches typed dates in (the profile, SQL-019).
+fn parse_day(text: &str) -> Option<NaiveDate> {
+    ["%Y-%m-%d", "%d/%m/%Y"]
+        .iter()
+        .find_map(|format| NaiveDate::parse_from_str(text, format).ok())
 }
 ```
 
-- Register the command in the module's `wire` (`m.command(import_invoices_command())`)
-  and the two tables' models with their migrations. `legacy_rejects` and
+- Register the command in the module's `wire`
+  (`m.command(import_invoices_command())`) and the two tables' models
+  with their migrations. `legacy_rejects` and
   `legacy_ids` belong to no workspace: classify them with
   `m.global_entity::<LegacyReject>()` and `m.global_entity::<LegacyId>()`,
   or `navree check` reports them (`navree-module-conformity`).

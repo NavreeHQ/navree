@@ -24,7 +24,7 @@ Group 4: <modules>    reports, exports, integrations that read everything
 
 ## Map coverage
 
-| Map section | Rows | Owned | Open | Dropped |
+| Map section | Rows | With an owner | Without an owner | Dropped |
 
 ## Disputed rows
 
@@ -41,9 +41,15 @@ Group 4: <modules>    reports, exports, integrations that read everything
   product, `shared` when every tenant sees the same rows (a currency list),
   `library` when there are global rows plus a tenant's own. This feeds the
   tenancy spec and, later, `navree check`.
-- **Map coverage** must show zero `Open` before stop 2.
+- **Map coverage** must show no row without an owner before stop 2.
+  (A row becomes `owned` later, when confirmed spec rows cover it.)
 
 ## MODULE.md
+
+The module planner writes it with a first guess of the layers; after
+the refuters, the reconciler fills it from the layer files. Layer writers
+don't edit it: they end their own file with the sections below, and the
+reconciler copies them here.
 
 ```text
 # Module <name>
@@ -73,6 +79,23 @@ A layer the module lacks gets `none` and a reason with a source ("no job,
 cron entry or queue touches the `price_lists` table: grep of jobs/ and
 crontab, see MAP.md JB-*"). An empty layer without a reason is unfinished.
 
+## The closing sections of every spec file
+
+Every spec file in `02-base`, `04-specs`, `05-cross` and `06-migration`
+ends with these, so writers running side by side never edit a shared
+file:
+
+```text
+## Questions
+| Row | Question | Options | Recommendation |
+
+## Deliberate changes
+| Row | Old behaviour | New behaviour | Why (mistakes entry or owner answer) |
+
+## New map rows
+| Kind (RT, SC, EP, TB, ...) | What | Where found |
+```
+
 ## Worked example
 
 ```text
@@ -90,7 +113,8 @@ crontab, see MAP.md JB-*"). An empty layer without a reason is unfinished.
 
 ## Checks before the files are done
 
-- Every map row is owned once; `Map coverage` shows no open row.
+- Every map row has exactly one owner module; `Map coverage` shows no
+  row without one.
 - The build order respects every dependency; no module depends on a later
   group.
 - Every module has a `MODULE.md` with every layer filled in or `none` with
