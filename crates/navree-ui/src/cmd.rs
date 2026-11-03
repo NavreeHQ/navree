@@ -51,6 +51,51 @@ pub enum Cmd {
     Focus(String),
     /// Submits the form with this id.
     Submit(String),
+    /// Sets the text of the element with this id: a price when a plan changes, a
+    /// label when a choice is made.
+    ///
+    /// It is text. The runtime sets `textContent`, so nothing in it is read as markup,
+    /// and it refuses a `<script>` or `<style>` target, whose text would be code.
+    Text {
+        /// The target's id.
+        target: String,
+        /// The text.
+        text: String,
+    },
+    /// Writes how many characters the element's own value holds into the element with
+    /// this id, as `12`, or `12/160` with a most. For a field's counter, on
+    /// [`Trigger::Input`].
+    ///
+    /// Characters are counted as the server's `length` rule counts them, by Unicode
+    /// scalar value. The runtime writes a number, as text, and nothing else.
+    Count {
+        /// The target's id.
+        target: String,
+        /// The most the field takes, written after a slash.
+        max: Option<u32>,
+    },
+    /// Sets the value of a hidden field: the state a form carries, such as the column
+    /// a set of buttons sorts by.
+    ///
+    /// Only `<input type="hidden">` takes it. A field the user types in keeps what was
+    /// typed, and a hidden field points at nothing and runs nothing. The value is posted
+    /// like any other, so the handler checks it like any other.
+    Value {
+        /// The field's id.
+        target: String,
+        /// The value.
+        value: String,
+    },
+    /// Fills the dialog, popover or details with this id from the row the element sits
+    /// in, and opens it: a row's details with no request.
+    ///
+    /// The row is the nearest element with `data-key`. In the dialog, an element marked
+    /// with [`Element::fill_cell`](crate::Element::fill_cell) gets the text of that
+    /// column's cell, and one marked with [`Element::fill_key`](crate::Element::fill_key)
+    /// the row's key; a hidden field gets it as its value, so a form in the dialog can
+    /// post it. Everything is copied as text. A key posted this way is a request like
+    /// any other: the handler checks the user may act on that row.
+    Fill(String),
 }
 
 impl Cmd {
@@ -128,6 +173,36 @@ impl Cmd {
         Self::Submit(id.into())
     }
 
+    /// Sets the text of `id` to `text`, as text.
+    pub fn text(id: impl Into<String>, text: impl Into<String>) -> Self {
+        Self::Text {
+            target: id.into(),
+            text: text.into(),
+        }
+    }
+
+    /// Writes how many characters this field holds into `id`, after a slash `max`
+    /// when there is one: `Cmd::count("bio-count", 160)`, `Cmd::count("words", None)`.
+    pub fn count(id: impl Into<String>, max: impl Into<Option<u32>>) -> Self {
+        Self::Count {
+            target: id.into(),
+            max: max.into(),
+        }
+    }
+
+    /// Sets the hidden field `id` to `value`.
+    pub fn value(id: impl Into<String>, value: impl Into<String>) -> Self {
+        Self::Value {
+            target: id.into(),
+            value: value.into(),
+        }
+    }
+
+    /// Fills the dialog `id` from the row this element sits in, and opens it.
+    pub fn fill(id: impl Into<String>) -> Self {
+        Self::Fill(id.into())
+    }
+
     /// The command as data, or nothing when it names a refused attribute.
     fn to_value(&self) -> Option<Value> {
         if let Self::SetAttr { name, .. }
@@ -154,6 +229,10 @@ impl Cmd {
             Self::Dispatch(name) => json!(["dispatch", name]),
             Self::Focus(id) => json!(["focus", id]),
             Self::Submit(id) => json!(["submit", id]),
+            Self::Text { target, text } => json!(["text", target, text]),
+            Self::Count { target, max } => json!(["count", target, max]),
+            Self::Value { target, value } => json!(["value", target, value]),
+            Self::Fill(id) => json!(["fill", id]),
         })
     }
 }
@@ -218,6 +297,33 @@ impl Trigger {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_commands_that_write_text_are_data_on_the_wire() {
+        let commands = Commands(vec![
+            Cmd::text("price", "$31"),
+            Cmd::count("bio-count", 160),
+            Cmd::count("words", None),
+            Cmd::value("sort", "amount"),
+            Cmd::fill("deal-dialog"),
+        ]);
+        assert_eq!(
+            commands.to_json(),
+            r#"[["text","price","$31"],["count","bio-count",160],["count","words",null],["value","sort","amount"],["fill","deal-dialog"]]"#
+        );
+    }
+
+    #[test]
+    fn text_that_looks_like_markup_or_more_commands_stays_one_string() {
+        let hostile = r#"<img src=x onerror=alert(1)>"],["set_attr","a","href","javascript:1"#;
+        let json = Commands::from(Cmd::text("t", hostile)).to_json();
+        let parsed: Vec<Vec<Value>> = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.len(), 1, "{json}");
+        assert_eq!(parsed[0][2], Value::String(hostile.to_owned()));
+        let json = Commands::from(Cmd::value("t", hostile)).to_json();
+        let parsed: Vec<Vec<Value>> = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.len(), 1, "{json}");
+    }
 
     #[test]
     fn commands_are_compact_json() {

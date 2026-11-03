@@ -444,6 +444,22 @@ impl Element {
         self.on_click(vec![command])
     }
 
+    /// Says [`Cmd::fill`] writes the text of the row's cell in column `column` here: the
+    /// column of a [`DataTable`](crate::DataTable) by its field's name, or, in a list that
+    /// isn't a table, the row's element with that `data-col`. A hidden field gets it as
+    /// its value.
+    #[must_use]
+    pub fn fill_cell(self, column: &'static str) -> Self {
+        self.attr("data-ui-cell", column)
+    }
+
+    /// Says [`Cmd::fill`] writes the row's key here. A hidden field gets it as its value,
+    /// so a form in the dialog posts which row it acts on.
+    #[must_use]
+    pub fn fill_key(self) -> Self {
+        self.flag("data-ui-row-key", true)
+    }
+
     /// Says this page must load `uses` when this element is on it.
     #[inline]
     #[must_use]

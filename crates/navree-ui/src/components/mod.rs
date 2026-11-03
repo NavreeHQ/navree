@@ -86,8 +86,8 @@ pub fn icon_labelled(icon: Icon, label: impl Into<std::borrow::Cow<'static, str>
     )
 }
 
-/// Adds `id`, `attr`, `flag` and `span` to a component whose `el` field is its
-/// root element.
+/// Adds `id`, `attr`, `on` and `span` to a component whose `el` field is its root
+/// element.
 macro_rules! root_methods {
     ($($type:ident),+ $(,)?) => {
         $(impl $type {
@@ -100,6 +100,13 @@ macro_rules! root_methods {
             /// Sets an attribute on the root element.
             pub fn attr(mut self, name: &'static str, value: impl Into<$crate::node::AttrValue>) -> Self {
                 self.el = self.el.attr(name, value);
+                self
+            }
+
+            /// Runs `commands` in the browser when `trigger` happens on the root element,
+            /// with no request: a counter as a field is typed in, a label as a choice is made.
+            pub fn on(mut self, trigger: $crate::Trigger, commands: impl Into<$crate::Commands>) -> Self {
+                self.el = self.el.on(trigger, commands);
                 self
             }
 

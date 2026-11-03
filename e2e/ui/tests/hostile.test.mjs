@@ -682,6 +682,124 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       await context.close();
     });
 
+    /** A page of command buttons: each `[id, commands]` is a button running those commands. */
+    const commandPage = (name, body, buttons) => {
+      const button = ([id, commands]) => `<button id="${id}" type="button" data-ui-click='${JSON.stringify(commands).replace(/&/g, "&amp;").replace(/'/g, "&#39;")}'>x</button>`;
+      route(`/${name}`, doc(body + buttons.map(button).join("")));
+    };
+    const pwned = (page) => page.evaluate(() => document.documentElement.getAttribute("data-pwned"));
+
+    test(`text, count and value write text and nothing else (${engine})`, async () => {
+      f.evil.length = 0;
+      const name = key("text");
+      const markup = `<img src="${E()}/img" onerror="document.documentElement.setAttribute('data-pwned','text')">`;
+      const breakout = `"]],[["set_attr","a1","href","javascript:1"]],["`;
+      commandPage(name,
+        `<p id="t">start</p><a id="a1" href="/ok">a</a><script id="s">/* old */</script><svg><script id="svgs">/* old */</script></svg>` +
+        `<input id="vis" name="vis" value="typed"><textarea id="ta" name="ta">area</textarea><select id="se" name="se"><option>one</option></select>` +
+        `<input type="hidden" id="h" name="h" value="old"><input type="HIDDEN" id="h2" name="h2" value="old"><div id="d">div</div>` +
+        `<textarea id="bio" name="bio" data-ui-input='[["count","n",10],["count","h",null],["count","vis",null]]'></textarea><span id="n">0/10</span>`,
+        [
+          ["b1", [["text", "t", markup]]],
+          ["b2", [["text", "t", breakout]]],
+          ["b3", [["text", "s", "document.documentElement.setAttribute('data-pwned','script')"], ["text", "svgs", "document.documentElement.setAttribute('data-pwned','svg')"]]],
+          ["b4", [["text", "vis", "x"], ["text", "ta", "x"], ["text", "se", "x"]]],
+          ["b5", [["value", "vis", "x"], ["value", "ta", "x"], ["value", "d", "x"], ["value", "se", "x"]]],
+          ["b6", [["value", "h", markup], ["value", "h2", "two"]]],
+          ["b7", [["text", "t", { toString: 1 }], ["value", "h", ["array"]], ["text", "t"], ["count"], ["value"], ["text", null, "x"]]],
+          ["b8", [["text", "__proto__", "x"], ["value", "constructor", "x"]]],
+        ]);
+      const { context, page, errors } = await fresh(`/${name}`);
+      const click = (id) => page.evaluate((b) => document.getElementById(b).click(), id);
+      await click("b1");
+      assert.equal(await page.textContent("#t"), markup);
+      assert.equal(await page.locator("#t *").count(), 0, "no element made");
+      await click("b2");
+      assert.equal(await page.textContent("#t"), breakout);
+      assert.equal(await page.getAttribute("#a1", "href"), "/ok");
+      await click("b3");
+      assert.equal(await page.evaluate(() => document.getElementById("s").textContent), "/* old */");
+      assert.equal(await page.evaluate(() => document.getElementById("svgs").textContent), "/* old */");
+      await click("b4");
+      await click("b5");
+      assert.deepEqual(await page.evaluate(() => ({
+        vis: document.getElementById("vis").value,
+        ta: document.getElementById("ta").value,
+        se: document.getElementById("se").options.length,
+        d: document.getElementById("d").textContent,
+      })), { vis: "typed", ta: "area", se: 1, d: "div" });
+      await click("b6");
+      assert.equal(await page.inputValue("#h"), markup);
+      assert.equal(await page.inputValue("#h2"), "two");
+      await click("b7");
+      await click("b8");
+      assert.equal(await page.inputValue("#h"), markup, "only a string sets a value");
+      assert.equal(await page.textContent("#t"), breakout, "only a string sets text");
+      // Characters as the server counts them: one emoji is one.
+      await page.fill("#bio", "a\u{1F600}");
+      assert.equal(await page.textContent("#n"), "2/10");
+      assert.equal(await page.inputValue("#h"), markup, "a count never writes a field");
+      assert.equal(await page.inputValue("#vis"), "typed");
+      assert.equal(await pwned(page), null);
+      assert.deepEqual(errors, []);
+      assert.deepEqual(f.evil, []);
+      await context.close();
+    });
+
+    test(`a text command can't write a style sheet (${engine})`, async () => {
+      f.evil.length = 0;
+      const name = key("style");
+      commandPage(name, `<style id="st"></style><p id="p">p</p>`, [["c1", [["text", "st", `#p{background:url(${E()}/css);color:rgb(1,2,3)}`]]]]);
+      const { context, page, errors } = await fresh(`/${name}`);
+      await page.evaluate(() => document.getElementById("c1").click());
+      await sleep(100);
+      assert.equal(await page.evaluate(() => document.getElementById("st").textContent), "");
+      assert.notEqual(await page.evaluate(() => getComputedStyle(document.getElementById("p")).color), "rgb(1, 2, 3)");
+      assert.deepEqual(errors, []);
+      assert.deepEqual(f.evil, []);
+      await context.close();
+    });
+
+    test(`fill copies a row's text into a dialog, and a key only into a hidden field (${engine})`, async () => {
+      f.evil.length = 0;
+      const name = key("fill");
+      const hostile = `<img src="${E()}/fill" onerror="document.documentElement.setAttribute('data-pwned','fill')">`;
+      const escaped = hostile.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      const row = (k, title, button) => `<tr data-key="${k}"><td>${title}</td><td>${k}0</td><td>${button}</td></tr>`;
+      route(`/${name}`, doc(
+        `<table><thead><tr><th data-col="title">Title</th><th data-col="amount">Amount</th><th></th></tr></thead><tbody>` +
+        row("7", escaped, `<button id="first" type="button" data-ui-click='[["fill","dlg"]]'>open</button>`) +
+        row(`8&quot; onclick=&quot;1`, "Second", `<button id="second" type="button" data-ui-click='[["fill","dlg"]]'>open</button>`) +
+        `</tbody></table><button id="outside" type="button" data-ui-click='[["fill","dlg"]]'>no row</button>` +
+        `<dialog id="dlg"><h2 id="title" data-ui-cell="title">-</h2><p id="amount" data-ui-cell="amount">-</p><p data-ui-cell='"],img[src=x'>bad</p><p data-ui-cell="none">none</p>` +
+        `<script id="s" data-ui-cell="title">/* old */</script><input id="vis" name="vis" data-ui-row-key value="typed">` +
+        `<form method="post" action="/x"><input type="hidden" id="k" name="id" data-ui-row-key value=""><input type="hidden" id="kt" name="t" data-ui-cell="title"></form></dialog>`,
+      ));
+      const { context, page, errors } = await fresh(`/${name}`);
+      await page.evaluate(() => document.getElementById("outside").click());
+      assert.equal(await page.evaluate(() => document.getElementById("dlg").open), false, "no row, no fill");
+      await page.evaluate(() => document.getElementById("first").click());
+      const state = await page.evaluate(() => ({
+        open: document.getElementById("dlg").open,
+        title: document.getElementById("title").textContent,
+        amount: document.getElementById("amount").textContent,
+        made: document.querySelectorAll("#dlg img").length,
+        script: document.getElementById("s").textContent,
+        vis: document.getElementById("vis").value,
+        key: document.getElementById("k").value,
+        keyText: document.getElementById("kt").value,
+      }));
+      assert.deepEqual(state, { open: true, title: hostile, amount: "70", made: 0, script: "/* old */", vis: "typed", key: "7", keyText: hostile });
+      await page.evaluate(() => document.getElementById("dlg").close());
+      await page.evaluate(() => document.getElementById("second").click());
+      assert.equal(await page.inputValue("#k"), `8" onclick="1`);
+      assert.equal(await page.evaluate(() => document.getElementById("k").getAttribute("onclick")), null);
+      assert.equal(await pwned(page), null);
+      assert.deepEqual(errors, []);
+      assert.deepEqual(f.evil, []);
+      await context.close();
+    });
+
     test(`an envelope loads only the toolkit's modules (${engine})`, async () => {
       for (const url of ["/attacker.js", "/_navree/ui/../../attacker.js", `${E()}/mod.js`, "data:text/javascript,document.documentElement.setAttribute('data-attacker-ran','1')"]) {
         f.evil.length = 0;
