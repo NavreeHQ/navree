@@ -9,9 +9,10 @@ use http::header::{
 use navree_http::response::{IntoResponse, Response};
 
 use crate::assets;
+use crate::form::csrf_field;
 use crate::html::escape_into;
-use crate::node::{IntoNodes, Node, Uses};
-use crate::render::{measure, render_into};
+use crate::node::{IntoNodes, Node, Uses, el};
+use crate::render::{Measure, POST_FORM, measure, render_into};
 
 /// The content security policy of every page: scripts, styles, fonts and
 /// requests from the page's own origin only, images also as `data:` URLs, no
@@ -47,6 +48,7 @@ pub struct View {
     status: StatusCode,
     cache: &'static str,
     cookies: Vec<HeaderValue>,
+    csrf: Option<String>,
 }
 
 impl View {
@@ -59,6 +61,7 @@ impl View {
             status: StatusCode::OK,
             cache: "no-store",
             cookies: Vec::new(),
+            csrf: None,
         }
     }
 
@@ -86,6 +89,14 @@ impl View {
         self
     }
 
+    /// Gives the page's post form the session's CSRF token. A page with a menu's post
+    /// items has one hidden form that they all post through, so none is nested in a form of
+    /// yours; with the token in it they also work with JavaScript off.
+    pub fn csrf(mut self, token: impl Into<String>) -> Self {
+        self.csrf = Some(token.into());
+        self
+    }
+
     /// Adds a `Set-Cookie` header.
     pub(crate) fn cookie(mut self, cookie: HeaderValue) -> Self {
         self.cookies.push(cookie);
@@ -106,11 +117,12 @@ impl View {
     pub fn to_html(&self) -> String {
         let found = measure(&self.body);
         let mut out = String::with_capacity(found.bytes + self.title.len() + HEAD_BYTES);
-        self.write(&mut out, found.uses);
+        self.write(&mut out, &found);
         out
     }
 
-    fn write(&self, out: &mut String, uses: Uses) {
+    fn write(&self, out: &mut String, found: &Measure) {
+        let uses = found.uses;
         out.push_str("<!doctype html><html lang=\"");
         out.push_str(self.lang);
         out.push('"');
@@ -141,6 +153,21 @@ impl View {
             "</head><body>"
         });
         render_into(out, &self.body);
+        if found.posts {
+            // The one form every post item names: outside any form of the page, so none nests.
+            let form: Node = el("form")
+                .attr("id", POST_FORM)
+                .attr("method", "post")
+                .flag("hidden", true)
+                .flag("data-ui-form", true)
+                .children(
+                    self.csrf
+                        .as_deref()
+                        .map(|token| csrf_field(token.to_owned())),
+                )
+                .into();
+            render_into(out, &form);
+        }
         out.push_str("</body></html>");
     }
 }
@@ -356,6 +383,36 @@ mod tests {
             html.contains(&format!("data-build=\"{}\"", assets::BUILD)),
             "{html}"
         );
+    }
+
+    #[test]
+    fn menus_post_items_get_one_post_form_after_the_page() {
+        use crate::components::{DropdownMenu, MenuItem};
+        let menu = |id: &'static str| DropdownMenu::new(id, "A").item(MenuItem::post("Del", "/d"));
+        let html = View::new("x")
+            .body((
+                el("form").attr("action", "/save").child(menu("one")),
+                menu("two"),
+            ))
+            .csrf("tok\"><x>")
+            .to_html();
+        assert_eq!(html.matches("id=\"ui-post\"").count(), 1, "{html}");
+        assert!(
+            html.contains(r#"<form id="ui-post" method="post" hidden data-ui-form><input type="hidden" name="_csrf" value="tok&quot;&gt;&lt;x&gt;"></form></body>"#),
+            "{html}"
+        );
+        // Without a token the form is there and carries none.
+        let bare = View::new("x").body(menu("one")).to_html();
+        assert!(
+            bare.contains(r#"<form id="ui-post" method="post" hidden data-ui-form></form></body>"#),
+            "{bare}"
+        );
+        // A page with no post item draws no form.
+        let none = View::new("x")
+            .body(el("main").child("hi"))
+            .csrf("tok")
+            .to_html();
+        assert!(!none.contains("ui-post"), "{none}");
     }
 
     #[test]

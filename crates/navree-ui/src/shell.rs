@@ -659,6 +659,9 @@ impl AppPage {
                 el("div").slot("sidebar-inset").children((topbar, main)),
             ));
         let mut view = View::new(self.title).body((wrapper, toaster));
+        if let Some(token) = &self.csrf {
+            view = view.csrf(token.clone());
+        }
         if had_flash
             && let Ok(clear) = HeaderValue::from_str(&format!(
                 "{FLASH_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax; HttpOnly"
@@ -884,7 +887,9 @@ mod tests {
     fn every_page_has_the_toaster_and_a_flash_is_a_toast_in_it() {
         let html = shell().page("x", "/").to_view().to_html();
         assert!(
-            html.contains(r#"<section data-slot="toaster" aria-label="Notifications""#),
+            html.contains(
+                r#"<section data-slot="toaster" id="ui-toaster" aria-label="Notifications""#
+            ),
             "{html}"
         );
         assert!(!html.contains(r#"data-slot="toast""#), "{html}");
@@ -910,6 +915,43 @@ mod tests {
             flash.trim_end().ends_with("</section></body></html>"),
             "{flash}"
         );
+    }
+
+    #[test]
+    fn a_menus_post_items_post_through_the_one_post_form_with_the_token() {
+        use crate::components::{DropdownMenu, MenuItem};
+        let menu = || {
+            DropdownMenu::new("m", "Actions")
+                .item(MenuItem::post("Archive", "/a"))
+                .item(MenuItem::post("Delete", "/d"))
+        };
+        let page = |csrf: Option<&str>, body: crate::node::Node| {
+            AppPage::new(
+                Arc::new(shell()),
+                "x".into(),
+                "/".to_owned(),
+                false,
+                None,
+                csrf.map(str::to_owned),
+            )
+            .body(body)
+            .to_view()
+            .to_html()
+        };
+        // Inside a form of the page, as the docs invite: the items still belong to the post form.
+        let form = el("form").attr("action", "/save").child(menu());
+        let html = page(Some("tok"), form.into());
+        assert_eq!(html.matches(r#"<form id="ui-post""#).count(), 1, "{html}");
+        assert!(
+            html.contains(r#"<form id="ui-post" method="post" hidden data-ui-form><input type="hidden" name="_csrf" value="tok"></form>"#),
+            "{html}"
+        );
+        // After everything else, outside every form of the page.
+        let post_form = html.find(r#"<form id="ui-post""#).unwrap();
+        assert!(html.find("</form>").unwrap() < post_form, "{html}");
+        // No post item, no post form.
+        let plain = page(Some("tok"), el("p").child("hi").into());
+        assert!(!plain.contains("ui-post"), "{plain}");
     }
 
     #[test]

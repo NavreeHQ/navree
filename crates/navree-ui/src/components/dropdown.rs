@@ -7,10 +7,10 @@ use std::borrow::Cow;
 
 use super::{Button, ButtonVariant, PopupAlign, Side, Size, icon};
 use crate::cmd::{Commands, Trigger};
-use crate::form::csrf_field;
 use crate::html::Href;
 use crate::icons::{self, Icon};
 use crate::node::{Element, Node, Uses, el, into_node};
+use crate::render::POST_FORM;
 
 #[derive(Clone, Debug)]
 enum Kind {
@@ -62,8 +62,9 @@ impl MenuItem {
         Self::with(label.into(), Kind::Action)
     }
 
-    /// A button that posts to `href`. Give the menu the session's token with
-    /// [`DropdownMenu::csrf`] for a page that works with no script.
+    /// A button that posts to `href`. It posts through the page's one post form, which carries
+    /// the session's token (see [`View::csrf`](crate::View::csrf)), so the menu may stand in a
+    /// form of its own and the item still posts on its own. It works with no script.
     pub fn post(label: impl Into<Node>, href: impl Into<Href>) -> Self {
         Self::with(label.into(), Kind::Post(href.into()))
     }
@@ -359,7 +360,6 @@ pub struct DropdownMenu {
     align: PopupAlign,
     entries: Vec<Entry>,
     keep_open: bool,
-    csrf: Option<String>,
     label: Option<String>,
 }
 
@@ -388,7 +388,6 @@ impl DropdownMenu {
             align: PopupAlign::Start,
             entries: Vec::new(),
             keep_open: false,
-            csrf: None,
             label: None,
         }
     }
@@ -433,12 +432,6 @@ impl DropdownMenu {
     /// Leaves the menu open when any item is chosen.
     pub fn keep_open(mut self) -> Self {
         self.keep_open = true;
-        self
-    }
-
-    /// Puts the session's CSRF token in each post item's form.
-    pub fn csrf(mut self, token: impl Into<String>) -> Self {
-        self.csrf = Some(token.into());
         self
     }
 
@@ -489,7 +482,6 @@ impl DropdownMenu {
         let mut cx = Cx {
             menu: &self.id,
             next: 0,
-            csrf: self.csrf.as_deref(),
             keep_open: self.keep_open,
             posts: false,
         };
@@ -526,7 +518,6 @@ impl DropdownMenu {
 struct Cx<'a> {
     menu: &'a str,
     next: usize,
-    csrf: Option<&'a str>,
     keep_open: bool,
     posts: bool,
 }
@@ -752,17 +743,21 @@ fn item_node(item: &MenuItem, cx: &mut Cx<'_>) -> Node {
             .into(),
         Kind::Post(href) => {
             cx.posts = true;
-            let button = common(el("button"))
-                .attr("type", if item.disabled { "button" } else { "submit" })
-                .children(content);
-            el("form")
-                .attr("role", "none")
-                .attr("method", "post")
-                .attr("action", href.clone())
-                .flag("data-ui-form", true)
-                .uses(Uses::CORE)
-                .children((cx.csrf.map(|token| csrf_field(token.to_owned())), button))
-                .into()
+            // A form inside a form can't be written in HTML: the parser drops the inner one and
+            // the button would submit the outer. So the button belongs to the page's one post
+            // form, and says where to post.
+            let button = common(el("button"));
+            let button = if item.disabled {
+                button.attr("type", "button")
+            } else {
+                button
+                    .attr("type", "submit")
+                    .attr("form", POST_FORM)
+                    .attr("formaction", href.clone())
+                    .attr("formmethod", "post")
+                    .uses(Uses::CORE)
+            };
+            button.children(content).into()
         }
     }
 }
@@ -814,13 +809,21 @@ mod tests {
     }
 
     #[test]
-    fn a_post_item_is_a_form_and_wants_core() {
-        let out = html(basic().csrf("tok"));
+    fn a_post_item_is_a_button_of_the_page_post_form_and_wants_core() {
+        let out = html(basic());
+        // No form of its own: one nested in a page form would be dropped by the parser and the
+        // button would submit the form around it.
+        assert!(!out.contains("<form"), "{out}");
         assert!(
-            out.contains(r#"<form role="none" method="post" action="/d" data-ui-form>"#),
+            out.contains(r#"type="submit" form="ui-post" formaction="/d" formmethod="post""#),
             "{out}"
         );
-        assert!(out.contains(r#"name="_csrf" value="tok""#), "{out}");
+        let disabled =
+            html(DropdownMenu::new("m", "A").item(MenuItem::post("Del", "/d").disabled(true)));
+        assert!(
+            !disabled.contains("formaction") && !disabled.contains(r#"form="ui-post""#),
+            "{disabled}"
+        );
         let node: Node = basic().into();
         assert!(crate::render::measure(&node).uses.has(Uses::CORE));
         let plain: Node = DropdownMenu::new("m", "A")

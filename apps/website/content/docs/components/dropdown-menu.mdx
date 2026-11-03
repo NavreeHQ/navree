@@ -25,7 +25,7 @@ A `MenuItem` is one of three:
 
 - `MenuItem::link(label, href)` goes to a page, on this site or another.
 - `MenuItem::action(label)` runs [commands](/docs/ui/commands-and-ops/) with `.on_click(...)`, or opens a dialog with `.opens_dialog(id)`.
-- `MenuItem::post(label, href)` posts a form, which answers [ops](/docs/ui/commands-and-ops/) as any form does. Give the menu the session's token with `.csrf(token)` for a page that works with no script.
+- `MenuItem::post(label, href)` posts, and the answer is [ops](/docs/ui/commands-and-ops/) as with any form. It works with JavaScript off. The item is a submit button that belongs to the page's one post form (`form="ui-post"`), which the shell and `View` draw once, hidden, carrying the session's token. So the menu can stand inside a form of your own, such as one around its checkbox items, and the item posts on its own: it never submits the form around it, and no form is nested in another. A page built by hand with `View` gives it the token with `.csrf(token)`.
 
 An item can have an icon (`.icon`, `.icon_end`), a shortcut hint (`.shortcut("Ctrl+D")`, which draws the hint and binds nothing), `.destructive()` and `.disabled(true)`. A disabled item can be reached with the arrow keys, as the menu pattern asks, but does nothing.
 

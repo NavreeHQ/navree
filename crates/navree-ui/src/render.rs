@@ -18,7 +18,13 @@ pub struct Measure {
     pub bytes: usize,
     /// What the page must load.
     pub uses: Uses,
+    /// Whether an element belongs to the page's post form (`form="ui-post"`), which the
+    /// page then has to draw.
+    pub posts: bool,
 }
+
+/// The id of the page's one post form, which a menu's post items name with `form`.
+pub(crate) const POST_FORM: &str = "ui-post";
 
 /// Walks `node`.
 pub fn measure(node: &Node) -> Measure {
@@ -41,6 +47,9 @@ fn measure_into(node: &Node, found: &mut Measure, depth: u32) {
             found.uses = found.uses.with(element.uses);
             found.bytes += 2 * element.tag.len() + 5;
             for attr in &element.attrs {
+                if attr.name == "form" && attr.value.as_text().as_deref() == Some(POST_FORM) {
+                    found.posts = true;
+                }
                 found.bytes += attr.name.len()
                     + 4
                     + match &attr.value {
