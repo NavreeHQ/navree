@@ -43,7 +43,7 @@ Fields that declare `#[roles]`, `#[permissions]` or `#[can]` need `AccessModule`
 
 ## Configuration
 
-`from_config()`, and a plain `.module(GraphqlModule)`, read the `graphql` section. Every key has a default:
+`from_config()`, and a plain `.module(GraphqlModule)`, read the `graphql` section. Every key has a default. This example sets the path and lowers the two limits:
 
 ```toml title="config/app.toml"
 [graphql]
