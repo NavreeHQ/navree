@@ -1,0 +1,46 @@
+---
+title: "Breadcrumb"
+description: "Where a page sits: a trail of links ending in the current page."
+---
+
+<UiPreview example="breadcrumb/default" />
+
+`Breadcrumb` is a `<nav>` holding an ordered list of links, ending in the current page. The [app shell](/docs/ui/app-shell/) draws one in its top bar from `AppPage::crumb`.
+
+```rust
+use navree::ui::*;
+
+Breadcrumb::new()
+    .link("Deals", "/deals")
+    .current("Acme renewal")
+```
+
+## When to use it
+
+Use a breadcrumb on pages deep in a hierarchy, so readers can step back up.
+
+<UiChoose name="wayfinding" current="Breadcrumb" />
+
+## Anatomy
+
+<UiAnatomy component="breadcrumb" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves between the trail's links. |
+
+- The `<nav>` is labelled "Breadcrumb"; `.label(name)` gives a second trail on the same page a name of its own, since landmarks must differ.
+- The current page has `aria-current="page"` and isn't a link.
+- Its links are fetched ahead of a click: they lead to pages that change nothing.
+
+</UiA11y>
+
+## API
+
+### Breadcrumb
+
+<UiProps type="Breadcrumb" />

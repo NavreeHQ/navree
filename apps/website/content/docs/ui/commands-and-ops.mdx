@@ -1,0 +1,94 @@
+---
+title: "Commands and ops"
+description: "What runs in the browser with no request (`Cmd`), and what the server sends back from an action (`Reply` and `Op`)."
+---
+
+<UiPreview example="commands/toggle" />
+
+Two closed lists cover everything a page does after it loads. A `Cmd` is something an element does in the browser with no request: show, hide, open, focus. An `Op` is a change the server sends back from an action: morph this element, show a toast, close that dialog. Both are data, which the runtime interprets: no expression is evaluated and nothing is `eval`ed.
+
+<UiChoose name="update" />
+
+## Commands
+
+`.on_click(cmd)` on a button, or `Element::on(trigger, cmd)` on any element, runs commands in order when the trigger fires. The preview above toggles a paragraph with no request:
+
+```rust
+Button::outline("Show details").on_click(Cmd::toggle("deal-details"))
+```
+
+| Command | Does |
+|---|---|
+| `Cmd::toggle(id)`, `show(id)`, `hide(id)` | toggles, removes or sets `hidden` |
+| `Cmd::open(id)`, `close(id)` | opens or closes a `<dialog>`, a popover or a `<details>` |
+| `Cmd::focus(id)` | moves focus |
+| `Cmd::submit(id)` | submits a form |
+| `Cmd::copy(text)` | copies text to the clipboard |
+| `Cmd::set_attr`, `remove_attr`, `toggle_attr` | changes a state attribute: `data-*` (not the runtime's own `data-ui-*`), `aria-*`, `hidden`, `open` or `disabled` |
+| `Cmd::dispatch(name)` | sends a custom event from the element |
+
+A command can't change where something points or what it runs: any other attribute is refused, in Rust and again in the runtime. Triggers are `Trigger::Click`, `Change` and `Input`.
+
+Several commands run in order. This button opens a dialog, then moves focus to its field:
+
+<UiPreview example="commands/open" />
+
+## Replies and ops
+
+An action handler answers with a `Reply`. With the runtime, the request carries `X-Navree-UI: 1` and the answer is an envelope of ops; with JavaScript off, the same handler's answer is a redirect, a full page or `204`. `UiModule` picks between them, so you write the handler once.
+
+Here `NewDeal` is the struct from [Forms](/docs/ui/forms/):
+
+```rust
+async fn update(Submit(deal): Submit<NewDeal>) -> Reply {
+    Reply::redirect("/deals/42")
+        .morph("deal-title", Heading::h1(deal.title.clone()))
+        .toast(ToastTone::Success, "Saved")
+}
+```
+
+```json title="What the runtime receives"
+{"build":"7dcd57c4af7d","ops":[
+  {"op":"morph","target":"deal-title","html":"<h1 data-slot=\"heading\">Acme renewal</h1>"},
+  {"op":"toast","tone":"success","text":"Saved"}
+]}
+```
+
+| Op | Does |
+|---|---|
+| `morph` | morphs an element into new HTML, keeping focus, caret, selection, composition and typed values |
+| `replace`, `append`, `prepend`, `remove` | replaces an element, adds to it, or removes it |
+| `errors` | shows field errors under a form's inputs, or clears them |
+| `toast` | shows a toast, and announces it to assistive technology |
+| `open`, `close`, `focus` | opens or closes a dialog, popover or details; moves focus |
+| `url` | changes the address bar without loading anything, on this site |
+| `navigate` | goes to another page of this site, the way a boosted link does |
+| `navigate_external` | leaves for another site, written only by `Op::navigate_external` and `Reply::redirect_external` |
+| `reload` | reloads the page |
+| `invalidate` | refetches a [region](/docs/ui/regions/) |
+
+An envelope names the build of the toolkit it belongs to. A page from an older build reloads instead of running old JavaScript against new ops, so a deploy never breaks an open tab.
+
+`Reply::redirect` and `Op::navigate` stay on this site: a URL that would leave it (`//host`, `/\host`, `https://host`) goes nowhere, so a `next` parameter from a request can't send a user away.
+
+## Toasts
+
+`Reply::toast(tone, text)` shows a short message after an action: "Saved", "Deleted 3 deals". With the runtime it appears at once and is announced; with JavaScript off it travels in a cookie and the next page shows it at the top, in the [app shell](/docs/ui/app-shell/). The tones are `ToastTone::Info`, `Success`, `Warning` and `Danger`.
+
+## Links and forms, boosted
+
+With the runtime, links on the site and forms load without a full page reload: the runtime fetches the next page and morphs it in. A form shows the pending state on its submit button and sets `aria-busy` while it posts. `data-ui-noboost` keeps a link out of this: it loads for real.
+
+## API
+
+### Cmd
+
+<UiProps type="Cmd" />
+
+### Reply
+
+<UiProps type="Reply" />
+
+### Op
+
+<UiProps type="Op" />

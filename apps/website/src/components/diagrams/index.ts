@@ -8,6 +8,7 @@ import { microservices } from "./microservices";
 import { modularMonolith } from "./modular-monolith";
 import { moduleGraph } from "./module-graph";
 import { multiTenancy } from "./multi-tenancy";
+import { navreeUi } from "./navree-ui";
 import { requestLifecycle } from "./request-lifecycle";
 
 export { DiagramCanvas, DiagramFigure, DiagramLegend, type DiagramSpec } from "./figure";
@@ -22,6 +23,7 @@ export const diagrams: Record<DiagramName, DiagramSpec> = {
   "backend-for-frontend": backendForFrontend,
   "request-lifecycle": requestLifecycle,
   "module-graph": moduleGraph,
+  "navree-ui": navreeUi,
 };
 
 /**

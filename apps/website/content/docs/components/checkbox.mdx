@@ -1,0 +1,48 @@
+---
+title: "Checkbox"
+description: "A checkbox that posts `true` when checked, with its label around it."
+---
+
+<UiPreview example="checkbox/default" />
+
+`Checkbox` draws an `<input type="checkbox">` that posts `name=true` when it is checked. With `.label(text)`, a `<label>` wraps it, so clicking the text checks it.
+
+```rust
+use navree::ui::*;
+
+Checkbox::new("terms").label("Accept the terms").required()
+```
+
+## When to use it
+
+Use a checkbox for a yes or no that is sent with a form, such as accepting terms, or for picking any number from a list.
+
+<UiChoose name="on-off" current="Checkbox" />
+
+## Anatomy
+
+<UiAnatomy component="checkbox" />
+
+## States
+
+<UiPreview example="checkbox/states" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves focus to the checkbox. |
+| `Space` | Checks or unchecks it. |
+
+- The label wraps the input, so its text is the checkbox's name and a click on it toggles the box.
+- A checkbox that isn't checked posts nothing: read a missing field as `false`.
+
+</UiA11y>
+
+## API
+
+### Checkbox
+
+<UiProps type="Checkbox" />

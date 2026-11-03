@@ -1,0 +1,43 @@
+---
+title: "ScrollArea"
+description: "A scrolling region with thin scrollbars that a keyboard can reach and a screen reader can name."
+---
+
+<UiPreview example="scroll-area/default" />
+
+`ScrollArea` is a region that scrolls on its own, with thin scrollbars. It takes focus, so a keyboard can scroll it, and it is named, so a screen reader can find it.
+
+```rust
+use navree::ui::*;
+
+ScrollArea::new("Activity").children(Text::muted("Ada moved Acme renewal to Proposal"))
+```
+
+## When to use it
+
+Use it for a list that would otherwise make the page too long: a log, an activity feed. Give it a height through its container.
+
+<UiChoose name="disclosure" current="ScrollArea" />
+
+## Anatomy
+
+<UiAnatomy component="scroll-area" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves focus to the area. |
+| `↑`, `↓`, `Page Up`, `Page Down` | Scroll it. |
+
+- It has `role="region"` and the label you give it, and `tabindex="0"`.
+
+</UiA11y>
+
+## API
+
+### ScrollArea
+
+<UiProps type="ScrollArea" />

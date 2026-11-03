@@ -9,6 +9,7 @@ import { FileTree } from "./file-tree";
 import { LinkCard, LinkCards } from "./link-card";
 import { Step, Steps } from "./steps";
 import { CodeGroup, Tab, Tabs } from "./tabs";
+import { UiA11y, UiAnatomy, UiAssets, UiChoose, UiCsp, UiGrid, UiPreview, UiProps, UiTokens } from "@/components/ui-docs";
 
 /**
  * Headings link to themselves (the whole heading is the anchor link), so
@@ -77,4 +78,13 @@ export const mdxComponents = {
   Steps,
   Tab,
   Tabs,
+  UiA11y,
+  UiAnatomy,
+  UiAssets,
+  UiChoose,
+  UiCsp,
+  UiGrid,
+  UiPreview,
+  UiProps,
+  UiTokens,
 };

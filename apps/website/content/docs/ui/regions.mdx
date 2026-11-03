@@ -1,0 +1,60 @@
+---
+title: "Regions and live updates"
+description: "A named part of a page that updates by itself: fetched after paint, polled, fed new rows, or refetched when an op says so."
+---
+
+<UiPreview example="regions/lazy" />
+
+A `Region` is a named part of a page with its own source. It can load after the page paints, poll while the page is visible, take only what's new as a feed, or be refetched when an action's reply invalidates it. Each answer morphs in, keeping focus and what was typed. A region loads the `core` runtime.
+
+```rust
+use navree::ui::*;
+
+Card::titled("Revenue by month")
+    .body(Region::new("revenue").src("/fragments/revenue").lazy())
+```
+
+The preview above is the region before it loads: two skeleton lines, and `aria-busy` on the region. In an app, the runtime fetches the source as soon as the page has painted.
+
+## When to use it
+
+<UiChoose name="update" current="Region" />
+
+## The source
+
+`.src(url)` is where the content comes from: a page that holds an element with the region's id, or a fragment, which is a page with no script of its own. A source that answers a page with the runtime but without that id, or a redirect, means the reader is somewhere else, as when a session has ended: the reader goes there.
+
+## Lazy
+
+`.lazy()` fetches the region after paint and shows skeleton lines until then. Use it for the slow parts of a dashboard, so the rest of the page is quick.
+
+## Polling
+
+`.poll(every)` refetches the region this often while the page is visible. Its first content can be drawn with the page, with `.children`.
+
+<UiPreview example="regions/poll" />
+
+```rust
+Region::new("activity")
+    .src("/fragments/activity")
+    .poll(Duration::from_secs(5))
+    .children(activity())
+```
+
+## A feed
+
+`.feed(into, after, empty)` asks the source only for what is newer than a cursor, and adds it at the start of the element `into`. The source answers the new rows as HTML (nothing when there are none) and the newest cursor in the `X-UI-Cursor` header. `empty` names an element to remove when the first row arrives, such as a "nothing yet" message. A [Table](/docs/components/table/) with `.body_id(id)` takes a feed's rows.
+
+## Refetched by an action
+
+An action's reply can name regions to refetch with an `invalidate` op, so a change in one place updates another without the handler drawing both. See [Commands and ops](/docs/ui/commands-and-ops/).
+
+## Live tables
+
+A [DataTable](/docs/ui/data-table/) has its own `.live(every)` and `.live_from(url)`: it refetches on a timer or when a server-sent event stream speaks, keeping the reader's typing, focus, open menus and selection, and dropping an answer that a newer change overtook.
+
+## API
+
+### Region
+
+<UiProps type="Region" />

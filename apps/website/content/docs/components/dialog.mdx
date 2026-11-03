@@ -1,0 +1,62 @@
+---
+title: "Dialog"
+description: "A modal dialog on the browser's `<dialog>`, opened by a button with no script: focus trap, Esc and focus return included."
+---
+
+<UiPreview example="dialog/default" />
+
+`Dialog` is the browser's `<dialog>`. A button opens it with `.opens_dialog(id)`, which writes the `command` and `commandfor` attributes, so it opens with no JavaScript. The browser brings the rest: focus moves in and is held there, the page behind is inert, `Esc` closes it, and focus returns to the button.
+
+The preview shows the dialog in place, as it looks open. Press **Share deal** to open it for real.
+
+```rust
+use navree::ui::*;
+
+(
+    Button::outline("Share deal").opens_dialog("share"),
+    Dialog::new("share", "Share Acme renewal")
+        .body(Field::new("share-email", "Email").control(Input::email("email")))
+        .footer((
+            Button::outline("Cancel").closes_dialog("share"),
+            Button::primary("Share"),
+        )),
+)
+```
+
+## When to use it
+
+Use a dialog for a short task that interrupts the page: a small form, a choice. For a question that must be answered, use an [AlertDialog](/docs/components/alert-dialog/); for a longer panel, a [Sheet](/docs/components/sheet/).
+
+<UiChoose name="overlay" current="Dialog" />
+
+## Anatomy
+
+<UiAnatomy component="dialog" />
+
+## A form in a dialog
+
+Put the form in the body and point the submit button at it with the `form` attribute, so the button can sit in the footer. With the runtime, the server's answer can close the dialog with an op; see [Commands and ops](/docs/ui/commands-and-ops/).
+
+<UiPreview example="dialog/form" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Enter`, `Space` on the button | Opens the dialog and moves focus into it. |
+| `Tab`, `Shift+Tab` | Moves between the dialog's controls; focus stays inside. |
+| `Esc` | Closes it. |
+
+- The title is required and names the dialog through `aria-labelledby`; a description is tied with `aria-describedby`.
+- The close button comes last, so the first thing focused is the dialog's own content. It is labelled "Close".
+- `closedby="any"`: a click outside the dialog closes it too.
+
+</UiA11y>
+
+## API
+
+### Dialog
+
+<UiProps type="Dialog" />

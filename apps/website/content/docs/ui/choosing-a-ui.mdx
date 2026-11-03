@@ -1,0 +1,67 @@
+---
+title: "Choosing a UI"
+description: "Three ways to build the screens of a Navree app: Navree UI in Rust, Next.js with React, or Nuxt with Vue. What each costs and gives."
+---
+
+A Navree app can draw its screens three ways. Navree UI renders them in Rust, in the same binary as the API. A Next.js (React) or Nuxt (Vue) app can sit beside the API instead, with Navree's packages for sign-in, data and live updates. All three use the same API, the same access rules and the same dark theme.
+
+<UiChoose name="choosing-a-ui" />
+
+## Navree UI
+
+Server-rendered Rust components, the default for apps whose screens are built in Rust. A handler returns typed components; the toolkit renders them to HTML, with one stylesheet and a small runtime that loads only when a page needs it.
+
+```rust title="src/deals/pages.rs"
+use navree::ui::*;
+
+async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<AppPage> {
+    let page = query.load(Deal::query(), &uow).await?;
+    Ok(shell
+        .page("Deals")
+        .actions(Button::primary("New deal").icon(icons::PLUS).href("/deals/new"))
+        .body(DataTable::new("deals", &query, &page)))
+}
+```
+
+| | |
+|---|---|
+| **Gives** | One language, one binary and one deploy. Forms from a validated struct, a data table driven by one definition, the app shell, and pages that work with JavaScript off. No Node at run time or in `cargo build`. |
+| **Costs** | Interactions that need data go to the server and back, so they wait on the network. Charts, a date picker, a searchable select and rich text are [coming](/docs/ui/coming-next/), not here yet. |
+| **Start** | The `ui` feature of `navree` (on by default) and `UiModule::from_config()`. See the [overview](/docs/ui/overview/) and the [components](/docs/components/overview/). |
+
+## Next.js (React)
+
+A Next.js app in `web/`, beside the API. Its server is a backend-for-frontend: it calls the API and keeps the tokens in httpOnly cookies, so the browser never holds one.
+
+```sh
+navree new acme --ui next
+```
+
+| | |
+|---|---|
+| **Gives** | React and its libraries, and instant interactions in the browser. `@navree/next` brings sign-in with refresh and two-factor, a typed client, `useListQuery`, a `DataTable`, live channels and abilities. The [SaaS starter kit](/docs/getting-started/starter-kits/) ships a full one. |
+| **Costs** | A second app in a second language, with Node.js to run its server and a build step. |
+| **Start** | `navree new <name> --ui next`, then [Next.js](/docs/frontend/nextjs/). |
+
+## Nuxt (Vue)
+
+A Nuxt app beside the API, with the backend-for-frontend as Nitro routes.
+
+| | |
+|---|---|
+| **Gives** | Vue and its libraries. `@navree/nuxt` is a Nuxt module: sign-in, a session gate, auto-imported composables (`useNavreeAuth`, `useListQuery`, `useChannel`) and `<NavreeDataTable>`. |
+| **Costs** | As for Next.js: a second app, and Node.js to run it. There is no Nuxt starter kit and `navree new` has no `--ui nuxt`: you create the Nuxt app yourself and add the module. |
+| **Start** | [Nuxt](/docs/frontend/nuxt/). The CRM's Nuxt front end, `apps/crm-nuxt`, is a complete example. |
+
+## Mixing them
+
+The three share the API, so you can mix them: an admin area in Navree UI and a customer app in Next.js, say. [Logbook](/docs/tools/logbook/), Navree's request log, is drawn with Navree UI and serves its pages from inside any app, whatever front end the app has.
+
+<LinkCards>
+  <LinkCard href="/docs/ui/overview/" title="Navree UI overview">
+    How it works, what ships to the browser, and the security policy.
+  </LinkCard>
+  <LinkCard href="/docs/frontend/introduction/" title="Front end packages">
+    The typed client, the backend-for-frontend, and the Next.js and Nuxt integrations.
+  </LinkCard>
+</LinkCards>

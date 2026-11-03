@@ -1,0 +1,49 @@
+---
+title: "Attachment"
+description: "A file shown as a small tile: its icon, its name, what is known about it, and an action."
+---
+
+<UiPreview example="attachment/default" />
+
+`Attachment` shows one file: an icon, its name (a link with `.href`), a line such as its type and size, and an optional button.
+
+```rust
+use navree::ui::*;
+
+Attachment::new("proposal-acme.pdf")
+    .meta("PDF · 2.4 MB")
+    .href("/files/proposal-acme.pdf")
+```
+
+## When to use it
+
+Use it for files on a record or in a [conversation](/docs/components/message/).
+
+<UiChoose name="conversation" current="Attachment" />
+
+## Anatomy
+
+<UiAnatomy component="attachment" />
+
+## With an action
+
+<UiPreview example="attachment/action" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves to the file's link, then to its action. |
+
+- The icon is hidden from assistive technology; the name and the meta line say what the file is.
+- An icon-only action needs `Button::icon_only` and its label, such as "Remove".
+
+</UiA11y>
+
+## API
+
+### Attachment
+
+<UiProps type="Attachment" />

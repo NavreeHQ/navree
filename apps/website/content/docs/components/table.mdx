@@ -1,0 +1,66 @@
+---
+title: "Table"
+description: "A plain table of data you have in hand, with a caption, numeric columns and a wrapper that scrolls on phones."
+---
+
+<UiPreview example="table/default" />
+
+`Table` draws a `<table>` from header cells and rows you build yourself. Its wrapper scrolls sideways on narrow screens. Numbers align right in tabular figures.
+
+```rust
+use navree::ui::*;
+
+Table::new()
+    .caption("Deals closing this month")
+    .head((TableHead::new("Deal"), TableHead::new("Value").numeric()))
+    .rows(TableRowEl::new((
+        TableCell::new("Acme renewal"),
+        TableCell::new("$48,000").numeric(),
+    )))
+```
+
+## When to use it
+
+Use it for a few rows you already have. For rows from a query, with sorting, filters, paging and selection in the URL, use the [DataTable](/docs/ui/data-table/).
+
+<UiChoose name="data" current="Table" />
+
+## Anatomy
+
+<UiAnatomy component="table" />
+
+## Sorted, selected, hidden on phones
+
+`TableHead::sort(ascending)` sets `aria-sort` on the column it's sorted by. `TableRowEl::selected` marks a row, `TableRowEl::key` keeps a row through a morph, and `hide_on_mobile` hides a column below 768 px.
+
+<UiPreview example="table/states" />
+
+`Table::body_id(id)` names the body, so a feed [region](/docs/ui/regions/) can add rows to it.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- Header cells have `scope="col"`, so each cell is read with its column's name.
+- The caption names the table; give every table one.
+- The scrolling wrapper keeps a wide table from widening the page.
+
+</UiA11y>
+
+## API
+
+### Table
+
+<UiProps type="Table" />
+
+### TableHead
+
+<UiProps type="TableHead" />
+
+### TableRowEl
+
+<UiProps type="TableRowEl" />
+
+### TableCell
+
+<UiProps type="TableCell" />

@@ -1,0 +1,56 @@
+---
+title: "Card"
+description: "A surface for related content, with a header, a body and a footer that appear only when used."
+---
+
+<UiPreview example="card/default" />
+
+`Card` is a surface with 6 px corners. Its header holds a title, a description and an action; its body and footer hold anything. Each part is drawn only when you fill it.
+
+```rust
+use navree::ui::*;
+
+Card::titled("Acme renewal")
+    .description("Annual platform license, 120 seats.")
+    .body(Text::new("Procurement asked for a two-year term."))
+    .footer(Button::primary("Mark won"))
+```
+
+## When to use it
+
+Use a card to set related content apart: a summary, a chart, a form. For a list of things of the same kind, use [Items](/docs/components/item/) or a [Table](/docs/components/table/).
+
+<UiChoose name="surface" current="Card" />
+
+## Anatomy
+
+<UiAnatomy component="card" />
+
+## Cards in a grid
+
+A card carries no outer margin: put cards in a [Grid](/docs/ui/layout/) and the grid spaces them.
+
+<UiPreview example="card/stats" />
+
+## Body only
+
+<UiPreview example="card/plain" />
+
+## Headings
+
+The title is an `<h2>`, which suits a card under a page's `<h1>`. Under a section's heading, `.heading(3)` makes it an `<h3>`, and so on, so the outline of the page stays in order.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- A card is a `<div>`: it isn't focusable and has no role. What's inside it keeps its own.
+- Its title is a real heading, so screen reader users can jump between cards.
+
+</UiA11y>
+
+## API
+
+### Card
+
+<UiProps type="Card" />

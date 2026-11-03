@@ -1,0 +1,18 @@
+---
+title: "Components"
+description: "Every component of Navree UI, rendered live by the Rust toolkit, grouped the way you look for them."
+---
+
+Each component is a Rust struct with builder methods that turns into HTML on the server. The previews below are the real thing: navree-ui renders every one, with its own stylesheet, in a frame of its own. Open one to see its variants, states, parts, keyboard behavior and API.
+
+```rust
+use navree::ui::*;
+
+Card::titled("Acme renewal")
+    .description("Proposal · $48,000")
+    .footer(Button::primary("Mark won"))
+```
+
+To choose between Navree UI and a JavaScript front end, see [Choosing a UI](/docs/ui/choosing-a-ui/). For how it works and what ships to the browser, see the [overview](/docs/ui/overview/).
+
+<UiGrid />

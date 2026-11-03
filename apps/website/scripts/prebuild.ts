@@ -8,6 +8,10 @@
  *   the README of Navree's benchmark app (`bench/frameworks/navree`).
  * - `public/data/bench/`: those two result files, for download.
  * - `public/data/search-index.json`: the docs search index (MiniSearch).
+ * - `public/ui-preview/`: the UI docs' preview documents, which
+ *   `cargo run -p ui-docs` writes to `content/ui/previews/`, and the
+ *   toolkit's stylesheet, font and modules they load, copied byte for byte
+ *   from `crates/navree-ui` (`content/ui/toolkit.json` lists them).
  *
  * It also checks that every page in `content/docs/manifest.ts` exists and
  * has a title and a description, and fails the build if one doesn't.
@@ -522,6 +526,32 @@ function buildCrates(): CrateInfo[] {
   return crates;
 }
 
+// --------------------------------------------------------------- ui previews
+
+const UI = path.join(WEBSITE, "content/ui");
+const UI_PREVIEW = path.join(WEBSITE, "public/ui-preview");
+
+type ToolkitAsset = { file: string; source: string };
+
+/**
+ * Copies the preview documents and the toolkit's files they load. A preview
+ * is a static page framed by the docs, so the toolkit's CSS and the site's
+ * never meet.
+ */
+function buildUiPreviews(): number {
+  if (!fs.existsSync(path.join(UI, "previews"))) fail("content/ui/previews is missing: run `cargo run -p ui-docs`");
+  fs.rmSync(UI_PREVIEW, { recursive: true, force: true });
+  fs.cpSync(path.join(UI, "previews"), UI_PREVIEW, { recursive: true });
+  const toolkit = readJson<{ assets: ToolkitAsset[] }>(path.join(UI, "toolkit.json"));
+  for (const asset of toolkit.assets) {
+    const from = path.join(REPO, asset.source);
+    if (!fs.existsSync(from)) fail(`${asset.source} is missing (listed in content/ui/toolkit.json)`);
+    writeFile(path.join(UI_PREVIEW, "_toolkit", asset.file), "");
+    fs.copyFileSync(from, path.join(UI_PREVIEW, "_toolkit", asset.file));
+  }
+  return fs.readdirSync(UI_PREVIEW, { recursive: true }).filter((f) => String(f).endsWith(".html")).length;
+}
+
 // --------------------------------------------------------------------- main
 
 const started = performance.now();
@@ -530,6 +560,7 @@ writeFile(path.join(GENERATED, "performance.json"), JSON.stringify(perf, null, 2
 const crates = buildCrates();
 writeFile(path.join(GENERATED, "crates.json"), JSON.stringify(crates, null, 2));
 
+const previews = buildUiPreviews();
 const docs = buildDocs(perf);
 const index = new MiniSearch<SearchDoc>(searchOptions);
 index.addAll(docs);
@@ -537,5 +568,5 @@ writeFile(path.join(PUBLIC_DATA, "search-index.json"), JSON.stringify(index));
 
 console.log(
   `prebuild: performance data, ${perf.downloads.length} raw files, ${crates.length} crates, ` +
-    `${docs.length} search entries (${Math.round(performance.now() - started)} ms)`,
+    `${docs.length} search entries, ${previews} UI previews (${Math.round(performance.now() - started)} ms)`,
 );

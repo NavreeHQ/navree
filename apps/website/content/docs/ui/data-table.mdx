@@ -1,0 +1,142 @@
+---
+title: "DataTable"
+description: "One Rust definition drives the URL, the query, the drawing, the export and bulk actions: sort, filter, page, select and act, with everything but the selection in the URL."
+---
+
+<UiPreview example="data-table/default" />
+
+`DataTable` draws rows from a query, and `#[derive(TableRow)]` on one struct says what can be done with each column. The same definition parses the URL into a `TableQuery`, builds the query through navree-orm with an allow-list, draws the table, exports CSV and checks bulk actions. Sort, filters, the page, the page size, hidden columns, widths and density live in the URL, so back, forward, reload and a shared link restore them, and it all works with JavaScript off.
+
+```rust title="src/deals/table.rs"
+#[derive(Clone, TableRow)]
+#[table(sort = "-amount", per = 5, per_pages(5, 25, 100))]
+pub struct Deal {
+    #[col(skip)]
+    pub id: i64,
+    #[col(sortable, search, sticky, filter = text, link = "/deals/{id}", label = "Deal")]
+    pub title: String,
+    #[col(sortable, hide_on_mobile)]
+    pub company: &'static str,
+    #[col(badge = tone)]
+    pub stage: &'static str,
+    #[col(sortable, numeric, filter = range)]
+    pub amount: Money,
+    #[col(sortable, filter = date, label = "Closes")]
+    pub closes_on: chrono::NaiveDate,
+}
+```
+
+In a handler, `TableQuery<Deal>` is an extractor and `query.load` runs it on your model (the `orm` feature):
+
+```rust title="src/deals/pages.rs"
+async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<AppPage> {
+    let page = query.load(Deal::query(), &uow).await?;
+    Ok(shell.page("Deals").body(DataTable::new("deals", &query, &page).caption("Deals")))
+}
+```
+
+The previews on this page draw five rows from memory with `TablePage::new(rows, total)`, which is what `load` returns.
+
+## When to use it
+
+<UiChoose name="data" current="DataTable" />
+
+## Anatomy
+
+<UiAnatomy component="data-table" />
+
+## Columns
+
+| Column option | Means |
+|---|---|
+| `sortable`, `search`, `filter = text\|range\|date\|select\|multi\|boolean\|relation` | what can be done with it; `kind = int` when the cell shows something other than the column queried; `source = "companies.name"` when the column has another name |
+| `sticky`, `sticky_end`, `hidden`, `locked`, `hide_on_mobile`, `width = 240`, `group = "Address"` | where it sits |
+| `numeric`, `align = center`, `strong`, `truncate`, `wrap`, `link = "..."`, `badge = tone`, `options = LIST` | how it reads |
+
+| On the table | Means |
+|---|---|
+| `#[table(cursor)]` | keyset pages, for huge tables |
+| `#[table(capped = 10000)]`, `#[table(no_count)]` | count no further than this; or don't count, with Previous and Next only |
+| `#[table(version = "col")]` | a column that changes with a row, compared before a bulk action |
+
+## Selection and bulk actions
+
+`.bulk(url, actions)` adds a checkbox to each row and a bar of actions for the selection. The selection is kept per tab: ticked rows survive paging, sorting and filtering, and "all that match" survives paging and sorting and takes exclusions. An action posts the selection and the count the user saw; `BulkRequest::resolve` runs the same definition on your scoped query and refuses when the count or a row's version differs.
+
+<UiPreview example="data-table/bulk" />
+
+```rust title="src/deals/pages.rs"
+async fn bulk(uow: Uow, request: BulkRequest<Deal>) -> Result<Reply> {
+    let target = match request.resolve(Deal::query(), &uow).await? {
+        Ok(target) => target,
+        Err(refusal) => return Ok(request.refused(StatusCode::CONFLICT, refusal.message())),
+    };
+    let count = target.delete(&uow).await?;
+    Ok(request.done(format!("Deleted {count}.")))
+}
+```
+
+## Filters under the headers
+
+`.filter_row()` puts each column's filter under its header instead of in a popover. `.filter_bar()` puts them in a bar over the table, where the reader chooses which show.
+
+<UiPreview example="data-table/filter-row" />
+
+## Compact rows
+
+`density=compact` in the URL, set from the table's view options, makes rows shorter.
+
+<UiPreview example="data-table/compact" />
+
+## Empty, loading and failed
+
+`.empty(empty)` shows an [Empty](/docs/components/empty/) when no row matches, `.loading()` skeleton rows, and `.failed(message)` an error with a way to try again.
+
+<UiPreview example="data-table/states" />
+
+## More on a table
+
+| Method | Means |
+|---|---|
+| `.detail(fn)`, `.row_actions(fn)`, `.row_href(fn)`, `.sticky_rows(fn)`, `.selectable_if(fn)` | per row |
+| `.cell(name, fn)` | draws a column from the whole row, into any component |
+| `.keyboard_grid()` | one tab stop, arrow keys, `Home`, `End`, `Page Up` and `Page Down` |
+| `.live(every)`, `.live_from(url)`, `.refreshable()` | refetches while the page is visible, or when a server-sent event stream speaks, keeping typing, focus and the selection |
+| `.views(&views, url)`, `.export(url)`, `.foot(col, cell)` | stored views, CSV export of the current filter, a footer row |
+
+## Limits
+
+- **One table per URL.** Its state lives in plain query parameters, so two tables on one page would share it: give the second its own route or [region](/docs/ui/regions/).
+- **NULL is the smallest value on every store:** ascending puts NULLs first, descending last. On PostgreSQL, index such a column as `(col NULLS FIRST, id)`.
+- **Huge tables** want an index per sort column, ending in the key. A search or text filter is `contains`, which reads every row unless the column has a trigram index on PostgreSQL. On numbered pages, a row added or deleted between pages moves what follows by one; `#[table(cursor)]` pages don't.
+- **Stored views** are SQL only, in the table `navree_ui_table_views`, which you create in a migration.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves through the toolbar, the headers' sort links, the checkboxes and the row links. |
+| `Enter` | Sorts by a header, follows a row's link. |
+| Arrow keys, `Home`, `End`, `Page Up`, `Page Down` | With `.keyboard_grid()`, move between cells with one tab stop. |
+| `Esc` | Closes an open column menu. |
+
+- The sorted header has `aria-sort`; the table has its caption; a refetch marks the table `aria-busy`.
+- Nothing a hover can fire changes anything: every action is a `POST`.
+
+</UiA11y>
+
+## API
+
+### DataTable
+
+<UiProps type="DataTable" />
+
+### BulkAction
+
+<UiProps type="BulkAction" />
+
+### RowAction
+
+<UiProps type="RowAction" />

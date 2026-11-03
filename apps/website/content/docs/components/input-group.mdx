@@ -1,0 +1,47 @@
+---
+title: "InputGroup"
+description: "An input with text, an icon or a button fixed before or after it, inside one border."
+---
+
+<UiPreview example="input-group/default" />
+
+`InputGroup` puts something fixed at either end of an input, inside one border: a currency, a unit, a search icon, a shortcut. A [Field](/docs/components/field/) around a group still finds the input inside it.
+
+```rust
+use navree::ui::*;
+
+InputGroup::new(Input::text("amount")).start("$").end("USD")
+```
+
+## When to use it
+
+Use it when the input means little without its unit, or when an icon says what it is for.
+
+<UiChoose name="text" current="InputGroup" />
+
+## Anatomy
+
+<UiAnatomy component="input-group" />
+
+## An icon and a key
+
+<UiPreview example="input-group/icon" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves focus to the input, then to any button in an addon. |
+
+- The addons are text beside the input, not part of its value. Say the unit in the label or the help too: a screen reader may not read text beside an input.
+- Icons are hidden from assistive technology.
+
+</UiA11y>
+
+## API
+
+### InputGroup
+
+<UiProps type="InputGroup" />

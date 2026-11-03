@@ -43,7 +43,7 @@ function Lines({ x, y, w, accent = false }: { x: number; y: number; w: number; a
   );
 }
 
-const thumbs: Record<Exclude<DiagramName, "request-lifecycle" | "module-graph">, ReactNode> = {
+const thumbs: Record<Exclude<DiagramName, "request-lifecycle" | "module-graph" | "navree-ui">, ReactNode> = {
   "modular-monolith": (
     <>
       <rect x={20.5} y={8.5} width={119} height={71} rx={10} className="fill-fg/[0.015] stroke-line-2" />

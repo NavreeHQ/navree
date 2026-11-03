@@ -1,0 +1,29 @@
+---
+title: "Coming next"
+description: "The components and modules planned for Navree UI, in the order they come, with where each one stands."
+---
+
+Navree UI grows one module at a time, each finished before the next starts. This is the order, and where each one stands. **Building** is under way, **next** starts when it is done, and **later** follows in this order. Until a module ships, its page doesn't exist and nothing here is a promise of its API.
+
+| Order | Module | Status |
+|---|---|---|
+| 1 | [DataTable](/docs/ui/data-table/): sort, filter, page, select, bulk actions, export and stored views, from one definition | Shipped |
+| 2 | Instant interactions: more of a page's interactions answered without waiting on the server | Building |
+| 3 | Themes and a theme builder: several themes and sidebar layouts, and themes you build yourself | Next |
+| 4 | Select with search, Combobox and Command, a command palette | Later |
+| 5 | Toast as a component of its own, beyond `Reply::toast` | Later |
+| 6 | Tabs, DropdownMenu and ToggleGroup | Later |
+| 7 | Charts, with a date range picker, since every report has both | Later |
+| 8 | DatePicker, Calendar and TimePicker | Later |
+| 9 | Wizard and Stepper | Later |
+| 10 | Rich text editing | Later |
+| 11 | Toolbar, TreeView and Slider, then ContextMenu, Menubar and NavigationMenu | Later |
+| 12 | Islands: a part of a server-rendered page with its own JavaScript component | Later |
+
+## Until then
+
+- **A searchable select:** a [NativeSelect](/docs/components/native-select/) for a fixed list, or a [Popover](/docs/components/popover/) holding a search input and a [region](/docs/ui/regions/) of results.
+- **Tabs:** links that change a query parameter, each drawing its panel on the server.
+- **A menu of actions:** a Popover with buttons, or a [DataTable](/docs/ui/data-table/)'s row actions.
+- **Charts:** `Bars` draws a small bar chart on the server today; see [Stat and Bars](/docs/components/stat/).
+- **Anything else in the browser:** a [Next.js or Nuxt front end](/docs/ui/choosing-a-ui/) beside the same API.

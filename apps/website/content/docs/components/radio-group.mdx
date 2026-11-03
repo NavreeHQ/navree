@@ -1,0 +1,53 @@
+---
+title: "RadioGroup"
+description: "One choice out of several, all shown: a `fieldset` of native radios whose keyboard is the browser's."
+---
+
+<UiPreview example="radio-group/default" />
+
+`RadioGroup` draws a `<fieldset>` with a `<legend>` and one native radio per choice, all posting as `name`.
+
+```rust
+use navree::ui::*;
+
+RadioGroup::new("plan", "Plan")
+    .option("starter", "Starter")
+    .option("team", "Team")
+    .selected("team")
+```
+
+## When to use it
+
+Use a radio group when there are two to five choices and seeing them all helps. For more, use a [NativeSelect](/docs/components/native-select/).
+
+<UiChoose name="pick-one" current="RadioGroup" />
+
+## Anatomy
+
+<UiAnatomy component="radio-group" />
+
+## Disabled
+
+`.disabled(true)` disables the whole fieldset.
+
+<UiPreview example="radio-group/disabled" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves focus into the group, to the chosen radio, and out again. |
+| `↑`, `↓`, `←`, `→` | Moves to the next or previous choice and chooses it. |
+
+- The legend names the group; each radio is named by its own label.
+- `.required()` puts `required` on every radio, so the browser asks for a choice.
+
+</UiA11y>
+
+## API
+
+### RadioGroup
+
+<UiProps type="RadioGroup" />

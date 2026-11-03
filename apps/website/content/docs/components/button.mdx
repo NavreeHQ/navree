@@ -1,0 +1,102 @@
+---
+title: "Button"
+description: "A button, or a link that looks like one: six variants, four sizes, icons, and a pending state."
+---
+
+<UiPreview example="button/default" />
+
+`Button` draws a `<button>`, or an `<a>` when you give it an `href`. Its look is a `ButtonVariant` and its height a `Size`, both Rust enums, so a misspelt variant doesn't compile. A page of buttons ships no JavaScript.
+
+```rust
+use navree::ui::*;
+
+Button::primary("Create deal").icon(icons::PLUS)
+```
+
+## When to use it
+
+Use a button for an action: saving, opening a dialog, submitting a form. Give each view one `Button::primary`, for the action that matters most there.
+
+<UiChoose name="action" current="Button" />
+
+## Anatomy
+
+<UiAnatomy component="button" />
+
+## Variants
+
+`primary` is the one green button of a view. `Button::new` is the quiet default, `outline` and `ghost` step further back, `destructive` deletes, and `ButtonVariant::Link` reads as a link.
+
+<UiPreview example="button/variants" />
+
+## Sizes
+
+Controls are 32 px tall by default. `Size::Xs`, `Sm` and `Lg` make them 24, 28 and 36 px.
+
+<UiPreview example="button/sizes" />
+
+## With an icon
+
+`.icon` puts an icon before the label, `.icon_end` after it. Every icon is a constant in `navree::ui::icons`.
+
+<UiPreview example="button/icon" />
+
+## Icon only
+
+`Button::icon_only` takes the icon and the label a screen reader announces. The label is required, so an icon button can't be nameless.
+
+<UiPreview example="button/icon-only" />
+
+## States
+
+`.disabled(true)` disables a button. On a link it sets `aria-disabled` and takes it out of the tab order, since a link can't be disabled. `.pending(true)` shows the spinner from the first render; the runtime sets the same state on a form's submit button while the form posts. `.block()` fills the width.
+
+<UiPreview example="button/states" />
+
+## A link that looks like a button
+
+With `.href`, the button is an `<a>`. Use it to go somewhere, not to change something. `.prefetch()` lets the page fetch a link ahead of the click; only use it for a `GET` that changes nothing.
+
+<UiPreview example="button/link" />
+
+## Submitting a form
+
+A button's `type` is `button` unless you say otherwise: `.submit()` makes it submit its form and `.kind(ButtonKind::Reset)` reset it. `.named(name, value)` posts a value with the click, for a form with two submit buttons.
+
+<UiPreview example="button/submit" />
+
+`.opens_dialog(id)` and `.closes_dialog(id)` open and close a `<dialog>` with the browser's `command` attribute, with no script; see [Dialog](/docs/components/dialog/). `.on_click(cmd)` runs [commands](/docs/ui/commands-and-ops/) in the browser.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves focus to the button. A disabled link is skipped. |
+| `Enter` | Presses a button, follows a link. |
+| `Space` | Presses a button. |
+
+- It is the browser's own `<button>` or `<a>`, with its focus ring, keyboard and role.
+- An icon-only button carries `aria-label`; the icon itself is hidden from assistive technology.
+- The pending spinner is drawn by CSS over transparent text, so the label is still read.
+
+</UiA11y>
+
+## API
+
+### Button
+
+<UiProps type="Button" />
+
+### ButtonVariant
+
+<UiProps type="ButtonVariant" />
+
+### ButtonKind
+
+<UiProps type="ButtonKind" />
+
+### Size
+
+<UiProps type="Size" />

@@ -597,3 +597,53 @@
 .link-card-text > p {
   margin: 0;
 }
+
+/* ------------------------------------------------------------------ UI docs */
+
+/* A signature in a props table: wraps anywhere rather than widening it. */
+.ui-sig {
+  color: var(--color-fg);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.ui-props td:first-child {
+  width: 50%;
+}
+.ui-props-block .table-wrap {
+  margin-block: 1rem;
+}
+
+/* Keyboard and accessibility notes: a framed block of Markdown. */
+.ui-a11y > .table-wrap {
+  margin-block: 1rem;
+}
+.ui-a11y > ul {
+  margin-block: 1rem;
+}
+.ui-a11y code {
+  white-space: nowrap;
+}
+
+/* UI docs components set their own type: the prose's lists, links and inline
+   code don't reach inside them. */
+.not-prose :where(ul, ol) {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.not-prose li {
+  margin: 0;
+  padding: 0;
+}
+.not-prose a {
+  text-decoration: none;
+}
+.not-prose :not(pre) > code {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font-size: inherit;
+}

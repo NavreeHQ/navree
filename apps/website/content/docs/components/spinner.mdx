@@ -1,0 +1,43 @@
+---
+title: "Spinner"
+description: "A sign that something is happening, with the `status` role and a label."
+---
+
+<UiPreview example="spinner/default" />
+
+`Spinner` turns an icon to show that work is under way. It has `role="status"` and the label you give it.
+
+```rust
+use navree::ui::*;
+
+Spinner::new("Loading deals")
+```
+
+## When to use it
+
+Use it when you know only that something is working. A pending button shows its own spinner: see [Button](/docs/components/button/#states).
+
+<UiChoose name="loading" current="Spinner" />
+
+## Anatomy
+
+<UiAnatomy component="spinner" />
+
+## Beside its text
+
+<UiPreview example="spinner/inline" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The label is what a screen reader announces; the icon is hidden.
+- The turning stops when the reader asks for reduced motion.
+
+</UiA11y>
+
+## API
+
+### Spinner
+
+<UiProps type="Spinner" />

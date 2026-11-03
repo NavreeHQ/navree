@@ -3,7 +3,8 @@
  *
  *   node scripts/check-links.ts          (checks out/)
  *
- * Each `href`, `src` and `srcset` in every HTML page must resolve to a file
+ * Each `href`, `src` and `srcset` in every HTML page (but the UI previews'
+ * example links) must resolve to a file
  * in `out/`, and each `#anchor` to an id on the target page. The navree.com
  * links inside `llms.txt`, `llms-full.txt` and the Markdown copies of the
  * docs are checked the same way (a `.md` link's anchor against its page).
@@ -85,7 +86,18 @@ function check(from: string, raw: string) {
 }
 
 const files = walk(OUT);
-const html = files.filter((f) => f.endsWith(".html"));
+// The UI previews (`ui-preview/`) are pages of an example app: their links
+// (`/deals/42`) show what a component draws and go nowhere by design. Their
+// own files (the toolkit's stylesheet, font and modules) are still checked.
+const html = files.filter((f) => f.endsWith(".html") && !rel(f).startsWith("ui-preview/"));
+const previews = files.filter((f) => f.endsWith(".html") && rel(f).startsWith("ui-preview/"));
+for (const file of previews) {
+  const text = fs.readFileSync(file, "utf8");
+  for (const m of text.matchAll(/<(?:link|script)\s[^>]*(?:href|src)="([^"]+)"/g)) {
+    checked++;
+    if (!fs.existsSync(path.resolve(path.dirname(file), m[1]))) report(rel(file), m[1], "no such file");
+  }
+}
 for (const file of html) {
   const text = fs.readFileSync(file, "utf8");
   // Attribute values only: the router's JSON payload is not markup.
@@ -102,7 +114,7 @@ for (const file of markdown) {
   }
 }
 
-console.log(`check-links: ${html.length} HTML pages and ${markdown.length} Markdown files, ${checked} internal links (${anchors} with an anchor)`);
+console.log(`check-links: ${html.length} HTML pages, ${previews.length} UI previews and ${markdown.length} Markdown files, ${checked} internal links (${anchors} with an anchor)`);
 if (problems.size === 0) {
   console.log("OK: every internal link resolves");
 } else {

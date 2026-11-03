@@ -1,0 +1,58 @@
+---
+title: "Item"
+description: "A row with media, a title, a description and actions at the end, or a whole row that is a link."
+---
+
+<UiPreview example="item/default" />
+
+`Item` is one row of a list: something at the start (an avatar or an icon), a title and a description, and actions at the end. With `.href`, the whole row is a link.
+
+```rust
+use navree::ui::*;
+
+Item::new("Ada Lovelace")
+    .description("Owner · ada@example.com")
+    .media(Avatar::placeholder("Ada Lovelace"))
+    .actions(Button::ghost("Remove"))
+```
+
+## When to use it
+
+Use items for a short list of people, settings or files. For rows with columns to compare, use a [Table](/docs/components/table/).
+
+<UiChoose name="surface" current="Item" />
+
+## Anatomy
+
+<UiAnatomy component="item" />
+
+## Variants
+
+<UiPreview example="item/variants" />
+
+## A row that is a link
+
+<UiPreview example="item/link" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves to a linked row, or to the buttons in its actions. |
+| `Enter` | Follows a linked row. |
+
+- A linked row is one `<a>`: its name is all its text. Don't put buttons inside a linked row; a link can't hold them.
+
+</UiA11y>
+
+## API
+
+### Item
+
+<UiProps type="Item" />
+
+### ItemVariant
+
+<UiProps type="ItemVariant" />

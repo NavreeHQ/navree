@@ -324,12 +324,37 @@ where a picture explains the page better than a paragraph:
 ```
 
 The names are `modular-monolith`, `microservices`, `multi-tenancy`,
-`event-driven`, `api-first`, `backend-for-frontend`, `request-lifecycle`
-and `module-graph`. The diagrams live in `src/components/diagrams/`, each
+`event-driven`, `api-first`, `backend-for-frontend`, `request-lifecycle`,
+`module-graph` and `navree-ui`. The diagrams live in `src/components/diagrams/`, each
 with a title and a text description for screen readers; to add one, add a
 component there and its name to `src/components/mdx/diagram.tsx`. Put the
 tag on its own line with blank lines around it, and don't repeat in prose
 what the diagram already labels.
+
+### The UI docs' components
+
+The pages under `/docs/ui/` and `/docs/components/` show Navree UI with
+components that read `content/ui/`. That folder is written by
+`cargo run -p ui-docs` from the toolkit itself, and `cargo test -p ui-docs`
+fails when it is stale, so nothing on these pages is drawn by hand.
+
+- `<UiPreview example="button/variants" />`: a live preview of an example,
+  with Preview and Code tabs. Examples are Rust functions in
+  `apps/ui-docs/src/examples/`; the function's body is the code shown.
+  The preview is a static page rendered by navree-ui with its own stylesheet,
+  framed, so the toolkit's CSS and the site's never meet.
+- `<UiAnatomy component="button" />`: the component's `data-slot` parts.
+- `<UiProps type="Button" />`: a type's constructors and methods, or an
+  enum's variants, read from the toolkit's source.
+- `<UiChoose name="overlay" current="Dialog" />`: a selection diagram from
+  `src/components/ui-docs/choices.ts`.
+- `<UiA11y>` with a keyboard table and notes in Markdown inside.
+- `<UiGrid />`, `<UiAssets />`, `<UiTokens />` and `<UiCsp />`: the
+  components as a grid of previews, the toolkit's file sizes, its colour
+  tokens and its content security policy.
+
+To add an example, write the function, list it in its module's `all()`,
+run `cargo run -p ui-docs`, then use its id in a page.
 
 ### Plain Markdown
 

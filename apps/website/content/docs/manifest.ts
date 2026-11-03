@@ -182,6 +182,84 @@ export const sections: DocsSection[] = [
     ],
   },
   {
+    slug: "ui",
+    title: "UI",
+    pages: [
+      "choosing-a-ui",
+      // The two ways into Navree go here, after "choosing-a-ui":
+      // "bring-your-product" (from an existing product: reverse engineering)
+      // and "bring-your-design" (from an existing design: HTML, a Figma export
+      // or screenshots, converted to Navree UI pages). They are written with
+      // their skills, so the commands and skill names are exact.
+      "overview",
+      "foundations",
+      "icons",
+      "layout",
+      "app-shell",
+      "forms",
+      "data-table",
+      "commands-and-ops",
+      "regions",
+      "coming-next",
+    ],
+  },
+  {
+    slug: "components",
+    title: "UI components",
+    pages: [
+      "overview",
+      // Actions
+      "button",
+      "button-group",
+      "toggle",
+      // Inputs
+      "field",
+      "input",
+      "input-group",
+      "textarea",
+      "native-select",
+      "checkbox",
+      "switch",
+      "radio-group",
+      // Display
+      "card",
+      "badge",
+      "avatar",
+      "item",
+      "typography",
+      "kbd",
+      "attachment",
+      "message",
+      // Feedback
+      "alert",
+      "empty",
+      "progress",
+      "skeleton",
+      "spinner",
+      // Overlays
+      "dialog",
+      "alert-dialog",
+      "sheet",
+      "drawer",
+      "popover",
+      "tooltip",
+      "hover-card",
+      // Layout
+      "accordion",
+      "collapsible",
+      "scroll-area",
+      "separator",
+      "aspect-ratio",
+      "direction",
+      // Navigation
+      "breadcrumb",
+      "pagination",
+      // Data
+      "table",
+      "stat",
+    ],
+  },
+  {
     slug: "frontend",
     title: "Front end",
     pages: [

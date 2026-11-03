@@ -1,0 +1,51 @@
+---
+title: "Badge"
+description: "A short label beside something: a status or a category, in five variants."
+---
+
+<UiPreview example="badge/default" />
+
+`Badge` is a short label: a deal's stage, an account's plan, a count. Its variant is a `BadgeVariant`, and a [DataTable](/docs/ui/data-table/) column draws one per cell with `#[col(badge = tone)]`.
+
+```rust
+use navree::ui::*;
+
+Badge::new("Won").variant(BadgeVariant::Success)
+```
+
+## When to use it
+
+Use a badge for a status or a category that a reader scans for. Green means good news, as it does everywhere in the toolkit.
+
+<UiChoose name="label" current="Badge" />
+
+## Anatomy
+
+<UiAnatomy component="badge" />
+
+## Variants
+
+<UiPreview example="badge/variants" />
+
+## With an icon
+
+<UiPreview example="badge/icon" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- A badge is text in a `<span>`: it is read where it stands and isn't focusable.
+- Colour doesn't carry the meaning alone: the text says the status. The icon is hidden from assistive technology.
+
+</UiA11y>
+
+## API
+
+### Badge
+
+<UiProps type="Badge" />
+
+### BadgeVariant
+
+<UiProps type="BadgeVariant" />

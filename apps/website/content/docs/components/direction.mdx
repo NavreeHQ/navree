@@ -1,0 +1,38 @@
+---
+title: "Direction"
+description: "Sets the reading direction of what's inside: right to left, or left to right."
+---
+
+<UiPreview example="direction/default" />
+
+`Direction::rtl(content)` sets `dir="rtl"` on a part of the page, and `Direction::ltr(content)` sets it back. Everything inside follows it: the text, the order of a row's items and which side a label sits on.
+
+```rust
+use navree::ui::*;
+
+Direction::rtl(Text::new("שלום"))
+```
+
+## When to use it
+
+Use it for a part of a page in another script: a customer's address, a quoted message. For a whole page in a right-to-left language, set the direction on the page.
+
+<UiChoose name="divider" current="Direction" />
+
+## Anatomy
+
+<UiAnatomy component="direction" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- `dir` changes the order screen readers and the keyboard follow inside it, and which way arrow keys move in a text field.
+
+</UiA11y>
+
+## API
+
+### Direction
+
+<UiProps type="Direction" />

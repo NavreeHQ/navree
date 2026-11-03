@@ -1,0 +1,45 @@
+---
+title: "Stat and Bars"
+description: "One figure with its label and trend, and a small bar chart drawn on the server as SVG."
+---
+
+<UiPreview example="stat/default" />
+
+`Stat` shows one figure, what it is and, with `.trend(text, good)`, how it's moving: green when that's good news, red when it isn't. `Bars` draws a small bar chart as SVG on the server, with no script and no `style` attribute.
+
+```rust
+use navree::ui::*;
+
+Stat::new("Open deals", "312").trend("+12 this week", true)
+```
+
+## When to use it
+
+<UiChoose name="data" current="Stat" />
+
+## Anatomy
+
+<UiAnatomy component="stat" />
+
+## Bars
+
+<UiPreview example="stat/bars" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The trend's colour isn't its only sign: write the direction in the text, such as "+3.1%".
+- `Bars` has `role="img"` and the description you give it, which is all assistive technology gets: say what the chart shows.
+
+</UiA11y>
+
+## API
+
+### Stat
+
+<UiProps type="Stat" />
+
+### Bars
+
+<UiProps type="Bars" />

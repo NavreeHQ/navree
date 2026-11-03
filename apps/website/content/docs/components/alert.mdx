@@ -1,0 +1,56 @@
+---
+title: "Alert"
+description: "A message inside the page, in four tones, with the role that matches how urgent it is."
+---
+
+<UiPreview example="alert/default" />
+
+`Alert` is a message that stays on the page: a title, a description and an icon chosen by its tone. Neutral and success alerts have `role="status"`; warning and danger alerts have `role="alert"`, which interrupts a screen reader.
+
+```rust
+use navree::ui::*;
+
+Alert::new(AlertTone::Success)
+    .title("Deal saved")
+    .body("Acme renewal moved to Proposal.")
+```
+
+## When to use it
+
+Use an alert for something about the page the reader is on: an archived record, a failed payment. After an action, a [toast](/docs/ui/commands-and-ops/#toasts) says it's done; the [app shell](/docs/ui/app-shell/) shows a toast left for the next page as an alert at the top.
+
+<UiChoose name="message" current="Alert" />
+
+## Anatomy
+
+<UiAnatomy component="alert" />
+
+## Tones
+
+<UiPreview example="alert/tones" />
+
+## A title alone
+
+<UiPreview example="alert/title-only" />
+
+`.icon(icon)` replaces the tone's icon.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- `role="status"` is announced when the screen reader is idle; `role="alert"` at once. Keep warning and danger for what can't wait.
+- An alert in the page when it loads is read with the page. The roles matter most for an alert that arrives later, in a [region](/docs/ui/regions/) or by an op.
+- The icon is hidden from assistive technology: the title says what happened.
+
+</UiA11y>
+
+## API
+
+### Alert
+
+<UiProps type="Alert" />
+
+### AlertTone
+
+<UiProps type="AlertTone" />

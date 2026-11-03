@@ -15,6 +15,7 @@ export const diagramNames = [
   "backend-for-frontend",
   "request-lifecycle",
   "module-graph",
+  "navree-ui",
 ] as const;
 
 export type DiagramName = (typeof diagramNames)[number];

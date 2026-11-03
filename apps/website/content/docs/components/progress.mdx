@@ -1,0 +1,45 @@
+---
+title: "Progress"
+description: "How far along something is: the browser's `<progress>`, named for assistive technology."
+---
+
+<UiPreview example="progress/default" />
+
+`Progress` is the browser's `<progress>` element, styled. `Progress::new(value, max, label)` shows how far along something is; `Progress::indeterminate(label)` shows that it is going, with no known end.
+
+```rust
+use navree::ui::*;
+
+Progress::new(640, 1000, "Importing contacts")
+```
+
+## When to use it
+
+Use it when you know how much is done: an upload, an import, a step of a batch.
+
+<UiChoose name="loading" current="Progress" />
+
+## Anatomy
+
+<UiAnatomy component="progress" />
+
+## States
+
+The value is held to the maximum, and the maximum is at least 1.
+
+<UiPreview example="progress/states" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The label is the element's `aria-label`; assistive technology reads the value as a percentage.
+- To update it as work goes on, put it in a [region](/docs/ui/regions/) that polls.
+
+</UiA11y>
+
+## API
+
+### Progress
+
+<UiProps type="Progress" />

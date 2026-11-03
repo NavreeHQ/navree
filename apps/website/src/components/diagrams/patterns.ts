@@ -7,7 +7,7 @@ import type { DiagramName } from "@/components/mdx/diagram";
  */
 export type Pattern = {
   /** Anchor on /architecture/, and the diagram's name. */
-  id: Exclude<DiagramName, "request-lifecycle" | "module-graph">;
+  id: Exclude<DiagramName, "request-lifecycle" | "module-graph" | "navree-ui">;
   name: string;
   /** The tab label on the homepage. */
   short: string;

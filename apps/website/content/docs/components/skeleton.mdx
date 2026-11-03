@@ -1,0 +1,47 @@
+---
+title: "Skeleton"
+description: "A placeholder in the shape of content that is loading, hidden from assistive technology."
+---
+
+<UiPreview example="skeleton/default" />
+
+`Skeleton` holds the place of content that is coming, in its shape, so the page doesn't jump when it arrives. A lazy [Region](/docs/ui/regions/) shows two skeleton lines until its content loads.
+
+```rust
+use navree::ui::*;
+
+Skeleton::new(SkeletonShape::Line)
+```
+
+## When to use it
+
+Use it when you know the shape of what is coming.
+
+<UiChoose name="loading" current="Skeleton" />
+
+## Anatomy
+
+<UiAnatomy component="skeleton" />
+
+## Shapes
+
+<UiPreview example="skeleton/shapes" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- A skeleton has `aria-hidden="true"`: it says nothing. Mark what is loading as busy instead; a lazy region sets `aria-busy` for you.
+- The pulse stops when the reader asks for reduced motion.
+
+</UiA11y>
+
+## API
+
+### Skeleton
+
+<UiProps type="Skeleton" />
+
+### SkeletonShape
+
+<UiProps type="SkeletonShape" />

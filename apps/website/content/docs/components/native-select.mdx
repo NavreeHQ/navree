@@ -1,0 +1,59 @@
+---
+title: "NativeSelect"
+description: "The browser's `<select>`, styled: one choice from a list, with an optional prompt."
+---
+
+<UiPreview example="native-select/default" />
+
+`NativeSelect` is the browser's own `<select>`. On a phone it opens the system picker, and it posts with no script.
+
+```rust
+use navree::ui::*;
+
+NativeSelect::new("stage")
+    .prompt("Choose a stage")
+    .option("lead", "Lead")
+    .option("won", "Won")
+    .selected("lead")
+```
+
+## When to use it
+
+Use it for one choice out of many, or when there is little room. With five choices or fewer that are worth seeing at once, a [RadioGroup](/docs/components/radio-group/) is quicker to read. A searchable select is [coming](/docs/ui/coming-next/).
+
+<UiChoose name="pick-one" current="NativeSelect" />
+
+## Anatomy
+
+<UiAnatomy component="native-select" />
+
+## States
+
+`.prompt(text)` adds an empty first choice, so `.required()` makes the browser ask for a real one.
+
+<UiPreview example="native-select/states" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves focus to the select. |
+| `Space`, `Alt+↓` | Opens the list. |
+| `↑`, `↓` | Moves between choices. |
+| Typing | Jumps to the choice that starts with those letters. |
+
+- Everything is the browser's own: the list, its keyboard and what a screen reader says.
+
+</UiA11y>
+
+## API
+
+### NativeSelect
+
+<UiProps type="NativeSelect" />
+
+### OptionItem
+
+<UiProps type="OptionItem" />

@@ -1,0 +1,54 @@
+---
+title: "Foundations"
+description: "The tokens behind every component: colour, corners, control sizes and type, from one table in the toolkit."
+---
+
+Every colour and length the components use is a CSS custom property from one table, `navree_ui::tokens::TOKENS`. The toolkit's stylesheet, the `@navree/theme` package for React and Vue apps and this website's colours are all generated from it, and tests fail when any of them drifts.
+
+## Colour
+
+The dark theme ships. Surfaces step up from `ink-0` (the page) to `ink-3`; text steps down from `fg` to `fg-3`; three accents carry meaning.
+
+<UiTokens />
+
+- **Green is for one thing at a time:** the primary action of a view, the focus ring, and good news (a won deal, a rising figure). Navigation, selection and hover use the ink steps, never green.
+- **Amber warns, red fails or destroys.** A destructive button and a failed alert are red; a warning is amber.
+- **Contrast is tested.** Every text and background pair the toolkit uses reaches 4.5:1, checked by a test in the crate.
+
+<UiPreview example="foundations/colour" />
+
+## Corners
+
+Controls (buttons, inputs, badges, menu items, avatars) have 4 px corners, `--radius`. Surfaces (cards, popovers, dialogs) have 6 px, `--radius-lg`. Nothing is a pill.
+
+<UiPreview example="foundations/radius" />
+
+## Sizes
+
+Controls are 32 px tall by default, on a 4 px grid. `Size::Xs`, `Sm` and `Lg` make a control 24, 28 or 36 px. Buttons, toggles, avatars and a popover's button take a `Size`.
+
+<UiPreview example="foundations/sizes" />
+
+### Size
+
+<UiProps type="Size" />
+
+## Type
+
+Body text is 14 px Geist, secondary text 13 px, headings 20 to 24 px semibold. Geist is the toolkit's one web font, self-hosted, preloaded and shown with `font-display: optional`, so text never reflows when it arrives. Code and other monospace text use the system's monospace font, which costs no download. See [Heading and Text](/docs/components/typography/).
+
+## Density
+
+Table rows are 40 px with 12 px cell padding, and pages have 24 px of padding. A [DataTable](/docs/ui/data-table/) can be made compact by the reader, from its own controls.
+
+## Layout and the shell
+
+Components carry no outer margin: space between them belongs to the [layout primitives](/docs/ui/layout/). The [app shell](/docs/ui/app-shell/) gives every page the same frame: a sidebar, a top bar and the page.
+
+## Changing a token
+
+Change the table in `crates/navree-ui/src/tokens.rs`, then write every file made from it:
+
+```sh
+cargo test -p navree-ui --lib tokens::tests::write_generated_files -- --ignored
+```

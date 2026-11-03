@@ -1,0 +1,119 @@
+---
+title: "Forms"
+description: "One struct is the form, its rules, its errors and its input: `#[derive(Validate, Form)]`, `FormView` to draw it and `Submit<T>` to read it back."
+---
+
+<UiPreview example="forms/default" />
+
+A form in Navree UI is one struct. Its doc comments are the labels, its field types pick the widgets, and its `#[validate]` rules set `required`, `maxlength` and `min` in the browser and run again on the server. `FormView` draws it; `Submit<T>` reads it back, and answers field errors under the inputs, or the page again with JavaScript off.
+
+```rust title="src/deals/form.rs"
+use navree::ui::form::Money;
+use navree::ui::{Form, Options, Validate};
+use serde::Deserialize;
+
+#[derive(Clone, Copy, Debug, Deserialize, Options)]
+#[serde(rename_all = "snake_case")]
+pub enum Stage {
+    Lead,
+    Qualified,
+    Proposal,
+    #[option(label = "Won (100%)")]
+    Won,
+}
+
+#[derive(Debug, Deserialize, Validate, Form)]
+pub struct NewDeal {
+    /// Deal name
+    #[validate(length(min = 1, max = 255))]
+    #[form(placeholder = "Annual platform license", wide, error = "Give the deal a name.")]
+    pub title: String,
+    /// Value
+    #[validate(skip)]
+    #[form(placeholder = "12,500", help = "In US dollars.")]
+    pub amount: Money,
+    /// Stage
+    #[validate(skip)]
+    pub stage: Stage,
+    /// Expected close
+    #[validate(skip)]
+    pub closes_on: Option<chrono::NaiveDate>,
+    /// Hot deal
+    #[validate(skip)]
+    pub hot: bool,
+}
+```
+
+The preview above is this struct, drawn by:
+
+```rust
+FormView::<NewDeal>::new()
+    .post("/deals")
+    .submit("Create deal")
+    .cancel("Cancel", "/deals")
+```
+
+## Widgets from types
+
+| Field type | Widget |
+|---|---|
+| `String`, `Uuid` | a text input |
+| integers, floats, `Decimal` | a number input |
+| `bool` | a checkbox |
+| `NaiveDate`, `NaiveTime`, `NaiveDateTime` | a date, time or date-and-time input |
+| `Money` | an amount typed like `12,500.50`, stored in its smallest unit |
+| an enum with `#[derive(Options)]` | a select of its variants |
+| `Option<T>` | the same widget, and it may be left empty |
+
+`#[form(widget = ...)]` picks another: `text`, `email`, `url`, `tel`, `password`, `search`, `number`, `date`, `time`, `datetime`, `hidden`, `textarea`, `select`, `radio`, `checkbox`, `switch` or `money`. A select whose choices come from the database takes them from `FormView::options(field, choices)`.
+
+| `#[form(...)]` | Means |
+|---|---|
+| `label = "..."` | the label, in place of the doc comment |
+| `placeholder`, `help`, `prompt` | the hint while empty, the help below, a select's empty first choice |
+| `error = "..."` | the message for any failed rule, in place of the rule's own |
+| `addon = "field"` | draws another field (a currency) inside this one's input group |
+| `rows = 4` | a textarea's height |
+| `autofocus`, `wide` | takes focus on load; takes the form's whole width |
+| `skip` | not drawn and never read from the request |
+
+Fields sit in two columns where there is room, and a `wide` field takes both; `FormView::one_column()` puts each field on its own line.
+
+## Reading it back
+
+`Submit<T>` is an extractor. It decodes the form, runs the rules and hands you a valid `T`, or a `Rejected<T>`, whose `respond` draws your page again around a form that holds what was typed and the errors:
+
+```rust title="src/deals/pages.rs"
+async fn store(shell: AppShell, submit: Result<Submit<NewDeal>, Rejected<NewDeal>>) -> Response {
+    match submit {
+        Ok(Submit(deal)) => Reply::redirect("/deals")
+            .toast(ToastTone::Success, format!("{} created", deal.title))
+            .into_response(),
+        Err(rejected) => rejected.respond(|form| {
+            shell.page("New deal").body(form.post("/deals").submit("Create deal"))
+        }),
+    }
+}
+```
+
+With the runtime, a rejected form answers `422` with an `errors` op, and the errors appear under the fields without reloading the page. With JavaScript off, it answers `422` with the page.
+
+## Sent back with errors
+
+<UiPreview example="forms/errors" />
+
+## What a form accepts
+
+- A body from another site is refused with 403, by `Sec-Fetch-Site`, or by `Origin` where a browser doesn't send that, unless its `Origin` is in `http.cors.allowed_origins`.
+- A body that isn't a urlencoded form gets 415; `GET` and `HEAD` get 405; past 1,000 fields, 413.
+- Only the struct's own fields are read: a `#[form(skip)]` field stays out of the client's reach.
+- A rejected form never writes a password back, and `Rejected`'s `Debug` holds field names and errors, not values.
+- Behind a session, a plain form with JavaScript off proves itself with the token field: `FormView::csrf(session.csrf_token())`. The runtime sends the token as a header itself.
+
+Rules run once every field has the right type, so a form with a wrongly typed value reports the type errors first and the rules after they are fixed.
+
+## API
+
+### FormView
+
+<UiProps type="FormView" />

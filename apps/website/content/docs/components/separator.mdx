@@ -1,0 +1,38 @@
+---
+title: "Separator"
+description: "A line between things, across a stack or down a row."
+---
+
+<UiPreview example="separator/default" />
+
+`Separator::horizontal()` is an `<hr>`. `Separator::vertical()` is a line in a [Row](/docs/ui/layout/), with `role="separator"` and a vertical orientation.
+
+```rust
+use navree::ui::*;
+
+Row::gap(3).children(("Proposal", Separator::vertical(), "$48,000"))
+```
+
+## When to use it
+
+Use a line when space alone doesn't set two things apart. Most of the time, the gap of a [Stack](/docs/ui/layout/) is enough.
+
+<UiChoose name="divider" current="Separator" />
+
+## Anatomy
+
+<UiAnatomy component="separator" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- A separator isn't focusable. Assistive technology may announce it as a separator between groups.
+
+</UiA11y>
+
+## API
+
+### Separator
+
+<UiProps type="Separator" />

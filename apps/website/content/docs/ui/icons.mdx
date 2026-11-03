@@ -1,0 +1,22 @@
+---
+title: "Icons"
+description: "The lucide icons the toolkit ships, each a constant in `navree::ui::icons`, compiled into your binary."
+---
+
+Each icon is a constant in `navree::ui::icons`, holding its SVG shapes at compile time, so no icon comes from a request and none costs a download. Pass one to a component, or draw one on its own with `components::icon`.
+
+<UiPreview example="icons/usage" />
+
+## Every icon
+
+The names are the constants'; `TRASH_2` is `icons::TRASH_2`.
+
+<UiPreview example="icons/all" />
+
+## How they're drawn
+
+An icon is an inline `<svg>` with `data-slot="icon"`, 16 px, a 1.75 stroke in the current text colour, and `aria-hidden="true"`: what it means is in the text beside it. A button with only an icon takes its label as an argument, `Button::icon_only(icons::SETTINGS, "Settings")`, so it can't be nameless.
+
+## Where they come from
+
+The icons are [lucide](https://lucide.dev)'s, under the ISC licence. `crates/navree-ui/runtime/icons.mjs` writes `src/icons.rs` from lucide-react; to add one, add its name there and run it.

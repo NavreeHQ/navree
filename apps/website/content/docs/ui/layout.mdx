@@ -1,0 +1,82 @@
+---
+title: "Stack, Row, Grid and Container"
+description: "The layout primitives: gaps, columns and widths on the 4 px grid, from a closed set the stylesheet already has."
+---
+
+<UiPreview example="layout/stack" />
+
+Components carry no outer margin. Space between them comes from four primitives: `Stack` puts items one above the other, `Row` side by side, `Grid` in equal columns, and `Container` holds content to a width. Gaps are in units of 4 px and snap to the scale (0 to 6, 8, 10, 12, 16), because the content security policy allows no `style` attribute.
+
+```rust
+use navree::ui::*;
+
+Stack::gap(3).children((
+    Heading::h3("Acme renewal"),
+    Text::muted("Proposal · closes 30 November"),
+    Row::gap(2).children((Button::primary("Mark won"), Button::outline("Edit"))),
+))
+```
+
+## When to use it
+
+<UiChoose name="divider" current="Stack, Row, Grid" />
+
+## Anatomy
+
+<UiAnatomy component="layout" />
+
+## A row
+
+Items in a row are centred across it. `.wrap()` lets them wrap onto more lines; `.align` and `.justify` place them.
+
+<UiPreview example="layout/row" />
+
+<UiPreview example="layout/justify" />
+
+## A grid
+
+`Grid::cols(n)` makes 1 to 6 equal columns from 768 px up, and one column on phones. Its gap is 16 px unless you set it.
+
+<UiPreview example="layout/grid" />
+
+## Spanning columns
+
+`.span(n)` on any component makes it take `n` columns of its grid.
+
+<UiPreview example="layout/span" />
+
+## A container
+
+`Container` centres content up to a maximum width: 80 rem by default, 40 rem for forms and reading with `ContainerSize::Sm`.
+
+<UiPreview example="layout/container" />
+
+## API
+
+### Stack
+
+<UiProps type="Stack" />
+
+### Row
+
+<UiProps type="Row" />
+
+### Grid
+
+<UiProps type="Grid" />
+
+### Container
+
+<UiProps type="Container" />
+
+### Align
+
+<UiProps type="Align" />
+
+### Justify
+
+<UiProps type="Justify" />
+
+### ContainerSize
+
+<UiProps type="ContainerSize" />

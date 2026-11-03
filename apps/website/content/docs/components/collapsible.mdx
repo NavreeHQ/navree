@@ -1,0 +1,42 @@
+---
+title: "Collapsible"
+description: "One section that opens and closes, on the browser's `<details>`."
+---
+
+<UiPreview example="collapsible/default" />
+
+`Collapsible` is one `<details>` with a title and a body: advanced settings, more about a record.
+
+```rust
+use navree::ui::*;
+
+Collapsible::new("Advanced settings")
+    .body(Switch::new("audit").label("Keep an audit log"))
+```
+
+## When to use it
+
+<UiChoose name="disclosure" current="Collapsible" />
+
+## Anatomy
+
+<UiAnatomy component="collapsible" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves to the title. |
+| `Enter`, `Space` | Opens or closes it. |
+
+- `.open(true)` starts it open. Its state is the browser's, so nothing posts back.
+
+</UiA11y>
+
+## API
+
+### Collapsible
+
+<UiProps type="Collapsible" />

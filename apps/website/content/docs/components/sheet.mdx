@@ -1,0 +1,59 @@
+---
+title: "Sheet"
+description: "A dialog that slides in from an edge of the screen, for longer panels beside the page."
+---
+
+<UiPreview example="sheet/default" />
+
+`Sheet` is a [Dialog](/docs/components/dialog/) pinned to an edge: the right by default, or the left, top or bottom. It has everything a dialog has: the focus trap, `Esc`, focus return and no script.
+
+The preview shows the sheet in place. Press **Filters** to open it for real.
+
+```rust
+use navree::ui::*;
+
+Sheet::new("filters", "Filters")
+    .side(SheetSide::Right)
+    .body(Switch::new("hot").label("Hot deals only"))
+    .footer(Button::primary("Apply"))
+```
+
+## When to use it
+
+Use a sheet for a panel with more in it than a dialog holds: filters, a record's details, settings.
+
+<UiChoose name="overlay" current="Sheet" />
+
+## Anatomy
+
+<UiAnatomy component="sheet" />
+
+## Sides
+
+Each button below opens a real sheet from its side.
+
+<UiPreview example="sheet/sides" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab`, `Shift+Tab` | Moves between the sheet's controls; focus stays inside. |
+| `Esc` | Closes it. |
+
+- The title names the sheet, as for a dialog.
+- A side sheet is 24 rem wide, and never more than the screen less 3 rem.
+
+</UiA11y>
+
+## API
+
+### Sheet
+
+<UiProps type="Sheet" />
+
+### SheetSide
+
+<UiProps type="SheetSide" />

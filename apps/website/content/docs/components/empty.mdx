@@ -1,0 +1,48 @@
+---
+title: "Empty"
+description: "What a list shows when it has nothing in it: an icon, a title, a description and what to do next."
+---
+
+<UiPreview example="empty/default" />
+
+`Empty` fills the space a list would take when there is nothing in it, and says what to do next.
+
+```rust
+use navree::ui::*;
+
+Empty::new("No deals yet")
+    .icon(icons::INBOX)
+    .description("Create a deal to start tracking your pipeline.")
+    .actions(Button::primary("New deal"))
+```
+
+## When to use it
+
+Use it for a list, a table or a search with no results. A [DataTable](/docs/ui/data-table/) takes one with `.empty(empty)`.
+
+<UiChoose name="message" current="Empty" />
+
+## Anatomy
+
+<UiAnatomy component="empty" />
+
+## A search that found nothing
+
+Say what was searched for, and offer the way out.
+
+<UiPreview example="empty/search" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The title is a paragraph, not a heading, so it doesn't break the page's outline.
+- The icon is hidden from assistive technology.
+
+</UiA11y>
+
+## API
+
+### Empty
+
+<UiProps type="Empty" />

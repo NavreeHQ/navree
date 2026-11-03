@@ -1,0 +1,67 @@
+---
+title: "Message and Bubble"
+description: "A conversation: messages with who and when, bubbles that lean to either side, and markers between them."
+---
+
+<UiPreview example="message/default" />
+
+A conversation is built from four pieces. `Message` holds an avatar, a header (who), its content and a footer (when). `Bubble` is what was said. `Marker` is a note between messages: a date, "joined the chat". An [Attachment](/docs/components/attachment/) sits in a message like a bubble. `BubbleSide::End` puts your own messages on the other side.
+
+```rust
+use navree::ui::*;
+
+Message::new(BubbleSide::Start)
+    .avatar(Avatar::placeholder("Ada Lovelace"))
+    .header("Ada Lovelace")
+    .content(Bubble::new(BubbleSide::Start, "Can we send the contract?"))
+    .footer("10:42")
+```
+
+## When to use it
+
+<UiChoose name="conversation" current="Message" />
+
+## Anatomy
+
+<UiAnatomy component="message" />
+
+## Bubbles
+
+A bubble on its own, without a message around it, suits a compact thread.
+
+<UiPreview example="message/thumb" />
+
+## Markers
+
+<UiPreview example="message/markers" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- Messages are plain elements read in order. Put the sender in the header and the time in the footer, so each message says who and when in words.
+- The side a bubble leans to is only visual. Inside `Direction::rtl`, start and end swap.
+
+</UiA11y>
+
+## API
+
+### Message
+
+<UiProps type="Message" />
+
+### Bubble
+
+<UiProps type="Bubble" />
+
+### BubbleSide
+
+<UiProps type="BubbleSide" />
+
+### Marker
+
+<UiProps type="Marker" />
+
+### MarkerVariant
+
+<UiProps type="MarkerVariant" />

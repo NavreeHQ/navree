@@ -21,6 +21,12 @@
  * | `<FileTree>` | a `text` code block |
  * | `<Diagram name>` | one sentence that says what the diagram shows |
  * | `<Badge>` | plain text: "(Feature: `queue`)" |
+ * | `<UiPreview example>` | the example's Rust code block |
+ * | `<UiProps type>` | the type's table |
+ * | `<UiAnatomy component>` | the parts as a nested list |
+ * | `<UiChoose name>` | the question and a list of the answers |
+ * | `<UiGrid>`, `<UiAssets>`, `<UiTokens>`, `<UiCsp>` | lists and tables of the same data |
+ * | `<UiA11y>` | its Markdown |
  *
  * Links to other docs pages point at their `.md` files, and every other
  * root-relative link becomes absolute, so a page still works when it is
@@ -36,6 +42,16 @@ import remarkGfm from "remark-gfm";
 import { sections } from "../../content/docs/manifest.ts";
 import { site } from "../../site.config.ts";
 import { fileTreeText } from "./file-tree-source.ts";
+import {
+  anatomyMarkdown,
+  assetsMarkdown,
+  chooseMarkdown,
+  cspMarkdown,
+  gridMarkdown,
+  previewMarkdown,
+  propsMarkdown,
+  tokensMarkdown,
+} from "./ui-markdown.ts";
 
 // ------------------------------------------------------------------ pages
 
@@ -436,6 +452,8 @@ const calloutKinds: Record<string, string> = { note: "Note", tip: "Tip", warning
 
 /** What each architecture diagram shows, in one sentence. */
 const diagrams: Record<string, string> = {
+  "navree-ui":
+    "How Navree UI works: a Rust handler returns components, which build one typed tree; render writes it to HTML in one pass with the page's content security policy; the browser loads navree-ui.css on every page and a module script only when the markup uses it; an action posts back and gets a Reply of ops that morph the page.",
   "modular-monolith":
     "A modular monolith: one Navree binary whose feature modules each own their routes, services and tables, talk through exported services and in-process events, and share one database.",
   microservices:
@@ -518,6 +536,22 @@ function element(ctx: Ctx, node: MdNode, mode: "flow" | "text"): string {
       const text = feature ? `Feature: \`${feature}\`` : oneLine(inner(ctx, node));
       return text ? `(${text})` : "";
     }
+    case "UiPreview":
+      return previewMarkdown(attr(node, "example") ?? "");
+    case "UiProps":
+      return propsMarkdown(attr(node, "type") ?? "");
+    case "UiAnatomy":
+      return anatomyMarkdown(attr(node, "component") ?? "");
+    case "UiChoose":
+      return chooseMarkdown(attr(node, "name") ?? "");
+    case "UiGrid":
+      return gridMarkdown();
+    case "UiAssets":
+      return assetsMarkdown();
+    case "UiTokens":
+      return tokensMarkdown();
+    case "UiCsp":
+      return cspMarkdown();
     case "br":
       return mode === "text" ? "\n" : "";
     default:
