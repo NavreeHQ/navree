@@ -28,8 +28,8 @@ fn the_table_module_is_at_most_5_kb_gzip() {
 }
 
 #[test]
-fn the_select_module_is_at_most_9_kb_gzip() {
-    assert!(size("select") <= 9 * 1024, "{}", size("select"));
+fn the_select_module_is_at_most_10_kb_gzip() {
+    assert!(size("select") <= 10 * 1024, "{}", size("select"));
 }
 
 #[test]

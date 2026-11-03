@@ -4,7 +4,7 @@
 // the list is followed with `aria-activedescendant`, and the value lives in a native
 // <select> (`select-native`) that forms, `required`, reset and `change` already
 // understand. Placement of the popup is the overlay module's (`ui:place`).
-import { clean, cookies, make, on, sameOrigin } from "./dom.js";
+import { active, all, clean, cookie, every, make, on, one, sameOrigin } from "./dom.js";
 
 // The words, in English. The server sends only those a page changes (`data-l`), and a
 // test holds this list equal to the server's defaults.
@@ -224,22 +224,43 @@ function sync(root) {
     if (icon) p.control.prepend(icon.cloneNode(true));
   } else if (p.kind === "combobox") {
     const text = values.length ? n.selectedOptions[0]?.text || values[0] : "";
-    if (document.activeElement !== p.control || !stateOf(root).open) p.control.value = text;
+    if (active() !== p.control || !stateOf(root).open) p.control.value = text;
   } else if (p.kind === "multi") chips(root, values);
   const clear = $(root, "[data-slot$=-clear]");
   if (clear) clear.hidden = !values.length;
-  const max = Number(root.getAttribute("data-ui-max")) || 0;
-  limit(root, max && values.length >= max);
+  if (root.hasAttribute("data-ui-max") || root.hasAttribute("data-limit")) limit(root, atMax(root));
 }
 
-/** @param {Element} root @param {boolean} full */
-function limit(root, full) {
-  if (root.hasAttribute("data-limit") === full) return;
-  flag(root, "data-limit", full);
-  for (const o of parts(root).list.querySelectorAll(full ? OPTION + '[aria-selected="false"]' : "[data-limit-off]")) {
-    flag(o, "data-limit-off", full);
-    if (full) o.setAttribute("aria-disabled", "true");
-    else o.removeAttribute("aria-disabled");
+/** Whether a multi-select has chosen all it may. @param {Element} root */
+function atMax(root) {
+  const max = Number(root.getAttribute("data-ui-max")) || 0;
+  return !!max && chosen(root).length >= max;
+}
+
+/** Says the limit is reached. @param {Element} root */
+function full(root) {
+  say(root, fmt(words(root).limit, { n: root.getAttribute("data-ui-max") }));
+}
+
+/**
+ * Switches the options off at the limit, and on again when it lets go. It runs for
+ * every list that comes in, so a new search's rows are off too. A row the server drew
+ * disabled is left as drawn: only what this switched off is switched on.
+ * @param {Element} root @param {boolean} on
+ */
+function limit(root, on) {
+  flag(root, "data-limit", on);
+  const list = parts(root).list;
+  if (on) {
+    for (const o of list.querySelectorAll(OPTION + '[aria-selected="false"]:not([aria-disabled="true"])')) {
+      o.setAttribute("data-limit-off", "");
+      o.setAttribute("aria-disabled", "true");
+    }
+  } else {
+    for (const o of list.querySelectorAll("[data-limit-off]")) {
+      o.removeAttribute("data-limit-off");
+      o.removeAttribute("aria-disabled");
+    }
   }
 }
 
@@ -303,7 +324,7 @@ function changed(root) {
 function choose(root, o) {
   const p = parts(root), s = stateOf(root);
   if (o.getAttribute("aria-disabled") === "true") {
-    if (o.hasAttribute("data-limit-off")) say(root, fmt(words(root).limit, { n: root.getAttribute("data-ui-max") }));
+    if (o.hasAttribute("data-limit-off")) full(root);
     return;
   }
   const value = valueOf(o), label = shownOf(o);
@@ -540,7 +561,10 @@ function actions(root, q, found) {
     const same = [...(p.native?.options || [])].some((o) => norm(o.text) === n || norm(o.value) === n) || [...p.list.querySelectorAll(ITEM)].some((o) => norm(labelOf(o)) === n);
     if (!same) {
       const denied = root.getAttribute("data-ui-create-denied");
-      const r = row("create", s.creating ? words(root).creating : fmt(words(root).create, { q: text }), s.creating || denied !== null);
+      const maxed = atMax(root);
+      const r = row("create", s.creating ? words(root).creating : fmt(words(root).create, { q: text }), s.creating || denied !== null || maxed);
+      // The limit's switch only: a row that is off for another reason isn't switched on when it lets go.
+      if (maxed && denied === null && !s.creating) r.setAttribute("data-limit-off", "");
       if (denied !== null) {
         const why = make("span");
         why.setAttribute("data-slot", "option-description");
@@ -595,7 +619,7 @@ function queue(root, q, wait) {
 }
 
 const TAGS = new Set(["DIV", "SPAN", "A", "IMG", "KBD", "svg", "path", "circle", "rect", "line", "polyline", "polygon", "g"]);
-const ATTRS = /^(role|dir|href|src|alt|loading|aria-(selected|disabled|label|hidden)|data-(value|keywords|selected-label|more|shortcut|no-recent)|d|cx|cy|r|x|y|x1|x2|y1|y2|width|height|points|viewBox|fill|stroke(-.+)?)$/;
+const ATTRS = /^(role|dir|href|src|alt|loading|aria-(selected|disabled|label|hidden)|data-(value|keywords|selected-label|more|no-recent)|d|cx|cy|r|x|y|x1|x2|y1|y2|width|height|points|viewBox|fill|stroke(-.+)?)$/;
 const SLOTS = /^(option-(body|text|description|avatar|group-label|separator|page)|command-(item|shortcut|reason)|icon)$/;
 
 /**
@@ -613,7 +637,8 @@ function tidy(html) {
       e.remove();
       continue;
     }
-    for (const { name, value } of [...e.attributes]) if (name === "data-slot" ? !SLOTS.test(value) : !ATTRS.test(name)) e.removeAttribute(name);
+    // A paint is a color: no function (a url() reaches another element or a file) and no escape.
+    for (const { name, value } of [...e.attributes]) if (name === "data-slot" ? !SLOTS.test(value) : !ATTRS.test(name) || (/^(fill|stroke)/.test(name) && /[()\\]/.test(value))) e.removeAttribute(name);
     for (const k of ["href", "src"]) {
       const v = e.getAttribute(k);
       if (v && !sameOrigin(v) && !(k === "src" && v.startsWith("data:image/"))) e.removeAttribute(k);
@@ -704,6 +729,7 @@ async function create(root) {
   const text = (p.control.value || "").trim().slice(0, 256);
   const how = root.getAttribute("data-ui-create");
   if (!text || s.creating) return;
+  if (atMax(root)) return full(root);
   if (how === "free") {
     store(root, text, text);
     if (p.kind === "multi") { p.control.value = ""; s.q = ""; }
@@ -720,8 +746,8 @@ async function create(root) {
   try {
     /** @type {Record<string, string>} */
     const headers = { "x-navree-ui": "1", accept: "text/html", "content-type": "application/x-www-form-urlencoded" };
-    const token = cookies().split("; ").find((c) => c.startsWith("XSRF-TOKEN="));
-    if (token) headers["x-xsrf-token"] = decodeURIComponent(token.slice(11));
+    const token = cookie("XSRF-TOKEN");
+    if (token) headers["x-xsrf-token"] = token;
     const res = await fetch(how, { method: "POST", headers, body: new URLSearchParams({ name: text }) });
     if (res.redirected && sameOrigin(res.url)) {
       location.assign(res.url);
@@ -730,6 +756,12 @@ async function create(root) {
     if (!res.ok) throw 0;
     const row = tidy(await res.text()).querySelector(ITEM);
     if (!row) throw 0;
+    // The limit may have been reached while this was on its way.
+    if (atMax(root)) {
+      s.creating = false;
+      view(root);
+      return full(root);
+    }
     const value = valueOf(row), label = shownOf(row);
     store(root, value, label);
     if (p.kind === "multi") { p.control.value = ""; s.q = ""; }
@@ -755,7 +787,10 @@ function act(root, o) {
   const action = o.getAttribute("data-action");
   const p = parts(root), s = stateOf(root);
   if (!action) return choose(root, o);
-  if (o.getAttribute("aria-disabled") === "true") return;
+  if (o.getAttribute("aria-disabled") === "true") {
+    if (o.hasAttribute("data-limit-off")) full(root);
+    return;
+  }
   if (action === "create") create(root);
   else if (action === "retry") find(root, s.q, 0);
   else if (action === "more") find(root, s.q, 0, s.more);
@@ -977,15 +1012,17 @@ const rootOf = (e) => /** @type {Element | null} */ (/** @type {Element} */ (e.t
 on(document, "keydown", (e) => {
   // Opening the palette, and the shortcuts of its items.
   if (!e.defaultPrevented && !e.repeat && (e.ctrlKey || e.metaKey || e.altKey)) {
-    for (const dlg of /** @type {NodeListOf<HTMLDialogElement>} */ (document.querySelectorAll("dialog[data-ui-palette]"))) {
+    for (const dlg of /** @type {NodeListOf<HTMLDialogElement>} */ (every("dialog[data-ui-palette]"))) {
       if (dlg.hasAttribute("data-ui-key") && e.key.toLowerCase() === "k" && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
         e.preventDefault();
         if (dlg.open) dlg.close();
-        else if (!document.querySelector("dialog[open]")) { prepare(dlg); dlg.showModal(); }
+        else if (!one("dialog[open]")) { prepare(dlg); dlg.showModal(); }
         return;
       }
       for (const item of dlg.querySelectorAll("[data-shortcut]")) {
-        if (chordMatches(/** @type {string} */ (item.getAttribute("data-shortcut")), e) && !document.querySelector("dialog[open]")) {
+        // What the server answered while the palette was open binds no key of the page.
+        if (item.closest("[data-slot=command-remote]")) continue;
+        if (chordMatches(/** @type {string} */ (item.getAttribute("data-shortcut")), e) && !one("dialog[open]")) {
           e.preventDefault();
           run(dlg, /** @type {HTMLElement} */ (item));
           return;
@@ -1068,7 +1105,7 @@ on(document, "mousedown", (e) => {
   const t = /** @type {Element} */ (e.target);
   if (t.closest?.("[data-slot=select-popup],[data-slot=command-list]")) e.preventDefault();
   // A press outside closes any open list.
-  for (const root of document.querySelectorAll("[data-ui-picker][data-open]")) if (!root.contains(t)) close(root);
+  for (const root of every("[data-ui-picker][data-open]")) if (!root.contains(t)) close(root);
 });
 
 on(document, "pointermove", (e) => {
@@ -1126,30 +1163,34 @@ on(document, "invalid", (e) => {
 
 on(document, "reset", (e) => {
   const form = /** @type {HTMLFormElement} */ (e.target);
-  setTimeout(() => { for (const root of form.querySelectorAll("[data-ui-picker]")) sync(root); }, 0);
+  setTimeout(() => { for (const root of all(form, "[data-ui-picker]")) sync(root); }, 0);
 });
 
 on(document, "close", (e) => {
   const dlg = /** @type {Element} */ (e.target);
   if (dlg.matches?.("dialog[data-ui-palette]")) {
-    // An item picked while a search was typed ahead: nothing is asked after the palette is gone.
+    // An item picked while a search was typed ahead: nothing is asked after the palette is gone,
+    // and what the server answered for the last text isn't there when it opens again.
     halt(dlg);
     stateOf(dlg).cache.clear();
+    $(dlg, "[data-slot=command-remote]")?.replaceChildren();
     prepare(dlg);
   }
 }, true);
 
 /** Starts what a page's pickers need: the values the browser restored, the palettes. */
 function boot() {
-  for (const root of document.querySelectorAll("[data-ui-picker]")) sync(root);
-  for (const dlg of document.querySelectorAll("dialog[data-ui-palette]")) prepare(dlg);
+  for (const root of every("[data-ui-picker]")) sync(root);
+  for (const dlg of every("dialog[data-ui-palette]")) prepare(dlg);
 }
 boot();
 on(window, "pageshow", boot);
 // A morph rewrites attributes to what the server drew: an open list is drawn again as it is.
 on(document, "ui:swap", () => {
+  // A row may have been relabelled where it stands: what was read of the rows is read again.
+  for (const root of every("[data-ui-picker],dialog[data-ui-palette]")) stateOf(root).index = null;
   boot();
-  for (const root of document.querySelectorAll("[data-ui-picker][data-open]")) {
+  for (const root of every("[data-ui-picker][data-open]")) {
     const p = parts(root), s = stateOf(root);
     if (!s.open) continue;
     p.control.setAttribute("aria-expanded", "true");

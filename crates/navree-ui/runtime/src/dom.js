@@ -21,6 +21,21 @@ export const root = (doc = document) => gRoot.call(doc);
 export const active = () => gActive.call(document);
 /** @returns {string} */
 export const cookies = () => gCookie.call(document);
+/**
+ * The cookie called `name`, decoded. Another site on the same domain can set one
+ * that doesn't decode, or that no header can carry: those are passed over.
+ * @param {string} name
+ */
+export const cookie = (name) => {
+  for (const part of cookies().split("; ")) {
+    if (!part.startsWith(name + "=")) continue;
+    try {
+      const value = decodeURIComponent(part.slice(name.length + 1));
+      if (/^[\x21-\x7e]+$/.test(value)) return value;
+    } catch {}
+  }
+  return "";
+};
 /** @param {string} cookie */
 export const setCookie = (cookie) => sCookie?.call(document, cookie);
 /** @returns {boolean} */

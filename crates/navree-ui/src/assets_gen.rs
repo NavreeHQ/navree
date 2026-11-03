@@ -3,22 +3,22 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "8934759b661f";
+pub const BUILD: &str = "b6ab0f43c45b";
 
 /// The URL of `core.js`.
-pub const CORE_URL: &str = "/_navree/ui/core-312f5e455708.js";
+pub const CORE_URL: &str = "/_navree/ui/core-3b8019551d99.js";
 
 /// The URL of `sidebar.js`.
-pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-be39798e378b.js";
+pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-e5b4eff2733d.js";
 
 /// The URL of `overlay.js`.
-pub const OVERLAY_URL: &str = "/_navree/ui/overlay-67279efcb892.js";
+pub const OVERLAY_URL: &str = "/_navree/ui/overlay-e302c03dc72e.js";
 
 /// The URL of `table.js`.
 pub const TABLE_URL: &str = "/_navree/ui/table-4f81fade135f.js";
 
 /// The URL of `select.js`.
-pub const SELECT_URL: &str = "/_navree/ui/select-c26c8c04100e.js";
+pub const SELECT_URL: &str = "/_navree/ui/select-04b01eb49aed.js";
 
 /// The URL of `navree-ui.css`.
 pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-a859d215d368.css";
@@ -40,7 +40,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "core",
         ext: "js",
-        hash: "312f5e455708",
+        hash: "3b8019551d99",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/core.js"),
         gzip: Some(include_bytes!("../dist/core.js.gz")),
@@ -49,7 +49,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "sidebar",
         ext: "js",
-        hash: "be39798e378b",
+        hash: "e5b4eff2733d",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/sidebar.js"),
         gzip: Some(include_bytes!("../dist/sidebar.js.gz")),
@@ -58,7 +58,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "overlay",
         ext: "js",
-        hash: "67279efcb892",
+        hash: "e302c03dc72e",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/overlay.js"),
         gzip: Some(include_bytes!("../dist/overlay.js.gz")),
@@ -76,7 +76,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "select",
         ext: "js",
-        hash: "c26c8c04100e",
+        hash: "04b01eb49aed",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/select.js"),
         gzip: Some(include_bytes!("../dist/select.js.gz")),
