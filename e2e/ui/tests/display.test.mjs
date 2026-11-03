@@ -733,6 +733,20 @@ for (const name of NAMES) {
         await page.done();
       });
 
+      test("a ticked notice stays ticked when the region morphs in place", async () => {
+        const page = await open("/display/live");
+        await waitLive(page, "on");
+        const box = page.locator("#activity [data-slot=reveal]");
+        await box.check();
+        const sent = page.waitForResponse((r) => /window=20/.test(r.url()));
+        await page.locator("#activity select[name=window]").selectOption("20");
+        await sent;
+        await sleep(900);
+        assert.equal(await page.locator("#activity [data-slot=reveal]").isChecked(), true);
+        assert.ok((await page.locator("#activity-list [data-filtered]").evaluateAll((all) => all.filter((e) => e.getBoundingClientRect().height > 0).length)) > 0, "the scanner row is still shown");
+        await page.done();
+      });
+
       test("the Simulate activity button adds a row through the stream", async () => {
         const page = await open("/display/live");
         await waitLive(page, "on");

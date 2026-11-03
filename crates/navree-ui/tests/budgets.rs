@@ -361,4 +361,41 @@ mod times {
         });
         assert!(time < Duration::from_millis(3), "{time:?}");
     }
+
+    #[test]
+    fn a_hundred_event_timeline_renders_in_under_1_ms() {
+        use navree_ui::{Meta, Timeline, TimelineEvent, Tone, icons};
+        let time = median(50, || {
+            let timeline = Timeline::new("t", "Steps")
+                .time_zone("Asia/Kolkata", 19_800)
+                .events((0..100).map(|n| {
+                    TimelineEvent::new(format!("Step {n}"))
+                        .at(1_793_592_667 + n * 97)
+                        .tone(Tone::Info)
+                        .meta(Meta::icon(icons::MONITOR, "Safari on macOS"))
+                }));
+            View::new("Steps").body(timeline).to_html()
+        });
+        assert!(time < Duration::from_millis(1), "{time:?}");
+    }
+
+    #[test]
+    fn a_hundred_row_feed_renders_in_under_1_ms() {
+        use navree_ui::{ActivityFeed, ActivityItem, Meta, Tone, icons};
+        let time = median(50, || {
+            let feed = ActivityFeed::new("a", "Recent activity")
+                .live()
+                .items((0..100).map(|n| {
+                    ActivityItem::new("Maya Patel", "opened")
+                        .object("Autumn launch")
+                        .tone(Tone::Info)
+                        .icon(icons::MAIL)
+                        .at(1_793_592_667 + n * 97)
+                        .meta(Meta::icon(icons::MONITOR, "Safari on macOS"))
+                        .href("/people/7")
+                }));
+            View::new("Feed").body(feed).to_html()
+        });
+        assert!(time < Duration::from_millis(1), "{time:?}");
+    }
 }
