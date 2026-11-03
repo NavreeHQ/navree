@@ -97,7 +97,7 @@ inBrowsers(({ open, browserName }) => {
     );
     assert.deepEqual(
       natives.map((n) => [n.name, n.min, n.max, n.step, n.valid]),
-      [["due", null, null, null, true], ["at", null, null, null, true], ["stepped", null, null, null, true]],
+      [["due", null, null, null, true], ["at", null, null, null, true], ["stepped", null, null, null, true], ["quarter", null, null, null, true]],
     );
     // The date and the time that are out of bounds say so, in words, at their box.
     const dueBox = page.locator("#dp-stale-due [data-ui-text]");
@@ -108,6 +108,9 @@ inBrowsers(({ open, browserName }) => {
     assert.equal(await atBox.inputValue(), "8:00 AM");
     assert.equal(await atBox.getAttribute("aria-invalid"), "true");
     assert.equal(await page.locator("#tp-stale-at [data-slot=field-error]").innerText(), "That time isn't available.");
+    // A stored time off a strict step is said too.
+    assert.equal(await page.locator("#tp-stale-quarter [data-ui-text]").inputValue(), "9:07 AM");
+    assert.equal(await page.locator("#tp-stale-quarter [data-slot=field-error]").innerText(), "That time isn't available.");
     // A time on the step is fine, though the least time is not on it.
     assert.equal(await page.locator("#tp-stale-step [data-ui-text]").inputValue(), "9:15 AM");
     assert.equal(await page.locator("#tp-stale-step [data-slot=field-error]").count(), 0);
@@ -122,10 +125,12 @@ inBrowsers(({ open, browserName }) => {
     await dueBox.blur();
     await atBox.fill("10:00 AM");
     await atBox.blur();
+    await page.locator("#tp-stale-quarter [data-ui-text]").fill("9:15 AM");
+    await page.locator("#tp-stale-quarter [data-ui-text]").blur();
     assert.equal(await page.locator("[data-slot=field-error]").count(), 0);
     await page.getByRole("button", { name: "Send" }).click();
     await page.waitForURL(/\/dates\/stale\?/);
-    assert.deepEqual(await page.locator("[data-result]").allInnerTexts(), ["due=2026-11-12 ok", "at=10:00 ok", "stepped=09:15 ok"]);
+    assert.deepEqual(await page.locator("[data-result]").allInnerTexts(), ["due=2026-11-12 ok", "at=10:00 ok", "stepped=09:15 ok", "quarter=09:15 ok"]);
     await close();
   });
 
@@ -154,9 +159,12 @@ inBrowsers(({ open, browserName }) => {
       await page.goto(`${BASE}/dates/report?${query}`);
       return [await page.locator("[data-report=window]").innerText(), await page.locator("[data-report=refused]").count()];
     };
+    const refusal = () => page.locator("[data-report=refused]").innerText();
     assert.deepEqual(await window("from=2026-01-01&to=2026-12-31"), ["2026-01-01 to 2026-12-31", 0]);
     assert.deepEqual(await window("from=2025-01-01&to=2026-12-31"), ["none", 1], "730 days is more than 400");
+    assert.equal(await refusal(), "Choose at most 400 days.", "a window too long says so");
     assert.deepEqual(await window("from=2026-11-01&to=2028-02-01"), ["none", 1], "past the latest day");
+    assert.equal(await refusal(), "That date isn't available.");
     assert.deepEqual(await window("from=2019-12-31&to=2020-01-05"), ["none", 1], "before the earliest");
     // Years the calendar doesn't draw are no range at all, said nothing of, and nothing breaks.
     assert.deepEqual(await window("from=-262143-01-01&to=2026-11-03"), ["none", 0]);
@@ -187,11 +195,17 @@ inBrowsers(({ open, browserName }) => {
     assert.equal(natives[2].min, "09:15");
     assert.equal(natives[2].step, "900");
     assert.equal(natives[2].valid, true, "9:15 is on the step the server counts from midnight");
+    // A strict step with no least time: the least is midnight, so the step is counted from where
+    // the server counts it, and not from the stored 9:07 (which would refuse 9:15 and take 9:22).
+    assert.equal(natives[3].min, "00:00");
+    assert.equal(natives[3].step, "900");
+    await page.locator("#tp-stale-quarter input[type=time]").fill("09:15");
+    if (browserName !== "webkit") assert.equal(await page.locator("#tp-stale-quarter input[type=time]").evaluate((n) => n.validity.valid), true, "9:15 is on the step");
     await page.locator("#dp-stale-due input[type=date]").fill("2026-11-12");
     await page.locator("#tp-stale-at input[type=time]").fill("10:00");
     await page.getByRole("button", { name: "Send" }).click();
     await page.waitForURL(/\/dates\/stale\?/);
-    assert.deepEqual(await page.locator("[data-result]").allInnerTexts(), ["due=2026-11-12 ok", "at=10:00 ok", "stepped=09:15 ok"]);
+    assert.deepEqual(await page.locator("[data-result]").allInnerTexts(), ["due=2026-11-12 ok", "at=10:00 ok", "stepped=09:15 ok", "quarter=09:15 ok"]);
     await close();
   });
 });

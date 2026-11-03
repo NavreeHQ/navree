@@ -305,11 +305,13 @@ pub fn page(shell: &AppShell) -> AppPage {
         .body(Stack::gap(8).children((calendars(), pickers(), ranges(), times())))
 }
 
-/// A booking: dates and a time, checked by the server.
+/// A booking: dates and a time. The rules are named once, on the fields: the pickers draw
+/// them for the browser and the server holds the posted values to them, with no rule of
+/// the type's own.
 #[derive(Debug, Deserialize, Validate, Form)]
 pub struct Booking {
     /// Start date
-    #[validate(custom(open_day))]
+    #[validate(skip)]
     #[form(
         widget = date_picker,
         date_rules = booking_rules,
@@ -321,7 +323,7 @@ pub struct Booking {
     #[form(widget = date_picker)]
     pub end: Option<NaiveDate>,
     /// Arrives at
-    #[validate(custom(open_hours))]
+    #[validate(skip)]
     #[form(
         widget = time_picker,
         time_rules = office_hours,
@@ -340,23 +342,11 @@ fn booking_rules() -> DateRules {
         .disable_weekdays([Weekday::Sat, Weekday::Sun])
 }
 
-fn open_day(day: &NaiveDate) -> Result<(), String> {
-    booking_rules()
-        .check(*day)
-        .map_err(|error| error.message(&DateLocale::english()))
-}
-
 fn office_hours() -> TimeRules {
     TimeRules::new()
         .min(time(9, 0))
         .max(time(17, 0))
         .unavailable(time(12, 0), time(12, 59))
-}
-
-fn open_hours(at: &NaiveTime) -> Result<(), String> {
-    office_hours()
-        .check(*at)
-        .map_err(|error| error.message(&DateLocale::english()))
 }
 
 fn booking_page(shell: &AppShell, form: FormView<Booking>) -> AppPage {
@@ -601,10 +591,10 @@ fn said_of(name: &str, params: &HashMap<String, String>) -> Option<(String, Stri
         _ => match NaiveTime::parse_from_str(text, "%H:%M")
             .or_else(|_| NaiveTime::parse_from_str(text, "%H:%M:%S"))
         {
-            Ok(at) => (if name == "at" {
-                stale_time()
-            } else {
-                stepped_time()
+            Ok(at) => (match name {
+                "at" => stale_time(),
+                "quarter" => quarter_time(),
+                _ => stepped_time(),
             })
             .check(at)
             .map_or_else(
@@ -625,6 +615,12 @@ fn stale_time() -> TimeRules {
     TimeRules::new().min(time(9, 0))
 }
 
+/// Quarter hours with no least time: a stored 9:07 is off the step, and a native field that
+/// counted the step from its own value would take 9:22 and refuse 9:15.
+fn quarter_time() -> TimeRules {
+    TimeRules::new().step_minutes(15).strict_step()
+}
+
 fn stepped_time() -> TimeRules {
     TimeRules::new()
         .min(time(9, 10))
@@ -637,7 +633,7 @@ fn stepped_time() -> TimeRules {
 /// step. A form with these must say so at the box, not stop with no word said; and what it
 /// posts is checked by the server under the same rules, shown below it.
 pub fn stale(params: &HashMap<String, String>) -> View {
-    let results: Vec<Element> = ["due", "at", "stepped"]
+    let results: Vec<Element> = ["due", "at", "stepped", "quarter"]
         .iter()
         .filter_map(|name| said_of(name, params))
         .map(|(posted, verdict)| {
@@ -671,6 +667,12 @@ pub fn stale(params: &HashMap<String, String>) -> View {
                             .id("tp-stale-step")
                             .rules(stepped_time())
                             .value(time(9, 15)),
+                    ),
+                    Field::new("fld-quarter", "Quarter hours, any start").control(
+                        TimePicker::new("quarter")
+                            .id("tp-stale-quarter")
+                            .rules(quarter_time())
+                            .value(time(9, 7)),
                     ),
                     Button::primary("Send").submit(),
                 )),
