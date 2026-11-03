@@ -121,7 +121,7 @@ export const choices = {
   },
   happened: {
     title: "Which way to show activity?",
-    question: "What happened, and to whom?",
+    question: "What happened?",
     options: [
       c("Timeline", "The steps of one thing", "/docs/components/timeline/"),
       c("ActivityFeed", "The latest from everyone", "/docs/components/activity-feed/"),
