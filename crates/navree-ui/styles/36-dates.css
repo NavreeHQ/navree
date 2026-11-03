@@ -37,6 +37,16 @@
   &[data-disabled]{text-decoration:line-through}
   &[data-outside]{color:var(--fg-3);cursor:default;&:hover{background:transparent}}
 }
+/* A day that can't be chosen is dimmed, but a day that is chosen is not off: the first day of a range
+   still waiting for its end, and every chosen day of a calendar that only shows, keep their look.
+   A calendar that only shows looks as any other with its days at full strength. A disabled
+   calendar is dimmed all over. */
+[data-slot=calendar]:not([data-disabled]) [data-slot=calendar-day][aria-disabled=true]{
+  &[data-selected],&[data-range-start],&[data-range-end],&[data-pending]{opacity:1;background:var(--accent);color:var(--accent-ink);cursor:default}
+  &[data-range-middle]{opacity:1;background:var(--band);color:var(--fg);cursor:default}
+}
+[data-slot=calendar][data-readonly] [data-slot=calendar-day][aria-disabled=true]:not([data-disabled],[data-unreachable],[data-selected],[data-range-start],[data-range-end],[data-range-middle],[data-pending]){opacity:1;color:inherit;cursor:default;&:hover{background:transparent;color:inherit}}
+[data-slot=calendar][data-readonly] [data-slot=calendar-day][data-today][aria-disabled=true]:not([data-disabled],[data-selected],[data-range-start],[data-range-end],[data-range-middle],[data-pending]){color:var(--fg)}
 /* The band behind a range runs from the middle of its first day to the middle of its last. */
 [data-slot=calendar-grid] td:has([data-range-start]:not([data-range-end])){background:linear-gradient(to right,transparent 50%,var(--band) 50%)}
 [data-slot=calendar-grid] td:has([data-range-end]:not([data-range-start])){background:linear-gradient(to left,transparent 50%,var(--band) 50%)}

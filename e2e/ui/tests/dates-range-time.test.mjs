@@ -142,6 +142,33 @@ inBrowsers(({ open }) => {
     await close();
   });
 
+  test("a start day waiting for its end looks chosen, a calendar that only shows looks like any other, a disabled one is dimmed", async () => {
+    const { page, close } = await open("/dates");
+    // As it looks once the pointer is away and no transition is still running.
+    const look = async (root, iso) => {
+      await page.mouse.move(0, 0);
+      await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)));
+      return day(page, root, iso).evaluate((e) => {
+        const s = getComputedStyle(e);
+        return { opacity: Number(s.opacity), background: s.backgroundColor, color: s.color };
+      });
+    };
+    const chosen = await look("#cal-single", "2026-11-12");
+    const plain = await look("#cal-single", "2026-11-18");
+    assert.equal(chosen.opacity, 1);
+    // Two days at least: the day just picked can't also be the end, and still shows as the start.
+    await day(page, "#cal-limits", "2026-11-02").click();
+    assert.equal(await day(page, "#cal-limits", "2026-11-02").getAttribute("aria-disabled"), "true");
+    assert.deepEqual(await look("#cal-limits", "2026-11-02"), chosen, "the start looks as a chosen day does");
+    // A calendar that only shows: its days look as they do anywhere, and the chosen one stands out.
+    assert.deepEqual(await look("#cal-ro", "2026-11-12"), chosen);
+    assert.deepEqual(await look("#cal-ro", "2026-11-18"), plain);
+    // A disabled calendar is dimmed all over, the chosen day too.
+    assert.ok((await look("#cal-off", "2026-11-18")).opacity < 1);
+    assert.ok((await look("#cal-off", "2026-11-12")).opacity < 1);
+    await close();
+  });
+
   test("the report's window is in the address: choose, reload, back, a shared link, bad values", async () => {
     const { page, close } = await open("/dates/report");
     assert.equal(await page.locator("[data-report=window]").innerText(), "none");
