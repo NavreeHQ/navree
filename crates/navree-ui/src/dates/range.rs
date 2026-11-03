@@ -165,8 +165,11 @@ pub struct DateRangeQuery {
     pub to: Option<String>,
 }
 
-/// A key that comes twice (`?from=a&from=b`) is not an error: the first one stands, and
+/// A key that comes twice (`?from=a&from=b`) is not an error: **the first one stands**, and
 /// any other key is ignored. A request can't make the extractor fail by repeating itself.
+/// Note that an extractor that reads the query into a map (`Query<HashMap<String, String>>`)
+/// keeps **the last** value of a repeated key, so a page that reads the same address both
+/// ways would see two windows: read it one way.
 impl<'de> Deserialize<'de> for DateRangeQuery {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct Reader;

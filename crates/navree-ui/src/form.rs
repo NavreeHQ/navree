@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::marker::PhantomData;
 
+use chrono::{NaiveDate, NaiveTime};
 use http::header::{ALLOW, CONTENT_TYPE, HOST, ORIGIN};
 use http::request::Parts;
 use http::{HeaderValue, Method, StatusCode};
@@ -102,9 +103,9 @@ pub struct FormField {
     /// [`decode`] refuses a post that goes past it.
     pub max: Option<u32>,
     /// A date picker's rules, from `#[form(date_rules = path)]`: the function that gives the
-    /// days that can't be chosen. The picker draws them for the browser. Call the same
-    /// function in the field's `custom` rule and the server holds the value to them too, so
-    /// the rules are written once.
+    /// days that can't be chosen. The picker draws them for the browser, and [`decode`]
+    /// holds the posted value to them, so the rules are written once and a value drawn as
+    /// off is refused by the server. A `custom` rule is for what the rules can't say.
     pub date_rules: Option<fn() -> crate::dates::DateRules>,
     /// A time picker's rules, from `#[form(time_rules = path)]`, used the same way.
     pub time_rules: Option<fn() -> crate::dates::TimeRules>,
@@ -1097,10 +1098,56 @@ fn clock_text<T: Form>(name: &str, value: &str) -> String {
     }
 }
 
+/// What the date and time fields say of the posted text, which the typed value can't: a
+/// year the calendar doesn't draw (outside 1 to 9999) and a time that is not a time of day
+/// (a leap second, a fraction of a second) are always refused, and the rules a field was
+/// given with `date_rules` or `time_rules` hold the server as they held the browser, so a
+/// value the picker drew as off is off here. Text that isn't a day or a time is left to the
+/// type's own error. The words are English, or the field's own `error`.
+fn refused_by_pickers<T: Form>(pairs: &[(String, String)]) -> FieldErrors {
+    let english = DateLocale::english();
+    let mut out = FieldErrors::new();
+    for (name, value) in pairs {
+        let Some(field) = T::FIELDS.iter().find(|field| field.name == name) else {
+            continue;
+        };
+        let why = match field.widget {
+            Widget::DatePicker | Widget::Input(InputKind::Date) => {
+                let Ok(day) = value.trim().parse::<NaiveDate>() else {
+                    continue;
+                };
+                let rules = field.date_rules.map(|rules| rules()).unwrap_or_default();
+                rules.check(day).err().map(|error| error.message(&english))
+            }
+            Widget::TimePicker | Widget::Input(InputKind::Time) => {
+                let Ok(time) = value.trim().parse::<NaiveTime>() else {
+                    continue;
+                };
+                let rules = field.time_rules.map(|rules| rules()).unwrap_or_default();
+                rules.check(time).err().map(|error| error.message(&english))
+            }
+            _ => None,
+        };
+        if let Some(text) = why {
+            let text = field.error.map_or(text, str::to_owned);
+            let list = out.entry(name.clone()).or_default();
+            if !list.contains(&text) {
+                list.push(text);
+            }
+        }
+    }
+    out
+}
+
 /// Decodes submitted pairs into `T` and runs its rules: what [`Submit`] and
 /// tests share. Empty values of optional fields are absent, an unchecked box
 /// is `false`, and a missing text field is empty. A pair that isn't one of `T`'s
 /// fields is dropped, so a field marked `#[form(skip)]` can't be set by the client.
+///
+/// The date and time fields are held to their pickers' rules too, whether or not the
+/// type has a `custom` rule of its own: see `date_rules` and `time_rules` on
+/// [`FormField`], and what is always refused (a year outside 1 to 9999, a leap second,
+/// a fraction of a second).
 pub fn decode<T>(pairs: &[(String, String)]) -> Result<T, FieldErrors>
 where
     T: Form + DeserializeOwned + Validate,
@@ -1156,6 +1203,30 @@ where
         .iter()
         .map(|(name, value)| (name.clone(), clock_text::<T>(name, value)))
         .collect();
+    let refused = refused_by_pickers::<T>(&pairs);
+    let outcome = read::<T>(&pairs);
+    if refused.is_empty() {
+        return outcome;
+    }
+    // The value read fine, or failed for other reasons: the rules' words join whatever else
+    // there is to say.
+    let mut errors = outcome.err().unwrap_or_default();
+    for (name, texts) in refused {
+        let list = errors.entry(name).or_default();
+        for text in texts {
+            if !list.contains(&text) {
+                list.push(text);
+            }
+        }
+    }
+    Err(errors)
+}
+
+/// The value the pairs say, and the rules of its type.
+fn read<T>(pairs: &[(String, String)]) -> Result<T, FieldErrors>
+where
+    T: Form + DeserializeOwned + Validate,
+{
     // A list field's values are read together: the deserializer takes a name once.
     let lists: Vec<(&'static str, String)> = T::FIELDS
         .iter()
@@ -1180,7 +1251,7 @@ where
         })
         .collect();
     let mut kept: Vec<(&str, &str)> = Vec::with_capacity(pairs.len() + T::FIELDS.len());
-    for (name, value) in &pairs {
+    for (name, value) in pairs {
         let Some(field) = T::FIELDS.iter().find(|field| field.name == name) else {
             continue;
         };

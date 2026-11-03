@@ -276,14 +276,215 @@ fn the_native_time_field_is_told_what_the_server_takes_and_never_less() {
             && limits.contains(" step=\"1\""),
         "{limits}"
     );
-    // A least time past the last step of the day leaves nothing to count from: no least.
+    // A least time past the last step of the day has nothing on the step to start from, so the
+    // step is counted from midnight, as the server counts it.
     let late = tag(TimePicker::new("t").rules(
         TimeRules::new()
             .min(t(23, 50, 0))
             .step_minutes(30)
             .strict_step(),
     ));
-    assert!(!late.contains(" min="), "{late}");
+    assert!(
+        late.contains(" min=\"00:00\"") && late.contains(" step=\"1800\""),
+        "{late}"
+    );
+    // A strict step with no least time: without a least the browser counts the step from the
+    // value the field holds (a stored 9:07 would refuse 9:15 and take 9:22), so the least is
+    // midnight. A step is never given without a least.
+    let free = tag(TimePicker::new("t")
+        .value(t(9, 7, 0))
+        .rules(TimeRules::new().step_minutes(15).strict_step()));
+    assert!(
+        free.contains(" min=\"00:00\"") && free.contains(" step=\"900\""),
+        "{free}"
+    );
+    for picker in [
+        TimePicker::new("t").rules(TimeRules::new().step_minutes(5).strict_step()),
+        TimePicker::new("t").seconds(),
+        TimePicker::new("t").value(t(9, 0, 30)),
+        TimePicker::new("t").rules(TimeRules::new().min(t(9, 0, 30))),
+        TimePicker::new("t").rules(
+            TimeRules::new()
+                .min(t(9, 10, 0))
+                .step_minutes(15)
+                .strict_step(),
+        ),
+    ] {
+        let field = tag(picker);
+        assert!(
+            !field.contains(" step=") || field.contains(" min="),
+            "a step with no least: {field}"
+        );
+    }
+}
+
+// ---- the server holds a form to the rules its pickers were given ------------------------------
+
+fn weekdays_only() -> DateRules {
+    DateRules::new().disable_weekdays([Weekday::Sat, Weekday::Sun])
+}
+
+fn nine_to_five() -> TimeRules {
+    TimeRules::new().min(t(9, 0, 0)).max(t(17, 0, 0))
+}
+
+/// Rules named only in the form: no `custom` rule anywhere.
+#[derive(Debug, Deserialize, Validate, Form)]
+struct OnlyDrawn {
+    /// Day
+    #[validate(skip)]
+    #[form(widget = date_picker, date_rules = weekdays_only)]
+    day: NaiveDate,
+    /// At
+    #[validate(skip)]
+    #[form(widget = time_picker, time_rules = nine_to_five)]
+    at: NaiveTime,
+}
+
+/// No rules at all, on the pickers and on the native fields.
+#[derive(Debug, Deserialize, Validate, Form)]
+struct Plain {
+    /// Day
+    #[validate(skip)]
+    #[form(widget = date_picker)]
+    day: NaiveDate,
+    /// At
+    #[validate(skip)]
+    #[form(widget = time_picker)]
+    at: NaiveTime,
+    /// Native day
+    #[validate(skip)]
+    #[form(widget = date)]
+    native_day: NaiveDate,
+    /// Native time
+    #[validate(skip)]
+    #[form(widget = time)]
+    native_at: NaiveTime,
+}
+
+#[test]
+fn rules_named_only_in_the_form_hold_the_server_to_them_too() {
+    assert!(decode::<OnlyDrawn>(&posted("2026-11-09", "10:00")).is_ok());
+    // A Saturday at ten; a Monday at three in the morning; the last day chrono holds with a leap
+    // second; leap day of year 0 with half a second: each was accepted when the rules only drew.
+    let day_only = decode::<OnlyDrawn>(&posted("2026-11-07", "10:00")).unwrap_err();
+    assert_eq!(day_only.keys().collect::<Vec<_>>(), ["day"], "{day_only:?}");
+    assert!(
+        day_only["day"][0].contains("isn't available"),
+        "{day_only:?}"
+    );
+    let at_only = decode::<OnlyDrawn>(&posted("2026-11-09", "03:00")).unwrap_err();
+    assert_eq!(at_only.keys().collect::<Vec<_>>(), ["at"], "{at_only:?}");
+    assert!(at_only["at"][0].contains("isn't available"), "{at_only:?}");
+    for (day, at) in [("+262142-12-31", "16:59:60"), ("0000-02-29", "10:00:00.5")] {
+        let both = decode::<OnlyDrawn>(&posted(day, at)).unwrap_err();
+        assert_eq!(
+            both.keys().collect::<Vec<_>>(),
+            ["at", "day"],
+            "{day} {at}: {both:?}"
+        );
+    }
+    // The edges of the rules are in, and a time with seconds is a time.
+    assert!(decode::<OnlyDrawn>(&posted("2026-11-06", "09:00")).is_ok());
+    assert!(decode::<OnlyDrawn>(&posted("2026-11-06", "17:00:00")).is_ok());
+    assert!(decode::<OnlyDrawn>(&posted("2026-11-06", "17:00:01")).is_err());
+}
+
+#[test]
+fn a_form_always_refuses_a_year_the_calendar_does_not_draw_and_a_time_that_is_not_a_time_of_day() {
+    let post = |day: &str, at: &str, native_day: &str, native_at: &str| {
+        vec![
+            ("day".to_owned(), day.to_owned()),
+            ("at".to_owned(), at.to_owned()),
+            ("native_day".to_owned(), native_day.to_owned()),
+            ("native_at".to_owned(), native_at.to_owned()),
+        ]
+    };
+    assert!(decode::<Plain>(&post("2026-11-07", "03:00", "2026-11-07", "03:00")).is_ok());
+    assert!(decode::<Plain>(&post("0001-01-01", "23:59:59", "9999-12-31", "00:00:00")).is_ok());
+    for bad in ["0000-02-29", "+10000-01-01", "-0001-12-31", "+262142-12-31"] {
+        let errors = decode::<Plain>(&post(bad, "10:00", "2026-11-07", "10:00")).unwrap_err();
+        assert_eq!(
+            errors.keys().collect::<Vec<_>>(),
+            ["day"],
+            "{bad}: {errors:?}"
+        );
+        let errors = decode::<Plain>(&post("2026-11-07", "10:00", bad, "10:00")).unwrap_err();
+        assert_eq!(
+            errors.keys().collect::<Vec<_>>(),
+            ["native_day"],
+            "{bad}: {errors:?}"
+        );
+    }
+    for bad in ["16:59:60", "10:00:00.5", "10:00:00.000001"] {
+        let errors = decode::<Plain>(&post("2026-11-07", bad, "2026-11-07", "10:00")).unwrap_err();
+        assert_eq!(
+            errors.keys().collect::<Vec<_>>(),
+            ["at"],
+            "{bad}: {errors:?}"
+        );
+        let errors = decode::<Plain>(&post("2026-11-07", "10:00", "2026-11-07", bad)).unwrap_err();
+        assert_eq!(
+            errors.keys().collect::<Vec<_>>(),
+            ["native_at"],
+            "{bad}: {errors:?}"
+        );
+    }
+    // Text that isn't a day or a time stays the type's own error, in its own words.
+    let errors = decode::<Plain>(&post("soon", "later", "2026-11-07", "10:00")).unwrap_err();
+    assert!(errors["day"][0].contains("enter a date"), "{errors:?}");
+}
+
+// ---- a refused range says why, in every language ------------------------------------------------
+
+#[test]
+fn a_refused_range_says_why_in_the_words_of_each_language() {
+    let english = DateLocale::english();
+    assert_eq!(
+        DateError::RangeTooLong(30).message(&english),
+        "Choose at most 30 days."
+    );
+    assert_eq!(
+        DateError::RangeTooShort(2).message(&english),
+        "Choose at least 2 days."
+    );
+    assert_eq!(
+        DateError::RangeBlocked.message(&english),
+        "The range includes a day that isn't available."
+    );
+    // The other reasons keep the plain "isn't available".
+    assert_eq!(
+        DateError::Weekday(Weekday::Sat).message(&english),
+        "That date isn't available."
+    );
+    for tag in [
+        "en", "en-GB", "de", "fr", "es", "it", "pt", "nl", "sv", "pl", "ru", "tr", "ja", "zh",
+        "ko", "ar", "he", "hi", "id",
+    ] {
+        let locale = DateLocale::of(tag);
+        let generic = DateError::Unavailable.message(&locale);
+        let long = DateError::RangeTooLong(30).message(&locale);
+        let short = DateError::RangeTooShort(2).message(&locale);
+        let blocked = DateError::RangeBlocked.message(&locale);
+        assert!(long.contains("30") && !long.contains('{'), "{tag}: {long}");
+        assert!(
+            short.contains('2') && !short.contains('{'),
+            "{tag}: {short}"
+        );
+        assert!(
+            !blocked.contains('{') && !blocked.is_empty(),
+            "{tag}: {blocked}"
+        );
+        assert!(
+            long != short && long != generic && short != generic && blocked != generic,
+            "{tag}"
+        );
+        // Plain and short: a line, not a paragraph.
+        assert!(
+            long.chars().count() < 60 && short.chars().count() < 60 && blocked.chars().count() < 70,
+            "{tag}"
+        );
+    }
 }
 
 #[test]

@@ -44,9 +44,19 @@ pub enum DateError {
 }
 
 impl DateError {
-    /// The message for a person, in the locale's words.
+    /// The message for a person, in the locale's words. A range that is too short, too long
+    /// or holds a day that is off says so; every other reason is "That date isn't
+    /// available." ([`to_string`](ToString::to_string) says which, in English, for a log.)
     pub fn message(&self, locale: &DateLocale) -> String {
-        locale.labels.unavailable_date.to_string()
+        let labels = &locale.labels;
+        match self {
+            Self::RangeTooShort(days) => {
+                labels.range_too_short.replace("{days}", &days.to_string())
+            }
+            Self::RangeTooLong(days) => labels.range_too_long.replace("{days}", &days.to_string()),
+            Self::RangeBlocked => labels.range_blocked.to_string(),
+            _ => labels.unavailable_date.to_string(),
+        }
     }
 }
 

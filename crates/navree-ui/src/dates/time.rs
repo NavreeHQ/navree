@@ -193,7 +193,8 @@ impl TimeRules {
 
     /// What a native `type=time` field is told, so that what it takes is what the server
     /// takes and never less. The native step counts from the field's least time, the server
-    /// from midnight, so a strict step puts the least on the step. Whole seconds (when the
+    /// from midnight, so a strict step puts the least on the step, and a step always comes
+    /// with a least time (midnight when the rules have none). Whole seconds (when the
     /// picker takes them, a value has them, or a limit has them) need a step of one second.
     pub(crate) fn native_limits(&self, seconds: bool) -> NativeLimits {
         let has_seconds = |time: Option<NaiveTime>| time.is_some_and(|t| t.second() != 0);
@@ -217,6 +218,11 @@ impl TimeRules {
             Some(min) => Some(text(min)),
             None => None,
         };
+        // A step with no least time is counted from the value the field holds, so a stored
+        // 9:07 would refuse 9:15 and take 9:22. Whenever there is a step there is a least
+        // time to count it from: midnight, where the server counts from, when the rules
+        // give none or give one past the last step of the day.
+        let min = min.or_else(|| step.map(|_| text(NaiveTime::MIN)));
         NativeLimits {
             min,
             max: self.max.map(text),

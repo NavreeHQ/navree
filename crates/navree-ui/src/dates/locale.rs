@@ -99,12 +99,19 @@ pub struct DateLabels {
     /// The words on each preset's button, in the order of [`DatePreset::ALL`]; read them
     /// with [`DateLabels::preset`].
     pub preset_names: [Cow<'static, str>; 14],
+    /// The message for a range of too few days; `{days}` is the least.
+    pub range_too_short: Cow<'static, str>,
+    /// The message for a range of too many days; `{days}` is the most.
+    pub range_too_long: Cow<'static, str>,
+    /// The message for a range that holds a day that can't be chosen.
+    pub range_blocked: Cow<'static, str>,
 }
 
 impl DateLabels {
     /// Builds the labels from their texts in field order. After the twenty words the
-    /// browser reads come the two of the range picker and the fourteen presets.
-    pub(crate) const fn from_array(t: [&'static str; 36]) -> Self {
+    /// browser reads come the two of the range picker, the fourteen presets and the three
+    /// messages about a range.
+    pub(crate) const fn from_array(t: [&'static str; 39]) -> Self {
         let [
             prev_month,
             next_month,
@@ -142,6 +149,9 @@ impl DateLabels {
             p11,
             p12,
             p13,
+            range_too_short,
+            range_too_long,
+            range_blocked,
         ] = t;
         Self {
             prev_month: Cow::Borrowed(prev_month),
@@ -182,6 +192,9 @@ impl DateLabels {
                 Cow::Borrowed(p12),
                 Cow::Borrowed(p13),
             ],
+            range_too_short: Cow::Borrowed(range_too_short),
+            range_too_long: Cow::Borrowed(range_too_long),
+            range_blocked: Cow::Borrowed(range_blocked),
         }
     }
 

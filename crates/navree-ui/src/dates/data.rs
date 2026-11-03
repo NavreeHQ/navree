@@ -51,6 +51,9 @@ const fn en_labels() -> DateLabels {
         "This year",
         "Last year",
         "All time",
+        "Choose at least {days} days.",
+        "Choose at most {days} days.",
+        "The range includes a day that isn't available.",
     ])
 }
 
@@ -230,6 +233,9 @@ static DE: LocaleData = LocaleData {
         "Dieses Jahr",
         "Letztes Jahr",
         "Gesamter Zeitraum",
+        "Wählen Sie mindestens {days} Tage.",
+        "Wählen Sie höchstens {days} Tage.",
+        "Der Zeitraum enthält einen Tag, der nicht verfügbar ist.",
     ]),
 };
 
@@ -309,6 +315,9 @@ static FR: LocaleData = LocaleData {
         "Cette année",
         "L'année dernière",
         "Toute la période",
+        "Choisissez au moins {days} jours.",
+        "Choisissez au plus {days} jours.",
+        "La période contient un jour indisponible.",
     ]),
 };
 
@@ -393,6 +402,9 @@ static ES: LocaleData = LocaleData {
         "Este año",
         "El año pasado",
         "Todo el tiempo",
+        "Elige al menos {days} días.",
+        "Elige como máximo {days} días.",
+        "El rango incluye un día no disponible.",
     ]),
 };
 
@@ -477,6 +489,9 @@ static IT: LocaleData = LocaleData {
         "Quest'anno",
         "Anno scorso",
         "Sempre",
+        "Scegli almeno {days} giorni.",
+        "Scegli al massimo {days} giorni.",
+        "L'intervallo comprende un giorno non disponibile.",
     ]),
 };
 
@@ -562,6 +577,9 @@ static PT: LocaleData = LocaleData {
         "Este ano",
         "Ano passado",
         "Todo o período",
+        "Escolha pelo menos {days} dias.",
+        "Escolha no máximo {days} dias.",
+        "O intervalo inclui um dia indisponível.",
     ]),
 };
 
@@ -646,6 +664,9 @@ static NL: LocaleData = LocaleData {
         "Dit jaar",
         "Vorig jaar",
         "Alle tijd",
+        "Kies minstens {days} dagen.",
+        "Kies maximaal {days} dagen.",
+        "De periode bevat een dag die niet beschikbaar is.",
     ]),
 };
 
@@ -725,6 +746,9 @@ static SV: LocaleData = LocaleData {
         "I år",
         "Förra året",
         "Alla tider",
+        "Välj minst {days} dagar.",
+        "Välj högst {days} dagar.",
+        "Perioden innehåller en dag som inte är tillgänglig.",
     ]),
 };
 
@@ -822,6 +846,9 @@ static PL: LocaleData = LocaleData {
         "Ten rok",
         "Zeszły rok",
         "Cały okres",
+        "Minimum dni: {days}.",
+        "Maksimum dni: {days}.",
+        "Zakres zawiera niedostępny dzień.",
     ]),
 };
 
@@ -930,6 +957,9 @@ static RU: LocaleData = LocaleData {
         "Этот год",
         "Прошлый год",
         "За всё время",
+        "Минимум дней: {days}.",
+        "Максимум дней: {days}.",
+        "В периоде есть недоступный день.",
     ]),
 };
 
@@ -1004,6 +1034,9 @@ static TR: LocaleData = LocaleData {
         "Bu yıl",
         "Geçen yıl",
         "Tüm zamanlar",
+        "En az {days} gün seçin.",
+        "En fazla {days} gün seçin.",
+        "Aralıkta uygun olmayan bir gün var.",
     ]),
 };
 
@@ -1077,6 +1110,9 @@ static JA: LocaleData = LocaleData {
         "今年",
         "昨年",
         "全期間",
+        "{days}日以上を選んでください。",
+        "{days}日以内で選んでください。",
+        "期間に選べない日が含まれています。",
     ]),
 };
 
@@ -1161,6 +1197,9 @@ static ZH: LocaleData = LocaleData {
         "今年",
         "去年",
         "全部时间",
+        "请至少选择 {days} 天。",
+        "请最多选择 {days} 天。",
+        "所选范围包含不可选的日期。",
     ]),
 };
 
@@ -1234,6 +1273,9 @@ static KO: LocaleData = LocaleData {
         "올해",
         "작년",
         "전체 기간",
+        "{days}일 이상 선택하세요.",
+        "{days}일 이하로 선택하세요.",
+        "기간에 선택할 수 없는 날이 있습니다.",
     ]),
 };
 
@@ -1329,6 +1371,9 @@ static AR: LocaleData = LocaleData {
         "هذه السنة",
         "السنة الماضية",
         "كل الأوقات",
+        "الحد الأدنى للأيام: {days}.",
+        "الحد الأقصى للأيام: {days}.",
+        "النطاق يتضمن يومًا غير متاح.",
     ]),
 };
 
@@ -1414,6 +1459,9 @@ static HE: LocaleData = LocaleData {
         "השנה",
         "שנה שעברה",
         "כל הזמן",
+        "מינימום ימים: {days}.",
+        "מקסימום ימים: {days}.",
+        "הטווח כולל יום שאינו זמין.",
     ]),
 };
 
@@ -1509,6 +1557,9 @@ static HI: LocaleData = LocaleData {
         "इस वर्ष",
         "पिछला वर्ष",
         "सभी समय",
+        "कम से कम {days} दिन चुनें।",
+        "अधिकतम {days} दिन चुनें।",
+        "सीमा में एक ऐसा दिन है जो उपलब्ध नहीं है।",
     ]),
 };
 
@@ -1587,6 +1638,9 @@ static ID: LocaleData = LocaleData {
         "Tahun ini",
         "Tahun lalu",
         "Sepanjang waktu",
+        "Pilih minimal {days} hari.",
+        "Pilih maksimal {days} hari.",
+        "Rentang berisi hari yang tidak tersedia.",
     ]),
 };
 
