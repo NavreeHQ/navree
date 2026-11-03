@@ -337,6 +337,25 @@ test("client-only commands make no network request", async () => {
   await close();
 });
 
+test("text, a counter and a row's details need no request either", async () => {
+  const { page, requests, problems, close } = await open("/gallery");
+  await page.waitForLoadState("networkidle");
+  const before = requests.length;
+  await page.locator("#g-yearly").click();
+  assert.equal(await page.textContent("#g-price"), "$120 a year");
+  await page.locator("#g-monthly").click();
+  assert.equal(await page.textContent("#g-price"), "$12 a month");
+  await page.getByLabel("Bio").pressSequentially("Hello \u{1F44B}");
+  assert.equal(await page.textContent("#g-bio-count"), "7/160");
+  await page.locator("#g-fill-8").click();
+  await page.locator("#g-fill[open]").waitFor();
+  assert.deepEqual(await page.evaluate(() => [document.getElementById("g-fill-title").textContent, document.getElementById("g-fill-amount").textContent, document.getElementById("g-fill-key").value]), ["Globex expansion", "48,000", "8"]);
+  await page.keyboard.press("Escape");
+  assert.equal(requests.length, before, "no network");
+  assert.deepEqual(problems, []);
+  await close();
+});
+
 test("assets are immutable, precompressed and negotiated", async () => {
   const { page, close } = await open("/");
   const src = await page.locator("script").first().getAttribute("src");

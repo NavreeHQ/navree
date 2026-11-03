@@ -240,6 +240,50 @@ fn overlays() -> Element {
     )
 }
 
+/// A row's details in a dialog, filled from the row with no request.
+fn commands_fill() -> (Table, Dialog) {
+    let row = |key: &'static str, title: &'static str, amount: &'static str| {
+        el("tr").attr("data-key", key).children((
+            el("td").child(title),
+            el("td").child(amount),
+            el("td").child(
+                Button::ghost("Details")
+                    .size(Size::Sm)
+                    .attr("id", format!("g-fill-{key}"))
+                    .on_click(Cmd::fill("g-fill")),
+            ),
+        ))
+    };
+    (
+        Table::new()
+            .caption("Deals")
+            .head((
+                el("th").attr("data-col", "title").child("Deal"),
+                el("th").attr("data-col", "amount").child("Amount"),
+                el("th").child(el("span").attr("data-ui-sr", "").child("Actions")),
+            ))
+            .rows((
+                row("7", "Acme renewal", "12,500"),
+                row("8", "Globex expansion", "48,000"),
+            )),
+        Dialog::new("g-fill", "Deal").body(
+            el("form").attr("method", "dialog").children((
+                el("p").children((
+                    el("strong").attr("id", "g-fill-title").fill_cell("title"),
+                    ", worth ",
+                    el("span").attr("id", "g-fill-amount").fill_cell("amount"),
+                    ".",
+                )),
+                el("input")
+                    .attr("type", "hidden")
+                    .attr("id", "g-fill-key")
+                    .attr("name", "id")
+                    .fill_key(),
+            )),
+        ),
+    )
+}
+
 /// `GET /gallery`.
 fn page(shell: &AppShell) -> AppPage {
     shell.page("Gallery").body(
@@ -250,14 +294,32 @@ fn page(shell: &AppShell) -> AppPage {
             overlays(),
             section(
                 "Commands",
-                Row::gap(2).children((
-                    Button::outline("Toggle")
-                        .attr("id", "g-toggle-button")
-                        .on_click(Cmd::toggle("g-toggled")),
-                    el("p")
-                        .attr("id", "g-toggled")
-                        .child("Toggled by a command, with no request."),
-                )),
+                (
+                    Row::gap(2).children((
+                        Button::outline("Toggle")
+                            .attr("id", "g-toggle-button")
+                            .on_click(Cmd::toggle("g-toggled")),
+                        el("p")
+                            .attr("id", "g-toggled")
+                            .child("Toggled by a command, with no request."),
+                    )),
+                    Row::gap(2).children((
+                        Button::outline("Monthly")
+                            .attr("id", "g-monthly")
+                            .on_click(Cmd::text("g-price", "$12 a month")),
+                        Button::outline("Yearly")
+                            .attr("id", "g-yearly")
+                            .on_click(Cmd::text("g-price", "$120 a year")),
+                        el("strong").attr("id", "g-price").child("$12 a month"),
+                    )),
+                    Field::new("g-bio", "Bio").control(
+                        Textarea::new("bio")
+                            .attr("maxlength", 160_u32)
+                            .on(Trigger::Input, Cmd::count("g-bio-count", 160)),
+                    ),
+                    Text::muted("0/160").id("g-bio-count"),
+                    commands_fill(),
+                ),
             ),
         )),
     )
