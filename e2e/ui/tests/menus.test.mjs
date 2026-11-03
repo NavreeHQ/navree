@@ -1518,9 +1518,11 @@ for (const name of NAMES) {
         await page.waitForFunction(() => Element.prototype.getAttribute.call(Document.prototype.getElementById.call(document, "t-tab-b"), "aria-selected") === "true");
         // The lazy panel failed: its alert is built by the module.
         await has("#t-panel-b [data-slot=tab-alert]");
-        // A menu opens by its button and Escape returns focus there.
-        await click("opener");
+        // A menu opens from its button by the keyboard, focus goes to its first item, and Escape returns it to the button.
+        await page.evaluate(() => HTMLElement.prototype.focus.call(Document.prototype.getElementById.call(document, "opener")));
+        await page.keyboard.press("Enter");
         await page.waitForFunction(() => Element.prototype.matches.call(Document.prototype.getElementById.call(document, "menu"), ":popover-open"));
+        await page.waitForFunction(() => Object.getOwnPropertyDescriptor(Document.prototype, "activeElement").get.call(document)?.id === "one");
         await page.keyboard.press("Escape");
         await page.waitForFunction(() => Object.getOwnPropertyDescriptor(Document.prototype, "activeElement").get.call(document)?.id === "opener");
         // A toast, an op that swaps, and the toast closed by its link.
