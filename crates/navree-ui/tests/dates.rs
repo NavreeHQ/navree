@@ -796,9 +796,41 @@ fn random_text_never_panics_and_never_reads_as_an_impossible_day() {
 }
 
 #[test]
+fn very_large_rules_cost_a_bounded_page() {
+    // Ten thousand listed days and a rule function over three years: the browser gets at
+    // most 1,000 runs, and the page stays the size of one without them, give or take.
+    let start = day(2026, 1, 1);
+    let many = DateRules::new()
+        .disable_dates((0..10_000).map(|n| start + chrono::Duration::days(n * 3)))
+        .disable_if(|d| d.day() % 2 == 0);
+    let big = html(Calendar::new("c").today(today()).rules(many.clone()));
+    let plain = html(Calendar::new("c").today(today()));
+    assert!(big.len() < plain.len() + 70_000, "{} against {}", big.len(), plain.len());
+    let json = json_attr(&big, "data-ui-dates=\"calendar\"", "data-ui-rules");
+    assert!(json["r"].as_array().unwrap().len() <= 1000);
+    // The server's check still knows every one of them.
+    assert!(many.check(start + chrono::Duration::days(9_999 * 3)).is_err());
+}
+
+#[test]
+fn the_markup_of_each_component_stays_small() {
+    let calendar = html(Calendar::new("c").today(today()).selected(day(2026, 11, 12)));
+    let picker = html(DatePicker::new("d").today(today()).value(day(2026, 11, 12)));
+    let range = html(DateRangePicker::new("a", "b").today(today()).value(DateRange::new(day(2026, 11, 1), day(2026, 11, 3))));
+    let clock = html(TimePicker::new("t").value(time(14, 30)));
+    println!("calendar {} B, date picker {} B, range picker {} B, time picker {} B", calendar.len(), picker.len(), range.len(), clock.len());
+    // A picker sends a shell, not a month: the browser draws the months when it opens.
+    assert!(picker.len() < 6 * 1024, "{}", picker.len());
+    assert!(clock.len() < 6 * 1024, "{}", clock.len());
+    assert!(range.len() < 9 * 1024, "{}", range.len());
+    assert!(calendar.len() < 12 * 1024, "{}", calendar.len());
+}
+
+#[test]
 fn the_dates_module_is_small_and_a_calendar_draws_fast() {
     let size = assets::get("dates").unwrap().gzip.unwrap().len();
-    assert!(size <= 12 * 1024, "{size}");
+    // 10.7 KB today: the calendar, the pickers and the reading of typed dates and times in 19 locales.
+    assert!(size <= 11 * 1024, "{size}");
 }
 
 #[cfg(not(debug_assertions))]
