@@ -369,10 +369,14 @@ function sortHere(root, url) {
   }
   // Ties go by key, in the column's direction, as the server orders them.
   groups.sort((a, b) => (down ? -1 : 1) * (compare(a[1], b[1], kind) || compare(a[0], b[0], "k")));
-  // What the headings show now, to put back if the server can't confirm: their state and
-  // their links' content, arrow and rank.
+  // What the server last drew, to put back if it can't confirm: rows, the headings' state
+  // and their links' content, and the form's sort. A sort done here before the server
+  // confirmed the last one keeps the state from before both.
   const links = heads.map((cell) => cell.querySelector("[data-slot=sort-link]"));
-  /** @type {any} */ (root).uiBefore = [[...body.rows], heads.map((cell, i) => [cell, cell.getAttribute("aria-sort"), links[i], [...(links[i]?.childNodes || [])]])];
+  const field = /** @type {HTMLInputElement | null} */ (root.querySelector("form[data-ui-target] input[type=hidden][name=sort]"));
+  if (!root.hasAttribute("data-ui-confirm")) {
+    /** @type {any} */ (root).uiBefore = [[...body.rows], heads.map((cell, i) => [cell, cell.getAttribute("aria-sort"), links[i], [...(links[i]?.childNodes || [])]]), field, field?.value];
+  }
   /** An arrow for each state shown now: the icons are copied, never drawn here. */
   const arrows = new Map(heads.map((cell, i) => [cell.getAttribute("aria-sort") || "", links[i]?.querySelector("svg")]));
   let at = body.firstElementChild;
@@ -401,7 +405,6 @@ function sortHere(root, url) {
     arrow.toggleAttribute("data-flip", from.hasAttribute("data-flip") !== !arrows.has(state));
     icon.replaceWith(arrow);
   });
-  const field = /** @type {HTMLInputElement | null} */ (root.querySelector("form[data-ui-target] input[type=hidden][name=sort]"));
   if (field) field.value = sort;
   // The rows are right already: the server's answer only confirms them.
   root.setAttribute("data-ui-confirm", "");
@@ -412,16 +415,17 @@ function sortHere(root, url) {
 // its URL says.
 document.addEventListener("ui:failed", (e) => {
   const root = /** @type {any} */ (/** @type {Element} */ (e.target).closest?.("[data-ui-table]"));
-  const [rows, sorts] = root?.uiBefore || [];
+  const [rows, sorts, field, sort] = root?.uiBefore || [];
   root?.removeAttribute("data-ui-confirm");
   if (!rows) return;
   root.uiBefore = null;
   rows[0]?.parentNode?.append(...rows);
-  for (const [th, sort, link, nodes] of sorts) {
-    if (sort === null) th.removeAttribute("aria-sort");
-    else th.setAttribute("aria-sort", sort);
+  for (const [th, state, link, nodes] of sorts) {
+    if (state === null) th.removeAttribute("aria-sort");
+    else th.setAttribute("aria-sort", state);
     link?.replaceChildren(...nodes);
   }
+  if (field) field.value = sort;
 });
 
 /* Wiring */

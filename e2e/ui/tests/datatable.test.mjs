@@ -176,6 +176,34 @@ for (const browserName of browsers) {
       await close();
     });
 
+    test("two sorts here, then a failed answer: back to the last order the server confirmed", async () => {
+      await reset();
+      const { page, close } = await open("/exact");
+      const state = () => page.evaluate(() => ({
+        keys: [...document.querySelectorAll("#sized tbody tr[data-key]")].map((row) => row.getAttribute("data-key")),
+        sorts: [...document.querySelectorAll("#sized thead th[aria-sort]")].map((th) => `${th.getAttribute("data-col")}:${th.getAttribute("aria-sort")}`),
+        field: document.querySelector("#sized form[data-ui-target] input[type=hidden][name=sort]")?.value ?? null,
+        url: location.pathname + location.search,
+      }));
+      const start = await state();
+      let asked = 0;
+      await page.route(/\/exact\?sort=/, async (route) => {
+        asked++;
+        if (asked === 1) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          await route.continue();
+        } else await route.abort();
+      });
+      await page.locator("#sized thead th[data-col=amount] [data-slot=sort-link]").click();
+      await page.waitForTimeout(100);
+      await page.locator("#sized thead th[data-col=closed_on] [data-slot=sort-link]").click();
+      await page.locator("#sized [data-slot=table-alert]:not([hidden])").waitFor();
+      await page.waitForTimeout(1200);
+      const end = await state();
+      assert.deepEqual(end, start, "rows, headings, the form's sort and the address as the server last drew them");
+      await close();
+    });
+
     test("a sort here that the server can't confirm goes back", async () => {
       await reset();
       const { page, close } = await open("/exact");
