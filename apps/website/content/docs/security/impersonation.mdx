@@ -145,7 +145,7 @@ impl PaymentMethodController {
 An impersonation session gets a 403 with the code `impersonation_forbidden`:
 
 ```json
-{"statusCode": 403, "message": "Not allowed while impersonating a user", "error": "Forbidden"}
+{"statusCode": 403, "message": "Not allowed while impersonating a user", "error": "Forbidden", "code": "impersonation_forbidden"}
 ```
 
 On the impl block it applies to every route. It is a guard, not an access declaration, and it needs the `auth` feature of the `navree` facade. For hand-written routes, add `.guard(navree::auth::not_while_impersonating())`.

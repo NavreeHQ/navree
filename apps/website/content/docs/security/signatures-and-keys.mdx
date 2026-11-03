@@ -9,7 +9,7 @@ description: "JSON Web Signatures with HS256, EdDSA, ES256 and RS256, JSON Web K
 - **sign** tokens that another service verifies, such as Apple's client secret, a service account's assertion or your own ID tokens;
 - **publish** your public keys as a JSON Web Key Set, so others can verify what you sign.
 
-Navree's own packages are built on it: [social sign-in](/docs/packages/social-sign-in/) verifies ID tokens and signs Apple's client secret with it, and the [OAuth server](/docs/packages/oauth-server/) signs its EdDSA ID tokens and serves `/oauth/jwks` with it. The access, challenge and setup tokens of [authentication](/docs/security/authentication/) are written and read with it too (HS256 with `SigningKey::hmac` and a verifying key pinned to HS256), apart from how they are checked: that is `JwtService`'s job, and only your app reads them.
+Navree's own packages are built on it: [social sign-in](/docs/packages/social-sign-in/) verifies ID tokens and signs Apple's client secret with it, and the [OAuth server](/docs/packages/oauth-server/) signs its EdDSA ID tokens and serves `/oauth/jwks` with it. The access, challenge and setup tokens of [authentication](/docs/security/authentication/) are written and read with it too: HS256, with a `SigningKey::hmac` key and a verifying key pinned to HS256. `JwtService` adds the claim checks, which this module leaves to you.
 
 Every signature runs on `ring`, which rustls already brings into your app, so the module adds no cryptography crate to your dependency tree.
 

@@ -60,7 +60,7 @@ base64:mfPeqWFuSe93GQYipIfV8X4lDcR0+9JZT0yRCGGfMPo=
 APP_KEY=base64:mfPeqWFuSe93GQYipIfV8X4lDcR0+9JZT0yRCGGfMPo=
 ```
 
-`navree key:generate` runs your app's `key:generate` command (it is `cargo run --quiet -- key:generate`). Like every app command, it boots the whole app first, so the database must be reachable. Without an application key or `auth.jwt.secret`, the app still boots but signs tokens with a random key per process, so every restart signs everyone out. The log warns about it. See [The signing key](#the-signing-key-jwt-secret-or-app_key) for the options.
+`navree key:generate` runs your app's `key:generate` command (it is `cargo run --quiet -- key:generate`). Like every app command, it boots the whole app first, so the database must be reachable. Without an application key or `auth.jwt.secret`, the app still boots but signs tokens with a random key per process. Every restart makes the access tokens already issued invalid, so clients have to refresh them, and two instances can't verify each other's tokens. The log warns about it. See [The signing key](#the-signing-key-jwt-secret-or-app_key) for the options.
 
 ### Migrations
 
@@ -487,7 +487,7 @@ Authentication is a chain of strategies, each one a way of recognising a request
 
 ### Writing your own strategy
 
-Navree has no built-in API keys or personal access tokens. A strategy is how you add them. This one accepts an `X-Api-Key` header and looks the key up in an `api_keys` table of your own (its [model](/docs/orm/models/), `ApiKey`, isn't shown):
+`navree-auth` has no API keys of its own; the [OAuth server](/docs/packages/oauth-server/#personal-access-tokens) gives your users personal access tokens. A strategy is how you add API keys of your own design. This one accepts an `X-Api-Key` header and looks the key up in an `api_keys` table of your own (its [model](/docs/orm/models/), `ApiKey`, isn't shown):
 
 ```rust title="src/modules/api_keys/strategy.rs"
 use http::request::Parts;

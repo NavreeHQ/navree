@@ -698,11 +698,11 @@ async fn move_deal(
 
 | Error | Response |
 |---|---|
-| `RoleNotFound` | 404 "The role `x` does not exist." |
-| `RecordNotFound` | 404 |
-| `RoleExists` | 409 "The role `x` already exists." |
-| `UnknownRoles` | 400, a field error on `roles` |
-| `InvalidName` | 400, a field error on the field |
+| `RoleNotFound` | 404 `role_not_found`, "The role `x` does not exist." |
+| `RecordNotFound` | 404 `not_found` |
+| `RoleExists` | 409 `role_already_exists`, "The role `x` already exists." |
+| `UnknownRoles` | 400 `validation_failed`, a field error on `roles` |
+| `InvalidName` | 400 `validation_failed`, a field error on the field |
 | `Db` | As database errors map (see [Errors](/docs/basics/errors/)) |
 | `Rules`, `Config` | 500 |
 
@@ -747,7 +747,7 @@ For HTTP tests, give the test user roles through `AccessService` and send reques
 
 - Conditions are ANDed comparisons on the record's own columns: no `$or`, no nested fields, no relations.
 - The abilities function can't read the database or other services.
-- Roles are global. Teams and per-team roles are not implemented.
+- The roles you manage with `AccessService` are global. A member's role inside a workspace comes from [workspace membership](/docs/workspaces/members-and-roles/#how-workspace-roles-reach-access-control), and inside an organization from [the organization](/docs/workspaces/organizations/), not from these tables.
 - The OpenAPI document has no schemas for `GET /api/me/abilities` and the `/api/access` routes.
 
 <LinkCards>

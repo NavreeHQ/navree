@@ -374,7 +374,7 @@ navree audit:prune --days 90
 Pruned 1204 audit entries older than 90 days.
 ```
 
-With `audit.retention_days = 0` the command keeps everything and says so. Nothing prunes on its own: schedule the command. The CRM runs it every night at 03:00 UTC, from its activities module:
+With `audit.retention_days = 0` and no `--days`, the command keeps everything and says so. Nothing prunes on its own: schedule the command. The CRM runs it every night at 03:00 UTC, from its activities module:
 
 ```rust
 m.schedule(|s| {

@@ -1,6 +1,6 @@
 ---
 title: "Single sign-on"
-description: "SAML 2.0 and OpenID Connect sign-in per organization or workspace, verified email domains that route sign-in and can make it the only way in, and just-in-time provisioning with group to role mapping."
+description: "SAML 2.0 and OpenID Connect sign-in per organization or workspace, with verified email domains, optional enforcement and just-in-time provisioning from groups to roles."
 ---
 
 ## Introduction
@@ -485,10 +485,10 @@ impl WorkspaceSsoController {
 | `connection(key)`, `connections(Option<SsoOwner>)` | Read them |
 | `add_domain(&uow, key, domain)`, `verify_domain(&uow, id)`, `mark_domain_verified(&uow, id)`, `remove_domain(&uow, id)`, `domains(key)` | Manage domains |
 | `discover(email)` | Where an email signs in |
-| `login(key, return_to)` | The identity provider URL to send the browser to (`SsoRedirect { url }`) |
-| `complete_saml(key, saml_response, relay_state, &meta)`, `complete_oidc(key, &OidcCallback, &meta)` | Check an answer and sign the person in (`SsoSignIn { user, connection_id, return_to, created }`) |
+| `login(key, return_to)` | The identity provider URL to send the browser to, and the sign-in's state (`SsoRedirect { url, state }`) |
+| `complete_saml(key, saml_response, relay_state, &meta)`, `complete_oidc(key, &OidcCallback, &meta)` | Check an answer and sign the person in (`SsoSignIn { user, connection_id, return_to, created, state }`) |
 | `sign_in_profile(key, SsoProfile, &meta)` | Sign in a profile your own code verified, with the same linking and provisioning |
-| `issue_code(&sign_in)`, `exchange(code, &meta)` | The one-time code of a finished sign-in, and its tokens |
+| `issue_code(&sign_in)`, `exchange(code, state, &meta)` | The one-time code of a finished sign-in, and its user, token pair and return path. `state` is optional (see [Finishing a sign-in](#finishing-a-sign-in)) |
 | `saml_metadata(key)` | The service provider metadata XML |
 
 The SAML building blocks are public in `navree::sso::saml`: `IdpMetadata::parse`, `ServiceProvider::metadata_xml`, `AuthnRequest::new` and `validate_response` with a `ResponseCheck`, which returns the verified `SamlAssertion`.
@@ -587,7 +587,7 @@ OpenID Connect connections talk to a provider over HTTP; point a connection's `i
 
 - Encrypted assertions and encrypted name ids are refused; requests are not signed; single logout isn't offered. Sign-out ends the Navree session ([`POST /api/auth/logout`](/docs/security/authentication/)), not the identity provider's.
 - Only the HTTP-Redirect binding is used for requests, and HTTP-POST for responses.
-- Directory sync (SCIM) is not part of the module: users are created and their roles updated at sign-in.
+- Directory sync (SCIM) is not part of this module: here, users are created and their roles updated at sign-in. [Directory sync](/docs/packages/directory-sync/) is the package for SCIM and directory pulls.
 - States, used assertion ids and one-time codes are kept in the cache: give it a shared store with several instances.
 - Only the JSON form of the login route binds a sign-in to the browser (through `state` at the exchange); IdP-initiated sign-ins can't be bound at all, which is why they are off by default.
 

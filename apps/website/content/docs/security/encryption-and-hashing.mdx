@@ -68,6 +68,7 @@ Every process of the app (`serve`, `queue:work`, `schedule:work`) and every inst
 |---|---|---|
 | Encrypted values: two-factor secrets and recovery codes, session cookies, your own | `Encrypter` | Encrypting fails |
 | JWT access tokens, unless `auth.jwt.secret` is set | A key derived for `navree-auth.jwt` | A random key per process |
+| [Emailed sign-in codes](/docs/security/passwordless/#emailed-codes) | A key derived for `navree-auth.otp` | Sending and checking a code fails |
 | Signed URLs such as email verification links, unless `http.signing_key` is set | An HMAC of the application key | A random key per process |
 | Temporary file URLs | A key derived from the application key | A random key per process |
 | Broadcasts that workers relay to `serve`, unless `realtime.secret` is set | A key derived from the application key, only through `CryptoModule` | Broadcasts stay in their process |
@@ -124,7 +125,7 @@ impl IntegrationVault {
 
 Each call encrypts with AES-256-GCM under a fresh random 96-bit nonce, so encrypting the same value twice gives two different payloads. Store payloads in a text column.
 
-There are no encrypted model attributes: encrypt before you write a column and decrypt after you read it, as the vault does.
+A model field needs no calls like these: `#[model(cast = "encrypted")]` and `"encrypted_json"` encrypt it on write and decrypt it on read, and `"hashed"` stores an Argon2id hash (see [Encrypted and hashed fields](/docs/orm/casts-and-accessors/#encrypted-and-hashed-fields)). The vault above is for values that don't live in a model.
 
 ### The payload format
 
@@ -186,12 +187,12 @@ Every process must read the same keys.
 </Step>
 </Steps>
 
-From then on, new payloads use the new key, and payloads made with an old key still decrypt: their key id picks the key. Nothing is re-encrypted for you, and there is no command for it. A value stays encrypted with the old key until your code writes it again, so keep an old key in `app.previous_keys` until nothing encrypted with it remains. That includes the two-factor secrets and recovery codes of `navree-auth`: drop the old key too early and those users can't sign in with a second factor.
+From then on, new payloads use the new key, and payloads made with an old key still decrypt: their key id picks the key. Nothing is re-encrypted for you, and there is no command for it. A value stays encrypted with the old key until your code writes it again (an encrypted model field is rewritten the next time its record is saved), so keep an old key in `app.previous_keys` until nothing encrypted with it remains. That includes the two-factor secrets and recovery codes of `navree-auth`: drop the old key too early and those users can't sign in with a second factor.
 
 Previous keys only help to decrypt. Everything **derived** from the application key changes with it:
 
 - access tokens signed with a derived key fail with `401 Invalid token`; clients refresh, because refresh tokens are stored as digests and don't depend on the key;
-- signed links already mailed (email verification) and temporary file URLs stop working;
+- signed links already mailed (email verification), temporary file URLs and emailed sign-in codes that are still pending stop working;
 - workers and `serve` must restart together, or relayed broadcasts fail their signature check.
 
 Set `auth.jwt.secret`, `http.signing_key` or `realtime.secret` when you want to rotate one of those separately.
@@ -334,8 +335,8 @@ Navree's own tokens work this way: refresh tokens (an id plus 48 random characte
 
 ## Limits
 
-- One cipher (AES-256-GCM) and one application key at a time, plus previous keys for decryption. There are no per-record keys and no key management service integration.
-- Nothing re-encrypts stored values after a rotation.
+- One cipher (AES-256-GCM) and one application key at a time, plus previous keys for decryption. A model can name another `Encrypter` that your app provides (`#[model(encrypter = "name")]`), but there are no per-record keys and no key management service integration.
+- No command re-encrypts stored values after a rotation.
 - Password hashes are Argon2id only: hashes from another system (bcrypt, say) can't be verified, so migrate those users with a password reset.
 
 <LinkCards>

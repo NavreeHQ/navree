@@ -421,7 +421,7 @@ A user who holds one of these roles and hasn't turned two-factor authentication 
 The access token is of type `two_factor_setup`. It reaches `POST /api/auth/2fa/enable`, `POST /api/auth/2fa/confirm`, `GET /api/auth/me`, `POST /api/auth/logout` and `POST /api/auth/refresh`; every other route answers 403 with the code `two_factor_required`:
 
 ```json
-{"statusCode": 403, "message": "Two-factor authentication required", "error": "Forbidden"}
+{"statusCode": 403, "message": "Two-factor authentication required", "error": "Forbidden", "code": "two_factor_required"}
 ```
 
 The front end walks the user through [Turning it on](#turning-it-on) with that token, then calls `POST /api/auth/refresh`: once two-factor authentication is on, the refreshed access token is a full one.

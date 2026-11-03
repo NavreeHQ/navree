@@ -29,7 +29,9 @@ Access tokens carry their session in two claims:
 }
 ```
 
-A refreshed access token keeps the session's `auth_time`: refreshing is not signing in. Both claims are absent from tokens issued before the session columns existed; such tokens keep working, and their first refresh adds `sid`.
+A refreshed access token keeps the session's `auth_time`: refreshing is not signing in. [Impersonation](/docs/security/impersonation/) tokens carry `sid` but no `auth_time`, and the challenge tokens of a two-factor or platform sign-in carry neither.
+
+These sessions belong to token sign-ins. The optional `SessionModule` keeps another kind: a server-side record behind an encrypted cookie, described in [Sessions and CSRF](/docs/basics/sessions-and-csrf/). `navree-auth` doesn't read those cookies.
 
 ## Listing sessions
 
@@ -113,7 +115,7 @@ impl AccountController {
 The route accepts a request only when its access token's `auth_time` is at most 10 minutes old, by the app's `dyn Clock`. Everything else gets a 403 with the code `reauthentication_required`:
 
 ```json
-{"statusCode": 403, "message": "Please confirm your identity to continue", "error": "Forbidden"}
+{"statusCode": 403, "message": "Please confirm your identity to continue", "error": "Forbidden", "code": "reauthentication_required"}
 ```
 
 That covers an older sign-in, an [impersonation](/docs/security/impersonation/) session (it never signed in, so it has no `auth_time`), and requests authenticated another way, such as a [session cookie](/docs/basics/sessions-and-csrf/) or an [API key strategy](/docs/security/authentication/#writing-your-own-strategy). The client then [confirms](#confirming-the-password-or-a-code) and retries.
@@ -209,7 +211,7 @@ impl SessionInfoController {
 | `auth.session_revoked` | `auth` | A session was ended; `metadata.session_id` |
 | `auth.confirmed` | `auth` | The user confirmed; `metadata.method` (`password` or `totp`) and `metadata.session_id` |
 
-`auth.refresh` entries carry the session in `metadata.family_id`, as before.
+`auth.refresh` entries carry the session in `metadata.family_id`.
 
 ## The session columns
 
