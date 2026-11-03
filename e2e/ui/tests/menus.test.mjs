@@ -627,6 +627,7 @@ for (const name of NAMES) {
       test("M4 a submenu opens on hover and stays while the pointer crosses to it; leaving for another item closes it", async () => {
         const page = await open("/menus");
         await page.locator("#m-sub-trigger").click();
+        await placed(page, "#m-sub");
         const moveTo = await page.locator("#m-sub-s1-trigger").boundingBox();
         await page.mouse.move(moveTo.x + 20, moveTo.y + moveTo.height / 2);
         await page.locator("#m-sub-s1").waitFor();
@@ -641,6 +642,7 @@ for (const name of NAMES) {
         assert.equal(await page.locator("#m-sub").isHidden(), true);
         // Resting on another item in the parent closes the submenu.
         await page.locator("#m-sub-trigger").click();
+        await placed(page, "#m-sub");
         const t = await page.locator("#m-sub-s1-trigger").boundingBox();
         await page.mouse.move(t.x + 20, t.y + t.height / 2);
         await page.locator("#m-sub-s1").waitFor();
@@ -790,6 +792,7 @@ for (const name of NAMES) {
         await page.locator("#m-dialog-box[open]").waitFor();
         await page.locator("#m-in-dialog-trigger").click();
         await page.locator("#m-in-dialog").waitFor();
+        await placed(page, "#m-in-dialog");
         const m = await page.locator("#m-in-dialog").boundingBox();
         const top = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest("#m-in-dialog") !== null, { x: m.x + 10, y: m.y + 10 });
         assert.equal(top, true, "the menu is above the dialog");
