@@ -236,9 +236,10 @@ impl ToggleGroup {
                 "data-orientation",
                 (self.orientation == Orientation::Vertical).then_some("vertical"),
             )
+            // A radio group may state its orientation; a plain group may not.
             .attr_opt(
                 "aria-orientation",
-                (self.orientation == Orientation::Vertical).then_some("vertical"),
+                (self.orientation == Orientation::Vertical && !self.multiple).then_some("vertical"),
             )
             .flag("data-joined", self.joined)
             .flag("data-ui-deselect", self.deselectable && !self.multiple)
@@ -335,6 +336,15 @@ mod tests {
         assert!(out.contains(r#"data-variant="outline""#), "{out}");
         assert!(out.contains(r#"data-size="sm""#), "{out}");
         assert!(out.contains(r#"aria-orientation="vertical""#), "{out}");
+        // Only a radio group may state it; a plain group of checkboxes may not.
+        let many = render(
+            &ToggleGroup::multiple("d", "Days")
+                .vertical()
+                .item(ToggleItem::new("a", "A"))
+                .into(),
+        );
+        assert!(many.contains(r#"data-orientation="vertical""#), "{many}");
+        assert!(!many.contains("aria-orientation"), "{many}");
         assert!(out.contains("data-joined"), "{out}");
         assert!(out.contains("data-ui-deselect"), "{out}");
         // Many items can be on at once, so there is nothing to turn off.

@@ -30,13 +30,13 @@ async fn archive(uow: Uow, id: Path<i64>) -> Result<Reply> {
 
 ## Title, action and a name
 
-`.title(text)` adds a line in bold above the text. `.action(...)` offers one thing to do: `ToastAction::link(label, href)` goes somewhere, and `ToastAction::post(label, href)` posts, such as an Undo. A post's answer is ops, so it can raise a toast of its own, and the toast it came from goes. `.id(name)` names a toast: one with the same name replaces it and its time starts again, so "Saving…" can become "Saved." A toast has a close button unless you say `.closable(false)`.
+`.title(text)` adds a line in bold above the text. `.action(...)` offers one thing to do: `ToastAction::link(label, href)` goes somewhere, and `ToastAction::post(label, href)` posts, such as an Undo. A post's answer is ops, so it can raise a toast of its own, and the toast it came from goes. `.id(name)` names a toast: one with the same name replaces it and its time starts again, so "Saving…" can become "Saved." A toast has a close button unless you say `.closable(false)`; a sticky toast keeps its close button whatever you say, since it could not go otherwise. With JavaScript off the close button is a link to the toast's own address, and the page hides the toast that is the target.
 
 ## How long it stays
 
 `ToastDuration::Brief` is 3 seconds, `Normal` 5, `Long` 8 and `Sticky` until it is closed. Without `.duration(...)`, a warning, an error or a toast with an action stays 8 seconds and any other 5. Use `Sticky` only for what must not be missed, and keep its close button.
 
-The time is a CSS animation, so with no script a toast fades out by itself. Hovering a toast, or focusing anything in it, pauses the animation, and leaving lets it run: nothing is held in script, so a missed event can't leave a toast stuck. A tab that is hidden pauses the toasts too.
+The time is a CSS animation, so with no script a toast fades out by itself. Hovering a toast with a pointer that hovers, or focusing anything in it, pauses the animation, and leaving lets it run: nothing is held in script, so a missed event can't leave a toast stuck. A tab that is hidden pauses the toasts too.
 
 ## The stack
 
@@ -63,9 +63,9 @@ Button::outline("Copy link").on_click(vec![
 
 ## Across a redirect
 
-A toast is not lost when the page changes. After a post that redirects, the toast shows first and stays through the navigation. When the next page is loaded for real, because the link was not boosted or the page was reloaded, the toasts still showing, with the time they have left, are handed to the next page of the site in that tab. A toast that was closed, or has ended, is not.
+A toast is not lost when the page changes. After a post that redirects, the toast shows first and stays through the navigation. When the next page is loaded for real, because the link was not boosted or the page was reloaded, the toasts still showing, with the time they have left, are handed to the next page of the site in that tab. A toast that was closed, or has ended, is not. They are kept for 30 seconds, as long as the flash cookie, and only for the person who is signed in: when the session changes in the tab, by signing out or in, the toasts showing go with it, and so do the posts they offer.
 
-A toast raised while a modal dialog is open stands inside it, above it and usable, since the page behind a modal is inert.
+A toast raised while a modal dialog is open stands inside it, above it and usable, since the page behind a modal is inert. With dialogs open over one another it stands in the top one, a toast that was showing when a dialog opened moves in with it, and the toaster returns to the page, or to the dialog below, as each closes. If a reply takes the dialog away, the toaster is back in the page first.
 
 ## When to use it
 
@@ -85,7 +85,7 @@ Use a toast for the result of something the reader just did, that needs no answe
 |---|---|
 | `Alt` + `T` | Moves focus to the first toast's action or close button. |
 | `Tab` | Moves between a toast's action and close button, and on to the next toast. |
-| `Esc` | Closes the toast with focus and returns focus to where it was. |
+| `Esc` | Closes the toast with focus and returns focus to where it was. Inside a dialog the dialog stays open. |
 
 - The region has the name "Notifications" and is a direct child of the page's body, the last thing a keyboard reaches.
 - A status is announced when it is added, without moving focus; an error is announced at once.

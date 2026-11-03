@@ -180,7 +180,8 @@ impl Toast {
         self
     }
 
-    /// Takes the close button away. Don't, for a toast that stays.
+    /// Takes the close button away. A sticky toast keeps it whatever this says, since it
+    /// could not go otherwise.
     pub fn closable(mut self, closable: bool) -> Self {
         self.closable = closable;
         self
@@ -208,8 +209,9 @@ impl Toast {
         )
     }
 
-    fn to_element(&self, csrf: Option<&str>, close_label: &str) -> Element {
+    fn to_element(&self, number: usize, csrf: Option<&str>, close_label: &str) -> Element {
         let danger = self.tone == ToastTone::Danger;
+        let address = format!("ui-toast-{number}");
         let action = self.action.as_ref().map(|action| {
             if action.post {
                 el("form")
@@ -230,8 +232,11 @@ impl Toast {
                     .child(action.label.clone())
             }
         });
+        // A toast that stays has to be able to go.
+        let closable = self.closable || self.lasts() == ToastDuration::Sticky;
         el("div")
             .slot("toast")
+            .attr("id", address.clone())
             .attr("data-tone", self.tone.as_str())
             .attr("data-duration", self.lasts().as_str())
             .attr("role", if danger { "alert" } else { "status" })
@@ -244,10 +249,12 @@ impl Toast {
                     el("p").slot("toast-text").child(self.text.clone()),
                 )),
                 action,
-                self.closable.then(|| {
-                    el("button")
+                // A link to the toast's own address: with no script the page hides the toast
+                // that is the target, and with the runtime the click removes it.
+                closable.then(|| {
+                    el("a")
                         .slot("toast-close")
-                        .attr("type", "button")
+                        .attr("href", format!("#{address}"))
                         .attr("aria-label", close_label.to_owned())
                 }),
             ))
@@ -320,10 +327,12 @@ impl Toaster {
         let toasts: Vec<Element> = self
             .toasts
             .iter()
-            .map(|toast| toast.to_element(self.csrf.as_deref(), &self.close_label))
+            .enumerate()
+            .map(|(n, toast)| toast.to_element(n + 1, self.csrf.as_deref(), &self.close_label))
             .collect();
         el("section")
             .slot("toaster")
+            .attr("id", "ui-toaster")
             .attr("aria-label", self.label)
             .attr("data-position", self.position.as_str())
             .attr("data-close", self.close_label)
@@ -355,7 +364,9 @@ mod tests {
     fn the_region_is_labelled_and_always_there() {
         let out = html(Toaster::new());
         assert!(
-            out.contains(r#"<section data-slot="toaster" aria-label="Notifications""#),
+            out.contains(
+                r#"<section data-slot="toaster" id="ui-toaster" aria-label="Notifications""#
+            ),
             "{out}"
         );
         assert!(out.contains(r#"data-position="bottom-end""#), "{out}");
@@ -423,13 +434,48 @@ mod tests {
             "{out}"
         );
         assert!(out.contains(r#"data-toast-id="job-1""#), "{out}");
+        // A link to the toast's own address: it works with no script.
         assert!(
-            out.contains(r#"<button data-slot="toast-close" type="button" aria-label="Dismiss">"#),
+            out.contains(r##"id="ui-toast-1""##)
+                && out.contains(
+                    r##"<a data-slot="toast-close" href="#ui-toast-1" aria-label="Dismiss">"##
+                ),
             "{out}"
         );
         let bare = html(Toaster::new().toast(Toast::new(ToastTone::Info, "x").closable(false)));
         assert!(!bare.contains("toast-close"), "{bare}");
         assert!(!bare.contains("toast-title"), "{bare}");
+    }
+
+    #[test]
+    fn each_toast_has_an_address_in_order() {
+        let out = html(
+            Toaster::new()
+                .toast(Toast::new(ToastTone::Info, "one"))
+                .toast(Toast::new(ToastTone::Info, "two")),
+        );
+        assert!(
+            out.contains(r##"id="ui-toast-1""##) && out.contains(r##"id="ui-toast-2""##),
+            "{out}"
+        );
+        assert!(out.contains(r##"href="#ui-toast-2""##), "{out}");
+    }
+
+    #[test]
+    fn a_sticky_toast_keeps_its_close_button_whatever_is_asked() {
+        let sticky = html(
+            Toaster::new().toast(
+                Toast::new(ToastTone::Danger, "x")
+                    .duration(ToastDuration::Sticky)
+                    .closable(false),
+            ),
+        );
+        assert!(sticky.contains("toast-close"), "{sticky}");
+    }
+
+    #[test]
+    fn the_toaster_has_a_name_of_its_own() {
+        assert!(html(Toaster::new()).contains(r#"id="ui-toaster""#));
     }
 
     #[test]
