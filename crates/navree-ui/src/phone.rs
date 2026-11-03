@@ -19,8 +19,10 @@ use crate::node::{AttrValue, Element, Node, Uses, el};
 /// The suffix of the field that posts the chosen country (`phone_country`).
 pub const COUNTRY_SUFFIX: &str = "_country";
 
-/// The suffix of the hidden field that posts the number in E.164 when the
-/// browser module runs (`phone_e164`).
+/// The suffix of the hidden field that posts the browser's reading of the
+/// number in E.164 when the browser module runs (`phone_e164`). It is a hint
+/// for code that reads the post without Navree: the server never reads it,
+/// and it can be wrong (the browser checks lengths only) or forged.
 pub const E164_SUFFIX: &str = "_e164";
 
 /// What a [`PhoneInput`] says, for apps in other languages.
@@ -447,14 +449,19 @@ impl PhoneInput {
     }
 }
 
-/// `number` as its country writes it: nationally when it is the chosen
-/// region's, else internationally.
+/// `number` as people write it: nationally when it is the chosen region's
+/// and the national form reads back to the same number there, else
+/// internationally. A few national forms name another number (Gabon's
+/// `05 84 17 52` is `+24105841752`, not `+2415841752`), and the box's text is
+/// what the form posts back.
 fn written(number: &PhoneNumber, region: Option<Region>) -> String {
     if region.is_some() && number.region() == region {
-        number.national()
-    } else {
-        number.international()
+        let national = number.national();
+        if PhoneNumber::parse(&national, region).as_ref() == Ok(number) {
+            return national;
+        }
     }
+    number.international()
 }
 
 /// A country name for sorting: lower case, with the accents of Latin

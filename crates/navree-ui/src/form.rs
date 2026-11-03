@@ -75,6 +75,17 @@ pub enum Widget {
     /// typed and the country as `{name}_country`, and the server reads the
     /// number in that country.
     Phone,
+    /// The phone input on a text field (`#[form(widget = phone)]` on a
+    /// `String`): the field gets the number in E.164, and a number that isn't
+    /// valid, or has an extension (which E.164 has no room for), is refused.
+    PhoneText,
+}
+
+impl Widget {
+    /// Whether it is the phone input, on a phone type or on text.
+    pub fn is_phone(self) -> bool {
+        matches!(self, Widget::Phone | Widget::PhoneText)
+    }
 }
 
 /// One field of a [`Form`]. The derive writes these.
@@ -443,6 +454,7 @@ fn native<T: Form>(field: &FormField) -> Native {
                 | Widget::Switch
                 | Widget::Multi
                 | Widget::Phone
+                | Widget::PhoneText
                 | Widget::Textarea { .. }
                 | Widget::Input(
                     InputKind::Text
@@ -820,7 +832,7 @@ impl<T: Form> FormView<T> {
                 .checked(is_on(value))
                 .label(field.label)
                 .into(),
-            Widget::Phone => self.phone(field, &rules, value, invalid),
+            Widget::Phone | Widget::PhoneText => self.phone(field, &rules, value, invalid),
         }
     }
 
@@ -1130,43 +1142,73 @@ fn is_phone_country<T: Form>(name: &str) -> bool {
     name.strip_suffix("_country").is_some_and(|field| {
         T::FIELDS
             .iter()
-            .any(|f| f.name == field && f.widget == Widget::Phone)
+            .any(|f| f.name == field && f.widget.is_phone())
     })
 }
 
 /// The pairs with each phone field's number read in the country posted with
-/// it: written in E.164 when it is valid there, and as a value no region
-/// reads when it is not, so the field reports it.
+/// it, and the errors of those that don't read. A valid number is written
+/// in E.164 (a `Phone` keeps its extension after it); one that isn't valid
+/// in its country, or an extension in a text field (E.164 has no room for
+/// it), is a field error, and the text stays as typed for the form to show.
+/// A `Phone` posted without a country is left to read in the request's
+/// region; text without one must carry its calling code.
 #[cfg(feature = "phone")]
-fn read_phones<T: Form>(pairs: &[(String, String)]) -> Vec<(String, String)> {
+fn read_phones<T: Form>(pairs: &[(String, String)]) -> (Vec<(String, String)>, FieldErrors) {
     use navree_phone::{PhoneNumber, Region};
-    pairs
+    let mut errors = FieldErrors::new();
+    let read = pairs
         .iter()
         .map(|(name, value)| {
-            let phone = T::FIELDS
+            let as_typed = (name.clone(), value.clone());
+            let Some(field) = T::FIELDS
                 .iter()
-                .any(|field| field.name == name && field.widget == Widget::Phone);
-            if !phone || value.trim().is_empty() {
-                return (name.clone(), value.clone());
+                .find(|field| field.name == name && field.widget.is_phone())
+            else {
+                return as_typed;
+            };
+            if value.trim().is_empty() {
+                return as_typed;
             }
+            let text = field.widget == Widget::PhoneText;
             let country = format!("{name}{}", crate::phone::COUNTRY_SUFFIX);
             let region = pairs
                 .iter()
                 .find(|(other, _)| *other == country)
                 .and_then(|(_, code)| Region::parse(code));
-            let Some(region) = region else {
-                return (name.clone(), value.clone());
+            if region.is_none() && !text {
+                return as_typed;
+            }
+            let refuse = |errors: &mut FieldErrors, why: String| {
+                let message = field.error.map_or(why, str::to_owned);
+                errors.insert(name.clone(), vec![message]);
             };
-            let read = match PhoneNumber::parse(value, Some(region)) {
-                Ok(number) => match number.extension() {
-                    Some(extension) => format!("{number} ext. {extension}"),
-                    None => number.as_str().to_owned(),
-                },
-                Err(_) => String::from("+"),
-            };
-            (name.clone(), read)
+            match PhoneNumber::parse(value, region) {
+                Ok(number) if text && number.extension().is_some() => {
+                    refuse(
+                        &mut errors,
+                        format!("{}: enter the number without an extension.", field.label),
+                    );
+                    as_typed
+                }
+                Ok(number) => {
+                    let written = match number.extension() {
+                        Some(extension) => format!("{number} ext. {extension}"),
+                        None => number.as_str().to_owned(),
+                    };
+                    (name.clone(), written)
+                }
+                Err(_) => {
+                    refuse(
+                        &mut errors,
+                        format!("{}: enter a phone number, with its country.", field.label),
+                    );
+                    as_typed
+                }
+            }
         })
-        .collect()
+        .collect();
+    (read, errors)
 }
 
 /// What a rejected form may show again: never a password, and a bounded amount.
@@ -1338,7 +1380,7 @@ where
     T: Form + DeserializeOwned + Validate,
 {
     #[cfg(feature = "phone")]
-    let phones = read_phones::<T>(pairs);
+    let (phones, phone_errors) = read_phones::<T>(pairs);
     #[cfg(feature = "phone")]
     let pairs = phones.as_slice();
     // A list field's values are read together: the deserializer takes a name once.
@@ -1397,7 +1439,8 @@ where
             | Widget::DatePicker
             | Widget::TimePicker
             | Widget::Money
-            | Widget::Phone => kept.push((field.name, "")),
+            | Widget::Phone
+            | Widget::PhoneText => kept.push((field.name, "")),
             // Read above, with the values it has.
             Widget::Multi => {}
         }
@@ -1406,6 +1449,10 @@ where
     // take the one it names out and read again: a field that is gone reports
     // only at the end, as missing, which ends the loop.
     let mut wrong = FieldErrors::new();
+    // Phone numbers that don't read in their country are wrong like a value
+    // of the wrong type: reported first, with the rest of those.
+    #[cfg(feature = "phone")]
+    wrong.extend(phone_errors);
     let value: T = loop {
         let encoded = encode(&kept);
         match serde_path_to_error::deserialize(urlencoded::Deserializer::new(encoded.as_bytes())) {
@@ -1495,7 +1542,7 @@ fn type_error<T: Form>(error: &serde_path_to_error::Error<urlencoded::Error>) ->
             ..
         }) => format!("{label}: choose one of the options."),
         Some(FormField {
-            widget: Widget::Phone,
+            widget: Widget::Phone | Widget::PhoneText,
             label,
             ..
         }) => format!("{label}: enter a phone number, with its country."),

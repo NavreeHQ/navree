@@ -143,6 +143,10 @@ struct Contact {
     #[form(widget = phone)]
     #[validate(phone)]
     fax: Option<String>,
+    /// Pager
+    #[form(widget = phone)]
+    #[validate(skip)]
+    pager: Option<String>,
 }
 
 #[test]
@@ -153,7 +157,8 @@ fn the_derive_draws_phone_types_as_phone_inputs() {
         [
             ("mobile", Widget::Phone),
             ("office", Widget::Phone),
-            ("fax", Widget::Phone)
+            ("fax", Widget::PhoneText),
+            ("pager", Widget::PhoneText),
         ]
     );
     let html = render(
@@ -164,7 +169,7 @@ fn the_derive_draws_phone_types_as_phone_inputs() {
     );
     assert_eq!(
         html.matches(r#"data-slot="phone-input""#).count(),
-        3,
+        4,
         "{html}"
     );
     assert!(html.contains(r#"<label data-slot="label" for="contact-mobile">Mobile</label>"#));
@@ -263,4 +268,92 @@ fn a_rejected_form_shows_the_number_and_country_again() {
             && html.contains(r#"<option value="FR" selected>"#),
         "{html}"
     );
+}
+
+/// The tel box of a rendered input: its text and the country chosen.
+fn shown(html: &str, name: &str) -> (String, Option<Region>) {
+    let input = html
+        .split("<input ")
+        .find(|tag| tag.contains(&format!(r#"type="tel" name="{name}""#)))
+        .unwrap_or_else(|| panic!("no tel input in {html}"));
+    let text = input
+        .split_once(r#"value=""#)
+        .map(|(_, rest)| rest.split('"').next().unwrap_or("").to_owned())
+        .unwrap_or_default();
+    let country = html
+        .split(r#"<option value=""#)
+        .find(|option| option.contains(" selected>"))
+        .and_then(|option| Region::parse(option.split('"').next().unwrap_or("")));
+    (text.replace("&amp;", "&"), country)
+}
+
+#[test]
+fn a_saved_number_shows_as_text_that_reads_back_to_it_in_every_region() {
+    // An edit form resubmitted unchanged must save the same number. Gabon
+    // writes `+2415841752` nationally as `05 84 17 52`, which reads as
+    // `+24105841752`; an Argentine landline starting with 15 has a national
+    // form that reads as a mobile. Those show internationally.
+    let mut numbers: Vec<navree_phone::PhoneNumber> = Region::all()
+        .flat_map(|region| {
+            navree_phone::NumberType::ALL
+                .into_iter()
+                .filter_map(move |kind| region.example(kind))
+        })
+        .collect();
+    for text in [
+        "+2415841752",
+        "+2414521211",
+        "+541115555595",
+        "+44 7400 123456 ext. 12",
+    ] {
+        numbers.push(navree_phone::PhoneNumber::parse(text, None).unwrap());
+    }
+    let mut checked = 0;
+    for number in numbers {
+        for start in [None, number.region(), Region::parse("GB")] {
+            let html = render(&PhoneInput::new("p").region(start).number(&number).into());
+            let (text, country) = shown(&html, "p");
+            assert_eq!(
+                navree_phone::PhoneNumber::parse(&text, country),
+                Ok(number),
+                "{number} shown as {text:?} in {country:?}"
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked > 3000, "{checked}");
+    let gabon = navree_phone::PhoneNumber::parse("+2415841752", None).unwrap();
+    let html = render(&PhoneInput::new("p").number(&gabon).into());
+    assert_eq!(shown(&html, "p").0, "+241 5 84 17 52");
+}
+
+#[test]
+fn a_text_field_holds_e164_only() {
+    let with = |more: &[(&str, &str)]| {
+        let mut all = vec![("name", "Ada"), ("mobile", "+447400123456")];
+        all.extend_from_slice(more);
+        decode::<Contact>(&pairs(&all))
+    };
+    // Valid: E.164 in the string.
+    let contact = with(&[("pager", "020 7946 0018"), ("pager_country", "GB")]).unwrap();
+    assert_eq!(contact.pager.as_deref(), Some("+442079460018"));
+    // Invalid in its country, with no rule on the field: refused, never stored.
+    let errors = with(&[("pager", "12"), ("pager_country", "GB")]).unwrap_err();
+    assert_eq!(
+        errors["pager"],
+        ["Pager: enter a phone number, with its country."]
+    );
+    // An extension has no room in E.164: refused in a text field...
+    let errors = with(&[("pager", "020 7946 0018 ext. 12"), ("pager_country", "GB")]).unwrap_err();
+    assert_eq!(
+        errors["pager"],
+        ["Pager: enter the number without an extension."]
+    );
+    // ...and kept by a Phone, which holds one.
+    let contact = with(&[
+        ("office", "020 7946 0018 ext. 12"),
+        ("office_country", "GB"),
+    ])
+    .unwrap();
+    assert_eq!(contact.office.unwrap().extension(), Some("12"));
 }

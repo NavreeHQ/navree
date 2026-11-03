@@ -176,7 +176,12 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
         let many = many_inner(inner);
         let element = many.unwrap_or(inner);
         let inferred = inferred_widget(&ui, type_name(element).as_deref());
+        let phone_type = matches!(type_name(inner).as_deref(), Some("Phone" | "PhoneNumber"));
         let widget = match &hint.widget {
+            // A phone input on text keeps the number as E.164 text.
+            Some(widget) if widget == "phone" && !phone_type => {
+                quote!(#ui::form::Widget::PhoneText)
+            }
             Some(widget) => named_widget(&ui, widget, rows)?,
             None if many.is_some() => quote!(#ui::form::Widget::Multi),
             None => inferred
