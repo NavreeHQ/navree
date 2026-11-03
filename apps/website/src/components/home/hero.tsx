@@ -69,7 +69,7 @@ export function Hero() {
               1.0
             </span>
             <span className="truncate sm:hidden">Read the release notes</span>
-            <span className="truncate max-sm:hidden">What ships in Navree 1.0: read the release notes</span>
+            <span className="truncate max-sm:hidden">Read what ships in Navree 1.0</span>
             <ArrowRightIcon
               aria-hidden
               className="size-3.5 shrink-0 text-fg-3 transition-transform duration-300 ease-(--ease-out-quint) group-hover:translate-x-0.5 group-hover:text-fg"
