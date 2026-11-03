@@ -1,6 +1,6 @@
 ---
 title: "Embeddings and RAG"
-description: "Turn your records into vectors with `Embeddings`, keep them in pgvector, Qdrant or memory with `VectorStore`, index through the queue, and answer questions grounded in your own data, with sources and the user's permissions."
+description: "Turn your records into vectors with `Embeddings`, keep them in pgvector, Qdrant or memory with `VectorStore`, and answer questions from your own data with sources, within the user's permissions."
 ---
 
 ## Introduction
@@ -20,7 +20,7 @@ The examples build "Ask about this deal" in the CRM: a rep asks "What did they s
 
 <Callout type="tip" title="Search or RAG">
 
-To let people **find records** ("customers unhappy with onboarding"), use [Search](/docs/packages/search/): `#[derive(Searchable)]` keeps models indexed for keyword and vector queries with the same `Embeddings`. Use what this page describes when a **model answers** from passages of your data.
+To let people **find records** ("customers unhappy with onboarding"), use [Search](/docs/packages/search/): `#[derive(Searchable)]` keeps models indexed for keyword and vector queries, with an embeddings provider you register that can call the `Embeddings` service of this page. Use what this page describes when a **model answers** from passages of your data.
 
 </Callout>
 

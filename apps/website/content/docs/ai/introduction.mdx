@@ -5,7 +5,7 @@ description: "Navree is AI-native on two sides: your coding agent builds with sk
 
 ## Two sides of AI-native
 
-Navree is built for the way backends are written now, with an AI agent in the editor, and for what products do now, with models inside them. Both sides come in the box.
+Navree is built for the way applications are written now, with an AI agent in the editor, and for what products do now, with models inside them. Both sides come in the box.
 
 **Building with an agent.** Your coding agent gets everything it needs to work on a Navree app the way your best engineer would: skills that walk it through each common task, an MCP server that shows it the running app, docs in a format it reads well, and project instructions in every new app.
 
@@ -68,7 +68,7 @@ Give it `https://navree.com/llms.txt`, or a page's Markdown, such as `https://na
 
 ## AI in your product
 
-`AiModule` (the facade's opt-in `ai` feature) adds models to your app as a service like any other: configured in `config/app.toml`, injected where you need it, faked in tests. Here is the whole path from configuration to a route, summarizing a deal in the reference CRM:
+`AiModule` (the facade's opt-in `ai` feature) adds models to your app as a service like any other: configured in `config/app.toml`, injected where you need it, faked in tests. Here is the whole path from configuration to a route, adding a deal summary to the reference CRM (the AI pages build their examples on it):
 
 ```toml title="config/app.toml"
 [ai]

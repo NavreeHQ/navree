@@ -1,6 +1,6 @@
 ---
 title: "Agent skills"
-description: "Skills that teach coding agents how to build with Navree, one per common task: what each covers, installing them with `navree skills:install` or `npx skills add`, how agents use them, and writing skills for your own app."
+description: "Skills teach your coding agent how to build with Navree, one per common task: what each covers, how to install them with `navree skills:install`, how agents use them, and how to write your own."
 ---
 
 ## Introduction
@@ -84,7 +84,7 @@ Start with **`navree`**. It explains what a Navree app is, how one is laid out, 
 | `navree-reverse-engineering` | Reverse-engineer an old product in any stack into specs with evidence (map, schema and data profile, CRUD, lists, screens, services, workers, workflows, reports, integrations, roles, tenancy, data migration), a task list and test cases, then rebuild it in Navree and verify it against the specs and the old product |
 | `navree-design-to-ui` | Turn a design (an HTML and CSS mock-up, a design-tool export, a handoff bundle or screenshots) into navree-ui pages rendered on the server: inventory, token mapping, an element-by-element component map with gaps named, page specs, pages built with `AppShell`, `#[derive(Form)]` and `#[derive(TableRow)]`, and verification beside the design at 1440 and 390 pixels with axe and the keyboard |
 
-Two skills run a whole job rather than one task, with phases, files and stop points where you decide: `navree-reverse-engineering` and `navree-design-to-ui`. [Bring your product](/docs/getting-started/bring-your-product/) and [Bring your design](/docs/getting-started/bring-your-design/) show how to start each one.
+Two skills run a whole job rather than one task, with phases, files and stop points where you decide: `navree-reverse-engineering` and `navree-design-to-ui`. [Bring your product](/docs/getting-started/bring-your-product/) and [Bring your design](/docs/getting-started/bring-your-design/) show how to start each one. Navree UI is not finished: when a design needs a component it doesn't have yet, `navree-design-to-ui` names the gap instead of improvising one, and [Coming next](/docs/ui/coming-next/) lists what is still to come.
 
 The [`skills/README.md`](https://github.com/NavreeHQ/navree/blob/main/skills/README.md) in the repository lists the same set. It grows with the framework, and `navree skills:install` always installs the skills of your Navree version.
 
@@ -219,7 +219,7 @@ order. Paths are relative to `apps/crm-api/`.
 
 1. Add the variant to `Stage` inside `string_enum!`, in board order, with its
    wire name (`Demo => "demo"`). Keep names to 16 characters: the column is
-   `String(StringLen::N(16))`, so no migration is needed.
+   `t.string("stage").length(16)`, so no migration is needed.
 2. Give it a probability in `Stage::probability` and a column title in
    `Stage::label`.
 3. If it closes a deal, add it to `Stage::is_closed` and to the closing
