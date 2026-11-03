@@ -104,6 +104,7 @@ fn html(text: &str, policy: Option<(&str, &str, &str)>) {
             generic_attributes: BTreeSet::new(),
             url_schemes: list(schemes),
             link_rel: rel.to_owned(),
+            ..HtmlPolicy::default()
         };
         // The module refuses to boot with a policy that does not check.
         if policy.check().is_ok() {
