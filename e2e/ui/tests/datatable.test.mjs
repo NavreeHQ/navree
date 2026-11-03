@@ -208,6 +208,46 @@ for (const browserName of browsers) {
       await close();
     });
 
+    for (const later of ["sort", "search"]) test(`after a sort here the server confirmed, a failed fetch keeps what the server last drew (then a ${later})`, async () => {
+      {
+        await reset();
+        const { page, close } = await open("/deals?q=renewal%201&per=50");
+        const state = () => page.evaluate(() => ({
+          keys: [...document.querySelectorAll("#deals tbody tr[data-key]")].map((row) => row.getAttribute("data-key")).filter((key) => !key.endsWith("-detail")),
+          sorts: [...document.querySelectorAll("#deals thead th[aria-sort]")].map((th) => `${th.getAttribute("data-col")}:${th.getAttribute("aria-sort")}`),
+          field: document.querySelector("#deals form[data-ui-target] input[type=hidden][name=sort]")?.value ?? null,
+          url: location.pathname + location.search,
+        }));
+        assert.equal(await page.locator("#deals[data-ui-local]").count(), 1, "the page holds every row");
+        const all = (await state()).keys.length;
+        // Sorted here, then confirmed by the server.
+        await page.locator("#deals thead th[data-col=amount] [data-slot=sort-link]").click();
+        await page.waitForFunction(() => new URLSearchParams(location.search).get("sort") === "amount" && !document.getElementById("deals").hasAttribute("data-ui-confirm"));
+        await settled(page);
+        if (later === "search") {
+          await page.locator("#deals form[data-ui-target] input[name=q]").fill("renewal 13");
+          await page.waitForFunction(() => new URLSearchParams(location.search).get("q") === "renewal 13");
+          await settled(page);
+        }
+        const confirmed = await state();
+        if (later === "search") assert.ok(confirmed.keys.length < all, `${confirmed.keys.length} of ${all}`);
+        // Then a fetch of the table fails.
+        await page.route((url) => url.pathname === "/deals", (route) => (route.request().resourceType() === "document" ? route.continue() : route.abort()));
+        await page.locator("#deals thead th[data-col=title] [data-slot=sort-link]").click();
+        await page.locator("#deals [data-slot=table-alert]:not([hidden])").waitFor();
+        await page.waitForTimeout(500);
+        assert.deepEqual(await state(), confirmed, `${later}: rows, headings, the form's sort and the address as the server last drew them`);
+        // Selecting the page selects what the address says, and nothing from before.
+        await page.locator("#deals [data-ui-select-page]").check();
+        assert.deepEqual(
+          await page.locator("#deals [data-ui-select-row]:checked").evaluateAll((boxes) => boxes.map((box) => box.value)),
+          confirmed.keys,
+          `${later}: select all takes only the rows the server last drew`,
+        );
+        await close();
+      }
+    });
+
     test("a sort here that the server can't confirm goes back", async () => {
       await reset();
       const { page, close } = await open("/exact");

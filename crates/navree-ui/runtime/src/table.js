@@ -235,7 +235,11 @@ function sync(root) {
 }
 
 function syncAll() {
-  for (const root of document.querySelectorAll("[data-ui-table]")) sync(/** @type {HTMLElement} */ (root));
+  for (const root of document.querySelectorAll("[data-ui-table]")) {
+    // The server drew the table: what came before a sort here is no longer the last it drew.
+    if (!root.hasAttribute("data-ui-confirm")) /** @type {any} */ (root).uiBefore = null;
+    sync(/** @type {HTMLElement} */ (root));
+  }
 }
 
 /** Whether back or forward is on its way. */
@@ -412,13 +416,16 @@ function sortHere(root, url) {
 }
 
 // The server couldn't confirm: what was done here is undone, and the table shows what
-// its URL says.
+// the server last drew. Only a sort still waiting for its answer is undone: once the
+// server has drawn the table, that is what a later failure leaves on screen.
 document.addEventListener("ui:failed", (e) => {
   const root = /** @type {any} */ (/** @type {Element} */ (e.target).closest?.("[data-ui-table]"));
-  const [rows, sorts, field, sort] = root?.uiBefore || [];
-  root?.removeAttribute("data-ui-confirm");
-  if (!rows) return;
+  if (!root) return;
+  const waited = root.hasAttribute("data-ui-confirm");
+  const [rows, sorts, field, sort] = root.uiBefore || [];
   root.uiBefore = null;
+  root.removeAttribute("data-ui-confirm");
+  if (!waited || !rows) return;
   rows[0]?.parentNode?.append(...rows);
   for (const [th, state, link, nodes] of sorts) {
     if (state === null) th.removeAttribute("aria-sort");
