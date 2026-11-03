@@ -20,7 +20,7 @@ journeys that pass through it.
 | Loading | <skeleton, spinner, nothing> | | | | |
 | Empty | <text and action> | | | | |
 | Error | <text and retry> | | | | |
-| Phone | <works at 375 px wide: yes / what changes> | | | | |
+| Phone | <works at 390 px wide: yes / what changes> | | | | |
 
 ### Actions
 

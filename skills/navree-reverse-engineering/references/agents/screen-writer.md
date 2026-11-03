@@ -34,7 +34,7 @@ sees it, and the journeys through it.
 4. Write the journeys: ask the owner for the tasks people do daily and
    monthly; confirm each by walking it on the copy and capturing its
    requests.
-5. Check the screen at a phone's width (375 pixels) and record what
+5. Check the screen at a phone's width (390 pixels) and record what
    breaks; the owner decides whether phones matter.
 6. Keep every screenshot: when the owner wants the old look kept, the
    `navree-design-to-ui` skill uses them as the design.
