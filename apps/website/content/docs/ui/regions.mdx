@@ -72,12 +72,21 @@ The stream's behaviour is the same for every region and every [DataTable](/docs/
 The server side is any endpoint that answers with `text/event-stream`. With `navree::http`:
 
 ```rust
+use std::convert::Infallible;
+use std::time::Duration;
+
+use futures_util::stream::{self, Stream};
 use navree::http::response::sse::{Event, KeepAlive, Sse};
 
+// `changes` is a tokio broadcast channel your code sends on when a deal changes.
 async fn events() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    let ticks = BroadcastStream::new(changes.subscribe())
-        .map(|_| Ok(Event::default().event("deals").data("changed")));
-    Sse::new(ticks).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
+    let rx = changes.subscribe();
+    let nudges = stream::unfold(rx, |mut rx| async move {
+        rx.recv().await.ok().map(|_| {
+            (Ok(Event::default().event("deals").data("changed")), rx)
+        })
+    });
+    Sse::new(nudges).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
 }
 ```
 

@@ -416,6 +416,30 @@ impl ActivityFeed {
         self
     }
 
+    /// Just the rows, with no header and no list: what the source of a live feed
+    /// answers with, to be added at the top of the feed's list. `offset_seconds` is
+    /// the feed's own time zone offset, so a clock time reads the same in a row
+    /// that arrives later.
+    ///
+    /// ```
+    /// use navree_ui::{ActivityFeed, ActivityItem, render};
+    ///
+    /// let rows = ActivityFeed::rows([ActivityItem::new("Maya Patel", "opened").id("event-9")], 19_800);
+    /// assert!(render(&rows).starts_with("<li"));
+    /// ```
+    pub fn rows(items: impl IntoIterator<Item = ActivityItem>, offset_seconds: i32) -> Node {
+        let zone = Zone {
+            name: String::new(),
+            offset: offset_seconds,
+        };
+        Node::list(
+            items
+                .into_iter()
+                .map(|item| item.into_row(&zone))
+                .collect::<Vec<_>>(),
+        )
+    }
+
     /// The id of the list that rows are added to: a [`Region`]'s feed target.
     pub fn list_id(&self) -> String {
         format!("{}-list", self.id)
@@ -562,7 +586,7 @@ impl ActivityFeed {
             Status::Ready => None,
         };
         self.el
-            .attr("aria-labelledby", title_id)
+            .attr("aria-labelledby", title_id.clone())
             .attr_opt("aria-busy", busy.then_some("true"))
             .children((
                 header,
@@ -571,6 +595,12 @@ impl ActivityFeed {
                     .slot("activity-list")
                     .id(list_id)
                     .attr_opt("data-height", self.height.value())
+                    // A list that scrolls inside itself is reached by keyboard, and named.
+                    .attr_opt("tabindex", self.height.value().map(|_| "0"))
+                    .attr_opt(
+                        "aria-labelledby",
+                        self.height.value().map(|_| title_id.clone()),
+                    )
                     .child(rows),
                 below,
             ))

@@ -31,7 +31,8 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
   Bubble, Button, ButtonGroup, Card, Checkbox, Direction, Empty, Field, Input,
   InputGroup, Item, Kbd, Label, Marker, Message, NativeSelect, Pagination, Progress,
   RadioGroup, Separator, Skeleton, Spinner, Switch, Table, Textarea, Toggle, Heading,
-  Text. Pickers: Select, Combobox, MultiSelect and Command. Native overlays: Accordion, AlertDialog, Collapsible, Dialog, Drawer,
+  Text, and for activity: Timeline, ActivityFeed, FactCard, FactGrid, and Badge's dot,
+  tones and outcome chips. Pickers: Select, Combobox, MultiSelect and Command. Native overlays: Accordion, AlertDialog, Collapsible, Dialog, Drawer,
   HoverCard, Popover, ScrollArea, Sheet, Tooltip. Menus and messages: Tabs, ToggleGroup,
   DropdownMenu, Toast and Toaster. Layout: Stack, Row, Grid, Container.
   Dates (`navree_ui::dates`): Calendar, DatePicker, DateRangePicker, TimePicker.
@@ -175,6 +176,8 @@ across the whole page for each row moved.
 **Stored views** are SQL only (`SavedViewModel`, table `navree_ui_table_views`: `id, owner, table_id, name, query, is_default`; create it in a migration). Save through `save_view`, read through `list_views`, and open with `query.or_default_view(&views)`.
 
 **Cells.** `#[col(cell = draw)]` or `.cell("name", |row| ...)` draws a column from the whole row into anything that becomes a `Node`; a field of type `Computed` is a column with no value of its own. Files still read the field's text. `EditCell::text`, `number`, `date` and `select` edit in place: the value shows at once and posts itself, and a status of 400 or more, or a failed post, puts it back. The handler's toast says why.
+
+**Live regions.** `Region::live_from(url)` refetches a region, or with `.feed(...)` fetches only the new rows, when a server-sent event stream speaks. One module, `live.js`, handles the stream for every region and every live table: one connection per address, closed while the page is hidden, reconnecting after 1 s, 2 s, 4 s up to 30 s, and never reading an event's payload.
 
 **Live.** `.live(every)` polls while the page is visible; `.live_from(url)` refetches when a server-sent event stream speaks; both show that it's live, with Refresh now. Typing, focus, open menus and the selection are kept, and an answer overtaken by a newer choice is dropped.
 

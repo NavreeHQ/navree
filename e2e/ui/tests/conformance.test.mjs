@@ -48,6 +48,9 @@ const STATES = [
   ["table, empty after a filter", "/deals?q=nothing-matches-this"],
   ["table, on a phone", "/deals?per=50", null, { width: 390, height: 800 }],
   ["gallery", "/gallery"],
+  ["display", "/display"],
+  ["display, on a phone", "/display", null, { width: 390, height: 800 }],
+  ["live activity", "/display/live"],
   ["gallery, sidebar collapsed", "/gallery", async (page) => page.keyboard.press("Control+b")],
   ["gallery, sheet open on a phone", "/gallery", async (page) => {
     await page.getByRole("button", { name: "Toggle sidebar" }).click();
@@ -167,7 +170,7 @@ test("Logbook's detail: axe, the page's own sections, and the replay form works"
 test("the design rules hold on every page", { timeout: 60000 }, async () => {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const page = await context.newPage();
-  for (const path of ["/", "/deals?per=50", "/deals/new", "/gallery", "/plain"]) {
+  for (const path of ["/", "/deals?per=50", "/deals/new", "/gallery", "/plain", "/display", "/display/live"]) {
     await page.goto(URL_BASE + path);
     const found = await page.evaluate(() => {
       const bad = [];
@@ -175,8 +178,8 @@ test("the design rules hold on every page", { timeout: 60000 }, async () => {
         const style = getComputedStyle(el);
         const slot = el.getAttribute("data-slot") || el.tagName;
         const radius = parseFloat(style.borderTopLeftRadius);
-        // Radio dots and spinners are the only round things.
-        const round = ["radio", "spinner"].includes(slot) || el.closest("[data-slot=spinner]");
+        // Radio dots and spinners are round, and so are the display module's dot, live dot, badge dot and tone icon.
+        const round = ["radio", "spinner", "timeline-dot", "live-dot", "badge-dot", "activity-icon"].includes(slot) || el.closest("[data-slot=spinner]");
         if (radius && ![2, 4, 6].includes(radius) && !round) bad.push(`radius ${radius}px on ${slot}`);
         if (style.boxShadow !== "none") bad.push(`shadow on ${slot}: ${style.boxShadow}`);
         if (el.hasAttribute("style") && !el.hasAttribute("popover")) bad.push(`style attribute on ${slot}`);

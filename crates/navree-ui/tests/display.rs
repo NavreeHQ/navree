@@ -562,6 +562,22 @@ fn a_feed_in_a_region_listens_to_a_stream_and_feeds_its_list() {
     );
 }
 
+#[test]
+fn the_rows_alone_are_what_a_live_source_answers() {
+    let out = html(ActivityFeed::rows(
+        [row("Maya").id("event-1"), row("Tomas").id("event-2")],
+        KOLKATA,
+    ));
+    assert!(out.starts_with("<li"), "{out}");
+    assert_eq!(count(&out, "<li"), 2, "{out}");
+    assert!(!out.contains("<ol") && !out.contains("<section"), "{out}");
+    assert!(
+        out.contains(">09:41:07</time>"),
+        "the zone is the feed's own: {out}"
+    );
+    assert_eq!(html(ActivityFeed::rows([], 0)), "");
+}
+
 // Region
 
 #[test]

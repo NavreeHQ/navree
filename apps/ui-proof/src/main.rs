@@ -16,6 +16,8 @@
 //! | `/gallery` | every component in its states |
 //! | `/menus` | tabs, toggle groups, dropdown menus and toasts in their states |
 //! | `/phone` | a contact form with phone numbers, and the phone input in its states |
+//! | `/display` | the timeline, activity feed, fact cards and badges in every state |
+//! | `/display/live` | a live feed and a live table on one server-sent event stream |
 #![forbid(unsafe_code)]
 
 use std::sync::Arc;
@@ -34,6 +36,7 @@ mod dashboard;
 mod dates;
 mod deal_form;
 mod deals;
+mod display;
 mod gallery;
 mod icons_flags;
 mod menus;
@@ -66,7 +69,9 @@ fn shell() -> Shell {
                 )
                 .item(NavItem::new("Select", "/select").icon(icons::LIST))
                 .item(NavItem::new("Icons and flags", "/icons-flags").icon(icons::FLAG))
-                .item(NavItem::new("Menus and toasts", "/menus").icon(icons::LIST)),
+                .item(NavItem::new("Menus and toasts", "/menus").icon(icons::LIST))
+                .item(NavItem::new("Display", "/display").icon(icons::LAYERS))
+                .item(NavItem::new("Live activity", "/display/live").icon(icons::ACTIVITY)),
         )
         .user(
             UserMenu::new("Ada Lovelace", "ada@navree.test")
@@ -93,7 +98,8 @@ impl Module for ProofModule {
             .controller::<icons_flags::IconPages>()
             .controller::<dates::DatePages>()
             .controller::<menus::MenuPages>()
-            .controller::<phone::PhonePages>();
+            .controller::<phone::PhonePages>()
+            .controller::<display::DisplayPages>();
     }
 }
 
