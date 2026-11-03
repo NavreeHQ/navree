@@ -17,7 +17,7 @@ const LAYOUT = new Set(["row", "stack", "grid", "container"]);
  */
 const COMPONENT_ROOTS = new Set([
   "alert", "attachment", "avatar", "badge", "bars", "breadcrumb", "bubble", "button", "button-group",
-  "card", "checkbox", "choice", "code", "combobox", "command-dialog", "empty", "field", "heading", "input",
+  "card", "checkbox", "choice", "code", "combobox", "command-dialog", "empty", "fact-card", "field", "heading", "input",
   "input-group", "item", "kbd", "label", "marker", "message", "multiselect", "native-select", "pagination",
   "progress", "radio-group", "select", "separator", "skeleton", "spinner", "stat", "switch", "table-container",
   "text", "textarea", "toggle",

@@ -114,8 +114,19 @@ export const choices = {
     question: "What does it name?",
     options: [
       c("Badge", "A status or a category", "/docs/components/badge/"),
+      c("Outcome chip", "Did it happen, yes or no", "/docs/components/badge/#outcome-chips"),
       c("Kbd", "A key to press", "/docs/components/kbd/"),
       c("Avatar", "A person", "/docs/components/avatar/"),
+    ],
+  },
+  happened: {
+    title: "Which way to show activity?",
+    question: "What happened, and to whom?",
+    options: [
+      c("Timeline", "The steps of one thing", "/docs/components/timeline/"),
+      c("ActivityFeed", "The latest from everyone", "/docs/components/activity-feed/"),
+      c("FactCard", "One fact, with its detail", "/docs/components/fact-card/"),
+      c("Table", "Rows to sort and compare", "/docs/components/table/"),
     ],
   },
   message: {

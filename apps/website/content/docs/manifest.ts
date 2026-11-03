@@ -269,6 +269,9 @@ export const sections: DocsSection[] = [
       "kbd",
       "attachment",
       "message",
+      "timeline",
+      "activity-feed",
+      "fact-card",
       // Feedback
       "alert",
       "toast",
