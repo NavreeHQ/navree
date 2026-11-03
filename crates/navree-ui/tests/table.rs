@@ -679,3 +679,29 @@ fn a_filter_bar_is_state_in_the_url() {
         "a filter in force stays: {html}"
     );
 }
+
+#[test]
+fn typing_waits_as_long_as_the_table_says() {
+    let query = q("");
+    let rows = vec![deal(1)];
+    let html = render(&DataTable::new("deals", &query, &rows).into());
+    assert!(
+        !html.contains("data-ui-debounce"),
+        "the runtime's 100 ms: {html}"
+    );
+    let html = render(
+        &DataTable::new("deals", &query, &rows)
+            .debounce(std::time::Duration::from_millis(400))
+            .into(),
+    );
+    assert!(html.contains(r#"data-ui-debounce="400""#), "{html}");
+    let html = render(
+        &DataTable::new("deals", &query, &rows)
+            .debounce(std::time::Duration::from_secs(3600))
+            .into(),
+    );
+    assert!(
+        html.contains(r#"data-ui-debounce="5000""#),
+        "capped: {html}"
+    );
+}

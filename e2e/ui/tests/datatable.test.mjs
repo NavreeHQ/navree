@@ -99,6 +99,29 @@ for (const browserName of browsers) {
       await close();
     });
 
+    test("a tick in a filter's list applies at once; typing waits for a pause", async () => {
+      await reset();
+      const { page, close } = await open("/deals?per=10");
+      const asked = [];
+      page.on("request", (request) => {
+        if (request.headers()["x-navree-ui"] && /\/deals\?/.test(request.url())) asked.push({ at: Date.now(), url: request.url() });
+      });
+      await page.locator("[popovertarget=deals-m-stage]").click();
+      const ticked = Date.now();
+      await page.locator("#deals-m-stage input[name='f.stage'][value=won]").check();
+      await page.waitForTimeout(60);
+      assert.ok(asked.some((ask) => /f\.stage=won/.test(ask.url) && ask.at - ticked < 60), JSON.stringify(asked));
+      await page.keyboard.press("Escape");
+      await settled(page);
+      asked.length = 0;
+      const search = page.locator("#deals input[name=q]");
+      await search.click();
+      await search.pressSequentially("acme", { delay: 20 });
+      await page.waitForTimeout(400);
+      assert.equal(asked.filter((ask) => /q=/.test(ask.url)).length, 1, `one request after the pause: ${JSON.stringify(asked)}`);
+      await close();
+    });
+
     test("a filter matching nothing keeps headers, chips and a way out", async () => {
       await reset();
       const { page, close, problems } = await open("/deals?q=nothing-matches-this");

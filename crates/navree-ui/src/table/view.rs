@@ -531,6 +531,7 @@ pub struct DataTable<'a, R, F = NoFilter> {
     live: Option<Duration>,
     live_from: Option<Href>,
     refreshable: bool,
+    debounce: Option<u32>,
     cell_uses: Cell<Uses>,
 }
 
@@ -577,6 +578,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             live: None,
             live_from: None,
             refreshable: false,
+            debounce: None,
             cell_uses: Cell::new(Uses::NONE),
         }
     }
@@ -604,6 +606,14 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     pub fn live_from(mut self, url: impl Into<Href>) -> Self {
         self.live_from = Some(url.into());
         self.refreshable = true;
+        self
+    }
+
+    /// How long typing in the search or a text filter waits for a pause before the
+    /// table asks again: 100 ms unless this says otherwise, up to 5 s. A tick or a choice
+    /// applies at once. A longer wait suits a search the database is slow to answer.
+    pub fn debounce(mut self, wait: std::time::Duration) -> Self {
+        self.debounce = Some(u32::try_from(wait.as_millis().min(5000)).unwrap_or(5000));
         self
     }
 
@@ -1650,6 +1660,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 .attr("autocomplete", "off")
                 .attr("action", self.query.path.clone())
                 .attr("data-ui-target", self.id)
+                .attr_opt("data-ui-debounce", self.debounce.map(i64::from))
                 .children((
                     search,
                     controls,

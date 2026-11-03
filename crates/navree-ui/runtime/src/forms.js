@@ -69,6 +69,12 @@ async function send(form, submitter) {
   }
 }
 
+/** How long typing in `form` waits for a pause, in ms: its `data-ui-debounce`, or 100. @param {HTMLFormElement} form */
+function delay(form) {
+  const ms = Number(attr(form, "data-ui-debounce"));
+  return Number.isFinite(ms) && ms >= 0 && attr(form, "data-ui-debounce") !== null ? Math.min(ms, 5000) : 100;
+}
+
 /** A GET form with a region: filters that morph the region in place. @param {HTMLFormElement} form */
 function filter(form) {
   const url = new URL(attr(form, "action") || location.href, location.href);
@@ -104,10 +110,16 @@ export function startForms() {
   /** @type {WeakMap<HTMLFormElement, number>} */
   const timers = new WeakMap();
   on(document, "input", (e) => {
-    const form = /** @type {HTMLInputElement} */ (e.target).form;
+    const input = /** @type {HTMLInputElement} */ (e.target);
+    const form = input.form;
     if (!form || !has(form, "data-ui-target") || /** @type {InputEvent} */ (e).isComposing) return;
     clearTimeout(timers.get(form));
-    timers.set(form, setTimeout(() => filter(form), 200));
+    // A select says so again in `change`, below.
+    if (input.nodeName === "SELECT") return;
+    // A tick or a choice is finished when it's made: it applies at once. Text waits
+    // for a pause in the typing, 100 ms unless the form says otherwise.
+    if (input.type === "checkbox" || input.type === "radio") filter(form);
+    else timers.set(form, setTimeout(() => filter(form), delay(form)));
   });
   on(document, "change", (e) => {
     const input = /** @type {HTMLInputElement} */ (e.target);
