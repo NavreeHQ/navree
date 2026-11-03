@@ -204,6 +204,30 @@ inBrowsers(({ open }) => {
     await close();
   });
 
+  test("a table's filter bar holds the window: choose, the rows follow, the address keeps it and the table's own state", async () => {
+    const { page, close } = await open("/dates/table?per=25&sort=-amount");
+    const total = async () => (await page.locator("[data-slot=table-summary]").innerText()).replace(/\s+/g, " ");
+    assert.match(await total(), /1,000/);
+    await page.locator("#table-window [data-ui-act=open]").click();
+    await page.locator("#table-window-pop [data-ui-preset=last_30_days]").click();
+    await page.waitForFunction(() => !document.querySelector("[data-slot=table-summary]")?.textContent.includes("1,000"));
+    assert.match(await total(), /69/, "the 23 days of October that hold rows, three rows each");
+    assert.match(page.url(), /from=2026-10-05&to=2026-11-03/);
+    assert.match(page.url(), /sort=-amount/, "the table's own state stays in the address");
+    const dates = await page.locator("#window-deals tbody tr[data-key] td:last-child").allInnerTexts();
+    assert.ok(dates.length > 0);
+    for (const text of dates) assert.ok(text >= "2026-10-05" && text <= "2026-11-03", text);
+    assert.equal(await label(page, "#table-window"), "Oct 5 – Nov 3");
+    // Back and reload show the same window; clearing the window brings the rows back.
+    await page.reload();
+    assert.equal(await label(page, "#table-window"), "Oct 5 – Nov 3");
+    assert.match(await total(), /69/);
+    await page.locator("#table-window [data-ui-act=clear]").first().click();
+    await page.waitForFunction(() => document.querySelector("[data-slot=table-summary]")?.textContent.includes("1,000"));
+    assert.doesNotMatch(page.url(), /from=/);
+    await close();
+  });
+
   // ---- time picker ----
 
   test("a time picker: 12 hour text, the list opens at the value, the keys choose, one change is heard", async () => {

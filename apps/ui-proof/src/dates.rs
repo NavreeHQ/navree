@@ -19,6 +19,8 @@ use navree::ui::dates::{
     DateRangePicker, DateRules, PickerStyle, TimePicker, TimeRules,
 };
 use navree::ui::form::{FormView, Rejected};
+
+use crate::deals::DealRow;
 use navree::ui::*;
 use serde::Deserialize;
 
@@ -385,14 +387,16 @@ pub fn form_store(
 /// `GET /dates/booked`: what the booking saved.
 pub fn booked(shell: &AppShell, params: &HashMap<String, String>) -> AppPage {
     let get = |key: &str| params.get(key).cloned().unwrap_or_default();
-    shell.page("Booked").body(el("dl").attr("data-saved", "").children((
-        el("dt").child("start"),
-        el("dd").attr("data-field", "start").child(get("start")),
-        el("dt").child("end"),
-        el("dd").attr("data-field", "end").child(get("end")),
-        el("dt").child("arrives"),
-        el("dd").attr("data-field", "arrives").child(get("arrives")),
-    )))
+    shell
+        .page("Booked")
+        .body(el("dl").attr("data-saved", "").children((
+            el("dt").child("start"),
+            el("dd").attr("data-field", "start").child(get("start")),
+            el("dt").child("end"),
+            el("dd").attr("data-field", "end").child(get("end")),
+            el("dt").child("arrives"),
+            el("dd").attr("data-field", "arrives").child(get("arrives")),
+        )))
 }
 
 /// `GET /dates/report`: the window is in the address.
@@ -523,6 +527,75 @@ pub fn probe(params: &HashMap<String, String>) -> View {
     )
 }
 
+/// A window a page owns: two parameters in the table's address, and a range picker in
+/// its toolbar. The table keeps them in every link and doesn't query them.
+#[derive(Default, Deserialize)]
+pub struct Window {
+    pub from: Option<String>,
+    pub to: Option<String>,
+}
+
+impl Window {
+    fn range(&self) -> Option<DateRange> {
+        DateRange::parse(self.from.as_deref()?, self.to.as_deref()?)
+    }
+}
+
+impl navree::ui::table::FilterBar for Window {
+    fn params(&self) -> Vec<(&'static str, String)> {
+        match self.range() {
+            Some(range) => vec![
+                ("from", range.from.to_string()),
+                ("to", range.to.to_string()),
+            ],
+            None => Vec::new(),
+        }
+    }
+
+    fn controls(&self) -> Vec<Node> {
+        vec![
+            DateRangePicker::new("from", "to")
+                .id("table-window")
+                .today(today())
+                .week_start(Weekday::Mon)
+                .title("Updated")
+                .value_opt(self.range())
+                .into(),
+        ]
+    }
+}
+
+static ROWS: std::sync::LazyLock<Vec<DealRow>> =
+    std::sync::LazyLock::new(|| crate::deals::rows(1000));
+
+/// `GET /dates/table`: the deals updated in the window, paged in the address.
+pub fn table(shell: &AppShell, query: &TableQuery<DealRow, Window>) -> AppPage {
+    let range = query.filter().range();
+    let mut found: Vec<&DealRow> = ROWS
+        .iter()
+        .filter(|row| range.is_none_or(|range| range.contains(row.updated_at)))
+        .collect();
+    if let Some((column, direction)) = query.sort() {
+        match column {
+            "title" => found.sort_by(|a, b| a.title.cmp(&b.title)),
+            "amount" => found.sort_by_key(|row| row.amount),
+            _ => found.sort_by_key(|row| row.updated_at),
+        }
+        if direction == navree::ui::table::Direction::Desc {
+            found.reverse();
+        }
+    }
+    let total = found.len() as u64;
+    let skip = usize::try_from(query.offset()).unwrap_or(usize::MAX);
+    let take = query.per_page() as usize;
+    let page: Vec<DealRow> = found.into_iter().skip(skip).take(take).cloned().collect();
+    shell.page("Deals by window").body(
+        DataTable::new("window-deals", query, &page)
+            .total(total)
+            .caption("Deals updated in the window"),
+    )
+}
+
 pub struct DatePages;
 
 impl Injectable for DatePages {
@@ -555,6 +628,14 @@ impl Controller for DatePages {
                 "!/dates/form",
                 |shell: AppShell, submit: Result<Submit<Booking>, Rejected<Booking>>| async move {
                     form_store(&shell, submit)
+                },
+            )
+            .public(),
+            RouteDef::on(
+                Method::GET,
+                "!/dates/table",
+                |shell: AppShell, query: TableQuery<DealRow, Window>| async move {
+                    table(&shell, &query)
                 },
             )
             .public(),

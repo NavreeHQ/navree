@@ -45,12 +45,18 @@ const STATES = [
   ["javascript off, the report", "/dates/report?from=2026-11-01&to=2026-11-03", null, { asIfScriptingOff: true }],
 ];
 
+/** Waits until no transition or animation is running: axe reads colours, and a colour in the middle of a change isn't one. */
+const still = async (page) => {
+  await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {}))));
+  await page.waitForTimeout(80);
+};
+
 inBrowsers(({ open }) => {
   for (const [name, path, prepare, options] of STATES) {
     test(`axe, dark, 1440px: ${name}`, { timeout: 90000 }, async () => {
       const { page, close } = await open(path, { ...options });
       if (prepare) await prepare(page);
-      await page.waitForTimeout(150);
+      await still(page);
       assert.deepEqual(await axe(page), []);
       await close();
     });
@@ -60,7 +66,7 @@ inBrowsers(({ open }) => {
     test(`axe, light, 1440px: ${name}`, { timeout: 90000 }, async () => {
       const { page, close } = await open(path, { light: true });
       if (prepare) await prepare(page);
-      await page.waitForTimeout(150);
+      await still(page);
       assert.deepEqual(await axe(page), []);
       await close();
     });
@@ -70,7 +76,7 @@ inBrowsers(({ open }) => {
     test(`axe, dark, 390px: ${name}`, { timeout: 90000 }, async () => {
       const { page, close } = await open(path, { viewport: PHONE });
       if (prepare) await prepare(page);
-      await page.waitForTimeout(150);
+      await still(page);
       assert.deepEqual(await axe(page), []);
       await close();
     });
@@ -165,25 +171,35 @@ inBrowsers(({ open }) => {
     await close();
   });
 
-  test("speed: a popover opens and a month turns within a frame or two of the browser's own time", async () => {
+  test("speed: a popover opens and a month turns within a frame or two, and the script's own time is small", async () => {
     const { page, close } = await open("/dates");
+    // `script` is the time the click's handlers take; `frame` runs on until the second frame after it.
     const timed = (selector) =>
       page.evaluate(async (sel) => {
         const el = document.querySelector(sel);
         const t = performance.now();
         el.click();
+        const script = performance.now() - t;
         await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-        return performance.now() - t;
+        return { script, frame: performance.now() - t };
       }, selector);
     const open1 = await timed("#dp-value [data-ui-act=open]");
     const nav = await timed("#dp-value-pop [data-ui-cal=next]");
     const nav2 = await timed("#dp-value-pop [data-ui-cal=next]");
     await page.keyboard.press("Escape");
     const range = await timed("#dr-b_from [data-ui-act=open]");
-    const list = await (async () => { await page.keyboard.press("Escape"); return timed("#tp-twelve [data-ui-act=open]"); })();
-    console.log(`  open ${open1.toFixed(1)} ms, month ${nav.toFixed(1)} and ${nav2.toFixed(1)} ms, range ${range.toFixed(1)} ms, time list ${list.toFixed(1)} ms`);
+    await page.keyboard.press("Escape");
+    const list = await timed("#tp-twelve [data-ui-act=open]");
+    const f = (x) => `${x.script.toFixed(1)} ms of script, ${x.frame.toFixed(1)} ms to the second frame`;
+    console.log(`  open: ${f(open1)}
+  month: ${f(nav)}; ${f(nav2)}
+  range open (two months, presets): ${f(range)}
+  time list (48 times): ${f(list)}`);
     // Generous: a busy machine, a debug server. They catch a change of scale.
-    for (const [what, ms] of [["open", open1], ["month", nav], ["range", range], ["list", list]]) assert.ok(ms < 250, `${what} took ${ms} ms`);
+    for (const [what, x] of [["open", open1], ["month", nav], ["range", range], ["list", list]]) {
+      assert.ok(x.script < 60, `${what} took ${x.script} ms of script`);
+      assert.ok(x.frame < 250, `${what} took ${x.frame} ms`);
+    }
     await close();
   });
 

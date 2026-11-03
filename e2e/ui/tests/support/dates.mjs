@@ -16,6 +16,26 @@ export const cases = JSON.parse(await readFile(new URL("../../../../crates/navre
 // is proved by putting these on the page.
 export const LIGHT = ":root{color-scheme:light;--ink-0:#ffffff;--ink-1:#f7f8f7;--ink-2:#eff1f0;--ink-3:#e5e8e6;--line:#dfe3e0;--line-2:#c8cecb;--line-3:#aeb6b2;--fg:#0a0e0c;--fg-1:#1c2420;--fg-2:#3f4a44;--fg-3:#55615b;--accent:#0b7a3e;--accent-ink:#ffffff;--amber:#8a5a00;--danger:#b3261e;--bar:#8a968f}";
 
+/**
+ * The light values, set before the page's first paint and winning over the stylesheet. Put on a
+ * page that is already drawn, a browser may keep some elements on their old colours.
+ */
+export const lightFromTheStart = (context) =>
+  context.addInitScript((css) => {
+    const style = document.createElement("style");
+    style.textContent = css;
+    const add = () => {
+      const host = document.head || document.documentElement;
+      if (host) host.append(style);
+      return !!host;
+    };
+    // Some browsers run this before the document has an element: wait for the first.
+    if (!add()) {
+      const watch = new MutationObserver(() => add() && watch.disconnect());
+      watch.observe(document, { childList: true, subtree: true });
+    }
+  }, LIGHT.replaceAll(";", " !important;").replace(/}$/, " !important}"));
+
 /** Runs axe. Violations come back as short lines. */
 export async function axe(page) {
   await page.evaluate(axeSource);
@@ -45,6 +65,7 @@ export function inBrowsers(body) {
           reducedMotion: "reduce",
           locale: options.locale,
         });
+        if (options.light) await lightFromTheStart(context);
         const page = await context.newPage();
         if (options.asIfScriptingOff) await asIfScriptingOff(page);
         const problems = [];
@@ -54,7 +75,7 @@ export function inBrowsers(body) {
         });
         page.on("pageerror", (error) => problems.push(String(error)));
         await page.goto(BASE + path);
-        if (options.light) await page.addStyleTag({ content: LIGHT });
+        if (options.light) assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()), "#0b7a3e", "the light values are in force");
         return {
           page,
           context,

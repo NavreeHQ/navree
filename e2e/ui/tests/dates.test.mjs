@@ -497,12 +497,12 @@ for (const browserName of browsers) {
       await page.locator("#dp-start input[type=date]").fill("2026-11-07"); // a Saturday
       await page.locator("#tp-arrives input[type=time]").fill("10:30");
       await page.getByRole("button", { name: "Book" }).click();
-      await page.waitForLoadState();
+      await page.locator("[data-slot=field-error]").first().waitFor();
       assert.match(await page.locator("[data-slot=field-error]").first().innerText(), /isn't available/, "the server's answer, as a page");
       assert.equal(await page.locator("#dp-start input[type=date]").inputValue(), "2026-11-07", "and what was sent is kept");
       await page.locator("#dp-start input[type=date]").fill("2026-11-09");
       await page.getByRole("button", { name: "Book" }).click();
-      await page.waitForLoadState();
+      await page.locator("[data-field=start]").waitFor();
       assert.equal(await page.locator("[data-field=start]").innerText(), "2026-11-09");
       assert.equal(await page.locator("[data-field=arrives]").innerText(), "10:30:00");
       await close();
@@ -515,8 +515,7 @@ for (const browserName of browsers) {
       assert.equal(await page.locator("#report-range [data-ui-act=open]").isVisible(), false);
       await page.locator("[name=from]").fill("2026-03-08");
       await page.locator("[name=to]").fill("2026-03-08");
-      await page.getByRole("button", { name: "Apply" }).click();
-      await page.waitForLoadState();
+      await Promise.all([page.waitForURL(/from=2026-03-08&to=2026-03-08/), page.getByRole("button", { name: "Apply" }).click()]);
       assert.match(page.url(), /from=2026-03-08&to=2026-03-08/);
       assert.match(await page.locator("[data-report=query]").innerText(), /created_at >= 2026-03-08T05:00:00Z AND created_at < 2026-03-09T04:00:00Z/, "a 23-hour day in New York, counted whole");
       await close();
