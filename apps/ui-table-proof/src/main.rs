@@ -13,6 +13,7 @@
 //! | `/empty`, `/one`, `/exact` | 0 rows, 1 row, exactly one page |
 //! | `/big` | 1,000,000 rows by cursor, with a capped count |
 //! | `/big-pages` | 1,000,000 rows by page number, with an exact count |
+//! | `/thousand` | the same rows, 100 or 1,000 to a page, each with a box, a menu of actions and details |
 //! | `/wide` | 30 columns |
 //! | `/tasks` | a model as its own row, in the simplest form |
 //! | `/extras` | the rest: a card with bleed, sticky rows, a footer, row links, rows that can't be ticked, the grid keys, header groups |
@@ -181,6 +182,7 @@ fn shell() -> Shell {
                 .item(NavItem::new("One page", "/exact").icon(icons::LIST))
                 .item(NavItem::new("A million, cursor", "/big").icon(icons::DATABASE))
                 .item(NavItem::new("A million, pages", "/big-pages").icon(icons::DATABASE))
+                .item(NavItem::new("A thousand to a page", "/thousand").icon(icons::TABLE))
                 .item(NavItem::new("Thirty columns", "/wide").icon(icons::COLUMNS_3)),
         )
 }
@@ -394,6 +396,65 @@ pub struct BigRow {
     pub amount: Option<i64>,
     #[col(sortable, filter = date)]
     pub created_on: Option<chrono::NaiveDate>,
+}
+
+/// The million again, a thousand to a page, with everything a row can carry: a box,
+/// a menu of actions that post, details. What a busy page costs the browser.
+#[derive(Clone, TableRow)]
+#[table(sort = "-amount", per = 100, per_pages(25, 100, 1000))]
+pub struct ThousandRow {
+    #[col(skip)]
+    pub id: i64,
+    #[col(sortable, search, filter = text, sticky, strong)]
+    pub title: String,
+    #[col(sortable, filter = multi, options = STAGES, badge = tone)]
+    pub stage: String,
+    #[col(sortable, numeric, filter = range)]
+    pub amount: Option<i64>,
+    #[col(sortable, filter = date)]
+    pub created_on: Option<chrono::NaiveDate>,
+}
+
+async fn thousand(
+    shell: &AppShell,
+    uow: &Uow,
+    query: &TableQuery<ThousandRow>,
+) -> Result<AppPage, AppError> {
+    let page = query
+        .load_as(Big::query(), uow, |record| {
+            let big = record.into_inner();
+            ThousandRow {
+                id: big.id,
+                title: big.title,
+                stage: big.stage,
+                amount: big.amount,
+                created_on: big.created_on,
+            }
+        })
+        .await?;
+    Ok(shell.page("A thousand to a page").body(
+        DataTable::new("thousand", query, &page)
+            .caption("A thousand to a page")
+            .sticky_header()
+            .bulk(
+                "/thousand/bulk",
+                [BulkAction::new("archive", "Archive").icon(icons::ARCHIVE)],
+            )
+            .row_actions(|row: &ThousandRow| {
+                vec![
+                    RowAction::post("Archive", format!("/thousand/{}/archive", row.id))
+                        .icon(icons::ARCHIVE),
+                    RowAction::post("Delete", format!("/thousand/{}/delete", row.id))
+                        .icon(icons::TRASH_2)
+                        .destructive(),
+                ]
+            })
+            .detail(|row: &ThousandRow| {
+                el("p")
+                    .child(format!("{} is at the {} stage.", row.title, row.stage))
+                    .into()
+            }),
+    ))
 }
 
 /// A row with thirty columns, drawn from memory.
@@ -872,6 +933,67 @@ impl Controller for Pages {
                                 .caption("A million rows")
                                 .sticky_header(),
                         ),
+                    )
+                },
+            )
+            .public(),
+            RouteDef::on(
+                Method::GET,
+                "!/thousand",
+                |shell: AppShell, uow: Uow, query: TableQuery<ThousandRow>| async move {
+                    thousand(&shell, &uow, &query).await
+                },
+            )
+            .public(),
+            RouteDef::on(
+                Method::POST,
+                "!/thousand/bulk",
+                |uow: Uow, request: BulkRequest<ThousandRow>| async move {
+                    let target = match request.resolve(Big::query(), &uow).await? {
+                        Ok(target) => target,
+                        Err(refusal) => {
+                            return Ok(request.refused(StatusCode::CONFLICT, refusal.message()));
+                        }
+                    };
+                    let count = target
+                        .update(&uow, [col("stage").set(Value::String("lost".into()))])
+                        .await?;
+                    Ok::<_, AppError>(request.done(format!("Archived {count}.")))
+                },
+            )
+            .public(),
+            RouteDef::on(
+                Method::POST,
+                "!/thousand/{id}/archive",
+                |uow: Uow, Path(id): Path<i64>| async move {
+                    Big::query()
+                        .where_(col("id").eq(Value::I64(id)))
+                        .update(&uow, [col("stage").set(Value::String("lost".into()))])
+                        .await?;
+                    Ok::<_, AppError>(
+                        Reply::ops_or_redirect("/thousand")
+                            .toast(ToastTone::Success, "Archived.")
+                            .op(navree::ui::Op::Invalidate {
+                                target: "thousand".into(),
+                            }),
+                    )
+                },
+            )
+            .public(),
+            RouteDef::on(
+                Method::POST,
+                "!/thousand/{id}/delete",
+                |uow: Uow, Path(id): Path<i64>| async move {
+                    Big::query()
+                        .where_(col("id").eq(Value::I64(id)))
+                        .delete(&uow)
+                        .await?;
+                    Ok::<_, AppError>(
+                        Reply::ops_or_redirect("/thousand")
+                            .toast(ToastTone::Success, "Deleted.")
+                            .op(navree::ui::Op::Invalidate {
+                                target: "thousand".into(),
+                            }),
                     )
                 },
             )
