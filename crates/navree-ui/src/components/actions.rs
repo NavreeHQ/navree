@@ -159,6 +159,12 @@ impl Button {
     }
 
     /// Makes this submit its form.
+    ///
+    /// In a list that is sorted, filtered or redrawn, give each row its own small form
+    /// around its button, or use a plain button with a command. Never tie a submit
+    /// button in every row to one form with `form=`, or wrap the rows in a form: in
+    /// Chromium, each such button that moves makes the form recount its controls across
+    /// the whole page, so a thousand rows cost a phone most of a second on every sort.
     pub fn submit(mut self) -> Self {
         self.kind = ButtonKind::Submit;
         self

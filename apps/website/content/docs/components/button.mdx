@@ -63,6 +63,8 @@ With `.href`, the button is an `<a>`. Use it to go somewhere, not to change some
 
 A button's `type` is `button` unless you say otherwise: `.submit()` makes it submit its form and `.kind(ButtonKind::Reset)` reset it. `.named(name, value)` posts a value with the click, for a form with two submit buttons.
 
+In a list that is sorted, filtered or redrawn, give each row its own small form around its button, as a [DataTable](/docs/ui/data-table/)'s row actions do, or use a plain button with a [command](/docs/ui/commands-and-ops/). Don't tie a submit button in every row to one form with `form=`, and don't wrap the rows in a form. In Chromium, every such button that moves makes the form recount its controls across the whole page: with a thousand rows, that is most of a second on a phone for every sort.
+
 <UiPreview example="button/submit" />
 
 `.opens_dialog(id)` and `.closes_dialog(id)` open and close a `<dialog>` with the browser's `command` attribute, with no script; see [Dialog](/docs/components/dialog/). `.on_click(cmd)` runs [commands](/docs/ui/commands-and-ops/) in the browser.
