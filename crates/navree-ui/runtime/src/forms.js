@@ -1,7 +1,7 @@
 // Forms: the pending state within the frame of the submit, then, on
 // `data-ui-form`, a fetch whose answer is ops or a page.
 import { applyEnvelope } from "./ops.js";
-import { forget, go, showPage, startRegions, whileWriting } from "./nav.js";
+import { forget, go, pageSwaps, showPage, startRegions, whileWriting } from "./nav.js";
 import { active, attr, cookies, has, on, set, unset, toggle } from "./dom.js";
 import { toast } from "./ui.js";
 
@@ -31,13 +31,17 @@ function pending(form, submitter, on) {
   else unset(form, "aria-busy");
 }
 
+/** Where and how a submit posts: the method and the whole address. @param {HTMLFormElement} form @param {HTMLElement | null} submitter */
+const targetOf = (form, submitter) =>
+  ((submitter && attr(submitter, "formmethod")) || attr(form, "method") || "get").toLowerCase() + " " + new URL((submitter && attr(submitter, "formaction")) || attr(form, "action") || location.href, location.href).href;
+
 /**
  * What a submit would send: where, how, and every field. Two submits that say the same
  * are one: a double click, Enter twice.
  * @param {HTMLFormElement} form @param {HTMLElement | null} submitter
  */
 function said(form, submitter) {
-  const parts = [(submitter && attr(submitter, "formaction")) || attr(form, "action") || "", (submitter && attr(submitter, "formmethod")) || attr(form, "method") || ""];
+  const parts = [targetOf(form, submitter)];
   try {
     for (const [name, value] of new FormData(form, submitter)) {
       parts.push(name, typeof value === "string" ? value : `${value.name}:${value.size}:${value.lastModified}`);
@@ -49,11 +53,12 @@ function said(form, submitter) {
 /**
  * Forms on their way, with what they sent. The fetch of a write can't be taken back, so
  * a second submit that says the same is ignored. One that says something new, typed
- * while the first was on its way, goes after it: the latest only, never lost.
+ * while the first was on its way, waits: the latest only. It goes only where it was
+ * typed, so it remembers the page, the address and the user it was typed for.
  * @type {WeakMap<HTMLFormElement, string>}
  */
 const sending = new WeakMap();
-/** @type {WeakMap<HTMLFormElement, {said: string, submitter: HTMLElement | null}>} */
+/** @type {WeakMap<HTMLFormElement, {said: string, submitter: HTMLElement | null, page: number, href: string, target: string, token: string}>} */
 const waiting = new WeakMap();
 
 /** @param {HTMLFormElement} form @param {HTMLElement | null} submitter */
@@ -61,8 +66,8 @@ async function send(form, submitter) {
   sending.set(form, said(form, submitter));
   const before = active();
   let answered = false;
-  /** Whether the answer moves the user to another page: what waits is then dropped. */
-  let left = false;
+  /** Whether the answer left this page as it was: ops that don't lead away. */
+  let kept = false;
   try {
     const action = (submitter && attr(submitter, "formaction")) || attr(form, "action") || location.href;
     const method = ((submitter && attr(submitter, "formmethod")) || attr(form, "method") || "get").toUpperCase();
@@ -83,7 +88,7 @@ async function send(form, submitter) {
     document.dispatchEvent(new CustomEvent("ui:sent", { detail: { form, ok: response.ok } }));
     // Errors take focus only for a save the user asked for, and only if the user is
     // still where the save left them: never from a field they moved to, or typed on in.
-    if (type.startsWith(OPS)) left = applyEnvelope(await response.json(), { focus: !!submitter && active() === before });
+    if (type.startsWith(OPS)) kept = !applyEnvelope(await response.json(), { focus: !!submitter && active() === before });
     else if (type.startsWith("text/html")) await showPage(response, { url: response.url, keep: response.url === location.href });
     else if (!response.ok) toast("danger", "That didn't work. Try again.");
     startRegions();
@@ -95,9 +100,12 @@ async function send(form, submitter) {
     sending.delete(form);
     const next = waiting.get(form);
     waiting.delete(form);
-    // What was typed meanwhile goes now, from the form as it is, if it's still here.
-    if (next && form.isConnected && !left) {
-      const by = next.submitter?.isConnected ? next.submitter : null;
+    const by = next?.submitter?.isConnected ? next.submitter : null;
+    // What was typed meanwhile goes now, from the form as it is, only where it was typed:
+    // after ops that left the page alone, on the same page and address, to the same
+    // place, for the same user. A redirect, a page, a swap, a new action or a sign-out
+    // drops it.
+    if (next && kept && form.isConnected && next.page === pageSwaps() && next.href === location.href && next.target === targetOf(form, by) && next.token === cookie("XSRF-TOKEN")) {
       try {
         form.requestSubmit(/** @type {HTMLButtonElement | null} */ (by));
       } catch {
@@ -138,7 +146,7 @@ export function startForms() {
     if (out !== undefined) {
       e.preventDefault();
       const now = said(form, submitter);
-      if (now !== out) waiting.set(form, { said: now, submitter });
+      if (now !== out) waiting.set(form, { said: now, submitter, page: pageSwaps(), href: location.href, target: targetOf(form, submitter), token: cookie("XSRF-TOKEN") });
       else waiting.delete(form);
       return;
     }

@@ -48,6 +48,78 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox], 
       form.requestSubmit(document.getElementById("go"));
     });
 
+    for (const withId of [true, false]) {
+      const id = withId ? ` id="f"` : "";
+      const label = withId ? "with an id" : "with none";
+
+      test(`what waited is dropped when the answer is a redirect to another page, form ${label} (${engine})`, async () => {
+        const name = key("redirect");
+        route(`/${name}`, doc(`<main><form${id} data-ui-form method="post" action="/${name}-post"><input id="i" name="title" value="one"><button id="go">Save</button></form></main>`));
+        f.routes.set(`/${name}-post`, (req, res) => setTimeout(() => { res.writeHead(303, { location: `/${name}-next` }); res.end(); }, 300));
+        route(`/${name}-next`, doc(`<main><form${id} data-ui-form method="post" action="/${name}-danger"><input type="hidden" name="all" value="yes"><button id="go">Delete every deal</button></form></main>`));
+        f.routes.set(`/${name}-danger`, (req, res) => f.ops(res, { ops: [] }));
+        const { context, page } = await fresh(`/${name}`);
+        await twice(page);
+        await until(() => new URL(page.url()).pathname === `/${name}-next`, 5000);
+        await sleep(800);
+        assert.equal(new URL(page.url()).pathname, `/${name}-next`);
+        assert.deepEqual(hits(`/${name}-danger`), [], "nothing posted on the page the user was sent to");
+        assert.equal(hits(`/${name}-post`).length, 1, "and what waited isn't sent anywhere");
+        await context.close();
+      });
+
+      test(`what waited is dropped when the user goes to another page meanwhile, form ${label} (${engine})`, async () => {
+        const name = key("navaway");
+        route(`/${name}`, doc(`<nav><a id="away" href="/${name}-other">Other</a></nav><main><form${id} data-ui-form method="post" action="/${name}-post"><input id="i" name="title" value="one"><button id="go">Save</button></form></main>`));
+        f.routes.set(`/${name}-post`, (req, res) => setTimeout(() => f.ops(res, { ops: [{ op: "toast", tone: "success", text: "saved" }] }), 500));
+        route(`/${name}-other`, doc(`<nav><a href="/${name}">Back</a></nav><main><form${id} data-ui-form method="post" action="/${name}-danger"><input type="hidden" name="archive" value="all"><button id="go">Archive all</button></form></main>`));
+        f.routes.set(`/${name}-danger`, (req, res) => f.ops(res, { ops: [] }));
+        const { context, page } = await fresh(`/${name}`);
+        await twice(page);
+        await page.click("#away");
+        await sleep(1200);
+        assert.equal(new URL(page.url()).pathname, `/${name}-other`);
+        assert.deepEqual(hits(`/${name}-danger`), [], "nothing posted on the other page");
+        assert.equal(hits(`/${name}-post`).length, 1);
+        await context.close();
+      });
+    }
+
+    test(`what waited goes after an ops answer on the same page, and only there (${engine})`, async () => {
+      const name = key("same");
+      route(`/${name}`, doc(`<form id="f" data-ui-form method="post" action="/${name}-post"><input id="i" name="title" value="one"><button id="go">Save</button></form>`));
+      f.routes.set(`/${name}-post`, (req, res, body) => setTimeout(() => f.ops(res, { ops: [] }), 250));
+      const { context, page } = await fresh(`/${name}`);
+      await twice(page);
+      await until(() => hits(`/${name}-post`).length >= 2, 3000);
+      await sleep(300);
+      assert.deepEqual(hits(`/${name}-post`).map((hit) => hit.body), ["title=one", "title=two"]);
+      await context.close();
+    });
+
+    test(`what waited is dropped when the form now posts somewhere else (${engine})`, async () => {
+      const name = key("moved");
+      route(`/${name}`, doc(`<form id="f" data-ui-form method="post" action="/${name}-post"><input id="i" name="title" value="one"><button id="go">Save</button></form>`));
+      f.routes.set(`/${name}-post`, (req, res) => setTimeout(() => f.ops(res, { ops: [{ op: "morph", target: "f", html: `<form id="f" data-ui-form method="post" action="/${name}-danger"><input id="i" name="title" value="two"><button id="go">Delete</button></form>` }] }), 250));
+      f.routes.set(`/${name}-danger`, (req, res) => f.ops(res, { ops: [] }));
+      const { context, page } = await fresh(`/${name}`);
+      await twice(page);
+      await sleep(900);
+      assert.deepEqual(hits(`/${name}-danger`), []);
+      await context.close();
+    });
+
+    test(`what waited is dropped when the answer signed the user out (${engine})`, async () => {
+      const name = key("token");
+      route(`/${name}`, doc(`<form id="f" data-ui-form method="post" action="/${name}-post"><input id="i" name="a" value="one"><button id="go">go</button></form>`), { "set-cookie": `XSRF-TOKEN=tok1; Path=/` });
+      f.routes.set(`/${name}-post`, (req, res) => setTimeout(() => f.ops(res, { ops: [] }, 200, { "set-cookie": "XSRF-TOKEN=; Path=/; Max-Age=0" }), 300));
+      const { context, page } = await fresh(`/${name}`);
+      await twice(page);
+      await sleep(1000);
+      assert.deepEqual(hits(`/${name}-post`).map((hit) => [hit.body, hit.headers["x-xsrf-token"] ?? null]), [["a=one", "tok1"]]);
+      await context.close();
+    });
+
     test(`text and fill never write into an option, a title or what a user types in (${engine})`, async () => {
       const name = key("closed");
       route(`/${name}`, doc(

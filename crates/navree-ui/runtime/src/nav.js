@@ -16,6 +16,10 @@ const MOST = 10000;
 /** @type {Map<string, {at: number, epoch: number, cookies: string, page: Promise<Response>}>} */
 const prefetched = new Map();
 let generation = 0;
+/** Moves on whenever the page is swapped for another, or is about to be. */
+let swaps = 0;
+/** How many times the page has been swapped: what was typed on one belongs to it. */
+export const pageSwaps = () => swaps;
 /** Moves on whenever what a page shows may have changed. */
 let epoch = 0;
 /** Writes on their way: what is fetched meanwhile may be from before them. */
@@ -129,6 +133,7 @@ export async function showPage(response, how = {}) {
   }
   if (how.push !== false && url !== location.href) history.pushState(null, "", url);
   clean(body(doc));
+  if (!how.region) swaps++;
   if (how.region) {
     const from = byId(how.region), to = byId(how.region, doc);
     if (from && to) {
@@ -178,6 +183,7 @@ export async function go(url, how = {}) {
   // Leaving the site is said by name: `leave`.
   if (!sameOrigin(url)) return;
   const mine = ++generation;
+  if (!how.region) swaps++;
   const html = root();
   const region = how.region ? document.getElementById(how.region) : null;
   const table = region?.hasAttribute("data-ui-table") ? region : null;
