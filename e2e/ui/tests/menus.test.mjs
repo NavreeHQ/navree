@@ -82,6 +82,8 @@ for (const name of NAMES) {
       return (a?.closest("label")?.textContent?.trim() || a?.textContent?.trim() || a?.getAttribute("aria-label") || a?.id) === t;
     }, text);
     const toasts = (page) => page.locator("[data-slot=toaster] [data-slot=toast]");
+    // The overlay module places a popup when the browser reports it open, a task after it showed.
+    const placed = (page, selector) => page.waitForFunction((sel) => document.querySelector(sel).style.top !== "", selector);
     const requests = (page) => {
       const list = [];
       page.on("request", (r) => list.push(r.url().replace(BASE, "")));
@@ -621,6 +623,7 @@ for (const name of NAMES) {
         const moveTo = await page.locator("#m-sub-s1-trigger").boundingBox();
         await page.mouse.move(moveTo.x + 20, moveTo.y + moveTo.height / 2);
         await page.locator("#m-sub-s1").waitFor();
+        await placed(page, "#m-sub-s1");
         const sub = await page.locator("#m-sub-s1").boundingBox();
         // A slanting path to the submenu, passing over the item below the trigger.
         await page.mouse.move(sub.x + 10, sub.y + sub.height / 2, { steps: 6 });
@@ -660,7 +663,7 @@ for (const name of NAMES) {
         await page.locator("#m-basic-trigger").evaluate((e) => e.scrollIntoView({ block: "end" }));
         await page.locator("#m-basic-trigger").click();
         await page.locator("#m-basic").waitFor();
-        await page.waitForTimeout(100);
+        await placed(page, "#m-basic");
         const box = await page.locator("#m-basic").boundingBox();
         const trigger = await page.locator("#m-basic-trigger").boundingBox();
         assert.ok(box.y >= 0 && box.y + box.height <= 520, JSON.stringify(box));
@@ -669,6 +672,7 @@ for (const name of NAMES) {
         // A row menu at the end of a table lines up with the end of its button and stays inside.
         await page.locator("#m-row-1-trigger").scrollIntoViewIfNeeded();
         await page.locator("#m-row-1-trigger").click();
+        await placed(page, "#m-row-1");
         const row = await page.locator("#m-row-1").boundingBox();
         const rt = await page.locator("#m-row-1-trigger").boundingBox();
         assert.ok(row.x >= 8 && row.x + row.width <= 1280 - 8, JSON.stringify(row));
@@ -680,6 +684,7 @@ for (const name of NAMES) {
         const page = await open("/menus", { viewport: { width: 390, height: 700 } });
         await page.locator("#m-right-trigger").scrollIntoViewIfNeeded();
         await page.locator("#m-right-trigger").click();
+        await placed(page, "#m-right");
         const small = await page.locator("#m-right").boundingBox();
         assert.ok(small.x >= 7 && small.x + small.width <= 390 - 7, JSON.stringify(small));
         await page.keyboard.press("Escape");
@@ -687,6 +692,7 @@ for (const name of NAMES) {
         await page.locator("#m-long-trigger").scrollIntoViewIfNeeded();
         await page.locator("#m-long-trigger").click();
         await page.locator("#m-long").waitFor();
+        await placed(page, "#m-long");
         const tall = await page.locator("#m-long").evaluate((e) => ({ h: e.getBoundingClientRect().height, scroll: e.scrollHeight, client: e.clientHeight }));
         assert.ok(tall.h <= 420 - 8, JSON.stringify(tall));
         assert.ok(tall.scroll > tall.client, "it scrolls inside");
@@ -699,7 +705,7 @@ for (const name of NAMES) {
           return i.top >= m.top - 1 && i.bottom <= m.bottom + 1;
         }, null, { timeout: 3000 });
         await page.setViewportSize({ width: 1280, height: 600 });
-        await page.waitForTimeout(150);
+        await page.waitForTimeout(250);
         const after = await page.locator("#m-long").boundingBox();
         assert.ok(after.y >= 0 && after.y + after.height <= 600, "placed again after a resize: " + JSON.stringify(after));
         await page.done();
@@ -710,6 +716,7 @@ for (const name of NAMES) {
         await page.evaluate(() => { document.documentElement.dir = "rtl"; });
         await page.locator("#m-row-1-trigger").scrollIntoViewIfNeeded();
         await page.locator("#m-row-1-trigger").click();
+        await placed(page, "#m-row-1");
         const menu = await page.locator("#m-row-1").boundingBox();
         const trigger = await page.locator("#m-row-1-trigger").boundingBox();
         assert.ok(Math.abs(menu.x - trigger.x) < 2 || menu.x >= 8, "end is the left edge in right-to-left: " + JSON.stringify({ menu, trigger }));
@@ -720,6 +727,7 @@ for (const name of NAMES) {
         const parent = await page.locator("#m-sub").boundingBox();
         await page.getByRole("menuitem", { name: "Move to" }).hover();
         await page.locator("#m-sub-s1").waitFor();
+        await placed(page, "#m-sub-s1");
         const sub = await page.locator("#m-sub-s1").boundingBox();
         assert.ok(sub.x + sub.width <= parent.x + 8, "the submenu is on the left of its parent: " + JSON.stringify({ parent, sub }));
         // The keys swap too: Left opens, Right closes.

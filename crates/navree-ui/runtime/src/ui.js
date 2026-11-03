@@ -65,7 +65,7 @@ function toaster() {
   persistent.add(host);
   // A popover is in the top layer, so a toast shows above an open dialog. Without the
   // runtime the same element is a fixed box.
-  host.setAttribute("popover", "manual");
+  if (!host.hasAttribute("popover")) host.setAttribute("popover", "manual");
   return host;
 }
 

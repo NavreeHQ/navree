@@ -112,6 +112,12 @@ in this notice, the name of a copyright holder shall not be used in advertising 
 otherwise to promote the sale, use or other dealings in these Data Files or Software
 without prior written authorization of the copyright holder.
 
+## WAI-ARIA Authoring Practices
+
+The keyboard behaviour of tabs, the menu button, menus and submenus, radio groups, toggle
+buttons and alerts follows the W3C's WAI-ARIA Authoring Practices Guide
+(https://www.w3.org/WAI/ARIA/apg/). The behaviour is followed; the code is Navree's own.
+
 ## Geist
 
 `assets/fonts/geist.woff2` is under the SIL Open Font License 1.1:

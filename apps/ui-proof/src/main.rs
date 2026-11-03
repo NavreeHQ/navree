@@ -123,10 +123,10 @@ fn main() -> Result<(), BoxError> {
                 "100000000".to_owned(),
             ),
             // A browser suite keeps hundreds of idle connections open from this one address,
-            // and the default cap of 256 closes every one over it.
+            // and Firefox keeps them between pages; the default cap of 256 closes every one over it.
             (
                 "APP_HTTP__SERVER__MAX_CONNECTIONS_PER_IP".to_owned(),
-                "10000".to_owned(),
+                "100000".to_owned(),
             ),
         ],
     );

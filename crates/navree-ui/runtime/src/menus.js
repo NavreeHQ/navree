@@ -368,6 +368,7 @@ on(document, "toggle", (e) => {
   buffer = "";
   if (!opening) {
     want = "";
+    hovered = null;
     return;
   }
   for (const item of itemsOf(menu)) item.tabIndex = -1;
@@ -530,6 +531,8 @@ on(window, "load", () => { for (const list of all(document.documentElement, "[ro
 
 function enhance() {
   for (const root of all(document.documentElement, "[data-ui-tabs]")) {
+    // Markup that claims to be tabs and has no list is left alone.
+    if (!tablist(root)) continue;
     rove(root);
     fade(tablist(root));
   }
