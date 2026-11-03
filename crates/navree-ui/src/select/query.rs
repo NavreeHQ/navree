@@ -39,7 +39,8 @@ const DEFAULT_LIMIT: usize = 20;
 
 /// What the runtime asks of a searched list: `?q=text&limit=20&after=40`.
 ///
-/// It never fails: a value that doesn't parse is dropped, the text is clipped to
+/// It never fails: a value that doesn't parse is dropped, control characters are
+/// taken out of the text, the text is clipped to
 /// [`MAX_QUERY_TEXT`] bytes on a character boundary, the limit is capped at 50 and the
 /// offset at [`MAX_OFFSET`]. It carries text, never a column name: which columns are
 /// searched is the endpoint's own list.
@@ -60,7 +61,7 @@ impl OptionQuery {
         };
         for (name, value) in urlencoded::parse(query.as_bytes()) {
             match name.as_ref() {
-                "q" => found.text = clip(value.trim()),
+                "q" => found.text = clip(&without_controls(&value)),
                 "limit" => {
                     if let Ok(limit) = value.parse::<usize>() {
                         found.limit = limit.clamp(1, MAX_LIMIT);
@@ -101,7 +102,8 @@ impl OptionQuery {
     pub fn next_url(&self, path: &str, taken: usize) -> String {
         let mut url = String::with_capacity(path.len() + self.text.len() + 32);
         url.push_str(path);
-        url.push_str("?q=");
+        // A path that already has a query goes on with `&`.
+        url.push_str(if path.contains('?') { "&q=" } else { "?q=" });
         crate::form::encode_into(&mut url, &self.text);
         url.push_str("&limit=");
         url.push_str(&self.limit.to_string());
@@ -115,6 +117,13 @@ impl OptionQuery {
         );
         url
     }
+}
+
+/// The text without control characters, trimmed. A NUL in a bound text makes
+/// PostgreSQL refuse the whole query, and no control character is a search.
+fn without_controls(text: &str) -> String {
+    let kept: String = text.chars().filter(|c| !c.is_control()).collect();
+    kept.trim().to_owned()
 }
 
 fn clip(text: &str) -> String {
