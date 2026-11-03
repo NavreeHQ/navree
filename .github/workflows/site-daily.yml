@@ -1,0 +1,115 @@
+# The daily check of navree.com: builds the website from main, runs every
+# SEO, GEO and AEO check on the built pages, checks that the changelog and the
+# dates are fresh, and runs Lighthouse on the key pages at its mobile
+# settings. When something fails it opens one GitHub issue labelled
+# `site-daily` (or adds a comment to the one that is open); when the next run
+# passes it comments and closes that issue.
+#
+# The steps are apps/website/scripts/site-daily.ts, the same script you run
+# on a laptop (`pnpm daily` in apps/website). It keeps each step's output in
+# apps/website/report/ and writes report/summary.md, which becomes the
+# issue's text. The reports are also kept as a workflow artifact.
+#
+# Runs every day, on every push to main that touches the website or its
+# deployment files, and by hand.
+name: Site daily
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  push:
+    branches: [main]
+    paths:
+      - "apps/website/**"
+      - "skills/**"
+      - "Cargo.toml"
+      - "deploy/navree.com/**"
+      - ".github/workflows/site-daily.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-daily
+  cancel-in-progress: false
+
+jobs:
+  site:
+    name: Build, check, Lighthouse
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # `issues: write` is for the last step only, which opens, updates or closes
+    # the one issue; everything before it only reads the repository.
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      # The whole history: the changelog and every page's date come from git.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: apps/website/package.json
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: apps/website/pnpm-lock.yaml
+
+      - name: Install
+        working-directory: apps/website
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint, typecheck, build, check, Lighthouse
+        id: daily
+        working-directory: apps/website
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: node scripts/site-daily.ts
+
+      - name: Keep the reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site-daily-report
+          path: apps/website/report/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      # One issue for the site: opened on the first failure, commented on while
+      # it keeps failing, closed when a run passes again.
+      - name: Open, update or close the issue
+        if: always() && steps.daily.outcome != 'skipped' && !cancelled()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          DAILY_OUTCOME: ${{ steps.daily.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh label create site-daily --color 3dff8f --description "The daily navree.com check" --force >/dev/null
+          number="$(gh issue list --state open --label site-daily --json number --jq '.[0].number // empty')"
+
+          if [ "$DAILY_OUTCOME" = "success" ]; then
+            if [ -n "$number" ]; then
+              gh issue close "$number" --comment "The daily site check passes again: $RUN_URL"
+            fi
+            exit 0
+          fi
+
+          if [ -f apps/website/report/summary.md ]; then
+            cp apps/website/report/summary.md body.md
+          else
+            echo "The daily site check failed before it could write a report: $RUN_URL" > body.md
+          fi
+
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body-file body.md
+          else
+            gh issue create --title "The daily site check failed" --label site-daily --body-file body.md
+          fi
