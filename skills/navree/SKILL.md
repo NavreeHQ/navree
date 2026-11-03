@@ -162,7 +162,7 @@ navree list                                 # every command of the app
 | CSV or Excel files: export buttons, big exports queued with a download link, importing users, contacts or other records from a spreadsheet, column mapping, import previews, error files, non-UTF-8 files from Excel | `navree-sheets` |
 | Work that waits days or for an event (onboarding sequences, reminders, trials, dunning, follow-ups), multi-step processes that must survive restarts, automations or rules your users build in an editor | `navree-workflows` |
 | Reverse engineering an old product (any stack, old data) into specs, a task list and tests, then rebuilding it in Navree; porting or migrating a legacy app and its data | `navree-reverse-engineering` |
-| Building navree-ui pages from a design: an HTML mock-up, a Figma or other design-tool export, a handoff bundle or screenshots; keeping an existing look; checking pages against a design | `navree-design-to-ui` |
+| Building navree-ui pages from a design: an HTML mock-up, a Figma or other design-tool export, a handoff bundle or screenshots; keeping an existing look; checking pages against a design; navree-ui forms with a select, a combobox searched on the server, a multi-select or a command palette | `navree-design-to-ui` |
 
 ## Common mistakes
 

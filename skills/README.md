@@ -84,7 +84,7 @@ conventions, and says which skill to load for each task.
 | [`navree-sheets`](navree-sheets/SKILL.md) | CSV and Excel exports (downloads, queued files with signed links) and imports (encoding detection, header mapping, a staging preview, duplicate modes, error files) (feature `sheets`) |
 | [`navree-workflows`](navree-workflows/SKILL.md) | Durable workflows (`#[workflow]`, steps, sleeps, event waits, versions) and end-user automations (`#[trigger]`, `#[condition]`, `#[action]`, versioned definitions, enrollments, simulation) (feature `workflows`) |
 | [`navree-reverse-engineering`](navree-reverse-engineering/SKILL.md) | Turn an old product in any stack, with old and messy data, into specs with evidence, a task list and test cases, then rebuild it in Navree and verify it against the specs and the old product |
-| [`navree-design-to-ui`](navree-design-to-ui/SKILL.md) | Turn a design (an HTML and CSS mock-up, a design-tool export, a handoff bundle or screenshots) into navree-ui pages on the server, with the design kept where the owner wants it, and verify them beside the design at 1440 and 390 pixels |
+| [`navree-design-to-ui`](navree-design-to-ui/SKILL.md) | Turn a design (an HTML and CSS mock-up, a design-tool export, a handoff bundle or screenshots) into navree-ui pages on the server, with the design kept where the owner wants it, and verify them beside the design at 1440 and 390 pixels; also the select, combobox, multi-select and command palette |
 
 ## Installing
 

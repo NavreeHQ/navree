@@ -1,6 +1,6 @@
 ---
 name: navree-search
-description: "Full-text and vector search with navree-search: `SearchModule` and the `search` config section, `#[derive(Searchable)]` on navree-orm models (or a hand-written `Searchable` with related data), engines (`postgres` with SQLite FTS5 in tests, `meilisearch`, `typesense`, `tantivy`, `memory`), syncing through the queue (`search.sync` queued/inline/off, the `search.sync` job `SyncDocuments`, `reindex`, `without_syncing`), the `Search` service and query builder (filters, ranges, sorts, `accessible`, `workspace`, `paginate`, `hits` and highlights, `across`), vectors (`#[searchable(embed)]`, `Embeddings`, pgvector/Qdrant/memory, `similar`, `similar_to`, `hybrid`), the `search:import`/`flush`/`settings`/`status` commands and test helpers. Use when adding a search box or command palette, making a model searchable, picking or configuring a search engine, rebuilding an index, or debugging missing, stale or leaking search results."
+description: "Full-text and vector search with navree-search: `SearchModule` and the `search` config section, `#[derive(Searchable)]` on navree-orm models (or a hand-written `Searchable` with related data), engines (`postgres` with SQLite FTS5 in tests, `meilisearch`, `typesense`, `tantivy`, `memory`), syncing through the queue (`search.sync` queued/inline/off, the `search.sync` job `SyncDocuments`, `reindex`, `without_syncing`), the `Search` service and query builder (filters, ranges, sorts, `accessible`, `workspace`, `paginate`, `hits` and highlights, `across`, a navree-ui command palette fed by it), vectors (`#[searchable(embed)]`, `Embeddings`, pgvector/Qdrant/memory, `similar`, `similar_to`, `hybrid`), the `search:import`/`flush`/`settings`/`status` commands and test helpers. Use when adding a search box or command palette, making a model searchable, picking or configuring a search engine, rebuilding an index, or debugging missing, stale or leaking search results."
 ---
 
 # Search
@@ -175,6 +175,68 @@ let hits = search
     .run()
     .await?; // AcrossHit { kind, id, title, score, highlights }; hit.load::<Contact>(&uow) -> Option<Record<Contact>>
 ```
+
+## Template: a command palette in navree-ui
+
+A navree-ui `Command` palette (Ctrl or Cmd and K) lists the page's own
+items and, with `.source(url)`, asks the server for more as the person
+types: `GET url?q=text`. The route reads `OptionQuery` and answers a
+`ChoiceList`; a choice made `.link(href)` is an item that goes to that page.
+Feed it from `across`, scoped by `Accessible`, so the palette finds only what
+the caller may read. The palette decides what to show and protects nothing:
+the route and the page behind each link check access as they do for a typed
+address.
+
+```rust
+use navree::access::{Accessible, Read};
+use navree::search::Search;
+use navree::ui::{Choice, ChoiceList, Command, CommandGroup, CommandItem, OptionQuery};
+
+#[injectable]
+pub struct PaletteSearch {
+    search: Arc<Search>,
+}
+
+#[controller]
+impl PaletteSearch {
+    /// Contacts matching the text, each a link to its page. Nothing typed, nothing asked.
+    #[get("!/palette/search")]
+    #[can(Read, Contact)]
+    async fn results(
+        &self,
+        query: OptionQuery,
+        contacts: Accessible<Contact, Read>,
+    ) -> Result<ChoiceList> {
+        if query.is_empty() {
+            return Ok(ChoiceList::new());
+        }
+        let hits = self
+            .search
+            .across(query.text())
+            .include::<Contact>(contacts)
+            .limit(10)
+            .run()
+            .await?;
+        let mut list = ChoiceList::new();
+        for hit in hits {
+            let label = hit.title.clone().unwrap_or_else(|| hit.id.clone());
+            list = list.choice(Choice::new(hit.id.clone(), label).link(format!("/contacts/{}", hit.id)));
+        }
+        Ok(list)
+    }
+}
+
+/// The palette: its own items first, then the contacts the server found.
+pub fn palette() -> Command {
+    Command::new("palette")
+        .placeholder("Type a command or search contacts…")
+        .group(CommandGroup::new("Go to").item(CommandItem::link("Contacts", "/contacts")))
+        .source("/palette/search")
+}
+```
+
+Put the palette in the app shell's search slot with `Command::trigger(id,
+label)` (`navree-design-to-ui`, `references/components.md`).
 
 ## Workspaces
 
