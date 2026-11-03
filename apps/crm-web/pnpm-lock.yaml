@@ -9,11 +9,11 @@ importers:
   .:
     dependencies:
       '@casl/ability':
-        specifier: ^7.0.2
-        version: 7.0.2
+        specifier: ^7.1.1
+        version: 7.1.1
       '@casl/react':
-        specifier: ^7.0.1
-        version: 7.0.1(@casl/ability@7.0.2)(react@19.3.1)
+        specifier: ^7.1.0
+        version: 7.1.0(@casl/ability@7.1.1)(react@19.3.1)
       '@dnd-kit/core':
         specifier: ^6.3.1
         version: 6.3.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -45,11 +45,11 @@ importers:
         specifier: ^1.1.1
         version: 1.1.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       cn:
-        specifier: ^0.5.0
-        version: 0.5.0
+        specifier: ^0.5.1
+        version: 0.5.1
       lucide-react:
-        specifier: ^1.61.0
-        version: 1.61.0(@types/react@19.3.0)(react@19.3.1)
+        specifier: ^1.66.0
+        version: 1.66.0(@types/react@19.3.0)(react@19.3.1)
       next:
         specifier: 16.4.3
         version: 16.4.3(@babel/core@7.29.7(supports-color@10.2.2))(@playwright/test@1.64.1)(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -222,11 +222,11 @@ packages:
     resolution: {integrity: sha512-0GEz8qJWokkUVYQYRukmkSHIFNoBH8QTreeHrAFbvz1XFYc3Y+puhMs8PQ5x8GNugiC2l5jvDBXKLbBIByeSBw==}
     hasBin: true
 
-  '@casl/ability@7.0.2':
-    resolution: {integrity: sha512-NOYbLTaw080a1Na4CpBtyGpL+i9NZhtGGt/tPrrNpLEv8EawFusHZCgc58ewyPBiZ0NER0iudB0et+IP8xJbLg==}
+  '@casl/ability@7.1.1':
+    resolution: {integrity: sha512-1WL90aW65z7RyaoFhOrfUua6e8gk5I2DS7WDjTTI5/qtGnFcnesX4LvfXkqO21LexTswLq71s4Lfs93eI45z8A==}
 
-  '@casl/react@7.0.1':
-    resolution: {integrity: sha512-HFfBxQD5wFUIyd9gAPa5LDqMbB7CIOqRcocxzwMC589d8vLMzaz/OAdFLglGiBz9pAcumC0ULp5QLFiYZ46mUw==}
+  '@casl/react@7.1.0':
+    resolution: {integrity: sha512-z0TkQNReAGGOGhPhtfrLBB2uJTxS2b55rBZH4aEw7dYUQQSYMj688NwCT75SwfyiKFnmwn0+B+II/DsoJKNe4w==}
     peerDependencies:
       '@casl/ability': ^4.0.0 || ^5.1.0 || ^6.0.0 || ^7.0.0
       react: ^18.0.0 || ^19.0.0
@@ -1888,8 +1888,8 @@ packages:
       react: ^18 || ^19 || ^19.0.0-rc
       react-dom: ^18 || ^19 || ^19.0.0-rc
 
-  cn@0.5.0:
-    resolution: {integrity: sha512-JGEixZEpfFXm1P5uXwvEobOFLlHwIWi5v4tjd1ZwfiYmcEilkuD2l+054rvJcYCR1B+uVThHeUbgmNz1FwuxuA==}
+  cn@0.5.1:
+    resolution: {integrity: sha512-SA06SpzSWXRNrt/EQWnRpck9jEVDfVJonw8ZewiNR6pOC4U0SQ81tWaQ9/PKNPh/lWvjuY4CMlxpc8tJViiX6Q==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -2226,8 +2226,8 @@ packages:
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
 
-  lucide-react@1.61.0:
-    resolution: {integrity: sha512-v2SQPPPNjnr+BlhL9Spuzmo5yR+hLkftfuE4E3jaxdNPgSH0hJKPcLJBP7yAta87jQNPsSERS59PJjCJ/CorBA==}
+  lucide-react@1.66.0:
+    resolution: {integrity: sha512-8zjbi/Us+ETXqfBwmXF/FHrWGIqOdE6zT1yUdRJLQVoptomSkB0zdFWVIM667t9K8djWDaXdkBkqi2qVTuDNiw==}
     peerDependencies:
       '@types/react': '*'
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
@@ -2957,13 +2957,13 @@ snapshots:
     dependencies:
       css-tree: 3.2.1
 
-  '@casl/ability@7.0.2':
+  '@casl/ability@7.1.1':
     dependencies:
       '@ucast/mongo2js': 2.0.0
 
-  '@casl/react@7.0.1(@casl/ability@7.0.2)(react@19.3.1)':
+  '@casl/react@7.1.0(@casl/ability@7.1.1)(react@19.3.1)':
     dependencies:
-      '@casl/ability': 7.0.2
+      '@casl/ability': 7.1.1
       react: 19.3.1
 
   '@csstools/color-helpers@6.1.2': {}
@@ -4361,7 +4361,7 @@ snapshots:
       - '@types/react'
       - '@types/react-dom'
 
-  cn@0.5.0: {}
+  cn@0.5.1: {}
 
   convert-source-map@2.0.0:
     optional: true
@@ -4628,7 +4628,7 @@ snapshots:
       yallist: 3.1.1
     optional: true
 
-  lucide-react@1.61.0(@types/react@19.3.0)(react@19.3.1):
+  lucide-react@1.66.0(@types/react@19.3.0)(react@19.3.1):
     dependencies:
       react: 19.3.1
     optionalDependencies:
