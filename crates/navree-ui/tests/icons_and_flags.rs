@@ -353,33 +353,3 @@ fn a_single_file_is_a_constant_too() {
     const ARROW: Icon = icon_file!("tests/own-icons/arrow-left.svg");
     assert_eq!(ARROW, brand::ARROW_LEFT);
 }
-
-/// A file with a script does not compile:
-///
-/// ```compile_fail
-/// let _ = navree_ui::icon_file!("tests/bad-icons/script.svg");
-/// ```
-///
-/// Nor does a path that climbs out of the crate:
-///
-/// ```compile_fail
-/// let _ = navree_ui::icon_file!("../navree-ui/Cargo.toml");
-/// ```
-///
-/// Nor a missing file:
-///
-/// ```compile_fail
-/// let _ = navree_ui::icon_file!("tests/own-icons/nope.svg");
-/// ```
-///
-/// Nor a code or an icon name that does not exist:
-///
-/// ```compile_fail
-/// let _ = navree_ui::flag!("ZZ");
-/// ```
-///
-/// ```compile_fail
-/// let _ = navree_ui::lucide!("not-an-icon");
-/// ```
-#[allow(dead_code)]
-fn compile_fail_examples() {}

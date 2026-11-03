@@ -928,4 +928,79 @@ mod tests {
             assert!(inside(&lit(bad)).is_err(), "{bad}");
         }
     }
+
+    // ---------------------------------------------------------- expansion
+
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// A fresh directory under the temp dir, with the files written into it.
+    fn dir(files: &[(&str, &str)]) -> PathBuf {
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "navree-ui-icons-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(dir.join("icons")).unwrap();
+        for (name, body) in files {
+            std::fs::write(dir.join("icons").join(name), body).unwrap();
+        }
+        dir
+    }
+
+    fn lit(text: &str) -> LitStr {
+        LitStr::new(text, Span::call_site())
+    }
+
+    const GOOD: &str = r#"<svg viewBox="0 0 24 24"><path d="M1 1h4"/></svg>"#;
+    const BAD: &str = r#"<svg viewBox="0 0 24 24"><script>alert(1)</script></svg>"#;
+
+    #[test]
+    fn a_file_expands_to_a_checked_icon_and_names_the_file_for_cargo() {
+        let root = dir(&[("a.svg", GOOD)]);
+        let tokens = file(&quote!(::navree_ui), &root, &lit("icons/a.svg")).unwrap().to_string();
+        assert!(tokens.contains("__checked"), "{tokens}");
+        assert!(tokens.contains("include_str"), "{tokens}");
+        assert!(tokens.contains("0 0 24 24"), "{tokens}");
+    }
+
+    #[test]
+    fn a_bad_file_is_an_error_naming_the_file_and_the_reason() {
+        let root = dir(&[("bad.svg", BAD)]);
+        let error = file(&quote!(::navree_ui), &root, &lit("icons/bad.svg")).unwrap_err().to_string();
+        assert!(error.contains("bad.svg") && error.contains("<script>") && error.contains("line 1"), "{error}");
+    }
+
+    #[test]
+    fn a_missing_file_and_a_path_out_of_the_crate_are_errors() {
+        let root = dir(&[]);
+        for path in ["icons/nope.svg", "../x.svg", "/etc/passwd", ""] {
+            assert!(file(&quote!(::navree_ui), &root, &lit(path)).is_err(), "{path}");
+        }
+    }
+
+    #[test]
+    fn a_set_makes_a_constant_for_every_svg_and_a_table_of_them() {
+        let root = dir(&[("arrow-left.svg", GOOD), ("Brand Mark.SVG", GOOD), ("notes.txt", "not an icon")]);
+        let tokens = set(&quote!(::navree_ui), &root, &lit("icons")).unwrap().to_string();
+        assert!(tokens.contains("ARROW_LEFT") && tokens.contains("BRAND_MARK"), "{tokens}");
+        assert!(tokens.contains("ALL"), "{tokens}");
+        assert!(!tokens.contains("NOTES"), "{tokens}");
+    }
+
+    #[test]
+    fn a_set_refuses_a_bad_file_a_clash_a_bad_name_and_an_empty_directory() {
+        let cases: Vec<(Vec<(&str, &str)>, &str)> = vec![
+            (vec![("a.svg", GOOD), ("b.svg", BAD)], "b.svg"),
+            (vec![("a-b.svg", GOOD), ("a_b.svg", GOOD)], "another file"),
+            (vec![("2fa.svg", GOOD)], "constant name"),
+            (vec![("all.svg", GOOD)], "constant name"),
+            (vec![("notes.txt", "x")], "no .svg"),
+        ];
+        for (files, wanted) in cases {
+            let root = dir(&files);
+            let error = set(&quote!(::navree_ui), &root, &lit("icons")).unwrap_err().to_string();
+            assert!(error.contains(wanted), "{files:?}: {error}");
+        }
+    }
 }

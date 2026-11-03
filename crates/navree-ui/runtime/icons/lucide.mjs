@@ -80,6 +80,8 @@ export function readLucide(files) {
     renamed.push([old, targets[0]]);
   }
 
+  renamed.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+
   const cleanTags = {};
   for (const { name } of icons) {
     const list = tags[name];

@@ -4186,6 +4186,9 @@ pub const AXIS_3_D: Icon = AXIS_3D;
 /// `badge-help`, now `badge-question-mark`.
 #[deprecated(note = "Lucide renamed this icon: use BADGE_QUESTION_MARK")]
 pub const BADGE_HELP: Icon = BADGE_QUESTION_MARK;
+/// `bar-chart`, now `chart-no-axes-column-increasing`.
+#[deprecated(note = "Lucide renamed this icon: use CHART_NO_AXES_COLUMN_INCREASING")]
+pub const BAR_CHART: Icon = CHART_NO_AXES_COLUMN_INCREASING;
 /// `bar-chart-2`, now `chart-no-axes-column`.
 #[deprecated(note = "Lucide renamed this icon: use CHART_NO_AXES_COLUMN")]
 pub const BAR_CHART_2: Icon = CHART_NO_AXES_COLUMN;
@@ -4198,15 +4201,12 @@ pub const BAR_CHART_4: Icon = CHART_COLUMN_INCREASING;
 /// `bar-chart-big`, now `chart-column-big`.
 #[deprecated(note = "Lucide renamed this icon: use CHART_COLUMN_BIG")]
 pub const BAR_CHART_BIG: Icon = CHART_COLUMN_BIG;
-/// `bar-chart-horizontal-big`, now `chart-bar-big`.
-#[deprecated(note = "Lucide renamed this icon: use CHART_BAR_BIG")]
-pub const BAR_CHART_HORIZONTAL_BIG: Icon = CHART_BAR_BIG;
 /// `bar-chart-horizontal`, now `chart-bar`.
 #[deprecated(note = "Lucide renamed this icon: use CHART_BAR")]
 pub const BAR_CHART_HORIZONTAL: Icon = CHART_BAR;
-/// `bar-chart`, now `chart-no-axes-column-increasing`.
-#[deprecated(note = "Lucide renamed this icon: use CHART_NO_AXES_COLUMN_INCREASING")]
-pub const BAR_CHART: Icon = CHART_NO_AXES_COLUMN_INCREASING;
+/// `bar-chart-horizontal-big`, now `chart-bar-big`.
+#[deprecated(note = "Lucide renamed this icon: use CHART_BAR_BIG")]
+pub const BAR_CHART_HORIZONTAL_BIG: Icon = CHART_BAR_BIG;
 /// `between-horizonal-end`, now `between-horizontal-end`.
 #[deprecated(note = "Lucide renamed this icon: use BETWEEN_HORIZONTAL_END")]
 pub const BETWEEN_HORIZONAL_END: Icon = BETWEEN_HORIZONTAL_END;
@@ -4231,18 +4231,18 @@ pub const BUILDING_2: Icon = BUILDING_COMPLEX;
 /// `candlestick-chart`, now `chart-candlestick`.
 #[deprecated(note = "Lucide renamed this icon: use CHART_CANDLESTICK")]
 pub const CANDLESTICK_CHART: Icon = CHART_CANDLESTICK;
-/// `check-circle-2`, now `circle-check`.
-#[deprecated(note = "Lucide renamed this icon: use CIRCLE_CHECK")]
-pub const CHECK_CIRCLE_2: Icon = CIRCLE_CHECK;
 /// `check-circle`, now `circle-check-big`.
 #[deprecated(note = "Lucide renamed this icon: use CIRCLE_CHECK_BIG")]
 pub const CHECK_CIRCLE: Icon = CIRCLE_CHECK_BIG;
-/// `check-square-2`, now `square-check`.
-#[deprecated(note = "Lucide renamed this icon: use SQUARE_CHECK")]
-pub const CHECK_SQUARE_2: Icon = SQUARE_CHECK;
+/// `check-circle-2`, now `circle-check`.
+#[deprecated(note = "Lucide renamed this icon: use CIRCLE_CHECK")]
+pub const CHECK_CIRCLE_2: Icon = CIRCLE_CHECK;
 /// `check-square`, now `square-check-big`.
 #[deprecated(note = "Lucide renamed this icon: use SQUARE_CHECK_BIG")]
 pub const CHECK_SQUARE: Icon = SQUARE_CHECK_BIG;
+/// `check-square-2`, now `square-check`.
+#[deprecated(note = "Lucide renamed this icon: use SQUARE_CHECK")]
+pub const CHECK_SQUARE_2: Icon = SQUARE_CHECK;
 /// `chevron-down-circle`, now `circle-chevron-down`.
 #[deprecated(note = "Lucide renamed this icon: use CIRCLE_CHEVRON_DOWN")]
 pub const CHEVRON_DOWN_CIRCLE: Icon = CIRCLE_CHEVRON_DOWN;
@@ -4270,12 +4270,12 @@ pub const CHEVRON_UP_SQUARE: Icon = SQUARE_CHEVRON_UP;
 /// `circle-help`, now `circle-question-mark`.
 #[deprecated(note = "Lucide renamed this icon: use CIRCLE_QUESTION_MARK")]
 pub const CIRCLE_HELP: Icon = CIRCLE_QUESTION_MARK;
-/// `circle-parking-off`, now `circle-letter-p-off`.
-#[deprecated(note = "Lucide renamed this icon: use CIRCLE_LETTER_P_OFF")]
-pub const CIRCLE_PARKING_OFF: Icon = CIRCLE_LETTER_P_OFF;
 /// `circle-parking`, now `circle-letter-p`.
 #[deprecated(note = "Lucide renamed this icon: use CIRCLE_LETTER_P")]
 pub const CIRCLE_PARKING: Icon = CIRCLE_LETTER_P;
+/// `circle-parking-off`, now `circle-letter-p-off`.
+#[deprecated(note = "Lucide renamed this icon: use CIRCLE_LETTER_P_OFF")]
+pub const CIRCLE_PARKING_OFF: Icon = CIRCLE_LETTER_P_OFF;
 /// `circle-slashed`, now `circle-slash-2`.
 #[deprecated(note = "Lucide renamed this icon: use CIRCLE_SLASH_2")]
 pub const CIRCLE_SLASHED: Icon = CIRCLE_SLASH_2;
@@ -4291,12 +4291,12 @@ pub const CODE_2: Icon = CODE_XML;
 /// `code-square`, now `square-code`.
 #[deprecated(note = "Lucide renamed this icon: use SQUARE_CODE")]
 pub const CODE_SQUARE: Icon = SQUARE_CODE;
-/// `columns-settings`, now `columns-3-cog`.
-#[deprecated(note = "Lucide renamed this icon: use COLUMNS_3_COG")]
-pub const COLUMNS_SETTINGS: Icon = COLUMNS_3_COG;
 /// `columns`, now `columns-2`.
 #[deprecated(note = "Lucide renamed this icon: use COLUMNS_2")]
 pub const COLUMNS: Icon = COLUMNS_2;
+/// `columns-settings`, now `columns-3-cog`.
+#[deprecated(note = "Lucide renamed this icon: use COLUMNS_3_COG")]
+pub const COLUMNS_SETTINGS: Icon = COLUMNS_3_COG;
 /// `contact-2`, now `contact-round`.
 #[deprecated(note = "Lucide renamed this icon: use CONTACT_ROUND")]
 pub const CONTACT_2: Icon = CONTACT_ROUND;
@@ -4318,36 +4318,36 @@ pub const DOT_SQUARE: Icon = SQUARE_DOT;
 /// `download-cloud`, now `cloud-download`.
 #[deprecated(note = "Lucide renamed this icon: use CLOUD_DOWNLOAD")]
 pub const DOWNLOAD_CLOUD: Icon = CLOUD_DOWNLOAD;
+/// `edit`, now `square-pen`.
+#[deprecated(note = "Lucide renamed this icon: use SQUARE_PEN")]
+pub const EDIT: Icon = SQUARE_PEN;
 /// `edit-2`, now `pen`.
 #[deprecated(note = "Lucide renamed this icon: use PEN")]
 pub const EDIT_2: Icon = PEN;
 /// `edit-3`, now `pen-line`.
 #[deprecated(note = "Lucide renamed this icon: use PEN_LINE")]
 pub const EDIT_3: Icon = PEN_LINE;
-/// `edit`, now `square-pen`.
-#[deprecated(note = "Lucide renamed this icon: use SQUARE_PEN")]
-pub const EDIT: Icon = SQUARE_PEN;
 /// `equal-square`, now `square-equal`.
 #[deprecated(note = "Lucide renamed this icon: use SQUARE_EQUAL")]
 pub const EQUAL_SQUARE: Icon = SQUARE_EQUAL;
-/// `file-audio-2`, now `file-headphone`.
-#[deprecated(note = "Lucide renamed this icon: use FILE_HEADPHONE")]
-pub const FILE_AUDIO_2: Icon = FILE_HEADPHONE;
 /// `file-audio`, now `file-headphone`.
 #[deprecated(note = "Lucide renamed this icon: use FILE_HEADPHONE")]
 pub const FILE_AUDIO: Icon = FILE_HEADPHONE;
+/// `file-audio-2`, now `file-headphone`.
+#[deprecated(note = "Lucide renamed this icon: use FILE_HEADPHONE")]
+pub const FILE_AUDIO_2: Icon = FILE_HEADPHONE;
 /// `file-axis-3-d`, now `file-axis-3d`.
 #[deprecated(note = "Lucide renamed this icon: use FILE_AXIS_3D")]
 pub const FILE_AXIS_3_D: Icon = FILE_AXIS_3D;
 /// `file-badge-2`, now `file-badge`.
 #[deprecated(note = "Lucide renamed this icon: use FILE_BADGE")]
 pub const FILE_BADGE_2: Icon = FILE_BADGE;
-/// `file-bar-chart-2`, now `file-chart-column`.
-#[deprecated(note = "Lucide renamed this icon: use FILE_CHART_COLUMN")]
-pub const FILE_BAR_CHART_2: Icon = FILE_CHART_COLUMN;
 /// `file-bar-chart`, now `file-chart-column-increasing`.
 #[deprecated(note = "Lucide renamed this icon: use FILE_CHART_COLUMN_INCREASING")]
 pub const FILE_BAR_CHART: Icon = FILE_CHART_COLUMN_INCREASING;
+/// `file-bar-chart-2`, now `file-chart-column`.
+#[deprecated(note = "Lucide renamed this icon: use FILE_CHART_COLUMN")]
+pub const FILE_BAR_CHART_2: Icon = FILE_CHART_COLUMN;
 /// `file-check-2`, now `file-check-corner`.
 #[deprecated(note = "Lucide renamed this icon: use FILE_CHECK_CORNER")]
 pub const FILE_CHECK_2: Icon = FILE_CHECK_CORNER;
@@ -4360,12 +4360,12 @@ pub const FILE_COG_2: Icon = FILE_COG;
 /// `file-edit`, now `file-pen`.
 #[deprecated(note = "Lucide renamed this icon: use FILE_PEN")]
 pub const FILE_EDIT: Icon = FILE_PEN;
-/// `file-json-2`, now `file-braces-corner`.
-#[deprecated(note = "Lucide renamed this icon: use FILE_BRACES_CORNER")]
-pub const FILE_JSON_2: Icon = FILE_BRACES_CORNER;
 /// `file-json`, now `file-braces`.
 #[deprecated(note = "Lucide renamed this icon: use FILE_BRACES")]
 pub const FILE_JSON: Icon = FILE_BRACES;
+/// `file-json-2`, now `file-braces-corner`.
+#[deprecated(note = "Lucide renamed this icon: use FILE_BRACES_CORNER")]
+pub const FILE_JSON_2: Icon = FILE_BRACES_CORNER;
 /// `file-key-2`, now `file-key`.
 #[deprecated(note = "Lucide renamed this icon: use FILE_KEY")]
 pub const FILE_KEY_2: Icon = FILE_KEY;
@@ -4396,12 +4396,12 @@ pub const FILE_SIGNATURE: Icon = FILE_PEN_LINE;
 /// `file-type-2`, now `file-type-corner`.
 #[deprecated(note = "Lucide renamed this icon: use FILE_TYPE_CORNER")]
 pub const FILE_TYPE_2: Icon = FILE_TYPE_CORNER;
-/// `file-video-2`, now `file-video-camera`.
-#[deprecated(note = "Lucide renamed this icon: use FILE_VIDEO_CAMERA")]
-pub const FILE_VIDEO_2: Icon = FILE_VIDEO_CAMERA;
 /// `file-video`, now `file-play`.
 #[deprecated(note = "Lucide renamed this icon: use FILE_PLAY")]
 pub const FILE_VIDEO: Icon = FILE_PLAY;
+/// `file-video-2`, now `file-video-camera`.
+#[deprecated(note = "Lucide renamed this icon: use FILE_VIDEO_CAMERA")]
+pub const FILE_VIDEO_2: Icon = FILE_VIDEO_CAMERA;
 /// `file-volume-2`, now `file-signal`.
 #[deprecated(note = "Lucide renamed this icon: use FILE_SIGNAL")]
 pub const FILE_VOLUME_2: Icon = FILE_SIGNAL;
@@ -4411,39 +4411,39 @@ pub const FILE_WARNING: Icon = FILE_EXCLAMATION_POINT;
 /// `file-x-2`, now `file-x-corner`.
 #[deprecated(note = "Lucide renamed this icon: use FILE_X_CORNER")]
 pub const FILE_X_2: Icon = FILE_X_CORNER;
-/// `filter-x`, now `funnel-x`.
-#[deprecated(note = "Lucide renamed this icon: use FUNNEL_X")]
-pub const FILTER_X: Icon = FUNNEL_X;
 /// `filter`, now `funnel`.
 #[deprecated(note = "Lucide renamed this icon: use FUNNEL")]
 pub const FILTER: Icon = FUNNEL;
+/// `filter-x`, now `funnel-x`.
+#[deprecated(note = "Lucide renamed this icon: use FUNNEL_X")]
+pub const FILTER_X: Icon = FUNNEL_X;
 /// `fingerprint`, now `fingerprint-pattern`.
 #[deprecated(note = "Lucide renamed this icon: use FINGERPRINT_PATTERN")]
 pub const FINGERPRINT: Icon = FINGERPRINT_PATTERN;
-/// `flip-horizontal-2`, now `triangles-centerline-dashed-horizontal`.
-#[deprecated(note = "Lucide renamed this icon: use TRIANGLES_CENTERLINE_DASHED_HORIZONTAL")]
-pub const FLIP_HORIZONTAL_2: Icon = TRIANGLES_CENTERLINE_DASHED_HORIZONTAL;
 /// `flip-horizontal`, now `square-centerline-dashed-horizontal`.
 #[deprecated(note = "Lucide renamed this icon: use SQUARE_CENTERLINE_DASHED_HORIZONTAL")]
 pub const FLIP_HORIZONTAL: Icon = SQUARE_CENTERLINE_DASHED_HORIZONTAL;
-/// `flip-vertical-2`, now `triangles-centerline-dashed-vertical`.
-#[deprecated(note = "Lucide renamed this icon: use TRIANGLES_CENTERLINE_DASHED_VERTICAL")]
-pub const FLIP_VERTICAL_2: Icon = TRIANGLES_CENTERLINE_DASHED_VERTICAL;
+/// `flip-horizontal-2`, now `triangles-centerline-dashed-horizontal`.
+#[deprecated(note = "Lucide renamed this icon: use TRIANGLES_CENTERLINE_DASHED_HORIZONTAL")]
+pub const FLIP_HORIZONTAL_2: Icon = TRIANGLES_CENTERLINE_DASHED_HORIZONTAL;
 /// `flip-vertical`, now `square-centerline-dashed-vertical`.
 #[deprecated(note = "Lucide renamed this icon: use SQUARE_CENTERLINE_DASHED_VERTICAL")]
 pub const FLIP_VERTICAL: Icon = SQUARE_CENTERLINE_DASHED_VERTICAL;
+/// `flip-vertical-2`, now `triangles-centerline-dashed-vertical`.
+#[deprecated(note = "Lucide renamed this icon: use TRIANGLES_CENTERLINE_DASHED_VERTICAL")]
+pub const FLIP_VERTICAL_2: Icon = TRIANGLES_CENTERLINE_DASHED_VERTICAL;
 /// `folder-cog-2`, now `folder-cog`.
 #[deprecated(note = "Lucide renamed this icon: use FOLDER_COG")]
 pub const FOLDER_COG_2: Icon = FOLDER_COG;
 /// `folder-edit`, now `folder-pen`.
 #[deprecated(note = "Lucide renamed this icon: use FOLDER_PEN")]
 pub const FOLDER_EDIT: Icon = FOLDER_PEN;
-/// `fork-knife-crossed`, now `utensils-crossed`.
-#[deprecated(note = "Lucide renamed this icon: use UTENSILS_CROSSED")]
-pub const FORK_KNIFE_CROSSED: Icon = UTENSILS_CROSSED;
 /// `fork-knife`, now `utensils`.
 #[deprecated(note = "Lucide renamed this icon: use UTENSILS")]
 pub const FORK_KNIFE: Icon = UTENSILS;
+/// `fork-knife-crossed`, now `utensils-crossed`.
+#[deprecated(note = "Lucide renamed this icon: use UTENSILS_CROSSED")]
+pub const FORK_KNIFE_CROSSED: Icon = UTENSILS_CROSSED;
 /// `form-input`, now `rectangle-ellipsis`.
 #[deprecated(note = "Lucide renamed this icon: use RECTANGLE_ELLIPSIS")]
 pub const FORM_INPUT: Icon = RECTANGLE_ELLIPSIS;
@@ -4453,12 +4453,12 @@ pub const FROWN: Icon = FACE_SLIGHTLY_FROWNING;
 /// `function-square`, now `square-function`.
 #[deprecated(note = "Lucide renamed this icon: use SQUARE_FUNCTION")]
 pub const FUNCTION_SQUARE: Icon = SQUARE_FUNCTION;
-/// `gantt-chart-square`, now `square-chart-gantt`.
-#[deprecated(note = "Lucide renamed this icon: use SQUARE_CHART_GANTT")]
-pub const GANTT_CHART_SQUARE: Icon = SQUARE_CHART_GANTT;
 /// `gantt-chart`, now `chart-no-axes-gantt`.
 #[deprecated(note = "Lucide renamed this icon: use CHART_NO_AXES_GANTT")]
 pub const GANTT_CHART: Icon = CHART_NO_AXES_GANTT;
+/// `gantt-chart-square`, now `square-chart-gantt`.
+#[deprecated(note = "Lucide renamed this icon: use SQUARE_CHART_GANTT")]
+pub const GANTT_CHART_SQUARE: Icon = SQUARE_CHART_GANTT;
 /// `gauge-circle`, now `circle-gauge`.
 #[deprecated(note = "Lucide renamed this icon: use CIRCLE_GAUGE")]
 pub const GAUGE_CIRCLE: Icon = CIRCLE_GAUGE;
@@ -4471,6 +4471,12 @@ pub const GLOBE_2: Icon = EARTH;
 /// `grab`, now `hand-grab`.
 #[deprecated(note = "Lucide renamed this icon: use HAND_GRAB")]
 pub const GRAB: Icon = HAND_GRAB;
+/// `grid`, now `grid-3x3`.
+#[deprecated(note = "Lucide renamed this icon: use GRID_3X3")]
+pub const GRID: Icon = GRID_3X3;
+/// `grid-2-x-2`, now `grid-2x2`.
+#[deprecated(note = "Lucide renamed this icon: use GRID_2X2")]
+pub const GRID_2_X_2: Icon = GRID_2X2;
 /// `grid-2-x-2-check`, now `grid-2x2-check`.
 #[deprecated(note = "Lucide renamed this icon: use GRID_2X2_CHECK")]
 pub const GRID_2_X_2_CHECK: Icon = GRID_2X2_CHECK;
@@ -4480,15 +4486,9 @@ pub const GRID_2_X_2_PLUS: Icon = GRID_2X2_PLUS;
 /// `grid-2-x-2-x`, now `grid-2x2-x`.
 #[deprecated(note = "Lucide renamed this icon: use GRID_2X2_X")]
 pub const GRID_2_X_2_X: Icon = GRID_2X2_X;
-/// `grid-2-x-2`, now `grid-2x2`.
-#[deprecated(note = "Lucide renamed this icon: use GRID_2X2")]
-pub const GRID_2_X_2: Icon = GRID_2X2;
 /// `grid-3-x-3`, now `grid-3x3`.
 #[deprecated(note = "Lucide renamed this icon: use GRID_3X3")]
 pub const GRID_3_X_3: Icon = GRID_3X3;
-/// `grid`, now `grid-3x3`.
-#[deprecated(note = "Lucide renamed this icon: use GRID_3X3")]
-pub const GRID: Icon = GRID_3X3;
 /// `heading`, now `letter-h`.
 #[deprecated(note = "Lucide renamed this icon: use LETTER_H")]
 pub const HEADING: Icon = LETTER_H;
@@ -4504,30 +4504,30 @@ pub const HISTORY: Icon = ROTATE_CCW_CLOCK;
 /// `home`, now `house`.
 #[deprecated(note = "Lucide renamed this icon: use HOUSE")]
 pub const HOME: Icon = HOUSE;
-/// `ice-cream-2`, now `ice-cream-bowl`.
-#[deprecated(note = "Lucide renamed this icon: use ICE_CREAM_BOWL")]
-pub const ICE_CREAM_2: Icon = ICE_CREAM_BOWL;
 /// `ice-cream`, now `ice-cream-cone`.
 #[deprecated(note = "Lucide renamed this icon: use ICE_CREAM_CONE")]
 pub const ICE_CREAM: Icon = ICE_CREAM_CONE;
+/// `ice-cream-2`, now `ice-cream-bowl`.
+#[deprecated(note = "Lucide renamed this icon: use ICE_CREAM_BOWL")]
+pub const ICE_CREAM_2: Icon = ICE_CREAM_BOWL;
+/// `indent`, now `list-indent-increase`.
+#[deprecated(note = "Lucide renamed this icon: use LIST_INDENT_INCREASE")]
+pub const INDENT: Icon = LIST_INDENT_INCREASE;
 /// `indent-decrease`, now `list-indent-decrease`.
 #[deprecated(note = "Lucide renamed this icon: use LIST_INDENT_DECREASE")]
 pub const INDENT_DECREASE: Icon = LIST_INDENT_DECREASE;
 /// `indent-increase`, now `list-indent-increase`.
 #[deprecated(note = "Lucide renamed this icon: use LIST_INDENT_INCREASE")]
 pub const INDENT_INCREASE: Icon = LIST_INDENT_INCREASE;
-/// `indent`, now `list-indent-increase`.
-#[deprecated(note = "Lucide renamed this icon: use LIST_INDENT_INCREASE")]
-pub const INDENT: Icon = LIST_INDENT_INCREASE;
 /// `inspect`, now `square-mouse-pointer`.
 #[deprecated(note = "Lucide renamed this icon: use SQUARE_MOUSE_POINTER")]
 pub const INSPECT: Icon = SQUARE_MOUSE_POINTER;
-/// `kanban-square-dashed`, now `square-dashed-kanban`.
-#[deprecated(note = "Lucide renamed this icon: use SQUARE_DASHED_KANBAN")]
-pub const KANBAN_SQUARE_DASHED: Icon = SQUARE_DASHED_KANBAN;
 /// `kanban-square`, now `square-kanban`.
 #[deprecated(note = "Lucide renamed this icon: use SQUARE_KANBAN")]
 pub const KANBAN_SQUARE: Icon = SQUARE_KANBAN;
+/// `kanban-square-dashed`, now `square-dashed-kanban`.
+#[deprecated(note = "Lucide renamed this icon: use SQUARE_DASHED_KANBAN")]
+pub const KANBAN_SQUARE_DASHED: Icon = SQUARE_DASHED_KANBAN;
 /// `laptop-2`, now `laptop-minimal`.
 #[deprecated(note = "Lucide renamed this icon: use LAPTOP_MINIMAL")]
 pub const LAPTOP_2: Icon = LAPTOP_MINIMAL;
@@ -4591,6 +4591,9 @@ pub const MOUSE_POINTER_SQUARE_DASHED: Icon = SQUARE_DASHED_MOUSE_POINTER;
 /// `move-3-d`, now `move-3d`.
 #[deprecated(note = "Lucide renamed this icon: use MOVE_3D")]
 pub const MOVE_3_D: Icon = MOVE_3D;
+/// `music`, now `eighth-notes`.
+#[deprecated(note = "Lucide renamed this icon: use EIGHTH_NOTES")]
+pub const MUSIC: Icon = EIGHTH_NOTES;
 /// `music-2`, now `eighth-note`.
 #[deprecated(note = "Lucide renamed this icon: use EIGHTH_NOTE")]
 pub const MUSIC_2: Icon = EIGHTH_NOTE;
@@ -4600,9 +4603,6 @@ pub const MUSIC_3: Icon = HALF_NOTE;
 /// `music-4`, now `sixteenth-notes`.
 #[deprecated(note = "Lucide renamed this icon: use SIXTEENTH_NOTES")]
 pub const MUSIC_4: Icon = SIXTEENTH_NOTES;
-/// `music`, now `eighth-notes`.
-#[deprecated(note = "Lucide renamed this icon: use EIGHTH_NOTES")]
-pub const MUSIC: Icon = EIGHTH_NOTES;
 /// `outdent`, now `list-indent-decrease`.
 #[deprecated(note = "Lucide renamed this icon: use LIST_INDENT_DECREASE")]
 pub const OUTDENT: Icon = LIST_INDENT_DECREASE;
@@ -4630,18 +4630,18 @@ pub const PANELS_LEFT_RIGHT: Icon = COLUMNS_3;
 /// `panels-top-bottom`, now `rows-3`.
 #[deprecated(note = "Lucide renamed this icon: use ROWS_3")]
 pub const PANELS_TOP_BOTTOM: Icon = ROWS_3;
-/// `parking-circle-off`, now `circle-letter-p-off`.
-#[deprecated(note = "Lucide renamed this icon: use CIRCLE_LETTER_P_OFF")]
-pub const PARKING_CIRCLE_OFF: Icon = CIRCLE_LETTER_P_OFF;
 /// `parking-circle`, now `circle-letter-p`.
 #[deprecated(note = "Lucide renamed this icon: use CIRCLE_LETTER_P")]
 pub const PARKING_CIRCLE: Icon = CIRCLE_LETTER_P;
-/// `parking-square-off`, now `square-letter-p-off`.
-#[deprecated(note = "Lucide renamed this icon: use SQUARE_LETTER_P_OFF")]
-pub const PARKING_SQUARE_OFF: Icon = SQUARE_LETTER_P_OFF;
+/// `parking-circle-off`, now `circle-letter-p-off`.
+#[deprecated(note = "Lucide renamed this icon: use CIRCLE_LETTER_P_OFF")]
+pub const PARKING_CIRCLE_OFF: Icon = CIRCLE_LETTER_P_OFF;
 /// `parking-square`, now `square-letter-p`.
 #[deprecated(note = "Lucide renamed this icon: use SQUARE_LETTER_P")]
 pub const PARKING_SQUARE: Icon = SQUARE_LETTER_P;
+/// `parking-square-off`, now `square-letter-p-off`.
+#[deprecated(note = "Lucide renamed this icon: use SQUARE_LETTER_P_OFF")]
+pub const PARKING_SQUARE_OFF: Icon = SQUARE_LETTER_P_OFF;
 /// `pause-circle`, now `circle-pause`.
 #[deprecated(note = "Lucide renamed this icon: use CIRCLE_PAUSE")]
 pub const PAUSE_CIRCLE: Icon = CIRCLE_PAUSE;
@@ -4711,12 +4711,12 @@ pub const SCATTER_CHART: Icon = CHART_SCATTER;
 /// `school-2`, now `university`.
 #[deprecated(note = "Lucide renamed this icon: use UNIVERSITY")]
 pub const SCHOOL_2: Icon = UNIVERSITY;
-/// `scissors-square-dashed-bottom`, now `square-bottom-dashed-scissors`.
-#[deprecated(note = "Lucide renamed this icon: use SQUARE_BOTTOM_DASHED_SCISSORS")]
-pub const SCISSORS_SQUARE_DASHED_BOTTOM: Icon = SQUARE_BOTTOM_DASHED_SCISSORS;
 /// `scissors-square`, now `square-scissors`.
 #[deprecated(note = "Lucide renamed this icon: use SQUARE_SCISSORS")]
 pub const SCISSORS_SQUARE: Icon = SQUARE_SCISSORS;
+/// `scissors-square-dashed-bottom`, now `square-bottom-dashed-scissors`.
+#[deprecated(note = "Lucide renamed this icon: use SQUARE_BOTTOM_DASHED_SCISSORS")]
+pub const SCISSORS_SQUARE_DASHED_BOTTOM: Icon = SQUARE_BOTTOM_DASHED_SCISSORS;
 /// `send-horizonal`, now `send-horizontal`.
 #[deprecated(note = "Lucide renamed this icon: use SEND_HORIZONTAL")]
 pub const SEND_HORIZONAL: Icon = SEND_HORIZONTAL;
@@ -4726,15 +4726,15 @@ pub const SHIELD_CLOSE: Icon = SHIELD_X;
 /// `shield-question`, now `shield-question-mark`.
 #[deprecated(note = "Lucide renamed this icon: use SHIELD_QUESTION_MARK")]
 pub const SHIELD_QUESTION: Icon = SHIELD_QUESTION_MARK;
+/// `sidebar`, now `panel-left`.
+#[deprecated(note = "Lucide renamed this icon: use PANEL_LEFT")]
+pub const SIDEBAR: Icon = PANEL_LEFT;
 /// `sidebar-close`, now `panel-left-close`.
 #[deprecated(note = "Lucide renamed this icon: use PANEL_LEFT_CLOSE")]
 pub const SIDEBAR_CLOSE: Icon = PANEL_LEFT_CLOSE;
 /// `sidebar-open`, now `panel-left-open`.
 #[deprecated(note = "Lucide renamed this icon: use PANEL_LEFT_OPEN")]
 pub const SIDEBAR_OPEN: Icon = PANEL_LEFT_OPEN;
-/// `sidebar`, now `panel-left`.
-#[deprecated(note = "Lucide renamed this icon: use PANEL_LEFT")]
-pub const SIDEBAR: Icon = PANEL_LEFT;
 /// `sigma-square`, now `square-sigma`.
 #[deprecated(note = "Lucide renamed this icon: use SQUARE_SIGMA")]
 pub const SIGMA_SQUARE: Icon = SQUARE_SIGMA;
@@ -4744,12 +4744,12 @@ pub const SLASH_SQUARE: Icon = SQUARE_SLASH;
 /// `sliders`, now `sliders-vertical`.
 #[deprecated(note = "Lucide renamed this icon: use SLIDERS_VERTICAL")]
 pub const SLIDERS: Icon = SLIDERS_VERTICAL;
-/// `smile-plus`, now `face-slightly-smiling-plus`.
-#[deprecated(note = "Lucide renamed this icon: use FACE_SLIGHTLY_SMILING_PLUS")]
-pub const SMILE_PLUS: Icon = FACE_SLIGHTLY_SMILING_PLUS;
 /// `smile`, now `face-slightly-smiling`.
 #[deprecated(note = "Lucide renamed this icon: use FACE_SLIGHTLY_SMILING")]
 pub const SMILE: Icon = FACE_SLIGHTLY_SMILING;
+/// `smile-plus`, now `face-slightly-smiling-plus`.
+#[deprecated(note = "Lucide renamed this icon: use FACE_SLIGHTLY_SMILING_PLUS")]
+pub const SMILE_PLUS: Icon = FACE_SLIGHTLY_SMILING_PLUS;
 /// `sort-asc`, now `arrow-up-narrow-wide`.
 #[deprecated(note = "Lucide renamed this icon: use ARROW_UP_NARROW_WIDE")]
 pub const SORT_ASC: Icon = ARROW_UP_NARROW_WIDE;
@@ -4768,12 +4768,12 @@ pub const SQUARE_GANTT_CHART: Icon = SQUARE_CHART_GANTT;
 /// `square-m`, now `square-letter-m`.
 #[deprecated(note = "Lucide renamed this icon: use SQUARE_LETTER_M")]
 pub const SQUARE_M: Icon = SQUARE_LETTER_M;
-/// `square-parking-off`, now `square-letter-p-off`.
-#[deprecated(note = "Lucide renamed this icon: use SQUARE_LETTER_P_OFF")]
-pub const SQUARE_PARKING_OFF: Icon = SQUARE_LETTER_P_OFF;
 /// `square-parking`, now `square-letter-p`.
 #[deprecated(note = "Lucide renamed this icon: use SQUARE_LETTER_P")]
 pub const SQUARE_PARKING: Icon = SQUARE_LETTER_P;
+/// `square-parking-off`, now `square-letter-p-off`.
+#[deprecated(note = "Lucide renamed this icon: use SQUARE_LETTER_P_OFF")]
+pub const SQUARE_PARKING_OFF: Icon = SQUARE_LETTER_P_OFF;
 /// `stars`, now `sparkles`.
 #[deprecated(note = "Lucide renamed this icon: use SPARKLES")]
 pub const STARS: Icon = SPARKLES;
@@ -4792,15 +4792,15 @@ pub const TERMINAL_SQUARE: Icon = SQUARE_TERMINAL;
 /// `test-tube-2`, now `test-tube-diagonal`.
 #[deprecated(note = "Lucide renamed this icon: use TEST_TUBE_DIAGONAL")]
 pub const TEST_TUBE_2: Icon = TEST_TUBE_DIAGONAL;
+/// `text`, now `text-align-start`.
+#[deprecated(note = "Lucide renamed this icon: use TEXT_ALIGN_START")]
+pub const TEXT: Icon = TEXT_ALIGN_START;
 /// `text-select`, now `square-dashed-text`.
 #[deprecated(note = "Lucide renamed this icon: use SQUARE_DASHED_TEXT")]
 pub const TEXT_SELECT: Icon = SQUARE_DASHED_TEXT;
 /// `text-selection`, now `square-dashed-text`.
 #[deprecated(note = "Lucide renamed this icon: use SQUARE_DASHED_TEXT")]
 pub const TEXT_SELECTION: Icon = SQUARE_DASHED_TEXT;
-/// `text`, now `text-align-start`.
-#[deprecated(note = "Lucide renamed this icon: use TEXT_ALIGN_START")]
-pub const TEXT: Icon = TEXT_ALIGN_START;
 /// `train`, now `tram-front`.
 #[deprecated(note = "Lucide renamed this icon: use TRAM_FRONT")]
 pub const TRAIN: Icon = TRAM_FRONT;
@@ -4810,12 +4810,12 @@ pub const TRASH_2: Icon = TRASH;
 /// `tv-2`, now `tv-minimal`.
 #[deprecated(note = "Lucide renamed this icon: use TV_MINIMAL")]
 pub const TV_2: Icon = TV_MINIMAL;
-/// `unlock-keyhole`, now `lock-keyhole-open`.
-#[deprecated(note = "Lucide renamed this icon: use LOCK_KEYHOLE_OPEN")]
-pub const UNLOCK_KEYHOLE: Icon = LOCK_KEYHOLE_OPEN;
 /// `unlock`, now `lock-open`.
 #[deprecated(note = "Lucide renamed this icon: use LOCK_OPEN")]
 pub const UNLOCK: Icon = LOCK_OPEN;
+/// `unlock-keyhole`, now `lock-keyhole-open`.
+#[deprecated(note = "Lucide renamed this icon: use LOCK_KEYHOLE_OPEN")]
+pub const UNLOCK_KEYHOLE: Icon = LOCK_KEYHOLE_OPEN;
 /// `upload-cloud`, now `cloud-upload`.
 #[deprecated(note = "Lucide renamed this icon: use CLOUD_UPLOAD")]
 pub const UPLOAD_CLOUD: Icon = CLOUD_UPLOAD;
@@ -4825,12 +4825,12 @@ pub const USER_2: Icon = USER_ROUND;
 /// `user-check-2`, now `user-round-check`.
 #[deprecated(note = "Lucide renamed this icon: use USER_ROUND_CHECK")]
 pub const USER_CHECK_2: Icon = USER_ROUND_CHECK;
-/// `user-circle-2`, now `circle-user-round`.
-#[deprecated(note = "Lucide renamed this icon: use CIRCLE_USER_ROUND")]
-pub const USER_CIRCLE_2: Icon = CIRCLE_USER_ROUND;
 /// `user-circle`, now `circle-user`.
 #[deprecated(note = "Lucide renamed this icon: use CIRCLE_USER")]
 pub const USER_CIRCLE: Icon = CIRCLE_USER;
+/// `user-circle-2`, now `circle-user-round`.
+#[deprecated(note = "Lucide renamed this icon: use CIRCLE_USER_ROUND")]
+pub const USER_CIRCLE_2: Icon = CIRCLE_USER_ROUND;
 /// `user-cog-2`, now `user-round-cog`.
 #[deprecated(note = "Lucide renamed this icon: use USER_ROUND_COG")]
 pub const USER_COG_2: Icon = USER_ROUND_COG;
@@ -4840,12 +4840,12 @@ pub const USER_MINUS_2: Icon = USER_ROUND_MINUS;
 /// `user-plus-2`, now `user-round-plus`.
 #[deprecated(note = "Lucide renamed this icon: use USER_ROUND_PLUS")]
 pub const USER_PLUS_2: Icon = USER_ROUND_PLUS;
-/// `user-square-2`, now `square-user-round`.
-#[deprecated(note = "Lucide renamed this icon: use SQUARE_USER_ROUND")]
-pub const USER_SQUARE_2: Icon = SQUARE_USER_ROUND;
 /// `user-square`, now `square-user`.
 #[deprecated(note = "Lucide renamed this icon: use SQUARE_USER")]
 pub const USER_SQUARE: Icon = SQUARE_USER;
+/// `user-square-2`, now `square-user-round`.
+#[deprecated(note = "Lucide renamed this icon: use SQUARE_USER_ROUND")]
+pub const USER_SQUARE_2: Icon = SQUARE_USER_ROUND;
 /// `user-x-2`, now `user-round-x`.
 #[deprecated(note = "Lucide renamed this icon: use USER_ROUND_X")]
 pub const USER_X_2: Icon = USER_ROUND_X;
@@ -6950,13 +6950,13 @@ pub(super) const RENAMED: &[(&str, &str)] = &[
     ("asterisk-square", "square-asterisk"),
     ("axis-3-d", "axis-3d"),
     ("badge-help", "badge-question-mark"),
+    ("bar-chart", "chart-no-axes-column-increasing"),
     ("bar-chart-2", "chart-no-axes-column"),
     ("bar-chart-3", "chart-column"),
     ("bar-chart-4", "chart-column-increasing"),
     ("bar-chart-big", "chart-column-big"),
-    ("bar-chart-horizontal-big", "chart-bar-big"),
     ("bar-chart-horizontal", "chart-bar"),
-    ("bar-chart", "chart-no-axes-column-increasing"),
+    ("bar-chart-horizontal-big", "chart-bar-big"),
     ("between-horizonal-end", "between-horizontal-end"),
     ("between-horizonal-start", "between-horizontal-start"),
     ("bold", "letter-b"),
@@ -6965,10 +6965,10 @@ pub(super) const RENAMED: &[(&str, &str)] = &[
     ("box-select", "square-dashed"),
     ("building-2", "building-complex"),
     ("candlestick-chart", "chart-candlestick"),
-    ("check-circle-2", "circle-check"),
     ("check-circle", "circle-check-big"),
-    ("check-square-2", "square-check"),
+    ("check-circle-2", "circle-check"),
     ("check-square", "square-check-big"),
+    ("check-square-2", "square-check"),
     ("chevron-down-circle", "circle-chevron-down"),
     ("chevron-down-square", "square-chevron-down"),
     ("chevron-left-circle", "circle-chevron-left"),
@@ -6978,15 +6978,15 @@ pub(super) const RENAMED: &[(&str, &str)] = &[
     ("chevron-up-circle", "circle-chevron-up"),
     ("chevron-up-square", "square-chevron-up"),
     ("circle-help", "circle-question-mark"),
-    ("circle-parking-off", "circle-letter-p-off"),
     ("circle-parking", "circle-letter-p"),
+    ("circle-parking-off", "circle-letter-p-off"),
     ("circle-slashed", "circle-slash-2"),
     ("clipboard-edit", "clipboard-pen"),
     ("clipboard-signature", "clipboard-pen-line"),
     ("code-2", "code-xml"),
     ("code-square", "square-code"),
-    ("columns-settings", "columns-3-cog"),
     ("columns", "columns-2"),
+    ("columns-settings", "columns-3-cog"),
     ("contact-2", "contact-round"),
     ("copyright", "circle-letter-c"),
     ("curly-braces", "braces"),
@@ -6994,22 +6994,22 @@ pub(super) const RENAMED: &[(&str, &str)] = &[
     ("divide-square", "square-divide"),
     ("dot-square", "square-dot"),
     ("download-cloud", "cloud-download"),
+    ("edit", "square-pen"),
     ("edit-2", "pen"),
     ("edit-3", "pen-line"),
-    ("edit", "square-pen"),
     ("equal-square", "square-equal"),
-    ("file-audio-2", "file-headphone"),
     ("file-audio", "file-headphone"),
+    ("file-audio-2", "file-headphone"),
     ("file-axis-3-d", "file-axis-3d"),
     ("file-badge-2", "file-badge"),
-    ("file-bar-chart-2", "file-chart-column"),
     ("file-bar-chart", "file-chart-column-increasing"),
+    ("file-bar-chart-2", "file-chart-column"),
     ("file-check-2", "file-check-corner"),
     ("file-code-2", "file-code-corner"),
     ("file-cog-2", "file-cog"),
     ("file-edit", "file-pen"),
-    ("file-json-2", "file-braces-corner"),
     ("file-json", "file-braces"),
+    ("file-json-2", "file-braces-corner"),
     ("file-key-2", "file-key"),
     ("file-line-chart", "file-chart-line"),
     ("file-lock-2", "file-lock"),
@@ -7020,50 +7020,50 @@ pub(super) const RENAMED: &[(&str, &str)] = &[
     ("file-search-2", "file-search-corner"),
     ("file-signature", "file-pen-line"),
     ("file-type-2", "file-type-corner"),
-    ("file-video-2", "file-video-camera"),
     ("file-video", "file-play"),
+    ("file-video-2", "file-video-camera"),
     ("file-volume-2", "file-signal"),
     ("file-warning", "file-exclamation-point"),
     ("file-x-2", "file-x-corner"),
-    ("filter-x", "funnel-x"),
     ("filter", "funnel"),
+    ("filter-x", "funnel-x"),
     ("fingerprint", "fingerprint-pattern"),
-    ("flip-horizontal-2", "triangles-centerline-dashed-horizontal"),
     ("flip-horizontal", "square-centerline-dashed-horizontal"),
-    ("flip-vertical-2", "triangles-centerline-dashed-vertical"),
+    ("flip-horizontal-2", "triangles-centerline-dashed-horizontal"),
     ("flip-vertical", "square-centerline-dashed-vertical"),
+    ("flip-vertical-2", "triangles-centerline-dashed-vertical"),
     ("folder-cog-2", "folder-cog"),
     ("folder-edit", "folder-pen"),
-    ("fork-knife-crossed", "utensils-crossed"),
     ("fork-knife", "utensils"),
+    ("fork-knife-crossed", "utensils-crossed"),
     ("form-input", "rectangle-ellipsis"),
     ("frown", "face-slightly-frowning"),
     ("function-square", "square-function"),
-    ("gantt-chart-square", "square-chart-gantt"),
     ("gantt-chart", "chart-no-axes-gantt"),
+    ("gantt-chart-square", "square-chart-gantt"),
     ("gauge-circle", "circle-gauge"),
     ("git-commit", "git-commit-horizontal"),
     ("globe-2", "earth"),
     ("grab", "hand-grab"),
+    ("grid", "grid-3x3"),
+    ("grid-2-x-2", "grid-2x2"),
     ("grid-2-x-2-check", "grid-2x2-check"),
     ("grid-2-x-2-plus", "grid-2x2-plus"),
     ("grid-2-x-2-x", "grid-2x2-x"),
-    ("grid-2-x-2", "grid-2x2"),
     ("grid-3-x-3", "grid-3x3"),
-    ("grid", "grid-3x3"),
     ("heading", "letter-h"),
     ("help-circle", "circle-question-mark"),
     ("helping-hand", "hand-helping"),
     ("history", "rotate-ccw-clock"),
     ("home", "house"),
-    ("ice-cream-2", "ice-cream-bowl"),
     ("ice-cream", "ice-cream-cone"),
+    ("ice-cream-2", "ice-cream-bowl"),
+    ("indent", "list-indent-increase"),
     ("indent-decrease", "list-indent-decrease"),
     ("indent-increase", "list-indent-increase"),
-    ("indent", "list-indent-increase"),
     ("inspect", "square-mouse-pointer"),
-    ("kanban-square-dashed", "square-dashed-kanban"),
     ("kanban-square", "square-kanban"),
+    ("kanban-square-dashed", "square-dashed-kanban"),
     ("laptop-2", "laptop-minimal"),
     ("laugh", "face-grinning"),
     ("layers-3", "layers"),
@@ -7085,10 +7085,10 @@ pub(super) const RENAMED: &[(&str, &str)] = &[
     ("more-vertical", "ellipsis-vertical"),
     ("mouse-pointer-square-dashed", "square-dashed-mouse-pointer"),
     ("move-3-d", "move-3d"),
+    ("music", "eighth-notes"),
     ("music-2", "eighth-note"),
     ("music-3", "half-note"),
     ("music-4", "sixteenth-notes"),
-    ("music", "eighth-notes"),
     ("outdent", "list-indent-decrease"),
     ("paintbrush-2", "paintbrush-vertical"),
     ("palmtree", "tree-palm"),
@@ -7098,10 +7098,10 @@ pub(super) const RENAMED: &[(&str, &str)] = &[
     ("panel-top-inactive", "panel-top-dashed"),
     ("panels-left-right", "columns-3"),
     ("panels-top-bottom", "rows-3"),
-    ("parking-circle-off", "circle-letter-p-off"),
     ("parking-circle", "circle-letter-p"),
-    ("parking-square-off", "square-letter-p-off"),
+    ("parking-circle-off", "circle-letter-p-off"),
     ("parking-square", "square-letter-p"),
+    ("parking-square-off", "square-letter-p-off"),
     ("pause-circle", "circle-pause"),
     ("pause-octagon", "octagon-pause"),
     ("pen-box", "square-pen"),
@@ -7125,51 +7125,51 @@ pub(super) const RENAMED: &[(&str, &str)] = &[
     ("scale-3-d", "scale-3d"),
     ("scatter-chart", "chart-scatter"),
     ("school-2", "university"),
-    ("scissors-square-dashed-bottom", "square-bottom-dashed-scissors"),
     ("scissors-square", "square-scissors"),
+    ("scissors-square-dashed-bottom", "square-bottom-dashed-scissors"),
     ("send-horizonal", "send-horizontal"),
     ("shield-close", "shield-x"),
     ("shield-question", "shield-question-mark"),
+    ("sidebar", "panel-left"),
     ("sidebar-close", "panel-left-close"),
     ("sidebar-open", "panel-left-open"),
-    ("sidebar", "panel-left"),
     ("sigma-square", "square-sigma"),
     ("slash-square", "square-slash"),
     ("sliders", "sliders-vertical"),
-    ("smile-plus", "face-slightly-smiling-plus"),
     ("smile", "face-slightly-smiling"),
+    ("smile-plus", "face-slightly-smiling-plus"),
     ("sort-asc", "arrow-up-narrow-wide"),
     ("sort-desc", "arrow-down-wide-narrow"),
     ("split-square-horizontal", "square-split-horizontal"),
     ("split-square-vertical", "square-split-vertical"),
     ("square-gantt-chart", "square-chart-gantt"),
     ("square-m", "square-letter-m"),
-    ("square-parking-off", "square-letter-p-off"),
     ("square-parking", "square-letter-p"),
+    ("square-parking-off", "square-letter-p-off"),
     ("stars", "sparkles"),
     ("stop-circle", "circle-stop"),
     ("subtitles", "captions"),
     ("table-config", "columns-3-cog"),
     ("terminal-square", "square-terminal"),
     ("test-tube-2", "test-tube-diagonal"),
+    ("text", "text-align-start"),
     ("text-select", "square-dashed-text"),
     ("text-selection", "square-dashed-text"),
-    ("text", "text-align-start"),
     ("train", "tram-front"),
     ("trash-2", "trash"),
     ("tv-2", "tv-minimal"),
-    ("unlock-keyhole", "lock-keyhole-open"),
     ("unlock", "lock-open"),
+    ("unlock-keyhole", "lock-keyhole-open"),
     ("upload-cloud", "cloud-upload"),
     ("user-2", "user-round"),
     ("user-check-2", "user-round-check"),
-    ("user-circle-2", "circle-user-round"),
     ("user-circle", "circle-user"),
+    ("user-circle-2", "circle-user-round"),
     ("user-cog-2", "user-round-cog"),
     ("user-minus-2", "user-round-minus"),
     ("user-plus-2", "user-round-plus"),
-    ("user-square-2", "square-user-round"),
     ("user-square", "square-user"),
+    ("user-square-2", "square-user-round"),
     ("user-x-2", "user-round-x"),
     ("users-2", "users-round"),
     ("verified", "badge-check"),

@@ -15,6 +15,21 @@
 //! stops the build. See [`components::icon`](crate::components::icon) to draw
 //! one.
 //!
+//! # Your own icons
+//!
+//! ```ignore
+//! // Relative to your crate's Cargo.toml; the file is read and checked while the
+//! // app compiles. A script, a style, a link or any element but a shape stops the
+//! // build, as does a path that leaves the crate or a file that is not there.
+//! const LOGO: Icon = icon_file!("assets/icons/logo.svg");
+//!
+//! // Every .svg file of a directory, as constants in this module.
+//! mod brand {
+//!     navree::ui::icon_set!("assets/icons");
+//! }
+//! Button::new("Home").icon(brand::LOGO)
+//! ```
+//!
 //! The icons are generated from a pinned Lucide release by `runtime/icons.mjs`;
 //! Lucide is under the ISC licence, with the MIT licence for the icons derived
 //! from Feather (see THIRD_PARTY.md).

@@ -253,7 +253,7 @@ impl<'de> Deserialize<'de> for CountryCode {
 /// use navree_ui::{flag, flags};
 ///
 /// let flag = flag!("ae");
-/// assert_eq!(flag.code(), flags::AE);
+/// assert_eq!(flag.code(), Some(flags::AE));
 /// ```
 ///
 /// A code that no flag has stops the build and names the code:
