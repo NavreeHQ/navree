@@ -21,3 +21,6 @@ next-env.d.ts
 
 # Visual checks (scripts/screenshots.ts)
 /screenshots/
+
+# The daily check's logs and Lighthouse reports (scripts/site-daily.ts)
+/report/
