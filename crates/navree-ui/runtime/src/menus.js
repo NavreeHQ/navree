@@ -117,6 +117,7 @@ function select(root, tab, url) {
   const panel = panelOf(tab);
   if (panel && has(panel, "data-ui-src") && (has(panel, "data-ui-fresh") || !has(panel, "data-ui-loaded"))) load(panel);
   tab.scrollIntoView({ block: "nearest", inline: "nearest" });
+  fade(tablist(root));
   if (url) writeUrl(root, tab, url);
 }
 
@@ -162,15 +163,15 @@ on(document, "focusout", (e) => {
   if (root && !(e.relatedTarget instanceof Node && tablist(root).contains(e.relatedTarget))) rove(root);
 });
 
-// Back and forward within one page's tabs need no request.
-on(window, "popstate", (e) => {
+// Back and forward within one page's tabs need no request: the entry is ours when only the
+// tabs' parameters differ from the page that is showing.
+function claim() {
   const now = pageKey();
   const roots = all(document.documentElement, "[data-ui-tabs]");
   if (now !== here || !roots.length) {
     here = now;
-    return;
+    return false;
   }
-  e.stopImmediatePropagation();
   const url = new URL(location.href);
   for (const root of roots) {
     const key = url.searchParams.get(get(root, "data-ui-tabs") || "tab");
@@ -178,7 +179,11 @@ on(window, "popstate", (e) => {
     const tab = tabs.find((t) => get(t, "data-key") === key && enabled(t)) || tabs.find(enabled);
     if (tab) select(root, tab);
   }
-}, true);
+  return true;
+}
+// With the core runtime, the page's own handler asks first; without it nothing else would answer.
+on(document, "ui:popstate", (e) => { if (claim()) e.preventDefault(); });
+on(window, "popstate", () => { if (!has(document.documentElement, "data-build")) claim(); });
 
 // Find-in-page matched text in a panel that is not showing.
 on(document, "beforematch", (e) => {
@@ -330,12 +335,13 @@ function subOf(trigger) {
 function openSub(trigger, focusIn) {
   const sub = subOf(trigger);
   if (!sub || isDisabled(trigger)) return;
-  if (isOpen(sub)) {
-    if (focusIn) reachable(sub)[0]?.focus();
-    return;
+  if (!isOpen(sub)) {
+    want = "";
+    try { sub.showPopover(); } catch {}
+    if (!isOpen(sub)) return;
   }
-  want = focusIn ? "first" : "";
-  try { sub.showPopover(); } catch {}
+  // The menu is showing as soon as showPopover returns, so keys that follow find focus inside.
+  if (focusIn) reachable(sub)[0]?.focus();
 }
 
 // A menu button opens with a press, and with the arrows from the keyboard.
@@ -344,12 +350,21 @@ on(document, "click", (e) => {
   if (trigger) want = closest(trigger, "[data-ui-menu]") ? (e.detail === 0 ? "first" : "") : e.detail === 0 ? "first" : "menu";
 }, true);
 
+// The state a button reports changes in the same task as the menu does, and focus goes
+// back to the item or button that opened a menu it was inside, whichever way it closes
+// (browsers differ on doing that themselves, and not at all for a nested one).
+on(document, "beforetoggle", (e) => {
+  const menu = e.target;
+  const trigger = menu.hasAttribute?.("data-ui-menu") && byId(get(menu, "aria-labelledby"));
+  if (!trigger) return;
+  set(trigger, "aria-expanded", String(e.newState === "open"));
+  if (e.newState !== "open" && menu.contains(document.activeElement)) trigger.focus({ preventScroll: true });
+}, true);
+
 on(document, "toggle", (e) => {
   const menu = /** @type {HTMLElement} */ (e.target);
   if (!menu.hasAttribute?.("data-ui-menu")) return;
-  const trigger = byId(get(menu, "aria-labelledby"));
   const opening = e.newState === "open";
-  if (trigger) set(trigger, "aria-expanded", String(opening));
   buffer = "";
   if (!opening) {
     want = "";
@@ -392,13 +407,12 @@ on(document, "keydown", (e) => {
       const menu = byId(get(button, "popovertarget"));
       if (!menu) return;
       e.preventDefault();
-      if (isOpen(menu)) {
-        const items = reachable(menu);
-        (e.key === "ArrowUp" ? items[items.length - 1] : items[0])?.focus();
-      } else {
-        want = e.key === "ArrowUp" ? "last" : "first";
+      if (!isOpen(menu)) {
+        want = "";
         try { menu.showPopover(); } catch {}
       }
+      const items = reachable(menu);
+      (e.key === "ArrowUp" ? items[items.length - 1] : items[0])?.focus();
     }
     return;
   }
@@ -420,7 +434,9 @@ on(document, "keydown", (e) => {
   }
   if (e.key === sideways.close && has(menu, "data-sub")) {
     e.preventDefault();
+    const opener = byId(get(menu, "aria-labelledby"));
     hide(menu);
+    opener?.focus();
     return;
   }
   if (e.key === "Enter" || (e.key === " " && !buffer)) {

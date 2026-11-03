@@ -425,6 +425,8 @@ export function startNav() {
     if (region) refresh(region.id);
   });
   on(window, "popstate", () => {
+    // A component may claim an entry it made itself (tabs): it says so by cancelling this.
+    if (!document.dispatchEvent(new CustomEvent("ui:popstate", { cancelable: true }))) return;
     // Back within a table's own states changes the table, not the page.
     const table = document.querySelector("[data-ui-table]");
     const same = table && new URL(table.getAttribute("data-ui-src") || "", location.href).pathname === location.pathname;

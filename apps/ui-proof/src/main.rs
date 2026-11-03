@@ -14,6 +14,7 @@
 //! | `/deals/new` | the deal form |
 //! | `/plain` | a page with nothing interactive: no script at all |
 //! | `/gallery` | every component in its states |
+//! | `/menus` | tabs, toggle groups, dropdown menus and toasts in their states |
 #![forbid(unsafe_code)]
 
 use std::sync::Arc;
@@ -34,6 +35,7 @@ mod deal_form;
 mod deals;
 mod gallery;
 mod icons_flags;
+mod menus;
 mod select;
 
 /// The app's one shell.
@@ -60,7 +62,8 @@ fn shell() -> Shell {
                         .prefetch(),
                 )
                 .item(NavItem::new("Select", "/select").icon(icons::LIST))
-                .item(NavItem::new("Icons and flags", "/icons-flags").icon(icons::FLAG)),
+                .item(NavItem::new("Icons and flags", "/icons-flags").icon(icons::FLAG))
+                .item(NavItem::new("Menus and toasts", "/menus").icon(icons::LIST)),
         )
         .user(
             UserMenu::new("Ada Lovelace", "ada@navree.test")
@@ -85,7 +88,8 @@ impl Module for ProofModule {
             .controller::<gallery::GalleryPages>()
             .controller::<select::SelectPages>()
             .controller::<icons_flags::IconPages>()
-            .controller::<dates::DatePages>();
+            .controller::<dates::DatePages>()
+            .controller::<menus::MenuPages>();
     }
 }
 

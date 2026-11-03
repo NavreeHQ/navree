@@ -60,7 +60,7 @@ function toaster() {
     host.setAttribute("data-position", "bottom-end");
     host.setAttribute("data-close", "Dismiss");
   }
-  if (host.parentNode !== body()) body().append(host);
+  if (!host.parentNode) body().append(host);
   persistent.add(host);
   // A popover is in the top layer, so a toast shows above an open dialog. Without the
   // runtime the same element is a fixed box.
@@ -151,14 +151,20 @@ function place(el, elapsed) {
   }
 }
 
-/** Opens the toaster. A dialog opened since is above it, so it goes to the top of the layer again. @param {HTMLElement} box */
+/**
+ * Opens the toaster. While a modal dialog is open, everything outside it is inert, so the
+ * toaster stands inside the dialog to stay above it and usable, and comes back out when it closes.
+ * @param {HTMLElement} box
+ */
 function show(box) {
+  const modal = one("dialog:modal");
   try {
-    if (!box.matches(":popover-open")) box.showPopover();
-    else if (one("dialog:modal")) {
-      box.hidePopover();
-      box.showPopover();
+    if (modal && !modal.contains(box)) {
+      modal.append(box);
+    } else if (!modal && box.parentNode !== body()) {
+      body().append(box);
     }
+    if (!box.matches(":popover-open")) box.showPopover();
   } catch {}
 }
 
@@ -261,6 +267,13 @@ export function startToasts() {
     if (t) dismiss(t);
   });
   on(document, "visibilitychange", () => host?.toggleAttribute("data-paused", hidden()));
+  // A dialog that closes takes the toaster with it, so it goes back to the page.
+  on(document, "close", (e) => {
+    if (host && e.target instanceof HTMLDialogElement && e.target.contains(host)) {
+      body().append(host);
+      if (host.querySelector("[data-slot=toast]")) show(host);
+    }
+  }, true);
   on(window, "pagehide", handOff);
   on(document, "keydown", (e) => {
     if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyT") {

@@ -378,7 +378,8 @@ impl Tabs {
                     .flag("data-ui-region", true)
                     .attr("data-ui-src", src)
                     .flag("data-ui-fresh", tab.fresh)
-                    .flag("data-ui-loaded", has_content);
+                    // The open tab is loaded by the page itself, so showing it again is not a load.
+                    .flag("data-ui-loaded", has_content || selected);
                 if !has_content {
                     panel = panel.flag("aria-busy", true);
                     if selected {
@@ -643,6 +644,7 @@ mod tests {
         let bare = html(Tabs::new("t", "T").tab(Tab::new("a", "A").lazy("/a")));
         assert!(bare.contains("data-ui-lazy"), "{bare}");
         assert!(bare.contains("aria-busy"), "{bare}");
+        assert!(bare.contains("data-ui-loaded"), "it is being loaded: {bare}");
         let given = html(Tabs::new("t", "T").tab(Tab::new("a", "A").lazy("/a").panel("Ready")));
         assert!(!given.contains("data-ui-lazy"), "{given}");
         assert!(given.contains("data-ui-loaded"), "{given}");
