@@ -2,10 +2,11 @@ import { ArrowRightIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { ArrowLink, PrimaryCta, SecondaryCta } from "@/components/home/parts";
+import { ArrowLink, HomeSection, PrimaryCta, SecondaryCta, SectionHeading } from "@/components/home/parts";
 import { CommandLine } from "@/components/showcase/code-panel";
 import { frontEnds } from "@/components/showcase/crm-data";
 import { BrowserFrame, PhoneFrame, ShotImage } from "@/components/showcase/frames";
+import { entry } from "@/content/ecosystem";
 import { pageMetadata } from "@/lib/metadata";
 import { PageSchema } from "@/lib/structured-data";
 
@@ -15,6 +16,11 @@ export const metadata: Metadata = pageMetadata({
     "Apps built on Navree, with code in the repository: the reference CRM with Next.js and Nuxt front ends, and tools such as Logbook, drawn with Navree UI.",
   path: "/showcase/",
 });
+
+/** The first-party tools with screens of their own, each a Navree module served by your app. */
+const tools = ["lighthouse", "fleet", "helm", "logbook"].map(entry);
+/** The tools whose pages are drawn with Navree UI (crates that depend on navree-ui). */
+const drawnWithUi = new Set(["logbook"]);
 
 const crmFacts = [
   { label: "API", value: "Rust, Navree" },
@@ -40,8 +46,8 @@ export default function ShowcasePage() {
               Real apps, built on Navree.
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-relaxed text-pretty text-fg-2">
-              Complete applications built with the framework and tested with it. Their code lives in the repository,
-              next to the crates they use, and each one runs on your machine in a few commands.
+              Applications built with the framework and tested with it: a complete CRM, and the first-party tools that run
+              inside your own app. Their code lives in the repository, next to the crates they use.
             </p>
           </div>
         </div>
@@ -129,6 +135,45 @@ export default function ShowcasePage() {
           </div>
         </div>
       </section>
+
+      <HomeSection id="tools-heading">
+        <SectionHeading
+          split
+          id="tools-heading"
+          eyebrow="Also built on Navree"
+          title="The tools that run your app are Navree modules too."
+          lead={
+            <p>
+              Monitoring, queues, admin and debugging ship as modules of the framework, with their own routes, screens and
+              tests, served by the app you build. Logbook&apos;s pages are drawn with{" "}
+              <Link href="/ui/" className="link">
+                Navree UI
+              </Link>
+              .
+            </p>
+          }
+          action={<ArrowLink href="/ecosystem/">Every tool and package</ArrowLink>}
+        />
+        <ul className="mt-12 grid grid-cols-1 gap-3 md:grid-cols-2 lg:mt-14 lg:grid-cols-4">
+          {tools.map((t) => (
+            <li key={t.slug} className="min-w-0">
+              <Link
+                href={t.href}
+                className="group flex h-full flex-col rounded-2xl border border-line bg-ink-1 p-6 shadow-bezel transition-colors duration-200 hover:border-line-2"
+              >
+                <h3 className="font-display text-display-sm font-semibold text-fg transition-colors group-hover:text-accent">
+                  {t.name}
+                </h3>
+                <p className="mt-2 text-[0.9375rem] leading-relaxed text-pretty text-fg-2">{t.tagline}.</p>
+                <p className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-5 font-mono text-xs text-fg-3">
+                  <span>{t.mount}</span>
+                  {drawnWithUi.has(t.slug) ? <span className="font-sans text-fg-2">Drawn with Navree UI</span> : null}
+                </p>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </HomeSection>
       <PageSchema path="/showcase/" metadata={metadata} />
     </>
   );
