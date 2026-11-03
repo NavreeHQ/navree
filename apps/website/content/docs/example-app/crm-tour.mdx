@@ -23,7 +23,7 @@ Both front ends are dark, on the navree.com design tokens, with a sidebar that f
 
 ## Running it
 
-You need Rust (1.95 or newer), Node.js 20.9 or newer and pnpm. No database server: development uses SQLite, which `crm-api` turns on with its default `sqlite` feature (the `postgres` feature adds the PostgreSQL driver instead). Run each long-running command in its own terminal. Start the API, then either front end, or both.
+You need Rust (1.95 or newer), Node.js 20.9 or newer and pnpm. No database server: development uses SQLite, which `crm-api` turns on with its default `sqlite` feature (the `postgres` feature adds the PostgreSQL driver). Run each long-running command in its own terminal. Start the API, then either front end, or both.
 
 <Steps>
 <Step title="Create an application key">
@@ -35,7 +35,7 @@ cd apps/crm-api
 cargo run -p crm-api -- key:generate
 ```
 
-Without a key, the API signs tokens with a random key per process, so every restart signs everyone out.
+Without a key, the API signs tokens with a random key per process, so every restart invalidates the access tokens already issued, and clients have to refresh them.
 
 To use the Nuxt front end with live updates, also let its origin open WebSockets, next to the Next.js app's:
 
