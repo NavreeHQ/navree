@@ -41,8 +41,8 @@ export function AiSection() {
             Built for developers and their agents.
           </h2>
           <p className="mt-5 max-w-xl text-lg leading-relaxed text-pretty text-fg-2">
-            Every Navree app has one predictable shape, so a coding agent finds its way the first time. Navree hands it the
-            steps for each task and a view of the running app, and gives your product models behind one typed service.
+            Every Navree app has one predictable shape, so a coding agent finds its way the first time. Skills give it the steps
+            for each task, Navigator shows it the running app, and your product gets AI models behind one typed service.
           </p>
 
           <div className="mt-10 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line">

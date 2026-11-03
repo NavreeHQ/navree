@@ -17,18 +17,18 @@ export function WhatIs() {
         <div className="xl:col-span-5">
           <p className="eyebrow">What is Navree</p>
           <h2 id="what-is" className="mt-5 text-display-lg font-semibold text-balance text-fg">
-            One clear structure for every backend.
+            One clear structure for the whole application.
           </h2>
           <div className="mt-6 max-w-2xl space-y-5 text-pretty">
             <p className="text-lg leading-relaxed text-fg-1">
-              Navree is a framework for building efficient, secure and scalable server-side applications in Rust. It gives you an
-              application architecture out of the box: features live in modules, modules declare what they import and export, and
-              a dependency-injection container wires them together when the app boots, refusing to start if anything is missing.
+              Navree is a framework for building complete applications in Rust: the API, the background work, the screens and
+              the tools that keep it all running. Features live in modules, modules declare what they import and export, and a
+              dependency-injection container wires them together when the app boots, refusing to start if anything is missing.
             </p>
             <p className="leading-relaxed text-fg-2">
-              Around that structure sits a complete standard library for backends, from routing and validation to workspaces,
-              queues, monitoring and AI, designed together, documented together and released together. The result is code that
-              stays easy to test, easy to change and easy to hand to a new teammate, or to an AI agent.
+              Around that structure sits everything a product needs, from routing and validation to workspaces, queues, monitoring
+              and AI, designed, documented and released together. The code stays easy to test, easy to change and easy to hand to
+              a new teammate, or to a coding agent.
             </p>
           </div>
 

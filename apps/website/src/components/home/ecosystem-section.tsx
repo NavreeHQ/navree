@@ -84,13 +84,14 @@ export function EcosystemSection() {
           <div className="lg:col-span-7">
             <p className="eyebrow">Ecosystem</p>
             <h2 id="home-ecosystem-heading" className="mt-5 text-display-lg font-semibold text-balance text-fg">
-              Everything your backend needs, first-party.
+              The tools to run it, first-party.
             </h2>
           </div>
           <div className="lg:col-span-5 lg:pb-1">
             <p className="max-w-xl text-lg leading-relaxed text-pretty text-fg-2">
-              Monitoring, queue supervision, deployment, an admin panel, a debugger and an MCP server for your agent ship with{" "}
-              {site.name}, next to libraries for search, billing, OAuth, AI and more. Open source, self-hosted, no paid add-ons.
+              Monitoring, an admin panel, queue supervision, a debugging timeline, deployment and an MCP server for your agent
+              ship with {site.name}, next to libraries for search, billing, OAuth, AI and more. Open source, self-hosted, no paid
+              add-ons.
             </p>
           </div>
         </div>

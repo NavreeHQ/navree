@@ -2,6 +2,7 @@ import { ArrowRightIcon } from "lucide-react";
 import Link from "next/link";
 
 import { GridPattern } from "@/components/magicui/grid-pattern";
+import { groups } from "@/components/ui-docs/data";
 import { ecosystem } from "@/content/ecosystem";
 import crates from "@/generated/crates.json";
 import { site } from "@site";
@@ -12,26 +13,27 @@ import { PrimaryCta, SecondaryCta } from "./parts";
 type Crate = { name: string; layer: number; module: string | null };
 
 const SUB_COPY =
-  "Navree gives every backend the same clear structure: modules wired by dependency injection, API-first by default and AI-native from the first command. Auth, workspaces, an ORM, queues, search, real time, monitoring and deployment are already in the box, so you build the product, not the plumbing.";
+  "Navree gives every application one clear structure: modules wired by dependency injection and checked when the app boots. Auth, workspaces, an ORM, queues, search, real time and AI are in the box. Build your screens in Rust with Navree UI, or in Next.js or Nuxt, and run it all with first-party tools for monitoring, admin and debugging.";
 
 /**
- * The headline in three lines from `xl` ("The complete / backend
- * framework / for Rust."), so no word is left alone on a line. Any other
- * headline falls back to one balanced block.
+ * The headline in three parts from `xl` ("The complete / application
+ * framework / for Rust."), so "for Rust." never ends a line on its own; the
+ * middle part takes two lines where the column is too narrow for it. Any
+ * other headline falls back to one balanced block.
  */
 function headlineLines(headline: string): string[] {
   const match = /^(\S+ \S+) (\S+ \S+) (.+)$/.exec(headline);
   return match ? match.slice(1) : [headline];
 }
 
-/** Navree's own facts, counted from the workspace and the catalogue. */
+/** Navree's own facts, counted from the workspace, the UI catalogue and the ecosystem. */
 function facts() {
   const all = crates as Crate[];
   const layers = new Set(all.map((c) => c.layer)).size;
-  const modules = all.filter((c) => c.module).length;
+  const components = groups.reduce((n, g) => n + g.components.length, 0);
   return [
     { value: String(all.length), label: "crates", text: `In ${layers} layers, under one facade` },
-    { value: String(modules), label: "core modules", text: "Config and HTTP to auth and workspaces" },
+    { value: String(components), label: "UI components", text: "Typed Rust, rendered on the server" },
     { value: String(ecosystem.length), label: "packages and tools", text: "First-party, open source and free" },
     { value: "1", label: "binary", text: "Web, workers and scheduler" },
     { value: "MIT", label: "or Apache-2.0", text: "Open source, free and self-hosted" },
@@ -67,7 +69,7 @@ export function Hero() {
               1.0
             </span>
             <span className="truncate sm:hidden">Read the release notes</span>
-            <span className="truncate max-sm:hidden">Navree&apos;s own data layer, hardened security and supply-chain checks</span>
+            <span className="truncate max-sm:hidden">What ships in Navree 1.0: read the release notes</span>
             <ArrowRightIcon
               aria-hidden
               className="size-3.5 shrink-0 text-fg-3 transition-transform duration-300 ease-(--ease-out-quint) group-hover:translate-x-0.5 group-hover:text-fg"

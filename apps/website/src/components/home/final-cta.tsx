@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Fragment } from "react";
 
 import { GitHubIcon } from "@/components/icons";
@@ -43,7 +44,16 @@ export function FinalCta() {
           Build the product, not the plumbing.
         </h2>
         <p className="mt-6 max-w-xl text-lg leading-relaxed text-pretty text-fg-2">
-          Install the CLI and create an app: a working API with auth, workspaces, OpenAPI docs and tests, ready to change.
+          Install the CLI and create an app: a working API with auth, workspaces, OpenAPI docs and tests, ready to change. Or
+          bring{" "}
+          <Link href="/docs/getting-started/bring-your-product/" className="link">
+            a product
+          </Link>{" "}
+          or{" "}
+          <Link href="/docs/getting-started/bring-your-design/" className="link">
+            a design
+          </Link>{" "}
+          you already have.
         </p>
 
         <div

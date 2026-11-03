@@ -12,6 +12,8 @@ import { PerformanceSection } from "@/components/home/performance-section";
 import { Pillars } from "@/components/home/pillars";
 import { Ship } from "@/components/home/ship";
 import { Showcase } from "@/components/home/showcase";
+import { TwoWays } from "@/components/home/two-ways";
+import { UiSection } from "@/components/home/ui-section";
 import { WhatIs } from "@/components/home/what-is";
 import { Workspaces } from "@/components/home/workspaces";
 import { pageMetadata } from "@/lib/metadata";
@@ -26,9 +28,11 @@ export const metadata: Metadata = pageMetadata({
 });
 
 /**
- * The homepage, top to bottom: what Navree is, what every app gets, the
- * code, the reference CRM built with it, the shapes of system it builds, workspaces, AI, the ecosystem,
- * shipping, performance, the crates, and the way in. The sections that
+ * The homepage, top to bottom: what Navree is, what every app gets, Navree
+ * UI and the other ways to draw screens, the code, the reference CRM built
+ * with it, the shapes of system it builds, workspaces, AI, the two ways in
+ * from an existing product or design, the ecosystem, shipping, performance,
+ * the crates, and the way to start. The sections that
  * summarize another page (architecture, AI, ecosystem, performance) render
  * their own content; each sits under a hairline divider drawn here.
  *
@@ -47,6 +51,9 @@ export default function Home() {
         <Pillars />
       </Part>
       <Part>
+        <UiSection />
+      </Part>
+      <Part>
         <Showcase />
       </Part>
       <Part>
@@ -60,6 +67,9 @@ export default function Home() {
       </Part>
       <Part divided>
         <AiSection />
+      </Part>
+      <Part>
+        <TwoWays />
       </Part>
       <Part divided>
         <EcosystemSection />
