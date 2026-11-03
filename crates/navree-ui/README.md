@@ -310,6 +310,13 @@ npm ci
 node build.mjs            # --check fails when the committed output is stale
 ```
 
+A module reaches the core runtime through three events on `document`, not through new
+commands: `ui:refresh` asks it to fetch a region again (a tab shown for the first time),
+`ui:region-error` says a region could not be fetched, and `ui:popstate`, which can be
+cancelled, lets a module claim a history entry it made itself (tabs). Everything a module
+reads from the page goes through the prototypes, so a field named like a method can't
+change what it does.
+
 `src/tokens.rs` is the design tokens' one source, and a test fails when
 `styles/tokens.css` differs from it.
 
