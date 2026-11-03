@@ -55,8 +55,10 @@ function cellText(row, column) {
  * @param {Element | null} target @param {Element} from
  */
 function fill(target, from) {
-  const row = Element.prototype.closest.call(from, "[data-key]");
-  if (!target || !row) return;
+  let row = Element.prototype.closest.call(from, "[data-key]");
+  // A details row stands for the row above it, whose cells and key it details.
+  if (row && attr(row, "data-slot") === "row-detail") row = row.previousElementSibling;
+  if (!target || !row || !has(row, "data-key")) return;
   for (const slot of all(target, "[data-ui-cell],[data-ui-row-key]")) {
     const text = ((has(slot, "data-ui-row-key") ? attr(row, "data-key") : cellText(row, attr(slot, "data-ui-cell") || "")) || "").trim();
     // A hidden field the page marked as a slot takes it as its value, so a form posts it.

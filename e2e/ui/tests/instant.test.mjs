@@ -89,5 +89,18 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox], 
       assert.deepEqual(out, { other: { _token: "real", _method: "PUT", plain: "old" }, mine: { sort: "amount" } });
       await context.close();
     });
+
+    test(`fill from a button in a details row fills from the row it details (${engine})`, async () => {
+      const name = key("detail");
+      route(`/${name}`, doc(
+        `<table><thead><tr><th data-col="title">Title</th><th data-col="amount">Amount</th></tr></thead><tbody>` +
+        `<tr data-key="7"><td>Acme</td><td>70</td></tr><tr data-slot="row-detail" data-key="7-detail"><td colspan="2">details ${button("inner", [["fill", "dlg"]])}</td></tr>` +
+        `</tbody></table><dialog id="dlg"><b id="t" data-ui-cell="title">-</b><i id="a" data-ui-cell="amount">-</i><form><input type="hidden" id="k" name="id" data-ui-row-key></form></dialog>`));
+      const { context, page } = await fresh(`/${name}`);
+      await click(page, "inner");
+      const out = await page.evaluate(() => ({ title: document.getElementById("t").textContent, amount: document.getElementById("a").textContent, key: document.getElementById("k").value }));
+      assert.deepEqual(out, { title: "Acme", amount: "70", key: "7" });
+      await context.close();
+    });
   });
 }
