@@ -37,15 +37,15 @@ const targetOf = (form, submitter) =>
 
 /**
  * What a submit would send: where, how, and every field. Two submits that say the same
- * are one: a double click, Enter twice. A file is its name, size and type; an empty one
- * is nothing, though a browser stamps it with the time.
+ * are one: a double click, Enter twice. A file is its name, size, type and time, so one
+ * picked again is new; an empty one is nothing, though a browser stamps it with the time.
  * @param {HTMLFormElement} form @param {HTMLElement | null} submitter
  */
 function said(form, submitter) {
   const parts = [targetOf(form, submitter)];
   try {
     for (const [name, value] of new FormData(form, submitter)) {
-      parts.push(name, typeof value === "string" ? value : value.size || value.name ? `${value.name}:${value.size}:${value.type}` : "");
+      parts.push(name, typeof value === "string" ? value : value.size || value.name ? `${value.name}:${value.size}:${value.type}:${value.lastModified}` : "");
     }
   } catch {}
   return JSON.stringify(parts);

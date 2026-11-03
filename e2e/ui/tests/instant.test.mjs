@@ -273,5 +273,31 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox], 
       await context.close();
     });
 
+    test(`a file picked again, with the same name, size and type, is a new submit (${engine})`, async () => {
+      const name = key("repick");
+      let writes = 0;
+      route(`/${name}`, doc(`<form id="f" data-ui-form method="post" enctype="multipart/form-data" action="/${name}-post"><input type="file" id="file" name="file"><button id="go">Upload</button></form>`));
+      f.routes.set(`/${name}-post`, (req, res) => {
+        writes++;
+        setTimeout(() => f.ops(res, { ops: [] }), 300);
+      });
+      const { context, page } = await fresh(`/${name}`);
+      await page.evaluate(() => {
+        const pick = (stamp) => {
+          const files = new DataTransfer();
+          files.items.add(new File(["same"], "report.csv", { type: "text/csv", lastModified: stamp }));
+          document.getElementById("file").files = files.files;
+        };
+        const form = document.getElementById("f");
+        pick(1000);
+        form.requestSubmit(document.getElementById("go"));
+        pick(2000);
+        form.requestSubmit(document.getElementById("go"));
+      });
+      await until(() => writes >= 2, LONG);
+      await sleep(300);
+      assert.equal(writes, 2);
+      await context.close();
+    });
   });
 }
