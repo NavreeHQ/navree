@@ -1,6 +1,6 @@
 ---
 title: "Workspaces and access"
-description: "Models scoped to the current workspace with `#[model(workspace)]`, models as access-control subjects with policies, list filters and record checks from the same rules, and `unique` and `exists` validation rules that query models."
+description: "Scope models to the current workspace, make them access-control subjects with policies, filter lists and check records from the same rules, and validate with `unique` and `exists`."
 ---
 
 Two questions come up for every record a request touches: does it belong to the request's workspace, and may this user act on it? The ORM answers both in the model, so every query and write follows the same rules without each handler remembering them.
@@ -38,7 +38,7 @@ let every = Project::query().without_workspace_scope().count(&uow).await?;
 let in_job = navree::orm::workspace::scope(workspace_id, Project::query().count(&db)).await?;
 ```
 
-The scoping is the same on every [isolation strategy](/docs/workspaces/isolation/). On PostgreSQL with row isolation, row-level security reads the `navree.workspace` setting of the request's transaction, which every ORM statement runs in, so the database enforces the same boundary underneath; with schema isolation the `search_path` does; and a `WorkspaceUow` (database isolation) is an executor like any other.
+The scoping is the same on every [isolation strategy](/docs/workspaces/isolation/). On PostgreSQL with row isolation, row-level security reads the `navree.workspace` setting of the request's transaction, which every ORM statement runs in, so the database enforces the same boundary underneath; with schema isolation the `search_path` does. A `WorkspaceUow` is the unit of work for the workspace's data (on the workspace's own database with database isolation). It derefs to `Uow`: pass `&*uow` to a model method, which takes its executor as a generic.
 
 ## Access control
 
@@ -86,6 +86,8 @@ impl TicketsModule {
 The policy's rules then join every user's rules (before the app's abilities function, which can still override them), and routes check them:
 
 ```rust
+use navree::orm::access::AccessibleQuery;
+
 #[controller("/tickets", version = "1")]
 impl TicketsController {
     /// The tickets the user may read: the rules become a SQL filter.

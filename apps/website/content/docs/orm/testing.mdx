@@ -20,7 +20,7 @@ async fn winning_a_deal(db: TestDb) -> Result<(), BoxError> {
 }
 ```
 
-For tests that boot the whole app and send requests, `TestApp` gives each test a database too: see [database tests](/docs/testing/database-tests/). The assertions on this page work there as well, on the app's `Db` (`app.get::<Db>().await?`).
+For tests that boot the whole app and send requests, `TestApp` gives each test a database too: see [database tests](/docs/testing/database-tests/). The assertions on this page work there as well, on the app's `Db` (`app.get::<Db>().await`).
 
 ## Database assertions
 

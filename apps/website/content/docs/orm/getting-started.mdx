@@ -31,7 +31,7 @@ use navree::orm::prelude::*; // Model, Record, Collection, Builder, the relation
 
 `navree::prelude` brings the everyday ones too: `Model` (the trait and the derive), `Record`, `Collection`, `Builder`, `OrmModule`, `Attributes`, `attrs!` and `#[accessors]`.
 
-Models need `serde`'s `Serialize`, so your app depends on `serde` with its `derive` feature, as an app made by `navree new` does. The ORM needs no other crate: it writes its SQL itself, for the database it runs on, and runs it through the connections `navree` opens.
+Models derive `Serialize`, and their fields use the types of `chrono` and `uuid`, so your app depends on `serde` (with `derive`), `chrono` and `uuid` (both with `serde`), as an app made by `navree new` does. The ORM needs no query or driver crate: it writes its SQL itself, for the database it runs on, and runs it through the connections `navree` opens.
 
 ## Configuration
 
@@ -95,9 +95,9 @@ Generate a model in a module, with the migration that creates its table:
 navree make:model deals Deal --migration
 ```
 
-This writes `src/modules/deals/models/deal.rs`, a `create_deals_table` migration, and registers the model in the module's `wire` (`m.model::<Deal>()`). `--factory`, `--seeder`, `--controller` and `--policy` add the companions, which refer to each other, and `--all` adds every one of them.
+This writes `src/modules/deals/models/deal.rs`, a `create_deals_table` migration, and registers the model in the module's `wire` (`m.model::<Deal>()`). The generated model has an `id`, a `name` and the two timestamps, and the migration creates the same columns: change both to your fields. `--migration` is `-m`. `--factory` (`-f`), `--seeder` (`-s`), `--controller` (`-c`) and `--policy` add the companions, which refer to each other, and `--all` (`-a`) adds every one of them. `--pivot` (`-p`) makes the [pivot model](/docs/orm/relationships/#pivot-models) of a many-to-many, such as `deal_tag`.
 
-A model is a struct with named fields:
+A model is a struct with named fields. This one has a title and an amount instead of a name:
 
 ```rust title="src/modules/deals/models/deal.rs"
 use chrono::{DateTime, Utc};
@@ -272,7 +272,7 @@ impl DealsController {
 }
 ```
 
-Records serialize as their model's JSON, so a handler returns them as they are; [serialization](/docs/orm/serialization/) shows how to hide fields and add computed ones. `navree make:model deals Deal --controller` writes a controller like this one for you, and `--policy` one whose routes check abilities.
+Records serialize as their model's JSON, so a handler returns them as they are; [serialization](/docs/orm/serialization/) shows how to hide fields and add computed ones. `navree make:model deals Deal --controller` writes a controller like this one for you, and with `--policy` as well its routes check abilities.
 
 Services take the unit of work as a parameter, like handlers:
 

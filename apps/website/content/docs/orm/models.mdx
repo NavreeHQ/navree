@@ -40,7 +40,7 @@ A model must be `Clone`, `Send`, `Sync`, `Serialize` and `'static`. Derive `Defa
 | `timestamps` | off | Keep `created_at` and `updated_at` ([below](#timestamps)). |
 | `soft_deletes` | off | Set `deleted_at` instead of deleting, and hide trashed rows from queries. See [soft deletes](/docs/orm/scopes-and-soft-deletes/#soft-deletes). |
 | `connection = "analytics"` | the default connection | Run the model's queries on a [named connection](/docs/orm/connections-and-transactions/#named-connections). |
-| `per_page = 25` | 15 | The page size of [`paginate`](/docs/orm/pagination-and-streaming/) when the request names none. |
+| `per_page = 25` | 15 | The page size of [`paginate`](/docs/orm/pagination-and-streaming/) when you pass a page number, and of `cursor_paginate` when the request has no `?limit=`. A `PageQuery` always carries a size (`?per_page=`, default 15), so it overrides this one. |
 
 Other attributes belong to other pages: `global_scopes(..)` to [scopes](/docs/orm/scopes-and-soft-deletes/#global-scopes); `touches`, `morph_name`, `with` and `with_count` to [relationships](/docs/orm/relationships/) and [eager loading](/docs/orm/eager-loading/); `fillable`, `guarded` and `unguarded` to [mass assignment](#mass-assignment); `hidden`, `visible`, `appends` and `resource` to [serialization](/docs/orm/serialization/); `observers`, `dispatches` and `broadcasts` to [events](/docs/orm/events-and-observers/); `prunable` to [pruning](/docs/orm/scopes-and-soft-deletes/#pruning-models); `factory` to [factories](/docs/orm/factories/); `route_key` to [route model binding](/docs/orm/route-model-binding/); `workspace`, `subject` and `policy` to [workspaces and access](/docs/orm/workspaces-and-access/).
 
@@ -142,7 +142,7 @@ A `Uuid` field is stored as a native `UUID` on PostgreSQL and as its 16 bytes on
 
 ## Timestamps
 
-With `timestamps`, the ORM sets `created_at` and `updated_at` on insert when they are empty, and `updated_at` on every update that changes something, unless you changed it yourself. Times come from the app's `dyn Clock`, so a test that [fixes the clock](/docs/testing/fakes/#the-clock) sees fixed timestamps, and are cut to microseconds so the stored and in-memory values agree on every database.
+With `timestamps`, the ORM sets `created_at` and `updated_at` on insert when they are empty, and `updated_at` on every update that changes something, unless you changed it yourself. Times come from the app's `dyn Clock`, so a test that [fixes the clock](/docs/testing/fakes/#the-clock) sees fixed timestamps. They are cut to the precision the database keeps (microseconds; milliseconds on MongoDB), so the stored and in-memory values agree.
 
 The columns may have other names, or be left out: `timestamps(created_at = "inserted_at", updated_at = false)`. A timestamp field is a `DateTime<Utc>`, a `DateTime<FixedOffset>`, a `NaiveDateTime`, an `i64` (Unix seconds) or an `Option` of one of them.
 
@@ -341,7 +341,7 @@ deal.fill(attrs! {
     "amount_cents" => 12_000,
     "owner_id" => "0199a7a0-6b1c-7d3e-9f40-5c2a1b3c4d5e",
 })?;
-assert_eq!(deal.owner_id, None); // not fillable: left out
+assert_eq!(deal.owner_id, None); // not fillable: left out (an error in strict mode, see below)
 
 deal.force_fill(attrs! { "owner_id" => "0199a7a0-6b1c-7d3e-9f40-5c2a1b3c4d5e" })?;
 deal.fill_only(attrs! { "title" => "Renewal 2027", "currency" => "EUR" }, &["title"])?;
@@ -376,7 +376,7 @@ async fn update(
 
 ### When a key is left out
 
-By default `fill` leaves out the keys the model doesn't allow. With the strict mode `prevent_discarding_attributes`, on in development unless you turn it off ([configuration](/docs/orm/getting-started/#configuration)), it fails with `OrmError::MassAssignment` instead, before changing anything, so a form that sends a field the model guards shows up at once. A `DiscardPolicy` can decide for the process (`set_discard_policy`) or for one task (`with_discard_policy`), and `unguarded(future)` turns guarding off while a future runs:
+Without a strict mode, `fill` leaves out the keys the model doesn't allow. With the strict mode `prevent_discarding_attributes` it fails with `OrmError::MassAssignment` instead, before changing anything, so a form that sends a field the model guards shows up at once. `OrmModule` turns that mode on in development and tests and off in production, unless you set it ([configuration](/docs/orm/getting-started/#configuration)). A `DiscardPolicy` can decide for the process (`set_discard_policy`) or for one task (`with_discard_policy`), and `unguarded(future)` turns guarding off while a future runs:
 
 ```rust
 use navree::orm::attributes::unguarded;

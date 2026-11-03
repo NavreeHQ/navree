@@ -1,6 +1,6 @@
 ---
 title: "MongoDB"
-description: "The ORM's models on MongoDB collections: `MongoModule`, ObjectId keys and embedded documents, queries compiled to filters and pipelines, relations, units of work on sessions, migrations, time-series and TTL collections, and what works differently."
+description: "Run the ORM's models on MongoDB collections: `MongoModule`, ObjectId keys, queries compiled to filters and pipelines, transactions, migrations, time-series collections and what differs."
 ---
 
 <Badge feature="mongo" /> MongoDB is supported as a document database under the same model API: models declare `driver = "mongodb"`, and every builder method compiles to a filter document or an aggregation pipeline instead of SQL. Records keep their dirty tracking, timestamps, soft deletes, scopes, events, relations and pagination.

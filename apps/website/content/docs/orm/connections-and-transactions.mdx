@@ -79,7 +79,7 @@ let scoped = using_connection("archive", Deal::query().count(&db)).await?;
 
 `on_connection` sends one query elsewhere; `using_connection(name, future)` makes `name` stand in for the default connection while a future runs (its task only). A unit of work spans one connection: given a `Uow`, an operation on another connection fails with `OrmError::Connection` rather than running outside the transaction.
 
-To work with a named connection directly, `db.connection("analytics").await?` returns its `Db`; `DbConnections` (from the container) lists and opens them, and `ctx.get_named::<Db>("analytics")` injects one. `DbConnections::names()` lists every configured connection.
+To work with a named connection directly, `db.connection("analytics").await?` returns its `Db`; `DbConnections` (from the container) opens them, and `DbConnections::names()` lists every configured connection. `ctx.get_named::<Db>("analytics")` injects one only when `DatabaseModule::for_root` was given the connection in code; connections configured in TOML are known at boot, so reach them with `db.connection(..)` or `DbConnections`.
 
 ## Read replicas
 

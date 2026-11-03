@@ -1,11 +1,14 @@
 ---
 title: "Events and observers"
-description: "Model events from `retrieved` to `restored`: observers, closure listeners, typed application events and real-time broadcasts, when each hears an event inside a unit of work, canceling writes, quiet operations, custom events and testing with `ModelEventFake`."
+description: "Model events from `retrieved` to `restored`: observers, closure listeners, application events and broadcasts, canceling writes, quiet operations, and `ModelEventFake` in tests."
 ---
 
 Every save, delete and read of a record goes through a fixed series of steps, and each step is a **model event** your code can hear: `creating` before a new record is inserted, `created` after, `saving` around both inserts and updates, and so on. Listeners use them to keep data tidy, refuse a write, notify someone after a deal is won, or push the change to open browsers.
 
 ```rust
+use navree::orm::prelude::*;
+use navree::orm::{ExecContext, Result}; // the ORM's Result, not the HTTP one
+
 /// Keeps titles tidy and refuses deals without one.
 #[derive(Default)]
 pub struct DealObserver;
@@ -69,7 +72,7 @@ An after-commit listener's error is logged and reported to the app's telemetry; 
 
 ## Observers
 
-An observer implements `Observer<M>`: one async method per event, all optional (`retrieved`, `saving`, `creating`, `created`, `updating`, `updated`, `saved`, `deleting`, `deleted`, `trashed`, `force_deleting`, `force_deleted`, `restoring`, `restored`, `replicating`, and `custom` for [custom events](#custom-events)). The `-ing` methods return `Result<Flow>`; the others `Result<()>`.
+An observer implements `Observer<M>`: one async method per event, all optional (`retrieved`, `saving`, `creating`, `created`, `updating`, `updated`, `saved`, `deleting`, `deleted`, `trashed`, `force_deleting`, `force_deleted`, `restoring`, `restored`, `replicating`, and `custom` for [custom events](#custom-events)). The `-ing` methods and `custom` (which also takes the event's name) return `Result<Flow>`; the others `Result<()>`.
 
 A stateless observer can be declared on the model, where it runs on every pool, even one opened without an app:
 

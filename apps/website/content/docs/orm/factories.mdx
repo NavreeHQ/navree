@@ -107,6 +107,12 @@ impl DealFactory {
         deal.stage = Stage::Won;
         deal.closed_at = Some(Utc::now());
     }
+
+    /// A lost deal.
+    pub fn lost(deal: &mut Deal) {
+        deal.stage = Stage::Lost;
+        deal.closed_at = Some(Utc::now());
+    }
 }
 
 let won = Deal::factory().count(5).state(DealFactory::won).create(&db).await?;

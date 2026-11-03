@@ -160,7 +160,7 @@ pub fn tags(&self) -> BelongsToMany<Deal, Tag, DealTag> {
 }
 ```
 
-`#[model(pivot(..))]` names the two key columns; a pivot model without an `id` is identified by both. Loaded tags then carry a `Record<DealTag>` (`tag.pivot_as::<DealTag>()`), and attaching, updating and detaching save and delete `DealTag` records, so its casts, hooks and [events](/docs/orm/events-and-observers/) run.
+`navree make:model deals deal_tag --pivot --all` writes a model of the table (an `id`, the two `Uuid` keys and the timestamps) with its migration, factory and seeder; the name is the two models' names joined by `_`. `#[model(pivot(..))]` names the two key columns; a pivot model without an `id` is identified by both. Loaded tags then carry a `Record<DealTag>` (`tag.pivot_as::<DealTag>()`), and attaching, updating and detaching save and delete `DealTag` records, so its casts, hooks and [events](/docs/orm/events-and-observers/) run.
 
 ## Through relations
 

@@ -86,7 +86,7 @@ user.append(["initials"])?;                   // an error for a name that isn't 
 user.without_appends();
 ```
 
-`set_hidden`, `merge_hidden`, `set_visible`, `merge_visible`, `set_appends` and `merge_appends` replace or extend the lists, and the `_if` forms take a `bool` or a function of the record. `hidden()`, `visible()`, `appends()` and `has_appended(name)` read them. A collection has the same methods and applies them to every record.
+`set_hidden`, `merge_hidden`, `set_visible`, `merge_visible`, `set_appends` and `merge_appends` replace or extend the lists, and the `_if` forms take a `bool` or a function of the record. `hidden()`, `visible()`, `appends()` and `has_appended(name)` read them. A collection has `make_hidden`, `merge_hidden`, `set_hidden`, `make_visible`, `merge_visible`, `set_visible`, `append`, `set_appends` and `without_appends`, and applies them to every record; the `_if` forms and the readers are on records only.
 
 `record.only(["id", "email"])` and `record.except(["password_hash"])` return a JSON map of some values, whatever the rules: for building an audit entry or a message, not a response.
 
