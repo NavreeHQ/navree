@@ -1015,10 +1015,14 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       for (const how of ["double click", "enter twice", "requestSubmit twice"]) {
         const name = key("double");
         let writes = 0;
+        // The answer waits until both presses are done, however slow the machine.
+        let release;
+        const held = new Promise((resolve) => (release = resolve));
         route(`/${name}`, doc(`<form id="f" data-ui-form method="post" action="/${name}-post"><input id="i" name="a" value="1"><button id="go">go</button></form>`));
-        f.routes.set(`/${name}-post`, (req, res) => {
+        f.routes.set(`/${name}-post`, async (req, res) => {
           writes++;
-          setTimeout(() => f.ops(res, { ops: [{ op: "toast", tone: "info", text: "saved" }] }), 200);
+          await held;
+          f.ops(res, { ops: [{ op: "toast", tone: "info", text: "saved" }] });
         });
         const { context, page } = await fresh(`/${name}`);
         if (how === "double click") await page.dblclick("#go");
@@ -1028,6 +1032,8 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
           await sleep(40);
           await page.keyboard.press("Enter");
         } else await page.evaluate(() => { const form = document.getElementById("f"); form.requestSubmit(); form.requestSubmit(); });
+        await sleep(100);
+        release();
         await sleep(450);
         assert.equal(writes, 1, how);
         assert.deepEqual(await toasts(page), ["saved"], how);
