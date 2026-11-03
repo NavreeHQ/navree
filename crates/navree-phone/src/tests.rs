@@ -175,3 +175,25 @@ fn every_region_has_a_placeholder_example() {
     // Territories whose plans list no lines of their own.
     assert!(missing.len() < 10, "{missing:?}");
 }
+
+/// What the plans cost in a binary that uses them: the tables, measured.
+#[test]
+fn the_plans_take_at_most_256_kib() {
+    use std::mem::size_of_val;
+
+    use crate::data::{CODE, CODE_TERRITORIES, CODES, DESCS, FORMATS, TERRITORIES, TEXT};
+    let sizes = [
+        ("patterns", size_of_val(&CODE)),
+        ("text", TEXT.len()),
+        ("descriptions", size_of_val(&DESCS)),
+        ("formats", size_of_val(&FORMATS)),
+        ("territories", size_of_val(&TERRITORIES)),
+        (
+            "calling codes",
+            size_of_val(&CODES) + size_of_val(&CODE_TERRITORIES),
+        ),
+    ];
+    let total: usize = sizes.iter().map(|(_, size)| size).sum();
+    println!("{sizes:?}: {total} bytes");
+    assert!(total <= 256 * 1024, "{total}");
+}
