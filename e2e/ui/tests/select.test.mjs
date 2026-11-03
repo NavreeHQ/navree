@@ -926,9 +926,9 @@ for (const browserName of browsers) {
       await filter.page.waitForFunction(() => document.querySelector("#filter-result").textContent === "Stage: qualified");
       await filter.page.waitForTimeout(500);
       const sent = await filter.page.evaluate(() => ({ enter: window.__clock.enter.at(-1), fetches: window.__clock.fetches.map((f) => f.at) }));
-      // The first request is the pick's own `change`, with no wait. Whatever the form
-      // runtime adds for the `input` that comes before it is that runtime's.
-      assert.ok(sent.fetches.length >= 1 && sent.fetches[0] - sent.enter < 60, `the request went ${sent.fetches[0] - sent.enter} ms after the pick`);
+      // A pick fires `input` and then `change`; the form sends one request for both, with no wait.
+      assert.equal(sent.fetches.length, 1, `a pick sent ${sent.fetches.length} requests`);
+      assert.ok(sent.fetches[0] - sent.enter < 60, `the request went ${sent.fetches[0] - sent.enter} ms after the pick`);
       await filter.close();
     });
 
