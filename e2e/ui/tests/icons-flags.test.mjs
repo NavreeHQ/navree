@@ -67,7 +67,11 @@ for (const browserName of browsers) {
       });
       page.on("pageerror", (error) => problems.push(String(error)));
       await page.goto(BASE + path);
-      if (light) await page.addStyleTag({ content: LIGHT });
+      if (light) {
+        await page.addStyleTag({ content: LIGHT });
+        // Past the colour transitions, so that axe and the screenshots see the light colours.
+        await page.waitForTimeout(500);
+      }
       return { page, problems, close: () => context.close() };
     }
 

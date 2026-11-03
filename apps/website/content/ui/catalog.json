@@ -12707,7 +12707,7 @@
       "slug": "names",
       "title": "Three ways to name an icon",
       "kind": "single",
-      "code": "Row::gap(3).children((\n    // A constant: your editor completes it.\n    Button::outline(\"Open\").icon(icons::MAIL_OPEN),\n    // The name as lucide.dev writes it, checked while your app compiles.\n    Button::outline(\"Open\").icon(lucide!(\"mail-open\")),\n    // A name that arrives at run time. This is the one way that puts every\n    // icon into your binary.\n    Button::outline(\"Open\").icon(Icon::lookup(\"mail-open\").unwrap_or(icons::CIRCLE_QUESTION_MARK)),\n))",
+      "code": "Row::gap(3).children((\n    // A constant: your editor completes it.\n    Button::outline(\"Open\").icon(icons::MAIL_OPEN),\n    // The name as lucide.dev writes it, checked while your app compiles.\n    Button::outline(\"Open\").icon(lucide!(\"mail-open\")),\n    // A name that arrives at run time. This is the one way that puts every\n    // icon into your binary.\n    Button::outline(\"Open\")\n        .icon(Icon::lookup(\"mail-open\").unwrap_or(icons::CIRCLE_QUESTION_MARK)),\n))",
       "src": "/ui-preview/icons/names.html",
       "height": 120,
       "layout": "center",

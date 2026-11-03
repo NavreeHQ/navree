@@ -2376,6 +2376,12 @@
         "generics": "",
         "args": "",
         "doc": "Hides the flag from assistive technology, for when the country's name is written beside it."
+      },
+      {
+        "name": "scope",
+        "generics": "",
+        "args": "scope: &'static str",
+        "doc": "Gives the ids inside the flag's artwork a prefix, so that two copies on one page never share one. Only Anguilla, Belarus and Nicaragua need it: they cut a shape out of their drawing with a clip, and browsers do not draw a clip that is defined inside hidden content. Use it on the flags of a closed menu, a hidden tab or a closed dialog that sit before the same flags in view. A scope is letters, digits, `-` and `_`; anything else is ignored."
       }
     ],
     "variants": [],
