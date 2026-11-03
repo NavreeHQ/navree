@@ -3,7 +3,9 @@
 // country, and the number in E.164 in a hidden field. The server re-reads
 // what was typed in the chosen country and is the authority; this module only
 // helps people type. The numbering plans load on first use, once.
-import { all, attr, every, has, make, on, set, unset } from "./dom.js";
+// Everything it reads from the document goes through dom.js, so named
+// elements in a page (`<img name="createTextNode">`) can't change what it does.
+import { active, all, attr, every, has, make, on, root as documentRoot, set, textNode, unset } from "./dom.js";
 
 /**
  * A territory of the plans: its id, calling code, international and national
@@ -50,17 +52,21 @@ function re(source, full) {
   return found;
 }
 
-// The digit zero of each run of ten decimal digits outside ASCII (Unicode Nd).
-const ZEROS = [0x660, 0x6f0, 0x7c0, 0x966, 0x9e6, 0xa66, 0xae6, 0xb66, 0xbe6, 0xc66, 0xce6, 0xd66, 0xde6, 0xe50, 0xed0, 0xf20, 0x1040, 0x1090, 0x17e0, 0x1810, 0x1946, 0x19d0, 0x1a80, 0x1a90, 0x1b50, 0x1bb0, 0x1c40, 0x1c50, 0xa620, 0xa8d0, 0xa900, 0xa9d0, 0xa9f0, 0xaa50, 0xabf0, 0xff10, 0x104a0, 0x10d30, 0x10d40, 0x11066, 0x110f0, 0x11136, 0x111d0, 0x112f0, 0x11450, 0x114d0, 0x11650, 0x116c0, 0x116d0, 0x116da, 0x11730, 0x118e0, 0x11950, 0x11bf0, 0x11c50, 0x11d50, 0x11da0, 0x11de0, 0x11f50, 0x16130, 0x16a60, 0x16ac0, 0x16b50, 0x16d70, 0x1ccf0, 0x1d7ce, 0x1d7d8, 0x1d7e2, 0x1d7ec, 0x1d7f6, 0x1e140, 0x1e2f0, 0x1e4f0, 0x1e5f1, 0x1e950, 0x1fbf0];
-
-/** The value of a decimal digit of any script, or -1. @param {string} c */
+const ND = /\p{Nd}/u;
+/**
+ * The value of a decimal digit of any script, or -1. Unicode writes each
+ * script's digits as one run of ten from zero, and runs that touch (the
+ * mathematical digits) are whole runs, so the value is the distance from the
+ * run's start, modulo ten.
+ * @param {string} c
+ */
 function digit(c) {
   const code = /** @type {number} */ (c.codePointAt(0));
   if (code >= 48 && code <= 57) return code - 48;
-  for (let i = ZEROS.length - 1; i >= 0 && code >= 0x660; i--) {
-    if (code >= ZEROS[i]) return code - ZEROS[i] < 10 ? code - ZEROS[i] : -1;
-  }
-  return -1;
+  if (!ND.test(c)) return -1;
+  let start = code;
+  while (start > code - 60 && ND.test(String.fromCodePoint(start - 1))) start--;
+  return (code - start) % 10;
 }
 
 const PUNCTUATION = /[\s\-‐-―−ー－-／().\[\]（）［］~⁓∼～]/;
@@ -183,13 +189,18 @@ function significant(t, digits) {
   return lengths.includes(next.length) || next.length > (lengths.at(-1) || 0) ? next : digits;
 }
 
-/** The territory a number of code `cc` belongs to; `current` stays when it fits. @param {number} cc @param {string} nsn @param {Territory | undefined} current */
+/**
+ * The territory a number of code `cc` belongs to, in the server's order (the
+ * one the code's formats belong to first): the first whose leading digits it
+ * starts with, or whose lines it fits. While it fits none (not whole yet), the
+ * chosen `current` stays if it shares the code.
+ * @param {number} cc @param {string} nsn @param {Territory | undefined} current
+ */
 function territoryOf(cc, nsn, current) {
   const list = byCode.get(cc) || [];
-  for (const t of list) if (t.ld && re(t.ld).test(nsn)) return t;
-  if (current?.cc === cc && !current.ld) return current;
-  for (const t of list) if (t.tp && re(t.tp, true).test(nsn)) return t;
-  return list.find((t) => !t.ld) || list[0];
+  if (list.length < 2) return list[0];
+  for (const t of list) if (t.ld ? re(t.ld).test(nsn) : t.tp && re(t.tp, true).test(nsn)) return t;
+  return current?.cc === cc ? current : list[0];
 }
 
 /** A calling code at the start of `digits`, and the rest. @param {string} digits @returns {[number, string] | null} */
@@ -230,7 +241,8 @@ export function format(text, region) {
   const t = /** @type {Territory} */ (region);
   const idd = t.idd && re(t.idd).exec(digits);
   if (idd && idd[0] && digits.length > idd[0].length && digits[idd[0].length] !== "0") {
-    return international(digits.slice(idd[0].length), `${idd[0]} `);
+    // Written with `+`: the number then reads the same in any country chosen.
+    return international(digits.slice(idd[0].length), "+");
   }
   const main = mainOf(t.cc) || t;
   let prefix = "";
@@ -269,7 +281,7 @@ function flag(root, id) {
   const own = /** @type {HTMLTemplateElement | null} */ (root.querySelector("template[data-slot=phone-flags]"))
     ?.content.querySelector(`[data-flag="${CSS.escape(id)}"]`);
   if (own) return own.cloneNode(true);
-  return document.createTextNode(id.length === 2 ? String.fromCodePoint(...[...id].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65)) : "");
+  return textNode(id.length === 2 ? String.fromCodePoint(...[...id].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65)) : "");
 }
 
 /** @param {Element} root */
@@ -302,19 +314,26 @@ function choose(root, id) {
   flagBox?.replaceChildren(flag(root, id));
   if (dial) dial.textContent = t ? `+${t.cc}` : "";
   if (option) set(trigger, "aria-label", `${attr(select, "aria-label") || ""}: ${option.text}`);
+  const list = parts(root).list;
+  if (list) for (const row of all(list, "[role=option]")) set(row, "aria-selected", String(attr(row, "data-value") === id));
   if (input && t?.ex && !has(input, "data-own-placeholder")) input.placeholder = national(t, t.ex);
   select.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-/** Rewrites the box from what it holds, keeping the caret after the same digit. @param {Element} root */
-function reformat(root) {
+/**
+ * Rewrites the box from what it holds, keeping the caret after the same digit.
+ * With `detect` (only when someone types), a number with its calling code
+ * chooses its own country; a country picked by hand is never overruled.
+ * @param {Element} root @param {boolean} [detect]
+ */
+function reformat(root, detect = false) {
   const { select, input, e164 } = parts(root);
   if (!input || !select) return;
   const region = byId.get(select.value);
   const before = input.value;
   const caret = input.selectionStart ?? before.length;
   const result = format(before, region);
-  if (result.found && result.found.id !== select.value && optionOf(select, result.found.id)) {
+  if (detect && result.found && result.found.id !== select.value && optionOf(select, result.found.id)) {
     choose(root, result.found.id);
     const text = attr(/** @type {Element} */ (parts(root).status), "data-label-country-set") || "{country}";
     announce(root, text.replace("{country}", optionOf(select, result.found.id)?.text || result.found.id));
@@ -328,7 +347,7 @@ function reformat(root) {
     if (/[+\d]/.test(result.text[at])) seen++;
     at++;
   }
-  if (document.activeElement === input) input.setSelectionRange(at, at);
+  if (active() === input) input.setSelectionRange(at, at);
 }
 
 /** The list of countries, built from the select the first time it opens. @param {Element} root */
@@ -443,8 +462,16 @@ function pick(root, item) {
   (input || trigger)?.focus();
 }
 
+// An event's target may be a form, whose named fields shadow its methods
+// (`<input name="closest">`): read them through the prototype.
+const EP = Element.prototype;
+/** @param {EventTarget | null} el @param {string} selector @returns {Element | null} */
+const closest = (el, selector) => (el instanceof Element ? EP.closest.call(el, selector) : null);
+/** @param {EventTarget | null} el @param {string} selector */
+const matches = (el, selector) => el instanceof Element && EP.matches.call(el, selector);
+
 /** @param {Event} e */
-const rootOf = (e) => /** @type {Element | null} */ (e.target)?.closest?.("[data-ui-phone]");
+const rootOf = (e) => closest(e.target, "[data-ui-phone]");
 
 function enhanceAll() {
   for (const root of every("[data-ui-phone]:not([data-enhanced])")) enhance(root);
@@ -452,7 +479,7 @@ function enhanceAll() {
 enhanceAll();
 new MutationObserver((records) => {
   if (records.some((r) => r.addedNodes.length)) enhanceAll();
-}).observe(document.documentElement, { childList: true, subtree: true });
+}).observe(documentRoot(), { childList: true, subtree: true });
 
 // Plans load when someone first reaches for a phone field.
 for (const type of ["focusin", "pointerdown"]) {
@@ -466,16 +493,16 @@ on(document, "input", (e) => {
   const root = rootOf(e);
   if (!root) return;
   const target = /** @type {HTMLElement} */ (e.target);
-  if (target.matches("[data-slot=phone-search]")) {
+  if (matches(target, "[data-slot=phone-search]")) {
     filter(root, /** @type {HTMLElement} */ (parts(root).list), /** @type {HTMLInputElement} */ (target).value);
-  } else if (target.matches("input[type=tel]")) {
-    load().then(() => reformat(root));
+  } else if (matches(target, "input[type=tel]")) {
+    load().then(() => reformat(root, true));
   }
 });
 
 on(document, "change", (e) => {
   const root = rootOf(e);
-  if (root && /** @type {Element} */ (e.target).matches("[data-slot=phone-country]") && e.isTrusted) {
+  if (root && matches(e.target, "[data-slot=phone-country]") && e.isTrusted) {
     load().then(() => {
       choose(root, /** @type {HTMLSelectElement} */ (e.target).value);
       reformat(root);
@@ -487,7 +514,7 @@ on(document, "change", (e) => {
 // before it, so the caret never sticks.
 on(document, "beforeinput", (e) => {
   const input = /** @type {HTMLInputElement} */ (e.target);
-  if (e.inputType !== "deleteContentBackward" || !input.matches?.("[data-ui-phone] input[type=tel]")) return;
+  if (e.inputType !== "deleteContentBackward" || !matches(input, "[data-ui-phone] input[type=tel]")) return;
   const at = input.selectionStart ?? 0;
   if (at !== input.selectionEnd || at === 0 || /[+\p{Nd}]/u.test(input.value[at - 1])) return;
   let from = at - 1;
@@ -502,21 +529,10 @@ on(document, "beforeinput", (e) => {
 // it is placed at its full size.
 on(document, "beforetoggle", (e) => {
   const list = /** @type {HTMLElement} */ (e.target);
-  if (/** @type {ToggleEvent} */ (e).newState !== "open" || !list.matches?.("[data-slot=phone-countries]")) return;
-  const root = /** @type {Element} */ (list.closest("[data-ui-phone]"));
+  if (/** @type {ToggleEvent} */ (e).newState !== "open" || !matches(list, "[data-slot=phone-countries]")) return;
+  const root = /** @type {Element} */ (closest(list, "[data-ui-phone]"));
   build(root);
   set(list, "data-align", getComputedStyle(root).direction === "rtl" ? "end" : "start");
-}, true);
-
-on(document, "toggle", (e) => {
-  const list = /** @type {HTMLElement} */ (e.target);
-  if (!list.matches?.("[data-slot=phone-countries]")) return;
-  const root = /** @type {Element} */ (list.closest("[data-ui-phone]"));
-  const { trigger } = parts(root);
-  const open = /** @type {ToggleEvent} */ (e).newState === "open";
-  if (trigger) set(trigger, "aria-expanded", String(open));
-  if (!open) return;
-  build(root);
   const search = /** @type {HTMLInputElement | null} */ (list.querySelector("[data-slot=phone-search]"));
   if (search) {
     search.value = attr(list, "data-typed") || "";
@@ -524,7 +540,23 @@ on(document, "toggle", (e) => {
     filter(root, list, search.value);
     const chosen = /** @type {HTMLElement | null} */ (list.querySelector("[aria-selected=true]:not([hidden])"));
     if (chosen && !search.value) activate(list, chosen, "center");
+  }
+}, true);
+
+on(document, "toggle", (e) => {
+  const list = /** @type {HTMLElement} */ (e.target);
+  if (!matches(list, "[data-slot=phone-countries]")) return;
+  const root = /** @type {Element} */ (closest(list, "[data-ui-phone]"));
+  const { trigger } = parts(root);
+  const open = /** @type {ToggleEvent} */ (e).newState === "open";
+  if (trigger) set(trigger, "aria-expanded", String(open));
+  if (!open) return;
+  const search = /** @type {HTMLInputElement | null} */ (list.querySelector("[data-slot=phone-search]"));
+  if (search && active() !== search) {
     search.focus();
+    // In view now that the list is shown.
+    const current = /** @type {HTMLElement | null} */ (list.querySelector("[data-active]"));
+    if (current) current.scrollIntoView({ block: search.value ? "nearest" : "center" });
   }
 }, true);
 
@@ -543,7 +575,7 @@ on(document, "keydown", (e) => {
     }
     return;
   }
-  if (!target.matches("[data-slot=phone-search]")) return;
+  if (!matches(target, "[data-slot=phone-search]")) return;
   const visible = shown(list);
   const current = /** @type {HTMLElement | null} */ (list.querySelector("[data-active]"));
   const at = current ? visible.indexOf(current) : -1;
@@ -569,18 +601,17 @@ on(document, "keydown", (e) => {
 });
 
 on(document, "click", (e) => {
-  const item = /** @type {HTMLElement | null} */ (/** @type {Element} */ (e.target).closest?.("[data-ui-phone] [role=option]"));
+  const item = /** @type {HTMLElement | null} */ (closest(e.target, "[data-ui-phone] [role=option]"));
   const root = item && rootOf(e);
   if (item && root) pick(root, item);
 });
 
 on(document, "pointermove", (e) => {
-  const item = /** @type {HTMLElement | null} */ (/** @type {Element} */ (e.target).closest?.("[data-ui-phone] [role=option]"));
-  if (item && !has(item, "data-active")) activate(/** @type {HTMLElement} */ (item.closest("[data-slot=phone-countries]")), item);
+  const item = /** @type {HTMLElement | null} */ (closest(e.target, "[data-ui-phone] [role=option]"));
+  if (item && !has(item, "data-active")) activate(/** @type {HTMLElement} */ (closest(item, "[data-slot=phone-countries]")), item);
 }, { passive: true });
 
 // A rejected form shows its errors on the number, the control people use.
 on(document, "focusin", (e) => {
-  const select = /** @type {Element} */ (e.target);
-  if (select.matches?.("[data-enhanced] [data-slot=phone-country]")) parts(/** @type {Element} */ (select.closest("[data-ui-phone]"))).trigger?.focus();
+  if (matches(e.target, "[data-enhanced] [data-slot=phone-country]")) parts(/** @type {Element} */ (closest(e.target, "[data-ui-phone]"))).trigger?.focus();
 });

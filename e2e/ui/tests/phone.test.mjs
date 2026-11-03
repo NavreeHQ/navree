@@ -152,11 +152,57 @@ for (const browserName of browsers) {
       assert.equal(await f.e164.inputValue(), "+14169795000");
       await page.waitForTimeout(150);
       assert.equal(await f.status.textContent(), "Country set to Canada +1");
-      // A number of a country sharing the code stays with the chosen one.
+      // A country sharing the code stays only while the number may be its own:
+      // a Canadian number keeps Canada, a US number with Canada chosen goes to
+      // the United States.
+      await f.input.fill("");
+      await typed(page, f, "+1416979");
+      assert.equal(await f.country(), "CA", "not whole yet: Canada stays");
       await f.input.fill("");
       await typed(page, f, "+16502530000");
-      assert.equal(await f.country(), "CA", "Canada and the United States share +1");
+      assert.equal(await f.country(), "US", "a US number");
+      await f.input.fill("");
+      await typed(page, f, "+14169795000");
+      assert.equal(await f.country(), "CA", "a Canadian number");
       await shot(page, "pasted");
+      assert.deepEqual(problems, []);
+      await close();
+    });
+
+    /** Chooses a country through the list. */
+    async function choose(page, f, name) {
+      await f.trigger.click();
+      await f.search.fill(name);
+      await page.waitForTimeout(50);
+      await page.keyboard.press("Enter");
+    }
+
+    test("a number dialled with an international prefix is written with +, and the server reads it", async () => {
+      const { page, field, problems, close } = await open("/phone");
+      const f = field("mobile");
+      // (country chosen, typed, country it picks, text, E.164)
+      for (const [from, code, dialled, to, text, e164] of [
+        ["France", "FR", "00 1 650 253 0000", "US", "+1 650-253-0000", "+16502530000"],
+        ["United States", "US", "011 44 7400 123456", "GB", "+44 7400 123456", "+447400123456"],
+        ["Germany", "DE", "00 1 416 979 5000", "CA", "+1 416-979-5000", "+14169795000"],
+        ["France", "FR", "00 81 3 1234 5678", "JP", "+81 3-1234-5678", "+81312345678"],
+        ["France", "FR", "00 61 412 345 678", "AU", "+61 412 345 678", "+61412345678"],
+      ]) {
+        // A country picked by hand stays, whatever number the box still holds.
+        await choose(page, f, from);
+        assert.equal(await f.country(), code, `picked ${from}`);
+        await f.input.fill("");
+        await typed(page, f, dialled.replaceAll(" ", ""));
+        assert.equal(await f.country(), to, dialled);
+        assert.equal(await f.input.inputValue(), text, dialled);
+        assert.equal(await f.e164.inputValue(), e164, dialled);
+      }
+      // The last one, posted: the server reads the text in the country now chosen.
+      await page.locator("#contact-name").fill("Ada Lovelace");
+      await page.getByRole("button", { name: "Save contact" }).click();
+      await page.waitForSelector("[data-proof=mobile]");
+      assert.equal(await page.locator("[data-proof=mobile] [data-fact=e164]").textContent(), "+61412345678");
+      assert.equal(await page.locator("[data-proof=mobile] [data-fact=region]").textContent(), "Australia");
       assert.deepEqual(problems, []);
       await close();
     });

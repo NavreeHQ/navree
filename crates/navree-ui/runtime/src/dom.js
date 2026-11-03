@@ -52,6 +52,8 @@ export const one = (selector) => D.querySelector.call(document, selector);
 export const every = (selector, doc = document) => D.querySelectorAll.call(doc, selector);
 /** @param {string} tag @returns {HTMLElement} */
 export const make = (tag) => D.createElement.call(document, tag);
+/** @param {string} text @returns {Text} */
+export const textNode = (text) => D.createTextNode.call(document, text);
 /** @param {EventTarget} target @param {string} type @param {(e: any) => void} listener @param {boolean | AddEventListenerOptions} [options] */
 export const on = (target, type, listener, options) => T.addEventListener.call(target, type, listener, options);
 /** Fires `event` at the document. @param {Event} event */

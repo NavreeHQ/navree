@@ -634,9 +634,11 @@ ${wrap(codeTerritories, 16)}
     if (main === t) {
       entry.f = t.formats.map((f) => [f.pattern, f.format, f.leading, nationalFormat(f) || 0, f.optional ? 1 : 0]);
       if (t.intl.length) entry.i = t.intl.map((f) => [f.pattern, f.format, f.leading]);
-    } else if (!t.leading) {
-      // A territory that shares its code and has no leading digits of its
-      // own (Canada with the United States) is told apart by its lines.
+    }
+    if (byCode.get(t.code).length > 1 && !t.leading) {
+      // Territories that share a code and have no leading digits of their
+      // own (the United States and Canada; Australia and its islands) are
+      // told apart by their lines, tried in the server's order, main first.
       const lines = ["fixedLine", "mobile"].map((type) => t.descs[type]?.pattern).filter(Boolean);
       entry.tp = lines.map((p) => `(?:${p})`).join("|");
     }

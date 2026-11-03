@@ -79,6 +79,57 @@ for (const [engine, launcher] of [["chromium", chromium], ["firefox", firefox]])
       }
     });
 
+    test(`named elements can't break the phone input (${engine})`, async () => {
+      const path = key("phone");
+      // Images named after what the module reads from the document, and form
+      // fields named after the methods it calls on event targets.
+      const clobber = `<img name="createTextNode" src="${GIF}" alt=""><img name="documentElement" src="${GIF}" alt=""><img name="documentElement" src="${GIF}" alt=""><img name="activeElement" src="${GIF}" alt="">`;
+      const phone = `<div data-slot="phone-input" data-ui-phone data-ui-keep-attrs="data-enhanced">
+        <select data-slot="phone-country" name="phone_country" aria-label="Country" data-field-skip><option value="">Country</option><option value="FR">France +33</option><option value="GB" selected>United Kingdom +44</option></select>
+        <button type="button" id="trigger" data-slot="phone-country-trigger" popovertarget="phone-countries" aria-haspopup="listbox" aria-expanded="false" aria-label="Country: United Kingdom +44" data-field-skip><span data-slot="phone-flag" aria-hidden="true"></span><span data-slot="phone-dial">+44</span></button>
+        <div data-slot="phone-countries" id="phone-countries" popover="auto" data-side="bottom" data-align="start" data-ui-place data-ui-keep data-label-search="Search countries" data-label-empty="No country found." data-label-count="{n} countries" data-preferred=""></div>
+        <input data-slot="input" id="tel" type="tel" name="phone" autocomplete="tel" inputmode="tel" dir="ltr">
+        <input data-slot="phone-e164" type="hidden" name="phone_e164" value="" disabled data-ui-keep-attrs="disabled value">
+        <span data-slot="phone-status" role="status" aria-live="polite" data-label-country-set="Country set to {country}"></span>
+      </div>`;
+      // What a page with a phone input loads: the phone and overlay modules.
+      route(`/${path}`, `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>t</title><script type="module" src="/_navree/ui/overlay.js"></script><script type="module" src="/_navree/ui/phone.js"></script></head><body>${clobber}<form id="f" method="post" action="/${path}-post"><input name="closest" value="x"><input name="matches" value="x">${phone}</form></body></html>`);
+      const { context, page, errors } = await fresh(`/${path}`);
+      const read = () => page.evaluate(() => {
+        const q = (s) => Document.prototype.querySelector.call(document, s);
+        return {
+          enhanced: Element.prototype.hasAttribute.call(q("[data-ui-phone]"), "data-enhanced"),
+          country: q("select[name=phone_country]").value,
+          text: q("#tel").value,
+          e164: q("input[name=phone_e164]").value,
+          options: Document.prototype.querySelectorAll.call(document, "#phone-countries [role=option]").length,
+          flag: q("[data-slot=phone-flag]").textContent,
+        };
+      });
+      const eventually = async (check) => {
+        for (const end = Date.now() + 5000; Date.now() < end; await sleep(20)) if (await check()) return;
+      };
+      await eventually(async () => (await read()).enhanced);
+      // A click on the form itself goes through a target whose fields shadow its methods.
+      await page.evaluate(() => Document.prototype.getElementById.call(document, "f").click());
+      // The list opens, draws its flags and picks a country.
+      await page.click("#trigger");
+      await eventually(async () => (await read()).options > 0);
+      await page.click("#phone-countries [role=option][data-value=FR]");
+      await eventually(async () => (await read()).country === "FR");
+      // A pasted number of another country formats and picks its own.
+      await page.click("#tel");
+      await page.keyboard.type("+447400123456");
+      await eventually(async () => (await read()).country === "GB");
+      const state = await read();
+      assert.deepEqual(
+        { enhanced: state.enhanced, country: state.country, text: state.text, e164: state.e164, options: state.options, flag: state.flag.length > 0 },
+        { enhanced: true, country: "GB", text: "+44 7400 123456", e164: "+447400123456", options: 2, flag: true },
+      );
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+
     test(`a field named enctype keeps a form multipart (${engine})`, async () => {
       const path = key("enctype");
       route(`/${path}`, doc(`<form id="f" data-ui-form method="post" enctype="multipart/form-data" action="/${path}-post"><input name="enctype" value="v"><button id="go">go</button></form>`));
