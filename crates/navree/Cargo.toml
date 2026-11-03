@@ -1,6 +1,6 @@
 [package]
 name = "navree"
-description = "Navree: the complete backend framework for Rust. Modular, API-first and AI-native (facade crate)."
+description = "Navree: the complete application framework for Rust. The backend, the screens and the tools to run them, modular and AI-native (facade crate)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

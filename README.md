@@ -6,18 +6,20 @@
   </picture>
 </p>
 
-<h3 align="center">The complete backend framework for Rust.</h3>
+<h3 align="center">The complete application framework for Rust.</h3>
 
 <p align="center">
-  Modular, API-first and AI-native. Auth, workspaces, an ORM, queues, search,<br>
-  real time, monitoring and deployment are already in the box,<br>
-  so you build the product, not the plumbing.
+  The backend, the screens and the tools to run them, in one modular,<br>
+  AI-native framework. Auth, workspaces, an ORM, queues, search, real time<br>
+  and AI are already in the box, so you build the product, not the plumbing.
 </p>
 
 <p align="center">
   <a href="https://navree.com/docs/prologue/introduction/"><b>Documentation</b></a>
   &nbsp;·&nbsp;
   <a href="https://navree.com/docs/getting-started/installation/"><b>Get started</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://navree.com/docs/ui/choosing-a-ui/"><b>UI</b></a>
   &nbsp;·&nbsp;
   <a href="https://navree.com/ecosystem/"><b>Ecosystem</b></a>
   &nbsp;·&nbsp;
@@ -35,15 +37,17 @@
 
 <br>
 
-<a href="https://navree.com"><img src="assets/readme/hero.jpg" alt="Navree: the complete backend framework for Rust" width="100%"></a>
+<a href="https://navree.com"><img src="assets/readme/hero.jpg" alt="Navree: the complete application framework for Rust" width="100%"></a>
 
 ## Why Navree
 
-Every Navree backend has the same clear structure. Features live in modules
-that declare what they import, provide and export, and a dependency-injection
-container wires them together when the app boots, refusing to start if
-anything is missing. Around that structure sits a complete standard library
-for backends, designed, documented and released together.
+Navree is a framework for complete applications: the API, the background
+work, the screens and the tools that keep it all running. Every app has the
+same clear structure. Features live in modules that declare what they
+import, provide and export, and a dependency-injection container wires them
+together when the app boots, refusing to start if anything is missing.
+Around that structure sits everything a product needs, designed, documented
+and released together.
 
 - **Modular by design.** An app is a set of modules with checked
   boundaries. Nothing is global, so the code stays easy to test, to change
@@ -56,8 +60,15 @@ for backends, designed, documented and released together.
   security headers, an audit log and an SSRF guard are on from the start.
 - **Multi-tenant from the first commit.** Workspaces and organizations with
   members, roles and invitations, isolated by row, schema or database.
+- **Screens your way.** Navree UI renders typed Rust components to HTML on
+  the server, with a strict content security policy and a server-side
+  DataTable. Or put a Next.js or Nuxt app beside the same API.
+- **The tools to run it.** Monitoring, an admin panel, a queue supervisor
+  and a debugging timeline are first-party and served by your own app.
 - **AI-native.** Agent skills, an MCP server for your coding agent, docs
   written for models as well as people, and an AI SDK for your product.
+- **Bring what you have.** Agent skills rebuild an existing product, with
+  its data, as a Navree app, or turn a design into Navree UI pages.
 - **One binary.** Web server, queue workers and scheduler ship as one
   release, built on Tokio, Hyper, Tower and rustls.
 
@@ -163,6 +174,7 @@ let won = Deal::query()
 | **Files** | Storage on S3, Google Cloud and Azure, media with image conversions, PDF and DOCX documents, and CSV and Excel imports and exports |
 | **Product** | Billing with Stripe and Paddle, feature flags, typed settings with inheritance, full-text and vector search, localization and time zones |
 | **AI** | An AI SDK for Anthropic, OpenAI, Gemini, Mistral, Ollama and Bedrock, agents with typed tools, embeddings and vector stores, and MCP servers |
+| **UI** | Navree UI: typed Rust components rendered on the server, forms from validated structs, an app shell and a server-side DataTable; or Next.js and Nuxt beside the API |
 | **Operations** | Monitoring, a debugging timeline, a queue supervisor, an admin panel, zero-downtime deploys, health checks, metrics and tracing |
 
 ## Multi-tenant from the first commit
@@ -195,8 +207,8 @@ billing, OAuth, AI and more. All first-party, open source and self-hosted.
 ## Built for developers and their agents
 
 Every Navree app has one predictable shape, so a coding agent finds its way
-the first time. Navree hands it the steps for each task and a view of the
-running app, and gives your product AI models behind one typed service.
+the first time. Skills give it the steps for each task, Navigator shows it
+the running app, and your product gets AI models behind one typed service.
 
 <a href="https://navree.com/ai/"><img src="assets/readme/ai.jpg" alt="A coding agent fixing a failing request through the Navree MCP server" width="100%"></a>
 
@@ -204,6 +216,10 @@ running app, and gives your product AI models behind one typed service.
 - **Navigator** (`navree mcp`) gives your agent the routes, the schema, the logs and the last error of the running app.
 - **Docs for models**: [`llms.txt`](https://navree.com/llms.txt) and every page as Markdown.
 - **AGENTS.md** in every new app.
+- **Two ways in**: [bring your product](https://navree.com/docs/getting-started/bring-your-product/)
+  rebuilds an old product, with its data, as a Navree app, and
+  [bring your design](https://navree.com/docs/getting-started/bring-your-design/)
+  turns a mock-up, an export or screenshots into Navree UI pages.
 
 ## A real CRM, built on Navree
 
@@ -220,9 +236,18 @@ log, and two front ends on the same API, one in Next.js and one in Nuxt.
   </tr>
 </table>
 
-## Front ends
+## Screens and front ends
 
-Navree is API-first and works with any front end. For web apps, the npm
+[Navree UI](https://navree.com/docs/ui/overview/) is the `ui` feature of
+`navree`, on by default. A handler returns typed components and the toolkit
+renders them to HTML on the server, with one stylesheet, a small runtime
+that loads only what a page uses, and a strict content security policy.
+Every [component](https://navree.com/docs/components/overview/) has a live
+preview in the docs. Navree UI grows one module at a time, and
+[Coming next](https://navree.com/docs/ui/coming-next/) lists what is still
+to come.
+
+Navree is also API-first and works with any front end. For web apps, the npm
 packages in [`packages/js`](packages/js) add a typed client generated from
 your OpenAPI document, a backend-for-frontend that keeps tokens in httpOnly
 cookies, Next.js and Nuxt integrations, and the navree.com theme.
@@ -239,6 +264,8 @@ cookies, Next.js and Nuxt integrations, and the navree.com theme.
 
 - [Documentation](https://navree.com/docs/prologue/introduction/): guides
   and reference for every module.
+- [Choosing a UI](https://navree.com/docs/ui/choosing-a-ui/): Navree UI,
+  Next.js or Nuxt, and what each costs and gives.
 - [The ecosystem](https://navree.com/ecosystem/): every first-party tool and
   package.
 - [The CRM showcase](https://navree.com/showcase/crm/): screenshots and a
