@@ -8,6 +8,12 @@
  *   LIGHTHOUSE_CLI=/path/to/lighthouse/cli/index.js node scripts/lighthouse.ts
  *                                              a Lighthouse you installed, instead of `npx lighthouse@<pinned>`
  *
+ * The pages are served by `scripts/serve.ts`, which sends text compressed
+ * with Brotli as the live site's CDN does; a server that does not compress
+ * gives scores 15 to 20 points too low. The script asks the server for the
+ * home page with `Accept-Encoding: br, gzip`, names the answer in the report
+ * and warns when the server does not compress.
+ *
  * Lighthouse runs with its default mobile settings (a phone-sized screen, a
  * slow 4G connection and a 4x slower CPU). The floors are for catching a
  * collapse, not for setting a goal: SEO and accessibility must stay at or
@@ -43,6 +49,17 @@ const ready = (url: string) =>
       .on("error", () => resolve(false));
   });
 
+/** The `Content-Encoding` the server answers with when the client accepts Brotli and gzip ("none" when it sends the file as is). */
+const encodingOf = (url: string) =>
+  new Promise<string>((resolve) => {
+    http
+      .get(url, { headers: { "Accept-Encoding": "br, gzip" } }, (res) => {
+        res.resume();
+        resolve(String(res.headers["content-encoding"] ?? "none"));
+      })
+      .on("error", () => resolve("unknown"));
+  });
+
 let server: ChildProcess | null = null;
 let base = process.env.BASE_URL ?? "";
 if (!base) {
@@ -55,6 +72,14 @@ if (!base) {
     console.error("lighthouse: the static server did not start; run `pnpm build` first");
     process.exit(1);
   }
+}
+
+const encoding = await encodingOf(`${base}/`);
+const compressing = encoding === "br" || encoding === "gzip";
+if (!compressing) {
+  console.warn(
+    `lighthouse: ${base} sends text uncompressed (Content-Encoding: ${encoding}); the scores will be lower than the live site's. Use scripts/serve.ts, or a server that sends Brotli or gzip.`,
+  );
 }
 
 const problems: string[] = [];
@@ -108,7 +133,10 @@ const table = [
   "|---|---|---|---|---|---|---|---|---|",
   ...rows,
 ].join("\n");
-fs.writeFileSync(path.join(REPORT, "lighthouse.md"), `${table}\n`);
+const served = compressing
+  ? `Served with ${encoding === "br" ? "Brotli" : "gzip"}, as the live site is.`
+  : `Served without compression (Content-Encoding: ${encoding}): the scores are lower than the live site's.`;
+fs.writeFileSync(path.join(REPORT, "lighthouse.md"), `${table}\n\n${served}\n`);
 console.log(table);
 
 finish("lighthouse", problems, `${pagesToCheck.length} pages at or above the floors (performance ${FLOOR.performance * 100}, accessibility ${FLOOR.accessibility * 100}, best practices ${FLOOR["best-practices"] * 100}, SEO ${FLOOR.seo * 100}, layout shift at most ${MAX_CLS})`);

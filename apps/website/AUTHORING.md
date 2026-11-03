@@ -425,7 +425,7 @@ pnpm lint          # oxlint
 pnpm typecheck     # tsc (runs the prebuild first)
 pnpm build         # static export to out/
 pnpm check:links   # every internal link and #anchor in out/ resolves
-pnpm serve         # serves out/ at http://127.0.0.1:3211, like a static host
+pnpm serve         # serves out/ at http://127.0.0.1:3211, like a static host (text compressed with Brotli, as the live site sends it)
 ```
 
 `pnpm build` (and `pnpm dev`) first runs `scripts/prebuild.ts`, which:
