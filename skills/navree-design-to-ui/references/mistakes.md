@@ -251,8 +251,8 @@ information already reachable another way.
 **Detect:** every link whose target changes data.
 
 **Navree form:** a form that posts (`UserMenu::action`, `RowAction::post`,
-a `Button` in a form). Links are fetched ahead of a click, so a link must
-never change anything.
+a `Button` in a form). A link can be fetched ahead of a click when the page
+asks for it (`prefetch`), so a link must never change anything.
 
 ## 20. Dates and times with no zone
 

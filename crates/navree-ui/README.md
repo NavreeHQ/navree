@@ -70,7 +70,7 @@ async fn index(shell: AppShell, uow: Uow, query: TableQuery<Deal>) -> Result<App
 
 | Page | Script |
 |---|---|
-| Nothing interactive | None. Links are prefetched from a `Speculation-Rules` header. |
+| Nothing interactive | None. Links marked with `prefetch` are fetched ahead through a `Speculation-Rules` header. |
 | A dialog, an accordion, a switch | None: `<dialog>`, `command`, `<details>`, `<input>`. |
 | A popover, tooltip or hover card | `overlay`: placing and hover delay. |
 | A form, a region, a command | `core`: delegation, commands, ops, morph, boosted links, pending states. |
@@ -221,11 +221,13 @@ behave as for any select, and with JavaScript off the `<select>` is what shows.
 
 ## Fetching ahead of a click
 
-A `GET` can change state: a sign-out written as a link, a delete. Hovering past one must
-do nothing, so only links marked safe are fetched ahead of a click: sidebar items,
-breadcrumbs, the app's name, sort and page links, and any link you mark with
-`Element::prefetch` or `Button::prefetch`. `NavItem::no_prefetch` turns it off for one
-item, and `data-ui-noboost` keeps a link out of boosting altogether: it loads for real.
+A `GET` can change state: a sign-out written as a link, a delete. And a fetch ahead costs
+a request the user may never need. So nothing is fetched ahead of a click unless the page
+asks, link by link: `Element::prefetch`, `Button::prefetch`, `NavItem::prefetch`,
+`Breadcrumb::prefetch`, `AppPage::prefetch_crumbs`, `Shell::prefetch_home`, and
+`DataTable::prefetch` for a table's own sort, page and filter links (never a cell's link).
+`NavItem::no_prefetch` undoes it for one item, and `data-ui-noboost` keeps a link out of
+boosting altogether: it loads for real.
 
 - Nothing is fetched with no hover unless a link asks: `prefetch_eager()` on an element, a
   `Button` or a `NavItem` fetches it as soon as the page is quiet, at most four a page, and

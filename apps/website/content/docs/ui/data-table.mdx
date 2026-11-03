@@ -118,6 +118,7 @@ A tick in a filter's list, a radio and a select apply at once. The search box an
 | `.live(every)`, `.live_from(url)`, `.refreshable()` | refetches while the page is visible, or when a server-sent event stream speaks, keeping typing, focus and the selection |
 | `.views(&views, url)`, `.export(url)`, `.foot(col, cell)` | stored views, CSV export of the current filter, a footer row |
 | `.debounce(wait)` | how long typing in the search or a text filter waits for a pause: 100 ms unless this says otherwise |
+| `.prefetch()` | fetches the table's own links (sort, page, filter chips, details) when the pointer rests on one, so the next state is often there before the click; off unless asked |
 
 ## Limits
 

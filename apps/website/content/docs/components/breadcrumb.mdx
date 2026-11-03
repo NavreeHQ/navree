@@ -35,7 +35,7 @@ Use a breadcrumb on pages deep in a hierarchy, so readers can step back up.
 
 - The `<nav>` is labelled "Breadcrumb"; `.label(name)` gives a second trail on the same page a name of its own, since landmarks must differ.
 - The current page has `aria-current="page"` and isn't a link.
-- Its links are fetched ahead of a click: they lead to pages that change nothing.
+- `.prefetch()` fetches its links when the pointer rests on one or it takes focus, so the page is often there before the click. Off unless asked; only for pages whose `GET` changes nothing.
 
 </UiA11y>
 

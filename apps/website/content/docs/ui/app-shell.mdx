@@ -65,7 +65,7 @@ A module that serves pages of its own and has no business registering a shell fo
 
 ## Fetched ahead of a click
 
-Sidebar items, breadcrumb links and the app's name are fetched when the pointer rests on them or they take focus, so the page is often there before the click. Only do this for pages whose `GET` changes nothing: `NavItem::no_prefetch()` turns it off for one item.
+Nothing is fetched ahead of a click unless you ask, link by link. `NavItem::prefetch()` fetches a sidebar item when the pointer rests on it or it takes focus, so the page is often there before the click; `NavItem::prefetch_eager()` fetches it as soon as the page is quiet. `AppPage::prefetch_crumbs()` does the same for a page's breadcrumb, and `Shell::prefetch_home()` for the app's name. Each costs a request the user may never need, so ask only for the places users usually go next, and only for pages whose `GET` changes nothing.
 
 ## Keyboard and accessibility
 

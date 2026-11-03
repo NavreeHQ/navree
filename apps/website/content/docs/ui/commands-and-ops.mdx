@@ -128,7 +128,7 @@ In a filter form that updates a region, such as a [DataTable](/docs/ui/data-tabl
 
 ## Fetching ahead of a click
 
-A link the toolkit knows is navigation (a sidebar item, a breadcrumb, a table's sort and page links) and a link marked with `.prefetch()` is fetched when the pointer rests on it or it takes focus, so the page is often there before the click. Only mark a link whose `GET` changes nothing.
+Nothing is fetched ahead of a click unless the page asks, link by link. A link marked with `.prefetch()` is fetched when the pointer rests on it or it takes focus, so the page is often there before the click: an element, a `Button`, a `NavItem`, a `Breadcrumb`, `AppPage::prefetch_crumbs()`, `Shell::prefetch_home()`, and `DataTable::prefetch()` for a table's own sort, page and filter links. Only mark a link whose `GET` changes nothing.
 
 Nothing is fetched with no hover unless a link asks: `.prefetch_eager()` on an element, a `Button` or a `NavItem` fetches it as soon as the page is quiet. It costs that page's bytes on every visit, so keep it for the one or two places users almost always go next. The runtime takes at most four such links a page, and none on a slow or data-saving connection. It pays most for a page that is the same for every user and says so with `View::cache("public, max-age=60")`. A page that differs per user stays `no-store`: what was fetched stands in for a click for only a few seconds, and a write in any tab drops it.
 
