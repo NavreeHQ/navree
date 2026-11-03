@@ -13,8 +13,9 @@ import { allDocs, documentTitle, findDoc, findSection, neighbours, plain, sectio
 import { howToFor } from "@/lib/howto";
 import { lastModified } from "@/lib/last-modified";
 import { renderMdx } from "@/lib/mdx";
-import { docTitle, pageMetadata } from "@/lib/metadata";
-import { JsonLd, docData, howToData } from "@/lib/structured-data";
+import { docTitle, pageMetadata, sectionTitle } from "@/lib/metadata";
+import { sectionModified } from "@/lib/site-pages";
+import { JsonLd, docData, howToData, sectionData } from "@/lib/structured-data";
 import { editUrl, site } from "@site";
 
 /** Every page is also published as Markdown (`scripts/agent-files.ts`). */
@@ -36,7 +37,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const section = slug.length === 1 ? findSection(slug[0]) : null;
   if (section) {
-    return pageMetadata({ title: section.documentTitle, description: plain(section.description), path: section.href });
+    return pageMetadata({
+      title: section.documentTitle,
+      htmlTitle: sectionTitle(section.title),
+      description: plain(section.description),
+      descriptionContext: `Every page of the ${section.title} section of the ${site.name} documentation.`,
+      path: section.href,
+      extra: { alternates: { types: { "text/markdown": markdownPath(section.slug) } } },
+    });
   }
   const doc = findDoc(slug);
   if (!doc) return {};
@@ -56,7 +64,23 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function DocPage({ params }: Props) {
   const { slug } = await params;
   const section = slug.length === 1 ? findSection(slug[0]) : null;
-  if (section) return <SectionIndexPage section={section} />;
+  if (section) {
+    return (
+      <>
+        <SectionIndexPage section={section} />
+        <JsonLd
+          data={sectionData({
+            title: section.title,
+            description: plain(section.description),
+            href: section.href,
+            dateModified: sectionModified(section.slug),
+            pages: section.pages.map((page) => ({ title: page.title, description: plain(page.description), href: page.href })),
+            markdown: markdownPath(section.slug),
+          })}
+        />
+      </>
+    );
+  }
   const doc = findDoc(slug);
   if (!doc) notFound();
 

@@ -3,7 +3,8 @@
  * so `next dev` serves them and `next build` copies them into `out/`:
  *
  * - `public/docs/<section>/<page>.md`: every docs page as Markdown
- *   (`src/lib/agent-markdown.ts` says how components are converted);
+ *   (`src/lib/agent-markdown.ts` says how components are converted), and
+ *   `public/docs/<section>.md`: each section's own page, which lists its pages;
  * - `public/llms.txt`: the index, one line per page linking its `.md`;
  * - `public/llms-full.txt`: every page in one file;
  * - `public/skills/<name>/...`: each skill of the repository's `skills/`
@@ -23,7 +24,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { agentPages, docsBundle, llmsFullTxt, llmsTxt, pageMarkdown } from "../src/lib/agent-markdown.ts";
+import { agentPages, agentSections, docsBundle, llmsFullTxt, llmsTxt, pageMarkdown, sectionMarkdown } from "../src/lib/agent-markdown.ts";
 import { listSkills } from "../src/lib/agent-skills.ts";
 import { site } from "../site.config.ts";
 
@@ -60,6 +61,12 @@ for (const page of pages) {
 if (problems.length) {
   console.error(`\nagent-files: these pages could not be converted to Markdown:\n  - ${problems.join("\n  - ")}\n`);
   process.exit(1);
+}
+
+// Each section's own page as Markdown: `public/docs/<section>.md`.
+const sectionPages = agentSections(pages);
+for (const section of sectionPages) {
+  write(path.join(PUBLIC, ...section.mdPath.split("/").filter(Boolean)), sectionMarkdown(section));
 }
 
 // The skills, copied as they are, and their index.
@@ -100,6 +107,6 @@ if (!version) {
 write(path.join(PUBLIC, "v", version, "docs.json"), `${JSON.stringify(docsBundle(version, pages))}\n`);
 
 console.log(
-  `agent-files: ${pages.length} Markdown pages, llms.txt, llms-full.txt (${Math.round(full.length / 1024)} KB), ` +
+  `agent-files: ${pages.length} Markdown pages and ${sectionPages.length} sections, llms.txt, llms-full.txt (${Math.round(full.length / 1024)} KB), ` +
     `docs.json for ${version}, ${skills.length} skills (${Math.round(performance.now() - started)} ms)`,
 );

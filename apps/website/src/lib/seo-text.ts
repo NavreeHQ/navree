@@ -79,3 +79,18 @@ export function docTitle(title: string, sectionTitle: string, siteName: string):
   ].filter((form): form is string => Boolean(form));
   return forms.find((form) => form.length <= TITLE_MAX) ?? forms[forms.length - 1];
 }
+
+/**
+ * The `<title>` of a docs section's own page, 30 to 60 characters: the
+ * section's name, what the page is (a list of all its pages) and the
+ * documentation's name. The form is the same for every section, so no
+ * section page can share a title with one of its own pages (a page called
+ * "Front end" in the section "Front end" is `Front end | Navree documentation`).
+ *
+ *   The basics: all pages | Navree documentation
+ *   AI: all pages | Navree documentation
+ */
+export function sectionPageTitle(title: string, siteName: string): string {
+  const forms = [`${title}: all pages | ${siteName} documentation`, `${title}: all pages | ${siteName} docs`, `${title}: all pages | ${siteName}`];
+  return forms.find((form) => form.length <= TITLE_MAX) ?? forms[forms.length - 1];
+}

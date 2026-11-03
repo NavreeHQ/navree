@@ -12,6 +12,7 @@ These docs are written for two readers: you, and the model working next to you. 
 | The index | [`/llms.txt`](/llms.txt) | Give a model the map of the docs, one line per page. |
 | Everything | [`/llms-full.txt`](/llms-full.txt) | Load the whole documentation into one context. |
 | One page | `/docs/<section>/<page>.md` | Give a model exactly the page it needs. |
+| One section | `/docs/<section>.md` | Give a model the list of a section's pages, with a line about each. |
 | One version, as data | `/v/<version>/docs.json` | Every page split at its `##` headings, as Markdown; what [Navigator](/docs/ai/navigator/#search_docs-and-read_doc) downloads for an app on that Navree version. |
 | Page actions | the top of every docs page | Copy a page, or open it in Claude or ChatGPT. |
 | Project instructions | `AGENTS.md` and `CLAUDE.md` in every new app | Tell agents how your app is built before they change it. |
@@ -28,6 +29,8 @@ Replace the trailing slash of a docs URL with `.md` and you get the page as Mark
 | `https://navree.com/docs/digging-deeper/queues/` | `https://navree.com/docs/digging-deeper/queues.md` |
 | `https://navree.com/docs/ai/agent-skills/` | `https://navree.com/docs/ai/agent-skills.md` |
 
+A section's own page works the same way: `https://navree.com/docs/basics/` is `https://navree.com/docs/basics.md`, a list of the section's pages with their descriptions.
+
 The Markdown starts with the page's title as a heading and its description, then the body as written: headings, tables, and code blocks with their language and file name. The site's components become plain Markdown, so nothing is lost on the way: a callout becomes a block quote that starts with its kind ("Note", "Tip", "Warning"), each tab becomes a titled section, steps become numbered headings, link cards a list of links, a file tree a text block and a diagram one sentence that describes it. The files are served as `text/markdown`, with no navigation, scripts or styling around them.
 
 Point your agent at the page for the task:
@@ -39,39 +42,50 @@ that exports a company's contacts to CSV and mails the requester a link.
 
 ## llms.txt
 
-[`/llms.txt`](/llms.txt) follows the [llms.txt](https://llmstxt.org/) convention: a short description of Navree, then one line per docs page, in the order of the sidebar, linking the page's Markdown with its one-sentence description:
+[`/llms.txt`](/llms.txt) follows the [llms.txt](https://llmstxt.org/) convention: a short description of Navree, its key facts (name, license, version, install command), the main pages of the site, then one line per docs page, in the order of the sidebar, linking the page's Markdown with its one-sentence description. Each section starts with a line for the section's own page:
 
 ```text title="https://navree.com/llms.txt"
 # Navree
 
 > The complete application framework for Rust. The backend, the screens and the tools to run them, in one modular, AI-native framework.
 
-Navree is an open-source Rust framework for complete applications. ...
+## Key facts
+
+- Name: Navree
+- Category: The complete application framework for Rust.
+- License: MIT OR Apache-2.0 (free and open source, no paid tiers)
+- Version: 1.0.0 (the first release; from the workspace Cargo.toml)
+- Install: `cargo install --git https://github.com/NavreeHQ/navree navree-cli`, then `navree new blog`
+...
+
+## Main pages
+
+- [Home](https://navree.com/): What Navree is, what comes in the box, and how to start.
+- [Navree UI](https://navree.com/ui/): Typed Rust components rendered on the server: how it works, every component with a live preview, what comes next.
+...
 
 ## Prologue
 
+- [Prologue: all pages](https://navree.com/docs/prologue.md): What Navree is, what 1.0 ships, what comes next, and how to report a bug or send a change.
 - [Introduction](https://navree.com/docs/prologue/introduction.md): What Navree is, the ideas it is built on, what comes in the box, who it's for and how to read these docs.
+...
 
 ## Getting started
 
+- [Getting started: all pages](https://navree.com/docs/getting-started.md): Install the CLI, build your first app, and learn how an app is configured, laid out, started and deployed, or bring an existing product or design.
 - [Installation](https://navree.com/docs/getting-started/installation.md): Install Rust and the `navree` CLI, create an app with `navree new`, and run it with `navree dev`.
 - [Your first app](https://navree.com/docs/getting-started/your-first-app.md): Build a small task-list API with a model, a migration, validation, JWT authentication, access rules and feature tests, from `navree new` to green tests.
 
 ...
-
-## The basics
-
-- [Routing and controllers](https://navree.com/docs/basics/routing.md): Controllers and route attributes, the API prefix and versions, absolute `!` paths, path and query parameters, route names and the route table.
-...
 ```
 
-The index ends with an "Agent skills" section: one line per [agent skill](/docs/ai/agent-skills/), linking its `SKILL.md` on navree.com, and the address of `/skills/index.json`, which lists them all.
+The index ends with an "Optional" section: the longer files (`/llms-full.txt`, the sitemap and the changelog feed), the address of `/skills/index.json`, which lists every [agent skill](/docs/ai/agent-skills/), and one line per skill, linking its `SKILL.md` on navree.com.
 
 An agent that starts from `llms.txt` reads the index (a few thousand tokens), picks the pages that matter for the task and fetches only those. That is the best default: small, current and specific.
 
 ## llms-full.txt
 
-[`/llms-full.txt`](/llms-full.txt) is every page's Markdown in one file, in sidebar order, each page starting with its title and URL. Use it when you want the model to hold the whole framework at once: loading it into a project's knowledge in a chat app, or asking broad questions ("Which modules does an app with workspaces, queues and real time need, and in what order?").
+[`/llms-full.txt`](/llms-full.txt) is every page's Markdown in one file, in sidebar order, each page starting with its title and URL. A section's own page comes before the section's pages. Use it when you want the model to hold the whole framework at once: loading it into a project's knowledge in a chat app, or asking broad questions ("Which modules does an app with workspaces, queues and real time need, and in what order?").
 
 It is large, the size of a book. For a coding task in your editor, the index and a few pages are faster and cost less; for a long design conversation, the full file saves the model from fetching page after page.
 

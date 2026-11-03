@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { site } from "@site";
 
-import { docTitle as fitDocTitle, metaDescription } from "./seo-text.ts";
+import { docTitle as fitDocTitle, metaDescription, sectionPageTitle } from "./seo-text.ts";
 
 export { metaDescription } from "./seo-text.ts";
 
@@ -23,6 +23,11 @@ export const changelogFeed = { url: "/changelog/feed.xml", title: `${site.name} 
  */
 export function docTitle(title: string, sectionTitle: string): string {
   return fitDocTitle(title, sectionTitle, site.name);
+}
+
+/** The `<title>` of a docs section's own page, 30 to 60 characters (see `seo-text.ts`). */
+export function sectionTitle(title: string): string {
+  return sectionPageTitle(title, site.name);
 }
 
 /**

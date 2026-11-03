@@ -236,8 +236,6 @@ export function docData(doc: {
   section: string;
   sectionTitle: string;
   dateModified?: string;
-  /** The section's own page (default: its index page when the docs have one, else its place on the docs index). */
-  sectionHref?: string;
   /** The page's Markdown copy, `/docs/<section>/<page>.md`. */
   markdown?: string;
 }): Json {
@@ -282,8 +280,66 @@ export function docData(doc: {
       breadcrumb(`${url}#breadcrumb`, [
         { name: site.name, path: "/" },
         { name: "Docs", path: "/docs/" },
-        { name: doc.sectionTitle, path: doc.sectionHref ?? docSectionPath(doc.section) },
+        { name: doc.sectionTitle, path: docSectionPath(doc.section) },
         { name: doc.title, path: doc.href },
+      ]),
+    ],
+  };
+}
+
+/**
+ * A docs section's own page (`/docs/<section>/`) as a `CollectionPage` whose
+ * main entity is the list of the section's pages, with its breadcrumb trail
+ * and its Markdown copy.
+ */
+export function sectionData(section: {
+  title: string;
+  description: string;
+  href: string;
+  dateModified: string;
+  pages: { title: string; description: string; href: string }[];
+  /** The section's Markdown copy, `/docs/<section>.md`. */
+  markdown?: string;
+}): Json {
+  const url = abs(section.href);
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "CollectionPage",
+        "@id": `${url}#webpage`,
+        url,
+        name: section.title,
+        description: section.description,
+        inLanguage: "en",
+        dateModified: section.dateModified,
+        isPartOf: { "@id": WEBSITE_ID },
+        about: { "@id": SOFTWARE_ID },
+        primaryImageOfPage: { "@type": "ImageObject", url: abs(ogImage.url), width: ogImage.width, height: ogImage.height },
+        breadcrumb: { "@id": `${url}#breadcrumb` },
+        mainEntity: { "@id": `${url}#pages` },
+        ...(section.markdown
+          ? { encoding: { "@type": "MediaObject", encodingFormat: "text/markdown", contentUrl: abs(section.markdown) } }
+          : {}),
+      },
+      {
+        "@type": "ItemList",
+        "@id": `${url}#pages`,
+        name: `Pages in ${section.title}`,
+        numberOfItems: section.pages.length,
+        itemListOrder: "https://schema.org/ItemListOrderAscending",
+        itemListElement: section.pages.map((page, i) => ({
+          "@type": "ListItem",
+          position: i + 1,
+          name: page.title,
+          description: page.description,
+          item: abs(page.href),
+        })),
+      },
+      breadcrumb(`${url}#breadcrumb`, [
+        { name: site.name, path: "/" },
+        { name: "Docs", path: "/docs/" },
+        { name: section.title, path: section.href },
       ]),
     ],
   };

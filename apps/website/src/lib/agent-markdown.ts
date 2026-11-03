@@ -127,6 +127,60 @@ export function pageMarkdown(page: AgentPage): string {
   return `${head}\n\n${body}${questions}\n`;
 }
 
+// --------------------------------------------------------------- sections
+
+/** A docs section's own page (`/docs/basics/`), published as Markdown too. */
+export type AgentSection = {
+  slug: string;
+  title: string;
+  description: string;
+  /** `/docs/basics/` */
+  href: string;
+  /** `/docs/basics.md` */
+  mdPath: string;
+  /** The section's pages in order, cut into the manifest's groups; the first group may have no title. */
+  groups: { title: string | null; pages: AgentPage[] }[];
+};
+
+/** Every section that has pages, in sidebar order, with its pages cut into the manifest's groups. */
+export function agentSections(pages: AgentPage[]): AgentSection[] {
+  return sections.flatMap((section) => {
+    const own = pages.filter((page) => page.section === section.slug);
+    if (!own.length) return [];
+    const groups: AgentSection["groups"] = [];
+    for (const page of own) {
+      const start = section.groups?.find((group) => group.from === page.page);
+      if (start || groups.length === 0) groups.push({ title: start?.title ?? null, pages: [] });
+      groups[groups.length - 1].pages.push(page);
+    }
+    return [
+      {
+        slug: section.slug,
+        title: section.title,
+        description: oneLine(section.description),
+        href: `/docs/${section.slug}/`,
+        mdPath: markdownPath(section.slug),
+        groups,
+      },
+    ];
+  });
+}
+
+/** A section's own page as Markdown: its title, what it covers, then a link and a line for each page. */
+export function sectionMarkdown(section: AgentSection): string {
+  const count = section.groups.reduce((n, group) => n + group.pages.length, 0);
+  const lines: string[] = [`# ${section.title}`, "", `> ${section.description}`, ""];
+  lines.push(`This section of the ${site.name} documentation has ${count} ${count === 1 ? "page" : "pages"}. Each link below is the page as Markdown.`);
+  for (const group of section.groups) {
+    lines.push("");
+    if (group.title) lines.push(`## ${group.title}`, "");
+    for (const page of group.pages) {
+      lines.push(`- [${page.title}](${site.url}${page.mdPath})${page.description ? `: ${page.description}` : ""}`);
+    }
+  }
+  return `${lines.join("\n")}\n`;
+}
+
 // ------------------------------------------------------------- llms files
 
 export type SkillLink = { name: string; summary: string; url: string };
@@ -142,8 +196,8 @@ function cap(text: string, max = 200): string {
  * `/llms.txt` (https://llmstxt.org/): the name, a short summary in a block
  * quote, the key facts, then lists of links in sections: the main pages, one
  * line per docs page grouped by section in sidebar order (each linking the
- * page's Markdown), and an Optional section with the longer files and the
- * agent skills. Descriptions are cut to 200 characters so the file stays
+ * page's Markdown, with the section's own page first), and an Optional
+ * section with the longer files and the agent skills. Descriptions are cut to 200 characters so the file stays
  * quick to read.
  */
 export function llmsTxt(pages: AgentPage[], skills: SkillLink[] = []): string {
@@ -160,11 +214,14 @@ export function llmsTxt(pages: AgentPage[], skills: SkillLink[] = []): string {
     "",
     ...mainPages.map((page) => `- [${page.title}](${site.url}${page.path}): ${page.summary}`),
   ];
+  const overviews = new Map(agentSections(pages).map((section) => [section.slug, section]));
   let section = "";
   for (const page of pages) {
     if (page.section !== section) {
       section = page.section;
       out.push("", `## ${page.sectionTitle}`, "");
+      const overview = overviews.get(section);
+      if (overview) out.push(`- [${overview.title}: all pages](${site.url}${overview.mdPath}): ${cap(overview.description)}`);
     }
     out.push(`- [${page.title}](${site.url}${page.mdPath})${page.description ? `: ${cap(page.description)}` : ""}`);
   }
@@ -199,14 +256,25 @@ export function llmsFullTxt(pages: AgentPage[], markdown: Map<string, string>): 
     `Every page of ${site.url}/docs/ in one file, in the order of the sidebar. Each page starts with its title and URL. ` +
       `The index of pages is ${site.url}/llms.txt.`,
   ].join("\n");
-  const parts = pages.map((page) => {
-    const md = (markdown.get(page.mdPath) ?? pageMarkdown(page)).trimEnd();
-    // Put the page's URL under its title.
+  // Put the page's URL under its title.
+  const withUrl = (md: string, href: string) => {
     const firstBreak = md.indexOf("\n");
     const title = firstBreak === -1 ? md : md.slice(0, firstBreak);
     const rest = firstBreak === -1 ? "" : md.slice(firstBreak);
-    return `${title}\n\nURL: ${site.url}${page.href}${rest}`;
-  });
+    return `${title}\n\nURL: ${site.url}${href}${rest}`;
+  };
+  // Each section's own page comes before the section's pages.
+  const overviews = new Map(agentSections(pages).map((section) => [section.slug, section]));
+  const parts: string[] = [];
+  let current = "";
+  for (const page of pages) {
+    if (page.section !== current) {
+      current = page.section;
+      const overview = overviews.get(current);
+      if (overview) parts.push(withUrl(sectionMarkdown(overview).trimEnd(), overview.href));
+    }
+    parts.push(withUrl((markdown.get(page.mdPath) ?? pageMarkdown(page)).trimEnd(), page.href));
+  }
   return `${head}\n\n---\n\n${parts.join("\n\n---\n\n")}\n`;
 }
 

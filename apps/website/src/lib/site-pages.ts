@@ -118,14 +118,7 @@ export function trailFor(route: string, ownName?: string): { name: string; path:
   return trail;
 }
 
-/**
- * Where a docs section's breadcrumb step points: the section's own index
- * page when the docs have one (`content/docs/<section>/index.mdx` or a route
- * `src/app/docs/<section>/page.tsx`), else its place on the docs index.
- */
+/** Where a docs section's breadcrumb step points: the section's own page, `/docs/<section>/`. */
 export function docSectionPath(section: string): string {
-  const own =
-    fs.existsSync(path.join(WEBSITE, "content", "docs", section, "index.mdx")) ||
-    fs.existsSync(path.join(APP, "docs", section, "page.tsx"));
-  return own ? `/docs/${section}/` : `/docs/#section-${section}`;
+  return `/docs/${section}/`;
 }

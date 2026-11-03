@@ -40,6 +40,14 @@ built all come from it.
 - To add a page, create the file, then add its slug to its section in the
   manifest. To move or rename a page, change both, and search the docs for
   links to the old URL.
+- Every section also has a page of its own, `/docs/<section>/`, that lists
+  the section's pages with their descriptions. Give the section a
+  `description` of 70 to 160 characters (it is the page's lead and its meta
+  description; `node scripts/check-docs.ts` checks the length) and, for a
+  long section, `groups` that cut the list under headings. The page carries
+  its structured data (a `CollectionPage` that holds the list of pages), a
+  Markdown copy at `/docs/<section>.md` and a line under the section in
+  `llms.txt`.
 
 ## Front-matter
 
